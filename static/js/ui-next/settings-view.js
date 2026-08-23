@@ -1,7 +1,17 @@
-export const MODULE_RELEASE = "wp07.1";
+export const MODULE_RELEASE = "alpha98-ui1";
 
-import { appearance } from "../ui/appearance.js?release=wp07.1";
-import { initAccessibility, updateAccessibility } from "../ui/accessibility.js?release=wp07.1";
+import { appearance } from "../ui/appearance.js?release=alpha98-ui1";
+import { initAccessibility, updateAccessibility } from "../ui/accessibility.js?release=alpha98-ui1";
+
+// UI_CATALOG_START: Alpha 9.8 living-world routing copy.
+const ALPHA98_SETTINGS_COPY = Object.freeze([
+  "Living world",
+  "Choose how authored routines, consequences, and off-screen plans may advance on the world clock. Requested depth is visibly clamped to what is built and what this story permits.",
+  "Not a setting: witnessing, telling, reading, and carrying information happen through bodies and routes in the Story.",
+  "Open Institution tools",
+  "Living world settings saved.",
+]);
+// UI_CATALOG_END
 
 const CATEGORIES = Object.freeze([
   ["experience", "Experience", "theme"],
@@ -242,11 +252,12 @@ function livingWorldSettings(documentRef, services, state) {
   const copy = el(documentRef, "span", "ui-settings__field-copy");
   copy.append(
     el(documentRef, "strong", "", "Living world"),
-    el(documentRef, "small", "", "Choose which world mechanisms may run outside the current scene. Requested depth is visibly clamped to what is built and what this story permits."),
+    el(documentRef, "small", "", "Choose how authored routines, consequences, and off-screen plans may advance on the world clock. Requested depth is visibly clamped to what is built and what this story permits."),
   );
+  const information = el(documentRef, "p", "ui-muted", "Not a setting: witnessing, telling, reading, and carrying information happen through bodies and routes in the Story.");
   const body = el(documentRef, "div", "ui-settings__maintenance-result", chatId ? "Loading this story's world settings…" : "Open a story to configure its living world.");
   body.setAttribute("role", "status");
-  group.append(copy, body);
+  group.append(copy, information, body);
   if (!chatId) return group;
   queueMicrotask(async () => {
     try {
@@ -294,9 +305,15 @@ function livingWorldSettings(documentRef, services, state) {
       const status = el(documentRef, "p", "ui-settings__connection-status");
       status.setAttribute("role", "status");
       const footer = el(documentRef, "div", "ui-settings__connection-footer");
+      const institutions = el(documentRef, "button", "ui-button ui-button--quiet", "Open Institution tools");
+      institutions.type = "button";
+      institutions.addEventListener("click", () => services.router.navigate({
+        destination: "play", segments: ["story-tools"],
+        query: { chat: String(chatId), tool: "dialogue" },
+      }));
       const save = el(documentRef, "button", "ui-button ui-button--primary", "Save living world settings");
       save.type = "button";
-      footer.append(save);
+      footer.append(institutions, save);
       save.addEventListener("click", async () => {
         save.disabled = true;
         status.textContent = "Saving living world settings…";

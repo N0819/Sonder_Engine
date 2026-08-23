@@ -151,3 +151,19 @@
   :root[data-a11y-reduced-motion="true"] .ui-skeleton,
   :root[data-a11y-reduced-motion="true"] .ui-button[data-loading="true"]::after { animation: none; }
 }
+.ui-lived-location {
+  border: 1px solid var(--ui-color-border);
+  border-radius: var(--ui-radius-compact);
+  background: color-mix(in srgb, var(--ui-color-surface-muted) 72%, transparent);
+}
+.ui-lived-location__summary { min-height: 44px; padding: 10px 12px; cursor: pointer; }
+.ui-lived-location__summary strong,
+.ui-lived-location__summary small { display: block; }
+.ui-lived-location__summary small { margin-top: 3px; color: var(--ui-color-text-muted); }
+.ui-lived-location__content { display: grid; gap: 12px; padding: 14px; border-top: 1px solid var(--ui-color-border); }
+.ui-lived-location__toggle { min-height: 44px; display: flex; align-items: center; gap: 8px; }
+.ui-lived-location__routes { display: grid; gap: 8px; }
+.ui-lived-location__route { display: grid; grid-template-columns: minmax(150px, .7fr) minmax(180px, 1fr); gap: 8px; padding: 10px 0; border: 0; border-top: 1px solid var(--ui-color-border); }
+.ui-lived-location__route legend { grid-column: 1 / -1; color: var(--ui-color-text); }
+.ui-lived-location__boundary { margin: 0; padding-left: 10px; border-left: 2px solid var(--ui-color-interactive); color: var(--ui-color-text-muted); }
+@media (max-width: 719px) { .ui-lived-location__route { grid-template-columns: 1fr; } }

@@ -1,8 +1,9 @@
 """Institutions and upkeep — the facade over the `charter_*` siblings.
 
-``docs/design/DESIGN_INSTITUTIONS_AND_UPKEEP.md``. Status: **prototype.** Pure,
-offline, model-free, and not yet wired to any commit path — nothing in this
-package reads or writes storage, mints a fuse, or calls a model.
+``docs/design/DESIGN_INSTITUTIONS_AND_UPKEEP.md``. Status: **pure simulator,
+production vertical slice.** This facade remains model-free and performs no
+I/O. ``world.charter_runtime`` owns the frame-scoped persistence, guarded
+catch-up job, consequence mint and bounded apertures that connect it to play.
 
     from world.charter import normalize_charter, seed_roster, run
 
@@ -32,8 +33,8 @@ one, because this repo has now paid for that split three times
 A caller imports this module. A test may name a sibling it patches or reads the
 source of; one that only calls through should come here, which is the same rule
 ``tools/project_check.py`` enforces for the three facades above. This one is
-not registered there yet — it is a prototype, and registering it would freeze a
-layout that is still being learned.
+not registered there yet — the deeper fidelity work is still teaching us which
+internal seams deserve to become permanent public boundaries.
 """
 
 from __future__ import annotations
@@ -57,6 +58,15 @@ from .charter_model import (
     normalize_upkeep,
     out_of_band,
     priority_rank,
+)
+from .charter_identity import (
+    display_name,
+    generated_name,
+    identity_aliases,
+    identity_seed,
+    materialize_body_names,
+    normalize_naming_profile,
+    title_for,
 )
 from .charter_feel import (
     NEGLIGIBLE,
@@ -124,7 +134,16 @@ from .charter_promote import (
     remembered,
 )
 from .charter_news import (
-    WITNESSABLE, decay_news, known_news, news_key, spread_of, witness)
+    WITNESSABLE,
+    claim_from_report,
+    decay_news,
+    known_news,
+    news_key,
+    report_from_claim,
+    report_key,
+    spread_of,
+    witness,
+)
 from .charter_plan import criticality, plan_watch, tended_upkeeps
 from .charter_practice import (
     ASKED_RETENTION,
@@ -144,16 +163,21 @@ from .charter_politics import (
     attribute_blame,
     normalize_politics,
     regard_between,
+    regard_key,
     regard_map,
+    regard_pair,
+    regard_value,
     spend_reluctance,
 )
 from .charter_space import REACH_LIMIT, charter_places, reach_map, travel_rooms
 from .charter_talk import (
+    FORMAL_REPORT_RETENTION,
     PARTNERS_PER_WINDOW,
     RETOLD_RETENTION,
     co_present,
     converse,
     pair_up,
+    report_to_superiors,
     report_up,
     tell_ranking,
     tellable,
@@ -169,13 +193,44 @@ from .charter_roster import (
     stale_claims,
 )
 from .charter_run import run, step
+from .charter_social import (
+    DEFAULT_SIGNALS, JUDGMENT_AXES, judgment_of, judgment_view,
+    normalize_judgments, normalize_social_norms, update_judgments_from_minds)
+from .charter_commitment import (
+    OPEN_STATES, TERMINAL_STATES, advance_commitments, commitment_id,
+    commitment_view, normalize_commitments, observe_public_commitments)
+from .charter_economy import (
+    advance_economy, caravan_exchange, normalize_economy, quote, stock_band,
+    trade)
+from .charter_decide import (
+    ORDER_ACTIONS, advance_decisions, decision_view, deliver_orders,
+    execute_orders, normalize_decisions)
+from .charter_intervene import (
+    INTERVENTION_OPS, apply_due, intervention_warnings,
+    normalize_interventions)
 
 __all__ = [
+    "DEFAULT_SIGNALS", "JUDGMENT_AXES", "OPEN_STATES", "ORDER_ACTIONS",
+    "TERMINAL_STATES", "INTERVENTION_OPS", "advance_commitments", "advance_decisions",
+    "advance_economy", "caravan_exchange", "commitment_id",
+    "commitment_view", "decision_view", "deliver_orders", "execute_orders",
+    "judgment_of", "judgment_view", "normalize_commitments",
+    "normalize_decisions", "normalize_economy", "normalize_judgments",
+    "normalize_social_norms", "observe_public_commitments", "quote",
+    "stock_band", "trade", "update_judgments_from_minds", "apply_due",
+    "intervention_warnings", "normalize_interventions",
     "ERRAND_RATE",
     "errands",
     "homecomings",
     "walk",
     "FIGURE_ACTS",
+    "display_name",
+    "generated_name",
+    "identity_aliases",
+    "identity_seed",
+    "materialize_body_names",
+    "normalize_naming_profile",
+    "title_for",
     "REFUSED_ABSENT",
     "REFUSED_NO_SITUATION",
     "REFUSED_OUTSIDE_LICENCE",
@@ -270,8 +325,12 @@ __all__ = [
     "pair_up",
     "reach_map",
     "regard_between",
+    "regard_key",
     "regard_map",
+    "regard_pair",
+    "regard_value",
     "report_up",
+    "report_to_superiors",
     "see",
     "spend_reluctance",
     "summarize",

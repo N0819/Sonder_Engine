@@ -1,4 +1,4 @@
-"""Per-body feeling and temperament, produced by the engine's own affect
+"""Optional audit: population feeling and temperament, produced by affect
 model rather than beside it.
 
 The mood experiment set the bar: a scalar built at this tier from pressure,
@@ -368,7 +368,8 @@ class TestReplay:
             "print(json.dumps(plan_watch(c, seed=9)['watch'], "
             "sort_keys=True))"
         ).format(root=str(pathlib.Path(__file__).resolve().parent.parent),
-                 tests=str(pathlib.Path(__file__).resolve().parent))
+                 tests=str(pathlib.Path(__file__).resolve().parent.parent
+                           / "tests"))
         watches = []
         for hash_seed in ("1", "2"):
             env = dict(os.environ, PYTHONHASHSEED=hash_seed)

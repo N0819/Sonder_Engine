@@ -1,6 +1,6 @@
-export const MODULE_RELEASE = "wp07.1";
+export const MODULE_RELEASE = "alpha98-ui1";
 
-import { button, element, replaceLocalized, stateMessage } from "./shared.js?release=wp07.1";
+import { button, element, replaceLocalized, stateMessage } from "./shared.js?release=alpha98-ui1";
 
 // UI_CATALOG_START: shared explicit-save document controls.
 const COPY = Object.freeze({

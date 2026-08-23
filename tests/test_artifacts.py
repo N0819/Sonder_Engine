@@ -258,8 +258,9 @@ def test_the_floor_is_whole_with_no_model_and_no_ceiling_setting(temp_db):
     artifact = _standing(temp_db, cid)[0]
     assert artifact["text"] == ""
 
-    # Floor setting: the ceiling gate refuses to spend.
-    temp_db.wset(cid, "living_world", {"rumor_ledger": "floor"})
+    # Physical information remains whole below the model-spending rung.
+    temp_db.wset(cid, "dialogue_config", {
+        "offscreen_life": "deterministic"})
     assert schedule_artifact_wording(ctx) is None
 
 
@@ -273,7 +274,7 @@ def test_the_ceiling_schedules_a_job_and_stops_paying_after_failures(temp_db):
 
     cid, chars, scene, ctx = _world(temp_db)
     _run(ctx, scene, [_post()])
-    temp_db.wset(cid, "living_world", {"rumor_ledger": "ceiling"})
+    temp_db.wset(cid, "dialogue_config", {"offscreen_life": "stochastic"})
 
     submitted = []
     real_submit = jobs.submit

@@ -1,6 +1,6 @@
-export const MODULE_RELEASE = "wp07.1";
+export const MODULE_RELEASE = "alpha98-ui1";
 
-import { renderPipelineInspector } from "./pipeline-inspector.js?release=wp13.0";
+import { renderPipelineInspector } from "./pipeline-inspector.js?release=alpha98-ui1";
 
 // UI_CATALOG_START: player-facing Play workflow copy.
 const COPY = Object.freeze({

@@ -55,9 +55,9 @@ def test_story_tool_registry_and_route_parser_are_exact(page: Page, ui_base_url:
     result = page.evaluate(
         """async base => {
           const registry = await import(
-            `${base}/static/js/ui-next/story-tools-registry.js?release=wp07.1`
+            `${base}/static/js/ui-next/story-tools-registry.js?release=alpha98-ui1`
           );
-          const router = await import(`${base}/static/js/ui-next/router.js?release=wp07.1`);
+          const router = await import(`${base}/static/js/ui-next/router.js?release=alpha98-ui1`);
           const route = router.parseHashRoute(
             "#/play/story-tools?chat=17&tool=conditions"
           );
@@ -135,4 +135,45 @@ def test_mobile_story_tools_are_staged_and_back_owned(
     page.go_back()
     expect(sheet).to_be_hidden()
     expect(opener).to_be_focused()
+
+
+def test_dialogue_tool_owns_charter_summary_and_diagnostics(
+    page: Page, ui_base_url: str
+) -> None:
+    page.route("**/api/chats/1/dialogue_config", lambda route: route.fulfill(
+        content_type="application/json", body=json.dumps({
+            "style": "natural", "min_lines": 0, "max_lines": 3, "variance": 0.2,
+            "autonomy": 50, "initial_parallel_reactors": 1,
+            "promote_after_addressed": 2, "max_offscreen_actors": 1,
+            "offscreen_life": "inert", "offscreen_life_levels": ["inert"],
+        }),
+    ))
+    page.route("**/api/chats/1/background_config", lambda route: route.fulfill(
+        content_type="application/json", body=json.dumps({"scene_life": "off", "max_managed": 6, "max_reactors": 1}),
+    ))
+    page.route("**/api/chats/1/living_world", lambda route: route.fulfill(
+        content_type="application/json", body=json.dumps({"living_world": {}, "approaches": []}),
+    ))
+    page.route("**/api/chats/1/charters", lambda route: route.fulfill(
+        content_type="application/json", body=json.dumps({
+            "charters": {"items": {"archive": {"name": "Lantern Archive", "bodies": {"keeper": {}}}}},
+            "character_history_routes": {"7": {"mode": "resident"}},
+            "character_journey_histories": {},
+            "warnings": ["One post has no room."],
+        }),
+    ))
+    page.route("**/api/chats/1/charters/diagnostics", lambda route: route.fulfill(
+        content_type="application/json", body=json.dumps({"beliefs": 2, "obligations": ["Keep the lamps lit"]}),
+    ))
+    page.route("**/api/chats/1/lorebooks", lambda route: route.fulfill(
+        content_type="application/json", body=json.dumps({"lorebooks": []}),
+    ))
+    _open(page, ui_base_url)
+    inspector = page.get_by_role("complementary", name="Story tools")
+    inspector.get_by_role("button", name="Dialogue", exact=True).click()
+    expect(inspector.get_by_role("heading", name="Institutions and upkeep")).to_be_visible()
+    expect(inspector.get_by_text("1 institution · 1 resident body · 1 Character history route", exact=True)).to_be_visible()
+    expect(inspector.get_by_text("One post has no room.", exact=True)).to_be_visible()
+    inspector.get_by_text("Load Charter diagnostics", exact=True).click()
+    expect(inspector.get_by_text("Keep the lamps lit", exact=False)).to_be_visible()
 

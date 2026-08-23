@@ -266,6 +266,19 @@ class LLMError(RuntimeError):
         super().__init__(message)
         self.status_code = status_code
         self.retryable = retryable
+
+
+class ReasoningBudgetExhausted(LLMError):
+    """The model returned private reasoning but never emitted an answer.
+
+    This is distinct from malformed content: there is no candidate answer to
+    validate or repair.  Keeping the failure typed lets the retry boundary
+    change only the setting that caused it, without scraping a reasoning trace
+    into user-visible content or weakening successful thinking-model calls.
+    """
+
+    def __init__(self, message: str):
+        super().__init__(message, status_code=0, retryable=True)
         
 class DegenerateOutput(LLMError):
     def __init__(self, reason: str):
@@ -911,12 +924,13 @@ def reasoning_effort_for(role):
         os.environ.get("FICTION_ENGINE_REASONING_EFFORT"))
 
 
-def _apply_reasoning_effort(body, prov, role):
+def _apply_reasoning_effort(body, prov, role, effort_override=None):
     """Attach this role's reasoning effort to an OpenAI-compatible request.
     OpenRouter takes `reasoning: {effort}` (and `{enabled: false}` to disable);
     every other OpenAI-style backend takes the flat `reasoning_effort` ('none'
     to disable). Nothing is added when the role is unset."""
-    effort = reasoning_effort_for(role)
+    effort = (effort_override if effort_override is not None
+              else reasoning_effort_for(role))
     if not effort:
         return body
     is_openrouter = _prov_field(prov, "kind") == "openrouter"
@@ -1927,6 +1941,11 @@ def chat_complete(
 
     resolved = candidates[candidate_offset]
     last_error = None
+    # A reasoning-only response has no answer to salvage.  On its retry only,
+    # ask for a direct answer instead of spending the same budget the same way
+    # again.  This is deliberately adaptive rather than a role/model default:
+    # successful reasoning-enabled calls retain every configured feature.
+    reasoning_effort_override = None
 
     for attempt in range(retry_config.max_retries + 1):
         _check_cancel()
@@ -1954,12 +1973,16 @@ def chat_complete(
                 sampler,
                 resolved=resolved,
                 json_schema=json_schema,
+                reasoning_effort_override=reasoning_effort_override,
             )
         except Aborted:
             raise
         except Exception as exc:
             error = _classify_error(exc)
             last_error = error
+
+            if isinstance(error, ReasoningBudgetExhausted):
+                reasoning_effort_override = "off"
 
             if not _should_retry(error, attempt, retry_config):
                 raise error
@@ -2139,6 +2162,7 @@ def _chat_complete_once(
     sampler,
     resolved=None,
     json_schema=None,
+    reasoning_effort_override=None,
 ):
     _check_cancel()
     # Clear before the request, not after: every path below either records a
@@ -2240,7 +2264,8 @@ def _chat_complete_once(
     body.update(merged)
     _apply_provider_routing(body, prov)
     _apply_cache_affinity(body, prov, role)
-    _apply_reasoning_effort(body, prov, role)
+    _apply_reasoning_effort(
+        body, prov, role, effort_override=reasoning_effort_override)
 
     _apply_json_mode(body, prov, model, json_mode, json_schema)
 
@@ -2433,10 +2458,10 @@ def _message_content(parsed, prov_name, model):
         return content
     reasoning = str(message.get("reasoning") or "").strip()
     if reasoning:
-        raise LLMError(
+        raise ReasoningBudgetExhausted(
             f"{prov_name}: {model} returned reasoning but no answer "
             f"({len(reasoning)} chars of trace, content empty) -- the "
-            f"thinking budget consumed the reply", None, True)
+            f"thinking budget consumed the reply")
     if content == "":
         raise LLMError(f"{prov_name}: {model} returned empty content",
                        None, True)

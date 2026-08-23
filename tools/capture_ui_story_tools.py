@@ -23,6 +23,7 @@ SCREENSHOTS = OUTPUT / "screenshots"
 TOOLS = ("cast", "world", "style", "dialogue", "attire", "backdrops", "ambience", "conditions", "frames", "multiplayer")
 CASES = (
     *((f"desktop-{tool}", 1280, 820, tool, "system", False) for tool in TOOLS),
+    ("desktop-institutions", 1280, 900, "dialogue", "system", False),
     ("expansive-cast", 1600, 900, "cast", "system", False),
     ("medium-frames", 1024, 768, "frames", "system", False),
     ("tablet-conditions", 768, 1024, "conditions", "system", False),
@@ -123,6 +124,9 @@ def route_case(page: Page, japanese: bool) -> list[str]:
         elif path == "/api/chats/1/dialogue_config": payload = DIALOGUE
         elif path == "/api/chats/1/background_config": payload = {"scene_life": "off", "max_managed": 6, "max_reactors": 1}
         elif path == "/api/chats/1/living_world": payload = {"living_world": {"routine_residue": "off"}, "approaches": [{"approach": "routine_residue", "label": "Routine residue", "value": "off", "depths": []}]}
+        elif path == "/api/chats/1/charters": payload = {"charters": {"items": {"archive": {"name": "Lantern Archive", "bodies": {"keeper": {}, "porter": {}}}}}, "character_history_routes": {"7": {"mode": "resident"}}, "character_journey_histories": {}, "warnings": ["One post has no assigned room."]}
+        elif path == "/api/chats/1/charters/diagnostics": payload = {"beliefs": 2, "obligations": ["Keep the lamps lit"]}
+        elif path == "/api/chats/1/lorebooks": payload = {"lorebooks": [{"id": 4, "name": "Archive Lore"}]}
         elif path == "/api/chats/1/frames": payload = {"frames": story()["frames"]}
         elif path == "/api/chats/1/personas": payload = {"personas": [{"id": 3, "name": "Rin", "station": "archive"}]}
         elif path == "/api/chats/1/guest_invites": payload = {"invites": [{"id": 9, "label": "Table guest", "expires_at": "tomorrow"}]}
@@ -195,6 +199,10 @@ def capture() -> dict:
                 if opener.count() and opener.is_visible():
                     opener.click()
             page.wait_for_function("[...document.querySelectorAll('[data-story-tool-panel]')].some(node => { const r = node.getBoundingClientRect(); return r.width > 1 && r.height > 1; })")
+            if case_id == "desktop-institutions":
+                heading = page.get_by_role("heading", name="Institutions and upkeep")
+                heading.wait_for()
+                heading.scroll_into_view_if_needed()
             page.wait_for_function("document.fonts.status === 'loaded'")
             page.evaluate("() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))")
             screenshot = SCREENSHOTS / f"{case_id}.png"

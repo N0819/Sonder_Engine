@@ -116,6 +116,16 @@ def hear_claim(minds, listener, claim, retention, regard=1.0,
         * float(regard)
     if arriving < PERSONAL_FLOOR:
         return False
+    news_retellings = None
+    if claim.get("kind") == "news":
+        from world.degradation import degrade, is_exhausted
+
+        try:
+            news_retellings = max(0, int(claim.get("retellings") or 0)) + 1
+        except (TypeError, ValueError):
+            news_retellings = 1
+        if is_exhausted(news_retellings):
+            return False
     held = minds.setdefault(str(listener), {})
     current = held.get(subject)
     if current is not None \
@@ -124,6 +134,45 @@ def hear_claim(minds, listener, claim, retention, regard=1.0,
     record = dict(claim)
     record["strength"] = arriving
     record["heard_from"] = str(heard_from) if heard_from else None
+    if news_retellings is not None:
+        record["retellings"] = news_retellings
+        # A firsthand observation may retain an exact quote and typed
+        # speech-act spans.  A retelling retains WHAT THE TELLER SAID (the
+        # degraded claim_text below), not a hidden pristine transcript one
+        # careless consumer could quote as if the listener had been there.
+        # Keeping only the act kinds preserves useful direction -- request vs
+        # offer -- without preserving words or named roles degradation has
+        # already begun to subtract.
+        public = record.get("public_evidence")
+        if isinstance(public, dict):
+            if str(public.get("kind") or "") == "speech" \
+                    and str(public.get("exact_quote") or "").strip():
+                actor = " ".join(str(
+                    public.get("actor") or record.get("about") or "someone"
+                ).split())
+                quote = str(public.get("exact_quote") or "").strip()
+                if len(quote) >= 2 and quote[0] in '\"\'“' \
+                        and quote[-1] in '\"\'”':
+                    quote = quote[1:-1].strip()
+                # Still the wording the teller passed, but no longer stored
+                # as a transcript the listener personally witnessed.
+                record["claim_text"] = f"{actor} was reported saying {quote}"
+            kinds = [
+                str(frame.get("kind") or "other")
+                for frame in (public.get("speech_acts") or [])
+                if isinstance(frame, dict)
+            ][:4]
+            record["public_evidence"] = {
+                "kind": str(public.get("kind") or ""),
+                **({"speech_act_kinds": kinds} if kinds else {}),
+                "secondhand": True,
+            }
+        if str(record.get("claim_text") or "").strip():
+            # Counts can be safely recognized without guessing identities.
+            # Named people/places are removed later by the shared carrier
+            # renderer, whose caller owns the authoritative rosters.
+            record["claim_text"] = degrade(
+                record["claim_text"], news_retellings)
     held[subject] = record
     return True
 

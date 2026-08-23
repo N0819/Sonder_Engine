@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "wp07.1";
+export const MODULE_RELEASE = "alpha98-ui1";
 
 const ITEM_ID = /^(story|character|persona|lore):([1-9][0-9]*)$/;
 const DIRTY_STATES = new Set([
@@ -533,9 +533,9 @@ export function createLibraryAuthoringRuntime(options = {}) {
     return true;
   };
 
-  const quickStart = async (personaIdValue, greetingIndexValue = 0) => {
-    const personaId = Number(personaIdValue);
-    const greetingIndex = Number(greetingIndexValue);
+  const quickStart = async (options = {}) => {
+    const personaId = Number(options.personaId);
+    const greetingIndex = Number(options.greetingIndex || 0);
     let state = store.getSnapshot().library.authoring;
     if (!active?.id || active.kind !== "character"
         || !Number.isSafeInteger(personaId) || personaId < 1
@@ -549,7 +549,14 @@ export function createLibraryAuthoringRuntime(options = {}) {
     patch({ authoring: { ...state, status: "starting-story", error: "" } });
     try {
       const result = await apiClient.request("POST", `/api/characters/${active.id}/start`, {
-        body: { persona_id: personaId, greeting_index: greetingIndex },
+        body: {
+          persona_id: personaId,
+          greeting_index: greetingIndex,
+          ...(options.lorebookId ? { lorebook_id: Number(options.lorebookId) } : {}),
+          already_known: Boolean(options.alreadyKnown),
+          language: String(options.language || "en"),
+          ...(options.livedLocation ? { lived_location: clone(options.livedLocation) } : {}),
+        },
         channel: "library-authoring-quick-start", owner: captured.owner,
         isCurrent: identity => identity.owner === captured.owner
           && isOwnerCurrent(captured) && generation === captured.generation,

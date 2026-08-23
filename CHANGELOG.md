@@ -1,5 +1,75 @@
 # Changelog
 
+## alpha 9.8 — The place was alive before you arrived
+
+Alpha 9.8 turns Charter from an off-screen upkeep prototype into the social,
+material and institutional substrate for inhabited places. A generated town,
+facility, ship or caravan now has stable people with work, private knowledge,
+local opinions, obligations, goods and reporting lines before the opening
+scene. The scene can borrow one of those people and hand them back without
+changing who they are or granting them knowledge they never received.
+
+### Local societies remember conduct without a universal reputation score
+
+Witnessed player and major-character conduct becomes provenance-bearing news
+in each actual witness's mind. Individuals form directed trust, fear, respect,
+obligation and suspicion from the evidence they possess; gossip degrades as it
+is retold, staffed reporting lines carry reports upward, and leaders can issue
+typed orders back down real chains of command. The same path carries rumors,
+courier news, caravan news and promotion memories rather than maintaining a
+second omniscient ledger.
+
+Speech can now create explicit promises, debts, contracts and favors for the
+people who heard them. Commitments have parties, evidence and a lifecycle, so
+they can be fulfilled, disputed, transferred, inherited and reported instead
+of becoming flavor text that disappears after the turn.
+
+### Markets have goods, scarcity and roads
+
+Charter institutions hold abstract stock lots, needs and supply points rather
+than simulating every coin. Markets derive local scarcity and prices from
+those stores; physical caravans carry freight and news along passable routes;
+broken inputs propagate through supply chains. Supply points provide a bounded
+stand-in for off-map production until a complete route is authored. Staffing
+also preserves specialist labor for specialist work and rotates comparable
+workers over time.
+
+### Lived locations are one operation everywhere
+
+Greeting launch, Story Quick Start, hand-built story creation, Dialogue Config
+and the lorebook workspace now share one lived-location generator. It retrieves
+the relevant lore subtree, proposes a qualitative plan, closes it
+deterministically, plants a prose-free room graph, pre-names every Charter
+resident, simulates only the newly added location and writes a historian pass
+whose claims cite actual pre-simulation events. Existing locations are
+preserved and collisions are namespaced, so a lore-accurate town, underground
+facility, spaceport or starship can also be added during play.
+
+Authors can inspect who believes what, why a person reacted, where a rumor
+came from, which obligations and orders remain active, which facilities were
+added for closure and how a featured character was handed off. Expensive
+population-and-month realism experiments remain in `make charter-audit`; the
+ordinary suite checks the mechanism on small deterministic institutions.
+
+### Full characters get the right kind of past
+
+Character history is now routed rather than universally simulated. A fixed
+resident or member of a moving institution can receive a Charter-grounded
+recent life; a visitor or eccentric traveler can receive an authored/canon or
+explicitly generated journey history; and authors can lock either route out.
+The compilers produce 10–16 chronological, identified memory rows rather than
+one mechanical packet, using optional author guidance and preserving the
+original greeting-memory pass.
+
+Each selected Story Quick Start character has an independent route control.
+Private card details never enter location planning, and after the history
+handoff the normal character agent owns the person completely. Failed
+pre-generation removes the incomplete new story, while mid-story generation
+remains additive. Background residents have permanent identities, stable
+names, lore-controlled naming styles, ranks and titles, identity-stable
+dialogue colors, and recognition ledgers so names can be learned in play
+without ever changing the underlying person.
+
 ## alpha 9.7.1 — Four things this project believed, measured and found false
 
 Twenty-eight commits, and the honest summary is that most of them are

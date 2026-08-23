@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "wp07.1";
+export const MODULE_RELEASE = "alpha98-ui1";
 
 // UI_CATALOG_START: Story authoring labels and recovery copy.
 const COPY = Object.freeze({

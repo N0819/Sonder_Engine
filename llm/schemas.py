@@ -1649,10 +1649,49 @@ class DialogueLogEntry(LenientModel):
         "articulation", pre=True, allow_reuse=True)(
         lambda cls, v: v if v in ("slurred", "stifled") else "")
 
+
+class PublicSpeechAct(LenientModel):
+    """What a witnessed utterance publicly DOES, never what its speaker
+    privately means or whether its proposition is true.
+
+    ``kind`` is actor-directed (``request`` means the actor requests;
+    ``offer`` means the actor offers).  Keeping that direction in the record
+    is what prevents an exchange such as "meals and a bed while I work" from
+    turning into the speaker offering somebody else lodging on recall.
+    """
+    kind: str = "other"
+    content: str = ""
+    about: str = ""
+    condition: str = ""
+
+
+class CharterPublicEvidence(LenientModel):
+    """A semantic annotation over one engine-authored public source.
+
+    The model may classify only ``source_id`` rows the payload supplied.  The
+    engine reattaches actor, target, exact quote/action surface and sensory
+    metadata from that source after validation, so none of those facts are
+    model-authoritative here.
+    """
+    source_id: str = ""
+    speech_acts: list[PublicSpeechAct] = Field(default_factory=list)
+    salience: float = 0.5
+
+    _clamp_salience = validator("salience", pre=True, allow_reuse=True)(
+        lambda cls, v: _clamp_float(v, 0.0, 1.0, 0.5)
+    )
+
+class CharterConduct(LenientModel):
+    """Exact Charter affordance echoed by one isolated presence call."""
+    act: str
+    other: str
+
+
 class BackgroundReactOutput(LenientModel):
     reacts: bool = False
     dialogue_log_entry: Optional[DialogueLogEntry] = None
     action: str = ""
+    charter_act: Optional[CharterConduct] = None
 
 class SceneLifeEntry(LenientModel):
     """One managed presence's conduct for this beat, attributed by name so the
@@ -1808,6 +1847,11 @@ class CourierOp(LenientModel):
     # names the known room it forms in (the crowd-minting precedent).
     stops: list[str] = Field(default_factory=list)
     from_room: str = ""       # caravan with no sender and no message: where it forms
+    # Optional real cargo for a caravan. `stock` is requested abstract lots,
+    # `from_holder` must own them at an origin market, and `wants` is what the
+    # caravan may buy at stops. The engine loads the actual amount; the model
+    # cannot mint stock by writing this field.
+    freight: dict[str, Any] = Field(default_factory=dict)
 
 
 class ArtifactOp(LenientModel):
@@ -2051,6 +2095,11 @@ class DirectorResolve(LenientModel):
     summary: str = ""
     dialogue_order: list[str] = Field(default_factory=list)
     dialogue_log: list[DialogueLogEntry] = Field(default_factory=list)
+    # Model-classified, then deterministically re-grounded against exact
+    # player/major-character sources before the step returns.  This is
+    # evidence offered to observer-scoped Charter minds, not objective scene
+    # state and never a replacement for dialogue_log/state_diff.
+    public_evidence: list[CharterPublicEvidence] = Field(default_factory=list)
     state_diff: StateDiff = Field(default_factory=StateDiff)
     changes_asserted: list[AssertedChange] = Field(default_factory=list)
     # The manifest's counterpart: what the beat deliberately did NOT list,
@@ -2226,6 +2275,7 @@ class DirectorSocialSpecialist(LenientModel):
     cast_changes: list[dict] = Field(default_factory=list)
     introductions: list[dict] = Field(default_factory=list)
     world_facts: list = Field(default_factory=list)
+    public_evidence: list[CharterPublicEvidence] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
     # The numbered manifest slice this call was handed, echoed back
     # with a verdict per event (schemas.ResolvedEvent).
@@ -2524,9 +2574,12 @@ class RelationshipUpdate(LenientModel):
     trust_delta: float = Field(default=0.0, ge=-0.2, le=0.2)
     warmth_delta: float = Field(default=0.0, ge=-0.2, le=0.2)
     fear_delta: float = Field(default=0.0, ge=-0.2, le=0.2)
+    respect_delta: float = Field(default=0.0, ge=-0.2, le=0.2)
+    suspicion_delta: float = Field(default=0.0, ge=-0.2, le=0.2)
     trigger_event_ids: list[str] = Field(default_factory=list)
 
     _clamp_deltas = validator("trust_delta", "warmth_delta", "fear_delta",
+                              "respect_delta", "suspicion_delta",
                               pre=True, allow_reuse=True)(
         lambda cls, v: _clamp_float(v, -0.2, 0.2, 0.0)
     )
@@ -3087,6 +3140,42 @@ class MappingStageOutput(LenientModel):
 
 # ---- Greeting interpretation (ingest-time, per docs/design/GREETING_IMPORT_DESIGN.md) ----
 
+class PrestoryJourneyEvent(LenientModel):
+    sequence: int = 0
+    when: str = ""
+    place: str = ""
+    people: list[str] = Field(default_factory=list)
+    memory: str = ""
+    consequence: str = ""
+    source_ids: list[str] = Field(default_factory=list)
+
+
+class PrestoryJourneyHistory(LenientModel):
+    summary: str = ""
+    events: list[PrestoryJourneyEvent] = Field(default_factory=list)
+
+
+class PrestoryResidentEpisode(LenientModel):
+    sequence: int = 0
+    when: str = ""
+    title: str = ""
+    kind: str = "recent_event"
+    location_id: str = ""
+    participant_ids: list[str] = Field(default_factory=list)
+    memory: str = ""
+    consequence: str = ""
+    source_ids: list[str] = Field(default_factory=list)
+    tone: str = "neutral"
+    lesson: str = "none"
+    valence: float = 0.0
+    arousal: float = 0.0
+    salience: float = 0.58
+
+
+class PrestoryResidentHistory(LenientModel):
+    overview: str = ""
+    episodes: list[PrestoryResidentEpisode] = Field(default_factory=list)
+
 class GreetingKnowledgeSeed(LenientModel):
     content: str = ""
     about_entity: str = "self"      # 'self' = the character
@@ -3230,6 +3319,8 @@ class GreetingInterpret(LenientModel):
 # ---- Validation ----
 
 SCHEMA_MAP = {
+    "prestory_journey": PrestoryJourneyHistory,
+    "prestory_resident": PrestoryResidentHistory,
     "greeting_interpret": GreetingInterpret,
     "director_interpret": DirectorInterpret,
     "director_establish": DirectorEstablish,
@@ -3492,7 +3583,8 @@ _STATE_DIFF_DICT_FIELDS = (
 #: agents/director.SPECIALISTS level with this map.
 SPECIALIST_CHANNELS = {
     "director_body": ("attire", "conditions", "vitals", "overlays"),
-    "director_social": ("cast_changes", "introductions", "world_facts"),
+    "director_social": ("cast_changes", "introductions", "world_facts",
+                        "public_evidence"),
     "director_contact": ("contact_ops", "substance_ops", "containment",
                          "scales"),
     "director_objects": ("entities", "remove_entities", "inventory_ops",
@@ -4635,6 +4727,20 @@ OUTPUT_EXAMPLES = {
         ],
         "introductions": [{"who": "Mara", "learns": "Sable"}],
         "world_facts": [],
+        # SHOWN POPULATED, for the reason the contact example gives below: an
+        # empty list teaches the shape of nothing, and this channel's shape is
+        # the part most easily got wrong. `source_id` must name a row the
+        # payload supplied -- actor, target, exact quote and sensory metadata
+        # are reattached by the engine after validation and are not
+        # model-authoritative -- and `kind` is ACTOR-DIRECTED: `request` means
+        # the actor requests.
+        "public_evidence": [
+            {"source_id": "sp_2", "salience": 0.6,
+             "speech_acts": [
+                 {"kind": "request", "content": "shelter until the thaw",
+                  "about": "Sable", "condition": "while she works"},
+             ]},
+        ],
         "notes": [],
     },
     "director_contact": {
@@ -4794,6 +4900,7 @@ OUTPUT_EXAMPLES = {
             "tone": "gruff",
         },
         "action": "wipes down the counter",
+        "charter_act": None,
     },
     "scene_life": {
         "entries": [

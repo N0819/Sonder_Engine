@@ -1,4 +1,8 @@
-export const MODULE_RELEASE = "wp07.1";
+export const MODULE_RELEASE = "alpha98-ui1";
+
+import { buildQuickStartLivedLocation, mountLivedLocationFields } from "../lived-location.js?release=alpha98-ui1";
+
+const quickStartDrafts = new Map();
 
 // UI_CATALOG_START: Reusable person authoring labels.
 const COPY = Object.freeze({
@@ -46,6 +50,12 @@ const COPY = Object.freeze({
   createHelp: "Build the complete reusable card, then save it to Library.",
   quickStart: "Quick start",
   quickStartHelp: "Save this card and open a new Story from one of its greetings.",
+  quickStartBoundary: "The place may publish public resident cards. This Character's generated past is handed only to this Character.",
+  lore: "Lore",
+  noLore: "No Lore selected",
+  untitledLore: "Untitled Lore",
+  alreadyKnown: "The Character already knows the Persona",
+  livedLocation: "Begin in a lived location",
   playAs: "Play as",
   openingGreeting: "Opening greeting",
   startStory: "Start story",
@@ -74,6 +84,22 @@ function field(documentRef, labelText, control) {
   label.htmlFor = control.id;
   wrapper.append(label, control);
   return wrapper;
+}
+
+function availableLibraryRows(services, kind) {
+  const library = services.store.getSnapshot().library || {};
+  const bootstrapRows = kind === "persona" ? library.personas : library.lorebooks;
+  const rows = [
+    ...(Array.isArray(bootstrapRows) ? bootstrapRows.map(item => ({ ...item, kind })) : []),
+    ...(Array.isArray(library.items) ? library.items : []),
+  ];
+  const seen = new Set();
+  return rows.filter(item => {
+    const id = Number(item?.id);
+    if (item?.kind !== kind || item.archived || !Number.isSafeInteger(id) || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
 }
 
 function setPath(documentValue, path, value) {
@@ -325,8 +351,7 @@ export function createPersonEditor(options = {}) {
   }
   form.append(tools);
   if (state.kind === "character" && state.mode === "edit") {
-    const personas = (services.store.getSnapshot().library?.library?.items || [])
-      .filter(item => item.kind === "persona" && !item.archived);
+    const personas = availableLibraryRows(services, "persona");
     const greetings = Array.isArray(current.opening?.greetings)
       ? current.opening.greetings : [];
     const quick = node(documentRef, "section", "ui-authoring-quick-start");
@@ -337,6 +362,12 @@ export function createPersonEditor(options = {}) {
     if (!personas.length || !greetings.length) {
       quick.append(node(documentRef, "p", "ui-muted", services.localizer.t(COPY.quickStartUnavailable)));
     } else {
+      const quickKey = String(state.owner || `character:${state.id}`);
+      const quickDraft = quickStartDrafts.get(quickKey) || {
+        lorebookId: "", alreadyKnown: false,
+        livedLocation: { enabled: false, brief: "", horizonHours: 0, characterHistories: [{ key: `quick:${state.id}`, mode: "auto", brief: "" }] },
+      };
+      quickStartDrafts.set(quickKey, quickDraft);
       const persona = node(documentRef, "select", "ui-input");
       persona.id = `ui-quick-persona-${state.id}`;
       for (const item of personas) {
@@ -352,13 +383,49 @@ export function createPersonEditor(options = {}) {
         option.value = String(index);
         greeting.append(option);
       });
+      const lore = node(documentRef, "select", "ui-input");
+      const noLore = node(documentRef, "option", "", services.localizer.t(COPY.noLore));
+      noLore.value = "";
+      lore.append(noLore);
+      availableLibraryRows(services, "lore")
+        .forEach(item => {
+          const option = node(documentRef, "option", "", item.name || services.localizer.t(COPY.untitledLore));
+          option.value = String(item.id);
+          option.selected = String(item.id) === String(quickDraft.lorebookId);
+          lore.append(option);
+        });
+      lore.addEventListener("change", () => { quickDraft.lorebookId = lore.value; });
+      const known = node(documentRef, "label", "ui-authoring-quick-start__known");
+      const knownInput = documentRef.createElement("input");
+      knownInput.type = "checkbox";
+      knownInput.checked = Boolean(quickDraft.alreadyKnown);
+      knownInput.addEventListener("change", () => { quickDraft.alreadyKnown = knownInput.checked; });
+      known.append(knownInput, documentRef.createTextNode(` ${services.localizer.t(COPY.alreadyKnown)}`));
+      const livedHost = node(documentRef, "div", "ui-authoring-quick-start__location");
+      mountLivedLocationFields({
+        document: documentRef, target: livedHost, value: quickDraft.livedLocation,
+        characters: [{ key: `quick:${state.id}`, name: current.identity?.name || current.name || "Character" }],
+        title: "Begin in a lived location",
+        onChange(value) { quickDraft.livedLocation = value; },
+      });
       const start = node(documentRef, "button", "ui-button ui-button--primary", services.localizer.t(COPY.startStory));
       start.type = "button";
       start.disabled = state.status === "starting-story";
-      start.addEventListener("click", () => services.authoring.quickStart(persona.value, greeting.value));
+      start.addEventListener("click", () => services.authoring.quickStart({
+        personaId: Number(persona.value),
+        greetingIndex: Number(greeting.value),
+        lorebookId: lore.value ? Number(lore.value) : null,
+        alreadyKnown: knownInput.checked,
+        language: services.store.getSnapshot().settings?.data?.ui_language || "en",
+        livedLocation: buildQuickStartLivedLocation(quickDraft.livedLocation),
+      }));
       quick.append(
         field(documentRef, services.localizer.t(COPY.playAs), persona),
         field(documentRef, services.localizer.t(COPY.openingGreeting), greeting),
+        field(documentRef, services.localizer.t(COPY.lore), lore),
+        known,
+        livedHost,
+        node(documentRef, "p", "ui-muted", services.localizer.t(COPY.quickStartBoundary)),
         start,
       );
     }

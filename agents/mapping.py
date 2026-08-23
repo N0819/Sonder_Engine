@@ -69,6 +69,12 @@ def mapping_stage(ctx, nonce):
         ctx.add_warning(f"owed history not attached: {exc}")
 
     pers = persona_of(chat)
+    planned = None
+    try:
+        from world.structure import planned_context
+        planned = planned_context(chat["id"], interp.get("location_query"))
+    except Exception as exc:
+        ctx.add_warning(f"planned room context not attached: {exc}")
 
     payload = {
         # X18: mapping is NOT entitled to the omniscient record. It emits lore
@@ -96,6 +102,7 @@ def mapping_stage(ctx, nonce):
         },
         "present_characters": cast_scene_context(ctx.cast),
         "location_query": interp.get("location_query"),
+        **({"planned_context": planned} if planned else {}),
         # Captured player declarations forwarded for BOUNDED ADDITIVE
         # elaboration (see the GENERATION REQUESTS prompt rule): the player
         # owns the declared existence and stated specifics; mapping owns

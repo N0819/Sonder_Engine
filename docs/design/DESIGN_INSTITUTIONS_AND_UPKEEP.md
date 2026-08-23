@@ -1,7 +1,11 @@
 # DESIGN_INSTITUTIONS_AND_UPKEEP — how a simulated crew actually runs the ship
 
-Status: **Draft. Proposed, nothing built.** Written 2026-08-21 against alpha
-9.7.1. Extends [`DESIGN_LIVING_WORLD.md`](DESIGN_LIVING_WORLD.md) and
+Status: **Deterministic vertical slice built; realism extensions remain.**
+Written 2026-08-21 against alpha 9.7.1. The pure simulator lives in
+`world/charter_*`; `world/charter_runtime.py` supplies explicit authoring
+storage, frame-scoped epoch catch-up, guarded atomic landing, stable consequence
+minting, destination residue, and per-presence context. Extends
+[`DESIGN_LIVING_WORLD.md`](DESIGN_LIVING_WORLD.md) and
 [`OFFSCREEN_WORLD_ARCHITECTURE.md`](OFFSCREEN_WORLD_ARCHITECTURE.md); it does
 not override them, and every invariant there holds here unchanged.
 
@@ -415,12 +419,38 @@ tracked ledger, the routine survives only as its aggregate — and the
 firewall tests came first: unheard blame does not cross, the register does
 not cross, register-fact events do not cross.
 
+**Amendment (2026-08-21, public scene evidence): built.** The missing reverse
+bridge now turns player and major-character conduct into claims a Charter body
+can actually own. The social specialist receives an engine-authored list of
+exact speech/action sources once per resolved beat and may add only speech-act
+direction plus verbatim spans from the quote. Deterministic grounding restores
+the source's actor, target, quote/action surface, volume and concealment; a
+failed annotation therefore loses nuance but never the factual source. Commit
+then asks the ordinary sight/hearing primitives separately for every unbound
+Charter body and inserts the claim only in witnesses. Exact quotes and full
+frames remain firsthand; `hear_claim` strips them on retelling while retaining
+coarse request/offer/etc. direction. The claim is ordinary news, so the
+existing gossip, reporting-line, carrier, Scene Life and promotion paths need
+no parallel history and gain no broadcast shortcut.
+
 Where §12a was WRONG: point 4. `pick_background_reactor` decides who
-SPEAKS, not who ACTS — the gate is an author-switch for voice only, and
-until conduct lands back through the affordance path the on-screen stretch
-is still a hole in the body's life, just with the polarity reversed: the
-simulation keeps ticking, and never hears what the body did. The switch had
-to be built at the conduct layer; the gate alone was never one.
+SPEAKS, not who ACTS; the gate alone was never an author-switch. The production
+seam now supplies exact `action_instances` beside the one-body view and accepts
+only an exact typed `charter_act` echo. Commit rechecks that allowlist and calls
+`charter_author.authored`, so the on-screen act uses the same builders and
+effects as simulated conduct. The model's prose has no mutation authority.
+
+The background lifecycle is now continuous. Unbound bodies derive into
+background-presence records with stable `{charter,body}` references and exact
+temperament; no duplicate identity is stored merely because the player entered
+the room. Scene life may author the body while it is encountered, and leaving
+requires no reverse conversion because Charter owned its state throughout.
+Promotion alone changes ownership: `charter_promote.promotion_handoff` copies
+felt state, vitals vocabulary, temperament, selected channelled memories and
+aggregate service evidence into the card/memory/active-state stores. Charter
+then removes its coarse interior and retains only a scene-position-synchronised
+institutional projection. It may roster that person or record their absence;
+it may never again move, tire, feel, converse or choose for them.
 
 And the layer §12a assumed was working was not. Its premise — "a charter
 that MINTS `world_events` rows is witnessed and gossiped by machinery that
@@ -484,17 +514,18 @@ of 500 bodies now move and every head runs at its claim cap — with the
    institution is not a mind, but it holds beliefs with evidence and decay,
    which is exactly that machinery. Reusing it is attractive and may be a
    category error.
-2. **How is a charter authored?** Lorebook entry, a new card kind, or derived
-   from a place? This decides whether it is usable, and it is the surface
-   most likely to fail silently — the psychology lesson applies in full, so
-   whatever it is wants `character_card_warnings`-style validation from day
-   one, not afterwards.
+2. **What should the guided Charter authoring surface be?** The first vertical
+   slice has a structured `/api/chats/{cid}/charters` endpoint with immediate
+   validation warnings. It still needs a usable card/form, templates, and a
+   decision about whether lore or place definitions may seed one. The
+   psychology lesson applies in full: validation belongs in that surface from
+   day one, not afterwards.
 3. **What is the planning window?** Fixed hours, or event-driven replanning
    only? Event-driven is cheaper and more accurate; fixed is easier to test.
 4. **Do charters nest?** A ship's charter and a department's. Probably, but
    nesting is where priority ordering stops being one list.
-5. **Blocked first, and this is not optional:** `UNBUILT` §2.8's open bullet.
-   The stored `offscreen_log` is mixed across four legacy shapes with nothing
-   migrating what is already written, and its own entry calls it "a trap for
-   the first thing that computes over the history." A charter reading its own
-   past is precisely that first thing.
+5. **Before any legacy-history import:** `UNBUILT` §2.8's open bullet. The
+   stored `offscreen_log` is mixed across four legacy shapes. The built runtime
+   avoids it entirely by owning typed current state and using the objective
+   event spine. Any attempt to reconstruct a Charter from older off-screen
+   prose must migrate that history first.

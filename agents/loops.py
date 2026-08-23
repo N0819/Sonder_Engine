@@ -573,8 +573,10 @@ def interaction_loop(ctx, nonce):
             name = character_name(json.loads(row["sheet"]))
         except Exception:
             continue
+        shared = ctx._extra.setdefault("character_turn_snapshot", {})
         debt = (_unanswered_question_note(
-            ctx.chat.id, name, char_id, ctx.turn.idx, ctx.turn.frame_id)
+            ctx.chat.id, name, char_id, ctx.turn.idx, ctx.turn.frame_id,
+            cache=shared.setdefault("unanswered_question_notes", {}))
             or {}).get("awaiting_your_answer")
         if not debt:
             continue
@@ -619,7 +621,11 @@ def interaction_loop(ctx, nonce):
             "calls": 0,
         }
 
-    scene = get_scene(ctx.chat.id, ctx.chat)
+    shared = ctx._extra.setdefault("character_turn_snapshot", {})
+    scene = shared.get("scene")
+    if scene is None:
+        scene = get_scene(ctx.chat.id, ctx.chat)
+        shared["scene"] = scene
     base_views = dict(
         (ctx.perception_act or {}).get("views")
         or {}
