@@ -68,7 +68,7 @@ def test_story_import_and_branch_are_routed_native_actions():
     assert "services.authoring.importStory" in editor
     assert "services.authoring.retryImport" in editor
     assert "services.authoring.branchStory" in view
-    assert '["edit", "import", "create"].includes(route.query?.mode)' in inspector
+    assert '["edit", "import", "create", "story-card"].includes(route.query?.mode)' in inspector
     assert "Duplicate story" not in view
 
 

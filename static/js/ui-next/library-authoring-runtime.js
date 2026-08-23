@@ -15,11 +15,18 @@ function selectedOwner(route) {
   if (route?.destination !== "library") return null;
   const match = ITEM_ID.exec(String(route.query?.item || "").toLowerCase());
   if (!match) return null;
+  const kind = match[1];
+  const id = Number(match[2]);
+  const mode = String(route.query?.mode || "view");
+  const storyId = mode === "story-card" && kind === "character"
+    ? Number(route.query?.story) : null;
+  if (storyId !== null && (!Number.isSafeInteger(storyId) || storyId < 1)) return null;
   return Object.freeze({
-    kind: match[1],
-    id: Number(match[2]),
-    owner: `${match[1]}:${Number(match[2])}`,
-    mode: String(route.query?.mode || "view"),
+    kind,
+    id,
+    storyId,
+    owner: storyId ? `story-character:${storyId}:${id}` : `${kind}:${id}`,
+    mode,
     route: String(route.canonicalHash || ""),
   });
 }
@@ -43,6 +50,13 @@ function routeOwner(route) {
 }
 
 function writeSpec(owner, draft, revision) {
+  if (owner.mode === "story-card" && owner.storyId) {
+    return {
+      method: "PUT",
+      path: `/api/chats/${owner.storyId}/characters/${owner.id}/card`,
+      body: { sheet: clone(draft) },
+    };
+  }
   const paths = {
     story: `/api/chats/${owner.id}`,
     character: `/api/characters/${owner.id}`,
@@ -104,7 +118,9 @@ export function createLibraryAuthoringRuntime(options = {}) {
     } });
     try {
       const result = await apiClient.get(
-        `/api/library/authoring/${owner.kind}/${owner.id}`,
+        owner.mode === "story-card" && owner.storyId
+          ? `/api/chats/${owner.storyId}`
+          : `/api/library/authoring/${owner.kind}/${owner.id}`,
         {
           channel: "library-authoring-load",
           owner: owner.owner,
@@ -115,7 +131,29 @@ export function createLibraryAuthoringRuntime(options = {}) {
         },
       );
       if (!isOwnerCurrent(owner) || requestGeneration !== generation) return false;
-      const data = result.data;
+      let data = result.data;
+      if (owner.mode === "story-card" && owner.storyId) {
+        const participant = (data?.participants || []).find(
+          row => Number(row.id) === owner.id,
+        );
+        if (!participant) throw new Error("That Character is not part of this Story.");
+        let document;
+        try {
+          document = JSON.parse(participant.sheet || "{}");
+        } catch {
+          throw new Error("The Story card document was invalid.");
+        }
+        data = {
+          owner: owner.owner, kind: "character", id: owner.id,
+          revision: `story-card:${participant.card_source || "library"}`,
+          document,
+          overview: {
+            story_id: owner.storyId,
+            story_name: result.data?.chat?.name || "",
+            card_source: participant.card_source || "library",
+          },
+        };
+      }
       if (data?.owner !== owner.owner || !data.document || !data.revision) {
         throw new Error("The authoring document response was incomplete.");
       }
@@ -262,6 +300,22 @@ export function createLibraryAuthoringRuntime(options = {}) {
       });
       if (!isOwnerCurrent(captured) || generation !== captured.generation) return false;
       const data = result.data;
+      if (captured.mode === "story-card" && captured.storyId) {
+        if (!data?.sheet || typeof data.sheet !== "object") {
+          throw new Error("The saved Story card response was incomplete.");
+        }
+        localState.clearDraft("library-authoring", captured.owner);
+        patch({ authoring: {
+          ...store.getSnapshot().library.authoring,
+          status: "saved", document: clone(data.sheet), draft: clone(data.sheet),
+          revision: "story-card:chat", restored: false, error: "",
+          overview: {
+            ...(store.getSnapshot().library.authoring.overview || {}),
+            card_source: data.card_source || "chat",
+          },
+        } });
+        return true;
+      }
       if (isCreate) {
         const id = Number(data?.id);
         if (!Number.isSafeInteger(id) || id < 1) {
@@ -479,6 +533,45 @@ export function createLibraryAuthoringRuntime(options = {}) {
     return true;
   };
 
+  const quickStart = async (personaIdValue, greetingIndexValue = 0) => {
+    const personaId = Number(personaIdValue);
+    const greetingIndex = Number(greetingIndexValue);
+    let state = store.getSnapshot().library.authoring;
+    if (!active?.id || active.kind !== "character"
+        || !Number.isSafeInteger(personaId) || personaId < 1
+        || !Number.isSafeInteger(greetingIndex) || greetingIndex < 0) return false;
+    if (DIRTY_STATES.has(state.status)) {
+      const saved = await save();
+      if (!saved) return false;
+      state = store.getSnapshot().library.authoring;
+    }
+    const captured = Object.freeze({ ...active, generation });
+    patch({ authoring: { ...state, status: "starting-story", error: "" } });
+    try {
+      const result = await apiClient.request("POST", `/api/characters/${active.id}/start`, {
+        body: { persona_id: personaId, greeting_index: greetingIndex },
+        channel: "library-authoring-quick-start", owner: captured.owner,
+        isCurrent: identity => identity.owner === captured.owner
+          && isOwnerCurrent(captured) && generation === captured.generation,
+      });
+      if (!isOwnerCurrent(captured) || generation !== captured.generation) return false;
+      const chatId = Number(result.data?.chat_id);
+      if (!Number.isSafeInteger(chatId) || chatId < 1) {
+        throw new Error("The started Story response was incomplete.");
+      }
+      router.navigate({ destination: "play", query: { chat: String(chatId) } });
+      return true;
+    } catch (error) {
+      if (!isOwnerCurrent(captured) || generation !== captured.generation
+          || ["aborted", "stale"].includes(error?.kind)) return false;
+      patch({ authoring: {
+        ...store.getSnapshot().library.authoring, status: "recoverable-error",
+        error: String(error?.userMessage || error?.message || "The Story could not be started."),
+      } });
+      return false;
+    }
+  };
+
   const servicesNavigateToStory = id => router.navigate({
     destination: "library", segments: ["stories"],
     query: { item: `story:${id}` },
@@ -575,6 +668,7 @@ export function createLibraryAuthoringRuntime(options = {}) {
     apiClient.cancel?.("library-authoring-duplicate", "runtime-stop");
     apiClient.cancel?.("library-authoring-template", "runtime-stop");
     apiClient.cancel?.("library-authoring-preview", "runtime-stop");
+    apiClient.cancel?.("library-authoring-quick-start", "runtime-stop");
     target.removeEventListener("beforeunload", beforeUnload);
   };
 
@@ -598,6 +692,7 @@ export function createLibraryAuthoringRuntime(options = {}) {
     previewGreetingRecovery,
     retryPreview: () => previewRetry?.(),
     discardPreview,
+    quickStart,
     reload: () => active?.id && load(active),
     teardown,
   });

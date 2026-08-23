@@ -159,7 +159,7 @@ export function createInspectorHost(options = {}) {
     }
     if (destination === "library") {
       body.dataset.libraryContext = "true";
-      const authoringMode = ["edit", "import", "create"].includes(route.query?.mode);
+      const authoringMode = ["edit", "import", "create", "story-card"].includes(route.query?.mode);
       const libraryModule = authoringMode
         ? modules.libraryAuthoringView : modules.libraryView;
       const mount = authoringMode
