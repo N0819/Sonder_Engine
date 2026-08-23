@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "alpha98-ui2-d5cf750f8b7e";
+export const MODULE_RELEASE = "alpha98-ui2-3f44d1cc71ed";
 
 const AUTOSAVE_ACTIONS = new Set(["field-edit", "draft-update"]);
 const INVERSE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
