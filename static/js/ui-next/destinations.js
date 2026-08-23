@@ -108,12 +108,22 @@ export function renderDestination({
   modules,
 }) {
   const safe = CORE_DESTINATIONS.includes(destination) ? destination : "play";
-  if (safe === "library") return modules.libraryView.createLibraryView({
-    document: documentRef,
-    state,
-    t,
-    services,
-  });
+  if (safe === "library") {
+    if (modules.libraryAuthoringView.isPersonAuthoringRoute(state.route)) {
+      return modules.libraryAuthoringView.createLibraryAuthoringWorkspace({
+        document: documentRef,
+        state,
+        t,
+        services,
+      });
+    }
+    return modules.libraryView.createLibraryView({
+      document: documentRef,
+      state,
+      t,
+      services,
+    });
+  }
   if (safe === "settings") return modules.settingsView.createSettingsView({
     document: documentRef,
     state,
