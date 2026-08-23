@@ -27,6 +27,17 @@ function node(documentRef, tag, className = "", text = "") {
   return element;
 }
 
+function icon(documentRef, name) {
+  const svg = documentRef.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("class", "ui-icon");
+  svg.setAttribute("aria-hidden", "true");
+  svg.setAttribute("focusable", "false");
+  const use = documentRef.createElementNS("http://www.w3.org/2000/svg", "use");
+  use.setAttribute("href", `/static/assets/icons/sonder-icons.svg#icon-${name}`);
+  svg.append(use);
+  return svg;
+}
+
 function defaultLanguage(settings) {
   const packs = (settings?.language_packs || []).filter(pack => pack.story);
   const preferred = settings?.ui_language || "en";
@@ -139,7 +150,8 @@ export function openNewStory(options = {}) {
   const header = node(documentRef, "header", "ui-new-story__header");
   const title = node(documentRef, "strong", "", "New story");
   title.id = "ui-new-story-title";
-  const close = node(documentRef, "button", "ui-button ui-button--quiet ui-button--icon", "×");
+  const close = node(documentRef, "button", "ui-button ui-button--quiet ui-button--icon");
+  close.append(icon(documentRef, "close"));
   close.type = "button";
   close.setAttribute("aria-label", "Close New story");
   close.addEventListener("click", () => dialog.close("close"));

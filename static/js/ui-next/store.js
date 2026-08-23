@@ -145,6 +145,7 @@ export function createStore(overrides = {}) {
     pendingPrevious = null;
     pendingActions = [];
     for (const subscriber of [...subscribers]) {
+      if (!subscribers.has(subscriber)) continue;
       const nextSelected = subscriber.selector(state);
       if (subscriber.equality(nextSelected, subscriber.selected)) continue;
       const previousSelected = subscriber.selected;

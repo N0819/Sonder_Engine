@@ -27,5 +27,10 @@ export const appearance = Object.freeze({
   themes: THEMES,
   setTheme: (value, persist = true) => applyDataset("theme", value, themeIds, "carbon-signal", "sonder.ui.next.theme.v1", persist),
   setProseSize: (value, persist = true) => applyDataset("proseSize", value, proseSizes, "17", "sonder.ui.next.prose.v1", persist),
-  setEffects: (value, persist = true) => applyDataset("effects", value, effectLevels, "full", "sonder.ui.next.effects.v1", persist),
+  setEffects: (value, persist = true) => {
+    const next = applyDataset("effects", value, effectLevels, "full", "sonder.ui.next.effects.v1", persist);
+    const systemReduced = globalThis.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+    document.documentElement.dataset.motionPreference = systemReduced ? "reduced" : next;
+    return next;
+  },
 });

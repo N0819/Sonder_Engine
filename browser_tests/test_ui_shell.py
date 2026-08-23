@@ -67,19 +67,19 @@ def test_destination_navigation_refresh_and_history_preserve_orientation(
 
     page.get_by_role("link", name="Library", exact=True).click()
     expect(page).to_have_url(re.compile(r"#/library$"))
-    expect(page.get_by_role("heading", name="All Library", level=2)).to_be_focused()
+    expect(page.get_by_role("heading", name="Library", level=2)).to_be_focused()
 
     page.reload()
     page.wait_for_function(
         "document.documentElement.dataset.uiNextState === 'ready'", timeout=10000
     )
     expect(page).to_have_url(re.compile(r"#/library$"))
-    expect(page.get_by_role("heading", name="All Library", level=2)).to_be_visible()
+    expect(page.get_by_role("heading", name="Library", level=2)).to_be_visible()
 
     page.get_by_role("link", name="Settings", exact=True).click()
     page.go_back()
     expect(page).to_have_url(re.compile(r"#/library$"))
-    expect(page.get_by_role("heading", name="All Library", level=2)).to_be_visible()
+    expect(page.get_by_role("heading", name="Library", level=2)).to_be_visible()
 
 
 def test_navigation_state_restores_valid_route_scroll_and_focus_identity(
@@ -176,7 +176,19 @@ def test_shell_restores_only_a_valid_saved_route_when_url_has_no_hash(
     )
     _open_shell(page, ui_base_url, hash_value="")
     expect(page).to_have_url(re.compile(r"#/library/characters$"))
-    expect(page.get_by_role("heading", name="All Library", level=2)).to_be_visible()
+    expect(page.get_by_role("heading", name="Library", level=2)).to_be_visible()
+
+
+def test_library_to_play_transition_cannot_restore_a_removed_library_inspector(
+    page: Page, ui_base_url: str
+) -> None:
+    _open_shell(page, ui_base_url, hash_value="#/library")
+    page.get_by_role("link", name="Play", exact=True).click()
+
+    inspector = page.get_by_role("complementary", name="Story tools")
+    expect(inspector.get_by_role("heading", name="Story tools")).to_be_visible()
+    expect(inspector.get_by_text("Choose a story to use Story Tools.", exact=True)).to_be_visible()
+    expect(inspector.get_by_text("Select a Library row to see its usage and details.", exact=True)).to_have_count(0)
 
 
 def test_desktop_inspector_opens_closes_pins_and_resizes_without_covering_workspace(
@@ -186,11 +198,17 @@ def test_desktop_inspector_opens_closes_pins_and_resizes_without_covering_worksp
     _open_shell(page, ui_base_url)
     inspector = page.get_by_role("complementary", name="Story tools")
     expect(inspector).to_be_visible()
+    pin_button = inspector.get_by_role("button", name="Pin context panel")
+    pin_icon = pin_button.locator("use")
+    expect(pin_button).to_have_attribute("aria-pressed", "true")
+    expect(pin_icon).to_have_attribute("href", "/static/assets/icons/sonder-icons.svg#icon-pin")
 
     inspector.get_by_role("button", name="Resize context panel").click()
-    expect(page.locator("html")).to_have_attribute("data-inspector-size", "wide")
-    inspector.get_by_role("button", name="Pin context panel").click()
+    expect(page.locator("html")).to_have_attribute("data-inspector-size", "compact")
+    pin_button.click()
     expect(page.locator("html")).to_have_attribute("data-inspector-pinned", "false")
+    expect(pin_button).to_have_attribute("aria-pressed", "false")
+    expect(pin_icon).to_have_attribute("href", "/static/assets/icons/sonder-icons.svg#icon-pin")
     inspector.get_by_role("button", name="Close context panel").click()
     expect(inspector).to_be_hidden()
 

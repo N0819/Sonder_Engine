@@ -1974,3 +1974,30 @@ def test_runtime_harness_mobile_controls_keep_touch_targets(
     )
     assert sizes["toggle"] >= 44
     assert sizes["back"] >= 44
+
+
+def test_store_does_not_invoke_a_subscriber_removed_during_notification(
+    page: Page, ui_base_url: str
+) -> None:
+    page.goto(f"{ui_base_url}/static/ui-next-lab.html")
+    calls = page.evaluate(
+        """async base => {
+          const { createStore } = await import(
+            `${base}/static/js/ui-next/store.js?release=alpha98-ui1`
+          );
+          const store = createStore();
+          const calls = [];
+          let removeLate = () => {};
+          store.subscribe(state => state.route, () => {
+            calls.push("first");
+            removeLate();
+          });
+          removeLate = store.subscribe(state => state.route, () => calls.push("removed"));
+          store.dispatch({ type: "presentation/patch", slice: "route", value: {
+            destination: "library",
+          }});
+          return calls;
+        }""",
+        ui_base_url,
+    )
+    assert calls == ["first"]

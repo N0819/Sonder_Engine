@@ -109,7 +109,9 @@ def test_story_switching_keeps_drafts_owned_by_story(
     composer = page.get_by_role("textbox", name="What do you do or say?")
     composer.fill("Light the lantern")
 
-    page.get_by_role("button", name="Story actions").click()
+    story_actions = page.get_by_role("button", name="Story actions")
+    assert story_actions.locator("use").get_attribute("href").endswith("#icon-more")
+    story_actions.click()
     page.get_by_role("combobox", name="Switch story").select_option("2")
     expect(page.get_by_role("heading", name="Winter Road", level=2)).to_be_visible()
     expect(composer).to_have_value("")
@@ -121,6 +123,30 @@ def test_story_switching_keeps_drafts_owned_by_story(
     expect(page.get_by_role("textbox", name="What do you do or say?")).to_have_value(
         "Light the lantern"
     )
+
+
+def test_empty_installation_offers_new_story_without_inert_story_tools(
+    page: Page, ui_base_url: str
+) -> None:
+    empty = {**_bootstrap(), "chats": []}
+    page.route(
+        "**/api/bootstrap",
+        lambda route: route.fulfill(content_type="application/json", body=json.dumps(empty)),
+    )
+    page.goto(f"{ui_base_url}/static/ui-next.html#/play")
+    page.wait_for_function("document.documentElement.dataset.uiNextState === 'ready'")
+
+    expect(page.get_by_role("heading", name="Choose a story to begin")).to_be_visible()
+    expect(page.get_by_role("button", name="New story", exact=True)).to_be_visible()
+    expect(page.get_by_role("button", name="Open Library", exact=True)).to_be_visible()
+    expect(page.locator("[data-story-tool-list]:visible button")).to_have_count(0)
+    expect(
+        page.get_by_role("complementary", name="Story tools").get_by_text(
+            "Choose a story to use Story Tools.", exact=True
+        )
+    ).to_be_visible()
+    page.get_by_role("button", name="New story", exact=True).click()
+    expect(page.get_by_role("dialog", name="New story")).to_be_visible()
 
 
 def test_send_uses_ndjson_and_refreshes_authoritative_turn(

@@ -140,27 +140,11 @@ const COPY = Object.freeze({
   exportAction: "Export",
   duplicateAction: "Duplicate",
   editStoryCard: "Edit Story card",
-  reusableMaterial: "Reusable story material",
-  yourMaterial: "Your story material",
-  browseStories: "Browse stories",
-  createStory: "Create a story",
-  continueStory: "Continue a story",
-  recentStories: "Recent stories",
-  scopeSummary: "Library scope",
   everyReusableItem: "Every reusable item on this installation.",
-  itemsShown: "Items shown",
-  currentScope: "Current scope",
-  viewOptions: "View options",
   library: "Library",
-  libraryScope: "Library / Scope",
-  allLibrary: "All Library",
+  libraryScope: "Scope",
+  allLibrary: "Library",
   newStory: "New story",
-  lorebooks: "Lorebooks",
-  reusableMaterialTitle: "Reusable material",
-  reusableMaterialDetail: "Use a story lens when you need a project-like view. Characters, personas, and lore remain reusable.",
-  reusableAssets: "Reusable assets",
-  openStoryLabel: "Open story",
-  searchThisView: "Search this view",
   activeStory: "Active story",
   moreFor: "More actions for ${name}",
 });
@@ -284,20 +268,6 @@ function filterRail(documentRef, services, state) {
     node(documentRef, "p", "ui-library__breadcrumb", COPY.libraryScope),
     sideTitle,
   );
-  const search = node(documentRef, "form", "ui-library__side-search");
-  search.setAttribute("role", "search");
-  const searchInput = node(documentRef, "input", "ui-input");
-  searchInput.type = "search";
-  searchInput.value = query.q || "";
-  searchInput.placeholder = COPY.searchThisView;
-  searchInput.setAttribute("aria-label", COPY.search);
-  searchInput.maxLength = 200;
-  search.addEventListener("submit", event => {
-    event.preventDefault();
-    navigate(services, activeType || "story", { ...query, item: "", q: searchInput.value.trim() });
-  });
-  search.append(searchInput);
-
   const scope = node(documentRef, "select", "ui-input ui-library__scope");
   scope.setAttribute("aria-label", COPY.scope);
   for (const [value, label] of SCOPES) {
@@ -315,7 +285,7 @@ function filterRail(documentRef, services, state) {
       story: scope.value === "story" ? (query.story || firstStory || "") : query.story,
     });
   });
-  head.append(heading, search, scope,
+  head.append(heading, scope,
     node(documentRef, "p", "ui-library__scope-note", COPY.everyReusableItem));
   rail.append(head);
 
@@ -348,25 +318,6 @@ function filterRail(documentRef, services, state) {
     storyLabel.append(story);
     rail.append(storyLabel);
   }
-  const railState = { ...state, library: {
-    ...(state.library || {}),
-    items: (state.library?.items || []).filter(item => item.kind === (activeType || "story")),
-  } };
-  const status = resultState(documentRef, railState.library);
-  if (status) rail.append(status);
-  if (railState.library.items?.length) rail.append(ledger(documentRef, services, railState));
-
-  const actions = node(documentRef, "div", "ui-library__side-actions");
-  const create = labelWithIcon(documentRef,
-    button(documentRef, COPY.newStory, "ui-button ui-button--primary"), "plus", COPY.newStory);
-  create.addEventListener("click", () => openNewStory({ document: documentRef, services }));
-  const importStory = labelWithIcon(documentRef,
-    button(documentRef, COPY.importStory, "ui-button ui-button--quiet"), "import", COPY.importStory);
-  importStory.addEventListener("click", () => navigate(services, "story", {
-    mode: "import", session: workflowSession(),
-  }));
-  actions.append(create, importStory);
-  rail.append(actions);
   return rail;
 }
 
@@ -497,8 +448,9 @@ function ledger(documentRef, services, state) {
       }));
     };
     control.addEventListener("click", selectItem);
-    const more = button(documentRef, "…", "ui-library__more");
+    const more = button(documentRef, "", "ui-library__more");
     more.setAttribute("aria-label", COPY.moreFor.replace("${name}", item.name || COPY.untitled));
+    more.append(icon(documentRef, "more"));
     more.addEventListener("click", selectItem);
     row.append(control, more);
     list.append(row);
@@ -524,102 +476,39 @@ function resultState(documentRef, library) {
   return null;
 }
 
-function libraryHome(documentRef, services, library) {
-  const route = library?.route || {};
-  const home = services.library.homeState();
-  const byKey = new Map((library.items || []).map(item => [item.key, item]));
-  const section = node(documentRef, "section", "ui-library-home");
-  section.dataset.libraryHome = "true";
-
-  const toolbar = node(documentRef, "header", "ui-library-home__toolbar");
+function libraryWorkspace(documentRef, services, state) {
+  const activeType = typeForRoute(state.route) || "story";
+  const labels = {
+    story: COPY.stories,
+    character: COPY.characters,
+    persona: COPY.personas,
+    lore: COPY.lore,
+  };
+  const filteredState = { ...state, library: {
+    ...(state.library || {}),
+    items: (state.library?.items || []).filter(item => item.kind === activeType),
+  } };
+  const section = node(documentRef, "section", "ui-library-workspace");
+  section.dataset.libraryWorkspace = "true";
+  const head = node(documentRef, "header", "ui-library-workspace__header");
   const title = node(documentRef, "div");
   title.append(
     node(documentRef, "p", "ui-library__kicker", COPY.library),
-    node(documentRef, "h2", "ui-library-home__title", COPY.yourMaterial),
+    node(documentRef, "h2", "ui-library-workspace__title", labels[activeType]),
   );
-  const actions = node(documentRef, "div", "ui-library-home__actions");
-  const browse = labelWithIcon(documentRef,
-    button(documentRef, COPY.browseStories, "ui-button ui-button--quiet"), "filter", COPY.browseStories);
-  browse.addEventListener("click", () => navigate(services, "story", {}));
-  const create = labelWithIcon(documentRef,
-    button(documentRef, COPY.createStory, "ui-button ui-button--primary"), "plus", COPY.createStory);
-  create.addEventListener("click", () => openNewStory({ document: documentRef, services }));
-  actions.append(browse, create);
-  toolbar.append(title, actions);
-
-  const facets = library.facets || {};
-  const summary = node(documentRef, "div", "ui-library-home__summary");
-  summary.setAttribute("aria-label", "Library totals");
-  for (const [kind, label, index] of [
-    ["story", COPY.stories, "01"],
-    ["character", COPY.characters, "02"],
-    ["persona", COPY.personas, "03"],
-    ["lore", COPY.lorebooks, "04"],
-  ]) {
-    const stat = node(documentRef, "button", "ui-library-stat");
-    stat.type = "button";
-    stat.append(
-      node(documentRef, "span", "ui-library-stat__index", index),
-      icon(documentRef, ({ story: "story", character: "character", persona: "persona", lore: "lore" })[kind]),
-      node(documentRef, "strong", "ui-library-stat__value", String(facets.types?.[kind] || 0)),
-      node(documentRef, "span", "ui-library-stat__label", label),
-    );
-    stat.addEventListener("click", () => navigate(services, kind, {}));
-    summary.append(stat);
+  head.append(title);
+  if (activeType === "story") {
+    const create = labelWithIcon(documentRef,
+      button(documentRef, COPY.newStory, "ui-button ui-button--primary"), "plus", COPY.newStory);
+    create.addEventListener("click", () => openNewStory({ document: documentRef, services }));
+    head.append(create);
   }
-
-  const recent = node(documentRef, "section", "ui-library-home__recent");
-  const recentHead = node(documentRef, "header", "ui-library-section-heading");
-  const recentTitle = node(documentRef, "div");
-  recentTitle.append(
-    node(documentRef, "p", "ui-library__kicker", COPY.recentStories),
-    node(documentRef, "h3", "", COPY.continueStory),
-  );
-  recentHead.append(recentTitle, node(documentRef, "span", "ui-library-section-code", "LIB / 01"));
-
-  const overview = node(documentRef, "div", "ui-library-home__overview");
-  const recentList = node(documentRef, "ol", "ui-library-home__stories");
-  let recentStories = home.recents.map(key => byKey.get(key)).filter(item => item?.kind === "story");
-  if (!recentStories.length) recentStories = (library.items || []).filter(item => item.kind === "story").slice(0, 5);
-  if (!recentStories.length) {
-    recentList.append(node(documentRef, "li", "ui-library-home__none", COPY.noneYet));
+  section.append(head, toolbar(documentRef, services, filteredState));
+  const status = resultState(documentRef, filteredState.library);
+  if (status) section.append(status);
+  if (filteredState.library.items?.length) {
+    section.append(ledger(documentRef, services, filteredState));
   }
-  for (const [position, item] of recentStories.entries()) {
-    const row = node(documentRef, "li");
-    const control = button(documentRef, "", "ui-library-home__story");
-    control.append(
-      node(documentRef, "span", "ui-library__index", String(position + 1).padStart(2, "0")),
-      icon(documentRef, "story"),
-      node(documentRef, "strong", "", item.name || COPY.untitled),
-      node(documentRef, "span", "ui-library-home__story-meta", usage(item)),
-      icon(documentRef, "chevron-right"),
-    );
-    control.addEventListener("click", () => navigate(services, "story", { item: item.key }));
-    row.append(control);
-    recentList.append(row);
-  }
-
-  const context = node(documentRef, "aside", "ui-library-home__context");
-  context.append(
-    node(documentRef, "p", "ui-library__kicker", "Scope / Context"),
-    node(documentRef, "h3", "", COPY.reusableMaterialTitle),
-    node(documentRef, "p", "ui-library-home__context-copy", COPY.reusableMaterialDetail),
-  );
-  const meta = node(documentRef, "dl", "ui-library-home__context-meta");
-  for (const [label, value] of [
-    [COPY.scope, route.scope || "all"],
-    [COPY.stories, library.facets?.types?.story || 0],
-    [COPY.reusableAssets, Math.max(0, (library.page?.total || 0) - (library.facets?.types?.story || 0))],
-    [COPY.openStoryLabel, library.chats?.[0]?.name || "—"],
-  ]) {
-    const row = node(documentRef, "div");
-    row.append(node(documentRef, "dt", "", label), node(documentRef, "dd", "", String(value)));
-    meta.append(row);
-  }
-  context.append(meta);
-  overview.append(recentList, context);
-  recent.append(recentHead, overview);
-  section.append(toolbar, summary, recent);
   return section;
 }
 
@@ -631,8 +520,8 @@ export function createLibraryView(options = {}) {
   const rail = filterRail(documentRef, services, state);
   const content = node(documentRef, "div", "ui-library__content");
   const library = state.library || {};
-  const home = libraryHome(documentRef, services, library);
-  if (home) content.append(home);
+  const workspace = libraryWorkspace(documentRef, services, state);
+  content.append(workspace);
   const undo = undoNotice(documentRef, services, library);
   if (undo) content.prepend(undo);
   if (library.notice) {
@@ -640,7 +529,6 @@ export function createLibraryView(options = {}) {
     notice.setAttribute("role", "status");
     content.append(notice);
   }
-  if (!home) content.append(toolbar(documentRef, services, state));
   section.append(rail, content);
   const routeIdentity = state.route?.canonicalHash || "#/library";
   const scrollRegion = content;
