@@ -39,6 +39,19 @@ const COPY = Object.freeze({
   stableIdentity: "Stable identity is read-only.",
   completeFields: "Complete card fields",
   completeFieldsHelp: "Every stored field is available below. Structured lists use JSON and apply when valid.",
+  more: "More",
+  character: "Character",
+  persona: "Persona",
+  editHelp: "Changes remain a local draft until you save.",
+  createHelp: "Build the complete reusable card, then save it to Library.",
+  quickStart: "Quick start",
+  quickStartHelp: "Save this card and open a new Story from one of its greetings.",
+  playAs: "Play as",
+  openingGreeting: "Opening greeting",
+  startStory: "Start story",
+  quickStartUnavailable: "Add a greeting and create a Persona to quick-start this Character.",
+  storyCard: "Story Character card",
+  storyCardHelp: "This card applies only to ${story}. Live mood, stress, memories, relationships, and physical state stay intact.",
 });
 // UI_CATALOG_END
 
@@ -176,6 +189,30 @@ export function createPersonEditor(options = {}) {
   let advanced;
   const form = node(documentRef, "form", "ui-authoring-form");
   form.dataset.personEditor = state.kind;
+  const editorHeader = node(documentRef, "header", "ui-authoring-form__header");
+  editorHeader.append(node(
+    documentRef, "p", "ui-authoring-form__eyebrow",
+    services.localizer.t(
+      state.mode === "story-card" ? COPY.storyCard
+        : state.kind === "character" ? COPY.character : COPY.persona,
+    ),
+  ));
+  const editorTitle = node(
+    documentRef, "h2", "ui-heading ui-heading--2",
+    String(state.draft.identity?.name || ""),
+  );
+  editorHeader.append(
+    editorTitle,
+    node(
+      documentRef, "p", "ui-muted",
+      state.mode === "story-card"
+        ? services.localizer.t(COPY.storyCardHelp).replace(
+          "${story}", state.overview?.story_name || "this Story",
+        )
+        : services.localizer.t(state.mode === "create" ? COPY.createHelp : COPY.editHelp),
+    ),
+  );
+  form.append(editorHeader);
   const update = (path, value) => {
     current = setPath(current, path, value);
     if (advanced) advanced.value = JSON.stringify(current, null, 2);
@@ -191,8 +228,10 @@ export function createPersonEditor(options = {}) {
   const name = bind(textControl(
     documentRef, `ui-person-name-${state.id}`, "identity.name", identity.name,
   ), ["identity", "name"]);
+  name.addEventListener("input", () => { editorTitle.textContent = name.value; });
   name.required = true;
   name.maxLength = 240;
+  name.disabled = state.mode === "story-card";
   const aliases = bind(textControl(
     documentRef, `ui-person-aliases-${state.id}`, "identity.aliases",
     (identity.aliases || []).join("\n"), true,
@@ -237,13 +276,19 @@ export function createPersonEditor(options = {}) {
     documentRef, `ui-person-tool-brief-${state.id || "new"}`, "authoring_brief", "", true,
   );
   tools.append(field(documentRef, services.localizer.t(COPY.toolBrief), brief));
-  const toolActions = node(documentRef, "div", "ui-authoring-form__actions");
-  const toolButton = (label, action) => {
+  const toolActions = node(documentRef, "div", "ui-authoring-form__actions ui-action-cluster");
+  toolActions.setAttribute("role", "toolbar");
+  toolActions.setAttribute("aria-label", services.localizer.t(COPY.tools));
+  const more = node(documentRef, "details", "ui-action-more");
+  more.append(node(documentRef, "summary", "ui-button ui-button--quiet", services.localizer.t(COPY.more)));
+  const moreBody = node(documentRef, "div", "ui-action-more__menu");
+  more.append(moreBody);
+  const toolButton = (label, action, secondary = false) => {
     const control = node(documentRef, "button", "ui-button ui-button--quiet", services.localizer.t(label));
     control.type = "button";
     control.disabled = state.status === "previewing";
     control.addEventListener("click", () => action(brief.value.trim()));
-    toolActions.append(control);
+    (secondary ? moreBody : toolActions).append(control);
   };
   if (state.mode === "create") {
     toolButton(COPY.generate, value => services.authoring.previewGenerate(value));
@@ -251,8 +296,8 @@ export function createPersonEditor(options = {}) {
     toolButton(COPY.appearanceFill, value => services.authoring.previewAppearance(value));
     if (state.kind === "character") {
       toolButton(COPY.psychologyFill, value => services.authoring.previewPsychology(value));
-      toolButton(COPY.greetingGenerate, value => services.authoring.previewGreeting(value));
-      toolButton(COPY.greetingRecover, () => services.authoring.previewGreetingRecovery());
+      toolButton(COPY.greetingGenerate, value => services.authoring.previewGreeting(value), true);
+      toolButton(COPY.greetingRecover, () => services.authoring.previewGreetingRecovery(), true);
     }
   }
   if (state.status === "generation-error") {
@@ -267,6 +312,7 @@ export function createPersonEditor(options = {}) {
     discardGenerated.addEventListener("click", () => services.authoring.discardPreview());
     toolActions.append(discardGenerated);
   }
+  if (moreBody.childElementCount) toolActions.append(more);
   tools.append(toolActions);
   if (state.preview || state.status === "generation-error") {
     const previewStatus = node(
@@ -278,6 +324,46 @@ export function createPersonEditor(options = {}) {
     tools.append(previewStatus);
   }
   form.append(tools);
+  if (state.kind === "character" && state.mode === "edit") {
+    const personas = (services.store.getSnapshot().library?.library?.items || [])
+      .filter(item => item.kind === "persona" && !item.archived);
+    const greetings = Array.isArray(current.opening?.greetings)
+      ? current.opening.greetings : [];
+    const quick = node(documentRef, "section", "ui-authoring-quick-start");
+    quick.append(
+      node(documentRef, "h3", "ui-heading ui-heading--3", services.localizer.t(COPY.quickStart)),
+      node(documentRef, "p", "ui-muted", services.localizer.t(COPY.quickStartHelp)),
+    );
+    if (!personas.length || !greetings.length) {
+      quick.append(node(documentRef, "p", "ui-muted", services.localizer.t(COPY.quickStartUnavailable)));
+    } else {
+      const persona = node(documentRef, "select", "ui-input");
+      persona.id = `ui-quick-persona-${state.id}`;
+      for (const item of personas) {
+        const option = node(documentRef, "option", "", item.name || services.localizer.t(COPY.persona));
+        option.value = String(item.id);
+        persona.append(option);
+      }
+      const greeting = node(documentRef, "select", "ui-input");
+      greeting.id = `ui-quick-greeting-${state.id}`;
+      greetings.forEach((entry, index) => {
+        const prose = String(entry?.prose || current.opening?.first_message || "").replace(/\s+/g, " ").trim();
+        const option = node(documentRef, "option", "", `${index + 1} · ${prose.slice(0, 80)}`);
+        option.value = String(index);
+        greeting.append(option);
+      });
+      const start = node(documentRef, "button", "ui-button ui-button--primary", services.localizer.t(COPY.startStory));
+      start.type = "button";
+      start.disabled = state.status === "starting-story";
+      start.addEventListener("click", () => services.authoring.quickStart(persona.value, greeting.value));
+      quick.append(
+        field(documentRef, services.localizer.t(COPY.playAs), persona),
+        field(documentRef, services.localizer.t(COPY.openingGreeting), greeting),
+        start,
+      );
+    }
+    form.append(quick);
+  }
   form.append(createSchemaSections(
     documentRef, current, update, services.localizer.t,
   ));
@@ -311,7 +397,8 @@ export function createPersonEditor(options = {}) {
   });
   disclosure.append(advanced, feedback, applyAdvanced);
   form.append(disclosure);
-  const actions = node(documentRef, "div", "ui-authoring-form__actions");
+  const actions = node(documentRef, "div", "ui-authoring-form__actions ui-action-cluster");
+  actions.setAttribute("role", "toolbar");
   const discard = node(documentRef, "button", "ui-button ui-button--quiet", services.localizer.t(COPY.discard));
   discard.type = "button";
   discard.addEventListener("click", () => services.authoring.discard());

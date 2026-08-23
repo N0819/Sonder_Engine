@@ -120,7 +120,7 @@ export function mountLibraryAuthoring(options = {}) {
         const back = node(documentRef, "button", "ui-button ui-button--quiet", services.localizer.t(COPY.backToLibrary));
         back.type = "button";
         back.addEventListener("click", () => services.library.navigate({
-          type: state.kind, query: { item: state.owner },
+          type: state.kind, query: { item: `${state.kind}:${state.id}` },
         }));
         const status = node(documentRef, "p", "ui-authoring__status", statusCopy(state, services.localizer.t));
         status.setAttribute("role", "status");

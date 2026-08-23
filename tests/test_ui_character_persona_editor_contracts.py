@@ -64,6 +64,7 @@ def test_people_create_import_and_preview_tools_have_native_contracts():
         "/fill_appearance",
         "/generate_greeting",
         "/recover_greetings_preview",
+        "/api/characters/${active.id}/start",
         "/api/characters/import",
         "/api/personas/import",
     ):
@@ -76,9 +77,42 @@ def test_people_create_import_and_preview_tools_have_native_contracts():
         "services.authoring.previewGreetingRecovery",
         "services.authoring.retryPreview",
         "services.authoring.discardPreview",
+        "services.authoring.quickStart",
     ):
         assert action in editor
     assert "Create character" in detail
     assert "Create persona" in detail
     assert "Import character" in detail
     assert "Import persona" in detail
+
+
+def test_people_editor_uses_bible_pane_and_cluster_contracts():
+    editor = (
+        RUNTIME / "library-editors" / "character-persona.js"
+    ).read_text(encoding="utf-8")
+    detail = (RUNTIME / "library-view.js").read_text(encoding="utf-8")
+    css = (ROOT / "static" / "css" / "ui" / "library-authoring.css").read_text(
+        encoding="utf-8"
+    )
+    assert "ui-authoring-form__header" in editor
+    assert 'setAttribute("role", "toolbar")' in editor
+    assert "ui-action-more__menu" in editor
+    assert "ui-action-cluster" in detail
+    assert ".ui-action-cluster" in css
+    for nonexistent_token in (
+        "--ui-text-muted", "--ui-text-secondary", "--ui-surface-1",
+        "--ui-border-subtle", "--ui-radius-2", "--ui-font-size-sm",
+    ):
+        assert nonexistent_token not in css
+
+
+def test_story_card_override_is_a_native_owned_editor_route():
+    runtime = (RUNTIME / "library-authoring-runtime.js").read_text(encoding="utf-8")
+    editor = (
+        RUNTIME / "library-editors" / "character-persona.js"
+    ).read_text(encoding="utf-8")
+    detail = (RUNTIME / "library-view.js").read_text(encoding="utf-8")
+    assert "story-character:${storyId}:${id}" in runtime
+    assert "/api/chats/${owner.storyId}/characters/${owner.id}/card" in runtime
+    assert 'state.mode === "story-card"' in editor
+    assert "Edit Story card" in detail
