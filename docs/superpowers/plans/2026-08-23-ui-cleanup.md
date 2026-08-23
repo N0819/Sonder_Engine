@@ -3,7 +3,7 @@
 > **Goal:** Repair the confirmed visual/interaction defects in the approved UI
 > cleanup ledger and leave a verified local result on `interface` for review.
 
-Status: implemented and verified locally; commit and push remain on hold.
+Status: corrective release implemented and verified; integration is approved.
 
 Specification and acceptance ledger:
 `docs/design/sonder-ui-replacement/UI_CLEANUP_FIX_LIST.md`.
@@ -114,3 +114,31 @@ environment. Remove only audit artifacts created by this run.
 
 Review the final diff and report the verified local state. Do not commit or push
 until the 2026-08-23 hold is explicitly lifted.
+
+The hold was lifted on 2026-08-23 after live testing exposed that the deployed
+browser could still retain the old immutable UI bundle.
+
+## Task 9: Correct Settings input routing and release-cache coherence
+
+**Files:**
+
+- Modify: `static/js/ui-next/settings-view.js`
+- Modify: `static/css/ui/settings.css`
+- Modify: `static/ui-next.html` and the replacement release graph
+- Modify: `web/app.py`
+- Modify: `tests/test_ui_runtime_contracts.py`
+- Modify: `browser_tests/test_ui_settings.py`
+
+Forward vertical wheel and keyboard paging from fixed Settings chrome to the
+one detail scroll owner while preserving nested and horizontal scrolling. Give
+that owner explicit region/focus semantics. Replace the reused immutable asset
+identifier with a content-fingerprinted release and make future asset edits
+without a release rotation fail a source contract.
+
+## Task 10: Re-audit, verify, and integrate
+
+Replace the external-`use` layout-box icon assertion with actual fill-and-stroke
+view-box measurement, rerun deterministic Settings captures and the full
+responsive browser matrix, compare against the approved references, update the
+ledger with the cache-delivery finding, run the complete repository gate, then
+commit and push the verified correction to `interface`.

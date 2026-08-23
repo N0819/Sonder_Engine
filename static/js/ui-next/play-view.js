@@ -1,8 +1,8 @@
-export const MODULE_RELEASE = "alpha98-ui1";
+export const MODULE_RELEASE = "alpha98-ui2-d5cf750f8b7e";
 
-import { openNewStory } from "./new-story.js?release=alpha98-ui1";
+import { openNewStory } from "./new-story.js?release=alpha98-ui2-d5cf750f8b7e";
 
-import { renderPipelineInspector } from "./pipeline-inspector.js?release=alpha98-ui1";
+import { renderPipelineInspector } from "./pipeline-inspector.js?release=alpha98-ui2-d5cf750f8b7e";
 
 // UI_CATALOG_START: player-facing Play workflow copy.
 const COPY = Object.freeze({
@@ -86,7 +86,7 @@ function icon(documentRef, name) {
   svg.setAttribute("aria-hidden", "true");
   svg.setAttribute("focusable", "false");
   const use = documentRef.createElementNS("http://www.w3.org/2000/svg", "use");
-  use.setAttribute("href", `/static/assets/icons/sonder-icons.svg#icon-${name}`);
+  use.setAttribute("href", `/static/assets/icons/sonder-icons.svg?release=${MODULE_RELEASE}#icon-${name}`);
   svg.append(use);
   return svg;
 }

@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "alpha98-ui1";
+export const MODULE_RELEASE = "alpha98-ui2-d5cf750f8b7e";
 
 // UI_CATALOG_START: Alpha 9.8 New Story copy.
 const ALPHA98_NEW_STORY_COPY = Object.freeze([
@@ -15,7 +15,7 @@ import {
   generateLivedLocation,
   mountLivedLocationFields,
   normalizeLivedLocation,
-} from "./lived-location.js?release=alpha98-ui1";
+} from "./lived-location.js?release=alpha98-ui2-d5cf750f8b7e";
 
 const DRAFT_TYPE = "new-story";
 const DRAFT_OWNER = "current";
@@ -33,7 +33,7 @@ function icon(documentRef, name) {
   svg.setAttribute("aria-hidden", "true");
   svg.setAttribute("focusable", "false");
   const use = documentRef.createElementNS("http://www.w3.org/2000/svg", "use");
-  use.setAttribute("href", `/static/assets/icons/sonder-icons.svg#icon-${name}`);
+  use.setAttribute("href", `/static/assets/icons/sonder-icons.svg?release=${MODULE_RELEASE}#icon-${name}`);
   svg.append(use);
   return svg;
 }

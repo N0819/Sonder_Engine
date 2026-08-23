@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "alpha98-ui1";
+export const MODULE_RELEASE = "alpha98-ui2-d5cf750f8b7e";
 
 // UI_CATALOG_START: Story Tool platform states shown before family modules land.
 const COPY = Object.freeze({
@@ -34,7 +34,7 @@ function icon(documentRef, name) {
   svg.classList.add("ui-icon", "ui-story-tools__icon");
   svg.setAttribute("aria-hidden", "true");
   const use = documentRef.createElementNS("http://www.w3.org/2000/svg", "use");
-  use.setAttribute("href", `/static/assets/icons/sonder-icons.svg#icon-${name}`);
+  use.setAttribute("href", `/static/assets/icons/sonder-icons.svg?release=${MODULE_RELEASE}#icon-${name}`);
   svg.append(use);
   return svg;
 }

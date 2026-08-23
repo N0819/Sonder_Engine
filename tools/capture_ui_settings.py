@@ -218,6 +218,59 @@ def main() -> None:
                 ),
             )
             page.goto(
+                f"http://{host}:{port}/static/ui-next.html#/settings/experience"
+            )
+            page.wait_for_function(
+                "document.documentElement.dataset.uiNextState === 'ready'"
+            )
+            page.locator("[data-settings-content]").evaluate(
+                "node => { node.scrollTop = 0; }"
+            )
+            page.screenshot(path=OUTPUT / "settings-1440.png")
+            page.get_by_role("navigation", name="Settings categories").hover()
+            page.mouse.wheel(0, 10_000)
+            page.wait_for_function(
+                "document.querySelector('[data-settings-content]').scrollTop > 0"
+            )
+            page.screenshot(path=OUTPUT / "settings-experience-scrolled-1440.png")
+
+            page.set_viewport_size({"width": 390, "height": 844})
+            page.goto(
+                f"http://{host}:{port}/static/ui-next.html#/settings/experience"
+            )
+            page.wait_for_function(
+                "document.documentElement.dataset.uiNextState === 'ready'"
+            )
+            page.locator("[data-settings-content]").evaluate(
+                "node => { node.scrollTop = 0; }"
+            )
+            page.screenshot(path=OUTPUT / "settings-390.png")
+            page.get_by_role("navigation", name="Settings categories").hover()
+            page.mouse.wheel(0, 10_000)
+            page.wait_for_function(
+                "document.querySelector('[data-settings-content]').scrollTop > 0"
+            )
+            page.screenshot(path=OUTPUT / "settings-experience-scrolled-390.png")
+
+            page.set_viewport_size({"width": 1024, "height": 600})
+            page.goto(
+                f"http://{host}:{port}/static/ui-next.html#/settings/experience"
+            )
+            page.wait_for_function(
+                "document.documentElement.dataset.uiNextState === 'ready'"
+            )
+            page.locator("[data-settings-content]").evaluate(
+                "node => { node.scrollTop = 0; }"
+            )
+            page.get_by_role("navigation", name="Settings categories").hover()
+            page.mouse.wheel(0, 10_000)
+            page.wait_for_function(
+                "document.querySelector('[data-settings-content]').scrollTop > 0"
+            )
+            page.screenshot(path=OUTPUT / "settings-experience-scrolled-1024x600.png")
+
+            page.set_viewport_size({"width": 1440, "height": 900})
+            page.goto(
                 f"http://{host}:{port}/static/ui-next.html#/settings/ai-connections"
             )
             page.wait_for_function(

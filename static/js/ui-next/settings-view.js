@@ -1,7 +1,7 @@
-export const MODULE_RELEASE = "alpha98-ui1";
+export const MODULE_RELEASE = "alpha98-ui2-d5cf750f8b7e";
 
-import { appearance } from "../ui/appearance.js?release=alpha98-ui1";
-import { initAccessibility, updateAccessibility } from "../ui/accessibility.js?release=alpha98-ui1";
+import { appearance } from "../ui/appearance.js?release=alpha98-ui2-d5cf750f8b7e";
+import { initAccessibility, updateAccessibility } from "../ui/accessibility.js?release=alpha98-ui2-d5cf750f8b7e";
 
 // UI_CATALOG_START: Alpha 9.8 living-world routing copy.
 const ALPHA98_SETTINGS_COPY = Object.freeze([
@@ -79,12 +79,67 @@ function el(documentRef, tag, className = "", text = "") {
   return node;
 }
 
+function isEditableTarget(target) {
+  return Boolean(target?.closest?.("input, textarea, select, [contenteditable='true']"));
+}
+
+function bindSettingsScrollIntent(root, content) {
+  const windowRef = root.ownerDocument.defaultView;
+  const wheelDelta = event => {
+    if (event.deltaMode === 1) return event.deltaY * 16;
+    if (event.deltaMode === 2) return event.deltaY * content.clientHeight;
+    return event.deltaY;
+  };
+  const hasIndependentScrollOwner = target => {
+    if (target?.closest?.(".ui-settings__search-results")) return true;
+    for (let node = target; node && node !== root; node = node.parentElement) {
+      if (node === content) return true;
+      const overflowY = windowRef.getComputedStyle(node).overflowY;
+      if (/^(auto|scroll|overlay)$/.test(overflowY) && node.scrollHeight > node.clientHeight + 1) {
+        return true;
+      }
+    }
+    return false;
+  };
+  const moveDetail = delta => {
+    const maximum = Math.max(0, content.scrollHeight - content.clientHeight);
+    const next = Math.min(maximum, Math.max(0, content.scrollTop + delta));
+    if (Math.abs(next - content.scrollTop) < 0.5) return false;
+    content.scrollTop = next;
+    return true;
+  };
+  const onWheel = event => {
+    if (Math.abs(event.deltaX) >= Math.abs(event.deltaY)) return;
+    if (hasIndependentScrollOwner(event.target)) return;
+    if (moveDetail(wheelDelta(event))) event.preventDefault();
+  };
+  const onKeyDown = event => {
+    if (event.altKey || event.ctrlKey || event.metaKey || isEditableTarget(event.target)) return;
+    if (hasIndependentScrollOwner(event.target)) return;
+    const page = Math.max(44, content.clientHeight * 0.85);
+    const movement = {
+      PageDown: page,
+      PageUp: -page,
+      Home: -content.scrollHeight,
+      End: content.scrollHeight,
+    }[event.key];
+    if (movement === undefined) return;
+    if (moveDetail(movement)) event.preventDefault();
+  };
+  root.addEventListener("wheel", onWheel, { passive: false });
+  root.addEventListener("keydown", onKeyDown);
+  return () => {
+    root.removeEventListener("wheel", onWheel);
+    root.removeEventListener("keydown", onKeyDown);
+  };
+}
+
 function icon(documentRef, name) {
   const svg = documentRef.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.classList.add("ui-icon");
   svg.setAttribute("aria-hidden", "true");
   const use = documentRef.createElementNS("http://www.w3.org/2000/svg", "use");
-  use.setAttribute("href", `/static/assets/icons/sonder-icons.svg#icon-${name}`);
+  use.setAttribute("href", `/static/assets/icons/sonder-icons.svg?release=${MODULE_RELEASE}#icon-${name}`);
   svg.append(use);
   return svg;
 }
@@ -2585,8 +2640,11 @@ export function createSettingsView(options = {}) {
   header.append(title, settingsSearch(documentRef, services));
   const body = el(documentRef, "div", "ui-settings__body");
   const nav = categoryNav(documentRef, services, active);
-  const content = el(documentRef, "main", "ui-settings__content");
+  const content = el(documentRef, "div", "ui-settings__content");
   content.dataset.settingsContent = "true";
+  content.tabIndex = 0;
+  content.setAttribute("role", "region");
+  content.setAttribute("aria-label", `${CATEGORIES.find(([id]) => id === active)?.[1] || "Current"} settings`);
   content.append(
     active === "experience"
       ? experience(documentRef, services)
@@ -2604,6 +2662,7 @@ export function createSettingsView(options = {}) {
   );
   body.append(nav, content);
   root.append(header, body);
+  const teardownScrollIntent = bindSettingsScrollIntent(root, content);
   services.localizer.localize(root);
   requestAnimationFrame(() => {
     nav.querySelector("[aria-current='page']")?.scrollIntoView({ block: "nearest", inline: "center" });
@@ -2617,5 +2676,5 @@ export function createSettingsView(options = {}) {
       target?.scrollIntoView({ block: "center" });
     }
   });
-  return { element: root, teardown() {} };
+  return { element: root, teardown: teardownScrollIntent };
 }

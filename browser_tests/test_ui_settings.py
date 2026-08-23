@@ -177,22 +177,83 @@ def test_experience_preferences_have_visible_effects_and_only_supported_density_
     assert off == "0ms"
 
 
-def test_settings_detail_is_the_scroll_owner_on_desktop_and_short_laptop(
+def test_settings_wheel_intent_reaches_the_detail_from_surrounding_chrome(
     page: Page, ui_base_url: str
 ) -> None:
-    for width, height in ((1440, 900), (1024, 600)):
+    for width, height in ((1440, 900), (1024, 600), (390, 844), (844, 390)):
         page.goto("about:blank")
         _open_settings(page, ui_base_url, width=width, height=height)
         content = page.locator("[data-settings-content]")
         geometry = content.evaluate(
-            "node => ({ client: node.clientHeight, scroll: node.scrollHeight, top: node.scrollTop })"
+            "node => { node.scrollTop = 0; return { client: node.clientHeight, scroll: node.scrollHeight, top: node.scrollTop }; }"
         )
         assert geometry["scroll"] > geometry["client"], (width, height, geometry)
-        bottom = content.evaluate(
-            "node => { node.scrollTop = node.scrollHeight; return node.scrollTop; }"
+
+        page.get_by_role("navigation", name="Settings categories").hover()
+        page.mouse.wheel(0, 600)
+        page.wait_for_function(
+            "document.querySelector('[data-settings-content]').scrollTop > 0",
+            timeout=1500,
         )
-        assert bottom >= geometry["scroll"] - geometry["client"] - 1
+        assert content.evaluate("node => node.scrollTop") > 0, (width, height)
+        for _ in range(8):
+            page.mouse.wheel(0, 600)
         expect(page.get_by_role("button", name="Reset Experience")).to_be_visible()
+
+
+def test_settings_detail_is_keyboard_scrollable_and_the_only_scroll_owner(
+    page: Page, ui_base_url: str
+) -> None:
+    for width, height in ((1440, 900), (1024, 600), (390, 844), (844, 390)):
+        page.goto("about:blank")
+        _open_settings(page, ui_base_url, width=width, height=height)
+        content = page.locator("[data-settings-content]")
+        content.evaluate("node => { node.scrollTop = 0; }")
+
+        expect(content).to_have_attribute("tabindex", "0")
+        page.get_by_role("link", name="Experience", exact=True).focus()
+        page.keyboard.press("PageDown")
+        page.wait_for_function(
+            "document.querySelector('[data-settings-content]').scrollTop > 0",
+            timeout=1500,
+        )
+        for _ in range(8):
+            page.keyboard.press("PageDown")
+        scroll_state = page.evaluate(
+            """() => ({
+              detail: document.querySelector('[data-settings-content]').scrollTop,
+              workspace: document.querySelector('.ui-shell__workspace').scrollTop,
+              page: document.documentElement.scrollTop,
+            })"""
+        )
+        assert scroll_state["detail"] > 0, (width, height, scroll_state)
+        assert scroll_state["workspace"] == 0, (width, height, scroll_state)
+        assert scroll_state["page"] == 0, (width, height, scroll_state)
+
+
+def test_settings_search_results_keep_their_own_wheel_scrolling(
+    page: Page, ui_base_url: str
+) -> None:
+    _open_settings(page, ui_base_url, width=1024, height=600)
+    page.get_by_role("searchbox", name="Search settings").fill("e")
+    results = page.locator(".ui-settings__search-results")
+    expect(results).to_be_visible()
+    page.locator("[data-settings-content]").evaluate("node => { node.scrollTop = 0; }")
+    geometry = results.evaluate(
+        "node => ({ client: node.clientHeight, scroll: node.scrollHeight })"
+    )
+    assert geometry["scroll"] > geometry["client"], geometry
+
+    results.hover()
+    page.mouse.wheel(0, 300)
+    page.wait_for_function(
+        "document.querySelector('.ui-settings__search-results').scrollTop > 0",
+        timeout=1500,
+    )
+    assert page.locator("[data-settings-content]").evaluate("node => node.scrollTop") == 0
+    results.get_by_role("button").first.focus()
+    page.keyboard.press("PageDown")
+    assert page.locator("[data-settings-content]").evaluate("node => node.scrollTop") == 0
 
 
 def test_settings_native_controls_meet_desktop_and_touch_target_minimums(

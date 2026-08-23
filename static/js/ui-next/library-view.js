@@ -1,7 +1,7 @@
-export const MODULE_RELEASE = "alpha98-ui1";
+export const MODULE_RELEASE = "alpha98-ui2-d5cf750f8b7e";
 
-import { mountLivedLocationFields } from "./lived-location.js?release=alpha98-ui1";
-import { openNewStory } from "./new-story.js?release=alpha98-ui1";
+import { mountLivedLocationFields } from "./lived-location.js?release=alpha98-ui2-d5cf750f8b7e";
+import { openNewStory } from "./new-story.js?release=alpha98-ui2-d5cf750f8b7e";
 
 const loreLocationDrafts = new Map();
 
@@ -236,7 +236,7 @@ function icon(documentRef, name) {
   svg.setAttribute("aria-hidden", "true");
   svg.setAttribute("focusable", "false");
   const use = documentRef.createElementNS("http://www.w3.org/2000/svg", "use");
-  use.setAttribute("href", `/static/assets/icons/sonder-icons.svg#icon-${name}`);
+  use.setAttribute("href", `/static/assets/icons/sonder-icons.svg?release=${MODULE_RELEASE}#icon-${name}`);
   svg.append(use);
   return svg;
 }
