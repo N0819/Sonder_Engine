@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "wp07.1";
+export const MODULE_RELEASE = "alpha98-ui1";
 
 const AUTOSAVE_ACTIONS = new Set(["field-edit", "draft-update"]);
 const INVERSE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);

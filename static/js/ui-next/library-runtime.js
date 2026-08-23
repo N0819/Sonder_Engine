@@ -1,4 +1,6 @@
-export const MODULE_RELEASE = "wp07.1";
+export const MODULE_RELEASE = "alpha98-ui1";
+
+import { generateLivedLocation } from "./lived-location.js?release=alpha98-ui1";
 
 const TYPE_BY_SEGMENT = Object.freeze({
   "": "",
@@ -532,6 +534,40 @@ export function createLibraryRuntime(options = {}) {
     navigateAfter: true,
   });
 
+  const generateLocationFromLore = async (item, value) => {
+    const story = store.getSnapshot().story;
+    const chatId = numericId(story?.data?.chat?.id);
+    if (!chatId) throw new Error("Open the Story that should own this location, then return to this Lore.");
+    if (story.frameId !== null && story.frameId !== undefined) {
+      throw new Error("Return to the Story's present frame before creating a lived location.");
+    }
+    if (item?.kind !== "lore" || !numericId(item.id)) throw new Error("Choose reusable Lore first.");
+    const capturedItem = item.key;
+    const capturedRoute = currentRoute?.canonicalHash;
+    patchLibrary({ mutation: { status: "saving", owner: capturedItem, message: "Creating lived location…" } });
+    try {
+      const data = await generateLivedLocation({
+        apiClient, chatId, value, lorebookId: item.id,
+        requestOptions: {
+          channel: "library-lore-lived-location", owner: `${capturedItem}:story:${chatId}`,
+          isCurrent: () => !stopped && currentRoute?.canonicalHash === capturedRoute
+            && store.getSnapshot().library?.selected?.key === capturedItem,
+        },
+      });
+      if (stopped || currentRoute?.canonicalHash !== capturedRoute) return null;
+      const institutionCount = Object.keys(data?.charters?.items || {}).length;
+      patchLibrary({ mutation: {
+        status: "saved", owner: capturedItem,
+        message: `${institutionCount} institutions prepared.`,
+      } });
+      return data;
+    } catch (error) {
+      if (["aborted", "stale"].includes(error?.kind)) return null;
+      patchLibrary({ mutation: { status: "error", owner: capturedItem, message: error?.userMessage || error?.message || "The lived location could not be created." } });
+      return null;
+    }
+  };
+
   const runUndo = async () => {
     const receipt = undoReceipt;
     if (!receipt || receipt.expiresAt <= Date.now()) {
@@ -588,6 +624,7 @@ export function createLibraryRuntime(options = {}) {
     addToStory,
     setArchived,
     deleteStory,
+    generateLocationFromLore,
     runUndo,
     currentRoute: () => currentRoute,
     homeState: () => {

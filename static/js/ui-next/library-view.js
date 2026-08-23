@@ -1,6 +1,9 @@
-export const MODULE_RELEASE = "wp07.1";
+export const MODULE_RELEASE = "alpha98-ui1";
 
-import { openNewStory } from "./new-story.js?release=wp07.1";
+import { mountLivedLocationFields } from "./lived-location.js?release=alpha98-ui1";
+import { openNewStory } from "./new-story.js?release=alpha98-ui1";
+
+const loreLocationDrafts = new Map();
 
 // UI_CATALOG_START: Library discovery and detail copy.
 const COPY = Object.freeze({
@@ -816,6 +819,29 @@ function lifecycleActions(documentRef, services, library, item, viewState, reren
   return section;
 }
 
+function loreLocationAction(documentRef, services, item) {
+  if (item.kind !== "lore" || !item.reusable) return null;
+  const story = services.store.getSnapshot().story;
+  const section = node(documentRef, "section", "ui-library-detail__location");
+  section.append(node(documentRef, "h4", "ui-heading ui-heading--3", "Create a lived location"));
+  if (!story?.data?.chat?.id) {
+    section.append(node(documentRef, "p", "ui-muted", "Open the Story that should own the location, then return to this Lore."));
+    return section;
+  }
+  if (story.frameId !== null && story.frameId !== undefined) {
+    section.append(node(documentRef, "p", "ui-muted", "Return to the Story's present frame before creating a lived location."));
+    return section;
+  }
+  const draft = loreLocationDrafts.get(item.key) || { enabled: true, brief: item.summary || item.name || "", horizonHours: 168, characterHistories: [] };
+  loreLocationDrafts.set(item.key, draft);
+  const host = node(documentRef, "div", "");
+  mountLivedLocationFields({ document: documentRef, target: host, value: draft, title: "Location preparation", onChange(value) { loreLocationDrafts.set(item.key, value); } });
+  const run = button(documentRef, "Create lived location", "ui-button ui-button--primary");
+  run.addEventListener("click", () => services.library.generateLocationFromLore(item, loreLocationDrafts.get(item.key)));
+  section.append(host, run);
+  return section;
+}
+
 function storyOverview(documentRef, services, library, item) {
   const authoring = library?.authoring;
   if (item.kind !== "story" || authoring?.owner !== item.key
@@ -927,6 +953,8 @@ function renderDetail(documentRef, services, target, library, viewState, rerende
   if (overview) article.append(overview);
   const add = addToStory(documentRef, services, library, item);
   if (add) article.append(add);
+  const location = loreLocationAction(documentRef, services, item);
+  if (location) article.append(location);
   article.append(lifecycleActions(documentRef, services, library, item, viewState, rerender));
   if (undo) article.append(undo);
   wrapper.append(article);

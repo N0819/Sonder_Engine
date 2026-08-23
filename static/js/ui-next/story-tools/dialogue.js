@@ -1,7 +1,8 @@
-export const MODULE_RELEASE = "wp07.1";
+export const MODULE_RELEASE = "alpha98-ui1";
 
-import { element, errorState, fieldLabel, replaceLocalized, stateMessage, toolScope } from "./shared.js?release=wp07.1";
-import { mountDocumentEditor } from "./document-editor.js?release=wp07.1";
+import { element, errorState, fieldLabel, replaceLocalized, stateMessage, toolScope } from "./shared.js?release=alpha98-ui1";
+import { mountDocumentEditor } from "./document-editor.js?release=alpha98-ui1";
+import { mountCharterSection } from "./charters.js?release=alpha98-ui1";
 
 // UI_CATALOG_START: Dialogue tool copy.
 const COPY = Object.freeze({
@@ -45,11 +46,20 @@ export function mountDialogueTool({ services, target, document: documentRef }) {
     const { chatId, owner } = scope.current();
     replaceLocalized(services, target, stateMessage(documentRef, "loading", COPY.loading));
     try {
-      const [dialogue, background, livingWorld] = await Promise.all([
+      const results = await Promise.allSettled([
         scope.run("GET", "dialogue", `/api/chats/${chatId}/dialogue_config`),
         scope.run("GET", "background", `/api/chats/${chatId}/background_config`),
         scope.run("GET", "living-world", `/api/chats/${chatId}/living_world`),
+        scope.run("GET", "charters", `/api/chats/${chatId}/charters`),
+        scope.run("GET", "lorebooks", `/api/chats/${chatId}/lorebooks`),
       ]);
+      const [dialogueResult, backgroundResult, livingWorldResult, charterResult, lorebookResult] = results;
+      const coreFailure = [dialogueResult, backgroundResult, livingWorldResult]
+        .find(result => result.status === "rejected");
+      if (coreFailure) throw coreFailure.reason;
+      const dialogue = dialogueResult.value;
+      const background = backgroundResult.value;
+      const livingWorld = livingWorldResult.value;
       if (!scope.isLive() || !dialogue || !background || !livingWorld) return;
       child = mountDocumentEditor({
         services, target, document: documentRef, toolId: "dialogue", owner,
@@ -135,6 +145,13 @@ export function mountDialogueTool({ services, target, document: documentRef }) {
           });
         },
       });
+      target.append(mountCharterSection({
+        services, scope, chatId, document: documentRef,
+        data: charterResult.status === "fulfilled" ? charterResult.value : {},
+        unavailable: charterResult.status === "rejected",
+        lorebooks: lorebookResult.status === "fulfilled" ? lorebookResult.value?.lorebooks || [] : [],
+        generationUnavailable: lorebookResult.status === "rejected",
+      }));
     } catch (error) {
       if (!scope.isLive() || error?.kind === "stale" || error?.kind === "aborted") return;
       const problem = errorState(error);

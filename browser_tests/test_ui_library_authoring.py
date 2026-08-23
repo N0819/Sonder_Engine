@@ -19,6 +19,61 @@ BOOTSTRAP = {
 }
 
 
+def test_character_quick_start_sends_alpha98_history_contract(
+    page: Page, ui_base_url: str,
+) -> None:
+    page.goto(f"{ui_base_url}/static/ui-next-lab.html")
+    result = page.evaluate(
+        """async base => {
+          const storeModule = await import(`${base}/static/js/ui-next/store.js?release=alpha98-ui1`);
+          const runtimeModule = await import(`${base}/static/js/ui-next/library-authoring-runtime.js?release=alpha98-ui1`);
+          const store = storeModule.createStore();
+          const route = { destination: 'library', segments: ['characters'], query: { item: 'character:7', mode: 'edit' }, canonicalHash: '#/library/characters?item=character%3A7&mode=edit' };
+          store.dispatch({ type: 'presentation/replace', slice: 'route', value: route });
+          const loads = [];
+          const writes = [];
+          const navigations = [];
+          const apiClient = {
+            get: (path, options) => new Promise(resolve => loads.push({ path, options, resolve })),
+            request: (method, path, options) => new Promise(resolve => writes.push({ method, path, options, resolve })),
+            cancel: () => true,
+          };
+          const runtime = runtimeModule.createLibraryAuthoringRuntime({
+            store, apiClient,
+            localState: { getDraft: () => null, setDraft() {}, clearDraft() {} },
+            router: { current: () => route, navigate: value => navigations.push(value) },
+            target: { addEventListener() {}, removeEventListener() {} },
+          });
+          loads[0].resolve({ data: { kind: 'character', id: 7, owner: 'character:7', revision: 'r1', document: { identity: { name: 'Ilya' }, opening: { greetings: [{ prose: 'Hello' }] } } } });
+          await Promise.resolve(); await Promise.resolve();
+          const pending = runtime.quickStart({
+            personaId: 3, greetingIndex: 0, lorebookId: 12, alreadyKnown: false, language: 'en',
+            livedLocation: { enabled: true, brief: 'A hospital built into a cliff', horizon_hours: 168, active_tail_hours: 96, generate_history: true, character_history: { mode: 'resident', brief: 'Night-shift surgeon' } },
+          });
+          await Promise.resolve();
+          const write = writes[0];
+          write.resolve({ data: { chat_id: 44 } });
+          const accepted = await pending;
+          runtime.teardown();
+          return { accepted, method: write.method, path: write.path, body: write.options.body, navigations };
+        }""",
+        ui_base_url,
+    )
+    assert result["accepted"] is True
+    assert result["method"] == "POST"
+    assert result["path"] == "/api/characters/7/start"
+    assert result["body"] == {
+        "persona_id": 3, "greeting_index": 0, "lorebook_id": 12,
+        "already_known": False, "language": "en",
+        "lived_location": {
+            "enabled": True, "brief": "A hospital built into a cliff",
+            "horizon_hours": 168, "active_tail_hours": 96,
+            "generate_history": True,
+            "character_history": {"mode": "resident", "brief": "Night-shift surgeon"},
+        },
+    }
+
+
 def test_story_editor_is_routed_and_round_trips_a_recovered_draft(
     page: Page, ui_base_url: str,
 ) -> None:
@@ -114,10 +169,10 @@ def test_authoring_runtime_preserves_drafts_and_rejects_late_save(
     result = page.evaluate(
         """async base => {
           const storeModule = await import(
-            `${base}/static/js/ui-next/store.js?release=wp07.1`
+            `${base}/static/js/ui-next/store.js?release=alpha98-ui1`
           );
           const authoringModule = await import(
-            `${base}/static/js/ui-next/library-authoring-runtime.js?release=wp07.1`
+            `${base}/static/js/ui-next/library-authoring-runtime.js?release=alpha98-ui1`
           );
           const store = storeModule.createStore();
           let route = {
@@ -231,10 +286,10 @@ def test_authoring_runtime_restores_draft_and_preserves_failed_save(
     result = page.evaluate(
         """async base => {
           const storeModule = await import(
-            `${base}/static/js/ui-next/store.js?release=wp07.1`
+            `${base}/static/js/ui-next/store.js?release=alpha98-ui1`
           );
           const authoringModule = await import(
-            `${base}/static/js/ui-next/library-authoring-runtime.js?release=wp07.1`
+            `${base}/static/js/ui-next/library-authoring-runtime.js?release=alpha98-ui1`
           );
           const store = storeModule.createStore();
           const route = {
@@ -298,10 +353,10 @@ def test_story_import_retry_and_branch_use_distinct_owned_operations(
     result = page.evaluate(
         """async base => {
           const storeModule = await import(
-            `${base}/static/js/ui-next/store.js?release=wp07.1`
+            `${base}/static/js/ui-next/store.js?release=alpha98-ui1`
           );
           const authoringModule = await import(
-            `${base}/static/js/ui-next/library-authoring-runtime.js?release=wp07.1`
+            `${base}/static/js/ui-next/library-authoring-runtime.js?release=alpha98-ui1`
           );
           const store = storeModule.createStore();
           let route = {

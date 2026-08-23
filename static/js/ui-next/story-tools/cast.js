@@ -1,8 +1,8 @@
-export const MODULE_RELEASE = "wp07.1";
+export const MODULE_RELEASE = "alpha98-ui1";
 
 import {
   button, element, errorState, fieldLabel, frameQuery, markData, replaceLocalized, stateMessage, toolScope,
-} from "./shared.js?release=wp07.1";
+} from "./shared.js?release=alpha98-ui1";
 
 // UI_CATALOG_START: Cast tool actions and states.
 const COPY = Object.freeze({

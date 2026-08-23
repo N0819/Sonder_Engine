@@ -92,3 +92,11 @@
     .ui-story-tools__list { grid-template-columns: minmax(0, 1fr); }
   }
 }
+.ui-charters { display: grid; gap: var(--ui-space-4); margin-block-start: var(--ui-space-5); }
+.ui-charters__summary { margin: 0; color: var(--ui-color-text); }
+.ui-charters__ledger { border: 1px solid var(--ui-color-border); }
+.ui-charters__row { display: flex; justify-content: space-between; gap: var(--ui-space-4); padding: var(--ui-space-4); border-block-end: 1px solid var(--ui-color-border); }
+.ui-charters__row:last-child { border-block-end: 0; }
+.ui-charters__warning { margin: 0; padding: var(--ui-space-4); border-inline-start: 2px solid var(--ui-color-warning); background: var(--ui-color-surface-muted); }
+.ui-charters__raw { max-block-size: 260px; overflow: auto; white-space: pre-wrap; color: var(--ui-color-text-muted); }
+.ui-charters__generation-body { display: grid; gap: var(--ui-space-4); padding-block-start: var(--ui-space-4); }

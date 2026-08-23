@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "wp07.1";
+export const MODULE_RELEASE = "alpha98-ui1";
 
 const DEFAULTS = Object.freeze({ muted: false, volume: 0.7, chime: false });
 

@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "wp13.0";
+export const MODULE_RELEASE = "alpha98-ui1";
 
 function node(documentRef, tag, className = "", text = "") {
   const result = documentRef.createElement(tag);

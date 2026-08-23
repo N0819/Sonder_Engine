@@ -1,4 +1,21 @@
-export const MODULE_RELEASE = "wp07.1";
+export const MODULE_RELEASE = "alpha98-ui1";
+
+// UI_CATALOG_START: Alpha 9.8 New Story copy.
+const ALPHA98_NEW_STORY_COPY = Object.freeze([
+  "Prepare a lived location",
+  "Lived location",
+  "Character pasts",
+  "View incomplete Story",
+  "Choose no more than 16 Characters when preparing a lived location.",
+]);
+// UI_CATALOG_END
+
+import {
+  buildLivedLocationRequest,
+  generateLivedLocation,
+  mountLivedLocationFields,
+  normalizeLivedLocation,
+} from "./lived-location.js?release=alpha98-ui1";
 
 const DRAFT_TYPE = "new-story";
 const DRAFT_OWNER = "current";
@@ -33,6 +50,7 @@ function emptyDraft(settings) {
     preparedCharacterIds: [],
     cardWarnings: [],
     cardWarningsReviewed: false,
+    livedLocation: normalizeLivedLocation(),
   };
 }
 
@@ -53,6 +71,7 @@ function restoreDraft(services, settings) {
         loreIds: Array.isArray(parsed.loreIds) ? parsed.loreIds : [],
         preparedCharacterIds: Array.isArray(parsed.preparedCharacterIds) ? parsed.preparedCharacterIds : [],
         cardWarnings: Array.isArray(parsed.cardWarnings) ? parsed.cardWarnings : [],
+        livedLocation: normalizeLivedLocation(parsed.livedLocation),
       },
       restored: true,
     };
@@ -130,6 +149,16 @@ export function openNewStory(options = {}) {
   (documentRef.querySelector("[data-shell-overlay-host]") || documentRef.body).append(dialog);
 
   const persist = () => services.localState.setDraft(DRAFT_TYPE, DRAFT_OWNER, JSON.stringify(state));
+  const mountLocation = (target, characters = []) => mountLivedLocationFields({
+    document: documentRef,
+    target,
+    value: state.livedLocation,
+    characters,
+    onChange(value) {
+      state.livedLocation = value;
+      persist();
+    },
+  });
   const setStep = (step, route = state.route) => {
     state.step = step;
     state.route = route;
@@ -234,6 +263,7 @@ export function openNewStory(options = {}) {
       field(documentRef, "Opening situation", scenario, "Where play begins and what is already true."),
       field(documentRef, "Story language", language),
     );
+    if (state.route === "blank") mountLocation(form);
     const actions = node(documentRef, "div", "ui-new-story__actions");
     actions.append(backButton("Back", () => setStep("choice", "")));
     const next = node(documentRef, "button", "ui-button ui-button--primary", state.route === "blank" ? "Review story" : "Choose story material");
@@ -297,6 +327,7 @@ export function openNewStory(options = {}) {
           ? [...new Set([...state.characterIds, Number(item.id)])]
           : state.characterIds.filter(id => Number(id) !== Number(item.id));
         persist();
+        render();
       }, "Saved in Library",
     )));
     const brief = node(documentRef, "textarea", "ui-textarea");
@@ -323,6 +354,16 @@ export function openNewStory(options = {}) {
     )));
     grid.append(personaSection, castSection, loreSection);
     body.append(grid);
+    const locationCharacters = (data.characters || []).filter(item => (
+      state.characterIds.includes(Number(item.id))
+    )).map(item => ({
+      key: `saved:${item.id}`,
+      name: item.name || "Untitled character",
+    }));
+    if (state.route === "describe") {
+      locationCharacters.push({ key: "generated:0", name: "New generated character" });
+    }
+    mountLocation(body, locationCharacters);
     const warning = node(documentRef, "div", "ui-new-story__warning");
     warning.append(
       node(documentRef, "strong", "", "AI generation is unavailable."),
@@ -368,8 +409,15 @@ export function openNewStory(options = {}) {
     row("Persona", personaName);
     row("Cast", `${selectedCharacters.length} saved · ${generatedCount} generated`);
     row("Lore", `${selectedLore.length} selected`);
+    if (state.livedLocation.enabled) {
+      const horizon = Number(state.livedLocation.horizonHours) || 0;
+      row("Lived location", state.livedLocation.brief.trim() || "Prepared from the story setup");
+      row("Character pasts", horizon
+        ? `${horizon === 720 ? "Past month" : "Past week"} · active tail ${Math.min(96, horizon)} hours`
+        : "Start at the present");
+    }
     body.append(review);
-    const needsModel = state.generatePersona || generatedCount > 0;
+    const needsModel = state.generatePersona || generatedCount > 0 || state.livedLocation.enabled;
     body.append(node(documentRef, "p", "ui-new-story__cost", needsModel
       ? "AI generation selected · provider usage may incur model cost."
       : "No AI generation selected"));
@@ -400,6 +448,7 @@ export function openNewStory(options = {}) {
       creating = true;
       create.disabled = true;
       error.textContent = "Creating story…";
+      let incompleteStoryId = null;
       try {
         if (state.cardWarnings.length && !state.cardWarningsReviewed) {
           state.cardWarningsReviewed = true;
@@ -441,22 +490,68 @@ export function openNewStory(options = {}) {
           return;
         }
         const characterIds = [...state.characterIds, ...generatedCharacterIds];
+        if (state.livedLocation.enabled && characterIds.length > 16) {
+          throw new Error("A lived-location start can prepare at most 16 full Characters. Remove a Character route or turn off lived-location preparation; the Story setup is still here.");
+        }
         const result = await services.apiClient.post("/api/chats", {
           name: state.name || "New story", scenario: state.scenario, language: state.language || "en",
         }, { channel: "new-story-create", owner: DRAFT_OWNER });
         const chatId = Number(result.data?.id);
         if (!Number.isSafeInteger(chatId)) throw new Error("The created Story response was incomplete.");
+        incompleteStoryId = chatId;
         if (personaId) await services.apiClient.put(`/api/chats/${chatId}`, { persona_id: personaId }, { channel: "new-story-persona-attach", owner: DRAFT_OWNER });
         for (const charId of characterIds) await services.apiClient.post(`/api/chats/${chatId}/characters`, { char_id: Number(charId), already_known: false }, { channel: "new-story-cast-attach", owner: DRAFT_OWNER });
-        for (const loreId of state.loreIds) await services.apiClient.post(`/api/chats/${chatId}/lorebooks`, { lorebook_id: Number(loreId) }, { channel: "new-story-lore-attach", owner: DRAFT_OWNER });
+        let owningLorebookId = null;
+        for (const loreId of state.loreIds) {
+          const attached = await services.apiClient.post(`/api/chats/${chatId}/lorebooks`, { lorebook_id: Number(loreId) }, { channel: "new-story-lore-attach", owner: DRAFT_OWNER });
+          if (!owningLorebookId) owningLorebookId = Number(attached.data?.lorebook_id || attached.data?.id) || null;
+        }
+        if (state.livedLocation.enabled) {
+          const generatedByIndex = new Map(generatedCharacterIds.map((id, index) => [`generated:${index}`, id]));
+          const savedIds = new Set(state.characterIds.map(Number));
+          await generateLivedLocation({
+            apiClient: services.apiClient,
+            chatId,
+            value: state.livedLocation,
+            sourceLorebookId: state.loreIds[0] || null,
+            owningLorebookId,
+            resolveCharacterId(key) {
+              if (key.startsWith("saved:")) {
+                const id = Number(key.slice(6));
+                return savedIds.has(id) ? id : null;
+              }
+              return generatedByIndex.get(key) || null;
+            },
+            requestOptions: { channel: "new-story-lived-location", owner: DRAFT_OWNER },
+          });
+        }
         services.localState.clearDraft(DRAFT_TYPE, DRAFT_OWNER);
         const current = services.store.getSnapshot().library;
         services.store.dispatch({ type: "server/patch", slice: "library", value: {
           chats: [{ id: chatId, name: state.name || "New story" }, ...(current.chats || [])],
         } });
         dialog.close("created");
+        incompleteStoryId = null;
         services.router.navigate({ destination: "play", query: { chat: String(chatId) } });
       } catch (caught) {
+        if (incompleteStoryId) {
+          try {
+            await services.apiClient.delete(`/api/chats/${incompleteStoryId}`, {
+              channel: "new-story-cleanup", owner: DRAFT_OWNER,
+            });
+          } catch (cleanupError) {
+            error.replaceChildren(documentRef.createTextNode("Story setup failed and the incomplete Story could not be removed. Your setup draft is still here. "));
+            const link = node(documentRef, "button", "ui-button ui-button--quiet", "View incomplete Story");
+            link.type = "button";
+            link.addEventListener("click", () => {
+              dialog.close("incomplete");
+              services.router.navigate({ destination: "play", query: { chat: String(incompleteStoryId) } });
+            });
+            error.append(link);
+            create.disabled = false;
+            return;
+          }
+        }
         error.textContent = caught?.userMessage || caught?.message || "Sonder could not create the story. Your setup draft is still here.";
         create.disabled = false;
       } finally {
