@@ -1,6 +1,6 @@
-export const MODULE_RELEASE = "wp07.1";
+export const MODULE_RELEASE = "alpha98-ui1";
 
-import { ApiError } from "./errors.js?release=wp07.1";
+import { ApiError } from "./errors.js?release=alpha98-ui1";
 
 const FRIENDLY_PHASES = Object.freeze({
   director_establish: "Setting the scene",

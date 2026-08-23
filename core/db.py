@@ -26,6 +26,9 @@ active_frame_id = contextvars.ContextVar("active_frame_id", default=None)
 FRAME_SCOPED_WORLD_KEYS = {
     "scene", "known", "simulation_clock", "pending", "background_presences",
     "offscreen_log", "offscreen_epoch", "offscreen_plans",
+    # Institution/upkeep simulation. Definitions are author-owned elsewhere;
+    # this is the clocked state they produce in one era.
+    "charters",
     "standing_intentions",
     # Crowd blobs. Per-era like the scene they stand in: a branch that never
     # went to the market must not inherit the market's throng.

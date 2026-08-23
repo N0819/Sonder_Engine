@@ -1,8 +1,8 @@
-export const MODULE_RELEASE = "wp07.1";
+export const MODULE_RELEASE = "alpha98-ui1";
 
 import {
   button, element, errorState, fieldLabel, markData, replaceLocalized, stateMessage, toolScope,
-} from "./shared.js?release=wp07.1";
+} from "./shared.js?release=alpha98-ui1";
 
 // UI_CATALOG_START: Ambience tool actions, credits, and explicit states.
 const COPY = Object.freeze({

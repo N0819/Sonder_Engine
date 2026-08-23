@@ -60,7 +60,7 @@ from core.logging_utils import logger
 from world.mechanics import stable_event_key
 
 # ---------------------------------------------------------------------------
-# The settings ladder: five approaches, each spendable at two depths.
+# The settings ladder: author-selectable world-generation approaches.
 # ---------------------------------------------------------------------------
 
 #: Ordered: a depth permits everything below it. ``ceiling`` is the
@@ -68,34 +68,30 @@ from world.mechanics import stable_event_key
 #: second mechanism (design doc, preamble to §1).
 LIVING_WORLD_DEPTHS = ("off", "floor", "ceiling")
 
-#: The five approaches of ``docs/design/DESIGN_LIVING_WORLD.md`` §1–§5, in its
-#: order. The keys are the design document's own names so the setting, the
-#: document and the report of what fired can never be three vocabularies.
+#: Rumour transport is no longer an optional approach. It is core epistemic
+#: physics owned by Charter people and the shared physical carrier rail; a
+#: setting that can disable witnessing, speech or letters makes the world
+#: incoherent. The remaining keys are author-selectable generation policies.
 LIVING_WORLD_APPROACHES = (
     "routine_residue",        # A: the world's default motion
     "scheduled_consequence",  # B: the world as a delay line
-    "rumor_ledger",           # C: information is the thing that moves
     "place_obligations",      # D: the lorebook edge owes a history
     "antagonist_ladder",      # E: plans that advance unwatched
 )
 
 #: Which depths actually DO something today. Kept beside the ladder, like
 #: ``scene.OFFSCREEN_LIFE_BUILT``, so an unbuilt tier cannot quietly start
-#: reading as built when it ships and nobody updates a menu. C's physical
-#: carrier floor and E's deterministic/reactive floor are built. E's floor
+#: reading as built when it ships and nobody updates a menu. Physical carrier
+#: behavior is core and therefore absent from this table. E's floor
 #: advances only Director-adjudicated stages authored from a character's own
-#: on-screen declaration; its adaptive ceiling is now built on top of C
+#: on-screen declaration; its adaptive ceiling is built on the core carrier
+#: network
 #: (``offscreen.schedule_agent_ticks``): an opted-in dormant mind with a
 #: private reason gets one reduced turn — fail-closed private context, one
 #: character call, one Director adjudication, one atomic landing.
 LIVING_WORLD_BUILT = {
     "routine_residue": frozenset({"floor"}),
     "scheduled_consequence": frozenset({"floor"}),
-    # C's ceiling is the artifact wording mint (`artifacts.
-    # schedule_artifact_wording`): one small out-of-band call per posted
-    # notice, landed only if the bill still stands. The floor — posting,
-    # reading, tearing down, caravans — never spends and never waits on it.
-    "rumor_ledger": frozenset({"floor", "ceiling"}),
     "place_obligations": frozenset({"floor"}),
     "antagonist_ladder": frozenset({"floor", "ceiling"}),
 }
@@ -117,8 +113,8 @@ LIVING_WORLD_DESCRIPTIONS = {
     "scheduled_consequence": {
         "label": "Scheduled consequence",
         "floor": "This beat's causes set offscreen effects on the clock — "
-                 "the patrol doubles in three days, news reaches the "
-                 "capital in a week — and they genuinely happen, seen or "
+                 "the patrol doubles in three days, the river gate closes "
+                 "in a week — and they genuinely happen, seen or "
                  "not.",
         "ceiling": "A significant consequence can mint a second-order one "
                    "when it lands (fire, then prices, then the bread "
@@ -126,16 +122,6 @@ LIVING_WORLD_DESCRIPTIONS = {
         "cost": "floor: free — rows on the existing event clock; ceiling: "
                 "~1 call per significant fired consequence, off the turn "
                 "path",
-    },
-    "rumor_ledger": {
-        "label": "Rumor ledger",
-        "floor": "Public event surfaces travel inside actual witnesses; "
-                 "another mind learns only through on-page communication, "
-                 "never because an objective-event timer fired.",
-        "ceiling": "Notices and proclamations get real written text when "
-                   "word reaches a surface that would post one.",
-        "cost": "floor: free — bounded character state; ceiling: ~1 "
-                "small call per posted artifact",
     },
     "place_obligations": {
         "label": "Places that owe a history",
@@ -180,7 +166,6 @@ LIVING_WORLD_REQUIRES = {
     "routine_residue": {"floor": "deterministic", "ceiling": "stochastic"},
     "scheduled_consequence": {"floor": "deterministic",
                               "ceiling": "stochastic"},
-    "rumor_ledger": {"floor": "deterministic", "ceiling": "stochastic"},
     "place_obligations": {"floor": "deterministic", "ceiling": "stochastic"},
     "antagonist_ladder": {"floor": "reactive",
                           "ceiling": "character_agent"},

@@ -15,7 +15,7 @@ def test_people_editor_is_loaded_and_edits_complete_documents():
     editor = (
         RUNTIME / "library-editors" / "character-persona.js"
     ).read_text(encoding="utf-8")
-    assert 'export const MODULE_RELEASE = "wp07.1";' in editor
+    assert 'export const MODULE_RELEASE = "alpha98-ui1";' in editor
     assert "library-editors/character-persona.js" in bootstrap
     assert "createPersonEditor" in view
     for owned_path in (

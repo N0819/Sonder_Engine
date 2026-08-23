@@ -671,6 +671,19 @@ def prepare_scene_commit(ctx):
             destruction, cid, ctx.turn.frame_id, ctx.turn,
             float(base_clock.get("elapsed_seconds") or 0.0))
 
+    # A planned neighbour becomes a real, prose-free scene stub before the
+    # dangling-edge guard runs. The registry continues to own the rest of the
+    # town; mapping resolves only the room the story actually reaches.
+    _frontier_mutations = []
+    try:
+        from world.structure import (
+            materialize_planned_fringe, prepare_frontier_expansion)
+        sc, _frontier_mutations = prepare_frontier_expansion(cid, sc)
+        sc, _planned_added = materialize_planned_fringe(cid, sc)
+    except Exception as _planned_exc:  # diagnostics, never a story blocker
+        ctx.warnings.append(
+            f"planned-room fringe could not be materialized: {_planned_exc}")
+
     for _msg in prune_dangling_exits(sc):
         ctx.warnings.append(_msg)
 
@@ -739,6 +752,7 @@ def prepare_scene_commit(ctx):
         "prev_clock": prev_clock,
         "room_registry": _prepare_room_registry(
             cid, chat.lorebook_id, prev_scene, sc),
+        "frontier_mutations": _frontier_mutations,
         "destruction": destruction,
     }
 
@@ -756,6 +770,10 @@ def commit_scene(ctx, nonce, *, prepared=None):
         # same commit domain (see the registry block comment): identity/
         # retirement bookkeeping, never a second authority over live rooms.
         _apply_room_registry(ctx.chat.id, ctx.turn.id, registry)
+        if prepared.get("frontier_mutations"):
+            from world.structure import apply_frontier_mutations
+            apply_frontier_mutations(
+                ctx.chat.id, ctx.turn.id, prepared["frontier_mutations"])
         if prepared.get("destruction"):
             _apply_destruction(
                 ctx.chat.id, ctx.turn.id, prepared["destruction"])

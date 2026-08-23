@@ -235,12 +235,40 @@ def test_a_reasoning_only_reply_is_a_retryable_failure_not_a_keyerror():
 
     parsed = {"choices": [{"message": {
         "reasoning": "1. Analyze the request. " * 40}}]}
-    with pytest.raises(providers.LLMError) as caught:
+    with pytest.raises(providers.ReasoningBudgetExhausted) as caught:
         providers._message_content(parsed, "nano", "glm-5p2")
     assert caught.value.retryable is True
     text = str(caught.value)
     assert "reasoning but no answer" in text
     assert "glm-5p2" in text
+
+
+def test_reasoning_only_reply_retries_once_in_direct_answer_mode(monkeypatch):
+    """Do not buy the same unusable trace on every retry.
+
+    The first call keeps the host's configured reasoning.  Only proof that it
+    consumed the whole answer changes the next attempt, and that change is
+    local to this one completion.
+    """
+    from llm import providers
+
+    monkeypatch.setattr(
+        providers, "resolve_role_candidates",
+        lambda role: [({"kind": "nanogpt"}, "model", {})])
+    overrides = []
+
+    def complete(*args, **kwargs):
+        overrides.append(kwargs.get("reasoning_effort_override"))
+        if len(overrides) == 1:
+            raise providers.ReasoningBudgetExhausted("no answer")
+        return '{"ok": true}'
+
+    monkeypatch.setattr(providers, "_chat_complete_once", complete)
+    retry = providers.RetryConfig(
+        max_retries=1, base_delay=0.0, max_delay=0.0)
+    assert providers.chat_complete(
+        "utility", "system", "user", retry_config=retry) == '{"ok": true}'
+    assert overrides == [None, "off"]
 
 
 def test_an_ordinary_reply_still_comes_straight_back():

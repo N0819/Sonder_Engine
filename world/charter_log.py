@@ -34,7 +34,12 @@ from .charter_needs import mood, pressure
 from .charter_news import known_news
 from .charter_feel import strain_of
 from .charter_model import out_of_band
+from .charter_politics import regard_pair, regard_value
 from .charter_temper import temperament_of
+from .charter_commitment import commitment_view
+from .charter_decide import decision_view
+from .charter_economy import normalize_economy, quote, stock_band
+from .charter_social import judgment_view
 
 
 def window_note(charter, events, told):
@@ -156,13 +161,15 @@ def life_of(body_key, charter, events, trace=(), hours_per_day=24.0):
             needs,
             blamed=int((politics.get("blame") or {}).get(key, 0)),
             regard_of_others=[
-                w for (listener, speaker), w in (
-                    politics.get("regard") or {}).items() if speaker == key]),
+                weight for pair_key, weight in (
+                    politics.get("regard") or {}).items()
+                if regard_pair(pair_key) is not None
+                and regard_pair(pair_key)[1] == key]),
         "regarded_by": {
-            speaker: round(float(weight), 3)
-            for (listener, speaker), weight in (
-                politics.get("regard") or {}).items()
-            if listener == key},
+            regard_pair(pair_key)[1]: round(float(weight), 3)
+            for pair_key, weight in (politics.get("regard") or {}).items()
+            if regard_pair(pair_key) is not None
+            and regard_pair(pair_key)[0] == key},
         "events": chronicle(
             [e for e in (events or [])
              if e.get("body") == key
@@ -206,6 +213,10 @@ def scene_ledger(charter, place, events=(), hours_per_day=24.0):
     strains = strain_of(feel)
     watch = charter.get("watch") or {}
     posts = charter.get("posts") or {}
+    judgments = charter.get("judgments") or {}
+    commitments = charter.get("commitments") or {}
+    decisions = charter.get("decisions") or {}
+    economy = normalize_economy(charter.get("economy"))
 
     here = sorted(k for k, b in bodies.items()
                   if str(b.get("place") or "") == place)
@@ -222,10 +233,14 @@ def scene_ledger(charter, place, events=(), hours_per_day=24.0):
         # What this body could raise: its news, strongest first, then the
         # people here it has an opinion about. Capped hard.
         news = [
-            {"what": n["event_kind"], "about": n["about"],
-             "where": n["place"], "hours_ago": round(
+            {"what": n.get("event_kind") or "report",
+             "about": n.get("about") or "something",
+             **({"claim": n["claim_text"]} if n.get("claim_text") else {}),
+             **({"public_evidence": dict(n["public_evidence"])}
+                if isinstance(n.get("public_evidence"), dict) else {}),
+             "where": n.get("place") or "", "hours_ago": round(
                  float(charter.get("clock_hours") or 0.0)
-                 - float(n["happened_at"]), 1),
+                 - float(n.get("happened_at") or 0.0), 1),
              "firsthand": n.get("heard_from") is None,
              "from": n.get("heard_from")}
             for n in known_news(minds, key)[:3]]
@@ -244,7 +259,7 @@ def scene_ledger(charter, place, events=(), hours_per_day=24.0):
             else:
                 surprise = 0.0 if claim.get("believed_available") else 1.0
             return (
-                abs(1.0 - float(regard.get((key, other), 1.0))),   # a view
+                abs(1.0 - regard_value(regard, key, other)),       # a view
                 surprise,
                 float(claim.get("strength") or 0.0),               # confidence
             )
@@ -261,7 +276,7 @@ def scene_ledger(charter, place, events=(), hours_per_day=24.0):
             other: {
                 "firsthand": (minds[key][other].get("heard_from") is None),
                 "believes_present": _believes_present(minds[key][other]),
-                "regard": round(float(regard.get((key, other), 1.0)), 3),
+                "regard": round(regard_value(regard, key, other), 3),
                 **({"figure": True}
                    if minds[key][other].get("kind") == "figure" else {}),
             }
@@ -269,6 +284,9 @@ def scene_ledger(charter, place, events=(), hours_per_day=24.0):
         }
         presences[key] = {
             "competence": dict(body.get("competence") or {}),
+            # The exact five dispositions the full character tier reads.
+            # This is personality continuity, not an improvised blurb.
+            "temperament": temperament_of(dict(body, key=key)),
             "able": bool(body.get("available", True)),
             "condition": {n: round(float(v["level"]), 2)
                           for n, v in held_needs.items()},
@@ -283,7 +301,32 @@ def scene_ledger(charter, place, events=(), hours_per_day=24.0):
                 company - set(minds.get(key) or {}) - {key}),
             "blamed": int(blame.get(key, 0)),
             "knows_it_is_blamed": sorted(heard_blame.get(key, ())),
+            # Independent, evidence-citing stances toward current company;
+            # and only commitments this body is party to or has learned.
+            "social_judgments": judgment_view(
+                judgments, key, subjects=company - {key}, cap=4),
+            "commitments": commitment_view(
+                commitments, key, parties=company - {key}, cap=4),
+            "institutional": decision_view(
+                decisions,
+                post=next((p for p, who in watch.items() if who == key), ""),
+                body=key, cap=4),
         }
+
+    market_rows = []
+    for market_key, market in sorted(economy["markets"].items()):
+        if market["place"] != place:
+            continue
+        holder = market["holder"]
+        goods = sorted(set((economy["stocks"].get(holder) or {}))
+                       | set((economy["targets"].get(holder) or {})))
+        market_rows.append({
+            "market": market_key, "holder": holder,
+            "stock": {good: stock_band(economy, holder, good)
+                      for good in goods},
+            "quotes": [quote(economy, market_key, good) for good in goods[:6]
+                       if quote(economy, market_key, good) is not None],
+        })
 
     return {
         "place": place,
@@ -299,6 +342,7 @@ def scene_ledger(charter, place, events=(), hours_per_day=24.0):
         "posts_here": sorted(
             p for p, entry in posts.items()
             if str(entry.get("place") or "") == place),
+        "markets_here": market_rows[:3],
         # Who with a mind of their own is standing here -- the player, a
         # major character. Place-level fact for the Director staging the
         # room, like `place_state`; what any PRESENCE makes of them lives

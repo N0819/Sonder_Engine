@@ -17,7 +17,7 @@ from __future__ import annotations
 import copy
 
 from world.charter import (
-    normalize_charter, out_of_band, run, seed_roster, step)
+    normalize_charter, out_of_band, run, seed_needs, seed_roster, step)
 
 from charter_fixtures import ABBEY, SHIP
 
@@ -46,6 +46,42 @@ class TestAHealthyInstitutionRunsItself:
         assert [e for e in events if e["kind"] == "upkeep_out_of_band"] == []
         for key, upkeep in abbey["upkeeps"].items():
             assert not out_of_band(upkeep), (key, upkeep["level"])
+
+    def test_a_recovered_worker_reports_fit_and_returns_to_the_roster(self):
+        """A one-person office may need rest, but it must not become vacant
+        forever merely because the register never hears that they recovered.
+        The status transition is the missing information channel."""
+        charter = normalize_charter({
+            "key": "single_office",
+            "upkeeps": {
+                "office": {
+                    "place": "office", "level": 1.0, "floor": 0.2,
+                    "drift_per_hour": 0.01, "service_per_hour": 0.03,
+                },
+            },
+            "posts": {
+                "director": {
+                    "place": "office", "requires": {"leadership": 1},
+                    "serves": ["office"],
+                },
+            },
+            "bodies": {
+                "director": {
+                    "place": "office", "berth": "office",
+                    "competence": {"leadership": 1}, "available": True,
+                },
+            },
+        })
+        charter["roster"] = seed_roster(charter["bodies"])
+        charter["needs"] = seed_needs(charter["bodies"])
+
+        after, events = run(charter, hours=48.0, window=4.0)
+
+        assert any(e["kind"] == "body_unable" for e in events)
+        assert any(e["kind"] == "body_recovered" for e in events)
+        assert any(e["kind"] == "post_filled_again" for e in events)
+        assert after["roster"]["director"]["believed_available"] is True
+        assert after["roster"]["director"]["strength"] == 1.0
 
 
 class TestAQuietWeekIsFree:

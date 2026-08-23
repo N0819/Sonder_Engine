@@ -78,6 +78,29 @@ def test_an_unpicked_character_is_coloured_from_their_card(client):
     assert body["participants"][0]["dialogue_color"] == ""
 
 
+def test_an_unpromoted_charter_speaker_has_a_stable_transcript_colour(
+        temp_db):
+    import time
+    cid = temp_db.qi(
+        "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+        ("charter", "", time.time()))
+    from world.charter_runtime import save_registry
+    save_registry(cid, {"watch": {
+        "naming": {
+            "titles": {"ranks": {"captain": "Captain"}},
+        },
+        "key": "watch",
+        "bodies": {"ysra": {
+            "name": "Ysra Vale", "rank": "captain", "place": "gate",
+            "dialogue_color": "#4A90E2",
+        }},
+    }})
+
+    body = app_module.chat_get(cid)
+    assert body["dialogue_colors"]["Captain Ysra Vale"] == "#4a90e2"
+    assert body["dialogue_colors"]["Ysra Vale"] == "#4a90e2"
+
+
 def test_a_pick_is_stored_and_wins(client):
     cid, ch = _story(client)
     r = client.put(f"/api/chats/{cid}/characters/{ch}/dialogue_color",

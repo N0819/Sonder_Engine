@@ -218,6 +218,160 @@ class TestQuickStartLorebook:
             greetings.start_story(cid_char, pid, lorebook_id=999999)
         assert q("SELECT COUNT(*) AS n FROM chats", one=True)["n"] == 0
 
+    def test_lived_location_lands_before_turn_zero_uses_chat_lore_copy(
+            self, temp_db, monkeypatch):
+        from story import greetings
+        from world import charter_runtime
+        cid_char, pid, lb = self._fixtures()
+        monkeypatch.setattr(
+            greetings, "extract_greeting",
+            lambda sheet, prose: {"knowledge_seeds": [], "time": "now"})
+        order = []
+
+        def generated(chat_id, request, **kwargs):
+            order.append("location")
+            selected = temp_db.q(
+                "SELECT chat_id FROM lorebooks WHERE id=?",
+                (request["owning_lorebook_id"],), one=True)
+            assert selected["chat_id"] == chat_id
+            assert request["lorebook_id"] == lb
+            assert request["owning_lorebook_id"] != lb
+            return {"ok": True}
+
+        monkeypatch.setattr(charter_runtime, "generate_lived_location", generated)
+        monkeypatch.setattr(
+            greetings, "_run_pipeline",
+            lambda cid, tid: order.append("turn_zero") or iter(()))
+
+        greetings.start_story(
+            cid_char, pid, lorebook_id=lb,
+            lived_location={"enabled": True, "brief": "the port"})
+
+        assert order == ["location", "turn_zero"]
+
+    def test_lived_location_places_and_hands_off_card_character(
+            self, temp_db, monkeypatch):
+        from story import greetings
+        from world import charter_history, charter_runtime
+        cid_char, pid, _lb = self._fixtures()
+        monkeypatch.setattr(
+            greetings, "extract_greeting",
+            lambda sheet, prose: {
+                "knowledge_seeds": [{
+                    "content": "The original greeting established this memory.",
+                    "salience": 0.5, "revealed_in_prose": True}],
+                "time": "now"})
+        order = []
+
+        def generated(chat_id, request, **kwargs):
+            resident = request["featured_residents"][0]
+            assert resident["seed_id"] == f"character:{cid_char}"
+            assert "private_history" not in resident
+            order.append("location")
+            return {"ok": True, "featured_residents": {
+                resident["seed_id"]: {
+                    "seed_id": resident["seed_id"], "charter": "site",
+                    "body": "psychologist:featured:x", "name": "Dr. Moon",
+                    "place": "office"}}}
+
+        def integrated(chat_id, char_id, binding, sheet, **kwargs):
+            assert char_id == cid_char
+            assert binding["charter"] == "site"
+            greeting_rows = temp_db.q(
+                "SELECT content FROM memories WHERE chat_id=? AND char_id=?",
+                (chat_id, char_id))
+            assert any("original greeting" in row["content"]
+                       for row in greeting_rows)
+            order.append("resident")
+            return {}
+
+        monkeypatch.setattr(charter_runtime, "generate_lived_location", generated)
+        monkeypatch.setattr(charter_history, "integrate_featured_resident", integrated)
+        monkeypatch.setattr(
+            greetings, "_run_pipeline",
+            lambda cid, tid: order.append("turn_zero") or iter(()))
+
+        greetings.start_story(
+            cid_char, pid,
+            lived_location={
+                "enabled": True, "brief": "the facility",
+                "character_history": {"mode": "resident"}})
+
+        assert order == ["location", "resident", "turn_zero"]
+
+    def test_itinerant_auto_route_never_places_character_in_charter(
+            self, temp_db, monkeypatch):
+        import json
+        from story import greetings, journey_history
+        from world import charter_runtime
+
+        cid_char, pid, _lb = self._fixtures()
+        row = temp_db.q("SELECT sheet FROM characters WHERE id=?",
+                        (cid_char,), one=True)
+        sheet = json.loads(row["sheet"])
+        sheet.setdefault("knowledge", {})["public_history"] = (
+            "An alien traveler who wanders between worlds and arrives at crises.")
+        temp_db.qi("UPDATE characters SET sheet=? WHERE id=?",
+                   (json.dumps(sheet), cid_char))
+        monkeypatch.setattr(
+            greetings, "extract_greeting",
+            lambda sheet, prose: {"knowledge_seeds": [], "time": "now"})
+        order = []
+
+        def generated(chat_id, request, **kwargs):
+            assert "featured_residents" not in request
+            order.append("location")
+            return {"ok": True, "featured_residents": {}}
+
+        def journey(chat_id, char_id, sheet, route, **kwargs):
+            assert route["opening_relationship"] == "visiting"
+            assert route["backends"] == ["authored_history"]
+            order.append("journey")
+            return {"events": [{"event_id": "journey:1"}],
+                    "memory_event_keys": ["prestory:journey:1"]}
+
+        monkeypatch.setattr(charter_runtime, "generate_lived_location", generated)
+        monkeypatch.setattr(journey_history, "compile_journey_history", journey)
+        monkeypatch.setattr(
+            greetings, "_run_pipeline",
+            lambda cid, tid: order.append("turn_zero") or iter(()))
+
+        chat_id, _ = greetings.start_story(
+            cid_char, pid,
+            lived_location={"enabled": True, "brief": "a distant city",
+                            "character_history": {"mode": "auto"}})
+
+        assert order == ["location", "journey", "turn_zero"]
+        route = temp_db.wget(chat_id, "character_history_routes", {})[
+            str(cid_char)]
+        assert route["handoff"]["journey_events"] == 1
+
+    def test_failed_lived_location_leaves_no_half_created_story(
+            self, temp_db, monkeypatch):
+        from core.db import q
+        from llm.providers import ReasoningBudgetExhausted
+        from story import greetings
+        from world import charter_runtime
+
+        cid_char, pid, lb = self._fixtures()
+        monkeypatch.setattr(
+            greetings, "extract_greeting",
+            lambda sheet, prose: {"knowledge_seeds": [], "time": "now"})
+
+        def fail(*args, **kwargs):
+            raise ReasoningBudgetExhausted("answer budget exhausted")
+
+        monkeypatch.setattr(charter_runtime, "generate_lived_location", fail)
+        with pytest.raises(ReasoningBudgetExhausted):
+            greetings.start_story(
+                cid_char, pid, lorebook_id=lb,
+                lived_location={"enabled": True, "brief": "the port"})
+
+        assert q("SELECT COUNT(*) AS n FROM chats", one=True)["n"] == 0
+        assert q(
+            "SELECT COUNT(*) AS n FROM lorebooks WHERE chat_id IS NOT NULL",
+            one=True)["n"] == 0
+
     def test_already_known_default_seeds_mutual_recognition(self, temp_db, monkeypatch):
         from core.db import wget
         greetings = self._stub_launch(monkeypatch)

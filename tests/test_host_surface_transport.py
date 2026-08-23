@@ -85,6 +85,17 @@ class TestStaticFilesAreFoundFromAnyworkingDirectory:
             response = client.get(path)
             assert response.status_code == 200, path
 
+    def test_the_spa_shell_revalidates_its_script_revision(self, client):
+        guest.reset_host_account()
+        setup = client.post(
+            "/api/auth/setup",
+            json={"username": "host", "password": "pw12345"},
+        )
+        assert setup.status_code == 200
+        response = client.get("/")
+        assert response.headers["cache-control"] == "no-store"
+        assert "?release=alpha98-ui1" in response.text
+
 
 class TestCookiesCarrySecureOnlyWhenTheHostSaysSo:
     def _account(self, client):

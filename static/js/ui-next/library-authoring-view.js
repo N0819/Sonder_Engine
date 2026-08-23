@@ -1,13 +1,13 @@
-export const MODULE_RELEASE = "wp07.1";
+export const MODULE_RELEASE = "alpha98-ui1";
 
 import {
   createStoryEditor,
   createStoryImporter,
-} from "./library-editors/story.js?release=wp07.1";
+} from "./library-editors/story.js?release=alpha98-ui1";
 import {
   createPersonEditor,
   createPersonImporter,
-} from "./library-editors/character-persona.js?release=wp07.1";
+} from "./library-editors/character-persona.js?release=alpha98-ui1";
 
 // UI_CATALOG_START: Library authoring status copy.
 const COPY = Object.freeze({

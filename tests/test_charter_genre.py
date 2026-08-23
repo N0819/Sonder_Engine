@@ -61,7 +61,7 @@ def _code_names_and_values(path):
     guessed.* Evidence is particular; rules are general. So the guard checks
     what the engine can ACT on: names it binds and values it carries.
     """
-    tree = ast.parse(path.read_text())
+    tree = ast.parse(path.read_text(encoding="utf-8"))
     docstrings = set()
     for node in ast.walk(tree):
         if isinstance(node, (ast.Module, ast.FunctionDef,

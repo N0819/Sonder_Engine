@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import re
 from collections import deque
+from concurrent.futures import ThreadPoolExecutor
+from contextvars import copy_context
 
 from mind import affect
 from mind.affect import (CRISIS_STRAIN_MIN, INTENT_DORMANT_AFTER,
@@ -90,6 +92,15 @@ from .common import (
     norm_sequence,
     player_speech_lines,
 )
+
+# Memory retrieval spends most of its pre-model wall time waiting on the
+# embedding provider.  The work is independent of lore, relationships, frame
+# masks and the rest of the character payload assembled below, so one small
+# shared pool lets those reads proceed during that wait.  Every submitted job
+# receives a context copied in the parent: provider call-ledger attribution and
+# cancellation live in contextvars and a worker otherwise inherits neither.
+_MEMORY_CONTEXT_POOL = ThreadPoolExecutor(
+    max_workers=4, thread_name_prefix="character-memory")
 
 def _ling(name):
     return linguistic("agents.character", name)
@@ -324,7 +335,7 @@ def _lines_delivered_to(char_id, rows):
 
 
 def _unanswered_question_note(chat_id, char_name, char_id, current_turn_idx,
-                              frame_id, n_turns=3):
+                              frame_id, n_turns=3, cache=None):
     """`{"awaiting_your_answer": {...}}` when somebody asked THIS character
     something, they received it, and they have not spoken since.
 
@@ -361,6 +372,15 @@ def _unanswered_question_note(chat_id, char_name, char_id, current_turn_idx,
     concealed aside after an overt question is not this mind's line, and a
     line that arrived muffled arrived as a fragment rather than as words.
     """
+    cache_key = (
+        int(chat_id), int(char_id) if char_id is not None else None,
+        int(current_turn_idx) if current_turn_idx is not None else None,
+        frame_id, str(char_name or "").casefold(), int(n_turns),
+    )
+    if isinstance(cache, dict) and cache_key in cache:
+        # The caller only reads this projection. Return a shallow copy so a
+        # future consumer cannot mutate the turn snapshot for the next reader.
+        return dict(cache[cache_key])
     if current_turn_idx is None or not char_name or char_id is None:
         return {}
     try:
@@ -485,7 +505,10 @@ def _unanswered_question_note(chat_id, char_name, char_id, current_turn_idx,
                 continue
             asked = {"from": speaker, "asked": str(reached[-1])[:240],
                      "turns_ago": int(current_turn_idx) - int(row["idx"])}
-    return {"awaiting_your_answer": asked} if asked else {}
+    result = {"awaiting_your_answer": asked} if asked else {}
+    if isinstance(cache, dict):
+        cache[cache_key] = dict(result)
+    return result
 
 
 def _player_quiet_beats(chat_id, current_turn_idx, frame_id, cap=8):
@@ -2610,11 +2633,18 @@ def character_step(ctx, cid, nonce):
     # card -- senses, abilities, embodiment capabilities, extra parts -- so a
     # transformation that stopped at the observer's view would leave this mind
     # certain it still had the shape it started with. See scene.transformed_sheet.
+    shared = ctx._extra.setdefault("character_turn_snapshot", {})
+    transformations = shared.get("active_transformations")
+    if transformations is None:
+        transformations = active_transformations(chat["id"])
+        shared["active_transformations"] = transformations
     sh = transformed_sheet(
         sh,
-        active_transformations(chat["id"]).get(
-            str(character_name(sh) or "").casefold()))
-    sc = get_scene(chat["id"], chat)
+        transformations.get(str(character_name(sh) or "").casefold()))
+    sc = shared.get("scene")
+    if sc is None:
+        sc = get_scene(chat["id"], chat)
+        shared["scene"] = sc
 
     # Consciousness gate (choke point): an unconscious/asleep/sedated mind does
     # not deliberate or act. The planner and both loops already drop non-awake
@@ -2770,7 +2800,10 @@ def character_step(ctx, cid, nonce):
         stored_state, _active_annotated, _refrain, ctx.turn.idx, absorption)
     if _prior_probe.get("fired"):
         _unbidden_fire = False
-    memory_context = build_character_memory_context(
+    memory_job_context = copy_context()
+    memory_context_future = _MEMORY_CONTEXT_POOL.submit(
+        memory_job_context.run,
+        build_character_memory_context,
         chat_id=chat.id, char_id=cid,
         current_turn_idx=ctx.turn.idx,
         current_view=view or "",
@@ -2790,30 +2823,6 @@ def character_step(ctx, cid, nonce):
         ponder_why=_ponder_why,
         resurfaced_subject=_resurfaced,
     )
-    memory_internal = memory_context.get("_internal") or {}
-    _unbidden_mem_id = None
-    _unbidden_mem_ref = None
-    if _unbidden_fire:
-        # Everything already in mind is excluded -- the recent buffer, this
-        # beat's ordinary recall, and the ledger of recently intruded rows
-        # (a memory that returns every few beats is a haunting, which is an
-        # authored effect, not a fallback behavior).
-        _in_mind = set(memory_internal.get("retrieved_ids") or [])
-        _in_mind |= {i for i in
-                     ((stored_state.get("unbidden") or {}).get("recent_ids")
-                      or [])}
-        _contrast = contrast_memory(
-            chat.id, cid,
-            " ".join(p for p in (
-                view or "", str((active or {}).get("goal") or ""),
-                str((active or {}).get("mood") or "")) if p),
-            ctx.turn.idx, here=_here_name,
-            exclude_ids=[i for i in _in_mind if i is not None])
-        if _contrast:
-            _unbidden_mem_id = _contrast[0]["id"]
-            _unbidden_mem_ref = _contrast[0].get("event_key") or ""
-            _attach_unbidden(
-                memory_context, _unbidden_entry(_contrast[0], ctx.turn.idx))
     known_tags, excl_titles = _char_known_tags(sh)
     knowledge = knowledge_for_character(_books(ctx), char_room, known_tags, excl_titles)
     # Lore is objective world record and its prose names people by name --
@@ -2836,10 +2845,13 @@ def character_step(ctx, cid, nonce):
     _tom = _list(_flow.get("tom_triggers"))
 
     relationships = relationships_for_payload(chat.id, cid)
-    _sim_clock = wget(
-        chat.id, "simulation_clock",
-        {"elapsed_seconds": 0.0, "display": "now"},
-    )
+    _sim_clock = shared.get("simulation_clock")
+    if _sim_clock is None:
+        _sim_clock = wget(
+            chat.id, "simulation_clock",
+            {"elapsed_seconds": 0.0, "display": "now"},
+        )
+        shared["simulation_clock"] = _sim_clock
     mind_models = mind_models_for_payload(
         stored_state.get("mind_models") or {}, ctx.turn.idx,
         elapsed_seconds=(_sim_clock or {}).get("elapsed_seconds"),
@@ -2868,7 +2880,10 @@ def character_step(ctx, cid, nonce):
         # cast member at all (a background presence, an unsheeted NPC)
         # correctly keeps that same -1/"recognized" fallback -- this
         # mask only ever applies to declared cast members.
-        name_to_id = all_cast_name_to_id(chat.id)
+        name_to_id = shared.get("all_cast_name_to_id")
+        if name_to_id is None:
+            name_to_id = all_cast_name_to_id(chat.id)
+            shared["all_cast_name_to_id"] = name_to_id
         relationships = {
             name: rel for name, rel in relationships.items()
             if is_recognized_in_frame(name_to_id.get(name, -1), frame_id)
@@ -2877,6 +2892,35 @@ def character_step(ctx, cid, nonce):
             name: mm for name, mm in mind_models.items()
             if is_recognized_in_frame(name_to_id.get(name, -1), frame_id)
         }
+
+    # Everything above is independent of memory retrieval and therefore ran
+    # while its embedding request was in flight.  From here on the payload and
+    # the optional unbidden lane need the finished, byte-identical context.
+    memory_context = memory_context_future.result()
+    memory_internal = memory_context.get("_internal") or {}
+    _unbidden_mem_id = None
+    _unbidden_mem_ref = None
+    if _unbidden_fire:
+        # Everything already in mind is excluded -- the recent buffer, this
+        # beat's ordinary recall, and the ledger of recently intruded rows
+        # (a memory that returns every few beats is a haunting, which is an
+        # authored effect, not a fallback behavior).
+        _in_mind = set(memory_internal.get("retrieved_ids") or [])
+        _in_mind |= {i for i in
+                     ((stored_state.get("unbidden") or {}).get("recent_ids")
+                      or [])}
+        _contrast = contrast_memory(
+            chat.id, cid,
+            " ".join(p for p in (
+                view or "", str((active or {}).get("goal") or ""),
+                str((active or {}).get("mood") or "")) if p),
+            ctx.turn.idx, here=_here_name,
+            exclude_ids=[i for i in _in_mind if i is not None])
+        if _contrast:
+            _unbidden_mem_id = _contrast[0]["id"]
+            _unbidden_mem_ref = _contrast[0].get("event_key") or ""
+            _attach_unbidden(
+                memory_context, _unbidden_entry(_contrast[0], ctx.turn.idx))
 
     # _interior was resolved above, before the memory context, where the
     # unbidden-recall trigger also reads it.
@@ -3308,7 +3352,8 @@ def character_step(ctx, cid, nonce):
             # since. The engine knew; nothing told them.
             **_unanswered_question_note(
                 chat.id, character_name(sh), cid,
-                ctx.turn.idx, ctx.turn.frame_id),
+                ctx.turn.idx, ctx.turn.frame_id,
+                cache=shared.setdefault("unanswered_question_notes", {})),
         },
         "simulation_clock": _sim_clock,
         "variant_seed": nonce,

@@ -58,6 +58,16 @@ def test_off_disables_reasoning(temp_db):
     assert body["reasoning"] == {"enabled": False}
 
 
+def test_call_override_can_disable_reasoning_without_changing_role_setting(
+        temp_db):
+    from core import db
+    db.set_setting("reasoning_effort", json.dumps({"utility": "high"}))
+    body = providers._apply_reasoning_effort(
+        {}, {"kind": "nanogpt"}, "utility", effort_override="off")
+    assert body == {"reasoning_effort": "none"}
+    assert providers.reasoning_effort_for("utility") == "high"
+
+
 def test_unset_role_adds_nothing(temp_db):
     from core import db
     db.set_setting("reasoning_effort", json.dumps({"director": "high"}))

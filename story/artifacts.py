@@ -396,19 +396,20 @@ def schedule_artifact_wording(ctx):
     Called from the commit tail, AFTER the turn's facts are durable, on the
     `schedule_profile_ticks` terms: a failure is a warning, never a
     rollback, and a turn starting never cancels the job. Gated on the
-    rumor ledger's CEILING -- the floor never spends -- and on the artifact
+    story's stochastic off-screen ceiling -- physical information is core,
+    while model-authored wording remains optional spend -- and on the artifact
     still lacking text with attempts left, so a dead provider costs a
     bounded number of cheap failures rather than a retry per beat forever.
     """
     from core import jobs
     from core.db import wget
-    from world.living_world import living_world_allows, living_world_config
+    from story.scene import dialogue_config, offscreen_life_allows
 
     cid = ctx.chat.id
     frame_id = ctx.turn.frame_id
     turn_idx = int(ctx.turn.idx)
-    if not living_world_allows(
-            living_world_config(cid), "rumor_ledger", "ceiling"):
+    if not offscreen_life_allows(
+            dialogue_config(cid).get("offscreen_life"), "stochastic"):
         return None
     pending = [
         dict(a) for a in wget(cid, ARTIFACTS_WORLD_KEY, []) or []

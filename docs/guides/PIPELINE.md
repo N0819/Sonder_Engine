@@ -106,13 +106,113 @@ seeded draw and epoch/log writes remain inside the turn transaction. Only the
 model-priced profile producer starts at the post-commit tail, carrying the base
 turn, frame, and epoch id; landing refuses a world restored to another epoch.
 
+Explicitly authored institutional Charters use that same post-commit epoch.
+Charter advances material flows before social reporting, then lets reports
+reach authorised officeholders, orders descend one staffed reporting edge,
+and typed executors create real consequences. Public shortage/order events are
+witnessed into individual minds; local judgments and commitment knowledge are
+derived only from those held claims. Generation is an authoring path, not a
+turn stage: `/charters/generate` closes one qualitative lore-grounded plan,
+plants prose-free planned rooms, runs coarse-plus-recent presim, and optionally
+stores a historian summary whose turning points cite actual presim event ids.
+The same operation is available during ordinary story creation and greeting
+quick-start; greeting launch lands it before establishment runs turn 0. During
+play it reads the explicitly selected lorebook subtree, preserves existing
+locations/Charters, namespaces room/structure/body collisions, and advances
+only the newly added registry slice. It never rewrites the current live room.
+`charter_runtime.schedule_charter_ticks` advances a copied registry in an
+out-of-band deterministic job, then lands the whole frame-scoped state plus
+stable `scheduled_events` rows atomically only if epoch, base turn, and the
+source registry revision still stand. The guards run under the landing write
+lock, so a concurrent turn, restore, or author edit cannot slip between check
+and write. Those rows re-enter the ordinary mechanics → `world_events` → carrier
+path on the next sweep. Charter owns each unpromoted body's sparse news claims;
+`charter_runtime.carrier_entries` projects them onto the ordinary carrier
+interface so witnessing, telling, couriers, caravans, notices and promotion use
+one physical delivery rail rather than parallel ledgers.
+Movement resolution additionally folds at most three current Charter facts into
+the existing `destination_residue` aperture. A background presence receives
+only the presence view for its own body. Unpromoted Charter bodies in the
+player's ambient scope are derived into the background gate with durable
+`{charter, body}` references; this does not create a second identity record
+until ordinary presence tracking has conduct to retain.
+Their personal names are materialized on the Charter body, while titles remain
+bounded aliases. Player and character recognition learns those aliases only
+when an exact delivered line names a co-located Charter body; lookup is indexed
+once per beat, rather than scanning an institution for every spoken line.
+Transcript color uses the permanent Charter/body seed before and after
+promotion.
+
+Story-start prehistory may include full characters as featured residents.
+Greeting launch supplies its one selected card; Story Quick Start exposes one
+independent history route for every selected or newly generated cast member,
+then resolves the browser's temporary keys to attached character ids before
+calling the same `charter_runtime.generate_lived_location` operation. That
+inclusion is never implied by generating a location. Before any history backend
+runs, `story.history_routing` resolves a closed topology from the author choice,
+card, opening and location brief. The runtime ignores any requested character
+that is not actually attached to that story. Only fixed-place or bounded-moving
+resident routes may send a full character through Charter;
+travel/arrival evidence wins over apparent job competence, and uncertain auto
+routes preserve authored history rather than inventing tenure.
+Only their public history and ability name/scope rows corroborated by that
+public history reach the location planner; ability limits, private history and
+psychology do not enter Charter generation. Deterministic
+closure places that stable seed exactly once and repairs a planner omission by
+matching it to an existing lore-authored post. After presim, `charter_history`
+builds a closed recent-life context from that body, its named coworkers and
+reporting line, real work/home rooms, duties, held reports, commitments,
+participant-owned experience and actual simulation anchors. One bounded
+utility call authors 10–16 detailed personal episodes under an explicit
+minor-prehistory licence. Each is validated against the closed people/place
+ids and written as its own `turn_idx=NULL` memory row with a content-derived
+identity, chronology, location, entities, affect and consequence. Every named
+participant receives a compact reciprocal `shared_prestory` experience in
+their own Charter history, so later promotion cannot erase that the meeting
+happened. Fewer than
+ten usable episodes abort launch; there is no sparse canonical fallback.
+`bind_promoted_character` then retires the Charter mind before establishment
+while preserving the institutional body. Aggregate watches produce a separate
+human-readable career summary rather than an episodic memory. Recent presim
+always includes the featured body's work and berth places. Generated lived
+locations must materialize a stable personal name for every body; a missing
+naming law fails generation instead of exposing a machine post id. Authored private
+habits attach only after public location planning, run only while that body is
+off duty, write only that body's bounded experience, and leave with the
+temporary Charter cognition at handoff. Each selected cast member is routed
+independently: one may be a local resident while another preserves an authored
+traveler history, without sharing a universal location-shaped past.
+
+An arriving traveler uses `story.journey_history`, never a location-shaped
+Charter. Cited mode compiles only card/lore source ids into ordered world
+visits; generated mode is a separate explicit author licence for the LLM to
+invent a bounded journey ledger. Failure of cited compilation falls back to
+the unchanged card and greeting; failure of an explicitly requested generated
+journey aborts launch rather than silently charging for nothing.
+
 After the ordinary `memories` domain settles each acting character's prepared
-state, `information_carriers` acquires public event surfaces for registered
-characters physically at the event location and advances the bounded route on
-reports whose holder moved. It must remain after `memories`: writing earlier
-would let the precomputed state update erase the envelope. The report is stored
-only in that holder's frame-specific character state and projected only into
-their private character payload; co-location never copies it to another mind.
+state, `information_carriers` acquires public event surfaces for physical
+holders at the event location: registered characters, the player, unpromoted
+Charter people, and standing crowds. It advances the bounded route on reports
+whose full-character holder moved. It must remain after `memories`: writing
+earlier would let the precomputed state update erase the envelope. A Charter
+row is translated into that exact body's `minds` entry at persistence and is
+projected back only from that body. Co-location never copies knowledge;
+explicit speech, a staffed reporting line, a courier/caravan handoff, or
+reading an artifact does.
+
+`charter_observations` follows that domain. The resolve social specialist has
+classified the beat's engine-authored player/major-character sources once;
+deterministic grounding restores actor, target, exact quote/action surface,
+volume and concealment from those sources and accepts semantic content only as
+an exact span of the utterance. The commit domain then delivers each source to
+each unpromoted Charter body through ordinary full-hearing/full-sight checks.
+Only that body's sparse `minds` map receives the resulting news claim. A failed
+or empty semantic classification keeps the factual source, while a retelling
+drops the pristine quote and retains only coarse speech-act direction. Scene
+Life reads the structured evidence through that body's capped `can_bring_up`;
+no narrator prose, raw player input, objective state diff or other body's mind
+enters this path.
 
 ## Normal turn
 
@@ -386,6 +486,25 @@ its next character turn without replacing normal recall. Pain and pleasure are
 independent and do not require survival mode. Multiple independent character
 steps may run in parallel.
 
+The decision contract is large, but latency work must not narrow the mind it
+describes. The provider receives a constraint-equivalent JSON Schema with
+annotation-only metadata removed; local validation still uses the complete
+Pydantic model. The name-bearing identity line is placed immediately before
+the output shape so the long authored contract before it is a reusable cache
+prefix. Immutable per-turn reads (scene, transformations, simulation clock,
+all-cast name map and unanswered-question history) are reused through
+`ctx._extra.character_turn_snapshot`. Memory-context construction runs under a
+parent-copied context while the main thread assembles independent lore,
+relationship and frame projections, and is joined before anything
+memory-dependent is built.
+
+`considered_responses` and the compatibility fields `observations_used`,
+`speech`, `action` and `actions` remain in the production wire contract. Their
+removal is an experiment only (`wire_variant="compact"`), measured by
+`tools/character_wire_ab.py` across cognition, agency, knowledge-firewall and
+synthetic social-memory situations; an absent downstream reader is not
+evidence that deliberation scratch does no cognitive work.
+
 `self.embodiment_capabilities` contains conditional facts hidden from ordinary
 observers but necessarily known by their owner. When a chosen completed process
 has an established non-discrete output, `material_effects` carries that
@@ -517,7 +636,24 @@ Unconditionally present in the plan but internally self-gating, with two paths c
 - **`off` (default) — one presence.** `persist/commit_background.py`'s `pick_background_reactors` is a deterministic, LLM-free check that returns `[]` for the large majority of turns (no salient, un-voiced named background presence this beat), in which case this stage costs nothing. It is the function `agents/background.py` actually calls, with `cap=background_config.max_reactors`; `pick_background_reactor` (singular) is only a convenience wrapper that takes the top pick. Both are re-exported from `persist/commit.py`, which is why older notes name that module. Only when it picks a name does one small, stateless LLM call decide whether that person reacts and, if so, a single line and/or brief action for this beat only. `max_reactors` defaults to 1 and is capped at 3, so "one presence" is the default rather than an invariant.
 - **`ambient` / `full` — the scene manager.** One batched call voices every managed presence in the room at once (roster from `managed_presences`, capped by `max_managed`), partitioned by `spatial.ambient_scope` and filtered per presence by a `hear_level` audience map. The plan label changes to "Scene life · manager (ambient|full)" accordingly. Voicing is batched; **writing is not** — each attributed entry is routed to its own record at commit, which is what keeps one call from becoming one shared mind. Design and its still-unbuilt half: [`BACKGROUND_LIFE_DESIGN.md`](../design/BACKGROUND_LIFE_DESIGN.md), [`UNBUILT.md`](../UNBUILT.md) §6.1.
 
-Neither path grants persistent memory, psychology, or mind-models — that is what character promotion is for. This is a deterministic backstop for the director_resolve prompt's own background-entity voicing license (see `llm/prompts.py`), which live play showed goes unused often enough under sustained narrative pressure to need one, the same lesson already learned for spatial zone-tagging and speech concealment.
+Charter-linked presences are orchestrated by this same stage but excluded from
+the shared manager payload: their own condition, temperament, relationships and
+news are divergent private context. Each receives an isolated presence call.
+The call also receives that presence's last three verified addressed/reply
+fragments, allowing a powerful scene-life model to continue the local exchange
+without receiving an unbounded history or another body's private context.
+Its packet includes capped exact `action_instances`; an optional
+`charter_act:{act,other}` echo lands only when it exactly matches that
+engine-authored allowlist and `charter_author.authored` still licenses it.
+Prose is never parsed into state. Off-screen departure needs no handoff because
+the call only authored conduct against the live Charter body. Promotion is the
+only ownership transfer and makes the registered character the exclusive owner
+of cognition and motion.
+
+Neither path grants a stateless presence its own persistent memory, psychology,
+or mind-models. A Charter presence is the explicit exception in source, not in
+ownership: the packet is a read aperture over state Charter already owns.
+Promotion transfers that state to a real character.
 
 Its output is merged into `perception_outcome`'s dialogue processing rather than mutating `director_resolve`'s already-persisted step/variant, so a rerun/resume from this point onward stays consistent with what was actually rendered.
 

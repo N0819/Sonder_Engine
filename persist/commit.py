@@ -122,11 +122,13 @@ from persist.commit_background import (BACKGROUND_PROMOTION_DIALOGUE_THRESHOLD,
     presence_personhood, presence_room,
     _merge_presence_record,
     _resolve_presence_name,
-    _fold_duplicate_presences, overt_declaration, overt_declaration_text,
+    _fold_duplicate_presences, with_charter_presences,
+    overt_declaration, overt_declaration_text,
     _background_name_mentioned,
     _character_address_of, _valid_pending_reply, _background_fired_reactions,
     _INERT_ENTITY_KINDS, _is_inert_presence_candidate,
-    prepare_background_claims, track_background_presences,
+    prepare_background_claims, commit_charter_observations,
+    track_background_presences,
     BACKGROUND_RECENT_TAIL, _persist_blurbs, _append_manager_conduct,
     _background_fired_reactions_any, _flow_addressed_refs,
     _presence_in_addressed_refs, _at_post_within_earshot,
@@ -441,6 +443,15 @@ def _commit_all_locked(ctx, nonce):
                 lambda: commit_information_carriers(
                     ctx, prepared["scene"], results.get("world_events") or {}),
             )
+            # The same post-resolution scene and the same physical delivery
+            # rules, but a different source: player/major-character conduct
+            # licensed by exact dialogue/declarations rather than a fired
+            # world-event surface.  It lands after ordinary carrier updates so
+            # neither writer can be overwritten by the other's registry copy.
+            _commit_domain(
+                ctx, results, "charter_observations",
+                lambda: commit_charter_observations(ctx, prepared["scene"]),
+            )
             _commit_domain(
                 ctx, results, "background_presences",
                 lambda: track_background_presences(
@@ -514,6 +525,20 @@ def _commit_all_locked(ctx, nonce):
     except Exception as exc:
         ctx.add_warning(f"auto-promotion failed: {exc}")
         results["promotions"] = {"promoted": [], "error": str(exc)}
+
+    # Deterministic institution/upkeep catch-up rides the same committed
+    # epoch as the character ticks. It is explicit-opt-in (a stored Charter
+    # definition), model-free, frame-scoped, and lands incidents onto the
+    # existing scheduled-event rail rather than inventing a delivery path.
+    try:
+        from world import charter_runtime as _charter_runtime
+
+        job = _charter_runtime.schedule_charter_ticks(
+            ctx, results.get("offscreen_epoch") or {})
+        results["charters"] = job.as_dict() if job else None
+    except Exception as exc:
+        ctx.add_warning(f"charter scheduling failed: {exc}")
+        results["charters"] = {"error": str(exc)}
 
     # Out-of-band offscreen ticks start HERE, after the turn's facts are
     # durable, and run in parallel with whatever the player does next. A
@@ -605,4 +630,3 @@ def _commit_all_locked(ctx, nonce):
         ),
         "results": results,
     }
-

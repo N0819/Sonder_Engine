@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "wp07.1";
+export const MODULE_RELEASE = "alpha98-ui1";
 
 const MAX_SCROLL_REGIONS = 80;
 const MAX_SCROLL_OFFSET = 10_000_000;

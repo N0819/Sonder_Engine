@@ -89,6 +89,10 @@ Interface replacement:
 
 Minds:
 
+- [`DESIGN_CHARACTER_HISTORY_ROUTING.md`](design/DESIGN_CHARACTER_HISTORY_ROUTING.md)
+  — routes pre-story continuity by anchor, authority, and relationship to the
+  opening location. Charter is the built anchored-resident slice; journey,
+  authored-history, inheritance, and general authoring routes are proposed.
 - [`DESIGN_LONG_TERM_GOALS.md`](design/DESIGN_LONG_TERM_GOALS.md) — the project
   tier between drive and intention. Built (v4); measured 2026-08-18, the review
   occasion now reaches 6 of 100 live banks and **0 have ever adopted a

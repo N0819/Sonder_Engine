@@ -70,15 +70,20 @@ def build(base, layout, name):
             {"role": "system", "content": tail.strip()}]
 
 
-def _call(prov, model, messages, timeout, max_tokens):
+def _call(prov, model, messages, timeout, max_tokens, affinity=False):
     from llm import providers
+    body = {"model": model, "messages": messages,
+            # Fixed and small, so generation cannot confound the reading.
+            "temperature": 0.0, "max_tokens": max_tokens}
+    if affinity:
+        # Same content-free role hint production uses when this provider is
+        # opted into cache_affinity_allow.
+        body["user"] = "sonder:character_major"
     t0 = time.perf_counter()
     r = providers._session().post(
         prov["base_url"].rstrip("/") + "/chat/completions",
         headers=providers._headers(prov),
-        json={"model": model, "messages": messages,
-              # Fixed and small, so generation cannot confound the reading.
-              "temperature": 0.0, "max_tokens": max_tokens},
+        json=body,
         timeout=timeout)
     dt = time.perf_counter() - t0
     if r.status_code >= 400:
@@ -102,6 +107,8 @@ def main(argv=None):
     ap.add_argument("--max-tokens", type=int, default=120)
     ap.add_argument("--timeout", type=int, default=180)
     ap.add_argument("--gap", type=float, default=1.5)
+    ap.add_argument("--affinity", action="store_true",
+                    help="send production's content-free character role hint")
     args = ap.parse_args(argv)
 
     os.environ["ENGINE_DB"] = args.db
@@ -122,7 +129,7 @@ def main(argv=None):
         for i in range(args.calls):
             name = NAMES[i % len(NAMES)]
             got, dt, err = _call(prov, model, build(base, args.layout, name),
-                                 args.timeout, args.max_tokens)
+                                 args.timeout, args.max_tokens, args.affinity)
             if err:
                 print(f"      {i+1}. {err}", flush=True)
                 times.append(None)

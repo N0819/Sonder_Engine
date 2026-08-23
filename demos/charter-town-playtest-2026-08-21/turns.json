@@ -1,0 +1,3033 @@
+{
+  "chat_id_in_disposable_copy": 79,
+  "pre_run": {
+    "hours": 26.0,
+    "events": [
+      {
+        "charter": "aldermere_civic_watch",
+        "kind": "post_unfilled",
+        "at_hours": 0.0,
+        "place": "riverside",
+        "post": "bridge_warden",
+        "reason": "no_competence",
+        "serves": [
+          "bridge_sound"
+        ]
+      },
+      {
+        "charter": "aldermere_civic_watch",
+        "kind": "upkeep_out_of_band",
+        "at_hours": 4.0,
+        "place": "riverside",
+        "upkeep": "bridge_sound",
+        "level": 0.22,
+        "floor": 0.3,
+        "starved_by": null
+      },
+      {
+        "charter": "aldermere_civic_watch",
+        "kind": "body_unable",
+        "at_hours": 16.0,
+        "place": "north_gate",
+        "body": "mett",
+        "worst": 0.05
+      },
+      {
+        "charter": "aldermere_civic_watch",
+        "kind": "body_unable",
+        "at_hours": 20.0,
+        "place": "north_gate",
+        "body": "bram",
+        "worst": 0.059448
+      },
+      {
+        "charter": "aldermere_civic_watch",
+        "kind": "body_recovered",
+        "at_hours": 20.0,
+        "place": "north_gate",
+        "body": "mett"
+      },
+      {
+        "charter": "aldermere_civic_watch",
+        "kind": "body_recovered",
+        "at_hours": 24.0,
+        "place": "north_gate",
+        "body": "bram"
+      },
+      {
+        "charter": "aldermere_civic_watch",
+        "kind": "post_believed_filled",
+        "at_hours": 24.0,
+        "place": "market_square",
+        "post": "lamp_round",
+        "body": "lysa",
+        "reason": "absent"
+      },
+      {
+        "charter": "aldermere_civic_watch",
+        "kind": "upkeep_out_of_band",
+        "at_hours": 25.0,
+        "place": "market_square",
+        "upkeep": "night_lamps",
+        "level": 0.285,
+        "floor": 0.3,
+        "starved_by": null
+      },
+      {
+        "charter": "aldermere_civic_watch",
+        "kind": "body_unable",
+        "at_hours": 25.0,
+        "place": "north_gate",
+        "body": "mett",
+        "worst": 0.060669
+      }
+    ],
+    "summaries": {
+      "aldermere_commons": {
+        "hours": 26.0,
+        "bodies": 10,
+        "posts": 5,
+        "rooms": 9,
+        "events": 0,
+        "event_kinds": {},
+        "failing": [],
+        "minds_holding_opinions": 10,
+        "acquaintance_mean": 2.2,
+        "acquaintance_max": 3,
+        "contested_bodies": 0,
+        "contested_sample": [],
+        "roster_entries": 10,
+        "roster_hearsay": 5,
+        "blame": {},
+        "feeling_bodies": 0,
+        "overloaded_bodies": [],
+        "windows_traced": 8
+      },
+      "aldermere_civic_watch": {
+        "hours": 26.0,
+        "bodies": 10,
+        "posts": 6,
+        "rooms": 9,
+        "events": 9,
+        "event_kinds": {
+          "body_recovered": 2,
+          "body_unable": 3,
+          "post_believed_filled": 1,
+          "post_unfilled": 1,
+          "upkeep_out_of_band": 2
+        },
+        "failing": [
+          "bridge_sound",
+          "night_lamps"
+        ],
+        "minds_holding_opinions": 10,
+        "acquaintance_mean": 5.1,
+        "acquaintance_max": 9,
+        "contested_bodies": 2,
+        "contested_sample": [
+          "bram",
+          "nella"
+        ],
+        "roster_entries": 10,
+        "roster_hearsay": 6,
+        "blame": {
+          "lysa": 1
+        },
+        "feeling_bodies": 5,
+        "overloaded_bodies": [],
+        "windows_traced": 8
+      }
+    }
+  },
+  "initial": {
+    "charters": {
+      "aldermere_commons": {
+        "clock_hours": 26.0,
+        "levels": {
+          "water_drawn": 1.0,
+          "grain_milled": 1.0,
+          "bread_baked": 1.0,
+          "market_stocked": 0.829,
+          "cart_roads": 1.0
+        },
+        "watch": {
+          "well_watch": "toma",
+          "mill_watch": "edrin",
+          "oven_watch": "anja",
+          "market_clerk": "dev",
+          "cart_warden": "keel"
+        },
+        "blame": {},
+        "bindings": {},
+        "places": {
+          "toma": "well_house",
+          "edrin": "mill",
+          "mara": "bakehouse",
+          "sable": "market_square",
+          "orin": "market_square",
+          "willa": "well_house",
+          "rusk": "mill",
+          "anja": "bakehouse",
+          "dev": "market_square",
+          "keel": "market_square"
+        },
+        "available": {
+          "toma": true,
+          "edrin": true,
+          "mara": true,
+          "sable": true,
+          "orin": true,
+          "willa": true,
+          "rusk": true,
+          "anja": true,
+          "dev": true,
+          "keel": true
+        }
+      },
+      "aldermere_civic_watch": {
+        "clock_hours": 26.0,
+        "levels": {
+          "gate_watch": 1.0,
+          "night_lamps": 0.23,
+          "infirmary_ready": 1.0,
+          "bridge_sound": 0.0,
+          "petitions_sorted": 1.0
+        },
+        "watch": {
+          "gate_captain": "bram",
+          "gate_guard": "jory",
+          "healer_watch": "odo",
+          "lamp_round": "lysa",
+          "petition_clerk": "pell"
+        },
+        "blame": {
+          "lysa": 1
+        },
+        "bindings": {},
+        "places": {
+          "ysra": "north_gate",
+          "jory": "north_gate",
+          "nella": "infirmary",
+          "iven": "infirmary",
+          "pell": "council_hall",
+          "bram": "north_gate",
+          "mett": "north_gate",
+          "lysa": "market_square",
+          "odo": "infirmary",
+          "tavi": "council_hall"
+        },
+        "available": {
+          "ysra": true,
+          "jory": true,
+          "nella": false,
+          "iven": true,
+          "pell": true,
+          "bram": true,
+          "mett": false,
+          "lysa": true,
+          "odo": true,
+          "tavi": true
+        }
+      }
+    },
+    "cast": [],
+    "world_events": 9
+  },
+  "final": {
+    "charters": {
+      "aldermere_commons": {
+        "clock_hours": 26.0,
+        "levels": {
+          "water_drawn": 1.0,
+          "grain_milled": 1.0,
+          "bread_baked": 1.0,
+          "market_stocked": 0.829,
+          "cart_roads": 1.0
+        },
+        "watch": {
+          "well_watch": "toma",
+          "mill_watch": "edrin",
+          "oven_watch": "anja",
+          "market_clerk": "dev",
+          "cart_warden": "keel"
+        },
+        "blame": {},
+        "bindings": {},
+        "places": {
+          "toma": "well_house",
+          "edrin": "mill",
+          "mara": "bakehouse",
+          "sable": "market_square",
+          "orin": "market_square",
+          "willa": "well_house",
+          "rusk": "mill",
+          "anja": "bakehouse",
+          "dev": "market_square",
+          "keel": "market_square"
+        },
+        "available": {
+          "toma": true,
+          "edrin": true,
+          "mara": true,
+          "sable": true,
+          "orin": true,
+          "willa": true,
+          "rusk": true,
+          "anja": true,
+          "dev": true,
+          "keel": true
+        }
+      },
+      "aldermere_civic_watch": {
+        "clock_hours": 26.0,
+        "levels": {
+          "gate_watch": 1.0,
+          "night_lamps": 0.23,
+          "infirmary_ready": 1.0,
+          "bridge_sound": 0.0,
+          "petitions_sorted": 1.0
+        },
+        "watch": {
+          "gate_captain": "bram",
+          "gate_guard": "jory",
+          "healer_watch": "odo",
+          "lamp_round": "lysa",
+          "petition_clerk": "pell"
+        },
+        "blame": {
+          "lysa": 1
+        },
+        "bindings": {},
+        "places": {
+          "ysra": "north_gate",
+          "jory": "north_gate",
+          "nella": "infirmary",
+          "iven": "infirmary",
+          "pell": "council_hall",
+          "bram": "north_gate",
+          "mett": "north_gate",
+          "lysa": "market_square",
+          "odo": "infirmary",
+          "tavi": "council_hall"
+        },
+        "available": {
+          "ysra": true,
+          "jory": true,
+          "nella": false,
+          "iven": true,
+          "pell": true,
+          "bram": true,
+          "mett": false,
+          "lysa": true,
+          "odo": true,
+          "tavi": true
+        }
+      }
+    },
+    "cast": [],
+    "world_events": 9
+  },
+  "turns": [
+    {
+      "turn": 1,
+      "turn_id": 2559,
+      "input": "I pause beneath the North Gate and take in the gatehouse, the people on duty, and the town beyond before I speak.",
+      "output": "The heavy stones of the North Gate press cool and solid against my shoulder as I pause there. A gatehouse stands just inside, its wooden beams weathered gray. Several figures in tabards hold their posts near the open doorway that leads into Market Square. The town stretches out beyond, all low roofs and morning bustle.",
+      "seconds": 9.411,
+      "error": "",
+      "warnings": [],
+      "calls": [
+        {
+          "role": "mapping",
+          "model": "inception/mercury-2",
+          "sys": 4949,
+          "out": 109,
+          "cached": 3,
+          "cwrite": 0,
+          "sec": 1.22,
+          "ok": true
+        },
+        {
+          "role": "narrator",
+          "model": "x-ai/grok-4.20",
+          "sys": 6436,
+          "out": 110,
+          "cached": 6400,
+          "cwrite": 0,
+          "sec": 2.33,
+          "ok": true
+        },
+        {
+          "role": "narrator",
+          "model": "x-ai/grok-4.20",
+          "sys": 6491,
+          "out": 105,
+          "cached": 128,
+          "cwrite": 0,
+          "sec": 2.69,
+          "ok": true
+        },
+        {
+          "role": "narrator",
+          "model": "x-ai/grok-4.20",
+          "sys": 6484,
+          "out": 81,
+          "cached": 6464,
+          "cwrite": 0,
+          "sec": 2.97,
+          "ok": true
+        }
+      ],
+      "background": {},
+      "promotions_this_turn": [],
+      "charters": {
+        "aldermere_commons": {
+          "clock_hours": 26.0,
+          "levels": {
+            "water_drawn": 1.0,
+            "grain_milled": 1.0,
+            "bread_baked": 1.0,
+            "market_stocked": 0.829,
+            "cart_roads": 1.0
+          },
+          "watch": {
+            "well_watch": "toma",
+            "mill_watch": "edrin",
+            "oven_watch": "anja",
+            "market_clerk": "dev",
+            "cart_warden": "keel"
+          },
+          "blame": {},
+          "bindings": {},
+          "places": {
+            "toma": "well_house",
+            "edrin": "mill",
+            "mara": "bakehouse",
+            "sable": "market_square",
+            "orin": "market_square",
+            "willa": "well_house",
+            "rusk": "mill",
+            "anja": "bakehouse",
+            "dev": "market_square",
+            "keel": "market_square"
+          },
+          "available": {
+            "toma": true,
+            "edrin": true,
+            "mara": true,
+            "sable": true,
+            "orin": true,
+            "willa": true,
+            "rusk": true,
+            "anja": true,
+            "dev": true,
+            "keel": true
+          }
+        },
+        "aldermere_civic_watch": {
+          "clock_hours": 26.0,
+          "levels": {
+            "gate_watch": 1.0,
+            "night_lamps": 0.23,
+            "infirmary_ready": 1.0,
+            "bridge_sound": 0.0,
+            "petitions_sorted": 1.0
+          },
+          "watch": {
+            "gate_captain": "bram",
+            "gate_guard": "jory",
+            "healer_watch": "odo",
+            "lamp_round": "lysa",
+            "petition_clerk": "pell"
+          },
+          "blame": {
+            "lysa": 1
+          },
+          "bindings": {},
+          "places": {
+            "ysra": "north_gate",
+            "jory": "north_gate",
+            "nella": "infirmary",
+            "iven": "infirmary",
+            "pell": "council_hall",
+            "bram": "north_gate",
+            "mett": "north_gate",
+            "lysa": "market_square",
+            "odo": "infirmary",
+            "tavi": "council_hall"
+          },
+          "available": {
+            "ysra": true,
+            "jory": true,
+            "nella": false,
+            "iven": true,
+            "pell": true,
+            "bram": true,
+            "mett": false,
+            "lysa": true,
+            "odo": true,
+            "tavi": true
+          }
+        }
+      },
+      "cast": [],
+      "world_events": 9,
+      "pending_jobs": []
+    },
+    {
+      "turn": 2,
+      "turn_id": 2560,
+      "input": "I read the duty board beside the gate, then ask the nearest guard, \"Who is in command here?\"",
+      "output": "I read the duty board beside the gate, then ask the nearest guard,\n\nThe unfamiliar person answers in a level voice: \"I am.\"\n\nThey turn from the board to face me directly. \"Captain Ysra Vale.\"\n\nThey nod toward the duty board.",
+      "seconds": 33.122,
+      "error": "",
+      "warnings": [
+        "orchestration scope: the offscreen specialist emitted telling_ops outside its granted scope (['offscreen_plan_ops']). Content was kept (fail-open); the scope gate under-granted and should be widened if this recurs.",
+        "player state: resolve restated positions for Rowan Hale; the assertion yields",
+        "Routed 'Captain Ysra Vale''s line to the background stage: the Director mints presences and moves them; it does not write their dialogue.",
+        "Dropped 'Captain Ysra Vale' from dialogue_order: no surviving dialogue_log line for this speaker.",
+        "orchestration gate: content shipped for channels or prose duties outside any served scope -- the scope gate read the scene as having no such work -- telling_ops carries content for 'telling_ops'. Nothing was dropped (fail-open); the stage model's encoding and the reconciliation seam stand. The scope gate mispredicted.",
+        "perception_outcome: authored prose named ['Captain Ysra Vale', 'Jory Flint'] to Rowan Hale, who has no channel to that identity; replaced with descriptors at admission",
+        "Proper noun from view missing in narrator prose: 'Tormac Reed'",
+        "Proper noun from view missing in narrator prose: 'Lira Morn'",
+        "telling refused: telling names someone unregistered: 'Rowan Hale' -> 'Captain Ysra Vale'",
+        "telling refused: telling names someone unregistered: 'Captain Ysra Vale' -> 'Rowan Hale'",
+        "Charter refused Mett Voss's null toward null: not_offered_to_scene_life"
+      ],
+      "calls": [
+        {
+          "role": "director",
+          "model": "x-ai/grok-4.20",
+          "sys": 8022,
+          "out": 732,
+          "cached": 128,
+          "cwrite": 0,
+          "sec": 9.62,
+          "ok": true
+        },
+        {
+          "role": "director_offscreen",
+          "model": "inception/mercury-2",
+          "sys": 3646,
+          "out": 69,
+          "cached": 4,
+          "cwrite": 0,
+          "sec": 0.8,
+          "ok": true
+        },
+        {
+          "role": "director_objects",
+          "model": "inception/mercury-2",
+          "sys": 3888,
+          "out": 50,
+          "cached": 3,
+          "cwrite": 0,
+          "sec": 0.81,
+          "ok": true
+        },
+        {
+          "role": "director_contact",
+          "model": "inception/mercury-2",
+          "sys": 5419,
+          "out": 48,
+          "cached": 4,
+          "cwrite": 0,
+          "sec": 0.82,
+          "ok": true
+        },
+        {
+          "role": "director_body",
+          "model": "inception/mercury-2",
+          "sys": 5022,
+          "out": 46,
+          "cached": 6,
+          "cwrite": 0,
+          "sec": 0.84,
+          "ok": true
+        },
+        {
+          "role": "director_social",
+          "model": "inception/mercury-2",
+          "sys": 2607,
+          "out": 42,
+          "cached": 6,
+          "cwrite": 0,
+          "sec": 0.82,
+          "ok": true
+        },
+        {
+          "role": "director_spatial",
+          "model": "inception/mercury-2",
+          "sys": 6105,
+          "out": 71,
+          "cached": 4,
+          "cwrite": 0,
+          "sec": 1.41,
+          "ok": true
+        },
+        {
+          "role": "mapping",
+          "model": "inception/mercury-2",
+          "sys": 5213,
+          "out": 346,
+          "cached": 3,
+          "cwrite": 0,
+          "sec": 1.42,
+          "ok": true
+        },
+        {
+          "role": "director",
+          "model": "x-ai/grok-4.20",
+          "sys": 10444,
+          "out": 762,
+          "cached": 128,
+          "cwrite": 0,
+          "sec": 9.46,
+          "ok": true
+        },
+        {
+          "role": "director_contact",
+          "model": "inception/mercury-2",
+          "sys": 5386,
+          "out": 46,
+          "cached": 5,
+          "cwrite": 0,
+          "sec": 0.61,
+          "ok": true
+        },
+        {
+          "role": "director_body",
+          "model": "inception/mercury-2",
+          "sys": 4916,
+          "out": 44,
+          "cached": 3,
+          "cwrite": 0,
+          "sec": 0.84,
+          "ok": true
+        },
+        {
+          "role": "director_social",
+          "model": "inception/mercury-2",
+          "sys": 2622,
+          "out": 134,
+          "cached": 3,
+          "cwrite": 0,
+          "sec": 0.93,
+          "ok": true
+        },
+        {
+          "role": "director_offscreen",
+          "model": "inception/mercury-2",
+          "sys": 3676,
+          "out": 166,
+          "cached": 4,
+          "cwrite": 0,
+          "sec": 0.92,
+          "ok": true
+        },
+        {
+          "role": "director_objects",
+          "model": "inception/mercury-2",
+          "sys": 4004,
+          "out": 123,
+          "cached": 5,
+          "cwrite": 0,
+          "sec": 0.98,
+          "ok": true
+        },
+        {
+          "role": "director_spatial",
+          "model": "inception/mercury-2",
+          "sys": 6266,
+          "out": 95,
+          "cached": 6,
+          "cwrite": 0,
+          "sec": 1.04,
+          "ok": true
+        },
+        {
+          "role": "character_bg",
+          "model": "x-ai/grok-4.20",
+          "sys": 1821,
+          "out": 80,
+          "cached": 128,
+          "cwrite": 0,
+          "sec": 1.7,
+          "ok": true
+        },
+        {
+          "role": "character_bg",
+          "model": "x-ai/grok-4.20",
+          "sys": 1645,
+          "out": 75,
+          "cached": 128,
+          "cwrite": 0,
+          "sec": 1.74,
+          "ok": true
+        },
+        {
+          "role": "narrator",
+          "model": "x-ai/grok-4.20",
+          "sys": 7299,
+          "out": 88,
+          "cached": 128,
+          "cwrite": 0,
+          "sec": 1.89,
+          "ok": true
+        },
+        {
+          "role": "narrator",
+          "model": "x-ai/grok-4.20",
+          "sys": 7347,
+          "out": 135,
+          "cached": 128,
+          "cwrite": 0,
+          "sec": 2.23,
+          "ok": true
+        },
+        {
+          "role": "mapping",
+          "model": "inception/mercury-2",
+          "sys": 2979,
+          "out": 521,
+          "cached": 2,
+          "cwrite": 0,
+          "sec": 1.34,
+          "ok": true
+        }
+      ],
+      "background": {
+        "fired": true,
+        "name": "Captain Ysra Vale",
+        "dialogue_log_entry": {
+          "speaker": "Captain Ysra Vale",
+          "exact_quote": "I am.",
+          "volume": "normal",
+          "intended_target": "Rowan Hale",
+          "tone": "level",
+          "visibility": "overt",
+          "conceal_from": [],
+          "articulation": ""
+        },
+        "action": "turns from the board to face the speaker directly",
+        "room": "north_gate",
+        "reactions": [
+          {
+            "name": "Captain Ysra Vale",
+            "dialogue_log_entry": {
+              "speaker": "Captain Ysra Vale",
+              "exact_quote": "I am.",
+              "volume": "normal",
+              "intended_target": "Rowan Hale",
+              "tone": "level",
+              "visibility": "overt",
+              "conceal_from": [],
+              "articulation": ""
+            },
+            "action": "turns from the board to face the speaker directly",
+            "room": "north_gate",
+            "charter_act": {
+              "act": "greet",
+              "other": "the road-worn surveyor"
+            },
+            "charter_offers": [
+              {
+                "act": "greet",
+                "other": "the road-worn surveyor",
+                "practice": "greeting:the road-worn surveyor:ysra:",
+                "utility": 0.9
+              },
+              {
+                "act": "ask",
+                "other": "bram",
+                "practice": "converse:bram:ysra:",
+                "utility": 0.509
+              },
+              {
+                "act": "ask",
+                "other": "jory",
+                "practice": "converse:jory:ysra:",
+                "utility": 0.509
+              },
+              {
+                "act": "tell",
+                "other": "bram",
+                "practice": "converse:bram:ysra:",
+                "utility": 0.4472
+              },
+              {
+                "act": "tell",
+                "other": "jory",
+                "practice": "converse:jory:ysra:",
+                "utility": 0.4472
+              }
+            ]
+          },
+          {
+            "name": "Mett Voss",
+            "dialogue_log_entry": {
+              "speaker": "Mett Voss",
+              "exact_quote": "Captain Ysra Vale.",
+              "volume": "normal",
+              "intended_target": "Rowan Hale",
+              "tone": "matter-of-fact",
+              "visibility": "overt",
+              "conceal_from": [],
+              "articulation": ""
+            },
+            "action": "nods toward the duty board",
+            "room": "north_gate",
+            "charter_act": {
+              "act": "null",
+              "other": "null"
+            },
+            "charter_offers": []
+          }
+        ],
+        "selected": [
+          "Captain Ysra Vale",
+          "Mett Voss"
+        ],
+        "mode": "background_react+background_react",
+        "agent_calls": [
+          "background_react",
+          "background_react"
+        ],
+        "_engine_notes": {
+          "llm_calls": [
+            {
+              "step_key": "background_react",
+              "role": "character_bg",
+              "requested": "x-ai/grok-4.20",
+              "served": "x-ai/grok-4.20",
+              "in": 1821,
+              "out": 80,
+              "cached": 128,
+              "duration": 1.705,
+              "kind": "stream"
+            },
+            {
+              "step_key": "background_react",
+              "role": "character_bg",
+              "requested": "x-ai/grok-4.20",
+              "served": "x-ai/grok-4.20",
+              "in": 1645,
+              "out": 75,
+              "cached": 128,
+              "duration": 1.735,
+              "kind": "stream"
+            }
+          ]
+        }
+      },
+      "promotions_this_turn": [],
+      "charters": {
+        "aldermere_commons": {
+          "clock_hours": 26.0,
+          "levels": {
+            "water_drawn": 1.0,
+            "grain_milled": 1.0,
+            "bread_baked": 1.0,
+            "market_stocked": 0.829,
+            "cart_roads": 1.0
+          },
+          "watch": {
+            "well_watch": "toma",
+            "mill_watch": "edrin",
+            "oven_watch": "anja",
+            "market_clerk": "dev",
+            "cart_warden": "keel"
+          },
+          "blame": {},
+          "bindings": {},
+          "places": {
+            "toma": "well_house",
+            "edrin": "mill",
+            "mara": "bakehouse",
+            "sable": "market_square",
+            "orin": "market_square",
+            "willa": "well_house",
+            "rusk": "mill",
+            "anja": "bakehouse",
+            "dev": "market_square",
+            "keel": "market_square"
+          },
+          "available": {
+            "toma": true,
+            "edrin": true,
+            "mara": true,
+            "sable": true,
+            "orin": true,
+            "willa": true,
+            "rusk": true,
+            "anja": true,
+            "dev": true,
+            "keel": true
+          }
+        },
+        "aldermere_civic_watch": {
+          "clock_hours": 26.0,
+          "levels": {
+            "gate_watch": 1.0,
+            "night_lamps": 0.23,
+            "infirmary_ready": 1.0,
+            "bridge_sound": 0.0,
+            "petitions_sorted": 1.0
+          },
+          "watch": {
+            "gate_captain": "bram",
+            "gate_guard": "jory",
+            "healer_watch": "odo",
+            "lamp_round": "lysa",
+            "petition_clerk": "pell"
+          },
+          "blame": {
+            "lysa": 1
+          },
+          "bindings": {},
+          "places": {
+            "ysra": "north_gate",
+            "jory": "north_gate",
+            "nella": "infirmary",
+            "iven": "infirmary",
+            "pell": "council_hall",
+            "bram": "north_gate",
+            "mett": "north_gate",
+            "lysa": "market_square",
+            "odo": "infirmary",
+            "tavi": "council_hall"
+          },
+          "available": {
+            "ysra": true,
+            "jory": true,
+            "nella": false,
+            "iven": true,
+            "pell": true,
+            "bram": true,
+            "mett": false,
+            "lysa": true,
+            "odo": true,
+            "tavi": true
+          }
+        }
+      },
+      "cast": [],
+      "world_events": 9,
+      "pending_jobs": []
+    },
+    {
+      "turn": 3,
+      "turn_id": 2561,
+      "input": "\"Captain Vale, I'm Rowan Hale, a surveyor. What is Aldermere most short of today?\" I ask.",
+      "output": "The unfamiliar person's measured words hang between us after I speak, their voice carrying clear across the gatehouse.\n\n\"A surveyor? We could use better maps of the eastern ridge. What's your rate?\"\n\nThey turn from the gate ledger to face me squarely, silver-braided insignia catching the lit morning light. The duty board still lists them as commander, alongside the sharp-faced guard eyeing the road, Lira Morn with her lantern, and Tormac Reed bearing his cheek scar. Beyond the open door to Market Square, the low roofs and bustle wait.",
+      "seconds": 37.588,
+      "error": "",
+      "warnings": [
+        "llm second call: validation failed (1 errors; first: 'LLM returned invalid JSON: Invalid control character at at position 14'); temperature-0 repair (0.8s)",
+        "offscreen specialist: no changes to any of my channels; player declaration only involves speech and movement, which are handled by other hands",
+        "orchestration scope: the offscreen specialist emitted telling_ops outside its granted scope (['offscreen_plan_ops']). Content was kept (fail-open); the scope gate under-granted and should be widened if this recurs.",
+        "player state: resolve restated entities for duty_board_001; the assertion yields",
+        "Routed 'Captain Ysra Vale''s line to the background stage: the Director mints presences and moves them; it does not write their dialogue.",
+        "Dropped 'Captain Ysra Vale' from dialogue_order: no surviving dialogue_log line for this speaker.",
+        "orchestration gate: content shipped for channels or prose duties outside any served scope -- the scope gate read the scene as having no such work -- telling_ops carries content for 'telling_ops'. Nothing was dropped (fail-open); the stage model's encoding and the reconciliation seam stand. The scope gate mispredicted.",
+        "perception_outcome: authored prose named ['Captain Ysra Vale', 'Jory Flint'] to Rowan Hale, who has no channel to that identity; replaced with descriptors at admission",
+        "telling refused: telling names someone unregistered: 'Rowan Hale' -> 'Captain Ysra Vale'",
+        "telling refused: telling names someone unregistered: 'Captain Ysra Vale' -> 'Rowan Hale'"
+      ],
+      "calls": [
+        {
+          "role": "director",
+          "model": "x-ai/grok-4.20",
+          "sys": 8385,
+          "out": 844,
+          "cached": 128,
+          "cwrite": 0,
+          "sec": 11.03,
+          "ok": true
+        },
+        {
+          "role": "director_contact",
+          "model": "inception/mercury-2",
+          "sys": 5330,
+          "out": 46,
+          "cached": 5,
+          "cwrite": 0,
+          "sec": 0.88,
+          "ok": true
+        },
+        {
+          "role": "director_body",
+          "model": "inception/mercury-2",
+          "sys": 4983,
+          "out": 46,
+          "cached": 6,
+          "cwrite": 0,
+          "sec": 0.88,
+          "ok": true
+        },
+        {
+          "role": "director_objects",
+          "model": "inception/mercury-2",
+          "sys": 3924,
+          "out": 50,
+          "cached": 3,
+          "cwrite": 0,
+          "sec": 0.89,
+          "ok": true
+        },
+        {
+          "role": "director_spatial",
+          "model": "inception/mercury-2",
+          "sys": 6050,
+          "out": 96,
+          "cached": 6,
+          "cwrite": 0,
+          "sec": 0.94,
+          "ok": true
+        },
+        {
+          "role": "director_social",
+          "model": "inception/mercury-2",
+          "sys": 2564,
+          "out": 42,
+          "cached": 4,
+          "cwrite": 0,
+          "sec": 0.97,
+          "ok": true
+        },
+        {
+          "role": "director_offscreen",
+          "model": "inception/mercury-2",
+          "sys": 3565,
+          "out": 93,
+          "cached": 4,
+          "cwrite": 0,
+          "sec": 1.0,
+          "ok": true
+        },
+        {
+          "role": "director_objects",
+          "model": "inception/mercury-2",
+          "sys": 1441,
+          "out": 129,
+          "cached": 2,
+          "cwrite": 0,
+          "sec": 0.79,
+          "ok": true
+        },
+        {
+          "role": "mapping",
+          "model": "inception/mercury-2",
+          "sys": 5555,
+          "out": 164,
+          "cached": 3,
+          "cwrite": 0,
+          "sec": 0.99,
+          "ok": true
+        },
+        {
+          "role": "director",
+          "model": "x-ai/grok-4.20",
+          "sys": 10546,
+          "out": 630,
+          "cached": 128,
+          "cwrite": 0,
+          "sec": 8.25,
+          "ok": true
+        },
+        {
+          "role": "director",
+          "model": "x-ai/grok-4.20",
+          "sys": 10673,
+          "out": 535,
+          "cached": 128,
+          "cwrite": 0,
+          "sec": 6.66,
+          "ok": true
+        },
+        {
+          "role": "director_offscreen",
+          "model": "inception/mercury-2",
+          "sys": 3604,
+          "out": 180,
+          "cached": 5,
+          "cwrite": 0,
+          "sec": 0.78,
+          "ok": true
+        },
+        {
+          "role": "director_body",
+          "model": "inception/mercury-2",
+          "sys": 4859,
+          "out": 43,
+          "cached": 4,
+          "cwrite": 0,
+          "sec": 0.89,
+          "ok": true
+        },
+        {
+          "role": "director_objects",
+          "model": "inception/mercury-2",
+          "sys": 4022,
+          "out": 126,
+          "cached": 4,
+          "cwrite": 0,
+          "sec": 0.91,
+          "ok": true
+        },
+        {
+          "role": "director_contact",
+          "model": "inception/mercury-2",
+          "sys": 5458,
+          "out": 48,
+          "cached": 4,
+          "cwrite": 0,
+          "sec": 0.93,
+          "ok": true
+        },
+        {
+          "role": "director_social",
+          "model": "inception/mercury-2",
+          "sys": 2583,
+          "out": 87,
+          "cached": 2,
+          "cwrite": 0,
+          "sec": 0.95,
+          "ok": true
+        },
+        {
+          "role": "director_spatial",
+          "model": "inception/mercury-2",
+          "sys": 6068,
+          "out": 57,
+          "cached": 3,
+          "cwrite": 0,
+          "sec": 0.97,
+          "ok": true
+        },
+        {
+          "role": "character_bg",
+          "model": "x-ai/grok-4.20",
+          "sys": 1956,
+          "out": 97,
+          "cached": 128,
+          "cwrite": 0,
+          "sec": 1.87,
+          "ok": true
+        },
+        {
+          "role": "character_bg",
+          "model": "x-ai/grok-4.20",
+          "sys": 1666,
+          "out": 116,
+          "cached": 128,
+          "cwrite": 0,
+          "sec": 1.77,
+          "ok": true
+        },
+        {
+          "role": "narrator",
+          "model": "x-ai/grok-4.20",
+          "sys": 7209,
+          "out": 140,
+          "cached": 128,
+          "cwrite": 0,
+          "sec": 2.78,
+          "ok": true
+        },
+        {
+          "role": "mapping",
+          "model": "inception/mercury-2",
+          "sys": 3277,
+          "out": 140,
+          "cached": 4,
+          "cwrite": 0,
+          "sec": 0.48,
+          "ok": true
+        }
+      ],
+      "background": {
+        "fired": true,
+        "name": "Captain Ysra Vale",
+        "dialogue_log_entry": {
+          "speaker": "Captain Ysra Vale",
+          "exact_quote": "A surveyor? We could use better maps of the eastern ridge. What's your rate?",
+          "volume": "normal",
+          "intended_target": "the road-worn surveyor",
+          "tone": "measured",
+          "visibility": "overt",
+          "conceal_from": [],
+          "articulation": ""
+        },
+        "action": "turns from the gate ledger to face the newcomer squarely",
+        "room": "north_gate",
+        "reactions": [
+          {
+            "name": "Captain Ysra Vale",
+            "dialogue_log_entry": {
+              "speaker": "Captain Ysra Vale",
+              "exact_quote": "A surveyor? We could use better maps of the eastern ridge. What's your rate?",
+              "volume": "normal",
+              "intended_target": "the road-worn surveyor",
+              "tone": "measured",
+              "visibility": "overt",
+              "conceal_from": [],
+              "articulation": ""
+            },
+            "action": "turns from the gate ledger to face the newcomer squarely",
+            "room": "north_gate",
+            "charter_act": {
+              "act": "ask",
+              "other": "the road-worn surveyor"
+            },
+            "charter_offers": [
+              {
+                "act": "ask",
+                "other": "bram",
+                "practice": "converse:bram:ysra:",
+                "utility": 0.509
+              },
+              {
+                "act": "ask",
+                "other": "jory",
+                "practice": "converse:jory:ysra:",
+                "utility": 0.509
+              },
+              {
+                "act": "ask",
+                "other": "the road-worn surveyor",
+                "practice": "converse:the road-worn surveyor:ysra:",
+                "utility": 0.509
+              },
+              {
+                "act": "tell",
+                "other": "bram",
+                "practice": "converse:bram:ysra:",
+                "utility": 0.4472
+              },
+              {
+                "act": "tell",
+                "other": "jory",
+                "practice": "converse:jory:ysra:",
+                "utility": 0.4472
+              },
+              {
+                "act": "tell",
+                "other": "the road-worn surveyor",
+                "practice": "converse:the road-worn surveyor:ysra:",
+                "utility": 0.4472
+              }
+            ]
+          }
+        ],
+        "selected": [
+          "Captain Ysra Vale",
+          "Mett Voss"
+        ],
+        "mode": "background_react+background_react",
+        "agent_calls": [
+          "background_react"
+        ],
+        "_engine_notes": {
+          "llm_calls": [
+            {
+              "step_key": "background_react",
+              "role": "character_bg",
+              "requested": "x-ai/grok-4.20",
+              "served": "x-ai/grok-4.20",
+              "in": 1956,
+              "out": 97,
+              "cached": 128,
+              "duration": 1.867,
+              "kind": "stream"
+            },
+            {
+              "step_key": "background_react",
+              "role": "character_bg",
+              "requested": "x-ai/grok-4.20",
+              "served": "x-ai/grok-4.20",
+              "in": 1666,
+              "out": 116,
+              "cached": 128,
+              "duration": 1.771,
+              "kind": "stream"
+            }
+          ]
+        }
+      },
+      "promotions_this_turn": [],
+      "charters": {
+        "aldermere_commons": {
+          "clock_hours": 26.0,
+          "levels": {
+            "water_drawn": 1.0,
+            "grain_milled": 1.0,
+            "bread_baked": 1.0,
+            "market_stocked": 0.829,
+            "cart_roads": 1.0
+          },
+          "watch": {
+            "well_watch": "toma",
+            "mill_watch": "edrin",
+            "oven_watch": "anja",
+            "market_clerk": "dev",
+            "cart_warden": "keel"
+          },
+          "blame": {},
+          "bindings": {},
+          "places": {
+            "toma": "well_house",
+            "edrin": "mill",
+            "mara": "bakehouse",
+            "sable": "market_square",
+            "orin": "market_square",
+            "willa": "well_house",
+            "rusk": "mill",
+            "anja": "bakehouse",
+            "dev": "market_square",
+            "keel": "market_square"
+          },
+          "available": {
+            "toma": true,
+            "edrin": true,
+            "mara": true,
+            "sable": true,
+            "orin": true,
+            "willa": true,
+            "rusk": true,
+            "anja": true,
+            "dev": true,
+            "keel": true
+          }
+        },
+        "aldermere_civic_watch": {
+          "clock_hours": 26.0,
+          "levels": {
+            "gate_watch": 1.0,
+            "night_lamps": 0.23,
+            "infirmary_ready": 1.0,
+            "bridge_sound": 0.0,
+            "petitions_sorted": 1.0
+          },
+          "watch": {
+            "gate_captain": "bram",
+            "gate_guard": "jory",
+            "healer_watch": "odo",
+            "lamp_round": "lysa",
+            "petition_clerk": "pell"
+          },
+          "blame": {
+            "lysa": 1
+          },
+          "bindings": {},
+          "places": {
+            "ysra": "north_gate",
+            "jory": "north_gate",
+            "nella": "infirmary",
+            "iven": "infirmary",
+            "pell": "council_hall",
+            "bram": "north_gate",
+            "mett": "north_gate",
+            "lysa": "market_square",
+            "odo": "infirmary",
+            "tavi": "council_hall"
+          },
+          "available": {
+            "ysra": true,
+            "jory": true,
+            "nella": false,
+            "iven": true,
+            "pell": true,
+            "bram": true,
+            "mett": false,
+            "lysa": true,
+            "odo": true,
+            "tavi": true
+          }
+        }
+      },
+      "cast": [],
+      "world_events": 9,
+      "pending_jobs": []
+    },
+    {
+      "turn": 4,
+      "turn_id": 2562,
+      "input": "\"Meals and a bed while I work,\" I answer. \"Which problem would you send a surveyor to first, and why?\"",
+      "output": "I offer meals and a bed while I work, then ask which problem they'd send a surveyor to first, and why.\n\nThe unfamiliar person answers in a practical voice, \"The collapsed bridge on the east road. A surveyor can map the damage and the detour before the next rain turns the ford into a swamp.\"\n\nTheir words settle between us in the lit gatehouse, the wooden board still bolted to the stone wall beside the open doorway. Beyond it the path to Market Square stands ready, morning air stirring faintly with open-air scents.",
+      "seconds": 35.494,
+      "error": "",
+      "warnings": [
+        "Routed 'Captain Ysra Vale''s line to the background stage: the Director mints presences and moves them; it does not write their dialogue.",
+        "Dropped 'Captain Ysra Vale' from dialogue_order: no surviving dialogue_log line for this speaker.",
+        "perception_outcome: authored prose named ['Captain Ysra Vale', 'Jory Flint'] to Rowan Hale, who has no channel to that identity; replaced with descriptors at admission",
+        "Proper noun from view missing in narrator prose: 'Tormac Reed'",
+        "off-screen plan refused: op 0 actor 'Rowan Hale' made no plan declaration this beat"
+      ],
+      "calls": [
+        {
+          "role": "director",
+          "model": "x-ai/grok-4.20",
+          "sys": 8478,
+          "out": 811,
+          "cached": 128,
+          "cwrite": 0,
+          "sec": 9.39,
+          "ok": true
+        },
+        {
+          "role": "director_social",
+          "model": "inception/mercury-2",
+          "sys": 2479,
+          "out": 39,
+          "cached": 1888,
+          "cwrite": 0,
+          "sec": 0.82,
+          "ok": true
+        },
+        {
+          "role": "director_contact",
+          "model": "inception/mercury-2",
+          "sys": 5276,
+          "out": 45,
+          "cached": 2,
+          "cwrite": 0,
+          "sec": 0.87,
+          "ok": true
+        },
+        {
+          "role": "director_objects",
+          "model": "inception/mercury-2",
+          "sys": 4036,
+          "out": 108,
+          "cached": 3,
+          "cwrite": 0,
+          "sec": 0.88,
+          "ok": true
+        },
+        {
+          "role": "director_body",
+          "model": "inception/mercury-2",
+          "sys": 4886,
+          "out": 44,
+          "cached": 3,
+          "cwrite": 0,
+          "sec": 0.91,
+          "ok": true
+        },
+        {
+          "role": "director_spatial",
+          "model": "inception/mercury-2",
+          "sys": 6057,
+          "out": 75,
+          "cached": 4,
+          "cwrite": 0,
+          "sec": 0.9,
+          "ok": true
+        },
+        {
+          "role": "director_offscreen",
+          "model": "inception/mercury-2",
+          "sys": 3491,
+          "out": 107,
+          "cached": 4,
+          "cwrite": 0,
+          "sec": 1.03,
+          "ok": true
+        },
+        {
+          "role": "mapping",
+          "model": "inception/mercury-2",
+          "sys": 5782,
+          "out": 136,
+          "cached": 6,
+          "cwrite": 0,
+          "sec": 1.28,
+          "ok": true
+        },
+        {
+          "role": "director",
+          "model": "x-ai/grok-4.20",
+          "sys": 10636,
+          "out": 949,
+          "cached": 128,
+          "cwrite": 0,
+          "sec": 10.12,
+          "ok": true
+        },
+        {
+          "role": "director",
+          "model": "x-ai/grok-4.20",
+          "sys": 10758,
+          "out": 483,
+          "cached": 128,
+          "cwrite": 0,
+          "sec": 5.48,
+          "ok": true
+        },
+        {
+          "role": "director_objects",
+          "model": "inception/mercury-2",
+          "sys": 4053,
+          "out": 51,
+          "cached": 5,
+          "cwrite": 0,
+          "sec": 0.6,
+          "ok": true
+        },
+        {
+          "role": "director_spatial",
+          "model": "inception/mercury-2",
+          "sys": 6189,
+          "out": 61,
+          "cached": 4,
+          "cwrite": 0,
+          "sec": 0.64,
+          "ok": true
+        },
+        {
+          "role": "director_social",
+          "model": "inception/mercury-2",
+          "sys": 2648,
+          "out": 40,
+          "cached": 4,
+          "cwrite": 0,
+          "sec": 0.72,
+          "ok": true
+        },
+        {
+          "role": "director_contact",
+          "model": "inception/mercury-2",
+          "sys": 5250,
+          "out": 44,
+          "cached": 2,
+          "cwrite": 0,
+          "sec": 0.74,
+          "ok": true
+        },
+        {
+          "role": "director_offscreen",
+          "model": "inception/mercury-2",
+          "sys": 3566,
+          "out": 64,
+          "cached": 4,
+          "cwrite": 0,
+          "sec": 0.74,
+          "ok": true
+        },
+        {
+          "role": "director_body",
+          "model": "inception/mercury-2",
+          "sys": 4819,
+          "out": 43,
+          "cached": 4,
+          "cwrite": 0,
+          "sec": 0.76,
+          "ok": true
+        },
+        {
+          "role": "character_bg",
+          "model": "x-ai/grok-4.20",
+          "sys": 1960,
+          "out": 136,
+          "cached": 128,
+          "cwrite": 0,
+          "sec": 1.86,
+          "ok": true
+        },
+        {
+          "role": "character_bg",
+          "model": "x-ai/grok-4.20",
+          "sys": 1676,
+          "out": 123,
+          "cached": 128,
+          "cwrite": 0,
+          "sec": 2.33,
+          "ok": true
+        },
+        {
+          "role": "narrator",
+          "model": "x-ai/grok-4.20",
+          "sys": 7405,
+          "out": 132,
+          "cached": 128,
+          "cwrite": 0,
+          "sec": 2.24,
+          "ok": true
+        }
+      ],
+      "background": {
+        "fired": true,
+        "name": "Captain Ysra Vale",
+        "dialogue_log_entry": {
+          "speaker": "Captain Ysra Vale",
+          "exact_quote": "The collapsed bridge on the east road. A surveyor can map the damage and the detour before the next rain turns the ford into a swamp.",
+          "volume": "normal",
+          "intended_target": "Rowan Hale",
+          "tone": "practical",
+          "visibility": "overt",
+          "conceal_from": [],
+          "articulation": ""
+        },
+        "action": "",
+        "room": "north_gate",
+        "reactions": [
+          {
+            "name": "Captain Ysra Vale",
+            "dialogue_log_entry": {
+              "speaker": "Captain Ysra Vale",
+              "exact_quote": "The collapsed bridge on the east road. A surveyor can map the damage and the detour before the next rain turns the ford into a swamp.",
+              "volume": "normal",
+              "intended_target": "Rowan Hale",
+              "tone": "practical",
+              "visibility": "overt",
+              "conceal_from": [],
+              "articulation": ""
+            },
+            "action": "",
+            "room": "north_gate",
+            "charter_act": {
+              "act": "tell",
+              "other": "the road-worn surveyor"
+            },
+            "charter_offers": [
+              {
+                "act": "ask",
+                "other": "bram",
+                "practice": "converse:bram:ysra:",
+                "utility": 0.509
+              },
+              {
+                "act": "ask",
+                "other": "jory",
+                "practice": "converse:jory:ysra:",
+                "utility": 0.509
+              },
+              {
+                "act": "ask",
+                "other": "the road-worn surveyor",
+                "practice": "converse:the road-worn surveyor:ysra:",
+                "utility": 0.509
+              },
+              {
+                "act": "tell",
+                "other": "bram",
+                "practice": "converse:bram:ysra:",
+                "utility": 0.4472
+              },
+              {
+                "act": "tell",
+                "other": "jory",
+                "practice": "converse:jory:ysra:",
+                "utility": 0.4472
+              },
+              {
+                "act": "tell",
+                "other": "the road-worn surveyor",
+                "practice": "converse:the road-worn surveyor:ysra:",
+                "utility": 0.4472
+              }
+            ]
+          }
+        ],
+        "selected": [
+          "Captain Ysra Vale",
+          "Mett Voss"
+        ],
+        "mode": "background_react+background_react",
+        "agent_calls": [
+          "background_react"
+        ],
+        "_engine_notes": {
+          "llm_calls": [
+            {
+              "step_key": "background_react",
+              "role": "character_bg",
+              "requested": "x-ai/grok-4.20",
+              "served": "x-ai/grok-4.20",
+              "in": 1960,
+              "out": 136,
+              "cached": 128,
+              "duration": 1.864,
+              "kind": "stream"
+            },
+            {
+              "step_key": "background_react",
+              "role": "character_bg",
+              "requested": "x-ai/grok-4.20",
+              "served": "x-ai/grok-4.20",
+              "in": 1676,
+              "out": 123,
+              "cached": 128,
+              "duration": 2.334,
+              "kind": "stream"
+            }
+          ]
+        }
+      },
+      "promotions_this_turn": [],
+      "charters": {
+        "aldermere_commons": {
+          "clock_hours": 26.0,
+          "levels": {
+            "water_drawn": 1.0,
+            "grain_milled": 1.0,
+            "bread_baked": 1.0,
+            "market_stocked": 0.829,
+            "cart_roads": 1.0
+          },
+          "watch": {
+            "well_watch": "toma",
+            "mill_watch": "edrin",
+            "oven_watch": "anja",
+            "market_clerk": "dev",
+            "cart_warden": "keel"
+          },
+          "blame": {},
+          "bindings": {},
+          "places": {
+            "toma": "well_house",
+            "edrin": "mill",
+            "mara": "bakehouse",
+            "sable": "market_square",
+            "orin": "market_square",
+            "willa": "well_house",
+            "rusk": "mill",
+            "anja": "bakehouse",
+            "dev": "market_square",
+            "keel": "market_square"
+          },
+          "available": {
+            "toma": true,
+            "edrin": true,
+            "mara": true,
+            "sable": true,
+            "orin": true,
+            "willa": true,
+            "rusk": true,
+            "anja": true,
+            "dev": true,
+            "keel": true
+          }
+        },
+        "aldermere_civic_watch": {
+          "clock_hours": 26.0,
+          "levels": {
+            "gate_watch": 1.0,
+            "night_lamps": 0.23,
+            "infirmary_ready": 1.0,
+            "bridge_sound": 0.0,
+            "petitions_sorted": 1.0
+          },
+          "watch": {
+            "gate_captain": "bram",
+            "gate_guard": "jory",
+            "healer_watch": "odo",
+            "lamp_round": "lysa",
+            "petition_clerk": "pell"
+          },
+          "blame": {
+            "lysa": 1
+          },
+          "bindings": {},
+          "places": {
+            "ysra": "north_gate",
+            "jory": "north_gate",
+            "nella": "infirmary",
+            "iven": "infirmary",
+            "pell": "council_hall",
+            "bram": "north_gate",
+            "mett": "north_gate",
+            "lysa": "market_square",
+            "odo": "infirmary",
+            "tavi": "council_hall"
+          },
+          "available": {
+            "ysra": true,
+            "jory": true,
+            "nella": false,
+            "iven": true,
+            "pell": true,
+            "bram": true,
+            "mett": false,
+            "lysa": true,
+            "odo": true,
+            "tavi": true
+          }
+        }
+      },
+      "cast": [],
+      "world_events": 9,
+      "pending_jobs": []
+    },
+    {
+      "turn": 5,
+      "turn_id": 2563,
+      "input": "\"I'll inspect the bridge. When did it collapse, and who actually saw it happen?\" I ask Captain Vale.",
+      "output": "The heavy stones of the North Gate press cool and solid against my shoulder as I speak, my question cutting across the lit gatehouse to Captain Ysra Vale.\n\nCaptain Vale's measured voice replies, \"This morning, just after dawn. The surveyor here saw it first.\"\n\nShe turns her gaze to me, silver-braided insignia catching the light.",
+      "seconds": 44.841,
+      "error": "",
+      "warnings": [
+        "Player act not declared this beat (player-act authority): 'Rowan Hale stands in the slate-roofed gatehouse at the north edge of Aldermere, the upland road stretching away beyond t'",
+        "player state: resolve restated entities for duty_board_001; the assertion yields",
+        "Routed 'Captain Ysra Vale''s line to the background stage: the Director mints presences and moves them; it does not write their dialogue.",
+        "Dropped 'Captain Ysra Vale' from dialogue_order: no surviving dialogue_log line for this speaker.",
+        "perception_outcome: authored prose named ['Captain Ysra Vale', 'Jory Flint'] to Rowan Hale, who has no channel to that identity; replaced with descriptors at admission",
+        "Proper noun from view missing in narrator prose: 'Tormac Reed'",
+        "Narrator prose appears to reuse a previous turn's content instead of describing this turn's view (shared phrase: 'the north gate press cool and...').",
+        "destruction declaration dropped: no target_id"
+      ],
+      "calls": [
+        {
+          "role": "director",
+          "model": "x-ai/grok-4.20",
+          "sys": 8399,
+          "out": 691,
+          "cached": 128,
+          "cwrite": 0,
+          "sec": 8.64,
+          "ok": true
+        },
+        {
+          "role": "director_social",
+          "model": "inception/mercury-2",
+          "sys": 2560,
+          "out": 42,
+          "cached": 4,
+          "cwrite": 0,
+          "sec": 0.69,
+          "ok": true
+        },
+        {
+          "role": "director_offscreen",
+          "model": "inception/mercury-2",
+          "sys": 3561,
+          "out": 67,
+          "cached": 2064,
+          "cwrite": 0,
+          "sec": 0.77,
+          "ok": true
+        },
+        {
+          "role": "director_contact",
+          "model": "inception/mercury-2",
+          "sys": 5278,
+          "out": 45,
+          "cached": 4,
+          "cwrite": 0,
+          "sec": 0.8,
+          "ok": true
+        },
+        {
+          "role": "director_spatial",
+          "model": "inception/mercury-2",
+          "sys": 6124,
+          "out": 74,
+          "cached": 6,
+          "cwrite": 0,
+          "sec": 0.86,
+          "ok": true
+        },
+        {
+          "role": "director_body",
+          "model": "inception/mercury-2",
+          "sys": 4903,
+          "out": 44,
+          "cached": 3,
+          "cwrite": 0,
+          "sec": 0.93,
+          "ok": true
+        },
+        {
+          "role": "director_objects",
+          "model": "inception/mercury-2",
+          "sys": 3905,
+          "out": 123,
+          "cached": 3,
+          "cwrite": 0,
+          "sec": 0.92,
+          "ok": true
+        },
+        {
+          "role": "director",
+          "model": "x-ai/grok-4.20",
+          "sys": 1167,
+          "out": 143,
+          "cached": 128,
+          "cwrite": 0,
+          "sec": 2.27,
+          "ok": true
+        },
+        {
+          "role": "mapping",
+          "model": "inception/mercury-2",
+          "sys": 5894,
+          "out": 304,
+          "cached": 4,
+          "cwrite": 0,
+          "sec": 1.19,
+          "ok": true
+        },
+        {
+          "role": "director",
+          "model": "x-ai/grok-4.20",
+          "sys": 10592,
+          "out": 1033,
+          "cached": 128,
+          "cwrite": 0,
+          "sec": 11.35,
+          "ok": true
+        },
+        {
+          "role": "director",
+          "model": "x-ai/grok-4.20",
+          "sys": 10718,
+          "out": 739,
+          "cached": 128,
+          "cwrite": 0,
+          "sec": 7.58,
+          "ok": true
+        },
+        {
+          "role": "director_body",
+          "model": "inception/mercury-2",
+          "sys": 5052,
+          "out": 45,
+          "cached": 3996,
+          "cwrite": 0,
+          "sec": 0.78,
+          "ok": true
+        },
+        {
+          "role": "director_contact",
+          "model": "inception/mercury-2",
+          "sys": 5307,
+          "out": 44,
+          "cached": 2,
+          "cwrite": 0,
+          "sec": 0.83,
+          "ok": true
+        },
+        {
+          "role": "director_spatial",
+          "model": "inception/mercury-2",
+          "sys": 6082,
+          "out": 73,
+          "cached": 3,
+          "cwrite": 0,
+          "sec": 0.88,
+          "ok": true
+        },
+        {
+          "role": "director_social",
+          "model": "inception/mercury-2",
+          "sys": 2652,
+          "out": 113,
+          "cached": 5,
+          "cwrite": 0,
+          "sec": 0.88,
+          "ok": true
+        },
+        {
+          "role": "director_offscreen",
+          "model": "inception/mercury-2",
+          "sys": 3762,
+          "out": 67,
+          "cached": 4,
+          "cwrite": 0,
+          "sec": 0.89,
+          "ok": true
+        },
+        {
+          "role": "director_objects",
+          "model": "inception/mercury-2",
+          "sys": 4048,
+          "out": 125,
+          "cached": 5,
+          "cwrite": 0,
+          "sec": 1.18,
+          "ok": true
+        },
+        {
+          "role": "character_bg",
+          "model": "x-ai/grok-4.20",
+          "sys": 1963,
+          "out": 90,
+          "cached": 128,
+          "cwrite": 0,
+          "sec": 2.06,
+          "ok": true
+        },
+        {
+          "role": "character_bg",
+          "model": "x-ai/grok-4.20",
+          "sys": 1675,
+          "out": 92,
+          "cached": 896,
+          "cwrite": 0,
+          "sec": 1.39,
+          "ok": true
+        },
+        {
+          "role": "narrator",
+          "model": "x-ai/grok-4.20",
+          "sys": 7575,
+          "out": 391,
+          "cached": 128,
+          "cwrite": 0,
+          "sec": 3.94,
+          "ok": true
+        },
+        {
+          "role": "narrator",
+          "model": "x-ai/grok-4.20",
+          "sys": 7625,
+          "out": 98,
+          "cached": 6272,
+          "cwrite": 0,
+          "sec": 1.82,
+          "ok": true
+        },
+        {
+          "role": "mapping",
+          "model": "inception/mercury-2",
+          "sys": 3320,
+          "out": 456,
+          "cached": 5,
+          "cwrite": 0,
+          "sec": 1.2,
+          "ok": true
+        }
+      ],
+      "background": {
+        "fired": true,
+        "name": "Captain Ysra Vale",
+        "dialogue_log_entry": {
+          "speaker": "Captain Ysra Vale",
+          "exact_quote": "This morning, just after dawn. The surveyor here saw it first.",
+          "volume": "normal",
+          "intended_target": "Rowan Hale",
+          "tone": "measured",
+          "visibility": "overt",
+          "conceal_from": [],
+          "articulation": ""
+        },
+        "action": "turns her gaze to the road-worn surveyor",
+        "room": "north_gate",
+        "reactions": [
+          {
+            "name": "Captain Ysra Vale",
+            "dialogue_log_entry": {
+              "speaker": "Captain Ysra Vale",
+              "exact_quote": "This morning, just after dawn. The surveyor here saw it first.",
+              "volume": "normal",
+              "intended_target": "Rowan Hale",
+              "tone": "measured",
+              "visibility": "overt",
+              "conceal_from": [],
+              "articulation": ""
+            },
+            "action": "turns her gaze to the road-worn surveyor",
+            "room": "north_gate",
+            "charter_act": {
+              "act": "ask",
+              "other": "the road-worn surveyor"
+            },
+            "charter_offers": [
+              {
+                "act": "ask",
+                "other": "bram",
+                "practice": "converse:bram:ysra:",
+                "utility": 0.509
+              },
+              {
+                "act": "ask",
+                "other": "jory",
+                "practice": "converse:jory:ysra:",
+                "utility": 0.509
+              },
+              {
+                "act": "ask",
+                "other": "the road-worn surveyor",
+                "practice": "converse:the road-worn surveyor:ysra:",
+                "utility": 0.509
+              },
+              {
+                "act": "tell",
+                "other": "bram",
+                "practice": "converse:bram:ysra:",
+                "utility": 0.4472
+              },
+              {
+                "act": "tell",
+                "other": "jory",
+                "practice": "converse:jory:ysra:",
+                "utility": 0.4472
+              },
+              {
+                "act": "tell",
+                "other": "the road-worn surveyor",
+                "practice": "converse:the road-worn surveyor:ysra:",
+                "utility": 0.4472
+              }
+            ]
+          }
+        ],
+        "selected": [
+          "Captain Ysra Vale",
+          "Mett Voss"
+        ],
+        "mode": "background_react+background_react",
+        "agent_calls": [
+          "background_react"
+        ],
+        "_engine_notes": {
+          "llm_calls": [
+            {
+              "step_key": "background_react",
+              "role": "character_bg",
+              "requested": "x-ai/grok-4.20",
+              "served": "x-ai/grok-4.20",
+              "in": 1963,
+              "out": 90,
+              "cached": 128,
+              "duration": 2.065,
+              "kind": "stream"
+            },
+            {
+              "step_key": "background_react",
+              "role": "character_bg",
+              "requested": "x-ai/grok-4.20",
+              "served": "x-ai/grok-4.20",
+              "in": 1675,
+              "out": 92,
+              "cached": 896,
+              "duration": 1.392,
+              "kind": "stream"
+            }
+          ]
+        }
+      },
+      "promotions_this_turn": [],
+      "charters": {
+        "aldermere_commons": {
+          "clock_hours": 26.0,
+          "levels": {
+            "water_drawn": 1.0,
+            "grain_milled": 1.0,
+            "bread_baked": 1.0,
+            "market_stocked": 0.829,
+            "cart_roads": 1.0
+          },
+          "watch": {
+            "well_watch": "toma",
+            "mill_watch": "edrin",
+            "oven_watch": "anja",
+            "market_clerk": "dev",
+            "cart_warden": "keel"
+          },
+          "blame": {},
+          "bindings": {},
+          "places": {
+            "toma": "well_house",
+            "edrin": "mill",
+            "mara": "bakehouse",
+            "sable": "market_square",
+            "orin": "market_square",
+            "willa": "well_house",
+            "rusk": "mill",
+            "anja": "bakehouse",
+            "dev": "market_square",
+            "keel": "market_square"
+          },
+          "available": {
+            "toma": true,
+            "edrin": true,
+            "mara": true,
+            "sable": true,
+            "orin": true,
+            "willa": true,
+            "rusk": true,
+            "anja": true,
+            "dev": true,
+            "keel": true
+          }
+        },
+        "aldermere_civic_watch": {
+          "clock_hours": 26.0,
+          "levels": {
+            "gate_watch": 1.0,
+            "night_lamps": 0.23,
+            "infirmary_ready": 1.0,
+            "bridge_sound": 0.0,
+            "petitions_sorted": 1.0
+          },
+          "watch": {
+            "gate_captain": "bram",
+            "gate_guard": "jory",
+            "healer_watch": "odo",
+            "lamp_round": "lysa",
+            "petition_clerk": "pell"
+          },
+          "blame": {
+            "lysa": 1
+          },
+          "bindings": {},
+          "places": {
+            "ysra": "north_gate",
+            "jory": "north_gate",
+            "nella": "infirmary",
+            "iven": "infirmary",
+            "pell": "council_hall",
+            "bram": "north_gate",
+            "mett": "north_gate",
+            "lysa": "market_square",
+            "odo": "infirmary",
+            "tavi": "council_hall"
+          },
+          "available": {
+            "ysra": true,
+            "jory": true,
+            "nella": false,
+            "iven": true,
+            "pell": true,
+            "bram": true,
+            "mett": false,
+            "lysa": true,
+            "odo": true,
+            "tavi": true
+          }
+        }
+      },
+      "cast": [],
+      "world_events": 9,
+      "pending_jobs": []
+    },
+    {
+      "turn": 6,
+      "turn_id": 2564,
+      "input": "\"I only arrived moments ago,\" I say. \"Which surveyor do you mean?\"",
+      "output": "I speak, and the words land in the lit gatehouse like a thrown stone.\n\nThe unfamiliar person says in a level voice: \"The one standing right there with the dusty cloak and the badger clasp. Claims he was sent by the cartographer’s guild in High Hollow.\"\n\nThey nod once toward me.",
+      "seconds": 32.738,
+      "error": "",
+      "warnings": [
+        "Player act not declared this beat (player-act authority): 'Rowan Hale stands near the gatehouse entrance, facing Captain Ysra Vale.'",
+        "body specialist: event 1 is an overlay change, handled in overlays channel",
+        "orchestration scope: the offscreen specialist emitted telling_ops outside its granted scope (['offscreen_plan_ops']). Content was kept (fail-open); the scope gate under-granted and should be widened if this recurs.",
+        "player state: resolve restated positions for Rowan Hale; the assertion yields",
+        "player state: resolve restated entities for duty_board_001; the assertion yields",
+        "Routed 'Captain Ysra Vale''s line to the background stage: the Director mints presences and moves them; it does not write their dialogue.",
+        "Dropped 'Captain Ysra Vale' from dialogue_order: no surviving dialogue_log line for this speaker.",
+        "orchestration gate: content shipped for channels or prose duties outside any served scope -- the scope gate read the scene as having no such work -- telling_ops carries content for 'telling_ops'. Nothing was dropped (fail-open); the stage model's encoding and the reconciliation seam stand. The scope gate mispredicted.",
+        "perception_outcome: authored prose named ['Captain Ysra Vale', 'Jory Flint'] to Rowan Hale, who has no channel to that identity; replaced with descriptors at admission",
+        "Proper noun from view missing in narrator prose: 'Tormac Reed'",
+        "Proper noun from view missing in narrator prose: 'Lira Morn'",
+        "telling refused: telling names someone unregistered: 'Captain Ysra Vale' -> 'Rowan Hale'"
+      ],
+      "calls": [
+        {
+          "role": "director",
+          "model": "x-ai/grok-4.20",
+          "sys": 8427,
+          "out": 721,
+          "cached": 128,
+          "cwrite": 0,
+          "sec": 8.26,
+          "ok": true
+        },
+        {
+          "role": "director_social",
+          "model": "inception/mercury-2",
+          "sys": 2460,
+          "out": 39,
+          "cached": 2,
+          "cwrite": 0,
+          "sec": 0.83,
+          "ok": true
+        },
+        {
+          "role": "director_offscreen",
+          "model": "inception/mercury-2",
+          "sys": 3534,
+          "out": 66,
+          "cached": 2054,
+          "cwrite": 0,
+          "sec": 0.84,
+          "ok": true
+        },
+        {
+          "role": "director_body",
+          "model": "inception/mercury-2",
+          "sys": 4810,
+          "out": 43,
+          "cached": 2,
+          "cwrite": 0,
+          "sec": 0.86,
+          "ok": true
+        },
+        {
+          "role": "director_spatial",
+          "model": "inception/mercury-2",
+          "sys": 5845,
+          "out": 70,
+          "cached": 2,
+          "cwrite": 0,
+          "sec": 0.86,
+          "ok": true
+        },
+        {
+          "role": "director_contact",
+          "model": "inception/mercury-2",
+          "sys": 5261,
+          "out": 45,
+          "cached": 4653,
+          "cwrite": 0,
+          "sec": 0.87,
+          "ok": true
+        },
+        {
+          "role": "director_objects",
+          "model": "inception/mercury-2",
+          "sys": 3962,
+          "out": 116,
+          "cached": 6,
+          "cwrite": 0,
+          "sec": 1.22,
+          "ok": true
+        },
+        {
+          "role": "mapping",
+          "model": "inception/mercury-2",
+          "sys": 5820,
+          "out": 191,
+          "cached": 5,
+          "cwrite": 0,
+          "sec": 0.86,
+          "ok": true
+        },
+        {
+          "role": "director",
+          "model": "x-ai/grok-4.20",
+          "sys": 10588,
+          "out": 818,
+          "cached": 128,
+          "cwrite": 0,
+          "sec": 7.85,
+          "ok": true
+        },
+        {
+          "role": "director",
+          "model": "x-ai/grok-4.20",
+          "sys": 10702,
+          "out": 494,
+          "cached": 4352,
+          "cwrite": 0,
+          "sec": 6.13,
+          "ok": true
+        },
+        {
+          "role": "director_objects",
+          "model": "inception/mercury-2",
+          "sys": 4189,
+          "out": 131,
+          "cached": 4,
+          "cwrite": 0,
+          "sec": 0.68,
+          "ok": true
+        },
+        {
+          "role": "director_body",
+          "model": "inception/mercury-2",
+          "sys": 5019,
+          "out": 112,
+          "cached": 4,
+          "cwrite": 0,
+          "sec": 0.76,
+          "ok": true
+        },
+        {
+          "role": "director_contact",
+          "model": "inception/mercury-2",
+          "sys": 5377,
+          "out": 45,
+          "cached": 2,
+          "cwrite": 0,
+          "sec": 0.82,
+          "ok": true
+        },
+        {
+          "role": "director_offscreen",
+          "model": "inception/mercury-2",
+          "sys": 3758,
+          "out": 150,
+          "cached": 3,
+          "cwrite": 0,
+          "sec": 0.94,
+          "ok": true
+        },
+        {
+          "role": "director_spatial",
+          "model": "inception/mercury-2",
+          "sys": 6259,
+          "out": 85,
+          "cached": 6,
+          "cwrite": 0,
+          "sec": 0.99,
+          "ok": true
+        },
+        {
+          "role": "director_social",
+          "model": "inception/mercury-2",
+          "sys": 2680,
+          "out": 109,
+          "cached": 2,
+          "cwrite": 0,
+          "sec": 1.05,
+          "ok": true
+        },
+        {
+          "role": "character_bg",
+          "model": "x-ai/grok-4.20",
+          "sys": 1933,
+          "out": 105,
+          "cached": 128,
+          "cwrite": 0,
+          "sec": 1.61,
+          "ok": true
+        },
+        {
+          "role": "character_bg",
+          "model": "x-ai/grok-4.20",
+          "sys": 1650,
+          "out": 73,
+          "cached": 128,
+          "cwrite": 0,
+          "sec": 1.35,
+          "ok": true
+        },
+        {
+          "role": "narrator",
+          "model": "x-ai/grok-4.20",
+          "sys": 7507,
+          "out": 88,
+          "cached": 6208,
+          "cwrite": 0,
+          "sec": 2.02,
+          "ok": true
+        },
+        {
+          "role": "mapping",
+          "model": "inception/mercury-2",
+          "sys": 3382,
+          "out": 497,
+          "cached": 4,
+          "cwrite": 0,
+          "sec": 0.74,
+          "ok": true
+        }
+      ],
+      "background": {
+        "fired": true,
+        "name": "Captain Ysra Vale",
+        "dialogue_log_entry": {
+          "speaker": "Captain Ysra Vale",
+          "exact_quote": "The one standing right there with the dusty cloak and the badger clasp. Claims he was sent by the cartographer’s guild in High Hollow.",
+          "volume": "normal",
+          "intended_target": "Rowan Hale",
+          "tone": "level",
+          "visibility": "overt",
+          "conceal_from": [],
+          "articulation": ""
+        },
+        "action": "nods once toward the road-worn surveyor",
+        "room": "north_gate",
+        "reactions": [
+          {
+            "name": "Captain Ysra Vale",
+            "dialogue_log_entry": {
+              "speaker": "Captain Ysra Vale",
+              "exact_quote": "The one standing right there with the dusty cloak and the badger clasp. Claims he was sent by the cartographer’s guild in High Hollow.",
+              "volume": "normal",
+              "intended_target": "Rowan Hale",
+              "tone": "level",
+              "visibility": "overt",
+              "conceal_from": [],
+              "articulation": ""
+            },
+            "action": "nods once toward the road-worn surveyor",
+            "room": "north_gate",
+            "charter_act": {
+              "act": "ask",
+              "other": "the road-worn surveyor"
+            },
+            "charter_offers": [
+              {
+                "act": "ask",
+                "other": "bram",
+                "practice": "converse:bram:ysra:",
+                "utility": 0.509
+              },
+              {
+                "act": "ask",
+                "other": "jory",
+                "practice": "converse:jory:ysra:",
+                "utility": 0.509
+              },
+              {
+                "act": "ask",
+                "other": "the road-worn surveyor",
+                "practice": "converse:the road-worn surveyor:ysra:",
+                "utility": 0.509
+              },
+              {
+                "act": "tell",
+                "other": "bram",
+                "practice": "converse:bram:ysra:",
+                "utility": 0.4472
+              },
+              {
+                "act": "tell",
+                "other": "jory",
+                "practice": "converse:jory:ysra:",
+                "utility": 0.4472
+              },
+              {
+                "act": "tell",
+                "other": "the road-worn surveyor",
+                "practice": "converse:the road-worn surveyor:ysra:",
+                "utility": 0.4472
+              }
+            ]
+          }
+        ],
+        "selected": [
+          "Captain Ysra Vale",
+          "Mett Voss"
+        ],
+        "mode": "background_react+background_react",
+        "agent_calls": [
+          "background_react"
+        ],
+        "_engine_notes": {
+          "llm_calls": [
+            {
+              "step_key": "background_react",
+              "role": "character_bg",
+              "requested": "x-ai/grok-4.20",
+              "served": "x-ai/grok-4.20",
+              "in": 1933,
+              "out": 105,
+              "cached": 128,
+              "duration": 1.61,
+              "kind": "stream"
+            },
+            {
+              "step_key": "background_react",
+              "role": "character_bg",
+              "requested": "x-ai/grok-4.20",
+              "served": "x-ai/grok-4.20",
+              "in": 1650,
+              "out": 73,
+              "cached": 128,
+              "duration": 1.35,
+              "kind": "stream"
+            }
+          ]
+        }
+      },
+      "promotions_this_turn": [],
+      "charters": {
+        "aldermere_commons": {
+          "clock_hours": 26.0,
+          "levels": {
+            "water_drawn": 1.0,
+            "grain_milled": 1.0,
+            "bread_baked": 1.0,
+            "market_stocked": 0.829,
+            "cart_roads": 1.0
+          },
+          "watch": {
+            "well_watch": "toma",
+            "mill_watch": "edrin",
+            "oven_watch": "anja",
+            "market_clerk": "dev",
+            "cart_warden": "keel"
+          },
+          "blame": {},
+          "bindings": {},
+          "places": {
+            "toma": "well_house",
+            "edrin": "mill",
+            "mara": "bakehouse",
+            "sable": "market_square",
+            "orin": "market_square",
+            "willa": "well_house",
+            "rusk": "mill",
+            "anja": "bakehouse",
+            "dev": "market_square",
+            "keel": "market_square"
+          },
+          "available": {
+            "toma": true,
+            "edrin": true,
+            "mara": true,
+            "sable": true,
+            "orin": true,
+            "willa": true,
+            "rusk": true,
+            "anja": true,
+            "dev": true,
+            "keel": true
+          }
+        },
+        "aldermere_civic_watch": {
+          "clock_hours": 26.0,
+          "levels": {
+            "gate_watch": 1.0,
+            "night_lamps": 0.23,
+            "infirmary_ready": 1.0,
+            "bridge_sound": 0.0,
+            "petitions_sorted": 1.0
+          },
+          "watch": {
+            "gate_captain": "bram",
+            "gate_guard": "jory",
+            "healer_watch": "odo",
+            "lamp_round": "lysa",
+            "petition_clerk": "pell"
+          },
+          "blame": {
+            "lysa": 1
+          },
+          "bindings": {},
+          "places": {
+            "ysra": "north_gate",
+            "jory": "north_gate",
+            "nella": "infirmary",
+            "iven": "infirmary",
+            "pell": "council_hall",
+            "bram": "north_gate",
+            "mett": "north_gate",
+            "lysa": "market_square",
+            "odo": "infirmary",
+            "tavi": "council_hall"
+          },
+          "available": {
+            "ysra": true,
+            "jory": true,
+            "nella": false,
+            "iven": true,
+            "pell": true,
+            "bram": true,
+            "mett": false,
+            "lysa": true,
+            "odo": true,
+            "tavi": true
+          }
+        }
+      },
+      "cast": [],
+      "world_events": 9,
+      "pending_jobs": []
+    },
+    {
+      "turn": 7,
+      "turn_id": 2565,
+      "input": "I look down at my own clothes, then meet her eyes. \"You are pointing at me, Captain. I have no badger clasp, I belong to no guild, and I did not witness the bridge collapse. Are you confusing me with someone else?\"",
+      "output": "I look down at my own clothes, then meet her eyes as I speak, the words landing heavy between us in the morning air.\n\n\"My mistake. The clasp is on the surveyor behind you.\"\n\nThe unfamiliar person's even tone carries no edge, just a flat correction that shifts the weight of the moment. The wooden board on the stone wall still lists the on-duty roster beside the gatehouse entrance, and beyond the open doorway the path to Market Square waits.",
+      "seconds": 26.325,
+      "error": "",
+      "warnings": [
+        "player state: resolve restated entities for duty_board_001; the assertion yields",
+        "Dropped 'Captain Ysra Vale' from dialogue_order: no surviving dialogue_log line for this speaker.",
+        "perception_outcome: authored prose named ['Captain Ysra Vale', 'Jory Flint', 'Mett Voss'] to Rowan Hale, who has no channel to that identity; replaced with descriptors at admission",
+        "Proper noun from view missing in narrator prose: 'Tormac Reed'"
+      ],
+      "calls": [
+        {
+          "role": "director",
+          "model": "x-ai/grok-4.20",
+          "sys": 8619,
+          "out": 906,
+          "cached": 128,
+          "cwrite": 0,
+          "sec": 8.73,
+          "ok": true
+        },
+        {
+          "role": "director_body",
+          "model": "inception/mercury-2",
+          "sys": 4931,
+          "out": 42,
+          "cached": 4,
+          "cwrite": 0,
+          "sec": 0.67,
+          "ok": true
+        },
+        {
+          "role": "director_objects",
+          "model": "inception/mercury-2",
+          "sys": 4065,
+          "out": 126,
+          "cached": 6,
+          "cwrite": 0,
+          "sec": 0.7,
+          "ok": true
+        },
+        {
+          "role": "director_contact",
+          "model": "inception/mercury-2",
+          "sys": 5447,
+          "out": 46,
+          "cached": 5,
+          "cwrite": 0,
+          "sec": 0.72,
+          "ok": true
+        },
+        {
+          "role": "director_social",
+          "model": "inception/mercury-2",
+          "sys": 2667,
+          "out": 42,
+          "cached": 4,
+          "cwrite": 0,
+          "sec": 0.79,
+          "ok": true
+        },
+        {
+          "role": "director_spatial",
+          "model": "inception/mercury-2",
+          "sys": 6042,
+          "out": 79,
+          "cached": 5,
+          "cwrite": 0,
+          "sec": 0.84,
+          "ok": true
+        },
+        {
+          "role": "director_offscreen",
+          "model": "inception/mercury-2",
+          "sys": 3676,
+          "out": 63,
+          "cached": 4,
+          "cwrite": 0,
+          "sec": 1.66,
+          "ok": true
+        },
+        {
+          "role": "mapping",
+          "model": "inception/mercury-2",
+          "sys": 6294,
+          "out": 205,
+          "cached": 5,
+          "cwrite": 0,
+          "sec": 1.5,
+          "ok": true
+        },
+        {
+          "role": "director",
+          "model": "x-ai/grok-4.20",
+          "sys": 10893,
+          "out": 754,
+          "cached": 9152,
+          "cwrite": 0,
+          "sec": 6.6,
+          "ok": true
+        },
+        {
+          "role": "director_body",
+          "model": "inception/mercury-2",
+          "sys": 5117,
+          "out": 77,
+          "cached": 3949,
+          "cwrite": 0,
+          "sec": 0.83,
+          "ok": true
+        },
+        {
+          "role": "director_contact",
+          "model": "inception/mercury-2",
+          "sys": 5576,
+          "out": 47,
+          "cached": 3,
+          "cwrite": 0,
+          "sec": 0.81,
+          "ok": true
+        },
+        {
+          "role": "director_social",
+          "model": "inception/mercury-2",
+          "sys": 2669,
+          "out": 40,
+          "cached": 5,
+          "cwrite": 0,
+          "sec": 0.83,
+          "ok": true
+        },
+        {
+          "role": "director_spatial",
+          "model": "inception/mercury-2",
+          "sys": 6005,
+          "out": 59,
+          "cached": 2,
+          "cwrite": 0,
+          "sec": 0.82,
+          "ok": true
+        },
+        {
+          "role": "director_offscreen",
+          "model": "inception/mercury-2",
+          "sys": 3658,
+          "out": 64,
+          "cached": 4,
+          "cwrite": 0,
+          "sec": 0.83,
+          "ok": true
+        },
+        {
+          "role": "director_objects",
+          "model": "inception/mercury-2",
+          "sys": 3983,
+          "out": 120,
+          "cached": 2,
+          "cwrite": 0,
+          "sec": 1.22,
+          "ok": true
+        },
+        {
+          "role": "character_bg",
+          "model": "x-ai/grok-4.20",
+          "sys": 2033,
+          "out": 120,
+          "cached": 128,
+          "cwrite": 0,
+          "sec": 1.87,
+          "ok": true
+        },
+        {
+          "role": "character_bg",
+          "model": "x-ai/grok-4.20",
+          "sys": 1724,
+          "out": 92,
+          "cached": 128,
+          "cwrite": 0,
+          "sec": 1.37,
+          "ok": true
+        },
+        {
+          "role": "narrator",
+          "model": "x-ai/grok-4.20",
+          "sys": 7714,
+          "out": 118,
+          "cached": 128,
+          "cwrite": 0,
+          "sec": 2.25,
+          "ok": true
+        }
+      ],
+      "background": {
+        "fired": true,
+        "name": "Captain Ysra Vale",
+        "dialogue_log_entry": {
+          "speaker": "Captain Ysra Vale",
+          "exact_quote": "My mistake. The clasp is on the surveyor behind you.",
+          "volume": "normal",
+          "intended_target": "Rowan Hale",
+          "tone": "even",
+          "visibility": "overt",
+          "conceal_from": [],
+          "articulation": ""
+        },
+        "action": "",
+        "room": "north_gate",
+        "reactions": [
+          {
+            "name": "Captain Ysra Vale",
+            "dialogue_log_entry": {
+              "speaker": "Captain Ysra Vale",
+              "exact_quote": "My mistake. The clasp is on the surveyor behind you.",
+              "volume": "normal",
+              "intended_target": "Rowan Hale",
+              "tone": "even",
+              "visibility": "overt",
+              "conceal_from": [],
+              "articulation": ""
+            },
+            "action": "",
+            "room": "north_gate",
+            "charter_act": {
+              "act": "ask",
+              "other": "the road-worn surveyor"
+            },
+            "charter_offers": [
+              {
+                "act": "ask",
+                "other": "bram",
+                "practice": "converse:bram:ysra:",
+                "utility": 0.509
+              },
+              {
+                "act": "ask",
+                "other": "jory",
+                "practice": "converse:jory:ysra:",
+                "utility": 0.509
+              },
+              {
+                "act": "ask",
+                "other": "the road-worn surveyor",
+                "practice": "converse:the road-worn surveyor:ysra:",
+                "utility": 0.509
+              },
+              {
+                "act": "tell",
+                "other": "bram",
+                "practice": "converse:bram:ysra:",
+                "utility": 0.4472
+              },
+              {
+                "act": "tell",
+                "other": "jory",
+                "practice": "converse:jory:ysra:",
+                "utility": 0.4472
+              },
+              {
+                "act": "tell",
+                "other": "the road-worn surveyor",
+                "practice": "converse:the road-worn surveyor:ysra:",
+                "utility": 0.4472
+              }
+            ]
+          }
+        ],
+        "selected": [
+          "Captain Ysra Vale",
+          "Mett Voss"
+        ],
+        "mode": "background_react+background_react",
+        "agent_calls": [
+          "background_react"
+        ],
+        "_engine_notes": {
+          "llm_calls": [
+            {
+              "step_key": "background_react",
+              "role": "character_bg",
+              "requested": "x-ai/grok-4.20",
+              "served": "x-ai/grok-4.20",
+              "in": 2033,
+              "out": 120,
+              "cached": 128,
+              "duration": 1.865,
+              "kind": "stream"
+            },
+            {
+              "step_key": "background_react",
+              "role": "character_bg",
+              "requested": "x-ai/grok-4.20",
+              "served": "x-ai/grok-4.20",
+              "in": 1724,
+              "out": 92,
+              "cached": 128,
+              "duration": 1.371,
+              "kind": "stream"
+            }
+          ]
+        }
+      },
+      "promotions_this_turn": [],
+      "charters": {
+        "aldermere_commons": {
+          "clock_hours": 26.0,
+          "levels": {
+            "water_drawn": 1.0,
+            "grain_milled": 1.0,
+            "bread_baked": 1.0,
+            "market_stocked": 0.829,
+            "cart_roads": 1.0
+          },
+          "watch": {
+            "well_watch": "toma",
+            "mill_watch": "edrin",
+            "oven_watch": "anja",
+            "market_clerk": "dev",
+            "cart_warden": "keel"
+          },
+          "blame": {},
+          "bindings": {},
+          "places": {
+            "toma": "well_house",
+            "edrin": "mill",
+            "mara": "bakehouse",
+            "sable": "market_square",
+            "orin": "market_square",
+            "willa": "well_house",
+            "rusk": "mill",
+            "anja": "bakehouse",
+            "dev": "market_square",
+            "keel": "market_square"
+          },
+          "available": {
+            "toma": true,
+            "edrin": true,
+            "mara": true,
+            "sable": true,
+            "orin": true,
+            "willa": true,
+            "rusk": true,
+            "anja": true,
+            "dev": true,
+            "keel": true
+          }
+        },
+        "aldermere_civic_watch": {
+          "clock_hours": 26.0,
+          "levels": {
+            "gate_watch": 1.0,
+            "night_lamps": 0.23,
+            "infirmary_ready": 1.0,
+            "bridge_sound": 0.0,
+            "petitions_sorted": 1.0
+          },
+          "watch": {
+            "gate_captain": "bram",
+            "gate_guard": "jory",
+            "healer_watch": "odo",
+            "lamp_round": "lysa",
+            "petition_clerk": "pell"
+          },
+          "blame": {
+            "lysa": 1
+          },
+          "bindings": {},
+          "places": {
+            "ysra": "north_gate",
+            "jory": "north_gate",
+            "nella": "infirmary",
+            "iven": "infirmary",
+            "pell": "council_hall",
+            "bram": "north_gate",
+            "mett": "north_gate",
+            "lysa": "market_square",
+            "odo": "infirmary",
+            "tavi": "council_hall"
+          },
+          "available": {
+            "ysra": true,
+            "jory": true,
+            "nella": false,
+            "iven": true,
+            "pell": true,
+            "bram": true,
+            "mett": false,
+            "lysa": true,
+            "odo": true,
+            "tavi": true
+          }
+        }
+      },
+      "cast": [],
+      "world_events": 9,
+      "pending_jobs": []
+    }
+  ]
+}

@@ -1,7 +1,7 @@
-export const MODULE_RELEASE = "wp07.1";
+export const MODULE_RELEASE = "alpha98-ui1";
 
-import { element, errorState, frameQuery, markData, replaceLocalized, stateMessage, toolScope } from "./shared.js?release=wp07.1";
-import { mountDocumentEditor } from "./document-editor.js?release=wp07.1";
+import { element, errorState, frameQuery, markData, replaceLocalized, stateMessage, toolScope } from "./shared.js?release=alpha98-ui1";
+import { mountDocumentEditor } from "./document-editor.js?release=alpha98-ui1";
 
 // UI_CATALOG_START: Attire summary copy.
 const COPY = Object.freeze({
