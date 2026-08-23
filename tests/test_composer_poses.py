@@ -254,3 +254,63 @@ def test_a_bare_noun_gains_the_packs_article_and_only_when_it_needs_one():
     assert support("her shoulder") == "Kai is sitting on her shoulder."
     assert support("on the sill") == "Kai is sitting on the sill."
     assert support("Excalibur") == "Kai is sitting on Excalibur."
+
+
+# ---- delivery and obligation boundaries in the observation projection ----
+
+class TestOneEntryIsOneDelivery:
+    """`observations_from_render` mints the numbered record the narrator
+    writes from, and a numbered entry claims to be ONE delivery.
+
+    Two guarantees, both deterministic, both stated as class rules rather
+    than against the beat that exposed them: a spoken line's boundaries are
+    part of the fact (never fractured, never welded to another mouth's), and
+    obligation is a boundary too (standing state never folded into an event).
+    """
+
+    def _render(self, percepts):
+        from agents import composer
+        rendered = composer.render_view(percepts, mode="character",
+                                        full_render=True)
+        return composer.observations_from_render("player", rendered), rendered
+
+    def _speech(self, who, body, order):
+        from agents import composer
+        return composer.speech_percept(
+            {"speaker": who, "text": body, "volume": "normal"},
+            {"same_room": True}, "Observer",
+            display=who, can_see=True, order_key=order,
+            observer_id="player")
+
+    def test_two_speakers_never_share_a_numbered_entry(self):
+        obs, _ = self._render([
+            self._speech("Mara", "We hold the line here.", 0),
+            self._speech("Vorne", "Agreed. For now.", 1),
+        ])
+        for entry in obs:
+            text = (entry.get("observed") or {}).get("text") or ""
+            assert not ("Mara" in text and "Vorne" in text), text
+
+    def test_one_mouths_consecutive_lines_may_share_an_entry(self):
+        """The refusal is about WHOSE delivery, not about tidiness: welding
+        one speaker's consecutive lines is an honest description of one
+        delivery, and refusing it would uncap the atom count on a monologue."""
+        obs, _ = self._render([
+            self._speech("Mara", "We hold the line here.", 0),
+            self._speech("Mara", "No one crosses.", 1),
+        ])
+        assert len(obs) <= 2
+
+    def test_every_delivered_quote_survives_whole_in_one_entry(self):
+        """The invariant the retired sentence-chunker used to break. A
+        multi-sentence utterance is ONE fact; splitting it at a full stop
+        makes the record disagree with the view it was projected from."""
+        long_line = ("Italian, Hinami. Means 'very good' or 'very well.' "
+                     "Old habit from a trip to Florence.")
+        obs, rendered = self._render([
+            self._speech("The Doctor", long_line, 0),
+            self._speech("Mara", "It fits the meal.", 1),
+        ])
+        texts = [(o.get("observed") or {}).get("text") or "" for o in obs]
+        assert any(long_line in t for t in texts), texts
+        assert long_line in rendered.text

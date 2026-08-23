@@ -2100,6 +2100,16 @@ def observations_from_render(pid, rendered):
         atoms.append({
             "percept": p,
             "channel": p.channel if p.channel in CHANNELS else "mixed",
+            # WHOSE DELIVERY, and WHETHER IT HAPPENED. Both are known from the
+            # IR and both were being thrown away here. `order_key is None` is
+            # standing state (the room, a pose, an appearance); an int is this
+            # beat's arrival order. `force` marks an appearance the engine has
+            # judged CHANGED this beat -- a garment gone, a mask down, a
+            # disguise dropped -- which is an event wearing a standing
+            # percept's shape.
+            "speaker": str(p.source_label or ""),
+            "kind": p.kind,
+            "standing": p.order_key is None and not p.data.get("force"),
             "text": sentence,
             "intensity": min(1.0, 0.35 + 0.4 * p.salience),
             "suddenness": p.suddenness,
@@ -2114,14 +2124,45 @@ def observations_from_render(pid, rendered):
     # folded into a full one would read as clearly perceived. When the cap
     # later forces a merge across verdicts, the group degrades to the WEAKEST
     # verdict present (max ambiguity, channel -> mixed), never the strongest.
+    #
+    # A DELIVERY BOUNDARY IS SUCH A BOUNDARY, and three more keys keep it.
+    # Two speakers welded into one entry is the exact shape the merged-speaker
+    # check exists to catch, and this function was MINTING it: measured over
+    # the 248 stored beats whose perception step carries a composer ledger --
+    # the ones the live projection wrote -- 46 entries across 39 beats (15.7%)
+    # carried two or more speakers' lines, every one of them `hearing`, which
+    # is this loop's signature rather than the cap's (a cap merge marks the
+    # channel `mixed`). The quotes inside stayed whole; what lied was the
+    # entry boundary, against a sheet that tells the narrator each numbered
+    # entry is a separate delivery.
+    #
+    # Same speaker, consecutive speech still merges: "The Doctor says X. The
+    # Doctor says Y." is one delivery honestly described, and refusing it
+    # would uncap the atom count on a monologue beat.
+    #
+    # OBLIGATION IS A BOUNDARY TOO. A standing atom folded into an event one
+    # (or the reverse) makes wallpaper indistinguishable from what happened,
+    # which is exactly the distinction `_render_observed_events` now files on.
+    def _may_merge(last, atom):
+        if last["channel"] != atom["channel"]:
+            return False
+        if (last["ambiguity"] >= 0.5) != (atom["ambiguity"] >= 0.5):
+            return False
+        if last["directed_at_self"] != atom["directed_at_self"]:
+            return False
+        if last["standing"] != atom["standing"]:
+            return False
+        if len(last["parts"]) >= 3:
+            return False
+        speech = (last["kind"] == "speech", atom["kind"] == "speech")
+        if any(speech):
+            # Speech joins speech, and only the SAME mouth's.
+            return all(speech) and last["speaker"] == atom["speaker"]
+        return True
+
     merged = []
     for atom in atoms:
-        same_verdict = (
-            merged
-            and merged[-1]["channel"] == atom["channel"]
-            and (merged[-1]["ambiguity"] >= 0.5) == (atom["ambiguity"] >= 0.5)
-            and merged[-1]["directed_at_self"] == atom["directed_at_self"]
-            and len(merged[-1]["parts"]) < 3)
+        same_verdict = bool(merged) and _may_merge(merged[-1], atom)
         if same_verdict:
             last = merged[-1]
             last["parts"].append(atom["text"])
@@ -2130,9 +2171,18 @@ def observations_from_render(pid, rendered):
             last["ambiguity"] = max(last["ambiguity"], atom["ambiguity"])
         else:
             merged.append({**atom, "parts": [atom["text"]]})
+    # THE CAP IS A LAST RESORT, AND IT NOW PICKS ITS VICTIM. It used to take
+    # the shortest group wherever it sat, so a forced merge could weld two
+    # speakers by accident after the loop above had deliberately refused to.
+    # Standing groups are spent first: re-describing the room in one entry
+    # instead of two costs a boundary nobody is scored on, while welding two
+    # deliveries costs the one the merge check hunts.
+    def _cap_cost(i):
+        return (0 if merged[i]["standing"] else 1,
+                len(" ".join(merged[i]["parts"])))
+
     while len(merged) > _MAX_OBSERVATION_ATOMS:
-        idx = min(range(len(merged)),
-                  key=lambda i: len(" ".join(merged[i]["parts"])))
+        idx = min(range(len(merged)), key=_cap_cost)
         into = idx - 1 if idx else 1
         target, source = sorted((into, idx))
         if merged[target]["channel"] != merged[source]["channel"]:
@@ -2157,5 +2207,10 @@ def observations_from_render(pid, rendered):
             "suddenness": atom["suddenness"],
             "ambiguity": atom["ambiguity"],
             "directed_at_self": atom["directed_at_self"],
+            # Absent on a stored row written before this field existed, which
+            # reads back as False -- obligation. That is today's behaviour and
+            # it fails in the safe direction: replay can never make something
+            # skippable that was not already.
+            "standing": atom["standing"],
         }))
     return out
