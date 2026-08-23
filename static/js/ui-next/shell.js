@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "alpha98-ui2-3f44d1cc71ed";
+export const MODULE_RELEASE = "alpha98-ui4-842dd802b09f";
 
 export const LAYOUT_STATES = Object.freeze(["compact", "medium", "wide", "expansive"]);
 
@@ -23,10 +23,26 @@ function required(documentRef, selector) {
   return node;
 }
 
+function isPersonAuthoringRoute(route) {
+  if (route?.destination !== "library") return false;
+  if (!["edit", "create", "import", "story-card"].includes(route.query?.mode)) {
+    return false;
+  }
+  const segment = route.segments?.[0];
+  const item = String(route.query?.item || "");
+  return ["characters", "personas"].includes(segment)
+    || /^(character|persona):[1-9][0-9]*$/.test(item);
+}
+
 function sameShellState(left, right) {
   if (left.route !== right.route || left.extensions !== right.extensions) return false;
   const destination = left.route?.destination || "play";
-  if (destination === "library") return left.library === right.library;
+  if (destination === "library") {
+    if (isPersonAuthoringRoute(left.route)) {
+      return left.library?.authoring?.owner === right.library?.authoring?.owner;
+    }
+    return left.library === right.library;
+  }
   if (destination === "settings") return left.settings === right.settings;
   return left.story?.status === right.story?.status
     && left.story?.owner === right.story?.owner;

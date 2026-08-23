@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "alpha98-ui2-3f44d1cc71ed";
+export const MODULE_RELEASE = "alpha98-ui4-842dd802b09f";
 
 const MAX_SCROLL_REGIONS = 80;
 const MAX_SCROLL_OFFSET = 10_000_000;

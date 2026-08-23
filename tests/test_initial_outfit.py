@@ -295,18 +295,19 @@ def test_first_attachment_to_existing_story_seeds_outfit(temp_db):
 def test_card_editors_place_initial_outfit_near_identity():
     from pathlib import Path
 
-    source = (
-        Path(__file__).resolve().parents[1] / "static/js/ui-next/library-editors/character-persona.js"
-    ).read_text(encoding="utf-8")
+    root = Path(__file__).resolve().parents[1]
+    source = (root / "static/js/ui-next/library-editors/character-persona.js").read_text(encoding="utf-8")
+    sections = (root / "static/js/ui-next/library-editors/person-sections.js").read_text(encoding="utf-8")
 
     # Clothing is authored by REGION now; the flat "initial outfit" and
     # "clothing condition" inputs are retired (docs/UNBUILT.md §2.14 landed).
     # The legacy `wearing` list survives as an INPUT format -- imports and the
     # generators still emit it, and character_schema migrates it into regions
     # on read -- but nothing types into it any more.
-    assert "createSchemaSections" in source
+    assert "createPersonSectionEditor" in source
+    assert "createSchemaNode" in sections
     assert "JSON.stringify(state.draft, null, 2)" in source
-    assert "services.authoring.stage(parsed)" in source
+    assert "services.authoring.stage(parsed, { render: true })" in source
 
 
 def test_director_establishment_respects_initial_outfit_separation():

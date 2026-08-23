@@ -144,7 +144,7 @@ def test_person_workspace_restores_parent_route_scroll_focus_and_local_draft(
 
 
 @pytest.mark.parametrize("width,height", [
-    (1440, 900), (1024, 768), (390, 844), (844, 390),
+    (1440, 900), (1024, 768), (1024, 600), (390, 844), (844, 390),
 ])
 def test_person_workspace_geometry_has_one_scroll_owner_and_safe_targets(
     page: Page, ui_base_url: str, width: int, height: int,
@@ -190,6 +190,98 @@ def test_person_workspace_geometry_has_one_scroll_owner_and_safe_targets(
         "tooSmall": [], "scrollOwners": 1,
         "hiddenFocusable": 0, "pageOverflow": 0, "unusedInspectorTrack": 0,
     }, (width, height, geometry)
+    nav = workspace.locator(".ui-person-editor__nav")
+    nav_geometry = nav.evaluate("""node => {
+      const style = getComputedStyle(node);
+      return { direction: style.flexDirection, overflowX: style.overflowX };
+    }""")
+    if height <= 600:
+        assert nav_geometry == {"direction": "row", "overflowX": "auto"}
+
+
+def test_advanced_document_apply_rerenders_the_same_owner_workspace(
+    page: Page, ui_base_url: str,
+) -> None:
+    """A whole-document apply must update visible controls, not only stored state."""
+
+    _route_character_editor(page)
+    page.goto(
+        f"{ui_base_url}/static/ui-next.html"
+        "#/library/characters?item=character%3A7&mode=edit"
+    )
+    page.wait_for_function("document.documentElement.dataset.uiNextState === 'ready'")
+    page.get_by_role("tab", name="Advanced", exact=True).click()
+    advanced = {**PERSON_DOCUMENT, "identity": {**PERSON_DOCUMENT["identity"], "name": "Mara Advanced"}}
+    page.locator('[name="advanced_json"]').fill(json.dumps(advanced))
+    page.get_by_role("button", name="Apply advanced JSON").click()
+
+    expect(page.get_by_role("heading", name="Mara Advanced")).to_be_visible()
+    expect(page.get_by_role("tabpanel", name="Advanced")).to_be_visible()
+    page.get_by_role("tab", name="Basics").click()
+    expect(page.get_by_role("textbox", name="Name")).to_have_value("Mara Advanced")
+
+
+def test_person_workspace_keystroke_staging_preserves_focused_control(
+    page: Page, ui_base_url: str,
+) -> None:
+    """A field edit must not remount the destination and throw keyboard focus away."""
+
+    _route_character_editor(page)
+    page.goto(
+        f"{ui_base_url}/static/ui-next.html"
+        "#/library/characters?item=character%3A7&mode=edit"
+    )
+    page.wait_for_function("document.documentElement.dataset.uiNextState === 'ready'")
+    workspace = page.locator("[data-person-workspace]")
+    workspace.evaluate("node => { node.dataset.shellProbe = 'stable'; }")
+    mount = page.locator(".ui-person-workspace__mount")
+    mount.evaluate("node => { node.dataset.mountProbe = 'stable'; }")
+    assert mount.evaluate("node => ({ owner: node.dataset.authoringOwner, revision: node.dataset.authoringRenderRevision })") == {
+        "owner": "character:7", "revision": "0",
+    }
+    name = page.get_by_role("textbox", name="Name")
+    name.evaluate("node => { node.dataset.focusProbe = 'stable'; }")
+    name.click()
+    name.press("End")
+    name.press("X")
+
+    expect(page.get_by_role("textbox", name="Name")).to_have_value("Mara VennX")
+    expect(page.locator("[data-person-workspace]")).to_have_attribute("data-shell-probe", "stable")
+    expect(page.locator(".ui-person-workspace__mount")).to_have_attribute("data-mount-probe", "stable")
+    expect(page.get_by_role("textbox", name="Name")).to_have_attribute("data-focus-probe", "stable")
+    expect(page.get_by_role("textbox", name="Name")).to_be_focused()
+
+
+def test_preview_result_rerenders_fields_and_review_actions(
+    page: Page, ui_base_url: str,
+) -> None:
+    """A generated sheet must become visible and remain explicitly discardable."""
+
+    _route_character_editor(page)
+    preview = {
+        **PERSON_DOCUMENT,
+        "embodiment": {
+            **PERSON_DOCUMENT["embodiment"],
+            "visible": {"summary": "A silver-braided courier."},
+        },
+    }
+    page.route("**/api/characters/7/fill_appearance", lambda route: route.fulfill(
+        content_type="application/json", body=json.dumps({"sheet": preview}),
+    ))
+    page.goto(
+        f"{ui_base_url}/static/ui-next.html"
+        "#/library/characters?item=character%3A7&mode=edit"
+    )
+    page.wait_for_function("document.documentElement.dataset.uiNextState === 'ready'")
+    page.get_by_role("tab", name="Opening").click()
+    page.get_by_role("button", name="Fill appearance").click()
+
+    expect(page.get_by_role("button", name="Discard preview")).to_be_visible()
+    expect(page.get_by_text("Preview applied to this draft.", exact=False)).to_be_visible()
+    page.get_by_role("tab", name="Appearance").click()
+    expect(page.get_by_role("textbox", name="Visible appearance")).to_have_value(
+        "A silver-braided courier."
+    )
 
 
 def test_character_quick_start_sends_alpha98_history_contract(
@@ -198,8 +290,8 @@ def test_character_quick_start_sends_alpha98_history_contract(
     page.goto(f"{ui_base_url}/static/ui-next-lab.html")
     result = page.evaluate(
         """async base => {
-          const storeModule = await import(`${base}/static/js/ui-next/store.js?release=alpha98-ui2-3f44d1cc71ed`);
-          const runtimeModule = await import(`${base}/static/js/ui-next/library-authoring-runtime.js?release=alpha98-ui2-3f44d1cc71ed`);
+          const storeModule = await import(`${base}/static/js/ui-next/store.js?release=alpha98-ui4-842dd802b09f`);
+          const runtimeModule = await import(`${base}/static/js/ui-next/library-authoring-runtime.js?release=alpha98-ui4-842dd802b09f`);
           const store = storeModule.createStore();
           const route = { destination: 'library', segments: ['characters'], query: { item: 'character:7', mode: 'edit' }, canonicalHash: '#/library/characters?item=character%3A7&mode=edit' };
           store.dispatch({ type: 'presentation/replace', slice: 'route', value: route });
@@ -342,10 +434,10 @@ def test_authoring_runtime_preserves_drafts_and_rejects_late_save(
     result = page.evaluate(
         """async base => {
           const storeModule = await import(
-            `${base}/static/js/ui-next/store.js?release=alpha98-ui2-3f44d1cc71ed`
+            `${base}/static/js/ui-next/store.js?release=alpha98-ui4-842dd802b09f`
           );
           const authoringModule = await import(
-            `${base}/static/js/ui-next/library-authoring-runtime.js?release=alpha98-ui2-3f44d1cc71ed`
+            `${base}/static/js/ui-next/library-authoring-runtime.js?release=alpha98-ui4-842dd802b09f`
           );
           const store = storeModule.createStore();
           let route = {
@@ -459,10 +551,10 @@ def test_authoring_runtime_restores_draft_and_preserves_failed_save(
     result = page.evaluate(
         """async base => {
           const storeModule = await import(
-            `${base}/static/js/ui-next/store.js?release=alpha98-ui2-3f44d1cc71ed`
+            `${base}/static/js/ui-next/store.js?release=alpha98-ui4-842dd802b09f`
           );
           const authoringModule = await import(
-            `${base}/static/js/ui-next/library-authoring-runtime.js?release=alpha98-ui2-3f44d1cc71ed`
+            `${base}/static/js/ui-next/library-authoring-runtime.js?release=alpha98-ui4-842dd802b09f`
           );
           const store = storeModule.createStore();
           const route = {
@@ -526,10 +618,10 @@ def test_story_import_retry_and_branch_use_distinct_owned_operations(
     result = page.evaluate(
         """async base => {
           const storeModule = await import(
-            `${base}/static/js/ui-next/store.js?release=alpha98-ui2-3f44d1cc71ed`
+            `${base}/static/js/ui-next/store.js?release=alpha98-ui4-842dd802b09f`
           );
           const authoringModule = await import(
-            `${base}/static/js/ui-next/library-authoring-runtime.js?release=alpha98-ui2-3f44d1cc71ed`
+            `${base}/static/js/ui-next/library-authoring-runtime.js?release=alpha98-ui4-842dd802b09f`
           );
           const store = storeModule.createStore();
           let route = {

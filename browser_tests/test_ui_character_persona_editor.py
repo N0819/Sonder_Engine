@@ -16,7 +16,7 @@ def test_shared_person_sections_keep_all_document_fields_reachable(
     result = page.evaluate(
         """async base => {
           const editorModule = await import(
-            `${base}/static/js/ui-next/library-editors/character-persona.js?release=alpha98-ui2-3f44d1cc71ed`
+            `${base}/static/js/ui-next/library-editors/character-persona.js?release=alpha98-ui4-842dd802b09f`
           );
           const original = {
             identity: { uid: "char-mara", name: "Mara", aliases: [],
@@ -84,7 +84,7 @@ def test_save_reveals_and_focuses_invalid_field_in_another_section(
     result = page.evaluate(
         """async base => {
           const editorModule = await import(
-            `${base}/static/js/ui-next/library-editors/character-persona.js?release=alpha98-ui2-3f44d1cc71ed`
+            `${base}/static/js/ui-next/library-editors/character-persona.js?release=alpha98-ui4-842dd802b09f`
           );
           let saves = 0;
           const host = document.createElement("div");
@@ -141,7 +141,7 @@ def test_character_editor_preserves_unknown_fields_through_advanced_json(
     result = page.evaluate(
         """async base => {
           const editorModule = await import(
-            `${base}/static/js/ui-next/library-editors/character-persona.js?release=alpha98-ui2-3f44d1cc71ed`
+            `${base}/static/js/ui-next/library-editors/character-persona.js?release=alpha98-ui4-842dd802b09f`
           );
           const original = {
             identity: { uid: "char-a", name: "Asha", aliases: ["Ash"],
@@ -249,9 +249,9 @@ def test_create_preview_failure_retry_discard_and_accept_are_lossless(
     page.goto(f"{ui_base_url}/static/ui-next-lab.html")
     result = page.evaluate(
         """async base => {
-          const storeModule = await import(`${base}/static/js/ui-next/store.js?release=alpha98-ui2-3f44d1cc71ed`);
+          const storeModule = await import(`${base}/static/js/ui-next/store.js?release=alpha98-ui4-842dd802b09f`);
           const runtimeModule = await import(
-            `${base}/static/js/ui-next/library-authoring-runtime.js?release=alpha98-ui2-3f44d1cc71ed`
+            `${base}/static/js/ui-next/library-authoring-runtime.js?release=alpha98-ui4-842dd802b09f`
           );
           const store = storeModule.createStore();
           const route = {
@@ -353,9 +353,9 @@ def test_quick_start_saves_the_owned_draft_before_opening_play(
     page.goto(f"{ui_base_url}/static/ui-next-lab.html")
     result = page.evaluate(
         """async base => {
-          const storeModule = await import(`${base}/static/js/ui-next/store.js?release=alpha98-ui2-3f44d1cc71ed`);
+          const storeModule = await import(`${base}/static/js/ui-next/store.js?release=alpha98-ui4-842dd802b09f`);
           const runtimeModule = await import(
-            `${base}/static/js/ui-next/library-authoring-runtime.js?release=alpha98-ui2-3f44d1cc71ed`
+            `${base}/static/js/ui-next/library-authoring-runtime.js?release=alpha98-ui4-842dd802b09f`
           );
           const store = storeModule.createStore();
           const route = {
@@ -421,9 +421,9 @@ def test_story_card_override_loads_and_saves_its_story_owned_document(
     page.goto(f"{ui_base_url}/static/ui-next-lab.html")
     result = page.evaluate(
         """async base => {
-          const storeModule = await import(`${base}/static/js/ui-next/store.js?release=alpha98-ui2-3f44d1cc71ed`);
+          const storeModule = await import(`${base}/static/js/ui-next/store.js?release=alpha98-ui4-842dd802b09f`);
           const runtimeModule = await import(
-            `${base}/static/js/ui-next/library-authoring-runtime.js?release=alpha98-ui2-3f44d1cc71ed`
+            `${base}/static/js/ui-next/library-authoring-runtime.js?release=alpha98-ui4-842dd802b09f`
           );
           const store = storeModule.createStore();
           const route = {

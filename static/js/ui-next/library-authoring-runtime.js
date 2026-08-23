@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "alpha98-ui2-3f44d1cc71ed";
+export const MODULE_RELEASE = "alpha98-ui4-842dd802b09f";
 
 const ITEM_ID = /^(story|character|persona|lore):([1-9][0-9]*)$/;
 const DIRTY_STATES = new Set([
@@ -261,15 +261,18 @@ export function createLibraryAuthoringRuntime(options = {}) {
   const unsubscribe = store.subscribe(state => state.route, onRoute);
   onRoute(store.getSnapshot().route);
 
-  const stage = document => {
+  const stage = (document, options = {}) => {
     const state = store.getSnapshot().library.authoring;
     if (!state?.owner || !active || state.owner !== active.owner) {
       throw new Error("No Library authoring item is active.");
     }
     const draft = clone(document);
+    const renderRevision = Number(state.renderRevision || 0)
+      + (options.render ? 1 : 0);
     localState.setDraft("library-authoring", state.owner, JSON.stringify(draft));
     patch({ authoring: {
       ...state, status: "dirty", draft, restored: false, error: "",
+      renderRevision,
     } });
     return draft;
   };
@@ -474,7 +477,10 @@ export function createLibraryAuthoringRuntime(options = {}) {
       previewBase = base;
       stage(next);
       const current = store.getSnapshot().library.authoring;
-      patch({ authoring: { ...current, preview: { task: name }, error: "" } });
+      patch({ authoring: {
+        ...current, preview: { task: name }, error: "",
+        renderRevision: Number(current.renderRevision || 0) + 1,
+      } });
       return true;
     } catch (error) {
       if (!isOwnerCurrent(captured) || generation !== captured.generation
@@ -544,7 +550,10 @@ export function createLibraryAuthoringRuntime(options = {}) {
     previewRetry = null;
     stage(base);
     const state = store.getSnapshot().library.authoring;
-    patch({ authoring: { ...state, preview: null, error: "" } });
+    patch({ authoring: {
+      ...state, preview: null, error: "",
+      renderRevision: Number(state.renderRevision || 0) + 1,
+    } });
     return true;
   };
 

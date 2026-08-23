@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "alpha98-ui2-3f44d1cc71ed";
+export const MODULE_RELEASE = "alpha98-ui4-842dd802b09f";
 
 // UI_CATALOG_START: Story Tool platform states shown before family modules land.
 const COPY = Object.freeze({

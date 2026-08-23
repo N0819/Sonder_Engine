@@ -1,7 +1,7 @@
-export const MODULE_RELEASE = "alpha98-ui2-3f44d1cc71ed";
+export const MODULE_RELEASE = "alpha98-ui4-842dd802b09f";
 
-import { buildQuickStartLivedLocation, mountLivedLocationFields } from "../lived-location.js?release=alpha98-ui2-3f44d1cc71ed";
-import { createPersonSectionEditor } from "./person-sections.js?release=alpha98-ui2-3f44d1cc71ed";
+import { buildQuickStartLivedLocation, mountLivedLocationFields } from "../lived-location.js?release=alpha98-ui4-842dd802b09f";
+import { createPersonSectionEditor } from "./person-sections.js?release=alpha98-ui4-842dd802b09f";
 
 const quickStartDrafts = new Map();
 
@@ -329,7 +329,7 @@ export function createPersonEditor(options = {}) {
       current = clone(parsed);
       advanced.removeAttribute("aria-invalid");
       feedback.textContent = "";
-      services.authoring.stage(parsed);
+      services.authoring.stage(parsed, { render: true });
     } catch {
       advanced.setAttribute("aria-invalid", "true");
       feedback.textContent = services.localizer.t(COPY.invalidJson);

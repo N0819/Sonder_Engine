@@ -25,10 +25,11 @@ reduced motion.
 |---|---|---|
 | 1440×900 | `screenshots/person-editor-1440.png` | Full destination width, restrained section rail, readable document measure, stable actions, no unused inspector track. |
 | 1024×768 | `screenshots/person-editor-1024.png` | Equivalent section and document hierarchy at medium width. |
+| 1024×600 | `screenshots/person-editor-1024x600.png` | Short-height staging exposes every section through a horizontal strip while preserving one document scroll owner and reachable actions. |
 | 390×844 | `screenshots/person-editor-390.png` | Horizontal section staging, single document scroll, persistent Back/save state/actions, no clipped controls. |
 | 844×390 | `screenshots/person-editor-844x390.png` | Short-landscape staging retains the full section strip and reachable Save while the document body scrolls independently. |
 
-The focused geometry test also covers all four viewports and asserts one named
+The focused geometry test covers all five viewports and asserts one named
 vertical document scroll owner, no horizontal page overflow, no unused
 inspector track, 44 px visible controls, and no rendered focus targets inside
 hidden panels.

@@ -150,10 +150,10 @@ def test_library_runtime_rejects_stale_results_and_bounds_identity_state(
     result = page.evaluate(
         """async base => {
           const storeModule = await import(
-            `${base}/static/js/ui-next/store.js?release=alpha98-ui2-3f44d1cc71ed`
+            `${base}/static/js/ui-next/store.js?release=alpha98-ui4-842dd802b09f`
           );
           const libraryModule = await import(
-            `${base}/static/js/ui-next/library-runtime.js?release=alpha98-ui2-3f44d1cc71ed`
+            `${base}/static/js/ui-next/library-runtime.js?release=alpha98-ui4-842dd802b09f`
           );
           const store = storeModule.createStore();
           let current = {
@@ -249,10 +249,10 @@ def test_lore_can_prepare_a_lived_location_for_the_current_story(
     result = page.evaluate(
         """async base => {
           const storeModule = await import(
-            `${base}/static/js/ui-next/store.js?release=alpha98-ui2-3f44d1cc71ed`
+            `${base}/static/js/ui-next/store.js?release=alpha98-ui4-842dd802b09f`
           );
           const libraryModule = await import(
-            `${base}/static/js/ui-next/library-runtime.js?release=alpha98-ui2-3f44d1cc71ed`
+            `${base}/static/js/ui-next/library-runtime.js?release=alpha98-ui4-842dd802b09f`
           );
           const route = {
             destination: "library", segments: ["lore"],
@@ -331,10 +331,10 @@ def test_library_mutations_keep_story_owner_and_undo_expires(
     result = page.evaluate(
         """async base => {
           const storeModule = await import(
-            `${base}/static/js/ui-next/store.js?release=alpha98-ui2-3f44d1cc71ed`
+            `${base}/static/js/ui-next/store.js?release=alpha98-ui4-842dd802b09f`
           );
           const libraryModule = await import(
-            `${base}/static/js/ui-next/library-runtime.js?release=alpha98-ui2-3f44d1cc71ed`
+            `${base}/static/js/ui-next/library-runtime.js?release=alpha98-ui4-842dd802b09f`
           );
           const item = {
             kind: "character", id: 7, key: "character:7", name: "Mara Venn",

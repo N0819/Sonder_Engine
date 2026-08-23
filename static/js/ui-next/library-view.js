@@ -1,7 +1,7 @@
-export const MODULE_RELEASE = "alpha98-ui2-3f44d1cc71ed";
+export const MODULE_RELEASE = "alpha98-ui4-842dd802b09f";
 
-import { mountLivedLocationFields } from "./lived-location.js?release=alpha98-ui2-3f44d1cc71ed";
-import { openNewStory } from "./new-story.js?release=alpha98-ui2-3f44d1cc71ed";
+import { mountLivedLocationFields } from "./lived-location.js?release=alpha98-ui4-842dd802b09f";
+import { openNewStory } from "./new-story.js?release=alpha98-ui4-842dd802b09f";
 
 const loreLocationDrafts = new Map();
 

@@ -206,7 +206,7 @@ Start into its Character-only panel.
 Add the module to the explicit bootstrap graph:
 
 ```js
-libraryPersonSections: "./library-editors/person-sections.js?release=alpha98-ui2-3f44d1cc71ed",
+libraryPersonSections: "./library-editors/person-sections.js?release=alpha98-ui4-842dd802b09f",
 ```
 
 The literal release is rotated in Task 6.
@@ -484,7 +484,7 @@ git commit -m "docs(ui): record person editor evidence"
 
 **Interfaces:**
 - Consumes: every immutable replacement CSS, JavaScript, and SVG asset.
-- Produces: one `alpha98-ui3-<12 hex>` release literal matching the normalized content fingerprint.
+- Produces: one `alpha98-ui4-<12 hex>` release literal matching the normalized content fingerprint.
 
 - [ ] **Step 1: Compute the normalized immutable fingerprint**
 
@@ -497,7 +497,7 @@ truncated to 12 hex characters.
 
 Replace the previous release in replacement HTML, all replacement ES modules,
 `static/js/ui/icons.js`, `web/app.py`, and release-specific source assertions.
-Use `alpha98-ui3-<computed fingerprint>` and recompute until the fingerprint
+Use `alpha98-ui4-<computed fingerprint>` and recompute until the fingerprint
 test agrees.
 
 - [ ] **Step 3: Run focused UI and API tests**
