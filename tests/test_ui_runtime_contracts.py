@@ -65,7 +65,8 @@ def _immutable_ui_fingerprint() -> str:
     for path in sorted(paths, key=lambda candidate: candidate.relative_to(ROOT).as_posix()):
         digest.update(path.relative_to(ROOT).as_posix().encode("utf-8"))
         digest.update(b"\0")
-        digest.update(RELEASE_TOKEN.sub(b"__UI_RELEASE__", path.read_bytes()))
+        normalized = RELEASE_TOKEN.sub(b"__UI_RELEASE__", path.read_bytes())
+        digest.update(normalized.replace(b"\r\n", b"\n"))
         digest.update(b"\0")
     return digest.hexdigest()[:12]
 

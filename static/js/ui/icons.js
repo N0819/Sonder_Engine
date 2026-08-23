@@ -1,4 +1,4 @@
-const SPRITE = "/static/assets/icons/sonder-icons.svg?release=alpha98-ui2-d5cf750f8b7e";
+const SPRITE = "/static/assets/icons/sonder-icons.svg?release=alpha98-ui2-3f44d1cc71ed";
 const ICON_NAMES = new Set([
   "play", "library", "settings", "tools", "cast", "world", "style", "dialogue", "clothing", "image", "ambience",
   "send", "stop", "search", "filter", "close", "more", "menu", "chevron-left", "chevron-right", "chevron-down",

@@ -1,7 +1,7 @@
-export const MODULE_RELEASE = "alpha98-ui2-d5cf750f8b7e";
+export const MODULE_RELEASE = "alpha98-ui2-3f44d1cc71ed";
 
-import { appearance } from "../ui/appearance.js?release=alpha98-ui2-d5cf750f8b7e";
-import { initAccessibility, updateAccessibility } from "../ui/accessibility.js?release=alpha98-ui2-d5cf750f8b7e";
+import { appearance } from "../ui/appearance.js?release=alpha98-ui2-3f44d1cc71ed";
+import { initAccessibility, updateAccessibility } from "../ui/accessibility.js?release=alpha98-ui2-3f44d1cc71ed";
 
 // UI_CATALOG_START: Alpha 9.8 living-world routing copy.
 const ALPHA98_SETTINGS_COPY = Object.freeze([
