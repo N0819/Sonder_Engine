@@ -446,20 +446,19 @@ class TestSheLeavesAndComesBack:
         gone, st, de = self._beat(False, None, st, de)
         assert not gone.text.strip(), "nothing reaches you while she is out"
 
-        back, st, de = self._beat(True, {}, st, de)
-        # SHE IS ANNOUNCED, NOT RE-DESCRIBED. Perception does not repeat a
-        # full appearance it has already delivered -- `prev_described` is
-        # first-mention tracking and it never forgets, so a body seen once
-        # is never re-described however long they were away. The narrator
-        # can still reach back for it (`past_narration` carries the earlier
-        # description), but the VIEW no longer supplies it.
+        back, st, de = self._beat(True, {"reearn": True}, st, de)
+        # SHE IS DESCRIBED AGAIN. First-mention tracking used to be
+        # PERMANENT: a body described once was never described again,
+        # however many times they left and came back, so a stranger seen on
+        # beat 3 of a two-hundred-beat story was "the unfamiliar person is
+        # close by" forever after. Familiarity is a reason not to REPEAT a
+        # description, never a reason never to give one.
         #
-        # This pins a real decision rather than a guarantee: re-earning the
-        # description on re-encounter would need the ledger to record who
-        # was DELIVERED AS PRESENT, because the presence dedupe key hashes
-        # tier/arc/level and changes when a body merely steps closer.
+        # A re-encounter is standing state that became sayable again, not
+        # an event -- so it re-earns the description without claiming
+        # anything happened, and the narrator owes it nothing.
         assert "close by" in back.text
-        assert "fox ears" not in back.text
+        assert "fox ears" in back.text
 
         off, st, de = self._beat(
             True, {"force": True, "delta": "no longer wearing haori"}, st, de)
@@ -468,3 +467,55 @@ class TestSheLeavesAndComesBack:
         assert "no longer wearing haori" in off.text
         assert "the unfamiliar person" in off.text.casefold()
         assert "ceremonial kimono" not in off.text
+
+
+class TestKnowingSomeoneIsNotAReasonToNeverDescribeThem:
+    """`recog and not changed` skipped a recognized body's card outright, so
+    a companion the player had travelled with for fifty beats opened every
+    scene undescribed and the narrator had only `past_narration` to work
+    from. Recognition should stop a description REPEATING, not stop it
+    happening.
+    """
+
+    def test_a_re_encounter_re_earns_the_description(self):
+        from agents import composer
+        p = composer.appearance_percept(
+            "Tamamo", "Tamamo", "nine tails and golden eyes", reearn=True)
+        rendered = composer.render_view(
+            [p], mode="player",
+            prev_described=frozenset({p.data["source_key"]}))
+        assert "nine tails" in rendered.text
+
+    def test_without_the_re_earn_it_stays_suppressed(self):
+        """The other half: an ordinary beat must NOT re-describe, or the
+        view repeats itself every turn and the craft diffs fight it."""
+        from agents import composer
+        p = composer.appearance_percept(
+            "Tamamo", "Tamamo", "nine tails and golden eyes")
+        rendered = composer.render_view(
+            [p], mode="player",
+            prev_described=frozenset({p.data["source_key"]}))
+        assert "nine tails" not in rendered.text
+
+    def test_a_re_encounter_is_reference_not_an_obligation(self):
+        """Meeting someone again is standing state that became sayable
+        again. Only `force` -- an actual change -- makes an appearance an
+        event the narrator must render."""
+        from agents import composer
+        again = composer.appearance_percept(
+            "Tamamo", "Tamamo", "nine tails", reearn=True)
+        obs = composer.observations_from_render(
+            "player", composer.render_view([again], mode="character",
+                                           full_render=True))
+        assert obs and all(o.get("standing") for o in obs)
+
+    def test_an_unknown_previous_beat_never_re_describes_everyone(self):
+        """`prev_seen=None` means the last beat left no record -- an older
+        stored ledger, or a stage that did not compute it. Reading that as
+        "saw nobody" would re-describe every body in the room at once."""
+        from agents.perception import _composer_prev_seen
+        assert _composer_prev_seen({}, "player") is None
+        assert _composer_prev_seen({"player": {}}, "player") is None
+        assert _composer_prev_seen({"player": {"seen": []}}, "player") == set()
+        assert _composer_prev_seen(
+            {"player": {"seen": ["Tamamo"]}}, "player") == {"Tamamo"}
