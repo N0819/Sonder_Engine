@@ -37,15 +37,15 @@ composition.
 | Story-specific card override | Supported | Not applicable | Supported | `/api/chats/{story}/characters/{id}/card` | Use the shared framework with Story context and preserve live state boundaries. |
 | Quick Start | Supported | Participates as selected player | Not applicable | `/api/characters/{id}/start` | Retain Persona, greeting, Lore, already-known, language, and lived-location choices. |
 | Lived location | Supported through Quick Start | Participates | Not applicable | shared lived-location adapter | Preserve public resident/private history disclosure and save-before-start order. |
-| Validation and focus | Partial | Partial | Partial | required name and JSON checks | Move to the affected section, focus the first invalid control, and retain the full draft. |
-| Desktop focused presentation | Missing | Missing | Missing | UI-FU-01 | Replace Library inner workspace during authoring. |
-| Compact full-screen presentation | Partial inspector sheet | Partial inspector sheet | Partial inspector sheet | UI-FU-01 | Use one full-screen destination stage with reachable Back and Save. |
-| Return-state restoration | Partial | Partial | Partial | Library route/scroll envelope | Prove category, scope, query, sort, visibility, selection, and scroll restoration. |
+| Validation and focus | Supported | Supported | Supported | required name and JSON checks | The affected section opens, enclosing disclosures expand, the first invalid control receives focus, and no save is sent; `test_save_reveals_and_focuses_invalid_field_in_another_section` proves the behavior. |
+| Desktop focused presentation | Supported | Supported | Supported | UI-FU-01 | The Library destination body owns authoring and the inspector track collapses; the 1440 and 1024 WP-16 captures plus the viewport geometry test prove it. |
+| Compact full-screen presentation | Supported | Supported | Supported | UI-FU-01 | The same workspace stages horizontal section navigation with reachable Back and Save at 390×844 and 844×390; WP-16 captures and the viewport geometry test prove it. |
+| Return-state restoration | Supported | Supported | Supported | Library route/scroll envelope | `test_person_workspace_restores_parent_route_scroll_focus_and_local_draft` proves query, scope, sort, Story, selection, exact scroll, focus, section, and draft restoration. |
 
 ## Audit conclusion
 
-The server and browser runtime already provide the required persistence and
-workflow capabilities. The implementation gap is the shared presentation and
-navigation contract, plus browser proof for validation, compact staging, and
-return-state restoration. No new server data model is required.
-
+The shared presentation and navigation contract is implemented without a new
+server data model. Browser coverage proves the complete document, generation,
+Quick Start, validation, focused desktop/compact staging, and return-state
+contracts. The remaining product work is ordinary maintenance of the supported
+capabilities listed above rather than a separate editor migration.

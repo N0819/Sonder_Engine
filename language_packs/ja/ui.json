@@ -828,5 +828,15 @@
   "View incomplete Story": "未完了のストーリーを見る",
   "Visitor": "訪問者",
   "Institution information is unavailable.": "組織の情報を利用できません。",
-  "Location preparation is unavailable.": "場所の準備を利用できません。"
+  "Location preparation is unavailable.": "場所の準備を利用できません。",
+  "Additional fields": "追加フィールド",
+  "Basics": "基本",
+  "Draft saved on this device": "下書きはこの端末に保存されています",
+  "Editor sections": "編集セクション",
+  "History": "経歴",
+  "Inner life": "内面",
+  "Opening": "導入",
+  "Saved to Library": "ライブラリに保存済み",
+  "Simulation": "シミュレーション",
+  "Story presence": "物語での表現"
 }

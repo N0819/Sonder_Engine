@@ -332,6 +332,26 @@ do not carry persistent work, failures, or choices.
 - Only favorites, recents, per-route scroll, and the last safe route enter the
   versioned local presentation envelope, each with a hard bound. They never
   make an archived, missing, or server-rejected item appear available.
+- Reusable Character, reusable Persona, and story-specific Character-card
+  editing use one focused Library authoring framework. Entering authoring
+  replaces the Library destination body while leaving concise selection detail
+  as the inspector's responsibility outside authoring. The inspector is hidden
+  for the task without changing its persisted open, pin, or size preference.
+- The shared authoring framework assigns fields to Basics, Appearance, History,
+  Advanced, and the applicable Character or Persona sections. Unknown
+  top-level fields remain reachable through Additional fields and Advanced;
+  the client never drops or normalizes a stored field merely because it lacks
+  a dedicated control.
+- Person authoring has one vertical document scroll owner. Wide layouts use a
+  restrained section rail; compact and short-landscape layouts stage the same
+  sections as a horizontal strip. Back, save state, and Save remain reachable,
+  hidden panels leave the focus order, and visible controls retain the 44 px
+  interaction target.
+- Save state distinguishes `Saved to Library` from `Draft saved on this
+  device`. Back removes authoring-only route keys while preserving category,
+  scope, Story, query, sort, visibility, selection, and the exact parent-route
+  scroll. A returned selection receives focus, and an owner-scoped local draft
+  and section choice survive re-entry.
 
 ### Settings and appearance ownership
 

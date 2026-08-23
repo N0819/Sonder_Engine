@@ -34,6 +34,7 @@ This register records the approved design direction consolidated into the bible.
 | DB-28 | Expert access | Keyboard shortcuts, pinned tools, recents, search, and compact density accelerate experts without cluttering novice defaults. |
 | DB-29 | Mobile adaptation | Mobile reprioritizes and stages content rather than compressing desktop. |
 | DB-30 | Quality governance | Alignment, state, responsive, UX, and accessibility audits are release gates. |
+| DB-31 | Person authoring | Reusable Characters, Personas, and story-specific Character cards share one focused, lossless Library workspace; concise item detail remains contextual. |
 
 ## Interpretation rules
 
