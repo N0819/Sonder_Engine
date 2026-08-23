@@ -97,7 +97,9 @@ def test_cap_and_database_order_are_deterministic(temp_db):
 def test_editor_exposes_the_opt_in_without_enabling_it_by_default():
     from pathlib import Path
 
-    source = (Path(__file__).resolve().parents[1]
-              / "static/js/ui-next/library-editors/character-persona.js").read_text(encoding="utf-8")
-    assert "createSchemaSections" in source
+    root = Path(__file__).resolve().parents[1]
+    source = (root / "static/js/ui-next/library-editors/character-persona.js").read_text(encoding="utf-8")
+    sections = (root / "static/js/ui-next/library-editors/person-sections.js").read_text(encoding="utf-8")
+    assert "createPersonSectionEditor" in source
+    assert "createSchemaNode" in sections
     assert "JSON.stringify(state.draft, null, 2)" in source

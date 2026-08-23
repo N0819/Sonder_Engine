@@ -339,7 +339,7 @@
   text-align: end;
 }
 
-@media (max-width: 719px), (max-height: 430px) and (max-width: 899px) {
+@media (max-width: 719px), (max-height: 650px) {
   .ui-person-workspace {
     padding: var(--ui-space-3);
   }

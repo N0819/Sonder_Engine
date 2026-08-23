@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "alpha98-ui2-3f44d1cc71ed";
+export const MODULE_RELEASE = "alpha98-ui4-842dd802b09f";
 
 // UI_CATALOG_START: Alpha 9.8 New Story copy.
 const ALPHA98_NEW_STORY_COPY = Object.freeze([
@@ -15,7 +15,7 @@ import {
   generateLivedLocation,
   mountLivedLocationFields,
   normalizeLivedLocation,
-} from "./lived-location.js?release=alpha98-ui2-3f44d1cc71ed";
+} from "./lived-location.js?release=alpha98-ui4-842dd802b09f";
 
 const DRAFT_TYPE = "new-story";
 const DRAFT_OWNER = "current";

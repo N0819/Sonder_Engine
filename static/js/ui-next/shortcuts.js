@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "alpha98-ui2-3f44d1cc71ed";
+export const MODULE_RELEASE = "alpha98-ui4-842dd802b09f";
 
 const OWNER = /^[a-z][a-z0-9_-]{1,63}$/;
 const ID = /^[A-Za-z0-9:._-]{1,120}$/;

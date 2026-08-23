@@ -21,6 +21,7 @@ OUTPUT = (
 CASES = (
     ("person-editor-1440.png", 1440, 900),
     ("person-editor-1024.png", 1024, 768),
+    ("person-editor-1024x600.png", 1024, 600),
     ("person-editor-390.png", 390, 844),
     ("person-editor-844x390.png", 844, 390),
 )

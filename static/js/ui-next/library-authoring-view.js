@@ -1,13 +1,13 @@
-export const MODULE_RELEASE = "alpha98-ui2-3f44d1cc71ed";
+export const MODULE_RELEASE = "alpha98-ui4-842dd802b09f";
 
 import {
   createStoryEditor,
   createStoryImporter,
-} from "./library-editors/story.js?release=alpha98-ui2-3f44d1cc71ed";
+} from "./library-editors/story.js?release=alpha98-ui4-842dd802b09f";
 import {
   createPersonEditor,
   createPersonImporter,
-} from "./library-editors/character-persona.js?release=alpha98-ui2-3f44d1cc71ed";
+} from "./library-editors/character-persona.js?release=alpha98-ui4-842dd802b09f";
 
 // UI_CATALOG_START: Library authoring status copy.
 const COPY = Object.freeze({
@@ -74,12 +74,14 @@ export function mountLibraryAuthoring(options = {}) {
   const documentRef = options.document || document;
   const { services, target, onTitle } = options;
   let rendering = false;
-  const render = library => {
+  const render = (library, force = false) => {
     if (rendering) return;
     rendering = true;
     const state = library?.authoring;
-    if (state?.owner && state.status === "dirty"
+    const renderRevision = String(Number(state?.renderRevision || 0));
+    if (!force && state?.owner && state.status === "dirty"
         && target.dataset.authoringOwner === state.owner
+        && target.dataset.authoringRenderRevision === renderRevision
         && target.querySelector("[data-story-editor], [data-person-editor]")) {
       const status = target.querySelector("[data-save-status]");
       if (status) {
@@ -90,6 +92,8 @@ export function mountLibraryAuthoring(options = {}) {
       return;
     }
     if (!state || state.status === "loading") {
+      delete target.dataset.authoringOwner;
+      delete target.dataset.authoringRenderRevision;
       target.replaceChildren(stateBlock(
         documentRef,
         services.localizer.t(COPY.loading),
@@ -110,6 +114,8 @@ export function mountLibraryAuthoring(options = {}) {
       wrapper.append(back, createStoryImporter({
         document: documentRef, services, state,
       }));
+      delete target.dataset.authoringOwner;
+      delete target.dataset.authoringRenderRevision;
       target.replaceChildren(wrapper);
       services.localizer.localize(target);
       onTitle?.("Import story archive");
@@ -124,6 +130,7 @@ export function mountLibraryAuthoring(options = {}) {
       back.addEventListener("click", () => returnToLibrary(services, back.dataset.focusIdentity));
       wrapper.append(back, createPersonImporter({ document: documentRef, services, state }));
       target.dataset.authoringOwner = state.owner;
+      target.dataset.authoringRenderRevision = renderRevision;
       target.replaceChildren(wrapper);
       services.localizer.localize(target);
       onTitle?.(`Import ${state.kind}`);
@@ -144,6 +151,7 @@ export function mountLibraryAuthoring(options = {}) {
           document: documentRef, services, state,
         }));
         target.dataset.authoringOwner = state.owner;
+        target.dataset.authoringRenderRevision = renderRevision;
         target.replaceChildren(wrapper);
         services.localizer.localize(target);
         onTitle?.(state.draft.identity?.name || "Person editor");
@@ -156,6 +164,8 @@ export function mountLibraryAuthoring(options = {}) {
         state.error || services.localizer.t(COPY.waiting),
         "error",
       ));
+      delete target.dataset.authoringOwner;
+      delete target.dataset.authoringRenderRevision;
       rendering = false;
       return;
     }
@@ -172,15 +182,19 @@ export function mountLibraryAuthoring(options = {}) {
       document: documentRef,
       services,
       state,
-      onRender: () => render(services.store.getSnapshot().library),
+      onRender: () => render(services.store.getSnapshot().library, true),
     }));
     target.dataset.authoringOwner = state.owner;
+    target.dataset.authoringRenderRevision = renderRevision;
     target.replaceChildren(wrapper);
     services.localizer.localize(target);
     onTitle?.(state.draft.name || "Story editor");
     rendering = false;
   };
-  const unsubscribe = services.store.subscribe(state => state.library, render);
+  const unsubscribe = services.store.subscribe(
+    state => state.library,
+    library => render(library),
+  );
   render(services.store.getSnapshot().library);
   return Object.freeze({ teardown: unsubscribe });
 }

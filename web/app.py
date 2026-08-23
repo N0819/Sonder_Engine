@@ -620,7 +620,7 @@ _RELEASED_UI_ASSET_PREFIXES = (
     "/static/js/ui-next/", "/static/js/ui/", "/static/css/ui/",
     "/static/assets/icons/sonder-icons.svg",
 )
-_UI_RELEASE = "alpha98-ui2-3f44d1cc71ed"
+_UI_RELEASE = "alpha98-ui4-842dd802b09f"
 
 
 @app.middleware("http")
