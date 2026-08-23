@@ -150,20 +150,23 @@ python tools/project_check.py
 python -m pytest -q --disable-warnings
 ```
 
-Final candidate-tree results: project structure passed; focused integrated UI
-passed 95 tests; Chromium passed 180 tests; Firefox passed 96 tests; WebKit
-smoke passed 9 tests; full Python regression passed 8,709 tests with 4 expected
-platform skips in 145.90 seconds. Exact-head verification follows the release
-commit without changing its source tree.
+Final integrated results: project structure passed; Chromium passed 180 tests;
+Firefox passed 96 tests; WebKit behavioral smoke passed 9 tests; full Python
+regression passed 8,711 tests with 4 expected platform skips in 162.95 seconds.
+All eleven replacement-surface recorders replayed successfully. The repaired
+Library recorder completed all 32 cases twice, with its 33 report/image files
+byte-identical between runs. Exact-head verification follows the release commit
+without changing its source tree.
 
 ## Integrated interface qualification
 
-The qualified WP07-WP14 chain was fast-forwarded into `interface`. The release
-code head is `6ffeeebe7f60dc577001ea5d7cd0533c33675a1e`; the documentation-only
-completion record containing this section follows it on that branch. GNU Make
-is not installed on the Windows qualification host, so `make check` and
-`make test-browser` are executed through the Makefile's exact underlying
-commands in a clean worktree: compile every declared source root, regenerate
-`docs/CODE_MAP.md`, run `tools/project_check.py`, run the complete Python suite,
-and run all `browser_tests`. The local ignored `extensions/directive` checkout
-in the primary worktree is excluded from release evidence and left untouched.
+The qualified WP07-WP14 chain was fast-forwarded into `interface`. The
+integrated source and evidence-tool head qualified here is
+`034c8b4d328c39dfa5eba6378f591a3bc60da920`; this documentation-only record
+follows it on that branch. GNU Make is not installed on the Windows
+qualification host, so `make check` and `make test-browser` are executed through
+the Makefile's exact underlying commands in a clean worktree: compile every
+declared source root, regenerate `docs/CODE_MAP.md`, run
+`tools/project_check.py`, run the complete Python suite, and run all
+`browser_tests`. The local ignored `extensions/directive` checkout in the
+primary worktree is excluded from release evidence and left untouched.
