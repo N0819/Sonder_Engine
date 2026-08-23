@@ -166,6 +166,11 @@ export function createInspectorHost(options = {}) {
     }
     if (destination === "library") {
       body.dataset.libraryContext = "true";
+      if (modules.libraryAuthoringView.isPersonAuthoringRoute(route)) {
+        body.replaceChildren();
+        sheet.body.replaceChildren();
+        return;
+      }
       const authoringMode = ["edit", "import", "create", "story-card"].includes(route.query?.mode);
       const libraryModule = authoringMode
         ? modules.libraryAuthoringView : modules.libraryView;
@@ -189,8 +194,9 @@ export function createInspectorHost(options = {}) {
 
   const layerOpen = () => route.layers.some(layer => layer.id === LAYER_ID);
   const isPaneLayout = () => layout === "wide" || layout === "expansive";
+  const personAuthoring = () => modules.libraryAuthoringView.isPersonAuthoringRoute(route);
   const stageInitialLibraryDeepLink = () => {
-    if (!initialLibraryDeepLinkPending || isPaneLayout() || layerOpen()) return;
+    if (!initialLibraryDeepLinkPending || personAuthoring() || isPaneLayout() || layerOpen()) return;
     initialLibraryDeepLinkPending = false;
     services.router.openLayer({ id: LAYER_ID, focusReturn: "inspector-toggle" });
     route = services.router.current();
@@ -198,14 +204,17 @@ export function createInspectorHost(options = {}) {
 
   const apply = () => {
     if (stopped) return;
-    root.dataset.inspectorOpen = String(panes.open);
+    const authoring = personAuthoring();
+    root.dataset.libraryAuthoring = String(authoring);
+    root.dataset.inspectorOpen = String(authoring ? false : panes.open);
     root.dataset.inspectorSize = panes.size;
     root.dataset.inspectorPinned = String(panes.pinned);
     pinButton.setAttribute("aria-pressed", String(panes.pinned));
-    aside.hidden = !isPaneLayout() || !panes.open;
+    openButton.hidden = authoring;
+    aside.hidden = authoring || !isPaneLayout() || !panes.open;
     updateCopy(route.destination);
     syncing = true;
-    if (!isPaneLayout() && layerOpen()) overlay.show();
+    if (!authoring && !isPaneLayout() && layerOpen()) overlay.show();
     else overlay.close("layout-sync");
     syncing = false;
   };

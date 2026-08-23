@@ -18,6 +18,82 @@ BOOTSTRAP = {
     "extensions": [], "extension_errors": [], "extension_lanes": [],
 }
 
+PERSON_DOCUMENT = {
+    "identity": {
+        "uid": "char_mara",
+        "name": "Mara Venn",
+        "aliases": ["Mara"],
+        "pronouns": {"subject": "she", "object": "her", "possessive": "her"},
+    },
+    "initial_outfit": {"wearing": [], "state": [], "regions": {}},
+    "simulation": {
+        "tier": "mid", "temperature": 0.8, "sampler": {},
+        "curiosity": 0.5, "offscreen_agent": False,
+    },
+    "embodiment": {
+        "senses": [],
+        "visible": {"summary": "A rain-dark courier."},
+        "scent": "rain", "latent": [], "extra_parts": [],
+    },
+    "psychology": {"traits": [], "values": []},
+    "social": {"voice": {"register": "quiet"}},
+    "competence": {"abilities": []},
+    "knowledge": {"public_history": "A courier.", "private_history": []},
+    "initial_state": {"mood": {"label": "watchful"}},
+    "opening": {"first_message": "The rain followed you in.", "greetings": []},
+    "extension_payload": {"note": "must survive"},
+}
+
+
+def _route_character_editor(page: Page) -> None:
+    def projection(route):
+        route.fulfill(content_type="application/json", body=json.dumps({
+            "items": [{
+                "kind": "character", "id": 7, "key": "character:7",
+                "name": "Mara Venn", "summary": "A rain-dark courier.",
+                "subtype": "character", "created": 1, "reusable": True,
+                "archived": False, "use_count": 0, "associations": [],
+            }],
+            "facets": {
+                "types": {"story": 0, "character": 1, "persona": 0, "lore": 0},
+                "scopes": {"all": 1, "story": 0, "unassigned": 1, "multiple": 0},
+            },
+            "page": {"offset": 0, "limit": 100, "returned": 1, "total": 1},
+            "query": {"scope": "all", "sort": "name", "visibility": "active"},
+        }))
+
+    page.route("**/api/bootstrap", lambda route: route.fulfill(
+        content_type="application/json",
+        body=json.dumps({**BOOTSTRAP, "characters": [{"id": 7, "name": "Mara Venn"}]}),
+    ))
+    page.route("**/api/library?*", projection)
+    page.route("**/api/library/authoring/character/7", lambda route: route.fulfill(
+        content_type="application/json",
+        body=json.dumps({
+            "kind": "character", "id": 7, "owner": "character:7",
+            "revision": "revision-one", "document": PERSON_DOCUMENT,
+        }),
+    ))
+
+
+def test_people_authoring_owns_the_library_destination_workspace(
+    page: Page, ui_base_url: str,
+) -> None:
+    """Removing the workspace route would put the long form back in Inspector."""
+
+    _route_character_editor(page)
+    response = page.goto(
+        f"{ui_base_url}/static/ui-next.html"
+        "#/library/characters?item=character%3A7&mode=edit"
+    )
+    assert response is not None and response.ok
+    page.wait_for_function("document.documentElement.dataset.uiNextState === 'ready'")
+
+    expect(page.locator("[data-person-workspace]")).to_be_visible()
+    expect(page.locator(".ui-library")).to_have_count(0)
+    expect(page.get_by_role("complementary", name="Library details")).to_be_hidden()
+    assert page.locator("html").get_attribute("data-library-authoring") == "true"
+
 
 def test_character_quick_start_sends_alpha98_history_contract(
     page: Page, ui_base_url: str,

@@ -54,6 +54,17 @@ function statusCopy(state, t) {
   return t(COPY.dirty);
 }
 
+export function isPersonAuthoringRoute(route) {
+  if (route?.destination !== "library") return false;
+  if (!["edit", "create", "import", "story-card"].includes(route.query?.mode)) {
+    return false;
+  }
+  const segment = route.segments?.[0];
+  const item = String(route.query?.item || "");
+  return ["characters", "personas"].includes(segment)
+    || /^(character|persona):[1-9][0-9]*$/.test(item);
+}
+
 export function mountLibraryAuthoring(options = {}) {
   const documentRef = options.document || document;
   const { services, target, onTitle } = options;
@@ -172,4 +183,19 @@ export function mountLibraryAuthoring(options = {}) {
   const unsubscribe = services.store.subscribe(state => state.library, render);
   render(services.store.getSnapshot().library);
   return Object.freeze({ teardown: unsubscribe });
+}
+
+export function createLibraryAuthoringWorkspace(options = {}) {
+  const documentRef = options.document || document;
+  const section = node(documentRef, "section", "ui-person-workspace");
+  section.dataset.personWorkspace = "true";
+  section.setAttribute("aria-label", "Character and Persona authoring");
+  const target = node(documentRef, "div", "ui-person-workspace__mount");
+  section.append(target);
+  const mounted = mountLibraryAuthoring({
+    ...options,
+    document: documentRef,
+    target,
+  });
+  return Object.freeze({ element: section, teardown: mounted.teardown });
 }
