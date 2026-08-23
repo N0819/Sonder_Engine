@@ -10,6 +10,11 @@
   overflow: clip;
 }
 
+:root[data-library-authoring="true"]:is([data-layout-state="wide"], [data-layout-state="expansive"])
+  .ui-shell {
+  grid-template-columns: var(--ui-shell-rail) minmax(0, 1fr);
+}
+
 .ui-person-workspace {
   display: grid;
   min-inline-size: 0;
