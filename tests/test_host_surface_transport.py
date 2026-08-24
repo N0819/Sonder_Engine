@@ -94,7 +94,7 @@ class TestStaticFilesAreFoundFromAnyworkingDirectory:
         assert setup.status_code == 200
         response = client.get("/")
         assert response.headers["cache-control"] == "no-store"
-        assert "?release=alpha98-ui10-0415f377b12f" in response.text
+        assert "?release=alpha98-ui11-0acc47fb0573" in response.text
 
 
 class TestCookiesCarrySecureOnlyWhenTheHostSaysSo:

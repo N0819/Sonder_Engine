@@ -1,8 +1,8 @@
-export const MODULE_RELEASE = "alpha98-ui10-0415f377b12f";
+export const MODULE_RELEASE = "alpha98-ui11-0acc47fb0573";
 
 import {
   button, element, errorState, fieldLabel, frameQuery, markData, replaceLocalized, stateMessage, toolScope,
-} from "./shared.js?release=alpha98-ui10-0415f377b12f";
+} from "./shared.js?release=alpha98-ui11-0acc47fb0573";
 
 // UI_CATALOG_START: Cast tool actions and states.
 const COPY = Object.freeze({

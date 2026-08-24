@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "alpha98-ui10-0415f377b12f";
+export const MODULE_RELEASE = "alpha98-ui11-0acc47fb0573";
 
 const LEGACY_REGISTRATIONS = Object.freeze({
   registerSidebarTab: ["legacy-sidebar", "render"],

@@ -1,6 +1,6 @@
-export const MODULE_RELEASE = "alpha98-ui10-0415f377b12f";
+export const MODULE_RELEASE = "alpha98-ui11-0acc47fb0573";
 
-import { ApiError } from "./errors.js?release=alpha98-ui10-0415f377b12f";
+import { ApiError } from "./errors.js?release=alpha98-ui11-0acc47fb0573";
 
 const FRIENDLY_PHASES = Object.freeze({
   director_establish: "Setting the scene",
