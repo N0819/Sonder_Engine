@@ -2125,6 +2125,65 @@ be read with this beside it; 2.20 notes the separate reason the signal cannot
 fire early in a story (`_RECALL_CONFIDENCE_MIN_BANK = 40`, which the median
 bank does not reach until turn 10).
 
+### 1.77 A derived ledger note is narrated as if it were authored prose
+
+**Found:** chat 86 t45, reading why a body's attire string read as machine
+output. Every observer of Hinami received:
+
+> You see a young woman appearing in golden fox ears and six golden tails,
+> wearing feather hair clip; **with bare at the head, torso, arms, waist,
+> groin, legs, feet**; currently bright red across her cheeks.
+
+`appearance_of` (`story/scene.py:425`) joins the whole of `attire.state`
+verbatim, and the pack maps the label `"; clothing state:"` to `"; with"`.
+That substitution assumes a NOUN-PHRASE state, which is what an authored one
+is — "with black leggings displaced off the groin" reads correctly. But
+`state` also carries notes the engine DERIVED, minted at `story/attire.py:2699`
+in the shape `bare at the <regions>`, which is adjective-shaped and comes out
+as "with bare at the head".
+
+`attire.is_derived_state_note` (`story/attire.py:2709`) already separates the
+two shapes exactly; `appearance_of` never asks it. The reason this shipped is
+in the tests: `tests/test_perception_appearance.py` feeds `state` hand-written
+prose (`"completely nude"`, `"soaked"`, `"torn"`) and never the shape
+production actually stores.
+
+Whether the fix is to omit derived notes from the narrated string (the region
+percepts already carry bareness) or to render them as prose — "bare" for a
+body bare everywhere, "bare at the X and Y" otherwise — is open. Note the
+adjacent read: "wearing feather hair clip; with bare at the head" is CORRECT
+under the ornament rule and still looks like a contradiction.
+
+Adjacent and smaller, same beat: `agents/perception.py:575` builds
+`f"{label}'s exposed {place} is visible"` where `place` is a region name, so a
+plural region reads "Hinami's exposed feet is visible", "arms is visible".
+
+### 1.78 Four authored body fields reach no reader
+
+**Found:** the same beat, asking why the same engine renders one body richly
+and another thinly.
+
+`character_appearance` (`story/character_schema.py:1447`) and
+`persona_appearance` (`:1690`) return `embodiment.visible.summary` and nothing
+else. `visible.build`, `visible.face`, `visible.hair`, `visible.eyes` and
+`visible.distinctive_features` are offered in the card editor, normalized,
+persisted, archived — and read, outside `character_schema` itself, by exactly
+one thing: `_prose_names_a_part`, a card-warning heuristic. No view, no
+narrator, no memory ever receives them.
+
+So how a body renders is decided by which field its author happened to fill.
+Measured on one pair: Mirelle's summary is a full paragraph and she arrives
+with skin, hair, eyes, horns, tail and wings; Hinami's summary is "A young
+woman appearing in golden fox ears and six golden tails." and her equally
+detailed `build`/`face`/`hair`/`eyes` reach nobody.
+
+`_coerce_appearance` (`:963`) already folds these fields into the summary —
+but only from `embodiment.<key>`, where an older sheet MISPLACED them. A card
+that puts them in the correct place, `embodiment.visible.<key>`, is the one
+that loses them. Either compose them the way the misplaced ones are composed,
+or stop offering fields the engine does not read.
+
+
 ## 2. Roadmap
 
 Features the architecture intends and has not built. Ordered by value per unit
