@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "alpha98-ui5-7fa758fa6df7";
+export const MODULE_RELEASE = "alpha98-ui5-98f796584158";
 
 export const PERSON_SECTION_IDS = Object.freeze([
   "basics", "appearance", "history", "inner-life", "opening",

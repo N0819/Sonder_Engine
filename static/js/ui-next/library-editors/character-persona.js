@@ -1,7 +1,7 @@
-export const MODULE_RELEASE = "alpha98-ui5-7fa758fa6df7";
+export const MODULE_RELEASE = "alpha98-ui5-98f796584158";
 
-import { buildQuickStartLivedLocation, mountLivedLocationFields } from "../lived-location.js?release=alpha98-ui5-7fa758fa6df7";
-import { createPersonSectionEditor } from "./person-sections.js?release=alpha98-ui5-7fa758fa6df7";
+import { buildQuickStartLivedLocation, mountLivedLocationFields } from "../lived-location.js?release=alpha98-ui5-98f796584158";
+import { createPersonSectionEditor } from "./person-sections.js?release=alpha98-ui5-98f796584158";
 
 const quickStartDrafts = new Map();
 

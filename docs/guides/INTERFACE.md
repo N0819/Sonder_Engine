@@ -394,6 +394,13 @@ do not carry persistent work, failures, or choices.
   Changing it names the required stored-vector rebuild and links to the existing
   Memory search maintenance operation. Unrelated specialist roles, sampling,
   and backup models remain under Advanced model assignments.
+- A server-owned setting is announced as saved only after its mutation succeeds
+  and a fresh `/api/settings` projection is accepted into the `settings` server
+  slice. Navigation and remounts therefore read the value the engine reports,
+  not the startup bootstrap copy or an optimistic form value. A failed mutation
+  or confirmation keeps the entered form intact and publishes a visible problem;
+  network, server, and unreadable-response failures remain in the shell notice
+  host until explicitly dismissed.
 
 ### Alpha 9.8 lived-location ownership
 

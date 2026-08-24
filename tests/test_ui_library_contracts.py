@@ -15,10 +15,10 @@ def test_library_modules_are_in_the_wp06_release_graph():
     html = (ROOT / "static" / "ui-next.html").read_text(encoding="utf-8")
     for name in ("library-runtime.js", "library-view.js"):
         source = (RUNTIME / name).read_text(encoding="utf-8")
-        assert 'export const MODULE_RELEASE = "alpha98-ui5-7fa758fa6df7";' in source
+        assert 'export const MODULE_RELEASE = "alpha98-ui5-98f796584158";' in source
         assert name in bootstrap
-    assert 'data-ui-next-version="alpha98-ui5-7fa758fa6df7"' in html
-    assert "/static/css/ui/library.css?release=alpha98-ui5-7fa758fa6df7" in html
+    assert 'data-ui-next-version="alpha98-ui5-98f796584158"' in html
+    assert "/static/css/ui/library.css?release=alpha98-ui5-98f796584158" in html
 
 
 def test_library_runtime_owns_projection_requests_and_bounded_local_state():
