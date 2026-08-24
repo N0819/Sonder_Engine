@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "alpha98-ui8-eb87a8415bda";
+export const MODULE_RELEASE = "alpha98-ui9-ff279a1d1d7f";
 
 const SENSITIVE_KEY = /(password|passphrase|token|api.?key|secret|session|cookie|join.?code|authorization|^code$)/i;
 const SENSITIVE_VALUE_PATTERNS = Object.freeze([

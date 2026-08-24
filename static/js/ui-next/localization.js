@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "alpha98-ui8-eb87a8415bda";
+export const MODULE_RELEASE = "alpha98-ui9-ff279a1d1d7f";
 
 const SKIP_TREE = 'script,style,[data-no-i18n],[translate="no"]';
 const SKIP_TEXT = `${SKIP_TREE},textarea,input,[contenteditable]`;

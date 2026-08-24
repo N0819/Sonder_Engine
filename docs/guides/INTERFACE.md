@@ -374,17 +374,25 @@ do not carry persistent work, failures, or choices.
   discover, mutate, update, or persist engine-owned settings.
 - Each available overview row is one link to an existing authoritative route.
   Turn details is unavailable and unfocusable without an open Story. Detailed
-  pages keep their category navigation and expose an ordinary Settings overview
-  link. Search continues to open exact controls. The bounded navigation-state
-  owner restores overview scroll and launching-row/search focus on browser Back.
+  pages reuse the overview's exact four groups, row order, icons, labels, and
+  owned-state summaries rather than maintaining a second Settings taxonomy.
+  Desktop presents that projection as the compact navigation rail. Tablet,
+  mobile, narrow, landscape, and short-height layouts move it inside
+  `[data-settings-content]` as four accessible disclosures; exactly one group
+  stays open, the active detail's group opens by default, and the selected row
+  remains current. Compact Settings never stages this navigation as a sidebar
+  or horizontal category strip. Every detail surface remains full width beneath
+  it and exposes an ordinary Settings overview link. Search continues to open
+  exact controls. The bounded navigation-state owner restores overview scroll
+  and launching-row/search focus on browser Back.
 - The shell gives the destination track `minmax(0, 1fr)`. Settings gives its
   detail track the same bound and makes `[data-settings-content]` the vertical
   scroll owner. The document body is never relied on to reveal clipped settings
   in desktop, short-height, or compact layouts. The detail owner is a named,
   keyboard-focusable region. Vertical wheel and Page Up/Down/Home/End intent
-  from the surrounding Settings header or category navigation is forwarded to
-  it; a nested result list keeps its own scrolling, and horizontal category
-  gestures remain horizontal.
+  from the surrounding Settings header or compact disclosure navigation is
+  forwarded to it; a nested result list keeps its own scrolling, and disclosure
+  groups never become secondary scroll owners.
 - Story text size changes prose only. The Experience page includes a local prose
   preview so the setting remains discoverable without an open Story; nearby
   labels and controls retain their interface size.

@@ -14,6 +14,9 @@ from playwright.sync_api import Route, sync_playwright
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "docs" / "design" / "sonder-ui-replacement" / "wp18" / "screenshots"
+NAVIGATION_OUTPUT = (
+    ROOT / "docs" / "design" / "sonder-ui-replacement" / "wp19" / "screenshots"
+)
 BOOTSTRAP = {
     "ui_language": "en",
     "ui_direction": "ltr",
@@ -84,31 +87,95 @@ def capture(browser, base_url: str, name: str, width: int, height: int) -> None:
     page.close()
 
 
-def capture_transition(browser, base_url: str) -> None:
+def capture_navigation_transition(browser, base_url: str) -> None:
     page = browser.new_page(viewport={"width": 1440, "height": 900})
     page.route("**/api/**", route_api)
     page.goto(f"{base_url}/static/ui-next.html#/settings")
     ready(page)
     page.get_by_role("link", name="AI Connections").click()
     page.get_by_role("heading", name="AI Connections", exact=True).wait_for()
-    page.screenshot(path=OUTPUT / "overview-detail-1440.png", animations="disabled")
+    page.screenshot(
+        path=NAVIGATION_OUTPUT / "overview-to-detail-1440.png",
+        animations="disabled",
+    )
     page.go_back()
     page.locator('[data-settings-overview-row="theme"]').wait_for()
-    page.screenshot(path=OUTPUT / "overview-return-1440.png", animations="disabled")
+    page.screenshot(
+        path=NAVIGATION_OUTPUT / "overview-return-1440.png",
+        animations="disabled",
+    )
+    page.close()
+
+
+def capture_detail_navigation(
+    browser,
+    base_url: str,
+    name: str,
+    width: int,
+    height: int,
+    *,
+    category: str,
+    expand_group: str | None = None,
+) -> None:
+    page = browser.new_page(viewport={"width": width, "height": height})
+    page.route("**/api/**", route_api)
+    response = page.goto(f"{base_url}/static/ui-next.html#/settings/{category}")
+    if response is None or not response.ok:
+        raise RuntimeError(f"Settings detail failed to load: {name}")
+    ready(page)
+    if expand_group:
+        page.get_by_role("button", name=expand_group, exact=True).click()
+    page.screenshot(path=NAVIGATION_OUTPUT / f"{name}.png", animations="disabled")
     page.close()
 
 
 def main() -> None:
     OUTPUT.mkdir(parents=True, exist_ok=True)
+    NAVIGATION_OUTPUT.mkdir(parents=True, exist_ok=True)
     with serve_root() as base_url, sync_playwright() as playwright:
         browser = playwright.chromium.launch()
         capture(browser, base_url, "overview-1440", 1440, 900)
         capture(browser, base_url, "overview-1024", 1024, 768)
         capture(browser, base_url, "overview-390", 390, 844)
         capture(browser, base_url, "overview-844x390", 844, 390)
-        capture_transition(browser, base_url)
+        capture_navigation_transition(browser, base_url)
+        capture_detail_navigation(
+            browser, base_url, "desktop-1440", 1440, 900, category="experience"
+        )
+        capture_detail_navigation(
+            browser, base_url, "tablet-1024", 1024, 768, category="ai-connections"
+        )
+        capture_detail_navigation(
+            browser, base_url, "mobile-390", 390, 844, category="experience"
+        )
+        capture_detail_navigation(
+            browser,
+            base_url,
+            "mobile-story-host-390",
+            390,
+            844,
+            category="experience",
+            expand_group="Story & host",
+        )
+        capture_detail_navigation(
+            browser,
+            base_url,
+            "landscape-844x390",
+            844,
+            390,
+            category="advanced",
+        )
+        capture_detail_navigation(
+            browser,
+            base_url,
+            "tablet-short-1024x600",
+            1024,
+            600,
+            category="advanced",
+        )
         browser.close()
     print(f"Wrote Settings overview screenshots to {OUTPUT}")
+    print(f"Wrote Settings navigation screenshots to {NAVIGATION_OUTPUT}")
 
 
 if __name__ == "__main__":

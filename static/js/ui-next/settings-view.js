@@ -1,7 +1,7 @@
-export const MODULE_RELEASE = "alpha98-ui8-eb87a8415bda";
+export const MODULE_RELEASE = "alpha98-ui9-ff279a1d1d7f";
 
-import { appearance } from "../ui/appearance.js?release=alpha98-ui8-eb87a8415bda";
-import { initAccessibility, updateAccessibility } from "../ui/accessibility.js?release=alpha98-ui8-eb87a8415bda";
+import { appearance } from "../ui/appearance.js?release=alpha98-ui9-ff279a1d1d7f";
+import { initAccessibility, updateAccessibility } from "../ui/accessibility.js?release=alpha98-ui9-ff279a1d1d7f";
 import {
   applyCustomTheme,
   CUSTOM_THEME_ROLES,
@@ -14,12 +14,12 @@ import {
   rgbToHex,
   serializeCustomTheme,
   validateCustomTheme,
-} from "../ui/custom-theme.js?release=alpha98-ui8-eb87a8415bda";
-import { createOverlayController } from "../ui/components/overlay.js?release=alpha98-ui8-eb87a8415bda";
+} from "../ui/custom-theme.js?release=alpha98-ui9-ff279a1d1d7f";
+import { createOverlayController } from "../ui/components/overlay.js?release=alpha98-ui9-ff279a1d1d7f";
 import {
   projectSettingsOverview,
   renderSettingsOverview,
-} from "./settings-overview.js?release=alpha98-ui8-eb87a8415bda";
+} from "./settings-overview.js?release=alpha98-ui9-ff279a1d1d7f";
 
 // UI_CATALOG_START: Alpha 9.8 living-world routing copy.
 const ALPHA98_SETTINGS_COPY = Object.freeze([
@@ -199,7 +199,33 @@ function humanizeSettingKey(value) {
     .replace(/\b\w/g, letter => letter.toUpperCase());
 }
 
-function categoryNav(documentRef, services, active) {
+function activeNavigationRow(active, route) {
+  if (active === "experience") {
+    return {
+      reading: "reading",
+      sound: "sound",
+      accessibility: "accessibility",
+      themes: "theme",
+    }[String(route.query?.control || "")] || "theme";
+  }
+  if (active === "ai-connections") {
+    return route.query?.control === "models" ? "model-assignments" : "ai-connections";
+  }
+  if (active === "advanced") {
+    const advancedTool = String(route.query?.tool || route.query?.control || "");
+    return {
+      prompts: "prompt-editor",
+      "story-data": "raw-story-data",
+    }[advancedTool] || "";
+  }
+  return {
+    content: "content",
+    "add-ons": "add-ons",
+    maintenance: "maintenance",
+  }[active] || "";
+}
+
+function categoryNav(documentRef, services, active, route, groups) {
   const nav = el(documentRef, "nav", "ui-settings__categories");
   nav.dataset.settingsCategories = "true";
   nav.setAttribute("aria-label", "Settings categories");
@@ -215,25 +241,111 @@ function categoryNav(documentRef, services, active) {
     services.router.navigate({ destination: "settings" });
   });
   nav.append(overview);
-  CATEGORIES.forEach(([id, label, iconName], index) => {
-    const link = el(documentRef, "a", "ui-settings__category");
-    link.href = `#/settings/${id}`;
-    link.dataset.settingsCategory = id;
-    if (id === active) link.setAttribute("aria-current", "page");
-    const indexLabel = el(documentRef, "span", "ui-settings__index", String(index + 1).padStart(2, "0"));
-    indexLabel.setAttribute("aria-hidden", "true");
-    link.append(
-      indexLabel,
-      icon(documentRef, iconName),
-      el(documentRef, "span", "ui-settings__category-label", services.localizer.t(label)),
+  const activeRow = activeNavigationRow(active, route);
+  const activeGroup = groups.find(group => group.rows.some(row => row.id === activeRow))?.id || {
+    experience: "appearance",
+    "ai-connections": "connections",
+    content: "story-host",
+    "add-ons": "story-host",
+    maintenance: "story-host",
+    advanced: "advanced",
+  }[active] || "connections";
+  nav.dataset.settingsNavigationActiveGroup = activeGroup;
+  for (const group of groups) {
+    const section = el(documentRef, "section", "ui-settings__navigation-group");
+    section.dataset.settingsNavigationGroup = group.id;
+    const heading = el(documentRef, "h2", "ui-settings__navigation-heading");
+    heading.dataset.settingsNavigationHeading = "true";
+    const disclosure = el(documentRef, "button", "ui-settings__navigation-disclosure");
+    disclosure.type = "button";
+    disclosure.dataset.settingsNavigationDisclosure = group.id;
+    const panelId = `settings-navigation-${group.id}`;
+    disclosure.setAttribute("aria-controls", panelId);
+    disclosure.append(
+      el(documentRef, "span", "", group.label),
+      icon(documentRef, "chevron-down"),
     );
-    link.addEventListener("click", event => {
-      event.preventDefault();
-      services.router.navigate({ destination: "settings", segments: [id] });
-    });
-    nav.append(link);
-  });
+    heading.append(disclosure);
+    const panel = el(documentRef, "div", "ui-settings__navigation-panel");
+    panel.id = panelId;
+    section.append(heading, panel);
+    for (const row of group.rows) {
+      const control = el(documentRef, row.available ? "a" : "div", "ui-settings__category");
+      control.dataset.settingsNavigationRow = row.id;
+      if (row.available) control.href = row.href;
+      else control.setAttribute("aria-disabled", "true");
+      if (row.id === activeRow) control.setAttribute("aria-current", "page");
+      const copy = el(documentRef, "span", "ui-settings__category-copy");
+      copy.append(
+        el(documentRef, "span", "ui-settings__category-label", services.localizer.t(row.label)),
+        el(documentRef, "span", "ui-settings__category-summary", row.summary),
+      );
+      control.append(
+        icon(documentRef, row.icon),
+        copy,
+        icon(documentRef, "chevron-right"),
+      );
+      if (row.available) {
+        control.addEventListener("click", event => {
+          event.preventDefault();
+          services.router.navigate(row.href);
+        });
+      }
+      panel.append(control);
+    }
+    nav.append(section);
+  }
   return nav;
+}
+
+function bindResponsiveSettingsNavigation(nav, body, content) {
+  const windowRef = nav.ownerDocument.defaultView;
+  const compactQuery = windowRef.matchMedia("(max-width: 1099px)");
+  let expandedGroup = nav.dataset.settingsNavigationActiveGroup || "connections";
+  const groups = [...nav.querySelectorAll("[data-settings-navigation-group]")];
+
+  const sync = () => {
+    const compact = compactQuery.matches;
+    nav.classList.toggle("ui-settings__categories--disclosures", compact);
+    if (compact && nav.parentElement !== content) content.prepend(nav);
+    if (!compact && nav.parentElement !== body) body.insertBefore(nav, content);
+    for (const group of groups) {
+      const disclosure = group.querySelector("[data-settings-navigation-disclosure]");
+      const panel = group.querySelector(".ui-settings__navigation-panel");
+      const expanded = !compact || group.dataset.settingsNavigationGroup === expandedGroup;
+      disclosure.disabled = !compact;
+      disclosure.setAttribute("aria-expanded", String(expanded));
+      panel.hidden = !expanded;
+    }
+  };
+
+  for (const group of groups) {
+    const disclosure = group.querySelector("[data-settings-navigation-disclosure]");
+    disclosure.addEventListener("click", () => {
+      if (!compactQuery.matches) return;
+      const groupId = group.dataset.settingsNavigationGroup;
+      expandedGroup = groupId;
+      sync();
+    });
+  }
+  compactQuery.addEventListener("change", sync);
+  sync();
+  return () => compactQuery.removeEventListener("change", sync);
+}
+
+function settingsOverviewGroups(documentRef, services, state) {
+  return projectSettingsOverview({
+    appearance: services.localState.snapshot().appearance || {},
+    accessibility: initAccessibility(),
+    atmosphere: services.atmosphere.snapshot()?.preferences || {},
+    settings: state.settings?.data || {},
+    extensions: state.extensions || {},
+    storyOpen: Boolean(state.story?.data?.chat?.id),
+    theme: documentRef.documentElement.dataset.theme,
+    proseSize: documentRef.documentElement.dataset.proseSize,
+    density: documentRef.documentElement.dataset.density,
+    effects: documentRef.documentElement.dataset.effects,
+  });
 }
 
 function settingsSearch(documentRef, services, { overview = false } = {}) {
@@ -3022,23 +3134,14 @@ export function createSettingsView(options = {}) {
   content.setAttribute("aria-label", isOverview
     ? "Settings overview"
     : `${CATEGORIES.find(([id]) => id === active)?.[1] || "Current"} settings`);
+  const groups = settingsOverviewGroups(documentRef, services, state);
+  let teardownNavigation = () => {};
   if (isOverview) {
     body.classList.add("ui-settings__body--overview");
     content.classList.add("ui-settings__content--overview");
     const overview = renderSettingsOverview({
       document: documentRef,
-      groups: projectSettingsOverview({
-        appearance: services.localState.snapshot().appearance || {},
-        accessibility: initAccessibility(),
-        atmosphere: services.atmosphere.snapshot()?.preferences || {},
-        settings: state.settings?.data || {},
-        extensions: state.extensions || {},
-        storyOpen: Boolean(state.story?.data?.chat?.id),
-        theme: documentRef.documentElement.dataset.theme,
-        proseSize: documentRef.documentElement.dataset.proseSize,
-        density: documentRef.documentElement.dataset.density,
-        effects: documentRef.documentElement.dataset.effects,
-      }),
+      groups,
       iconFactory: name => icon(documentRef, name),
       navigate: href => services.router.navigate(href),
       rememberFocus: identity => services.navigationState.rememberFocus(identity),
@@ -3047,7 +3150,7 @@ export function createSettingsView(options = {}) {
     content.append(overview);
     body.append(content);
   } else {
-    const nav = categoryNav(documentRef, services, active);
+    const nav = categoryNav(documentRef, services, active, route, groups);
     content.append(
       active === "experience"
       ? experience(documentRef, services)
@@ -3064,6 +3167,7 @@ export function createSettingsView(options = {}) {
         : placeholder(documentRef, active),
     );
     body.append(nav, content);
+    teardownNavigation = bindResponsiveSettingsNavigation(nav, body, content);
   }
   root.append(header, body);
   const teardownScrollIntent = bindSettingsScrollIntent(root, content);
@@ -3086,5 +3190,11 @@ export function createSettingsView(options = {}) {
       target?.scrollIntoView({ block: "center" });
     }
   });
-  return { element: root, teardown: teardownScrollIntent };
+  return {
+    element: root,
+    teardown: () => {
+      teardownNavigation();
+      teardownScrollIntent();
+    },
+  };
 }
