@@ -1,8 +1,8 @@
-export const MODULE_RELEASE = "alpha98-ui6-ff8a9b712a2d";
+export const MODULE_RELEASE = "alpha98-ui8-eb87a8415bda";
 
 import {
   button, element, errorState, fieldLabel, markData, replaceLocalized, stateMessage, toolScope,
-} from "./shared.js?release=alpha98-ui6-ff8a9b712a2d";
+} from "./shared.js?release=alpha98-ui8-eb87a8415bda";
 
 // UI_CATALOG_START: Ambience tool actions, credits, and explicit states.
 const COPY = Object.freeze({

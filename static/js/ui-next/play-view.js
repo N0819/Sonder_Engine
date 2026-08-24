@@ -1,8 +1,8 @@
-export const MODULE_RELEASE = "alpha98-ui6-ff8a9b712a2d";
+export const MODULE_RELEASE = "alpha98-ui8-eb87a8415bda";
 
-import { openNewStory } from "./new-story.js?release=alpha98-ui6-ff8a9b712a2d";
+import { openNewStory } from "./new-story.js?release=alpha98-ui8-eb87a8415bda";
 
-import { renderPipelineInspector } from "./pipeline-inspector.js?release=alpha98-ui6-ff8a9b712a2d";
+import { renderPipelineInspector } from "./pipeline-inspector.js?release=alpha98-ui8-eb87a8415bda";
 
 // UI_CATALOG_START: player-facing Play workflow copy.
 const COPY = Object.freeze({

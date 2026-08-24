@@ -24,7 +24,7 @@ def test_play_sources_are_release_coherent_native_modules():
         assert match, name
         releases.add(match.group(1))
 
-    assert releases == {"alpha98-ui6-ff8a9b712a2d"}
+    assert releases == {"alpha98-ui8-eb87a8415bda"}
     for forbidden in (
         "window.S ",
         "window.S=",
@@ -55,7 +55,7 @@ def test_play_uses_owned_story_drafts_and_current_server_routes():
     assert "frameId" in runtime
     assert "registry?.emitEvent?.(`turn:${event.type}`" in runtime
     for module in ("play-runtime.js", "play-view.js", "prose.js"):
-        assert f'"./{module}?release=alpha98-ui6-ff8a9b712a2d"' in bootstrap
+        assert f'"./{module}?release=alpha98-ui8-eb87a8415bda"' in bootstrap
 
 
 def test_play_entry_declares_semantic_transcript_composer_and_styles():
@@ -65,7 +65,7 @@ def test_play_entry_declares_semantic_transcript_composer_and_styles():
 
     assert css.is_file()
     assert view.is_file()
-    assert "/static/css/ui/play.css?release=alpha98-ui6-ff8a9b712a2d" in html
+    assert "/static/css/ui/play.css?release=alpha98-ui8-eb87a8415bda" in html
     source = view.read_text(encoding="utf-8")
     for contract in (
         "data-play-transcript",
