@@ -31,6 +31,7 @@ def _open_settings(
     width: int = 1440,
     height: int | None = None,
     category: str = "experience",
+    route: str | None = None,
     bootstrap: dict[str, object] | None = None,
     settings: dict[str, object] | None = None,
 ) -> None:
@@ -51,11 +52,48 @@ def _open_settings(
             content_type="application/json", body=json.dumps(settings_payload)
         ),
     )
-    response = page.goto(f"{ui_base_url}/static/ui-next.html#/settings/{category}")
+    requested_route = route or f"#/settings/{category}"
+    response = page.goto(f"{ui_base_url}/static/ui-next.html{requested_route}")
     assert response is not None and response.ok
     page.wait_for_function(
         "document.documentElement.dataset.uiNextState === 'ready'", timeout=10000
     )
+
+
+def test_settings_entry_uses_one_navigation_and_opens_theme_detail(
+    page: Page, ui_base_url: str
+) -> None:
+    _open_settings(page, ui_base_url, route="#/settings")
+
+    expect(page.get_by_role("navigation", name="Settings categories")).to_be_visible()
+    expect(page.locator("[data-settings-overview]")).to_have_count(0)
+    expect(page.get_by_role("link", name="Settings overview")).to_have_count(0)
+    expect(page.get_by_role("link", name="Theme", exact=True)).to_have_attribute(
+        "aria-current", "page"
+    )
+    expect(page.get_by_role("heading", name="Theme", level=2)).to_be_visible()
+
+
+def test_accessibility_is_a_real_panel_and_keeps_outer_scroll_fixed(
+    page: Page, ui_base_url: str
+) -> None:
+    _open_settings(
+        page,
+        ui_base_url,
+        route="#/settings/experience?control=accessibility",
+    )
+
+    expect(page.get_by_role("heading", name="Accessibility", level=2)).to_be_visible()
+    expect(page.get_by_text("Six restrained palettes.", exact=False)).to_have_count(0)
+    state = page.evaluate(
+        """() => ({
+          document: document.documentElement.scrollTop,
+          workspace: document.querySelector('.ui-shell__workspace').scrollTop,
+          shellTop: document.querySelector('[data-settings-shell]').getBoundingClientRect().top,
+          contentTop: document.querySelector('[data-settings-content]').scrollTop,
+        })"""
+    )
+    assert state == {"document": 0, "workspace": 0, "shellTop": 0, "contentTop": 0}
 
 
 def test_experience_ports_reference_frame_and_applies_local_preferences(
@@ -75,7 +113,7 @@ def test_experience_ports_reference_frame_and_applies_local_preferences(
     expect(categories.get_by_role("link", name="Theme", exact=True)).to_have_attribute(
         "aria-current", "page"
     )
-    expect(page.get_by_role("heading", name="Experience", level=2)).to_be_visible()
+    expect(page.get_by_role("heading", name="Theme", level=2)).to_be_visible()
 
     shell = page.locator("[data-settings-shell]")
     geometry = shell.evaluate(
@@ -97,6 +135,8 @@ def test_experience_ports_reference_frame_and_applies_local_preferences(
     )
     assert stored == "ash-brass"
 
+    categories.get_by_role("link", name="Accessibility", exact=True).click()
+    expect(page.get_by_role("heading", name="Accessibility", level=2)).to_be_visible()
     page.get_by_role("checkbox", name="Reduced motion").check()
     expect(page.locator("html")).to_have_attribute("data-a11y-reduced-motion", "true")
 
@@ -129,12 +169,19 @@ def test_experience_connects_reading_sound_effects_and_interface_language(
         )
 
     page.route("**/api/ui-language", language)
-    _open_settings(page, ui_base_url, bootstrap=bootstrap)
+    _open_settings(
+        page,
+        ui_base_url,
+        route="#/settings/experience?control=reading",
+        bootstrap=bootstrap,
+    )
 
     page.get_by_role("combobox", name="Story text size").select_option("19")
     expect(page.locator("html")).to_have_attribute("data-prose-size", "19")
     page.get_by_role("combobox", name="Visual effects").select_option("off")
     expect(page.locator("html")).to_have_attribute("data-effects", "off")
+    page.get_by_role("link", name="Sound & motion", exact=True).click()
+    expect(page.get_by_role("heading", name="Sound & motion", level=2)).to_be_visible()
     page.get_by_role("slider", name="Sound volume").fill("0.35")
     page.get_by_role("checkbox", name="Mute story sound").check()
     page.get_by_role("combobox", name="Interface language").select_option("ja")
@@ -155,7 +202,7 @@ def test_experience_connects_reading_sound_effects_and_interface_language(
 def test_experience_preferences_have_visible_effects_and_only_supported_density_modes(
     page: Page, ui_base_url: str
 ) -> None:
-    _open_settings(page, ui_base_url)
+    _open_settings(page, ui_base_url, route="#/settings/experience?control=reading")
 
     density = page.get_by_role("combobox", name="Interface density")
     expect(density.locator("option")).to_have_count(2)
@@ -212,7 +259,7 @@ def test_settings_wheel_intent_reaches_the_detail_from_surrounding_chrome(
         assert content.evaluate("node => node.scrollTop") > 0, (width, height)
         for _ in range(8):
             page.mouse.wheel(0, 600)
-        expect(page.get_by_role("button", name="Reset Experience")).to_be_visible()
+        expect(page.get_by_role("button", name="Export theme JSON")).to_be_visible()
 
 
 def test_settings_detail_is_keyboard_scrollable_and_the_only_scroll_owner(
@@ -339,7 +386,7 @@ def test_empty_settings_status_collapses_to_the_shared_section_rhythm(
 def test_shared_settings_selects_use_compact_glass_control_geometry(
     page: Page, ui_base_url: str
 ) -> None:
-    _open_settings(page, ui_base_url)
+    _open_settings(page, ui_base_url, route="#/settings/experience?control=reading")
     density = page.get_by_role("combobox", name="Interface density")
     comfortable = density.evaluate(
         """node => {
@@ -445,10 +492,10 @@ def test_tablet_settings_disclosures_reuse_overview_rows_and_summaries(
     expect(content.get_by_role("heading", name="AI Connections", level=2)).to_be_visible()
 
 
-def test_compact_advanced_navigation_does_not_claim_an_unrepresented_tool(
+def test_compact_advanced_navigation_tracks_the_real_selected_panel(
     page: Page, ui_base_url: str
 ) -> None:
-    """Keeps the active group open without assigning a misleading current row."""
+    """Keeps the active group open and assigns the one real selected panel."""
     _open_settings(
         page,
         ui_base_url,
@@ -460,11 +507,15 @@ def test_compact_advanced_navigation_does_not_claim_an_unrepresented_tool(
     categories = page.get_by_role("navigation", name="Settings categories")
     advanced = categories.get_by_role("button", name="Advanced", exact=True)
     expect(advanced).to_have_attribute("aria-expanded", "true")
-    expect(categories.locator('[aria-current="page"]')).to_have_count(0)
+    expect(categories.locator('[data-settings-navigation-row="prompt-editor"]')).to_have_attribute(
+        "aria-current", "page"
+    )
 
     page.goto(f"{ui_base_url}/static/ui-next.html#/settings/advanced?tool=clothing-data")
     expect(advanced).to_have_attribute("aria-expanded", "true")
-    expect(categories.locator('[aria-current="page"]')).to_have_count(0)
+    expect(categories.locator('[data-settings-navigation-row="raw-story-data"]')).to_have_attribute(
+        "aria-current", "page"
+    )
 
     page.goto(f"{ui_base_url}/static/ui-next.html#/settings/advanced?control=story-data")
     expect(advanced).to_have_attribute("aria-expanded", "true")
@@ -473,26 +524,15 @@ def test_compact_advanced_navigation_does_not_claim_an_unrepresented_tool(
     )
 
 
-def test_advanced_ports_the_reference_launcher_panel(
+def test_advanced_opens_the_prompt_editor_without_a_duplicate_launcher_panel(
     page: Page, ui_base_url: str
 ) -> None:
-    """Catches replacement of the supplied Advanced ledger with generic cards."""
+    """Catches a return to the duplicate Advanced launcher method."""
     _open_settings(page, ui_base_url, width=1024, height=600, category="advanced")
 
-    expect(page.locator(".ui-settings__section-head").get_by_role("heading", name="Advanced", level=2)).to_be_visible()
-    expect(page.get_by_text("Prompts, diagnostics, and raw story data", exact=True)).to_be_visible()
-    launchers = page.locator("[data-settings-launcher]")
-    expect(launchers).to_have_count(4)
-    for label in (
-        "Prompt editor",
-        "Turn details",
-        "Raw story data",
-        "Raw clothing data",
-    ):
-        expect(page.get_by_role("button", name=re.compile(f"^{label}"))).to_be_visible()
-    expect(
-        page.get_by_text("Advanced tools change engine-facing data.", exact=True)
-    ).to_be_visible()
+    expect(page.locator(".ui-settings__section-head").get_by_role("heading", name="Prompt editor", level=2)).to_be_visible()
+    expect(page.locator("[data-settings-launcher]")).to_have_count(0)
+    expect(page.get_by_role("combobox", name="Prompt preset", exact=True)).to_be_visible()
 
 
 def test_settings_search_reaches_an_aliased_control_and_restores_focus(
@@ -597,9 +637,12 @@ def test_advanced_prompt_editor_uses_current_presets_and_explicit_save(
         )
 
     page.route("**/api/prompt_presets", save)
-    _open_settings(page, ui_base_url, category="advanced", bootstrap=bootstrap)
-
-    page.get_by_role("button", name=re.compile("^Prompt editor")).click()
+    _open_settings(
+        page,
+        ui_base_url,
+        route="#/settings/advanced?tool=prompts",
+        bootstrap=bootstrap,
+    )
     expect(page).to_have_url(re.compile(r"#/settings/advanced\?tool=prompts$"))
     editor = page.get_by_role("textbox", name="Director prompt")
     expect(editor).to_have_value("Focused sheet")
@@ -639,8 +682,12 @@ def test_advanced_prompt_editor_activates_and_stages_preset_deletion(
 
     page.route("**/api/active_preset", active)
     page.route("**/api/prompt_presets/Spare", remove)
-    _open_settings(page, ui_base_url, category="advanced", bootstrap=bootstrap)
-    page.get_by_role("button", name=re.compile("^Prompt editor")).click()
+    _open_settings(
+        page,
+        ui_base_url,
+        route="#/settings/advanced?tool=prompts",
+        bootstrap=bootstrap,
+    )
 
     page.get_by_role("combobox", name="Prompt preset", exact=True).select_option("Spare")
     page.get_by_role("button", name="Use selected preset").click()
@@ -667,9 +714,13 @@ def test_advanced_raw_story_editor_validates_and_saves_the_current_story(
             else route.fulfill(content_type="application/json", body=json.dumps({"rooms": {"atrium": {}}}))
         ),
     )
-    _open_settings(page, ui_base_url, category="advanced", bootstrap=bootstrap)
+    _open_settings(
+        page,
+        ui_base_url,
+        route="#/settings/advanced?tool=story-data",
+        bootstrap=bootstrap,
+    )
 
-    page.get_by_role("button", name=re.compile("^Raw story data")).click()
     expect(page).to_have_url(re.compile(r"#/settings/advanced\?tool=story-data$"))
     editor = page.get_by_role("textbox", name="Raw story data JSON")
     expect(editor).to_have_value(re.compile(r'"atrium"'))
@@ -996,9 +1047,12 @@ def test_ai_connections_saves_advanced_role_models_without_flattening_configs(
 
     page.route("**/api/agent_models", models_route)
     page.route("**/api/reasoning_effort", effort_route)
-    _open_settings(page, ui_base_url, category="ai-connections", bootstrap=bootstrap)
-
-    page.get_by_text("Advanced model assignments", exact=True).click()
+    _open_settings(
+        page,
+        ui_base_url,
+        route="#/settings/ai-connections?control=models",
+        bootstrap=bootstrap,
+    )
     page.get_by_role("combobox", name="Provider for Director").select_option("")
     page.get_by_role("button", name="Save model assignments").click()
 
@@ -1238,9 +1292,12 @@ def test_ai_connections_edits_role_samplers_and_ordered_backup_models(
         "**/api/reasoning_effort",
         lambda route: route.fulfill(content_type="application/json", body=json.dumps({"ok": True})),
     )
-    _open_settings(page, ui_base_url, category="ai-connections", bootstrap=bootstrap)
-
-    page.get_by_text("Advanced model assignments", exact=True).click()
+    _open_settings(
+        page,
+        ui_base_url,
+        route="#/settings/ai-connections?control=models",
+        bootstrap=bootstrap,
+    )
     page.get_by_text("Sampling and backup models for Default", exact=True).click()
     page.get_by_role("spinbutton", name="Temperature for Default").fill("0.45")
     page.get_by_role("textbox", name="Backup 1 model for Default").fill(
@@ -1917,8 +1974,7 @@ def test_mobile_advanced_keeps_prompt_tools_without_horizontal_overflow(
     """Protects compact Settings from dropping or clipping Advanced functionality."""
     _open_settings(page, ui_base_url, width=390, height=844, category="advanced")
 
-    page.get_by_role("button", name="Prompt editor").click()
-    expect(page.locator(".ui-settings__section-head").get_by_role("heading", name="Advanced", level=2)).to_be_visible()
+    expect(page.locator(".ui-settings__section-head").get_by_role("heading", name="Prompt editor", level=2)).to_be_visible()
     expect(page.get_by_role("combobox", name="Prompt preset", exact=True)).to_be_visible()
     expect(page.get_by_role("button", name="Save prompt preset")).to_be_visible()
     geometry = page.evaluate(

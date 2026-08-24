@@ -96,7 +96,7 @@ information-architecture authority.
 | ID | Priority | Status | Observed problem | Approved direction | Browser verification after feature approval |
 |---|---:|---|---|---|---|
 | UI-BL-01 | P2 | Fixed | The shipped theme choices did not provide a safe user-authored theme workflow, and unrestricted CSS would compromise layout, accessibility, and upgrade contracts. | Implement the approved eight-role semantic-token editor with preview, reset, contrast validation, and safe import/export. Arbitrary CSS and layout overrides remain out of bounds. | Browser tests create, preview, persist, reload, reset, export, and import at desktop and compact viewports; malformed, extra-key, low-contrast, CSS, URL, and markup payloads fall back safely without damaging the current theme. |
-| UI-BL-02 | P2 | Fixed | Direct category entry is efficient for repeat users but gave no clean scan-first map of where Settings tasks live or their current high-level state. | `#/settings` is now a grouped row ledger for Connections, Appearance, Story & host, and Advanced. Each row uses a local icon, plain title, optional owned summary, and chevron into an existing authoritative route. Search and every detailed page remain; no external assets, code, branding, or pixel values were copied. | Ordered groups/routes, summary ownership, direct deep links, search, browser Back, focus/scroll restoration, unavailable Turn details, 44 px compact targets, and zero horizontal overflow pass focused static and browser contracts. WP-18 records desktop, tablet, phone, and short-landscape evidence. |
+| UI-BL-02 | P2 | Fixed | Settings accumulated both a scan-first overview and grouped detail navigation, while row routes still mounted category-length documents and scrolled anchors into view. This created two Settings methods and could move the shell above the viewport. | Retain one grouped navigation and one real selected panel. `#/settings` selects Theme; internal rows mount only their owned controls; external tasks remain links to their owning destinations. `[data-settings-content]` is the only vertical owner and programmatic focus cannot scroll ancestors. | Ordered groups/routes, direct panels, search aliases, unavailable Turn details, `preventScroll` focus, desktop and compact disclosures, 44 px compact targets, zero outer scroll, and zero horizontal overflow pass 53 focused static/browser contracts. |
 
 The current Design Bible and approved replacement direction remain authoritative.
 This ledger is the sole retained product-facing record; no separate intake
@@ -235,7 +235,8 @@ The Settings, curated/custom theme, and shared-control package was verified on
 ## Grouped Settings overview record
 
 The scan-first Settings home was verified on 2026-08-23 as the separate UI7
-package.
+package. It is historical evidence only and was retired by the single-method
+Settings correction below.
 
 - `#/settings`, global Settings navigation, and `mod+,` open the overview;
   existing category, search, and Advanced-tool routes remain compatible.
@@ -294,3 +295,21 @@ as the UI10 package.
   DEV-UI-2026-08-24-C above.
 - The complete immutable UI graph is coherent at
   `alpha98-ui10-0415f377b12f`.
+
+## Single-method Settings correction
+
+The duplicate overview-plus-detail model was removed on 2026-08-24.
+
+- `#/settings`, global Settings navigation, and `mod+,` select Theme through
+  the same four-group navigation used by every other Settings route.
+- Theme, Reading & layout, Sound & motion, Accessibility, AI Connections,
+  Model assignments, Prompt editor, and Raw story data are real selected
+  panels. Their navigation rows no longer target anchors inside combined
+  category documents, and Advanced no longer repeats those rows as launchers.
+- `[data-settings-content]` is the only vertical scroll owner. Route changes
+  set its offset directly and focus with `preventScroll`; the document,
+  workspace, and shell remain fixed.
+- Wide short-height and compact layouts use one-open disclosure groups without
+  giving the navigation its own scrollbar.
+- The focused Settings static/browser gate passes 53 tests across desktop,
+  tablet, phone, and short-landscape geometry.

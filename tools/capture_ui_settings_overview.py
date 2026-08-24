@@ -1,4 +1,4 @@
-"""Capture deterministic review evidence for the grouped Settings overview."""
+"""Capture deterministic evidence for single-method Settings navigation."""
 
 from __future__ import annotations
 
@@ -13,8 +13,7 @@ from playwright.sync_api import Route, sync_playwright
 
 
 ROOT = Path(__file__).resolve().parents[1]
-OUTPUT = ROOT / "docs" / "design" / "sonder-ui-replacement" / "wp18" / "screenshots"
-NAVIGATION_OUTPUT = (
+OUTPUT = (
     ROOT / "docs" / "design" / "sonder-ui-replacement" / "wp19" / "screenshots"
 )
 BOOTSTRAP = {
@@ -81,7 +80,7 @@ def capture(browser, base_url: str, name: str, width: int, height: int) -> None:
     page.route("**/api/**", route_api)
     response = page.goto(f"{base_url}/static/ui-next.html#/settings")
     if response is None or not response.ok:
-        raise RuntimeError(f"Settings overview failed to load: {name}")
+        raise RuntimeError(f"Settings navigation failed to load: {name}")
     ready(page)
     page.screenshot(path=OUTPUT / f"{name}.png", animations="disabled")
     page.close()
@@ -95,13 +94,13 @@ def capture_navigation_transition(browser, base_url: str) -> None:
     page.get_by_role("link", name="AI Connections").click()
     page.get_by_role("heading", name="AI Connections", exact=True).wait_for()
     page.screenshot(
-        path=NAVIGATION_OUTPUT / "overview-to-detail-1440.png",
+        path=OUTPUT / "navigation-to-connections-1440.png",
         animations="disabled",
     )
     page.go_back()
-    page.locator('[data-settings-overview-row="theme"]').wait_for()
+    page.locator('[data-settings-navigation-row="theme"]').wait_for()
     page.screenshot(
-        path=NAVIGATION_OUTPUT / "overview-return-1440.png",
+        path=OUTPUT / "navigation-return-theme-1440.png",
         animations="disabled",
     )
     page.close()
@@ -125,19 +124,18 @@ def capture_detail_navigation(
     ready(page)
     if expand_group:
         page.get_by_role("button", name=expand_group, exact=True).click()
-    page.screenshot(path=NAVIGATION_OUTPUT / f"{name}.png", animations="disabled")
+    page.screenshot(path=OUTPUT / f"{name}.png", animations="disabled")
     page.close()
 
 
 def main() -> None:
     OUTPUT.mkdir(parents=True, exist_ok=True)
-    NAVIGATION_OUTPUT.mkdir(parents=True, exist_ok=True)
     with serve_root() as base_url, sync_playwright() as playwright:
         browser = playwright.chromium.launch()
-        capture(browser, base_url, "overview-1440", 1440, 900)
-        capture(browser, base_url, "overview-1024", 1024, 768)
-        capture(browser, base_url, "overview-390", 390, 844)
-        capture(browser, base_url, "overview-844x390", 844, 390)
+        capture(browser, base_url, "navigation-root-1440", 1440, 900)
+        capture(browser, base_url, "navigation-root-1024", 1024, 768)
+        capture(browser, base_url, "navigation-root-390", 390, 844)
+        capture(browser, base_url, "navigation-root-844x390", 844, 390)
         capture_navigation_transition(browser, base_url)
         capture_detail_navigation(
             browser, base_url, "desktop-1440", 1440, 900, category="experience"
@@ -174,8 +172,7 @@ def main() -> None:
             category="advanced",
         )
         browser.close()
-    print(f"Wrote Settings overview screenshots to {OUTPUT}")
-    print(f"Wrote Settings navigation screenshots to {NAVIGATION_OUTPUT}")
+    print(f"Wrote Settings navigation screenshots to {OUTPUT}")
 
 
 if __name__ == "__main__":

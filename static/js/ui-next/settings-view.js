@@ -16,10 +16,7 @@ import {
   validateCustomTheme,
 } from "../ui/custom-theme.js?release=alpha98-ui10-0415f377b12f";
 import { createOverlayController } from "../ui/components/overlay.js?release=alpha98-ui10-0415f377b12f";
-import {
-  projectSettingsOverview,
-  renderSettingsOverview,
-} from "./settings-overview.js?release=alpha98-ui10-0415f377b12f";
+import { projectSettingsNavigation } from "./settings-overview.js?release=alpha98-ui10-0415f377b12f";
 
 // UI_CATALOG_START: Alpha 9.8 living-world routing copy.
 const ALPHA98_SETTINGS_COPY = Object.freeze([
@@ -75,13 +72,6 @@ const ACCESSIBILITY = Object.freeze([
   ["largeUi", "Large interface", "Increase interface type and control sizing."],
   ["largeProse", "Large story text", "Increase the reading size without changing controls."],
   ["roomyTargets", "Roomy controls", "Increase touch targets and control spacing."],
-]);
-
-const ADVANCED_LAUNCHERS = Object.freeze([
-  ["prompts", "prompt", "Prompt editor", "Inspect and edit the engine's advanced prompt templates"],
-  ["turn-details", "terminal", "Turn details", "Show the live technical stage log while a turn runs"],
-  ["story-data", "world", "Raw story data", "Open the current story's internal world record"],
-  ["clothing-data", "clothing", "Raw clothing data", "Open the current story's attire and visible-state record"],
 ]);
 
 function el(documentRef, tag, className = "", text = "") {
@@ -216,7 +206,8 @@ function activeNavigationRow(active, route) {
     return {
       prompts: "prompt-editor",
       "story-data": "raw-story-data",
-    }[advancedTool] || "";
+      "clothing-data": "raw-story-data",
+    }[advancedTool] || "prompt-editor";
   }
   return {
     content: "content",
@@ -229,18 +220,6 @@ function categoryNav(documentRef, services, active, route, groups) {
   const nav = el(documentRef, "nav", "ui-settings__categories");
   nav.dataset.settingsCategories = "true";
   nav.setAttribute("aria-label", "Settings categories");
-  const overview = el(documentRef, "a", "ui-settings__category ui-settings__category--overview");
-  overview.href = "#/settings";
-  overview.append(
-    el(documentRef, "span", "ui-settings__index", "00"),
-    icon(documentRef, "home"),
-    el(documentRef, "span", "ui-settings__category-label", "Settings overview"),
-  );
-  overview.addEventListener("click", event => {
-    event.preventDefault();
-    services.router.navigate({ destination: "settings" });
-  });
-  nav.append(overview);
   const activeRow = activeNavigationRow(active, route);
   const activeGroup = groups.find(group => group.rows.some(row => row.id === activeRow))?.id || {
     experience: "appearance",
@@ -301,19 +280,21 @@ function categoryNav(documentRef, services, active, route, groups) {
 function bindResponsiveSettingsNavigation(nav, body, content) {
   const windowRef = nav.ownerDocument.defaultView;
   const compactQuery = windowRef.matchMedia("(max-width: 1099px)");
+  const shortQuery = windowRef.matchMedia("(min-width: 1100px) and (max-height: 799px)");
   let expandedGroup = nav.dataset.settingsNavigationActiveGroup || "connections";
   const groups = [...nav.querySelectorAll("[data-settings-navigation-group]")];
 
   const sync = () => {
     const compact = compactQuery.matches;
-    nav.classList.toggle("ui-settings__categories--disclosures", compact);
+    const disclosures = compact || shortQuery.matches;
+    nav.classList.toggle("ui-settings__categories--disclosures", disclosures);
     if (compact && nav.parentElement !== content) content.prepend(nav);
     if (!compact && nav.parentElement !== body) body.insertBefore(nav, content);
     for (const group of groups) {
       const disclosure = group.querySelector("[data-settings-navigation-disclosure]");
       const panel = group.querySelector(".ui-settings__navigation-panel");
-      const expanded = !compact || group.dataset.settingsNavigationGroup === expandedGroup;
-      disclosure.disabled = !compact;
+      const expanded = !disclosures || group.dataset.settingsNavigationGroup === expandedGroup;
+      disclosure.disabled = !disclosures;
       disclosure.setAttribute("aria-expanded", String(expanded));
       panel.hidden = !expanded;
     }
@@ -322,19 +303,23 @@ function bindResponsiveSettingsNavigation(nav, body, content) {
   for (const group of groups) {
     const disclosure = group.querySelector("[data-settings-navigation-disclosure]");
     disclosure.addEventListener("click", () => {
-      if (!compactQuery.matches) return;
+      if (!compactQuery.matches && !shortQuery.matches) return;
       const groupId = group.dataset.settingsNavigationGroup;
       expandedGroup = groupId;
       sync();
     });
   }
   compactQuery.addEventListener("change", sync);
+  shortQuery.addEventListener("change", sync);
   sync();
-  return () => compactQuery.removeEventListener("change", sync);
+  return () => {
+    compactQuery.removeEventListener("change", sync);
+    shortQuery.removeEventListener("change", sync);
+  };
 }
 
-function settingsOverviewGroups(documentRef, services, state) {
-  return projectSettingsOverview({
+function settingsNavigationGroups(documentRef, services, state) {
+  return projectSettingsNavigation({
     appearance: services.localState.snapshot().appearance || {},
     accessibility: initAccessibility(),
     atmosphere: services.atmosphere.snapshot()?.preferences || {},
@@ -348,7 +333,7 @@ function settingsOverviewGroups(documentRef, services, state) {
   });
 }
 
-function settingsSearch(documentRef, services, { overview = false } = {}) {
+function settingsSearch(documentRef, services) {
   const field = el(documentRef, "div", "ui-settings__search-wrap");
   const label = el(documentRef, "label", "ui-settings__search");
   const input = documentRef.createElement("input");
@@ -356,7 +341,6 @@ function settingsSearch(documentRef, services, { overview = false } = {}) {
   input.placeholder = "Search settings";
   input.setAttribute("aria-label", "Search settings");
   input.setAttribute("aria-controls", "settings-search-results");
-  if (overview) input.dataset.focusIdentity = "settings-overview:search";
   const results = el(documentRef, "div", "ui-settings__search-results");
   results.id = "settings-search-results";
   results.hidden = true;
@@ -391,7 +375,6 @@ function settingsSearch(documentRef, services, { overview = false } = {}) {
           segments: [category],
           query: { control },
         });
-        if (overview) services.navigationState.rememberFocus(input.dataset.focusIdentity);
       });
       results.append(button);
     });
@@ -864,7 +847,7 @@ function livingWorldSettings(documentRef, services, state) {
   return group;
 }
 
-function experience(documentRef, services) {
+function experience(documentRef, services, panelKey = "theme") {
   const storedAppearance = services.localState.snapshot().appearance || {};
   if (Object.hasOwn(storedAppearance, "legacyTheme")) {
     const migratedAppearance = { ...storedAppearance };
@@ -873,10 +856,16 @@ function experience(documentRef, services) {
   }
   const section = el(documentRef, "section", "ui-settings__section");
   const head = el(documentRef, "header", "ui-settings__section-head");
+  const panelCopy = {
+    theme: ["Theme", "Choose and tune the interface palette on this device."],
+    reading: ["Reading & layout", "Story text, interface density, and visual effects."],
+    sound: ["Sound & motion", "Story sound, turn notifications, and interface language."],
+    accessibility: ["Accessibility", "Look, reading, motion, and control accommodations."],
+  }[panelKey] || ["Theme", "Choose and tune the interface palette on this device."];
   head.append(
-    el(documentRef, "p", "ui-settings__crumb", "Settings / 01"),
-    el(documentRef, "h2", "ui-heading ui-heading--2", "Experience"),
-    el(documentRef, "p", "ui-muted", "Look, reading, sound, motion, and accessibility"),
+    el(documentRef, "p", "ui-settings__crumb", "Settings / Appearance"),
+    el(documentRef, "h2", "ui-heading ui-heading--2", panelCopy[0]),
+    el(documentRef, "p", "ui-muted", panelCopy[1]),
   );
   const themeGroup = el(documentRef, "section", "ui-settings__group");
   themeGroup.id = "settings-control-themes";
@@ -1076,7 +1065,13 @@ function experience(documentRef, services) {
     });
   });
   resetGroup.append(resetCopy, reset, resetConsent);
-  section.append(head, themeGroup, readingGroup, soundGroup, accessibilityGroup, resetGroup);
+  const panels = {
+    theme: [themeGroup],
+    reading: [readingGroup],
+    sound: [soundGroup],
+    accessibility: [accessibilityGroup, resetGroup],
+  };
+  section.append(head, ...(panels[panelKey] || panels.theme));
   return section;
 }
 
@@ -2172,48 +2167,25 @@ function rawDataEditor(documentRef, services, state, kind) {
   return editor;
 }
 
-function advanced(documentRef, services, state, route) {
+function advanced(documentRef, services, state, route, panelKey = "prompt-editor") {
   const section = el(documentRef, "section", "ui-settings__section ui-settings__section--advanced");
   const head = el(documentRef, "header", "ui-settings__section-head");
+  const rawData = panelKey === "raw-story-data";
   head.append(
-    el(documentRef, "p", "ui-settings__crumb", "Settings / 06"),
-    el(documentRef, "h2", "ui-heading ui-heading--2", "Advanced"),
-    el(documentRef, "p", "ui-muted", "Prompts, diagnostics, and raw story data"),
+    el(documentRef, "p", "ui-settings__crumb", "Settings / Advanced"),
+    el(documentRef, "h2", "ui-heading ui-heading--2", rawData ? "Raw story data" : "Prompt editor"),
+    el(documentRef, "p", "ui-muted", rawData
+      ? "Inspect and deliberately edit the current Story's engine-owned record."
+      : "Inspect and edit advanced prompt templates and presets."),
   );
-  const launchers = el(documentRef, "section", "ui-settings__group ui-settings__launcher-group");
-  ADVANCED_LAUNCHERS.forEach(([id, iconName, label, detail]) => {
-    const control = el(documentRef, "button", "ui-settings__launcher");
-    control.type = "button";
-    control.dataset.settingsLauncher = id;
-    control.id = `settings-control-${id}`;
-    const copy = el(documentRef, "span", "ui-settings__launcher-copy");
-    copy.append(el(documentRef, "strong", "", label), el(documentRef, "small", "", detail));
-    control.append(icon(documentRef, iconName), copy, icon(documentRef, "chevron-right"));
-    control.addEventListener("click", () => {
-      if (id === "turn-details") {
-        services.router.navigate({ destination: "play", segments: ["story-tools"], query: { tool: "turn-details" } });
-        return;
-      }
-      services.router.navigate({ destination: "settings", segments: ["advanced"], query: { tool: id } });
-    });
-    launchers.append(control);
-  });
-  const warning = el(documentRef, "aside", "ui-settings__warning");
-  const warningCopy = el(documentRef, "span", "ui-settings__launcher-copy");
-  warningCopy.append(
-    el(documentRef, "strong", "", "Advanced tools change engine-facing data."),
-    el(documentRef, "small", "", "Use them when correcting a known problem or diagnosing a turn."),
-  );
-  warning.append(icon(documentRef, "warning"), warningCopy);
   const tool = String(route?.query?.tool || "");
   section.append(head);
-  if (tool === "prompts") section.append(promptEditor(documentRef, services, state, route));
-  else if (tool === "story-data" || tool === "clothing-data") section.append(rawDataEditor(documentRef, services, state, tool));
-  else section.append(launchers, warning);
+  if (rawData) section.append(rawDataEditor(documentRef, services, state, tool === "clothing-data" ? tool : "story-data"));
+  else section.append(promptEditor(documentRef, services, state, route));
   return section;
 }
 
-function aiConnections(documentRef, services, state, route) {
+function aiConnections(documentRef, services, state, route, panelKey = "ai-connections") {
   const data = state.settings?.data || {};
   const providers = Array.isArray(data.providers) ? data.providers : [];
   let currentAgentModels = structuredClone(data.agent_models || {});
@@ -2221,10 +2193,13 @@ function aiConnections(documentRef, services, state, route) {
   const memoryModel = currentAgentModels.embeddings || {};
   const section = el(documentRef, "section", "ui-settings__section ui-settings__section--ai");
   const head = el(documentRef, "header", "ui-settings__section-head");
+  const assignmentsOnly = panelKey === "model-assignments";
   head.append(
-    el(documentRef, "p", "ui-settings__crumb", "Settings / 02"),
-    el(documentRef, "h2", "ui-heading ui-heading--2", "AI Connections"),
-    el(documentRef, "p", "ui-muted", "Providers, credentials, models, and generation defaults"),
+    el(documentRef, "p", "ui-settings__crumb", assignmentsOnly ? "Settings / Advanced" : "Settings / Connections"),
+    el(documentRef, "h2", "ui-heading ui-heading--2", assignmentsOnly ? "Model assignments" : "AI Connections"),
+    el(documentRef, "p", "ui-muted", assignmentsOnly
+      ? "Specialist models, reasoning effort, sampling, and ordered backups."
+      : "Providers, credentials, defaults, memory search, images, and ambience."),
   );
 
   const connections = el(documentRef, "section", "ui-settings__group ui-settings__provider-group");
@@ -3106,9 +3081,14 @@ function aiConnections(documentRef, services, state, route) {
   });
   ambience.append(ambienceTitle, ambienceFields, ambienceToggles, ambienceStatus, ambienceFooter);
 
-  section.append(head, connections, defaults, memorySearch, limitGroup);
-  if (openRouterGroup) section.append(openRouterGroup);
-  section.append(assignments, backdrops, ambience);
+  section.append(head);
+  if (assignmentsOnly) {
+    section.append(assignments);
+  } else {
+    section.append(connections, defaults, memorySearch, limitGroup);
+    if (openRouterGroup) section.append(openRouterGroup);
+    section.append(backdrops, ambience);
+  }
   return section;
 }
 
@@ -3116,46 +3096,29 @@ export function createSettingsView(options = {}) {
   const documentRef = options.document || document;
   const { services, state } = options;
   const route = state.route || services.router.current();
-  const requested = route.segments?.[0] || "overview";
-  const isOverview = requested === "overview";
+  const requested = route.segments?.[0] || "experience";
   const active = CATEGORIES.some(([id]) => id === requested) ? requested : "experience";
+  const panelKey = activeNavigationRow(active, route);
   const root = el(documentRef, "section", "ui-settings");
   root.dataset.settingsShell = "true";
   const header = el(documentRef, "header", "ui-settings__header");
   const title = el(documentRef, "div");
   title.append(el(documentRef, "p", "ui-settings__kicker", "Settings"), el(documentRef, "h1", "ui-heading ui-heading--1", "Sonder preferences"));
-  header.append(title, settingsSearch(documentRef, services, { overview: isOverview }));
+  header.append(title, settingsSearch(documentRef, services));
   const body = el(documentRef, "div", "ui-settings__body");
   const content = el(documentRef, "div", "ui-settings__content");
   content.dataset.settingsContent = "true";
   content.dataset.shellScrollRegion = "settings-content";
   content.tabIndex = 0;
   content.setAttribute("role", "region");
-  content.setAttribute("aria-label", isOverview
-    ? "Settings overview"
-    : `${CATEGORIES.find(([id]) => id === active)?.[1] || "Current"} settings`);
-  const groups = settingsOverviewGroups(documentRef, services, state);
-  let teardownNavigation = () => {};
-  if (isOverview) {
-    body.classList.add("ui-settings__body--overview");
-    content.classList.add("ui-settings__content--overview");
-    const overview = renderSettingsOverview({
-      document: documentRef,
-      groups,
-      iconFactory: name => icon(documentRef, name),
-      navigate: href => services.router.navigate(href),
-      rememberFocus: identity => services.navigationState.rememberFocus(identity),
-    });
-    overview.setAttribute("data-settings-overview", "true");
-    content.append(overview);
-    body.append(content);
-  } else {
-    const nav = categoryNav(documentRef, services, active, route, groups);
-    content.append(
-      active === "experience"
-      ? experience(documentRef, services)
+  content.setAttribute("aria-label", `${CATEGORIES.find(([id]) => id === active)?.[1] || "Current"} settings`);
+  const groups = settingsNavigationGroups(documentRef, services, state);
+  const nav = categoryNav(documentRef, services, active, route, groups);
+  content.append(
+    active === "experience"
+      ? experience(documentRef, services, panelKey)
       : active === "ai-connections"
-        ? aiConnections(documentRef, services, state, route)
+        ? aiConnections(documentRef, services, state, route, panelKey)
       : active === "content"
         ? contentSettings(documentRef, services, state)
       : active === "add-ons"
@@ -3163,31 +3126,28 @@ export function createSettingsView(options = {}) {
       : active === "maintenance"
         ? maintenanceSettings(documentRef, services)
       : active === "advanced"
-        ? advanced(documentRef, services, state, route)
+        ? advanced(documentRef, services, state, route, panelKey)
         : placeholder(documentRef, active),
-    );
-    body.append(nav, content);
-    teardownNavigation = bindResponsiveSettingsNavigation(nav, body, content);
-  }
+  );
+  body.append(nav, content);
+  const teardownNavigation = bindResponsiveSettingsNavigation(nav, body, content);
   root.append(header, body);
   const teardownScrollIntent = bindSettingsScrollIntent(root, content);
   services.localizer.localize(root);
   requestAnimationFrame(() => {
-    root.querySelector("[data-settings-categories] [aria-current='page']")?.scrollIntoView({ block: "nearest", inline: "center" });
-    if (isOverview) {
-      const identity = services.navigationState.snapshot().focusIdentity;
-      if (identity.startsWith("settings-overview:")) {
-        requestAnimationFrame(() => services.navigationState.restoreFocus(identity));
-      }
-    }
+    content.scrollTop = 0;
+    const heading = content.querySelector(".ui-settings__section-head h2");
+    if (heading) heading.tabIndex = -1;
     const control = String(route.query?.control || "");
     if (control) {
       const target = content.querySelector(`#settings-control-${CSS.escape(control)}`);
       const focusTarget = target?.matches("button, input, select, textarea, summary, a[href]")
         ? target
         : target?.querySelector("button, input, select, textarea, summary, a[href]");
-      focusTarget?.focus();
-      target?.scrollIntoView({ block: "center" });
+      if (focusTarget) focusTarget.focus({ preventScroll: true });
+      else heading?.focus({ preventScroll: true });
+    } else {
+      heading?.focus({ preventScroll: true });
     }
   });
   return {
