@@ -1,7 +1,7 @@
-export const MODULE_RELEASE = "alpha98-ui5-7fa758fa6df7";
+export const MODULE_RELEASE = "alpha98-ui5-98f796584158";
 
-import { appearance } from "../ui/appearance.js?release=alpha98-ui5-7fa758fa6df7";
-import { initAccessibility, updateAccessibility } from "../ui/accessibility.js?release=alpha98-ui5-7fa758fa6df7";
+import { appearance } from "../ui/appearance.js?release=alpha98-ui5-98f796584158";
+import { initAccessibility, updateAccessibility } from "../ui/accessibility.js?release=alpha98-ui5-98f796584158";
 
 // UI_CATALOG_START: Alpha 9.8 living-world routing copy.
 const ALPHA98_SETTINGS_COPY = Object.freeze([
@@ -77,6 +77,42 @@ function el(documentRef, tag, className = "", text = "") {
   if (className) node.className = className;
   if (text) node.textContent = text;
   return node;
+}
+
+function settingsFailureMessage(services, error, fallback) {
+  const source = error?.userMessage || error?.message || fallback;
+  const message = `${source} This settings change was not confirmed.`;
+  services.notices.clearCondition("settings", "save-confirmed");
+  services.notices.problem({
+    id: "settings-save-problem",
+    owner: "settings",
+    condition: "save-failed",
+    message,
+    persistent: ["network", "server", "malformed-response"].includes(error?.kind),
+    error,
+  });
+  return message;
+}
+
+async function confirmSettingsSave(services, message) {
+  const result = await services.apiClient.get("/api/settings", {
+    channel: "settings-confirm",
+    owner: "settings",
+  });
+  const current = services.store.getSnapshot().settings || {};
+  services.notices.clearCondition("settings", "save-failed");
+  services.notices.publish({
+    id: "settings-save-confirmed",
+    owner: "settings",
+    condition: "save-confirmed",
+    message,
+  });
+  services.store.dispatch({
+    type: "server/replace",
+    slice: "settings",
+    value: { ...current, status: "ready", data: result.data || {} },
+  });
+  return result.data || {};
 }
 
 function isEditableTarget(target) {
@@ -378,7 +414,7 @@ function livingWorldSettings(documentRef, services, state) {
           }, { channel: `settings-living-world:${chatId}`, owner: `story:${chatId}` });
           if (save.isConnected) status.textContent = "Living world settings saved.";
         } catch (error) {
-          if (save.isConnected) status.textContent = error?.userMessage || error?.message || "Sonder could not save living world settings.";
+          if (save.isConnected) status.textContent = settingsFailureMessage(services, error, "Sonder could not save living world settings.");
         } finally {
           if (save.isConnected) save.disabled = false;
         }
@@ -563,9 +599,9 @@ function experience(documentRef, services) {
         await services.apiClient.put("/api/ui-language", { language: language.value }, {
           channel: "settings-ui-language", owner: "settings-experience",
         });
-        if (applyLanguage.isConnected) languageStatus.textContent = "Language saved. Reload Sonder to apply it everywhere.";
+        await confirmSettingsSave(services, "Language saved. Reload Sonder to apply it everywhere.");
       } catch (error) {
-        if (applyLanguage.isConnected) languageStatus.textContent = error?.userMessage || error?.message || "Sonder could not save the interface language.";
+        if (applyLanguage.isConnected) languageStatus.textContent = settingsFailureMessage(services, error, "Sonder could not save the interface language.");
       } finally {
         if (applyLanguage.isConnected) applyLanguage.disabled = false;
       }
@@ -701,9 +737,9 @@ function contentSettings(documentRef, services, state) {
       await services.apiClient.put("/api/affect_habituation", { enabled: habituation.input.checked }, {
         channel: "settings-content-affect-habituation", owner: "settings-content",
       });
-      if (save.isConnected) status.textContent = "Content preferences saved.";
+      await confirmSettingsSave(services, "Content preferences saved.");
     } catch (error) {
-      if (save.isConnected) status.textContent = error?.userMessage || error?.message || "Sonder could not save content preferences.";
+      if (save.isConnected) status.textContent = settingsFailureMessage(services, error, "Sonder could not save content preferences.");
     } finally {
       if (save.isConnected) save.disabled = false;
     }
@@ -744,9 +780,9 @@ function contentSettings(documentRef, services, state) {
       await services.apiClient.put("/api/exemplars", {
         exemplars: inputs.map(input => input.value.trim()).filter(Boolean),
       }, { channel: "settings-content-exemplars", owner: "settings-content" });
-      if (saveExemplars.isConnected) exemplarStatus.textContent = "Narrator voice saved.";
+      await confirmSettingsSave(services, "Narrator voice saved.");
     } catch (error) {
-      if (saveExemplars.isConnected) exemplarStatus.textContent = error?.userMessage || error?.message || "Sonder could not save the narrator voice.";
+      if (saveExemplars.isConnected) exemplarStatus.textContent = settingsFailureMessage(services, error, "Sonder could not save the narrator voice.");
     } finally {
       if (saveExemplars.isConnected) saveExemplars.disabled = false;
     }
@@ -883,7 +919,7 @@ function addOnsSettings(documentRef, services) {
             updateReports.delete(extension.id);
             await load();
           } catch (error) {
-            status.textContent = error?.userMessage || error?.message || `Sonder could not update ${name}.`;
+            status.textContent = settingsFailureMessage(services, error, `Sonder could not update ${name}.`);
           }
         });
         actions.append(update);
@@ -904,7 +940,7 @@ function addOnsSettings(documentRef, services) {
             services.registry.unregisterOwner(extension.id);
             await load();
           } catch (error) {
-            status.textContent = error?.userMessage || error?.message || `Sonder could not disable ${name}.`;
+            status.textContent = settingsFailureMessage(services, error, `Sonder could not disable ${name}.`);
           }
           return;
         }
@@ -933,7 +969,7 @@ function addOnsSettings(documentRef, services) {
             await services.registry.loadEnabled([{ ...extension, enabled: true }]);
             await load();
           } catch (error) {
-            status.textContent = error?.userMessage || error?.message || `Sonder could not enable ${name}.`;
+            status.textContent = settingsFailureMessage(services, error, `Sonder could not enable ${name}.`);
           }
         });
         cancel.addEventListener("click", () => {
@@ -962,7 +998,7 @@ function addOnsSettings(documentRef, services) {
             services.registry.unregisterOwner(extension.id);
             await load();
           } catch (error) {
-            status.textContent = error?.userMessage || error?.message || `Sonder could not remove ${name}.`;
+            status.textContent = settingsFailureMessage(services, error, `Sonder could not remove ${name}.`);
           }
         });
         cancel.addEventListener("click", () => {
@@ -1031,7 +1067,7 @@ function addOnsSettings(documentRef, services) {
       installConsent.hidden = true;
       await load();
     } catch (error) {
-      status.textContent = error?.userMessage || error?.message || "Sonder could not install the extension.";
+      status.textContent = settingsFailureMessage(services, error, "Sonder could not install the extension.");
     } finally {
       if (confirmInstall.isConnected) confirmInstall.disabled = false;
     }
@@ -1505,9 +1541,9 @@ function promptEditor(documentRef, services, state, route) {
         language: language.value,
         prompts: Object.fromEntries([...promptInputs].map(([id, input]) => [id, input.value])),
       }, { channel: `settings-prompt-preset:${presetName}`, owner: "settings-prompts" });
-      if (save.isConnected) status.textContent = "Prompt preset saved.";
+      await confirmSettingsSave(services, "Prompt preset saved.");
     } catch (error) {
-      if (save.isConnected) status.textContent = error?.userMessage || error?.message || "Sonder could not save the prompt preset.";
+      if (save.isConnected) status.textContent = settingsFailureMessage(services, error, "Sonder could not save the prompt preset.");
     } finally {
       if (save.isConnected) save.disabled = false;
     }
@@ -1523,11 +1559,11 @@ function promptEditor(documentRef, services, state, route) {
       await services.apiClient.put("/api/active_preset", { name: selectedName }, {
         channel: "settings-active-prompt-preset", owner: "settings-prompts",
       });
-      if (activate.isConnected) status.textContent = `${selectedName} is now the active prompt preset.`;
+      await confirmSettingsSave(services, `${selectedName} is now the active prompt preset.`);
     } catch (error) {
       if (activate.isConnected) {
         activate.disabled = false;
-        status.textContent = error?.userMessage || error?.message || "Sonder could not change the active prompt preset.";
+        status.textContent = settingsFailureMessage(services, error, "Sonder could not change the active prompt preset.");
       }
     }
   });
@@ -1565,9 +1601,9 @@ function promptEditor(documentRef, services, state, route) {
       const result = await services.apiClient.post("/api/prompt_presets/import", { preset: document }, {
         channel: "settings-prompt-import", owner: "settings-prompts",
       });
-      status.textContent = `Imported prompt preset ${result.data?.name || "successfully"}.`;
+      await confirmSettingsSave(services, `Imported prompt preset ${result.data?.name || "successfully"}.`);
     } catch (error) {
-      status.textContent = error?.userMessage || error?.message || "Sonder could not import that prompt preset.";
+      status.textContent = settingsFailureMessage(services, error, "Sonder could not import that prompt preset.");
     }
   });
   const remove = el(documentRef, "button", "ui-button ui-button--danger", "Delete selected preset");
@@ -1592,11 +1628,12 @@ function promptEditor(documentRef, services, state, route) {
         await services.apiClient.delete(`/api/prompt_presets/${encodeURIComponent(selectedName)}`, {
           channel: `settings-prompt-delete:${selectedName}`, owner: "settings-prompts",
         });
+        await confirmSettingsSave(services, `${selectedName} was deleted.`);
         services.router.navigate({ destination: "settings", segments: ["advanced"], query: { tool: "prompts", preset: "Default" } }, { replace: true });
       } catch (error) {
         if (confirm.isConnected) {
           confirm.disabled = false;
-          removeConsent.append(el(documentRef, "p", "ui-settings__extension-error", error?.userMessage || error?.message || "Sonder could not delete the prompt preset."));
+          removeConsent.append(el(documentRef, "p", "ui-settings__extension-error", settingsFailureMessage(services, error, "Sonder could not delete the prompt preset.")));
         }
       }
     });
@@ -1901,7 +1938,15 @@ function aiConnections(documentRef, services, state) {
       if (models.length) modelSelect.focus();
     } catch (error) {
       if (!connect.isConnected) return;
-      setupStatus.textContent = error?.userMessage || error?.message || "Sonder could not connect to this provider.";
+      if (createdProvider) {
+        try {
+          await confirmSettingsSave(services, "Connection saved, but its model list could not be checked.");
+        } catch (confirmationError) {
+          if (connect.isConnected) setupStatus.textContent = settingsFailureMessage(services, confirmationError, "Sonder saved the connection but could not refresh Settings.");
+        }
+      } else {
+        setupStatus.textContent = settingsFailureMessage(services, error, "Sonder could not save the provider connection.");
+      }
     } finally {
       if (connect.isConnected) connect.disabled = false;
     }
@@ -1919,23 +1964,10 @@ function aiConnections(documentRef, services, state) {
         owner: "settings-agent-models",
       });
       currentAgentModels = agentModels;
-      services.store.dispatch({
-        type: "server/replace",
-        slice: "settings",
-        value: {
-          ...state.settings,
-          data: {
-            ...data,
-            providers: providers.some(provider => provider.id === createdProvider.id)
-              ? providers.map(provider => provider.id === createdProvider.id ? createdProvider : provider)
-              : [...providers, createdProvider],
-            agent_models: agentModels,
-          },
-        },
-      });
+      await confirmSettingsSave(services, "Connection and default model saved.");
     } catch (error) {
       if (!saveDefault.isConnected) return;
-      setupStatus.textContent = error?.userMessage || error?.message || "Sonder could not save the default model.";
+      setupStatus.textContent = settingsFailureMessage(services, error, "Sonder could not save the default model.");
       saveDefault.disabled = false;
     }
   });
@@ -1988,11 +2020,11 @@ function aiConnections(documentRef, services, state) {
         if (!cache.isConnected) return;
         const enabled = Boolean(result.data?.prompt_cache);
         cache.checked = enabled;
-        status.textContent = `Prompt caching ${enabled ? "remains on" : "is off"} for ${provider.name || provider.kind || "this provider"}.`;
+        await confirmSettingsSave(services, `Prompt caching ${enabled ? "remains on" : "is off"} for ${provider.name || provider.kind || "this provider"}.`);
       } catch (error) {
         if (!cache.isConnected) return;
         cache.checked = !requested;
-        status.textContent = error?.userMessage || error?.message || "Sonder could not change prompt caching.";
+        status.textContent = settingsFailureMessage(services, error, "Sonder could not change prompt caching.");
       } finally {
         if (cache.isConnected) cache.disabled = Boolean(provider.prompt_cache_locked);
       }
@@ -2098,14 +2130,13 @@ function aiConnections(documentRef, services, state) {
         channel: "settings-memory-search-model-save",
         owner: "settings-agent-models",
       });
-      if (!saveMemory.isConnected) return;
       currentAgentModels = nextModels;
-      memoryStatus.textContent = result.data?.embeddings_role_changed
+      await confirmSettingsSave(services, result.data?.embeddings_role_changed
         ? "Stored memory search vectors must be rebuilt for the new model."
-        : "Memory search model saved.";
+        : "Memory search model saved.");
     } catch (error) {
       if (!saveMemory.isConnected) return;
-      memoryStatus.textContent = error?.userMessage || error?.message || "Sonder could not save the memory search model.";
+      memoryStatus.textContent = settingsFailureMessage(services, error, "Sonder could not save the memory search model.");
     } finally {
       if (saveMemory.isConnected) saveMemory.disabled = false;
     }
@@ -2146,10 +2177,10 @@ function aiConnections(documentRef, services, state) {
       if (!saveLimit.isConnected) return;
       const saved = Number(result.data?.value);
       if (Number.isFinite(saved)) limit.value = String(saved);
-      limitStatus.textContent = `Response limit saved: ${Number(limit.value).toLocaleString("en-US")} tokens.`;
+      await confirmSettingsSave(services, `Response limit saved: ${Number(limit.value).toLocaleString("en-US")} tokens.`);
     } catch (error) {
       if (!saveLimit.isConnected) return;
-      limitStatus.textContent = error?.userMessage || error?.message || "Sonder could not save the response limit.";
+      limitStatus.textContent = settingsFailureMessage(services, error, "Sonder could not save the response limit.");
     } finally {
       if (saveLimit.isConnected) saveLimit.disabled = false;
     }
@@ -2225,9 +2256,9 @@ function aiConnections(documentRef, services, state) {
           allow_fallbacks: !pin.checked,
           sort: sort.value || null,
         }, { channel: "settings-openrouter-routing", owner: "settings-ai-connections" });
-        if (saveRouting.isConnected) routingStatus.textContent = "OpenRouter routing saved.";
+        await confirmSettingsSave(services, "OpenRouter routing saved.");
       } catch (error) {
-        if (saveRouting.isConnected) routingStatus.textContent = error?.userMessage || error?.message || "Sonder could not save OpenRouter routing.";
+        if (saveRouting.isConnected) routingStatus.textContent = settingsFailureMessage(services, error, "Sonder could not save OpenRouter routing.");
       } finally {
         if (saveRouting.isConnected) saveRouting.disabled = false;
       }
@@ -2406,12 +2437,11 @@ function aiConnections(documentRef, services, state) {
         channel: "settings-reasoning-effort-save",
         owner: "settings-agent-models",
       });
-      if (!saveAssignments.isConnected) return;
       currentAgentModels = nextModels;
-      assignmentStatus.textContent = "Model assignments saved.";
+      await confirmSettingsSave(services, "Model assignments saved.");
     } catch (error) {
       if (!saveAssignments.isConnected) return;
-      assignmentStatus.textContent = error?.userMessage || error?.message || "Sonder could not save model assignments.";
+      assignmentStatus.textContent = settingsFailureMessage(services, error, "Sonder could not save model assignments.");
     } finally {
       if (saveAssignments.isConnected) saveAssignments.disabled = false;
     }
@@ -2529,9 +2559,9 @@ function aiConnections(documentRef, services, state) {
         enabled: backdropEnabled.checked,
         continuity: continuity.checked,
       }, { channel: "settings-backdrops", owner: "settings-backdrops" });
-      if (saveBackdrops.isConnected) backdropStatus.textContent = "Backdrop settings saved.";
+      await confirmSettingsSave(services, "Backdrop settings saved.");
     } catch (error) {
-      if (saveBackdrops.isConnected) backdropStatus.textContent = error?.userMessage || error?.message || "Sonder could not save backdrop settings.";
+      if (saveBackdrops.isConnected) backdropStatus.textContent = settingsFailureMessage(services, error, "Sonder could not save backdrop settings.");
     } finally {
       if (saveBackdrops.isConnected) saveBackdrops.disabled = false;
     }
@@ -2611,9 +2641,9 @@ function aiConnections(documentRef, services, state) {
         freesound_key: freesoundKey.value.trim(),
         licenses: licenseInputs.filter(([, input]) => input.checked).map(([license]) => license),
       }, { channel: "settings-ambience", owner: "settings-ambience" });
-      if (saveAmbience.isConnected) ambienceStatus.textContent = "Ambience settings saved.";
+      await confirmSettingsSave(services, "Ambience settings saved.");
     } catch (error) {
-      if (saveAmbience.isConnected) ambienceStatus.textContent = error?.userMessage || error?.message || "Sonder could not save ambience settings.";
+      if (saveAmbience.isConnected) ambienceStatus.textContent = settingsFailureMessage(services, error, "Sonder could not save ambience settings.");
     } finally {
       if (saveAmbience.isConnected) saveAmbience.disabled = false;
     }

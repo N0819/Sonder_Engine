@@ -1,8 +1,8 @@
-export const MODULE_RELEASE = "alpha98-ui5-7fa758fa6df7";
+export const MODULE_RELEASE = "alpha98-ui5-98f796584158";
 
-import { element, errorState, fieldLabel, replaceLocalized, stateMessage, toolScope } from "./shared.js?release=alpha98-ui5-7fa758fa6df7";
-import { mountDocumentEditor } from "./document-editor.js?release=alpha98-ui5-7fa758fa6df7";
-import { mountCharterSection } from "./charters.js?release=alpha98-ui5-7fa758fa6df7";
+import { element, errorState, fieldLabel, replaceLocalized, stateMessage, toolScope } from "./shared.js?release=alpha98-ui5-98f796584158";
+import { mountDocumentEditor } from "./document-editor.js?release=alpha98-ui5-98f796584158";
+import { mountCharterSection } from "./charters.js?release=alpha98-ui5-98f796584158";
 
 // UI_CATALOG_START: Dialogue tool copy.
 const COPY = Object.freeze({

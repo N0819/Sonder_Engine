@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "alpha98-ui5-7fa758fa6df7";
+export const MODULE_RELEASE = "alpha98-ui5-98f796584158";
 
 export const LAYOUT_STATES = Object.freeze(["compact", "medium", "wide", "expansive"]);
 
@@ -35,7 +35,8 @@ function isPersonAuthoringRoute(route) {
 }
 
 function sameShellState(left, right) {
-  if (left.route !== right.route || left.extensions !== right.extensions) return false;
+  if (left.route !== right.route || left.extensions !== right.extensions
+      || left.notices !== right.notices) return false;
   const destination = left.route?.destination || "play";
   if (destination === "library") {
     if (isPersonAuthoringRoute(left.route)) {
@@ -68,6 +69,7 @@ export function createApplicationShell(options = {}) {
   const parent = required(documentRef, "[data-shell-parent]");
   const context = required(documentRef, "[data-shell-context]");
   const view = required(documentRef, "[data-shell-destination-view]");
+  const noticeHost = required(documentRef, "[data-shell-notice-host]");
   const links = [...documentRef.querySelectorAll("[data-core-destination]")];
   const t = services.localizer.t;
   let stopped = false;
@@ -78,6 +80,31 @@ export function createApplicationShell(options = {}) {
   let destinationTeardown = null;
   let renderedData = null;
   let renderedRouteIdentity = null;
+  let renderedNotices = null;
+
+  const syncNotices = noticeState => {
+    if (noticeState === renderedNotices) return;
+    renderedNotices = noticeState;
+    noticeHost.replaceChildren();
+    for (const item of noticeState?.items || []) {
+      const notice = documentRef.createElement("section");
+      notice.className = "ui-notice ui-shell__notice";
+      notice.dataset.noticeId = item.id;
+      notice.dataset.tone = item.kind === "problem" ? "error" : "success";
+      notice.dataset.marker = item.kind === "problem" ? "!" : "✓";
+      notice.setAttribute("role", item.kind === "problem" ? "alert" : "status");
+      const message = documentRef.createElement("p");
+      message.textContent = item.message;
+      const dismiss = documentRef.createElement("button");
+      dismiss.type = "button";
+      dismiss.className = "ui-button ui-button--quiet";
+      dismiss.textContent = "Dismiss";
+      dismiss.setAttribute("aria-label", `Dismiss notification: ${item.message}`);
+      dismiss.addEventListener("click", () => services.notices.dismiss(item.id));
+      notice.append(message, dismiss);
+      noticeHost.append(notice);
+    }
+  };
 
   const applyLayout = () => {
     root.dataset.layoutState = layoutStateFor(target.innerWidth, target.innerHeight);
@@ -86,6 +113,7 @@ export function createApplicationShell(options = {}) {
 
   const render = shellState => {
     if (stopped) return;
+    syncNotices(shellState.notices);
     const destination = modules.destinations.CORE_DESTINATIONS.includes(
       shellState.route?.destination,
     ) ? shellState.route.destination : "play";
@@ -214,6 +242,7 @@ export function createApplicationShell(options = {}) {
     library: state.library,
     settings: state.settings,
     extensions: state.extensions,
+    notices: state.notices,
   });
   const unsubscribe = services.store.subscribe(selectShellState, render, {
     equality: sameShellState,

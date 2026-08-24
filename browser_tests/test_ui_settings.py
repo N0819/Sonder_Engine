@@ -32,14 +32,23 @@ def _open_settings(
     height: int | None = None,
     category: str = "experience",
     bootstrap: dict[str, object] | None = None,
+    settings: dict[str, object] | None = None,
 ) -> None:
+    bootstrap_payload = bootstrap or BOOTSTRAP
+    settings_payload = settings if settings is not None else bootstrap_payload
     page.set_viewport_size(
         {"width": width, "height": height or (900 if width >= 1000 else 844)}
     )
     page.route(
         "**/api/bootstrap",
         lambda route: route.fulfill(
-            content_type="application/json", body=json.dumps(bootstrap or BOOTSTRAP)
+            content_type="application/json", body=json.dumps(bootstrap_payload)
+        ),
+    )
+    page.route(
+        "**/api/settings",
+        lambda route: route.fulfill(
+            content_type="application/json", body=json.dumps(settings_payload)
         ),
     )
     response = page.goto(f"{ui_base_url}/static/ui-next.html#/settings/{category}")
@@ -528,23 +537,24 @@ def test_ai_connections_stages_provider_connection_and_default_model_save(
         "agent_models": {},
     }
     writes: dict[str, object] = {}
+    server_settings = dict(bootstrap)
 
     def provider_route(route) -> None:
         writes["provider"] = route.request.post_data_json
+        provider = {
+            "id": 11,
+            "name": "Anthropic",
+            "kind": "anthropic",
+            "base_url": "https://api.anthropic.com",
+            "has_key": True,
+            "prompt_cache": True,
+            "prompt_cache_default": True,
+            "prompt_cache_locked": False,
+        }
+        server_settings["providers"] = [provider]
         route.fulfill(
             content_type="application/json",
-            body=json.dumps(
-                {
-                    "id": 11,
-                    "name": "Anthropic",
-                    "kind": "anthropic",
-                    "base_url": "https://api.anthropic.com",
-                    "has_key": True,
-                    "prompt_cache": True,
-                    "prompt_cache_default": True,
-                    "prompt_cache_locked": False,
-                }
-            ),
+            body=json.dumps(provider),
         )
 
     def models_route(route) -> None:
@@ -557,6 +567,7 @@ def test_ai_connections_stages_provider_connection_and_default_model_save(
 
     def defaults_route(route) -> None:
         writes["agent_models"] = route.request.post_data_json
+        server_settings["agent_models"] = route.request.post_data_json
         route.fulfill(
             content_type="application/json",
             body=json.dumps({"ok": True, "embeddings_role_changed": False}),
@@ -570,6 +581,7 @@ def test_ai_connections_stages_provider_connection_and_default_model_save(
         ui_base_url,
         category="ai-connections",
         bootstrap=bootstrap,
+        settings=server_settings,
     )
 
     page.get_by_role("button", name="Add provider").click()
@@ -837,6 +849,145 @@ def test_ai_connections_exposes_memory_search_model_and_rebuild_route(
     page.get_by_role("button", name="Review memory search").click()
     expect(page).to_have_url(re.compile(r"#/settings/maintenance$"))
     expect(page.get_by_role("heading", name="Maintenance", level=2)).to_be_visible()
+
+
+def test_server_confirmed_memory_and_backdrop_values_survive_settings_navigation(
+    page: Page, ui_base_url: str
+) -> None:
+    """A successful PUT must replace the stale startup projection with server truth."""
+    bootstrap = {
+        **BOOTSTRAP,
+        "providers": [
+            {"id": 8, "name": "NanoGPT", "kind": "nanogpt", "has_key": True}
+        ],
+        "provider_presets": {},
+        "roles": ["default", "embeddings"],
+        "agent_models": {
+            "default": {"provider": 8, "model": "glm-5.2"},
+            "embeddings": {"provider": 8, "model": "old-embedding-model"},
+        },
+        "max_output_tokens": 20000,
+        "max_output_tokens_bounds": {"min": 1024, "max": 128000, "default": 20000},
+        "image_model": {"provider": 8, "model": "old-image-model"},
+        "backdrops_enabled": False,
+        "backdrop_continuity": False,
+        "ambience": {"enabled": False, "source": "local", "library": "", "has_key": False},
+        "ambience_licenses": [],
+    }
+    server_settings = dict(bootstrap)
+
+    def save_models(route) -> None:
+        server_settings["agent_models"] = route.request.post_data_json
+        route.fulfill(
+            content_type="application/json",
+            body=json.dumps({"ok": True, "embeddings_role_changed": True}),
+        )
+
+    def save_image(route) -> None:
+        body = route.request.post_data_json
+        server_settings["image_model"] = body
+        route.fulfill(
+            content_type="application/json",
+            body=json.dumps({"ok": True, "image_model": body}),
+        )
+
+    def save_backdrops(route) -> None:
+        body = route.request.post_data_json
+        server_settings["backdrops_enabled"] = body["enabled"]
+        server_settings["backdrop_continuity"] = body["continuity"]
+        route.fulfill(content_type="application/json", body=json.dumps(body))
+
+    page.route("**/api/agent_models", save_models)
+    page.route("**/api/image_model", save_image)
+    page.route("**/api/backdrops", save_backdrops)
+    _open_settings(
+        page,
+        ui_base_url,
+        category="ai-connections",
+        bootstrap=bootstrap,
+        settings=server_settings,
+    )
+
+    page.get_by_role("textbox", name="Memory search model").fill("text-embedding-3-small")
+    page.get_by_role("button", name="Save memory search model").click()
+    expect(page.get_by_text(
+        "Stored memory search vectors must be rebuilt for the new model.", exact=True
+    )).to_be_visible()
+
+    page.get_by_role("combobox", name="Backdrop image model").fill("gpt-image-2")
+    page.get_by_role("checkbox", name="Generate backdrops for new rooms").check()
+    page.get_by_role("checkbox", name="Keep room images visually consistent").check()
+    page.get_by_role("button", name="Save backdrop settings").click()
+    expect(page.get_by_text("Backdrop settings saved.", exact=True)).to_be_visible()
+
+    page.get_by_role("link", name="Content", exact=True).click()
+    page.get_by_role("link", name="AI Connections", exact=True).click()
+
+    expect(page.get_by_role("textbox", name="Memory search model")).to_have_value(
+        "text-embedding-3-small"
+    )
+    expect(page.get_by_role("combobox", name="Backdrop image model")).to_have_value(
+        "gpt-image-2"
+    )
+    expect(page.get_by_role("checkbox", name="Generate backdrops for new rooms")).to_be_checked()
+    expect(page.get_by_role(
+        "checkbox", name="Keep room images visually consistent"
+    )).to_be_checked()
+
+
+def test_failed_settings_write_keeps_the_draft_and_raises_a_persistent_engine_notice(
+    page: Page, ui_base_url: str
+) -> None:
+    bootstrap = {
+        **BOOTSTRAP,
+        "providers": [
+            {"id": 8, "name": "NanoGPT", "kind": "nanogpt", "has_key": True}
+        ],
+        "provider_presets": {},
+        "roles": ["default", "embeddings"],
+        "agent_models": {
+            "default": {"provider": 8, "model": "glm-5.2"},
+            "embeddings": {"provider": 8, "model": "old-embedding-model"},
+        },
+        "max_output_tokens": 20000,
+        "max_output_tokens_bounds": {"min": 1024, "max": 128000, "default": 20000},
+    }
+    page.route("**/api/agent_models", lambda route: route.abort("connectionrefused"))
+    _open_settings(page, ui_base_url, category="ai-connections", bootstrap=bootstrap)
+
+    model = page.get_by_role("textbox", name="Memory search model")
+    model.fill("text-embedding-3-small")
+    page.get_by_role("button", name="Save memory search model").click()
+
+    expect(model).to_have_value("text-embedding-3-small")
+    notice = page.locator("[data-shell-notice-host] [data-tone='error']")
+    expect(notice).to_contain_text("Sonder could not reach the engine")
+    expect(notice).to_contain_text("not confirmed")
+    dismiss = page.get_by_role("button", name=re.compile(r"Dismiss notification:"))
+    dismiss_box = dismiss.bounding_box()
+    viewport = page.viewport_size
+    assert dismiss_box is not None
+    assert viewport is not None
+    assert dismiss_box["x"] >= 0
+    assert dismiss_box["x"] + dismiss_box["width"] <= viewport["width"]
+    assert notice.evaluate("element => element.scrollWidth <= element.clientWidth")
+    expect(page.get_by_text("Memory search model saved.", exact=True)).to_have_count(0)
+
+
+def test_content_projects_existing_narrator_voice_and_server_bounds(
+    page: Page, ui_base_url: str
+) -> None:
+    bootstrap = {
+        **BOOTSTRAP,
+        "exemplars": ["Rain hissed against the copper roof."],
+        "exemplar_bounds": {"max_count": 2, "max_chars": 80},
+    }
+    _open_settings(page, ui_base_url, category="content", bootstrap=bootstrap)
+
+    examples = page.get_by_role("textbox", name=re.compile(r"Narrator voice example"))
+    expect(examples).to_have_count(2)
+    expect(examples.first).to_have_value("Rain hissed against the copper roof.")
+    expect(examples.first).to_have_attribute("maxlength", "80")
 
 
 def test_ai_connections_edits_role_samplers_and_ordered_backup_models(

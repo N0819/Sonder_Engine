@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "alpha98-ui5-7fa758fa6df7";
+export const MODULE_RELEASE = "alpha98-ui5-98f796584158";
 
 export class MixedReleaseError extends Error {
   constructor(moduleName, expected, received) {

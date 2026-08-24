@@ -98,7 +98,7 @@ Verification results on the reviewed candidate:
 - catalog extraction: 922 English source messages with a matching Japanese key
   set;
 - deterministic visual capture: 13 states completed and reviewed;
-- immutable UI release: `alpha98-ui5-7fa758fa6df7`.
+- immutable UI release: `alpha98-ui5-98f796584158`.
 
 `tools/project_check.py` continues to report the seven previously recorded
 direct-import findings in the installed Directive extension integration test.

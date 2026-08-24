@@ -1,6 +1,6 @@
-export const MODULE_RELEASE = "alpha98-ui5-7fa758fa6df7";
+export const MODULE_RELEASE = "alpha98-ui5-98f796584158";
 
-import { button, element, errorState, fieldLabel, markData, replaceLocalized, stateMessage, toolScope } from "./shared.js?release=alpha98-ui5-7fa758fa6df7";
+import { button, element, errorState, fieldLabel, markData, replaceLocalized, stateMessage, toolScope } from "./shared.js?release=alpha98-ui5-98f796584158";
 
 // UI_CATALOG_START: Frames tool copy.
 const COPY = Object.freeze({

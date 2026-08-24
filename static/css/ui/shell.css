@@ -226,7 +226,10 @@
 
   .ui-shell__notice-host,
   .ui-shell__task-host { position: fixed; z-index: var(--ui-z-toast); inset-inline-end: max(var(--ui-space-6), env(safe-area-inset-right)); inline-size: min(24rem, calc(100vw - 2 * var(--ui-space-6))); }
-  .ui-shell__notice-host { inset-block-start: max(var(--ui-space-6), env(safe-area-inset-top)); }
+  .ui-shell__notice-host { display: grid; gap: var(--ui-space-3); inset-block-start: max(var(--ui-space-6), env(safe-area-inset-top)); }
+  .ui-shell__notice { grid-template-columns: minmax(0, 1fr) auto; }
+  :root[data-a11y-status-markers="true"] .ui-shell__notice { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .ui-shell__notice > p { margin: 0; overflow-wrap: anywhere; }
   .ui-shell__task-host { inset-block-end: max(var(--ui-space-6), env(safe-area-inset-bottom)); }
 
   [data-layout-state="expansive"] .ui-shell { --ui-shell-rail: 15rem; --ui-shell-inspector: 23rem; }

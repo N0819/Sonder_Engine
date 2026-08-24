@@ -128,6 +128,30 @@ class TestTheNarratorsVoiceAnchorIsReachable:
         assert app.bootstrap()["exemplars"] == ["A short passage.", "Another."]
 
 
+class TestSettingsAcknowledgementSnapshot:
+    """The settings UI confirms writes against a fresh server-owned projection."""
+
+    def test_the_snapshot_reports_current_values_without_library_or_story_data(self, temp_db):
+        import json
+
+        from core.db import set_setting
+        from web import app
+
+        set_setting("agent_models", json.dumps({
+            "embeddings": {"provider": 8, "model": "text-embedding-3-small"}
+        }))
+        set_setting("backdrops_enabled", "1")
+        set_setting("backdrop_continuity", "1")
+
+        snapshot = app.settings_snapshot()
+
+        assert snapshot["agent_models"]["embeddings"]["model"] == "text-embedding-3-small"
+        assert snapshot["backdrops_enabled"] is True
+        assert snapshot["backdrop_continuity"] is True
+        assert "chats" not in snapshot
+        assert "characters" not in snapshot
+
+
 class TestBothHalvesOfALifecycleHaveAControl:
     """WEB-9 / FRONTEND-8. Routes whose other half was already reachable.
 

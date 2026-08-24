@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "alpha98-ui5-7fa758fa6df7";
+export const MODULE_RELEASE = "alpha98-ui5-98f796584158";
 
 const ITEM_ID = /^(story|character|persona|lore):([1-9][0-9]*)$/;
 const DIRTY_STATES = new Set([

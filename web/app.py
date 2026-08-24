@@ -620,7 +620,7 @@ _RELEASED_UI_ASSET_PREFIXES = (
     "/static/js/ui-next/", "/static/js/ui/", "/static/css/ui/",
     "/static/assets/icons/sonder-icons.svg",
 )
-_UI_RELEASE = "alpha98-ui5-7fa758fa6df7"
+_UI_RELEASE = "alpha98-ui5-98f796584158"
 
 
 @app.middleware("http")
@@ -1527,6 +1527,33 @@ def bootstrap():
         # an extension's to label them as such. Empty with nothing installed.
         "extension_lanes": extension_lanes,
     }
+
+
+_SETTINGS_SNAPSHOT_KEYS = (
+    "providers", "provider_presets", "roles", "role_fallbacks", "sampler_keys",
+    "default_samplers", "agent_models", "exemplars", "exemplar_bounds",
+    "max_output_tokens", "max_output_tokens_bounds", "reasoning_effort",
+    "reasoning_effort_levels", "openrouter_routing", "nsfw_enabled",
+    "attire_beneath", "director_fanout_parallel", "affect_habituation",
+    "image_model", "backdrops_enabled", "backdrop_continuity", "ambience",
+    "ambience_licenses", "auto_promote", "language_packs", "ui_language",
+    "ui_direction", "language_error", "default_prompts", "prompt_presets",
+    "active_preset",
+)
+
+
+@app.get("/api/settings")
+def settings_snapshot():
+    """Fresh, public server truth for settings write acknowledgement.
+
+    A settings form is initialized from the one-time bootstrap payload.  A
+    successful write must not leave that startup copy as the browser's owner,
+    or navigating away and back appears to undo a value that the database did
+    save.  This deliberately excludes stories, Library records, and extension
+    bootstrap material; it is small enough to confirm every settings write.
+    """
+    payload = bootstrap()
+    return {key: payload[key] for key in _SETTINGS_SNAPSHOT_KEYS if key in payload}
 
 @app.put("/api/agent_models")
 def put_agent_models(body: dict = Body(...)):
