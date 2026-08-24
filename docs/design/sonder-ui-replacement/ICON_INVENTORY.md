@@ -11,7 +11,7 @@ Decorative instances are `aria-hidden`. An icon that carries its own meaning use
 |---|---|---|
 | Destinations | `play`, `library`, `settings`, `home` | Primary destinations; visible labels required outside compact navigation |
 | Story tools | `tools`, `cast`, `world`, `style`, `dialogue`, `clothing`, `image`, `ambience`, `conditions`, `frames`, `multiplayer`, `story`, `character`, `persona`, `lore`, `prompt` | Product nouns and tool launchers |
-| Transport | `send`, `stop`, `retry`, `update`, `recent`, `calendar` | Turn and task actions; stop/retry retain visible text when consequential |
+| Transport | `send`, `stop`, `retry`, `update`, `maintenance`, `recent`, `calendar` | Turn and task actions; Maintenance uses its dedicated wrench, while update remains the refresh action; stop/retry retain visible text when consequential |
 | Discovery | `search`, `filter`, `folder`, `archive`, `favorite`, `sort` | Query, scope, and collection controls |
 | Navigation | `menu`, `more`, `close`, `chevron-left`, `chevron-right`, `chevron-down` | Navigation and disclosure; close/more may be icon-only with names/tooltips |
 | Editing | `plus`, `minus`, `import`, `export`, `edit`, `delete`, `duplicate`, `save` | CRUD and transfer; delete/import/export retain visible text where consequential |

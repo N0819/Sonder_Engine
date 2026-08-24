@@ -1,0 +1,38 @@
+@layer ui-themes {
+  :root[data-theme="custom"] {
+    --ui-custom-background: #090D10;
+    --ui-custom-panel: #141B20;
+    --ui-custom-text: #EEF3F2;
+    --ui-custom-muted: #AEB9B7;
+    --ui-custom-accent: #80E4E8;
+    --ui-custom-attention: #D0A75B;
+    --ui-custom-success: #76C29A;
+    --ui-custom-danger: #DC747D;
+
+    --ui-color-canvas: var(--ui-custom-background);
+    --ui-color-canvas-subtle: color-mix(in srgb, var(--ui-custom-background) 82%, var(--ui-custom-panel));
+    --ui-color-surface: color-mix(in srgb, var(--ui-custom-panel) 88%, transparent);
+    --ui-color-surface-solid: var(--ui-custom-panel);
+    --ui-color-surface-raised: color-mix(in srgb, var(--ui-custom-panel) 84%, var(--ui-custom-text));
+    --ui-color-surface-muted: color-mix(in srgb, var(--ui-custom-panel) 66%, transparent);
+    --ui-color-text: var(--ui-custom-text);
+    --ui-color-text-muted: var(--ui-custom-muted);
+    --ui-color-text-faint: color-mix(in srgb, var(--ui-custom-muted) 68%, var(--ui-custom-background));
+    --ui-color-border: color-mix(in srgb, var(--ui-custom-muted) 20%, transparent);
+    --ui-color-border-strong: color-mix(in srgb, var(--ui-custom-muted) 38%, transparent);
+    --ui-color-interactive: var(--ui-custom-accent);
+    --ui-color-interactive-strong: color-mix(in srgb, var(--ui-custom-accent) 76%, white);
+    --ui-color-interactive-soft: color-mix(in srgb, var(--ui-custom-accent) 13%, transparent);
+    --ui-color-callout: var(--ui-custom-attention);
+    --ui-color-callout-soft: color-mix(in srgb, var(--ui-custom-attention) 14%, transparent);
+    --ui-color-success: var(--ui-custom-success);
+    --ui-color-warning: var(--ui-custom-attention);
+    --ui-color-danger: var(--ui-custom-danger);
+    --ui-color-info: var(--ui-custom-accent);
+    --ui-color-on-strong: var(--ui-custom-background);
+    --ui-color-scrim: color-mix(in srgb, var(--ui-custom-background) 80%, transparent);
+    --ui-color-shadow: color-mix(in srgb, black 48%, transparent);
+    --ui-color-focus-inner: var(--ui-custom-background);
+    --ui-color-focus-outer: var(--ui-color-interactive-strong);
+  }
+}

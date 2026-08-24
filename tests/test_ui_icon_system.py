@@ -17,6 +17,7 @@ FILLED_REPLACEMENT_ICONS = {
     "icon-retry",
     "icon-offline",
     "icon-duplicate",
+    "icon-maintenance",
 }
 
 
@@ -53,6 +54,23 @@ def test_icon_helper_is_explicit_and_accessible():
     assert "aria-hidden" in text
     assert "querySelectorAll" not in text
     assert "MutationObserver" not in text
+    assert '"maintenance"' in text
+
+
+def test_maintenance_icon_is_dedicated_current_color_wrench():
+    root = ET.parse(SPRITE).getroot()
+    symbols = {
+        symbol.attrib.get("id", ""): symbol
+        for symbol in root.findall("{http://www.w3.org/2000/svg}symbol")
+    }
+    maintenance = symbols["icon-maintenance"]
+    assert maintenance.attrib.get("viewBox") == "0 0 24 24"
+    assert maintenance.attrib.get("fill") == "currentColor"
+    assert maintenance.attrib.get("stroke") == "none"
+    assert maintenance.find("{http://www.w3.org/2000/svg}path") is not None
+    assert "maintenance" in (
+        ROOT / "docs" / "design" / "sonder-ui-replacement" / "ICON_INVENTORY.md"
+    ).read_text(encoding="utf-8")
 
 
 def test_filled_replacement_icons_do_not_inherit_the_outline_icon_stroke():

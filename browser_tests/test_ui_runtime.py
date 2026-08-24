@@ -16,7 +16,7 @@ def test_release_module_is_importable_without_classic_host_scripts(
     page.goto(f"{ui_base_url}/static/ui-next-lab.html")
     result = page.evaluate(
         """async (base) => {
-          const module = await import(`${base}/static/js/ui-next/release.js?release=alpha98-ui5-7fa758fa6df7`);
+          const module = await import(`${base}/static/js/ui-next/release.js?release=alpha98-ui6-57d168ae23cf`);
           return {
             release: module.MODULE_RELEASE,
             hasClassicState: Object.hasOwn(window, "S"),
@@ -26,7 +26,7 @@ def test_release_module_is_importable_without_classic_host_scripts(
         ui_base_url,
     )
     assert result == {
-        "release": "alpha98-ui5-7fa758fa6df7",
+        "release": "alpha98-ui6-57d168ae23cf",
         "hasClassicState": False,
         "hasReleaseCheck": True,
     }
@@ -39,11 +39,11 @@ def test_runtime_rejects_a_mixed_release_before_boot(
     result = page.evaluate(
         """async (base) => {
           const runtime = await import(
-            `${base}/static/js/ui-next/bootstrap.js?release=alpha98-ui5-7fa758fa6df7`
+            `${base}/static/js/ui-next/bootstrap.js?release=alpha98-ui6-57d168ae23cf`
           );
           try {
             await runtime.loadRuntimeModules(async path => ({
-              MODULE_RELEASE: path.includes("api.js") ? "wp01" : "alpha98-ui5-7fa758fa6df7",
+              MODULE_RELEASE: path.includes("api.js") ? "wp01" : "alpha98-ui6-57d168ae23cf",
             }));
           } catch (error) {
             return {
@@ -62,7 +62,7 @@ def test_runtime_rejects_a_mixed_release_before_boot(
         "name": "MixedReleaseError",
         "kind": "mixed-release",
         "moduleName": "api",
-        "expected": "alpha98-ui5-7fa758fa6df7",
+        "expected": "alpha98-ui6-57d168ae23cf",
         "received": "wp01",
     }
 
@@ -74,7 +74,7 @@ def test_reboot_replaces_runtime_listeners_instead_of_accumulating_them(
     result = page.evaluate(
         """async (base) => {
           const runtime = await import(
-            `${base}/static/js/ui-next/bootstrap.js?release=alpha98-ui5-7fa758fa6df7`
+            `${base}/static/js/ui-next/bootstrap.js?release=alpha98-ui6-57d168ae23cf`
           );
           const listeners = new Map();
           let added = 0;
@@ -95,7 +95,7 @@ def test_reboot_replaces_runtime_listeners_instead_of_accumulating_them(
             },
             dispatchEvent() {},
           };
-          const importer = async () => ({ MODULE_RELEASE: "alpha98-ui5-7fa758fa6df7" });
+          const importer = async () => ({ MODULE_RELEASE: "alpha98-ui6-57d168ae23cf" });
           const firstRoot = { dataset: {} };
           const secondRoot = { dataset: {} };
           await runtime.bootRuntime({ target, root: firstRoot, importModule: importer });
@@ -142,7 +142,7 @@ def test_api_normalizes_forbidden_malformed_and_session_expired(
     result = page.evaluate(
         r"""async (base) => {
           const { createApiClient } = await import(
-            `${base}/static/js/ui-next/api.js?release=alpha98-ui5-7fa758fa6df7`
+            `${base}/static/js/ui-next/api.js?release=alpha98-ui6-57d168ae23cf`
           );
           let expired = 0;
           const fetchImpl = async url => {
@@ -215,7 +215,7 @@ def test_api_aborts_superseded_channels_and_refuses_stale_owners(
     result = page.evaluate(
         """async (base) => {
           const { createApiClient } = await import(
-            `${base}/static/js/ui-next/api.js?release=alpha98-ui5-7fa758fa6df7`
+            `${base}/static/js/ui-next/api.js?release=alpha98-ui6-57d168ae23cf`
           );
           let settleFirst;
           let firstAborted = false;
@@ -277,7 +277,7 @@ def test_api_parses_text_empty_and_ndjson_without_retrying_writes(
     result = page.evaluate(
         r"""async (base) => {
           const { createApiClient } = await import(
-            `${base}/static/js/ui-next/api.js?release=alpha98-ui5-7fa758fa6df7`
+            `${base}/static/js/ui-next/api.js?release=alpha98-ui6-57d168ae23cf`
           );
           const calls = [];
           const fetchImpl = async (url, init) => {
@@ -359,7 +359,7 @@ def test_store_owns_documented_slices_and_immutable_copied_state(
     result = page.evaluate(
         """async (base) => {
           const { createStore, SLICE_OWNERS } = await import(
-            `${base}/static/js/ui-next/store.js?release=alpha98-ui5-7fa758fa6df7`
+            `${base}/static/js/ui-next/store.js?release=alpha98-ui6-57d168ae23cf`
           );
           const store = createStore();
           const extensionProjection = {
@@ -456,7 +456,7 @@ def test_store_batches_selector_events_and_tears_down_deterministically(
     result = page.evaluate(
         """async (base) => {
           const { createStore } = await import(
-            `${base}/static/js/ui-next/store.js?release=alpha98-ui5-7fa758fa6df7`
+            `${base}/static/js/ui-next/store.js?release=alpha98-ui6-57d168ae23cf`
           );
           const store = createStore();
           const routeEvents = [];
@@ -537,7 +537,7 @@ def test_router_parses_stable_routes_and_reports_truthful_fallbacks(
     result = page.evaluate(
         """async (base) => {
           const { parseHashRoute, serializeRoute } = await import(
-            `${base}/static/js/ui-next/router.js?release=alpha98-ui5-7fa758fa6df7`
+            `${base}/static/js/ui-next/router.js?release=alpha98-ui6-57d168ae23cf`
           );
           const explain = code => `localized:${code}`;
           const valid = parseHashRoute(
@@ -608,7 +608,7 @@ def test_router_history_unwinds_layers_and_restores_focus_identity(
     result = page.evaluate(
         """async (base) => {
           const { createRouter } = await import(
-            `${base}/static/js/ui-next/router.js?release=alpha98-ui5-7fa758fa6df7`
+            `${base}/static/js/ui-next/router.js?release=alpha98-ui6-57d168ae23cf`
           );
           history.replaceState(null, "", "#/play");
           const routes = [];
@@ -676,7 +676,7 @@ def test_localizer_applies_explicit_chrome_rules_and_preserves_data(
     result = page.evaluate(
         """async (base) => {
           const { createLocalizer } = await import(
-            `${base}/static/js/ui-next/localization.js?release=alpha98-ui5-7fa758fa6df7`
+            `${base}/static/js/ui-next/localization.js?release=alpha98-ui6-57d168ae23cf`
           );
           const longSource = `Long ${"explanation ".repeat(30)}`.trim();
           const longTarget = `長い ${"説明".repeat(180)}`;
@@ -770,7 +770,7 @@ def test_content_boundary_uses_text_nodes_and_rebuilds_allowlisted_rich_text(
     result = page.evaluate(
         """async (base) => {
           const { setText, appendSafeRichText } = await import(
-            `${base}/static/js/ui-next/content.js?release=alpha98-ui5-7fa758fa6df7`
+            `${base}/static/js/ui-next/content.js?release=alpha98-ui6-57d168ae23cf`
           );
           const textHost = document.createElement("div");
           setText(textHost, '<img src=x onerror="window.pwned=1">');
@@ -825,7 +825,7 @@ def test_task_service_tracks_lifecycle_elapsed_time_and_bounded_cleanup(
     result = page.evaluate(
         """async (base) => {
           const { createTaskService } = await import(
-            `${base}/static/js/ui-next/tasks.js?release=alpha98-ui5-7fa758fa6df7`
+            `${base}/static/js/ui-next/tasks.js?release=alpha98-ui6-57d168ae23cf`
           );
           let now = 100;
           let cancelCalls = 0;
@@ -899,7 +899,7 @@ def test_notices_distinguish_acknowledgement_condition_and_safe_retry(
     result = page.evaluate(
         """async (base) => {
           const { createNoticeService } = await import(
-            `${base}/static/js/ui-next/notices.js?release=alpha98-ui5-7fa758fa6df7`
+            `${base}/static/js/ui-next/notices.js?release=alpha98-ui6-57d168ae23cf`
           );
           const notices = createNoticeService({ limit: 3 });
           let retries = 0;
@@ -996,7 +996,7 @@ def test_diagnostics_are_opt_in_bounded_and_recursively_redacted(
     result = page.evaluate(
         """async (base) => {
           const { createDiagnostics } = await import(
-            `${base}/static/js/ui-next/diagnostics.js?release=alpha98-ui5-7fa758fa6df7`
+            `${base}/static/js/ui-next/diagnostics.js?release=alpha98-ui6-57d168ae23cf`
           );
           const diagnostics = createDiagnostics({ enabled: false, limit: 2 });
           diagnostics.record({ ignored: true, password: "first" });
@@ -1047,7 +1047,7 @@ def test_local_storage_migrates_members_and_isolates_story_drafts(
     result = page.evaluate(
         """async (base) => {
           const { createLocalState } = await import(
-            `${base}/static/js/ui-next/storage.js?release=alpha98-ui5-7fa758fa6df7`
+            `${base}/static/js/ui-next/storage.js?release=alpha98-ui6-57d168ae23cf`
           );
           const memory = new Map();
           let writes = 0;
@@ -1110,7 +1110,7 @@ def test_local_storage_discards_only_bad_members_and_survives_write_failure(
     result = page.evaluate(
         """async (base) => {
           const { createLocalState } = await import(
-            `${base}/static/js/ui-next/storage.js?release=alpha98-ui5-7fa758fa6df7`
+            `${base}/static/js/ui-next/storage.js?release=alpha98-ui6-57d168ae23cf`
           );
           const errors = [];
           const storage = {
@@ -1171,7 +1171,7 @@ def test_credential_submitter_allowlists_routes_and_always_clears_secrets(
     result = page.evaluate(
         """async (base) => {
           const { submitCredentialForm } = await import(
-            `${base}/static/js/ui-next/credentials.js?release=alpha98-ui5-7fa758fa6df7`
+            `${base}/static/js/ui-next/credentials.js?release=alpha98-ui6-57d168ae23cf`
           );
           const calls = [];
           const apiClient = {
@@ -1249,7 +1249,7 @@ def test_save_policy_refuses_explicit_actions_and_sequences_rapid_edits(
     result = page.evaluate(
         """async (base) => {
           const { createSaveCoordinator, classifySaveAction } = await import(
-            `${base}/static/js/ui-next/save-policy.js?release=alpha98-ui5-7fa758fa6df7`
+            `${base}/static/js/ui-next/save-policy.js?release=alpha98-ui6-57d168ae23cf`
           );
           const writes = [];
           const coordinator = createSaveCoordinator({
@@ -1337,7 +1337,7 @@ def test_save_policy_preserves_drafts_on_owner_switch_conflict_and_error(
     result = page.evaluate(
         """async (base) => {
           const { createSaveCoordinator } = await import(
-            `${base}/static/js/ui-next/save-policy.js?release=alpha98-ui5-7fa758fa6df7`
+            `${base}/static/js/ui-next/save-policy.js?release=alpha98-ui6-57d168ae23cf`
           );
           const pending = [];
           const coordinator = createSaveCoordinator({
@@ -1423,7 +1423,7 @@ def test_undo_policy_accepts_only_bounded_matching_server_receipts(
     result = page.evaluate(
         """async (base) => {
           const { acceptUndoReceipt } = await import(
-            `${base}/static/js/ui-next/save-policy.js?release=alpha98-ui5-7fa758fa6df7`
+            `${base}/static/js/ui-next/save-policy.js?release=alpha98-ui6-57d168ae23cf`
           );
           const now = 1000;
           const valid = {
@@ -1484,10 +1484,10 @@ def test_v1_extension_registers_calls_events_faults_and_fully_unloads(
     result = page.evaluate(
         """async ({ base, source }) => {
           const { createExtensionRegistry } = await import(
-            `${base}/static/js/ui-next/extensions.js?release=alpha98-ui5-7fa758fa6df7`
+            `${base}/static/js/ui-next/extensions.js?release=alpha98-ui6-57d168ae23cf`
           );
           const { createV1Adapter, installV1Adapter } = await import(
-            `${base}/static/js/ui-next/extensions-v1.js?release=alpha98-ui5-7fa758fa6df7`
+            `${base}/static/js/ui-next/extensions-v1.js?release=alpha98-ui6-57d168ae23cf`
           );
           const calls = [];
           const hostState = {
@@ -1636,10 +1636,10 @@ def test_extension_assets_use_authenticated_routes_and_fail_independently(
     result = page.evaluate(
         """async (base) => {
           const { createExtensionRegistry } = await import(
-            `${base}/static/js/ui-next/extensions.js?release=alpha98-ui5-7fa758fa6df7`
+            `${base}/static/js/ui-next/extensions.js?release=alpha98-ui6-57d168ae23cf`
           );
           const { createV1Adapter, installV1Adapter } = await import(
-            `${base}/static/js/ui-next/extensions-v1.js?release=alpha98-ui5-7fa758fa6df7`
+            `${base}/static/js/ui-next/extensions-v1.js?release=alpha98-ui6-57d168ae23cf`
           );
           let tornDown = 0;
           window.addEventListener("module-torn-down", () => { tornDown += 1; });
@@ -1809,7 +1809,7 @@ def test_runtime_boot_drops_unknown_sensitive_bootstrap_fields_and_tears_down(
     result = page.evaluate(
         """async (base) => {
           const { bootRuntime } = await import(
-            `${base}/static/js/ui-next/bootstrap.js?release=alpha98-ui5-7fa758fa6df7`
+            `${base}/static/js/ui-next/bootstrap.js?release=alpha98-ui6-57d168ae23cf`
           );
           const root = document.documentElement;
           const runtime = await bootRuntime({ host: true, root, target: window });
@@ -1854,7 +1854,7 @@ def test_host_runtime_reports_session_expiry_once_and_fails_closed(
     result = page.evaluate(
         """async (base) => {
           const { bootRuntime } = await import(
-            `${base}/static/js/ui-next/bootstrap.js?release=alpha98-ui5-7fa758fa6df7`
+            `${base}/static/js/ui-next/bootstrap.js?release=alpha98-ui6-57d168ae23cf`
           );
           const root = document.documentElement;
           const destinations = [];
@@ -1983,7 +1983,7 @@ def test_store_does_not_invoke_a_subscriber_removed_during_notification(
     calls = page.evaluate(
         """async base => {
           const { createStore } = await import(
-            `${base}/static/js/ui-next/store.js?release=alpha98-ui5-7fa758fa6df7`
+            `${base}/static/js/ui-next/store.js?release=alpha98-ui6-57d168ae23cf`
           );
           const store = createStore();
           const calls = [];

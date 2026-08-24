@@ -16,12 +16,19 @@
   .ui-icon-label { display: inline-flex; align-items: center; gap: var(--ui-space-4); min-inline-size: 0; }
 
   .ui-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
     min-block-size: var(--ui-control-default);
     padding: var(--ui-space-3) var(--ui-space-5);
     border: 1px solid var(--ui-color-border-strong);
     border-radius: var(--ui-radius-md);
     background: var(--ui-color-surface-muted);
     color: var(--ui-color-text);
+    font-size: .8125rem;
+    font-weight: 520;
+    line-height: 1.15;
     cursor: pointer;
     transition: border-color var(--ui-motion-fast) var(--ui-ease-standard), background var(--ui-motion-fast) var(--ui-ease-standard), transform var(--ui-motion-fast) var(--ui-ease-standard);
   }
@@ -34,7 +41,7 @@
   .ui-menu__item:focus-visible,
   .ui-list-row:focus-visible { outline: 0; box-shadow: var(--ui-focus-ring); }
   .ui-button:disabled { cursor: not-allowed; opacity: .48; }
-  .ui-button--primary { color: var(--ui-color-interactive-strong); border-color: var(--ui-color-interactive); background: var(--ui-color-interactive-soft); font-weight: 650; }
+  .ui-button--primary { color: var(--ui-color-interactive-strong); border-color: var(--ui-color-interactive); background: var(--ui-color-interactive-soft); font-weight: 600; }
   .ui-button--quiet { border-color: transparent; background: transparent; }
   .ui-button--destructive { color: var(--ui-color-danger); border-color: var(--ui-color-danger); background: transparent; }
   .ui-button--compact { min-block-size: var(--ui-control-compact); padding-block: var(--ui-space-2); }
@@ -62,6 +69,51 @@
   .ui-field__control[aria-invalid="true"] { border-color: var(--ui-color-danger); }
   .ui-field__help { color: var(--ui-color-text-faint); font-size: .8125rem; }
   .ui-field__error { display: flex; align-items: center; gap: var(--ui-space-3); color: var(--ui-color-danger); font-size: .8125rem; }
+
+  :where(.ui-app, .ui-lab) select {
+    appearance: none;
+    min-block-size: var(--ui-control-default);
+    block-size: var(--ui-control-default);
+    padding: 0 34px 0 10px;
+    border: 1px solid var(--ui-color-border-strong);
+    border-radius: var(--ui-radius-md);
+    background-color: color-mix(in srgb, var(--ui-color-canvas) 88%, transparent);
+    background-image:
+      linear-gradient(45deg, transparent 50%, var(--ui-color-text-muted) 50%),
+      linear-gradient(135deg, var(--ui-color-text-muted) 50%, transparent 50%);
+    background-position:
+      calc(100% - 14px) calc(50% - 1px),
+      calc(100% - 10px) calc(50% - 1px);
+    background-repeat: no-repeat;
+    background-size: 4px 4px;
+    color: var(--ui-color-text);
+    font-size: .8125rem;
+    line-height: 1;
+    cursor: pointer;
+  }
+  :where(.ui-app, .ui-lab)[dir="rtl"] select {
+    padding-inline: 34px 10px;
+    background-position:
+      10px calc(50% - 1px),
+      14px calc(50% - 1px);
+  }
+  :where(.ui-app, .ui-lab) select:hover:not(:disabled) {
+    border-color: var(--ui-color-interactive);
+    background-color: color-mix(in srgb, var(--ui-color-surface-muted) 88%, transparent);
+  }
+  :where(.ui-app, .ui-lab) select:focus-visible {
+    outline: 0;
+    border-color: var(--ui-color-focus);
+    box-shadow: var(--ui-focus-ring);
+  }
+  :where(.ui-app, .ui-lab) select:disabled {
+    cursor: not-allowed;
+    opacity: .5;
+  }
+  :root[data-density="compact"] :where(.ui-app, .ui-lab) select {
+    min-block-size: var(--ui-control-compact);
+    block-size: var(--ui-control-compact);
+  }
 
   .ui-toggle { position: relative; display: inline-flex; align-items: center; gap: var(--ui-space-5); min-block-size: var(--ui-target-current); cursor: pointer; }
   .ui-toggle__input { position: absolute; z-index: 1; inset: 0; inline-size: 100%; block-size: 100%; margin: 0; opacity: 0; cursor: inherit; }
@@ -136,7 +188,11 @@
     .ui-segmented .ui-button,
     .ui-tabs__tab,
     .ui-menu__item,
-    .ui-field__control { min-block-size: var(--ui-target-touch); }
+    .ui-field__control,
+    :where(.ui-app, .ui-lab) select {
+      min-block-size: var(--ui-target-touch);
+      block-size: var(--ui-target-touch);
+    }
     .ui-notice,
     :root[data-a11y-status-markers="true"] .ui-notice { grid-template-columns: auto minmax(0, 1fr); }
     .ui-notice > .ui-button { grid-column: 2; justify-self: start; }
