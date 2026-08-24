@@ -1,26 +1,18 @@
 export const MODULE_RELEASE = "alpha98-ui13-a39372e1d8d1";
 
-import { createOverlayController } from "../ui/components/overlay.js?release=alpha98-ui13-a39372e1d8d1";
+import { canPinContext } from "./layout-contract.js?release=alpha98-ui13-a39372e1d8d1";
+import { focusRouteTarget } from "../ui/components/route-focus.js?release=alpha98-ui13-a39372e1d8d1";
 
 const LAYER_ID = "inspector:context";
-const SIZES = Object.freeze(["expanded", "compact", "rail"]);
-const LEGACY_SIZES = Object.freeze({
-  wide: "expanded",
-  default: "expanded",
-  narrow: "compact",
-});
 
-// UI_CATALOG_START: responsive inspector labels and states.
 const INSPECTOR_COPY = Object.freeze({
   libraryTitle: "Library details",
-  libraryBody: "Choose an item when the Library replacement arrives to see its details here.",
+  libraryBody: "Select a Library row to see its usage and details.",
   settingsTitle: "Settings help",
   settingsBody: "Contextual guidance appears here without moving system controls into Play.",
   storyTitle: "Story tools",
   storyBody: "Choose a story before opening its contextual tools.",
-  close: "Close",
 });
-// UI_CATALOG_END
 
 function createElement(documentRef, tag, className = "", text = "") {
   const node = documentRef.createElement(tag);
@@ -32,32 +24,17 @@ function createElement(documentRef, tag, className = "", text = "") {
 function safePanes(localState) {
   const panes = localState.snapshot().panes || {};
   const inspector = panes.inspector || {};
-  return {
-    open: inspector.open !== false,
-    pinned: inspector.pinned !== false,
-    size: SIZES.includes(inspector.size)
-      ? inspector.size
-      : (LEGACY_SIZES[inspector.size] || "expanded"),
-  };
+  return { open: inspector.open === true, pinned: inspector.pinned === true };
 }
 
 function contextCopy(destination, t) {
   if (destination === "library") {
-    return {
-      title: t("Library details"),
-      body: t(INSPECTOR_COPY.libraryBody),
-    };
+    return { title: t(INSPECTOR_COPY.libraryTitle), body: t(INSPECTOR_COPY.libraryBody) };
   }
   if (destination === "settings") {
-    return {
-      title: t(INSPECTOR_COPY.settingsTitle),
-      body: t(INSPECTOR_COPY.settingsBody),
-    };
+    return { title: t(INSPECTOR_COPY.settingsTitle), body: t(INSPECTOR_COPY.settingsBody) };
   }
-  return {
-    title: t(INSPECTOR_COPY.storyTitle),
-    body: t(INSPECTOR_COPY.storyBody),
-  };
+  return { title: t(INSPECTOR_COPY.storyTitle), body: t(INSPECTOR_COPY.storyBody) };
 }
 
 function inspectorKind(destination) {
@@ -66,31 +43,10 @@ function inspectorKind(destination) {
   return "context";
 }
 
-function sheetContent(documentRef, t) {
-  const overlay = createElement(documentRef, "div", "ui-overlay");
-  overlay.hidden = true;
-  overlay.dataset.shellInspectorSheet = "true";
-  const sheet = createElement(documentRef, "section", "ui-sheet ui-shell__inspector-sheet");
-  sheet.setAttribute("role", "dialog");
-  sheet.setAttribute("aria-modal", "true");
-  sheet.setAttribute("aria-labelledby", "ui-shell-inspector-sheet-title");
-  const header = createElement(documentRef, "header", "ui-shell__inspector-header");
-  const heading = createElement(documentRef, "h2", "ui-heading ui-heading--2", t(INSPECTOR_COPY.storyTitle));
-  heading.id = "ui-shell-inspector-sheet-title";
-  heading.tabIndex = -1;
-  const close = createElement(documentRef, "button", "ui-button ui-button--quiet", t(INSPECTOR_COPY.close));
-  close.type = "button";
-  close.dataset.shellInspectorSheetClose = "true";
-  header.append(heading, close);
-  const body = createElement(documentRef, "div", "ui-shell__inspector-body");
-  sheet.append(header, body);
-  overlay.append(sheet);
-  return { overlay, heading, body, close };
-}
-
 export function createInspectorHost(options = {}) {
   const { services, modules } = options;
   const documentRef = options.document || document;
+  const target = documentRef.defaultView || window;
   const root = options.root || documentRef.documentElement;
   const aside = documentRef.querySelector("[data-shell-inspector]");
   const heading = documentRef.querySelector("[data-shell-inspector-heading]");
@@ -98,214 +54,169 @@ export function createInspectorHost(options = {}) {
   const openButton = documentRef.querySelector("[data-shell-inspector-open]");
   const closeButton = documentRef.querySelector("[data-shell-inspector-close]");
   const pinButton = documentRef.querySelector("[data-shell-inspector-pin]");
-  const resizeButton = documentRef.querySelector("[data-shell-inspector-resize]");
   const overlayHost = documentRef.querySelector("[data-shell-overlay-host]");
-  if (!aside || !heading || !body || !openButton || !closeButton
-      || !pinButton || !resizeButton || !overlayHost) {
-    throw new Error("The contextual inspector frame is incomplete.");
+  if (!aside || !heading || !body || !openButton || !closeButton || !pinButton || !overlayHost) {
+    throw new Error("The contextual drawer frame is incomplete.");
   }
 
   let panes = safePanes(services.localState);
-  let layout = root.dataset.layoutState || "wide";
   let route = services.router.current();
-  let initialLibraryDeepLinkPending = route.destination === "library"
-    && Boolean(route.query?.item) && !route.layers.some(layer => layer.id === LAYER_ID);
-  let syncing = false;
   let stopped = false;
-  let desktopStoryTools = null;
-  let sheetStoryTools = null;
-  let desktopLibrary = null;
-  let sheetLibrary = null;
-  const sheet = sheetContent(documentRef, services.localizer.t);
-  overlayHost.append(sheet.overlay);
-  const overlay = createOverlayController(sheet.overlay, {
-    backgroundRoot: overlayHost.parentElement,
-    onClose: () => {
-      if (!syncing && services.router.current().layers.some(layer => layer.id === LAYER_ID)) {
-        services.router.closeTopLayer();
-      }
-    },
+  let contextMount = null;
+  let mountedIdentity = "";
+  let applying = false;
+
+  const drawer = modules.responsiveDrawer.createResponsiveDrawer({
+    document: documentRef,
+    root,
+    surface: aside,
+    overlayHost,
+    onRequestClose: () => close(),
   });
 
   const persist = () => {
     const current = services.localState.snapshot().panes || {};
     services.localState.setRecord("panes", { ...current, inspector: panes });
   };
-
-  const clearContextView = () => {
-    desktopStoryTools?.teardown();
-    sheetStoryTools?.teardown();
-    desktopStoryTools = null;
-    sheetStoryTools = null;
-    desktopLibrary?.teardown();
-    sheetLibrary?.teardown();
-    desktopLibrary = null;
-    sheetLibrary = null;
+  const layerOpen = () => route.layers.some(layer => layer.id === LAYER_ID);
+  const personAuthoring = () => modules.libraryAuthoringView.isPersonAuthoringRoute(route);
+  const pinAllowed = () => canPinContext({
+    viewportWidth: target.innerWidth,
+    viewportHeight: target.innerHeight,
+    railWidth: root.dataset.navCollapsed === "true" ? 72 : 192,
+    drawerWidth: 360,
+  });
+  const desiredMode = () => {
+    if (personAuthoring() || !panes.open) return "closed";
+    if (panes.pinned && pinAllowed()) return "pinned";
+    return "overlay";
   };
 
-  const updateCopy = destination => {
-    const copy = contextCopy(destination, services.localizer.t);
+  const clearContext = () => {
+    contextMount?.teardown?.();
+    contextMount = null;
+    body.replaceChildren();
+  };
+  const mountContext = () => {
+    const authoringMode = ["edit", "import", "create", "story-card"].includes(route.query?.mode);
+    const identity = `${route.destination}:${authoringMode}:${route.query?.item || ""}`;
+    if (identity === mountedIdentity && body.childElementCount) return;
+    mountedIdentity = identity;
+    clearContext();
+    const copy = contextCopy(route.destination, services.localizer.t);
     heading.textContent = copy.title;
-    sheet.heading.textContent = copy.title;
     aside.setAttribute("aria-label", copy.title);
-    clearContextView();
-    if (destination === "play" && modules?.storyToolsView && modules?.storyToolsRegistry) {
-      desktopStoryTools = modules.storyToolsView.mountStoryTools({
+    if (route.destination === "play") {
+      contextMount = modules.storyToolsView.mountStoryTools({
         document: documentRef,
         services,
         registry: modules.storyToolsRegistry,
         target: body,
-        compact: false,
-        interactive: isPaneLayout() && panes.open,
-        tools: modules.liveStoryTools,
-      });
-      sheetStoryTools = modules.storyToolsView.mountStoryTools({
-        document: documentRef,
-        services,
-        registry: modules.storyToolsRegistry,
-        target: sheet.body,
-        compact: true,
-        interactive: !isPaneLayout() && layerOpen(),
+        compact: desiredMode() !== "pinned",
+        interactive: desiredMode() !== "closed",
         tools: modules.liveStoryTools,
       });
       return;
     }
-    if (destination === "library") {
+    if (route.destination === "library") {
       body.dataset.libraryContext = "true";
-      if (modules.libraryAuthoringView.isPersonAuthoringRoute(route)) {
-        body.replaceChildren();
-        sheet.body.replaceChildren();
-        return;
-      }
-      const authoringMode = ["edit", "import", "create", "story-card"].includes(route.query?.mode);
-      const libraryModule = authoringMode
-        ? modules.libraryAuthoringView : modules.libraryView;
-      const mount = authoringMode
-        ? libraryModule.mountLibraryAuthoring : libraryModule.mountLibraryDetail;
-      desktopLibrary = mount({
-        document: documentRef,
-        services,
-        target: body,
-      });
-      sheetLibrary = mount({
-        document: documentRef,
-        services,
-        target: sheet.body,
+      if (personAuthoring()) return;
+      const libraryModule = authoringMode ? modules.libraryAuthoringView : modules.libraryView;
+      contextMount = (authoringMode
+        ? libraryModule.mountLibraryAuthoring : libraryModule.mountLibraryDetail)({
+        document: documentRef, services, target: body,
       });
       return;
     }
     body.replaceChildren(createElement(documentRef, "p", "ui-muted", copy.body));
-    sheet.body.replaceChildren(createElement(documentRef, "p", "ui-muted", copy.body));
-  };
-
-  const layerOpen = () => route.layers.some(layer => layer.id === LAYER_ID);
-  const isPaneLayout = () => layout === "wide" || layout === "expansive";
-  const personAuthoring = () => modules.libraryAuthoringView.isPersonAuthoringRoute(route);
-  const stageInitialLibraryDeepLink = () => {
-    if (!initialLibraryDeepLinkPending || personAuthoring() || isPaneLayout() || layerOpen()) return;
-    initialLibraryDeepLinkPending = false;
-    services.router.openLayer({ id: LAYER_ID, focusReturn: "inspector-toggle" });
-    route = services.router.current();
   };
 
   const apply = () => {
-    if (stopped) return;
+    if (stopped || applying) return;
+    applying = true;
     const authoring = personAuthoring();
-    const kind = inspectorKind(route.destination);
+    if (panes.pinned && !pinAllowed()) {
+      panes = { ...panes, pinned: false };
+      persist();
+      if (panes.open && !layerOpen()) {
+        services.router.openLayer({ id: LAYER_ID, focusReturn: "inspector-toggle" });
+        route = services.router.current();
+      }
+    }
+    const mode = desiredMode();
     root.dataset.libraryAuthoring = String(authoring);
-    root.dataset.inspectorOpen = String(authoring ? false : panes.open);
-    root.dataset.inspectorKind = kind;
-    root.dataset.inspectorSize = kind === "story-tools" ? panes.size : "expanded";
-    root.dataset.inspectorPinned = String(panes.pinned);
-    pinButton.setAttribute("aria-pressed", String(panes.pinned));
-    resizeButton.hidden = kind !== "story-tools";
-    openButton.hidden = authoring;
-    aside.hidden = authoring || !isPaneLayout() || !panes.open;
-    updateCopy(route.destination);
-    syncing = true;
-    if (!authoring && !isPaneLayout() && layerOpen()) overlay.show();
-    else overlay.close("layout-sync");
-    syncing = false;
+    root.dataset.inspectorOpen = String(mode !== "closed");
+    root.dataset.inspectorPinned = String(mode === "pinned");
+    root.dataset.inspectorKind = inspectorKind(route.destination);
+    pinButton.hidden = !pinAllowed();
+    pinButton.setAttribute("aria-pressed", String(mode === "pinned"));
+    openButton.hidden = authoring || mode !== "closed";
+    mountContext();
+    drawer.setMode(mode);
+    applying = false;
   };
 
-  const open = () => {
-    if (isPaneLayout()) {
-      panes = { ...panes, open: true };
-      persist();
-      apply();
-      heading.focus({ preventScroll: true });
-      return;
-    }
-    if (!layerOpen()) {
+  function open() {
+    panes = { ...panes, open: true, pinned: false };
+    persist();
+    if (!layerOpen()) services.router.openLayer({ id: LAYER_ID, focusReturn: "inspector-toggle" });
+    route = services.router.current();
+    mountedIdentity = "";
+    apply();
+  }
+  function close() {
+    panes = { ...panes, open: false, pinned: false };
+    persist();
+    if (layerOpen()) services.router.closeTopLayer();
+    route = services.router.current();
+    apply();
+    focusRouteTarget(openButton);
+  }
+  const togglePin = () => {
+    if (!pinAllowed()) return;
+    panes = { ...panes, open: true, pinned: !panes.pinned };
+    persist();
+    if (panes.pinned && layerOpen()) services.router.closeTopLayer();
+    else if (!panes.pinned && !layerOpen()) {
       services.router.openLayer({ id: LAYER_ID, focusReturn: "inspector-toggle" });
     }
     route = services.router.current();
-    apply();
-  };
-
-  const close = () => {
-    if (isPaneLayout()) {
-      panes = { ...panes, open: false };
-      persist();
-      apply();
-      openButton.focus({ preventScroll: true });
-      return;
-    }
-    services.router.closeTopLayer();
-  };
-
-  const togglePin = () => {
-    panes = { ...panes, pinned: !panes.pinned };
-    persist();
-    apply();
-  };
-
-  const resize = () => {
-    const next = SIZES[(SIZES.indexOf(panes.size) + 1) % SIZES.length];
-    panes = { ...panes, size: next };
-    persist();
+    mountedIdentity = "";
     apply();
   };
 
   openButton.addEventListener("click", open);
   closeButton.addEventListener("click", close);
-  sheet.close.addEventListener("click", close);
   pinButton.addEventListener("click", togglePin);
-  resizeButton.addEventListener("click", resize);
   const onLibrarySelect = () => open();
   documentRef.addEventListener("sonder:library-select", onLibrarySelect);
 
   const sync = nextRoute => {
+    const restoreOpener = panes.open && !panes.pinned
+      && !nextRoute.layers.some(layer => layer.id === LAYER_ID);
     route = nextRoute;
-    if (!panes.pinned && route.destination !== "play" && isPaneLayout()) {
-      panes = { ...panes, open: false };
-      persist();
-    }
+    if (!layerOpen() && !panes.pinned && panes.open) panes = { ...panes, open: false };
+    mountedIdentity = "";
     apply();
+    if (restoreOpener) target.requestAnimationFrame(() => focusRouteTarget(openButton));
   };
-  const setLayout = nextLayout => {
-    layout = nextLayout;
-    if (isPaneLayout()) initialLibraryDeepLinkPending = false;
-    else stageInitialLibraryDeepLink();
-    if (isPaneLayout() && layerOpen()) services.router.closeTopLayer();
-    apply();
-  };
+  const setLayout = () => apply();
 
-  stageInitialLibraryDeepLink();
   apply();
-  const teardown = () => {
-    if (stopped) return;
-    stopped = true;
-    openButton.removeEventListener("click", open);
-    closeButton.removeEventListener("click", close);
-    sheet.close.removeEventListener("click", close);
-    pinButton.removeEventListener("click", togglePin);
-    resizeButton.removeEventListener("click", resize);
-    documentRef.removeEventListener("sonder:library-select", onLibrarySelect);
-    clearContextView();
-    overlay.destroy();
-    sheet.overlay.remove();
-  };
-
-  return Object.freeze({ sync, setLayout, open, close, teardown });
+  return Object.freeze({
+    sync,
+    setLayout,
+    open,
+    close,
+    teardown() {
+      if (stopped) return;
+      stopped = true;
+      openButton.removeEventListener("click", open);
+      closeButton.removeEventListener("click", close);
+      pinButton.removeEventListener("click", togglePin);
+      documentRef.removeEventListener("sonder:library-select", onLibrarySelect);
+      clearContext();
+      drawer.teardown();
+    },
+  });
 }

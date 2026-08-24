@@ -1,31 +1,29 @@
 @layer ui-play {
-  :root[data-destination="play"] .ui-shell__header { display: contents; }
+  :root[data-destination="play"] .ui-shell__header { display: flex; }
   :root[data-destination="play"] .ui-shell__center { position: relative; }
   :root[data-destination="play"] .ui-shell__header .ui-shell__orientation {
-    position: absolute;
-    inset: 0 auto auto 0;
-    inline-size: 1px;
-    block-size: 1px;
-    opacity: .001;
-    pointer-events: none;
-    white-space: nowrap;
+    position: static;
+    inline-size: auto;
+    block-size: auto;
+    opacity: 1;
+    pointer-events: auto;
+    white-space: normal;
   }
   :root[data-destination="play"] .ui-shell__center:has(.ui-play__state) .ui-shell__orientation {
-    z-index: 11;
-    inset: 14px auto auto 14px;
+    z-index: auto;
+    inset: auto;
     inline-size: min(70vw, 42rem);
     block-size: auto;
     opacity: 1;
     white-space: normal;
   }
   :root[data-destination="play"] .ui-shell__header-actions {
-    position: fixed;
-    z-index: 12;
-    inset-block-start: 9px;
-    inset-inline-end: calc(var(--ui-shell-inspector, 0px) + 14px);
+    position: static;
+    z-index: auto;
+    inset: auto;
   }
   :root[data-destination="play"][data-inspector-open="false"] .ui-shell__header-actions,
-  :root[data-destination="play"]:is([data-layout-state="medium"], [data-layout-state="compact"]) .ui-shell__header-actions { inset-inline-end: 14px; }
+  :root[data-destination="play"]:is([data-layout-state="medium"], [data-layout-state="compact"]) .ui-shell__header-actions { inset-inline-end: auto; }
   :root[data-destination="play"] .ui-shell__save { display: none; }
   :root[data-destination="play"] [data-shell-inspector-open] {
     display: inline-flex;
@@ -375,10 +373,9 @@
   [data-layout-state="compact"] .ui-shell__workspace:has(.ui-play) { padding-block-start: var(--ui-space-4); }
   [data-layout-state="compact"] .ui-play__story-header { padding-inline: 62px; }
   :root[data-destination="play"][data-layout-state="compact"] .ui-shell__go-to {
-    position: fixed;
-    z-index: 12;
-    inset-block-start: 9px;
-    inset-inline: 14px auto;
+    position: static;
+    z-index: auto;
+    inset: auto;
     display: grid;
     inline-size: 44px;
     min-inline-size: 44px;

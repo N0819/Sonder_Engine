@@ -60,7 +60,8 @@ export function createApplicationShell(options = {}) {
       || !modules?.shortcuts || !modules?.goTo || !modules?.extensionHost
       || !modules?.playView || !modules?.prose || !modules?.storyToolsRegistry
       || !modules?.storyToolsView || !modules?.libraryView
-      || !modules?.libraryAuthoringView || !modules?.settingsView) {
+      || !modules?.libraryAuthoringView || !modules?.settingsView
+      || !modules?.appHeader || !modules?.responsiveDrawer) {
     throw new Error("The application shell presentation modules are missing.");
   }
 
@@ -80,6 +81,9 @@ export function createApplicationShell(options = {}) {
   let renderedData = null;
   let renderedRouteIdentity = null;
   let renderedNotices = null;
+  const appHeader = modules.appHeader.createAppHeader({
+    services, document: documentRef, root,
+  });
 
   const syncNotices = noticeState => {
     if (noticeState === renderedNotices) return;
@@ -107,6 +111,7 @@ export function createApplicationShell(options = {}) {
 
   const applyLayout = () => {
     root.dataset.layoutState = layoutStateFor(target.innerWidth, target.innerHeight);
+    appHeader.setLayout(root.dataset.layoutState);
     inspectorHost?.setLayout(root.dataset.layoutState);
   };
 
@@ -260,6 +265,7 @@ export function createApplicationShell(options = {}) {
     shortcutRegistry.stop();
     inspectorHost.teardown();
     destinationTeardown?.();
+    appHeader.teardown();
     destinationTeardown = null;
     view.replaceChildren();
   };
