@@ -86,6 +86,10 @@ Interface replacement:
   current implementation status.
 - [`SONDER_UI_DESIGN_BIBLE_ADOPTION_AUDIT_2026-08-21.md`](design/SONDER_UI_DESIGN_BIBLE_ADOPTION_AUDIT_2026-08-21.md)
   — current-source disposition of the supplied candidate and its evidence.
+- [`EXTERNAL_UI_UX_REFERENCE_REVIEWS.md`](design/sonder-ui-replacement/EXTERNAL_UI_UX_REFERENCE_REVIEWS.md)
+  — snapshot-scoped UI/UX reviews of AstraProjecta and ChungusHub: interaction
+  ideas to adapt, existing Sonder contracts they corroborate, and patterns to
+  reject. Design evidence only, not implementation authority or feature status.
 
 Minds:
 
