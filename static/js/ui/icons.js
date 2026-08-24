@@ -1,9 +1,9 @@
-const SPRITE = "/static/assets/icons/sonder-icons.svg?release=alpha98-ui5-98f796584158";
+const SPRITE = "/static/assets/icons/sonder-icons.svg?release=alpha98-ui6-ff8a9b712a2d";
 const ICON_NAMES = new Set([
   "play", "library", "settings", "tools", "cast", "world", "style", "dialogue", "clothing", "image", "ambience",
   "send", "stop", "search", "filter", "close", "more", "menu", "chevron-left", "chevron-right", "chevron-down",
   "plus", "minus", "import", "export", "edit", "delete", "duplicate", "archive", "favorite", "recent", "story",
-  "character", "persona", "lore", "link", "unlink", "pin", "resize", "theme", "api", "update", "prompt",
+  "character", "persona", "lore", "link", "unlink", "pin", "resize", "theme", "api", "update", "maintenance", "prompt",
   "extension", "sound-on", "sound-off", "retry", "tasks", "check", "warning", "error", "info", "lock", "unlock",
   "home", "folder", "calendar", "connection", "offline", "spark", "sort", "save",
 ]);

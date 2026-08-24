@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "alpha98-ui5-98f796584158";
+export const MODULE_RELEASE = "alpha98-ui6-ff8a9b712a2d";
 
 function numericId(value) {
   const id = Number(value);

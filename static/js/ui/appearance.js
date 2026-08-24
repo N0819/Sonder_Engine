@@ -1,8 +1,18 @@
+import {
+  applyCustomTheme,
+  CUSTOM_THEME_STORAGE_KEY,
+  persistCustomTheme,
+  readCustomTheme,
+} from "./custom-theme.js?release=alpha98-ui6-ff8a9b712a2d";
+
 const THEMES = Object.freeze([
   { id: "carbon-signal", name: "Carbon Signal" },
   { id: "ash-brass", name: "Ash and Brass" },
   { id: "midnight-ink", name: "Midnight Ink" },
   { id: "parchment-night", name: "Parchment Night" },
+  { id: "neon-circuit", name: "Neon Circuit" },
+  { id: "modern-slate", name: "Modern Slate" },
+  { id: "custom", name: "Custom Theme" },
 ]);
 const themeIds = new Set(THEMES.map(({ id }) => id));
 const proseSizes = new Set(["15", "17", "19", "21"]);
@@ -25,7 +35,20 @@ function applyDataset(name, value, allowed, fallback, key, persist) {
 
 export const appearance = Object.freeze({
   themes: THEMES,
-  setTheme: (value, persist = true) => applyDataset("theme", value, themeIds, "carbon-signal", "sonder.ui.next.theme.v1", persist),
+  setTheme: (value, persist = true) => {
+    if (value === "custom") applyCustomTheme(document.documentElement, readCustomTheme());
+    return applyDataset("theme", value, themeIds, "carbon-signal", "sonder.ui.next.theme.v1", persist);
+  },
+  getCustomTheme: () => readCustomTheme(),
+  setCustomTheme: (value, persist = true) => {
+    const palette = persist
+      ? persistCustomTheme(value)
+      : applyCustomTheme(document.documentElement, value);
+    applyCustomTheme(document.documentElement, palette);
+    applyDataset("theme", "custom", themeIds, "carbon-signal", "sonder.ui.next.theme.v1", persist);
+    return palette;
+  },
+  customThemeStorageKey: CUSTOM_THEME_STORAGE_KEY,
   setProseSize: (value, persist = true) => applyDataset("proseSize", value, proseSizes, "17", "sonder.ui.next.prose.v1", persist),
   setEffects: (value, persist = true) => {
     const next = applyDataset("effects", value, effectLevels, "full", "sonder.ui.next.effects.v1", persist);

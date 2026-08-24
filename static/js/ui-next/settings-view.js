@@ -1,7 +1,21 @@
-export const MODULE_RELEASE = "alpha98-ui5-98f796584158";
+export const MODULE_RELEASE = "alpha98-ui6-ff8a9b712a2d";
 
-import { appearance } from "../ui/appearance.js?release=alpha98-ui5-98f796584158";
-import { initAccessibility, updateAccessibility } from "../ui/accessibility.js?release=alpha98-ui5-98f796584158";
+import { appearance } from "../ui/appearance.js?release=alpha98-ui6-ff8a9b712a2d";
+import { initAccessibility, updateAccessibility } from "../ui/accessibility.js?release=alpha98-ui6-ff8a9b712a2d";
+import {
+  applyCustomTheme,
+  CUSTOM_THEME_ROLES,
+  CUSTOM_THEME_SCHEMA_VERSION,
+  DEFAULT_CUSTOM_THEME,
+  hexToRgb,
+  normalizeHex,
+  parseCustomTheme,
+  persistCustomTheme,
+  rgbToHex,
+  serializeCustomTheme,
+  validateCustomTheme,
+} from "../ui/custom-theme.js?release=alpha98-ui6-ff8a9b712a2d";
+import { createOverlayController } from "../ui/components/overlay.js?release=alpha98-ui6-ff8a9b712a2d";
 
 // UI_CATALOG_START: Alpha 9.8 living-world routing copy.
 const ALPHA98_SETTINGS_COPY = Object.freeze([
@@ -18,7 +32,7 @@ const CATEGORIES = Object.freeze([
   ["ai-connections", "AI Connections", "api"],
   ["content", "Content", "prompt"],
   ["add-ons", "Add-ons", "extension"],
-  ["maintenance", "Maintenance", "update"],
+  ["maintenance", "Maintenance", "maintenance"],
   ["advanced", "Advanced", "terminal"],
 ]);
 
@@ -27,15 +41,9 @@ const THEME_COPY = Object.freeze({
   "ash-brass": ["Ash and Brass", "Warm graphite, muted brass, cool blue.", ["#111316", "#22282c", "#7f9eaa", "#b89752"]],
   "midnight-ink": ["Midnight Ink", "Blue-black, violet, and silver-blue.", ["#090d18", "#111b2b", "#68b8c8", "#998bc1"]],
   "parchment-night": ["Parchment Night", "Dark umber, ink, and warm cream.", ["#15100d", "#2a211a", "#819da0", "#c99a58"]],
+  "neon-circuit": ["Neon Circuit", "Carbon violet, restrained cyan, and amber.", ["#08070f", "#171126", "#58dce5", "#d1a557"]],
+  "modern-slate": ["Modern Slate", "Warm grayscale and subdued white.", ["#0e0d0c", "#262421", "#d6d3cf", "#f4f1ec"]],
 });
-
-const LEGACY_THEMES = Object.freeze([
-  ["sonder", "Sonder", "carbon-signal"],
-  ["tavern", "Tavern", "ash-brass"],
-  ["lcars", "LCARS", "carbon-signal"],
-  ["stone", "Stone", "ash-brass"],
-  ["ink", "Ink", "midnight-ink"],
-]);
 
 const SETTINGS_INDEX = Object.freeze([
   ["experience", "themes", "Themes", "appearance palette colors legacy skin"],
@@ -287,9 +295,10 @@ function themeChoice(documentRef, services, id, active) {
   control.append(el(documentRef, "span", "ui-settings__index", String(Object.keys(THEME_COPY).indexOf(id) + 1).padStart(2, "0")), copy, status);
   control.addEventListener("click", () => {
     appearance.setTheme(id);
-    delete documentRef.documentElement.dataset.legacyTheme;
     const stored = services.localState.snapshot().appearance || {};
-    services.localState.setRecord("appearance", { ...stored, theme: id, legacyTheme: undefined });
+    const nextStored = { ...stored, theme: id };
+    delete nextStored.legacyTheme;
+    services.localState.setRecord("appearance", nextStored);
     control.closest(".ui-settings__group")?.querySelector(".ui-settings__theme-readout")?.replaceChildren(name);
     for (const candidate of control.parentElement.children) {
       const selected = candidate.dataset.themeChoice === id;
@@ -299,6 +308,302 @@ function themeChoice(documentRef, services, id, active) {
   });
   control.setAttribute("aria-pressed", String(id === active));
   return control;
+}
+
+function customThemeEditor(documentRef, services, themeGroup, themes) {
+  documentRef.querySelector("[data-custom-theme-overlay]")?.remove();
+  const editor = el(documentRef, "section", "ui-settings__custom-theme");
+  editor.dataset.customThemeEditor = "true";
+  const heading = el(documentRef, "div", "ui-settings__custom-theme-head");
+  const headingCopy = el(documentRef, "span", "ui-settings__field-copy");
+  headingCopy.append(
+    el(documentRef, "h3", "ui-heading ui-heading--3", "Custom Theme"),
+    el(documentRef, "small", "", "Choose eight semantic colors. Sonder derives surfaces and borders without accepting custom CSS."),
+  );
+  const preview = el(documentRef, "div", "ui-settings__custom-preview");
+  preview.setAttribute("aria-label", "Custom theme preview");
+  preview.append(
+    el(documentRef, "span", "ui-settings__custom-preview-panel", "Panel"),
+    el(documentRef, "strong", "", "Readable story text"),
+    el(documentRef, "small", "", "Muted detail and an interaction marker"),
+    el(documentRef, "span", "ui-settings__custom-preview-accent", "Action"),
+  );
+  heading.append(headingCopy, preview);
+
+  let draft = { ...appearance.getCustomTheme() };
+  const swatches = el(documentRef, "div", "ui-settings__custom-swatches");
+  const validationStatus = el(documentRef, "p", "ui-settings__custom-validation");
+  validationStatus.dataset.customThemeValidation = "true";
+  validationStatus.setAttribute("role", "status");
+  const actions = el(documentRef, "div", "ui-settings__custom-actions");
+  const useCustom = el(documentRef, "button", "ui-button ui-button--primary", "Use Custom Theme");
+  useCustom.type = "button";
+  const reset = el(documentRef, "button", "ui-button ui-button--quiet", "Reset Custom Theme");
+  reset.type = "button";
+  const importButton = el(documentRef, "button", "ui-button ui-button--quiet", "Import theme JSON");
+  importButton.type = "button";
+  const exportButton = el(documentRef, "button", "ui-button ui-button--quiet", "Export theme JSON");
+  exportButton.type = "button";
+  const fileInput = documentRef.createElement("input");
+  fileInput.type = "file";
+  fileInput.accept = "application/json,.json";
+  fileInput.hidden = true;
+  fileInput.setAttribute("aria-label", "Custom theme JSON file");
+  actions.append(useCustom, reset, importButton, exportButton, fileInput);
+
+  const overlay = el(documentRef, "div", "ui-overlay ui-settings__custom-theme-overlay");
+  overlay.dataset.customThemeOverlay = "true";
+  overlay.hidden = true;
+  const dialog = el(documentRef, "section", "ui-dialog ui-settings__color-dialog");
+  dialog.setAttribute("role", "dialog");
+  dialog.setAttribute("aria-modal", "true");
+  dialog.setAttribute("aria-labelledby", "custom-theme-dialog-title");
+  const dialogHead = el(documentRef, "div", "ui-settings__color-dialog-head");
+  const dialogTitle = el(documentRef, "h2", "ui-heading ui-heading--2", "Choose color");
+  dialogTitle.id = "custom-theme-dialog-title";
+  const dialogCancelTop = el(documentRef, "button", "ui-button ui-button--quiet", "Close");
+  dialogCancelTop.type = "button";
+  dialogHead.append(dialogTitle, dialogCancelTop);
+  const colorLabel = el(documentRef, "label", "ui-settings__color-well");
+  colorLabel.append(el(documentRef, "span", "", "Color"));
+  const colorInput = documentRef.createElement("input");
+  colorInput.type = "color";
+  colorInput.setAttribute("aria-label", "Color");
+  colorLabel.append(colorInput);
+  const hexLabel = el(documentRef, "label", "ui-field ui-settings__hex-field");
+  hexLabel.append(el(documentRef, "span", "ui-field__label", "Hex color"));
+  const hexInput = documentRef.createElement("input");
+  hexInput.type = "text";
+  hexInput.className = "ui-field__control";
+  hexInput.maxLength = 7;
+  hexInput.autocomplete = "off";
+  hexInput.spellcheck = false;
+  hexInput.setAttribute("aria-label", "Hex color");
+  hexLabel.append(hexInput);
+  const rgbFields = el(documentRef, "div", "ui-settings__rgb-fields");
+  const rgbInputs = {};
+  for (const channel of ["Red", "Green", "Blue"]) {
+    const field = el(documentRef, "label", "ui-field");
+    field.append(el(documentRef, "span", "ui-field__label", channel));
+    const input = documentRef.createElement("input");
+    input.type = "number";
+    input.className = "ui-field__control";
+    input.min = "0";
+    input.max = "255";
+    input.step = "1";
+    input.setAttribute("aria-label", channel);
+    rgbInputs[channel.toLocaleLowerCase()] = input;
+    field.append(input);
+    rgbFields.append(field);
+  }
+  const dialogStatus = el(documentRef, "p", "ui-settings__color-error");
+  dialogStatus.setAttribute("role", "status");
+  const dialogActions = el(documentRef, "div", "ui-settings__color-actions");
+  const cancel = el(documentRef, "button", "ui-button ui-button--quiet", "Cancel");
+  cancel.type = "button";
+  const save = el(documentRef, "button", "ui-button ui-button--primary", "Save color");
+  save.type = "button";
+  dialogActions.append(cancel, save);
+  dialog.append(dialogHead, colorLabel, hexLabel, rgbFields, dialogStatus, dialogActions);
+  overlay.append(dialog);
+  documentRef.body.append(overlay);
+
+  let activeRole = null;
+  let candidate = null;
+  let previousTheme = "carbon-signal";
+  const restorePreviousTheme = () => {
+    if (previousTheme === "custom") {
+      applyCustomTheme(documentRef.documentElement, draft);
+      documentRef.documentElement.dataset.theme = "custom";
+    } else {
+      appearance.setTheme(previousTheme, false);
+    }
+  };
+  const controller = createOverlayController(overlay, {
+    backgroundRoot: documentRef.body,
+    onClose: restorePreviousTheme,
+  });
+
+  const setDialogFields = value => {
+    const normalized = normalizeHex(value);
+    const rgb = hexToRgb(normalized);
+    colorInput.value = normalized.toLocaleLowerCase();
+    hexInput.value = normalized;
+    rgbInputs.red.value = String(rgb.red);
+    rgbInputs.green.value = String(rgb.green);
+    rgbInputs.blue.value = String(rgb.blue);
+  };
+  const previewCandidate = value => {
+    let normalized;
+    try {
+      normalized = normalizeHex(value);
+    } catch (error) {
+      candidate = null;
+      save.disabled = true;
+      dialogStatus.textContent = error.message;
+      return;
+    }
+    const validation = validateCustomTheme({ ...draft, [activeRole.id]: normalized });
+    if (!validation.valid) {
+      candidate = null;
+      save.disabled = true;
+      dialogStatus.textContent = validation.errors.join(" ");
+      return;
+    }
+    candidate = validation.palette;
+    save.disabled = false;
+    dialogStatus.textContent = "This color keeps the custom theme readable.";
+    applyCustomTheme(documentRef.documentElement, candidate);
+    documentRef.documentElement.dataset.theme = "custom";
+  };
+  const syncFromHex = () => {
+    try {
+      const normalized = normalizeHex(hexInput.value);
+      const rgb = hexToRgb(normalized);
+      colorInput.value = normalized.toLocaleLowerCase();
+      rgbInputs.red.value = String(rgb.red);
+      rgbInputs.green.value = String(rgb.green);
+      rgbInputs.blue.value = String(rgb.blue);
+      previewCandidate(normalized);
+    } catch (error) {
+      candidate = null;
+      save.disabled = true;
+      dialogStatus.textContent = error.message;
+    }
+  };
+  const syncFromRgb = () => {
+    try {
+      const normalized = rgbToHex({
+        red: rgbInputs.red.value,
+        green: rgbInputs.green.value,
+        blue: rgbInputs.blue.value,
+      });
+      hexInput.value = normalized;
+      colorInput.value = normalized.toLocaleLowerCase();
+      previewCandidate(normalized);
+    } catch (error) {
+      candidate = null;
+      save.disabled = true;
+      dialogStatus.textContent = error.message;
+    }
+  };
+  colorInput.addEventListener("input", () => {
+    setDialogFields(colorInput.value);
+    previewCandidate(colorInput.value);
+  });
+  hexInput.addEventListener("input", syncFromHex);
+  Object.values(rgbInputs).forEach(input => input.addEventListener("input", syncFromRgb));
+
+  const updatePage = message => {
+    const validation = validateCustomTheme(draft);
+    useCustom.disabled = !validation.valid;
+    validationStatus.textContent = message || (validation.valid
+      ? "All required contrast checks pass."
+      : validation.errors.join(" "));
+    preview.style.setProperty("--ui-preview-background", draft.background);
+    preview.style.setProperty("--ui-preview-panel", draft.panel);
+    preview.style.setProperty("--ui-preview-text", draft.text);
+    preview.style.setProperty("--ui-preview-muted", draft.muted);
+    preview.style.setProperty("--ui-preview-accent", draft.accent);
+    for (const button of swatches.children) {
+      const role = button.dataset.customThemeSwatch;
+      button.style.setProperty("--ui-swatch-color", draft[role]);
+      button.querySelector("code")?.replaceChildren(draft[role]);
+    }
+  };
+  const openRole = role => {
+    activeRole = role;
+    candidate = validateCustomTheme(draft).palette;
+    previousTheme = documentRef.documentElement.dataset.theme || "carbon-signal";
+    dialogTitle.textContent = `Choose ${role.label} color`;
+    setDialogFields(draft[role.id]);
+    dialogStatus.textContent = "This color keeps the custom theme readable.";
+    save.disabled = false;
+    applyCustomTheme(documentRef.documentElement, draft);
+    documentRef.documentElement.dataset.theme = "custom";
+    controller.show();
+  };
+  for (const role of CUSTOM_THEME_ROLES) {
+    const button = el(documentRef, "button", "ui-settings__custom-swatch");
+    button.type = "button";
+    button.dataset.customThemeSwatch = role.id;
+    button.setAttribute("aria-label", `Edit ${role.label} color`);
+    button.append(
+      el(documentRef, "span", "ui-settings__custom-swatch-color"),
+      el(documentRef, "strong", "", role.label),
+      el(documentRef, "code", "", draft[role.id]),
+    );
+    button.addEventListener("click", () => openRole(role));
+    swatches.append(button);
+  }
+  const closeDialog = () => controller.close("cancel");
+  cancel.addEventListener("click", closeDialog);
+  dialogCancelTop.addEventListener("click", closeDialog);
+  save.addEventListener("click", () => {
+    if (!candidate || !activeRole) return;
+    draft = { ...candidate };
+    updatePage(`${activeRole.label} updated in the custom-theme draft.`);
+    controller.close("save");
+  });
+
+  useCustom.addEventListener("click", () => {
+    const palette = appearance.setCustomTheme(draft);
+    draft = { ...palette };
+    const stored = services.localState.snapshot().appearance || {};
+    const nextStored = {
+      ...stored,
+      theme: "custom",
+      customTheme: { version: CUSTOM_THEME_SCHEMA_VERSION, colors: palette },
+    };
+    delete nextStored.legacyTheme;
+    services.localState.setRecord("appearance", nextStored);
+    themeGroup.querySelector(".ui-settings__theme-readout")?.replaceChildren("Custom Theme");
+    themes.querySelectorAll("[data-theme-choice]").forEach(choice => {
+      choice.setAttribute("aria-pressed", "false");
+      choice.querySelector(".ui-settings__theme-status").textContent = "Use";
+    });
+    updatePage("Custom theme saved and active on this device.");
+  });
+  reset.addEventListener("click", () => {
+    draft = { ...DEFAULT_CUSTOM_THEME };
+    persistCustomTheme(draft);
+    applyCustomTheme(documentRef.documentElement, draft);
+    const stored = services.localState.snapshot().appearance || {};
+    const nextStored = {
+      ...stored,
+      customTheme: { version: CUSTOM_THEME_SCHEMA_VERSION, colors: draft },
+    };
+    delete nextStored.legacyTheme;
+    services.localState.setRecord("appearance", nextStored);
+    updatePage("Custom theme reset to its safe defaults.");
+  });
+  importButton.addEventListener("click", () => fileInput.click());
+  fileInput.addEventListener("change", async () => {
+    const file = fileInput.files?.[0];
+    if (!file) return;
+    try {
+      draft = { ...parseCustomTheme(await file.text()) };
+      updatePage("Custom theme JSON imported. Choose Use Custom Theme to save it.");
+    } catch (error) {
+      validationStatus.textContent = error.message;
+    } finally {
+      fileInput.value = "";
+    }
+  });
+  exportButton.addEventListener("click", () => {
+    const blob = new Blob([serializeCustomTheme(draft)], { type: "application/json" });
+    const href = URL.createObjectURL(blob);
+    const download = documentRef.createElement("a");
+    download.href = href;
+    download.download = "sonder-custom-theme.json";
+    download.click();
+    setTimeout(() => URL.revokeObjectURL(href), 0);
+    validationStatus.textContent = "Custom theme JSON exported.";
+  });
+
+  updatePage();
+  editor.append(heading, swatches, validationStatus, actions);
+  return editor;
 }
 
 function toggleRow(documentRef, key, label, detail, preferences, onUpdate) {
@@ -428,6 +733,12 @@ function livingWorldSettings(documentRef, services, state) {
 }
 
 function experience(documentRef, services) {
+  const storedAppearance = services.localState.snapshot().appearance || {};
+  if (Object.hasOwn(storedAppearance, "legacyTheme")) {
+    const migratedAppearance = { ...storedAppearance };
+    delete migratedAppearance.legacyTheme;
+    services.localState.setRecord("appearance", migratedAppearance);
+  }
   const section = el(documentRef, "section", "ui-settings__section");
   const head = el(documentRef, "header", "ui-settings__section-head");
   head.append(
@@ -439,43 +750,12 @@ function experience(documentRef, services) {
   themeGroup.id = "settings-control-themes";
   const themeHead = el(documentRef, "div", "ui-settings__field-head");
   const copy = el(documentRef, "span", "ui-settings__field-copy");
-  copy.append(el(documentRef, "strong", "", "Theme"), el(documentRef, "small", "", "Four restrained, genre-neutral palettes. Theme changes stay on this device."));
+  copy.append(el(documentRef, "strong", "", "Theme"), el(documentRef, "small", "", "Six restrained palettes. Theme changes stay on this device."));
   themeHead.append(copy, el(documentRef, "code", "ui-settings__theme-readout", THEME_COPY[documentRef.documentElement.dataset.theme]?.[0] || "Carbon Signal"));
   const themes = el(documentRef, "div", "ui-settings__theme-ledger");
   const active = documentRef.documentElement.dataset.theme || "carbon-signal";
   Object.keys(THEME_COPY).forEach(id => themes.append(themeChoice(documentRef, services, id, active)));
-  const legacy = el(documentRef, "div", "ui-settings__legacy");
-  const legacyCopy = el(documentRef, "span", "ui-settings__field-copy");
-  legacyCopy.append(el(documentRef, "strong", "", "Legacy themes"), el(documentRef, "small", "", "Kept for compatibility."));
-  const select = documentRef.createElement("select");
-  select.setAttribute("aria-label", "Legacy themes");
-  const emptyLegacy = el(documentRef, "option", "", "Choose a legacy theme");
-  emptyLegacy.value = "";
-  select.append(emptyLegacy);
-  const storedLegacy = services.localState.snapshot().appearance?.legacyTheme || "";
-  LEGACY_THEMES.forEach(([id, label]) => {
-    const option = el(documentRef, "option", "", label);
-    option.value = id;
-    option.selected = id === storedLegacy;
-    select.append(option);
-  });
-  select.addEventListener("change", () => {
-    const selected = LEGACY_THEMES.find(([id]) => id === select.value);
-    if (!selected) return;
-    const [legacyId, , semanticTheme] = selected;
-    appearance.setTheme(semanticTheme);
-    documentRef.documentElement.dataset.legacyTheme = legacyId;
-    const stored = services.localState.snapshot().appearance || {};
-    services.localState.setRecord("appearance", { ...stored, theme: semanticTheme, legacyTheme: legacyId });
-    themeGroup.querySelector(".ui-settings__theme-readout")?.replaceChildren(`Legacy · ${selected[1]}`);
-    themes.querySelectorAll("[data-theme-choice]").forEach(choice => {
-      const activeChoice = choice.dataset.themeChoice === semanticTheme;
-      choice.setAttribute("aria-pressed", String(activeChoice));
-      choice.querySelector(".ui-settings__theme-status").textContent = activeChoice ? "Mapped" : "Use";
-    });
-  });
-  legacy.append(legacyCopy, select);
-  themeGroup.append(themeHead, themes, legacy);
+  themeGroup.append(themeHead, themes, customThemeEditor(documentRef, services, themeGroup, themes));
 
   const readingGroup = el(documentRef, "section", "ui-settings__group");
   readingGroup.id = "settings-control-reading";
@@ -650,7 +930,6 @@ function experience(documentRef, services) {
       appearance.setProseSize("17");
       appearance.setEffects("full");
       documentRef.documentElement.dataset.density = "comfortable";
-      delete documentRef.documentElement.dataset.legacyTheme;
       services.atmosphere.setMuted(false);
       services.atmosphere.setVolume(0.7);
       services.atmosphere.setChime(false);
@@ -758,17 +1037,53 @@ function contentSettings(documentRef, services, state) {
   const maxChars = Math.max(1, Number(bounds.max_chars) || 2000);
   const exemplarFields = el(documentRef, "div", "ui-settings__exemplars");
   const existing = Array.isArray(data.exemplars) ? data.exemplars : [];
-  const inputs = [];
+  const drafts = Array.from({ length: maxCount }, (_, index) => existing[index] || "");
+  const tabList = el(documentRef, "div", "ui-settings__exemplar-tabs");
+  tabList.setAttribute("role", "tablist");
+  tabList.setAttribute("aria-label", "Narrator voice examples");
+  const input = documentRef.createElement("textarea");
+  input.id = "narrator-example-editor";
+  input.maxLength = maxChars;
+  input.rows = 6;
+  let activeIndex = -1;
+  const tabs = [];
+  const activate = (nextIndex, { focus = false } = {}) => {
+    if (activeIndex >= 0) drafts[activeIndex] = input.value;
+    activeIndex = nextIndex;
+    tabs.forEach((tab, index) => {
+      const selected = index === activeIndex;
+      tab.setAttribute("aria-selected", String(selected));
+      tab.tabIndex = selected ? 0 : -1;
+    });
+    input.value = drafts[activeIndex];
+    input.placeholder = activeIndex
+      ? "Another optional passage"
+      : "Paste a short representative passage";
+    input.setAttribute("aria-labelledby", `narrator-example-tab-${activeIndex + 1}`);
+    if (focus) tabs[activeIndex].focus();
+  };
   for (let index = 0; index < maxCount; index += 1) {
-    const input = documentRef.createElement("textarea");
-    input.maxLength = maxChars;
-    input.rows = 3;
-    input.value = existing[index] || "";
-    input.placeholder = index ? "Another optional passage" : "Paste a short representative passage";
-    input.setAttribute("aria-label", `Narrator voice example ${index + 1}`);
-    inputs.push(input);
-    exemplarFields.append(input);
+    const tab = el(documentRef, "button", "ui-settings__exemplar-tab", `Example ${index + 1}`);
+    tab.id = `narrator-example-tab-${index + 1}`;
+    tab.type = "button";
+    tab.setAttribute("role", "tab");
+    tab.setAttribute("aria-controls", input.id);
+    tab.addEventListener("click", () => activate(index));
+    tab.addEventListener("keydown", event => {
+      let nextIndex = null;
+      if (event.key === "ArrowRight") nextIndex = (index + 1) % maxCount;
+      else if (event.key === "ArrowLeft") nextIndex = (index - 1 + maxCount) % maxCount;
+      else if (event.key === "Home") nextIndex = 0;
+      else if (event.key === "End") nextIndex = maxCount - 1;
+      if (nextIndex === null) return;
+      event.preventDefault();
+      activate(nextIndex, { focus: true });
+    });
+    tabs.push(tab);
+    tabList.append(tab);
   }
+  exemplarFields.append(tabList, input);
+  activate(0);
   const exemplarStatus = el(documentRef, "p", "ui-settings__connection-status");
   exemplarStatus.setAttribute("role", "status");
   const saveExemplars = el(documentRef, "button", "ui-button ui-button--primary", "Save narrator voice");
@@ -777,8 +1092,9 @@ function contentSettings(documentRef, services, state) {
     saveExemplars.disabled = true;
     exemplarStatus.textContent = "Saving narrator voice…";
     try {
+      drafts[activeIndex] = input.value;
       await services.apiClient.put("/api/exemplars", {
-        exemplars: inputs.map(input => input.value.trim()).filter(Boolean),
+        exemplars: drafts.map(value => value.trim()).filter(Boolean),
       }, { channel: "settings-content-exemplars", owner: "settings-content" });
       await confirmSettingsSave(services, "Narrator voice saved.");
     } catch (error) {
@@ -807,6 +1123,11 @@ function extensionTrustText(extension) {
   if (trust === "data") return "Data only. It runs no code.";
   if (trust === "prompt") return "Supplies prompt text. It runs no code of its own.";
   return "Runs code inside Sonder with access to stories, world state, and provider connections.";
+}
+
+function extensionActionName(name) {
+  const source = String(name || "").trim();
+  return source.replace(/\s*\(demo\)\s*$/i, "").trim() || source;
 }
 
 function addOnsSettings(documentRef, services) {
@@ -873,6 +1194,7 @@ function addOnsSettings(documentRef, services) {
     if (!extensions.length) list.append(el(documentRef, "p", "ui-settings__provider-empty", "No extensions are installed."));
     extensions.forEach(extension => {
       const name = extension.name || extension.id;
+      const actionName = extensionActionName(name);
       const row = el(documentRef, "article", "ui-settings__extension-row");
       const rowHead = el(documentRef, "div", "ui-settings__extension-head");
       const title = el(documentRef, "span", "ui-settings__field-copy");
@@ -900,17 +1222,17 @@ function addOnsSettings(documentRef, services) {
       row.append(el(documentRef, "p", "ui-settings__trust-note", extensionTrustText(extension)));
       if (extension.error) row.append(el(documentRef, "p", "ui-settings__extension-error", String(extension.error)));
       const actions = el(documentRef, "div", "ui-settings__extension-actions");
-      const toggle = el(documentRef, "button", "ui-button ui-button--quiet", extension.enabled ? `Disable ${name}` : `Enable ${name}`);
+      const toggle = el(documentRef, "button", "ui-button ui-button--quiet", extension.enabled ? `Disable ${actionName}` : `Enable ${actionName}`);
       toggle.type = "button";
-      const remove = el(documentRef, "button", "ui-button ui-button--quiet", `Remove ${name}`);
+      const remove = el(documentRef, "button", "ui-button ui-button--quiet", `Remove ${actionName}`);
       remove.type = "button";
       const report = updateReports.get(extension.id);
       if (report?.update) {
-        const update = el(documentRef, "button", "ui-button ui-button--primary", `Update ${name}`);
+        const update = el(documentRef, "button", "ui-button ui-button--primary", `Update ${actionName}`);
         update.type = "button";
         update.addEventListener("click", async () => {
           update.disabled = true;
-          status.textContent = `Updating ${name}…`;
+          status.textContent = `Updating ${actionName}…`;
           try {
             await services.apiClient.post(`/api/extensions/${encodeURIComponent(extension.id)}/update`, {}, {
               channel: `settings-extension-update:${extension.id}`, owner: "settings-add-ons",
@@ -919,7 +1241,7 @@ function addOnsSettings(documentRef, services) {
             updateReports.delete(extension.id);
             await load();
           } catch (error) {
-            status.textContent = settingsFailureMessage(services, error, `Sonder could not update ${name}.`);
+            status.textContent = settingsFailureMessage(services, error, `Sonder could not update ${actionName}.`);
           }
         });
         actions.append(update);
@@ -932,7 +1254,7 @@ function addOnsSettings(documentRef, services) {
       toggle.addEventListener("click", async () => {
         if (extension.enabled) {
           toggle.disabled = true;
-          status.textContent = `Disabling ${name}…`;
+          status.textContent = `Disabling ${actionName}…`;
           try {
             await services.apiClient.post(`/api/extensions/${encodeURIComponent(extension.id)}/disable`, {}, {
               channel: `settings-extension-toggle:${extension.id}`, owner: "settings-add-ons",
@@ -940,7 +1262,7 @@ function addOnsSettings(documentRef, services) {
             services.registry.unregisterOwner(extension.id);
             await load();
           } catch (error) {
-            status.textContent = settingsFailureMessage(services, error, `Sonder could not disable ${name}.`);
+            status.textContent = settingsFailureMessage(services, error, `Sonder could not disable ${actionName}.`);
           }
           return;
         }
@@ -953,7 +1275,7 @@ function addOnsSettings(documentRef, services) {
           permissions.forEach(permission => disclosure.append(el(documentRef, "li", "", permission)));
           consent.append(disclosure);
         }
-        const confirm = el(documentRef, "button", "ui-button ui-button--primary", `Confirm enable ${name}`);
+        const confirm = el(documentRef, "button", "ui-button ui-button--primary", `Confirm enable ${actionName}`);
         confirm.type = "button";
         const cancel = el(documentRef, "button", "ui-button ui-button--quiet", "Cancel");
         cancel.type = "button";
@@ -961,7 +1283,7 @@ function addOnsSettings(documentRef, services) {
         consent.hidden = false;
         confirm.addEventListener("click", async () => {
           confirm.disabled = true;
-          status.textContent = `Enabling ${name}…`;
+          status.textContent = `Enabling ${actionName}…`;
           try {
             await services.apiClient.post(`/api/extensions/${encodeURIComponent(extension.id)}/enable`, {}, {
               channel: `settings-extension-toggle:${extension.id}`, owner: "settings-add-ons",
@@ -969,7 +1291,7 @@ function addOnsSettings(documentRef, services) {
             await services.registry.loadEnabled([{ ...extension, enabled: true }]);
             await load();
           } catch (error) {
-            status.textContent = settingsFailureMessage(services, error, `Sonder could not enable ${name}.`);
+            status.textContent = settingsFailureMessage(services, error, `Sonder could not enable ${actionName}.`);
           }
         });
         cancel.addEventListener("click", () => {
@@ -979,10 +1301,10 @@ function addOnsSettings(documentRef, services) {
       });
       remove.addEventListener("click", () => {
         consent.replaceChildren(
-          el(documentRef, "strong", "", `Remove ${name}?`),
+          el(documentRef, "strong", "", `Remove ${actionName}?`),
           el(documentRef, "p", "", "Its files will be deleted. Story data it owns is kept so reinstalling can recover it."),
         );
-        const confirm = el(documentRef, "button", "ui-button ui-button--danger", `Confirm remove ${name}`);
+        const confirm = el(documentRef, "button", "ui-button ui-button--danger", `Confirm remove ${actionName}`);
         confirm.type = "button";
         const cancel = el(documentRef, "button", "ui-button ui-button--quiet", "Cancel");
         cancel.type = "button";
@@ -990,7 +1312,7 @@ function addOnsSettings(documentRef, services) {
         consent.hidden = false;
         confirm.addEventListener("click", async () => {
           confirm.disabled = true;
-          status.textContent = `Removing ${name}…`;
+          status.textContent = `Removing ${actionName}…`;
           try {
             await services.apiClient.delete(`/api/extensions/${encodeURIComponent(extension.id)}`, {
               channel: `settings-extension-remove:${extension.id}`, owner: "settings-add-ons",
@@ -998,7 +1320,7 @@ function addOnsSettings(documentRef, services) {
             services.registry.unregisterOwner(extension.id);
             await load();
           } catch (error) {
-            status.textContent = settingsFailureMessage(services, error, `Sonder could not remove ${name}.`);
+            status.textContent = settingsFailureMessage(services, error, `Sonder could not remove ${actionName}.`);
           }
         });
         cancel.addEventListener("click", () => {

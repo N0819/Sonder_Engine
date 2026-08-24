@@ -245,3 +245,17 @@ Python/pytest static contracts, and Playwright browser tests.
 7. Commit the verified implementation and documentation, push `interface`, and
    report the exact tests, render evidence, commit, and remote state.
 
+## Next approved work package: grouped Settings overview
+
+The clean scan-first Settings index is deliberately queued after this UI6
+control-and-theme release so its information-architecture change receives its
+own regressions, visual comparison, immutable release, and integration proof.
+It keeps every detailed page and search path, while making `#/settings` a
+grouped row ledger with semantic icons, concise current-state summaries, and
+direct chevron navigation.
+
+- Design:
+  `docs/superpowers/specs/2026-08-23-settings-overview-design.md`
+- Implementation plan:
+  `docs/superpowers/plans/2026-08-23-settings-overview.md`
+

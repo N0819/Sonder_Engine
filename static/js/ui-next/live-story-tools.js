@@ -1,15 +1,15 @@
-export const MODULE_RELEASE = "alpha98-ui5-98f796584158";
+export const MODULE_RELEASE = "alpha98-ui6-ff8a9b712a2d";
 
-import { mountCastTool } from "./story-tools/cast.js?release=alpha98-ui5-98f796584158";
-import { mountConditionsTool } from "./story-tools/conditions.js?release=alpha98-ui5-98f796584158";
-import { mountFramesTool } from "./story-tools/frames.js?release=alpha98-ui5-98f796584158";
-import { mountMultiplayerTool } from "./story-tools/multiplayer.js?release=alpha98-ui5-98f796584158";
-import { mountWorldTool } from "./story-tools/world.js?release=alpha98-ui5-98f796584158";
-import { mountStyleTool } from "./story-tools/style.js?release=alpha98-ui5-98f796584158";
-import { mountDialogueTool } from "./story-tools/dialogue.js?release=alpha98-ui5-98f796584158";
-import { mountAttireTool } from "./story-tools/attire.js?release=alpha98-ui5-98f796584158";
-import { mountBackdropsTool } from "./story-tools/backdrops.js?release=alpha98-ui5-98f796584158";
-import { mountAmbienceTool } from "./story-tools/ambience.js?release=alpha98-ui5-98f796584158";
+import { mountCastTool } from "./story-tools/cast.js?release=alpha98-ui6-ff8a9b712a2d";
+import { mountConditionsTool } from "./story-tools/conditions.js?release=alpha98-ui6-ff8a9b712a2d";
+import { mountFramesTool } from "./story-tools/frames.js?release=alpha98-ui6-ff8a9b712a2d";
+import { mountMultiplayerTool } from "./story-tools/multiplayer.js?release=alpha98-ui6-ff8a9b712a2d";
+import { mountWorldTool } from "./story-tools/world.js?release=alpha98-ui6-ff8a9b712a2d";
+import { mountStyleTool } from "./story-tools/style.js?release=alpha98-ui6-ff8a9b712a2d";
+import { mountDialogueTool } from "./story-tools/dialogue.js?release=alpha98-ui6-ff8a9b712a2d";
+import { mountAttireTool } from "./story-tools/attire.js?release=alpha98-ui6-ff8a9b712a2d";
+import { mountBackdropsTool } from "./story-tools/backdrops.js?release=alpha98-ui6-ff8a9b712a2d";
+import { mountAmbienceTool } from "./story-tools/ambience.js?release=alpha98-ui6-ff8a9b712a2d";
 
 const MOUNTS = Object.freeze({
   cast: mountCastTool,

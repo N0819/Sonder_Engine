@@ -239,6 +239,70 @@ compatibility token bridge, and theme migration were not adopted.
 
 ---
 
+## SillyTavern-AstraProjecta
+
+| | |
+|---|---|
+| **URL** | https://github.com/RivelleDays/SillyTavern-AstraProjecta |
+| **Author** | `RivelleDays` and contributors |
+| **Licence** | **AGPL-3.0.** Sonder is MIT, so no AstraProjecta source, markup, styles, or assets may be incorporated without changing Sonder's licensing. The UI ideas below require independent implementation. |
+| **What it is** | An early-alpha alternative SillyTavern frontend with desktop and mobile chat, transcript search/editing, revision history, and context-usage presentation. |
+| **Surveyed** | 2026-08-23 at `e7ab01f8e61008ea59da695cc5ab8e33824899e2`; UI/UX only. |
+
+### What was looked at
+
+The README and supplied preview images, plus the change records for context
+usage (PR 7), transcript search/replace (PR 13), optional long-press actions
+(PR 29), and stable generation actions (PR 33). Backend and extension
+architecture were deliberately excluded.
+
+### Ideas drawn from it
+
+**Nothing is implemented merely by this survey.** The external-reference review
+shortlists a focused mobile Find in Story task mode, a visible revision-history
+list, stable composer/action geometry through generation, and progressive
+context disclosure in Turn Details. It rejects message-app chrome, dense
+icon-only composer controls, glass under prose, duplicate navigation, and
+long-press as the sole action route.
+
+The exact dispositions and Sonder-specific limits are recorded in
+[`design/sonder-ui-replacement/EXTERNAL_UI_UX_REFERENCE_REVIEWS.md`](design/sonder-ui-replacement/EXTERNAL_UI_UX_REFERENCE_REVIEWS.md).
+
+---
+
+## ChungusHub
+
+| | |
+|---|---|
+| **URL** | https://github.com/patcireamo/ChungusHub |
+| **Author** | `patcireamo` and contributors |
+| **Licence** | **AGPL-3.0.** Sonder is MIT, so no ChungusHub source, markup, styles, or assets may be incorporated without changing Sonder's licensing. The UI ideas below require independent implementation. |
+| **What it is** | A local-first LLM roleplay frontend whose chat history is a branch tree, with branch-aware search, a visual story map, Library and Settings workspaces, and desktop/mobile compositions. |
+| **Surveyed** | 2026-08-23 at `5c493fe1730543edd7c362302624db6f28255ec1`; UI/UX only. |
+
+### What was looked at
+
+The README; supplied desktop and phone renders; `ChatSearchBar.svelte`,
+`StoryMapView.svelte`, `Workspace.svelte`, and `WelcomeView.svelte`; and the
+Quickstart and SillyTavern migration guides. No installed-app run was treated as
+evidence.
+
+### Ideas drawn from it
+
+**Nothing is implemented merely by this survey.** The review shortlists search
+that cycles only the active story path and requires an explicit jump to an
+off-path result, plus more informative recent-story resume rows. A story map and
+bulk-import receipts are capability-dependent designs rather than current
+commitments. Its state-preserving contextual workspaces corroborate behavior
+Sonder already owns. Its message cards, icon-only mobile navigation,
+workspace-wide effects, and two simultaneous global side docks are rejected for
+Sonder's composition.
+
+The exact dispositions and evidence are recorded in
+[`design/sonder-ui-replacement/EXTERNAL_UI_UX_REFERENCE_REVIEWS.md`](design/sonder-ui-replacement/EXTERNAL_UI_UX_REFERENCE_REVIEWS.md).
+
+---
+
 ## Change log for this file
 
 | Date | Change |
@@ -247,3 +311,4 @@ compatibility token bridge, and theme migration were not adopted.
 | 2026-08-14 | Antonio added — the register's first adopted *implementation*, bundled under OFL 1.1 for the `lcars` theme. |
 | 2026-08-21 | Imported the maintainer-supplied Sonder UI Design Bible 1.0 and recorded its authority boundary. |
 | 2026-08-21 | Recorded the supplied MIT implementation candidate and the narrowly adapted SVG icon sprite. |
+| 2026-08-23 | Recorded the UI/UX-only AstraProjecta and ChungusHub surveys; no AGPL implementation or assets were adopted. |

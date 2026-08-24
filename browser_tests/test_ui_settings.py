@@ -277,6 +277,90 @@ def test_settings_native_controls_meet_desktop_and_touch_target_minimums(
         assert sizes and min(sizes) >= minimum, (width, height, sizes)
 
 
+def test_settings_search_icon_stays_centered_at_every_control_height(
+    page: Page, ui_base_url: str
+) -> None:
+    for width, height in ((1440, 900), (390, 844), (844, 390)):
+        page.goto("about:blank")
+        _open_settings(page, ui_base_url, width=width, height=height)
+        geometry = page.locator(".ui-settings__search").evaluate(
+            """node => {
+              const field = node.querySelector('input').getBoundingClientRect();
+              const icon = node.querySelector('.ui-icon').getBoundingClientRect();
+              return {
+                fieldCenter: field.top + field.height / 2,
+                iconCenter: icon.top + icon.height / 2,
+              };
+            }"""
+        )
+        assert abs(geometry["fieldCenter"] - geometry["iconCenter"]) <= 0.5, (
+            width,
+            height,
+            geometry,
+        )
+
+
+def test_empty_settings_status_collapses_to_the_shared_section_rhythm(
+    page: Page, ui_base_url: str
+) -> None:
+    page.route(
+        "**/api/extensions",
+        lambda route: route.fulfill(
+            content_type="application/json",
+            body=json.dumps({"extensions": [], "load_errors": [], "ext_api": 2}),
+        ),
+    )
+    _open_settings(page, ui_base_url, category="add-ons")
+    page.wait_for_function(
+        "document.querySelector('[data-extension-count]')?.dataset.extensionCount === '0'"
+    )
+    geometry = page.locator(".ui-settings__section").evaluate(
+        """node => {
+          const head = node.querySelector('.ui-settings__section-head').getBoundingClientRect();
+          const status = node.querySelector('.ui-settings__connection-status');
+          const group = node.querySelector('.ui-settings__group').getBoundingClientRect();
+          return {
+            gap: group.top - head.bottom,
+            statusDisplay: getComputedStyle(status).display,
+            statusHeight: status.getBoundingClientRect().height,
+          };
+        }"""
+    )
+    assert geometry["statusDisplay"] == "none", geometry
+    assert geometry["statusHeight"] == 0, geometry
+    assert 17 <= geometry["gap"] <= 19, geometry
+
+
+def test_shared_settings_selects_use_compact_glass_control_geometry(
+    page: Page, ui_base_url: str
+) -> None:
+    _open_settings(page, ui_base_url)
+    density = page.get_by_role("combobox", name="Interface density")
+    comfortable = density.evaluate(
+        """node => {
+          const style = getComputedStyle(node);
+          return {
+            height: node.getBoundingClientRect().height,
+            radius: parseFloat(style.borderRadius),
+            fontSize: parseFloat(style.fontSize),
+            appearance: style.appearance,
+            paddingRight: parseFloat(style.paddingRight),
+            background: style.backgroundColor,
+          };
+        }"""
+    )
+    assert comfortable["height"] == 36, comfortable
+    assert 3 <= comfortable["radius"] <= 4, comfortable
+    assert comfortable["fontSize"] == 13, comfortable
+    assert comfortable["appearance"] == "none", comfortable
+    assert comfortable["paddingRight"] >= 32, comfortable
+    assert comfortable["background"] != "rgba(0, 0, 0, 0)", comfortable
+
+    density.select_option("compact")
+    compact_height = density.evaluate("node => node.getBoundingClientRect().height")
+    assert compact_height == 32
+
+
 def test_mobile_settings_uses_reference_horizontal_category_staging(
     page: Page, ui_base_url: str
 ) -> None:
@@ -347,19 +431,66 @@ def test_settings_search_reaches_an_aliased_control_and_restores_focus(
     expect(page.get_by_role("button", name="Add provider")).to_be_focused()
 
 
-def test_experience_applies_a_legacy_theme_through_the_compatibility_mapping(
+def test_experience_retires_legacy_themes_and_keeps_the_mapped_curated_palette(
     page: Page, ui_base_url: str
 ) -> None:
-    """Catches an inert legacy selector or classic CSS taking layout ownership."""
+    page.add_init_script(
+        """(() => {
+          localStorage.setItem('sonder.ui.next.theme.v1', 'ash-brass');
+          localStorage.setItem('sonder.ui-next', JSON.stringify({
+            version: 2,
+            appearance: { theme: 'ash-brass', legacyTheme: 'tavern' },
+            navigation: {}, panes: {}, drafts: {},
+          }));
+        })()"""
+    )
     _open_settings(page, ui_base_url)
 
-    page.get_by_role("combobox", name="Legacy themes").select_option("tavern")
     expect(page.locator("html")).to_have_attribute("data-theme", "ash-brass")
-    expect(page.locator("html")).to_have_attribute("data-legacy-theme", "tavern")
+    expect(page.get_by_role("combobox", name="Legacy themes")).to_have_count(0)
+    expect(page.get_by_text(re.compile(r"legacy theme", re.I))).to_have_count(0)
+    assert page.locator("html").get_attribute("data-legacy-theme") is None
+    for label in (
+        "Carbon Signal",
+        "Ash and Brass",
+        "Midnight Ink",
+        "Parchment Night",
+        "Neon Circuit",
+        "Modern Slate",
+    ):
+        expect(page.get_by_role("button", name=f"Use {label} theme")).to_be_visible()
+
+    page.get_by_role("button", name="Use Ash and Brass theme").click()
     stored = page.evaluate(
         "JSON.parse(localStorage.getItem('sonder.ui-next') || '{}').appearance"
     )
-    assert stored == {"theme": "ash-brass", "legacyTheme": "tavern"}
+    assert stored == {"theme": "ash-brass"}
+
+
+def test_modern_slate_renders_warm_white_interaction_without_blue(
+    page: Page, ui_base_url: str
+) -> None:
+    _open_settings(page, ui_base_url)
+    page.get_by_role("button", name="Use Modern Slate theme").click()
+    expect(page.locator("html")).to_have_attribute("data-theme", "modern-slate")
+    colors = page.locator("html").evaluate(
+        """node => {
+          const style = getComputedStyle(node);
+          return ['--ui-color-canvas', '--ui-color-surface-solid',
+            '--ui-color-interactive', '--ui-color-interactive-strong',
+            '--ui-color-success', '--ui-color-danger', '--ui-color-info']
+            .map(name => style.getPropertyValue(name).trim());
+        }"""
+    )
+    parsed = []
+    for color in colors:
+        match = re.search(r"rgba?\((\d+),?\s+(\d+),?\s+(\d+)", color)
+        assert match, color
+        channels = tuple(map(int, match.groups()))
+        assert channels[0] >= channels[1] >= channels[2], channels
+        assert channels[0] - channels[2] <= 8, channels
+        parsed.append(channels)
+    assert parsed[2][0] >= 200
 
 
 def test_advanced_prompt_editor_uses_current_presets_and_explicit_save(
@@ -984,10 +1115,11 @@ def test_content_projects_existing_narrator_voice_and_server_bounds(
     }
     _open_settings(page, ui_base_url, category="content", bootstrap=bootstrap)
 
-    examples = page.get_by_role("textbox", name=re.compile(r"Narrator voice example"))
-    expect(examples).to_have_count(2)
-    expect(examples.first).to_have_value("Rain hissed against the copper roof.")
-    expect(examples.first).to_have_attribute("maxlength", "80")
+    expect(page.get_by_role("tab")).to_have_count(2)
+    editor = page.locator(".ui-settings__exemplars textarea")
+    expect(editor).to_have_count(1)
+    expect(editor).to_have_value("Rain hissed against the copper roof.")
+    expect(editor).to_have_attribute("maxlength", "80")
 
 
 def test_ai_connections_edits_role_samplers_and_ordered_backup_models(
@@ -1221,6 +1353,71 @@ def test_content_saves_current_story_content_permissions_and_explains_local_data
     }
 
 
+def test_narrator_voice_uses_one_keyboard_tabbed_editor_and_saves_all_slots(
+    page: Page, ui_base_url: str
+) -> None:
+    bootstrap = {
+        **BOOTSTRAP,
+        "exemplars": ["First voice.", "Second voice.", "Third voice.", "Fourth voice."],
+        "exemplar_bounds": {"max_count": 4, "max_chars": 2000},
+    }
+    writes: list[dict[str, object]] = []
+
+    def save(route) -> None:
+        writes.append(route.request.post_data_json)
+        route.fulfill(
+            content_type="application/json",
+            body=json.dumps({"exemplars": route.request.post_data_json["exemplars"]}),
+        )
+
+    page.route("**/api/exemplars", save)
+    _open_settings(page, ui_base_url, category="content", bootstrap=bootstrap)
+
+    tabs = page.get_by_role("tab")
+    expect(tabs).to_have_count(4)
+    editor = page.locator(".ui-settings__exemplars textarea")
+    expect(editor).to_have_count(1)
+    expect(editor).to_have_value("First voice.")
+    expect(editor).to_have_attribute("aria-labelledby", "narrator-example-tab-1")
+    expect(page.get_by_role("tab", name="Example 1", exact=True)).to_have_attribute(
+        "aria-selected", "true"
+    )
+
+    page.get_by_role("tab", name="Example 2", exact=True).click()
+    expect(editor).to_have_value("Second voice.")
+    editor.fill("Edited second voice.")
+
+    page.get_by_role("tab", name="Example 2", exact=True).press("ArrowRight")
+    expect(page.get_by_role("tab", name="Example 3", exact=True)).to_have_attribute(
+        "aria-selected", "true"
+    )
+    expect(editor).to_have_value("Third voice.")
+    editor.fill("Edited third voice.")
+
+    page.get_by_role("tab", name="Example 3", exact=True).press("End")
+    expect(page.get_by_role("tab", name="Example 4", exact=True)).to_have_attribute(
+        "aria-selected", "true"
+    )
+    expect(editor).to_have_value("Fourth voice.")
+
+    page.get_by_role("tab", name="Example 4", exact=True).press("Home")
+    expect(page.get_by_role("tab", name="Example 1", exact=True)).to_have_attribute(
+        "aria-selected", "true"
+    )
+    expect(editor).to_have_value("First voice.")
+
+    page.get_by_role("button", name="Save narrator voice").click()
+    expect(page.get_by_text("Narrator voice saved.", exact=True)).to_be_visible()
+    assert writes == [{
+        "exemplars": [
+            "First voice.",
+            "Edited second voice.",
+            "Edited third voice.",
+            "Fourth voice.",
+        ]
+    }]
+
+
 def test_content_renders_living_world_built_and_effective_depth_from_server_truth(
     page: Page, ui_base_url: str
 ) -> None:
@@ -1345,6 +1542,60 @@ def test_add_ons_discloses_permissions_and_runs_current_extension_lifecycle(
     page.get_by_role("button", name="Check for extension updates").click()
     expect(page.get_by_role("button", name="Update Sample Extension")).to_be_visible()
     assert writes == [("POST", "enable")]
+
+
+def test_add_on_demo_qualifier_stays_in_title_not_actions_and_actions_have_bounds(
+    page: Page, ui_base_url: str
+) -> None:
+    page.route(
+        re.compile(r".*/api/extensions$"),
+        lambda route: route.fulfill(
+            content_type="application/json",
+            body=json.dumps({
+                "extensions": [{
+                    "id": "campaign",
+                    "name": "Campaign (demo)",
+                    "version": "0.1.0",
+                    "enabled": False,
+                    "trust": "code",
+                    "capabilities": {"ui": {"api": 2}},
+                    "disclosures": [],
+                }],
+                "load_errors": [],
+                "safe_mode": False,
+                "ext_api": 2,
+            }),
+        ),
+    )
+    _open_settings(page, ui_base_url, category="add-ons")
+
+    expect(page.get_by_text("Campaign (demo)", exact=True)).to_be_visible()
+    enable = page.get_by_role("button", name="Enable Campaign", exact=True)
+    remove = page.get_by_role("button", name="Remove Campaign", exact=True)
+    expect(enable).to_be_visible()
+    expect(remove).to_be_visible()
+    expect(page.get_by_role("button", name=re.compile(r"demo", re.I))).to_have_count(0)
+    border = enable.evaluate(
+        """node => {
+          const style = getComputedStyle(node);
+          return { width: parseFloat(style.borderTopWidth), color: style.borderTopColor };
+        }"""
+    )
+    # Chromium snaps a half-CSS-pixel border to one device pixel at DPR 1.
+    assert 0 < border["width"] <= 1, border
+    assert border["color"] != "rgba(0, 0, 0, 0)", border
+
+    enable.click()
+    expect(page.get_by_role("button", name="Confirm enable Campaign", exact=True)).to_be_visible()
+
+
+def test_maintenance_category_uses_its_dedicated_wrench_icon(
+    page: Page, ui_base_url: str
+) -> None:
+    _open_settings(page, ui_base_url)
+    maintenance = page.get_by_role("link", name="Maintenance", exact=True)
+    href = maintenance.locator("use").get_attribute("href")
+    assert href is not None and href.endswith("#icon-maintenance"), href
 
 
 def test_add_ons_stages_install_and_preserves_story_data_on_removal(
