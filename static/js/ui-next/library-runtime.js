@@ -1,6 +1,6 @@
-export const MODULE_RELEASE = "alpha98-ui14-8c5f0c3f2d06";
+export const MODULE_RELEASE = "alpha98-ui15-5b0f039aae29";
 
-import { generateLivedLocation } from "./lived-location.js?release=alpha98-ui14-8c5f0c3f2d06";
+import { generateLivedLocation } from "./lived-location.js?release=alpha98-ui15-5b0f039aae29";
 
 const TYPE_BY_SEGMENT = Object.freeze({
   "": "",

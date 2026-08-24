@@ -14,13 +14,13 @@ def test_live_story_tools_are_native_release_coherent_modules():
     missing = [name for name in MODULES if not (TOOLS / name).is_file()]
     assert missing == []
     for name in MODULES:
-        assert 'export const MODULE_RELEASE = "alpha98-ui14-8c5f0c3f2d06";' in (TOOLS / name).read_text(
+        assert 'export const MODULE_RELEASE = "alpha98-ui15-5b0f039aae29";' in (TOOLS / name).read_text(
             encoding="utf-8"
         )
 
     family = (TOOLS.parent / "live-story-tools.js").read_text(encoding="utf-8")
     for name in MODULES[1:]:
-        assert f'./story-tools/{name}?release=alpha98-ui14-8c5f0c3f2d06' in family
+        assert f'./story-tools/{name}?release=alpha98-ui15-5b0f039aae29' in family
 
 
 def test_cast_uses_authoritative_membership_position_and_colour_routes():

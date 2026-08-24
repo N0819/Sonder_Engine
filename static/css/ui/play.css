@@ -105,20 +105,11 @@
     overflow: hidden;
     pointer-events: none;
     background:
-      radial-gradient(ellipse 52% 40% at 52% 0%, color-mix(in srgb, var(--ui-color-interactive) 7%, transparent), transparent 74%),
       linear-gradient(180deg, transparent 62%, rgb(0 0 0 / .24)),
       var(--ui-color-canvas);
   }
   .ui-play__atmosphere::after {
-    content: "";
-    position: absolute;
-    inset: 58px 0 88px;
-    opacity: .36;
-    background-image:
-      linear-gradient(color-mix(in srgb, var(--ui-color-border) 32%, transparent) 1px, transparent 1px),
-      linear-gradient(90deg, color-mix(in srgb, var(--ui-color-border) 32%, transparent) 1px, transparent 1px);
-    background-size: 64px 64px;
-    mask-image: linear-gradient(180deg, rgb(0 0 0 / .65), transparent 72%);
+    content: none;
   }
   .ui-play__backdrop {
     position: absolute;
@@ -335,7 +326,6 @@
     min-block-size: 20rem;
     margin: clamp(7rem, 18vh, 12rem) auto 0;
     border: 1px solid var(--ui-color-border);
-    border-inline-start: 2px solid var(--ui-color-interactive);
     border-radius: var(--ui-radius-lg);
     background: color-mix(in srgb, var(--ui-color-surface-solid) 58%, transparent);
   }

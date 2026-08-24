@@ -1,6 +1,6 @@
 @layer ui-entry {
   html { min-block-size: 100%; background: var(--ui-color-canvas); }
-  .ui-entry { min-block-size: 100dvh; display: grid; place-items: center; padding: var(--ui-space-7); background: radial-gradient(circle at 60% 0%, var(--ui-color-interactive-soft), transparent 44%), var(--ui-color-canvas); }
+  .ui-entry { min-block-size: 100dvh; display: grid; place-items: center; padding: var(--ui-space-7); background: var(--ui-color-canvas); }
   .ui-entry__panel { inline-size: min(36rem, 100%); display: grid; gap: var(--ui-space-5); padding: var(--ui-space-8); border: 1px solid var(--ui-color-border-strong); border-radius: var(--ui-radius-lg); background: var(--ui-color-surface); box-shadow: var(--ui-shadow-raised); }
   .ui-entry__link { justify-self: start; display: inline-flex; align-items: center; text-decoration: none; margin-block-start: var(--ui-space-4); }
 }

@@ -1,6 +1,6 @@
-export const MODULE_RELEASE = "alpha98-ui14-8c5f0c3f2d06";
+export const MODULE_RELEASE = "alpha98-ui15-5b0f039aae29";
 
-import { createOverlayController } from "../../ui/components/overlay.js?release=alpha98-ui14-8c5f0c3f2d06";
+import { createOverlayController } from "../../ui/components/overlay.js?release=alpha98-ui15-5b0f039aae29";
 
 export function createResponsiveDrawer(options = {}) {
   const documentRef = options.document || document;

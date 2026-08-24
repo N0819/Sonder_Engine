@@ -1,6 +1,6 @@
-export const MODULE_RELEASE = "alpha98-ui14-8c5f0c3f2d06";
+export const MODULE_RELEASE = "alpha98-ui15-5b0f039aae29";
 
-import { decorateFieldControl } from "../ui/components/field.js?release=alpha98-ui14-8c5f0c3f2d06";
+import { decorateFieldControl } from "../ui/components/field.js?release=alpha98-ui15-5b0f039aae29";
 
 // UI_CATALOG_START: Shared lived-location authoring copy.
 const LIVED_LOCATION_COPY = Object.freeze([

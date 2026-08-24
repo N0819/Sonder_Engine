@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "alpha98-ui14-8c5f0c3f2d06";
+export const MODULE_RELEASE = "alpha98-ui15-5b0f039aae29";
 
 function savedNavigation(localState) {
   const panes = localState.snapshot().panes || {};
@@ -19,7 +19,6 @@ export function createAppHeader(options = {}) {
     root.dataset.navCollapsed = String(collapsed);
     collapse.setAttribute("aria-label", collapsed ? "Expand navigation" : "Collapse navigation");
     label.textContent = collapsed ? "Expand" : "Collapse";
-    mark.textContent = collapsed ? "›" : "‹";
   };
   const persist = () => {
     const panes = services.localState.snapshot().panes || {};

@@ -252,18 +252,20 @@ discarding unknown data.
 
 ## Visual system Revision
 
-The approved default scale becomes 12/16 micro, 13/18 metadata, 14/20 control,
-15/22 body, 17/24 section, 24/31 page, and 17/1.7 prose. Routine navigation and
+The approved default scale remains 11/14 micro, 12/16 metadata, 13/18 control,
+14/20 body, 16/22 section, 21/28 page, and 17/1.7 prose. Routine navigation and
 tool labels never use micro text. Mobile inputs remain 16 px.
 
-Controls target 40 px on ordinary desktop and 44 px on touch. The radius family
-becomes 6 px small, 9 px medium, 14 px large, and semantic round. Large radii
-are reserved for cards, drawers, and dialogs; ordinary controls are not pills.
+Controls target 36 px on ordinary desktop and 44 px on touch. The radius family
+remains 3 px compact, 4 px default, 5 px panel, and semantic round. Buttons use
+flat neutral surfaces and regular compact labels; ordinary controls are not
+pills.
 
 Canvas, surface, raised surface, selected surface, and scrim must be perceptibly
 distinct. Spacing and tone perform primary grouping; borders serve fields,
-selection, and structural boundaries. Decorative grids and ambient cyan glow
-are removed. Cyan signals primary action/selection/focus; amber signals warning
+selection, and structural boundaries. Decorative grids, ambient cyan glow,
+thick accent edges, and selected-state gradients are removed. Cyan signals
+primary action/selection/focus; amber signals warning
 or judgment. All curated themes preserve those relationships.
 
 Motion lasts roughly 120-220 ms and explains drawer, disclosure, or selection

@@ -70,7 +70,7 @@ def test_layout_contract_classifies_viewports_and_bounds_pinned_context(
     result = page.evaluate(
         """async (base) => {
           const layout = await import(
-            `${base}/static/js/ui-next/layout-contract.js?release=alpha98-ui14-8c5f0c3f2d06`
+            `${base}/static/js/ui-next/layout-contract.js?release=alpha98-ui15-5b0f039aae29`
           );
           return {
             states: [
@@ -192,10 +192,10 @@ def test_navigation_state_restores_valid_route_scroll_and_focus_identity(
         """async (base) => {
           history.replaceState(null, "", location.pathname);
           const navigationModule = await import(
-            `${base}/static/js/ui-next/navigation-state.js?release=alpha98-ui14-8c5f0c3f2d06`
+            `${base}/static/js/ui-next/navigation-state.js?release=alpha98-ui15-5b0f039aae29`
           );
           const routerModule = await import(
-            `${base}/static/js/ui-next/router.js?release=alpha98-ui14-8c5f0c3f2d06`
+            `${base}/static/js/ui-next/router.js?release=alpha98-ui15-5b0f039aae29`
           );
           let record = {
             route: "#/library/characters",
@@ -599,7 +599,7 @@ def test_shortcut_registry_rejects_collisions_and_guards_typing_and_ime(
     result = page.evaluate(
         """async (base) => {
           const { createShortcutRegistry } = await import(
-            `${base}/static/js/ui-next/shortcuts.js?release=alpha98-ui14-8c5f0c3f2d06`
+            `${base}/static/js/ui-next/shortcuts.js?release=alpha98-ui15-5b0f039aae29`
           );
           let calls = 0;
           let collision = null;
