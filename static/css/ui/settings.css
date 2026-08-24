@@ -1,6 +1,5 @@
 @layer ui-settings {
   :root[data-destination="settings"] .ui-shell { grid-template-columns: var(--ui-shell-rail) minmax(0, 1fr); }
-  :root[data-destination="settings"] .ui-shell__header,
   :root[data-destination="settings"] .ui-shell__inspector { display: none; }
   :root[data-destination="settings"] .ui-shell__workspace { padding: 0; overflow: clip; scrollbar-gutter: auto; }
   :root[data-destination="settings"] .ui-shell__destination-view { overflow: clip; inline-size: 100%; max-inline-size: none; block-size: 100%; min-block-size: 0; }
@@ -280,7 +279,6 @@
     .ui-settings__color-dialog { inline-size: 100%; max-block-size: calc(100dvh - env(safe-area-inset-top)); padding: 18px 14px max(18px, env(safe-area-inset-bottom)); border-width: 1px 0 0; border-radius: var(--ui-radius-lg) var(--ui-radius-lg) 0 0; }
     .ui-settings__toggle-row { grid-template-columns: minmax(0, 1fr) auto auto; }
     .ui-settings__prompt-controls { grid-template-columns: minmax(0, 1fr); }
-    :root[data-destination="settings"] .ui-shell__go-to { display: none; }
   }
 
   @media (max-width: 640px), (pointer: coarse) {

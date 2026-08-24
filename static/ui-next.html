@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-ui-next-entry="application" data-ui-next-version="alpha98-ui13-a39372e1d8d1" data-layout-state="wide">
+<html lang="en" data-ui-next-entry="application" data-ui-next-version="alpha98-ui13-a39372e1d8d1" data-layout-state="wide" data-nav-collapsed="false" data-context-mode="closed">
 <head>
   <meta charset="utf-8">
   <meta name="darkreader-lock">
@@ -43,34 +43,30 @@
         <li>
           <a class="ui-shell__destination" href="#/play" data-core-destination="play" data-focus-identity="nav:play" aria-current="page">
             <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="/static/assets/icons/sonder-icons.svg?release=alpha98-ui13-a39372e1d8d1#icon-play"></use></svg>
-            <span class="ui-shell__destination-index" aria-hidden="true">01</span>
             <span class="ui-shell__destination-label">Play</span>
           </a>
         </li>
         <li>
           <a class="ui-shell__destination" href="#/library" data-core-destination="library" data-focus-identity="nav:library">
             <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="/static/assets/icons/sonder-icons.svg?release=alpha98-ui13-a39372e1d8d1#icon-library"></use></svg>
-            <span class="ui-shell__destination-index" aria-hidden="true">02</span>
             <span class="ui-shell__destination-label">Library</span>
           </a>
         </li>
         <li>
           <a class="ui-shell__destination" href="#/settings" data-core-destination="settings" data-focus-identity="nav:settings">
             <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="/static/assets/icons/sonder-icons.svg?release=alpha98-ui13-a39372e1d8d1#icon-settings"></use></svg>
-            <span class="ui-shell__destination-index" aria-hidden="true">03</span>
             <span class="ui-shell__destination-label">Settings</span>
           </a>
         </li>
       </ol>
-      <button class="ui-shell__go-to ui-button ui-button--quiet" type="button" aria-label="Go To" data-shell-go-to data-focus-identity="go-to-opener">
-        <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="/static/assets/icons/sonder-icons.svg?release=alpha98-ui13-a39372e1d8d1#icon-search"></use></svg>
-        <span>Go To</span>
-        <kbd>Ctrl K</kbd>
+      <button class="ui-shell__nav-collapse ui-button ui-button--quiet" type="button" aria-label="Collapse navigation" data-shell-nav-collapse>
+        <span aria-hidden="true" data-shell-nav-collapse-mark>‹</span>
+        <span data-shell-nav-collapse-label>Collapse</span>
       </button>
     </nav>
 
     <div class="ui-shell__center">
-      <header class="ui-shell__header" data-ui-region="destination-header">
+      <header class="ui-shell__header" data-ui-region="destination-header" data-app-header="true">
         <div class="ui-shell__orientation">
           <p class="ui-shell__eyebrow" data-shell-parent>Sonder Engine</p>
           <h1 class="ui-heading ui-heading--1" id="ui-shell-title" tabindex="-1" data-shell-heading>Play</h1>
@@ -78,6 +74,9 @@
         </div>
         <div class="ui-shell__header-actions">
           <span class="ui-shell__save" data-shell-save-state>Nothing to save</span>
+          <button class="ui-shell__go-to ui-button ui-button--quiet ui-button--icon" type="button" aria-label="Go To" data-shell-go-to data-focus-identity="go-to-opener">
+            <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="/static/assets/icons/sonder-icons.svg?release=alpha98-ui13-a39372e1d8d1#icon-search"></use></svg>
+          </button>
           <button class="ui-button ui-button--quiet ui-button--icon" type="button" aria-label="Open context panel" title="Context panel" data-shell-inspector-open data-focus-identity="inspector-toggle">
             <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="/static/assets/icons/sonder-icons.svg?release=alpha98-ui13-a39372e1d8d1#icon-tools"></use></svg>
             <span class="ui-icon-label">Story tools</span>
@@ -105,11 +104,9 @@
           <button class="ui-button ui-button--quiet ui-button--icon" type="button" aria-label="Pin context panel" title="Pin context panel" aria-pressed="true" data-shell-inspector-pin>
             <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="/static/assets/icons/sonder-icons.svg?release=alpha98-ui13-a39372e1d8d1#icon-pin"></use></svg>
           </button>
-          <button class="ui-button ui-button--quiet ui-button--icon" type="button" aria-label="Resize context panel" title="Resize context panel" data-shell-inspector-resize>
-            <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="/static/assets/icons/sonder-icons.svg?release=alpha98-ui13-a39372e1d8d1#icon-resize"></use></svg>
-          </button>
-          <button class="ui-button ui-button--quiet ui-button--icon" type="button" aria-label="Close context panel" title="Close" data-shell-inspector-close>
+          <button class="ui-button ui-button--quiet" type="button" aria-label="Back" title="Back" data-shell-inspector-close autofocus>
             <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="/static/assets/icons/sonder-icons.svg?release=alpha98-ui13-a39372e1d8d1#icon-close"></use></svg>
+            <span>Back</span>
           </button>
         </div>
       </header>

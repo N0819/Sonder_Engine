@@ -60,6 +60,7 @@ def test_application_entry_uses_the_semantic_shell_and_no_classic_assets():
 def test_shell_declares_exactly_three_core_destinations_and_four_layout_states():
     destinations = (RUNTIME / "destinations.js").read_text(encoding="utf-8")
     shell = (RUNTIME / "shell.js").read_text(encoding="utf-8")
+    layout = (RUNTIME / "layout-contract.js").read_text(encoding="utf-8")
     css = (ROOT / "static" / "css" / "ui" / "shell.css").read_text(
         encoding="utf-8"
     )
@@ -75,7 +76,7 @@ def test_shell_declares_exactly_three_core_destinations_and_four_layout_states()
     ]
     assert "global-settings" not in shell
     for state in ("compact", "medium", "wide", "expansive"):
-        assert f'"{state}"' in shell
+        assert f'"{state}"' in layout
         assert f'[data-layout-state="{state}"]' in css
 
 

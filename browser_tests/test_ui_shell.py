@@ -58,6 +58,9 @@ def test_shell_exposes_three_destinations_and_truthful_empty_play(
     expect(page.get_by_role("heading", name="Play", level=1)).to_be_focused()
     expect(page.get_by_text("Choose a story to begin", exact=True)).to_be_visible()
     assert page.get_by_text("Provider", exact=True).count() == 0
+    expect(page.locator("html")).to_have_attribute("data-context-mode", "closed")
+    expect(page.get_by_role("complementary", name="Story tools")).to_be_hidden()
+    expect(page.locator(".ui-shell__destination-index")).to_have_count(0)
 
 
 def test_layout_contract_classifies_viewports_and_bounds_pinned_context(
@@ -283,8 +286,9 @@ def test_library_to_play_transition_cannot_restore_a_removed_library_inspector(
 ) -> None:
     _open_shell(page, ui_base_url, hash_value="#/library")
     page.get_by_role("link", name="Play", exact=True).click()
+    page.get_by_role("button", name="Open context panel").click()
 
-    inspector = page.get_by_role("complementary", name="Story tools")
+    inspector = page.get_by_role("dialog", name="Story tools")
     expect(inspector.get_by_role("heading", name="Story tools")).to_be_visible()
     expect(inspector.get_by_text("Choose a story to use Story Tools.", exact=True)).to_be_visible()
     expect(inspector.get_by_text("Select a Library row to see its usage and details.", exact=True)).to_have_count(0)
@@ -311,42 +315,88 @@ def test_story_tools_opener_keeps_icon_and_label_on_one_row(
     assert geometry["centerDelta"] <= 1
 
 
-def test_desktop_inspector_opens_closes_pins_and_resizes_without_covering_workspace(
+def test_wide_rail_is_labeled_and_user_collapse_persists(
     page: Page, ui_base_url: str
 ) -> None:
     page.set_viewport_size({"width": 1280, "height": 800})
     _open_shell(page, ui_base_url)
-    inspector = page.get_by_role("complementary", name="Story tools")
-    expect(inspector).to_be_visible()
-    pin_button = inspector.get_by_role("button", name="Pin context panel")
-    pin_icon = pin_button.locator("use")
-    expect(pin_button).to_have_attribute("aria-pressed", "true")
-    expect(pin_icon).to_have_attribute("href", "/static/assets/icons/sonder-icons.svg?release=alpha98-ui13-a39372e1d8d1#icon-pin")
 
-    inspector.get_by_role("button", name="Resize context panel").click()
-    expect(page.locator("html")).to_have_attribute("data-inspector-size", "compact")
-    pin_button.click()
-    expect(page.locator("html")).to_have_attribute("data-inspector-pinned", "false")
-    expect(pin_button).to_have_attribute("aria-pressed", "false")
-    expect(pin_icon).to_have_attribute("href", "/static/assets/icons/sonder-icons.svg?release=alpha98-ui13-a39372e1d8d1#icon-pin")
-    inspector.get_by_role("button", name="Close context panel").click()
-    expect(inspector).to_be_hidden()
+    expect(page.locator("html")).to_have_attribute("data-nav-collapsed", "false")
+    expect(page.locator(".ui-shell__destination-label").first).to_be_visible()
+    collapse = page.get_by_role("button", name="Collapse navigation")
+    collapse.click()
+    expect(page.locator("html")).to_have_attribute("data-nav-collapsed", "true")
+    expect(page.locator(".ui-shell__destination-label").first).to_be_hidden()
 
-    opener = page.get_by_role("button", name="Open context panel")
-    expect(opener).to_be_focused()
-    opener.click()
-    expect(inspector).to_be_visible()
-    expect(inspector.get_by_role("heading", name="Story tools")).to_be_focused()
-    overlap = page.evaluate(
+    page.reload()
+    page.wait_for_function(
+        "document.documentElement.dataset.uiNextState === 'ready'", timeout=10000
+    )
+    expect(page.locator("html")).to_have_attribute("data-nav-collapsed", "true")
+    page.get_by_role("button", name="Expand navigation").click()
+    expect(page.locator("html")).to_have_attribute("data-nav-collapsed", "false")
+
+
+def test_compact_shell_uses_one_app_bar_command_and_no_fixed_title_overlap(
+    page: Page, ui_base_url: str
+) -> None:
+    page.set_viewport_size({"width": 390, "height": 844})
+    _open_shell(page, ui_base_url)
+
+    header = page.locator("[data-ui-region='destination-header']")
+    expect(header).to_have_attribute("data-app-header", "true")
+    command = page.get_by_role("button", name="Go To", exact=True)
+    expect(command).to_have_count(1)
+    geometry = page.evaluate(
         """() => {
-          const workspace = document.querySelector('[data-ui-region="workspace"]')
-            .getBoundingClientRect();
-          const inspector = document.querySelector('[data-ui-region="inspector"]')
-            .getBoundingClientRect();
-          return workspace.right - inspector.left;
+          const header = document.querySelector('[data-app-header]').getBoundingClientRect();
+          const title = document.querySelector('[data-shell-heading]').getBoundingClientRect();
+          const command = document.querySelector('[data-shell-go-to]').getBoundingClientRect();
+          return {
+            titleInside: title.left >= header.left && title.right <= header.right,
+            commandInside: command.left >= header.left && command.right <= header.right,
+            overlap: Math.min(title.right, command.right) - Math.max(title.left, command.left),
+            boxes: { header: header.toJSON(), title: title.toJSON(), command: command.toJSON() },
+          };
         }"""
     )
-    assert overlap <= 1
+    assert geometry["titleInside"] and geometry["commandInside"], geometry
+    assert geometry["overlap"] <= 0, geometry
+
+
+def test_wide_context_is_overlay_and_expansive_context_can_pin_without_crushing_workspace(
+    page: Page, ui_base_url: str
+) -> None:
+    page.set_viewport_size({"width": 1280, "height": 800})
+    _open_shell(page, ui_base_url)
+    opener = page.get_by_role("button", name="Open context panel")
+    opener.click()
+    dialog = page.get_by_role("dialog", name="Story tools")
+    expect(dialog).to_be_visible()
+    expect(page.locator("html")).to_have_attribute("data-context-mode", "overlay")
+    expect(dialog.get_by_role("button", name="Pin context panel")).to_be_hidden()
+    expect(page.locator("[data-story-tools='true']")).to_have_count(1)
+    dialog.get_by_role("button", name="Back").click()
+    expect(opener).to_be_focused()
+
+    page.set_viewport_size({"width": 1440, "height": 900})
+    opener.click()
+    dialog = page.get_by_role("dialog", name="Story tools")
+    pin_button = dialog.get_by_role("button", name="Pin context panel")
+    expect(pin_button).to_be_visible()
+    pin_button.click()
+    inspector = page.get_by_role("complementary", name="Story tools")
+    expect(inspector).to_be_visible()
+    expect(page.locator("html")).to_have_attribute("data-context-mode", "pinned")
+    workspace_width = page.locator("[data-ui-region='workspace']").evaluate(
+        "node => node.getBoundingClientRect().width"
+    )
+    assert workspace_width >= 680
+    expect(page.locator("[data-story-tools='true']")).to_have_count(1)
+
+    page.set_viewport_size({"width": 1280, "height": 800})
+    expect(page.locator("html")).to_have_attribute("data-context-mode", "overlay")
+    expect(page.locator("html")).to_have_attribute("data-inspector-pinned", "false")
 
 
 def test_mobile_inspector_is_a_back_owned_focus_contained_sheet(
@@ -358,7 +408,7 @@ def test_mobile_inspector_is_a_back_owned_focus_contained_sheet(
     opener.click()
     dialog = page.get_by_role("dialog", name="Story tools")
     expect(dialog).to_be_visible()
-    expect(dialog.get_by_role("button", name="Close")).to_be_focused()
+    expect(dialog.get_by_role("button", name="Back")).to_be_focused()
     assert page.locator("[data-ui-region='workspace']").evaluate(
         "node => Boolean(node.closest('[inert]'))"
     )
