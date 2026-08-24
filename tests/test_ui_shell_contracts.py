@@ -30,16 +30,16 @@ def test_shell_sources_are_explicit_release_coherent_modules():
         assert match, name
         releases.add(match.group(1))
 
-    assert releases == {"alpha98-ui6-57d168ae23cf"}
+    assert releases == {"alpha98-ui7-516e7c3e67a7"}
 
 
 def test_application_entry_uses_the_semantic_shell_and_no_classic_assets():
     html = (ROOT / "static" / "ui-next.html").read_text(encoding="utf-8")
 
     assert 'data-ui-next-entry="application"' in html
-    assert 'data-ui-next-version="alpha98-ui6-57d168ae23cf"' in html
-    assert '/static/css/ui/shell.css?release=alpha98-ui6-57d168ae23cf' in html
-    assert '/static/js/ui-next/main.js?release=alpha98-ui6-57d168ae23cf' in html
+    assert 'data-ui-next-version="alpha98-ui7-516e7c3e67a7"' in html
+    assert '/static/css/ui/shell.css?release=alpha98-ui7-516e7c3e67a7' in html
+    assert '/static/js/ui-next/main.js?release=alpha98-ui7-516e7c3e67a7' in html
     assert '<nav ' in html
     assert '<main ' in html
     assert 'data-ui-region="inspector"' in html

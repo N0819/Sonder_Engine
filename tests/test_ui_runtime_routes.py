@@ -61,7 +61,7 @@ def test_documents_and_assets_have_coherent_cache_policy(monkeypatch):
             assert response.headers.get("cache-control") == "no-store", path
 
         unversioned = client.get("/static/js/ui-next/main.js")
-        versioned = client.get("/static/js/ui-next/main.js?release=alpha98-ui6-57d168ae23cf")
+        versioned = client.get("/static/js/ui-next/main.js?release=alpha98-ui7-516e7c3e67a7")
     finally:
         client.close()
 

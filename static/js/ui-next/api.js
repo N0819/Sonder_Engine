@@ -1,11 +1,11 @@
-export const MODULE_RELEASE = "alpha98-ui6-57d168ae23cf";
+export const MODULE_RELEASE = "alpha98-ui7-516e7c3e67a7";
 
 import {
   ApiError,
   apiErrorForStatus,
   malformedResponseError,
   normalizeApiError,
-} from "./errors.js?release=alpha98-ui6-57d168ae23cf";
+} from "./errors.js?release=alpha98-ui7-516e7c3e67a7";
 
 const JSON_TYPES = (contentType) => (
   contentType.includes("application/json") || contentType.includes("+json")

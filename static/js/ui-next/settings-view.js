@@ -1,7 +1,7 @@
-export const MODULE_RELEASE = "alpha98-ui6-57d168ae23cf";
+export const MODULE_RELEASE = "alpha98-ui7-516e7c3e67a7";
 
-import { appearance } from "../ui/appearance.js?release=alpha98-ui6-57d168ae23cf";
-import { initAccessibility, updateAccessibility } from "../ui/accessibility.js?release=alpha98-ui6-57d168ae23cf";
+import { appearance } from "../ui/appearance.js?release=alpha98-ui7-516e7c3e67a7";
+import { initAccessibility, updateAccessibility } from "../ui/accessibility.js?release=alpha98-ui7-516e7c3e67a7";
 import {
   applyCustomTheme,
   CUSTOM_THEME_ROLES,
@@ -14,8 +14,12 @@ import {
   rgbToHex,
   serializeCustomTheme,
   validateCustomTheme,
-} from "../ui/custom-theme.js?release=alpha98-ui6-57d168ae23cf";
-import { createOverlayController } from "../ui/components/overlay.js?release=alpha98-ui6-57d168ae23cf";
+} from "../ui/custom-theme.js?release=alpha98-ui7-516e7c3e67a7";
+import { createOverlayController } from "../ui/components/overlay.js?release=alpha98-ui7-516e7c3e67a7";
+import {
+  projectSettingsOverview,
+  renderSettingsOverview,
+} from "./settings-overview.js?release=alpha98-ui7-516e7c3e67a7";
 
 // UI_CATALOG_START: Alpha 9.8 living-world routing copy.
 const ALPHA98_SETTINGS_COPY = Object.freeze([
@@ -163,6 +167,18 @@ function categoryNav(documentRef, services, active) {
   const nav = el(documentRef, "nav", "ui-settings__categories");
   nav.dataset.settingsCategories = "true";
   nav.setAttribute("aria-label", "Settings categories");
+  const overview = el(documentRef, "a", "ui-settings__category ui-settings__category--overview");
+  overview.href = "#/settings";
+  overview.append(
+    el(documentRef, "span", "ui-settings__index", "00"),
+    icon(documentRef, "home"),
+    el(documentRef, "span", "ui-settings__category-label", "Settings overview"),
+  );
+  overview.addEventListener("click", event => {
+    event.preventDefault();
+    services.router.navigate({ destination: "settings" });
+  });
+  nav.append(overview);
   CATEGORIES.forEach(([id, label, iconName], index) => {
     const link = el(documentRef, "a", "ui-settings__category");
     link.href = `#/settings/${id}`;
@@ -184,7 +200,7 @@ function categoryNav(documentRef, services, active) {
   return nav;
 }
 
-function settingsSearch(documentRef, services) {
+function settingsSearch(documentRef, services, { overview = false } = {}) {
   const field = el(documentRef, "div", "ui-settings__search-wrap");
   const label = el(documentRef, "label", "ui-settings__search");
   const input = documentRef.createElement("input");
@@ -192,6 +208,7 @@ function settingsSearch(documentRef, services) {
   input.placeholder = "Search settings";
   input.setAttribute("aria-label", "Search settings");
   input.setAttribute("aria-controls", "settings-search-results");
+  if (overview) input.dataset.focusIdentity = "settings-overview:search";
   const results = el(documentRef, "div", "ui-settings__search-results");
   results.id = "settings-search-results";
   results.hidden = true;
@@ -220,11 +237,14 @@ function settingsSearch(documentRef, services) {
       const categoryLabel = CATEGORIES.find(([id]) => id === category)?.[1] || category;
       const button = el(documentRef, "button", "ui-settings__search-result", `${labelText} · ${categoryLabel}`);
       button.type = "button";
-      button.addEventListener("click", () => services.router.navigate({
-        destination: "settings",
-        segments: [category],
-        query: { control },
-      }));
+      button.addEventListener("click", () => {
+        services.router.navigate({
+          destination: "settings",
+          segments: [category],
+          query: { control },
+        });
+        if (overview) services.navigationState.rememberFocus(input.dataset.focusIdentity);
+      });
       results.append(button);
     });
     results.hidden = false;
@@ -2044,7 +2064,7 @@ function advanced(documentRef, services, state, route) {
   return section;
 }
 
-function aiConnections(documentRef, services, state) {
+function aiConnections(documentRef, services, state, route) {
   const data = state.settings?.data || {};
   const providers = Array.isArray(data.providers) ? data.providers : [];
   let currentAgentModels = structuredClone(data.agent_models || {});
@@ -2560,6 +2580,8 @@ function aiConnections(documentRef, services, state) {
   const assignments = documentRef.createElement("details");
   assignments.className = "ui-settings__group ui-settings__model-assignments";
   const assignmentsSummary = el(documentRef, "summary", "ui-settings__details-summary", "Advanced model assignments");
+  assignmentsSummary.id = "settings-control-models";
+  assignments.open = route?.query?.control === "models";
   const assignmentsIntro = el(
     documentRef,
     "p",
@@ -2952,26 +2974,55 @@ export function createSettingsView(options = {}) {
   const documentRef = options.document || document;
   const { services, state } = options;
   const route = state.route || services.router.current();
-  const requested = route.segments?.[0] || "experience";
+  const requested = route.segments?.[0] || "overview";
+  const isOverview = requested === "overview";
   const active = CATEGORIES.some(([id]) => id === requested) ? requested : "experience";
   const root = el(documentRef, "section", "ui-settings");
   root.dataset.settingsShell = "true";
   const header = el(documentRef, "header", "ui-settings__header");
   const title = el(documentRef, "div");
   title.append(el(documentRef, "p", "ui-settings__kicker", "Settings"), el(documentRef, "h1", "ui-heading ui-heading--1", "Sonder preferences"));
-  header.append(title, settingsSearch(documentRef, services));
+  header.append(title, settingsSearch(documentRef, services, { overview: isOverview }));
   const body = el(documentRef, "div", "ui-settings__body");
-  const nav = categoryNav(documentRef, services, active);
   const content = el(documentRef, "div", "ui-settings__content");
   content.dataset.settingsContent = "true";
+  content.dataset.shellScrollRegion = "settings-content";
   content.tabIndex = 0;
   content.setAttribute("role", "region");
-  content.setAttribute("aria-label", `${CATEGORIES.find(([id]) => id === active)?.[1] || "Current"} settings`);
-  content.append(
-    active === "experience"
+  content.setAttribute("aria-label", isOverview
+    ? "Settings overview"
+    : `${CATEGORIES.find(([id]) => id === active)?.[1] || "Current"} settings`);
+  if (isOverview) {
+    body.classList.add("ui-settings__body--overview");
+    content.classList.add("ui-settings__content--overview");
+    const overview = renderSettingsOverview({
+      document: documentRef,
+      groups: projectSettingsOverview({
+        appearance: services.localState.snapshot().appearance || {},
+        accessibility: initAccessibility(),
+        atmosphere: services.atmosphere.snapshot()?.preferences || {},
+        settings: state.settings?.data || {},
+        extensions: state.extensions || {},
+        storyOpen: Boolean(state.story?.data?.chat?.id),
+        theme: documentRef.documentElement.dataset.theme,
+        proseSize: documentRef.documentElement.dataset.proseSize,
+        density: documentRef.documentElement.dataset.density,
+        effects: documentRef.documentElement.dataset.effects,
+      }),
+      iconFactory: name => icon(documentRef, name),
+      navigate: href => services.router.navigate(href),
+      rememberFocus: identity => services.navigationState.rememberFocus(identity),
+    });
+    overview.setAttribute("data-settings-overview", "true");
+    content.append(overview);
+    body.append(content);
+  } else {
+    const nav = categoryNav(documentRef, services, active);
+    content.append(
+      active === "experience"
       ? experience(documentRef, services)
       : active === "ai-connections"
-        ? aiConnections(documentRef, services, state)
+        ? aiConnections(documentRef, services, state, route)
       : active === "content"
         ? contentSettings(documentRef, services, state)
       : active === "add-ons"
@@ -2981,19 +3032,26 @@ export function createSettingsView(options = {}) {
       : active === "advanced"
         ? advanced(documentRef, services, state, route)
         : placeholder(documentRef, active),
-  );
-  body.append(nav, content);
+    );
+    body.append(nav, content);
+  }
   root.append(header, body);
   const teardownScrollIntent = bindSettingsScrollIntent(root, content);
   services.localizer.localize(root);
   requestAnimationFrame(() => {
-    nav.querySelector("[aria-current='page']")?.scrollIntoView({ block: "nearest", inline: "center" });
+    root.querySelector("[data-settings-categories] [aria-current='page']")?.scrollIntoView({ block: "nearest", inline: "center" });
+    if (isOverview) {
+      const identity = services.navigationState.snapshot().focusIdentity;
+      if (identity.startsWith("settings-overview:")) {
+        requestAnimationFrame(() => services.navigationState.restoreFocus(identity));
+      }
+    }
     const control = String(route.query?.control || "");
     if (control) {
       const target = content.querySelector(`#settings-control-${CSS.escape(control)}`);
-      const focusTarget = target?.matches("button, input, select, textarea, a[href]")
+      const focusTarget = target?.matches("button, input, select, textarea, summary, a[href]")
         ? target
-        : target?.querySelector("button, input, select, textarea, a[href]");
+        : target?.querySelector("button, input, select, textarea, summary, a[href]");
       focusTarget?.focus();
       target?.scrollIntoView({ block: "center" });
     }
