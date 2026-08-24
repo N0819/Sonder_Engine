@@ -415,7 +415,32 @@
 }
 
 .ui-library-detail__actions.ui-action-cluster {
-  display: inline-flex;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(8.5rem, 100%), 1fr));
+  inline-size: 100%;
+  max-inline-size: none;
+}
+
+.ui-library-detail__actions.ui-action-cluster > :is(.ui-button, a.ui-button, .ui-action-more) {
+  inline-size: 100%;
+  min-inline-size: 0;
+}
+
+.ui-library-detail__actions.ui-action-cluster > :is(.ui-button, a.ui-button, .ui-action-more) + :is(.ui-button, a.ui-button, .ui-action-more) {
+  border-inline-start: 0;
+}
+
+.ui-library-detail__actions.ui-action-cluster > :is(.ui-button, a.ui-button, .ui-action-more):nth-child(even) {
+  border-inline-start: 1px solid var(--ui-color-border);
+}
+
+.ui-library-detail__actions.ui-action-cluster > :is(.ui-button, a.ui-button, .ui-action-more):nth-child(n + 3) {
+  border-block-start: 1px solid var(--ui-color-border);
+}
+
+.ui-library-detail__actions.ui-action-cluster > :is(.ui-button, a.ui-button, .ui-action-more):last-child:nth-child(odd),
+.ui-library-detail__actions.ui-action-cluster > .ui-library-detail__delete {
+  grid-column: 1 / -1;
 }
 
 .ui-library__create-cluster {

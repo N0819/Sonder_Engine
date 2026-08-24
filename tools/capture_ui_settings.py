@@ -278,10 +278,21 @@ def main() -> None:
             )
             page.screenshot(path=OUTPUT / "settings-ai-1440.png")
 
-            page.get_by_text("Advanced model assignments", exact=True).click()
-            page.locator(".ui-settings__model-assignments").scroll_into_view_if_needed()
+            page.goto(
+                f"http://{host}:{port}/static/ui-next.html#/settings/ai-connections?control=models"
+            )
+            page.wait_for_function(
+                "document.documentElement.dataset.uiNextState === 'ready'"
+            )
+            page.get_by_role("heading", name="Model assignments", level=2).wait_for()
             page.screenshot(path=OUTPUT / "settings-ai-models-1440.png")
 
+            page.goto(
+                f"http://{host}:{port}/static/ui-next.html#/settings/ai-connections"
+            )
+            page.wait_for_function(
+                "document.documentElement.dataset.uiNextState === 'ready'"
+            )
             page.get_by_text("Scene backdrops", exact=True).scroll_into_view_if_needed()
             page.screenshot(path=OUTPUT / "settings-ai-media-1440.png")
 

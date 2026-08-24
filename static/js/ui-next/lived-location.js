@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "alpha98-ui11-0acc47fb0573";
+export const MODULE_RELEASE = "alpha98-ui12-7eaf6b3481a3";
 
 // UI_CATALOG_START: Shared lived-location authoring copy.
 const LIVED_LOCATION_COPY = Object.freeze([
