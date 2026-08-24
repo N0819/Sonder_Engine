@@ -37,11 +37,11 @@ def test_story_tool_platform_is_a_release_coherent_native_module_family():
         match = re.search(r'export const MODULE_RELEASE = "([^"]+)";', source)
         assert match, name
         releases.add(match.group(1))
-    assert releases == {"alpha98-ui9-ff279a1d1d7f"}
+    assert releases == {"alpha98-ui10-c14a4cf8dabd"}
 
     bootstrap = (RUNTIME / "bootstrap.js").read_text(encoding="utf-8")
     for module in STORY_TOOL_MODULES:
-        assert f'"./{module}?release=alpha98-ui9-ff279a1d1d7f"' in bootstrap
+        assert f'"./{module}?release=alpha98-ui10-c14a4cf8dabd"' in bootstrap
 
 
 def test_story_tool_registry_names_every_current_story_surface_once():

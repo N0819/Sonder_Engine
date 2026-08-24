@@ -1,7 +1,7 @@
-export const MODULE_RELEASE = "alpha98-ui9-ff279a1d1d7f";
+export const MODULE_RELEASE = "alpha98-ui10-c14a4cf8dabd";
 
-import { appearance } from "../ui/appearance.js?release=alpha98-ui9-ff279a1d1d7f";
-import { initAccessibility, updateAccessibility } from "../ui/accessibility.js?release=alpha98-ui9-ff279a1d1d7f";
+import { appearance } from "../ui/appearance.js?release=alpha98-ui10-c14a4cf8dabd";
+import { initAccessibility, updateAccessibility } from "../ui/accessibility.js?release=alpha98-ui10-c14a4cf8dabd";
 import {
   applyCustomTheme,
   CUSTOM_THEME_ROLES,
@@ -14,12 +14,12 @@ import {
   rgbToHex,
   serializeCustomTheme,
   validateCustomTheme,
-} from "../ui/custom-theme.js?release=alpha98-ui9-ff279a1d1d7f";
-import { createOverlayController } from "../ui/components/overlay.js?release=alpha98-ui9-ff279a1d1d7f";
+} from "../ui/custom-theme.js?release=alpha98-ui10-c14a4cf8dabd";
+import { createOverlayController } from "../ui/components/overlay.js?release=alpha98-ui10-c14a4cf8dabd";
 import {
   projectSettingsOverview,
   renderSettingsOverview,
-} from "./settings-overview.js?release=alpha98-ui9-ff279a1d1d7f";
+} from "./settings-overview.js?release=alpha98-ui10-c14a4cf8dabd";
 
 // UI_CATALOG_START: Alpha 9.8 living-world routing copy.
 const ALPHA98_SETTINGS_COPY = Object.freeze([

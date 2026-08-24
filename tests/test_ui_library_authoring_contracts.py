@@ -18,10 +18,10 @@ def test_authoring_modules_are_release_coherent_and_loaded_explicitly():
         "library-editors/story.js",
     ):
         source = (RUNTIME / name).read_text(encoding="utf-8")
-        assert 'export const MODULE_RELEASE = "alpha98-ui9-ff279a1d1d7f";' in source
+        assert 'export const MODULE_RELEASE = "alpha98-ui10-c14a4cf8dabd";' in source
         assert name in bootstrap
-    assert 'data-ui-next-version="alpha98-ui9-ff279a1d1d7f"' in html
-    assert "/static/css/ui/library-authoring.css?release=alpha98-ui9-ff279a1d1d7f" in html
+    assert 'data-ui-next-version="alpha98-ui10-c14a4cf8dabd"' in html
+    assert "/static/css/ui/library-authoring.css?release=alpha98-ui10-c14a4cf8dabd" in html
 
 
 def test_authoring_runtime_owns_revisions_drafts_and_stale_responses():

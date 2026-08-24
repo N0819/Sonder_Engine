@@ -38,7 +38,7 @@ contract break, P2 is visible polish/consistency debt, and P3 is minor residue.
 | UI-009 | P1 | Story Tools | Fixed | Selecting a tool leaves all ten rows above the editor, often putting the editor below the fold. Compact widths cannot safely host editors. | Stage list and detail as separate views with an All tools back control. Temporarily present detail at expanded width, then restore the saved list mode on return. | Short-panel and responsive-sheet tests prove editor visibility, focus, back navigation, and restored mode. |
 | UI-010 | P2 | Story Tools / icons | Fixed | Conditions reuses Clothing, Frames reuses Story, and Multiplayer reuses Cast. These are semantically unrelated substitutions. | Give conditions, frames, and multiplayer dedicated local SVG symbols and map each tool to its own icon. | Sprite/DOM test checks unique symbol references and accessible labels. |
 | UI-011 | P2 | Shared icons | Fixed | Library More (`…`), Play More (`⋯`), New Story Close (`×`), Story Tool chevrons (`›`), and a Library state marker (`●`) use text-glyph stand-ins. | Replace action glyphs with the existing or new local SVG symbols; render the status marker as CSS geometry rather than text. | DOM/source regression ensures these controls contain SVG and no glyph fallback. |
-| UI-012 | P1 | Library | Fixed | The left `Library / Scope / All Library` ledger and central `Library / Your story material` dashboard repeat hierarchy, counts, scope, and creation actions. `libraryHome()` is unconditional and the alternate toolbar path is dead. | Make the left rail category/scope navigation and the center the single searchable material ledger. Remove decorative totals and redundant scope context; keep one create/import action cluster. | Empty/populated Library tests assert one canonical heading, ledger, scope description, and create/import cluster. |
+| UI-012 | P1 | Library | Fixed | The first cleanup removed duplicate ledgers but retained a Library category/scope sub-sidebar beside a category-named workspace. The result had one data ledger but still repeated `Stories`, `Characters`, `Personas`, and `Lore` as competing navigation and content hierarchy. | Use one Library destination workspace: contextual create/import actions in its header, material type and Library scope in its filter region, one search/sort/visibility toolbar, one ledger, and optional right-side detail. Do not add a persistent Library sub-sidebar beside the global destination rail. | Desktop/tablet/compact browser tests assert one `Library` heading, no Library sub-sidebar, one material-type navigation, one scope control, one ledger, one action cluster, retained route/filter behavior, and 44 px compact controls. |
 | UI-013 | P2 | Library terminology | Fixed | The same category is called Lore in the rail and Lorebooks in the dashboard. | Use Lore consistently in navigation, totals, headings, and accessible names. | Browser text assertion. |
 | UI-014 | P1 | Shared responsive controls | Fixed | Playwright found 36–40px phone controls: Library search/scope/tabs, compact sheet actions, and the landscape Play empty action. | Enforce the 44px touch minimum for actionable controls in compact and phone/landscape layouts without inflating desktop density. | Target-size scan across the reference responsive matrix, including dialog and staged sheet controls. |
 | UI-015 | P2 | Play composition | Fixed | Empty Play's stage is visually under-structured and reads as a broken blank region rather than a purposeful starting state. | Bound the empty state with the same stage rhythm, divider/accent language, concise orientation, and action hierarchy as the supplied reference. | Same-viewport screenshot comparison at desktop, phone, and short landscape. |
@@ -106,6 +106,8 @@ document is retained.
 
 ### DEV-UI-2026-08-23-A: Library hierarchy calibration
 
+Status: superseded by DEV-UI-2026-08-24-C.
+
 - Category: calibration / information architecture correction
 - Current reference rule: the supplied desktop Library screenshot contains a
   narrow ledger and a central material dashboard with repeated summary data.
@@ -120,6 +122,24 @@ document is retained.
 - Accessibility/localization impact: fewer repeated landmarks and action names;
   stable accessible headings and one create/import cluster.
 - Approval: approved as part of the 2026-08-23 cleanup scope.
+
+### DEV-UI-2026-08-24-C: Single Library destination workspace
+
+- Category: information architecture correction
+- Superseded rule: DEV-UI-2026-08-23-A retained a persistent Library
+  category/scope pane beside the central ledger.
+- Approved rule: Library has one destination workspace. The workspace owns its
+  heading, contextual create/import cluster, material-type navigation, scope,
+  search, sort, visibility, and ledger. The existing optional inspector remains
+  the only adjacent detail region; there is no persistent Library sub-sidebar.
+- Rationale: the retained sub-sidebar and category-named workspace exposed the
+  same choice twice and added a third rail-like region without a distinct task.
+- Responsive impact: the same workspace filters recompose above the ledger;
+  compact selection detail continues to use the existing Back-owned sheet.
+- Accessibility/localization impact: one destination heading and one named
+  material-type navigation replace competing category headings; all compact
+  controls retain the 44 px target floor.
+- Approval: approved by the project owner on 2026-08-24.
 
 ### DEV-UI-2026-08-23-B: Story Tools presentation modes
 
@@ -245,3 +265,29 @@ The detailed Settings navigation was reconciled with the grouped overview on
   short-landscape states.
 - The integrated immutable UI graph is coherent at
   `alpha98-ui9-ff279a1d1d7f`.
+
+## Single Library workspace record
+
+The Library information architecture correction was verified on 2026-08-24
+as the UI10 package.
+
+- Library now has one destination workspace: one `Library` heading, one
+  material-type navigation, one scope control, one search/sort/visibility
+  toolbar, one ledger, and one contextual create/import cluster. The global
+  destination rail and optional detail inspector are the only adjacent regions.
+- The focused Library, authoring, runtime, and entry gate passed 56 tests; the
+  complete browser suite passed 245 tests.
+- The complete repository suite passed 8,808 tests with 4 expected
+  platform-specific skips. The seven initial extension failures were caused by
+  Git safe-directory rejection in the isolated worktree and passed when the
+  exact repository and worktree paths were supplied process-locally.
+- The repeatable Library capture produced 32 reviewed desktop, tablet, phone,
+  short-height, detail, Japanese, reduced-motion, and scale states with zero
+  horizontal overflow, undersized compact targets, unbounded rows, or page
+  errors. Its 12 fixture 404 console entries are unchanged from the preceding
+  capture.
+- The generated code map and complete project structure check passed. The
+  approved reference-composition departure is recorded in
+  DEV-UI-2026-08-24-C above.
+- The complete immutable UI graph is coherent at
+  `alpha98-ui10-c14a4cf8dabd`.

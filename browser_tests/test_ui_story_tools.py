@@ -55,9 +55,9 @@ def test_story_tool_registry_and_route_parser_are_exact(page: Page, ui_base_url:
     result = page.evaluate(
         """async base => {
           const registry = await import(
-            `${base}/static/js/ui-next/story-tools-registry.js?release=alpha98-ui9-ff279a1d1d7f`
+            `${base}/static/js/ui-next/story-tools-registry.js?release=alpha98-ui10-c14a4cf8dabd`
           );
-          const router = await import(`${base}/static/js/ui-next/router.js?release=alpha98-ui9-ff279a1d1d7f`);
+          const router = await import(`${base}/static/js/ui-next/router.js?release=alpha98-ui10-c14a4cf8dabd`);
           const route = router.parseHashRoute(
             "#/play/story-tools?chat=17&tool=conditions"
           );
@@ -179,9 +179,9 @@ def test_story_tool_detail_replaces_list_and_uses_distinct_svg_icons(
         for tool in ("conditions", "frames", "multiplayer")
     }
     assert hrefs == {
-        "conditions": "/static/assets/icons/sonder-icons.svg?release=alpha98-ui9-ff279a1d1d7f#icon-conditions",
-        "frames": "/static/assets/icons/sonder-icons.svg?release=alpha98-ui9-ff279a1d1d7f#icon-frames",
-        "multiplayer": "/static/assets/icons/sonder-icons.svg?release=alpha98-ui9-ff279a1d1d7f#icon-multiplayer",
+        "conditions": "/static/assets/icons/sonder-icons.svg?release=alpha98-ui10-c14a4cf8dabd#icon-conditions",
+        "frames": "/static/assets/icons/sonder-icons.svg?release=alpha98-ui10-c14a4cf8dabd#icon-frames",
+        "multiplayer": "/static/assets/icons/sonder-icons.svg?release=alpha98-ui10-c14a4cf8dabd#icon-multiplayer",
     }
     assert inspector.locator(
         "[data-story-tool='cast'] > .ui-icon:last-child use"

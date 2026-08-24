@@ -161,7 +161,7 @@ def test_every_sprite_icon_keeps_fill_and_stroke_inside_its_viewbox(
     _open_lab(page, ui_base_url)
     measurements = page.evaluate(
         """async () => {
-          const source = await fetch('/static/assets/icons/sonder-icons.svg?release=alpha98-ui9-ff279a1d1d7f').then(response => response.text());
+          const source = await fetch('/static/assets/icons/sonder-icons.svg?release=alpha98-ui10-c14a4cf8dabd').then(response => response.text());
           const sprite = new DOMParser().parseFromString(source, 'image/svg+xml');
           const host = document.createElement('div');
           host.style.cssText = 'position:fixed;inset:0 auto auto 0;display:flex;visibility:hidden';

@@ -1,13 +1,13 @@
-export const MODULE_RELEASE = "alpha98-ui9-ff279a1d1d7f";
+export const MODULE_RELEASE = "alpha98-ui10-c14a4cf8dabd";
 
 import {
   createStoryEditor,
   createStoryImporter,
-} from "./library-editors/story.js?release=alpha98-ui9-ff279a1d1d7f";
+} from "./library-editors/story.js?release=alpha98-ui10-c14a4cf8dabd";
 import {
   createPersonEditor,
   createPersonImporter,
-} from "./library-editors/character-persona.js?release=alpha98-ui9-ff279a1d1d7f";
+} from "./library-editors/character-persona.js?release=alpha98-ui10-c14a4cf8dabd";
 
 // UI_CATALOG_START: Library authoring status copy.
 const COPY = Object.freeze({

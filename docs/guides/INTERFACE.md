@@ -317,14 +317,14 @@ do not carry persistent work, failures, or choices.
 - Undo is in-memory, owner-bound, exact-operation, and expires after twelve
   seconds. It is offered only for sound inverses; no receipt or story data is
   persisted in browser-local presentation state.
-- Wide/expansive layouts assign each responsibility once: the left pane owns
-  category and scope navigation, the center owns the single searchable/sortable
-  material ledger and create/import actions, and the right pane owns selected
-  item detail. Decorative duplicate totals, recent lists, and scope summaries
-  are not parallel authorities. Medium/compact layouts retain the central
-  ledger and stage detail in the Back-owned inspector sheet. Direct
-  selected-item links stage that sheet once; Back returns to the retained ledger
-  rather than reopening it.
+- Library has one destination workspace at every viewport. Its header owns the
+  contextual create/import cluster; its filter region owns material type and
+  Library scope; and its toolbar and ledger own search, sort, visibility, and
+  results. Library does not add a persistent sub-sidebar beside the global
+  destination rail. The optional right inspector owns selected-item detail on
+  wide/expansive layouts, while medium/compact layouts stage the same detail in
+  the Back-owned inspector sheet. Direct selected-item links stage that sheet
+  once; Back returns to the retained ledger rather than reopening it.
 - Activating a Story row selects it and reveals Library detail; it never enters
   Play. Only the explicit `Open in Play` action commits that navigation. Until
   then the Library route, scope, filters, selection, and scroll remain owned by

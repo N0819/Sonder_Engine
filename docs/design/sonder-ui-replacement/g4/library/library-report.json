@@ -13,7 +13,7 @@
       "console_errors": [],
       "detail_state": null,
       "detail_visible": false,
-      "dom_count": 242,
+      "dom_count": 187,
       "horizontal_overflow_px": 0,
       "id": "expansive-all",
       "language": "en",
@@ -29,7 +29,7 @@
       "result_state": null,
       "route": "#/library",
       "screenshot": "docs/design/sonder-ui-replacement/g4/library/screenshots/expansive-all.png",
-      "screenshot_sha256": "6d72ff1b53352afc46ecb5ffd502a80eae510f4601846ab054ff5fc7041acc07",
+      "screenshot_sha256": "75b4f183b44d4fdfee62cbd8c8d932ac8a2bb66b0238d29a47d2785e283e24f2",
       "selected_name": null,
       "sensitive_text": false,
       "ui_state": "ready",
@@ -51,7 +51,7 @@
       "console_errors": [],
       "detail_state": null,
       "detail_visible": false,
-      "dom_count": 231,
+      "dom_count": 183,
       "horizontal_overflow_px": 0,
       "id": "wide-current-story",
       "language": "en",
@@ -67,7 +67,7 @@
       "result_state": null,
       "route": "#/library?scope=story&story=1",
       "screenshot": "docs/design/sonder-ui-replacement/g4/library/screenshots/wide-current-story.png",
-      "screenshot_sha256": "b0cb980e1959aed5e31e484eb8920460be086ca2f14b50b79f4be322c6038d7d",
+      "screenshot_sha256": "29ca18aad2f159e576eb57cbd4501304e5f348d6eb7aec4ee11a7d921f315692",
       "selected_name": null,
       "sensitive_text": false,
       "ui_state": "ready",
@@ -89,7 +89,7 @@
       "console_errors": [],
       "detail_state": null,
       "detail_visible": false,
-      "dom_count": 242,
+      "dom_count": 187,
       "horizontal_overflow_px": 0,
       "id": "desktop-choose-story",
       "language": "en",
@@ -105,7 +105,7 @@
       "result_state": null,
       "route": "#/library",
       "screenshot": "docs/design/sonder-ui-replacement/g4/library/screenshots/desktop-choose-story.png",
-      "screenshot_sha256": "8abd6945c7436ed925d8be7912c2fe830330460626b0954ca3d7d754d047ea41",
+      "screenshot_sha256": "9a4b97e5ea368f4c5727af64a7ef7de5f1785e652dd6621f69a3c82a3524e5ed",
       "selected_name": null,
       "sensitive_text": false,
       "ui_state": "ready",
@@ -127,7 +127,7 @@
       "console_errors": [],
       "detail_state": null,
       "detail_visible": false,
-      "dom_count": 210,
+      "dom_count": 168,
       "horizontal_overflow_px": 0,
       "id": "desktop-unassigned",
       "language": "en",
@@ -143,7 +143,7 @@
       "result_state": null,
       "route": "#/library?scope=unassigned",
       "screenshot": "docs/design/sonder-ui-replacement/g4/library/screenshots/desktop-unassigned.png",
-      "screenshot_sha256": "3c70fcb187a7b8ebdc3080b90261955c0ab7ef63e0f2d13f0ba8eca939695b9b",
+      "screenshot_sha256": "1fed069b750d089391215b8f01c0ab3bc6c684717d5fe1e0a6f49a7d252b0cbf",
       "selected_name": null,
       "sensitive_text": false,
       "ui_state": "ready",
@@ -165,7 +165,7 @@
       "console_errors": [],
       "detail_state": null,
       "detail_visible": false,
-      "dom_count": 210,
+      "dom_count": 168,
       "horizontal_overflow_px": 0,
       "id": "desktop-multiple",
       "language": "en",
@@ -181,7 +181,7 @@
       "result_state": null,
       "route": "#/library?scope=multiple",
       "screenshot": "docs/design/sonder-ui-replacement/g4/library/screenshots/desktop-multiple.png",
-      "screenshot_sha256": "77e57178eff3591e60ff798812cbcd663bfac0b703f7f85f1d773ec7e6641d33",
+      "screenshot_sha256": "fa910587d4ff477104f0dc399d3156f94a829251b6a2f775e94f6d88e5dfe69b",
       "selected_name": null,
       "sensitive_text": false,
       "ui_state": "ready",
@@ -203,7 +203,7 @@
       "console_errors": [],
       "detail_state": null,
       "detail_visible": false,
-      "dom_count": 242,
+      "dom_count": 187,
       "horizontal_overflow_px": 0,
       "id": "desktop-stories",
       "language": "en",
@@ -219,7 +219,7 @@
       "result_state": null,
       "route": "#/library/stories",
       "screenshot": "docs/design/sonder-ui-replacement/g4/library/screenshots/desktop-stories.png",
-      "screenshot_sha256": "b51874f5947d0283df01c351dacaa8c3694018bc59d2e3c81292406709c4b345",
+      "screenshot_sha256": "9a4b97e5ea368f4c5727af64a7ef7de5f1785e652dd6621f69a3c82a3524e5ed",
       "selected_name": null,
       "sensitive_text": false,
       "ui_state": "ready",
@@ -241,7 +241,7 @@
       "console_errors": [],
       "detail_state": null,
       "detail_visible": false,
-      "dom_count": 231,
+      "dom_count": 193,
       "horizontal_overflow_px": 0,
       "id": "desktop-characters",
       "language": "en",
@@ -257,7 +257,7 @@
       "result_state": null,
       "route": "#/library/characters",
       "screenshot": "docs/design/sonder-ui-replacement/g4/library/screenshots/desktop-characters.png",
-      "screenshot_sha256": "53720cd7776931ecaef49e34cb66633135afed050d85796a6bc22fd7ec4c350b",
+      "screenshot_sha256": "37efc5d3fa563b1edba2109c3b302fb78cdaba6499ae4b4b0352fad1fde50083",
       "selected_name": null,
       "sensitive_text": false,
       "ui_state": "ready",
@@ -279,7 +279,7 @@
       "console_errors": [],
       "detail_state": null,
       "detail_visible": false,
-      "dom_count": 231,
+      "dom_count": 193,
       "horizontal_overflow_px": 0,
       "id": "desktop-personas",
       "language": "en",
@@ -295,7 +295,7 @@
       "result_state": null,
       "route": "#/library/personas",
       "screenshot": "docs/design/sonder-ui-replacement/g4/library/screenshots/desktop-personas.png",
-      "screenshot_sha256": "6c2dc9fe8643987e64a1b78d8c05b773ae090472d9efedf731625f566b2039f2",
+      "screenshot_sha256": "fea908d681ea4c7230bda2cd4bf71e131c57103446dc4cf559eb3907301627e1",
       "selected_name": null,
       "sensitive_text": false,
       "ui_state": "ready",
@@ -317,7 +317,7 @@
       "console_errors": [],
       "detail_state": null,
       "detail_visible": false,
-      "dom_count": 231,
+      "dom_count": 185,
       "horizontal_overflow_px": 0,
       "id": "desktop-lore",
       "language": "en",
@@ -333,7 +333,7 @@
       "result_state": null,
       "route": "#/library/lore",
       "screenshot": "docs/design/sonder-ui-replacement/g4/library/screenshots/desktop-lore.png",
-      "screenshot_sha256": "e7730acffacb2be0b4e4ee058123805d4d897d7fbe7e521509da5409e5c35a12",
+      "screenshot_sha256": "68aa236c6d51f68746ba62d079a1f43268f411784358815dc0197adbdca17b05",
       "selected_name": null,
       "sensitive_text": false,
       "ui_state": "ready",
@@ -355,7 +355,7 @@
       "console_errors": [],
       "detail_state": null,
       "detail_visible": false,
-      "dom_count": 226,
+      "dom_count": 178,
       "horizontal_overflow_px": 0,
       "id": "desktop-search",
       "language": "en",
@@ -371,7 +371,7 @@
       "result_state": null,
       "route": "#/library?q=Quiet",
       "screenshot": "docs/design/sonder-ui-replacement/g4/library/screenshots/desktop-search.png",
-      "screenshot_sha256": "bb38362845c7f27e7779ee59ef8a158c5825af3ce1853914fa69f9715c78cc24",
+      "screenshot_sha256": "04b97318395778fe9263ce0f3699d51b31501be063ca0228e4927c343ab75a3f",
       "selected_name": null,
       "sensitive_text": false,
       "ui_state": "ready",
@@ -393,7 +393,7 @@
       "console_errors": [],
       "detail_state": null,
       "detail_visible": false,
-      "dom_count": 213,
+      "dom_count": 171,
       "horizontal_overflow_px": 0,
       "id": "desktop-no-results",
       "language": "en",
@@ -409,7 +409,7 @@
       "result_state": null,
       "route": "#/library?q=No+such+item",
       "screenshot": "docs/design/sonder-ui-replacement/g4/library/screenshots/desktop-no-results.png",
-      "screenshot_sha256": "dadbb7349dd80cadb089cdbd9db029935b0ee159444639af4425be9454a8a724",
+      "screenshot_sha256": "62d227e60c08389fc506e7e0c04927e9ced9f08507365b6b9e76f5fbbedeeb11",
       "selected_name": null,
       "sensitive_text": false,
       "ui_state": "ready",
@@ -434,12 +434,12 @@
       ],
       "detail_state": null,
       "detail_visible": true,
-      "dom_count": 264,
+      "dom_count": 209,
       "horizontal_overflow_px": 0,
       "id": "desktop-story-detail",
       "language": "en",
       "layout_state": "wide",
-      "library_horizontal_overflow_px": 63,
+      "library_horizontal_overflow_px": 0,
       "mode": "normal",
       "motion": "system",
       "page_errors": [],
@@ -450,7 +450,7 @@
       "result_state": null,
       "route": "#/library/stories?item=story%3A1",
       "screenshot": "docs/design/sonder-ui-replacement/g4/library/screenshots/desktop-story-detail.png",
-      "screenshot_sha256": "63e6ad19cec90204dfe4654f701078811aee6cfaa4208fd8e318571068e31b40",
+      "screenshot_sha256": "cb4f5477b87791d86ec0e760458f3bafc0f8b48dd240aa6cdd98827867b02c03",
       "selected_name": "The Lantern Archive",
       "sensitive_text": false,
       "ui_state": "ready",
@@ -475,12 +475,12 @@
       ],
       "detail_state": null,
       "detail_visible": true,
-      "dom_count": 281,
+      "dom_count": 243,
       "horizontal_overflow_px": 0,
       "id": "desktop-associations",
       "language": "en",
       "layout_state": "wide",
-      "library_horizontal_overflow_px": 63,
+      "library_horizontal_overflow_px": 0,
       "mode": "normal",
       "motion": "system",
       "page_errors": [],
@@ -491,7 +491,7 @@
       "result_state": null,
       "route": "#/library/characters?item=character%3A7",
       "screenshot": "docs/design/sonder-ui-replacement/g4/library/screenshots/desktop-associations.png",
-      "screenshot_sha256": "9804e48ffaec943d434d42f891ce1e1acbf626b9fbe06957775ebdbb0d3d1be5",
+      "screenshot_sha256": "96c3d18458c470770246fc727f2fe9a80bf05ddfdfbe9e4729e7d07bdf05eecc",
       "selected_name": "Mara Venn",
       "sensitive_text": false,
       "ui_state": "ready",
@@ -516,12 +516,12 @@
       ],
       "detail_state": null,
       "detail_visible": true,
-      "dom_count": 261,
+      "dom_count": 221,
       "horizontal_overflow_px": 0,
       "id": "desktop-archived",
       "language": "en",
       "layout_state": "wide",
-      "library_horizontal_overflow_px": 63,
+      "library_horizontal_overflow_px": 0,
       "mode": "normal",
       "motion": "system",
       "page_errors": [],
@@ -532,7 +532,7 @@
       "result_state": null,
       "route": "#/library/characters?visibility=archived&item=character%3A99",
       "screenshot": "docs/design/sonder-ui-replacement/g4/library/screenshots/desktop-archived.png",
-      "screenshot_sha256": "579693c7e642d3159dd12fe331db4997a487d1149234a501e2d43692b420b82d",
+      "screenshot_sha256": "4989d03aa876117b35412fd5651b9f7dfea98f0a5e3eea04bef84d25a60ecffe",
       "selected_name": "Archived Wayfinder",
       "sensitive_text": false,
       "ui_state": "ready",
@@ -559,7 +559,7 @@
       ],
       "detail_state": null,
       "detail_visible": false,
-      "dom_count": 222,
+      "dom_count": 180,
       "horizontal_overflow_px": 0,
       "id": "desktop-restore",
       "language": "en",
@@ -576,7 +576,7 @@
       "result_state": null,
       "route": "#/library/characters?visibility=archived",
       "screenshot": "docs/design/sonder-ui-replacement/g4/library/screenshots/desktop-restore.png",
-      "screenshot_sha256": "73edfc15cd6aa86ccfdca388ca50b86113bc300e57f28760ea97b34c10bd0ee3",
+      "screenshot_sha256": "0853b05a9e9c0447d558e0cc8b72e3e67475b02e121e9d8ccf1b6824175229a2",
       "selected_name": null,
       "sensitive_text": false,
       "ui_state": "ready",
@@ -598,7 +598,7 @@
       "console_errors": [],
       "detail_state": null,
       "detail_visible": false,
-      "dom_count": 213,
+      "dom_count": 171,
       "horizontal_overflow_px": 0,
       "id": "desktop-empty",
       "language": "en",
@@ -614,7 +614,7 @@
       "result_state": null,
       "route": "#/library",
       "screenshot": "docs/design/sonder-ui-replacement/g4/library/screenshots/desktop-empty.png",
-      "screenshot_sha256": "132dab648a5600e869c7ad85be4006934c224e7105b69da4ff16e3022da45356",
+      "screenshot_sha256": "b151298ada7864ea599cef5f2850a1740462b729beaacabd482eacdc0f3d473f",
       "selected_name": null,
       "sensitive_text": false,
       "ui_state": "ready",
@@ -639,12 +639,12 @@
       ],
       "detail_state": "unavailable",
       "detail_visible": true,
-      "dom_count": 231,
+      "dom_count": 193,
       "horizontal_overflow_px": 0,
       "id": "desktop-unavailable",
       "language": "en",
       "layout_state": "wide",
-      "library_horizontal_overflow_px": 63,
+      "library_horizontal_overflow_px": 0,
       "mode": "normal",
       "motion": "system",
       "page_errors": [],
@@ -655,7 +655,7 @@
       "result_state": null,
       "route": "#/library/characters?item=character%3A404",
       "screenshot": "docs/design/sonder-ui-replacement/g4/library/screenshots/desktop-unavailable.png",
-      "screenshot_sha256": "2bfffe895deb1234d9049328aa67643db3dfd35b8f59f2059581015fb792f650",
+      "screenshot_sha256": "9971c0a6a295737b09b1e65dedd4aab38f6d88d6685a3cdd4c6c309c7b447cba",
       "selected_name": null,
       "sensitive_text": false,
       "ui_state": "ready",
@@ -676,7 +676,7 @@
       "console_errors": [],
       "detail_state": null,
       "detail_visible": false,
-      "dom_count": 213,
+      "dom_count": 171,
       "horizontal_overflow_px": 0,
       "id": "desktop-loading",
       "language": "en",
@@ -690,7 +690,7 @@
       "result_state": null,
       "route": "#/library",
       "screenshot": "docs/design/sonder-ui-replacement/g4/library/screenshots/desktop-loading.png",
-      "screenshot_sha256": "f11476dee22984b87cbd399922bd11f05e5c101386ae12a24d276aae848178a9",
+      "screenshot_sha256": "54396cb51330cb8e0e0f5f4ed027ee4c0861f7203fbff10f0e2029431ac9a6e7",
       "selected_name": null,
       "sensitive_text": false,
       "ui_state": "ready",
@@ -711,7 +711,7 @@
       "console_errors": [],
       "detail_state": null,
       "detail_visible": false,
-      "dom_count": 213,
+      "dom_count": 171,
       "horizontal_overflow_px": 0,
       "id": "desktop-offline",
       "language": "en",
@@ -725,7 +725,7 @@
       "result_state": null,
       "route": "#/library",
       "screenshot": "docs/design/sonder-ui-replacement/g4/library/screenshots/desktop-offline.png",
-      "screenshot_sha256": "97942286bb0cc0b7168fd3d626c1c32297010a4464a07093cd2ac3fe1bf8fe89",
+      "screenshot_sha256": "35a380bc2ad94b2c818682a15674beb5748ad1bd27e149be13fba342dd48cb90",
       "selected_name": null,
       "sensitive_text": false,
       "ui_state": "ready",
@@ -746,7 +746,7 @@
       "console_errors": [],
       "detail_state": null,
       "detail_visible": false,
-      "dom_count": 213,
+      "dom_count": 171,
       "horizontal_overflow_px": 0,
       "id": "desktop-error",
       "language": "en",
@@ -760,7 +760,7 @@
       "result_state": null,
       "route": "#/library",
       "screenshot": "docs/design/sonder-ui-replacement/g4/library/screenshots/desktop-error.png",
-      "screenshot_sha256": "0d5aa8e9e0955ca9b887b822c4671c90d9794fbedb9a8dc676853e2de4b23698",
+      "screenshot_sha256": "261ff1d20ae057b92d0adbd45a49b398392a8e1f24171716f88c011a8490df18",
       "selected_name": null,
       "sensitive_text": false,
       "ui_state": "ready",
@@ -785,7 +785,7 @@
       ],
       "detail_state": null,
       "detail_visible": true,
-      "dom_count": 271,
+      "dom_count": 225,
       "horizontal_overflow_px": 0,
       "id": "medium-lore-detail",
       "language": "en",
@@ -801,7 +801,7 @@
       "result_state": null,
       "route": "#/library/lore?item=lore%3A12",
       "screenshot": "docs/design/sonder-ui-replacement/g4/library/screenshots/medium-lore-detail.png",
-      "screenshot_sha256": "ccf6bca50da64fb5df54a68dea1c00c37705bd42452181422a68a954250c0637",
+      "screenshot_sha256": "2bb7b7e43bbd7189258b5fe35dc74fb0ddd186713a45199d9b00b85df56489e2",
       "selected_name": "Quiet Roads",
       "sensitive_text": false,
       "ui_state": "ready",
@@ -826,7 +826,7 @@
       ],
       "detail_state": null,
       "detail_visible": true,
-      "dom_count": 281,
+      "dom_count": 243,
       "horizontal_overflow_px": 0,
       "id": "tablet-associations",
       "language": "en",
@@ -842,7 +842,7 @@
       "result_state": null,
       "route": "#/library/characters?item=character%3A7",
       "screenshot": "docs/design/sonder-ui-replacement/g4/library/screenshots/tablet-associations.png",
-      "screenshot_sha256": "c4f93e698b94ee9461df1a29a656ccfa6d1b47ca5d0848e77c130ecc7cf40fe9",
+      "screenshot_sha256": "aafd1e64f4693e0c696a88b765c29cfeeb99bb0bfc85dbf799add5b38b90c746",
       "selected_name": "Mara Venn",
       "sensitive_text": false,
       "ui_state": "ready",
@@ -864,7 +864,7 @@
       "console_errors": [],
       "detail_state": null,
       "detail_visible": false,
-      "dom_count": 242,
+      "dom_count": 187,
       "horizontal_overflow_px": 0,
       "id": "phone-430-all",
       "language": "en",
@@ -880,52 +880,11 @@
       "result_state": null,
       "route": "#/library",
       "screenshot": "docs/design/sonder-ui-replacement/g4/library/screenshots/phone-430-all.png",
-      "screenshot_sha256": "b61ed7102ecb9ba222e2aa4954d96620ef9e0ce950f1ec14de177303dece3701",
+      "screenshot_sha256": "87dfc48c6b6612ec953906311763023ca8639432f3e926a0ea5e9d2b4409d147",
       "selected_name": null,
       "sensitive_text": false,
       "ui_state": "ready",
-      "undersized_compact_targets": [
-        {
-          "height": 36,
-          "label": "Search Library",
-          "width": 408
-        },
-        {
-          "height": 36,
-          "label": "Scope",
-          "width": 408
-        },
-        {
-          "height": 40,
-          "label": "Stories",
-          "width": 103.5
-        },
-        {
-          "height": 40,
-          "label": "Characters",
-          "width": 103.5
-        },
-        {
-          "height": 40,
-          "label": "Personas",
-          "width": 103.5
-        },
-        {
-          "height": 40,
-          "label": "Lore",
-          "width": 103.5
-        },
-        {
-          "height": 36,
-          "label": "More actions for The Lantern Archive",
-          "width": 36
-        },
-        {
-          "height": 36,
-          "label": "More actions for The Quiet Signal",
-          "width": 36
-        }
-      ],
+      "undersized_compact_targets": [],
       "viewport": {
         "height": 860,
         "width": 430
@@ -946,7 +905,7 @@
       ],
       "detail_state": null,
       "detail_visible": true,
-      "dom_count": 271,
+      "dom_count": 225,
       "horizontal_overflow_px": 0,
       "id": "phone-390-detail",
       "language": "en",
@@ -962,52 +921,11 @@
       "result_state": null,
       "route": "#/library/lore?item=lore%3A12",
       "screenshot": "docs/design/sonder-ui-replacement/g4/library/screenshots/phone-390-detail.png",
-      "screenshot_sha256": "cf3d109f579c10cfaa29134ab03a384baa5916506b232578a58f8c498691eb8c",
+      "screenshot_sha256": "be4d19f3ee001f40ce2e3ebacda38d15e64c1faaa963066c78391827693b4c25",
       "selected_name": "Quiet Roads",
       "sensitive_text": false,
       "ui_state": "ready",
-      "undersized_compact_targets": [
-        {
-          "height": 36,
-          "label": "Search Library",
-          "width": 368
-        },
-        {
-          "height": 36,
-          "label": "Scope",
-          "width": 368
-        },
-        {
-          "height": 40,
-          "label": "Stories",
-          "width": 93.5
-        },
-        {
-          "height": 40,
-          "label": "Characters",
-          "width": 93.5
-        },
-        {
-          "height": 40,
-          "label": "Personas",
-          "width": 93.5
-        },
-        {
-          "height": 40,
-          "label": "Lore",
-          "width": 93.5
-        },
-        {
-          "height": 36,
-          "label": "More actions for Lamp Rites",
-          "width": 36
-        },
-        {
-          "height": 36,
-          "label": "More actions for Quiet Roads",
-          "width": 36
-        }
-      ],
+      "undersized_compact_targets": [],
       "viewport": {
         "height": 844,
         "width": 390
@@ -1025,7 +943,7 @@
       "console_errors": [],
       "detail_state": null,
       "detail_visible": false,
-      "dom_count": 210,
+      "dom_count": 168,
       "horizontal_overflow_px": 0,
       "id": "phone-360-multiple",
       "language": "en",
@@ -1041,42 +959,11 @@
       "result_state": null,
       "route": "#/library?scope=multiple",
       "screenshot": "docs/design/sonder-ui-replacement/g4/library/screenshots/phone-360-multiple.png",
-      "screenshot_sha256": "96d759f36f50a9822a5e7beaeb091fa9146d2542178b8f18b6b01926b21aa2bc",
+      "screenshot_sha256": "103601be2034dc20cc84ef88a5e5fe411eae77780e5d8729837e5e272de66a2a",
       "selected_name": null,
       "sensitive_text": false,
       "ui_state": "ready",
-      "undersized_compact_targets": [
-        {
-          "height": 36,
-          "label": "Search Library",
-          "width": 338
-        },
-        {
-          "height": 36,
-          "label": "Scope",
-          "width": 338
-        },
-        {
-          "height": 40,
-          "label": "Stories",
-          "width": 86
-        },
-        {
-          "height": 40,
-          "label": "Characters",
-          "width": 86
-        },
-        {
-          "height": 40,
-          "label": "Personas",
-          "width": 86
-        },
-        {
-          "height": 40,
-          "label": "Lore",
-          "width": 86
-        }
-      ],
+      "undersized_compact_targets": [],
       "viewport": {
         "height": 800,
         "width": 360
@@ -1098,7 +985,7 @@
       ],
       "detail_state": null,
       "detail_visible": false,
-      "dom_count": 1251,
+      "dom_count": 1409,
       "horizontal_overflow_px": 0,
       "id": "phone-back-context",
       "language": "en",
@@ -1115,82 +1002,11 @@
       "result_state": null,
       "route": "#/library/characters?item=character%3A36",
       "screenshot": "docs/design/sonder-ui-replacement/g4/library/screenshots/phone-back-context.png",
-      "screenshot_sha256": "e0d593ca15d3225eec2b746ff771fe8e316d544f5f6aa0c38065b30fbecf3622",
+      "screenshot_sha256": "055e4e573ab45f40ecf0483d1a8984ebebc28aef778f4cd32138c8effd5c1b38",
       "selected_name": "Library Character 0036",
       "sensitive_text": false,
       "ui_state": "ready",
-      "undersized_compact_targets": [
-        {
-          "height": 36,
-          "label": "Search Library",
-          "width": 368
-        },
-        {
-          "height": 36,
-          "label": "Scope",
-          "width": 368
-        },
-        {
-          "height": 40,
-          "label": "Stories",
-          "width": 93.5
-        },
-        {
-          "height": 40,
-          "label": "Characters",
-          "width": 93.5
-        },
-        {
-          "height": 40,
-          "label": "Personas",
-          "width": 93.5
-        },
-        {
-          "height": 40,
-          "label": "Lore",
-          "width": 93.5
-        },
-        {
-          "height": 36,
-          "label": "More actions for Library Character 0001",
-          "width": 36
-        },
-        {
-          "height": 36,
-          "label": "More actions for Library Character 0002",
-          "width": 36
-        },
-        {
-          "height": 36,
-          "label": "More actions for Library Character 0003",
-          "width": 36
-        },
-        {
-          "height": 36,
-          "label": "More actions for Library Character 0004",
-          "width": 36
-        },
-        {
-          "height": 36,
-          "label": "More actions for Library Character 0005",
-          "width": 36
-        },
-        {
-          "height": 36,
-          "label": "More actions for Library Character 0006",
-          "width": 36
-        },
-        {
-          "height": 36,
-          "label": "More actions for Library Character 0007",
-          "width": 36
-        },
-        {
-          "height": 36,
-          "label": "More actions for Library Character 0008",
-          "width": 36
-        }
-      ],
+      "undersized_compact_targets": [],
       "viewport": {
         "height": 844,
         "width": 390
@@ -1211,7 +1027,7 @@
       ],
       "detail_state": null,
       "detail_visible": true,
-      "dom_count": 281,
+      "dom_count": 243,
       "horizontal_overflow_px": 0,
       "id": "short-landscape",
       "language": "en",
@@ -1227,52 +1043,11 @@
       "result_state": null,
       "route": "#/library/characters?item=character%3A7",
       "screenshot": "docs/design/sonder-ui-replacement/g4/library/screenshots/short-landscape.png",
-      "screenshot_sha256": "45e33c10905463ac9c9aa926f9271242c56ae0d638a174e4753fbcfb8b6bd1d9",
+      "screenshot_sha256": "ad43c8c496668b1f3d90ee028d0afb1250cf5a5a2fea4bff6176421b8e9dc842",
       "selected_name": "Mara Venn",
       "sensitive_text": false,
       "ui_state": "ready",
-      "undersized_compact_targets": [
-        {
-          "height": 36,
-          "label": "Search Library",
-          "width": 822
-        },
-        {
-          "height": 36,
-          "label": "Scope",
-          "width": 822
-        },
-        {
-          "height": 40,
-          "label": "Stories",
-          "width": 207
-        },
-        {
-          "height": 40,
-          "label": "Characters",
-          "width": 207
-        },
-        {
-          "height": 40,
-          "label": "Personas",
-          "width": 207
-        },
-        {
-          "height": 40,
-          "label": "Lore",
-          "width": 207
-        },
-        {
-          "height": 36,
-          "label": "More actions for Ivo Senn",
-          "width": 36
-        },
-        {
-          "height": 36,
-          "label": "More actions for Mara Venn",
-          "width": 36
-        }
-      ],
+      "undersized_compact_targets": [],
       "viewport": {
         "height": 390,
         "width": 844
@@ -1290,7 +1065,7 @@
       "console_errors": [],
       "detail_state": null,
       "detail_visible": false,
-      "dom_count": 242,
+      "dom_count": 187,
       "horizontal_overflow_px": 0,
       "id": "short-desktop",
       "language": "en",
@@ -1306,7 +1081,7 @@
       "result_state": null,
       "route": "#/library",
       "screenshot": "docs/design/sonder-ui-replacement/g4/library/screenshots/short-desktop.png",
-      "screenshot_sha256": "ab2973496b346d2aedb3742a4895fd0389299a973726e3f2ce612826d029f3ca",
+      "screenshot_sha256": "11b9b97d20bdbf0c08fd1385498e6193c1793a139049b3a2bde9c0909fd2c29e",
       "selected_name": null,
       "sensitive_text": false,
       "ui_state": "ready",
@@ -1331,7 +1106,7 @@
       ],
       "detail_state": null,
       "detail_visible": true,
-      "dom_count": 277,
+      "dom_count": 239,
       "horizontal_overflow_px": 0,
       "id": "zoom-200-equivalent",
       "language": "en",
@@ -1347,52 +1122,11 @@
       "result_state": null,
       "route": "#/library/personas?item=persona%3A9",
       "screenshot": "docs/design/sonder-ui-replacement/g4/library/screenshots/zoom-200-equivalent.png",
-      "screenshot_sha256": "4370e9094bcd04cf049cc67311e33e60fe2256704312b506d008a4184d6f5b4b",
+      "screenshot_sha256": "1352e46c066fce5694b0865aa4818dfe27e3a48ac275d9ff26f6f2806072d2c4",
       "selected_name": "Rin Vale",
       "sensitive_text": false,
       "ui_state": "ready",
-      "undersized_compact_targets": [
-        {
-          "height": 36,
-          "label": "Search Library",
-          "width": 618
-        },
-        {
-          "height": 36,
-          "label": "Scope",
-          "width": 618
-        },
-        {
-          "height": 40,
-          "label": "Stories",
-          "width": 156
-        },
-        {
-          "height": 40,
-          "label": "Characters",
-          "width": 156
-        },
-        {
-          "height": 40,
-          "label": "Personas",
-          "width": 156
-        },
-        {
-          "height": 40,
-          "label": "Lore",
-          "width": 156
-        },
-        {
-          "height": 36,
-          "label": "More actions for Rin Vale",
-          "width": 36
-        },
-        {
-          "height": 36,
-          "label": "More actions for Tala",
-          "width": 36
-        }
-      ],
+      "undersized_compact_targets": [],
       "viewport": {
         "height": 450,
         "width": 640
@@ -1413,7 +1147,7 @@
       ],
       "detail_state": null,
       "detail_visible": true,
-      "dom_count": 281,
+      "dom_count": 243,
       "horizontal_overflow_px": 0,
       "id": "japanese-phone",
       "language": "ja",
@@ -1429,52 +1163,11 @@
       "result_state": null,
       "route": "#/library/characters?item=character%3A7",
       "screenshot": "docs/design/sonder-ui-replacement/g4/library/screenshots/japanese-phone.png",
-      "screenshot_sha256": "87978728e98002c83d3a04f25bafc6438f7d77e40300927aced24e3c5989e872",
+      "screenshot_sha256": "ccf26deeaccb8ba2fade24e03dd672a19c2d475b2da2b04744fd0b518703e8c1",
       "selected_name": "Mara Venn",
       "sensitive_text": false,
       "ui_state": "ready",
-      "undersized_compact_targets": [
-        {
-          "height": 36,
-          "label": "ライブラリを検索",
-          "width": 368
-        },
-        {
-          "height": 36,
-          "label": "範囲",
-          "width": 368
-        },
-        {
-          "height": 40,
-          "label": "物語",
-          "width": 93.5
-        },
-        {
-          "height": 40,
-          "label": "キャラクター",
-          "width": 93.5
-        },
-        {
-          "height": 40,
-          "label": "ペルソナ",
-          "width": 93.5
-        },
-        {
-          "height": 40,
-          "label": "伝承",
-          "width": 93.5
-        },
-        {
-          "height": 36,
-          "label": "Ivo Sennのその他の操作",
-          "width": 36
-        },
-        {
-          "height": 36,
-          "label": "Mara Vennのその他の操作",
-          "width": 36
-        }
-      ],
+      "undersized_compact_targets": [],
       "viewport": {
         "height": 844,
         "width": 390
@@ -1492,7 +1185,7 @@
       "console_errors": [],
       "detail_state": null,
       "detail_visible": false,
-      "dom_count": 231,
+      "dom_count": 185,
       "horizontal_overflow_px": 0,
       "id": "reduced-motion",
       "language": "en",
@@ -1508,7 +1201,7 @@
       "result_state": null,
       "route": "#/library/lore",
       "screenshot": "docs/design/sonder-ui-replacement/g4/library/screenshots/reduced-motion.png",
-      "screenshot_sha256": "e7730acffacb2be0b4e4ee058123805d4d897d7fbe7e521509da5409e5c35a12",
+      "screenshot_sha256": "68aa236c6d51f68746ba62d079a1f43268f411784358815dc0197adbdca17b05",
       "selected_name": null,
       "sensitive_text": false,
       "ui_state": "ready",
@@ -1530,7 +1223,7 @@
       "console_errors": [],
       "detail_state": null,
       "detail_visible": false,
-      "dom_count": 1211,
+      "dom_count": 1369,
       "horizontal_overflow_px": 0,
       "id": "scale-1000",
       "language": "en",
@@ -1546,7 +1239,7 @@
       "result_state": null,
       "route": "#/library/characters",
       "screenshot": "docs/design/sonder-ui-replacement/g4/library/screenshots/scale-1000.png",
-      "screenshot_sha256": "6941601a88bb7502e3599d5b88b1989515b75ff6af1518f192233833b1eeacd7",
+      "screenshot_sha256": "a6a868394a3c348f9172fc780904bc3a936177e1bec3441b35e047c15dfb921a",
       "selected_name": null,
       "sensitive_text": false,
       "ui_state": "ready",
@@ -1559,6 +1252,6 @@
   ],
   "platform": "Windows-10-10.0.19045-SP0",
   "schema_version": 1,
-  "source_commit": "07492bcaddab149fece87c244ced1975e7b247c4",
-  "source_tree_sha256": "b987fe33686fac6294138a7d8486a1fdab4e8f7eaa20edcf56df7947fcbd93ef"
+  "source_commit": "9edacbdeee345c30d9b7150e70c25cc47da1de9d",
+  "source_tree_sha256": "d3ece34707202bd1fd362a99629a063c4e746c75e16663d0dd3c5e619d85dd10"
 }

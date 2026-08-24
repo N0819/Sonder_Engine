@@ -76,16 +76,18 @@ def _open(page: Page, ui_base_url: str, *, width: int = 1440) -> None:
     assert response is not None and response.ok
     page.wait_for_function("document.documentElement.dataset.uiNextState === 'ready'")
     expect(page.get_by_role("heading", name="Library", level=2)).to_be_visible()
-    expect(page.get_by_role("heading", name="Stories", level=2)).to_be_visible()
+    expect(page.get_by_role("heading", name="Stories", level=2)).to_have_count(0)
     expect(page.locator("[data-library-ledger] [data-library-item]")).to_have_count(1)
     if width > 700:
         geometry = page.locator(".ui-shell").evaluate(
             """node => ({
               rail: node.querySelector('.ui-shell__navigation').getBoundingClientRect().width,
-              side: node.querySelector('.ui-library__filters').getBoundingClientRect().width,
+              subSidebar: Boolean(node.querySelector('.ui-library__filters')),
             })"""
         )
-        expected = {"rail": 68, "side": 320} if width < 1100 else {"rail": 72, "side": 320}
+        expected = {"rail": 68, "subSidebar": False} if width < 1100 else {
+            "rail": 72, "subSidebar": False,
+        }
         assert geometry == expected
     if width > 700:
         assert page.locator(".ui-library__content").evaluate(
@@ -93,28 +95,52 @@ def _open(page: Page, ui_base_url: str, *, width: int = 1440) -> None:
         ) == 0
 
 
-def test_tablet_library_uses_reference_rail_and_side_pane(
+def test_tablet_library_uses_one_workspace_without_a_sub_sidebar(
     page: Page, ui_base_url: str,
 ) -> None:
     _open(page, ui_base_url, width=768)
 
 
-def test_library_has_one_canonical_material_ledger_and_action_cluster(
+def test_library_has_one_workspace_for_filters_ledger_and_actions(
     page: Page, ui_base_url: str
 ) -> None:
     _open(page, ui_base_url)
 
-    expect(page.get_by_role("heading", name="Stories", level=2)).to_be_visible()
-    expect(page.locator(".ui-library__filters [data-library-ledger]")).to_have_count(0)
-    expect(page.locator(".ui-library__content [data-library-ledger]")).to_have_count(1)
+    workspace = page.locator("[data-library-workspace]")
+    expect(workspace.get_by_role("heading", name="Library", level=2)).to_be_visible()
+    expect(page.locator(".ui-library__filters")).to_have_count(0)
+    expect(workspace.locator("[data-library-ledger]")).to_have_count(1)
+    types = workspace.get_by_role("navigation", name="Library material types")
+    expect(types.get_by_role("button", name="Stories", exact=True)).to_have_attribute(
+        "aria-current", "page"
+    )
+    expect(types.get_by_role("button", name="Characters", exact=True)).to_be_visible()
+    expect(types.get_by_role("button", name="Personas", exact=True)).to_be_visible()
+    expect(types.get_by_role("button", name="Lore", exact=True)).to_be_visible()
+    expect(workspace.get_by_role("combobox", name="Library scope")).to_be_visible()
     expect(page.locator(".ui-library-home__summary")).to_have_count(0)
     expect(page.locator(".ui-library-home__context")).to_have_count(0)
-    expect(page.get_by_role("button", name="New story", exact=True)).to_have_count(1)
-    expect(page.get_by_role("button", name="Import story", exact=True)).to_have_count(1)
+    actions = workspace.locator(".ui-library-workspace__actions")
+    expect(actions.get_by_role("button", name="New story", exact=True)).to_have_count(1)
+    expect(actions.get_by_role("button", name="Import story", exact=True)).to_have_count(1)
+    expect(workspace.locator(".ui-library__toolbar").get_by_role(
+        "button", name="Import story", exact=True
+    )).to_have_count(0)
     expect(page.get_by_text("Lorebooks", exact=True)).to_have_count(0)
     assert page.locator(".ui-library__more use").first.get_attribute("href").endswith(
         "#icon-more"
     )
+
+    types.get_by_role("button", name="Characters", exact=True).click()
+    expect(page).to_have_url(re.compile(r"#/library/characters"))
+    expect(page.get_by_role("heading", name="Library", level=2)).to_be_visible()
+    expect(page.get_by_role("heading", name="Characters", level=2)).to_have_count(0)
+    expect(types.get_by_role("button", name="Characters", exact=True)).to_have_attribute(
+        "aria-current", "page"
+    )
+    expect(page.locator('[data-library-item="character:7"]')).to_be_visible()
+    expect(actions.get_by_role("button", name="Create character", exact=True)).to_be_visible()
+    expect(actions.get_by_role("button", name="Import character", exact=True)).to_be_visible()
 
 
 def test_library_actions_center_compact_icon_and_label_geometry(
@@ -159,13 +185,25 @@ def test_library_actions_center_compact_icon_and_label_geometry(
     assert select_style["appearance"] == "none", select_style
 
 
+def test_story_import_action_stages_the_existing_import_workflow(
+    page: Page, ui_base_url: str
+) -> None:
+    _open(page, ui_base_url)
+
+    page.get_by_role("button", name="Import story", exact=True).click()
+
+    expect(page).to_have_url(re.compile(r"#/library/stories\?.*mode=import"))
+    root = page.locator("html")
+    expect(root).to_have_attribute("data-inspector-open", "true")
+
+
 def test_compact_library_navigation_controls_meet_touch_minimum(
     page: Page, ui_base_url: str
 ) -> None:
     _open(page, ui_base_url, width=390)
     sizes = page.locator(
-        ".ui-library__side-head :is(input, select), .ui-library__tabs button, "
-        ".ui-library__more"
+        ".ui-library-workspace__filters :is(input, select, button), "
+        ".ui-library__toolbar :is(input, select, button), .ui-library__more"
     ).evaluate_all("nodes => nodes.map(node => node.getBoundingClientRect().height)")
     assert sizes and min(sizes) >= 44, sizes
 
@@ -192,10 +230,10 @@ def test_library_runtime_rejects_stale_results_and_bounds_identity_state(
     result = page.evaluate(
         """async base => {
           const storeModule = await import(
-            `${base}/static/js/ui-next/store.js?release=alpha98-ui9-ff279a1d1d7f`
+            `${base}/static/js/ui-next/store.js?release=alpha98-ui10-c14a4cf8dabd`
           );
           const libraryModule = await import(
-            `${base}/static/js/ui-next/library-runtime.js?release=alpha98-ui9-ff279a1d1d7f`
+            `${base}/static/js/ui-next/library-runtime.js?release=alpha98-ui10-c14a4cf8dabd`
           );
           const store = storeModule.createStore();
           let current = {
@@ -291,10 +329,10 @@ def test_lore_can_prepare_a_lived_location_for_the_current_story(
     result = page.evaluate(
         """async base => {
           const storeModule = await import(
-            `${base}/static/js/ui-next/store.js?release=alpha98-ui9-ff279a1d1d7f`
+            `${base}/static/js/ui-next/store.js?release=alpha98-ui10-c14a4cf8dabd`
           );
           const libraryModule = await import(
-            `${base}/static/js/ui-next/library-runtime.js?release=alpha98-ui9-ff279a1d1d7f`
+            `${base}/static/js/ui-next/library-runtime.js?release=alpha98-ui10-c14a4cf8dabd`
           );
           const route = {
             destination: "library", segments: ["lore"],
@@ -373,10 +411,10 @@ def test_library_mutations_keep_story_owner_and_undo_expires(
     result = page.evaluate(
         """async base => {
           const storeModule = await import(
-            `${base}/static/js/ui-next/store.js?release=alpha98-ui9-ff279a1d1d7f`
+            `${base}/static/js/ui-next/store.js?release=alpha98-ui10-c14a4cf8dabd`
           );
           const libraryModule = await import(
-            `${base}/static/js/ui-next/library-runtime.js?release=alpha98-ui9-ff279a1d1d7f`
+            `${base}/static/js/ui-next/library-runtime.js?release=alpha98-ui10-c14a4cf8dabd`
           );
           const item = {
             kind: "character", id: 7, key: "character:7", name: "Mara Venn",
