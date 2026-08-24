@@ -13,12 +13,12 @@ MODULES = ("document-editor.js", "world.js", "style.js", "dialogue.js", "attire.
 def test_story_author_controls_are_native_release_coherent_modules():
     assert [name for name in MODULES if not (TOOLS / name).is_file()] == []
     for name in MODULES:
-        assert 'export const MODULE_RELEASE = "alpha98-ui12-7eaf6b3481a3";' in (TOOLS / name).read_text(
+        assert 'export const MODULE_RELEASE = "alpha98-ui13-a39372e1d8d1";' in (TOOLS / name).read_text(
             encoding="utf-8"
         )
     family = (TOOLS.parent / "live-story-tools.js").read_text(encoding="utf-8")
     for name in MODULES[1:]:
-        assert f'./story-tools/{name}?release=alpha98-ui12-7eaf6b3481a3' in family
+        assert f'./story-tools/{name}?release=alpha98-ui13-a39372e1d8d1' in family
 
 
 def test_world_and_attire_preserve_complete_authoritative_payloads():

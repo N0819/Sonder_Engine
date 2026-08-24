@@ -90,10 +90,10 @@ def test_navigation_state_restores_valid_route_scroll_and_focus_identity(
         """async (base) => {
           history.replaceState(null, "", location.pathname);
           const navigationModule = await import(
-            `${base}/static/js/ui-next/navigation-state.js?release=alpha98-ui12-7eaf6b3481a3`
+            `${base}/static/js/ui-next/navigation-state.js?release=alpha98-ui13-a39372e1d8d1`
           );
           const routerModule = await import(
-            `${base}/static/js/ui-next/router.js?release=alpha98-ui12-7eaf6b3481a3`
+            `${base}/static/js/ui-next/router.js?release=alpha98-ui13-a39372e1d8d1`
           );
           let record = {
             route: "#/library/characters",
@@ -191,6 +191,27 @@ def test_library_to_play_transition_cannot_restore_a_removed_library_inspector(
     expect(inspector.get_by_text("Select a Library row to see its usage and details.", exact=True)).to_have_count(0)
 
 
+def test_story_tools_opener_keeps_icon_and_label_on_one_row(
+    page: Page, ui_base_url: str,
+) -> None:
+    _open_shell(page, ui_base_url)
+    opener = page.get_by_role("button", name="Open context panel")
+    expect(opener.get_by_text("Story tools", exact=True)).to_be_visible()
+    geometry = opener.evaluate(
+        """node => {
+          const icon = node.querySelector('.ui-icon').getBoundingClientRect();
+          const label = node.querySelector('.ui-icon-label').getBoundingClientRect();
+          const button = node.getBoundingClientRect();
+          return {
+            height: button.height,
+            centerDelta: Math.abs((icon.top + icon.height / 2) - (label.top + label.height / 2)),
+          };
+        }"""
+    )
+    assert geometry["height"] <= 44
+    assert geometry["centerDelta"] <= 1
+
+
 def test_desktop_inspector_opens_closes_pins_and_resizes_without_covering_workspace(
     page: Page, ui_base_url: str
 ) -> None:
@@ -201,14 +222,14 @@ def test_desktop_inspector_opens_closes_pins_and_resizes_without_covering_worksp
     pin_button = inspector.get_by_role("button", name="Pin context panel")
     pin_icon = pin_button.locator("use")
     expect(pin_button).to_have_attribute("aria-pressed", "true")
-    expect(pin_icon).to_have_attribute("href", "/static/assets/icons/sonder-icons.svg?release=alpha98-ui12-7eaf6b3481a3#icon-pin")
+    expect(pin_icon).to_have_attribute("href", "/static/assets/icons/sonder-icons.svg?release=alpha98-ui13-a39372e1d8d1#icon-pin")
 
     inspector.get_by_role("button", name="Resize context panel").click()
     expect(page.locator("html")).to_have_attribute("data-inspector-size", "compact")
     pin_button.click()
     expect(page.locator("html")).to_have_attribute("data-inspector-pinned", "false")
     expect(pin_button).to_have_attribute("aria-pressed", "false")
-    expect(pin_icon).to_have_attribute("href", "/static/assets/icons/sonder-icons.svg?release=alpha98-ui12-7eaf6b3481a3#icon-pin")
+    expect(pin_icon).to_have_attribute("href", "/static/assets/icons/sonder-icons.svg?release=alpha98-ui13-a39372e1d8d1#icon-pin")
     inspector.get_by_role("button", name="Close context panel").click()
     expect(inspector).to_be_hidden()
 
@@ -398,7 +419,7 @@ def test_shortcut_registry_rejects_collisions_and_guards_typing_and_ime(
     result = page.evaluate(
         """async (base) => {
           const { createShortcutRegistry } = await import(
-            `${base}/static/js/ui-next/shortcuts.js?release=alpha98-ui12-7eaf6b3481a3`
+            `${base}/static/js/ui-next/shortcuts.js?release=alpha98-ui13-a39372e1d8d1`
           );
           let calls = 0;
           let collision = null;

@@ -1,7 +1,7 @@
-export const MODULE_RELEASE = "alpha98-ui12-7eaf6b3481a3";
+export const MODULE_RELEASE = "alpha98-ui13-a39372e1d8d1";
 
-import { appearance } from "../ui/appearance.js?release=alpha98-ui12-7eaf6b3481a3";
-import { initAccessibility, updateAccessibility } from "../ui/accessibility.js?release=alpha98-ui12-7eaf6b3481a3";
+import { appearance } from "../ui/appearance.js?release=alpha98-ui13-a39372e1d8d1";
+import { initAccessibility, updateAccessibility } from "../ui/accessibility.js?release=alpha98-ui13-a39372e1d8d1";
 import {
   applyCustomTheme,
   CUSTOM_THEME_ROLES,
@@ -14,16 +14,15 @@ import {
   rgbToHex,
   serializeCustomTheme,
   validateCustomTheme,
-} from "../ui/custom-theme.js?release=alpha98-ui12-7eaf6b3481a3";
-import { createOverlayController } from "../ui/components/overlay.js?release=alpha98-ui12-7eaf6b3481a3";
-import { projectSettingsNavigation } from "./settings-overview.js?release=alpha98-ui12-7eaf6b3481a3";
+} from "../ui/custom-theme.js?release=alpha98-ui13-a39372e1d8d1";
+import { createOverlayController } from "../ui/components/overlay.js?release=alpha98-ui13-a39372e1d8d1";
+import { projectSettingsNavigation } from "./settings-overview.js?release=alpha98-ui13-a39372e1d8d1";
 
 // UI_CATALOG_START: Alpha 9.8 living-world routing copy.
 const ALPHA98_SETTINGS_COPY = Object.freeze([
   "Living world",
   "Choose how authored routines, consequences, and off-screen plans may advance on the world clock. Requested depth is visibly clamped to what is built and what this story permits.",
   "Not a setting: witnessing, telling, reading, and carrying information happen through bodies and routes in the Story.",
-  "Open Institution tools",
   "Living world settings saved.",
 ]);
 // UI_CATALOG_END
@@ -495,6 +494,9 @@ function customThemeEditor(documentRef, services, themeGroup, themes) {
   hexInput.spellcheck = false;
   hexInput.setAttribute("aria-label", "Hex color");
   hexLabel.append(hexInput);
+  const colorEntry = el(documentRef, "div", "ui-settings__color-entry");
+  const rgbDetails = el(documentRef, "details", "ui-settings__rgb-details");
+  rgbDetails.append(el(documentRef, "summary", "", "More color controls"));
   const rgbFields = el(documentRef, "div", "ui-settings__rgb-fields");
   const rgbInputs = {};
   for (const channel of ["Red", "Green", "Blue"]) {
@@ -511,6 +513,8 @@ function customThemeEditor(documentRef, services, themeGroup, themes) {
     field.append(input);
     rgbFields.append(field);
   }
+  colorEntry.append(colorLabel, hexLabel);
+  rgbDetails.append(rgbFields);
   const dialogStatus = el(documentRef, "p", "ui-settings__color-error");
   dialogStatus.setAttribute("role", "status");
   const dialogActions = el(documentRef, "div", "ui-settings__color-actions");
@@ -519,16 +523,17 @@ function customThemeEditor(documentRef, services, themeGroup, themes) {
   const save = el(documentRef, "button", "ui-button ui-button--primary", "Save color");
   save.type = "button";
   dialogActions.append(cancel, save);
-  dialog.append(dialogHead, colorLabel, hexLabel, rgbFields, dialogStatus, dialogActions);
+  dialog.append(dialogHead, colorEntry, rgbDetails, dialogStatus, dialogActions);
   overlay.append(dialog);
   documentRef.body.append(overlay);
 
   let activeRole = null;
   let candidate = null;
   let previousTheme = "carbon-signal";
+  let previousPalette = { ...appearance.getCustomTheme() };
   const restorePreviousTheme = () => {
     if (previousTheme === "custom") {
-      applyCustomTheme(documentRef.documentElement, draft);
+      applyCustomTheme(documentRef.documentElement, previousPalette);
       documentRef.documentElement.dataset.theme = "custom";
     } else {
       appearance.setTheme(previousTheme, false);
@@ -558,18 +563,18 @@ function customThemeEditor(documentRef, services, themeGroup, themes) {
       dialogStatus.textContent = error.message;
       return;
     }
-    const validation = validateCustomTheme({ ...draft, [activeRole.id]: normalized });
-    if (!validation.valid) {
-      candidate = null;
-      save.disabled = true;
-      dialogStatus.textContent = validation.errors.join(" ");
-      return;
-    }
-    candidate = validation.palette;
+    candidate = normalized;
     save.disabled = false;
-    dialogStatus.textContent = "This color keeps the custom theme readable.";
-    applyCustomTheme(documentRef.documentElement, candidate);
-    documentRef.documentElement.dataset.theme = "custom";
+    const validation = validateCustomTheme({ ...draft, [activeRole.id]: normalized });
+    dialogStatus.textContent = validation.valid
+      ? "This color keeps the custom theme readable."
+      : validation.errors.join(" ");
+    if (validation.valid) {
+      applyCustomTheme(documentRef.documentElement, validation.palette);
+      documentRef.documentElement.dataset.theme = "custom";
+    } else {
+      restorePreviousTheme();
+    }
   };
   const syncFromHex = () => {
     try {
@@ -628,8 +633,9 @@ function customThemeEditor(documentRef, services, themeGroup, themes) {
   };
   const openRole = role => {
     activeRole = role;
-    candidate = validateCustomTheme(draft).palette;
+    candidate = draft[role.id];
     previousTheme = documentRef.documentElement.dataset.theme || "carbon-signal";
+    previousPalette = { ...appearance.getCustomTheme() };
     dialogTitle.textContent = `Choose ${role.label} color`;
     setDialogFields(draft[role.id]);
     dialogStatus.textContent = "This color keeps the custom theme readable.";
@@ -656,7 +662,7 @@ function customThemeEditor(documentRef, services, themeGroup, themes) {
   dialogCancelTop.addEventListener("click", closeDialog);
   save.addEventListener("click", () => {
     if (!candidate || !activeRole) return;
-    draft = { ...candidate };
+    draft = { ...draft, [activeRole.id]: candidate };
     updatePage(`${activeRole.label} updated in the custom-theme draft.`);
     controller.close("save");
   });
@@ -816,15 +822,9 @@ function livingWorldSettings(documentRef, services, state) {
       const status = el(documentRef, "p", "ui-settings__connection-status");
       status.setAttribute("role", "status");
       const footer = el(documentRef, "div", "ui-settings__connection-footer");
-      const institutions = el(documentRef, "button", "ui-button ui-button--quiet", "Open Institution tools");
-      institutions.type = "button";
-      institutions.addEventListener("click", () => services.router.navigate({
-        destination: "play", segments: ["story-tools"],
-        query: { chat: String(chatId), tool: "dialogue" },
-      }));
       const save = el(documentRef, "button", "ui-button ui-button--primary", "Save living world settings");
       save.type = "button";
-      footer.append(institutions, save);
+      footer.append(save);
       save.addEventListener("click", async () => {
         save.disabled = true;
         status.textContent = "Saving living world settings…";
@@ -1082,7 +1082,7 @@ function contentSettings(documentRef, services, state) {
   head.append(
     el(documentRef, "p", "ui-settings__crumb", "Settings / 03"),
     el(documentRef, "h2", "ui-heading ui-heading--2", "Content"),
-    el(documentRef, "p", "ui-muted", "Story boundaries, authored detail, and local data"),
+    el(documentRef, "p", "ui-muted", "Story boundaries, authored detail, and narrator voice"),
   );
 
   const permissions = el(documentRef, "section", "ui-settings__group");
@@ -1232,16 +1232,7 @@ function contentSettings(documentRef, services, state) {
   });
   exemplars.append(exemplarCopy, exemplarFields, saveExemplars, exemplarStatus);
 
-  const localData = el(documentRef, "section", "ui-settings__group ui-settings__data-note");
-  const dataCopy = el(documentRef, "span", "ui-settings__field-copy");
-  dataCopy.append(
-    el(documentRef, "strong", "", "Your stories stay on this Sonder host."),
-    el(documentRef, "small", "", "Imports, portable exports, and permanent deletion remain attached to the specific story or Library item, so a broad control cannot overwrite or erase the wrong data."),
-  );
-  const manage = el(documentRef, "a", "ui-button ui-button--quiet", "Manage story exports and deletion");
-  manage.href = "#/library/stories";
-  localData.append(dataCopy, manage);
-  section.append(head, permissions, exemplars, localData, livingWorldSettings(documentRef, services, state));
+  section.append(head, permissions, exemplars, livingWorldSettings(documentRef, services, state));
   return section;
 }
 
@@ -1833,17 +1824,6 @@ function maintenanceSettings(documentRef, services) {
   diagnosticHead.append(diagnosticCopy, download);
   diagnostics.append(diagnosticHead);
 
-  const backups = el(documentRef, "section", "ui-settings__group ui-settings__data-note");
-  backups.id = "settings-control-backups";
-  const backupCopy = el(documentRef, "span", "ui-settings__field-copy");
-  backupCopy.append(
-    el(documentRef, "strong", "", "Portable story backups"),
-    el(documentRef, "small", "", "A story export is a portable backup of that story and its owned data. Exports stay per story so one maintenance action cannot silently expose or overwrite every story."),
-  );
-  const manageBackups = el(documentRef, "a", "ui-button ui-button--quiet", "Manage portable story backups");
-  manageBackups.href = "#/library/stories";
-  backups.append(backupCopy, manageBackups);
-
   const session = el(documentRef, "section", "ui-settings__group ui-settings__data-note");
   session.id = "settings-control-session";
   const sessionCopy = el(documentRef, "span", "ui-settings__field-copy");
@@ -1885,7 +1865,7 @@ function maintenanceSettings(documentRef, services) {
   });
   session.append(sessionCopy, signOut, signOutConsent);
 
-  section.append(head, updates, checkpoints, memorySearch, diagnostics, backups, session);
+  section.append(head, updates, checkpoints, memorySearch, diagnostics, session);
   queueMicrotask(loadCheckpoints);
   queueMicrotask(loadMemory);
   return section;
@@ -1926,6 +1906,7 @@ function promptEditor(documentRef, services, state, route) {
   const presetField = el(documentRef, "label", "ui-field");
   presetField.append(el(documentRef, "span", "ui-field__label", "Preset"));
   const preset = documentRef.createElement("select");
+  preset.className = "ui-field__control";
   preset.setAttribute("aria-label", "Prompt preset");
   ["Default", ...Object.keys(presets).sort()].forEach(presetName => {
     const option = el(documentRef, "option", "", presetName === activeName ? `${presetName} · active` : presetName);
@@ -1941,12 +1922,14 @@ function promptEditor(documentRef, services, state, route) {
   nameField.append(el(documentRef, "span", "ui-field__label", "Preset name"));
   const name = documentRef.createElement("input");
   name.type = "text";
+  name.className = "ui-field__control";
   name.value = selectedName === "Default" ? "" : selectedName;
   name.setAttribute("aria-label", "Prompt preset name");
   nameField.append(name);
   const languageField = el(documentRef, "label", "ui-field");
   languageField.append(el(documentRef, "span", "ui-field__label", "Story language"));
   const language = documentRef.createElement("select");
+  language.className = "ui-field__control";
   language.setAttribute("aria-label", "Prompt preset language");
   const packs = Array.isArray(data.language_packs) && data.language_packs.length
     ? data.language_packs : [{ id: selected?.language || "en", name: selected?.language || "English" }];
@@ -1964,6 +1947,7 @@ function promptEditor(documentRef, services, state, route) {
     const field = el(documentRef, "label", "ui-field ui-settings__prompt-field");
     field.append(el(documentRef, "span", "ui-field__label", humanizeSettingKey(id)));
     const textarea = documentRef.createElement("textarea");
+    textarea.className = "ui-field__control";
     textarea.value = String(value || "");
     textarea.rows = 10;
     textarea.setAttribute("aria-label", `${humanizeSettingKey(id)} prompt`);

@@ -353,10 +353,10 @@ def test_library_runtime_rejects_stale_results_and_bounds_identity_state(
     result = page.evaluate(
         """async base => {
           const storeModule = await import(
-            `${base}/static/js/ui-next/store.js?release=alpha98-ui12-7eaf6b3481a3`
+            `${base}/static/js/ui-next/store.js?release=alpha98-ui13-a39372e1d8d1`
           );
           const libraryModule = await import(
-            `${base}/static/js/ui-next/library-runtime.js?release=alpha98-ui12-7eaf6b3481a3`
+            `${base}/static/js/ui-next/library-runtime.js?release=alpha98-ui13-a39372e1d8d1`
           );
           const store = storeModule.createStore();
           let current = {
@@ -452,10 +452,10 @@ def test_lore_can_prepare_a_lived_location_for_the_current_story(
     result = page.evaluate(
         """async base => {
           const storeModule = await import(
-            `${base}/static/js/ui-next/store.js?release=alpha98-ui12-7eaf6b3481a3`
+            `${base}/static/js/ui-next/store.js?release=alpha98-ui13-a39372e1d8d1`
           );
           const libraryModule = await import(
-            `${base}/static/js/ui-next/library-runtime.js?release=alpha98-ui12-7eaf6b3481a3`
+            `${base}/static/js/ui-next/library-runtime.js?release=alpha98-ui13-a39372e1d8d1`
           );
           const route = {
             destination: "library", segments: ["lore"],
@@ -534,10 +534,10 @@ def test_library_mutations_keep_story_owner_and_undo_expires(
     result = page.evaluate(
         """async base => {
           const storeModule = await import(
-            `${base}/static/js/ui-next/store.js?release=alpha98-ui12-7eaf6b3481a3`
+            `${base}/static/js/ui-next/store.js?release=alpha98-ui13-a39372e1d8d1`
           );
           const libraryModule = await import(
-            `${base}/static/js/ui-next/library-runtime.js?release=alpha98-ui12-7eaf6b3481a3`
+            `${base}/static/js/ui-next/library-runtime.js?release=alpha98-ui13-a39372e1d8d1`
           );
           const item = {
             kind: "character", id: 7, key: "character:7", name: "Mara Venn",
@@ -788,6 +788,41 @@ def test_library_character_lifecycle_and_bounded_undo_use_server_truth(
     expect(page.locator('[data-library-item="character:7"]')).to_have_count(0)
     page.get_by_role("button", name="Undo").click()
     expect(page.locator('[data-library-item="character:7"]')).to_be_visible()
+
+
+def test_row_menu_archive_refreshes_library_and_play_story_choices_immediately(
+    page: Page, ui_base_url: str,
+) -> None:
+    state = {"archived": False}
+
+    def library_route(route) -> None:
+        active = [] if state["archived"] else [ITEMS[0]]
+        payload = _projection(active)
+        payload["stories"] = [] if state["archived"] else BOOTSTRAP["chats"]
+        route.fulfill(content_type="application/json", body=json.dumps(payload))
+
+    def archive_route(route) -> None:
+        state["archived"] = route.request.method == "PUT"
+        route.fulfill(
+            content_type="application/json",
+            body=json.dumps({"key": "story:1", "archived": state["archived"], "changed": True}),
+        )
+
+    page.route(
+        "**/api/bootstrap",
+        lambda route: route.fulfill(content_type="application/json", body=json.dumps(BOOTSTRAP)),
+    )
+    page.route("**/api/library?*", library_route)
+    page.route("**/api/library/story/1/archive", archive_route)
+    page.goto(f"{ui_base_url}/static/ui-next.html#/library/stories")
+    page.wait_for_function("document.documentElement.dataset.uiNextState === 'ready'")
+
+    page.get_by_role("button", name="More actions for The Lantern Archive").click()
+    page.get_by_role("menuitem", name="Archive story").click()
+    expect(page.locator('[data-library-item="story:1"]')).to_have_count(0)
+
+    page.get_by_role("link", name="Play", exact=True).click()
+    expect(page.get_by_role("button", name="The Lantern Archive")).to_have_count(0)
 
 
 def test_primary_persona_is_protected_and_story_delete_names_its_scope(

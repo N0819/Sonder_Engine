@@ -375,15 +375,16 @@ do not carry persistent work, failures, or choices.
 - Settings has one navigation method and one selected detail surface. There is
   no overview dashboard and no category-level launcher page. `#/settings`, the
   global Settings destination, and `mod+,` select Theme in the grouped
-  navigation. Each internal row mounts only its real panel; Story imports and
-  Turn details remain explicit links to their owning destinations.
+  navigation. Each row mounts only its real Settings panel. Story imports,
+  portable backups, deletion, Turn details, and Institution tools remain in
+  Library or Play and are not duplicated as cross-destination Settings links.
 - The navigation projects four ordered groups—Connections, Appearance, Story
-  & host, and Advanced—and 13 rows from one immutable source. Summaries read
+  & host, and Advanced—and 11 rows from one immutable source. Summaries read
   only already-loaded Settings/extension state and browser-local presentation
   preferences; rendering navigation cannot discover, mutate, update, or
-  persist engine-owned settings. Turn details is unavailable and unfocusable
-  without an open Story. Search resolves aliases to these same authoritative
-  routes rather than opening a second Settings taxonomy.
+  persist engine-owned settings. Search resolves aliases to these same
+  authoritative routes rather than opening a second Settings taxonomy or
+  changing primary destination.
 - Desktop presents the groups as a compact rail. Tablet, mobile, narrow,
   landscape, and wide short-height layouts use the same groups as accessible
   single-open disclosures; the active detail's group opens by default and the
@@ -461,7 +462,7 @@ do not carry persistent work, failures, or choices.
 - Dialogue remains the canonical home for story-scoped institutions. Its
   Charter section reads `/charters`, expands `/charters/diagnostics` on demand,
   and offers explicit generation from attached Story Lore. Settings owns only
-  living-world ceilings and a link to this tool.
+  living-world ceilings and does not route away to this tool.
 - Witnessing, telling, reading, and carrying information are story events, not
   UI settings. The replacement exposes that boundary in plain language and
   never invents a browser-side rumor, courier, resident, or world-clock model.
@@ -488,10 +489,15 @@ Custom Theme is an eight-role semantic editor for background, panel, primary
 text, muted text, accent, attention, success, and danger. It previews changes
 locally and accepts only normalized colors in a versioned exact-key document.
 Text contrast, non-text contrast, and background/panel distinction must pass
-before activation. Import rejects unknown fields, CSS, URLs, markup, malformed
+before activation. A syntactically valid individual role may be saved into the
+draft while the palette is incomplete; the exact validation issue remains
+visible and activation stays disabled until the complete draft passes. Import
+rejects unknown fields, CSS, URLs, markup, malformed
 versions, and unsafe colors; application can write only the eight fixed custom
 properties. Hex, RGB, reset, import, and export are alternate interfaces to the
-same validated palette. The browser-local theme is synchronous on first paint.
+same validated palette. RGB controls sit behind a compact disclosure; the
+primary editing surface is the color chip and hex value. The browser-local
+theme is synchronous on first paint.
 
 Foundation source responsibilities are fixed: `tokens.css` defines geometry,
 motion, type, layering, and semantic color roles; theme files only override
@@ -510,6 +516,9 @@ and 36 px comfortable / 32 px compact desktop geometry while retaining the 44
 px touch minimum. Shared buttons use centered inline-flex content, restrained
 13 px type, and icon/text gaps so symbols such as New Story's plus align with
 their label.
+Prompt textareas use the 13/18 control scale at regular weight on the near-black
+canvas surface; browser-native bright form surfaces are not allowed inside the
+dark editor.
 `appearance-preflight.js` is the only pre-module behavior and may only stamp
 validated browser-local appearance before paint. Accessibility preferences are
 independent overrides, with Accessibility Mode applying the documented bundle

@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "alpha98-ui12-7eaf6b3481a3";
+export const MODULE_RELEASE = "alpha98-ui13-a39372e1d8d1";
 
 export const SETTINGS_NAVIGATION_GROUPS = Object.freeze([
   Object.freeze({
@@ -25,7 +25,6 @@ export const SETTINGS_NAVIGATION_GROUPS = Object.freeze([
       Object.freeze({ id: "content", label: "Content", icon: "prompt", href: "#/settings/content" }),
       Object.freeze({ id: "add-ons", label: "Add-ons", icon: "extension", href: "#/settings/add-ons" }),
       Object.freeze({ id: "maintenance", label: "Maintenance", icon: "maintenance", href: "#/settings/maintenance" }),
-      Object.freeze({ id: "story-imports", label: "Story imports & backups", icon: "import", href: "#/library/stories" }),
     ]),
   }),
   Object.freeze({
@@ -34,7 +33,6 @@ export const SETTINGS_NAVIGATION_GROUPS = Object.freeze([
     rows: Object.freeze([
       Object.freeze({ id: "model-assignments", label: "Model assignments", icon: "connection", href: "#/settings/ai-connections?control=models" }),
       Object.freeze({ id: "prompt-editor", label: "Prompt editor", icon: "prompt", href: "#/settings/advanced?tool=prompts" }),
-      Object.freeze({ id: "turn-details", label: "Turn details", icon: "terminal", href: "#/play/story-tools?tool=turn-details" }),
       Object.freeze({ id: "raw-story-data", label: "Raw story data", icon: "world", href: "#/settings/advanced?tool=story-data" }),
     ]),
   }),
@@ -109,10 +107,8 @@ function summaryProjection(input) {
       ? `${enabled} enabled · ${installed.length} installed`
       : "Extensions, permissions, updates, and recovery",
     maintenance: "Updates, storage conversion, memory search, and diagnostics",
-    "story-imports": "Opens Library for import, portable export, and deletion",
     "model-assignments": defaultModel ? `Default · ${defaultModel}` : "Choose defaults and specialist models",
     "prompt-editor": "Advanced prompt templates and presets",
-    "turn-details": input?.storyOpen ? "Inspect the current Story turn" : "Open a Story first",
     "raw-story-data": input?.storyOpen ? "Inspect the current Story world record" : "Open a Story first",
   });
 }
@@ -124,7 +120,7 @@ export function projectSettingsNavigation(input = {}) {
     rows: Object.freeze(group.rows.map(row => Object.freeze({
       ...row,
       summary: summaries[row.id] || "",
-      available: row.id !== "turn-details" || Boolean(input.storyOpen),
+      available: true,
     }))),
   })));
 }

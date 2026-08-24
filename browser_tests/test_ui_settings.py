@@ -109,7 +109,7 @@ def test_experience_ports_reference_frame_and_applies_local_preferences(
     assert groups.locator("[data-settings-navigation-heading]").all_text_contents() == [
         "Connections", "Appearance", "Story & host", "Advanced"
     ]
-    expect(categories.locator("[data-settings-navigation-row]")).to_have_count(13)
+    expect(categories.locator("[data-settings-navigation-row]")).to_have_count(11)
     expect(categories.get_by_role("link", name="Theme", exact=True)).to_have_attribute(
         "aria-current", "page"
     )
@@ -646,6 +646,22 @@ def test_advanced_prompt_editor_uses_current_presets_and_explicit_save(
     expect(page).to_have_url(re.compile(r"#/settings/advanced\?tool=prompts$"))
     editor = page.get_by_role("textbox", name="Director prompt")
     expect(editor).to_have_value("Focused sheet")
+    editor_style = editor.evaluate(
+        """node => {
+          const style = getComputedStyle(node);
+          return {
+            background: style.backgroundColor,
+            fontSize: style.fontSize,
+            fontWeight: style.fontWeight,
+            lineHeight: style.lineHeight,
+          };
+        }"""
+    )
+    channels = tuple(map(int, re.findall(r"\d+", editor_style["background"])[:3]))
+    assert channels and max(channels) <= 32
+    assert editor_style["fontSize"] == "13px"
+    assert editor_style["fontWeight"] == "400"
+    assert editor_style["lineHeight"] == "18px"
     editor.fill("Revised focused sheet")
     page.get_by_role("button", name="Save prompt preset").click()
     expect(page.get_by_text("Prompt preset saved.", exact=True)).to_be_visible()
@@ -1472,7 +1488,7 @@ def test_content_saves_current_story_content_permissions_and_explains_local_data
     _open_settings(page, ui_base_url, category="content", bootstrap=bootstrap)
 
     expect(page.get_by_role("heading", name="Content", level=2)).to_be_visible()
-    expect(page.get_by_text("Your stories stay on this Sonder host.", exact=True)).to_be_visible()
+    expect(page.get_by_text("Your stories stay on this Sonder host.", exact=True)).to_have_count(0)
     page.get_by_role("checkbox", name="Allow adult story content").check()
     page.get_by_role("checkbox", name="Use underneath descriptions from cards").check()
     page.get_by_role("checkbox", name="Allow stories to promote recurring extras").check()
@@ -1480,9 +1496,8 @@ def test_content_saves_current_story_content_permissions_and_explains_local_data
     page.get_by_role("button", name="Save content preferences").click()
 
     expect(page.get_by_text("Content preferences saved.", exact=True)).to_be_visible()
-    expect(page.get_by_role("link", name="Manage story exports and deletion")).to_have_attribute(
-        "href", "#/library/stories"
-    )
+    expect(page.get_by_text("Your stories stay on this Sonder host.", exact=True)).to_have_count(0)
+    expect(page.get_by_role("link", name="Manage story exports and deletion")).to_have_count(0)
     assert writes == {
         "nsfw": {"enabled": True},
         "attire": {"enabled": True},
@@ -1606,8 +1621,7 @@ def test_content_renders_living_world_built_and_effective_depth_from_server_trut
     page.get_by_role("combobox", name="Routine and residue depth").select_option("floor")
     page.get_by_role("button", name="Save living world settings").click()
     expect(page.get_by_text("Living world settings saved.", exact=True)).to_be_visible()
-    page.get_by_role("button", name="Open Institution tools").click()
-    expect(page).to_have_url(re.compile(r"#/play/story-tools\?chat=5&tool=dialogue$"))
+    expect(page.get_by_role("button", name="Open Institution tools")).to_have_count(0)
     assert writes == [{"living_world": {"routine_residue": "floor", "rumor_ledger": "ceiling"}}]
 
 
@@ -1936,15 +1950,14 @@ def test_maintenance_exposes_redacted_diagnostics_and_stages_embedding_rebuild(
     assert writes == [{}]
 
 
-def test_maintenance_routes_portable_backups_to_owned_story_exports(
+def test_maintenance_does_not_duplicate_library_backup_navigation(
     page: Page, ui_base_url: str
 ) -> None:
-    """Keeps backup promises attached to the per-story export that actually owns them."""
+    """Library owns story import and backup navigation."""
     _open_settings(page, ui_base_url, category="maintenance")
 
-    expect(page.get_by_text("Portable story backups", exact=True)).to_be_visible()
-    backup = page.get_by_role("link", name="Manage portable story backups")
-    expect(backup).to_have_attribute("href", "#/library/stories")
+    expect(page.get_by_text("Portable story backups", exact=True)).to_have_count(0)
+    expect(page.get_by_role("link", name="Manage portable story backups")).to_have_count(0)
 
 
 def test_maintenance_stages_host_sign_out_before_destroying_session(

@@ -4,7 +4,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_settings_overview_contract_keeps_ordered_groups_and_existing_targets():
+def test_settings_overview_contract_keeps_ordered_groups_and_settings_owned_targets():
     source = (ROOT / "static/js/ui-next/settings-overview.js").read_text(
         encoding="utf-8"
     )
@@ -19,10 +19,8 @@ def test_settings_overview_contract_keeps_ordered_groups_and_existing_targets():
         "#/settings/content",
         "#/settings/add-ons",
         "#/settings/maintenance",
-        "#/library/stories",
         "#/settings/ai-connections?control=models",
         "#/settings/advanced?tool=prompts",
-        "#/play/story-tools?tool=turn-details",
         "#/settings/advanced?tool=story-data",
     ]
 
@@ -30,6 +28,10 @@ def test_settings_overview_contract_keeps_ordered_groups_and_existing_targets():
     assert positions == sorted(positions)
     positions = [source.index(f'href: "{target}"') for target in ordered_targets]
     assert positions == sorted(positions)
+    assert "#/library" not in source
+    assert "#/play" not in source
+    assert "story-imports" not in source
+    assert "turn-details" not in source
 
 
 def test_settings_uses_one_navigation_model_and_routes_remain_compatible():
@@ -55,3 +57,6 @@ def test_settings_uses_one_navigation_model_and_routes_remain_compatible():
     assert '"Settings overview"' not in view
     assert ".scrollIntoView(" not in view
     assert ".focus({ preventScroll: true })" in view
+    assert "Manage story exports and deletion" not in view
+    assert "Portable story backups" not in view
+    assert "Open Institution tools" not in view

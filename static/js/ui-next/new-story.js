@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "alpha98-ui12-7eaf6b3481a3";
+export const MODULE_RELEASE = "alpha98-ui13-a39372e1d8d1";
 
 // UI_CATALOG_START: Alpha 9.8 New Story copy.
 const ALPHA98_NEW_STORY_COPY = Object.freeze([
@@ -15,7 +15,7 @@ import {
   generateLivedLocation,
   mountLivedLocationFields,
   normalizeLivedLocation,
-} from "./lived-location.js?release=alpha98-ui12-7eaf6b3481a3";
+} from "./lived-location.js?release=alpha98-ui13-a39372e1d8d1";
 
 const DRAFT_TYPE = "new-story";
 const DRAFT_OWNER = "current";
@@ -78,7 +78,7 @@ function restoreDraft(services, settings) {
         ...parsed,
         characterIds: Array.isArray(parsed.characterIds) ? parsed.characterIds : [],
         characterBriefs: Array.isArray(parsed.characterBriefs) && parsed.characterBriefs.length
-          ? parsed.characterBriefs : [""],
+          ? parsed.characterBriefs.map(value => typeof value === "string" ? value : "") : [""],
         loreIds: Array.isArray(parsed.loreIds) ? parsed.loreIds : [],
         preparedCharacterIds: Array.isArray(parsed.preparedCharacterIds) ? parsed.preparedCharacterIds : [],
         cardWarnings: Array.isArray(parsed.cardWarnings) ? parsed.cardWarnings : [],
@@ -279,15 +279,19 @@ export function openNewStory(options = {}) {
     const actions = node(documentRef, "div", "ui-new-story__actions");
     actions.append(backButton("Back", () => setStep("choice", "")));
     const next = node(documentRef, "button", "ui-button ui-button--primary", state.route === "blank" ? "Review story" : "Choose story material");
-    next.type = "submit";
+    next.type = "button";
     actions.append(next);
     form.append(actions);
-    form.addEventListener("submit", event => {
-      event.preventDefault();
+    const continueToMaterial = () => {
       state.name = name.value.trim();
       state.scenario = scenario.value.trim();
       state.language = language.value || "en";
       setStep(state.route === "blank" ? "review" : "assets");
+    };
+    next.addEventListener("click", continueToMaterial);
+    form.addEventListener("submit", event => {
+      event.preventDefault();
+      continueToMaterial();
     });
     body.append(form);
   };

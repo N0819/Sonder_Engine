@@ -81,6 +81,16 @@ def _archive_map():
     }
 
 
+def active_story_rows():
+    """Return Stories available for discovery and continuation surfaces."""
+    return [dict(row) for row in q(
+        "SELECT c.* FROM chats c "
+        "LEFT JOIN library_item_state s "
+        "ON s.item_type='story' AND s.item_id=c.id "
+        "WHERE COALESCE(s.archived,0)=0 ORDER BY c.id DESC"
+    )]
+
+
 def _story_recent_use():
     """Return the latest defensible activity timestamp for each Story."""
     return {
@@ -357,6 +367,7 @@ def library_projection(
     page = items[offset:offset + limit]
     return {
         "items": page,
+        "stories": active_story_rows(),
         "page": {
             "offset": offset, "limit": limit,
             "returned": len(page), "total": total,

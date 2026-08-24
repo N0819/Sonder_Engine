@@ -28,15 +28,17 @@
   :root[data-destination="play"]:is([data-layout-state="medium"], [data-layout-state="compact"]) .ui-shell__header-actions { inset-inline-end: 14px; }
   :root[data-destination="play"] .ui-shell__save { display: none; }
   :root[data-destination="play"] [data-shell-inspector-open] {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
     inline-size: auto;
     min-inline-size: 112px;
     padding-inline: 12px;
     color: var(--ui-color-interactive-strong);
     border-color: var(--ui-color-border-strong);
   }
-  :root[data-destination="play"] [data-shell-inspector-open]::after {
-    content: "Story tools";
-    margin-inline-start: 8px;
+  :root[data-destination="play"] [data-shell-inspector-open] .ui-icon-label {
     font-size: var(--ui-text-body);
     line-height: var(--ui-leading-body);
   }
@@ -386,7 +388,7 @@
   }
   :root[data-destination="play"][data-layout-state="compact"] .ui-shell__go-to > :not(.ui-icon) { display: none; }
   [data-layout-state="compact"] [data-shell-inspector-open] { min-inline-size: 44px; inline-size: 44px; padding: 0; }
-  [data-layout-state="compact"] [data-shell-inspector-open]::after { display: none; }
+  [data-layout-state="compact"] [data-shell-inspector-open] .ui-icon-label { display: none; }
   [data-layout-state="compact"] .ui-play__transcript { scrollbar-gutter: auto; padding-inline: 0; }
   [data-layout-state="compact"] .ui-play__story-header { padding-inline: 0; }
   [data-layout-state="compact"] .ui-play__composer { inline-size: calc(100% + 2 * var(--ui-space-5)); margin-inline: calc(-1 * var(--ui-space-5)); padding-inline: max(var(--ui-space-5), env(safe-area-inset-left)) max(var(--ui-space-5), env(safe-area-inset-right)); }
