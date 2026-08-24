@@ -1,19 +1,20 @@
 @layer ui-typography {
   :where(.ui-app, .ui-lab) {
     font-family: var(--ui-font-interface);
-    font-size: 15px;
-    line-height: 1.5;
+    font-size: var(--ui-text-body);
+    line-height: var(--ui-leading-body);
     color: var(--ui-color-text);
     text-rendering: optimizeLegibility;
   }
 
-  .ui-heading { font-weight: 650; letter-spacing: -.02em; line-height: 1.2; }
-  .ui-heading--1 { font-size: clamp(1.5rem, 2.5vw, 2rem); }
-  .ui-heading--2 { font-size: 1.25rem; }
-  .ui-heading--3 { font-size: 1rem; }
+  .ui-heading { font-weight: 650; letter-spacing: -.02em; }
+  .ui-heading--1 { font-size: var(--ui-text-page); line-height: var(--ui-leading-page); }
+  .ui-heading--2 { font-size: var(--ui-text-section); line-height: var(--ui-leading-section); }
+  .ui-heading--3 { font-size: var(--ui-text-body); line-height: var(--ui-leading-body); }
+  .ui-heading--display { font-size: var(--ui-text-display); line-height: var(--ui-leading-display); }
   .ui-kicker {
     color: var(--ui-color-text-faint);
-    font: 600 .6875rem/1.2 var(--ui-font-mono);
+    font: 600 var(--ui-text-micro)/var(--ui-leading-micro) var(--ui-font-mono);
     letter-spacing: .1em;
     text-transform: uppercase;
   }

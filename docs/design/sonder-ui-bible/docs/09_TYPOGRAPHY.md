@@ -12,6 +12,13 @@ The roles are semantic. A font is not chosen because a surface looks empty or ne
 
 ## Interface scale
 
+This table is the formal, normative interface scale. The default is deliberately
+compact for modern high-density desktop displays. Components MUST consume the
+semantic size and line-height tokens for their role; they MUST NOT introduce a
+one-off numeric font size to make one screen denser or louder. Library details,
+Settings copy, inspector text, and equivalent interface prose all use this same
+scale. Story prose is the only independent reading scale.
+
 | Role | Size | Weight | Line height | Notes |
 |---|---:|---:|---:|---|
 | Micro index | 11 px | 500-600 | 14 px | desktop only; nonessential; never primary copy |
@@ -24,6 +31,10 @@ The roles are semantic. A font is not chosen because a surface looks empty or ne
 | Display/setup heading | 26-32 px | 550-650 | 34-40 px | onboarding and empty-state focus only |
 
 Mobile should not reduce core UI text below 14 px. Inputs should render at 16 px where needed to prevent mobile browser zoom.
+
+The Larger interface accessibility preference remaps the same roles. It does
+not permit individual components to enlarge themselves, and it does not change
+the independently configured story-prose size.
 
 ## Story typography
 

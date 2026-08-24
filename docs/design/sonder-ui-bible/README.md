@@ -1,7 +1,7 @@
 # Sonder UI Design Bible
 
-**Version:** 1.0  
-**Date:** 2026-08-20  
+**Version:** 1.2
+**Date:** 2026-08-24
 **Status:** Authoritative UI/UX design direction  
 **Applies to:** Sonder Engine player-facing web interface, host setup, guest play, extensions hosted inside Sonder, desktop, tablet, and mobile
 

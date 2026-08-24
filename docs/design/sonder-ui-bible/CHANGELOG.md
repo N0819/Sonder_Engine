@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2 -- 2026-08-24
+
+Formalizes the compact, high-density interface type scale as a site-wide
+contract, keeps story prose independently configurable, and makes a semantic
+3-5 px bevel mandatory on every free-standing bordered surface. One-off
+numeric component font sizes and unrounded full-border boxes are now audited
+as conformance defects.
+
 ## 1.1 -- 2026-08-23
 
 Extends the approved Library direction with a focused person-authoring

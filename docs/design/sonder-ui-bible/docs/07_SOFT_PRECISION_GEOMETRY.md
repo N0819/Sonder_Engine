@@ -29,6 +29,9 @@ Zero-radius corners are permitted only when the corner is not visually free-stan
 - structural dividers.
 
 Ordinary interactive controls must not use completely sharp free-standing corners.
+Every free-standing bordered surface MUST declare one of the semantic radius
+tokens. A full border without a semantic radius is a conformance defect. Zero
+radius remains valid only for the internal and viewport-flush cases above.
 
 ## Nested radius relationship
 

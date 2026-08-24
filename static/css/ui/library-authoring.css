@@ -114,7 +114,8 @@
   background: transparent;
   color: var(--ui-color-text-muted);
   font: inherit;
-  font-size: .875rem;
+  font-size: var(--ui-text-control);
+  line-height: var(--ui-leading-control);
   font-weight: 600;
   text-align: start;
   cursor: pointer;
@@ -142,7 +143,8 @@
   background: transparent;
   color: var(--ui-color-text-muted);
   font: inherit;
-  font-size: .875rem;
+  font-size: var(--ui-text-control);
+  line-height: var(--ui-leading-control);
   font-weight: 600;
   text-align: start;
   cursor: pointer;
@@ -195,7 +197,8 @@
   min-height: 1.5rem;
   margin: 0;
   color: var(--ui-color-text-muted);
-  font-size: .8125rem;
+  font-size: var(--ui-text-meta);
+  line-height: var(--ui-leading-meta);
 }
 
 .ui-authoring-form,
@@ -222,7 +225,8 @@
 
 .ui-authoring-form__eyebrow {
   color: var(--ui-color-callout);
-  font-size: .75rem;
+  font-size: var(--ui-text-micro);
+  line-height: var(--ui-leading-micro);
   font-weight: 700;
   letter-spacing: .08em;
   text-transform: uppercase;
@@ -230,7 +234,8 @@
 
 .ui-authoring-field__label {
   color: var(--ui-color-text-muted);
-  font-size: .8125rem;
+  font-size: var(--ui-text-meta);
+  line-height: var(--ui-leading-meta);
   font-weight: 600;
 }
 
@@ -291,7 +296,8 @@
 .ui-authoring-field-group__title {
   margin: 0;
   color: var(--ui-color-text);
-  font-size: .875rem;
+  font-size: var(--ui-text-body);
+  line-height: var(--ui-leading-body);
   font-weight: 650;
 }
 
@@ -534,7 +540,7 @@
   .ui-authoring-form input,
   .ui-authoring-form select,
   .ui-authoring-form textarea {
-    font-size: 1rem;
+    font-size: var(--ui-text-input-mobile);
   }
 
   .ui-authoring-form__actions > * {

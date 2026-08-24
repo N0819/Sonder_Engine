@@ -1,17 +1,17 @@
 @layer ui-surface {
   .ui-guest-page, .ui-guest-page *, .ui-guest-page *::before, .ui-guest-page *::after { box-sizing: border-box; }
   .ui-guest-page { margin: 0; }
-  .ui-guest-page { min-block-size: 100dvh; block-size: 100dvh; display: grid; grid-template-rows: 56px minmax(0, 1fr); overflow: hidden; background: var(--ui-color-canvas); color: var(--ui-color-text); font-family: var(--ui-font-interface); }
+  .ui-guest-page { min-block-size: 100dvh; block-size: 100dvh; display: grid; grid-template-rows: 56px minmax(0, 1fr); overflow: hidden; background: var(--ui-color-canvas); color: var(--ui-color-text); font-family: var(--ui-font-interface); font-size: var(--ui-text-body); line-height: var(--ui-leading-body); }
   .ui-guest-header { display: flex; align-items: center; gap: 10px; padding-inline: 14px; border-block-end: 1px solid var(--ui-color-border); background: color-mix(in srgb, var(--ui-color-surface-solid) 90%, transparent); }
-  .ui-guest-header__mark { display: grid; place-items: center; inline-size: 30px; block-size: 30px; border: 1px solid var(--ui-color-interactive); border-radius: var(--ui-radius-md); color: var(--ui-color-interactive-strong); font: 13px var(--ui-font-mono); }
+  .ui-guest-header__mark { display: grid; place-items: center; inline-size: 30px; block-size: 30px; border: 1px solid var(--ui-color-interactive); border-radius: var(--ui-radius-md); color: var(--ui-color-interactive-strong); font: var(--ui-text-control)/var(--ui-leading-control) var(--ui-font-mono); }
   .ui-guest-header__copy { display: grid; gap: 2px; }
-  .ui-guest-header__copy strong { font-size: 14px; }
-  .ui-guest-header__copy span { color: var(--ui-color-text-faint); font: 9px var(--ui-font-mono); letter-spacing: .12em; text-transform: uppercase; }
+  .ui-guest-header__copy strong { font-size: var(--ui-text-body); line-height: var(--ui-leading-body); }
+  .ui-guest-header__copy span { color: var(--ui-color-text-faint); font: var(--ui-text-micro)/var(--ui-leading-micro) var(--ui-font-mono); letter-spacing: .12em; text-transform: uppercase; }
   .ui-guest-join { display: flex; justify-content: center; align-items: flex-start; padding: 20px 12px; }
   .ui-guest-join__card { inline-size: min(430px, 100%); min-block-size: 352px; padding: 18px 16px; background: color-mix(in srgb, var(--ui-color-surface-muted) 72%, transparent); }
-  .ui-guest-eyebrow { margin: 0 0 19px; color: var(--ui-color-text-faint); font: 700 9px var(--ui-font-mono); letter-spacing: .14em; text-transform: uppercase; }
-  .ui-guest-join h1 { margin: 0; font-size: 22px; line-height: 1.2; letter-spacing: -.02em; }
-  .ui-guest-join__intro { max-inline-size: 35ch; margin: 29px 0 26px; color: var(--ui-color-text-muted); font-size: 14px; line-height: 1.72; }
+  .ui-guest-eyebrow { margin: 0 0 19px; color: var(--ui-color-text-faint); font: 700 var(--ui-text-micro)/var(--ui-leading-micro) var(--ui-font-mono); letter-spacing: .14em; text-transform: uppercase; }
+  .ui-guest-join h1 { margin: 0; font-size: var(--ui-text-page); line-height: var(--ui-leading-page); letter-spacing: -.02em; }
+  .ui-guest-join__intro { max-inline-size: 35ch; margin: 29px 0 26px; color: var(--ui-color-text-muted); font-size: var(--ui-text-body); line-height: var(--ui-leading-body); }
   .ui-guest-join .ui-field { gap: 7px; }
   .ui-guest-join input { min-block-size: 44px; padding-inline: 10px; text-transform: uppercase; letter-spacing: .08em; }
   .ui-guest-join .ui-button { inline-size: 100%; min-block-size: 44px; margin-block-start: 13px; }
@@ -22,17 +22,17 @@
   .ui-guest-connection[hidden] { display: none; }
   .ui-guest-transcript { grid-row: 2; min-block-size: 0; overflow-y: auto; padding: var(--ui-space-7) max(var(--ui-space-5), env(safe-area-inset-left)) var(--ui-space-9); scroll-padding-block: var(--ui-space-7); }
   .ui-guest-turn { max-inline-size: var(--ui-prose-measure); margin: 0 auto var(--ui-space-8); }
-  .ui-guest-turn__input { margin-block-end: var(--ui-space-4); color: var(--ui-color-text-muted); font-size: .875rem; }
+  .ui-guest-turn__input { margin-block-end: var(--ui-space-4); color: var(--ui-color-text-muted); font-size: var(--ui-text-body); line-height: var(--ui-leading-body); }
   .ui-guest-turn__prose { font: 400 var(--ui-prose-size)/var(--ui-prose-leading) var(--ui-font-prose); white-space: pre-wrap; }
   .ui-guest-turn.stale .ui-guest-turn__prose { opacity: .62; }
   .ui-guest-turn__waiting { color: var(--ui-color-text-muted); font-style: italic; }
-  .ui-guest-turn__stale { margin-block-start: var(--ui-space-4); color: var(--ui-color-warning); font-size: .8125rem; }
+  .ui-guest-turn__stale { margin-block-start: var(--ui-space-4); color: var(--ui-color-warning); font-size: var(--ui-text-meta); line-height: var(--ui-leading-meta); }
   .ui-guest-composer { grid-row: 3; border-block-start: 1px solid var(--ui-color-border); background: color-mix(in srgb, var(--ui-color-surface-solid) 94%, transparent); }
   .ui-guest-composer__inner { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--ui-space-3); inline-size: min(760px, 100%); margin-inline: auto; padding: var(--ui-space-4) max(var(--ui-space-5), env(safe-area-inset-right)) max(var(--ui-space-4), env(safe-area-inset-bottom)) max(var(--ui-space-5), env(safe-area-inset-left)); }
   .ui-guest-composer__field { min-inline-size: 0; }
-  .ui-guest-composer textarea { inline-size: 100%; min-block-size: 52px; max-block-size: 160px; resize: vertical; padding: var(--ui-space-4); font: 400 1rem/1.5 var(--ui-font-prose); }
+  .ui-guest-composer textarea { inline-size: 100%; min-block-size: 52px; max-block-size: 160px; resize: vertical; padding: var(--ui-space-4); font: 400 var(--ui-text-input-mobile)/var(--ui-leading-body) var(--ui-font-prose); }
   .ui-guest-composer .ui-button { min-block-size: 44px; min-inline-size: 72px; align-self: stretch; }
-  .ui-guest-send-status { grid-column: 1 / -1; min-block-size: 18px; color: var(--ui-color-danger); font-size: .8125rem; }
+  .ui-guest-send-status { grid-column: 1 / -1; min-block-size: 18px; color: var(--ui-color-danger); font-size: var(--ui-text-meta); line-height: var(--ui-leading-meta); }
   .ui-visually-hidden { position: absolute; inline-size: 1px; block-size: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
   @media (min-width: 700px) {
     .ui-guest-header { padding-inline: 32px; }
