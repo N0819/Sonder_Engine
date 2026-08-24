@@ -53,7 +53,7 @@ CASES = (
     ("short-landscape", 844, 390, "#/library/characters?item=character%3A7", "normal", "", "en", "system"),
     ("short-desktop", 1280, 560, "#/library", "normal", "", "en", "system"),
     ("zoom-200-equivalent", 640, 450, "#/library/personas?item=persona%3A9", "normal", "", "en", "system"),
-    ("japanese-phone", 390, 844, "#/library/characters?item=character%3A7", "normal", "", "ja", "system"),
+    ("japanese-phone", 390, 844, "#/library", "normal", "", "ja", "system"),
     ("reduced-motion", 1280, 820, "#/library/lore", "normal", "", "en", "reduce"),
     ("scale-1000", 1280, 820, "#/library/characters", "scale", "", "en", "system"),
 )

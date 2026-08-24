@@ -142,6 +142,22 @@ def test_library_has_one_workspace_for_filters_ledger_and_actions(
     expect(actions.get_by_role("button", name="Create character", exact=True)).to_be_visible()
     expect(actions.get_by_role("button", name="Import character", exact=True)).to_be_visible()
 
+    types.get_by_role("button", name="Personas", exact=True).click()
+    expect(page).to_have_url(re.compile(r"#/library/personas"))
+    expect(types.get_by_role("button", name="Personas", exact=True)).to_have_attribute(
+        "aria-current", "page"
+    )
+    expect(actions.get_by_role("button", name="Create persona", exact=True)).to_be_visible()
+    expect(actions.get_by_role("button", name="Import persona", exact=True)).to_be_visible()
+
+    types.get_by_role("button", name="Lore", exact=True).click()
+    expect(page).to_have_url(re.compile(r"#/library/lore"))
+    expect(types.get_by_role("button", name="Lore", exact=True)).to_have_attribute(
+        "aria-current", "page"
+    )
+    expect(page.locator('[data-library-item="lore:12"]')).to_be_visible()
+    expect(workspace.locator(".ui-library-workspace__actions")).to_have_count(0)
+
 
 def test_library_actions_center_compact_icon_and_label_geometry(
     page: Page, ui_base_url: str
@@ -183,6 +199,9 @@ def test_library_actions_center_compact_icon_and_label_geometry(
     assert 3 <= select_style["radius"] <= 4, select_style
     assert select_style["fontSize"] == 13, select_style
     assert select_style["appearance"] == "none", select_style
+    assert page.get_by_role("heading", name="Library", level=2).evaluate(
+        "node => getComputedStyle(node).outlineStyle"
+    ) == "none"
 
 
 def test_story_import_action_stages_the_existing_import_workflow(
@@ -190,11 +209,21 @@ def test_story_import_action_stages_the_existing_import_workflow(
 ) -> None:
     _open(page, ui_base_url)
 
+    page.evaluate(
+        """() => {
+          window.__storyImportWorkflow = null;
+          document.addEventListener('sonder:library-select', event => {
+            window.__storyImportWorkflow = event.detail?.workflow || null;
+          }, { once: true });
+        }"""
+    )
+
     page.get_by_role("button", name="Import story", exact=True).click()
 
     expect(page).to_have_url(re.compile(r"#/library/stories\?.*mode=import"))
     root = page.locator("html")
     expect(root).to_have_attribute("data-inspector-open", "true")
+    assert page.evaluate("window.__storyImportWorkflow") == "story-import"
 
 
 def test_compact_library_navigation_controls_meet_touch_minimum(
@@ -230,10 +259,10 @@ def test_library_runtime_rejects_stale_results_and_bounds_identity_state(
     result = page.evaluate(
         """async base => {
           const storeModule = await import(
-            `${base}/static/js/ui-next/store.js?release=alpha98-ui10-c14a4cf8dabd`
+            `${base}/static/js/ui-next/store.js?release=alpha98-ui10-0415f377b12f`
           );
           const libraryModule = await import(
-            `${base}/static/js/ui-next/library-runtime.js?release=alpha98-ui10-c14a4cf8dabd`
+            `${base}/static/js/ui-next/library-runtime.js?release=alpha98-ui10-0415f377b12f`
           );
           const store = storeModule.createStore();
           let current = {
@@ -329,10 +358,10 @@ def test_lore_can_prepare_a_lived_location_for_the_current_story(
     result = page.evaluate(
         """async base => {
           const storeModule = await import(
-            `${base}/static/js/ui-next/store.js?release=alpha98-ui10-c14a4cf8dabd`
+            `${base}/static/js/ui-next/store.js?release=alpha98-ui10-0415f377b12f`
           );
           const libraryModule = await import(
-            `${base}/static/js/ui-next/library-runtime.js?release=alpha98-ui10-c14a4cf8dabd`
+            `${base}/static/js/ui-next/library-runtime.js?release=alpha98-ui10-0415f377b12f`
           );
           const route = {
             destination: "library", segments: ["lore"],
@@ -411,10 +440,10 @@ def test_library_mutations_keep_story_owner_and_undo_expires(
     result = page.evaluate(
         """async base => {
           const storeModule = await import(
-            `${base}/static/js/ui-next/store.js?release=alpha98-ui10-c14a4cf8dabd`
+            `${base}/static/js/ui-next/store.js?release=alpha98-ui10-0415f377b12f`
           );
           const libraryModule = await import(
-            `${base}/static/js/ui-next/library-runtime.js?release=alpha98-ui10-c14a4cf8dabd`
+            `${base}/static/js/ui-next/library-runtime.js?release=alpha98-ui10-0415f377b12f`
           );
           const item = {
             kind: "character", id: 7, key: "character:7", name: "Mara Venn",

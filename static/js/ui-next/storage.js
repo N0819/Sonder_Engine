@@ -1,6 +1,6 @@
-export const MODULE_RELEASE = "alpha98-ui10-c14a4cf8dabd";
+export const MODULE_RELEASE = "alpha98-ui10-0415f377b12f";
 
-import { assertSafeToPersist } from "./credentials.js?release=alpha98-ui10-c14a4cf8dabd";
+import { assertSafeToPersist } from "./credentials.js?release=alpha98-ui10-0415f377b12f";
 
 export const LOCAL_STATE_VERSION = 2;
 export const LOCAL_STATE_NAMESPACE = "sonder.ui-next";

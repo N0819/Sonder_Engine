@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "alpha98-ui10-c14a4cf8dabd";
+export const MODULE_RELEASE = "alpha98-ui10-0415f377b12f";
 
 function node(documentRef, tag, className = "", text = "") {
   const result = documentRef.createElement(tag);

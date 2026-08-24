@@ -1,7 +1,7 @@
-export const MODULE_RELEASE = "alpha98-ui10-c14a4cf8dabd";
+export const MODULE_RELEASE = "alpha98-ui10-0415f377b12f";
 
-import { mountLivedLocationFields } from "./lived-location.js?release=alpha98-ui10-c14a4cf8dabd";
-import { openNewStory } from "./new-story.js?release=alpha98-ui10-c14a4cf8dabd";
+import { mountLivedLocationFields } from "./lived-location.js?release=alpha98-ui10-0415f377b12f";
+import { openNewStory } from "./new-story.js?release=alpha98-ui10-0415f377b12f";
 
 const loreLocationDrafts = new Map();
 
@@ -323,10 +323,10 @@ function workspaceActions(documentRef, services, activeType) {
     const importStory = labelWithIcon(documentRef,
       button(documentRef, COPY.importStory), "import", COPY.importStory);
     importStory.addEventListener("click", () => {
-      navigate(services, "story", { mode: "import", session: workflowSession() });
       documentRef.dispatchEvent(new CustomEvent("sonder:library-select", {
         detail: { workflow: "story-import" },
       }));
+      navigate(services, "story", { mode: "import", session: workflowSession() });
     });
     actions.append(create, importStory);
   } else if (activeType === "character" || activeType === "persona") {
@@ -345,7 +345,7 @@ function workspaceActions(documentRef, services, activeType) {
     }));
     actions.append(create, importPerson);
   }
-  return actions;
+  return actions.childElementCount ? actions : null;
 }
 
 function toolbar(documentRef, services, state) {
@@ -496,7 +496,9 @@ function libraryWorkspace(documentRef, services, state) {
   const heading = title.querySelector("h2");
   heading.tabIndex = -1;
   heading.dataset.focusIdentity = "destination:library";
-  head.append(title, workspaceActions(documentRef, services, activeType));
+  head.append(title);
+  const actions = workspaceActions(documentRef, services, activeType);
+  if (actions) head.append(actions);
   section.append(
     head,
     workspaceFilters(documentRef, services, filteredState),
