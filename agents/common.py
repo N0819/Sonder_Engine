@@ -236,6 +236,476 @@ def observable_action_text(elem):
     return str(obs or "")
 
 
+_COMMUNICATIVE_TYPES = frozenset({
+    "communication", "communicative_act", "speech_act", "indirect_speech",
+})
+
+
+def communication_surface(elem):
+    """Observable indirect-speech predicate for a typed communicative act.
+
+    The returned text is deliberately not a quotation.  ``content`` is the
+    proposition the author supplied (ask what happened, explain the route),
+    not words the engine is licensed to put in the speaker's mouth.
+    """
+    if not isinstance(elem, dict):
+        return ""
+    act = " ".join(str(elem.get("act") or "say").split()).casefold()
+    content = " ".join(str(
+        elem.get("content") or elem.get("topic") or "").split())
+    if not content:
+        return ""
+    verbs = {
+        "ask": "asks", "question": "asks", "explain": "explains",
+        "report": "reports", "tell": "tells", "warn": "warns",
+        "request": "requests", "offer": "offers", "instruct": "instructs",
+        "reassure": "reassures", "promise": "promises", "admit": "admits",
+        "answer": "answers", "clarify": "clarifies", "inform": "informs",
+        "say": "says",
+    }
+    verb = verbs.get(act, (act + "s") if act else "says")
+    return f"{verb} {content}".strip()
+
+
+def resolve_action_referents(surface, elem, labels=None):
+    """Resolve exact annotated pronoun spans without guessing an antecedent.
+
+    ``labels`` maps canonical entity strings to the observer-safe label the
+    caller already earned (a name, ``you``, or an anonymous epithet).  Missing
+    mappings fall back to the canonical entity, which is appropriate only for
+    objective/narrator surfaces; perception callers pass their display map.
+    """
+    text = str(surface or "")
+    refs = elem.get("referents") if isinstance(elem, dict) else None
+    if not text or not isinstance(refs, list):
+        return text
+    label_map = {
+        str(key or "").strip().casefold(): str(value or "").strip()
+        for key, value in (labels or {}).items() if str(key or "").strip()
+    }
+    # Replace later occurrences first so earlier span offsets stay valid.
+    replacements = []
+    for ref in refs:
+        if not isinstance(ref, dict):
+            continue
+        needle = str(ref.get("text") or "").strip()
+        entity = str(ref.get("entity") or "").strip()
+        if not needle or not entity:
+            continue
+        try:
+            occurrence = max(1, int(ref.get("occurrence") or 1))
+        except (TypeError, ValueError):
+            occurrence = 1
+        matches = list(re.finditer(
+            rf"(?<!\w){re.escape(needle)}(?!\w)", text, flags=re.I))
+        if occurrence > len(matches):
+            continue
+        match = matches[occurrence - 1]
+        label = label_map.get(entity.casefold(), entity)
+        role = str(ref.get("role") or "").casefold()
+        if "possessive" in role and label.casefold() in ("you", "your"):
+            label = "your"
+        elif "possessive" in role and label.casefold() not in ("its",):
+            label = label + ("'" if label.endswith("s") else "'s")
+        replacements.append((match.start(), match.end(), label))
+    for start, end, replacement in sorted(replacements, reverse=True):
+        text = text[:start] + replacement + text[end:]
+    return text
+
+
+def sequence_onset_elements(sequence):
+    """Only phases that exist before anyone has had a chance to react."""
+    out = []
+    for raw in sequence or []:
+        if not isinstance(raw, dict):
+            continue
+        phase = str(raw.get("phase") or "atomic").casefold()
+        if raw.get("depends_on") or phase in ("continuation", "completion"):
+            continue
+        out.append(raw)
+    return out
+
+
+def _claim_realized(elem, resolved):
+    """Whether resolution explicitly realized every claim for one action."""
+    if str(elem.get("commitment") or "") != "contestable":
+        return True
+    resolved = resolved if isinstance(resolved, dict) else {}
+    rows = list(resolved.get("claim_dispositions") or [])
+    sd = resolved.get("state_diff")
+    if isinstance(sd, dict):
+        rows.extend(sd.get("claim_dispositions") or [])
+    event_id = str(elem.get("event_id") or "").strip()
+    match = re.search(r":player:(\d+):action$", event_id)
+    sequence_idx = match.group(1) if match else None
+    related = []
+    realized_ids = set()
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        claim_id = str(row.get("claim_id") or "").strip()
+        status = str(row.get("status") or "").casefold()
+        if status == "realized":
+            realized_ids.update(
+                str(value).strip()
+                for value in (row.get("realized_event_ids") or [])
+                if str(value).strip())
+        if claim_id == event_id or (sequence_idx is not None and
+                claim_id.startswith(f"claim:{sequence_idx}:")):
+            related.append(status)
+    return (bool(related) and all(status == "realized" for status in related)) \
+        or (not related and bool(event_id and event_id in realized_ids))
+
+
+def _scene_has_subject(scene, subject):
+    wanted = str(subject or "").strip().casefold()
+    if not wanted or wanted in {
+            "self", "player", "the player", "you", "me", "him", "her",
+            "them", "it"}:
+        return True
+    candidates = set()
+    for key in (scene.get("positions") or {}):
+        candidates.add(str(key).strip().casefold())
+    for key, entity in (scene.get("entities") or {}).items():
+        candidates.add(str(key).strip().casefold())
+        if isinstance(entity, dict):
+            candidates.add(str(entity.get("name") or "").strip().casefold())
+            candidates.update(str(alias).strip().casefold()
+                              for alias in entity.get("aliases") or [])
+    return wanted in candidates
+
+
+def _scene_has_contact(scene, selector):
+    if not isinstance(selector, dict):
+        return False
+    actor = str(selector.get("actor") or "").strip().casefold()
+    target = str(selector.get("target") or "").strip().casefold()
+    actor_part = str(selector.get("actor_part") or "").strip().casefold()
+    target_part = str(selector.get("target_part") or "").strip().casefold()
+    for contact in scene.get("contacts") or []:
+        if not isinstance(contact, dict):
+            continue
+        ca = str(contact.get("actor") or "").strip().casefold()
+        ct = str(contact.get("target") or "").strip().casefold()
+        cap = str(contact.get("actor_part") or "").strip().casefold()
+        ctp = str(contact.get("target_part") or "").strip().casefold()
+        direct = ca == actor and ct == target \
+            and (not actor_part or cap == actor_part) \
+            and (not target_part or ctp == target_part)
+        mirror = ca == target and ct == actor \
+            and (not actor_part or ctp == actor_part) \
+            and (not target_part or cap == target_part)
+        if direct or mirror:
+            return True
+    return False
+
+
+def settle_sequence_dispositions(sequence, resolved, scene):
+    """Compose model adjudication with explicit causal prerequisites.
+
+    The model decides contested outcomes.  The engine decides the structural
+    consequence: a dependent phase cannot execute when its prerequisite was
+    merely attempted, when a named participant does not exist, or when a
+    required standing contact is absent.
+    """
+    verdicts = []
+    by_key = {}
+    for index, elem in enumerate(sequence or []):
+        if not isinstance(elem, dict):
+            continue
+        event_id = str(elem.get("event_id") or f"sequence:{index}")
+        phase_id = str(elem.get("phase_id") or event_id)
+        dependencies = [str(value) for value in elem.get("depends_on") or []
+                        if str(value).strip()]
+        reason = ""
+        for dependency in dependencies:
+            parent = by_key.get(dependency)
+            if parent is None:
+                reason = f"missing prerequisite {dependency}"
+                break
+            if parent.get("status") not in ("executed", "realized"):
+                reason = f"prerequisite {dependency} did not complete"
+                break
+        if not reason:
+            missing = [person for person in elem.get("participants") or []
+                       if not _scene_has_subject(scene, person)]
+            if missing:
+                reason = "missing participant(s): " + ", ".join(missing)
+        if not reason:
+            missing_contact = next((
+                selector for selector in elem.get("requires_contacts") or []
+                if not _scene_has_contact(scene, selector)), None)
+            if missing_contact is not None:
+                reason = "required contact is not standing"
+        if reason:
+            status = "blocked"
+        elif elem.get("type") == "action" \
+                and str(elem.get("commitment") or "") == "contestable":
+            status = "realized" if _claim_realized(elem, resolved) else "attempted"
+        else:
+            status = "executed"
+        verdict = {
+            "event_id": event_id, "phase_id": phase_id,
+            "status": status, "reason": reason,
+        }
+        verdicts.append(verdict)
+        by_key[event_id] = verdict
+        by_key[phase_id] = verdict
+    return verdicts
+
+
+def sequence_event_allowed(event, resolved):
+    """Whether a declared event survived the engine-authored causal floor."""
+    event_id = str((event or {}).get("event_id") or "")
+    if not event_id:
+        return True
+    for row in (resolved or {}).get("sequence_dispositions") or []:
+        if isinstance(row, dict) and str(row.get("event_id") or "") == event_id:
+            return str(row.get("status") or "") != "blocked"
+    return True
+
+
+def prune_blocked_phase_changes(diff, dispositions):
+    """Drop state-diff records explicitly sourced from a blocked phase.
+
+    Specialists map each derived channel path or list index to its event id in
+    ``phase_sources``.  Untagged legacy output is left alone; this floor never
+    guesses which change a prose sentence meant.  Inline ``source_event_id``
+    is accepted only as a compatibility input and stripped before persistence.
+    """
+    if not isinstance(diff, dict):
+        return []
+    blocked = {
+        str(row.get("event_id") or "") for row in dispositions or []
+        if isinstance(row, dict) and row.get("status") == "blocked"
+    }
+    dropped = []
+    phase_sources = diff.pop("phase_sources", {})
+    numeric_list_drops = {}
+    if isinstance(phase_sources, dict):
+        for path, source in phase_sources.items():
+            source = str(source or "")
+            if source not in blocked:
+                continue
+            channel, dot, key = str(path or "").partition(".")
+            value = diff.get(channel)
+            if dot and isinstance(value, dict) and key in value:
+                value.pop(key, None)
+                dropped.append((path, source))
+            elif dot and isinstance(value, list):
+                if key.isdigit() and int(key) < len(value):
+                    numeric_list_drops.setdefault(channel, set()).add(int(key))
+                    dropped.append((path, source))
+                else:
+                    before = len(value)
+                    diff[channel] = [item for item in value
+                                     if str(item) != key]
+                    if len(diff[channel]) != before:
+                        dropped.append((path, source))
+    for channel, indices in numeric_list_drops.items():
+        value = diff.get(channel)
+        if isinstance(value, list):
+            diff[channel] = [item for index, item in enumerate(value)
+                             if index not in indices]
+    for channel, value in list(diff.items()):
+        if isinstance(value, list):
+            kept = []
+            for record in value:
+                source = (str(record.get("source_event_id") or "")
+                          if isinstance(record, dict) else "")
+                if source in blocked:
+                    dropped.append((channel, source))
+                else:
+                    if isinstance(record, dict) and "source_event_id" in record:
+                        record = dict(record)
+                        record.pop("source_event_id", None)
+                    kept.append(record)
+            diff[channel] = kept
+        elif isinstance(value, dict):
+            kept = {}
+            for key, record in value.items():
+                source = (str(record.get("source_event_id") or "")
+                          if isinstance(record, dict) else "")
+                if source in blocked:
+                    dropped.append((f"{channel}.{key}", source))
+                else:
+                    if isinstance(record, dict) and "source_event_id" in record:
+                        record = dict(record)
+                        record.pop("source_event_id", None)
+                    kept[key] = record
+            diff[channel] = kept
+    return dropped
+
+
+def observable_action_onset_text(elem):
+    """The part of an action surface available *before* it is adjudicated.
+
+    ``observable_action_text`` is the complete outward surface the interpret
+    model extracted from the player's sentence.  That is safe for an asserted
+    act, but not automatically safe for a contestable multi-stage act: live
+    scenario play handed a dance partner "signals a dip, takes her weight,
+    returns her upright, opens both hands, and steps back" in perception pass
+    one.  Her reaction therefore arrived after every outcome she existed to
+    help resolve.
+
+    Interpret already marks these acts contestable.  For that one class, pass
+    one exposes only the first visible phase, stopping at explicit sequencing
+    punctuation/words.  The full declaration still reaches resolution
+    unchanged.  This is deliberately grammar-level rather than a combat verb
+    list: a dip, an examination, a spell, and a grapple receive the same
+    causality boundary.
+    """
+    surface = observable_action_text(elem).strip()
+    if not surface or str(elem.get("commitment") or "") != "contestable":
+        return surface
+    # Observable surfaces are verb-first predicate phrases.  A comma followed
+    # by a new verb phrase, a semicolon, or an explicit then/afterward marks a
+    # later phase.  Keep coordinating words inside the first phase ("raises
+    # both hands and braces") when no stronger sequence boundary appears.
+    pieces = re.split(
+        r"\s*;\s*|\s*,\s*(?:and\s+)?(?:then\s+)?|\s+\b(?:then|afterward|subsequently)\b\s+",
+        surface,
+        maxsplit=1,
+        flags=re.I,
+    )
+    onset = pieces[0].strip()
+    if not onset:
+        return ""
+
+    # A contestable observable describes the motion that is beginning, not an
+    # outcome the first perception pass may award. Model-written predicate
+    # phrases nevertheless commonly arrive as completed-looking presents --
+    # ``creates space`` / ``takes her wrist``. That taught the reacting mind
+    # that the very effect it was being asked to contest had already happened,
+    # and the same wording could later make narration contradict a rejected
+    # disposition (live close-contact audit: the committed pose said the
+    # retreat was prevented while the page said ``I create space``).
+    #
+    # Keep the outward surface rather than `attempt` (which may contain
+    # private purpose), but put its first English predicate under explicit
+    # attempt modality. Non-Latin/scripted surfaces fall through unchanged;
+    # their morphology belongs to the language adapter, not an English
+    # conjugation guess here.
+    match = re.match(r"([A-Za-z]+)(\b.*)", onset)
+    if not match:
+        return onset
+    verb, tail = match.groups()
+    low = verb.casefold()
+    if low in ("tries", "attempts", "begins", "starts"):
+        return onset
+    irregular = {"is": "be", "has": "have", "does": "do", "goes": "go"}
+    if low in irregular:
+        base = irregular[low]
+    elif low.endswith("ies") and len(low) > 3:
+        base = low[:-3] + "y"
+    elif (low.endswith(("ches", "shes", "xes", "zzes", "oes", "sses"))
+          and len(low) > 4):
+        base = low[:-2]
+    elif low.endswith("s") and not low.endswith("ss") and len(low) > 2:
+        base = low[:-1]
+    else:
+        base = low
+    return "attempts to " + base + tail
+
+
+def adjudicated_player_action_text(elem, resolved=None):
+    """Return only the outward portion resolution made true.
+
+    Asserted acts retain their complete observable surface. A contestable act
+    does so only when a claim disposition names its event id in
+    ``realized_event_ids``; otherwise only the onset is safe. Missing or
+    malformed disposition data therefore loses detail instead of inventing a
+    successful conditional branch.
+    """
+    surface = observable_action_text(elem).strip()
+    if not surface or str(elem.get("commitment") or "") != "contestable":
+        return surface
+    resolved = resolved if isinstance(resolved, dict) else {}
+    if not sequence_event_allowed(elem, resolved):
+        return ""
+    sd = resolved.get("state_diff")
+    rows = list(resolved.get("claim_dispositions") or [])
+    if isinstance(sd, dict):
+        rows.extend(sd.get("claim_dispositions") or [])
+    event_id = str(elem.get("event_id") or "").strip()
+    match = re.search(r":player:(\d+):action$", event_id)
+    sequence_idx = match.group(1) if match else None
+    related = []
+    related_claim_ids = []
+    realized_ids = set()
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        claim_id = str(row.get("claim_id") or "").strip()
+        status = str(row.get("status") or "").casefold()
+        ids = {str(value).strip()
+               for value in (row.get("realized_event_ids") or [])
+               if str(value).strip()}
+        realized_ids.update(ids if status == "realized" else ())
+        # Intent claims use claim:<sequence-index>:intent:<effect-index>.
+        # Several can belong to one multi-phase action, and one realized
+        # effect must not promote its deferred siblings to completed fact.
+        if claim_id == event_id or (sequence_idx is not None and
+                claim_id.startswith("claim:%s:" % sequence_idx)):
+            related.append(status)
+            related_claim_ids.append(claim_id)
+    fully_realized = bool(related) and all(
+        status == "realized" for status in related)
+    if not related:
+        fully_realized = bool(event_id and event_id in realized_ids)
+    if fully_realized:
+        return surface
+    # An intent-only alternative that was wholly deferred/rejected never
+    # began. A direct event disposition of "deferred" is different: the
+    # attempted onset may have happened before its effect was prevented.
+    intent_only = bool(related_claim_ids) and all(
+        claim_id.startswith("claim:") for claim_id in related_claim_ids)
+    if intent_only and not any(
+            status in ("realized", "begun", "contested")
+            for status in related):
+        return ""
+    return observable_action_onset_text(elem)
+
+
+def discard_unanchored_player_speech(out, raw_input):
+    """Drop exact player lines whose words were not copied from the input.
+
+    A description such as ``I explain the warning signs`` does not authorize
+    the interpreter to write a speech for the player. Downstream ownership
+    checks trust the interpreter, so provenance has to be enforced here.
+    """
+    if not isinstance(out, dict):
+        return []
+
+    def _flat(value):
+        return re.sub(r"\s+", " ", str(value or "")).strip().casefold()
+
+    source = _flat(raw_input)
+    dropped, kept = [], []
+    for event in out.get("sequence") or []:
+        if not isinstance(event, dict) or event.get("type") != "speech":
+            kept.append(event)
+            continue
+        line = str(event.get("text") or "").strip()
+        if line and _flat(line) not in source:
+            dropped.append(line)
+            continue
+        kept.append(event)
+    out["sequence"] = kept
+
+    flat = str(out.get("speech") or "").strip()
+    if flat and _flat(flat) not in source:
+        if flat not in dropped:
+            dropped.append(flat)
+        out["speech"] = None
+    surviving = [event.get("text") for event in kept
+                 if isinstance(event, dict) and event.get("type") == "speech"
+                 and event.get("text")]
+    if surviving:
+        out["speech"] = surviving[0]
+    return dropped
+
+
 def _dict(value):
     return value if isinstance(value, dict) else {}
 
@@ -1194,7 +1664,8 @@ def _normalize_scene_patch(value):
 def _sequence_has_content(result):
     return any(
         (event.get("text") if event.get("type") == "speech"
-         else event.get("attempt"))
+         else (event.get("content") if event.get("type") == "communication"
+               else event.get("attempt")))
         for event in (result.get("sequence") or [])
         if isinstance(event, dict)
     )
@@ -1225,6 +1696,14 @@ def _asks_player(result, chat, cast=None):
     if addresses & cast_names:
         return False
     for event in _dict_list(result.get("sequence")):
+        if event.get("type") == "communication":
+            if str(event.get("act") or "").casefold() in (
+                    "ask", "question", "request", "instruct"):
+                targets = {str(value).casefold()
+                           for value in event.get("targets") or []}
+                if not targets or targets & aliases:
+                    return True
+            continue
         if event.get("type") != "speech":
             continue
         text = str(event.get("text") or "").strip()
@@ -1339,8 +1818,7 @@ def authored_other_subject(elem, name_forms, actor_forms=()):
 
 
 def bind_sequence_targets(sequence, target_forms):
-    """Fill an action element's EMPTY `targets` with the display names of the
-    cast members its own text names.
+    """Fill an action/communication element's EMPTY ``targets`` from names.
 
     The director routinely emits an act that plainly lands on a character with
     `targets: []` -- and every downstream seam that asks "does this land on
@@ -1360,9 +1838,12 @@ def bind_sequence_targets(sequence, target_forms):
     name evidence through its own `target_forms` guard instead."""
     bound = 0
     for elem in _dict_list(sequence):
-        if elem.get("type") != "action" or elem.get("targets"):
+        if elem.get("type") not in ("action", "communication") \
+                or elem.get("targets"):
             continue
-        haystack = f"{elem.get('attempt') or ''} {_element_effect_text(elem)}".casefold()
+        haystack = (f"{elem.get('attempt') or ''} "
+                    f"{elem.get('content') or ''} "
+                    f"{_element_effect_text(elem)}").casefold()
         if not haystack.strip():
             continue
         names = []
@@ -2090,10 +2571,43 @@ def norm_sequence(out, warn=None):
                     "interrupts": str(e.get("interrupts") or "").strip(),
                     "visibility": "concealed" if e.get("visibility") == "concealed" else "overt",
                     "conceal_from": e.get("conceal_from") or [],
+                    "targets": e.get("targets") or [],
+                    "phase_id": str(e.get("phase_id") or ""),
+                    "phase": str(e.get("phase") or "atomic"),
+                    "depends_on": [str(x) for x in e.get("depends_on") or []
+                                   if str(x).strip()],
+                    "participants": [str(x) for x in
+                                     e.get("participants") or []
+                                     if str(x).strip()],
                     # raw (pre-normalization) signals, consumed by the
                     # concealment backstop below and stripped before return.
                     "_raw_vis": e.get("visibility"),
                     "_raw_vol": e.get("volume"),
+                })
+        elif t in _COMMUNICATIVE_TYPES:
+            content = e.get("content") or e.get("topic") or e.get("meaning")
+            if content:
+                targets = e.get("targets") or e.get("target") or []
+                if not isinstance(targets, list):
+                    targets = [targets]
+                clean.append({
+                    "type": "communication",
+                    "act": str(e.get("act") or e.get("kind") or "say"),
+                    "content": " ".join(str(content).split()),
+                    "targets": targets,
+                    "volume": normalize_speech_volume(e.get("volume")),
+                    "tone": str(e.get("tone") or ""),
+                    "visibility": ("concealed" if
+                                   e.get("visibility") == "concealed"
+                                   else "overt"),
+                    "conceal_from": e.get("conceal_from") or [],
+                    "phase_id": str(e.get("phase_id") or ""),
+                    "phase": str(e.get("phase") or "atomic"),
+                    "depends_on": [str(x) for x in e.get("depends_on") or []
+                                   if str(x).strip()],
+                    "participants": [str(x) for x in
+                                     e.get("participants") or []
+                                     if str(x).strip()],
                 })
         elif t == "ponder":
             # Private cognitive action. It never enters the public sequence,
@@ -2136,6 +2650,18 @@ def norm_sequence(out, warn=None):
                     "conceal_from": e.get("conceal_from") or [],
                     "commitment": e.get("commitment") or "asserted",
                     "asserted_effects": asserted_effects,
+                    "phase_id": str(e.get("phase_id") or ""),
+                    "phase": str(e.get("phase") or "atomic"),
+                    "depends_on": [str(x) for x in e.get("depends_on") or []
+                                   if str(x).strip()],
+                    "participants": [str(x) for x in
+                                     e.get("participants") or []
+                                     if str(x).strip()],
+                    "requires_contacts": [dict(x) for x in
+                                          e.get("requires_contacts") or []
+                                          if isinstance(x, dict)],
+                    "referents": [dict(x) for x in e.get("referents") or []
+                                  if isinstance(x, dict)],
                 })
         else:
             att = e.get("attempt")
@@ -2199,6 +2725,18 @@ def norm_sequence(out, warn=None):
                     "stage": e.get("stage", "immediate"),
                     "intended_effects": intended_effects,
                     "asserted_effects": asserted_effects,
+                    "phase_id": str(e.get("phase_id") or ""),
+                    "phase": str(e.get("phase") or "atomic"),
+                    "depends_on": [str(x) for x in e.get("depends_on") or []
+                                   if str(x).strip()],
+                    "participants": [str(x) for x in
+                                     e.get("participants") or []
+                                     if str(x).strip()],
+                    "requires_contacts": [dict(x) for x in
+                                          e.get("requires_contacts") or []
+                                          if isinstance(x, dict)],
+                    "referents": [dict(x) for x in e.get("referents") or []
+                                  if isinstance(x, dict)],
                 })
     # A promoted stage direction the character also declared as a real action
     # is the same act twice, and the narrator rendered both.
@@ -2228,7 +2766,8 @@ def norm_sequence(out, warn=None):
     # the audience exist. `schemas._uncross_concealed_speech` does it there.
     concealed_from_union, conceal_targets = [], []
     for e in clean:
-        if e["type"] == "action" and e.get("visibility") == "concealed":
+        if e["type"] in ("action", "communication") \
+                and e.get("visibility") == "concealed":
             for cf in e.get("conceal_from") or []:
                 if cf not in concealed_from_union:
                     concealed_from_union.append(cf)
@@ -2238,7 +2777,8 @@ def norm_sequence(out, warn=None):
     propagate = [cf for cf in concealed_from_union if cf not in conceal_targets]
     if propagate:
         for e in clean:
-            if e["type"] != "speech" or e.get("visibility") == "concealed":
+            if e["type"] not in ("speech", "communication") \
+                    or e.get("visibility") == "concealed":
                 continue
             explicitly_public = (e.get("_raw_vis") == "overt") or (e.get("_raw_vol") in ("loud", "shout"))
             if explicitly_public:
@@ -6091,17 +6631,41 @@ def _check_event_order(prose, event_order):
     only a strict position inversion between two located quotes fires."""
     if not prose or not event_order:
         return []
+    quote_pattern = _ling("_QUOTE_BODY_RE")
+    quote_spans = []
+    for match in quote_pattern.finditer(strip_prose_markup(prose)):
+        span = re.sub(r"\s+", " ", match.group(1).strip())
+        if span:
+            quote_spans.append((match.start(), span))
+
     located = []
     for ev in event_order:
         if not isinstance(ev, dict) or ev.get("kind") != "speech":
             continue
-        body = _quote_body(str(ev.get("quote") or ""))
-        if len(body) < 4:
+        body = re.sub(
+            r"\s+", " ", _quote_body(str(ev.get("quote") or "")).strip())
+        normalized = _fold_typography(body).casefold().rstrip(".,!?…;:")
+        if len(normalized) < 3:
             continue
-        pat = _flexible_quote_re(body)
-        m = pat.search(prose) if pat else None
-        if m:
-            located.append((m.start(), ev))
+        # Locate a line only as a whole quoted span or a sentence-bounded line
+        # region inside one. A plain substring search reads the player's short
+        # ``More?`` as present inside an NPC's later ``More of that.``, then
+        # reports the perfectly ordered answer as an inversion and spends
+        # narrator rewrites trying to fix it. `_spoken_line_regions` retains
+        # legitimate same-mouth multi-line spans without reviving that prefix
+        # collision.
+        at = None
+        for start, span in quote_spans:
+            if (_fold_typography(span).casefold().rstrip(".,!?…;:")
+                    == normalized):
+                at = start
+                break
+            regions = _spoken_line_regions(body, span)
+            if regions:
+                at = start + regions[0][0]
+                break
+        if at is not None:
+            located.append((at, ev))
     warnings = []
     for (pos_a, ev_a), (pos_b, ev_b) in zip(located, located[1:]):
         if pos_b < pos_a:
@@ -6623,15 +7187,36 @@ def _check_narrator_fidelity(out, view, recent_prose=None, exclude_quotes=None,
     }
     quote_pattern = _ling("_QUOTE_BODY_RE")
     normalized_prose = re.sub(r"\s+", " ", prose.casefold())
+    view_quotes = []
     for match in quote_pattern.finditer(view_text):
         quote = re.sub(r"\s+", " ", match.group(1).strip())
         if not quote:
             continue
+        view_quotes.append(quote)
         if quote.casefold().rstrip(".,!?…;:") in excluded_bodies:
             continue
         if not _contains_quote(normalized_prose, quote):
             warnings.append(
                 f"Dialogue from view missing or altered in narrator prose: \"{quote[:80]}\""
+            )
+
+    # The inverse of dialogue preservation is equally absolute: a quoted line
+    # the player-facing view never delivered has no authorised speaker. The
+    # old check proved only that required quotes survived, so a draft could
+    # keep every real line and add one more from the narrator. This happened
+    # when a reaction-loop act vanished from perception and the narrator
+    # guessed both the missing motion and a fresh NPC line.
+    allowed_quotes = {
+        re.sub(r"\s+", " ", quote.casefold()).rstrip(".,!?…;:")
+        for quote in view_quotes
+    }
+    for match in quote_pattern.finditer(prose):
+        quote = re.sub(r"\s+", " ", match.group(1).strip())
+        normalized = quote.casefold().rstrip(".,!?…;:")
+        if normalized and normalized not in allowed_quotes:
+            warnings.append(
+                "Narrator invented quoted dialogue absent from the player "
+                f"view: \"{quote[:80]}\""
             )
 
     # ONE PAIR OF QUOTES, ONE MOUTH.

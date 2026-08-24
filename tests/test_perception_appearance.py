@@ -30,6 +30,7 @@ from __future__ import annotations
 import pytest
 
 from agents.common import _appearance_as_prose, _inject_visible_actor
+from agents.perception import _appearance_ledger_changed
 from story.scene import appearance_of
 
 BASE = "A tall figure in a grey travelling coat, hood raised."
@@ -86,6 +87,65 @@ class TestAppearanceReadsAsProse:
     def test_empty_and_junk(self):
         assert _appearance_as_prose("") == ""
         assert _appearance_as_prose(None) == ""
+
+    def test_structured_overlay_renders_description_not_python_dict(self):
+        raw = appearance_of("H", BASE, _scene(overlays={"H": [{
+            "name": "flush", "description": "red across her cheeks"}]}))
+
+        assert "red across her cheeks" in raw
+        assert "{'name':" not in raw
+
+    def test_reasserted_overlay_does_not_reearn_full_appearance(self):
+        before = _scene(overlays={"H": [{
+            "name": "flush", "description": "red across her cheeks"}]})
+        same = _scene(overlays={"H": [{
+            "name": "flush", "description": "red across her cheeks"}]})
+        changed = _scene(overlays={"H": [{
+            "name": "flush", "description": "fading from her cheeks"}]})
+
+        assert not _appearance_ledger_changed(before, same, "overlays", "H")
+        assert _appearance_ledger_changed(before, changed, "overlays", "H")
+
+
+class TestAppearancePruningBoundary:
+    def _percepts(self, *, prune):
+        from agents.perception import _composer_standing_percepts
+
+        scene = {
+            "rooms": {"hall": {"name": "Hall", "light": "normal"}},
+            "positions": {"Reya": "hall", "Tamamo": "hall"},
+            "entities": {}, "poses": {}, "contacts": [], "attire": {},
+            "overlays": {}, "scales": {}, "contained": {},
+        }
+        observer = {"room": "hall", "room_name": "Hall",
+                    "room_notes": "", "sense_card": None}
+        others = [{
+            "name": "Tamamo", "room": "hall",
+            "appearance": "nine golden tails; wearing a ceremonial kimono",
+            "aliases": [], "disguise_known_to": [],
+            "disguise_conceals_identity": False,
+        }]
+        return _composer_standing_percepts(
+            scene, observer, "Reya", others, {"Tamamo": "Tamamo"},
+            {"Reya": ["Tamamo"]}, prev_seen={"Tamamo"},
+            prune_appearance=prune)
+
+    def test_npc_view_keeps_another_bodys_complete_string(self):
+        from agents import composer
+
+        percepts = self._percepts(prune=False)
+        appearance = next(p for p in percepts if p.kind == "appearance")
+        rendered = composer.render_view(
+            percepts, mode="character",
+            prev_described={appearance.data["source_key"]})
+
+        assert "nine golden tails" in rendered.text
+        assert "ceremonial kimono" in rendered.text
+
+    def test_player_pruning_can_drop_the_same_unchanged_string(self):
+        percepts = self._percepts(prune=True)
+
+        assert not any(p.kind == "appearance" for p in percepts)
 
 
 class TestAppearanceIsNotHandedOverUnseen:

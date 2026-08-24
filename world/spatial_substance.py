@@ -4,8 +4,13 @@ transfer, and speech impediment."""
 
 import hashlib
 
-from world.spatial_contacts import (_part_identity, _same_region, contact_relation,
-                              same_owned_region)
+from world.spatial_contacts import (
+    _part_identity,
+    _same_region,
+    contact_id,
+    contact_relation,
+    same_owned_region,
+)
 from world.spatial_identity import canonical_subject, same_subject
 
 
@@ -14,6 +19,24 @@ from world.spatial_identity import canonical_subject, same_subject
 # liquid in a vessel, residue on a surface, gas in a chamber, powder in a wound
 # or any fictional equivalent is matter located relative to a target.
 _SUBSTANCE_PLACEMENTS = frozenset({"surface", "interior", "contained", "room"})
+
+# Magnitude is model-authored structure, never recovered from English prose.
+# The free-text `amount` remains the fiction's wording; `amount_band` is only
+# an optional comparison value for an explicitly declared transfer.
+SUBSTANCE_AMOUNT_BANDS = ("trace", "small", "moderate", "large", "flooding")
+SUBSTANCE_PORTIONS = ("trace", "some", "most", "all")
+
+
+def substance_amount_band(value) -> str:
+    raw = _substance_text(value, 32).casefold().replace("_", " ")
+    aliases = {"light": "small", "copious": "large", "flood": "flooding"}
+    raw = aliases.get(raw, raw)
+    return raw if raw in SUBSTANCE_AMOUNT_BANDS else ""
+
+
+def substance_portion(value) -> str:
+    raw = _substance_text(value, 32).casefold()
+    return raw if raw in SUBSTANCE_PORTIONS else ""
 
 
 # Part kinds (per `_part_identity`) whose engagement mis-forms speech, split
@@ -40,13 +63,19 @@ ARTICULATION_SLURRED = "slurred"   # the tongue is engaged on a surface
 def speech_articulation_impediment(scene: dict, speaker: str) -> tuple:
     """(kind, reason) for how this speaker's mouth mis-forms speech now.
 
-    Reads only the standing contact ledger. Kinds, by severity:
+    Reads standing topology plus an explicit material affordance. Quantity is
+    not an articulation law: water, smoke, foam and magical silence can occupy
+    the same named cavity with different consequences. A substance therefore
+    affects speech only when the fiction records `speech_impediment`.
+
+    Kinds, by severity:
 
       - "stifled": something is INSIDE the speaker's mouth or throat; the
-        speaker's own mouth-part is inside another body; or another body is
-        pressed against the speaker's mouth from outside. Words can barely
-        be shaped at all.
-      - "slurred": the speaker's own TONGUE is engaged on another body's
+        speaker's own mouth-part is inside another body; another body is
+        pressed against the speaker's mouth from outside; the speaker's own
+        mouth is explicitly sealed against another body's surface; or a
+        standing substance explicitly carries that affordance.
+      - "slurred": the speaker's own TONGUE is engaged on an external
         surface. Measured live (chat 69, turns 74-75): full clean sentences
         at `normal` volume while the beat's own ops re-asserted her tongue
         mid-lick -- you cannot articulate cleanly with your tongue on
@@ -92,6 +121,16 @@ def speech_articulation_impediment(scene: dict, speaker: str) -> tuple:
                     f"{actor}'s {contact.get('actor_part') or 'body'} is "
                     f"pressed against {name}'s "
                     f"{contact.get('target_part')}")
+        # A mouth merely touching a surface is not necessarily sealed. The
+        # manner supplies that fact; otherwise a kiss on a cheek, drinking
+        # from a cup, and invented anatomy all become the same obstruction.
+        manner = str(contact.get("manner") or "").strip().casefold()
+        if speaker_is_actor and relation == "surface" \
+                and actor_kind == "mouth" \
+                and manner in {"seal", "sealed", "cover", "covered"}:
+            return (ARTICULATION_STIFLED,
+                    f"{name}'s mouth is sealed against {target}'s "
+                    f"{contact.get('target_part') or 'body'}")
         if slurred is None and speaker_is_actor and relation == "surface" \
                 and actor_kind == "tongue":
             # Held rather than returned: a stifled impediment elsewhere in
@@ -99,6 +138,28 @@ def speech_articulation_impediment(scene: dict, speaker: str) -> tuple:
             slurred = (ARTICULATION_SLURRED,
                        f"{name}'s tongue is against {target}'s "
                        f"{contact.get('target_part') or 'body'}")
+    # Material consequences are explicit and world-specific. The core locates
+    # and enforces the affordance; it does not infer physiology from prose.
+    for record in (scene or {}).get("substances") or []:
+        if not isinstance(record, dict):
+            continue
+        if not same_subject(scene, record.get("target"), name):
+            continue
+        if _substance_placement(record.get("placement")) != "interior":
+            continue
+        interior = _part_identity(record.get("target_interior"))[0]
+        if interior not in _SPEECH_CAVITY_INTERIORS:
+            continue
+        impediment = _substance_text(
+            record.get("speech_impediment"), 32).casefold()
+        if impediment not in {ARTICULATION_SLURRED, ARTICULATION_STIFLED}:
+            continue
+        substance = _substance_text(record.get("substance"), 160) or "matter"
+        cavity = _substance_text(record.get("target_interior"), 160) \
+            or interior
+        return (impediment,
+                f"{name}'s {cavity} holds {_substance_text(record.get('amount'), 80)} "
+                f"of {substance}")
     return slurred or ("", "")
 
 
@@ -292,6 +353,7 @@ def _resolved_substance_add(scene, raw, report=None):
         "target_interior": target_interior,
         "target_part": target_part,
         "amount": _substance_text(raw.get("amount"), 80),
+        "amount_band": substance_amount_band(raw.get("amount_band")),
         "detail": _substance_text(raw.get("detail"), 240),
         # What this matter SMELLS of, deliberately beside `amount` and
         # `detail` rather than among the identity fields: matter deposited
@@ -300,6 +362,17 @@ def _resolved_substance_add(scene, raw, report=None):
         # re-describes. Hashing it into `_substance_id` would file drying
         # blood as a second puddle beside fresh.
         "scent": _substance_text(raw.get("scent"), 160),
+        # World-specific affordance, never inferred from the material name or
+        # amount. Empty means the material has no deterministic speech rule.
+        "speech_impediment": (
+            _substance_text(raw.get("speech_impediment"), 32).casefold()
+            if _substance_text(raw.get("speech_impediment"), 32).casefold()
+            in {ARTICULATION_SLURRED, ARTICULATION_STIFLED} else ""),
+        # Transfer metadata is consumed by apply_substance_ops and is not part
+        # of the destination pool's durable identity.
+        "source_substance_id": _substance_text(
+            raw.get("source_substance_id"), 120),
+        "portion": substance_portion(raw.get("portion")),
     }
     # Adds derive identity from physical semantics. A model-supplied id could
     # otherwise overwrite an unrelated standing record; ids are selectors for
@@ -421,7 +494,8 @@ def _absorb_into_pool(standing: dict, arriving: dict) -> dict:
     `{op:'remove', substance_id}` selector minted from an earlier payload
     still find the row.
     """
-    for field in ("amount", "detail", "scent"):
+    for field in ("amount", "amount_band", "detail", "scent",
+                  "speech_impediment"):
         value = _substance_text(arriving.get(field), 240)
         if value:
             standing[field] = arriving.get(field, "")
@@ -481,6 +555,41 @@ def _stock_consumed_by(scene, record, current) -> list:
     return consumed
 
 
+def _apply_explicit_transfer(current, record, report=None) -> bool:
+    """Apply one explicitly identified qualitative transfer.
+
+    Returns True when the add named a source pool, including when that source
+    could not be found. Free prose is never parsed into magnitude. Unknown
+    bands preserve the source unless the fiction explicitly says `all`.
+    """
+    source_id = _substance_text(record.get("source_substance_id"), 120)
+    if not source_id:
+        return False
+    source = current.get(source_id)
+    if not isinstance(source, dict):
+        if report:
+            report(f"substance transfer source {source_id!r} was not present")
+        return True
+    portion = substance_portion(record.get("portion")) or "all"
+    if portion == "all":
+        current.pop(source_id, None)
+        return True
+    band = substance_amount_band(source.get("amount_band"))
+    if not band:
+        if report:
+            report(
+                f"preserved transfer source {source_id!r}: partial portion "
+                "requires its explicit amount_band")
+        return True
+    index = SUBSTANCE_AMOUNT_BANDS.index(band)
+    if portion == "most":
+        source["amount_band"] = "trace"
+    elif portion == "some" and index > 0:
+        source["amount_band"] = SUBSTANCE_AMOUNT_BANDS[index - 1]
+    # `trace` moves too little to lower a qualitative band.
+    return True
+
+
 def apply_substance_ops(scene: dict, ops, report=None) -> dict:
     """Apply add/remove/clear operations to ``scene.substances``."""
     current = {}
@@ -525,18 +634,32 @@ def apply_substance_ops(scene: dict, ops, report=None) -> dict:
             # Found by replaying the live ledger: pooling used to return here
             # first, and the measured swallow deposited into a stomach that
             # already had a row -- so the mouth was never emptied at all.
-            for sid in _stock_consumed_by(scene, record, current):
-                if sid == pooled_id:
-                    continue  # the destination is not its own origin
-                if report:
-                    gone = current[sid]
-                    report(
-                        f"{_substance_text(gone.get('substance'), 160)!r} left "
-                        f"{_substance_text(gone.get('target'), 120)}'s "
-                        f"{_record_region(gone)} -- "
-                        f"{_substance_text(record.get('source'), 120)} moved "
-                        f"matter out of that region this beat")
-                current.pop(sid, None)
+            source_id = _substance_text(
+                record.get("source_substance_id"), 120)
+            # Moving a named portion back into its own already-pooled
+            # destination changes no stock; it only re-describes that pool.
+            explicit_transfer = bool(source_id and source_id == pooled_id)
+            if not explicit_transfer:
+                explicit_transfer = _apply_explicit_transfer(
+                    current, record, report=report)
+            if not explicit_transfer:
+                # Backward-compatible all-or-nothing conservation for older
+                # ops that identify an origin only by source/source_part. New
+                # partial transfers name source_substance_id + portion.
+                for sid in _stock_consumed_by(scene, record, current):
+                    if sid == pooled_id:
+                        continue  # the destination is not its own origin
+                    if report:
+                        gone = current[sid]
+                        report(
+                            f"{_substance_text(gone.get('substance'), 160)!r} left "
+                            f"{_substance_text(gone.get('target'), 120)}'s "
+                            f"{_record_region(gone)} -- "
+                            f"{_substance_text(record.get('source'), 120)} moved "
+                            f"matter out of that region this beat")
+                    current.pop(sid, None)
+            record.pop("source_substance_id", None)
+            record.pop("portion", None)
             if pooled_id is not None:
                 # The standing record keeps its own id, so a removal by either
                 # id's selector still finds one row rather than half of two.
@@ -609,3 +732,251 @@ def substance_event_clause(event: dict, *, you: str, scene: dict) -> str:
             scene, event.get("source"), event.get("target"))):
         clause += f", {detail}"
     return clause
+
+
+# ---------------------------------------------------------------------------
+# Contact effects: durable dynamics performed through a standing contact.
+# The external channel remains `contact_action_ops`; internally every record
+# is attached to a stable contact id and dies with that parent relation.
+# ---------------------------------------------------------------------------
+
+_MAX_CONTACT_ACTIONS = 80
+
+
+def _contact_action_text(value, limit=160):
+    return " ".join(str(value or "").replace("_", " ").split())[:limit]
+
+
+def _contact_by_id(scene, value):
+    needle = _contact_action_text(value, 80).casefold()
+    if not needle:
+        return None
+    matches = [c for c in (scene or {}).get("contacts") or []
+               if isinstance(c, dict)
+               and contact_id(c).casefold() == needle]
+    return matches[0] if len(matches) == 1 else None
+
+
+def _selector_contact(scene, selector):
+    if not isinstance(selector, dict):
+        return None
+    a = selector.get("actor")
+    ap = selector.get("actor_part")
+    t = selector.get("target")
+    tp = selector.get("target_part")
+    if not all(_contact_action_text(v) for v in (a, ap, t, tp)):
+        return None
+
+    def side_matches(contact, left, left_part, right, right_part):
+        return (same_subject(scene, contact.get("actor"), left)
+                and _same_region(contact.get("actor_part"), left_part)
+                and same_subject(scene, contact.get("target"), right)
+                and _same_region(contact.get("target_part"), right_part))
+
+    matches = []
+    for contact in (scene or {}).get("contacts") or []:
+        if not isinstance(contact, dict):
+            continue
+        if side_matches(contact, a, ap, t, tp) or side_matches(
+                contact, t, tp, a, ap):
+            matches.append(contact)
+    return matches[0] if len(matches) == 1 else None
+
+
+def resolve_contact_action_ref(scene, value):
+    """Resolve a durable contact id or an exact structured endpoint selector."""
+    contact = _selector_contact(scene, value) if isinstance(value, dict) \
+        else _contact_by_id(scene, value)
+    return (contact_id(contact), contact) if contact is not None else ("", None)
+
+
+def _contact_action_key(actor, contact_ref, action):
+    return (
+        _contact_action_text(actor, 120).casefold(),
+        _contact_action_text(contact_ref, 80).casefold(),
+        _contact_action_text(action, 120).casefold(),
+    )
+
+
+def _clean_contact_action(raw, scene=None):
+    if not isinstance(raw, dict) or not isinstance(scene, dict):
+        return None
+    actor = canonical_subject(
+        scene, _contact_action_text(raw.get("actor"), 120))
+    action = _contact_action_text(raw.get("action"), 120)
+    raw_ref = raw.get("contact_id") or raw.get("contact_ref")
+    ref, contact = resolve_contact_action_ref(scene, raw_ref)
+    if not actor or not action or not ref or contact is None:
+        return None
+    if not (same_subject(scene, actor, contact.get("actor"))
+            or same_subject(scene, actor, contact.get("target"))):
+        return None
+    key = _contact_action_key(actor, ref, action)
+    action_id = "contact-action:" + hashlib.sha256(
+        "\x1f".join(key).encode("utf-8")).hexdigest()[:20]
+    return {
+        "action_id": action_id,
+        "actor": actor,
+        "contact_id": ref,
+        "action": action,
+        "intensity": _contact_action_text(raw.get("intensity"), 60),
+        "rhythm": _contact_action_text(
+            raw.get("rhythm") or raw.get("cadence"), 80),
+        # Author diagnostics only. Deterministic perception does not deliver
+        # arbitrary prose from this field across the identity firewall.
+        "detail": _contact_action_text(raw.get("detail"), 200),
+    }
+
+
+def _live_contact_actions(scene):
+    """Clean existing records and drop any whose parent contact has ended."""
+    out = []
+    for raw in (scene or {}).get("contact_actions") or []:
+        if not isinstance(raw, dict):
+            continue
+        # Saved rows already carry a durable id; feed it through the same
+        # resolver so an orphan cannot survive a move, scale change, or release.
+        candidate = {**raw, "contact_ref": raw.get("contact_id")}
+        cleaned = _clean_contact_action(candidate, scene)
+        if cleaned is not None:
+            out.append(cleaned)
+    return out[-_MAX_CONTACT_ACTIONS:]
+
+
+def contact_actions_of(scene, name):
+    """Standing contact effects performed by one body, oldest first."""
+    return [dict(record) for record in _live_contact_actions(scene)
+            if same_subject(scene, record.get("actor"), name)]
+
+
+def actions_for_contact(scene, contact_ref):
+    """All standing effects attached to one durable contact id."""
+    ref, _ = resolve_contact_action_ref(scene, contact_ref)
+    return [dict(record) for record in _live_contact_actions(scene)
+            if ref and record.get("contact_id") == ref]
+
+
+def apply_contact_action_ops(scene, ops, report=None) -> dict:
+    """Apply bounded effect ops, then enforce parent-contact ownership.
+
+    Effects persist until explicitly removed or until their contact ends.
+    Model silence never changes physical state.
+    """
+    scene = scene if isinstance(scene, dict) else {}
+    rows = _live_contact_actions(scene)
+
+    def rebuild_index():
+        return {row.get("action_id"): i for i, row in enumerate(rows)
+                if isinstance(row, dict) and row.get("action_id")}
+
+    index = rebuild_index()
+    for raw in (ops if isinstance(ops, list) else []):
+        if not isinstance(raw, dict):
+            continue
+        op = _contact_action_text(raw.get("op"), 32).casefold()
+        if op in {"add", "change"}:
+            action_id = _contact_action_text(raw.get("action_id"), 80)
+            at = index.get(action_id) if action_id else None
+            candidate = raw
+            if op == "change" and at is not None:
+                # A stable action_id is enough to address a change; omitted
+                # identity fields inherit from the standing record rather
+                # than making the model repeat an opaque contact id.
+                candidate = {**rows[at], **raw}
+                candidate["contact_ref"] = (
+                    raw.get("contact_ref") or raw.get("contact_id")
+                    or rows[at].get("contact_id"))
+            cleaned = _clean_contact_action(candidate, scene)
+            if cleaned is None:
+                if report:
+                    report("discarded contact action without a live contact, "
+                           "participant actor, and noun-like action")
+                continue
+            if at is None:
+                at = index.get(cleaned["action_id"])
+            if at is None:
+                rows.append(cleaned)
+            else:
+                rows[at] = cleaned
+            index = rebuild_index()
+            continue
+
+        action_id = _contact_action_text(raw.get("action_id"), 80)
+        actor = canonical_subject(
+            scene, _contact_action_text(raw.get("actor"), 120))
+        action = _contact_action_text(raw.get("action"), 120).casefold()
+        raw_ref = raw.get("contact_id") or raw.get("contact_ref")
+        ref, _ = resolve_contact_action_ref(scene, raw_ref)
+        if op not in {"remove", "clear"}:
+            continue
+        if raw_ref and not ref:
+            if report:
+                report("discarded contact-action removal with an unknown "
+                       "contact reference")
+            continue
+        if not any((action_id, actor, ref)):
+            if report:
+                report("discarded unbounded contact-action removal")
+            continue
+        kept = []
+        for row in rows:
+            matches = True
+            if action_id and row.get("action_id") != action_id:
+                matches = False
+            if actor and not same_subject(scene, row.get("actor"), actor):
+                matches = False
+            if ref and row.get("contact_id") != ref:
+                matches = False
+            if op == "remove" and action \
+                    and row.get("action", "").casefold() != action:
+                matches = False
+            if not matches:
+                kept.append(row)
+        rows = kept
+        index = rebuild_index()
+
+    scene["contact_actions"] = _live_contact_actions(
+        {**scene, "contact_actions": rows})[-_MAX_CONTACT_ACTIONS:]
+    return scene
+
+
+def contact_actions_for_observer(scene, observer):
+    """Effects on contacts the observer is physically party to.
+
+    Returns cleaned records only. The parent contact is deliberately not
+    exposed to the renderer; ordinary contact perception already carries its
+    endpoint-specific sensation and identity-safe partner label.
+    """
+    out = []
+    for record in _live_contact_actions(scene):
+        contact = _contact_by_id(scene, record.get("contact_id"))
+        if contact is None:
+            continue
+        if (same_subject(scene, contact.get("actor"), observer)
+                or same_subject(scene, contact.get("target"), observer)):
+            out.append(dict(record))
+    return out
+
+
+def contact_action_clause(record, *, observer, scene=None, label_for=None):
+    """Observer-safe tactile clause for one standing contact effect.
+
+    `action` is required to be a noun-like physical effect ("vibration",
+    "pressure pulses", "suction"), allowing fixed grammar in every genre.
+    The recipient does not need a canonical name for the other party; the
+    ordinary contact sensation already carries the recognition-safe identity.
+    """
+    if not isinstance(record, dict):
+        return ""
+    action = _contact_action_text(record.get("action"))
+    if not action:
+        return ""
+    intensity = _contact_action_text(record.get("intensity"))
+    rhythm = _contact_action_text(record.get("rhythm"))
+    effect = " ".join(part for part in (intensity, action) if part)
+    if rhythm:
+        effect += f", {rhythm}"
+    actor_is_observer = same_subject(
+        scene or {}, record.get("actor"), observer)
+    return (f"You sustain {effect} through the contact" if actor_is_observer
+            else f"You feel {effect} through the contact")

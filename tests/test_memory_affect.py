@@ -12,8 +12,9 @@ import time
 
 from persist import commit
 from story.character_schema import default_character_data
-from persist.commit import prepare_memory_commit
+from persist.commit import _inference_memory_text, prepare_memory_commit
 from core.pipeline_context import ChatData, PipelineContext, TurnData
+from llm.prompts import get_prompt_body
 
 
 def _story(temp_db, name="Vorne"):
@@ -156,10 +157,10 @@ def test_inference_memory_omits_empty_evidence_and_duplicate_subject(
         turn=TurnData(id=102, chat_id=chat_id, idx=6,
                       player_input="watch", created=time.time()),
         cast=cast, input="watch",
-        director_resolve={"resolved_event": "Hinami pauses.", "dialogue_log": []},
+        director_resolve={"resolved_event": "Mara pauses.", "dialogue_log": []},
     )
     ctx.character_results = {char_id: {"mind_model_updates": [{
-        "about_entity": "Hinami", "claim": "Hinami wants distance",
+        "about_entity": "Mara", "claim": "Mara wants distance",
         "confidence": 0.6, "evidence": [{"fact": ""}, {}],
     }]}}
 
@@ -167,6 +168,26 @@ def test_inference_memory_omits_empty_evidence_and_duplicate_subject(
     inference = next(m for m in captured["memories"]
                      if m["category"] == "inference")
 
-    assert inference["content"] == "Hinami wants distance."
+    assert inference["content"] == "I suspected that Mara wants distance."
     assert "About Hinami: Hinami" not in inference["content"]
     assert "Evidence:" not in inference["content"]
+
+
+def test_inference_memory_voices_confidence_and_evidence_as_my_reasoning():
+    assert _inference_memory_text(
+        "the route is unsafe", "north road", 0.8, "I saw fresh tracks") == (
+            "I concluded this about north road: the route is unsafe. "
+            "I based that on: I saw fresh tracks.")
+    assert _inference_memory_text(
+        "Mara may be hiding something", "Mara", 0.2) == (
+            "I wondered whether Mara may be hiding something.")
+
+
+def test_memory_consolidator_requires_first_person_in_both_language_packs():
+    english = get_prompt_body("memory_consolidate", "en")
+    japanese = get_prompt_body("memory_consolidate", "ja")
+
+    assert "first-person singular" in english
+    assert "third person about the character" not in english
+    assert "一人称" in japanese
+    assert "third person about the character" not in japanese

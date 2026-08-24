@@ -199,7 +199,7 @@ and the suite was green through both:
 - `agents/director_scopes._schema_list_channels` read `field.outer_type_`,
   which exists only on Pydantic 1. On the shipped major it returned the empty
   set, so `_LIST_DELEGATED` was empty and every one of the seventeen op-list
-  Director channels — `contact_ops`, `introductions`, `crowd_ops`,
+  Director channels — `contact_ops`, `contact_action_ops`, `introductions`, `crowd_ops`,
   `remove_rooms` — was coerced to `{}`: dispatched, paid for, and discarded
   without a word.
 - `tests/test_lore_blind_scoring.py` built its fixtures as

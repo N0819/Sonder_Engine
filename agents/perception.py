@@ -48,6 +48,8 @@ from world.spatial import (
     hiding_holders_of,
     ambient_scope,
     contact_sensation,
+    contact_action_clause,
+    contact_actions_for_observer,
     egocentric_frame,
     _entity_named,
     entity_arc,
@@ -605,8 +607,15 @@ from .common import (
     # through this module. It belongs to common.py and should be imported
     # from there; the test file is outside this slice's ownership.
     _significant_name_tokens,
+    _quote_body,
+    adjudicated_player_action_text,
+    communication_surface,
     observable_action_text,
+    observable_action_onset_text,
     player_speech_lines,
+    resolve_action_referents,
+    sequence_event_allowed,
+    sequence_onset_elements,
     _strip_identity_tokens,
     _unknown_actor_label,
     observer_body_regions,
@@ -615,7 +624,182 @@ from .common import (
     character_room,
     character_scene_keys,
     split_sentences,
+    _merge_character_results,
 )
+
+
+def _settled_character_result(ctx, character_id):
+    """One character's declarations across both behaviour paths.
+
+    A contested beat runs ``reaction_loop`` instead of the ordinary
+    interaction path. Dialogue projection already read both result maps, but
+    action/source projection read only ``character_results``. The result was
+    a particularly dangerous half-delivery: a reacting character's line could
+    reach an observer while the physical act beside it vanished, leaving the
+    narrator to guess the missing motion from older prose.
+
+    Reaction comes first because an interaction result, when one exists, is a
+    later declaration in the beat. The shared merger preserves both ordered
+    sequences and the accumulating update fields.
+    """
+    return _merge_character_results(
+        (ctx.reaction_results or {}).get(character_id),
+        (ctx.character_results or {}).get(character_id),
+    ) or {}
+
+
+def _outcome_event_stream(ctx, scene, interp, res, player_name,
+                          dialogue, background_beats):
+    """One causally ordered speech/action stream for outcome perception.
+
+    `dialogue_log` is the authority for which lines were actually delivered,
+    but it is not a sufficient chronology: a Director can group or reorder
+    its transcription, and it contains no physical actions at all.  The
+    declarations carry the original interleaving.  Bind each declared speech
+    element back to its exact dialogue row, keep each observable action beside
+    it, then append only genuinely unbound dialogue/background events.
+
+    This is deliberately still pre-perceiver.  Concealment, sight, hearing,
+    containment and identity remain per-observer decisions in the loop that
+    consumes the stream.
+    """
+    sequences = [(player_name, interp.get("sequence") or [], True)]
+
+    # Additional human declarations happen in the same opening causal band as
+    # the primary player's declaration. Their own sequence remains intact.
+    other_players = interp.get("other_players") or {}
+    for extra in ctx.extra_players:
+        entry = other_players.get(str(extra.get("persona_id"))) or {}
+        sequences.append((extra.get("name") or "Player",
+                          entry.get("sequence") or [], True))
+
+    cast_names = {}
+    for row in ctx.cast:
+        try:
+            cast_names[int(row["id"])] = character_name(json.loads(row["sheet"]))
+        except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+            continue
+
+    represented_ids = set()
+    for stage_name in ("reaction_loop", "interaction_loop"):
+        stage = ctx.get(stage_name) or {}
+        for round_data in stage.get("rounds") or []:
+            if not isinstance(round_data, dict):
+                continue
+            raw_id = (round_data.get("reactor_id")
+                      if stage_name == "reaction_loop"
+                      else round_data.get("speaker_id"))
+            try:
+                char_id = int(raw_id)
+            except (TypeError, ValueError):
+                char_id = None
+            if char_id is not None:
+                represented_ids.add(char_id)
+            actor = (round_data.get("reactor") or round_data.get("speaker")
+                     or cast_names.get(char_id))
+            result = round_data.get("result") or {}
+            if actor and isinstance(result, dict):
+                sequences.append((str(actor), result.get("sequence") or [],
+                                  False))
+
+    # Resume and focused tests can hydrate the result maps without hydrating
+    # round records. Preserve those declarations once, after any real rounds.
+    for row in ctx.cast:
+        try:
+            char_id = int(row["id"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if char_id in represented_ids:
+            continue
+        result = _settled_character_result(ctx, char_id)
+        if result.get("sequence"):
+            sequences.append((cast_names.get(char_id) or str(char_id),
+                              result["sequence"], False))
+
+    def _same_speaker(actual, declared, is_player):
+        if (is_player
+                and str(declared or "").strip().casefold()
+                == str(player_name or "").strip().casefold()
+                and is_player_speaker(actual, ctx.chat)):
+            return True
+        return same_subject(scene, actual, declared) or (
+            str(actual or "").strip().casefold()
+            == str(declared or "").strip().casefold())
+
+    used_dialogue = set()
+    seen_events = set()
+    stream = []
+    deferred_stream = []
+    for actor, sequence, is_player in sequences:
+        for local_index, event in enumerate(sequence):
+            if not isinstance(event, dict):
+                continue
+            event_key = str(event.get("event_id") or "").strip()
+            if not event_key:
+                event_key = json.dumps(
+                    [actor, local_index, event], sort_keys=True,
+                    ensure_ascii=False, default=str)
+            if event_key in seen_events:
+                continue
+            seen_events.add(event_key)
+            if not sequence_event_allowed(event, res):
+                continue
+            destination = deferred_stream if (
+                is_player and (event.get("depends_on") or
+                str(event.get("phase") or "").casefold() in (
+                    "continuation", "completion"))) else stream
+            if event.get("type") == "speech" and event.get("text"):
+                wanted = _quote_body(str(event.get("text") or "")).strip()
+                match = next((
+                    index for index, entry in enumerate(dialogue)
+                    if index not in used_dialogue
+                    and _same_speaker(entry.get("speaker"), actor, is_player)
+                    and _quote_body(str(entry.get("exact_quote") or "")).strip()
+                    == wanted
+                ), None)
+                if match is not None:
+                    used_dialogue.add(match)
+                    destination.append({"kind": "speech",
+                                        "entry": dialogue[match]})
+            elif (event.get("type") == "communication"
+                  and communication_surface(event)):
+                destination.append({
+                    "kind": "communication", "actor": actor,
+                    "entry": {**event, "speaker": actor},
+                })
+            elif (event.get("type") == "action"
+                  and event.get("visibility") != "concealed"):
+                surface = (adjudicated_player_action_text(event, res)
+                           if is_player else observable_action_text(event))
+                if surface:
+                    destination.append({
+                        "kind": "action", "actor": actor,
+                        "attempt": surface, "event": event})
+
+    # A dependent player phase occurs only after present minds had the chance
+    # to answer its prerequisite.  Character declarations were appended while
+    # the main stream was built, so placing continuations here creates the
+    # causal sandwich: onset -> response -> continuation/completion.
+    stream.extend(deferred_stream)
+
+    # A Director-originated/background line has no character declaration to
+    # bind. Preserve it in dialogue-log order after the declared stream.
+    for index, entry in enumerate(dialogue):
+        if index not in used_dialogue:
+            stream.append({"kind": "speech", "entry": entry})
+
+    for beat in background_beats:
+        if not beat.get("action") or not beat.get("room"):
+            continue
+        stream.append({
+            "kind": "action", "actor": beat["name"],
+            "attempt": beat["action"],
+            "event": {"actor": beat["name"],
+                      "observable": beat["action"],
+                      "visibility": "overt",
+                      "event_id": "background:%s" % beat["name"]},
+        })
+    return stream
 
 
 def _ubiquitous_names(sc):
@@ -1477,6 +1661,7 @@ def perception_establish(ctx, nonce):
 
     perceivers = [{
         "id": "player", "name": p_name, "room": p_room,
+        "pronouns": (pers.get("identity") or {}).get("pronouns") or {},
         "room_name": (p_rdata or {}).get("name") or p_room or "an unspecified area",
         "room_notes": ((p_rdata or {}).get("notes") or _room_notes_from_lore(p_room, ctx, sc)),
         "ambient_location": _ambient_location_for(sc, p_room),
@@ -1503,6 +1688,7 @@ def perception_establish(ctx, nonce):
         c_sources = [s for s in sources if s["name"] != character_name(sh)]
         perceivers.append({
             "id": c["id"], "name": character_name(sh), "room": r,
+            "pronouns": (sh.get("identity") or {}).get("pronouns") or {},
             "room_name": (rdata or {}).get("name") or r or "an unspecified area",
             "room_notes": ((rdata or {}).get("notes") or _room_notes_from_lore(r, ctx, sc)),
             "ambient_location": _ambient_location_for(sc, r),
@@ -1587,7 +1773,9 @@ def perception_act(ctx, nonce):
     # once, from resolve. It lands before `p_appearance` and before the
     # composer reads `sc`, because those are how a body reaches a view at all.
     sc = preview_player_state_assertions(
-        sc, interp.get("state_assertions"), ctx, p_name)
+        sc, (interp.get("onset_state_assertions")
+             if interp.get("onset_state_assertions") is not None
+             else interp.get("state_assertions")), ctx, p_name)
     p_appearance = _appearance_as_prose(appearance_of(
         p_name, pers.get("appearance") or persona_appearance(pers), sc))
     # A physical disguise conceals the actor's real appearance from observers:
@@ -1680,6 +1868,7 @@ def perception_act(ctx, nonce):
 
         perceivers.append({
             "id": c["id"], "name": character_name(sh), "room": r,
+            "pronouns": (sh.get("identity") or {}).get("pronouns") or {},
             "room_name": (rdata or {}).get("name") or r or "an unspecified area",
             "room_notes": ((rdata or {}).get("notes") or _room_notes_from_lore(r, ctx, sc)),
             "ambient_location": _ambient_location_for(sc, r),
@@ -2083,7 +2272,7 @@ def perception_outcome(ctx, nonce):
     for _b in _bg_beats:
         sources.append({"name": _b["name"], "room": _b["room"]})
     for c in ctx.cast:
-        d = ctx.character_results.get(c["id"])
+        d = _settled_character_result(ctx, c["id"])
         sh = json.loads(c["sheet"])
         if d and (d.get("sequence") or d.get("speech") or d.get("action")):
             sources.append({"name": character_name(sh),
@@ -2123,6 +2312,7 @@ def perception_outcome(ctx, nonce):
 
     perceivers = [{
         "id": "player", "name": p_name, "room": p_room,
+        "pronouns": (pers.get("identity") or {}).get("pronouns") or {},
         "room_name": (p_rdata or {}).get("name") or p_room or "an unspecified area",
         "room_notes": ((p_rdata or {}).get("notes") or _room_notes_from_lore(p_room, ctx, sc)),
         "ambient_location": _ambient_location_for(sc, p_room),
@@ -2147,6 +2337,7 @@ def perception_outcome(ctx, nonce):
         e_rdata = (sc.get("rooms") or {}).get(e_room) if e_room else None
         perceivers.append({
             "id": f"extra:{pid_key}", "name": e_name, "room": e_room,
+            "pronouns": (extra.get("identity") or {}).get("pronouns") or {},
             "room_name": (e_rdata or {}).get("name") or e_room or "an unspecified area",
             "room_notes": ((e_rdata or {}).get("notes") or _room_notes_from_lore(e_room, ctx, sc)),
             "ambient_location": _ambient_location_for(sc, e_room),
@@ -2175,6 +2366,7 @@ def perception_outcome(ctx, nonce):
         rdata = (sc.get("rooms") or {}).get(r) if r else None
         perceivers.append({
             "id": c["id"], "name": character_name(sh), "room": r,
+            "pronouns": (sh.get("identity") or {}).get("pronouns") or {},
             "room_name": (rdata or {}).get("name") or r or "an unspecified area",
             "room_notes": ((rdata or {}).get("notes") or _room_notes_from_lore(r, ctx, sc)),
             "ambient_location": _ambient_location_for(sc, r),
@@ -2923,7 +3115,9 @@ def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
                                 appearance_deltas=None, prev_seen=None,
                                 seen_out=None,
                                 gate=None, extra_parts=None,
-                                body_scents=None):
+                                body_scents=None,
+                                prune_appearance=False,
+                                self_forms=(), self_pronouns=None):
     """The standing-state half of one observer's IR: environment, presence,
     first-mention/changed appearances, own body state, standing contact
     sensations, bare body regions. Every admission is a subtraction --
@@ -2956,7 +3150,8 @@ def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
     percepts.extend(composer.presence_percepts(
         sc, name, others, display_map, senses))
     percepts.extend(composer.pose_percepts(
-        sc, name, others, display_map, senses))
+        sc, name, others, display_map, senses,
+        self_forms=self_forms, self_pronouns=self_pronouns))
     recognized = set(known.get(name) or [])
     for body in others:
         b_name = body.get("name")
@@ -2985,7 +3180,7 @@ def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
         # everyone", so it reads as no re-encounter at all.
         reencountered = (prev_seen is not None
                          and b_name not in prev_seen)
-        if recog and not changed and not reencountered:
+        if prune_appearance and recog and not changed and not reencountered:
             # A familiar stable body's authored card is not a new percept.
             continue
         label = display_map.get(b_name) or (
@@ -3011,7 +3206,8 @@ def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
             # Computed by the caller, which is the stage that holds the
             # PREVIOUS scene; a stage without one simply has no delta and
             # falls back to the full description.
-            delta = (appearance_deltas or {}).get(b_name, "") if changed else ""
+            delta = ((appearance_deltas or {}).get(b_name, "")
+                     if prune_appearance and changed else "")
             percepts.append(composer.appearance_percept(
                 b_name, label, description, force=changed, delta=delta,
                 reearn=reencountered))
@@ -3029,10 +3225,21 @@ def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
     # fired on every contact beat with an unrecognized partner (chat 70).
     _sensation_label = (lambda other:
                         display_map.get(str(other)) or "someone")
+    observer_standing_contacts = _standing_contacts_for(sc, name)
     percepts.extend(composer.contact_percepts([
         (contact, contact_sensation(contact, you=name, scene=sc,
                                     label_for=_sensation_label))
-        for contact in _standing_contacts_for(sc, name)
+        for contact in observer_standing_contacts
+    ]))
+    # Contact actions ride the same contacts: suction/humming/pulsing the
+    # actor is performing, or that someone else is performing on a contact
+    # the observer is a party to. Same channel (touch), same dedupe story,
+    # carried as their own percepts so the actor and the receiver each get
+    # their side on a single beat.
+    percepts.extend(composer.contact_action_percepts([
+        (record, contact_action_clause(record, observer=name, scene=sc,
+                                       label_for=_sensation_label))
+        for record in contact_actions_for_observer(sc, name)
     ]))
     region_labels = {name: "you"}
     for body in others:
@@ -3200,6 +3407,8 @@ def _composer_establish(ctx, sc, perceivers, known, p_name, p_appearance,
             "disguise_known_to": b_known_to,
             "disguise_conceals_identity": _ci,
         })
+    bodies_by_name = {b["name"]: b for b in bodies if b.get("name")}
+    joint_labels = _joint_stranger_labels(bodies)
     roster = _identity_roster(p_name, p_appearance, ctx.cast)
     identity_space = _composer_identity_space(ctx, p_name, p_appearance)
     cast_parts = _composer_extra_parts(ctx, p_name)
@@ -3218,6 +3427,11 @@ def _composer_establish(ctx, sc, perceivers, known, p_name, p_appearance,
                       if not _is_the_observer(sc, b["name"], name)]
             display_map = composer.observer_display_map(
                 sc, name, others, known)
+            own_body = bodies_by_name.get(name)
+            own_aliases = (own_body or {}).get("aliases") or []
+            self_forms = _composer_self_forms(
+                name, self_name_forms(name, [name, *own_aliases]),
+                own_body, joint_labels, display_map)
             gate = _authored_prose_gate(
                 ctx, "perception_establish", name, known, identity_space)
             # `prev_seen=set()` is the LITERAL TRUTH of a scene opening --
@@ -3234,7 +3448,9 @@ def _composer_establish(ctx, sc, perceivers, known, p_name, p_appearance,
                 or (entity_states or {}).get(name),
                 prev_seen=set(), seen_out=seen_bodies,
                 gate=gate, extra_parts=cast_parts,
-                body_scents=body_scents)
+                body_scents=body_scents,
+                self_forms=self_forms,
+                self_pronouns=p.get("pronouns"))
             percepts.extend(
                 _gated_ambient_percepts(gate, sensory_events, p.get("room")))
             company[pid] = _composer_company(others, display_map, percepts)
@@ -3258,7 +3474,7 @@ def _composer_establish(ctx, sc, perceivers, known, p_name, p_appearance,
 def _composer_act(ctx, sc, interp, perceivers, known, p_name, p_visible,
                   p_disguise_known, p_disguise_conceals, p_disguise_terms,
                   co_present, amap, speech_elems, action):
-    onset_sequence = list(interp.get("sequence") or [])
+    onset_sequence = sequence_onset_elements(interp.get("sequence") or [])
     if speech_elems and not any(
             isinstance(e, dict) and e.get("type") == "speech"
             for e in onset_sequence):
@@ -3316,6 +3532,9 @@ def _composer_act(ctx, sc, interp, perceivers, known, p_name, p_visible,
             others.append(actor_body)
             display_map = composer.observer_display_map(
                 sc, name, others, known)
+            self_forms = _composer_self_forms(
+                name, self_forms_by_name.get(name),
+                bodies_by_name.get(name), joint_labels, display_map)
             percepts = _composer_standing_percepts(
                 sc, p, name, others, display_map, known,
                 entity_state=p.get("entity_state")
@@ -3324,10 +3543,9 @@ def _composer_act(ctx, sc, interp, perceivers, known, p_name, p_visible,
                 seen_out=seen_bodies,
                 gate=_authored_prose_gate(
                     ctx, "perception_act", name, known, identity_space),
-                extra_parts=cast_parts, body_scents=body_scents)
-            self_forms = _composer_self_forms(
-                name, self_forms_by_name.get(name),
-                bodies_by_name.get(name), joint_labels, display_map)
+                extra_parts=cast_parts, body_scents=body_scents,
+                self_forms=self_forms,
+                self_pronouns=p.get("pronouns"))
             rel = p.get("spatial_to_actor") or {}
             vis = p.get("visual_channel_to_actor", False)
             can_see = _in_plain_view(rel, vis)
@@ -3360,18 +3578,44 @@ def _composer_act(ctx, sc, interp, perceivers, known, p_name, p_visible,
                         senses=p.get("sense_card"))
                     if percept:
                         percepts.append(percept)
+                elif event.get("type") == "communication":
+                    speech_rel = rel if continuity else {
+                        **rel, "open_group_continuity": False}
+                    entry = {**event, "speaker": p_name}
+                    percept = composer.communication_percept(
+                        entry, _with_comm_channel(
+                            sc, speech_rel, speaker=p_name, observer=name,
+                            observer_room=p.get("room")),
+                        name, display=display, can_see=can_see,
+                        proximity=p.get("proximity_to_actor"),
+                        order_key=idx, observer_id=pid,
+                        senses=p.get("sense_card"))
+                    if percept:
+                        percepts.append(percept)
                 elif event.get("type") == "action":
                     if _declares_rapid_movement([event]):
                         # Speech before the run stays audible; speech after
                         # gets no continuity floor.
                         continuity = False
                     surface = _composer_scrub_surface(
-                        observable_action_text(event), name, recognized,
+                        observable_action_onset_text(event), name, recognized,
                         unknown)
+                    surface = resolve_action_referents(
+                        surface, event, {
+                            **{key: value for key, value in display_map.items()},
+                            name: "you", p_name: display,
+                        })
                     percept = composer.act_percept(
                         sc, event, name, p_name, rel, display=display,
                         can_see=can_see,
                         self_forms=self_forms,
+                        self_pronouns=p.get("pronouns"),
+                        other_forms=tuple(
+                            form
+                            for other_name, other_names
+                            in self_forms_by_name.items()
+                            if other_name != name
+                            for form in (other_names or ())),
                         order_key=idx, observer_id=pid, surface=surface)
                     if percept:
                         percepts.append(percept)
@@ -3575,6 +3819,29 @@ def _attire_delta_text(prev_scene, scene, name, language=None):
     return join.join(parts)
 
 
+def _appearance_ledger_value(scene, field, subject):
+    """The value one visible-form ledger holds for ``subject``.
+
+    Director channels may address a registered body by its scene key, display
+    name, or an alias. Appearance admission must answer whether the resulting
+    visible state actually changed, not whether the diff happened to contain a
+    key. A restated overlay/scale otherwise re-describes the entire person and
+    seeds the narrator with the same card prose every turn.
+    """
+    values = (scene or {}).get(field) or {}
+    wanted = str(subject or "").strip().casefold()
+    for key, value in values.items():
+        if str(key).strip().casefold() == wanted \
+                or same_subject(scene, key, subject):
+            return value
+    return None
+
+
+def _appearance_ledger_changed(prev_scene, scene, field, subject):
+    return (_appearance_ledger_value(prev_scene, field, subject)
+            != _appearance_ledger_value(scene, field, subject))
+
+
 def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
                       p_appearance, p_disguise, p_disguise_known,
                       p_disguise_conceals, p_disguise_terms, perceivers,
@@ -3595,41 +3862,14 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
     self_forms_by_name[p_name] = self_name_forms(
         p_name, [p_name, *((pers.get("identity") or {}).get("aliases") or [])])
 
-    # Terminal overt act per actor -- the same last-overt rule as the model
-    # path's deterministic backstop, for the same reason (no per-stage
-    # room/barrier snapshot exists to gate earlier sub-actions honestly).
-    last_overt_by_actor = {}
-    for e in (interp.get("sequence") or []):
-        if e.get("type") == "action" and e.get("visibility") != "concealed":
-            surface = observable_action_text(e)
-            if surface:
-                last_overt_by_actor[p_name] = {
-                    "actor": p_name, "attempt": surface, "event": e}
-    for c in ctx.cast:
-        d = ctx.character_results.get(c["id"])
-        sh = json.loads(c["sheet"])
-        cname = character_name(sh)
-        for e in ((d or {}).get("sequence") or []):
-            if e.get("type") == "action" and e.get("visibility") != "concealed":
-                surface = observable_action_text(e)
-                if surface:
-                    last_overt_by_actor[cname] = {
-                        "actor": cname, "attempt": surface, "event": e}
-    # A background presence's act, through the same gate. `background.py`
-    # authors it as the outward surface already (there is no `observable`/
-    # `visibility` pair to read), so it is wrapped in the event shape the
-    # percept builder expects rather than re-derived. An unplaceable presence
-    # is skipped: with no room there is no channel, and a body the engine
-    # cannot place must not be rendered into a view as though it were here.
-    for _b in _background_beats(ctx, sc):
-        if not _b["action"] or not _b["room"]:
-            continue
-        last_overt_by_actor[_b["name"]] = {
-            "actor": _b["name"], "attempt": _b["action"],
-            "event": {"actor": _b["name"], "observable": _b["action"],
-                      "visibility": "overt",
-                      "event_id": "background:%s" % _b["name"]},
-        }
+    # Speech and action are one declared chronology.  Reducing them into a
+    # dialogue list plus an actor-keyed terminal action first lost motion; a
+    # plain action list restored the motion but still placed every line before
+    # every act.  Bind both back to their original sequence slots once, before
+    # applying each observer's channels below.
+    beat_events = _outcome_event_stream(
+        ctx, sc, interp, res, p_name, enriched_dlog,
+        _background_beats(ctx, sc))
 
     # The complete set of lines actually spoken this beat (the invented-
     # dialogue tripwire's ground truth).
@@ -3690,6 +3930,9 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
                     continue
                 if not _attire_changed_semantically(prev_scene, sc, str(key)):
                     continue
+            elif not _appearance_ledger_changed(
+                    prev_scene, sc, field, str(key)):
+                continue
             appearance_changed.add(str(key))
     # What each change LOOKS like, computed here because this is the stage
     # that holds the previous scene. Empty for a body whose clothing did not
@@ -3701,8 +3944,19 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
         if text:
             appearance_deltas[key] = text
     for key, entity in (diff.get("entities") or {}).items():
-        if isinstance(entity, dict) and any(
-                f in entity for f in ("description", "appearance")):
+        # Schema-normalized entity rows routinely carry ``description: ''``
+        # even when the specialist changed no visible prose. Key presence was
+        # therefore enough to re-earn a registered body's complete card every
+        # beat. Only a non-empty, genuinely changed description may signal a
+        # visible rewrite here.
+        previous = ((prev_scene or {}).get("entities") or {}).get(key) or {}
+        rewrote_visible = isinstance(entity, dict) and any(
+            str(entity.get(field) or "").strip()
+            and entity.get(field) != (previous.get(field)
+                                      if isinstance(previous, dict) else None)
+            for field in ("description", "appearance")
+        )
+        if rewrote_visible:
             appearance_changed.add(str(key))
             if entity.get("name"):
                 appearance_changed.add(str(entity["name"]))
@@ -3788,80 +4042,127 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
                       if not _is_the_observer(sc, b["name"], name)]
             display_map = composer.observer_display_map(
                 sc, name, others, known)
+            self_forms = _composer_self_forms(
+                name, self_forms_by_name.get(name),
+                bodies_by_name.get(name), joint_labels, display_map)
             percepts = _composer_standing_percepts(
                 sc, p, name, others, display_map, known,
                 entity_state=p.get("entity_state")
                 or _own_body_state(sc, name),
                 appearance_changed=appearance_changed,
-                appearance_deltas=appearance_deltas,
+                appearance_deltas=(appearance_deltas
+                                   if is_player_view else None),
                 prev_seen=_composer_prev_seen(base_ledger, pid),
                 seen_out=seen_bodies,
                 gate=_authored_prose_gate(
                     ctx, "perception_outcome", name, known, identity_space),
-                extra_parts=cast_parts, body_scents=body_scents)
-            self_forms = _composer_self_forms(
-                name, self_forms_by_name.get(name),
-                bodies_by_name.get(name), joint_labels, display_map)
+                extra_parts=cast_parts, body_scents=body_scents,
+                # Compression belongs only to player-facing prose. NPC
+                # cognition keeps every other visible body's complete
+                # appearance/attire surface. The observer's own body is not
+                # in `others`; its current card + self.attire own that data.
+                prune_appearance=(is_player_view
+                                  and not full_player_render),
+                self_forms=self_forms,
+                self_pronouns=p.get("pronouns"))
             spatial = p.get("spatial_to_sources") or {}
             visual = p.get("visual_channel_to_sources") or {}
             recognized, unknown = _composer_unknown_sources(
                 name, known, ident_roster)
             behind = set(p.get("behind_sources") or [])
             order = 0
-            for d in enriched_dlog:
-                speaker = d.get("speaker", "?")
-                if _is_the_observer(
-                        sc, speaker, name, cast_aliases.get(name)) or (
-                        pid == "player"
-                        and is_player_speaker(speaker, chat)):
+            for beat_event in beat_events:
+                if beat_event.get("kind") == "speech":
+                    d = beat_event.get("entry") or {}
+                    speaker = d.get("speaker", "?")
+                    if _is_the_observer(
+                            sc, speaker, name, cast_aliases.get(name)) or (
+                            pid == "player"
+                            and is_player_speaker(speaker, chat)):
+                        order += 1
+                        continue
+                    rel = spatial.get(speaker)
+                    if rel is None:
+                        if str(speaker).strip().casefold() in _ubiq:
+                            rel = {"same_room": True, "barrier": "open",
+                                   "distance": "near", "note": (
+                                       "bodiless voice, present throughout")}
+                        else:
+                            sp_room = (d.get("speaker_room")
+                                       or room_of(sc, speaker))
+                            rel = spatial_rel_between(
+                                sc, name, speaker,
+                                observer_room=p.get("room"),
+                                target_room=sp_room)
+                    can_see = _in_plain_view(
+                        rel, visual.get(speaker, False))
+                    if _recognizes(speaker, recognized):
+                        display = speaker
+                    elif can_see:
+                        display = (display_map.get(speaker)
+                                   or _unknown_actor_label(
+                                       speaker, _strip_identity_tokens(
+                                           appearances.get(speaker),
+                                           [speaker, *(cast_aliases.get(
+                                               speaker) or [])])))
+                    else:
+                        display = "a voice"
+                    percept = composer.speech_percept(
+                        d, _with_comm_channel(
+                            sc, rel, speaker=speaker, observer=name,
+                            observer_room=p.get("room"),
+                            speaker_room=d.get("speaker_room")),
+                        name, display=display, can_see=can_see,
+                        proximity=measured_proximity_rel(
+                            sc, name, speaker),
+                        order_key=order, observer_id=pid,
+                        senses=p.get("sense_card"))
+                    if percept:
+                        percepts.append(percept)
                     order += 1
                     continue
-                rel = spatial.get(speaker)
-                if rel is None:
-                    if str(speaker).strip().casefold() in _ubiq:
-                        rel = {"same_room": True, "barrier": "open",
-                               "distance": "near",
-                               "note": "bodiless voice, present throughout"}
-                    else:
-                        sp_room = d.get("speaker_room") or room_of(sc, speaker)
-                        rel = spatial_rel_between(
-                            sc, name, speaker,
-                            observer_room=p.get("room"),
-                            target_room=sp_room)
-                can_see = _in_plain_view(rel, visual.get(speaker, False))
-                if _recognizes(speaker, recognized):
-                    display = speaker
-                elif can_see:
-                    display = display_map.get(speaker) or _unknown_actor_label(
-                        speaker,
-                        _strip_identity_tokens(
-                            appearances.get(speaker),
-                            [speaker, *(cast_aliases.get(speaker) or [])]))
-                else:
-                    display = "a voice"
-                percept = composer.speech_percept(
-                    d, _with_comm_channel(
-                        sc, rel, speaker=speaker, observer=name,
-                        observer_room=p.get("room"),
-                        speaker_room=d.get("speaker_room")),
-                    name, display=display, can_see=can_see,
-                    proximity=measured_proximity_rel(sc, name, speaker),
-                    order_key=order, observer_id=pid,
-                    senses=p.get("sense_card"))
-                if percept:
-                    percepts.append(percept)
-                order += 1
-            for act in last_overt_by_actor.values():
-                actor = act["actor"]
+
+                if beat_event.get("kind") == "communication":
+                    actor = beat_event.get("actor")
+                    entry = beat_event.get("entry") or {}
+                    if _is_the_observer(
+                            sc, actor, name, cast_aliases.get(name)):
+                        order += 1
+                        continue
+                    rel = spatial.get(actor)
+                    if rel is None:
+                        order += 1
+                        continue
+                    can_see = _in_plain_view(rel, visual.get(actor, False))
+                    display = (actor if _recognizes(actor, recognized)
+                               else (display_map.get(actor) or "a voice"))
+                    percept = composer.communication_percept(
+                        entry, _with_comm_channel(
+                            sc, rel, speaker=actor, observer=name,
+                            observer_room=p.get("room")),
+                        name, display=display, can_see=can_see,
+                        proximity=measured_proximity_rel(sc, name, actor),
+                        order_key=order, observer_id=pid,
+                        senses=p.get("sense_card"))
+                    if percept:
+                        percepts.append(percept)
+                    order += 1
+                    continue
+
+                act = beat_event
+                actor = act.get("actor")
                 if _is_the_observer(
                         sc, actor, name, cast_aliases.get(name)) \
                         or actor in behind:
+                    order += 1
                     continue
                 rel = spatial.get(actor)
                 if rel is None:
+                    order += 1
                     continue
                 can_see = _in_plain_view(rel, visual.get(actor, False))
                 if not can_see:
+                    order += 1
                     continue
                 if _recognizes(actor, recognized):
                     display = actor
@@ -3872,11 +4173,23 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
                             appearances.get(actor),
                             [actor, *(cast_aliases.get(actor) or [])]))
                 surface = _composer_scrub_surface(
-                    act["attempt"], name, recognized, unknown)
+                    act.get("attempt"), name, recognized, unknown)
+                surface = resolve_action_referents(
+                    surface, act.get("event") or {}, {
+                        **{key: value for key, value in display_map.items()},
+                        name: "you", actor: display,
+                    })
                 percept = composer.act_percept(
                     sc, act.get("event") or {}, name, actor, rel,
                     display=display, can_see=True,
                     self_forms=self_forms,
+                    self_pronouns=p.get("pronouns"),
+                    other_forms=tuple(
+                        form
+                        for other_name, other_names
+                        in self_forms_by_name.items()
+                        if other_name != name
+                        for form in (other_names or ())),
                     order_key=order, observer_id=pid, surface=surface)
                 if percept:
                     percepts.append(percept)

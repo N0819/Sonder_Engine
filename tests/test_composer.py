@@ -105,7 +105,7 @@ def test_no_sight_no_act_percept():
     event = {"type": "action", "observable": "slides a knife from her belt",
              "visibility": "overt"}
     percept = composer.act_percept(
-        scene, event, "Alice", "Hinami", {"same_room": True},
+        scene, event, "Alice", "Mara", {"same_room": True},
         display="the fox-eared woman", can_see=False)
     assert percept is None
 
@@ -117,6 +117,86 @@ def test_mental_beat_is_imperceptible():
     assert composer.act_percept(
         scene, event, "Alice", "Hinami", {"same_room": True},
         display="the fox-eared woman", can_see=True) is None
+
+
+def test_action_target_body_pronouns_follow_the_named_target():
+    """An actor and target may share pronouns without swapping bodies.
+
+    The observable names Alice once, then uses ``her`` for Alice's body.  In
+    Alice's own view both references must remain Alice/second-person; the
+    omitted predicate subject is still Mara.
+    """
+    scene = _scene()
+    event = {
+        "type": "action", "visibility": "overt", "targets": ["Alice"],
+        "observable": (
+            "guides Alice's hand open between her fingers, "
+            "thumb pressing against her palm"),
+    }
+    percept = composer.act_percept(
+        scene, event, "Alice", "Mara", {"same_room": True},
+        display="Mara", can_see=True, self_forms=["Alice"],
+        self_pronouns={"subject": "she", "object": "her",
+                       "possessive": "her"})
+
+    assert percept is not None
+    assert percept.data["surface"] == (
+        "guides your hand open between your fingers, "
+        "thumb pressing against your palm")
+
+
+def test_action_target_repair_does_not_claim_the_actors_own_body():
+    scene = _scene()
+    event = {
+        "type": "action", "visibility": "overt", "targets": ["Alice"],
+        "observable": (
+            "takes Alice's hand and draws it toward her own chest"),
+    }
+    percept = composer.act_percept(
+        scene, event, "Alice", "Mara", {"same_room": True},
+        display="Mara", can_see=True, self_forms=["Alice"],
+        self_pronouns={"subject": "she", "object": "her",
+                       "possessive": "her"})
+
+    assert percept is not None
+    assert percept.data["surface"] == (
+        "takes your hand and draws it toward her own chest")
+
+
+def test_action_target_body_pronouns_cross_anatomical_modifiers_only():
+    scene = _scene()
+    event = {
+        "type": "action", "visibility": "overt", "targets": ["Alice"],
+        "observable": (
+            "supports Alice at her injured lower back while checking her bag"),
+    }
+    percept = composer.act_percept(
+        scene, event, "Alice", "Mara", {"same_room": True},
+        display="Mara", can_see=True, self_forms=["Alice"],
+        self_pronouns={"subject": "she", "object": "her",
+                       "possessive": "her"})
+
+    assert percept.data["surface"] == (
+        "supports you at your injured lower back while checking her bag")
+
+
+def test_action_target_body_pronouns_stop_at_another_named_body():
+    scene = _scene()
+    event = {
+        "type": "action", "visibility": "overt",
+        "targets": ["Alice", "Beth"],
+        "observable": (
+            "steadies Alice at her shoulder, then turns to Beth and takes her hand"),
+    }
+    percept = composer.act_percept(
+        scene, event, "Alice", "Mara", {"same_room": True},
+        display="Mara", can_see=True, self_forms=["Alice"],
+        other_forms=["Beth"],
+        self_pronouns={"subject": "she", "object": "her",
+                       "possessive": "her"})
+
+    assert percept.data["surface"] == (
+        "steadies you at your shoulder, then turns to Beth and takes her hand")
 
 
 def test_unrecognized_actor_never_named_in_ir():
@@ -244,23 +324,29 @@ def test_changed_standing_state_rerenders_in_delta_mode():
     assert "dark" in second.text.casefold()
 
 
-def test_full_appearance_is_first_mention_only_in_every_mode():
-    """The 481+249-verbatim-repeat bug: the full appearance description is
-    discovery data and must not be re-emitted every beat."""
+def test_full_appearance_pruning_is_player_only():
+    """Page compression must not subtract evidence from an NPC mind."""
     appearance = composer.appearance_percept(
         "Hinami", "the fox woman with six tails",
         "a fox-eared young woman with six tails, wearing a red obi")
-    first = composer.render_view([appearance], mode="character")
+    first = composer.render_view([appearance], mode="player")
     assert "six tails" in first.text
     again = composer.render_view(
-        [appearance], mode="character",
+        [appearance], mode="player",
         prev_described=frozenset(first.described))
     assert again.text == ""
+
+    npc = composer.render_view(
+        [appearance], mode="character",
+        prev_described=frozenset(first.described))
+    assert "six tails" in npc.text
+    assert "red obi" in npc.text
+
     changed = composer.appearance_percept(
         "Hinami", "the fox woman with six tails",
         "a fox-eared young woman, obi torn, fur soaked", force=True)
     third = composer.render_view(
-        [changed], mode="character", prev_described=frozenset(first.described))
+        [changed], mode="player", prev_described=frozenset(first.described))
     assert "soaked" in third.text
 
 

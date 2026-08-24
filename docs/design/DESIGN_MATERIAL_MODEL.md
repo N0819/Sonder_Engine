@@ -1,15 +1,29 @@
 # Design: does the engine grow a material model at all?
 
-**Status: not built, and deliberately open.** Moved out of
+**Status: explicit qualitative substrate built; world physics deliberately
+open.** Moved out of
 [`docs/UNBUILT.md`](../UNBUILT.md) §4.7 and §4.8 on 2026-08-19, because both are
 one undecided question rather than two defects: whether matter in this engine
 gets a magnitude and a miscibility, or stays a ledger of described deposits.
-Everything below is blocked on that answer rather than on difficulty. The
-register keeps a pointer at §4.
+The engine now carries an optional explicit amount band and bounded partial
+transfer, but does not infer either from prose and does not impose universal
+miscibility, drying, or displacement. The register keeps a pointer at §4 for
+the remaining world-law question.
 
 ---
 
 ## 1. Matter has no volume, so nothing can wash anything away
+
+### Implemented boundary
+
+`amount` remains author prose. `amount_band` is an optional closed qualitative
+field (`trace|small|moderate|large|flooding`), and partial movement names the
+exact origin record plus `portion:trace|some|most|all`. This permits explicit
+conservation without pretending that “coating,” “torrent,” or “remainder” are
+units. Model silence and elapsed time do not change a record, and one material
+never displaces another merely because its English amount sounds larger.
+Drying, absorption, mixing, decay, and wash-away remain explicit operations or
+future world-specific mechanics.
 
 The substance ledger accumulates. Coalescing landed (`9a6bc3c`) — same material,
 same source, same region, same body is one pool a later release re-describes —

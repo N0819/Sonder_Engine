@@ -80,7 +80,7 @@ from world.background_claims import (
 from story.scene import persona_of
 
 from .common import (_agent_json, _unknown_actor_label, character_room,
-                     observable_action_text)
+                     communication_surface, observable_action_text)
 
 _log = logging.getLogger(__name__)
 
@@ -145,6 +145,13 @@ def _filtered_player_declaration(ctx, sc, name, here):
                     parts.append("an indistinct remark")
                     continue
                 parts.append('"%s"' % e["text"])
+            elif e.get("type") == "communication":
+                level = _hearing(e.get("volume"))
+                if level == "none":
+                    continue
+                parts.append(
+                    communication_surface(e) if level == "full"
+                    else "an indistinct remark")
             elif e.get("type") == "action":
                 if here != p_room:
                     continue

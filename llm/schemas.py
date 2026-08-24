@@ -1049,6 +1049,23 @@ class ActionElement(LenientModel):
     visibility: ActionVisibility = ActionVisibility.overt
     conceal_from: list[str] = Field(default_factory=list)
     conditions: list[dict] = Field(default_factory=list)
+    # Causal structure for a compound declaration. ``phase_id`` is local to
+    # this sequence; later phases name it in ``depends_on``.  The first
+    # independent phase is available to the reaction pass, while dependent
+    # continuation/completion phases wait for objective resolution.
+    phase_id: str = ""
+    phase: str = "atomic"  # atomic | onset | continuation | completion
+    depends_on: list[str] = Field(default_factory=list)
+    # Bodies/objects whose actual presence is a prerequisite, and standing
+    # contact selectors that must still resolve before this phase can occur.
+    # These are explicit rather than inferred from prose so a generic target
+    # ("the horizon") is never mistaken for a missing scene participant.
+    participants: list[str] = Field(default_factory=list)
+    requires_contacts: list[dict] = Field(default_factory=list)
+    # Exact-span identity annotations for otherwise ambiguous pronouns.
+    # {text:'her', entity:'Mara', role:'target', occurrence:1}.  They change
+    # only delivery wording; they never grant an observer identity knowledge.
+    referents: list[dict] = Field(default_factory=list)
 
 class SpeechElement(LenientModel):
     type: str = "speech"
@@ -1061,6 +1078,7 @@ class SpeechElement(LenientModel):
     tone: str = ""
     visibility: ActionVisibility = ActionVisibility.overt
     conceal_from: list[str] = Field(default_factory=list)
+
 
 class DiceSpec(LenientModel):
     # Advisory sub-field of the interpret flow; the Director re-judges
@@ -1184,6 +1202,10 @@ class DirectorInterpret(LenientModel):
     # Forward-referenced: `StateDiff` is declared further down, and resolving
     # it after the fact is cheaper than moving either class.
     state_assertions: Optional["StateDiff"] = None
+    # ENGINE-AUTHORED preview subset: dependent continuation/completion state
+    # is withheld until resolution, while the complete tagged assertions stay
+    # in state_assertions for final merge and causal pruning.
+    onset_state_assertions: Optional["StateDiff"] = None
     # Voluntary durable travel relation for the player. {op:start,target} or
     # {op:stop,reason}; absence means keep the current relation unchanged.
     follow_op: Optional[dict] = None
@@ -1351,7 +1373,6 @@ class DestructionEffect(LenientModel):
     effect_id/source_event_id are optional in the declaration (commit
     derives stable ids itself)."""
     effect_id: str = ""
-    source_event_id: str = ""
     target_id: str
     scale: str
     kind: str
@@ -1444,6 +1465,7 @@ class CommsOp(LenientModel):
 
     _subject_field = "id"
 
+
     id: str = ""
     op: str = "set"
     name: str = ""
@@ -1527,6 +1549,7 @@ class CrowdOp(LenientModel):
     mood: str = ""
     heading: str = ""         # adjacent room it is flowing toward, or ""
 
+
 class DirectorEstablish(LenientModel):
     location: str = ""
     time: str = "now"
@@ -1565,6 +1588,9 @@ class DirectorEstablish(LenientModel):
     # else. Prose is not state; if the hold is still true when play begins it
     # has to arrive as an op.
     contact_ops: list[dict] = Field(default_factory=list)
+    # Ongoing physical dynamics attached to one opening contact. The contact
+    # must be established in `contact_ops` in the same opening.
+    contact_action_ops: list[dict] = Field(default_factory=list)
     # Non-discrete matter the opening leaves located on/within something.
     # Separate from contact (bodies touching) and inventory (discrete objects).
     substance_ops: list[dict] = Field(default_factory=list)
@@ -1878,6 +1904,10 @@ class ArtifactOp(LenientModel):
 
 
 class StateDiff(LenientModel):
+    # Source ids for scalar/map changes that cannot carry source_event_id in
+    # their own value, e.g. {"positions.Dana": "turn:4:..."}.  Consumed and
+    # removed by the causal phase floor before scene merge/persistence.
+    phase_sources: dict[str, str] = Field(default_factory=dict)
     positions: dict[str, str] = Field(default_factory=dict)
     rooms: dict[str, RoomDef] = Field(default_factory=dict)
     entities: dict[str, SceneEntityDef] = Field(default_factory=dict)
@@ -1897,10 +1927,22 @@ class StateDiff(LenientModel):
     # topology (`surface|interior`) and kinematics (`settled|moving`) are
     # independent: an interior contact may be moving.
     contact_ops: list[dict] = Field(default_factory=list)
+    # Continuous physical effects performed THROUGH a standing contact.
+    # {op:add|change|remove|clear, actor, contact_ref, action, intensity,
+    # rhythm, detail}. `contact_ref` is either the engine's stable contact_id
+    # or an exact {actor,actor_part,target,target_part} selector for a contact
+    # created this beat. `action` is a noun phrase suitable after "feel"
+    # (vibration, pressure pulses, suction), not arbitrary event prose.
+    contact_action_ops: list[dict] = Field(default_factory=list)
     # Physical matter transferred and left somewhere after the beat.
     # {op:add|release|deposit|remove|clear, source, source_part, substance,
     # target, placement:surface|interior|contained|room, target_interior,
-    # target_part, amount, detail, scent, substance_id?}.  A release from the
+    # target_part, amount, amount_band?, source_substance_id?, portion?,
+    # speech_impediment?, detail, scent, substance_id?}. `amount` is prose;
+    # only the optional closed `amount_band` is comparable. A partial transfer
+    # names its exact origin id and qualitative portion. Speech impairment is
+    # an explicit world affordance rather than an inference from quantity.
+    # A release from the
     # acting part of a unique standing interior contact derives its
     # destination from that topology; the model names the matter, never the
     # code. `scent` is what the matter smells of and is why this ledger, not
@@ -2086,6 +2128,13 @@ class AssertedChange(LenientModel):
     actor_part: str = ""
     target: str = ""
     target_part: str = ""
+    # Contact-effect manifests carry the parent relation and effect fields so
+    # reconciliation can distinguish two dynamics by the same participant.
+    contact_ref: Any = None
+    action: str = ""
+    intensity: str = ""
+    rhythm: str = ""
+    detail: str = ""
     substance: str = ""
     placement: str = ""
     target_interior: str = ""
@@ -2168,6 +2217,10 @@ class DirectorResolve(LenientModel):
     # the schema dump drops unknown keys, which would have silently discarded
     # the hand-off and turned a re-homed line into a deleted one.
     routed_to_background: list[str] = Field(default_factory=list)
+    # ENGINE-AUTHORED causal verdicts for declared sequence phases.  The
+    # Director supplies claim dispositions; deterministic code composes those
+    # with phase dependencies and participant/contact prerequisites.
+    sequence_dispositions: list[dict] = Field(default_factory=list)
     # ENGINE-AUTHORED (same contract as routed_to_background): the orchestrated
     # Director's dispatch record -- which specialists this beat ran, the scene
     # facts the gate read, and what assembly replaced (design note 19). Empty
@@ -2260,6 +2313,7 @@ class DirectorBodySpecialist(LenientModel):
     # The numbered manifest slice this call was handed, echoed back
     # with a verdict per event (schemas.ResolvedEvent).
     resolved_events: list[ResolvedEvent] = Field(default_factory=list)
+    phase_sources: dict[str, str] = Field(default_factory=dict)
 
     _coerce_list_maps = validator("overlays", "conditions", pre=True,
                                   allow_reuse=True)(
@@ -2280,12 +2334,14 @@ class DirectorSocialSpecialist(LenientModel):
     # The numbered manifest slice this call was handed, echoed back
     # with a verdict per event (schemas.ResolvedEvent).
     resolved_events: list[ResolvedEvent] = Field(default_factory=list)
+    phase_sources: dict[str, str] = Field(default_factory=dict)
 
 
 class DirectorContactSpecialist(LenientModel):
     """The contact-and-matter specialist: the physical-relation channels,
     in StateDiff's own shapes (same contract as DirectorBodySpecialist)."""
     contact_ops: list[dict] = Field(default_factory=list)
+    contact_action_ops: list[dict] = Field(default_factory=list)
     substance_ops: list[dict] = Field(default_factory=list)
     containment: dict[str, Optional[dict]] = Field(default_factory=dict)
     scales: dict[str, float] = Field(default_factory=dict)
@@ -2293,6 +2349,7 @@ class DirectorContactSpecialist(LenientModel):
     # The numbered manifest slice this call was handed, echoed back
     # with a verdict per event (schemas.ResolvedEvent).
     resolved_events: list[ResolvedEvent] = Field(default_factory=list)
+    phase_sources: dict[str, str] = Field(default_factory=dict)
 
 
 class DirectorObjectsSpecialist(LenientModel):
@@ -2307,6 +2364,7 @@ class DirectorObjectsSpecialist(LenientModel):
     # The numbered manifest slice this call was handed, echoed back
     # with a verdict per event (schemas.ResolvedEvent).
     resolved_events: list[ResolvedEvent] = Field(default_factory=list)
+    phase_sources: dict[str, str] = Field(default_factory=dict)
 
 
 class DirectorSpatialSpecialist(LenientModel):
@@ -2326,6 +2384,7 @@ class DirectorSpatialSpecialist(LenientModel):
     # The numbered manifest slice this call was handed, echoed back
     # with a verdict per event (schemas.ResolvedEvent).
     resolved_events: list[ResolvedEvent] = Field(default_factory=list)
+    phase_sources: dict[str, str] = Field(default_factory=dict)
 
     _coerce_stations = validator("stations", pre=True, allow_reuse=True)(
         lambda cls, v: _coerce_station_table(v)
@@ -2348,6 +2407,7 @@ class DirectorOffscreenSpecialist(LenientModel):
     # The numbered manifest slice this call was handed, echoed back
     # with a verdict per event (schemas.ResolvedEvent).
     resolved_events: list[ResolvedEvent] = Field(default_factory=list)
+    phase_sources: dict[str, str] = Field(default_factory=dict)
 
 # ---- Resolve reconciliation (agents/director.py's post-resolve seam) ----
 
@@ -3585,8 +3645,8 @@ SPECIALIST_CHANNELS = {
     "director_body": ("attire", "conditions", "vitals", "overlays"),
     "director_social": ("cast_changes", "introductions", "world_facts",
                         "public_evidence"),
-    "director_contact": ("contact_ops", "substance_ops", "containment",
-                         "scales"),
+    "director_contact": ("contact_ops", "contact_action_ops",
+                         "substance_ops", "containment", "scales"),
     "director_objects": ("entities", "remove_entities", "inventory_ops",
                          "artifact_ops", "destruction"),
     "director_spatial": ("positions", "rooms", "remove_rooms",
@@ -3633,7 +3693,7 @@ _SPECIALIST_DICT_CHANNELS, _SPECIALIST_LIST_CHANNELS = (
 _STATE_DIFF_SIBLING_FIELDS = (
     "remove_entities", "remove_rooms", "remove_adjacent", "conditions",
     "inventory_ops", "artifact_ops", "destruction", "contact_ops",
-    "substance_ops", "stations", "poses", "scales", "containment",
+    "contact_action_ops", "substance_ops", "stations", "poses", "scales", "containment",
     "vitals", "overlays",
     "attire", "cast_changes",
     "world_facts", "introductions", "time", "claim_dispositions",
@@ -4615,6 +4675,7 @@ OUTPUT_EXAMPLES = {
         "stations": {"Maren": {"at": "lamp_post", "near": []}},
         "poses": {},
         "contact_ops": [],
+        "contact_action_ops": [],
         "substance_ops": [],
         "attire": {},
         "entity_states": {},
@@ -4749,6 +4810,13 @@ OUTPUT_EXAMPLES = {
              "target": "Sable", "target_part": "shoulder",
              "manner": "rest", "relation": "surface", "motion": "settled"},
         ],
+        "contact_action_ops": [
+            {"op": "add", "actor": "Mara",
+             "contact_ref": {"actor": "Mara", "actor_part": "hand",
+                             "target": "Sable", "target_part": "shoulder"},
+             "action": "steady pressure", "intensity": "light",
+             "rhythm": "constant"},
+        ],
         # Matter that landed somewhere is the commonest smell in play, and
         # `scent` had to be SHOWN rather than only described: this was `[]`,
         # and an empty list teaches the shape of nothing.
@@ -4756,6 +4824,7 @@ OUTPUT_EXAMPLES = {
             {"op": "add", "source": "Mara", "source_part": "forearm",
              "substance": "blood", "target": "lamp_room",
              "placement": "room", "amount": "a few drops",
+             "amount_band": "small",
              "scent": "wet iron"},
         ],
         "containment": {},

@@ -256,6 +256,11 @@ def _live_subject_spellings(scene: dict) -> set:
             if isinstance(contact, dict):
                 add(contact.get("actor"))
                 add(contact.get("target"))
+    contact_actions = (scene or {}).get("contact_actions")
+    if isinstance(contact_actions, list):
+        for record in contact_actions:
+            if isinstance(record, dict):
+                add(record.get("actor"))
     substances = (scene or {}).get("substances")
     if isinstance(substances, list):
         for record in substances:
@@ -437,6 +442,10 @@ def normalize_scene_subjects(scene: dict) -> list:
         for contact in contacts:
             for field in ("actor", "target"):
                 fold_field(contact, field, f"contacts.{field}")
+    contact_actions = scene.get("contact_actions")
+    if isinstance(contact_actions, list):
+        for record in contact_actions:
+            fold_field(record, "actor", "contact_actions.actor")
     substances = scene.get("substances")
     if isinstance(substances, list):
         for record in substances:

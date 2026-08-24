@@ -220,6 +220,20 @@ def _own_sequence_memory(seq):
             spoken = str(event["text"]).strip()
             clauses.append(
                 f"I said {spoken!r}" + ("" if spoken[-1] in ".!?" else "."))
+        elif (event.get("type") == "communication"
+              and str(event.get("content") or "").strip()):
+            act = str(event.get("act") or "communicate").strip().casefold()
+            past = {
+                "ask": "asked", "explain": "explained", "report": "reported",
+                "tell": "told", "warn": "warned", "request": "requested",
+                "offer": "offered", "instruct": "instructed",
+                "reassure": "reassured", "promise": "promised",
+                "admit": "admitted", "answer": "answered",
+                "clarify": "clarified", "inform": "informed",
+                "say": "said",
+            }.get(act, "communicated")
+            clauses.append(
+                f"I {past} {str(event['content']).strip().rstrip('.')}.")
         elif event.get("type") == "action" and str(event.get("attempt") or "").strip():
             clauses.append(f"I tried to {str(event['attempt']).strip().rstrip('.')}.")
     if not clauses:
@@ -233,6 +247,38 @@ def _own_sequence_memory(seq):
         gist_parts.append(clause)
     gist = " Then ".join(gist_parts) if gist_parts else clauses[0][:239].rstrip() + "…"
     return content, gist
+
+
+def _inference_memory_text(claim, about="", confidence=0.5, evidence=""):
+    """Voice a theory as this mind's theory, not an objective dossier fact.
+
+    The row remains ``provenance: inferred`` structurally, but its content is
+    also handed directly to the character agent. A bare third-person claim
+    beside first-person episodes reads as omniscient fact before the model
+    ever sees the provenance label. Confidence chooses ordinary epistemic
+    language; evidence remains something *I based it on*, never an objective
+    ``Evidence:`` appendix.
+    """
+    claim = str(claim or "").strip().rstrip(".")
+    about = str(about or "").strip()
+    try:
+        confidence = float(confidence)
+    except (TypeError, ValueError):
+        confidence = 0.5
+    names_subject = bool(about) and about.casefold() in claim.casefold()
+    if confidence >= 0.7:
+        text = (f"I concluded that {claim}." if names_subject or not about
+                else f"I concluded this about {about}: {claim}.")
+    elif confidence >= 0.4:
+        text = (f"I suspected that {claim}." if names_subject or not about
+                else f"I suspected this about {about}: {claim}.")
+    else:
+        text = (f"I wondered whether {claim}." if names_subject or not about
+                else f"I wondered whether this was true of {about}: {claim}.")
+    evidence = str(evidence or "").strip().rstrip(".")
+    if evidence:
+        text += f" I based that on: {evidence}."
+    return text
 
 def prepare_memory_commit(ctx, *, scene=None):
     """Build and embed all per-character memory mutations without writes."""
@@ -649,7 +695,7 @@ def prepare_memory_commit(ctx, *, scene=None):
                             "turn_idx": turn.idx, "kind": "dialogue", "category": category,
                             "provenance": "heard",
                             "salience": 0.9 if category == "promise" else 0.82,
-                            "content": f"{spk_label} said {quote}" + (f" to {tgt}" if tgt else ""),
+                            "content": f"I heard {spk_label} say {quote}" + (f" to {tgt}" if tgt else ""),
                             "gist": f"{spk_label}: {qbody}", "key_phrases": [qbody, spk_label],
                             "entities": [spk_label], "location": room_name,
                             "emotional_context": " — ".join(
@@ -825,11 +871,8 @@ def prepare_memory_commit(ctx, *, scene=None):
                 )
                 about = str(update.get("about_entity") or "").strip()
                 claim = str(update.get("claim") or "").strip().rstrip(".")
-                prefix = "" if claim.casefold().startswith(
-                    about.casefold() + " ") else (f"About {about}: " if about else "")
-                inference_content = f"{prefix}{claim}."
-                if evidence:
-                    inference_content += f" Evidence: {evidence}"
+                inference_content = _inference_memory_text(
+                    claim, about, confidence, evidence)
                 pending_memories.append({
                     "chat_id": cid, "char_id": ccid, "turn_id": turn.id,
                     "turn_idx": turn.idx, "kind": "inference", "category": "inference",

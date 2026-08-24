@@ -29,8 +29,10 @@ import json
 import time
 
 from agents.common import (
+    adjudicated_player_action_text,
     assign_event_ids,
     norm_sequence,
+    observable_action_onset_text,
     observable_action_text,
 )
 from story.character_schema import default_character_data, default_persona_data
@@ -120,6 +122,94 @@ def test_observable_action_text_legacy_element_falls_back_to_attempt():
     # explicit empty -> suppressed
     assert observable_action_text(
         {"attempt": "wave hello", "observable": ""}) == ""
+
+
+def test_contestable_onset_does_not_deliver_completed_multistage_outcome():
+    elem = {
+        "type": "action",
+        "commitment": "contestable",
+        "observable": (
+            "signals a shallow dip, takes her weight, returns her upright, "
+            "then opens both hands and steps back"),
+    }
+
+    assert observable_action_onset_text(elem) == "attempts to signal a shallow dip"
+    # The complete surface remains available to the resolver.
+    assert "returns her upright" in observable_action_text(elem)
+
+
+def test_contestable_outcome_surface_requires_realized_event_id():
+    elem = {
+        "type": "action", "event_id": "turn:7:player:0:action",
+        "commitment": "contestable",
+        "observable": "tests the wound edge, irrigates it, then sutures it",
+    }
+    stopped = {"state_diff": {"claim_dispositions": [{
+            "claim_id": "turn:7:player:0:action", "status": "deferred",
+        "realized_event_ids": [],
+    }]}}
+    realized = {"state_diff": {"claim_dispositions": [{
+        "claim_id": "claim:0:intent:0", "status": "realized",
+        "realized_event_ids": ["turn:7:player:0:action"],
+    }]}}
+
+    assert adjudicated_player_action_text(elem, stopped) == (
+        "attempts to test the wound edge")
+    assert adjudicated_player_action_text(elem, realized) == elem["observable"]
+
+
+def test_one_realized_effect_cannot_promote_deferred_sibling_phases():
+    elem = {
+        "type": "action", "event_id": "turn:7:player:0:action",
+        "commitment": "contestable",
+        "observable": "tests the wound edge, irrigates it, then sutures it",
+    }
+    mixed = {"state_diff": {"claim_dispositions": [
+        {"claim_id": "claim:0:intent:0", "status": "realized",
+         "realized_event_ids": ["turn:7:player:0:action"]},
+        {"claim_id": "claim:0:intent:1", "status": "deferred",
+         "realized_event_ids": []},
+    ]}}
+
+    assert adjudicated_player_action_text(elem, mixed) == (
+        "attempts to test the wound edge")
+
+
+def test_rejected_contestable_effect_never_reads_as_completed_success():
+    elem = {
+        "type": "action", "event_id": "turn:7:player:0:action",
+        "commitment": "contestable",
+        "observable": "creates space, breaks the grip, then retreats two steps",
+    }
+    prevented = {"state_diff": {"claim_dispositions": [
+        {"claim_id": "claim:0:intent:0", "status": "contested"},
+        {"claim_id": "claim:0:intent:1", "status": "rejected"},
+    ]}}
+
+    assert adjudicated_player_action_text(elem, prevented) == (
+        "attempts to create space")
+
+
+def test_wholly_deferred_conditional_alternative_never_begins():
+    elem = {
+        "type": "action", "event_id": "turn:7:player:1:action",
+        "commitment": "contestable",
+        "observable": "pauses the procedure and prepares to escalate care",
+    }
+    deferred = {"state_diff": {"claim_dispositions": [
+        {"claim_id": "claim:1:intent:0", "status": "deferred"},
+        {"claim_id": "claim:1:intent:1", "status": "deferred"},
+    ]}}
+
+    assert adjudicated_player_action_text(elem, deferred) == ""
+
+
+def test_asserted_action_onset_keeps_complete_surface():
+    elem = {
+        "type": "action", "commitment": "asserted",
+        "observable": "opens the case, removes the key, and holds it up",
+    }
+    assert observable_action_onset_text(elem) == elem["observable"]
 
 
 # --- integration: the deterministic delivery paths -------------------------
@@ -284,3 +374,116 @@ def test_perception_outcome_delivers_observable_not_intent(temp_db, monkeypatch)
     low = view.lower()
     for term in FORBIDDEN:
         assert term not in low, f"intent leaked into outcome view: {term!r} in {view!r}"
+
+
+def test_perception_outcome_delivers_reaction_loop_action(temp_db):
+    """A reactor's body and voice must travel through the same result seam.
+
+    Contested beats store the character declaration in ``reaction_results``.
+    Dialogue already read that map, but outcome action projection used only
+    ``character_results``; the narrator consequently received a disembodied
+    line and guessed the missing physical response.
+    """
+    ctx, moon_id = _make_ctx(temp_db)
+    ctx.director_interpret = _norm([{
+        "type": "action", "attempt": "steps toward Dr. Moon",
+        "observable": "steps toward Dr. Moon", "visibility": "overt",
+    }])
+    ctx.director_interpret["flow"] = {
+        "reactors": [moon_id], "resolution_flags": {"contested": True}}
+    ctx.director_resolve = {"resolved_event": "Dr. Moon gives ground.",
+                            "dialogue_log": [], "state_diff": {}}
+    ctx.reaction_results = {moon_id: {
+        "sequence": [{
+            "type": "action",
+            "attempt": "raise both hands and step back",
+            "observable": "raises both hands and steps back",
+            "visibility": "overt",
+        }],
+    }}
+
+    import agents.perception as perception
+    player_view = perception.perception_outcome(ctx, nonce=0)["views"]["player"]
+
+    assert "raises both hands and steps back" in player_view
+
+
+def test_perception_outcome_keeps_every_overt_action_in_one_declaration(
+        temp_db):
+    """A sequence is chronology, not a set of candidates for a final pose.
+
+    In the measured regression, a character declared three actions around two
+    lines of dialogue. The
+    old actor-keyed map replaced each action with the next and gave the player
+    only her final movement, even though Director resolution retained all
+    three.  Distinct event ids must produce distinct delivered acts.
+    """
+    ctx, moon_id = _make_ctx(temp_db)
+    ctx.director_interpret = _norm([{
+        "type": "action", "attempt": "steps toward Dr. Moon",
+        "observable": "steps toward Dr. Moon", "visibility": "overt",
+    }])
+    ctx.director_interpret["flow"] = {
+        "reactors": [moon_id], "resolution_flags": {"contested": True}}
+    ctx.director_resolve = {
+        "resolved_event": "Dr. Moon responds in three movements.",
+        # Deliberately grouped in the wrong order. Outcome perception must
+        # bind these exact delivered lines back to declaration slots rather
+        # than treating dialogue_log order as the whole beat chronology.
+        "dialogue_log": [
+            {"speaker": "Dr. Moon", "exact_quote": '"Second."'},
+            {"speaker": "Dr. Moon", "exact_quote": '"First."'},
+        ],
+        "state_diff": {}}
+    ctx.reaction_results = {moon_id: {
+        "sequence": [
+            {
+                "type": "action", "event_id": "moon:0",
+                "observable": "lifts her head from the console",
+                "visibility": "overt",
+            },
+            {
+                "type": "speech", "event_id": "moon:1", "text": "First.",
+                "visibility": "overt", "volume": "normal",
+            },
+            {
+                "type": "action", "event_id": "moon:2",
+                "observable": "reaches one hand toward the alarm",
+                "visibility": "overt",
+            },
+            {
+                "type": "speech", "event_id": "moon:3", "text": "Second.",
+                "visibility": "overt", "volume": "normal",
+            },
+            {
+                "type": "action", "event_id": "moon:4",
+                "observable": "steps sideways across the doorway",
+                "visibility": "overt",
+            },
+        ],
+    }}
+
+    import agents.perception as perception
+    result = perception.perception_outcome(ctx, nonce=0)
+    player_view = result["views"]["player"]
+    player_observations = " ".join(
+        (row.get("observed") or {}).get("text") or ""
+        for row in result["observations"]["player"])
+
+    for surface in (
+        "lifts her head from the console",
+        "reaches one hand toward the alarm",
+        "steps sideways across the doorway",
+    ):
+        assert surface in player_view
+        assert surface in player_observations
+
+    ordered_fragments = (
+        "lifts her head from the console",
+        '"First."',
+        "reaches one hand toward the alarm",
+        '"Second."',
+        "steps sideways across the doorway",
+    )
+    offsets = [player_view.index(fragment) for fragment in ordered_fragments]
+    assert offsets == sorted(offsets), player_view

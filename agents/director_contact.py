@@ -16,6 +16,7 @@ import re
 
 from story.character_schema import character_name, character_name_from_text
 from world.spatial import (
+    contact_is_momentary,
     contact_motion,
     contacts_of,
     contact_relation,
@@ -23,6 +24,27 @@ from world.spatial import (
     room_of,
     same_subject,
 )
+
+
+def _drop_momentary_contact_adds(raw, report=None):
+    """Keep event verbs out of end-of-beat contact topology.
+
+    If contact remains after a strike, kiss, brush, or similar event, its
+    standing relation must be described as a state such as rest, press, hold,
+    or interior contact. Player-authored onset assertions use their separate
+    authority path; this filters model-resolved operations only.
+    """
+    kept = []
+    for item in (raw if isinstance(raw, list) else []):
+        if not isinstance(item, dict):
+            continue
+        op = str(item.get("op") or "add").strip().casefold()
+        if op in ("add", "cross") and contact_is_momentary(item):
+            if report:
+                report("discarded momentary act from standing contact topology")
+            continue
+        kept.append(item)
+    return kept
 
 def _canonical_scene_subject(sc, value):
     """The positioned scene spelling for one body/entity reference."""
@@ -32,7 +54,8 @@ def _canonical_scene_subject(sc, value):
     return str(value or "").strip()
 
 
-def _validated_player_contact_assertions(sc, raw, player_name, report=None):
+def _validated_player_contact_assertions(
+        sc, raw, player_name, report=None, *, allow_new_player_contacts=True):
     """Guard pass-1 contact assertions at the player-authority boundary.
 
     A player may establish contact through their OWN completed conduct. When
@@ -101,8 +124,21 @@ def _validated_player_contact_assertions(sc, raw, player_name, report=None):
             if report:
                 report("discarded a new NPC-authored contact assertion")
             continue
+        if actor_is_player and standing is None and not allow_new_player_contacts:
+            if report:
+                report(
+                    "discarded a new contact from a contestable action before "
+                    "the other body had reacted")
+            continue
         if standing is not None and not actor_is_player:
             actor_part = str(standing.get("actor_part") or actor_part).strip()
+            # A first-person report may refine what an already-touching NPC
+            # part feels like; omission may not move that part onto an
+            # endpoint-free ghost relation.  Live combat ended the exact
+            # forearm->shoulder frame but retained a second, coarser
+            # forearm->"" contact minted here from the same onset.
+            target_part = str(
+                target_part or standing.get("target_part") or "").strip()
         manner = str(item.get("manner") or (
             standing or {}).get("manner") or "touch").strip()
         detail = str(item.get("detail") or "").strip()

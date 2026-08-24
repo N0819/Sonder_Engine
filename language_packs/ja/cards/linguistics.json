@@ -492,6 +492,14 @@
         "肌"
       ]
     },
+    "_BODY_OWNERSHIP_MODIFIERS": {
+      "$type": "frozenset",
+      "items": [
+        "left", "right", "upper", "lower", "inner", "outer", "front",
+        "rear", "injured", "wounded", "bare", "exposed", "covered",
+        "clothed", "near", "far"
+      ]
+    },
     "_QUOTE_SPAN_RE": {
       "$type": "regex",
       "pattern": "([\"“「『])([^\"“”」』]{2,})([\"”」』])",
@@ -2048,6 +2056,7 @@
       "$type": "tuple",
       "items": [
         "Dialogue from view missing or altered",
+        "Narrator invented quoted dialogue absent from the player view",
         "Merged dialogue from different speakers",
         "Pronoun mismatch for",
         "Player named in third person",

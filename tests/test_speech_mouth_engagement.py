@@ -1,11 +1,10 @@
 """How speech is FORMED when the speaker's mouth is engaged -- three layers.
 
-Live (chat 69 "Horny Story. \u234749"): across 24 turns a character spoke at
-`normal` volume while the standing contact ledger had her mouth engaged; and
-after the first (notice-only) fix, turns 74-75 exposed the case it missed --
-her tongue extended mid-lick on an external surface, delivering clean full
-sentences ("Every inch of you, darling."). You cannot articulate cleanly with
-your tongue on someone.
+A measured long run showed a character speaking at `normal` volume while the
+standing contact ledger had her mouth engaged. A later beat exposed the case
+the first, notice-only fix missed: her tongue remained extended against an
+external surface while she delivered a clean full sentence. Articulation must
+reflect what the speaker's mouth is physically doing.
 
 The layers, earliest first, per the repo rule (fix where the data first
 becomes wrong):
@@ -92,6 +91,125 @@ class TestTheImpediment:
 
         assert speech_articulation_impediment(scene, "Reya")[0] == "stifled"
 
+    def test_the_speakers_own_mouth_sealed_on_a_body_stifles(self):
+        """A speaker's mouth sealed against a patient's palm came out as
+        perfectly articulated. The contact ledger held the cause; the
+        predicate read neither actor kind nor the speaker-side surface
+        relation, so the gate did not fire.
+        """
+        scene = _scene([{
+            "actor": "Reya", "actor_part": "mouth", "target": "Bram",
+            "target_part": "palm", "target_interior": "",
+            "manner": "seal", "relation": "surface", "motion": "settled"}])
+
+        kind, reason = speech_articulation_impediment(scene, "Reya")
+        assert kind == "stifled"
+        assert "sealed against" in reason
+        assert "Bram" in reason
+
+    def test_a_mouth_resting_on_a_surface_is_not_a_seal(self):
+        scene = _scene([{
+            "actor": "Reya", "actor_part": "mouth", "target": "Bram",
+            "target_part": "mask", "target_interior": "",
+            "manner": "rest", "relation": "surface", "motion": "settled"}])
+        assert speech_articulation_impediment(scene, "Reya") == ("", "")
+
+    def test_a_substance_in_the_speakers_mouth_stifles(self):
+        """Matter deposited inside the speaker's mouth muffles speech even
+        without a contact. A substance has no actor -- a swallow, medicine,
+        or inhaled material -- so the contact loop cannot catch it.
+        """
+        scene = _scene([])
+        scene["substances"] = [{
+            "source": "Bram", "substance": "thick broth",
+            "target": "Reya", "placement": "interior",
+            "target_interior": "mouth", "target_part": "tongue",
+            "amount": "copious", "speech_impediment": "stifled",
+        }]
+        kind, reason = speech_articulation_impediment(scene, "Reya")
+        assert kind == "stifled"
+        assert "mouth" in reason
+        assert "thick broth" in reason
+
+    def test_a_substance_in_the_speakers_throat_stifles(self):
+        scene = _scene([])
+        scene["substances"] = [{
+            "source": "Bram", "substance": "medicine",
+            "target": "Reya", "placement": "interior",
+            "target_interior": "throat", "amount": "a dose",
+            "speech_impediment": "stifled",
+        }]
+        kind, reason = speech_articulation_impediment(scene, "Reya")
+        assert kind == "stifled"
+        assert "throat" in reason
+
+    def test_a_trace_in_the_speakers_mouth_does_not_impede(self):
+        """A residue is a taste, not a body of matter.  Rank 0 stays under
+        the gate so a faint trace (the linger of a kiss, the aftertaste of
+        a sip) is not enough to claim speech is muffled.
+        """
+        scene = _scene([])
+        scene["substances"] = [{
+            "source": "Bram", "substance": "spit",
+            "target": "Reya", "placement": "interior",
+            "target_interior": "mouth", "amount": "a trace",
+        }]
+        assert speech_articulation_impediment(scene, "Reya") == ("", "")
+
+    def test_quantity_alone_is_not_a_speech_law(self):
+        scene = _scene([])
+        scene["substances"] = [{
+            "source": "Bram", "substance": "enchanted air",
+            "target": "Reya", "placement": "interior",
+            "target_interior": "mouth", "amount": "flooding",
+            "amount_band": "flooding",
+        }]
+        assert speech_articulation_impediment(scene, "Reya") == ("", "")
+
+    def test_a_substance_in_someone_elses_mouth_does_not_impede_me(self):
+        """The substance is at the recipient, not at the speaker -- the
+        listener side of a swallow is a different fact.
+        """
+        scene = _scene([])
+        scene["substances"] = [{
+            "source": "Reya", "substance": "fluid",
+            "target": "Bram", "placement": "interior",
+            "target_interior": "mouth", "amount": "copious",
+        }]
+        assert speech_articulation_impediment(scene, "Reya") == ("", "")
+
+    def test_a_substance_on_a_surface_does_not_impede_speech(self):
+        """Interior placement gates the rule; surface matter sits OUTSIDE
+        the cavity and is the front of the mouth at most.  A coating on
+        lips does not fill them.
+        """
+        scene = _scene([])
+        scene["substances"] = [{
+            "source": "Bram", "substance": "oil",
+            "target": "Reya", "placement": "surface",
+            "target_part": "lips", "amount": "a film",
+        }]
+        assert speech_articulation_impediment(scene, "Reya") == ("", "")
+
+    def test_a_sealed_mouth_outranks_a_substance_in_the_mouth(self):
+        """Both checks can fire; the contact check returns first because a
+        contact's seal is the more concrete cause, and the same beat already
+        names the body part responsible.
+        """
+        scene = _scene([{
+            "actor": "Reya", "actor_part": "mouth", "target": "Bram",
+            "target_part": "palm", "target_interior": "",
+            "manner": "seal", "relation": "surface", "motion": "settled",
+        }])
+        scene["substances"] = [{
+            "source": "Bram", "substance": "broth",
+            "target": "Reya", "placement": "interior",
+            "target_interior": "mouth", "amount": "copious",
+        }]
+        kind, reason = speech_articulation_impediment(scene, "Reya")
+        assert kind == "stifled"
+        assert "sealed against" in reason
+
     def test_a_tongue_on_an_external_surface_slurs(self):
         """The turn 74/75 gap: none of the original three occasions covered
         a tongue extended onto a SURFACE, so 'Every inch of you, darling.'
@@ -159,6 +277,46 @@ class TestTheStamp:
 
         assert line["articulation"] == ""
         assert notices == []
+
+    def test_a_substance_op_this_beat_stamps_a_stifled_line(self):
+        """The post-op substance ledger must reach the gate; otherwise the
+        gate silently clears as soon as the model names the matter aloud in
+        the same beat.  Mirrors `test_a_beat_that_ends_the_contact_first_is_clean`
+        for the substance side.
+        """
+        line = _line(speaker="Reya")
+        scene = _scene([])
+        sd = {"substance_ops": [{
+            "op": "add", "source": "Bram", "substance": "thick broth",
+            "target": "Reya", "placement": "interior",
+            "target_interior": "mouth", "amount": "copious",
+            "speech_impediment": "stifled",
+        }]}
+        notices = _stamp_dialogue_articulation(scene, sd, [line])
+
+        assert line["articulation"] == "stifled"
+        assert notices and "substance_ops" in notices[0]
+        # Backwards compat: the existing fix already mentioned contact_ops;
+        # the substance path keeps that string present so the prompt's
+        # `end that contact in contact_ops` still has a pointer in the notice.
+        assert "contact_ops" in notices[0]
+
+    def test_a_contact_op_this_beat_keeps_a_sealed_mouth_stifled(self):
+        """A mouth seal added THIS beat must still be caught; previously the
+        line went unstamped because the gate did not see the new contact.
+        """
+        line = _line(speaker="Reya")
+        scene = _scene([])
+        sd = {"contact_ops": [{
+            "op": "add", "actor": "Reya", "actor_part": "mouth",
+            "target": "Bram", "target_part": "palm",
+            "target_interior": "",
+            "manner": "seal", "relation": "surface", "motion": "settled",
+        }]}
+        notices = _stamp_dialogue_articulation(scene, sd, [line])
+
+        assert line["articulation"] == "stifled"
+        assert notices
 
     def test_the_schema_keeps_a_stamped_value_through_revalidation(self):
         """The field exists in the schema precisely so a re-validation of a

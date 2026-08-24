@@ -2,6 +2,7 @@
 """The contact ledger: part/region identity, manner/relation/motion
 classification, cleaning, and op application."""
 
+import hashlib
 import re
 
 from world.spatial_containment import (hiding_holders_of,
@@ -111,7 +112,7 @@ _CONTACT_RESIDUE_VERB = ("is against", "are against")
 # ledger names anatomical -s parts on most beats it names anything.
 _SINGULAR_S_PARTS = frozenset({"abs", "iris", "solar plexus", "biceps",
                                "triceps", "forceps", "glans", "penis",
-                               "anus", "clitoris", "uterus"})
+                               "anus", "clitoris", "uterus", "pelvis"})
 
 
 def _part_is_plural(part: str) -> bool:
@@ -340,6 +341,33 @@ def _mirror_key(key):
     return (target, target_part, actor, actor_part)
 
 
+def contact_id(contact) -> str:
+    """Stable opaque identity for one physical contact.
+
+    Contact is symmetric for identity even though an interior contact keeps a
+    meaningful stored direction. Sorting the two owned endpoints gives every
+    observer and stage the same handle. If an endpoint changes, the handle
+    changes too, so dependent effects end instead of migrating silently.
+    """
+    if not isinstance(contact, dict):
+        return ""
+    left = (
+        _contact_text(contact.get("actor"), 120).casefold(),
+        canonical_region(contact.get("actor_part")),
+    )
+    right = (
+        _contact_text(contact.get("target"), 120).casefold(),
+        canonical_region(contact.get("target_part")),
+    )
+    # Whole-body contact legitimately leaves one or both part slots blank;
+    # the two owners are still enough to identify the one deduplicated row.
+    if not left[0] or not right[0]:
+        return ""
+    identity = "\x1f".join(
+        part for endpoint in sorted((left, right)) for part in endpoint)
+    return "contact:" + hashlib.sha256(identity.encode("utf-8")).hexdigest()[:20]
+
+
 def _flip(contact):
     """The same contact read from the other body's side, for displacement.
 
@@ -524,7 +552,7 @@ def _clean_contact(raw, scene=None):
             # contact at the cavity".
             target_part = ""
 
-    return {
+    cleaned = {
         "actor": actor,
         "actor_part": actor_part,
         "target": target,
@@ -555,6 +583,8 @@ def _clean_contact(raw, scene=None):
         # saved before ageing existed, both of which read as 0.
         "unasserted": unasserted,
     }
+    cleaned["contact_id"] = contact_id(cleaned)
+    return cleaned
 
 
 def contacts_broken_by_scale_change(scene: dict, previous_scales) -> list:

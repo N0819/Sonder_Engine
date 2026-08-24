@@ -32,6 +32,8 @@ from world.spatial import (
     spatial_digest,
     spatial_rel,
     substances_for,
+    contact_action_clause,
+    contact_actions_for_observer,
     visible_adjacent_rooms,
     visual_level_between,
 )
@@ -93,8 +95,13 @@ from .common import (
     _unknown_actor_label,
     cast_room,
     character_scene_keys,
+    adjudicated_player_action_text,
+    communication_surface,
     observable_action_text,
+    observable_action_onset_text,
     player_speech_lines,
+    resolve_action_referents,
+    sequence_event_allowed,
 )
 
 def _resolve_narration_person(chat_id, raw_input, player_name, player_pronouns,
@@ -266,6 +273,11 @@ def _standing_substance_clauses(scene, you):
     the destination (releasing is felt at your own body, where it landed is
     sight's problem). `detail` is model prose delivered once at onset and is
     deliberately not re-delivered -- every admission here subtracts.
+
+    These are standing physical facts. Model silence cannot evaporate matter;
+    removal, transfer, cleanup, or a world-specific process must change the
+    ledger explicitly. Player-facing delta suppression prevents unchanged
+    clauses from being repeated every beat.
     """
     clauses = []
     for record in substances_for(scene, you):
@@ -371,6 +383,12 @@ def _sensory_channels_manifest(scene, player_name, view, observations,
             continue
         clause = contact_sensation(contact, you=player_name, scene=scene,
                                    label_for=_partner_label)
+        if clause:
+            touch_standing.append(clause)
+    for record in contact_actions_for_observer(scene, player_name):
+        clause = contact_action_clause(
+            record, observer=player_name, scene=scene,
+            label_for=_partner_label)
         if clause:
             touch_standing.append(clause)
     touch_standing.extend(_standing_substance_clauses(scene, player_name))
@@ -494,16 +512,41 @@ def _ordered_beat_events(ctx, p_name, view, recognized, cast_info,
     player can perceive its actor; speakers render under the same display
     (name or anonymous label) the view used."""
     raw = []
+    player_deferred = []
+    # Action referents are canonical identities at interpret time.  Event
+    # order is player-facing, so resolve them through the same recognition
+    # floor used for the actor label rather than leaking a name inside the
+    # action surface while anonymising its speaker one field away.
+    referent_labels = {str(p_name): "you"}
+    for canonical, info in (cast_info or {}).items():
+        display = _speaker_display(
+            canonical, recognized, info.get("appearance"),
+            info.get("aliases"))
+        referent_labels[str(canonical)] = display
+        for alias in info.get("aliases") or []:
+            referent_labels[str(alias)] = display
     di = ctx.get("director_interpret") or {}
     for e in (di.get("sequence") or []):
         if not isinstance(e, dict):
             continue
+        if not sequence_event_allowed(e, ctx.get("director_resolve") or {}):
+            continue
+        destination = player_deferred if (
+            e.get("depends_on") or str(e.get("phase") or "").casefold()
+            in ("continuation", "completion")) else raw
         if e.get("type") == "speech" and e.get("text"):
-            raw.append((p_name, "speech", e["text"]))
-        elif e.get("type") == "action":
-            surface = observable_action_text(e)
+            destination.append((p_name, "speech", e["text"]))
+        elif e.get("type") == "communication":
+            surface = communication_surface(e)
             if surface:
-                raw.append((p_name, "action", surface))
+                destination.append((p_name, "communication", surface))
+        elif e.get("type") == "action":
+            surface = adjudicated_player_action_text(
+                e, ctx.get("director_resolve") or {})
+            if surface:
+                destination.append((p_name, "action",
+                                    resolve_action_referents(
+                                        surface, e, referent_labels)))
 
     seen_cache = {}
 
@@ -560,6 +603,10 @@ def _ordered_beat_events(ctx, p_name, view, recognized, cast_info,
                 continue
             if e.get("type") == "speech" and e.get("text"):
                 raw.append((name, "speech", e["text"]))
+            elif e.get("type") == "communication":
+                surface = communication_surface(e)
+                if surface:
+                    raw.append((name, "communication", surface))
             elif e.get("type") == "action":
                 if str(e.get("visibility") or "overt").strip().lower() \
                         != "overt":
@@ -570,7 +617,9 @@ def _ordered_beat_events(ctx, p_name, view, recognized, cast_info,
                 if perceives is None:
                     perceives = _player_perceives(name)
                 if perceives:
-                    raw.append((name, "action", surface))
+                    raw.append((name, "action",
+                                resolve_action_referents(
+                                    surface, e, referent_labels)))
 
     covered = set()
     for r in (ctx.reaction_loop or {}).get("rounds") or []:
@@ -600,6 +649,7 @@ def _ordered_beat_events(ctx, p_name, view, recognized, cast_info,
         _seq_events(name, d.get("sequence"))
         if not (d.get("sequence")) and d.get("speech"):
             raw.append((name, "speech", d["speech"]))
+    raw.extend(player_deferred)
     br = ctx.get("background_react") or {}
     reactions = br.get("reactions")
     if reactions is None:
@@ -629,7 +679,7 @@ def _ordered_beat_events(ctx, p_name, view, recognized, cast_info,
     for name, kind, text in raw:
         if not name:
             continue
-        if kind == "speech" and name != p_name:
+        if kind in ("speech", "communication") and name != p_name:
             body = re.sub(r"\s+", " ", _quote_body(text)).casefold()
             if not body or body not in view_norm:
                 continue  # the player never received this line
@@ -1178,14 +1228,55 @@ def _narrator_player_declared(interpreted):
                     "visibility", "conceal_from")
                 if key in event
             })
+        elif event.get("type") == "communication":
+            spoke = True
+            sequence.append({
+                "type": "communication",
+                "act": event.get("act"),
+                "content": event.get("content"),
+                "targets": event.get("targets") or [],
+                "volume": event.get("volume", "normal"),
+            })
         else:
-            sequence.append(dict(event))
+            safe = {
+                key: event[key] for key in (
+                    "type", "event_id", "commitment", "stage", "targets",
+                    "visibility", "conceal_from")
+                if key in event
+            }
+            onset = observable_action_onset_text(event)
+            if onset:
+                safe["onset"] = onset
+            sequence.append(safe)
+    asserted = [
+        observable_action_text(event)
+        for event in interpreted.get("sequence") or []
+        if isinstance(event, dict) and event.get("type") == "action"
+        and str(event.get("commitment") or "") != "contestable"
+        and observable_action_text(event)
+    ]
     return {
         "sequence": sequence,
         "spoke": spoke or bool(interpreted.get("speech")),
-        "action": (interpreted.get("action") or {}).get("attempt"),
+        "action": asserted[0] if asserted else None,
         "private_thought": interpreted.get("private_thought"),
     }
+
+
+def _strip_raw_player_input_echo(prose, raw_input):
+    """Remove a verbatim reprint of the player's non-dialogue turn.
+
+    The input is already on the page. Narration may render its adjudicated
+    motion, but occasionally returns the entire instruction paragraph word for
+    word. Exact normalized-span removal is conservative: paraphrase and short
+    callbacks are untouched, while the duplicated paragraph disappears.
+    """
+    prose = str(prose or "")
+    raw = str(raw_input or "").strip()
+    if len(raw) < 20:
+        return prose
+    pattern = r"\s+".join(re.escape(part) for part in raw.split())
+    return re.sub(pattern, "", prose, count=1, flags=re.I).strip()
 
 def narrator(ctx, nonce):
     chat = ctx.chat
@@ -1499,10 +1590,11 @@ def narrator(ctx, nonce):
     # rendered twice in one turn's prose -- is dropped deterministically.
     # Quoted dialogue and short sentences are exempt (see the helper).
     out["prose"] = _cap_repeated_quotes(
-        _dedupe_view_sentences(_strip_player_echo(
-            out.get("prose", ""), p_lines,
-            protect_quotes=_protected_view_quotes(view, p_lines),
-        )),
+        _dedupe_view_sentences(_strip_raw_player_input_echo(
+            _strip_player_echo(
+                out.get("prose", ""), p_lines,
+                protect_quotes=_protected_view_quotes(view, p_lines),
+            ), ctx.input)),
         view, exclude_bodies=p_lines)
     return out
 
@@ -1626,10 +1718,11 @@ def narrator_extra(ctx, nonce):
             out["narration_person_writes"] = pending_person_writes
         # Within-view dedupe (W12) -- see the matching comment in narrator().
         out["prose"] = _cap_repeated_quotes(
-            _dedupe_view_sentences(_strip_player_echo(
-                out.get("prose", ""), p_lines,
-                protect_quotes=_protected_view_quotes(view, p_lines),
-            )),
+            _dedupe_view_sentences(_strip_raw_player_input_echo(
+                _strip_player_echo(
+                    out.get("prose", ""), p_lines,
+                    protect_quotes=_protected_view_quotes(view, p_lines),
+                ), extra.get("input"))),
             view, exclude_bodies=p_lines)
         return pid_key, out, warnings, fidelity_warnings
 

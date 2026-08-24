@@ -92,6 +92,26 @@ def test_fidelity_allows_similar_scene_with_new_content():
     assert not any("reuse a previous turn" in w for w in warnings)
 
 
+def test_fidelity_rejects_dialogue_the_player_view_never_received():
+    warnings = _check_narrator_fidelity(
+        {"prose": 'Mara steps back. "Hold the line."'},
+        view="Mara steps back.",
+    )
+
+    assert any("invented quoted dialogue" in warning for warning in warnings)
+
+
+def test_fidelity_allows_dialogue_delivered_in_the_player_view():
+    line = '"Hold the line."'
+    warnings = _check_narrator_fidelity(
+        {"prose": f"Mara steps back. {line}"},
+        view=f"Mara steps back and says {line}",
+    )
+
+    assert not any("invented quoted dialogue" in warning
+                   for warning in warnings)
+
+
 # --- the narrator tidies what the player typed -----------------------------
 
 def test_a_repunctuated_player_line_is_still_stripped():

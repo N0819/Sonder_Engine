@@ -1,5 +1,29 @@
 # Changelog
 
+## alpha 9.8.1 — The body and the beat agree again
+
+This corrective release keeps complex physical scenes causal without making
+their machinery genre-specific. Multi-action declarations retain their actual
+order across reactions, perception and narration; dialogue stays in its
+original slot; rejected prerequisites cannot leak their dependent effects into
+state; and contact, pose, target and substance updates keep the body and object
+they belong to.
+
+Character perception now retains complete current sensation and the full
+visible appearance of other people while omitting only redundant self-card
+description. Autobiographical memory uses a consistent first-person
+perspective. Narration receives one ordered event package, preserves the
+player's question/answer order, rejects undelivered dialogue, and screens
+repetitive sensor-ledger phrasing before it reaches the page.
+
+Substances gain qualitative conservation and transfer, contact actions remain
+open-ended physical relations, and speech formation reflects an occupied or
+engaged mouth without baking restraint, consent, morality or any other
+personality trait into the agent. Finally, attire exposure is durable across
+later wardrobe changes: a revealed authored body surface is not forgotten by
+an unrelated change of clothing, and a phrase such as `bare feet` can no longer
+be invented as a garment.
+
 ## alpha 9.8 — The place was alive before you arrived
 
 Alpha 9.8 turns Charter from an off-screen upkeep prototype into the social,

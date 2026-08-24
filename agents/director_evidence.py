@@ -107,9 +107,11 @@ def _interpret_coverage_corpus(out):
         # action containing the entire narrative bridge.  Perception then had
         # two competing versions of the same chronology.
         for field in ("text", "attempt", "raw_text", "description",
-                      "observable", "tone", "subject", "verb"):
+                      "observable", "tone", "subject", "verb", "act",
+                      "content", "topic"):
             pieces.append(e.get(field))
         pieces.extend(str(t) for t in (e.get("targets") or []))
+        pieces.extend(str(t) for t in (e.get("participants") or []))
         effects = _list(e.get("intended_effects")) + \
             _list(e.get("asserted_effects"))
         for eff in effects:
@@ -202,7 +204,7 @@ def _normalize_diff_shape(sd):
             sd[k] = {}
     for k in ("cast_changes", "world_facts", "introductions", "following_ops",
               "remove_entities", "remove_rooms", "remove_adjacent",
-              "inventory_ops", "contact_ops", "substance_ops", "claim_dispositions",
+              "inventory_ops", "contact_ops", "contact_action_ops", "substance_ops", "claim_dispositions",
               "consequences", "offscreen_plan_ops", "crowd_ops",
               "telling_ops"):
         if not isinstance(sd.get(k), list):
@@ -298,7 +300,7 @@ def _diff_is_substantive(sd):
     for key in ("rooms", "entities", "conditions", "attire", "overlays",
                 "positions", "poses", "remove_entities", "remove_rooms",
                 "remove_adjacent", "inventory_ops", "contact_ops",
-                "substance_ops", "cast_changes"):
+                "contact_action_ops", "substance_ops", "cast_changes"):
         if sd.get(key):
             return True
     return False
@@ -386,7 +388,8 @@ def _merge_repair_into_diff(sd, patch):
     for key, station in (patch.get("stations") or {}).items():
         sd.setdefault("stations", {}).setdefault(key, station)
     for field in ("remove_entities", "remove_rooms", "remove_adjacent",
-                  "inventory_ops", "contact_ops", "substance_ops", "cast_changes", "world_facts",
+                  "inventory_ops", "contact_ops", "contact_action_ops",
+                  "substance_ops", "cast_changes", "world_facts",
                   "introductions"):
         for item in (patch.get(field) or []):
             if item not in sd[field]:
@@ -525,6 +528,14 @@ def _omission_subject_encoded(sd, subject, forms=None):
         if hits(op.get("actor")) or hits(op.get("target")):
             return True
         if _norm_subject(subject) in ("contact", "contacts"):
+            return True
+    for op in (sd.get("contact_action_ops") or []):
+        if not isinstance(op, dict):
+            continue
+        if hits(op.get("actor")) or hits(op.get("action")):
+            return True
+        if _norm_subject(subject) in (
+                "contactaction", "contactactions", "contacteffect"):
             return True
     for op in (sd.get("substance_ops") or []):
         if not isinstance(op, dict):
@@ -736,6 +747,32 @@ def _evidence_present(sd, omission, forms=None):
                     or hits(op.get("actor")) or hits(op.get("target"))) \
                     and endpoint_matches(op):
                 return True
+        return False
+    if category in ("contact_action", "contact_actions"):
+        manifested_actor = str(omission.get("actor") or subject or "").strip()
+        manifested_action = str(omission.get("action") or "").strip()
+        manifested_ref = omission.get("contact_ref")
+        for op in (sd.get("contact_action_ops") or []):
+            if not isinstance(op, dict):
+                continue
+            if manifested_actor and not _make_subject_hit(
+                    manifested_actor)(op.get("actor")):
+                continue
+            if manifested_action and _norm_subject(
+                    manifested_action) != _norm_subject(op.get("action")):
+                continue
+            if manifested_ref:
+                op_ref = op.get("contact_ref") or op.get("contact_id")
+                if isinstance(manifested_ref, dict):
+                    if not isinstance(op_ref, dict):
+                        continue
+                    fields = ("actor", "actor_part", "target", "target_part")
+                    if any(_norm_subject(manifested_ref.get(field)) !=
+                           _norm_subject(op_ref.get(field)) for field in fields):
+                        continue
+                elif _norm_subject(manifested_ref) != _norm_subject(op_ref):
+                    continue
+            return True
         return False
     if category == "substances":
         manifested_substance = str(omission.get("substance") or "").strip()

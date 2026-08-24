@@ -172,6 +172,15 @@ class TestWhatEachPartyFeels:
         assert contact_sensation(plural, you="Bram").startswith(
             "your back registers Reya's fingers against it")
 
+    def test_pelvis_is_singular_despite_its_trailing_s(self):
+        """A recorded failure rendered ``your pelvis register ... against them``.
+        The final s belongs to the singular noun, not to plural morphology.
+        """
+        contact = {"actor": "Reya", "actor_part": "hand", "target": "Bram",
+                   "target_part": "pelvis", "manner": "pressing"}
+        assert contact_sensation(contact, you="Bram").startswith(
+            "your pelvis registers Reya's hand against it")
+
     def test_a_slot_holding_an_act_or_a_sound_renders_nothing(self):
         """The Director periodically fills a part slot with something that is
         not a body -- a live ledger held `physical reaction` against
@@ -359,18 +368,31 @@ class TestTheStandingContactReachesTheView:
         not be checked against model prose, so it stayed biased toward silence.
         The composer has no prose to check, so the honest answer is the one the
         ledger gives -- a body IS in continuous contact and the mind is told
-        so. `player` mode still renders it once, on the beat it changed
-        (the dedupe key hashes the contact)."""
+        so. Player-mode compression does not apply to a live bodily input:
+        the same contact remains felt on every beat it remains active."""
         scene = {"positions": {"Reya": "cell", "Bram": "cell"}, "entities": {},
                  "contacts": [{"actor": "Reya", "target": "Bram",
                                "manner": "lean"}]}
-        assert "Your body registers Reya against it" in _view("Bram", scene)
+        percepts = _percepts("Bram", scene)
+        first = composer.render_view(percepts, mode="player")
+        again = composer.render_view(
+            percepts, mode="player", prev_standing=first.standing_keys)
+        assert "Your body registers Reya against it" in first.text
+        assert "Your body registers Reya against it" in again.text
 
     def test_one_contact_is_one_dedupe_key(self):
-        """Which is what keeps it out of a delta view on the beats it has not
-        changed, and out of a memory episode as a non-event."""
+        """The stable key still prevents duplicate percepts and prevents an
+        unchanged sensation alone from becoming a new memory; it no longer
+        suppresses active input from the present perspective."""
         keys = {p.dedupe_key for p in _percepts("Bram")}
         assert len(keys) == 2
+
+    def test_unchanged_sensation_alone_still_mints_no_memory(self):
+        percepts = _percepts("Bram")
+        first = composer.render_view(percepts, mode="player")
+        content, gist, entities = composer.render_episode(
+            percepts, prev_standing=first.standing_keys)
+        assert content == "" and gist == "" and entities == []
 
 
 class TestTheChannelItArrivesOn:
@@ -410,7 +432,7 @@ class TestTheChannelItArrivesOn:
 class TestMomentaryResidue:
     """A momentary act's standing record delivers its residue, not the act.
 
-    Live (chat 69 "Horny Story. ⎇49"): a head-kiss recorded at turn 42 with
+    In a measured long run, a head contact recorded at turn 42 with
     motion `moving` stood unaged through five quiet beats -- ageing is
     evidence-gated, correctly -- and `contact_sensation` rendered its stored
     motion every beat, so both parties were told "movement and friction" of a
@@ -625,3 +647,89 @@ def test_a_body_with_both_anatomies_registers_both_at_once():
     assert "your hand registers Elyra Voss's vaginal canal enclosing it" in theirs
     # Nobody is told a cavity entered a cavity.
     assert "vaginal walls register" not in hers.casefold()
+
+
+def test_contact_prompt_accepts_any_body_part_as_actor_part():
+    """The ledger is permissive: actor_part is whatever body part the prose
+    names, not a small vocabulary the prompt enumerates.
+
+    A mouth braced against a patient's palm while the tongue inspected a
+    wound was repeatedly recorded with actor_part='mouth', because the prompt's
+    example list ('hand', 'wrist', 'shoulder', 'mouth', 'tail', 'back')
+    taught the model to fall back on those and put the moving sub-part in
+    `detail`. The patient's standing percept named 'mouth' rather than 'tongue'
+    for every beat the seal held.
+
+    The fix: the resolve prompt contract opens actor_part to whatever the
+    prose describes, and the contact specialist encodes the named part
+    directly. The Director and specialists judge feasibility; the engine
+    rejects only what the body verifiably lacks.
+    """
+    prompt = DEFAULT_PROMPTS["director_contact"]
+    assert "ANY BODY PART THE FICTION DESCRIBES" in prompt
+    assert "DIRECTOR AND SPECIALISTS JUDGE FEASIBILITY" in prompt
+    assert "CONTAINER'S SEAL IS A SEPARATE CONTACT" in prompt
+
+
+def test_resolve_manifest_takes_endpoints_from_prose():
+    """The resolve model's manifest contract says actor_part comes from the
+    prose, not from imagined contact_ops.
+
+    The resolve prompt's CHANGES MANIFEST block previously read 'copy from
+    the exact contact_ops relation that encodes it' — but contact_ops is
+    delegated to the specialist. The resolve model was projecting its
+    own contact_ops in its head and writing `mouth` for the structural
+    seal while the prose said `tongue`. The receiver's standing percept
+    reflected the manifest, not the prose, for every reroll.
+    """
+    resolve = DEFAULT_PROMPTS["director_resolve_lean"]
+    assert "from your own resolved_event prose" in resolve
+    assert "contact_ops is delegated to the specialist" in resolve
+    assert "you write the manifest from prose, not from imagined contact_ops" in resolve
+
+
+def test_a_moving_subpart_inside_a_container_renders_its_own_part():
+    """When the structural record uses the moving sub-part as actor_part,
+    contact_sensation names that sub-part, not the container.
+
+    The structural record has to express the moving surface as actor_part
+    for the receiver to perceive it -- contact_sensation reads actor_part,
+    never the detail. The prompt teaches the model to write the moving
+    sub-part when the sub-part is the part currently pressing, stroking,
+    sliding, circling, or otherwise moving against the target.
+    """
+    contact = {
+        "actor": "Rhea", "actor_part": "tongue",
+        "target": "Mara", "target_part": "palm",
+        "manner": "press", "relation": "surface", "motion": "moving",
+    }
+
+    felt = contact_sensation(contact, you="Mara")
+    assert "your palm registers Rhea's tongue" in felt
+    assert "Rhea's mouth" not in felt
+
+
+def test_container_seal_and_moving_subpart_coexist_as_two_percepts():
+    """The container's seal is one contact with its own actor_part and
+    manner; the contained moving part's surface is another. Both stand
+    when both relationships matter, and the receiver perceives both.
+    """
+    container = {
+        "actor": "Rhea", "actor_part": "mouth",
+        "target": "Mara", "target_part": "palm",
+        "manner": "seal", "relation": "surface", "motion": "settled",
+    }
+    moving = {
+        "actor": "Rhea", "actor_part": "tongue",
+        "target": "Mara", "target_part": "palm",
+        "manner": "press", "relation": "surface", "motion": "moving",
+    }
+    scene = {"positions": {"Rhea": "r", "Mara": "r"}}
+    felt = [
+        contact_sensation(c, you="Mara", scene=scene)
+        for c in (container, moving)
+    ]
+    felt = [s for s in felt if s]
+    assert any("Rhea's mouth" in s for s in felt), felt
+    assert any("Rhea's tongue" in s for s in felt), felt
+    assert len(felt) == 2, felt

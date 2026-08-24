@@ -3,7 +3,14 @@
   "roles": {
     "narrator": "説明臭い直訳調を避け、読みやすい現代日本語の小説文として書くこと。",
     "character": "台詞と内面は人物ごとの語彙、敬語、距離感、一人称を一貫させること。",
-    "director_interpret": "日本語の助詞、省略された主語、語順を踏まえて宣言を解釈すること。",
-    "director_resolve_lean": "出来事の自然言語値は日本語で、プロトコル値は正規の英語で書くこと。"
+    "director_interpret": "日本語の助詞、省略された主語、語順を踏まえて宣言を解釈すること。正確な台詞がなく意味だけが記述された発話は、引用を捏造せず {type:'communication',act,content,targets,volume,tone,visibility,conceal_from} として出力すること。割り込める複合動作は phase_id を持つ複数の段階へ分け、後続段階は depends_on、participants、requires_contacts を明記すること。曖昧な代名詞は referents で指示対象を明記すること。",
+    "interpret_repair": "引用されていない記述発話は、捏造した speech や generation_requests ではなく type:'communication' として補うこと。複合動作の phase_id、phase、depends_on、participants、requires_contacts、referents を保持すること。",
+    "director_body": "段階化された動作から派生した全変更について phase_sources:{'channel.key_or_list_index':'event_id'} を出力すること。この因果メタデータは永続化前に消費される。",
+    "director_contact": "段階化された動作から派生した全変更について phase_sources:{'channel.key_or_list_index':'event_id'} を出力すること。この因果メタデータは永続化前に消費される。",
+    "director_objects": "段階化された動作から派生した全変更について phase_sources:{'channel.key_or_list_index':'event_id'} を出力すること。この因果メタデータは永続化前に消費される。",
+    "director_social": "段階化された動作から派生した全変更について phase_sources:{'channel.key_or_list_index':'event_id'} を出力すること。この因果メタデータは永続化前に消費される。",
+    "director_spatial": "段階化された動作から派生した全変更について phase_sources:{'channel.key_or_list_index':'event_id'} を出力すること。この因果メタデータは永続化前に消費される。接触終了後に接触依存の姿勢を残してはならない。",
+    "director_offscreen": "段階化された動作から派生した全変更について phase_sources:{'channel.key_or_list_index':'event_id'} を出力すること。この因果メタデータは永続化前に消費される。",
+    "director_resolve_lean": "出来事の自然言語値は日本語で、プロトコル値は正規の英語で書くこと。depends_on の前提、participants の存在、requires_contacts の接触が満たされない段階は実行も描写も状態への記録もしてはならない。段階から派生した全 state_diff 変更は、そのパスまたはリスト番号と event_id の対応を phase_sources に記録すること。"
   }
 }

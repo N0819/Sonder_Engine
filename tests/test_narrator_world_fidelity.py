@@ -40,6 +40,7 @@ from agents.narration import (
     _render_observed_events,
     _position_delta_payload,
     _visible_portal_states,
+    _strip_raw_player_input_echo,
 )
 from story.character_schema import default_character_data
 from core.pipeline_context import ChatData, PipelineContext, TurnData
@@ -108,6 +109,17 @@ def test_event_order_missing_quotes_are_skipped():
     assert _check_event_order('"Understood," Vorne says.', order) == []
     assert _check_event_order("", order) == []
     assert _check_event_order("prose", None) == []
+
+
+def test_event_order_does_not_locate_short_line_inside_longer_quote():
+    """The player's echo-stripped ``More?`` is not the NPC's later line."""
+    order = _events(("Player", "More?"),
+                    ("Mara", "Your hand — right there."),
+                    ("Mara", "More of that."))
+    prose = ('Mara says, "Your hand — right there." '
+             'Then she adds, "More of that."')
+
+    assert _check_event_order(prose, order) == []
 
 
 # ---- F4: quote attribution ----
@@ -528,6 +540,23 @@ def test_ordered_beat_events_order_and_view_filter(temp_db):
     assert all("never heard" not in str(e.get("quote")) for e in events)
 
 
+def test_ordered_events_use_only_adjudicated_contestable_action(temp_db):
+    ctx = _mk_ctx(temp_db, {"rooms": {}, "positions": {}})
+    ctx.director_interpret = {"sequence": [{
+        "type": "action", "event_id": "turn:9:player:0:action",
+        "commitment": "contestable",
+        "observable": "tests the wound edge, irrigates it, then sutures it",
+    }]}
+    ctx.director_resolve = {"state_diff": {"claim_dispositions": [{
+        "claim_id": "turn:9:player:0:action", "status": "deferred",
+        "realized_event_ids": [],
+    }]}}
+
+    events = _ordered_beat_events(ctx, "Player", "", set(), {})
+    assert [event.get("action") for event in events] == [
+        "attempts to test the wound edge"]
+
+
 def test_narrator_never_receives_player_speech_to_paraphrase_backwards():
     interpreted = {
         "sequence": [{
@@ -549,6 +578,30 @@ def test_narrator_never_receives_player_speech_to_paraphrase_backwards():
     }]
 
 
+def test_narrator_declared_strips_contestable_success_branch():
+    payload = _narrator_player_declared({"sequence": [{
+        "type": "action", "event_id": "turn:9:player:0:action",
+        "commitment": "contestable", "stage": "immediate",
+        "attempt": "only if numb, irrigate and close the wound",
+        "observable": "tests the wound edge, irrigates it, then sutures it",
+        "targets": [3],
+    }], "action": {"attempt": "irrigate and close the wound"}})
+
+    encoded = json.dumps(payload)
+    assert "irrigates" not in encoded and "sutures" not in encoded
+    assert payload["action"] is None
+    assert payload["sequence"][0]["onset"] == (
+        "attempts to test the wound edge")
+
+
+def test_verbatim_player_action_paragraph_is_not_reprinted():
+    raw = ("Only if the edge is numb, I irrigate the wound and remove the "
+           "visible debris with forceps.")
+    prose = raw + '\n\n"I can still feel that," the patient says.'
+    assert _strip_raw_player_input_echo(prose, raw) == (
+        '"I can still feel that," the patient says.')
+
+
 def test_ordered_beat_events_unrecognized_speaker_gets_label(temp_db):
     ctx = _mk_ctx(temp_db, {"rooms": {}, "positions": {}})
     ctx.director_interpret = {"sequence": []}
@@ -568,6 +621,36 @@ def test_ordered_beat_events_unrecognized_speaker_gets_label(temp_db):
     # canonical name the player has not learned.
     assert "Mara" not in events[0]["actor"]
     assert "woman" in events[0]["actor"]
+
+
+def test_ordered_action_referents_use_the_player_identity_floor(temp_db):
+    scene = {"rooms": {"yard": {"name": "Yard"}},
+             "positions": {"Player": "yard", "Iris": "yard",
+                           "Mara": "yard"}}
+    ctx = _mk_ctx(temp_db, scene)
+    ctx.director_interpret = {"sequence": []}
+    ctx.interaction_loop = {"rounds": [{
+        "round": 0, "speaker_id": 1, "speaker": "Iris",
+        "result": {"sequence": [{
+            "type": "action", "observable": "takes her hand with her left hand",
+            "visibility": "overt", "referents": [
+                {"text": "her", "entity": "Mara",
+                 "role": "target_possessive", "occurrence": 1},
+                {"text": "her", "entity": "Iris",
+                 "role": "actor_possessive", "occurrence": 2},
+            ],
+        }]},
+    }]}
+    events = _ordered_beat_events(
+        ctx, "Player", "", {"Iris"},
+        {"Iris": {"appearance": "", "aliases": []},
+         "Mara": {"appearance": "Mara, a woman in a gray uniform.",
+                  "aliases": []}},
+        scene=scene, p_room="yard")
+    assert len(events) == 1
+    assert "Mara" not in events[0]["action"]
+    assert "woman" in events[0]["action"]
+    assert "Iris" in events[0]["action"]
 
 
 # ---- F5: a character's physical act is an event, not scenery ----

@@ -66,16 +66,33 @@ Housekeeping tables not described below: `schema_meta` (the migration version), 
   cannot. Touched snapshots replace whole. Room separation clears the relative
   and constraint axes while retaining a still-valid own posture. Open strings
   keep fictional bodies genre-neutral.
+- `scene.contact_actions`: frame-scoped ongoing tactile effects attached to a
+  stable `contact_id`. The id is derived symmetrically from a contact's two
+  owned endpoints rather than from list order. Records keep the participating
+  actor, a noun-like effect, and optional qualitative intensity/rhythm. They
+  persist through model silence and are removed when their parent contact
+  ends; only contact participants receive their cause-blind percepts.
 - `scene.substances`: frame-scoped flat records for non-discrete matter that
   remains at a destination. Each record has a stable id plus source/source
   part, fiction-authored material name, target, `placement:surface|interior|contained|room`,
-  optional enclosing interior/endpoint, amount, and detail. A unique standing
+  optional enclosing interior/endpoint, free-text amount, optional explicit
+  `amount_band`, and detail. Partial transfers name `source_substance_id` and
+  a qualitative `portion`; these transient selector fields are consumed during
+  merge. A unique standing
   interior contact may supply omitted destination topology before that beat's
   contact removals. Records persist until a bounded remove/clear operation;
+  elapsed time and model silence do not alter them without world-specific law,
   they are neither inventory nor body contact. Because this is inside the
   scene blob, checkpoints, branches, and portable archives carry it without a
   normalized-table migration.
 - `checkpoints`: whole-state restoration blobs keyed by chat and turn index.
+
+Sequence causality adds no world table and no persistent scene ledger.
+`DirectorResolve.sequence_dispositions` is retained with the step result for
+author diagnostics and replay inspection. `StateDiff.phase_sources` is a
+transient source map consumed by the deterministic causal floor before the
+scene is committed; neither it nor compatibility `source_event_id` annotations
+belong in the stored scene blob.
 
 ## Structured world tables
 

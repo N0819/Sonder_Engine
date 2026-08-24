@@ -422,6 +422,34 @@ class TestRemovedGarmentsBecomeThings:
         assert sorted(attire.newly_removed(worn, after)) == [
             ("feet", "heavy boots"), ("torso", "a robe")]
 
+    def test_an_unrelated_later_change_keeps_prior_uncovered_history(self):
+        regions = attire.normalize_regions({"regions": {
+            "torso": {"garments": [], "beneath": "a healed rib scar",
+                      "uncovered": True},
+            "feet": {"garments": [{"name": "walking boots"}],
+                     "beneath": "road-callused feet"},
+        }})
+
+        changed = attire.apply_flat_change(regions, [], decisive=True)
+        healed = attire.release_removed_garments({"regions": changed})[
+            "regions"]
+
+        assert healed["torso"]["uncovered"] is True
+        assert healed["feet"]["uncovered"] is True
+        surfaces = attire.perceptible_region_surfaces(
+            healed, beneath_visible=True)
+        assert "healed rib scar" in surfaces["torso"]
+        assert "road-callused feet" in surfaces["feet"]
+
+    def test_a_bare_surface_phrase_never_becomes_a_garment(self):
+        regions = attire.apply_flat_change({}, ["bare feet"])
+
+        assert attire.flat_wearing(regions) == []
+        assert all(
+            garment.get("name") != "bare feet"
+            for entry in regions.values()
+            for garment in entry.get("garments") or [])
+
 
 class TestAGarmentNameIsAHandleNotADescription:
     """Live failure, Tamamo's card: the generator wrote the whole description

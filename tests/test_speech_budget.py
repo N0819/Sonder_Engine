@@ -13,14 +13,10 @@ Two defects, both pinned here.
 
 2. THE FIELD CARRIED NO MEANING. The character prompt's whole treatment of it
    was "SPEECH BUDGET: speech_budget is pacing guidance. Silence is valid." --
-   which describes the budget as optional and blesses the floor, 480 lines
-   under "Predict the smallest plausible next behavior". That is the third time
-   in this codebase a divisible quantity next to that directive has been
-   minimised to its floor: the sprint offer's `path` (agents/character.py,
-   `sprint_offers`), spoken-line fullness (test_voice_register_stability.py),
-   and now line COUNT. The voice fix already scoped the directive away from
-   "word count" -- but 400 lines away, inside the VOICE section, and in terms
-   of line fullness rather than line count, so it did not carry.
+   which describes the budget as optional and blesses the floor. The character
+   contract now states the micro-beat bound as elapsed action and causal
+   ownership, while line count remains governed explicitly by the authored
+   voice and `decision.speech_budget`.
 
 Measured across the author's live chats (read-only, structural): line counts do
 not track the setting at all. A chat at `min_lines: 2` produced exactly one
@@ -107,24 +103,23 @@ class TestThePromptReadsTheBudget:
         assert "may_stay_silent:true" in self.SYSTEM
 
 
-class TestTheMinimiserIsScopedToAction:
+class TestTheMicroBeatScopeDoesNotMinimizeVoice:
     SYSTEM = DEFAULT_PROMPTS["character"]
 
     def test_the_directive_itself_is_intact(self):
-        # Load-bearing for the whole character agent. Scoped, never blunted.
-        assert "Predict the smallest plausible next behavior" in self.SYSTEM
+        assert "Predict this character's next behavior" in self.SYSTEM
 
     def test_it_is_scoped_where_it_is_stated(self):
-        # The pre-existing scoping lived in the VOICE section ~400 lines below
-        # and spoke about word count, not line count. Locality is the point:
-        # the qualification has to sit on the directive.
+        # The qualification sits beside the scope directive, before any
+        # epistemic rules can make it read as a personality preference.
         head = self.SYSTEM[:self.SYSTEM.index("EPISTEMIC FIREWALL")]
-        assert "'Smallest plausible' scopes what the character DOES" in head
-        assert "NEITHER how many lines they speak NOR" in head
+        assert "MICRO-BEAT SCOPE limits elapsed action and causal ownership" in head
+        assert "not personality or intensity" in head
+        assert "no preference for caution" in head
 
     def test_the_voice_scoping_still_stands(self):
-        # test_voice_register_stability.py's contract, unchanged.
-        assert "constrains physical scope and story impact, NOT " in self.SYSTEM
+        # The distant voice anchor independently states the same boundary.
+        assert "constrains elapsed action and causal ownership, NOT " in self.SYSTEM
         assert "word count" in self.SYSTEM
 
 

@@ -23,8 +23,10 @@ renderers already in production: `_inject_dialogue`'s dialogue grammar,
 Three render modes over one percept list, because the view has three
 consumers with different needs:
 
-- ``character`` -- full standing state every beat. A character agent is a
-  stateless LLM call; if it is not in context, the mind does not have it.
+- ``character`` -- full standing state every beat, including complete visible
+  body and attire strings for every OTHER person. A character agent is a
+  stateless LLM call; if it is not in context, the mind does not have it. The
+  observer's own body/attire remains supplied by its updated card state.
 - ``player`` -- delta only: what CHANGED, plus this beat's events. Standing
   state is re-rendered only when its content changed (the dedupe key hashes
   the content) or on an explicit look/examine intent (``full_render=True``).
@@ -81,6 +83,7 @@ from .common import (
     _observable_predicate,
     _quote_body,
     _recognizes,
+    _fix_you_agreement,
     _self_second_person,
     _unknown_actor_label,
 )
@@ -97,6 +100,7 @@ from .common import (
 # hand-maintained lists of one thing, and only the unread one was wrong.
 PERCEPT_KINDS = (
     "environment", "presence", "pose", "appearance", "act", "speech",
+    "communication",
     "sensation", "substance", "body_part", "body_region", "body_state",
     "crossing", "residue", "ambient", "scent",
 )
@@ -788,8 +792,156 @@ def _same_referent(scene, a, b):
     return bool(na) and na == nb
 
 
+def _pose_owner_second_person(text, pronouns, other_forms=()):
+    """Rewrite pronouns whose referent is known from a pose's ownership.
+
+    A pose is stored under the body it describes.  Its ``posture``,
+    ``constraint`` and ``detail`` therefore have an explicit grammatical
+    owner even when a model writes them as third-person fragments.  That is a
+    materially narrower case than arbitrary prose anaphora: within each
+    comma/semicolon-delimited fragment, the owner's declared pronouns refer
+    to the owner until another body is explicitly named.  After that name we
+    leave matching pronouns alone rather than guessing which body they mean.
+
+    This is what turns ``settled on her heels ... Mara`` into ``settled on
+    your heels ... Mara`` without turning the later ``steady her`` (after
+    Mara has been named) into ``steady you``. Quoted spans are untouched.
+    """
+    text = str(text or "")
+    if not text or not isinstance(pronouns, dict):
+        return text
+    subject = str(pronouns.get("subject") or "").strip()
+    obj = str(pronouns.get("object") or "").strip()
+    possessive = str(pronouns.get("possessive") or "").strip()
+    if not any((subject, obj, possessive)):
+        return text
+
+    other_patterns = []
+    for form in sorted({str(f or "").strip() for f in other_forms if str(f or "").strip()},
+                       key=len, reverse=True):
+        other_patterns.append(re.compile(
+            r"(?<!\w)" + re.escape(form) + r"(?:['’]s)?(?!\w)", re.I))
+
+    reflexives = {
+        "she": "herself", "he": "himself", "they": "themselves",
+        "it": "itself",
+    }
+    reflexive = reflexives.get(subject.casefold(), "")
+    forms = sorted({f.casefold() for f in (subject, obj, possessive, reflexive)
+                    if f}, key=len, reverse=True)
+    if not forms:
+        return text
+    pronoun_re = re.compile(
+        r"(?<!\w)(" + "|".join(re.escape(f) for f in forms) + r")(?!\w)",
+        re.I)
+
+    def rewrite_fragment(fragment):
+        cutoff = len(fragment)
+        for pattern in other_patterns:
+            match = pattern.search(fragment)
+            if match:
+                cutoff = min(cutoff, match.start())
+        prefix, suffix = fragment[:cutoff], fragment[cutoff:]
+
+        def replace(match):
+            word = match.group(1)
+            low = word.casefold()
+            if reflexive and low == reflexive.casefold():
+                replacement = "yourself"
+            elif ((low == possessive.casefold()
+                   and low != obj.casefold()) or
+                  (low == possessive.casefold() == obj.casefold()
+                   and bool(re.match(
+                       r"\s+[A-Za-z]", prefix[match.end():])))):
+                replacement = "your"
+            else:
+                replacement = "you"
+            return replacement.capitalize() if word[:1].isupper() else replacement
+
+        rewritten = pronoun_re.sub(replace, prefix)
+        return _fix_you_agreement(rewritten) + suffix
+
+    quoted = linguistic("agents.common", "_QUOTED_SPAN_RE").split(text)
+    for index in range(0, len(quoted), 2):
+        pieces = re.split(r"([,;—])", quoted[index])
+        for piece_index in range(0, len(pieces), 2):
+            pieces[piece_index] = rewrite_fragment(pieces[piece_index])
+        quoted[index] = "".join(pieces)
+    return "".join(quoted)
+
+
+def _action_target_second_person(text, target_forms, target_pronouns,
+                                 other_forms=()):
+    """Repair target-owned body pronouns after an explicit target name.
+
+    Character observables are predicates whose omitted subject is the actor.
+    When actor and target share pronouns, models commonly write a target once
+    and then fall back to an ambiguous possessive: ``from Mara's back down
+    between her thighs``.  Merely replacing the exact name produces ``your
+    back ... her thighs`` and hands the action to the wrong body.
+
+    This deliberately does *less* than general anaphora resolution.  It runs
+    only when the event structurally targets this observer, only after an
+    explicit form of that observer in the same sentence, and only when the
+    matching possessive owns a body noun, optionally through a small
+    language-pack list of anatomical modifiers. Subject pronouns, ``her
+    own``, objects, quoted speech, arbitrary possessions, and everything
+    after another explicitly named body are untouched.
+    """
+    text = str(text or "")
+    if not text or not isinstance(target_pronouns, dict):
+        return text
+    possessive = str(target_pronouns.get("possessive") or "").strip()
+    forms = sorted({str(form or "").strip() for form in target_forms or ()
+                    if str(form or "").strip()}, key=len, reverse=True)
+    if not possessive or not forms:
+        return text
+
+    target_re = re.compile(
+        r"(?<!\w)(?:" + "|".join(re.escape(form) for form in forms)
+        + r")(?:['’]s)?(?!\w)", re.I)
+    other_patterns = [
+        re.compile(r"(?<!\w)" + re.escape(form) + r"(?:['’]s)?(?!\w)", re.I)
+        for form in sorted({str(form or "").strip()
+                            for form in other_forms or ()
+                            if str(form or "").strip()}, key=len, reverse=True)
+    ]
+    body_nouns = sorted(linguistic(
+        "agents.common", "_OWN_BODY_NOUNS"), key=len, reverse=True)
+    modifiers = sorted(linguistic(
+        "agents.common", "_BODY_OWNERSHIP_MODIFIERS"), key=len, reverse=True)
+    modifier_part = ((r"(?:(?:" + "|".join(re.escape(word)
+                                            for word in modifiers)
+                      + r")\s+){0,2}") if modifiers else "")
+    owned_body_re = re.compile(
+        r"(?<!\w)" + re.escape(possessive)
+        + r"(?=\s+(?!own\b)" + modifier_part + r"(?:"
+        + "|".join(re.escape(noun) for noun in body_nouns)
+        + r")\b)", re.I)
+
+    quoted = linguistic("agents.common", "_QUOTED_SPAN_RE").split(text)
+    for index in range(0, len(quoted), 2):
+        sentences = re.split(r"([.!?]+\s*)", quoted[index])
+        for sentence_index in range(0, len(sentences), 2):
+            sentence = sentences[sentence_index]
+            named = target_re.search(sentence)
+            if not named:
+                continue
+            prefix, suffix = sentence[:named.end()], sentence[named.end():]
+            cutoff = len(suffix)
+            for pattern in other_patterns:
+                match = pattern.search(suffix)
+                if match:
+                    cutoff = min(cutoff, match.start())
+            owned, remainder = suffix[:cutoff], suffix[cutoff:]
+            suffix = owned_body_re.sub("your", owned) + remainder
+            sentences[sentence_index] = prefix + suffix
+        quoted[index] = "".join(sentences)
+    return "".join(quoted)
+
+
 def pose_percepts(scene, observer_name, co_present, display_map,
-                  senses=None):
+                  senses=None, *, self_forms=(), self_pronouns=None):
     """How bodies are arranged: posture, what holds them up, who they are
     against, what pins them.
 
@@ -858,10 +1010,29 @@ def pose_percepts(scene, observer_name, co_present, display_map,
             if entity_arc(scene, observer_name, name) == "rear":
                 continue
             label = display_map.get(name) or "someone"
-        data = {"posture": pose["posture"]}
+        # Every exact handle for the receiving observer becomes second person
+        # before it enters the IR.  This applies to OTHER bodies' details too:
+        # ``Mara ... squeezing Rhea's hand`` in Rhea's own view must
+        # read ``... squeezing your hand``.
+        data = {"posture": _self_second_person(
+            pose["posture"], self_forms) if self_forms else pose["posture"]}
         if level == "full":
             for f in ("support", "relation", "constraint", "detail"):
-                data[f] = pose[f]
+                data[f] = (_self_second_person(pose[f], self_forms)
+                           if self_forms else pose[f])
+            if is_self and self_pronouns:
+                other_forms = []
+                for body in co_present or []:
+                    other = str(body.get("name") or "")
+                    if not other or same_subject(scene, other, observer_name):
+                        continue
+                    other_forms.extend([
+                        other, *(body.get("aliases") or []),
+                        (display_map or {}).get(other),
+                    ])
+                for f in ("posture", "constraint", "detail"):
+                    data[f] = _pose_owner_second_person(
+                        data.get(f), self_pronouns, other_forms)
             # Support is a referent too, and took the same raw string onto
             # the page: "on chair_interview" is an entity id being read to
             # the player. Both fields go through the same resolver.
@@ -978,6 +1149,36 @@ def contact_percepts(contacts_with_sensation):
                 contact.get("actor"), contact.get("actor_part"),
                 contact.get("target"), contact.get("target_part"),
                 contact.get("manner")),
+        ))
+    return out
+
+
+def contact_action_percepts(actions_with_sensation):
+    """Standing contact-effect sensations as ``[(record, safe_clause)]``.
+
+    Admission and observer-side phrasing happen upstream, exactly like
+    ``contact_percepts``. The composer receives no scene and cannot widen the
+    identity or tactile channel.
+    """
+    out = []
+    for entry in actions_with_sensation or []:
+        if not isinstance(entry, tuple) or len(entry) != 2:
+            continue
+        record, clause = entry
+        if not isinstance(record, dict):
+            continue
+        clause = str(clause or "").strip()
+        if not clause:
+            continue
+        out.append(Percept(
+            kind="sensation", channel="touch", source_label="you",
+            data={"clause": clause, "directed_at_self": True},
+            salience=0.4,
+            dedupe_key="contact_action:" + _short_hash(
+                record.get("action_id"), record.get("contact_id"),
+                record.get("action"),
+                record.get("actor"), record.get("intensity"),
+                record.get("rhythm")),
         ))
     return out
 
@@ -1259,8 +1460,46 @@ def speech_percept(entry, rel, observer_name, *, display, can_see,
     )
 
 
+def communication_percept(entry, rel, observer_name, *, display, can_see,
+                           proximity=None, order_key=0, observer_id=None,
+                           senses=None):
+    """Admit described communication without manufacturing a quotation."""
+    if concealed_from_observer(entry, observer_name, observer_id):
+        return None
+    from .common import communication_surface
+    surface = communication_surface(entry)
+    if not surface:
+        return None
+    volume = str(entry.get("volume") or "normal")
+    level = line_hear_level(entry, rel, observer_name, proximity=proximity,
+                            senses=senses)
+    if level == "none":
+        return None
+    # Partial hearing cannot deliver a proposition whose words were never
+    # specified.  It carries only that communication occurred.
+    data = {
+        "surface": surface if level == "full" else "speaks indistinctly",
+        "level": level, "volume": volume, "can_see": bool(can_see),
+        "directed_at_self": any(
+            _addresses(target, observer_name)
+            for target in entry.get("targets") or []),
+    }
+    channel = rel.get("comm_channel")
+    if isinstance(channel, dict) and not rel.get("same_room"):
+        data["via"] = str(channel.get("name") or channel.get("id") or "")
+    return Percept(
+        kind="communication", channel="hearing", source_label=display,
+        fidelity="full" if level == "full" else "fragment", data=data,
+        salience=0.7, order_key=order_key,
+        dedupe_key="communication:" + _short_hash(
+            entry.get("speaker"), entry.get("act"), entry.get("content")),
+    )
+
+
 def act_percept(scene, event, observer_name, actor_name, rel, *,
-                display, can_see, self_forms=None, order_key=0,
+                display, can_see, self_forms=None, self_pronouns=None,
+                other_forms=None,
+                order_key=0,
                 observer_id=None, surface=None):
     """Admit one action element's observable surface for one observer, or
     None. Gates: concealment, rear arc, sight (an action is visible or it is
@@ -1278,6 +1517,14 @@ def act_percept(scene, event, observer_name, actor_name, rel, *,
         return None
     if not can_see:
         return None
+    targets_self = any(
+        same_subject(scene, target, observer_name)
+        or str(target or "").strip().casefold() in {
+            str(form or "").strip().casefold() for form in self_forms or ()}
+        for target in event.get("targets") or ())
+    if targets_self and self_forms and self_pronouns:
+        surface = _action_target_second_person(
+            surface, self_forms, self_pronouns, other_forms)
     if self_forms:
         surface = _self_second_person(surface, self_forms)
     return Percept(
@@ -1354,6 +1601,48 @@ _STANDING_ORDER = {
     # The air of the place, after the bodies in it and after what is on them.
     "ambient": 8, "scent": 9,
 }
+
+#: Standing kinds that DESCRIBE a body's own surface rather than report its
+#: situation. Deliberately excludes `pose` and `environment`: where a body is
+#: and how it is arranged CHANGE, and are the two things a mind cannot read
+#: off its own card.
+_OWN_BODY_DESCRIPTION_KINDS = frozenset(("body_part", "body_region"))
+
+# A sensation is standing only in the sense that it has no one-time event
+# order.  It is not inert scenery: pressure, movement, heat, pain and an
+# ongoing contact action are present bodily input on every beat they remain
+# true.  Player-mode presentation compression must therefore never dedupe it.
+# Memory keeps a separate rule below: an unchanged sensation by itself is not
+# enough to mint a new autobiographical episode.
+_ACTIVE_STANDING_KINDS = frozenset(("sensation",))
+
+
+def _is_own_body_description(p):
+    """Is this standing percept the observer describing their OWN surface.
+
+    Character mode re-renders the full standing state every beat, and the
+    reason is sound: a character agent is a stateless LLM call, so what is
+    not in context is not in the mind. That argument does not reach the
+    observer's own anatomy, because the CARD is in that context on every one
+    of those calls -- `embodiment.extra_parts` carries the same count, place
+    and description the view renders, so the view is repeating what the
+    prompt already said.
+
+    In a measured 27-beat run, 43% of one character's perception payload
+    described their own body: 13,298 characters of authored anatomy, 92%
+    byte-identical to the previous beat. A stable horn description repeated
+    every beat despite the same structured horn data already being on the
+    character card.
+
+    Suppression is by dedupe key, not by kind, so the mutable half re-earns
+    itself for free: `tucked` is hashed into a body_part's key, so wings
+    coming out from under a coat change the key and render. `full_render`
+    (an explicit look) re-renders everything, which is how a mind examines
+    itself on purpose.
+    """
+    return (p.source_label == "you"
+            and p.kind in _OWN_BODY_DESCRIPTION_KINDS)
+
 
 _TIER_PHRASES = dict(_ENGLISH_COMPOSITOR["tier_phrases"])
 
@@ -1537,24 +1826,32 @@ def _render_pose(p, *, past=False):
         subject = _en(
             "pose_other_past" if past else "pose_other_present",
             label=_cap(p.source_label))
-    parts = [str(p.data.get("posture") or "").strip()]
-    support = str(p.data.get("support") or "").strip()
+    def value(field):
+        text = str(p.data.get(field) or "").strip()
+        # Episode prose is first person whether the pose belongs to the mind
+        # or to somebody it watched.  Thus another body's ``astride you`` is
+        # remembered as ``astride me``, while the owner's ``your heels`` is
+        # remembered as ``my heels``.
+        return _first_person(text) if past else text
+
+    parts = [value("posture")]
+    support = value("support")
     if support:
         parts.append(support if support.split()[:1] and support.split()[0] in
                      _POSE_PREPOSITIONS else _en("pose_support", support=support))
-    other = str(p.data.get("relative_to") or "").strip()
+    other = value("relative_to")
     if other:
-        relation = str(p.data.get("relation") or "").strip()
+        relation = value("relation")
         parts.append(f"{relation} {other}" if relation
                      else _en("pose_relation", other=other))
     clause = " ".join(x for x in parts if x).strip()
     if not clause:
         return ""
     sentence = f"{subject} {clause}"
-    constraint = str(p.data.get("constraint") or "").strip()
+    constraint = value("constraint")
     if constraint:
         sentence += f", {constraint}"
-    detail = str(p.data.get("detail") or "").strip()
+    detail = value("detail")
     if detail:
         sentence += f" — {detail.rstrip('.')}"
     return sentence.rstrip(".") + "."
@@ -1676,6 +1973,12 @@ def _render_event(p):
         if via and line:
             line = _en("speech_via", sentence=line.rstrip("."), via=via)
         return line
+    if p.kind == "communication":
+        line = _observable_predicate(
+            p.source_label, p.data.get("surface")) or ""
+        via = str(p.data.get("via") or "")
+        return (_en("speech_via", sentence=line.rstrip("."), via=via)
+                if via and line else line)
     if p.kind == "act":
         return _observable_predicate(
             p.source_label, p.data.get("surface")) or ""
@@ -1694,13 +1997,19 @@ def _render_view_english(percepts, *, mode="character",
                          prev_described=frozenset(), full_render=False):
     """Decision-free realisation of one observer's percepts.
 
-    ``mode='character'`` renders the full standing state every beat;
-    ``mode='player'`` renders only standing state whose content changed
-    (dedupe key not in ``prev_standing``) unless ``full_render`` re-renders
-    everything (explicit look/examine intent). Events always render, in
-    declared order -- chronology is authoritative. The full appearance
-    description is FIRST MENTION ONLY in every mode (``prev_described``);
-    a look intent re-earns it.
+    ``mode='character'`` renders the full standing state every beat, including
+    complete visible anatomy and attire for every OTHER person. The observer's
+    own body description (`_is_own_body_description` -- anatomy and bare
+    regions, never pose or place) is delta-suppressed because the updated card
+    and self.attire already carry it into the same call. ``mode='player'``
+    renders only standing state whose content changed (dedupe key not in
+    ``prev_standing``) unless ``full_render`` re-renders everything (explicit
+    look/examine intent). Active sensations are the exception: an unchanged
+    contact is still being felt now, so ``sensation`` percepts render every
+    beat in both modes. Events always render, in declared order -- chronology
+    is authoritative. Full appearance is first-mention/change/re-encounter
+    only in player mode; NPC cognition retains other bodies' complete strings
+    every beat.
 
     Returns a RenderedView; ``text`` may be "" ("nothing reached this mind"
     -- the caller stores None, as today).
@@ -1738,10 +2047,15 @@ def _render_view_english(percepts, *, mode="character",
         seen_dedupe.add(p.dedupe_key)
         if p.kind == "appearance":
             source_key = str(p.data.get("source_key") or "")
-            if source_key in described and not p.data.get("force") \
+            if mode == "player" and source_key in described \
+                    and not p.data.get("force") \
                     and not p.data.get("reearn") and not full_render:
                 continue
-        elif delta and p.dedupe_key in prev_standing:
+        elif (delta and p.dedupe_key in prev_standing
+              and p.kind not in _ACTIVE_STANDING_KINDS):
+            continue
+        elif (not full_render and p.dedupe_key in prev_standing
+                and _is_own_body_description(p)):
             continue
         # Presence is ONE observation -- who is here -- however many bodies
         # it covers, so it is held back and rendered as a group. Everything

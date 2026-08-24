@@ -25,11 +25,12 @@ from world.spatial_containment import (
     normalize_scene_scales,
 )
 from world.spatial_geometry import (apply_pose_diff, derive_scene_stations,
+                              invalidate_contact_bound_poses,
                               normalize_scene_poses, normalize_scene_stations)
 from world.spatial_identity import (_ci_get, _entity_named, room_of,
                               is_derived_room_name, normalize_scene_subjects)
 from world.spatial_senses import apply_comms_ops, normalize_scene_comms
-from world.spatial_substance import apply_substance_ops
+from world.spatial_substance import apply_substance_ops, apply_contact_action_ops
 from world.spatial_routing import stamp_sight_direction
 from world.spatial_transit import apply_transit_dock_edges, infer_body_enclosures
 
@@ -1075,6 +1076,7 @@ def merge_scene_with_diff(
     # ask whether contact tracking is "on" for this scene is a reader that will
     # eventually forget to.
     merged.setdefault("contacts", [])
+    merged.setdefault("contact_actions", [])
 
     # Scale FIRST, and the contacts it invalidates with it -- before this
     # beat's contact ops, not after. A size change cancels the holds that were
@@ -1156,9 +1158,15 @@ def merge_scene_with_diff(
     apply_substance_ops(merged, diff.get("substance_ops"),
                         report=substance_report)
 
+    _contacts_before_ops = copy.deepcopy(merged.get("contacts") or [])
     apply_contact_ops(merged, diff.get("contact_ops"),
                       report=contact_report)
     normalize_scene_contacts(merged)
+
+    # Contact actions ride standing contacts: apply AFTER contacts are settled
+    # so the contact_ref pointers have something to point at, and BEFORE stations
+    # are derived (a held hand is not derived from an action).
+    apply_contact_action_ops(merged, diff.get("contact_action_ops"))
 
     # Within-room position, last of all. Contact is settled by now, and contact
     # is what the derivation reads: a hand on the quilt is a body at the bed.
@@ -1167,6 +1175,7 @@ def merge_scene_with_diff(
     derive_scene_stations(merged, diff.get("stations"), diff.get("contact_ops"))
     merged.setdefault("stations", {})
     normalize_scene_stations(merged)
+    invalidate_contact_bound_poses(merged, _contacts_before_ops)
     normalize_scene_poses(merged)
 
     # Channels, after rooms have settled: a channel names rooms, so it can only
@@ -1182,10 +1191,9 @@ def merge_scene_with_diff(
     if incoming_vitals or merged.get("vitals"):
         from world.survival import apply_vitals_diff, tick_vitals
         apply_vitals_diff(merged, incoming_vitals)
-        elapsed = 0
         time_block = diff.get("time")
-        if isinstance(time_block, dict):
-            elapsed = time_block.get("duration_seconds") or 0
+        elapsed = (time_block.get("duration_seconds") or 0
+                   if isinstance(time_block, dict) else 0)
         # WHO IS ASLEEP comes from the caller (`sleeping=`), because the
         # answer lives in the conditions ledger's awareness levels
         # (story/scene.AWARENESS_LEVELS via awareness_map) -- a layer above
@@ -1203,4 +1211,5 @@ def merge_scene_with_diff(
                     | {n for n, r in (merged.get("contained") or {}).items()
                        if isinstance(r, dict) and r.get("mode") == "asleep"}),
         )
+
     return merged

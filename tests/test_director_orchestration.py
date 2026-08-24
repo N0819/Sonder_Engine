@@ -1607,8 +1607,11 @@ def test_interpret_always_gets_the_delegation_note_as_a_suffix(
     from llm.prompts import get_prompt_body
     assert sheet.startswith(get_prompt_body("director_interpret"))
     assert "SPECIALISTS ENCODE, YOU DECOMPOSE" in sheet
-    assert sheet.endswith(
-        "translate only its free-text human-language values.")
+    # English now has role-specific causal floors as well as the common
+    # language/schema policy.  Both must survive the call-site delegation
+    # suffix; their relative tail order is owned by prompt_policy.
+    assert "translate only its free-text human-language values." in sheet
+    assert "CONTESTABLE ONSET" in sheet
     # The note must name the interpret spelling of the contact channel --
     # that is the one whose name differs between the stages.
     assert "contact_assertions" in sheet
@@ -2401,8 +2404,10 @@ def test_diff_application_is_order_independent_by_construction():
     # purpose: containment and scales APPLY as end-state upserts (so they
     # sit in end_state above) while still being part of what the
     # sequential appliers READ -- which is an ownership question, asserted
-    # separately below.
-    sequential_ops = {"contact_ops", "substance_ops"}
+    # separately below. Contact actions ride standing contacts: the merge
+    # applies contacts first so contact_ref pointers resolve, then the
+    # actions, so they belong with the family of sequential channels.
+    sequential_ops = {"contact_ops", "substance_ops", "contact_action_ops"}
     sequential_read_set = sequential_ops | {"containment", "scales"}
 
     # 1. One owner per channel -- no channel under two specialists.

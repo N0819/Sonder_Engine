@@ -808,6 +808,87 @@ def normalize_scene_poses(scene: dict) -> dict:
     return scene
 
 
+_CONTACT_BOUND_POSE_WORDS = frozenset({
+    "against", "carried", "carrying", "held", "holding", "pinned",
+    "restrained", "supported", "supporting", "borne", "embraced",
+    "grappled", "gripped", "lifted", "cradled",
+})
+
+
+def invalidate_contact_bound_poses(scene: dict, previous_contacts=None) -> dict:
+    """Clear relational pose facts whose physical contact no longer exists.
+
+    Pose and contact are separate ledgers, but some poses explicitly depend on
+    contact ("supported by Dana", "held against Reya").  Ending the contact
+    used to leave those prose snapshots standing indefinitely.  Non-contact
+    relations such as facing, beside, above, or watching remain untouched.
+    """
+    poses = scene.get("poses")
+    if not isinstance(poses, dict) or not poses:
+        return scene
+    if previous_contacts is None:
+        return scene
+    positions = scene.get("positions") or {}
+    contacts = scene.get("contacts") or []
+    old_contacts = previous_contacts or []
+
+    def _is_body(value):
+        return bool(value and _ci_get(positions, value) is not None)
+
+    def _touches(left, right):
+        a = str(left or "").strip().casefold()
+        b = str(right or "").strip().casefold()
+        return any(
+            isinstance(contact, dict) and {
+                str(contact.get("actor") or "").strip().casefold(),
+                str(contact.get("target") or "").strip().casefold(),
+            } == {a, b}
+            for contact in contacts)
+
+    def _touched_before(left, right):
+        a = str(left or "").strip().casefold()
+        b = str(right or "").strip().casefold()
+        return any(
+            isinstance(contact, dict) and {
+                str(contact.get("actor") or "").strip().casefold(),
+                str(contact.get("target") or "").strip().casefold(),
+            } == {a, b}
+            for contact in old_contacts)
+
+    for subject, raw in list(poses.items()):
+        pose = _clean_pose(raw)
+        if pose is None:
+            continue
+        other = pose.get("relative_to")
+        support = pose.get("support")
+        relation_words = set(re.findall(
+            r"[\w'-]+", " ".join((pose.get("relation") or "",
+                                   pose.get("constraint") or "",
+                                   pose.get("detail") or "")).casefold()))
+        contact_bound = bool(relation_words & _CONTACT_BOUND_POSE_WORDS)
+
+        if (_is_body(support) and _touched_before(subject, support)
+                and not _touches(subject, support)):
+            pose["support"] = ""
+            if not other or str(other).casefold() == str(support).casefold():
+                pose["constraint"] = ""
+        if (_is_body(other) and contact_bound
+                and _touched_before(subject, other)
+                and not _touches(subject, other)):
+            pose["relative_to"] = ""
+            pose["relation"] = ""
+            pose["constraint"] = ""
+            # Detail is part of the invalidated relation only when it carries
+            # the same contact-bound vocabulary.  Unrelated posture detail
+            # ("breathing hard") remains.
+            detail_words = set(re.findall(
+                r"[\w'-]+", (pose.get("detail") or "").casefold()))
+            if detail_words & _CONTACT_BOUND_POSE_WORDS:
+                pose["detail"] = ""
+        poses[subject] = pose
+    return scene
+
+
 def apply_pose_diff(scene: dict, incoming) -> dict:
     """Replace touched pose snapshots; null/empty explicitly clears one."""
     scene.setdefault("poses", {})
