@@ -32,7 +32,7 @@ def test_settings_overview_contract_keeps_ordered_groups_and_existing_targets():
     assert positions == sorted(positions)
 
 
-def test_settings_overview_is_projection_only_and_routes_remain_compatible():
+def test_settings_uses_one_navigation_model_and_routes_remain_compatible():
     overview = (ROOT / "static/js/ui-next/settings-overview.js").read_text(
         encoding="utf-8"
     )
@@ -50,5 +50,8 @@ def test_settings_overview_is_projection_only_and_routes_remain_compatible():
         "advanced",
     ):
         assert f'"{segment}"' in router
-    assert 'route.segments?.[0] || "overview"' in view
-    assert 'data-settings-overview' in view
+    assert 'route.segments?.[0] || "experience"' in view
+    assert 'data-settings-overview' not in view
+    assert '"Settings overview"' not in view
+    assert ".scrollIntoView(" not in view
+    assert ".focus({ preventScroll: true })" in view

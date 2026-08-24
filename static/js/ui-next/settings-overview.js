@@ -1,6 +1,6 @@
 export const MODULE_RELEASE = "alpha98-ui10-0415f377b12f";
 
-export const SETTINGS_OVERVIEW_GROUPS = Object.freeze([
+export const SETTINGS_NAVIGATION_GROUPS = Object.freeze([
   Object.freeze({
     id: "connections",
     label: "Connections",
@@ -117,9 +117,9 @@ function summaryProjection(input) {
   });
 }
 
-export function projectSettingsOverview(input = {}) {
+export function projectSettingsNavigation(input = {}) {
   const summaries = summaryProjection(input);
-  return Object.freeze(SETTINGS_OVERVIEW_GROUPS.map(group => Object.freeze({
+  return Object.freeze(SETTINGS_NAVIGATION_GROUPS.map(group => Object.freeze({
     ...group,
     rows: Object.freeze(group.rows.map(row => Object.freeze({
       ...row,
@@ -127,61 +127,4 @@ export function projectSettingsOverview(input = {}) {
       available: row.id !== "turn-details" || Boolean(input.storyOpen),
     }))),
   })));
-}
-
-function node(documentRef, tag, className = "", text = "") {
-  const element = documentRef.createElement(tag);
-  if (className) element.className = className;
-  if (text) element.textContent = text;
-  return element;
-}
-
-export function renderSettingsOverview(options = {}) {
-  const { document: documentRef, groups, iconFactory, navigate, rememberFocus } = options;
-  const overview = node(documentRef, "section", "ui-settings__overview");
-  overview.setAttribute("aria-label", "Settings overview");
-
-  for (const group of groups) {
-    const section = node(documentRef, "section", "ui-settings__overview-group");
-    section.dataset.settingsOverviewGroup = group.id;
-    const heading = node(documentRef, "h2", "ui-settings__overview-heading", group.label);
-    heading.id = `settings-overview-${group.id}`;
-    const ledger = node(documentRef, "div", "ui-settings__overview-ledger");
-    ledger.setAttribute("aria-labelledby", heading.id);
-
-    for (const row of group.rows) {
-      const control = node(
-        documentRef,
-        row.available ? "a" : "div",
-        `ui-settings__overview-row${row.available ? "" : " ui-settings__overview-row--unavailable"}`,
-      );
-      control.dataset.settingsOverviewRow = row.id;
-      const summaryId = `settings-overview-${row.id}-summary`;
-      if (row.available) {
-        control.href = row.href;
-        control.dataset.focusIdentity = `settings-overview:${row.id}`;
-        control.addEventListener("click", event => {
-          event.preventDefault();
-          navigate?.(row.href);
-          rememberFocus?.(control.dataset.focusIdentity);
-        });
-      } else {
-        control.setAttribute("aria-disabled", "true");
-      }
-      control.setAttribute("aria-describedby", summaryId);
-      const title = node(documentRef, "span", "ui-settings__overview-title", row.label);
-      const summary = node(documentRef, "span", "ui-settings__overview-summary", row.summary);
-      summary.id = summaryId;
-      control.append(
-        iconFactory(row.icon),
-        title,
-        summary,
-        iconFactory("chevron-right"),
-      );
-      ledger.append(control);
-    }
-    section.append(heading, ledger);
-    overview.append(section);
-  }
-  return overview;
 }
