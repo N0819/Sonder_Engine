@@ -15,20 +15,19 @@ const GO_TO_COPY = Object.freeze({
   shortcutLabel: "Open Go To",
 });
 const CORE_RESULTS = Object.freeze([
-  ["Play", "Your active story", "play", ""],
-  ["Story tools", "Play", "play", "story-tools"],
-  ["Library", "Stories and play material", "library", ""],
-  ["Stories", "Library", "library", "stories"],
-  ["Characters", "Library", "library", "characters"],
-  ["Personas", "Library", "library", "personas"],
-  ["Lore", "Library", "library", "lore"],
-  ["Settings", "Engine preferences", "settings", ""],
-  ["Experience", "Settings", "settings", "experience"],
-  ["AI Connections", "Settings", "settings", "ai-connections"],
-  ["Content", "Settings", "settings", "content"],
-  ["Add-ons", "Settings", "settings", "add-ons"],
-  ["Maintenance", "Settings", "settings", "maintenance"],
-  ["Advanced", "Settings", "settings", "advanced"],
+  ["Destinations", "Play", "Your active story", "play", ""],
+  ["Destinations", "Library", "Stories and play material", "library", ""],
+  ["Destinations", "Settings", "Engine preferences", "settings", ""],
+  ["Library", "Stories", "Browse saved stories", "library", "stories"],
+  ["Library", "Characters", "Browse reusable characters", "library", "characters"],
+  ["Library", "Personas", "Browse player personas", "library", "personas"],
+  ["Library", "Lore", "Browse world material", "library", "lore"],
+  ["Settings", "Experience", "Theme, reading, sound, and accessibility", "settings", "experience"],
+  ["Settings", "AI Connections", "Providers, models, and roles", "settings", "ai-connections"],
+  ["Settings", "Content", "Story content permissions", "settings", "content"],
+  ["Settings", "Add-ons", "Extensions and permissions", "settings", "add-ons"],
+  ["Settings", "Maintenance", "Updates, memory search, and diagnostics", "settings", "maintenance"],
+  ["Settings", "Advanced", "Prompt and raw story tools", "settings", "advanced"],
 ]);
 // UI_CATALOG_END
 
@@ -44,7 +43,7 @@ function normalized(value) {
 }
 
 export function createGoTo(options = {}) {
-  const { services, shortcutRegistry } = options;
+  const { services, modules, shortcutRegistry } = options;
   const documentRef = options.document || document;
   const overlayHost = documentRef.querySelector("[data-shell-overlay-host]");
   const opener = documentRef.querySelector("[data-shell-go-to]");
@@ -90,25 +89,52 @@ export function createGoTo(options = {}) {
   let stopped = false;
 
   const availableResults = () => {
-    const core = CORE_RESULTS.map(([label, context, destination, segment]) => ({
+    const state = services.store.getSnapshot();
+    const core = CORE_RESULTS.map(([group, label, context, destination, segment]) => ({
+      group: t(group),
       label: t(label),
       context: t(context),
       route: { destination, segments: segment ? [segment] : [] },
     }));
+    const actions = [{
+      group: t("Actions"),
+      label: t("New story"),
+      context: t("Start with a character, persona, and world"),
+      action: () => modules?.newStory?.openNewStory?.({ document: documentRef, services }),
+    }];
+    if (state.story?.owner) {
+      actions.push({
+        group: t("Actions"),
+        label: t("Story tools"),
+        context: t("Current story"),
+        action: () => options.openContext?.(),
+      });
+    }
+    const recent = (state.library?.chats || []).slice(0, 5).map(story => ({
+      group: t("Recent stories"),
+      label: story.name || t("Untitled story"),
+      context: t("Open in Play"),
+      route: { destination: "play", query: { chat: String(story.id) } },
+    }));
     const provided = (options.resultProviders || []).flatMap(provider => {
       try {
-        return provider() || [];
+        return (provider() || []).map(item => ({ group: t("Add-ons"), ...item }));
       } catch {
         return [];
       }
     });
-    return [...core, ...provided].map((item, index) => ({
+    return [...actions, ...core.slice(0, 3), ...recent, ...core.slice(3), ...provided].map((item, index) => ({
       ...item,
       id: `ui-go-to-result-${index}`,
     }));
   };
 
   const select = result => {
+    if (result.action) {
+      services.router.closeTopLayer();
+      documentRef.defaultView.requestAnimationFrame(() => result.action());
+      return;
+    }
     services.router.navigate(result.route);
   };
 
@@ -126,7 +152,13 @@ export function createGoTo(options = {}) {
       !query || normalized(`${item.label} ${item.context}`).includes(query)
     ));
     activeIndex = Math.min(activeIndex, Math.max(0, visible.length - 1));
-    const nodes = visible.map((item, index) => {
+    let lastGroup = "";
+    const nodes = visible.flatMap((item, index) => {
+      const groupNodes = [];
+      if (item.group !== lastGroup) {
+        lastGroup = item.group;
+        groupNodes.push(element(documentRef, "h3", "ui-go-to__group", item.group));
+      }
       const option = element(documentRef, "button", "ui-go-to__result");
       option.type = "button";
       option.id = item.id;
@@ -140,7 +172,8 @@ export function createGoTo(options = {}) {
         paintActive();
       });
       option.addEventListener("click", () => select(item));
-      return option;
+      groupNodes.push(option);
+      return groupNodes;
     });
     results.replaceChildren(...nodes);
     empty.hidden = visible.length > 0;

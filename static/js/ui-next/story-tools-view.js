@@ -54,21 +54,25 @@ export function mountStoryTools(options = {}) {
   const panel = element(documentRef, "section", "ui-story-tools__panel");
   panel.dataset.storyToolPanel = "true";
   const controls = new Map();
+  const groups = new Map();
   let mountedTool = null;
 
   for (const tool of registry.STORY_TOOLS) {
+    if (!groups.has(tool.group)) {
+      const group = element(documentRef, "section", "ui-story-tools__group");
+      group.append(element(documentRef, "h3", "ui-story-tools__group-title", t(tool.group)));
+      groups.set(tool.group, group);
+      list.append(group);
+    }
     const control = button(documentRef, t(tool.label));
     control.dataset.storyTool = tool.id;
     control.title = t(tool.label);
-    const index = element(documentRef, "span", "ui-story-tools__index", String(tool.index).padStart(2, "0"));
-    index.setAttribute("aria-hidden", "true");
     const copy = element(documentRef, "span", "ui-story-tools__copy");
     copy.append(
       element(documentRef, "strong", "ui-story-tools__label", t(tool.label)),
       element(documentRef, "small", "ui-story-tools__detail", t(tool.detail)),
     );
     control.append(
-      index,
       icon(documentRef, TOOL_ICONS[tool.id] || "tools"),
       copy,
       icon(documentRef, "chevron-right"),
@@ -77,7 +81,7 @@ export function mountStoryTools(options = {}) {
       preserveLayers: true,
     }));
     controls.set(tool.id, control);
-    list.append(control);
+    groups.get(tool.group).append(control);
   }
 
   const render = state => {
@@ -96,7 +100,7 @@ export function mountStoryTools(options = {}) {
       if (active && id === active.id) control.setAttribute("aria-current", "page");
       else control.removeAttribute("aria-current");
     }
-    list.hidden = false;
+    list.hidden = Boolean(selectedId);
     root.dataset.detail = String(Boolean(selectedId));
     panel.hidden = !selectedId;
     if (!selectedId) {

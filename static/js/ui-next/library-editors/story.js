@@ -1,5 +1,7 @@
 export const MODULE_RELEASE = "alpha98-ui13-a39372e1d8d1";
 
+import { decorateFieldControl } from "../../ui/components/field.js?release=alpha98-ui13-a39372e1d8d1";
+
 // UI_CATALOG_START: Story authoring labels and recovery copy.
 const COPY = Object.freeze({
   name: "Story name",
@@ -38,18 +40,18 @@ export function createStoryEditor(options = {}) {
   const { document: documentRef, services, state, onRender } = options;
   const form = node(documentRef, "form", "ui-authoring-form");
   form.dataset.storyEditor = "true";
-  const name = node(documentRef, "input", "ui-input");
+  const name = decorateFieldControl(node(documentRef, "input"));
   name.type = "text";
   name.id = `ui-story-name-${state.id}`;
   name.name = "name";
   name.required = true;
   name.maxLength = 240;
   name.value = state.draft?.name || "";
-  const scenario = node(documentRef, "textarea", "ui-textarea ui-authoring-form__long");
+  const scenario = decorateFieldControl(node(documentRef, "textarea", "ui-authoring-form__long"));
   scenario.id = `ui-story-scenario-${state.id}`;
   scenario.name = "scenario";
   scenario.value = state.draft?.scenario || "";
-  const persona = node(documentRef, "select", "ui-select");
+  const persona = decorateFieldControl(node(documentRef, "select"));
   persona.id = `ui-story-persona-${state.id}`;
   persona.name = "persona_id";
   const empty = node(documentRef, "option", "", services.localizer.t(COPY.noPersona));
@@ -114,7 +116,7 @@ export function createStoryImporter(options = {}) {
     node(documentRef, "h3", "ui-heading ui-heading--2", services.localizer.t(COPY.importTitle)),
     node(documentRef, "p", "ui-muted", services.localizer.t(COPY.importHelp)),
   );
-  const archive = node(documentRef, "input", "ui-input");
+  const archive = decorateFieldControl(node(documentRef, "input"));
   archive.type = "file";
   archive.id = "ui-story-import-archive";
   archive.name = "story_archive";

@@ -561,6 +561,37 @@ def test_go_to_is_keyboard_owned_and_does_not_fire_while_typing(
     expect(dialog).not_to_be_visible()
 
 
+def test_go_to_groups_destinations_recent_stories_actions_and_settings(
+    page: Page, ui_base_url: str
+) -> None:
+    bootstrap = {
+        **BOOTSTRAP,
+        "chats": [
+            {"id": 17, "name": "The Glass Orchard"},
+            {"id": 18, "name": "Salt at Dusk"},
+        ],
+    }
+    page.route(
+        "**/api/bootstrap",
+        lambda route: route.fulfill(
+            content_type="application/json", body=json.dumps(bootstrap)
+        ),
+    )
+    response = page.goto(f"{ui_base_url}/static/ui-next.html#/play")
+    assert response is not None and response.ok
+    page.wait_for_function("document.documentElement.dataset.uiNextState === 'ready'")
+
+    page.get_by_role("button", name="Go To", exact=True).click()
+    dialog = page.get_by_role("dialog", name="Go To")
+    for group in ("Actions", "Destinations", "Recent stories", "Library", "Settings"):
+        expect(dialog.get_by_role("heading", name=group)).to_be_visible()
+    expect(dialog.get_by_role("option", name=re.compile("New story"))).to_be_visible()
+    expect(dialog.get_by_role("option", name=re.compile("The Glass Orchard"))).to_be_visible()
+    expect(dialog.get_by_role("option", name=re.compile("Characters"))).to_be_visible()
+    expect(dialog.get_by_role("option", name=re.compile("AI Connections"))).to_be_visible()
+    expect(dialog.get_by_role("option", name=re.compile("Story tools"))).to_have_count(0)
+
+
 def test_shortcut_registry_rejects_collisions_and_guards_typing_and_ime(
     page: Page, ui_base_url: str
 ) -> None:

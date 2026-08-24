@@ -28,6 +28,7 @@ const SERVICE_PATHS = Object.freeze({
   responsiveDrawer: "./components/responsive-drawer.js?release=alpha98-ui13-a39372e1d8d1",
   libraryRuntime: "./library-runtime.js?release=alpha98-ui13-a39372e1d8d1",
   libraryView: "./library-view.js?release=alpha98-ui13-a39372e1d8d1",
+  newStory: "./new-story.js?release=alpha98-ui13-a39372e1d8d1",
   libraryAuthoringRuntime: "./library-authoring-runtime.js?release=alpha98-ui13-a39372e1d8d1",
   libraryAuthoringView: "./library-authoring-view.js?release=alpha98-ui13-a39372e1d8d1",
   libraryStoryEditor: "./library-editors/story.js?release=alpha98-ui13-a39372e1d8d1",

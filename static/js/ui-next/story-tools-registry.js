@@ -15,16 +15,16 @@ export const STORY_TOOL_IDS = Object.freeze([
 
 // UI_CATALOG_START: current-story tool names and short orientation copy.
 const DEFINITIONS = Object.freeze({
-  cast: Object.freeze({ label: "Cast", detail: "People in this story and where they are now." }),
-  world: Object.freeze({ label: "World", detail: "Current places, entities, and established world state." }),
-  style: Object.freeze({ label: "Style", detail: "How this story is written and interpreted." }),
-  dialogue: Object.freeze({ label: "Dialogue", detail: "Conversation, background voices, and living-world limits." }),
-  attire: Object.freeze({ label: "Attire", detail: "The story's current clothing state." }),
-  backdrops: Object.freeze({ label: "Backdrops", detail: "Scene imagery behind the reading surface." }),
-  ambience: Object.freeze({ label: "Ambience", detail: "Room sound, volume, pins, and chime." }),
-  conditions: Object.freeze({ label: "Conditions", detail: "Player and cast condition without covering the story." }),
-  frames: Object.freeze({ label: "Frames", detail: "Story eras and participant stationing." }),
-  multiplayer: Object.freeze({ label: "Multiplayer", detail: "Participants and guarded guest invitations." }),
+  cast: Object.freeze({ group: "World and cast", label: "Cast", detail: "People in this story and where they are now." }),
+  world: Object.freeze({ group: "World and cast", label: "World", detail: "Current places, entities, and established world state." }),
+  style: Object.freeze({ group: "Presentation", label: "Style", detail: "How this story is written and interpreted." }),
+  dialogue: Object.freeze({ group: "Story setup", label: "Dialogue", detail: "Conversation, background voices, and living-world limits." }),
+  attire: Object.freeze({ group: "World and cast", label: "Attire", detail: "The story's current clothing state." }),
+  backdrops: Object.freeze({ group: "Presentation", label: "Backdrops", detail: "Scene imagery behind the reading surface." }),
+  ambience: Object.freeze({ group: "Presentation", label: "Ambience", detail: "Room sound, volume, pins, and chime." }),
+  conditions: Object.freeze({ group: "World and cast", label: "Conditions", detail: "Player and cast condition without covering the story." }),
+  frames: Object.freeze({ group: "Story setup", label: "Frames", detail: "Story eras and participant stationing." }),
+  multiplayer: Object.freeze({ group: "Story setup", label: "Multiplayer", detail: "Participants and guarded guest invitations." }),
 });
 // UI_CATALOG_END
 

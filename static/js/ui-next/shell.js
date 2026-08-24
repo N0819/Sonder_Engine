@@ -219,6 +219,7 @@ export function createApplicationShell(options = {}) {
     modules,
     shortcutRegistry,
     document: documentRef,
+    openContext: () => inspectorHost.open(),
     resultProviders: [extensionHost.goToResults],
   });
   const unregisterSettings = shortcutRegistry.register({

@@ -103,12 +103,13 @@ def test_desktop_story_tools_select_route_without_resetting_play_state(
     page: Page, ui_base_url: str
 ) -> None:
     _open(page, ui_base_url)
-    composer = page.get_by_role("textbox", name="What do you do or say?")
+    composer = page.locator(".ui-play__composer-input")
     composer.fill("A private draft")
     transcript = page.locator("[data-play-transcript]")
     before = transcript.evaluate("node => node.scrollTop")
 
-    inspector = page.get_by_role("complementary", name="Story tools")
+    page.get_by_role("button", name="Open context panel").click()
+    inspector = page.get_by_role("dialog", name="Story tools")
     expect(inspector.locator("[data-story-tool-list] button")).to_have_count(10)
     inspector.get_by_role("button", name="World", exact=True).click()
 
@@ -141,39 +142,25 @@ def test_mobile_story_tools_are_staged_and_back_owned(
     expect(opener).to_be_focused()
 
 
-def test_story_tools_modes_change_information_density_and_persist(
+def test_story_tools_use_semantic_groups_without_numeric_or_icon_only_modes(
     page: Page, ui_base_url: str
 ) -> None:
     _open(page, ui_base_url)
-    inspector = page.get_by_role("complementary", name="Story tools")
-    resize = inspector.get_by_role("button", name="Resize context panel")
-    first = inspector.locator("[data-story-tool='cast']")
-
-    expect(page.locator("html")).to_have_attribute("data-inspector-size", "expanded")
-    expect(first.locator(".ui-story-tools__label")).to_be_visible()
-    expect(first.locator(".ui-story-tools__detail")).to_be_visible()
-
-    resize.click()
-    expect(page.locator("html")).to_have_attribute("data-inspector-size", "compact")
-    expect(first.locator(".ui-story-tools__label")).to_be_visible()
-    expect(first.locator(".ui-story-tools__detail")).to_be_hidden()
-
-    resize.click()
-    expect(page.locator("html")).to_have_attribute("data-inspector-size", "rail")
-    expect(first.locator(".ui-story-tools__label")).to_be_hidden()
-    assert first.evaluate("node => node.getBoundingClientRect().width") <= 72
-    assert first.get_attribute("title") == "Cast"
-
-    page.reload()
-    page.wait_for_function("document.documentElement.dataset.uiNextState === 'ready'")
-    expect(page.locator("html")).to_have_attribute("data-inspector-size", "rail")
+    page.get_by_role("button", name="Open context panel").click()
+    inspector = page.get_by_role("dialog", name="Story tools")
+    for group in ("World and cast", "Story setup", "Presentation"):
+        expect(inspector.get_by_role("heading", name=group, exact=True)).to_be_visible()
+    expect(inspector.locator(".ui-story-tools__index")).to_have_count(0)
+    expect(inspector.get_by_role("button", name="Resize context panel")).to_have_count(0)
+    expect(inspector.locator("[data-story-tool='cast'] .ui-story-tools__label")).to_be_visible()
 
 
 def test_story_tool_detail_replaces_list_and_uses_distinct_svg_icons(
     page: Page, ui_base_url: str
 ) -> None:
     _open(page, ui_base_url)
-    inspector = page.get_by_role("complementary", name="Story tools")
+    page.get_by_role("button", name="Open context panel").click()
+    inspector = page.get_by_role("dialog", name="Story tools")
     hrefs = {
         tool: inspector.locator(f"[data-story-tool='{tool}'] use").first.get_attribute("href")
         for tool in ("conditions", "frames", "multiplayer")
@@ -188,8 +175,7 @@ def test_story_tool_detail_replaces_list_and_uses_distinct_svg_icons(
     ).get_attribute("href").endswith("#icon-chevron-right")
 
     inspector.get_by_role("button", name="World", exact=True).click()
-    expect(inspector.locator("[data-story-tool-list]")).to_be_visible()
-    expect(inspector.locator("[data-story-tool='cast'] .ui-story-tools__label")).to_be_hidden()
+    expect(inspector.locator("[data-story-tool-list]")).to_be_hidden()
     expect(inspector.get_by_role("button", name="All tools")).to_be_visible()
     panel = inspector.locator("[data-story-tool-panel]")
     geometry = panel.evaluate(
@@ -232,7 +218,8 @@ def test_dialogue_tool_owns_charter_summary_and_diagnostics(
         content_type="application/json", body=json.dumps({"lorebooks": []}),
     ))
     _open(page, ui_base_url)
-    inspector = page.get_by_role("complementary", name="Story tools")
+    page.get_by_role("button", name="Open context panel").click()
+    inspector = page.get_by_role("dialog", name="Story tools")
     inspector.get_by_role("button", name="Dialogue", exact=True).click()
     expect(inspector.get_by_role("heading", name="Institutions and upkeep")).to_be_visible()
     expect(inspector.get_by_text("1 institution · 1 resident body · 1 Character history route", exact=True)).to_be_visible()

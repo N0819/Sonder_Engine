@@ -100,9 +100,17 @@ def test_new_story_ports_reference_three_route_choice_without_provider(
     expect(page.get_by_role("button", name="Use my Library")).to_be_visible()
     expect(page.get_by_role("button", name="Start blank")).to_be_visible()
     expect(page.get_by_text("Recommended", exact=True)).to_be_visible()
+    expect(page.locator(".ui-new-story__choice-index")).to_have_count(0)
     assert page.locator(".ui-new-story__routes").evaluate(
         "node => node.scrollWidth - node.clientWidth"
     ) == 0
+
+    page.get_by_role("button", name="Describe a story").click()
+    expect(page.get_by_text("Story direction", exact=True)).to_be_visible()
+    controls = page.locator(".ui-new-story__form :is(input, select, textarea)")
+    assert controls.evaluate_all(
+        "nodes => nodes.every(node => node.classList.contains('ui-field__control'))"
+    )
 
 
 def test_start_blank_creates_an_ordinary_story_without_ai(

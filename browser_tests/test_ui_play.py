@@ -140,11 +140,8 @@ def test_empty_installation_offers_new_story_without_inert_story_tools(
     expect(page.get_by_role("button", name="New story", exact=True)).to_be_visible()
     expect(page.get_by_role("button", name="Open Library", exact=True)).to_be_visible()
     expect(page.locator("[data-story-tool-list]:visible button")).to_have_count(0)
-    expect(
-        page.get_by_role("complementary", name="Story tools").get_by_text(
-            "Choose a story to use Story Tools.", exact=True
-        )
-    ).to_be_visible()
+    expect(page.get_by_role("complementary", name="Story tools")).to_be_hidden()
+    expect(page.get_by_role("button", name="Open context panel")).to_be_visible()
     page.get_by_role("button", name="New story", exact=True).click()
     expect(page.get_by_role("dialog", name="New story")).to_be_visible()
 
@@ -191,7 +188,7 @@ def test_send_uses_ndjson_and_refreshes_authoritative_turn(
     assert generated["body"] == {"input": "Open the door", "frame_id": None}
 
 
-def test_turn_actions_and_reroll_warning_are_touch_discoverable(
+def test_turn_actions_are_staged_behind_a_touch_sized_more_menu(
     page: Page, ui_base_url: str
 ) -> None:
     page.set_viewport_size({"width": 390, "height": 844})
@@ -203,14 +200,47 @@ def test_turn_actions_and_reroll_warning_are_touch_discoverable(
             [_turn(12, 0, "Wait", "Rain crosses the windows in silver threads.")],
         ),
     )
-    for name in ("Edit", "Reroll", "Versions", "More"):
-        expect(page.get_by_role("button", name=name, exact=True)).to_be_visible()
-    page.get_by_role("button", name="Reroll", exact=True).click()
+    expect(page.get_by_role("button", name="More", exact=True)).to_be_visible()
+    assert page.get_by_role("button", name="More", exact=True).evaluate(
+        "node => node.getBoundingClientRect().height"
+    ) >= 44
+    for name in ("Edit", "Reroll", "Versions"):
+        expect(page.get_by_role("button", name=name, exact=True)).to_be_hidden()
+    page.get_by_role("button", name="More", exact=True).click()
+    menu = page.get_by_role("menu")
+    for name in ("Edit", "Reroll", "Versions", "Edit narration", "Branch here"):
+        expect(menu.get_by_role("menuitem", name=name, exact=True)).to_be_visible()
+    menu.get_by_role("menuitem", name="Reroll", exact=True).click()
     dialog = page.get_by_role("dialog", name="Reroll this turn?")
     expect(dialog).to_contain_text(
         "world state, memories, and lorebooks to the start of this turn"
     )
     expect(dialog.get_by_role("button", name="Reroll", exact=True)).to_be_focused()
+
+
+def test_play_uses_editorial_input_real_story_meta_and_disclosed_ambience(
+    page: Page, ui_base_url: str
+) -> None:
+    _open_play(
+        page,
+        ui_base_url,
+        story_handler=lambda chat_id: _story(
+            chat_id,
+            [_turn(12, 0, "Wait", "Rain crosses the windows in silver threads.")],
+        ),
+    )
+    echo = page.locator(".ui-play__input-echo")
+    style = echo.evaluate(
+        "node => ({background:getComputedStyle(node).backgroundImage, border:getComputedStyle(node).borderTopWidth})"
+    )
+    assert style == {"background": "none", "border": "0px"}
+    expect(page.get_by_text("Ready", exact=True)).to_have_count(0)
+    expect(page.get_by_text("1 turn · Present", exact=True)).to_be_visible()
+    ambience = page.locator(".ui-play__ambience-summary")
+    expect(ambience).to_be_visible()
+    expect(page.get_by_role("slider", name="Ambience volume")).to_be_hidden()
+    ambience.click()
+    expect(page.get_by_role("slider", name="Ambience volume")).to_be_visible()
 
 
 def test_keyboard_send_and_short_landscape_keep_composer_action_visible(
@@ -460,12 +490,15 @@ def test_story_chrome_does_not_change_prose_line_breaks(
     before = prose.evaluate(
         "node => ({ width: node.getBoundingClientRect().width, height: node.getBoundingClientRect().height })"
     )
-    page.get_by_role("button", name="Close context panel").click()
+    page.get_by_role("button", name="Open context panel").click()
     after = prose.evaluate(
         "node => ({ width: node.getBoundingClientRect().width, height: node.getBoundingClientRect().height })"
     )
     assert abs(after["width"] - before["width"]) <= 1
     assert abs(after["height"] - before["height"]) <= 1
+    page.get_by_role("dialog", name="Story tools").get_by_role(
+        "button", name="Back", exact=True
+    ).click()
 
 
 def test_prose_emphasis_and_speaker_color_never_parse_model_html(
@@ -650,6 +683,7 @@ def test_latest_turn_versions_switch_immediately_and_persist(
         route.fulfill(content_type="application/json", body='{"ok":true}')
 
     page.route("**/api/turns/12/narration", narration)
+    page.locator(".ui-play__turn").hover()
     page.get_by_role("button", name="Versions", exact=True).click()
     dialog = page.get_by_role("dialog", name="Versions")
     dialog.get_by_role("button", name="Next version").click()
@@ -681,6 +715,7 @@ def test_confirmed_reroll_uses_the_existing_streaming_endpoint(
         )
 
     page.route("**/api/turns/12/reroll", reroll)
+    page.locator(".ui-play__turn").hover()
     page.get_by_role("button", name="Reroll", exact=True).click()
     with page.expect_request("**/api/turns/12/reroll"):
         page.get_by_role("dialog", name="Reroll this turn?").get_by_role(
@@ -747,6 +782,7 @@ def test_japanese_localizes_late_play_dialogs_but_not_story_data(
     expect(page.get_by_text("Rain crosses the archive windows.", exact=True)).to_be_visible()
     expect(page.get_by_role("textbox", name="何をする、または何と言いますか？")).to_be_visible()
     expect(page.get_by_role("button", name="送信", exact=True)).to_be_visible()
+    page.locator(".ui-play__turn").hover()
     page.get_by_role("button", name="リロール", exact=True).click()
     dialog = page.get_by_role("dialog", name="このターンを再生成しますか？")
     expect(dialog).to_be_visible()
@@ -786,6 +822,7 @@ def test_turn_edit_details_delete_and_branch_use_current_routes(
         lambda route: route.fulfill(content_type="application/json", body='{"id":2}'),
     )
 
+    page.locator(".ui-play__turn").hover()
     page.get_by_role("button", name="Edit", exact=True).click()
     edit_input = page.get_by_role("dialog", name="Edit player input")
     edit_input.get_by_role("textbox", name="Edit player input").fill("Open the door")
