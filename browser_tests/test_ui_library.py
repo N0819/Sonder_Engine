@@ -252,6 +252,88 @@ def test_story_selection_requires_explicit_open_action(
     expect(page).to_have_url(re.compile(r"#/play\?chat=1$"))
 
 
+def test_story_overflow_is_bare_inside_the_card_and_does_not_select_it(
+    page: Page, ui_base_url: str
+) -> None:
+    _open(page, ui_base_url)
+
+    row = page.locator(".ui-library__row").filter(
+        has=page.locator('[data-library-item="story:1"]')
+    )
+    more = row.get_by_role(
+        "button", name="More actions for The Lantern Archive"
+    )
+    geometry = more.evaluate(
+        """node => {
+          const row = node.closest('.ui-library__row').getBoundingClientRect();
+          const control = node.getBoundingClientRect();
+          const style = getComputedStyle(node);
+          return {
+            contained: control.left >= row.left && control.right <= row.right,
+            borderWidth: parseFloat(style.borderWidth),
+            background: style.backgroundColor,
+          };
+        }"""
+    )
+    assert geometry == {
+        "contained": True,
+        "borderWidth": 0,
+        "background": "rgba(0, 0, 0, 0)",
+    }
+
+    initial_url = page.url
+    more.click()
+    expect(page).to_have_url(initial_url)
+    menu = page.get_by_role("menu", name="More actions for The Lantern Archive")
+    expect(menu).to_be_visible()
+    expect(menu.get_by_role("menuitem", name="Open in Play")).to_be_visible()
+    expect(menu.get_by_role("menuitem", name="Edit story")).to_be_visible()
+    expect(menu.get_by_role("menuitem", name="Export story")).to_be_visible()
+    expect(menu.get_by_role("menuitem", name="Archive story")).to_be_visible()
+    expect(page.get_by_role("complementary", name="Library details")).to_be_hidden()
+
+    page.keyboard.press("Escape")
+    expect(menu).to_be_hidden()
+    expect(more).to_be_focused()
+
+
+def test_library_details_ignores_story_tool_resize_and_closes_without_a_gap(
+    page: Page, ui_base_url: str
+) -> None:
+    page.add_init_script(
+        """(() => localStorage.setItem('sonder.ui-next', JSON.stringify({
+          version: 2,
+          appearance: {},
+          navigation: {},
+          panes: { inspector: { open: true, pinned: true, size: 'rail' } },
+          drafts: {},
+        })))()"""
+    )
+    _open(page, ui_base_url)
+    page.locator('[data-library-item="story:1"]').click()
+
+    root = page.locator("html")
+    inspector = page.get_by_role("complementary", name="Library details")
+    expect(root).to_have_attribute("data-inspector-kind", "library-details")
+    expect(inspector).to_be_visible()
+    expect(inspector.get_by_role("button", name="Resize context panel")).to_be_hidden()
+    assert inspector.evaluate("node => node.getBoundingClientRect().width") >= 320
+
+    inspector.get_by_role("button", name="Close context panel").click()
+    expect(inspector).to_be_hidden()
+    geometry = page.evaluate(
+        """() => {
+          const workspace = document.querySelector('[data-ui-region="workspace"]')
+            .getBoundingClientRect();
+          return {
+            workspaceRight: workspace.right,
+            viewportRight: document.documentElement.clientWidth,
+          };
+        }"""
+    )
+    assert abs(geometry["workspaceRight"] - geometry["viewportRight"]) <= 1
+
+
 def test_library_runtime_rejects_stale_results_and_bounds_identity_state(
     page: Page, ui_base_url: str,
 ) -> None:

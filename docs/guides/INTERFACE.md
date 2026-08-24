@@ -324,11 +324,16 @@ do not carry persistent work, failures, or choices.
   destination rail. The optional right inspector owns selected-item detail on
   wide/expansive layouts, while medium/compact layouts stage the same detail in
   the Back-owned inspector sheet. Direct selected-item links stage that sheet
-  once; Back returns to the retained ledger rather than reopening it.
+  once; Back returns to the retained ledger rather than reopening it. Library
+  detail always uses the readable expanded inspector width; Expanded, Compact,
+  and Rail are Story Tools presentation modes only. Closing Library detail
+  removes its grid track even while the selected-item route remains retained.
 - Activating a Story row selects it and reveals Library detail; it never enters
   Play. Only the explicit `Open in Play` action commits that navigation. Until
   then the Library route, scope, filters, selection, and scroll remain owned by
-  Library.
+  Library. A row's trailing ellipsis is a bare 44 px target inside the row's
+  outer frame. It opens the record's action menu without selecting the row;
+  Escape closes the menu and returns focus to the ellipsis.
 - Only favorites, recents, per-route scroll, and the last safe route enter the
   versioned local presentation envelope, each with a hard bound. They never
   make an archived, missing, or server-rejected item appear available.
