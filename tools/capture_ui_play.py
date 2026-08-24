@@ -195,19 +195,22 @@ def route_case(page: Page, payload: dict, boot: dict, action: str) -> None:
 
 
 def apply_action(page: Page, action: str) -> None:
+    turn = page.locator("[data-play-turn]").last
     if action == "scrollback":
         page.locator("[data-play-transcript]").evaluate("node => { node.scrollTop = 900; }")
     elif action == "versions":
-        page.get_by_role("button", name="Versions", exact=True).click()
+        turn.get_by_role("button", name="More", exact=True).click()
+        turn.get_by_role("menuitem", name="Versions", exact=True).click()
         page.get_by_role("dialog", name="Versions").get_by_text(
             "The first telling.", exact=True
         ).wait_for()
     elif action == "reroll":
-        page.get_by_role("button", name="Reroll", exact=True).click()
+        turn.get_by_role("button", name="More", exact=True).click()
+        turn.get_by_role("menuitem", name="Reroll", exact=True).click()
         page.get_by_role("dialog", name="Reroll this turn?").wait_for()
     elif action == "details":
-        page.get_by_role("button", name="More", exact=True).click()
-        page.get_by_role("menuitem", name="Turn details", exact=True).click()
+        turn.get_by_role("button", name="More", exact=True).click()
+        turn.get_by_role("menuitem", name="Turn details", exact=True).click()
         page.get_by_role("dialog", name="Turn details").get_by_text(
             "Write the scene", exact=True
         ).wait_for()

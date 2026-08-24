@@ -111,12 +111,12 @@ def test_formal_type_roles_and_large_interface_scale_are_computed_from_tokens(
         )
 
     assert scale() == {
-        "micro": [11, 14],
-        "meta": [12, 16],
-        "control": [13, 18],
-        "body": [14, 20],
-        "section": [16, 22],
-        "page": [21, 28],
+        "micro": [12, 16],
+        "meta": [13, 18],
+        "control": [14, 20],
+        "body": [15, 22],
+        "section": [17, 24],
+        "page": [24, 32],
         "display": [28, 36],
         "prose": [17, 28.9],
     }
@@ -215,7 +215,7 @@ def test_every_sprite_icon_keeps_fill_and_stroke_inside_its_viewbox(
     _open_lab(page, ui_base_url)
     measurements = page.evaluate(
         """async () => {
-          const source = await fetch('/static/assets/icons/sonder-icons.svg?release=alpha98-ui13-a39372e1d8d1').then(response => response.text());
+          const source = await fetch('/static/assets/icons/sonder-icons.svg?release=alpha98-ui14-8c5f0c3f2d06').then(response => response.text());
           const sprite = new DOMParser().parseFromString(source, 'image/svg+xml');
           const host = document.createElement('div');
           host.style.cssText = 'position:fixed;inset:0 auto auto 0;display:flex;visibility:hidden';

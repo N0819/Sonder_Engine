@@ -1,7 +1,7 @@
-export const MODULE_RELEASE = "alpha98-ui13-a39372e1d8d1";
+export const MODULE_RELEASE = "alpha98-ui14-8c5f0c3f2d06";
 
-import { canPinContext } from "./layout-contract.js?release=alpha98-ui13-a39372e1d8d1";
-import { focusRouteTarget } from "../ui/components/route-focus.js?release=alpha98-ui13-a39372e1d8d1";
+import { canPinContext } from "./layout-contract.js?release=alpha98-ui14-8c5f0c3f2d06";
+import { focusRouteTarget } from "../ui/components/route-focus.js?release=alpha98-ui14-8c5f0c3f2d06";
 
 const LAYER_ID = "inspector:context";
 
@@ -52,6 +52,7 @@ export function createInspectorHost(options = {}) {
   const heading = documentRef.querySelector("[data-shell-inspector-heading]");
   const body = documentRef.querySelector("[data-shell-inspector-body]");
   const openButton = documentRef.querySelector("[data-shell-inspector-open]");
+  const openButtonLabel = openButton?.querySelector(".ui-icon-label");
   const closeButton = documentRef.querySelector("[data-shell-inspector-close]");
   const pinButton = documentRef.querySelector("[data-shell-inspector-pin]");
   const overlayHost = documentRef.querySelector("[data-shell-overlay-host]");
@@ -150,7 +151,13 @@ export function createInspectorHost(options = {}) {
     root.dataset.inspectorKind = inspectorKind(route.destination);
     pinButton.hidden = !pinAllowed();
     pinButton.setAttribute("aria-pressed", String(mode === "pinned"));
-    openButton.hidden = authoring || mode !== "closed";
+    const contextAvailable = route.destination === "play"
+      || (route.destination === "library" && Boolean(route.query?.item));
+    const openerLabel = route.destination === "library" ? "Library details" : "Story tools";
+    openButton.hidden = authoring || !contextAvailable || mode !== "closed";
+    openButton.setAttribute("aria-label", `Open ${openerLabel.toLowerCase()}`);
+    openButton.title = openerLabel;
+    if (openButtonLabel) openButtonLabel.textContent = openerLabel;
     mountContext();
     drawer.setMode(mode);
     applying = false;

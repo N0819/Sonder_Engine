@@ -28,14 +28,15 @@
   .ui-settings__index { color: var(--ui-color-text-faint); font: 650 var(--ui-text-micro)/var(--ui-leading-micro) var(--ui-font-mono); }
   .ui-settings__navigation-group { margin-block-start: 17px; }
   .ui-settings__navigation-heading { margin: 0 10px 6px; }
-  .ui-settings__navigation-disclosure { display: flex; align-items: center; justify-content: space-between; inline-size: 100%; min-block-size: 24px; padding: 0; border: 0; background: transparent; color: var(--ui-color-text-faint); font: 650 var(--ui-text-micro)/var(--ui-leading-micro) var(--ui-font-mono); letter-spacing: .13em; text-align: start; text-transform: uppercase; }
+  .ui-settings__navigation-disclosure { display: flex; align-items: center; justify-content: space-between; inline-size: 100%; min-block-size: 28px; padding: 0; border: 0; background: transparent; color: var(--ui-color-text-faint); font: 650 var(--ui-text-control)/var(--ui-leading-control) var(--ui-font-interface); letter-spacing: .04em; text-align: start; }
   .ui-settings__navigation-disclosure:disabled { opacity: 1; cursor: default; }
   .ui-settings__navigation-disclosure .ui-icon { display: none; inline-size: 16px; block-size: 16px; transition: transform var(--ui-motion-fast) var(--ui-ease-standard); }
   .ui-settings__navigation-panel { overflow: hidden; border-block-start: 1px solid var(--ui-color-border); }
   .ui-settings__navigation-panel .ui-settings__category { min-block-size: 38px; }
   .ui-settings__navigation-panel .ui-settings__category:last-child { border-block-end: 0; }
-  .ui-settings__content { min-block-size: 0; overflow: auto; overscroll-behavior: contain; padding: clamp(22px, 3vw, 42px); background-image: linear-gradient(var(--ui-color-grid) 1px, transparent 1px), linear-gradient(90deg, var(--ui-color-grid) 1px, transparent 1px); background-size: 72px 72px; }
+  .ui-settings__content { min-block-size: 0; overflow: auto; overscroll-behavior: contain; padding: clamp(22px, 3vw, 42px); }
   .ui-settings__content:focus-visible { outline: 2px solid var(--ui-color-focus); outline-offset: -2px; }
+  .ui-settings__back { position: sticky; z-index: 2; inset-block-start: 0; inline-size: max-content; margin-block-end: 14px; background: var(--ui-color-surface-raised); }
   .ui-settings__section { max-inline-size: 880px; margin-inline: auto; }
   .ui-settings__section-head { margin-block-end: 18px; padding-block-end: 14px; border-block-end: 1px solid var(--ui-color-border); }
   .ui-settings__section-head > * { margin: 0; }

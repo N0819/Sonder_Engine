@@ -18,7 +18,7 @@ def test_people_editor_is_loaded_and_edits_complete_documents():
     sections = (
         RUNTIME / "library-editors" / "person-sections.js"
     ).read_text(encoding="utf-8")
-    assert 'export const MODULE_RELEASE = "alpha98-ui13-a39372e1d8d1";' in editor
+    assert 'export const MODULE_RELEASE = "alpha98-ui14-8c5f0c3f2d06";' in editor
     assert "library-editors/character-persona.js" in bootstrap
     assert "createPersonEditor" in view
     for owned_path in (

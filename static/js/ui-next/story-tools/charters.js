@@ -1,8 +1,8 @@
-export const MODULE_RELEASE = "alpha98-ui13-a39372e1d8d1";
+export const MODULE_RELEASE = "alpha98-ui14-8c5f0c3f2d06";
 
-import { buildLivedLocationRequest, mountLivedLocationFields } from "../lived-location.js?release=alpha98-ui13-a39372e1d8d1";
-import { button, element, markData } from "./shared.js?release=alpha98-ui13-a39372e1d8d1";
-import { decorateFieldControl } from "../../ui/components/field.js?release=alpha98-ui13-a39372e1d8d1";
+import { buildLivedLocationRequest, mountLivedLocationFields } from "../lived-location.js?release=alpha98-ui14-8c5f0c3f2d06";
+import { button, element, markData } from "./shared.js?release=alpha98-ui14-8c5f0c3f2d06";
+import { decorateFieldControl } from "../../ui/components/field.js?release=alpha98-ui14-8c5f0c3f2d06";
 
 // UI_CATALOG_START: Charter inspection copy.
 const COPY = Object.freeze({

@@ -46,7 +46,7 @@ def test_root_serves_only_the_static_application_to_a_valid_host(
 
     assert response.status_code == 200
     assert 'data-ui-next-entry="application"' in response.text
-    assert '/static/js/ui-next/main.js?release=alpha98-ui13-a39372e1d8d1' in response.text
+    assert '/static/js/ui-next/main.js?release=alpha98-ui14-8c5f0c3f2d06' in response.text
     assert "/api/" not in response.text
     assert "Baseline Story" not in response.text
 
@@ -74,18 +74,18 @@ def test_ui_next_lab_uses_the_same_host_only_boundary(monkeypatch):
 def test_formal_interface_type_scale_is_tokenized():
     css = (ROOT / "static/css/ui/tokens.css").read_text(encoding="utf-8")
     for declaration in (
-        "--ui-text-micro: 11px",
-        "--ui-leading-micro: 14px",
-        "--ui-text-meta: 12px",
-        "--ui-leading-meta: 16px",
-        "--ui-text-control: 13px",
-        "--ui-leading-control: 18px",
-        "--ui-text-body: 14px",
-        "--ui-leading-body: 20px",
-        "--ui-text-section: 16px",
-        "--ui-leading-section: 22px",
-        "--ui-text-page: 21px",
-        "--ui-leading-page: 28px",
+        "--ui-text-micro: 12px",
+        "--ui-leading-micro: 16px",
+        "--ui-text-meta: 13px",
+        "--ui-leading-meta: 18px",
+        "--ui-text-control: 14px",
+        "--ui-leading-control: 20px",
+        "--ui-text-body: 15px",
+        "--ui-leading-body: 22px",
+        "--ui-text-section: 17px",
+        "--ui-leading-section: 24px",
+        "--ui-text-page: 24px",
+        "--ui-leading-page: 32px",
         "--ui-text-display: 28px",
         "--ui-leading-display: 36px",
     ):

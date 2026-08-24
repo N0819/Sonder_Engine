@@ -1,8 +1,8 @@
-export const MODULE_RELEASE = "alpha98-ui13-a39372e1d8d1";
+export const MODULE_RELEASE = "alpha98-ui14-8c5f0c3f2d06";
 
 import {
   button, element, errorState, markData, replaceLocalized, stateMessage, toolScope,
-} from "./shared.js?release=alpha98-ui13-a39372e1d8d1";
+} from "./shared.js?release=alpha98-ui14-8c5f0c3f2d06";
 
 // UI_CATALOG_START: Backdrop tool actions and explicit route states.
 const COPY = Object.freeze({

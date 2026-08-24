@@ -1,6 +1,6 @@
-export const MODULE_RELEASE = "alpha98-ui13-a39372e1d8d1";
+export const MODULE_RELEASE = "alpha98-ui14-8c5f0c3f2d06";
 
-import { button, element, errorState, fieldLabel, markData, replaceLocalized, stateMessage, toolScope } from "./shared.js?release=alpha98-ui13-a39372e1d8d1";
+import { button, element, errorState, fieldLabel, markData, replaceLocalized, stateMessage, toolScope } from "./shared.js?release=alpha98-ui14-8c5f0c3f2d06";
 
 // UI_CATALOG_START: Frames tool copy.
 const COPY = Object.freeze({
@@ -61,7 +61,7 @@ export function mountFramesTool({ services, target, document: documentRef }) {
       const card = element(documentRef, "article", "ui-tool-card ui-frame-card");
       const title = id === null ? COPY.present : frame.label;
       const head = element(documentRef, "header", "ui-tool-card__header");
-      const identity = element(documentRef, "div");
+      const identity = element(documentRef, "div", "ui-frame-card__identity");
       identity.append(
         markData(element(documentRef, "h4", "ui-heading ui-heading--5", title)),
         element(documentRef, "span", "ui-badge", frame.kind || COPY.present),

@@ -15,11 +15,18 @@ must look and feel like and how the supplied implementation is reused.
   per-file SHA-256 values for the imported package.
 - The surface chapters, component contracts, responsive rules, tokens, audit
   rubric, checklists, and change-control chapter are normative for UI work.
+- The approved
+  [`DB-2026-08-24 Progressive interface redesign`](../design/sonder-ui-bible/amendments/2026-08-24-progressive-interface-redesign.md)
+  Revision supersedes the covered macro compositions, calibrated type/control
+  scale, radii, and progressive-disclosure rules. Its associated
+  [implementation specification](../superpowers/specs/2026-08-24-sonder-progressive-interface-redesign.md)
+  is the current authority for the redesigned shell, Play, Library, Story
+  Tools, Settings, New Story, and authoring presentation.
 
 ### Visual composition authority
 
-The supplied `Sonder_UI_Design_Bible_Revision_Screenshots.zip` is the approved
-rendered reference. Its SHA-256 is
+The supplied `Sonder_UI_Design_Bible_Revision_Screenshots.zip` is verified
+historical composition evidence. Its SHA-256 is
 `299ad1fbb7edd60255f2cd2bf160e43479fc382a355be9218f60308983d94fe0`.
 
 The set contains:
@@ -45,8 +52,12 @@ The set contains:
 On the project owner's workstation the archive was supplied at
 `C:\Users\Keptin\Downloads\Sonder_UI_Design_Bible_Revision_Screenshots.zip`.
 Treat the filename and hash as identity; do not assume that absolute path is
-portable. If the archive is unavailable, do not make or approve visual changes
-to a covered surface from memory or from replacement screenshots.
+portable. For presentation areas not replaced by DB-2026-08-24 it remains the
+approved rendered reference. For areas named by that Revision, use it to
+inventory behavior and compare hierarchy debt, not to override the approved
+progressive composition. If neither the archive nor current Revision evidence
+is available, do not approve visual changes from memory or work-in-progress
+screenshots.
 
 ### Reference implementation
 
@@ -86,8 +97,9 @@ The broader evidence review is
 
 | Question | Authority |
 |---|---|
-| What should the interface look like at a covered viewport? | Supplied reference screenshot, interpreted with the Design Bible and matching candidate CSS/markup. |
-| How should the same design extend to an uncovered state or viewport? | Design Bible, nearest reference states, and existing reference component grammar. |
+| What should the interface look like at a viewport replaced by DB-2026-08-24? | The approved Revision and its implementation specification, checked against its same-viewport before/after evidence. |
+| What should an unrevised covered viewport look like? | Supplied reference screenshot, interpreted with the Design Bible and matching candidate CSS/markup. |
+| How should the design extend to an uncovered state or viewport? | Current Design Bible including approved amendments, nearest current evidence states, and existing component grammar. |
 | Which information and actions appear, and how are they staged? | Design Bible plus supplied reference; an approved feature specification may add required current capabilities without restyling the composition. |
 | What owns data, writes, authentication, async lifetime, localization, or extension behavior? | Current source, schemas, APIs, tests, and maintained repository guides. |
 | Which candidate mechanism may be copied? | The salvage ledger, confirmed against current contracts. |
@@ -98,6 +110,11 @@ the current replacement's appearance above the supplied reference merely
 because the replacement is newer.
 
 ## Required porting method
+
+For each unrevised surface, follow the porting method below. For a surface
+covered by DB-2026-08-24, substitute the approved Revision composition for the
+historical screenshot/candidate composition while preserving the same runtime
+adapter and evidence discipline.
 
 For each surface:
 

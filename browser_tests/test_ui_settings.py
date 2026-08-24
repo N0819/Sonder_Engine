@@ -106,9 +106,14 @@ def test_experience_ports_reference_frame_and_applies_local_preferences(
     expect(page.get_by_role("heading", name="Sonder preferences", level=1)).to_be_visible()
     categories = page.get_by_role("navigation", name="Settings categories")
     groups = categories.locator("[data-settings-navigation-group]")
-    expect(groups).to_have_count(4)
+    expect(groups).to_have_count(6)
     assert groups.locator("[data-settings-navigation-heading]").all_text_contents() == [
-        "Connections", "Appearance", "Story & host", "Advanced"
+        "Account and access",
+        "AI and models",
+        "Appearance and accessibility",
+        "Story defaults and content",
+        "Data, extensions, and maintenance",
+        "Advanced",
     ]
     expect(categories.locator("[data-settings-navigation-row]")).to_have_count(11)
     expect(categories.get_by_role("link", name="Theme", exact=True)).to_have_attribute(
@@ -251,7 +256,12 @@ def test_settings_wheel_intent_reaches_the_detail_from_surrounding_chrome(
         )
         assert geometry["scroll"] > geometry["client"], (width, height, geometry)
 
-        page.get_by_role("navigation", name="Settings categories").hover()
+        chrome = (
+            page.get_by_role("navigation", name="Settings categories")
+            if width >= 1100
+            else page.locator(".ui-settings__header")
+        )
+        chrome.hover()
         page.mouse.wheel(0, 600)
         page.wait_for_function(
             "document.querySelector('[data-settings-content]').scrollTop > 0",
@@ -273,7 +283,12 @@ def test_settings_detail_is_keyboard_scrollable_and_the_only_scroll_owner(
         content.evaluate("node => { node.scrollTop = 0; }")
 
         expect(content).to_have_attribute("tabindex", "0")
-        page.locator('[data-settings-navigation-row="theme"]').focus()
+        focus_target = (
+            page.locator('[data-settings-navigation-row="theme"]')
+            if width >= 1100
+            else page.get_by_role("link", name="Back to Settings")
+        )
+        focus_target.focus()
         page.keyboard.press("PageDown")
         page.wait_for_function(
             "document.querySelector('[data-settings-content]').scrollTop > 0",
@@ -414,19 +429,20 @@ def test_shared_settings_selects_use_compact_glass_control_geometry(
     assert compact_height == 36
 
 
-def test_mobile_settings_uses_grouped_disclosures_instead_of_a_sidebar(
+def test_mobile_settings_stages_grouped_overview_before_detail(
     page: Page, ui_base_url: str
 ) -> None:
-    """Catches a return to the competing sidebar or horizontal-strip taxonomy."""
-    _open_settings(page, ui_base_url, width=390)
+    """Compact Settings shows overview or detail, never both."""
+    _open_settings(page, ui_base_url, width=390, route="#/settings")
 
-    expect(page).to_have_url(re.compile(r"#/settings/experience$"))
+    expect(page).to_have_url(re.compile(r"#/settings$"))
     categories = page.get_by_role("navigation", name="Settings categories")
     expect(categories).to_be_visible()
+    expect(page.locator("[data-settings-content]")).to_be_hidden()
     disclosures = categories.locator("[data-settings-navigation-disclosure]")
-    expect(disclosures).to_have_count(4)
-    appearance = categories.get_by_role("button", name="Appearance", exact=True)
-    connections = categories.get_by_role("button", name="Connections", exact=True)
+    expect(disclosures).to_have_count(6)
+    appearance = categories.get_by_role("button", name="Appearance and accessibility", exact=True)
+    connections = categories.get_by_role("button", name="Account and access", exact=True)
     expect(appearance).to_have_attribute("aria-expanded", "true")
     expect(connections).to_have_attribute("aria-expanded", "false")
     expect(categories.locator('[data-settings-navigation-row="theme"]')).to_be_visible()
@@ -457,10 +473,16 @@ def test_mobile_settings_uses_grouped_disclosures_instead_of_a_sidebar(
     assert abs(geometry["contentLeft"]) <= 1
     assert min(geometry["targetHeights"]) >= 44
     assert geometry["overflow"] <= 1
+
+    appearance.click()
+    categories.locator('[data-settings-navigation-row="theme"]').click()
+    expect(categories).to_be_hidden()
+    expect(page.locator("[data-settings-content]")).to_be_visible()
+    expect(page.get_by_role("link", name="Back to Settings")).to_be_visible()
     expect(page.get_by_role("button", name="Use Parchment Night theme")).to_be_visible()
 
 
-def test_tablet_settings_disclosures_reuse_overview_rows_and_summaries(
+def test_tablet_settings_stages_detail_with_a_back_route(
     page: Page, ui_base_url: str
 ) -> None:
     """Catches tablet fallback to a sidebar or a second label-only taxonomy."""
@@ -480,20 +502,13 @@ def test_tablet_settings_disclosures_reuse_overview_rows_and_summaries(
         bootstrap=bootstrap,
     )
 
-    categories = page.get_by_role("navigation", name="Settings categories")
     content = page.locator("[data-settings-content]")
-    assert categories.evaluate("node => node.parentElement === node.closest('[data-settings-content]')")
-    expect(categories.locator(".ui-settings__navigation-panel:not([hidden])")).to_have_count(1)
-    expect(categories.get_by_role("button", name="Connections", exact=True)).to_have_attribute(
-        "aria-expanded", "true"
-    )
-    ai_row = categories.locator('[data-settings-navigation-row="ai-connections"]')
-    expect(ai_row).to_have_attribute("aria-current", "page")
-    expect(ai_row).to_contain_text("1 provider · claude-sonnet-4-5")
+    expect(page.get_by_role("navigation", name="Settings categories")).to_be_hidden()
+    expect(page.get_by_role("link", name="Back to Settings")).to_be_visible()
     expect(content.get_by_role("heading", name="AI Connections", level=2)).to_be_visible()
 
 
-def test_compact_advanced_navigation_tracks_the_real_selected_panel(
+def test_compact_advanced_routes_show_one_real_selected_panel(
     page: Page, ui_base_url: str
 ) -> None:
     """Keeps the active group open and assigns the one real selected panel."""
@@ -505,24 +520,17 @@ def test_compact_advanced_navigation_tracks_the_real_selected_panel(
         category="advanced",
     )
 
-    categories = page.get_by_role("navigation", name="Settings categories")
-    advanced = categories.get_by_role("button", name="Advanced", exact=True)
-    expect(advanced).to_have_attribute("aria-expanded", "true")
-    expect(categories.locator('[data-settings-navigation-row="prompt-editor"]')).to_have_attribute(
-        "aria-current", "page"
-    )
+    content = page.locator("[data-settings-content]")
+    expect(page.get_by_role("navigation", name="Settings categories")).to_be_hidden()
+    expect(content.get_by_role("heading", name="Prompt editor", level=2)).to_be_visible()
+    expect(page.get_by_role("link", name="Back to Settings")).to_be_visible()
 
     page.goto(f"{ui_base_url}/static/ui-next.html#/settings/advanced?tool=clothing-data")
-    expect(advanced).to_have_attribute("aria-expanded", "true")
-    expect(categories.locator('[data-settings-navigation-row="raw-story-data"]')).to_have_attribute(
-        "aria-current", "page"
-    )
+    expect(content.get_by_role("heading", name="Raw story data", level=2)).to_be_visible()
+    expect(content.get_by_text("Raw clothing data", exact=True)).to_be_visible()
 
     page.goto(f"{ui_base_url}/static/ui-next.html#/settings/advanced?control=story-data")
-    expect(advanced).to_have_attribute("aria-expanded", "true")
-    expect(categories.locator('[data-settings-navigation-row="raw-story-data"]')).to_have_attribute(
-        "aria-current", "page"
-    )
+    expect(content.get_by_role("heading", name="Raw story data", level=2)).to_be_visible()
 
 
 def test_advanced_opens_the_prompt_editor_without_a_duplicate_launcher_panel(
@@ -1204,7 +1212,7 @@ def test_server_confirmed_memory_and_backdrop_values_survive_settings_navigation
     expect(page.get_by_text("Backdrop settings saved.", exact=True)).to_be_visible()
 
     page.get_by_role("link", name="Content", exact=True).click()
-    page.get_by_role("link", name="AI Connections", exact=True).click()
+    page.get_by_role("link", name="Provider credentials", exact=True).click()
 
     expect(page.get_by_role("textbox", name="Memory search model")).to_have_value(
         "text-embedding-3-small"

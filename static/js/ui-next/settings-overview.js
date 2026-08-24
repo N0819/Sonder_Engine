@@ -1,16 +1,23 @@
-export const MODULE_RELEASE = "alpha98-ui13-a39372e1d8d1";
+export const MODULE_RELEASE = "alpha98-ui14-8c5f0c3f2d06";
 
 export const SETTINGS_NAVIGATION_GROUPS = Object.freeze([
   Object.freeze({
-    id: "connections",
-    label: "Connections",
+    id: "account-access",
+    label: "Account and access",
     rows: Object.freeze([
-      Object.freeze({ id: "ai-connections", label: "AI Connections", icon: "api", href: "#/settings/ai-connections" }),
+      Object.freeze({ id: "ai-connections", label: "Provider credentials", icon: "api", href: "#/settings/ai-connections" }),
     ]),
   }),
   Object.freeze({
-    id: "appearance",
-    label: "Appearance",
+    id: "ai-models",
+    label: "AI and models",
+    rows: Object.freeze([
+      Object.freeze({ id: "model-assignments", label: "Model assignments", icon: "connection", href: "#/settings/ai-connections?control=models" }),
+    ]),
+  }),
+  Object.freeze({
+    id: "appearance-accessibility",
+    label: "Appearance and accessibility",
     rows: Object.freeze([
       Object.freeze({ id: "theme", label: "Theme", icon: "theme", href: "#/settings/experience?control=themes" }),
       Object.freeze({ id: "reading", label: "Reading & layout", icon: "style", href: "#/settings/experience?control=reading" }),
@@ -19,10 +26,16 @@ export const SETTINGS_NAVIGATION_GROUPS = Object.freeze([
     ]),
   }),
   Object.freeze({
-    id: "story-host",
-    label: "Story & host",
+    id: "story-content",
+    label: "Story defaults and content",
     rows: Object.freeze([
       Object.freeze({ id: "content", label: "Content", icon: "prompt", href: "#/settings/content" }),
+    ]),
+  }),
+  Object.freeze({
+    id: "data-extensions-maintenance",
+    label: "Data, extensions, and maintenance",
+    rows: Object.freeze([
       Object.freeze({ id: "add-ons", label: "Add-ons", icon: "extension", href: "#/settings/add-ons" }),
       Object.freeze({ id: "maintenance", label: "Maintenance", icon: "maintenance", href: "#/settings/maintenance" }),
     ]),
@@ -31,7 +44,6 @@ export const SETTINGS_NAVIGATION_GROUPS = Object.freeze([
     id: "advanced",
     label: "Advanced",
     rows: Object.freeze([
-      Object.freeze({ id: "model-assignments", label: "Model assignments", icon: "connection", href: "#/settings/ai-connections?control=models" }),
       Object.freeze({ id: "prompt-editor", label: "Prompt editor", icon: "prompt", href: "#/settings/advanced?tool=prompts" }),
       Object.freeze({ id: "raw-story-data", label: "Raw story data", icon: "world", href: "#/settings/advanced?tool=story-data" }),
     ]),
