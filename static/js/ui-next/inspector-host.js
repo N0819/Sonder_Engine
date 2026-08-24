@@ -60,6 +60,12 @@ function contextCopy(destination, t) {
   };
 }
 
+function inspectorKind(destination) {
+  if (destination === "play") return "story-tools";
+  if (destination === "library") return "library-details";
+  return "context";
+}
+
 function sheetContent(documentRef, t) {
   const overlay = createElement(documentRef, "div", "ui-overlay");
   overlay.hidden = true;
@@ -205,11 +211,14 @@ export function createInspectorHost(options = {}) {
   const apply = () => {
     if (stopped) return;
     const authoring = personAuthoring();
+    const kind = inspectorKind(route.destination);
     root.dataset.libraryAuthoring = String(authoring);
     root.dataset.inspectorOpen = String(authoring ? false : panes.open);
-    root.dataset.inspectorSize = panes.size;
+    root.dataset.inspectorKind = kind;
+    root.dataset.inspectorSize = kind === "story-tools" ? panes.size : "expanded";
     root.dataset.inspectorPinned = String(panes.pinned);
     pinButton.setAttribute("aria-pressed", String(panes.pinned));
+    resizeButton.hidden = kind !== "story-tools";
     openButton.hidden = authoring;
     aside.hidden = authoring || !isPaneLayout() || !panes.open;
     updateCopy(route.destination);

@@ -409,6 +409,101 @@ function toolbar(documentRef, services, state) {
   return form;
 }
 
+function rowAction(documentRef, label, action) {
+  const control = button(documentRef, label, "ui-menu__item");
+  control.setAttribute("role", "menuitem");
+  control.addEventListener("click", action);
+  return control;
+}
+
+function rowOverflow(documentRef, services, item) {
+  const name = item.name || COPY.untitled;
+  const details = node(documentRef, "details", "ui-library__more-menu");
+  const summary = node(documentRef, "summary", "ui-library__more");
+  summary.setAttribute("role", "button");
+  summary.setAttribute("aria-label", COPY.moreFor.replace("${name}", name));
+  summary.setAttribute("aria-haspopup", "menu");
+  summary.setAttribute("aria-expanded", "false");
+  summary.append(icon(documentRef, "more"));
+  const menu = node(documentRef, "div", "ui-menu ui-library__row-menu");
+  menu.id = `ui-library-actions-${item.kind}-${item.id}`;
+  menu.setAttribute("role", "menu");
+  menu.setAttribute("aria-label", COPY.moreFor.replace("${name}", name));
+  summary.setAttribute("aria-controls", menu.id);
+
+  const closeMenu = () => {
+    details.open = false;
+    summary.setAttribute("aria-expanded", "false");
+  };
+  const act = (label, action) => rowAction(documentRef, label, event => {
+    event.stopPropagation();
+    closeMenu();
+    action();
+  });
+
+  if (item.kind === "story") {
+    menu.append(
+      act(COPY.openStory, () => services.router.navigate({
+        destination: "play", query: { chat: String(item.id) },
+      })),
+      act(COPY.editStory, () => {
+        const route = services.library.currentRoute();
+        services.library.navigate({
+          type: "story",
+          query: { ...(route?.query || {}), item: item.key, mode: "edit" },
+        });
+      }),
+    );
+    const exported = node(documentRef, "a", "ui-menu__item", COPY.exportStory);
+    exported.setAttribute("role", "menuitem");
+    exported.href = `/api/chats/${item.id}/export`;
+    exported.download = `${name}.json`;
+    exported.addEventListener("click", closeMenu);
+    menu.append(exported);
+  } else if (item.kind === "character" || item.kind === "persona") {
+    const editLabel = item.kind === "character" ? COPY.editCharacter : COPY.editPersona;
+    menu.append(act(editLabel, () => {
+      const route = services.library.currentRoute();
+      services.library.navigate({
+        type: item.kind,
+        query: { ...(route?.query || {}), item: item.key, mode: "edit" },
+      });
+    }));
+    const exported = node(
+      documentRef, "a", "ui-menu__item",
+      item.kind === "character" ? COPY.exportCharacter : COPY.exportPersona,
+    );
+    exported.setAttribute("role", "menuitem");
+    exported.href = item.kind === "character"
+      ? `/api/characters/${item.id}/export`
+      : `/api/personas/${item.id}/export`;
+    exported.download = `${name}.json`;
+    exported.addEventListener("click", closeMenu);
+    menu.append(exported);
+  }
+  menu.append(act(
+    item.archived ? RESTORE_LABELS[item.kind] : ARCHIVE_LABELS[item.kind],
+    () => services.library.setArchived(item, !item.archived),
+  ));
+
+  details.addEventListener("toggle", () => {
+    summary.setAttribute("aria-expanded", String(details.open));
+    if (!details.open) return;
+    for (const other of documentRef.querySelectorAll(".ui-library__more-menu[open]")) {
+      if (other !== details) other.open = false;
+    }
+  });
+  details.addEventListener("keydown", event => {
+    if (event.key !== "Escape" || !details.open) return;
+    event.preventDefault();
+    event.stopPropagation();
+    closeMenu();
+    summary.focus({ preventScroll: true });
+  });
+  details.append(summary, menu);
+  return details;
+}
+
 function ledger(documentRef, services, state) {
   const library = state.library || {};
   const route = state.route || {};
@@ -451,11 +546,7 @@ function ledger(documentRef, services, state) {
       }));
     };
     control.addEventListener("click", selectItem);
-    const more = button(documentRef, "", "ui-library__more");
-    more.setAttribute("aria-label", COPY.moreFor.replace("${name}", item.name || COPY.untitled));
-    more.append(icon(documentRef, "more"));
-    more.addEventListener("click", selectItem);
-    row.append(control, more);
+    row.append(control, rowOverflow(documentRef, services, item));
     list.append(row);
   }
   return list;

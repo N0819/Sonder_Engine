@@ -321,7 +321,7 @@
   :root[data-destination="library"] .ui-shell__header,
   :root[data-destination="library"][data-library-selection="false"] .ui-shell__inspector { display: none; }
 
-  :root:is([data-layout-state="wide"], [data-layout-state="expansive"])[data-destination="library"][data-library-selection="true"] .ui-shell {
+  :root:is([data-layout-state="wide"], [data-layout-state="expansive"])[data-destination="library"][data-library-selection="true"][data-inspector-open="true"] .ui-shell {
     grid-template-columns: var(--ui-shell-rail) minmax(0, 1fr) var(--ui-shell-inspector);
   }
 
