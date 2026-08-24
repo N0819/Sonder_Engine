@@ -250,6 +250,7 @@ def test_both_card_editors_present_and_save_a_body_scent():
     editor = (root / "static/js/ui-next/library-editors/character-persona.js").read_text(encoding="utf-8")
     sections = (root / "static/js/ui-next/library-editors/person-sections.js").read_text(encoding="utf-8")
     assert "createPersonSectionEditor" in editor
-    assert "createSchemaNode" in sections
+    assert 'path: "embodiment.scent"' in sections
+    assert "createAdditionalNode" in sections
     assert "JSON.stringify(state.draft, null, 2)" in editor
     assert "services.authoring.stage(parsed, { render: true })" in editor

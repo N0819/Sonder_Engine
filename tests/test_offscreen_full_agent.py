@@ -101,5 +101,6 @@ def test_editor_exposes_the_opt_in_without_enabling_it_by_default():
     source = (root / "static/js/ui-next/library-editors/character-persona.js").read_text(encoding="utf-8")
     sections = (root / "static/js/ui-next/library-editors/person-sections.js").read_text(encoding="utf-8")
     assert "createPersonSectionEditor" in source
-    assert "createSchemaNode" in sections
+    assert 'path: "simulation.offscreen_agent"' in sections
+    assert "createAdditionalNode" in sections
     assert "JSON.stringify(state.draft, null, 2)" in source

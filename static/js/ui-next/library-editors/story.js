@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "alpha98-ui4-842dd802b09f";
+export const MODULE_RELEASE = "alpha98-ui5-7fa758fa6df7";
 
 // UI_CATALOG_START: Story authoring labels and recovery copy.
 const COPY = Object.freeze({

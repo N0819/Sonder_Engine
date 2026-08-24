@@ -44,7 +44,16 @@ contract break, P2 is visible polish/consistency debt, and P3 is minor residue.
 | UI-015 | P2 | Play composition | Fixed | Empty Play's stage is visually under-structured and reads as a broken blank region rather than a purposeful starting state. | Bound the empty state with the same stage rhythm, divider/accent language, concise orientation, and action hierarchy as the supplied reference. | Same-viewport screenshot comparison at desktop, phone, and short landscape. |
 | UI-016 | P1 | Library / Play boundary | Fixed | Story selection and entering Play are separate user commitments and must not collapse into one click during cleanup. | Keep row activation as selection/detail only. Enter Play only from the explicit **Open in Play** action, retaining the Library route/query until that action is chosen. | Browser regression asserts selection remains on Library, reveals detail, and only the explicit action navigates to Play. |
 | UI-017 | P1 | Settings / AI Connections | Fixed | The embeddings assignment exists but is buried with expert role routing and explains the model constraint more clearly than its value to a user. | Add a first-class **Memory search model (embeddings)** control beside the essential model configuration. Explain meaning-based recall, require a vector/embedding model, state that a model change requires rebuilding stored vectors, and link directly to Memory search maintenance. Keep unrelated specialist routing under Advanced. | Browser test changes the model, verifies the preserved assignment document and rebuild warning, then follows the maintenance route. |
-| UI-018 | P1 | UI delivery / cache coherence | Fixed | Replacement CSS and JavaScript changed while the entry and asset graph continued to request `alpha98-ui1`. The server marks a matching released asset `immutable` for one year, so an already-open installation could keep the pre-cleanup bundle and appear completely unfixed after updating. | Rotate the complete entry/module graph to `alpha98-ui4-842dd802b09f` and derive the suffix from normalized bytes of every immutable replacement CSS, JavaScript, and SVG sprite asset. Make a reused or mismatched release identifier fail the runtime contract suite. | A fresh host response keeps HTML `no-store`; every entry import and module literal names the same fingerprinted release; matching released assets return the immutable cache policy; the fingerprint test changes whenever an immutable asset changes; a browser loading the updated entry requests the new asset URLs and boots without a mixed-release error. |
+| UI-018 | P1 | UI delivery / cache coherence | Fixed | Replacement CSS and JavaScript changed while the entry and asset graph continued to request `alpha98-ui1`. The server marks a matching released asset `immutable` for one year, so an already-open installation could keep the pre-cleanup bundle and appear completely unfixed after updating. | Rotate the complete entry/module graph to `alpha98-ui5-7fa758fa6df7` and derive the suffix from normalized bytes of every immutable replacement CSS, JavaScript, and SVG sprite asset. Make a reused or mismatched release identifier fail the runtime contract suite. | A fresh host response keeps HTML `no-store`; every entry import and module literal names the same fingerprinted release; matching released assets return the immutable cache policy; the fingerprint test changes whenever an immutable asset changes; a browser loading the updated entry requests the new asset URLs and boots without a mixed-release error. |
+| UI-019 | P1 | Person authoring / controls | Fixed | Shared person editors created `ui-input` and `ui-textarea` controls while the replacement component contract styles `.ui-field__control`, leaving native gray inputs and inconsistent focus treatment. | Route every Character, Persona, story-card, Quick Start, and import control through the shared field-control class without changing its value or ownership contract. | The real component contains no `ui-input` or `ui-textarea` controls of its own; every visible text, number, select, file, and textarea control has `ui-field__control`, and focus/invalid states match the shared component at desktop and phone widths. |
+| UI-020 | P1 | Person authoring / structured editing | Fixed | The workspace's blanket 44 px target selector overrode the intended 22 rem Advanced and 7 rem structured editor minimums; Advanced rendered about 51 px tall. | Lower the blanket selector specificity and express prose/structured editor sizes with logical `min-block-size` so target safety and authored editing space compose. | At 1440×900, computed Advanced minimum and rendered height are at least 352 px and structured field editors are at least 112 px; compact layouts retain one document scroll owner and reachable actions. |
+| UI-021 | P1 | Person authoring / draft safety | Fixed | Discard draft sat beside Save and immediately erased the owner-scoped local draft without naming the document or consequence. | Open a native modal that names the document, explains restoration of the last Library version, defaults focus to Keep editing, and invokes discard only after the destructive confirmation. | With a dirty Mara Venn draft, Discard opens `Discard changes to Mara Venn?`; Escape or Keep editing preserves the draft and makes zero discard calls; `Discard local changes` makes exactly one call. |
+| UI-022 | P1 | Person authoring / field language | Fixed | Ordinary sections mechanically exposed internal schema labels such as `Offscreen agent`, `Top p`, and hedonic structures, with no bounds or consequence-oriented help. | Use one semantic path registry for maintained fields, friendly group/field labels, appropriate text/number/select/checkbox/JSON controls, literal bounds, and help. Keep raw unknowns only in Additional fields and Advanced. | Character and Persona renders expose Creativity, Curiosity, Background activity, Starting mood, and Pain sensitivity; raw internal labels are absent from ordinary sections; 0–1 values carry literal bounds/help; edited values and unknown nested extension data round-trip unchanged. |
+| UI-023 | P2 | Person authoring / hierarchy | Fixed | Up to nine peer tabs gave Quick Start and technical escape hatches the same visual weight as content sections, duplicated the Quick Start heading, and made compact navigation look clipped and overfull. | Keep only peer content sections as tabs. Stage Start a Story, Additional fields, and Advanced under one More disclosure, keep the active auxiliary label visible in its summary, and remove duplicate headings. | Character exposes six peer tabs and one More entry; Persona exposes four peer tabs and one More entry; More reveals only the applicable auxiliary tasks; choosing one leaves `More · <section>` visible and the panel contains one heading. |
+| UI-024 | P2 | Person authoring / composition | Fixed | Back, save state, editor frame, and form actions read as four detached horizontal bands, leaving excess whitespace and weak action ownership. | Pair Back/save state in one topbar and place Discard/Save in a footer owned by the bordered editor frame while retaining a single vertical panel scroll owner. | At 1440×900, 1024×768, 390×844, 360×800, and 844×390, the footer is a direct editor child and in view, the topbar stays legible, page overflow is zero, and exactly one named vertical document owner exists. |
+| UI-025 | P2 | Person authoring / compact navigation | Fixed | The compact section strip exposed every peer and technical tab at once with a conspicuous native overflow treatment; the currently selected auxiliary task could scroll entirely out of sight. | Limit the persistent strip to peer content tabs plus More, use a restrained thin overflow treatment, and make the More summary itself carry auxiliary selected state. | Phone, narrow-phone, short-desktop, and short-landscape browser cases retain 44 px targets, horizontal-only section overflow, a visible active auxiliary summary, no page overflow, and no focusable control in a hidden panel or closed disclosure. |
+| UI-026 | P2 | Person authoring / visual evidence | Fixed | Initial evidence concentrated on one dense Character section and five viewports, leaving Persona, story-card, destructive, validation, localization, accessibility, and zoom states underrepresented. | Expand deterministic evidence across shared document owners, high-risk states, long localized labels, Accessibility Mode, and 200% zoom equivalent without treating work-in-progress screenshots as design authority. | Repeatable capture and browser tests cover Character, Persona, story-card, dirty discard, invalid Advanced JSON, English/Japanese copy, Accessibility Mode, 200% zoom equivalent, and the six reference geometry cases; every image is reviewed against the approved replacement composition. |
+| UI-027 | P1 | Library / story Character card | Fixed | The detail action emitted `mode=story-card`, but Library route normalization did not admit that maintained mode and immediately rewrote it to ordinary view. Runtime-only tests therefore passed while the real browser never entered the shared story-card workspace. | Admit story-card as a bounded Library authoring mode only for a selected Character with a valid Story context; keep its existing story-owned load/save authority and immutable identity rules. | In the real application, select a Character used by a Story and choose Edit Story card; the URL retains `mode=story-card` and `story=<id>`, the shared person workspace opens, identifies Story Character card, disables Name, and loads/saves through the Story-owned routes. |
 
 ## Explicitly investigated and not classified as defects
 
@@ -121,7 +130,7 @@ document is retained.
   `default` to Expanded.
 - Approval: approved as part of the 2026-08-23 cleanup scope.
 
-## Completion record
+## Foundation cleanup record
 
 Implementation and local verification completed on 2026-08-23.
 
@@ -143,7 +152,7 @@ Implementation and local verification completed on 2026-08-23.
 - Corrective Experience captures now record both the top and final control at
   1440x900, 1024x600, and 390x844 after wheel input over the category rail.
   The complete UI entry/module graph uses release
-  `alpha98-ui4-842dd802b09f`, whose suffix matches the normalized immutable
+  `alpha98-ui5-7fa758fa6df7`, whose suffix matches the normalized immutable
   CSS/JavaScript/SVG content fingerprint.
 - `.venv\Scripts\python.exe tools\project_check.py` now accepts the regenerated
   English catalog and Japanese `All tools` entry. Its remaining failures are
@@ -153,3 +162,25 @@ Implementation and local verification completed on 2026-08-23.
 
 The approval hold was lifted on 2026-08-23; integration to `interface` is
 authorized.
+
+## Person-authoring polish record
+
+The shared Character, Persona, and story-specific Character-card polish was
+verified on 2026-08-23 before integration.
+
+- The focused UI contract and persistence gate passed 25 tests.
+- The focused real-browser editor and Library gate passed 27 tests.
+- The complete browser suite passed 219 tests.
+- The complete repository suite passed 8,802 tests with 4 platform-specific
+  skips.
+- The repeatable WP-16 capture produced 13 reviewed states spanning the six
+  reference geometries, both reusable document kinds, story-owned editing,
+  discard confirmation, invalid structured input, Japanese, Accessibility
+  Mode, and a 200-percent zoom equivalent.
+- Catalog extraction found 922 English source messages with a matching
+  Japanese key set.
+- The complete immutable UI graph remains coherent at
+  `alpha98-ui5-7fa758fa6df7`.
+- `tools/project_check.py` continues to report only the seven previously
+  recorded direct-import findings in the installed Directive extension test;
+  this UI change does not modify that extension boundary.

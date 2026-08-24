@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "alpha98-ui4-842dd802b09f";
+export const MODULE_RELEASE = "alpha98-ui5-7fa758fa6df7";
 
 const MARKUP_TAGS = Object.freeze({
   i: "em",

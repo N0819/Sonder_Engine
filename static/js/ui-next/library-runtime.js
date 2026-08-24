@@ -1,6 +1,6 @@
-export const MODULE_RELEASE = "alpha98-ui4-842dd802b09f";
+export const MODULE_RELEASE = "alpha98-ui5-7fa758fa6df7";
 
-import { generateLivedLocation } from "./lived-location.js?release=alpha98-ui4-842dd802b09f";
+import { generateLivedLocation } from "./lived-location.js?release=alpha98-ui5-7fa758fa6df7";
 
 const TYPE_BY_SEGMENT = Object.freeze({
   "": "",
@@ -18,7 +18,7 @@ const SEGMENT_BY_TYPE = Object.freeze({
 const SCOPES = new Set(["all", "story", "unassigned", "multiple"]);
 const SORTS = new Set(["name", "type", "created", "usage", "recent"]);
 const VISIBILITIES = new Set(["active", "archived"]);
-const MODES = new Set(["view", "edit", "create", "import"]);
+const MODES = new Set(["view", "edit", "create", "import", "story-card"]);
 const ITEM_ID = /^(story|character|persona|lore):([1-9][0-9]*)$/;
 const MAX_FAVORITES = 20;
 const MAX_RECENTS = 50;
@@ -48,7 +48,7 @@ export function normalizeLibraryRoute(route) {
   const sort = SORTS.has(raw.sort) ? raw.sort : "name";
   const visibility = VISIBILITIES.has(raw.visibility) ? raw.visibility : "active";
   const item = cleanItemId(raw.item);
-  const mode = MODES.has(raw.mode) ? raw.mode : "view";
+  let mode = MODES.has(raw.mode) ? raw.mode : "view";
   const q = boundedText(raw.q, 200);
   const reasons = [];
   if (raw.scope && raw.scope !== scope) reasons.push("scope");
@@ -59,6 +59,11 @@ export function normalizeLibraryRoute(route) {
   if (raw.item && !item) reasons.push("item");
   if (raw.mode && raw.mode !== mode) reasons.push("mode");
   if (mode === "edit" && !item) reasons.push("edit-item-required");
+  if (mode === "story-card"
+      && (type !== "character" || !item.startsWith("character:") || !story)) {
+    reasons.push("story-card-context-required");
+    mode = "view";
+  }
   const effectiveScope = scope === "story" && !story ? "all" : scope;
   const query = {};
   if (effectiveScope !== "all") query.scope = effectiveScope;

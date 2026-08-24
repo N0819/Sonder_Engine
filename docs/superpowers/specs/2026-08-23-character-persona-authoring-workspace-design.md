@@ -110,15 +110,17 @@ Save state uses distinct language:
 ### Sections
 
 The workspace exposes a small section navigator. It changes which editor
-section is visible without changing routes or server state.
+section is visible without changing routes or server state. Peer content tabs
+stay visible. Task transitions and technical escape hatches are staged under a
+single **More** disclosure whose summary names the active auxiliary section.
 
 Shared sections:
 
 - **Basics:** name, aliases, pronouns, stable identity disclosure.
 - **Appearance:** visible appearance, outfit, senses, embodiment, and abilities.
 - **History:** public and private authored history.
-- **Advanced:** the complete JSON document with explicit Apply; invalid JSON
-  changes nothing.
+- **Advanced:** under More, the complete JSON document with explicit Apply;
+  invalid JSON changes nothing.
 
 Character sections:
 
@@ -127,22 +129,28 @@ Character sections:
 - **Opening:** first message, stored greetings, generation/recovery tools, and
   other opening fields.
 - **Simulation:** tier, temperature, curiosity, sampler, and off-screen opt-in.
-- **Quick Start:** Persona, greeting, Lore, knowledge relationship, and lived
-  location. This appears only where the maintained Quick Start contract is
-  available.
+- **Start a Story:** under More, Persona, greeting, Lore, knowledge relationship,
+  and lived location. This appears only where the maintained Quick Start
+  contract is available. Its completion action says **Save and start Story** so
+  the persistence and navigation boundary is explicit.
 
 Persona section:
 
 - **Story presence:** narration voice and other Persona-specific story-facing
   fields.
 
-Unknown or extension-owned top-level fields remain reachable in an **Additional
-fields** section and in Advanced. The editor never drops a field merely because
-it lacks a bespoke control.
+Unknown or extension-owned fields remain reachable under **Additional fields**
+in More and in Advanced. The editor never drops a field merely because it lacks
+a bespoke control, including an unfamiliar nested field inside a maintained
+top-level object.
 
 ### Field behavior
 
 - Plain labels remain visible; placeholders never replace labels.
+- A path-based semantic registry owns maintained labels, help, control type,
+  bounds, and enumerated choices. Internal keys are not exposed in ordinary
+  sections; unknown keys remain literal only in the technical Additional and
+  Advanced surfaces.
 - Long prose uses textareas and stages a local draft on input.
 - Structured arrays retain the current lossless JSON control until a dedicated
   typed control is separately specified.
@@ -165,7 +173,9 @@ it lacks a bespoke control.
 - Leaving with a dirty or invalid draft does not show a destructive modal
   because every accepted field change is already in the bounded owner-scoped
   local draft. The header explains that the draft is local.
-- Discard draft is explicit and restores the last accepted server document.
+- Discard draft is explicit, names the affected document and consequence in a
+  modal confirmation, and restores the last accepted server document only
+  after the destructive choice is confirmed.
 - Create/import workflows return to their originating category after cancel or
   completion.
 - A direct authoring link with no usable parent falls back to the selected
@@ -190,8 +200,9 @@ patch Library associations optimistically, or write engine state directly.
 
 - **Wide/expansive:** section navigation occupies a restrained left column and
   the active form occupies the main reading column.
-- **Medium/tablet:** section navigation becomes a compact horizontal strip or
-  select while the form keeps a readable measure.
+- **Medium/tablet:** section navigation becomes a compact horizontal strip while
+  the form keeps a readable measure. More is one visible entry rather than
+  three permanently exposed technical tabs.
 - **Compact/phone:** the workspace becomes a full-screen destination stage;
   Back, title/save state, and Save remain reachable. Fields stack to one column
   and use safe mobile font sizes.
@@ -243,14 +254,18 @@ patch Library associations optimistically, or write engine state directly.
 
 - 1440 × 900 desktop;
 - 1024 × 768 tablet/medium;
+- 1024 × 600 short desktop;
 - 390 × 844 phone portrait;
+- 360 × 800 narrow phone;
 - 844 × 390 short landscape;
 - 200% zoom equivalent;
 - keyboard-only and reduced-motion passes.
 
-Each viewport captures Basics, a dense Character section, Advanced validation,
-dirty state, and a recoverable failure. Screenshots are compared against the
-approved Design Bible composition and recorded with implementation evidence.
+The capture set includes Character, Persona, and story-specific Character-card
+ownership plus Basics, a dense Character section, Advanced validation, dirty
+and discard-confirmation state, and a recoverable failure. Screenshots are
+compared against the approved Design Bible composition and recorded with
+implementation evidence.
 
 ## Documentation impact
 
@@ -259,4 +274,3 @@ approved Design Bible composition and recorded with implementation evidence.
 - Record the extension in the Design Bible decision register and changelog.
 - Update UI-FU-01 and UI-FU-02 only when their browser criteria pass.
 - Retain the capability audit as implementation evidence.
-

@@ -7,6 +7,75 @@ import json
 from playwright.sync_api import Page, expect
 
 
+def test_person_editor_field_contract_and_discard_confirmation(
+    page: Page, ui_base_url: str,
+) -> None:
+    page.goto(f"{ui_base_url}/static/ui-next-lab.html")
+    page.evaluate(
+        """async base => {
+          const editorModule = await import(
+            `${base}/static/js/ui-next/library-editors/character-persona.js?release=alpha98-ui5-7fa758fa6df7`
+          );
+          const original = {
+            identity: { uid: "char-mara", name: "Mara Venn", aliases: [], pronouns: {} },
+            initial_outfit: { wearing: [], state: [], regions: {} },
+            simulation: { tier: "mid", temperature: 0.8, sampler: {},
+              curiosity: 0.5, offscreen_agent: false },
+            embodiment: { visible: { summary: "A rain-dark courier." } },
+            psychology: {}, social: {}, competence: {}, knowledge: {},
+            initial_state: {}, opening: { first_message: "Evening.", greetings: [] },
+          };
+          window.__personDiscardCalls = 0;
+          const host = document.createElement("div");
+          host.id = "person-contract-host";
+          document.body.append(host);
+          host.append(editorModule.createPersonEditor({
+            document,
+            services: {
+              localizer: { t: value => value },
+              store: { getSnapshot: () => ({ library: {}, settings: { data: {} } }) },
+              authoring: {
+                stage() {}, save() {},
+                discard() { window.__personDiscardCalls += 1; },
+                previewAppearance() {}, previewPsychology() {}, previewGreeting() {},
+                previewGreetingRecovery() {}, retryPreview() {}, discardPreview() {},
+                quickStart() {},
+              },
+            },
+            state: {
+              kind: "character", id: 7, mode: "edit", status: "dirty",
+              owner: "character:7", draft: structuredClone(original),
+            },
+          }));
+        }""",
+        ui_base_url,
+    )
+
+    controls = page.locator(
+        "#person-contract-host input:not([type=checkbox]), "
+        "#person-contract-host select, #person-contract-host textarea"
+    )
+    assert controls.count() > 0
+    assert controls.evaluate_all(
+        "nodes => nodes.every(node => node.classList.contains('ui-field__control'))"
+    )
+    assert page.locator("#person-contract-host .ui-input, #person-contract-host .ui-textarea").count() == 0
+
+    page.get_by_role("button", name="Discard draft").click()
+    dialog = page.get_by_role("dialog", name="Discard changes to Mara Venn?")
+    expect(dialog).to_be_visible()
+    assert page.evaluate("window.__personDiscardCalls") == 0
+    dialog.get_by_role("button", name="Keep editing").click()
+    expect(dialog).to_have_count(0)
+    assert page.evaluate("window.__personDiscardCalls") == 0
+
+    page.get_by_role("button", name="Discard draft").click()
+    dialog = page.get_by_role("dialog", name="Discard changes to Mara Venn?")
+    dialog.get_by_role("button", name="Discard local changes").click()
+    expect(dialog).to_have_count(0)
+    assert page.evaluate("window.__personDiscardCalls") == 1
+
+
 def test_shared_person_sections_keep_all_document_fields_reachable(
     page: Page, ui_base_url: str,
 ) -> None:
@@ -16,7 +85,7 @@ def test_shared_person_sections_keep_all_document_fields_reachable(
     result = page.evaluate(
         """async base => {
           const editorModule = await import(
-            `${base}/static/js/ui-next/library-editors/character-persona.js?release=alpha98-ui4-842dd802b09f`
+            `${base}/static/js/ui-next/library-editors/character-persona.js?release=alpha98-ui5-7fa758fa6df7`
           );
           const original = {
             identity: { uid: "char-mara", name: "Mara", aliases: [],
@@ -52,7 +121,11 @@ def test_shared_person_sections_keep_all_document_fields_reachable(
             state: { kind: "character", id: 7, mode: "edit", status: "saved",
               owner: "character:7", draft: structuredClone(original) },
           }));
-          const labels = [...host.querySelectorAll(".ui-person-editor__nav button")]
+          const labels = [...host.querySelectorAll('.ui-person-editor__nav [role="tab"]')]
+            .map(button => button.textContent.trim());
+          const more = host.querySelector(".ui-person-editor__more");
+          if (more) more.open = true;
+          const auxiliary = [...(more?.querySelectorAll("button") || [])]
             .map(button => button.textContent.trim());
           const additional = [...host.querySelectorAll(".ui-person-editor__nav button")]
             .find(button => button.textContent.trim() === "Additional fields");
@@ -63,18 +136,105 @@ def test_shared_person_sections_keep_all_document_fields_reachable(
             note.dispatchEvent(new Event("input", { bubbles: true }));
           }
           const activePanel = host.querySelector('.ui-person-editor__panel:not([hidden])')?.dataset.editorSection;
+          const moreLabel = more?.querySelector("summary")?.textContent.trim() || "";
           host.remove();
-          return { labels, staged, activePanel };
+          return { labels, auxiliary, staged, activePanel, moreLabel };
         }""",
         ui_base_url,
     )
 
     assert result["labels"] == [
         "Basics", "Appearance", "History", "Inner life", "Opening",
-        "Simulation", "Quick start", "Additional fields", "Advanced",
+        "Simulation",
     ]
+    assert result["auxiliary"] == ["Start a Story", "Additional fields", "Advanced"]
     assert result["activePanel"] == "additional"
+    assert result["moreLabel"] == "More · Additional fields"
     assert result["staged"]["extension_payload"]["note"] == "kept and edited"
+
+
+def test_person_editor_semantic_field_registry_is_plain_and_lossless(
+    page: Page, ui_base_url: str,
+) -> None:
+    page.goto(f"{ui_base_url}/static/ui-next-lab.html")
+    result = page.evaluate(
+        """async base => {
+          const editorModule = await import(
+            `${base}/static/js/ui-next/library-editors/character-persona.js?release=alpha98-ui5-7fa758fa6df7`
+          );
+          const original = {
+            identity: { uid: "char-mara", name: "Mara", aliases: [], pronouns: {} },
+            initial_outfit: { wearing: [], state: [], regions: {} },
+            simulation: { tier: "mid", temperature: 0.8, sampler: { top_p: 0.9 },
+              curiosity: 0.5, offscreen_agent: false },
+            embodiment: {
+              visible: { summary: "Rain-dark coat" },
+              interoception: { acuity: 0.5, pain_sensitivity: 0.6,
+                fatigue_sensitivity: 0.4, pleasure_sensitivity: 0.7 },
+            },
+            psychology: {
+              drive: { essence: "Deliver the letter", expression: "", taboo: "" },
+              traits: [], values: [], capacity: "focused",
+            },
+            social: {}, competence: {}, knowledge: {},
+            initial_state: {
+              mood: { label: "watchful", valence: 0.1, arousal: 0.4 },
+              hedonic: { pain: 0, pleasure: 0, source: "" },
+            },
+            opening: { first_message: "Evening.", greetings: [] },
+            extension_payload: { note: "must survive", nested: { exact: true } },
+          };
+          let staged = structuredClone(original);
+          const host = document.createElement("div");
+          document.body.append(host);
+          host.append(editorModule.createPersonEditor({
+            document,
+            services: {
+              localizer: { t: value => value },
+              store: { getSnapshot: () => ({ library: {}, settings: { data: {} } }) },
+              authoring: {
+                stage(value) { staged = structuredClone(value); }, save() {}, discard() {},
+                previewAppearance() {}, previewPsychology() {}, previewGreeting() {},
+                previewGreetingRecovery() {}, retryPreview() {}, discardPreview() {},
+                quickStart() {},
+              },
+            },
+            state: { kind: "character", id: 7, mode: "edit", status: "saved",
+              owner: "character:7", draft: structuredClone(original) },
+          }));
+          const labels = [...host.querySelectorAll(".ui-authoring-field__label")]
+            .map(label => label.textContent.trim());
+          const allText = host.textContent;
+          const curiosity = host.querySelector('[data-schema-path="simulation.curiosity"]');
+          curiosity.value = "0.7";
+          curiosity.dispatchEvent(new Event("input", { bubbles: true }));
+          const result = {
+            labels, allText, staged,
+            curiosity: { min: curiosity.min, max: curiosity.max, step: curiosity.step,
+              describedBy: curiosity.getAttribute("aria-describedby") },
+          };
+          host.remove();
+          return result;
+        }""",
+        ui_base_url,
+    )
+
+    for label in (
+        "Creativity", "Curiosity", "Background activity", "Starting mood",
+        "Pain sensitivity", "Sampling overrides",
+    ):
+        assert label in result["labels"]
+    for raw_label in ("Top p", "Offscreen agent", "Hedonic"):
+        assert raw_label not in result["labels"]
+    assert result["curiosity"]["min"] == "0"
+    assert result["curiosity"]["max"] == "1"
+    assert result["curiosity"]["step"] == "0.05"
+    assert result["curiosity"]["describedBy"]
+    assert result["staged"]["simulation"]["curiosity"] == 0.7
+    assert result["staged"]["simulation"]["sampler"] == {"top_p": 0.9}
+    assert result["staged"]["extension_payload"] == {
+        "note": "must survive", "nested": {"exact": True},
+    }
 
 
 def test_save_reveals_and_focuses_invalid_field_in_another_section(
@@ -84,7 +244,7 @@ def test_save_reveals_and_focuses_invalid_field_in_another_section(
     result = page.evaluate(
         """async base => {
           const editorModule = await import(
-            `${base}/static/js/ui-next/library-editors/character-persona.js?release=alpha98-ui4-842dd802b09f`
+            `${base}/static/js/ui-next/library-editors/character-persona.js?release=alpha98-ui5-7fa758fa6df7`
           );
           let saves = 0;
           const host = document.createElement("div");
@@ -141,7 +301,7 @@ def test_character_editor_preserves_unknown_fields_through_advanced_json(
     result = page.evaluate(
         """async base => {
           const editorModule = await import(
-            `${base}/static/js/ui-next/library-editors/character-persona.js?release=alpha98-ui4-842dd802b09f`
+            `${base}/static/js/ui-next/library-editors/character-persona.js?release=alpha98-ui5-7fa758fa6df7`
           );
           const original = {
             identity: { uid: "char-a", name: "Asha", aliases: ["Ash"],
@@ -200,7 +360,7 @@ def test_character_editor_preserves_unknown_fields_through_advanced_json(
           quick.querySelector(".ui-authoring-quick-start__known input").click();
           quick.querySelector("details summary").click();
           quick.querySelector('input[aria-label="Prepare a lived location"]').click();
-          const locationBrief = quick.querySelector("textarea.ui-textarea");
+          const locationBrief = quick.querySelector(".ui-lived-location__content textarea");
           locationBrief.value = "A rain archive";
           locationBrief.dispatchEvent(new Event("input", { bubbles: true }));
           const historyRoute = quick.querySelector('select[aria-label^="History route for"]');
@@ -249,9 +409,9 @@ def test_create_preview_failure_retry_discard_and_accept_are_lossless(
     page.goto(f"{ui_base_url}/static/ui-next-lab.html")
     result = page.evaluate(
         """async base => {
-          const storeModule = await import(`${base}/static/js/ui-next/store.js?release=alpha98-ui4-842dd802b09f`);
+          const storeModule = await import(`${base}/static/js/ui-next/store.js?release=alpha98-ui5-7fa758fa6df7`);
           const runtimeModule = await import(
-            `${base}/static/js/ui-next/library-authoring-runtime.js?release=alpha98-ui4-842dd802b09f`
+            `${base}/static/js/ui-next/library-authoring-runtime.js?release=alpha98-ui5-7fa758fa6df7`
           );
           const store = storeModule.createStore();
           const route = {
@@ -353,9 +513,9 @@ def test_quick_start_saves_the_owned_draft_before_opening_play(
     page.goto(f"{ui_base_url}/static/ui-next-lab.html")
     result = page.evaluate(
         """async base => {
-          const storeModule = await import(`${base}/static/js/ui-next/store.js?release=alpha98-ui4-842dd802b09f`);
+          const storeModule = await import(`${base}/static/js/ui-next/store.js?release=alpha98-ui5-7fa758fa6df7`);
           const runtimeModule = await import(
-            `${base}/static/js/ui-next/library-authoring-runtime.js?release=alpha98-ui4-842dd802b09f`
+            `${base}/static/js/ui-next/library-authoring-runtime.js?release=alpha98-ui5-7fa758fa6df7`
           );
           const store = storeModule.createStore();
           const route = {
@@ -421,9 +581,9 @@ def test_story_card_override_loads_and_saves_its_story_owned_document(
     page.goto(f"{ui_base_url}/static/ui-next-lab.html")
     result = page.evaluate(
         """async base => {
-          const storeModule = await import(`${base}/static/js/ui-next/store.js?release=alpha98-ui4-842dd802b09f`);
+          const storeModule = await import(`${base}/static/js/ui-next/store.js?release=alpha98-ui5-7fa758fa6df7`);
           const runtimeModule = await import(
-            `${base}/static/js/ui-next/library-authoring-runtime.js?release=alpha98-ui4-842dd802b09f`
+            `${base}/static/js/ui-next/library-authoring-runtime.js?release=alpha98-ui5-7fa758fa6df7`
           );
           const store = storeModule.createStore();
           const route = {

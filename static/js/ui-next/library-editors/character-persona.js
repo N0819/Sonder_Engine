@@ -1,7 +1,7 @@
-export const MODULE_RELEASE = "alpha98-ui4-842dd802b09f";
+export const MODULE_RELEASE = "alpha98-ui5-7fa758fa6df7";
 
-import { buildQuickStartLivedLocation, mountLivedLocationFields } from "../lived-location.js?release=alpha98-ui4-842dd802b09f";
-import { createPersonSectionEditor } from "./person-sections.js?release=alpha98-ui4-842dd802b09f";
+import { buildQuickStartLivedLocation, mountLivedLocationFields } from "../lived-location.js?release=alpha98-ui5-7fa758fa6df7";
+import { createPersonSectionEditor } from "./person-sections.js?release=alpha98-ui5-7fa758fa6df7";
 
 const quickStartDrafts = new Map();
 
@@ -22,6 +22,10 @@ const COPY = Object.freeze({
   saveCharacter: "Save character",
   savePersona: "Save persona",
   discard: "Discard draft",
+  discardTitle: "Discard changes to ${name}?",
+  discardHelp: "This removes the local draft for ${name} and restores the last version saved to Library.",
+  keepEditing: "Keep editing",
+  discardChanges: "Discard local changes",
   tools: "Authoring tools",
   toolBrief: "Optional direction for generation",
   generate: "Generate preview",
@@ -49,7 +53,6 @@ const COPY = Object.freeze({
   persona: "Persona",
   editHelp: "Changes remain a local draft until you save.",
   createHelp: "Build the complete reusable card, then save it to Library.",
-  quickStart: "Quick start",
   quickStartHelp: "Save this card and open a new Story from one of its greetings.",
   quickStartBoundary: "The place may publish public resident cards. This Character's generated past is handed only to this Character.",
   lore: "Lore",
@@ -59,7 +62,7 @@ const COPY = Object.freeze({
   livedLocation: "Begin in a lived location",
   playAs: "Play as",
   openingGreeting: "Opening greeting",
-  startStory: "Start story",
+  startStory: "Save and start Story",
   quickStartUnavailable: "Add a greeting and create a Persona to quick-start this Character.",
   storyCard: "Story Character card",
   storyCardHelp: "This card applies only to ${story}. Live mood, stress, memories, relationships, and physical state stay intact.",
@@ -117,7 +120,8 @@ function setPath(documentValue, path, value) {
 }
 
 function textControl(documentRef, id, name, value, long = false) {
-  const control = node(documentRef, long ? "textarea" : "input", long ? "ui-textarea" : "ui-input");
+  const control = node(documentRef, long ? "textarea" : "input", "ui-field__control");
+  if (long) control.classList.add("ui-authoring-form__long");
   if (!long) control.type = "text";
   control.id = id;
   control.name = name;
@@ -234,10 +238,7 @@ export function createPersonEditor(options = {}) {
     const greetings = Array.isArray(current.opening?.greetings)
       ? current.opening.greetings : [];
     const quick = node(documentRef, "section", "ui-authoring-quick-start");
-    quick.append(
-      node(documentRef, "h3", "ui-heading ui-heading--3", services.localizer.t(COPY.quickStart)),
-      node(documentRef, "p", "ui-muted", services.localizer.t(COPY.quickStartHelp)),
-    );
+    quick.append(node(documentRef, "p", "ui-muted", services.localizer.t(COPY.quickStartHelp)));
     if (!personas.length || !greetings.length) {
       quick.append(node(documentRef, "p", "ui-muted", services.localizer.t(COPY.quickStartUnavailable)));
     } else {
@@ -247,14 +248,14 @@ export function createPersonEditor(options = {}) {
         livedLocation: { enabled: false, brief: "", horizonHours: 0, characterHistories: [{ key: `quick:${state.id}`, mode: "auto", brief: "" }] },
       };
       quickStartDrafts.set(quickKey, quickDraft);
-      const persona = node(documentRef, "select", "ui-input");
+      const persona = node(documentRef, "select", "ui-field__control");
       persona.id = `ui-quick-persona-${state.id}`;
       for (const item of personas) {
         const option = node(documentRef, "option", "", item.name || services.localizer.t(COPY.persona));
         option.value = String(item.id);
         persona.append(option);
       }
-      const greeting = node(documentRef, "select", "ui-input");
+      const greeting = node(documentRef, "select", "ui-field__control");
       greeting.id = `ui-quick-greeting-${state.id}`;
       greetings.forEach((entry, index) => {
         const prose = String(entry?.prose || current.opening?.first_message || "").replace(/\s+/g, " ").trim();
@@ -262,7 +263,7 @@ export function createPersonEditor(options = {}) {
         option.value = String(index);
         greeting.append(option);
       });
-      const lore = node(documentRef, "select", "ui-input");
+      const lore = node(documentRef, "select", "ui-field__control");
       const noLore = node(documentRef, "option", "", services.localizer.t(COPY.noLore));
       noLore.value = "";
       lore.append(noLore);
@@ -343,7 +344,46 @@ export function createPersonEditor(options = {}) {
   actions.setAttribute("role", "toolbar");
   const discard = node(documentRef, "button", "ui-button ui-button--quiet", services.localizer.t(COPY.discard));
   discard.type = "button";
-  discard.addEventListener("click", () => services.authoring.discard());
+  discard.disabled = state.status === "saving";
+  discard.addEventListener("click", () => {
+    const nameValue = String(current.identity?.name || "this draft").trim() || "this draft";
+    const titleText = services.localizer.t(COPY.discardTitle).replace("${name}", nameValue);
+    const helpText = services.localizer.t(COPY.discardHelp).replace("${name}", nameValue);
+    const dialog = node(documentRef, "dialog", "ui-dialog ui-confirmation ui-person-discard-dialog");
+    const suffix = String(state.owner || `${state.kind}:${state.id || "new"}`)
+      .replace(/[^a-zA-Z0-9_-]/g, "-");
+    const title = node(documentRef, "h2", "ui-heading ui-heading--2", titleText);
+    title.id = `ui-person-discard-title-${suffix}`;
+    dialog.setAttribute("aria-labelledby", title.id);
+    dialog.append(title, node(documentRef, "p", "ui-muted", helpText));
+    const dialogActions = node(documentRef, "div", "ui-person-discard-dialog__actions");
+    const keep = node(documentRef, "button", "ui-button ui-button--quiet", services.localizer.t(COPY.keepEditing));
+    keep.type = "button";
+    const confirm = node(
+      documentRef, "button", "ui-button ui-button--destructive",
+      services.localizer.t(COPY.discardChanges),
+    );
+    confirm.type = "button";
+    dialogActions.append(keep, confirm);
+    dialog.append(dialogActions);
+    const close = returnValue => {
+      if (dialog.open) dialog.close(returnValue);
+      else dialog.remove();
+    };
+    keep.addEventListener("click", () => close("cancel"));
+    confirm.addEventListener("click", () => {
+      close("discard");
+      services.authoring.discard();
+    });
+    dialog.addEventListener("cancel", event => {
+      event.preventDefault();
+      close("cancel");
+    });
+    dialog.addEventListener("close", () => dialog.remove(), { once: true });
+    (documentRef.querySelector("[data-shell-overlay-host]") || documentRef.body).append(dialog);
+    dialog.showModal();
+    keep.focus();
+  });
   save = node(
     documentRef, "button", "ui-button ui-button--primary",
     services.localizer.t(state.kind === "character" ? COPY.saveCharacter : COPY.savePersona),
@@ -351,7 +391,7 @@ export function createPersonEditor(options = {}) {
   save.type = "submit";
   save.disabled = state.status === "saving" || !String(current.identity?.name || "").trim();
   actions.append(discard, save);
-  form.append(actions);
+  sections.element.append(actions);
   form.addEventListener("submit", async event => {
     event.preventDefault();
     if (!String(current.identity?.name || "").trim()) {
@@ -377,7 +417,7 @@ export function createPersonImporter(options = {}) {
     node(documentRef, "h3", "ui-heading ui-heading--2", label(COPY.importTitle)),
     node(documentRef, "p", "ui-muted", services.localizer.t(COPY.importHelp)),
   );
-  const input = node(documentRef, "input", "ui-input");
+  const input = node(documentRef, "input", "ui-field__control");
   input.type = "file";
   input.id = `ui-${kind}-import-card`;
   input.name = `${kind}_card`;

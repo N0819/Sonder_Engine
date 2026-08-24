@@ -13,7 +13,9 @@ def test_character_editor_exposes_v3_psychology_and_hedonics():
     runtime = (ROOT / "static/js/ui-next/library-authoring-runtime.js").read_text(encoding="utf-8")
     assert "Fill psychology" in source
     assert "createPersonSectionEditor" in source
-    assert "createSchemaNode" in sections
+    assert 'path: "psychology.stress_profile"' in sections
+    assert 'path: "initial_state.hedonic"' in sections
+    assert "createAdditionalNode" in sections
     assert "JSON.stringify(state.draft, null, 2)" in source
     assert "previewPsychology" in source
     assert "/fill_psychology" in runtime
