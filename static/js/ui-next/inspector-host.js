@@ -1,6 +1,6 @@
-export const MODULE_RELEASE = "alpha98-ui8-eb87a8415bda";
+export const MODULE_RELEASE = "alpha98-ui9-ff279a1d1d7f";
 
-import { createOverlayController } from "../ui/components/overlay.js?release=alpha98-ui8-eb87a8415bda";
+import { createOverlayController } from "../ui/components/overlay.js?release=alpha98-ui9-ff279a1d1d7f";
 
 const LAYER_ID = "inspector:context";
 const SIZES = Object.freeze(["expanded", "compact", "rail"]);

@@ -66,8 +66,13 @@ def test_experience_ports_reference_frame_and_applies_local_preferences(
 
     expect(page.get_by_role("heading", name="Sonder preferences", level=1)).to_be_visible()
     categories = page.get_by_role("navigation", name="Settings categories")
-    expect(categories.get_by_role("link")).to_have_count(7)
-    expect(categories.get_by_role("link", name="Experience", exact=True)).to_have_attribute(
+    groups = categories.locator("[data-settings-navigation-group]")
+    expect(groups).to_have_count(4)
+    assert groups.locator("[data-settings-navigation-heading]").all_text_contents() == [
+        "Connections", "Appearance", "Story & host", "Advanced"
+    ]
+    expect(categories.locator("[data-settings-navigation-row]")).to_have_count(13)
+    expect(categories.get_by_role("link", name="Theme", exact=True)).to_have_attribute(
         "aria-current", "page"
     )
     expect(page.get_by_role("heading", name="Experience", level=2)).to_be_visible()
@@ -220,7 +225,7 @@ def test_settings_detail_is_keyboard_scrollable_and_the_only_scroll_owner(
         content.evaluate("node => { node.scrollTop = 0; }")
 
         expect(content).to_have_attribute("tabindex", "0")
-        page.get_by_role("link", name="Experience", exact=True).focus()
+        page.locator('[data-settings-navigation-row="theme"]').focus()
         page.keyboard.press("PageDown")
         page.wait_for_function(
             "document.querySelector('[data-settings-content]').scrollTop > 0",
@@ -361,35 +366,111 @@ def test_shared_settings_selects_use_compact_glass_control_geometry(
     assert compact_height == 32
 
 
-def test_mobile_settings_uses_reference_horizontal_category_staging(
+def test_mobile_settings_uses_grouped_disclosures_instead_of_a_sidebar(
     page: Page, ui_base_url: str
 ) -> None:
-    """Catches desktop sidebar leakage or clipped controls on the phone surface."""
+    """Catches a return to the competing sidebar or horizontal-strip taxonomy."""
     _open_settings(page, ui_base_url, width=390)
 
     expect(page).to_have_url(re.compile(r"#/settings/experience$"))
     categories = page.get_by_role("navigation", name="Settings categories")
     expect(categories).to_be_visible()
+    disclosures = categories.locator("[data-settings-navigation-disclosure]")
+    expect(disclosures).to_have_count(4)
+    appearance = categories.get_by_role("button", name="Appearance", exact=True)
+    connections = categories.get_by_role("button", name="Connections", exact=True)
+    expect(appearance).to_have_attribute("aria-expanded", "true")
+    expect(connections).to_have_attribute("aria-expanded", "false")
+    expect(categories.locator('[data-settings-navigation-row="theme"]')).to_be_visible()
+    expect(categories.locator('[data-settings-navigation-row="ai-connections"]')).to_be_hidden()
+
+    connections.click()
+    expect(connections).to_have_attribute("aria-expanded", "true")
+    expect(appearance).to_have_attribute("aria-expanded", "false")
+    expect(categories.locator('[data-settings-navigation-row="ai-connections"]')).to_be_visible()
+    connections.click()
+    expect(connections).to_have_attribute("aria-expanded", "true")
     geometry = page.evaluate(
         """() => {
           const nav = document.querySelector('[data-settings-categories]');
           const content = document.querySelector('[data-settings-content]');
-          const selected = nav.querySelector('[aria-current="page"]');
           return {
             navWidth: nav.getBoundingClientRect().width,
             navScroll: nav.scrollWidth,
             contentLeft: content.getBoundingClientRect().left,
-            selectedHeight: selected.getBoundingClientRect().height,
+            targetHeights: [...nav.querySelectorAll('[data-settings-navigation-disclosure]')]
+              .map(button => button.getBoundingClientRect().height),
             overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
           };
         }"""
     )
-    assert geometry["navWidth"] == 390
-    assert geometry["navScroll"] > geometry["navWidth"]
+    assert 360 <= geometry["navWidth"] <= 390
+    assert geometry["navScroll"] <= geometry["navWidth"] + 1
     assert abs(geometry["contentLeft"]) <= 1
-    assert geometry["selectedHeight"] >= 44
+    assert min(geometry["targetHeights"]) >= 44
     assert geometry["overflow"] <= 1
     expect(page.get_by_role("button", name="Use Parchment Night theme")).to_be_visible()
+
+
+def test_tablet_settings_disclosures_reuse_overview_rows_and_summaries(
+    page: Page, ui_base_url: str
+) -> None:
+    """Catches tablet fallback to a sidebar or a second label-only taxonomy."""
+    bootstrap = {
+        **BOOTSTRAP,
+        "providers": [
+            {"id": 7, "name": "Anthropic", "kind": "anthropic", "has_key": True}
+        ],
+        "agent_models": {"default": {"provider": 7, "model": "claude-sonnet-4-5"}},
+    }
+    _open_settings(
+        page,
+        ui_base_url,
+        width=1024,
+        height=768,
+        category="ai-connections",
+        bootstrap=bootstrap,
+    )
+
+    categories = page.get_by_role("navigation", name="Settings categories")
+    content = page.locator("[data-settings-content]")
+    assert categories.evaluate("node => node.parentElement === node.closest('[data-settings-content]')")
+    expect(categories.locator(".ui-settings__navigation-panel:not([hidden])")).to_have_count(1)
+    expect(categories.get_by_role("button", name="Connections", exact=True)).to_have_attribute(
+        "aria-expanded", "true"
+    )
+    ai_row = categories.locator('[data-settings-navigation-row="ai-connections"]')
+    expect(ai_row).to_have_attribute("aria-current", "page")
+    expect(ai_row).to_contain_text("1 provider · claude-sonnet-4-5")
+    expect(content.get_by_role("heading", name="AI Connections", level=2)).to_be_visible()
+
+
+def test_compact_advanced_navigation_does_not_claim_an_unrepresented_tool(
+    page: Page, ui_base_url: str
+) -> None:
+    """Keeps the active group open without assigning a misleading current row."""
+    _open_settings(
+        page,
+        ui_base_url,
+        width=390,
+        height=844,
+        category="advanced",
+    )
+
+    categories = page.get_by_role("navigation", name="Settings categories")
+    advanced = categories.get_by_role("button", name="Advanced", exact=True)
+    expect(advanced).to_have_attribute("aria-expanded", "true")
+    expect(categories.locator('[aria-current="page"]')).to_have_count(0)
+
+    page.goto(f"{ui_base_url}/static/ui-next.html#/settings/advanced?tool=clothing-data")
+    expect(advanced).to_have_attribute("aria-expanded", "true")
+    expect(categories.locator('[aria-current="page"]')).to_have_count(0)
+
+    page.goto(f"{ui_base_url}/static/ui-next.html#/settings/advanced?control=story-data")
+    expect(advanced).to_have_attribute("aria-expanded", "true")
+    expect(categories.locator('[data-settings-navigation-row="raw-story-data"]')).to_have_attribute(
+        "aria-current", "page"
+    )
 
 
 def test_advanced_ports_the_reference_launcher_panel(
@@ -398,7 +479,7 @@ def test_advanced_ports_the_reference_launcher_panel(
     """Catches replacement of the supplied Advanced ledger with generic cards."""
     _open_settings(page, ui_base_url, width=1024, height=600, category="advanced")
 
-    expect(page.get_by_role("heading", name="Advanced", level=2)).to_be_visible()
+    expect(page.locator(".ui-settings__section-head").get_by_role("heading", name="Advanced", level=2)).to_be_visible()
     expect(page.get_by_text("Prompts, diagnostics, and raw story data", exact=True)).to_be_visible()
     launchers = page.locator("[data-settings-launcher]")
     expect(launchers).to_have_count(4)
@@ -1594,7 +1675,7 @@ def test_maintenance_category_uses_its_dedicated_wrench_icon(
 ) -> None:
     _open_settings(page, ui_base_url)
     maintenance = page.get_by_role("link", name="Maintenance", exact=True)
-    href = maintenance.locator("use").get_attribute("href")
+    href = maintenance.locator(".ui-icon").first.locator("use").get_attribute("href")
     assert href is not None and href.endswith("#icon-maintenance"), href
 
 
@@ -1837,7 +1918,7 @@ def test_mobile_advanced_keeps_prompt_tools_without_horizontal_overflow(
     _open_settings(page, ui_base_url, width=390, height=844, category="advanced")
 
     page.get_by_role("button", name="Prompt editor").click()
-    expect(page.get_by_role("heading", name="Advanced", level=2)).to_be_visible()
+    expect(page.locator(".ui-settings__section-head").get_by_role("heading", name="Advanced", level=2)).to_be_visible()
     expect(page.get_by_role("combobox", name="Prompt preset", exact=True)).to_be_visible()
     expect(page.get_by_role("button", name="Save prompt preset")).to_be_visible()
     geometry = page.evaluate(

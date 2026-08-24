@@ -226,4 +226,22 @@ package.
 - The focused Settings/overview/shell browser gate passed 68 tests.
 - WP-18 records six reviewed desktop, tablet, phone, short-landscape, detail,
   and Back-return states.
-- The integrated immutable UI graph is coherent at `alpha98-ui8-eb87a8415bda`.
+- The integrated immutable UI graph was coherent at
+  `alpha98-ui8-eb87a8415bda`.
+
+## Unified Settings navigation record
+
+The detailed Settings navigation was reconciled with the grouped overview on
+2026-08-24 as the UI9 package.
+
+- Desktop projects the overview's four groups and 13 rows into the compact rail
+  instead of maintaining a second category taxonomy.
+- At 1099 px and below, the same groups move into the Settings content owner as
+  single-open disclosures with the active group expanded by default.
+- Compact layouts retain overview summaries, current-row state, full-width
+  detail content, and 44 px interaction targets without a sidebar or horizontal
+  category strip.
+- WP-19 records reviewed desktop, tablet, phone, alternate-group, and
+  short-landscape states.
+- The integrated immutable UI graph is coherent at
+  `alpha98-ui9-ff279a1d1d7f`.
