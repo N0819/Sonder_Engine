@@ -376,17 +376,20 @@ function createTurn(documentRef, services, proseModule, turn, isLatest) {
   const note = staleNote(documentRef, turn);
   if (note) article.append(note);
   const actions = element(documentRef, "div", "ui-play__turn-actions");
-  const edit = button(documentRef, COPY.edit);
-  edit.addEventListener("click", () => textDialog(
+  const editAction = () => textDialog(
     documentRef,
     COPY.editPlayerInput,
     turn.player_input,
     { services, multiline: true, onSave: value => services.play.editInput(turn.id, value) },
-  ));
+  );
+  const edit = button(documentRef, COPY.edit);
+  edit.classList.add("ui-play__turn-action--direct");
+  edit.addEventListener("click", editAction);
   actions.append(edit);
+  let rerollAction = null;
+  let versionsAction = null;
   if (isLatest) {
-    const reroll = button(documentRef, COPY.reroll);
-    reroll.addEventListener("click", async () => {
+    rerollAction = async () => {
       const confirmed = await confirmDialog(
         documentRef,
         COPY.rerollTitle,
@@ -394,12 +397,20 @@ function createTurn(documentRef, services, proseModule, turn, isLatest) {
         { services, confirmLabel: COPY.reroll, danger: true },
       );
       if (confirmed) void services.play.reroll(turn.id);
-    });
+    };
+    const reroll = button(documentRef, COPY.reroll);
+    reroll.classList.add("ui-play__turn-action--direct");
+    reroll.addEventListener("click", rerollAction);
+    versionsAction = () => void versionsDialog(documentRef, services, turn, proseModule);
     const versions = button(documentRef, COPY.versions);
-    versions.addEventListener("click", () => void versionsDialog(documentRef, services, turn, proseModule));
+    versions.classList.add("ui-play__turn-action--direct");
+    versions.addEventListener("click", versionsAction);
     actions.append(reroll, versions);
   }
   const more = actionMenu(documentRef);
+  const editPlayer = button(documentRef, COPY.edit);
+  editPlayer.setAttribute("role", "menuitem");
+  editPlayer.addEventListener("click", () => { closeMenu(more.menu); editAction(); });
   const editNarration = button(documentRef, COPY.editNarration);
   editNarration.setAttribute("role", "menuitem");
   editNarration.addEventListener("click", () => {
@@ -424,6 +435,16 @@ function createTurn(documentRef, services, proseModule, turn, isLatest) {
     closeMenu(more.menu);
     turnDetailsDialog(documentRef, services, turn);
   });
+  more.body.append(editPlayer);
+  if (isLatest) {
+    const reroll = button(documentRef, COPY.reroll);
+    reroll.setAttribute("role", "menuitem");
+    reroll.addEventListener("click", () => { closeMenu(more.menu); void rerollAction(); });
+    const versions = button(documentRef, COPY.versions);
+    versions.setAttribute("role", "menuitem");
+    versions.addEventListener("click", () => { closeMenu(more.menu); versionsAction(); });
+    more.body.append(reroll, versions);
+  }
   more.body.append(editNarration, branch, details);
   if (isLatest) {
     const remove = button(documentRef, COPY.deleteTurn, "ui-button ui-button--danger");
@@ -468,6 +489,7 @@ function createStoryView(documentRef, services, proseModule, initialState) {
     element(documentRef, "p", "ui-kicker", COPY.currentStory),
     storyTitle,
   );
+  const frames = story.frames || [];
   const storyActions = element(documentRef, "div", "ui-play__story-actions");
   const rename = button(documentRef, COPY.rename);
   rename.addEventListener("click", () => textDialog(
@@ -484,12 +506,16 @@ function createStoryView(documentRef, services, proseModule, initialState) {
   storyMore.menu.querySelector("summary").append(icon(documentRef, "more"));
   storyMore.body.append(storyChoice(documentRef, services, story.chat.id), rename, archive);
   storyActions.append(
-    element(documentRef, "span", "ui-play__story-state", "Ready"),
+    element(
+      documentRef,
+      "span",
+      "ui-play__story-meta",
+      `${story.turns?.length || 0} ${story.turns?.length === 1 ? "turn" : "turns"} · ${frames[0]?.label || COPY.present}`,
+    ),
     storyMore.menu,
   );
   storyHeader.append(identity, storyActions);
 
-  const frames = story.frames || [];
   if (frames.length > 1) {
     const frameBar = element(documentRef, "nav", "ui-play__frames");
     frameBar.setAttribute("aria-label", COPY.storyThreads);
@@ -544,14 +570,17 @@ function createStoryView(documentRef, services, proseModule, initialState) {
   const validation = element(documentRef, "p", "ui-play__validation");
   validation.setAttribute("role", "alert");
   composerActions.append(send, stop, retry);
-  const audioCluster = element(documentRef, "div", "ui-play__audio-cluster");
+  const audioCluster = element(documentRef, "details", "ui-play__audio-cluster");
   audioCluster.setAttribute("aria-label", "Ambience controls");
+  const ambienceSummary = element(documentRef, "summary", "ui-play__ambience-summary", "Ambience");
+  const ambienceBody = element(documentRef, "div", "ui-play__ambience-body");
   const muteAmbience = button(documentRef, COPY.muteAmbience, "ui-button ui-button--quiet");
   const ambienceVolume = documentRef.createElement("input");
   ambienceVolume.type = "range";
   ambienceVolume.min = "0"; ambienceVolume.max = "1"; ambienceVolume.step = "0.05";
   ambienceVolume.setAttribute("aria-label", COPY.ambienceVolume);
-  audioCluster.append(muteAmbience, ambienceVolume);
+  ambienceBody.append(muteAmbience, ambienceVolume);
+  audioCluster.append(ambienceSummary, ambienceBody);
   composer.append(input, composerHelp, validation, progress, composerActions, audioCluster);
   root.append(atmosphere, storyHeader, transcript, newTurn, composer);
 

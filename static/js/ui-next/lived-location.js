@@ -1,5 +1,7 @@
 export const MODULE_RELEASE = "alpha98-ui13-a39372e1d8d1";
 
+import { decorateFieldControl } from "../ui/components/field.js?release=alpha98-ui13-a39372e1d8d1";
+
 // UI_CATALOG_START: Shared lived-location authoring copy.
 const LIVED_LOCATION_COPY = Object.freeze([
   "Choose from the story",
@@ -121,13 +123,13 @@ export function mountLivedLocationFields(options = {}) {
   enabledLabel.append(enabled, documentRef.createTextNode(" Build the place as somewhere already lived in"));
   const briefLabel = element(documentRef, "label", "ui-field");
   briefLabel.append(element(documentRef, "span", "ui-field__label", "Location brief"));
-  const brief = element(documentRef, "textarea", "ui-textarea");
+  const brief = decorateFieldControl(element(documentRef, "textarea"));
   brief.value = value.brief;
   brief.placeholder = "A hospital built into a cliff";
   briefLabel.append(brief, element(documentRef, "small", "ui-muted", "Describe the place, its work, pressures, and public life."));
   const horizonLabel = element(documentRef, "label", "ui-field");
   horizonLabel.append(element(documentRef, "span", "ui-field__label", "Recent history"));
-  const horizon = element(documentRef, "select", "ui-select");
+  const horizon = decorateFieldControl(element(documentRef, "select"));
   [[0, "Start at the present"], [168, "Past week"], [720, "Past month"]].forEach(([hours, label]) => {
     const option = element(documentRef, "option", "", label);
     option.value = String(hours);
@@ -143,7 +145,7 @@ export function mountLivedLocationFields(options = {}) {
     const group = element(documentRef, "fieldset", "ui-lived-location__route");
     const legend = element(documentRef, "legend", "", character.name || "Character");
     legend.setAttribute("translate", "no");
-    const mode = element(documentRef, "select", "ui-select");
+    const mode = decorateFieldControl(element(documentRef, "select"));
     mode.setAttribute("aria-label", `History route for ${character.name || "Character"}`);
     HISTORY_MODES.forEach(([raw, label]) => {
       const option = element(documentRef, "option", "", label);
@@ -151,7 +153,7 @@ export function mountLivedLocationFields(options = {}) {
       option.selected = raw === row.mode;
       mode.append(option);
     });
-    const guidance = element(documentRef, "input", "ui-input");
+    const guidance = decorateFieldControl(element(documentRef, "input"));
     guidance.type = "text";
     guidance.value = row.brief;
     guidance.placeholder = "Optional history guidance";

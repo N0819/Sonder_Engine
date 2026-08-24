@@ -16,6 +16,7 @@ import {
   mountLivedLocationFields,
   normalizeLivedLocation,
 } from "./lived-location.js?release=alpha98-ui13-a39372e1d8d1";
+import { decorateFieldControl } from "../ui/components/field.js?release=alpha98-ui13-a39372e1d8d1";
 
 const DRAFT_TYPE = "new-story";
 const DRAFT_OWNER = "current";
@@ -109,7 +110,6 @@ function routeCard(documentRef, index, title, detail, options = {}) {
   button.type = "button";
   button.setAttribute("aria-label", title);
   button.append(
-    node(documentRef, "span", "ui-new-story__choice-index", String(index).padStart(2, "0")),
     node(documentRef, "strong", "", title),
     node(documentRef, "small", "", detail),
   );
@@ -245,22 +245,22 @@ export function openNewStory(options = {}) {
 
   const renderDetails = () => {
     body.append(heading(
-      "Step 1 of 3",
+      "Story direction",
       state.route === "blank" ? "Name the blank story" : "Set the story direction",
       state.route === "blank"
         ? "Both fields are optional. You can change them later in Story tools."
         : "Give the story a name and opening situation. You can refine both before creation.",
     ));
     const form = node(documentRef, "form", "ui-new-story__form");
-    const name = node(documentRef, "input", "ui-input");
+    const name = decorateFieldControl(node(documentRef, "input"));
     name.type = "text";
     name.value = state.name;
     name.maxLength = 240;
     name.addEventListener("input", () => { state.name = name.value; persist(); });
-    const scenario = node(documentRef, "textarea", "ui-textarea ui-new-story__scenario");
+    const scenario = decorateFieldControl(node(documentRef, "textarea", "ui-new-story__scenario"));
     scenario.value = state.scenario;
     scenario.addEventListener("input", () => { state.scenario = scenario.value; persist(); });
-    const language = node(documentRef, "select", "ui-select");
+    const language = decorateFieldControl(node(documentRef, "select"));
     language.setAttribute("aria-label", "Story language");
     const packs = (settings.language_packs || []).filter(pack => pack.story);
     (packs.length ? packs : [{ id: "en", native_name: "English" }]).forEach(pack => {
@@ -299,7 +299,7 @@ export function openNewStory(options = {}) {
   const renderAssets = () => {
     const data = library();
     body.append(heading(
-      "Step 2 of 3",
+      "People and world",
       "Choose story material",
       "Saved and generated material can be mixed. Everything stays editable in Library after creation.",
     ));
@@ -307,7 +307,7 @@ export function openNewStory(options = {}) {
     let updateGenerationState = () => {};
     const personaSection = node(documentRef, "section", "ui-new-story__asset-section");
     personaSection.append(node(documentRef, "h3", "ui-heading ui-heading--3", "Player persona"));
-    const persona = node(documentRef, "select", "ui-select");
+    const persona = decorateFieldControl(node(documentRef, "select"));
     persona.setAttribute("aria-label", "Player persona");
     const noPersona = node(documentRef, "option", "", "No persona yet");
     noPersona.value = "";
@@ -327,7 +327,7 @@ export function openNewStory(options = {}) {
     }, "Uses the configured text model only when the story is created.");
     personaSection.append(generatePersona);
     if (state.generatePersona) {
-      const brief = node(documentRef, "textarea", "ui-textarea");
+      const brief = decorateFieldControl(node(documentRef, "textarea"));
       brief.setAttribute("aria-label", "New persona description");
       brief.value = state.personaBrief;
       brief.addEventListener("input", () => { state.personaBrief = brief.value; persist(); });
@@ -346,7 +346,7 @@ export function openNewStory(options = {}) {
         render();
       }, "Saved in Library",
     )));
-    const brief = node(documentRef, "textarea", "ui-textarea");
+    const brief = decorateFieldControl(node(documentRef, "textarea"));
     brief.setAttribute("aria-label", "New character description");
     brief.placeholder = "Optional: describe one new character for Sonder to generate.";
     brief.value = state.characterBriefs[0] || "";
@@ -414,7 +414,7 @@ export function openNewStory(options = {}) {
     const selectedCharacters = (data.characters || []).filter(item => state.characterIds.includes(Number(item.id)));
     const generatedCount = state.characterBriefs.filter(value => value.trim()).length;
     const selectedLore = (data.lorebooks || []).filter(item => state.loreIds.includes(Number(item.id)));
-    body.append(heading("Step 3 of 3", "Review your story", "Nothing is created until you choose Create story."));
+    body.append(heading("Review", "Review your story", "Nothing is created until you choose Create story."));
     const review = node(documentRef, "dl", "ui-new-story__review");
     const row = (term, value) => {
       review.append(node(documentRef, "dt", "", term), node(documentRef, "dd", "", value));

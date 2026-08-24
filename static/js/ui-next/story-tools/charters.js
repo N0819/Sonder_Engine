@@ -2,6 +2,7 @@ export const MODULE_RELEASE = "alpha98-ui13-a39372e1d8d1";
 
 import { buildLivedLocationRequest, mountLivedLocationFields } from "../lived-location.js?release=alpha98-ui13-a39372e1d8d1";
 import { button, element, markData } from "./shared.js?release=alpha98-ui13-a39372e1d8d1";
+import { decorateFieldControl } from "../../ui/components/field.js?release=alpha98-ui13-a39372e1d8d1";
 
 // UI_CATALOG_START: Charter inspection copy.
 const COPY = Object.freeze({
@@ -117,7 +118,7 @@ export function mountCharterSection(options = {}) {
     let value = { enabled: true, brief: "", horizonHours: 168, characterHistories: [] };
     mountLivedLocationFields({ document: documentRef, target: controls, value, title: "Location and history", onChange(next) { value = next; } });
     const lore = documentRef.createElement("select");
-    lore.className = "ui-select";
+    decorateFieldControl(lore);
     lore.setAttribute("aria-label", "Lore for lived location");
     const blank = element(documentRef, "option", "", "Choose Story Lore");
     blank.value = "";

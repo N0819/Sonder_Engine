@@ -157,9 +157,12 @@ export function createInspectorHost(options = {}) {
   };
 
   function open() {
-    panes = { ...panes, open: true, pinned: false };
+    const keepPinned = panes.pinned && pinAllowed();
+    panes = { ...panes, open: true, pinned: keepPinned };
     persist();
-    if (!layerOpen()) services.router.openLayer({ id: LAYER_ID, focusReturn: "inspector-toggle" });
+    if (!keepPinned && !layerOpen()) {
+      services.router.openLayer({ id: LAYER_ID, focusReturn: "inspector-toggle" });
+    }
     route = services.router.current();
     mountedIdentity = "";
     apply();
@@ -202,6 +205,13 @@ export function createInspectorHost(options = {}) {
   };
   const setLayout = () => apply();
 
+  if (route.destination === "library" && route.query?.item && !personAuthoring()) {
+    panes = { ...panes, open: true, pinned: false };
+    if (!layerOpen()) {
+      services.router.openLayer({ id: LAYER_ID, focusReturn: "destination:library" });
+      route = services.router.current();
+    }
+  }
   apply();
   return Object.freeze({
     sync,

@@ -145,6 +145,8 @@
   .ui-go-to__header { display: flex; justify-content: space-between; align-items: center; gap: var(--ui-space-5); }
   .ui-go-to__header > * { margin: 0; }
   .ui-go-to__results { display: grid; gap: var(--ui-space-2); max-block-size: min(26rem, 55dvh); overflow: auto; }
+  .ui-go-to__group { margin: var(--ui-space-4) var(--ui-space-4) var(--ui-space-1); color: var(--ui-color-text-faint); font: 650 var(--ui-text-micro)/var(--ui-leading-micro) var(--ui-font-mono); letter-spacing: .1em; text-transform: uppercase; }
+  .ui-go-to__group:first-child { margin-block-start: 0; }
   .ui-go-to__result { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--ui-space-5); min-block-size: var(--ui-target-current); padding: var(--ui-space-4) var(--ui-space-5); border: 1px solid transparent; border-radius: var(--ui-radius-md); background: transparent; color: var(--ui-color-text); text-align: start; cursor: pointer; }
   .ui-go-to__result:hover, .ui-go-to__result[aria-selected="true"] { border-color: var(--ui-color-interactive); background: var(--ui-color-interactive-soft); }
   .ui-go-to__result-label { min-inline-size: 0; overflow-wrap: anywhere; font-weight: 650; }

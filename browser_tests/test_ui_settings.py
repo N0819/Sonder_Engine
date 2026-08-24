@@ -93,7 +93,8 @@ def test_accessibility_is_a_real_panel_and_keeps_outer_scroll_fixed(
           contentTop: document.querySelector('[data-settings-content]').scrollTop,
         })"""
     )
-    assert state == {"document": 0, "workspace": 0, "shellTop": 0, "contentTop": 0}
+    assert state["document"] == 0 and state["workspace"] == 0 and state["contentTop"] == 0
+    assert state["shellTop"] >= 64
 
 
 def test_experience_ports_reference_frame_and_applies_local_preferences(
@@ -123,8 +124,8 @@ def test_experience_ports_reference_frame_and_applies_local_preferences(
           return { left: box.left, top: box.top, navWidth: nav.width };
         }"""
     )
-    assert abs(geometry["left"] - 72) <= 1
-    assert abs(geometry["top"] - 0) <= 1
+    assert abs(geometry["left"] - 192) <= 1
+    assert geometry["top"] >= 64
     assert abs(geometry["navWidth"] - 240) <= 1
 
     page.get_by_role("button", name="Use Ash and Brass theme").click()
@@ -401,16 +402,16 @@ def test_shared_settings_selects_use_compact_glass_control_geometry(
           };
         }"""
     )
-    assert comfortable["height"] == 36, comfortable
-    assert 3 <= comfortable["radius"] <= 4, comfortable
-    assert comfortable["fontSize"] == 13, comfortable
+    assert comfortable["height"] == 40, comfortable
+    assert comfortable["radius"] == 9, comfortable
+    assert comfortable["fontSize"] == 14, comfortable
     assert comfortable["appearance"] == "none", comfortable
     assert comfortable["paddingRight"] >= 32, comfortable
     assert comfortable["background"] != "rgba(0, 0, 0, 0)", comfortable
 
     density.select_option("compact")
     compact_height = density.evaluate("node => node.getBoundingClientRect().height")
-    assert compact_height == 32
+    assert compact_height == 36
 
 
 def test_mobile_settings_uses_grouped_disclosures_instead_of_a_sidebar(
@@ -659,9 +660,9 @@ def test_advanced_prompt_editor_uses_current_presets_and_explicit_save(
     )
     channels = tuple(map(int, re.findall(r"\d+", editor_style["background"])[:3]))
     assert channels and max(channels) <= 32
-    assert editor_style["fontSize"] == "13px"
+    assert editor_style["fontSize"] == "14px"
     assert editor_style["fontWeight"] == "400"
-    assert editor_style["lineHeight"] == "18px"
+    assert editor_style["lineHeight"] == "20px"
     editor.fill("Revised focused sheet")
     page.get_by_role("button", name="Save prompt preset").click()
     expect(page.get_by_text("Prompt preset saved.", exact=True)).to_be_visible()
@@ -2000,3 +2001,10 @@ def test_mobile_advanced_keeps_prompt_tools_without_horizontal_overflow(
     assert geometry["viewport"] == 390
     assert geometry["scroll"] <= geometry["viewport"]
     assert geometry["main"] <= geometry["viewport"]
+def test_settings_uses_named_concepts_without_internal_ordinals(
+    page: Page, ui_base_url: str
+) -> None:
+    _open_settings(page, ui_base_url)
+    expect(page.locator(".ui-settings__index")).to_have_count(0)
+    crumbs = page.locator(".ui-settings__crumb").all_text_contents()
+    assert all(not re.search(r"Settings\s*/\s*\d", crumb) for crumb in crumbs)

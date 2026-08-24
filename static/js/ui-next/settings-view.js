@@ -406,7 +406,7 @@ function themeChoice(documentRef, services, id, active) {
   const copy = el(documentRef, "span", "ui-settings__theme-copy");
   copy.append(el(documentRef, "strong", "", name), el(documentRef, "small", "", detail), swatches);
   const status = el(documentRef, "span", "ui-settings__theme-status", id === active ? "Selected" : "Use");
-  control.append(el(documentRef, "span", "ui-settings__index", String(Object.keys(THEME_COPY).indexOf(id) + 1).padStart(2, "0")), copy, status);
+  control.append(copy, status);
   control.addEventListener("click", () => {
     appearance.setTheme(id);
     const stored = services.localState.snapshot().appearance || {};
@@ -1080,7 +1080,7 @@ function contentSettings(documentRef, services, state) {
   const section = el(documentRef, "section", "ui-settings__section");
   const head = el(documentRef, "header", "ui-settings__section-head");
   head.append(
-    el(documentRef, "p", "ui-settings__crumb", "Settings / 03"),
+    el(documentRef, "p", "ui-settings__crumb", "Settings / Content"),
     el(documentRef, "h2", "ui-heading ui-heading--2", "Content"),
     el(documentRef, "p", "ui-muted", "Story boundaries, authored detail, and narrator voice"),
   );
@@ -1252,7 +1252,7 @@ function addOnsSettings(documentRef, services) {
   const section = el(documentRef, "section", "ui-settings__section");
   const head = el(documentRef, "header", "ui-settings__section-head");
   head.append(
-    el(documentRef, "p", "ui-settings__crumb", "Settings / 04"),
+    el(documentRef, "p", "ui-settings__crumb", "Settings / Add-ons"),
     el(documentRef, "h2", "ui-heading ui-heading--2", "Add-ons"),
     el(documentRef, "p", "ui-muted", "Installed extensions, permissions, updates, and settings"),
   );
@@ -1521,7 +1521,7 @@ function maintenanceSettings(documentRef, services) {
   const section = el(documentRef, "section", "ui-settings__section");
   const head = el(documentRef, "header", "ui-settings__section-head");
   head.append(
-    el(documentRef, "p", "ui-settings__crumb", "Settings / 05"),
+    el(documentRef, "p", "ui-settings__crumb", "Settings / Maintenance"),
     el(documentRef, "h2", "ui-heading ui-heading--2", "Maintenance"),
     el(documentRef, "p", "ui-muted", "Updates, storage conversion, and recovery tools"),
   );
@@ -1876,7 +1876,7 @@ function placeholder(documentRef, active) {
   const section = el(documentRef, "section", "ui-settings__section");
   const head = el(documentRef, "header", "ui-settings__section-head");
   head.append(
-    el(documentRef, "p", "ui-settings__crumb", `Settings / ${String(CATEGORIES.indexOf(definition) + 1).padStart(2, "0")}`),
+    el(documentRef, "p", "ui-settings__crumb", `Settings / ${definition[1]}`),
     el(documentRef, "h2", "ui-heading ui-heading--2", definition[1]),
   );
   section.append(head, el(documentRef, "p", "ui-muted", "This category will be connected to its current engine controls in the next Settings slice."));

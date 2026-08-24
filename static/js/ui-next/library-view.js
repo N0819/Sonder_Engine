@@ -3,6 +3,8 @@ export const MODULE_RELEASE = "alpha98-ui13-a39372e1d8d1";
 import { mountLivedLocationFields } from "./lived-location.js?release=alpha98-ui13-a39372e1d8d1";
 import { openNewStory } from "./new-story.js?release=alpha98-ui13-a39372e1d8d1";
 import { decorateFieldControl } from "../ui/components/field.js?release=alpha98-ui13-a39372e1d8d1";
+import { createFilterSheet } from "./components/filter-sheet.js?release=alpha98-ui13-a39372e1d8d1";
+import { createMediaThumb } from "./components/media-row.js?release=alpha98-ui13-a39372e1d8d1";
 
 const loreLocationDrafts = new Map();
 
@@ -510,7 +512,7 @@ function ledger(documentRef, services, state) {
   const route = state.route || {};
   const query = routeQuery(route);
   const activeType = typeForRoute(route);
-  const list = node(documentRef, "ol", "ui-library__ledger");
+  const list = node(documentRef, "ul", "ui-library__ledger");
   list.dataset.libraryLedger = "true";
   const items = (library.items || []).slice(0, 100);
   for (const item of items) {
@@ -523,22 +525,17 @@ function ledger(documentRef, services, state) {
         && String(item.id) === String(openStoryId || ""))) {
       control.setAttribute("aria-current", "true");
     }
-    const index = node(documentRef, "span", "ui-library__index", String(item.id).padStart(2, "0"));
-    index.setAttribute("aria-hidden", "true");
+    const media = createMediaThumb(documentRef, item);
     const copy = node(documentRef, "span", "ui-library__item-copy");
     const name = node(documentRef, "strong", "ui-library__name", item.name || COPY.untitled);
-    if (item.kind === "story") {
-      copy.append(name, node(documentRef, "span", "ui-library__summary", COPY.activeStory));
-    } else {
-      const meta = node(documentRef, "span", "ui-library__meta");
-      meta.append(
-        node(documentRef, "span", "ui-library__kind", KIND_LABELS[item.kind] || COPY.libraryItem),
-        node(documentRef, "span", "ui-library__usage", usage(item)),
-      );
-      if (item.summary) copy.append(name, node(documentRef, "span", "ui-library__summary", item.summary), meta);
-      else copy.append(name, meta);
-    }
-    control.append(index, copy);
+    const meta = node(documentRef, "span", "ui-library__meta");
+    meta.append(
+      node(documentRef, "span", "ui-library__kind", KIND_LABELS[item.kind] || COPY.libraryItem),
+      node(documentRef, "span", "ui-library__usage", usage(item)),
+    );
+    if (item.summary) copy.append(name, node(documentRef, "span", "ui-library__summary", item.summary), meta);
+    else copy.append(name, meta);
+    control.append(media, copy);
     const selectItem = () => {
       services.library.recordRecent(item.key);
       navigate(services, activeType, { ...query, item: item.key });
@@ -591,11 +588,15 @@ function libraryWorkspace(documentRef, services, state) {
   head.append(title);
   const actions = workspaceActions(documentRef, services, activeType);
   if (actions) head.append(actions);
-  section.append(
-    head,
-    workspaceFilters(documentRef, services, filteredState),
-    toolbar(documentRef, services, filteredState),
-  );
+  const filters = workspaceFilters(documentRef, services, filteredState);
+  const toolbarNode = toolbar(documentRef, services, filteredState);
+  const secondary = [
+    ...filters.querySelectorAll(".ui-library__scope-field, .ui-library__story-scope"),
+    ...toolbarNode.querySelectorAll(".ui-library__sort, .ui-library__visibility"),
+  ];
+  const filterSheet = createFilterSheet(documentRef, { label: "Filters", children: secondary });
+  toolbarNode.append(filterSheet.element);
+  section.append(head, filters, toolbarNode);
   const status = resultState(documentRef, filteredState.library);
   if (status) section.append(status);
   if (filteredState.library.items?.length) {
@@ -716,7 +717,7 @@ function addToStory(documentRef, services, library, item) {
   const section = node(documentRef, "section", "ui-library-detail__add");
   section.append(node(documentRef, "h4", "ui-heading ui-heading--3", COPY.addToStoryHeading));
   const controls = node(documentRef, "div", "ui-tool-inline");
-  const select = node(documentRef, "select", "ui-input");
+  const select = decorateFieldControl(node(documentRef, "select"));
   select.setAttribute("aria-label", COPY.storyFor.replace("${name}", item.name || COPY.libraryItem));
   for (const story of stories) {
     const option = node(documentRef, "option", "", story.name || COPY.untitledStory);

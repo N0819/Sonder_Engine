@@ -75,7 +75,7 @@ def _open(page: Page, ui_base_url: str, *, width: int = 1440) -> None:
     response = page.goto(f"{ui_base_url}/static/ui-next.html#/library")
     assert response is not None and response.ok
     page.wait_for_function("document.documentElement.dataset.uiNextState === 'ready'")
-    expect(page.get_by_role("heading", name="Library", level=2)).to_be_visible()
+    expect(page.get_by_role("heading", name="Library", level=2, exact=True)).to_be_visible()
     expect(page.get_by_role("heading", name="Stories", level=2)).to_have_count(0)
     expect(page.locator("[data-library-ledger] [data-library-item]")).to_have_count(1)
     if width > 700:
@@ -85,8 +85,8 @@ def _open(page: Page, ui_base_url: str, *, width: int = 1440) -> None:
               subSidebar: Boolean(node.querySelector('.ui-library__filters')),
             })"""
         )
-        expected = {"rail": 68, "subSidebar": False} if width < 1100 else {
-            "rail": 72, "subSidebar": False,
+        expected = {"rail": 72, "subSidebar": False} if width < 1100 else {
+            "rail": 192, "subSidebar": False,
         }
         assert geometry == expected
     if width > 700:
@@ -117,7 +117,7 @@ def test_library_has_one_workspace_for_filters_ledger_and_actions(
     expect(types.get_by_role("button", name="Characters", exact=True)).to_be_visible()
     expect(types.get_by_role("button", name="Personas", exact=True)).to_be_visible()
     expect(types.get_by_role("button", name="Lore", exact=True)).to_be_visible()
-    expect(workspace.get_by_role("combobox", name="Library scope")).to_be_visible()
+    expect(workspace.get_by_role("combobox", name="Library scope")).to_be_hidden()
     expect(page.locator(".ui-library-home__summary")).to_have_count(0)
     expect(page.locator(".ui-library-home__context")).to_have_count(0)
     actions = workspace.locator(".ui-library-workspace__actions")
@@ -175,6 +175,32 @@ def test_library_uses_the_canonical_field_control_contract(
     expect(page.locator(".ui-library-workspace .ui-input")).to_have_count(0)
 
 
+def test_library_uses_media_rows_without_internal_id_ordinals_and_stages_filters(
+    page: Page, ui_base_url: str
+) -> None:
+    _open(page, ui_base_url)
+
+    expect(page.locator(".ui-library__index")).to_have_count(0)
+    row = page.locator('[data-library-item="story:1"]')
+    expect(row.locator("[data-media-fallback]")).to_have_text("T")
+    filters = page.get_by_role("button", name="Filters", exact=True)
+    expect(filters).to_be_visible()
+    expect(page.get_by_role("combobox", name="Library scope")).to_be_hidden()
+    filters.click()
+    expect(page.get_by_role("combobox", name="Library scope")).to_be_visible()
+    expect(page.get_by_role("combobox", name="Sort Library")).to_be_visible()
+
+
+def test_compact_library_reaches_the_first_result_within_240_pixels(
+    page: Page, ui_base_url: str
+) -> None:
+    _open(page, ui_base_url, width=390)
+    top = page.locator("[data-library-ledger] [data-library-item]").first.evaluate(
+        "node => node.getBoundingClientRect().top"
+    )
+    assert top <= 240, top
+
+
 def test_library_actions_center_compact_icon_and_label_geometry(
     page: Page, ui_base_url: str
 ) -> None:
@@ -201,6 +227,7 @@ def test_library_actions_center_compact_icon_and_label_geometry(
     assert geometry["fontSize"] == 14, geometry
     assert abs(geometry["iconCenter"] - geometry["labelCenter"]) <= 1, geometry
 
+    page.get_by_role("button", name="Filters", exact=True).click()
     sort_select = page.get_by_role("combobox", name="Sort Library")
     select_style = sort_select.evaluate(
         """node => {
@@ -247,8 +274,8 @@ def test_compact_library_navigation_controls_meet_touch_minimum(
 ) -> None:
     _open(page, ui_base_url, width=390)
     sizes = page.locator(
-        ".ui-library-workspace__filters :is(input, select, button), "
-        ".ui-library__toolbar :is(input, select, button), .ui-library__more"
+        ".ui-library-workspace__filters :is(input, select, button):visible, "
+        ".ui-library__toolbar :is(input, select, button):visible, .ui-library__more:visible"
     ).evaluate_all("nodes => nodes.map(node => node.getBoundingClientRect().height)")
     assert sizes and min(sizes) >= 44, sizes
 
@@ -260,7 +287,7 @@ def test_story_selection_requires_explicit_open_action(
 
     page.locator('[data-library-item="story:1"]').click()
     expect(page).to_have_url(re.compile(r"#/library(?:/stories)?\?.*item=story%3A1"))
-    detail = page.get_by_role("complementary", name="Library details")
+    detail = page.get_by_role("dialog", name="Library details")
     expect(detail.get_by_role("button", name="Open in Play", exact=True)).to_be_visible()
     assert "#/play" not in page.url
 
@@ -313,7 +340,7 @@ def test_story_overflow_is_bare_inside_the_card_and_does_not_select_it(
     expect(more).to_be_focused()
 
 
-def test_library_details_ignores_story_tool_resize_and_closes_without_a_gap(
+def test_library_details_pin_expansively_and_close_without_a_gap(
     page: Page, ui_base_url: str
 ) -> None:
     page.add_init_script(
@@ -332,7 +359,7 @@ def test_library_details_ignores_story_tool_resize_and_closes_without_a_gap(
     inspector = page.get_by_role("complementary", name="Library details")
     expect(root).to_have_attribute("data-inspector-kind", "library-details")
     expect(inspector).to_be_visible()
-    expect(inspector.get_by_role("button", name="Resize context panel")).to_be_hidden()
+    expect(root).to_have_attribute("data-context-mode", "pinned")
     assert inspector.evaluate("node => node.getBoundingClientRect().width") >= 320
     action_geometry = inspector.locator(".ui-library-detail__actions").evaluate(
         """node => {
@@ -347,7 +374,7 @@ def test_library_details_ignores_story_tool_resize_and_closes_without_a_gap(
     )
     assert action_geometry == {"scrollFits": True, "controlsFit": True}
 
-    inspector.get_by_role("button", name="Close context panel").click()
+    inspector.get_by_role("button", name="Back", exact=True).click()
     expect(inspector).to_be_hidden()
     geometry = page.evaluate(
         """() => {
@@ -655,10 +682,11 @@ def test_library_search_route_and_desktop_detail_are_truthful(
     page.locator('[data-library-item="character:7"]').click()
 
     expect(page).to_have_url(re.compile(r"item=character%3A7"))
-    detail = page.get_by_role("complementary", name="Library details")
+    detail = page.get_by_role("dialog", name="Library details")
     expect(detail.get_by_role("heading", name="Mara Venn")).to_be_visible()
     expect(detail.get_by_text("The Lantern Archive")).to_be_visible()
     expect(detail.get_by_text("Active", exact=True)).to_be_visible()
+    detail.get_by_role("button", name="Back", exact=True).click()
 
     search = page.get_by_role("searchbox", name="Search Library")
     search.fill("Quiet Road")
@@ -670,7 +698,8 @@ def test_compact_library_detail_is_history_staged_and_targets_are_large(
     page: Page, ui_base_url: str,
 ) -> None:
     _open(page, ui_base_url, width=390)
-    expect(page.get_by_role("combobox", name="Scope")).to_be_visible()
+    page.get_by_role("button", name="Filters", exact=True).click()
+    expect(page.get_by_role("combobox", name="Library scope")).to_be_visible()
     page.get_by_role("button", name="Lore", exact=True).click()
     page.locator('[data-library-item="lore:12"]').click()
 
@@ -731,7 +760,7 @@ def test_japanese_localizes_late_library_detail_without_translating_story_data(
     page.goto(f"{ui_base_url}/static/ui-next.html#/library/characters?item=character%3A7")
     page.wait_for_function("document.documentElement.dataset.uiNextState === 'ready'")
 
-    detail = page.get_by_role("complementary", name="ライブラリの詳細")
+    detail = page.get_by_role("dialog", name="ライブラリの詳細")
     expect(detail.get_by_role("heading", name="Mara Venn")).to_be_visible()
     expect(detail.get_by_text("ストーリーでの使用", exact=True)).to_be_visible()
     expect(detail.get_by_role("button", name="アクティブキャストから外す")).to_be_visible()
@@ -790,7 +819,7 @@ def test_library_character_lifecycle_and_bounded_undo_use_server_truth(
     page.goto(f"{ui_base_url}/static/ui-next.html#/library/characters")
     page.wait_for_function("document.documentElement.dataset.uiNextState === 'ready'")
     page.locator('[data-library-item="character:7"]').click()
-    detail = page.get_by_role("complementary", name="Library details")
+    detail = page.get_by_role("dialog", name="Library details")
 
     detail.get_by_role("button", name="Remove from active cast").click()
     expect(detail.get_by_text("Dormant", exact=True)).to_be_visible()
@@ -873,11 +902,12 @@ def test_primary_persona_is_protected_and_story_delete_names_its_scope(
     page.wait_for_function("document.documentElement.dataset.uiNextState === 'ready'")
 
     page.locator('[data-library-item="persona:9"]').click()
-    detail = page.get_by_role("complementary", name="Library details")
+    detail = page.get_by_role("dialog", name="Library details")
     expect(detail.get_by_text("Primary", exact=True)).to_be_visible()
     expect(detail.get_by_text("Primary persona · change in Story setup")).to_be_visible()
     expect(detail.get_by_role("button", name=re.compile("Remove"))).to_have_count(0)
 
+    detail.get_by_role("button", name="Back", exact=True).click()
     page.get_by_role("button", name="Stories", exact=True).click()
     page.locator('[data-library-item="story:1"]').click()
     detail.get_by_role("button", name="Delete story…").click()
@@ -924,7 +954,7 @@ def test_lore_detach_targets_story_copy_and_undo_reattaches_origin(
     page.goto(f"{ui_base_url}/static/ui-next.html#/library/lore")
     page.wait_for_function("document.documentElement.dataset.uiNextState === 'ready'")
     page.locator('[data-library-item="lore:12"]').click()
-    detail = page.get_by_role("complementary", name="Library details")
+    detail = page.get_by_role("dialog", name="Library details")
 
     detail.get_by_role("button", name="Detach from story").click()
     expect(detail.get_by_text("Not used by a story.")).to_be_visible()
