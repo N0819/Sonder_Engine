@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 from contextlib import contextmanager
 from functools import partial
@@ -19,12 +20,30 @@ OUTPUT = (
     ROOT / "docs" / "design" / "sonder-ui-replacement" / "wp16" / "screenshots"
 )
 CASES = (
-    ("person-editor-1440.png", 1440, 900),
-    ("person-editor-1024.png", 1024, 768),
-    ("person-editor-1024x600.png", 1024, 600),
-    ("person-editor-390.png", 390, 844),
-    ("person-editor-844x390.png", 844, 390),
+    {"filename": "person-editor-1440.png", "width": 1440, "height": 900, "section": "Inner life"},
+    {"filename": "person-editor-1024.png", "width": 1024, "height": 768, "section": "Inner life"},
+    {"filename": "person-editor-1024x600.png", "width": 1024, "height": 600, "section": "Inner life"},
+    {"filename": "person-editor-390.png", "width": 390, "height": 844, "section": "Inner life"},
+    {"filename": "person-editor-360.png", "width": 360, "height": 800, "section": "Inner life"},
+    {"filename": "person-editor-844x390.png", "width": 844, "height": 390, "section": "Inner life"},
+    {"filename": "persona-editor-1440.png", "width": 1440, "height": 900, "kind": "persona", "section": "Story presence"},
+    {"filename": "story-character-editor-1440.png", "width": 1440, "height": 900, "mode": "story-card", "section": "Inner life"},
+    {"filename": "person-editor-discard-1440.png", "width": 1440, "height": 900, "state": "discard"},
+    {"filename": "person-editor-invalid-1440.png", "width": 1440, "height": 900, "state": "invalid"},
+    {"filename": "person-editor-ja-390.png", "width": 390, "height": 844, "language": "ja", "section": "Simulation"},
+    {"filename": "person-editor-accessibility-1440.png", "width": 1440, "height": 900, "accessibility": True, "section": "Appearance"},
+    {"filename": "person-editor-zoom-200.png", "width": 720, "height": 450, "section": "Inner life"},
 )
+
+SECTION_IDS = {
+    "Basics": "basics",
+    "Appearance": "appearance",
+    "History": "history",
+    "Inner life": "inner-life",
+    "Opening": "opening",
+    "Simulation": "simulation",
+    "Story presence": "story-presence",
+}
 
 BOOTSTRAP = {
     "ui_language": "en", "ui_direction": "ltr", "ui_messages": {},
@@ -80,6 +99,24 @@ PERSON_DOCUMENT = {
     "extension_payload": {"route_marks": ["north", "lantern", "archive"]},
 }
 
+PERSONA_DOCUMENT = {
+    "identity": {
+        "uid": "persona_rin", "name": "Rin Vale", "aliases": ["Rin"],
+        "pronouns": {"subject": "they", "object": "them", "possessive": "their"},
+    },
+    "initial_outfit": {"wearing": ["blue traveling coat"], "state": [], "regions": {}},
+    "embodiment": {
+        "visible": {"summary": "A calm traveler with an ink-stained cuff."},
+        "senses": [], "scent": "cedar", "latent": [], "extra_parts": [],
+    },
+    "competence": {"abilities": ["patient listening", "map reading"]},
+    "knowledge": {
+        "public_history": "A traveler returning to the Lantern Archive.",
+        "private_history": ["Knows why the northern signal failed."],
+    },
+    "narration": {"voice_setting": "Close third person with restrained sensory detail."},
+}
+
 ITEM = {
     "kind": "character", "id": 7, "key": "character:7", "name": "Mara Venn",
     "summary": "A careful courier who knows the signal roads.", "subtype": "character",
@@ -116,11 +153,20 @@ def fulfill(route: Route, payload: object) -> None:
     )
 
 
-def route_api(page: Page) -> None:
+def route_api(page: Page, case: dict[str, object]) -> list[str]:
+    kind = str(case.get("kind") or "character")
+    language = str(case.get("language") or "en")
+    messages = (
+        json.loads((ROOT / "language_packs" / "ja" / "ui.json").read_text(encoding="utf-8"))
+        if language == "ja" else {}
+    )
+    seen: list[str] = []
+
     def handler(route: Route) -> None:
         path = route.request.url.split("?", 1)[0]
+        seen.append(path)
         if path.endswith("/api/bootstrap"):
-            fulfill(route, BOOTSTRAP)
+            fulfill(route, {**BOOTSTRAP, "ui_language": language, "ui_messages": messages})
         elif path.endswith("/api/library"):
             fulfill(route, {
                 "items": [ITEM],
@@ -136,35 +182,84 @@ def route_api(page: Page) -> None:
                 "kind": "character", "id": 7, "owner": "character:7",
                 "revision": "wp16-evidence", "document": PERSON_DOCUMENT,
             })
+        elif path.endswith("/api/library/authoring/persona/9"):
+            fulfill(route, {
+                "kind": "persona", "id": 9, "owner": "persona:9",
+                "revision": "wp16-persona-evidence", "document": PERSONA_DOCUMENT,
+            })
+        elif path.endswith("/api/chats/1"):
+            fulfill(route, {
+                "chat": {"id": 1, "name": "The Lantern Archive"},
+                "participants": [{
+                    "id": 7, "name": "Mara Venn", "card_source": "library",
+                    "sheet": json.dumps(PERSON_DOCUMENT, ensure_ascii=False),
+                }],
+            })
         else:
             fulfill(route, {"detail": "Not found"})
 
     page.route("**/api/**", handler)
+    return seen
 
 
 def main() -> None:
     from playwright.sync_api import sync_playwright
 
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--case", default="", help="Capture one exact output filename")
+    args = parser.parse_args()
+    selected = [case for case in CASES if not args.case or case["filename"] == args.case]
+    if not selected:
+        raise SystemExit(f"Unknown capture case: {args.case}")
     OUTPUT.mkdir(parents=True, exist_ok=True)
     with serve_root() as base_url, sync_playwright() as playwright:
         browser = playwright.chromium.launch()
-        for filename, width, height in CASES:
+        for case in selected:
+            filename = str(case["filename"])
+            width = int(case["width"])
+            height = int(case["height"])
             page = browser.new_page(viewport={"width": width, "height": height})
             page.emulate_media(reduced_motion="reduce")
-            route_api(page)
+            seen_api = route_api(page, case)
+            kind = str(case.get("kind") or "character")
+            mode = str(case.get("mode") or "edit")
+            item = "persona%3A9" if kind == "persona" else "character%3A7"
+            story = "&story=1" if mode == "story-card" else ""
             page.goto(
                 f"{base_url}/static/ui-next.html"
-                "#/library/characters?item=character%3A7&mode=edit"
+                f"#/library/{'personas' if kind == 'persona' else 'characters'}"
+                f"?item={item}&mode={mode}{story}"
             )
             page.wait_for_function(
-                "document.documentElement.dataset.uiNextState === 'ready'"
+                "document.documentElement.dataset.uiNextState === 'ready'",
+                timeout=10_000,
             )
-            page.get_by_role("tab", name="Inner life").click()
-            disclosures = page.locator(
-                '.ui-person-editor__panel:not([hidden]) details > summary'
-            )
-            for index in range(disclosures.count()):
-                disclosures.nth(index).click()
+            try:
+                page.locator(".ui-person-editor").wait_for(state="visible", timeout=10_000)
+            except Exception as exc:
+                summary = " ".join(page.locator("body").inner_text().split())[:800]
+                raise RuntimeError(
+                    f"Person editor did not render for {filename}; APIs={seen_api}; body={summary}"
+                ) from exc
+            if case.get("accessibility"):
+                page.locator("html").evaluate(
+                    "node => { node.dataset.a11ySolid = 'true'; node.dataset.a11yContrast = 'high'; }"
+                )
+            state = str(case.get("state") or "")
+            if state == "discard":
+                page.get_by_role("textbox", name="Name").fill("Mara Venn — revised")
+                page.get_by_role("button", name="Discard draft").click()
+            elif state == "invalid":
+                more = page.locator(".ui-person-editor__more")
+                more.locator("summary").click()
+                more.get_by_role("button", name="Advanced", exact=True).click()
+                page.locator('[name="advanced_json"]').fill("{ not valid JSON")
+                page.get_by_role("button", name="Apply advanced JSON").click()
+            else:
+                section = str(case.get("section") or "Basics")
+                page.locator(
+                    f'.ui-person-editor__tab[aria-controls$="-{SECTION_IDS[section]}"]'
+                ).click()
             page.locator("[data-person-scroll-region]").evaluate(
                 "node => { node.scrollTop = 0; }"
             )
@@ -174,6 +269,7 @@ def main() -> None:
             page.screenshot(path=destination, full_page=False)
             if destination.stat().st_size == 0:
                 raise RuntimeError(f"Empty screenshot: {destination}")
+            print(f"Captured {filename}")
             page.close()
         browser.close()
 

@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "alpha98-ui4-842dd802b09f";
+export const MODULE_RELEASE = "alpha98-ui5-7fa758fa6df7";
 
 export const SLICE_OWNERS = Object.freeze({
   server: Object.freeze([

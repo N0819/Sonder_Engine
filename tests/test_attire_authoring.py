@@ -656,7 +656,8 @@ def test_both_card_editors_offer_regions_and_the_generator():
     runtime = (root / "static/js/ui-next/library-authoring-runtime.js").read_text(encoding="utf-8")
     assert "createPersonEditor" in editor
     assert "createPersonSectionEditor" in editor
-    assert "createSchemaNode" in sections
+    assert 'path: "initial_outfit.regions"' in sections
+    assert "createAdditionalNode" in sections
     assert "JSON.stringify(state.draft, null, 2)" in editor
     assert "previewAppearance" in editor
     assert "/fill_appearance" in runtime

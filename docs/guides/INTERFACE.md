@@ -337,21 +337,33 @@ do not carry persistent work, failures, or choices.
   replaces the Library destination body while leaving concise selection detail
   as the inspector's responsibility outside authoring. The inspector is hidden
   for the task without changing its persisted open, pin, or size preference.
-- The shared authoring framework assigns fields to Basics, Appearance, History,
-  Advanced, and the applicable Character or Persona sections. Unknown
-  top-level fields remain reachable through Additional fields and Advanced;
-  the client never drops or normalizes a stored field merely because it lacks
-  a dedicated control.
+- The shared authoring framework assigns maintained fields through one semantic
+  path registry to Basics, Appearance, History, and the applicable Character or
+  Persona sections. The registry owns plain labels, consequence-oriented help,
+  control type, numeric bounds, and enumerated choices. Internal schema keys do
+  not appear in ordinary sections. Unknown fields remain literal and lossless
+  under More > Additional fields and in Advanced; the client never drops or
+  normalizes a stored field merely because it lacks a dedicated control.
+- Peer content sections remain the visible tab set. Character Start a Story,
+  Additional fields, and Advanced are staged under one More disclosure whose
+  summary names the active auxiliary section. Start a Story uses the explicit
+  `Save and start Story` boundary and does not become a parallel workflow.
 - Person authoring has one vertical document scroll owner. Wide layouts use a
   restrained section rail; compact and short-landscape layouts stage the same
-  sections as a horizontal strip. Back, save state, and Save remain reachable,
-  hidden panels leave the focus order, and visible controls retain the 44 px
-  interaction target.
+  peer sections plus More as a horizontal strip. Back and save state share one
+  topbar, and the editor frame owns the persistent action footer. Hidden panels
+  and closed More controls leave the focus order, visible controls retain the
+  44 px interaction target, structured editors retain useful authored height,
+  and the page itself does not become a second scroll owner.
 - Save state distinguishes `Saved to Library` from `Draft saved on this
   device`. Back removes authoring-only route keys while preserving category,
   scope, Story, query, sort, visibility, selection, and the exact parent-route
   scroll. A returned selection receives focus, and an owner-scoped local draft
   and section choice survive re-entry.
+- Discard draft is the one destructive local action. It opens a modal that
+  names the document and explains that the last Library version will be
+  restored; only the explicit destructive confirmation invokes the runtime's
+  discard operation.
 
 ### Settings and appearance ownership
 

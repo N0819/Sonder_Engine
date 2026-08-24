@@ -32,16 +32,29 @@
 }
 
 .ui-person-workspace .ui-authoring {
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
 }
 
-.ui-person-workspace .ui-authoring > .ui-button {
+.ui-authoring__topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ui-space-4);
+  min-inline-size: 0;
+}
+
+.ui-authoring__topbar > .ui-button {
   min-block-size: 44px;
-  justify-self: start;
+  flex: 0 0 auto;
+}
+
+.ui-authoring__topbar > .ui-authoring__status {
+  min-inline-size: 0;
+  text-align: end;
 }
 
 .ui-person-workspace .ui-authoring-form {
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr);
   min-block-size: 0;
   overflow: hidden;
 }
@@ -49,6 +62,7 @@
 .ui-person-editor {
   display: grid;
   grid-template-columns: minmax(11rem, 14rem) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
   min-inline-size: 0;
   min-block-size: 0;
   overflow: hidden;
@@ -67,6 +81,56 @@
   padding: var(--ui-space-3);
   border-inline-end: 1px solid var(--ui-color-border);
   background: var(--ui-color-surface-muted);
+}
+
+.ui-person-editor__tabs,
+.ui-person-editor__more-menu {
+  display: grid;
+  gap: var(--ui-space-1);
+}
+
+.ui-person-editor__more {
+  margin-block-start: auto;
+}
+
+.ui-person-editor__more > summary {
+  list-style: none;
+}
+
+.ui-person-editor__more > summary::-webkit-details-marker {
+  display: none;
+}
+
+.ui-person-editor__more-summary,
+.ui-person-editor__more-button {
+  display: flex;
+  align-items: center;
+  inline-size: 100%;
+  min-inline-size: 44px;
+  min-block-size: 44px;
+  padding: var(--ui-space-2) var(--ui-space-3);
+  border: 1px solid transparent;
+  border-radius: var(--ui-radius-sm);
+  background: transparent;
+  color: var(--ui-color-text-muted);
+  font: inherit;
+  font-size: .875rem;
+  font-weight: 600;
+  text-align: start;
+  cursor: pointer;
+}
+
+.ui-person-editor__more-summary:hover,
+.ui-person-editor__more-button:hover {
+  border-color: var(--ui-color-border);
+  color: var(--ui-color-text);
+  background: var(--ui-color-surface-raised);
+}
+
+.ui-person-editor__more-summary[data-state="selected"],
+.ui-person-editor__more-button[aria-current="page"] {
+  color: var(--ui-color-interactive-strong);
+  background: var(--ui-color-interactive-soft);
 }
 
 .ui-person-editor__tab {
@@ -98,6 +162,8 @@
 }
 
 .ui-person-editor__panels {
+  grid-column: 2;
+  grid-row: 1;
   min-inline-size: 0;
   min-block-size: 0;
   overflow-y: auto;
@@ -120,8 +186,8 @@
   border-block-end: 1px solid var(--ui-color-border);
 }
 
-.ui-person-workspace :is(.ui-button, .ui-person-editor__tab),
-.ui-person-workspace :is(input, select, textarea, summary) {
+.ui-person-workspace :where(.ui-button, .ui-person-editor__tab),
+.ui-person-workspace :where(input, select, textarea, summary) {
   min-block-size: 44px;
 }
 
@@ -169,12 +235,12 @@
 }
 
 .ui-authoring-form__long {
-  min-height: 10rem;
+  min-block-size: 10rem;
   resize: vertical;
 }
 
 .ui-authoring-form__json {
-  min-height: 22rem;
+  min-block-size: 22rem;
   font-family: var(--ui-font-mono);
   tab-size: 2;
 }
@@ -211,8 +277,22 @@
 }
 
 .ui-authoring-schema__json {
-  min-height: 7rem;
+  min-block-size: 7rem;
   font-family: var(--ui-font-mono);
+}
+
+.ui-authoring-field-group {
+  display: grid;
+  gap: var(--ui-space-3);
+  padding-block: var(--ui-space-4);
+  border-block-start: 1px solid var(--ui-color-border);
+}
+
+.ui-authoring-field-group__title {
+  margin: 0;
+  color: var(--ui-color-text);
+  font-size: .875rem;
+  font-weight: 650;
 }
 
 .ui-authoring-check {
@@ -303,6 +383,13 @@
   border-block-start: 1px solid var(--ui-color-border);
 }
 
+.ui-person-editor > .ui-authoring-form__actions {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  padding: var(--ui-space-3);
+  background: var(--ui-color-surface-solid);
+}
+
 .ui-authoring-form__actions.ui-action-cluster {
   flex-wrap: nowrap;
   gap: 0;
@@ -312,6 +399,13 @@
 
 .ui-person-workspace .ui-authoring-form__actions.ui-action-cluster > .ui-button {
   min-block-size: 44px;
+}
+
+.ui-person-discard-dialog__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--ui-space-2);
 }
 
 .ui-library-detail__actions.ui-action-cluster {
@@ -363,18 +457,53 @@
 
   .ui-person-editor {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) auto;
   }
 
   .ui-person-editor__nav {
-    flex-direction: row;
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
     gap: var(--ui-space-1);
-    overflow-x: auto;
-    overflow-y: hidden;
+    overflow: visible;
     padding: var(--ui-space-2);
     border-inline-end: 0;
     border-block-end: 1px solid var(--ui-color-border);
+  }
+
+  .ui-person-editor__tabs {
+    display: flex;
+    gap: var(--ui-space-1);
+    min-inline-size: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
     scrollbar-width: thin;
+  }
+
+  .ui-person-editor__more {
+    display: block;
+    margin-block-start: 0;
+  }
+
+  .ui-person-editor__more-menu {
+    position: absolute;
+    z-index: var(--ui-z-menu);
+    inset-block-start: calc(100% - 1px);
+    inset-inline-end: var(--ui-space-2);
+    display: grid;
+    min-inline-size: min(15rem, calc(100% - 2 * var(--ui-space-2)));
+    padding: var(--ui-space-2);
+    border: 1px solid var(--ui-color-border-strong);
+    border-radius: var(--ui-radius-md);
+    background: var(--ui-color-surface-raised);
+    box-shadow: var(--ui-shadow-menu);
+  }
+
+  .ui-person-editor__more-summary,
+  .ui-person-editor__more-button {
+    inline-size: auto;
+    flex: 0 0 auto;
+    white-space: nowrap;
   }
 
   .ui-person-editor__tab {
@@ -388,12 +517,18 @@
   }
 
   .ui-person-editor__panels {
+    grid-column: 1;
+    grid-row: 2;
     padding: var(--ui-space-3);
     scrollbar-gutter: auto;
   }
 
   .ui-person-workspace .ui-authoring-form__actions {
     padding-block-start: var(--ui-space-2);
+  }
+
+  .ui-person-editor > .ui-authoring-form__actions {
+    grid-row: 3;
   }
 
   .ui-authoring-form input,

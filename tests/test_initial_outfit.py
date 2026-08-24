@@ -305,7 +305,8 @@ def test_card_editors_place_initial_outfit_near_identity():
     # generators still emit it, and character_schema migrates it into regions
     # on read -- but nothing types into it any more.
     assert "createPersonSectionEditor" in source
-    assert "createSchemaNode" in sections
+    assert 'path: "initial_outfit.regions"' in sections
+    assert "createAdditionalNode" in sections
     assert "JSON.stringify(state.draft, null, 2)" in source
     assert "services.authoring.stage(parsed, { render: true })" in source
 

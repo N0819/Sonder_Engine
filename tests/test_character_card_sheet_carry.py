@@ -21,7 +21,8 @@ def test_identity_uid_is_locked_without_dropping_unpresented_fields():
     assert 'dotted === "identity.uid"' in sections
     assert "state.draft" in source
     assert "createPersonSectionEditor" in source
-    assert "createSchemaNode" in sections
+    assert "FIELD_SPECS" in sections
+    assert "createAdditionalNode" in sections
 
 
 def test_character_and_persona_share_the_lossless_editor():

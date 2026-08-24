@@ -1,13 +1,13 @@
-export const MODULE_RELEASE = "alpha98-ui4-842dd802b09f";
+export const MODULE_RELEASE = "alpha98-ui5-7fa758fa6df7";
 
 import {
   createStoryEditor,
   createStoryImporter,
-} from "./library-editors/story.js?release=alpha98-ui4-842dd802b09f";
+} from "./library-editors/story.js?release=alpha98-ui5-7fa758fa6df7";
 import {
   createPersonEditor,
   createPersonImporter,
-} from "./library-editors/character-persona.js?release=alpha98-ui4-842dd802b09f";
+} from "./library-editors/character-persona.js?release=alpha98-ui5-7fa758fa6df7";
 
 // UI_CATALOG_START: Library authoring status copy.
 const COPY = Object.freeze({
@@ -147,7 +147,9 @@ export function mountLibraryAuthoring(options = {}) {
         const status = node(documentRef, "p", "ui-authoring__status", statusCopy(state, services.localizer.t));
         status.setAttribute("role", "status");
         status.dataset.saveStatus = state.status;
-        wrapper.append(back, status, createPersonEditor({
+        const topbar = node(documentRef, "div", "ui-authoring__topbar");
+        topbar.append(back, status);
+        wrapper.append(topbar, createPersonEditor({
           document: documentRef, services, state,
         }));
         target.dataset.authoringOwner = state.owner;
@@ -178,7 +180,9 @@ export function mountLibraryAuthoring(options = {}) {
     const status = node(documentRef, "p", "ui-authoring__status", statusCopy(state, services.localizer.t));
     status.setAttribute("role", "status");
     status.dataset.saveStatus = state.status;
-    wrapper.append(back, status, createStoryEditor({
+    const topbar = node(documentRef, "div", "ui-authoring__topbar");
+    topbar.append(back, status);
+    wrapper.append(topbar, createStoryEditor({
       document: documentRef,
       services,
       state,
