@@ -32,7 +32,7 @@ def test_authenticated_root_is_the_only_product_host_entry(monkeypatch):
     assert anonymous.headers["location"] == "/login"
     assert root.status_code == 200
     assert 'data-ui-next-entry="application"' in root.text
-    assert "/static/js/ui-next/main.js?release=alpha98-ui6-57d168ae23cf" in root.text
+    assert "/static/js/ui-next/main.js?release=alpha98-ui7-516e7c3e67a7" in root.text
     assert "/static/js/app.js" not in root.text
     assert former_development_route.status_code == 404
 

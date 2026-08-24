@@ -66,7 +66,7 @@ def test_lived_location_request_normalizes_character_routes(
     _open(page, ui_base_url)
     payload = page.evaluate(
         """async () => {
-          const module = await import('/static/js/ui-next/lived-location.js?release=alpha98-ui6-57d168ae23cf');
+          const module = await import('/static/js/ui-next/lived-location.js?release=alpha98-ui7-516e7c3e67a7');
           return module.buildLivedLocationRequest({
             enabled: true,
             brief: '  A crowded orbital customs station  ',

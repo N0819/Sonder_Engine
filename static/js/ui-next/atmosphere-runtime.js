@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "alpha98-ui6-57d168ae23cf";
+export const MODULE_RELEASE = "alpha98-ui7-516e7c3e67a7";
 
 const DEFAULTS = Object.freeze({ muted: false, volume: 0.7, chime: false });
 

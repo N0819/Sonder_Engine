@@ -367,6 +367,16 @@ do not carry persistent work, failures, or choices.
 
 ### Settings and appearance ownership
 
+- `#/settings` is the scan-first Settings overview. It projects four ordered
+  groups—Connections, Appearance, Story & host, and Advanced—into one readable
+  row ledger. Its summaries read only already-loaded Settings/extension state
+  and browser-local presentation preferences; rendering the overview cannot
+  discover, mutate, update, or persist engine-owned settings.
+- Each available overview row is one link to an existing authoritative route.
+  Turn details is unavailable and unfocusable without an open Story. Detailed
+  pages keep their category navigation and expose an ordinary Settings overview
+  link. Search continues to open exact controls. The bounded navigation-state
+  owner restores overview scroll and launching-row/search focus on browser Back.
 - The shell gives the destination track `minmax(0, 1fr)`. Settings gives its
   detail track the same bound and makes `[data-settings-content]` the vertical
   scroll owner. The document body is never relied on to reveal clipped settings

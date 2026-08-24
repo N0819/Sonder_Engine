@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "alpha98-ui6-57d168ae23cf";
+export const MODULE_RELEASE = "alpha98-ui7-516e7c3e67a7";
 
 const MAX_SCROLL_REGIONS = 80;
 const MAX_SCROLL_OFFSET = 10_000_000;
@@ -81,10 +81,14 @@ export function createNavigationState(options = {}) {
   const onRoute = route => {
     captureScroll();
     currentHash = route.canonicalHash;
+    const keepOverviewFocus = route.destination === "settings"
+      && navigation.focusIdentity.startsWith("settings-overview:");
     navigation = {
       ...navigation,
       route: route.valid ? route.canonicalHash : `#/${route.destination}`,
-      focusIdentity: `destination:${route.destination}`,
+      focusIdentity: keepOverviewFocus
+        ? navigation.focusIdentity
+        : `destination:${route.destination}`,
     };
     persist();
     restoreScroll(currentHash);
@@ -101,6 +105,12 @@ export function createNavigationState(options = {}) {
     return Boolean(match);
   };
 
+  const rememberFocus = focusIdentity => {
+    const identity = String(focusIdentity || "").slice(0, 120);
+    navigation = { ...navigation, focusIdentity: identity };
+    persist();
+  };
+
   const teardown = () => {
     if (stopped) return;
     captureScroll();
@@ -111,6 +121,7 @@ export function createNavigationState(options = {}) {
   return Object.freeze({
     prepareInitialRoute,
     onRoute,
+    rememberFocus,
     restoreFocus,
     captureScroll,
     teardown,

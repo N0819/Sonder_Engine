@@ -96,7 +96,7 @@ information-architecture authority.
 | ID | Priority | Status | Observed problem | Approved direction | Browser verification after feature approval |
 |---|---:|---|---|---|---|
 | UI-BL-01 | P2 | Fixed | The shipped theme choices did not provide a safe user-authored theme workflow, and unrestricted CSS would compromise layout, accessibility, and upgrade contracts. | Implement the approved eight-role semantic-token editor with preview, reset, contrast validation, and safe import/export. Arbitrary CSS and layout overrides remain out of bounds. | Browser tests create, preview, persist, reload, reset, export, and import at desktop and compact viewports; malformed, extra-key, low-contrast, CSS, URL, and markup payloads fall back safely without damaging the current theme. |
-| UI-BL-02 | P2 | Planned | Direct category entry is efficient for repeat users but gives no clean scan-first map of where Settings tasks live or their current high-level state. | Make `#/settings` a grouped row ledger for Connections, Appearance, Story & host, and Advanced. Each row uses a local icon, plain title, optional owned summary, and chevron into an existing authoritative route. Keep search and every detailed page; copy no external assets, code, branding, or pixel values. | Verify ordered groups and routes, summary ownership, direct deep links, search, browser Back, focus/scroll restoration, unavailable Turn details, 44 px compact targets, and zero horizontal overflow across desktop, phone, short landscape, Japanese, large-interface, and 200-percent zoom-equivalent states. |
+| UI-BL-02 | P2 | Fixed | Direct category entry is efficient for repeat users but gave no clean scan-first map of where Settings tasks live or their current high-level state. | `#/settings` is now a grouped row ledger for Connections, Appearance, Story & host, and Advanced. Each row uses a local icon, plain title, optional owned summary, and chevron into an existing authoritative route. Search and every detailed page remain; no external assets, code, branding, or pixel values were copied. | Ordered groups/routes, summary ownership, direct deep links, search, browser Back, focus/scroll restoration, unavailable Turn details, 44 px compact targets, and zero horizontal overflow pass focused static and browser contracts. WP-18 records desktop, tablet, phone, and short-landscape evidence. |
 
 The current Design Bible and approved replacement direction remain authoritative.
 This ledger is the sole retained product-facing record; no separate intake
@@ -209,5 +209,21 @@ The Settings, curated/custom theme, and shared-control package was verified on
 - The complete immutable UI graph is coherent at
   `alpha98-ui6-57d168ae23cf`.
 - The grouped Settings overview requested during final review is recorded as
-  UI-BL-02 with its own design and executable follow-up plan; it is intentionally
+  UI-BL-02 with its own design and executable follow-up plan; it was intentionally
   not mixed into the frozen UI6 asset graph.
+
+## Grouped Settings overview record
+
+The scan-first Settings home was verified on 2026-08-23 as the separate UI7
+package.
+
+- `#/settings`, global Settings navigation, and `mod+,` open the overview;
+  existing category, search, and Advanced-tool routes remain compatible.
+- Four ordered ledgers expose 13 task rows. Summaries are pure projections of
+  already-owned state, and Turn details remains unavailable without a Story.
+- Browser Back restores both the overview scroll position and its launching row
+  or search field through the bounded navigation-state owner.
+- The focused Settings/overview/shell browser gate passed 68 tests.
+- WP-18 records six reviewed desktop, tablet, phone, short-landscape, detail,
+  and Back-return states.
+- The immutable UI graph is coherent at `alpha98-ui7-516e7c3e67a7`.
