@@ -66,7 +66,7 @@ def test_experience_ports_reference_frame_and_applies_local_preferences(
 
     expect(page.get_by_role("heading", name="Sonder preferences", level=1)).to_be_visible()
     categories = page.get_by_role("navigation", name="Settings categories")
-    expect(categories.get_by_role("link")).to_have_count(6)
+    expect(categories.get_by_role("link")).to_have_count(7)
     expect(categories.get_by_role("link", name="Experience", exact=True)).to_have_attribute(
         "aria-current", "page"
     )
