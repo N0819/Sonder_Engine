@@ -277,10 +277,13 @@ as the UI10 package.
   destination rail and optional detail inspector are the only adjacent regions.
 - The focused Library, authoring, runtime, and entry gate passed 56 tests; the
   complete browser suite passed 245 tests.
-- The complete repository suite passed 8,808 tests with 4 expected
-  platform-specific skips. The seven initial extension failures were caused by
-  Git safe-directory rejection in the isolated worktree and passed when the
-  exact repository and worktree paths were supplied process-locally.
+- The complete repository suite covered 8,808 tests with 4 expected
+  platform-specific skips. The pre-review run passed all 8,808; the final
+  parallel run passed 8,807 and hit one unrelated Windows temporary-directory
+  rename race, whose exact failed node passed immediately in isolation. Seven
+  earlier extension failures were caused by Git safe-directory rejection in
+  the isolated worktree and passed when the exact repository and worktree paths
+  were supplied process-locally.
 - The repeatable Library capture produced 32 reviewed desktop, tablet, phone,
   short-height, detail, Japanese, reduced-motion, and scale states with zero
   horizontal overflow, undersized compact targets, unbounded rows, or page
