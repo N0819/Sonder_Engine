@@ -3,7 +3,7 @@ import {
   CUSTOM_THEME_STORAGE_KEY,
   persistCustomTheme,
   readCustomTheme,
-} from "./custom-theme.js?release=alpha98-ui10-c14a4cf8dabd";
+} from "./custom-theme.js?release=alpha98-ui10-0415f377b12f";
 
 const THEMES = Object.freeze([
   { id: "carbon-signal", name: "Carbon Signal" },
