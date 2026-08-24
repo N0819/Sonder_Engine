@@ -167,6 +167,7 @@ def test_custom_theme_editor_syncs_hex_rgb_and_persists_after_reload(
     page.get_by_role("button", name="Edit Accent color", exact=True).click()
     dialog = page.get_by_role("dialog", name="Choose Accent color")
     expect(dialog).to_be_visible()
+    dialog.get_by_text("More color controls", exact=True).click()
     hex_field = dialog.get_by_role("textbox", name="Hex color")
     hex_field.fill("#80e4e8")
     expect(dialog.get_by_role("spinbutton", name="Red")).to_have_value("128")
@@ -193,10 +194,14 @@ def test_custom_theme_editor_syncs_hex_rgb_and_persists_after_reload(
     assert accent == "#80E4E8"
 
 
-def test_custom_theme_invalid_color_cannot_replace_saved_state_and_mobile_fits(
+def test_custom_theme_can_save_an_intermediate_color_without_applying_an_unsafe_palette(
     page: Page, ui_base_url: str
 ) -> None:
     _open_settings(page, ui_base_url, width=390)
+    page_errors: list[str] = []
+    page.on("pageerror", lambda error: page_errors.append(str(error)))
+    page.get_by_role("button", name="Use Custom Theme", exact=True).click()
+    expect(page.locator("html")).to_have_attribute("data-theme", "custom")
     original = page.evaluate(
         "localStorage.getItem('sonder.ui.next.custom-theme.v1')"
     )
@@ -205,13 +210,16 @@ def test_custom_theme_invalid_color_cannot_replace_saved_state_and_mobile_fits(
     dialog = page.get_by_role("dialog", name="Choose Primary text color")
     dialog.get_by_role("textbox", name="Hex color").fill("#101010")
     expect(dialog.locator(".ui-settings__color-error")).to_contain_text("Primary text")
-    expect(dialog.get_by_role("button", name="Save color")).to_be_disabled()
-    dialog.get_by_role("button", name="Cancel").click()
+    expect(dialog.get_by_role("button", name="Save color")).to_be_enabled()
+    dialog.get_by_role("button", name="Save color").click()
     expect(dialog).to_be_hidden()
     expect(opener).to_be_focused()
+    expect(page.get_by_role("button", name="Use Custom Theme", exact=True)).to_be_disabled()
+    expect(page.locator("[data-custom-theme-validation]")).to_contain_text("Primary text")
     assert page.evaluate(
         "localStorage.getItem('sonder.ui.next.custom-theme.v1')"
     ) == original
+    assert page_errors == []
 
     geometry = page.evaluate(
         """() => ({

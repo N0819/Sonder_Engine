@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "alpha98-ui12-7eaf6b3481a3";
+export const MODULE_RELEASE = "alpha98-ui13-a39372e1d8d1";
 
 const ALLOWED_ELEMENTS = new Set([
   "a",

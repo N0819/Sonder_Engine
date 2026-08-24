@@ -68,7 +68,7 @@ def test_settings_root_projects_one_grouped_navigation_and_theme_panel(
 
     navigation = page.get_by_role("navigation", name="Settings categories")
     expect(navigation.locator("[data-settings-navigation-group]")).to_have_count(4)
-    expect(navigation.locator("[data-settings-navigation-row]")).to_have_count(13)
+    expect(navigation.locator("[data-settings-navigation-row]")).to_have_count(11)
     expect(page.locator("[data-settings-overview]")).to_have_count(0)
     expect(page.get_by_role("link", name="Settings overview")).to_have_count(0)
     expect(navigation.get_by_role("link", name="Theme", exact=True)).to_have_attribute(
@@ -87,9 +87,8 @@ def test_navigation_rows_open_real_panels_without_a_second_launcher(
     _open_navigation(page, ui_base_url)
     navigation = page.get_by_role("navigation", name="Settings categories")
 
-    turn_details = navigation.locator('[data-settings-navigation-row="turn-details"]')
-    expect(turn_details).to_have_attribute("aria-disabled", "true")
-    expect(turn_details).to_contain_text("Open a Story first")
+    expect(navigation.locator('[href^="#/play"]')).to_have_count(0)
+    expect(navigation.locator('[href^="#/library"]')).to_have_count(0)
 
     navigation.get_by_role("link", name="Model assignments").click()
     expect(page).to_have_url(

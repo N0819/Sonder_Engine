@@ -143,7 +143,7 @@ from web.auth_routes import (
     _set_guest_cookie as set_guest_cookie,
     router as auth_router,
 )
-from web.library import cleanup_library_state, router as library_router
+from web.library import active_story_rows, cleanup_library_state, router as library_router
 from web.library_authoring import (
     assert_expected_revision,
     authoring_payload,
@@ -620,7 +620,7 @@ _RELEASED_UI_ASSET_PREFIXES = (
     "/static/js/ui-next/", "/static/js/ui/", "/static/css/ui/",
     "/static/assets/icons/sonder-icons.svg",
 )
-_UI_RELEASE = "alpha98-ui12-7eaf6b3481a3"
+_UI_RELEASE = "alpha98-ui13-a39372e1d8d1"
 
 
 @app.middleware("http")
@@ -1468,7 +1468,7 @@ def bootstrap():
         "characters": [dict(r) for r in q("SELECT id,name,sheet FROM characters")],
         "personas": [dict(r) for r in q("SELECT id,name,sheet FROM personas")],
         "lorebooks": [dict(r) for r in q("SELECT * FROM lorebooks WHERE chat_id IS NULL")],
-        "chats": [dict(r) for r in q("SELECT * FROM chats ORDER BY id DESC")],
+        "chats": active_story_rows(),
         "nsfw_enabled": get_setting("nsfw_enabled") == "1",
         # What a card authors under each clothing region (attire.describe's
         # `beneath`). Off unless asked for: exposure itself is objective and

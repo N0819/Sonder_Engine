@@ -1,6 +1,6 @@
-export const MODULE_RELEASE = "alpha98-ui12-7eaf6b3481a3";
+export const MODULE_RELEASE = "alpha98-ui13-a39372e1d8d1";
 
-import { createOverlayController } from "../ui/components/overlay.js?release=alpha98-ui12-7eaf6b3481a3";
+import { createOverlayController } from "../ui/components/overlay.js?release=alpha98-ui13-a39372e1d8d1";
 
 const LAYER_ID = "go-to";
 

@@ -101,7 +101,7 @@
 | `web/app.py` | 6591 | FastAPI application assembly, resource CRUD, turn control, and streaming endpoints. | `agents`, `core`, `core.db`, `core.frames`, `core.paths`, `dressing.ambience`, `dressing.backdrops`, `llm`, `llm.prompts`, `llm.providers`, `mind.memory`, `persist.chat_archive`, `persist.chat_delete`, `persist.checkpoints`, `persist.commit`, `story`, `story.character_schema`, `story.dialogue_colors`, `story.importers`, `story.scene`, `web`, `web.auth_routes`, `web.library`, `web.library_authoring`, `world`, `world.survival` |
 | `web/auth_routes.py` | 279 | Typed host-authentication HTTP routes and cookie transport. | `web` |
 | `web/guest_access.py` | 554 |  | `core.db` |
-| `web/library.py` | 419 |  | `core.db` |
+| `web/library.py` | 430 |  | `core.db` |
 | `web/library_authoring.py` | 255 |  | `core.db`, `story.character_schema` |
 | `web/story_view.py` | 881 |  | `core.db` |
 | `world/__init__.py` | 6 |  | — |
@@ -1189,14 +1189,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_base_items()` | 176 | 88 lines |
-| `library_projection()` | 311 | 60 lines |
-| `_lore_associations()` | 131 | 43 lines |
-| `_persona_associations()` | 108 | 21 lines |
+| `_base_items()` | 186 | 88 lines |
+| `library_projection()` | 321 | 61 lines |
+| `_lore_associations()` | 141 | 43 lines |
+| `_persona_associations()` | 118 | 21 lines |
 | `_public_text()` | 44 | 17 lines |
-| `archive_library_item()` | 389 | 16 lines |
-| `_parse_types()` | 266 | 13 lines |
-| `_sort_key()` | 288 | 13 lines |
+| `archive_library_item()` | 400 | 16 lines |
+| `_parse_types()` | 276 | 13 lines |
+| `_sort_key()` | 298 | 13 lines |
 
 ### `web/library_authoring.py`
 
@@ -2087,10 +2087,10 @@
 | POST | `/api/join` | `join_with_code()` | `web/app.py:4101` |
 | GET | `/api/language-packs` | `language_packs_get()` | `web/app.py:3331` |
 | GET | `/api/language-packs/{language_id}/ui` | `language_pack_ui()` | `web/app.py:3352` |
-| GET | `/api/library` | `library_projection()` | `web/library.py:311` |
+| GET | `/api/library` | `library_projection()` | `web/library.py:321` |
 | GET | `/api/library/authoring/{kind}/{item_id}` | `library_authoring_get()` | `web/library_authoring.py:254` |
-| DELETE | `/api/library/{kind}/{item_id}/archive` | `restore_library_item()` | `web/library.py:408` |
-| PUT | `/api/library/{kind}/{item_id}/archive` | `archive_library_item()` | `web/library.py:389` |
+| DELETE | `/api/library/{kind}/{item_id}/archive` | `restore_library_item()` | `web/library.py:419` |
+| PUT | `/api/library/{kind}/{item_id}/archive` | `archive_library_item()` | `web/library.py:400` |
 | DELETE | `/api/lore_entries/{eid}` | `lore_entry_delete()` | `web/app.py:3306` |
 | PUT | `/api/lore_entries/{eid}` | `lore_entry_edit()` | `web/app.py:3234` |
 | DELETE | `/api/lore_gen_jobs/{job_id}` | `lorebook_generate_discard()` | `web/app.py:2448` |

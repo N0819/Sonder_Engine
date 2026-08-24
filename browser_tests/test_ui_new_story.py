@@ -66,7 +66,7 @@ def test_lived_location_request_normalizes_character_routes(
     _open(page, ui_base_url)
     payload = page.evaluate(
         """async () => {
-          const module = await import('/static/js/ui-next/lived-location.js?release=alpha98-ui12-7eaf6b3481a3');
+          const module = await import('/static/js/ui-next/lived-location.js?release=alpha98-ui13-a39372e1d8d1');
           return module.buildLivedLocationRequest({
             enabled: true,
             brief: '  A crowded orbital customs station  ',
@@ -302,6 +302,38 @@ def test_setup_draft_resumes_and_can_be_discarded(
     expect(page.get_by_text("Recovered setup draft", exact=True)).to_be_visible()
     page.get_by_role("button", name="Discard setup draft").click()
     expect(page.get_by_role("heading", name="Choose how to begin", level=2)).to_be_visible()
+
+
+def test_recovered_pre_alpha_draft_cannot_break_choose_story_material(
+    page: Page, ui_base_url: str,
+) -> None:
+    page_errors: list[str] = []
+    page.on("pageerror", lambda error: page_errors.append(str(error)))
+    draft = {
+        "route": "library",
+        "step": "details",
+        "name": "Recovered story",
+        "scenario": "",
+        "language": "en",
+        "characterBriefs": [None],
+    }
+    envelope = {
+        "version": 2,
+        "appearance": {},
+        "navigation": {},
+        "panes": {},
+        "drafts": {"new-story": {"current": json.dumps(draft)}},
+    }
+    page.add_init_script(
+        f"localStorage.setItem('sonder.ui-next', JSON.stringify({json.dumps(envelope)}));"
+    )
+    _open(page, ui_base_url)
+    _open_wizard(page)
+
+    page.get_by_role("button", name="Choose story material").click()
+    expect(page.get_by_role("heading", name="Choose story material", level=2)).to_be_visible()
+    expect(page.get_by_label("New character description")).to_have_value("")
+    assert page_errors == []
 
 
 def test_mobile_new_story_uses_full_screen_stages_without_overflow(

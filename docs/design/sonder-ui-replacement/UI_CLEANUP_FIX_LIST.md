@@ -98,6 +98,7 @@ information-architecture authority.
 | UI-BL-01 | P2 | Fixed | The shipped theme choices did not provide a safe user-authored theme workflow, and unrestricted CSS would compromise layout, accessibility, and upgrade contracts. | Implement the approved eight-role semantic-token editor with preview, reset, contrast validation, and safe import/export. Arbitrary CSS and layout overrides remain out of bounds. | Browser tests create, preview, persist, reload, reset, export, and import at desktop and compact viewports; malformed, extra-key, low-contrast, CSS, URL, and markup payloads fall back safely without damaging the current theme. |
 | UI-BL-02 | P2 | Fixed | Settings accumulated both a scan-first overview and grouped detail navigation, while row routes still mounted category-length documents and scrolled anchors into view. This created two Settings methods and could move the shell above the viewport. | Retain one grouped navigation and one real selected panel. `#/settings` selects Theme; internal rows mount only their owned controls; external tasks remain links to their owning destinations. `[data-settings-content]` is the only vertical owner and programmatic focus cannot scroll ancestors. | Ordered groups/routes, direct panels, search aliases, unavailable Turn details, `preventScroll` focus, desktop and compact disclosures, 44 px compact targets, zero outer scroll, and zero horizontal overflow pass 53 focused static/browser contracts. |
 | UI-BL-03 | P1 | Fixed | Library details inherited Story Tools Compact/Rail sizing, and closing a selected detail hid the panel while its grid track remained. Its action strip overflowed the readable inspector, while the row ellipsis was a separate framed button that selected the record instead of exposing actions. | Keep Story Tools sizing modes scoped to Story Tools; give Library detail the expanded readable inspector, reflow its actions inside that width, remove the track on close, and place a bare 44 px ellipsis inside the row frame with a keyboard-owned action menu that does not select the row. | Browser contracts seed Rail, prove a Library detail width of at least 320 px with no resize control or action overflow, close it with workspace reaching the viewport edge, and verify ellipsis containment, transparent presentation, unchanged route, complete Story actions, Escape close, and focus return. |
+| UI-BL-04 | P1 | Fixed | Archive from an unselected Library row navigated to the hash already on screen, so no refresh occurred; bootstrap also exposed archived Stories to Play. Settings duplicated Library and Play tasks as page-changing links, the custom color dialog blocked draft progress on whole-palette validation, Story tools stacked its CSS-generated label, and prompt fields fell back to bright native surfaces. | Refresh accepted same-route Library mutations, project one server-owned active Story list to bootstrap and Library refreshes, keep Settings destination-local, permit valid per-role color drafting while gating activation, use a real one-row Story tools label, and apply the compact dark editor contract. | Focused database and browser regressions cover archive/restore discovery, Play exclusion, recovered New Story drafts, Settings route isolation, custom-theme draft/application separation, Story tools geometry, and prompt computed style. |
 
 The current Design Bible and approved replacement direction remain authoritative.
 This ledger is the sole retained product-facing record; no separate intake
@@ -295,7 +296,7 @@ as the UI10 package.
   approved reference-composition departure is recorded in
   DEV-UI-2026-08-24-C above.
 - The complete immutable UI graph is coherent at
-  `alpha98-ui12-7eaf6b3481a3`.
+  `alpha98-ui13-a39372e1d8d1`.
 
 ## Single-method Settings correction
 
@@ -314,3 +315,17 @@ The duplicate overview-plus-detail model was removed on 2026-08-24.
   giving the navigation its own scrollbar.
 - The focused Settings static/browser gate passes 53 tests across desktop,
   tablet, phone, and short-landscape geometry.
+
+## Pre-alpha UI interaction correction
+
+The 2026-08-24 correction keeps rapid UI iteration attached to direct ownership:
+
+- Library refreshes immediately after row-menu archive and publishes the active
+  Story list used by Play; archived Stories remain recoverable only through the
+  archived Library view.
+- Settings exposes 11 destination-local rows. Story import/backup/deletion,
+  Turn details, and Institution tools remain solely in Library or Play.
+- Custom Theme saves valid individual role values into a draft while keeping
+  activation disabled for an unsafe combined palette.
+- Story tools uses one horizontal icon-label control, and Prompt editor fields
+  use compact regular-weight type on the near-black canvas surface.

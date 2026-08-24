@@ -1,6 +1,6 @@
-export const MODULE_RELEASE = "alpha98-ui12-7eaf6b3481a3";
+export const MODULE_RELEASE = "alpha98-ui13-a39372e1d8d1";
 
-import { generateLivedLocation } from "./lived-location.js?release=alpha98-ui12-7eaf6b3481a3";
+import { generateLivedLocation } from "./lived-location.js?release=alpha98-ui13-a39372e1d8d1";
 
 const TYPE_BY_SEGMENT = Object.freeze({
   "": "",
@@ -249,6 +249,7 @@ export function createLibraryRuntime(options = {}) {
       replace({
         ...legacy(),
         ...latest,
+        chats: Array.isArray(payload.stories) ? payload.stories : legacy().chats,
         status: payload.items.length ? "ready" : "empty",
         owner: requestOwner,
         route: normalized,
@@ -400,11 +401,15 @@ export function createLibraryRuntime(options = {}) {
       if (spec.navigateAfter) {
         const normalized = normalizeLibraryRoute(router.current());
         const { item: _selectedItem, ...parentQuery } = normalized.query;
-        router.navigate({
-          destination: "library",
-          segments: normalized.segment ? [normalized.segment] : [],
-          query: parentQuery,
-        });
+        if (normalized.item) {
+          router.navigate({
+            destination: "library",
+            segments: normalized.segment ? [normalized.segment] : [],
+            query: parentQuery,
+          });
+        } else {
+          await refresh(router.current());
+        }
       } else {
         await refresh(router.current());
       }

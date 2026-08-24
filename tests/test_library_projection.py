@@ -246,6 +246,28 @@ def test_archive_is_reversible_idempotent_and_separate_from_delete(
     )["n"] == 1
 
 
+def test_archived_story_leaves_bootstrap_and_active_story_projection(
+    temp_db, monkeypatch,
+):
+    seeded = _seed_library(temp_db)
+    story_id = seeded["story_a"]
+    with _client(monkeypatch) as client:
+        before = client.get("/api/bootstrap").json()
+        archived = client.put(f"/api/library/story/{story_id}/archive")
+        bootstrap = client.get("/api/bootstrap").json()
+        library = client.get("/api/library?types=story&limit=100").json()
+        restored = client.delete(f"/api/library/story/{story_id}/archive")
+        after = client.get("/api/bootstrap").json()
+
+    assert archived.status_code == 200
+    assert story_id in {story["id"] for story in before["chats"]}
+    assert story_id not in {story["id"] for story in bootstrap["chats"]}
+    assert story_id not in {story["id"] for story in library["stories"]}
+    assert f"story:{story_id}" not in _by_key(library)
+    assert restored.status_code == 200
+    assert story_id in {story["id"] for story in after["chats"]}
+
+
 def test_delete_cleans_library_lifecycle_metadata(temp_db, monkeypatch):
     seeded = _seed_library(temp_db)
     with _client(monkeypatch) as client:
