@@ -153,6 +153,10 @@ hard by `_durable_dialogue_category`: only quotes containing a promise marker
 (`"my name is"`, `"i confess"`, `"i killed"`, `"i love you"`). Everything else
 spoken lives in the episode memory and nowhere else. This is why the live
 corpus has 145 dialogue rows against 2,601 episodes — by design, not by defect.
+Its durable content is autobiographical grammar (`"I heard <speaker> say …"`),
+not an external transcript (`"<speaker> said …"`). The structural provenance
+still routes it to hearsay; the wording prevents a raw row from changing
+person when it is placed beside first-person episodes in the agent payload.
 
 The speaker's name passes through a **recognition gate**. If the hearer's
 `known` map does not contain the speaker, the memory stores
@@ -165,8 +169,10 @@ dropped in that case too, since it names the speaker.
 `salience: 0.45 + 0.3 * confidence`. That formula is load-bearing: it is how
 `_mint_confidence_of` recovers the original confidence later without a second
 column (§7). Empty evidence facts are omitted rather than producing
-`Evidence: ; ;`, and a claim that already begins with its subject is not
-prefixed with `About <subject>:` a second time.
+`Evidence: ; ;`. Content is explicitly owned by the mind — `I concluded`,
+`I suspected`, or `I wondered whether`, selected from mint-time confidence —
+and any basis reads as `I based that on`, never as an objective dossier
+appendix. A claim that already names its subject is not named a second time.
 
 ### Encoding-time affect
 
@@ -237,6 +243,13 @@ what_i_was_told:           hearsay summary, if any
 what_i_concluded:          surmise summary, if any
 surfaces_unbidden:         one contrast memory, when triggered (§6)
 ```
+
+All three summary prose surfaces are first-person singular from that mind's
+point of view. The consolidator preserves the structural split above while
+writing `I experienced`, `I was told`, and `I concluded`; it never switches to
+a narrator naming the character. A legacy third-person previous summary is
+converted on its next consolidation, with claims, provenance and uncertainty
+unchanged.
 
 Nothing current is repeated under `memory`. The current view and observations
 live under `perception`; current affect and goals live under

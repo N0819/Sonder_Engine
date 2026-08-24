@@ -196,18 +196,19 @@ class TestObserverProjection:
         assert "Mara" not in composer.render_view(
             percepts, mode="character").text
 
-    def test_familiar_stable_appearance_is_not_reintroduced(self):
-        """First mention only, in every mode. `_novel_visible_appearances`
-        answered the same question one layer up and by name; `prev_described`
-        answers it by source key, so a re-described body cannot slip through on
-        a spelling."""
+    def test_familiar_stable_appearance_is_reintroduced_only_to_npc_minds(self):
+        """The character call is stateless and needs the other body's visible
+        card each beat; only player-facing presentation uses first-mention
+        compression."""
         ivo = composer.appearance_percept(
             "Ivo", "Ivo", "Ivo, a beautiful six-tailed person.")
         first = composer.render_view([ivo], mode="character")
 
         assert "six-tailed" in first.text
+        assert "six-tailed" in composer.render_view(
+            [ivo], mode="character", prev_described=first.described).text
         assert composer.render_view(
-            [ivo], mode="character", prev_described=first.described).text == ""
+            [ivo], mode="player", prev_described=first.described).text == ""
 
     def test_a_visibly_changed_appearance_is_included_again(self):
         ivo = composer.appearance_percept(

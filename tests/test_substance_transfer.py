@@ -21,6 +21,7 @@ from llm.schemas import CharacterOutput, StateDiff, validate_llm_output_strict
 from world.spatial import (apply_substance_ops, merge_scene_with_diff,
                      resolve_substance_ops, substance_event_clause,
                      substances_for)
+from agents.narration import _standing_substance_clauses
 
 
 def _scene():
@@ -372,7 +373,7 @@ class TestPerceptionBoundary:
 class TestOneReleaseIsOneRecord:
     """A release the Director wrote twice at two part-precisions is one event.
 
-    Live (chat 69 "Horny Story. ⎇49", turn 34): one release arrived as an
+    In a measured long run, one release arrived as an
     `add` naming the endpoint part and a `deposit` omitting it, in the same
     beat, otherwise word-for-word identical. `_substance_id` hashes the part
     slots, so the pair minted two standing records, and the saved scene still
@@ -678,6 +679,10 @@ class TestMatterMovedLeavesWhereItWas:
     The floor cannot depend on the Director emitting the paired removal: it
     emitted 5 removals against 38 deposits across the whole stored corpus, and
     none at all after turn 38.
+
+    Legacy moves with only source/source_part retain all-or-nothing
+    conservation. New partial moves identify the exact source record and use
+    an explicit qualitative portion and amount band.
     """
 
     def _holding(self, **over):
@@ -693,7 +698,8 @@ class TestMatterMovedLeavesWhereItWas:
               # Deliberately a DIFFERENT name for the same matter: the
               # Director renamed one substance three times across turns
               # 61/66/70 ("fluid", "seed", "Elyra Voss seed"), so a rule keyed
-              # on the substance name would never once have fired.
+              # on the substance name would never once have fired. This legacy
+              # op has no structured portion, so conservation is all-or-nothing.
               "substance": "settled coolant", "target": "Vessel",
               "placement": "interior", "target_interior": "sump",
               "amount": "the remainder"}
@@ -701,6 +707,9 @@ class TestMatterMovedLeavesWhereItWas:
         return op
 
     def test_moving_matter_out_of_a_region_empties_it(self):
+        """`the remainder` says everything -- so the origin empties and the
+        sump holds it all. The magnitude-ordered rule (rank-of-moved >=
+        rank-of-standing) draws the line this was missing."""
         scene = self._holding()
         apply_substance_ops(scene, [self._move()])
 
@@ -774,6 +783,26 @@ class TestMatterMovedLeavesWhereItWas:
                      for record in scene["substances"]}
         assert interiors == {"sump"}
 
+    def test_a_partial_transfer_thins_the_origin(self):
+        """Partial conservation follows explicit qualitative structure,
+        never an English amount parser."""
+        scene = self._holding(amount="copious", amount_band="large")
+        source_id = scene["substances"][0]["substance_id"]
+        op = self._move(amount="a sip", substance="settled coolant")
+        op.update({"amount_band": "small", "source_substance_id": source_id,
+                   "portion": "some"})
+        apply_substance_ops(scene, [op])
+
+        origins = {(record["target"], record["target_interior"],
+                    record["amount_band"])
+                   for record in scene["substances"]
+                   if record["target_interior"] == "reservoir"}
+        assert ("Vessel", "reservoir", "moderate") in origins
+        destinations = {(record["target"], record["target_interior"])
+                        for record in scene["substances"]
+                        if record["target_interior"] == "sump"}
+        assert ("Vessel", "sump") in destinations
+
     def test_an_ordinary_release_still_deposits_normally(self):
         """The common case has no standing stock at the source region at all,
         and must not become a special case."""
@@ -781,3 +810,191 @@ class TestMatterMovedLeavesWhereItWas:
         apply_substance_ops(scene, [_release()])
 
         assert len(scene["substances"]) == 1
+
+
+class TestExplicitAmountBands:
+    """Free prose stays prose; only declared qualitative bands compare."""
+
+    def test_unreadable_has_no_band(self):
+        from world.spatial import substance_amount_band
+        assert substance_amount_band("") == ""
+        assert substance_amount_band("a thing") == ""
+
+    def test_free_text_is_not_physics(self):
+        from world.spatial import substance_amount_band
+        assert substance_amount_band("coating") == ""
+        assert substance_amount_band("light coating") == ""
+
+    def test_declared_bands_are_exact(self):
+        from world.spatial import SUBSTANCE_AMOUNT_BANDS, substance_amount_band
+        assert tuple(substance_amount_band(v) for v in SUBSTANCE_AMOUNT_BANDS) \
+            == SUBSTANCE_AMOUNT_BANDS
+
+    def test_a_torrent_does_not_imply_a_band(self):
+        from world.spatial import substance_amount_band
+        assert substance_amount_band("a torrent of blood") == ""
+
+
+class TestMatterNeedsAnExplicitProcess:
+    """The substrate does not impose one drying/decay law on every genre."""
+
+    def test_time_skip_does_not_change_matter(self):
+        scene = _scene()
+        apply_substance_ops(scene, [_release(
+            amount="a pool", amount_band="large")])
+        scene = merge_scene_with_diff(scene, {
+            "time": {"duration_seconds": 7 * 24 * 3600},
+            "substance_ops": [],
+        })
+        [record] = scene["substances"]
+        assert record["amount"] == "a pool"
+        assert record["amount_band"] == "large"
+
+    def test_restatement_updates_the_same_pool(self):
+        scene = _scene()
+        apply_substance_ops(scene, [_release(
+            amount="a pool", amount_band="large")])
+        apply_substance_ops(scene, [_release(
+            amount="a film", amount_band="small")])
+        assert len(scene["substances"]) == 1
+        assert scene["substances"][0]["amount_band"] == "small"
+
+    def test_explicit_remove_ends_the_record(self):
+        scene = _scene()
+        apply_substance_ops(scene, [_release(amount_band="moderate")])
+        substance_id = scene["substances"][0]["substance_id"]
+        apply_substance_ops(scene, [
+            {"op": "remove", "substance_id": substance_id}])
+        assert scene["substances"] == []
+
+
+class TestDifferentMaterialsNeedWorldLaw:
+    """Cross-material physics is world law, not a universal name heuristic."""
+
+    def _add(self, **over):
+        op = {"op": "add", "source": "Emitter", "source_part": "nozzle",
+              "substance": "coolant", "target": "Vessel",
+              "placement": "surface", "target_part": "casing"}
+        op.update(over)
+        return op
+
+    def test_two_materials_coexist_without_an_explicit_process(self):
+        scene = _scene()
+        scene["contacts"] = []
+        apply_substance_ops(scene, [
+            self._add(substance="oil", amount="a film"),
+            self._add(substance="water", amount="a torrent"),
+        ])
+        survived = {(r["substance"], r["amount"]) for r in scene["substances"]}
+        assert ("water", "a torrent") in survived
+        assert ("oil", "a film") in survived
+
+    def test_equal_ranks_coexist(self):
+        scene = _scene()
+        scene["contacts"] = []
+        apply_substance_ops(scene, [
+            self._add(substance="oil", amount="a film"),
+            self._add(substance="dust", amount="a coating"),
+        ])
+        assert len(scene["substances"]) == 2
+
+    def test_a_body_own_product_at_the_same_region_is_never_spent(self):
+        scene = _scene()
+        scene["contacts"] = []
+        apply_substance_ops(scene, [
+            self._add(source="Vessel", substance="sweat", amount="copious"),
+            self._add(substance="water", amount="a torrent"),
+        ])
+        # Sweat is the body's own product: it thins its own standing, but
+        # arrival cannot wash it away -- that would empty a gland.
+        assert ("Vessel", "sweat") in {(r["source"], r["substance"])
+                                        for r in scene["substances"]}
+
+    def test_displacement_on_a_different_body_does_not_reach(self):
+        scene = _scene()
+        scene["contacts"] = []
+        scene["positions"]["Other"] = "lab"
+        apply_substance_ops(scene, [
+            self._add(target="Vessel", substance="oil", amount="a film"),
+            self._add(target="Other", substance="water", amount="a torrent"),
+        ])
+        assert len(scene["substances"]) == 2
+
+
+class TestStandingSubstancePersistence:
+    """Silence suppresses repeat prose downstream; it does not erase state."""
+
+    def _release(self, **overrides):
+        op = {"op": "add", "source": "Mara", "substance": "fluid",
+              "amount": "copious", "target": "Mara",
+              "target_part": "thighs", "placement": "surface"}
+        op.update(overrides)
+        return op
+
+    def _unrelated_ops(self):
+        """An unrelated material operation that says nothing about fluid."""
+        return [{"op": "add", "source": "Mara", "substance": "air",
+                 "amount": "a breath", "target": "room",
+                 "placement": "surface"}]
+
+    def _scene_with_hinami(self):
+        scene = _scene()
+        scene["positions"]["Mara"] = "lab"
+        scene["contacts"] = []
+        return scene
+
+    def test_a_fresh_record_is_rendered_as_present_tense(self):
+        scene = self._scene_with_hinami()
+        apply_substance_ops(scene, [self._release()])
+        clauses = _standing_substance_clauses(scene, "Mara")
+        assert clauses, (
+            f"fresh record should render as present-tense, got: {clauses}")
+
+    def test_a_record_not_reasserted_next_beat_remains_true(self):
+        scene = self._scene_with_hinami()
+        apply_substance_ops(scene, [self._release()])
+        apply_substance_ops(scene, self._unrelated_ops())
+        clauses = _standing_substance_clauses(scene, "Mara")
+        assert any("fluid" in clause for clause in clauses)
+
+    def test_silent_beats_do_not_delete_the_record(self):
+        scene = self._scene_with_hinami()
+        apply_substance_ops(scene, [self._release()])
+        apply_substance_ops(scene, self._unrelated_ops())
+        apply_substance_ops(scene, self._unrelated_ops())
+        assert any(record.get("substance") == "fluid"
+                   for record in scene["substances"])
+
+    def test_redescribing_a_substance_updates_the_pool(self):
+        scene = self._scene_with_hinami()
+        apply_substance_ops(scene, [self._release(amount="copious")])
+        apply_substance_ops(scene, self._unrelated_ops())
+        apply_substance_ops(scene, [self._release(amount="a film")])
+        clauses = _standing_substance_clauses(scene, "Mara")
+        assert clauses, (
+            f"re-asserted record should render fresh, got: {clauses}")
+        # And the rendered amount is the new one.
+        assert any("film" in c for c in clauses), (
+            f"re-asserted amount should be the new one, got: {clauses}")
+
+    def test_repeated_description_keeps_one_pool(self):
+        scene = self._scene_with_hinami()
+        # Three beats in a row, each re-asserting the same fluid.  The
+        # record should be alive and present on every beat.
+        for _ in range(3):
+            apply_substance_ops(scene, [self._release()])
+            clauses = _standing_substance_clauses(scene, "Mara")
+            assert clauses
+        assert len([record for record in scene["substances"]
+                    if record.get("substance") == "fluid"]) == 1
+
+    def test_a_record_survives_restore_and_time(self):
+        scene = self._scene_with_hinami()
+        apply_substance_ops(scene, [self._release()])
+        for _ in range(3):
+            scene = merge_scene_with_diff(dict(scene), {
+                "time": {"duration_seconds": 1.0},
+                "substance_ops": self._unrelated_ops(),
+            })
+        assert any(record.get("substance") == "fluid"
+                   for record in scene.get("substances", []))

@@ -395,6 +395,7 @@ def get_scene(chat_id, chat=None):
     # Body position tracking. A list, not a dict: a contact is a relation and is
     # stored once rather than on either body (spatial.normalize_scene_contacts).
     sc.setdefault("contacts", [])
+    sc.setdefault("contact_actions", [])
     # Scale: {name: factor relative to that body's own baseline}. Absent or 1.0
     # is normal size, so a scene that never mentions size behaves as before.
     sc.setdefault("scales", {})
@@ -423,7 +424,22 @@ def appearance_of(name, base, scene):
     if att.get("state"):
         s += "; clothing state: " + ", ".join(map(str, att["state"]))
     if ov:
-        s += "; currently: " + "; ".join(map(str, ov))
+        rendered = []
+        for item in ov:
+            if isinstance(item, dict):
+                # Body specialists may use a named structured overlay so a
+                # later beat can replace the same temporary mark. ``str`` on
+                # that record exposed Python's dict representation to views,
+                # memories and narrator prompts ("currently {'name': ...}").
+                # The description is the reader-facing fact; the name is an
+                # identity handle and is useful only as a fallback.
+                text = str(item.get("description") or item.get("name") or "").strip()
+            else:
+                text = str(item or "").strip()
+            if text and text not in rendered:
+                rendered.append(text)
+        if rendered:
+            s += "; currently: " + "; ".join(rendered)
     return s
 
 

@@ -19,6 +19,7 @@ from core.db import get_setting
 from world.spatial import (
     ARTICULATION_STIFLED,
     apply_contact_ops,
+    apply_substance_ops,
     speech_articulation_impediment,
 )
 
@@ -161,6 +162,14 @@ def _stamp_dialogue_articulation(sc, sd, dialogue_log):
     preview = dict(sc or {})
     preview["contacts"] = copy.deepcopy((sc or {}).get("contacts") or [])
     apply_contact_ops(preview, (sd or {}).get("contact_ops") or [])
+    # The substance ledger needs the same treatment: a material affordance
+    # established this beat is not in
+    # `sc` yet, but it MUST be visible to the impediment check or the gate
+    # silently clears as soon as the model names the matter aloud.  Mirror
+    # contact_ops exactly so the stamp reads the post-op scene the same way
+    # the merge will.
+    preview["substances"] = copy.deepcopy((sc or {}).get("substances") or [])
+    apply_substance_ops(preview, (sd or {}).get("substance_ops") or [])
     notices, noticed = [], set()
     impediments = {}
     for entry in dialogue_log or []:
@@ -179,10 +188,14 @@ def _stamp_dialogue_articulation(sc, sd, dialogue_log):
         if kind == ARTICULATION_STIFLED and key not in noticed \
                 and volume in ("normal", "loud", "shout"):
             noticed.add(key)
+            # The remedy is op-shaped: a contact that ends the block, or a
+            # bounded substance op that ends or changes its explicit speech
+            # affordance. The 'mutter' escape hatch is unchanged.
             notices.append(
                 f"speech: {speaker} spoke at volume '{volume}' while "
-                f"{reason}. Either end that contact in contact_ops before "
-                "the line, or keep the line to a word or two at volume "
+                f"{reason}. Either end that contact in contact_ops, or update "
+                "the blocking material state in substance_ops, before the "
+                "line -- or keep the line to a word or two at volume "
                 "'mutter' -- muffled against what blocks it.")
     return notices
 

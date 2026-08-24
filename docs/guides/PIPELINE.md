@@ -281,6 +281,20 @@ Parses the player declaration into structured speech/action sequence, authority 
 
 This stage should preserve player wording and distinguish attempted actions from asserted facts.
 
+Exact quoted speech and described communicative meaning are different sequence
+types. `speech` is licensed only by words the player actually supplied;
+`communication` carries an authored act and proposition (ask, explain, warn,
+report) without inventing a quotation. It follows the same hearing,
+concealment, memory, public-evidence and Charter-carrier paths as speech, but a
+partial hearing channel receives only that somebody spoke indistinctly.
+
+An interruptible compound act is represented as phases rather than one prose
+blob. `phase_id` identifies a phase, `depends_on` names the phases that must
+have completed, and `participants` / `requires_contacts` state structural
+prerequisites. `referents` binds exact occurrences of ambiguous pronouns to
+canonical entities; every observer renderer substitutes only the label that
+observer is entitled to use.
+
 **`flow.reactors` is load-bearing well beyond reaction eligibility, and that is
 easy to miss.** It decides who gets a character step, and it is *also*
 `perception_act`'s entire perceiver list — pass 1 iterates the cast and skips
@@ -306,6 +320,19 @@ Neither stage should directly decide what a character perceives. Full mapping ma
 ### `perception_act`
 
 Produces observer-specific views of the action onset: speech delivery, visible movement, immediate sensory evidence, and deterministic spatial additions. This occurs before objective resolution so characters do not react using future knowledge.
+
+A `contestable` action's visible first phase is rendered under explicit attempt
+modality. A model-authored predicate such as `creates space` is not itself
+permission to tell a reactor that space was created before they react, nor to
+tell the narrator it succeeded after resolution rejected that effect. The
+complete observable remains available to resolution and is released only when
+the action's dispositions make it true.
+
+Only atomic/onset roots without dependencies enter this pass. Continuation and
+completion phases are deferred until reactions have declared. The same rule
+applies to `state_assertions`: `onset_state_assertions` is an engine-authored,
+copy-only projection with changes sourced to deferred phases removed. The full
+assertion remains available to resolve and commit, subject to the causal floor.
 
 A direct contact the player declares as already present through their own
 conduct or first-person body sense is structured by interpret as
@@ -362,6 +389,16 @@ exact `crossed_target_part`, downstream `target_interior`, and optional new
 interior endpoint. The crossed boundary is transition evidence; only the
 downstream interior and current endpoint persist as state.
 
+Each normalized contact also receives a stable opaque `contact_id` derived
+symmetrically from its two owned endpoints. Ongoing tactile dynamics that
+topology cannot express live in `scene.contact_actions`, attached to that id:
+vibration, pressure pulses, steady pressure, suction, and analogous
+genre-neutral effects. A same-beat new contact may be selected by its exact
+four endpoints. Effects persist without reassertion, accept bounded
+add/change/remove/clear operations, and are pruned when their parent contact
+ends. Only a contact participant receives the deterministic, cause-blind touch
+percept; arbitrary diagnostic detail never crosses the identity firewall.
+
 A character can also end a contact without trusting the resolve model to infer
 that state transition from prose. Its private payload lists every onset contact
 involving its body under `self.standing_contacts` using opaque `contact:N`
@@ -389,6 +426,14 @@ enclosing structure from that onset topology before applying same-turn contact
 removals. A contradictory explicit destination is refused. The resulting
 `scene.substances` entry persists until a bounded remove/clear operation; code
 tracks the material the fiction names but never infers one from an event label.
+`amount` remains fiction-authored wording. Optional `amount_band`
+(`trace|small|moderate|large|flooding`) is the only comparable magnitude, and a
+partial transfer names its exact `source_substance_id` plus a qualitative
+`portion`. Silence and elapsed time never evaporate every genre's matter by
+one universal law, and adding one substance never automatically displaces a
+different one. Drying, mixing, absorption, decay, and wash-away require an
+explicit operation or a world-specific mechanic. Speech impairment is likewise
+an explicit material affordance, never inferred from amount prose.
 
 **There is no perception model here either.** Each declared element becomes its
 own percept through its own hearing/sight/concealment gate (`speech_percept`,
@@ -556,6 +601,22 @@ Combines the player declaration, character declarations, reaction declarations, 
 
 The Director owns objective causality but does not own character private psychology or narration.
 
+After the model adjudicates contested outcomes, the engine settles every player
+sequence phase against the onset scene. A dependency that did not complete, a
+missing participant, or a required contact that was not standing makes the
+phase `blocked`; otherwise it is `executed`, `attempted`, or `realized`.
+These engine-authored `sequence_dispositions` govern perception and event-order
+admission. Specialists associate each phased change with its source event in
+`state_diff.phase_sources`, keyed by channel path or list index. The causal
+floor drops changes belonging to blocked phases and consumes the sidecar before
+persistence; it never tries to infer a prose-to-state correspondence.
+
+The resulting chronology is structural: root/onset player events, character
+reactions and interaction, then surviving player continuation/completion
+events. Ending contact also invalidates a standing pose only when its support,
+constraint, relation, or detail was contact-bound; non-contact spatial facts
+remain standing.
+
 Every persistent physical change asserted by the resolved event is repeated in
 `changes_asserted` and checked against its own structured diff category before
 commit. Contact entries carry the same actor, actor part, target, and target part
@@ -682,15 +743,65 @@ in [`UNBUILT.md`](../UNBUILT.md) §3.8.
 Observer scene projections include only visible bodies' pose snapshots plus the
 observer's own. These are authoritative: visibility alone never licenses a
 default standing or “before you” relation. A body without a snapshot appears in
-`pose_unknown`. Full authored appearance is scoped to discovery or a structural
-visible change; familiar stable card description is withheld while dynamic
-clothing and exposed body regions remain available. This matters at the memory
-boundary because witnessed episodic memory is formed from this output, not
-repaired after it.
+`pose_unknown`. Pose snapshots are owner-keyed, so their owner-bound posture,
+constraint and detail fragments are normalized into that owner's own view
+before becoming percepts; exact self names in any body's pose become
+second-person references. An explicit third-party name stops pronoun rewriting
+within its local fragment, avoiding anaphora guesses. Episodic rendering then
+converts those same admitted references to first person. In player-facing
+views, full authored appearance is scoped to
+discovery, re-encounter, explicit examination or a structural visible change;
+an attire change renders as its delta rather than reissuing the wardrobe. NPC
+views do **not** share that presentation compression: every character call
+receives complete visible body/attire strings for every other person. Only the
+NPC observer's own body/attire string is omitted from perception, because its
+updated card state and `self.attire` already supply that same fact in the call.
+An authored beneath-surface becomes eligible when its region is first
+uncovered. That eligibility is durable across unrelated later wardrobe changes;
+ordinary coverage still hides the surface. Bare-surface phrases are state and
+must never be stored as garments.
+Active sensations are never presentation-compressed in either view: sustained
+touch, pressure, motion, temperature and contact actions remain current bodily
+input on every beat they remain true. Their stable keys still prevent duplicate
+percepts and an unchanged sensation alone still does not mint an episodic
+memory.
+This matters at the memory boundary because witnessed episodic memory is formed
+from this output, not repaired after it.
+
+Character declarations are merged from both behavior stores before source and
+action projection: ordinary interaction results and contested-beat reaction
+results. Dialogue already used both; the physical act beside a reactor's line
+must use the same merged declaration or the narrator receives a disembodied
+voice and is forced to guess the missing motion. Every distinct overt action
+in that merged sequence is projected as its own event. An actor-keyed
+"last action" summary is not equivalent: it turns a multi-motion response into
+a terminal pose and silently removes conduct that the Director already
+resolved. Speech and action are rebound into one stream from the original
+declaration sequence; `dialogue_log` proves which exact lines landed, but its
+row order is not allowed to regroup the beat. When an action structurally
+targets the observer, a possessive body reference following that observer's
+explicit name remains attached to the observer during second-person rendering
+(`Alice's back ... her hands` becomes `your back ... your hands`), without
+rewriting an actor's explicit `her own` body. A bounded language-pack list of
+anatomical modifiers covers `her injured lower back`; naming another body ends
+that local rewrite rather than handing the new person's pronouns to the first
+target.
 
 ### `narrator`
 
-Renders the player-facing prose. Fidelity checks and player-echo stripping are applied before the output is saved.
+Renders the player-facing prose. Fidelity checks and player-echo stripping are
+applied before the output is saved. Dialogue fidelity is bidirectional: every
+quote delivered in the player view must survive verbatim, and every quote in
+the narrator draft must already exist in that view. An extra invented line is
+an enforceable correction, even when all required lines also survived.
+Standing sensations remain available as bodily evidence, but the composer's
+plain "X registers Y" wording is a sensor ledger rather than story voice. If a
+draft copies that construction in any ordinary inflection (`registers`,
+`registered`, `registering`), or copies the `steady pressure / shared warmth`
+list around it, the bounded craft screen asks for one direct, integrated
+rendering instead; unchanged sensation may also remain implicit. Dialogue
+chronology is scored by complete quoted spans: an echo-stripped short player
+line cannot be mistaken for the prefix of a longer NPC line.
 
 ### `narrator_extra`
 

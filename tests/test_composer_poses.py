@@ -58,6 +58,64 @@ def test_your_own_pose_is_yours_in_the_second_person():
     assert percepts[0].channel == "interoception"
 
 
+def test_pose_owned_fragments_do_not_mix_third_person_into_own_view():
+    """A recorded failure supplied ``You are`` and then pasted an
+    owner-keyed detail still saying ``her heels``/``behind her``.  A named
+    third party inside the middle fragment remains third person; ownership is
+    not permission to rewrite every matching pronoun indiscriminately.
+    """
+    scene = _scene({
+        "Reya": {
+            "posture": "kneeling", "relative_to": "Kai",
+            "relation": "beneath",
+            "detail": (
+                "settled back on her heels beside Kai, both hands slid from "
+                "Kai's ribs around to the small of her back to steady her, "
+                "tail flicking once behind her"),
+        },
+        "Kai": {
+            "posture": "sitting", "relative_to": "Reya",
+            "relation": "astride",
+            "detail": "right hand squeezing Reya's shoulder harder",
+        },
+    })
+    percepts = pose_percepts(
+        scene, "Reya", [{"name": "Kai"}], {"Kai": "Kai"},
+        self_forms=["Reya"],
+        self_pronouns={"subject": "she", "object": "her",
+                       "possessive": "her"})
+    text = render_view(percepts).text
+
+    assert "settled back on your heels beside Kai" in text
+    assert "small of her back to steady her" in text
+    assert "tail flicking once behind you" in text
+    assert "squeezing your shoulder harder" in text
+    assert "Reya" not in text
+
+
+def test_pose_episode_converts_every_second_person_pose_referent_to_first():
+    scene = _scene({
+        "Reya": {
+            "posture": "kneeling", "relative_to": "Kai",
+            "relation": "beneath", "detail": "settled on her heels"},
+        "Kai": {
+            "posture": "sitting", "relative_to": "Reya",
+            "relation": "astride", "detail": "hand on Reya's shoulder"},
+    })
+    percepts = pose_percepts(
+        scene, "Reya", [{"name": "Kai"}], {"Kai": "Kai"},
+        self_forms=["Reya"],
+        self_pronouns={"subject": "she", "object": "her",
+                       "possessive": "her"})
+    content, _gist, _entities = render_episode(percepts)
+
+    assert "I was kneeling beneath Kai" in content
+    assert "settled on my heels" in content
+    assert "Kai was sitting astride me" in content
+    assert "hand on my shoulder" in content
+    assert " you" not in content.casefold() and "your" not in content.casefold()
+
+
 def test_a_bare_posture_is_a_short_sentence_not_a_gappy_one():
     text, _ = _render(_scene({"Kai": {"posture": "standing"}}))
     assert text == "Kai is standing."
@@ -519,3 +577,101 @@ class TestKnowingSomeoneIsNotAReasonToNeverDescribeThem:
         assert _composer_prev_seen({"player": {"seen": []}}, "player") == set()
         assert _composer_prev_seen(
             {"player": {"seen": ["Tamamo"]}}, "player") == {"Tamamo"}
+
+
+class TestYourOwnBodyIsAlreadyInYourCard:
+    """Character mode re-rendered the FULL standing state every beat, and the
+    reason was sound -- a character agent is a stateless call, so what is not
+    in context is not in the mind. The reason does not reach the observer's
+    own anatomy: `embodiment.extra_parts` is in that same context on every
+    one of those calls, carrying the same count, place and description the
+    view was re-rendering.
+
+    In a measured 27-beat run, 43% of one perception payload described the
+    observer's own body, and 13,298 characters of it were authored anatomy
+    92% byte-identical to the previous beat -- "Two horns emerge from the top
+    of your head, Small curved black horns." on every beat of the story,
+    against a card reading {"kind": "horns", "count": 2, "at": "head"}.
+
+    What is suppressed is DESCRIPTION, never situation: pose and place are
+    the two things a mind cannot read off its own card, and they stay.
+    """
+
+    @staticmethod
+    def _parts(tucked=False):
+        from agents.composer import body_part_percepts
+        return body_part_percepts([
+            ("you", {"kind": "horns", "count": 2, "at": "head",
+                     "aspect": "top", "description": "small curved black",
+                     "tucked": tucked}),
+            ("Kai", {"kind": "tails", "count": 6, "at": "waist",
+                     "aspect": "back", "description": "golden and fluffy"}),
+        ])
+
+    def test_your_own_anatomy_is_delivered_the_first_time(self):
+        first = render_view(self._parts(), mode="character")
+        assert "your head" in first.text
+
+    def test_and_not_again_while_it_is_unchanged(self):
+        parts = self._parts()
+        first = render_view(parts, mode="character")
+        again = render_view(parts, mode="character",
+                            prev_standing=first.standing_keys)
+        assert "your head" not in again.text
+
+    def test_but_another_bodys_anatomy_still_arrives(self):
+        """The saving is about the card the observer already carries. Kai's
+        card is in KAI's call, not in this one."""
+        parts = self._parts()
+        first = render_view(parts, mode="character")
+        again = render_view(parts, mode="character",
+                            prev_standing=first.standing_keys)
+        assert "Kai's waist" in again.text
+
+    def test_a_part_that_changes_state_re_earns_itself(self):
+        """`tucked` is hashed into the dedupe key, so wings coming out from
+        under a coat are a different key and render. This is the whole reason
+        suppression keys off content rather than off kind."""
+        first = render_view(self._parts(), mode="character")
+        after = render_view(self._parts(tucked=True), mode="character",
+                            prev_standing=first.standing_keys)
+        assert "your head" in after.text
+
+    def test_looking_at_yourself_on_purpose_brings_it_back(self):
+        parts = self._parts()
+        first = render_view(parts, mode="character")
+        look = render_view(parts, mode="character",
+                           prev_standing=first.standing_keys,
+                           full_render=True)
+        assert "your head" in look.text
+
+    def test_where_you_are_and_how_you_are_held_are_never_suppressed(self):
+        """The carve-out that makes this safe. A body's place and posture
+        CHANGE, and are exactly what a card cannot say -- so they keep the
+        old every-beat delivery even when they repeat."""
+        scene = _scene({"Reya": {"posture": "kneeling"}})
+        percepts = pose_percepts(scene, "Reya", [], {})
+        first = render_view(percepts, mode="character")
+        again = render_view(percepts, mode="character",
+                            prev_standing=first.standing_keys)
+        assert "kneeling" in first.text
+        assert "kneeling" in again.text
+
+    def test_the_players_own_view_is_unchanged_by_this(self):
+        """Player mode already delta-suppressed everything standing; the new
+        branch must not alter what it does."""
+        parts = self._parts()
+        first = render_view(parts, mode="player")
+        again = render_view(parts, mode="player",
+                            prev_standing=first.standing_keys)
+        assert "your head" in first.text
+        assert again.text == ""
+
+    def test_a_suppressed_part_stays_in_the_ledger(self):
+        """Suppression must not forget the key, or the next beat reads it as
+        new and the anatomy returns on every second beat."""
+        parts = self._parts()
+        first = render_view(parts, mode="character")
+        again = render_view(parts, mode="character",
+                            prev_standing=first.standing_keys)
+        assert first.standing_keys == again.standing_keys

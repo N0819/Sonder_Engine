@@ -3990,6 +3990,37 @@ records: no live story has ever opened a paradox. *(Restated here until
 2026-08-19.)*
 
 
+### 6.14 Close-contact causality — [`CLOSE_CONTACT_SCENARIO_AUDIT_2026-08-23.md`](experiments/CLOSE_CONTACT_SCENARIO_AUDIT_2026-08-23.md)
+
+Alpha 9.8.1 landed the phase/dependency floor, typed communicative acts, typed
+referents, contact actions and substance conservation this audit asked for.
+Three residuals survive it, all genre-neutral and all stated in the audit's
+own words:
+
+- **A typed observation/result ledger.** A test whose finding gates a later
+  action still has no record with an id, observer, subject, method, bounded
+  finding, time and provenance for a conditional phase to reference. Branch
+  truth is therefore read out of prose, which is the audit's weakest measured
+  judgment (the surgical arm can still proceed after a finding falsifies an
+  explicit "only if"). The same ledger serves a surgeon checking numbness, a
+  mechanic testing pressure, a dancer checking balance, a hacker validating
+  access, and a fighter checking whether a grip took.
+- **Deterministic contact-bound pose invalidation is only partial.**
+  Support/pin/grapple facts are dropped when their contact ends; a stale
+  *detail* fragment (`underhook`) can still survive one evidence beat while a
+  replacement (`overhook`) is established, so contact refinement remains less
+  exact than the prose that produced it.
+- **Durable procedure results and device state.** A splint, dressing,
+  anesthetic, finding or aftercare plan is still reduced to a generic
+  condition or to prose, so a material procedure leaves no typed thing a
+  later beat can check.
+
+Also open from the same run: direct-object and instrument pronouns
+(`kisses her`, `takes Alice's hand with her left hand`) are solved by the
+compatibility anaphora repair rather than by typed referents, which exist but
+are not yet emitted on every action surface.
+
+
 ## 7. Experiments not yet run
 
 Moved to

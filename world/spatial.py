@@ -105,7 +105,8 @@ from world.spatial_contacts import (
     _STRICT_CAVITY_KINDS, apply_contact_ops, canonical_region,
     CONTACT_INTERIOR_MANNERS, contact_is_momentary, contact_manner_kind,
     CONTACT_MANNERS, CONTACT_MOMENTARY_MANNERS, contact_motion,
-    CONTACT_MOVING_MANNERS, contact_relation, contacts_broken_by_scale_change,
+    CONTACT_MOVING_MANNERS, contact_id, contact_relation,
+    contacts_broken_by_scale_change,
     contacts_of, normalize_scene_contacts, owned_region, same_owned_region,
 )
 
@@ -119,13 +120,20 @@ from world.spatial_contact_migration import (
 
 
 from world.spatial_substance import (
-    _absorb_into_pool, _interior_destination_for_release, _record_region,
+    _absorb_into_pool, _clean_contact_action,
+    _contact_action_key, _contact_action_text,
+    _interior_destination_for_release, _record_region,
     _resolved_substance_add, _same_pool, _SPEECH_CAVITY_INTERIORS,
     _SPEECH_MOUTH_KINDS, _stock_consumed_by, _substance_id,
     _substance_placement, _SUBSTANCE_PLACEMENTS, _substance_target_exists,
-    _substance_text, apply_substance_ops, ARTICULATION_SLURRED,
-    ARTICULATION_STIFLED, resolve_substance_ops,
-    speech_articulation_impediment, substance_event_clause, substances_for,
+    _substance_text, actions_for_contact,
+    apply_contact_action_ops, apply_substance_ops, contact_action_clause,
+    contact_actions_for_observer, contact_actions_of,
+    resolve_contact_action_ref, SUBSTANCE_AMOUNT_BANDS, SUBSTANCE_PORTIONS,
+    substance_amount_band, substance_portion,
+    ARTICULATION_SLURRED, ARTICULATION_STIFLED,
+    resolve_substance_ops, speech_articulation_impediment,
+    substance_event_clause, substances_for,
 )
 
 
@@ -137,7 +145,8 @@ from world.spatial_geometry import (
     anchor_bearing_of, apply_pose_diff, crossing_of, derive_scene_stations,
     door_anchor_id, effective_anchors, effective_facing, effective_room_size,
     effective_station, egocentric_frame, entity_arc, entity_side,
-    guessed_room_sizes, measured_proximity_rel, normalize_scene_poses,
+    guessed_room_sizes, invalidate_contact_bound_poses,
+    measured_proximity_rel, normalize_scene_poses,
     normalize_scene_stations, pose_facts, proximity_rel, room_layout,
     spatial_digest, THRESHOLD_CROSSING_BEATS,
 )

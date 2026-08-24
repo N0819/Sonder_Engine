@@ -444,7 +444,8 @@ class TestLiftingContactOutOfEntityState:
             "actor": "Hinami", "actor_part": "", "target": "Tamamo",
             "target_part": "", "target_interior": "", "manner": "lean",
             "relation": "surface",
-            "motion": "settled", "detail": "", "unasserted": 0}
+            "motion": "settled", "detail": "", "unasserted": 0,
+            "contact_id": "contact:b0cfe217587d26e9bb54"}
 
     def test_the_key_name_yields_the_body_part(self):
         scene = self._lift({"hinami": {
@@ -1053,7 +1054,7 @@ class TestEnvelopmentFold:
     """An envelopment stated from the enclosing side is folded, not trusted.
 
     The ledger's interior direction is fixed: actor_part is the part that is
-    INSIDE, and the target encloses it. Live (chat 69 "Horny Story. ⎇49"), a
+    INSIDE, and the target encloses it. In a measured long run, an
     interior contact stood eight beats as `cavity -> part, engulf, relation
     surface` -- so both parties were told "against" about a body enclosed to
     the hilt -- and the mirror spelling `lips -> tip, seal, interior` read,

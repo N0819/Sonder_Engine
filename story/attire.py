@@ -1362,8 +1362,18 @@ _REMOVAL_STATE_WORDS = frozenset({
 
 
 def is_bare_garment_state(text):
-    """Is this note's whole text a state, with no garment named in it?"""
-    return str(text or "").strip().casefold().strip(".") in _BARE_STATE_WORDS
+    """Is this note's whole text a state, with no garment named in it?
+
+    Models also put exposed surfaces in ``add`` (``bare feet``, ``bare
+    torso``). Those are body state, not garments; accepting one files it by
+    the garment-name fallback and can conceal the real surface it described.
+    """
+    value = str(text or "").strip().casefold().strip(".")
+    if value in _BARE_STATE_WORDS:
+        return True
+    return bool(re.fullmatch(
+        r"(?:bare|uncovered|exposed)\s+(?:head|torso|waist|groin|feet|"
+        r"foot|arms?|legs?|hands?|chest|body)", value))
 
 
 def is_removal_state(text):
@@ -2278,6 +2288,12 @@ def advance(previous, proposed, decisive=False, process=False):
         out[region] = {"garments": garments,
                        "beneath": entry.get("beneath")
                        or (previous.get(region) or {}).get("beneath") or ""}
+        # ``uncovered`` is durable history about the body, not transient
+        # garment state. A later reconciliation carries it even if something
+        # covers the region again; the covering gate still hides beneath.
+        if (entry.get("uncovered")
+                or (previous.get(region) or {}).get("uncovered")):
+            out[region]["uncovered"] = True
         beneath_zones = _clean_beneath_zones(
             region, entry.get("beneath_zones")
             or (previous.get(region) or {}).get("beneath_zones"))
@@ -2531,6 +2547,8 @@ def apply_flat_change(previous, wanted, decisive=False, conditions=None,
     wanted_keys = {}
     for name in (wanted or []):
         resolved = resolve_garment(name, worn_names, allow_head_noun=False) or str(name)
+        if is_bare_garment_state(resolved):
+            continue
         wanted_keys[resolved.casefold()] = resolved
     proposed = {}
     seen = set()
@@ -2552,6 +2570,11 @@ def apply_flat_change(previous, wanted, decisive=False, conditions=None,
                 garments.append(dict(garment, state="removed"))
         proposed[region] = {"garments": garments,
                             "beneath": entry.get("beneath") or ""}
+        # A region remembers that its authored beneath-surface has entered
+        # play. Rebuilding the wardrobe for an unrelated later change used to
+        # erase this bit on every region except the one changed that beat.
+        if entry.get("uncovered"):
+            proposed[region]["uncovered"] = True
         beneath_zones = _clean_beneath_zones(
             region, entry.get("beneath_zones"))
         if beneath_zones:

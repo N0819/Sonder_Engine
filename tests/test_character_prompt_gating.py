@@ -165,6 +165,23 @@ def test_the_firewall_paragraphs_are_never_gated():
         assert heading in out, heading
 
 
+def test_character_contract_supplies_mechanisms_not_a_default_temperament():
+    """Scope and urgency must not quietly author a cautious personality."""
+    out = character_prompt(EMPTY, base=BASE)
+
+    assert "CURRENT EVIDENCE, NOT DEFAULT TEMPERAMENT:" in out
+    assert "This is an information rule only" in out
+    assert "creates no preference for caution" in out
+    assert "Do not seed caution, compromise, escalation, violence, mercy" in out
+    assert "Urgency changes stakes and available time" in out
+    assert "Urgency changes stakes and available time; it does not supply values" in out
+    assert "Consider silence, a small response" not in out
+    assert "It is a brake on unearned action" not in out
+    assert "at least one response_candidate MUST pause" not in out
+    assert "must be yielded to" not in out
+    assert "at least one considered_response MUST address it" not in out
+
+
 def test_surviving_text_keeps_its_authored_order_and_spacing():
     out = character_prompt(EMPTY, base=BASE)
     kept = [line for line in out.split("\n") if line.strip()]

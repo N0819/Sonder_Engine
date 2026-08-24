@@ -161,6 +161,7 @@ def test_episode_does_not_append_dialogue_again(
 
     assert len(promises) == 1
     assert promises[0]["gist"] == "a voice: I promise I will return."
+    assert promises[0]["content"].startswith("I heard a voice say ")
 
 def test_embedding_fallback_is_surfaced_as_a_warning(temp_db):
     """A missing embeddings provider silently downgrades every stored vector

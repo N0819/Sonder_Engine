@@ -76,7 +76,7 @@ def body_receives_evidence(scene, body_key, body, roles, naming, evidence):
     if _is_concealed(evidence or {}, forms):
         return False
 
-    if evidence.get("kind") == "speech":
+    if evidence.get("kind") in ("speech", "communication"):
         # A private comm reaches only its named endpoint.  Otherwise sound
         # obeys the same enclosure, barrier, material, volume and distance
         # ladder the foreground perception path uses.  Exact words require
@@ -105,6 +105,9 @@ def evidence_phrase(evidence):
     if evidence.get("kind") == "speech":
         quote = " ".join(str(evidence.get("exact_quote") or "").split())
         return f"{actor} said {quote}"[:320]
+    if evidence.get("kind") == "communication":
+        surface = " ".join(str(evidence.get("surface") or "communicated").split())
+        return f"{actor} {surface}"[:320]
     surface = " ".join(str(evidence.get("surface") or "acted").split())
     # `observable` is normalized as a verb-first predicate phrase precisely so
     # an observer label can be prepended without changing its grammar.

@@ -473,6 +473,18 @@ def prepare_scene_commit(ctx):
     for k, v in (diff.get("overlays") or {}).items():
         cur = sc.setdefault("overlays", {}).setdefault(k, [])
         for it in (v if isinstance(v, list) else [v]):
+            # A named overlay is a mutable temporary fact (flush, soot,
+            # swelling), not an append-only event. Replace its earlier value
+            # in place so a changing description does not accumulate six
+            # contradictory copies and re-earn the body's full appearance on
+            # every beat. Bare prose overlays retain legacy exact-dedupe
+            # behaviour because they carry no safe identity to replace by.
+            if isinstance(it, dict) and str(it.get("name") or "").strip():
+                handle = str(it["name"]).strip().casefold()
+                cur = [old for old in cur
+                       if not (isinstance(old, dict)
+                               and str(old.get("name") or "").strip().casefold()
+                               == handle)]
             if it not in cur:
                 cur.append(it)
         sc["overlays"][k] = cur[-6:]

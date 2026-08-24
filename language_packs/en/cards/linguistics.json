@@ -374,6 +374,27 @@
         "hair",
         "elbow",
         "hips",
+        "thigh",
+        "thighs",
+        "butt",
+        "buttocks",
+        "breast",
+        "breasts",
+        "nipple",
+        "nipples",
+        "groin",
+        "crotch",
+        "genitals",
+        "vulva",
+        "vagina",
+        "clit",
+        "clitoris",
+        "penis",
+        "testicles",
+        "scrotum",
+        "anus",
+        "rectum",
+        "pelvis",
         "knee",
         "ear",
         "weight",
@@ -409,6 +430,14 @@
         "head",
         "brow",
         "fists"
+      ]
+    },
+    "_BODY_OWNERSHIP_MODIFIERS": {
+      "$type": "frozenset",
+      "items": [
+        "left", "right", "upper", "lower", "inner", "outer", "front",
+        "rear", "injured", "wounded", "bare", "exposed", "covered",
+        "clothed", "near", "far"
       ]
     },
     "_QUOTE_SPAN_RE": {
@@ -1722,6 +1751,7 @@
       "$type": "tuple",
       "items": [
         "Dialogue from view missing or altered",
+        "Narrator invented quoted dialogue absent from the player view",
         "Merged dialogue from different speakers",
         "Pronoun mismatch for",
         "Player named in third person",
@@ -1733,6 +1763,13 @@
       ]
     },
     "_CRAFT_TELLS": [
+      {
+        "$type": "tuple",
+        "items": [
+          "\\b(?:(?:the contact at (?:your|my|his|her|their)|(?:your|my|his|her|their)\\s+(?:\\w+\\s+){0,2})[^.!?]{0,80}|(?:steady pressure[^.!?]{0,70}shared warmth|shared warmth[^.!?]{0,70}steady pressure)[^.!?]{0,80})\\bregister(?:s|ed|ing)?\\b",
+          "sensor-ledger diction ('registers')"
+        ]
+      },
       {
         "$type": "tuple",
         "items": [

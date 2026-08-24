@@ -115,6 +115,31 @@ def test_only_player_and_major_character_sources_enter_the_shared_digest():
     assert all("a porter" not in str(s) for s in view["public_sources"])
 
 
+def test_described_communication_reaches_charter_without_a_fake_quote():
+    view = _resolve_beat_view(
+        {"resolved_event": "", "dialogue_log": []}, [], {}, [], "Rowan",
+        {"sequence": [{
+            "type": "communication", "act": "ask",
+            "content": "which culvert should be surveyed first",
+            "targets": ["Reeve Ysra"], "volume": "normal",
+            "visibility": "overt", "conceal_from": [],
+        }]})
+    out = {"dialogue_log": [], "public_evidence": []}
+    _ground_public_evidence(out, view)
+    evidence = out["public_evidence"][0]
+    assert evidence["kind"] == "communication"
+    assert "exact_quote" not in evidence
+    assert evidence["speech_acts"] == [{
+        "kind": "ask", "content": "which culvert should be surveyed first"}]
+
+    charter, metrics = apply_public_evidence(
+        _charter(), [evidence], _scene(), turn_id=11)
+    news = next(c for c in charter["minds"]["reeve"].values()
+                if c.get("kind") == "news")
+    assert metrics["acquired"] == 1
+    assert "asks which culvert" in news["claim_text"]
+
+
 def test_exact_speech_lands_only_in_the_full_hearing_witness():
     charter, metrics = apply_public_evidence(
         _charter(), [_speech()], _scene(), turn_id=7)

@@ -435,7 +435,11 @@ def _unanswered_question_note(chat_id, char_name, char_id, current_turn_idx,
         # in that same beat clears it.
         if row["step_key"] == "director_interpret":
             spoken = player_speech_lines(content)
-            if not spoken:
+            communicated = [
+                e for e in (content.get("sequence") or [])
+                if isinstance(e, dict) and e.get("type") == "communication"
+                and str(e.get("content") or "").strip()]
+            if not spoken and not communicated:
                 continue
             addressed = [str(a).casefold() for a in
                          ((content.get("flow") or {}).get("addressed_to_refs")
@@ -454,6 +458,15 @@ def _unanswered_question_note(chat_id, char_name, char_id, current_turn_idx,
             # `expects_response` on a player declaration, and inventing one
             # would mean guessing at intent the Director never recorded.
             reached = [line for line in reached if "?" in line]
+            # Typed described questions carry their direction structurally;
+            # no punctuation or invented exact quote is needed.
+            for event in communicated:
+                if str(event.get("act") or "").casefold() not in (
+                        "ask", "question", "request", "instruct"):
+                    continue
+                content_text = str(event.get("content") or "").strip()
+                if content_text and _reached(content_text, row["idx"]):
+                    reached.append(content_text)
             if not reached:
                 continue
             asked = {"from": "the player", "asked": str(reached[-1])[:240],
@@ -471,9 +484,13 @@ def _unanswered_question_note(chat_id, char_name, char_id, current_turn_idx,
             if not isinstance(result, dict):
                 continue
             speaker = str(result.get("name") or "").strip()
-            said = [e.get("text") for e in (result.get("sequence") or [])
-                    if isinstance(e, dict) and e.get("type") == "speech"
-                    and e.get("text")]
+            said = [
+                e.get("text") if e.get("type") == "speech"
+                else e.get("content")
+                for e in (result.get("sequence") or [])
+                if isinstance(e, dict)
+                and e.get("type") in ("speech", "communication")
+                and (e.get("text") or e.get("content"))]
             # THIS character speaking clears the debt, whatever they said. An
             # answer need not be responsive to count as having spoken; whether
             # it was a real answer is the asker's business, not a field's.

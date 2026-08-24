@@ -119,11 +119,14 @@ from .common import (
     reconcile_cast_entity_names,
     character_room,
     character_scene_keys,
+    discard_unanchored_player_speech,
     lore_for,
     norm_sequence,
     normalize_character_refs,
     player_speech_lines,
+    prune_blocked_phase_changes,
     repair_narrated_speech_elements,
+    settle_sequence_dispositions,
     extra_parts_lines,
     scene_attire_view,
     scene_compact_attire,
@@ -135,6 +138,7 @@ from .director_lingua import (
 )
 from .director_contact import (
     _canonical_scene_subject,
+    _drop_momentary_contact_adds,
     _validated_player_contact_assertions,
     _merge_player_contact_assertions,
     _validated_character_contact_endings,
@@ -405,6 +409,9 @@ def director_establish(ctx, nonce):
         # unrepresentable at establishment and the scene opened with contacts:[].
         "contact_ops": (out.get("contact_ops")
                         if isinstance(out.get("contact_ops"), list) else []),
+        "contact_action_ops": (
+            out.get("contact_action_ops")
+            if isinstance(out.get("contact_action_ops"), list) else []),
         "substance_ops": (out.get("substance_ops")
                           if isinstance(out.get("substance_ops"), list) else []),
         # The channels the opening installs, through the same merge every later
@@ -645,6 +652,17 @@ def director_interpret(ctx, nonce):
         ctx.add_warning(
             "director_interpret: speech element carried narration; reduced to "
             f"the spoken words ({len(_before)} -> {len(_after)} chars)")
+    _unanchored_speech = discard_unanchored_player_speech(out, ctx.input)
+    if _unanchored_speech:
+        ctx.add_warning(
+            "director_interpret: discarded %d player speech line(s) whose "
+            "words were not present in the player's input" %
+            len(_unanchored_speech))
+        ctx.tell_director(
+            "A description that the player explains, reassures, warns, or "
+            "speaks is not permission to invent their exact words. Preserve "
+            "only player dialogue copied from the input; leave described "
+            "speech as an action when no exact line was supplied.")
     _route_authorial_npc_beat(
         ctx, out, [str(pers.get("name") or persona_name(pers) or "").casefold()])
     # Bind the acts the model left unbound BEFORE anything downstream asks
@@ -733,14 +751,32 @@ def director_interpret(ctx, nonce):
         },
         "interpret")
 
+    _declared_actions = [
+        item for item in (out.get("sequence") or [])
+        if isinstance(item, dict) and item.get("type") == "action"
+    ]
+    _allows_new_onset_contact = any(
+        item.get("commitment") == "asserted" for item in _declared_actions)
     out["contact_assertions"] = _validated_player_contact_assertions(
         sc, out.get("contact_assertions"), p_name,
         report=lambda note: ctx.add_warning(f"player contact: {note}"),
+        allow_new_player_contacts=_allows_new_onset_contact,
     )
     out["state_assertions"] = validated_player_state_assertions(
         sc, out.get("state_assertions"), p_name,
         report=lambda note: ctx.add_warning(f"player state: {note}"),
     )
+    _onset_assertions = copy.deepcopy(out["state_assertions"])
+    _deferred_verdicts = [
+        {"event_id": str(event.get("event_id") or ""), "status": "blocked"}
+        for event in out.get("sequence") or []
+        if isinstance(event, dict) and event.get("event_id") and (
+            event.get("depends_on") or
+            str(event.get("phase") or "").casefold() in (
+                "continuation", "completion"))
+    ]
+    prune_blocked_phase_changes(_onset_assertions, _deferred_verdicts)
+    out["onset_state_assertions"] = _onset_assertions
 
     fl = out.get("flow")
     if not isinstance(fl, dict):
@@ -2165,6 +2201,19 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
                 outside.append(channel)
                 if not authored:
                     container[key] = owned
+        # Persistent state records must not carry orchestration metadata.
+        # Specialists therefore return a side map keyed by channel.path (or a
+        # list index). Admit only paths in channels
+        # this hand was actually granted; the causal floor consumes the map
+        # before merge and persistence.
+        _phase_sources = result.get("phase_sources") or {}
+        if isinstance(_phase_sources, dict):
+            _target, _ = _stage_container(out, stage, spec["channels"][0])
+            _merged_sources = _target.setdefault("phase_sources", {})
+            for _path, _source in _phase_sources.items():
+                _channel = str(_path or "").split(".", 1)[0]
+                if _channel in state["scope"] and _channel in spec["channels"]:
+                    _merged_sources[str(_path)] = str(_source)
         state["channels_replaced"] = replaced
         # What this specialist actually CONTRIBUTED -- distinct from
         # `channels_replaced`, which counts author content that lost to
@@ -2264,7 +2313,8 @@ def _ground_public_evidence(out, view):
                         final.get(field, default)
 
         semantic = annotated.get(source_id) or {}
-        frames = []
+        frames = list(source.get("speech_acts") or []) \
+            if source.get("kind") == "communication" else []
         quote = _quote_body(source.get("exact_quote") or "")
         folded_quote = quote.casefold()
         if source.get("kind") == "speech":
@@ -2462,7 +2512,9 @@ def director_resolve(ctx, nonce, _corrections=None):
     # Same for everything else the player asserted: the resolving Director
     # must see the body the reactors saw, or it re-resolves the beat against
     # an outfit already off and a posture already changed when they decided.
-    onset_state = interp.get("state_assertions")
+    onset_state = (interp.get("onset_state_assertions")
+                   if interp.get("onset_state_assertions") is not None
+                   else interp.get("state_assertions"))
     onset_state = onset_state if isinstance(onset_state, dict) else {}
     resolve_sc = preview_player_state_assertions(
         resolve_sc, onset_state, ctx, p_name)
@@ -3138,8 +3190,12 @@ def director_resolve(ctx, nonce, _corrections=None):
     # it: project only the player's interpreted decision and each NPC's own
     # character result into the objective diff.
     sd["following_ops"] = _collect_following_ops(ctx, sc, interp, p_name)
+    resolved_contact_ops = _drop_momentary_contact_adds(
+        sd.get("contact_ops"),
+        report=lambda note: ctx.add_warning(f"resolved contact: {note}"),
+    )
     resolved_contact_ops = _merge_character_contact_endings(
-        character_contact_endings, sd.get("contact_ops"),
+        character_contact_endings, resolved_contact_ops,
         report=lambda note: ctx.add_warning(f"character contact: {note}"),
     )
     sd["contact_ops"] = _merge_player_contact_assertions(
@@ -3799,6 +3855,30 @@ def director_resolve(ctx, nonce, _corrections=None):
     # points reads `sd` -- and gives the deterministic refusal the last word,
     # which is what it was always documented to have.
     _guard_approach_is_not_arrival(ctx, interp, out["state_diff"], sc, p_name)
+
+    # CAUSAL PHASE FLOOR.  Compound declarations carry explicit dependencies;
+    # the Director adjudicates their contested effects, while deterministic
+    # code prevents a continuation from occurring through a failed onset, a
+    # missing participant, or a contact that never stood.  Preview the exact
+    # post-diff scene perception/commit will read, then remove only state
+    # records that explicitly cite a blocked source event -- never infer a
+    # prose-to-state mapping.
+    # Prerequisites are judged against the same onset world the reacting cast
+    # received.  Using the completed diff here lets a phase conjure its own
+    # missing participant/contact and then cite the result as its prerequisite.
+    _phase_scene = resolve_sc
+    _phase_sequence = list(interp.get("sequence") or [])
+    for _extra in ctx.extra_players:
+        _phase_sequence.extend(
+            ((interp.get("other_players") or {}).get(
+                str(_extra.get("persona_id"))) or {}).get("sequence") or [])
+    out["sequence_dispositions"] = settle_sequence_dispositions(
+        _phase_sequence, out, _phase_scene)
+    for _channel, _event_id in prune_blocked_phase_changes(
+            out.get("state_diff") or {}, out["sequence_dispositions"]):
+        ctx.add_warning(
+            f"dropped {_channel} change sourced from blocked phase "
+            f"{_event_id}")
 
     # Orchestration's scope backstop runs on the FINAL output -- after the
     # reconciliation seam, whose repair can itself recover a delegated

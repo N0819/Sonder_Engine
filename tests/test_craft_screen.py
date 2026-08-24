@@ -15,6 +15,30 @@ def test_flags_common_ai_tells():
     assert any("take the room in" in t for t in tells)
 
 
+def test_flags_perception_ledger_diction_but_not_ordinary_registration():
+    """Typed sensation wording is evidence for prose, not publishable prose.
+
+    The live failure copied a standing contact clause almost literally into
+    the final sentence: "The contact at your own wrist registers ...". Keep
+    the trigger tied to a possessed body/contact surface so an instrument or
+    clerk legitimately registering something does not spend a rewrite.
+    """
+    awkward = (
+        "The contact at your own hand registers her fingertips still moving "
+        "against it."
+    )
+    assert "sensor-ledger diction ('registers')" in _craft_tells(awkward)
+    for copied_clause in (
+        "Steady pressure, weight, and shared warmth register against my palm.",
+        "The shared warmth and steady pressure of Rowan's hand keep "
+        "registering against my own.",
+    ):
+        assert "sensor-ledger diction ('registers')" in _craft_tells(
+            copied_clause)
+    assert _craft_tells("The seismograph registers a second impact.") == []
+    assert _craft_tells("The clerk registers the caravan at the gate.") == []
+
+
 def test_clean_publishable_prose_has_no_tells():
     # The style exemplars must not self-trigger.
     for prose in (

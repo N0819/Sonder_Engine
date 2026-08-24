@@ -15,8 +15,10 @@ Import direction: nothing outside `agents/director*.py` may import an
 from story.character_schema import character_name_from_text
 from core.db import get_setting, wget
 from world.survival import survival_enabled, vitals_of
+from world.spatial import contact_id
 
-from .common import observable_action_text, scene_compact_attire
+from .common import (communication_surface, observable_action_text,
+                     scene_compact_attire)
 from .director_evidence import _manifest_items
 from .director_scopes import (
     SPECIALISTS,
@@ -90,7 +92,28 @@ def _resolve_beat_view(out, decls, char_actions, dice, p_name, interp):
     for actor, sequence in speech_groups:
         ordinal = 0
         for spoken in sequence:
-            if not isinstance(spoken, dict) or spoken.get("type") != "speech" \
+            if not isinstance(spoken, dict):
+                continue
+            if spoken.get("type") == "communication":
+                surface = communication_surface(spoken)
+                if surface:
+                    public_sources.append({
+                        "source_id": f"communication:{actor}:{ordinal}",
+                        "kind": "communication", "actor": actor,
+                        "surface": surface,
+                        "target": str((spoken.get("targets") or [""])[0] or ""),
+                        "volume": str(spoken.get("volume") or "normal"),
+                        "tone": str(spoken.get("tone") or ""),
+                        "visibility": str(spoken.get("visibility") or "overt"),
+                        "conceal_from": list(spoken.get("conceal_from") or []),
+                        "speech_acts": [{
+                            "kind": str(spoken.get("act") or "other"),
+                            "content": str(spoken.get("content") or ""),
+                        }],
+                    })
+                    ordinal += 1
+                continue
+            if spoken.get("type") != "speech" \
                     or not str(spoken.get("text") or "").strip():
                 continue
             quote = str(spoken["text"]).strip()
@@ -168,6 +191,8 @@ def _interpret_beat_view(ctx, out, p_name):
         sequence.append({
             k: element.get(k)
             for k in ("type", "text", "attempt", "raw_text", "commitment",
+                      "act", "content", "phase_id", "phase", "depends_on",
+                      "participants", "requires_contacts", "referents",
                       "targets", "asserted_effects", "intended_effects",
                       "volume")
             if element.get(k) is not None
@@ -256,7 +281,7 @@ def _specialist_payload(name, ctx, sc, view, extras):
     # A worn garment exists only inside sc.attire, so a specialist that
     # needed to name one could not: the contact specialist's live note says
     # it could not encode dampness on the shorts because "objects not in
-    # entity_names", and the objects specialist minted `hinami_shorts` for
+    # entity_names", and the objects specialist minted a duplicate object for
     # the same reason and said so. A hand that cannot name a thing invents
     # one, and the invention becomes a second record of a garment that
     # already existed.
@@ -306,10 +331,14 @@ def _specialist_payload(name, ctx, sc, view, extras):
         if view.get("public_sources"):
             payload["public_sources"] = list(view.get("public_sources") or [])
     elif name == "contact":
-        payload.update({
-            "contacts": extras.get("contacts")
+        raw_contacts = (extras.get("contacts")
                         if extras.get("contacts") is not None
-                        else (sc.get("contacts") or []),
+                        else (sc.get("contacts") or []))
+        payload.update({
+            "contacts": [
+                {**row, "contact_id": contact_id(row)}
+                for row in raw_contacts if isinstance(row, dict)
+            ],
             "contained": sc.get("contained") or {},
             "scales": sc.get("scales") or {},
             "rooms": rooms_index,

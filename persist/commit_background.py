@@ -618,6 +618,8 @@ def overt_declaration_text(ctx):
     for element in elements:
         if element.get("type") == "speech":
             parts.append(str(element.get("text") or ""))
+        elif element.get("type") == "communication":
+            parts.append(str(element.get("content") or ""))
         else:
             parts.append(str(element.get("observable")
                              or element.get("attempt") or ""))

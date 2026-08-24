@@ -95,8 +95,8 @@ SPECIALISTS = {
     "contact": {
         "step_key": "director_contact",
         "role": "director_contact",
-        "channels": ("contact_ops", "substance_ops", "containment",
-                     "scales"),
+        "channels": ("contact_ops", "contact_action_ops", "substance_ops",
+                     "containment", "scales"),
     },
     "objects": {
         "step_key": "director_objects",
@@ -186,6 +186,8 @@ _CATEGORY_CHANNELS = {
     "cast_changes": "cast_changes",
     "contact": "contact_ops",
     "contacts": "contact_ops",
+    "contact_action": "contact_action_ops",
+    "contact_actions": "contact_action_ops",
     "substance": "substance_ops",
     "substances": "substance_ops",
     "inventory": "inventory_ops",
@@ -289,6 +291,8 @@ _CHANNEL_GATES = {
     "public_evidence": lambda f: f["resolved_stage"] and (
         f["speech_present"] or f["physical_beat"]),
     "contact_ops": lambda f: f["physical_beat"] or f["contacts_standing"],
+    "contact_action_ops": lambda f: (
+        f["physical_beat"] or f["contacts_standing"]),
     "substance_ops": lambda f: (f["physical_beat"]
                                 or f["material_effects_declared"]),
     "containment": lambda f: f["physical_beat"] or f["containment_active"],

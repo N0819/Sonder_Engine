@@ -12,6 +12,7 @@ import json
 import time
 
 from agents.director import (
+    _drop_momentary_contact_adds,
     _merge_character_contact_endings,
     _merge_player_contact_assertions,
     _validated_character_contact_endings,
@@ -22,6 +23,21 @@ from core.pipeline_context import ChatData, PipelineContext, TurnData
 from llm.prompts import DEFAULT_PROMPTS
 from llm.schemas import validate_llm_output
 from world.spatial import apply_contact_ops
+
+
+def test_momentary_acts_do_not_become_standing_contact_state():
+    reports = []
+    ops = _drop_momentary_contact_adds([
+        {"op": "add", "actor": "Alex", "actor_part": "fist",
+         "target": "Kade", "target_part": "guard", "manner": "strike"},
+        {"op": "add", "actor": "Alex", "actor_part": "forearm",
+         "target": "Kade", "target_part": "torso", "manner": "press"},
+        {"op": "remove", "actor": "Alex", "actor_part": "hand",
+         "target": "Kade", "target_part": "wrist", "manner": "grip"},
+    ], reports.append)
+
+    assert [op["manner"] for op in ops] == ["press", "grip"]
+    assert reports == ["discarded momentary act from standing contact topology"]
 
 
 def _scene():
@@ -149,6 +165,41 @@ def test_felt_contact_can_refine_standing_relation_but_not_mint_npc_act():
         **_assertion(), "actor_part": "head",
     }], "Hinami")
     assert subpart[0]["actor_part"] == "cock"
+
+
+def test_contestable_player_act_cannot_mint_contact_before_reaction():
+    scene = _scene()
+    scene["positions"] = {"Mara": "room", "Rhea": "room"}
+    attempted = {
+        "actor": "Mara", "actor_part": "hand",
+        "target": "Rhea", "target_part": "shoulder",
+        "manner": "grip", "relation": "surface", "motion": "settled",
+    }
+
+    assert _validated_player_contact_assertions(
+        scene, [attempted], "Mara",
+        allow_new_player_contacts=False) == []
+    assert _validated_player_contact_assertions(
+        scene, [attempted], "Mara",
+        allow_new_player_contacts=True)[0]["target_part"] == "shoulder"
+
+
+def test_npc_refinement_cannot_drop_standing_endpoint():
+    scene = _scene()
+    scene["positions"] = {"Mara": "room", "Rhea": "room"}
+    scene["contacts"] = [{
+        "actor": "Rhea", "actor_part": "forearm",
+        "target": "Mara", "target_part": "right shoulder",
+        "manner": "press", "relation": "surface", "motion": "settled",
+    }]
+
+    [refined] = _validated_player_contact_assertions(scene, [{
+        "actor": "Rhea", "actor_part": "forearm",
+        "target": "Mara", "target_part": "",
+        "manner": "press", "relation": "surface", "motion": "settled",
+    }], "Mara")
+
+    assert refined["target_part"] == "right shoulder"
 
 
 def test_resolve_cannot_silently_coarsen_asserted_contact_endpoint():

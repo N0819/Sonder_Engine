@@ -40,6 +40,7 @@ from .common import (
     _next_speaker_candidates,
     _observable_predicate,
     _requires_director_resolution,
+    communication_surface,
     observable_action_text,
     _sequence_has_content,
     normalize_character_refs,
@@ -186,7 +187,7 @@ def deterministic_micro_perception(ctx, actor_id, actor_result, scene):
         observer_senses = character_senses(observer_sheet)
         additions = []
         for event in actor_result.get("sequence") or []:
-            if event.get("type") == "speech":
+            if event.get("type") in ("speech", "communication"):
                 # A concealed line is an absolute exclusion, not a volume: it
                 # must never be delivered to an observer named in its
                 # conceal_from, regardless of physical earshot. The action
@@ -218,8 +219,14 @@ def deterministic_micro_perception(ctx, actor_id, actor_result, scene):
                     "hearing", observer_senses)
                 quote = str(event.get("text") or "")
                 if level == "full":
-                    additions.append(compositor_text(
-                        "loop_speech", label=display, body=quote))
+                    if event.get("type") == "communication":
+                        surface = communication_surface(event)
+                        if surface:
+                            additions.append(
+                                _observable_predicate(display, surface))
+                    else:
+                        additions.append(compositor_text(
+                            "loop_speech", label=display, body=quote))
                 elif level == "trace":
                     # Contentless by contract (G4): detection and direction at
                     # best -- no words, no identity, not even the gated
@@ -242,9 +249,14 @@ def deterministic_micro_perception(ctx, actor_id, actor_result, scene):
                     # entire secret, verbatim. `_muffle_tokens` was fixed for
                     # exactly this and this call site was missed; one muffling
                     # rule, in one place, is the only way that stays true.
-                    fragment = _muffle_middle(quote)
-                    additions.append(compositor_text(
-                        "loop_muffled", label=display, fragment=fragment))
+                    if event.get("type") == "communication":
+                        additions.append(
+                            _observable_predicate(display,
+                                                  "speaks indistinctly"))
+                    else:
+                        fragment = _muffle_middle(quote)
+                        additions.append(compositor_text(
+                            "loop_muffled", label=display, fragment=fragment))
                 perceived_by.add(observer_id)
             elif event.get("type") == "action":
                 if event.get("visibility") == "concealed":
@@ -525,7 +537,7 @@ def interaction_loop(ctx, nonce):
     )
     acted_upon = set()
     for element in _dict_list(interp.get("sequence")):
-        if element.get("type") not in ("action", "speech"):
+        if element.get("type") not in ("action", "speech", "communication"):
             continue
         for target_id in normalize_character_refs(
                 _list(element.get("targets")), ctx.cast):
@@ -856,7 +868,8 @@ def interaction_loop(ctx, nonce):
         # Live, chat 59 t146. The Doctor owed Tamamo an answer, so he was
         # queued first -- but she was in the same blind instant, so her round
         # was written deaf. Her present evidence was "dim light... gravel...
-        # Hinami stands perfectly still", with his answer nowhere in it, and
+        # another bystander stands perfectly still", with his answer nowhere
+        # in it, and
         # she selected "rephrase the dimensional question freshly to the
         # Doctor". Given a second round she then heard him and acknowledged by
         # restating his own terms back at him. On the page: an answer, then the
