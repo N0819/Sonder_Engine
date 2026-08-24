@@ -18,11 +18,11 @@ def test_atmosphere_modules_are_release_coherent_and_runtime_owned():
     )
     assert [path.name for path in modules if not path.is_file()] == []
     for path in modules:
-        assert 'export const MODULE_RELEASE = "alpha98-ui9-ff279a1d1d7f";' in path.read_text(
+        assert 'export const MODULE_RELEASE = "alpha98-ui10-c14a4cf8dabd";' in path.read_text(
             encoding="utf-8"
         )
     bootstrap = (RUNTIME / "bootstrap.js").read_text(encoding="utf-8")
-    assert '"./atmosphere-runtime.js?release=alpha98-ui9-ff279a1d1d7f"' in bootstrap
+    assert '"./atmosphere-runtime.js?release=alpha98-ui10-c14a4cf8dabd"' in bootstrap
     assert "createAtmosphereRuntime" in bootstrap
 
 

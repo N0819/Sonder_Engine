@@ -265,7 +265,7 @@ def test_person_workspace_geometry_has_one_scroll_owner_and_safe_targets(
 
     workspace = page.locator("[data-person-workspace]")
     expect(workspace).to_be_visible()
-    expect(page.locator(".ui-library__filters")).to_have_count(0)
+    expect(page.locator("[data-library-workspace]")).to_have_count(0)
     expect(page.get_by_role("complementary", name="Library details")).to_be_hidden()
     page.locator(".ui-person-editor__more > summary").click()
     page.locator(".ui-person-editor__more").get_by_role(
@@ -403,8 +403,8 @@ def test_character_quick_start_sends_alpha98_history_contract(
     page.goto(f"{ui_base_url}/static/ui-next-lab.html")
     result = page.evaluate(
         """async base => {
-          const storeModule = await import(`${base}/static/js/ui-next/store.js?release=alpha98-ui9-ff279a1d1d7f`);
-          const runtimeModule = await import(`${base}/static/js/ui-next/library-authoring-runtime.js?release=alpha98-ui9-ff279a1d1d7f`);
+          const storeModule = await import(`${base}/static/js/ui-next/store.js?release=alpha98-ui10-c14a4cf8dabd`);
+          const runtimeModule = await import(`${base}/static/js/ui-next/library-authoring-runtime.js?release=alpha98-ui10-c14a4cf8dabd`);
           const store = storeModule.createStore();
           const route = { destination: 'library', segments: ['characters'], query: { item: 'character:7', mode: 'edit' }, canonicalHash: '#/library/characters?item=character%3A7&mode=edit' };
           store.dispatch({ type: 'presentation/replace', slice: 'route', value: route });
@@ -547,10 +547,10 @@ def test_authoring_runtime_preserves_drafts_and_rejects_late_save(
     result = page.evaluate(
         """async base => {
           const storeModule = await import(
-            `${base}/static/js/ui-next/store.js?release=alpha98-ui9-ff279a1d1d7f`
+            `${base}/static/js/ui-next/store.js?release=alpha98-ui10-c14a4cf8dabd`
           );
           const authoringModule = await import(
-            `${base}/static/js/ui-next/library-authoring-runtime.js?release=alpha98-ui9-ff279a1d1d7f`
+            `${base}/static/js/ui-next/library-authoring-runtime.js?release=alpha98-ui10-c14a4cf8dabd`
           );
           const store = storeModule.createStore();
           let route = {
@@ -664,10 +664,10 @@ def test_authoring_runtime_restores_draft_and_preserves_failed_save(
     result = page.evaluate(
         """async base => {
           const storeModule = await import(
-            `${base}/static/js/ui-next/store.js?release=alpha98-ui9-ff279a1d1d7f`
+            `${base}/static/js/ui-next/store.js?release=alpha98-ui10-c14a4cf8dabd`
           );
           const authoringModule = await import(
-            `${base}/static/js/ui-next/library-authoring-runtime.js?release=alpha98-ui9-ff279a1d1d7f`
+            `${base}/static/js/ui-next/library-authoring-runtime.js?release=alpha98-ui10-c14a4cf8dabd`
           );
           const store = storeModule.createStore();
           const route = {
@@ -731,10 +731,10 @@ def test_story_import_retry_and_branch_use_distinct_owned_operations(
     result = page.evaluate(
         """async base => {
           const storeModule = await import(
-            `${base}/static/js/ui-next/store.js?release=alpha98-ui9-ff279a1d1d7f`
+            `${base}/static/js/ui-next/store.js?release=alpha98-ui10-c14a4cf8dabd`
           );
           const authoringModule = await import(
-            `${base}/static/js/ui-next/library-authoring-runtime.js?release=alpha98-ui9-ff279a1d1d7f`
+            `${base}/static/js/ui-next/library-authoring-runtime.js?release=alpha98-ui10-c14a4cf8dabd`
           );
           const store = storeModule.createStore();
           let route = {

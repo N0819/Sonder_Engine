@@ -1,7 +1,7 @@
-export const MODULE_RELEASE = "alpha98-ui9-ff279a1d1d7f";
+export const MODULE_RELEASE = "alpha98-ui10-c14a4cf8dabd";
 
-import { mountLivedLocationFields } from "./lived-location.js?release=alpha98-ui9-ff279a1d1d7f";
-import { openNewStory } from "./new-story.js?release=alpha98-ui9-ff279a1d1d7f";
+import { mountLivedLocationFields } from "./lived-location.js?release=alpha98-ui10-c14a4cf8dabd";
+import { openNewStory } from "./new-story.js?release=alpha98-ui10-c14a4cf8dabd";
 
 const loreLocationDrafts = new Map();
 
@@ -10,7 +10,7 @@ const COPY = Object.freeze({
   search: "Search Library",
   searchAction: "Search",
   sort: "Sort Library",
-  filters: "Library categories and scopes",
+  filters: "Library material types",
   loading: "Loading Library…",
   loadingDetail: "Reading the current Library index.",
   empty: "Your Library is empty",
@@ -36,8 +36,6 @@ const COPY = Object.freeze({
   confirmDeleteStory: "Delete this story",
   cancelDelete: "Keep story",
   deleteWarning: "This permanently removes the complete story, its history, and story-owned lore. Reusable Characters, Personas, and original Lore remain.",
-  all: "All",
-  allItems: "All Library items",
   stories: "Stories",
   characters: "Characters",
   personas: "Personas",
@@ -48,7 +46,6 @@ const COPY = Object.freeze({
   story: "Story",
   character: "Character",
   persona: "Persona",
-  scope: "Scope",
   storyScope: "Story scope",
   untitledStory: "Untitled story",
   name: "Name",
@@ -140,10 +137,10 @@ const COPY = Object.freeze({
   exportAction: "Export",
   duplicateAction: "Duplicate",
   editStoryCard: "Edit Story card",
-  everyReusableItem: "Every reusable item on this installation.",
   library: "Library",
-  libraryScope: "Scope",
-  allLibrary: "Library",
+  libraryScope: "Library scope",
+  allLibrary: "All Library",
+  storyMaterial: "Story material",
   newStory: "New story",
   activeStory: "Active story",
   moreFor: "More actions for ${name}",
@@ -151,14 +148,13 @@ const COPY = Object.freeze({
 // UI_CATALOG_END
 
 const TYPES = Object.freeze([
-  ["", COPY.all, COPY.allItems],
   ["story", COPY.stories, COPY.stories],
   ["character", COPY.characters, COPY.characters],
   ["persona", COPY.personas, COPY.personas],
   ["lore", COPY.lore, COPY.lore],
 ]);
 const SCOPES = Object.freeze([
-  ["all", COPY.all],
+  ["all", COPY.allLibrary],
   ["story", COPY.chosenStory],
   ["unassigned", COPY.notUsed],
   ["multiple", COPY.multipleStories],
@@ -251,25 +247,31 @@ function workflowSession() {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-function filterRail(documentRef, services, state) {
+function workspaceFilters(documentRef, services, state) {
   const route = state.route || {};
   const query = routeQuery(route);
   const activeType = typeForRoute(route);
   const activeScope = query.scope || "all";
-  const rail = node(documentRef, "nav", "ui-library__filters");
-  rail.setAttribute("aria-label", COPY.filters);
+  const filters = node(documentRef, "div", "ui-library-workspace__filters");
 
-  const head = node(documentRef, "header", "ui-library__side-head");
-  const heading = node(documentRef, "div");
-  const sideTitle = node(documentRef, "h2", "ui-library__side-title", COPY.allLibrary);
-  sideTitle.tabIndex = -1;
-  sideTitle.dataset.focusIdentity = "destination:library";
-  heading.append(
-    node(documentRef, "p", "ui-library__breadcrumb", COPY.libraryScope),
-    sideTitle,
-  );
+  const types = node(documentRef, "nav", "ui-library-workspace__types");
+  types.setAttribute("aria-label", COPY.filters);
+  const typeList = node(documentRef, "ul", "ui-library__filter-list ui-library__tabs");
+  for (const [type, label, accessible] of TYPES) {
+    const item = node(documentRef, "li");
+    const control = button(documentRef, label, "ui-library__filter");
+    control.setAttribute("aria-label", accessible);
+    if (type === (activeType || "story")) control.setAttribute("aria-current", "page");
+    control.addEventListener("click", () => navigate(services, type, { ...query, item: "" }));
+    item.append(control);
+    typeList.append(item);
+  }
+  types.append(typeList);
+
+  const scopeField = node(documentRef, "label", "ui-field ui-library__scope-field");
+  scopeField.append(node(documentRef, "span", "ui-field__label", COPY.libraryScope));
   const scope = node(documentRef, "select", "ui-input ui-library__scope");
-  scope.setAttribute("aria-label", COPY.scope);
+  scope.setAttribute("aria-label", COPY.libraryScope);
   for (const [value, label] of SCOPES) {
     const option = node(documentRef, "option", "", label);
     option.value = value;
@@ -285,21 +287,9 @@ function filterRail(documentRef, services, state) {
       story: scope.value === "story" ? (query.story || firstStory || "") : query.story,
     });
   });
-  head.append(heading, scope,
-    node(documentRef, "p", "ui-library__scope-note", COPY.everyReusableItem));
-  rail.append(head);
+  scopeField.append(scope);
+  filters.append(types, scopeField);
 
-  const typeList = node(documentRef, "ul", "ui-library__filter-list ui-library__tabs");
-  for (const [type, label, accessible] of TYPES.filter(([type]) => type)) {
-    const item = node(documentRef, "li");
-    const control = button(documentRef, label, "ui-library__filter");
-    control.setAttribute("aria-label", accessible);
-    if (type === (activeType || "story")) control.setAttribute("aria-current", "page");
-    control.addEventListener("click", () => navigate(services, type, { ...query, item: "" }));
-    item.append(control);
-    typeList.append(item);
-  }
-  rail.append(typeList);
   const stories = state.library?.chats || [];
   if (stories.length && activeScope === "story") {
     const storyLabel = node(documentRef, "label", "ui-field ui-library__story-scope");
@@ -316,9 +306,46 @@ function filterRail(documentRef, services, state) {
       ...query, item: "", scope: "story", story: story.value,
     }));
     storyLabel.append(story);
-    rail.append(storyLabel);
+    filters.append(storyLabel);
   }
-  return rail;
+  return filters;
+}
+
+function workspaceActions(documentRef, services, activeType) {
+  const actions = node(
+    documentRef, "div", "ui-action-cluster ui-library-workspace__actions",
+  );
+  actions.setAttribute("role", "group");
+  if (activeType === "story") {
+    const create = labelWithIcon(documentRef,
+      button(documentRef, COPY.newStory, "ui-button ui-button--primary"), "plus", COPY.newStory);
+    create.addEventListener("click", () => openNewStory({ document: documentRef, services }));
+    const importStory = labelWithIcon(documentRef,
+      button(documentRef, COPY.importStory), "import", COPY.importStory);
+    importStory.addEventListener("click", () => {
+      navigate(services, "story", { mode: "import", session: workflowSession() });
+      documentRef.dispatchEvent(new CustomEvent("sonder:library-select", {
+        detail: { workflow: "story-import" },
+      }));
+    });
+    actions.append(create, importStory);
+  } else if (activeType === "character" || activeType === "persona") {
+    const isCharacter = activeType === "character";
+    const createLabel = isCharacter ? COPY.createCharacter : COPY.createPersona;
+    const importLabel = isCharacter ? COPY.importCharacter : COPY.importPersona;
+    const create = labelWithIcon(documentRef,
+      button(documentRef, createLabel, "ui-button ui-button--primary"), "plus", createLabel);
+    create.addEventListener("click", () => navigate(services, activeType, {
+      mode: "create", session: workflowSession(),
+    }));
+    const importPerson = labelWithIcon(documentRef,
+      button(documentRef, importLabel), "import", importLabel);
+    importPerson.addEventListener("click", () => navigate(services, activeType, {
+      mode: "import", session: workflowSession(),
+    }));
+    actions.append(create, importPerson);
+  }
+  return actions;
 }
 
 function toolbar(documentRef, services, state) {
@@ -379,31 +406,6 @@ function toolbar(documentRef, services, state) {
     navigate(services, activeType, { ...query, item: "", q: input.value.trim() });
   });
   form.append(label, submit, sortLabel, visibilityLabel);
-  if (!activeType || activeType === "story") {
-    const importStory = button(documentRef, COPY.importStory);
-    importStory.addEventListener("click", () => {
-      navigate(services, "story", { mode: "import", session: workflowSession() });
-      documentRef.dispatchEvent(new CustomEvent("sonder:library-select", {
-        detail: { workflow: "story-import" },
-      }));
-    });
-    form.append(importStory);
-  }
-  if (activeType === "character" || activeType === "persona") {
-    const isCharacter = activeType === "character";
-    const create = button(documentRef, isCharacter ? COPY.createCharacter : COPY.createPersona);
-    create.addEventListener("click", () => navigate(services, activeType, {
-      mode: "create", session: workflowSession(),
-    }));
-    const importPerson = button(documentRef, isCharacter ? COPY.importCharacter : COPY.importPersona);
-    importPerson.addEventListener("click", () => navigate(services, activeType, {
-      mode: "import", session: workflowSession(),
-    }));
-    const createCluster = node(documentRef, "div", "ui-action-cluster ui-library__create-cluster");
-    createCluster.setAttribute("role", "group");
-    createCluster.append(create, importPerson);
-    form.append(createCluster);
-  }
   return form;
 }
 
@@ -479,12 +481,6 @@ function resultState(documentRef, library) {
 
 function libraryWorkspace(documentRef, services, state) {
   const activeType = typeForRoute(state.route) || "story";
-  const labels = {
-    story: COPY.stories,
-    character: COPY.characters,
-    persona: COPY.personas,
-    lore: COPY.lore,
-  };
   const filteredState = { ...state, library: {
     ...(state.library || {}),
     items: (state.library?.items || []).filter(item => item.kind === activeType),
@@ -494,17 +490,18 @@ function libraryWorkspace(documentRef, services, state) {
   const head = node(documentRef, "header", "ui-library-workspace__header");
   const title = node(documentRef, "div");
   title.append(
-    node(documentRef, "p", "ui-library__kicker", COPY.library),
-    node(documentRef, "h2", "ui-library-workspace__title", labels[activeType]),
+    node(documentRef, "p", "ui-library__kicker", COPY.storyMaterial),
+    node(documentRef, "h2", "ui-library-workspace__title", COPY.library),
   );
-  head.append(title);
-  if (activeType === "story") {
-    const create = labelWithIcon(documentRef,
-      button(documentRef, COPY.newStory, "ui-button ui-button--primary"), "plus", COPY.newStory);
-    create.addEventListener("click", () => openNewStory({ document: documentRef, services }));
-    head.append(create);
-  }
-  section.append(head, toolbar(documentRef, services, filteredState));
+  const heading = title.querySelector("h2");
+  heading.tabIndex = -1;
+  heading.dataset.focusIdentity = "destination:library";
+  head.append(title, workspaceActions(documentRef, services, activeType));
+  section.append(
+    head,
+    workspaceFilters(documentRef, services, filteredState),
+    toolbar(documentRef, services, filteredState),
+  );
   const status = resultState(documentRef, filteredState.library);
   if (status) section.append(status);
   if (filteredState.library.items?.length) {
@@ -518,7 +515,6 @@ export function createLibraryView(options = {}) {
   const { services, state } = options;
   const section = node(documentRef, "section", "ui-library");
   section.dataset.libraryView = "true";
-  const rail = filterRail(documentRef, services, state);
   const content = node(documentRef, "div", "ui-library__content");
   const library = state.library || {};
   const workspace = libraryWorkspace(documentRef, services, state);
@@ -530,7 +526,7 @@ export function createLibraryView(options = {}) {
     notice.setAttribute("role", "status");
     content.append(notice);
   }
-  section.append(rail, content);
+  section.append(content);
   const routeIdentity = services.library.scrollIdentity(state.route);
   const scrollRegion = content;
   const restorePosition = services.library.scrollFor(routeIdentity);

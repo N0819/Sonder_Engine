@@ -90,10 +90,10 @@ def test_navigation_state_restores_valid_route_scroll_and_focus_identity(
         """async (base) => {
           history.replaceState(null, "", location.pathname);
           const navigationModule = await import(
-            `${base}/static/js/ui-next/navigation-state.js?release=alpha98-ui9-ff279a1d1d7f`
+            `${base}/static/js/ui-next/navigation-state.js?release=alpha98-ui10-c14a4cf8dabd`
           );
           const routerModule = await import(
-            `${base}/static/js/ui-next/router.js?release=alpha98-ui9-ff279a1d1d7f`
+            `${base}/static/js/ui-next/router.js?release=alpha98-ui10-c14a4cf8dabd`
           );
           let record = {
             route: "#/library/characters",
@@ -201,14 +201,14 @@ def test_desktop_inspector_opens_closes_pins_and_resizes_without_covering_worksp
     pin_button = inspector.get_by_role("button", name="Pin context panel")
     pin_icon = pin_button.locator("use")
     expect(pin_button).to_have_attribute("aria-pressed", "true")
-    expect(pin_icon).to_have_attribute("href", "/static/assets/icons/sonder-icons.svg?release=alpha98-ui9-ff279a1d1d7f#icon-pin")
+    expect(pin_icon).to_have_attribute("href", "/static/assets/icons/sonder-icons.svg?release=alpha98-ui10-c14a4cf8dabd#icon-pin")
 
     inspector.get_by_role("button", name="Resize context panel").click()
     expect(page.locator("html")).to_have_attribute("data-inspector-size", "compact")
     pin_button.click()
     expect(page.locator("html")).to_have_attribute("data-inspector-pinned", "false")
     expect(pin_button).to_have_attribute("aria-pressed", "false")
-    expect(pin_icon).to_have_attribute("href", "/static/assets/icons/sonder-icons.svg?release=alpha98-ui9-ff279a1d1d7f#icon-pin")
+    expect(pin_icon).to_have_attribute("href", "/static/assets/icons/sonder-icons.svg?release=alpha98-ui10-c14a4cf8dabd#icon-pin")
     inspector.get_by_role("button", name="Close context panel").click()
     expect(inspector).to_be_hidden()
 
@@ -398,7 +398,7 @@ def test_shortcut_registry_rejects_collisions_and_guards_typing_and_ime(
     result = page.evaluate(
         """async (base) => {
           const { createShortcutRegistry } = await import(
-            `${base}/static/js/ui-next/shortcuts.js?release=alpha98-ui9-ff279a1d1d7f`
+            `${base}/static/js/ui-next/shortcuts.js?release=alpha98-ui10-c14a4cf8dabd`
           );
           let calls = 0;
           let collision = null;
