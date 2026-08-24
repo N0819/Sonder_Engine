@@ -2,6 +2,7 @@ export const MODULE_RELEASE = "alpha98-ui13-a39372e1d8d1";
 
 import { mountLivedLocationFields } from "./lived-location.js?release=alpha98-ui13-a39372e1d8d1";
 import { openNewStory } from "./new-story.js?release=alpha98-ui13-a39372e1d8d1";
+import { decorateFieldControl } from "../ui/components/field.js?release=alpha98-ui13-a39372e1d8d1";
 
 const loreLocationDrafts = new Map();
 
@@ -270,7 +271,7 @@ function workspaceFilters(documentRef, services, state) {
 
   const scopeField = node(documentRef, "label", "ui-field ui-library__scope-field");
   scopeField.append(node(documentRef, "span", "ui-field__label", COPY.libraryScope));
-  const scope = node(documentRef, "select", "ui-input ui-library__scope");
+  const scope = decorateFieldControl(node(documentRef, "select", "ui-library__scope"));
   scope.setAttribute("aria-label", COPY.libraryScope);
   for (const [value, label] of SCOPES) {
     const option = node(documentRef, "option", "", label);
@@ -294,7 +295,7 @@ function workspaceFilters(documentRef, services, state) {
   if (stories.length && activeScope === "story") {
     const storyLabel = node(documentRef, "label", "ui-field ui-library__story-scope");
     storyLabel.append(node(documentRef, "span", "ui-field__label", COPY.storyScope));
-    const story = node(documentRef, "select", "ui-input");
+    const story = decorateFieldControl(node(documentRef, "select"));
     story.setAttribute("aria-label", COPY.storyScope);
     for (const row of stories) {
       const option = node(documentRef, "option", "", row.name || COPY.untitledStory);
@@ -356,7 +357,7 @@ function toolbar(documentRef, services, state) {
   form.setAttribute("role", "search");
   const label = node(documentRef, "label", "ui-field ui-library__search");
   const labelText = node(documentRef, "span", "ui-field__label", COPY.search);
-  const input = node(documentRef, "input", "ui-input");
+  const input = decorateFieldControl(node(documentRef, "input"));
   input.type = "search";
   input.name = "q";
   input.value = query.q || "";
@@ -368,7 +369,7 @@ function toolbar(documentRef, services, state) {
 
   const sortLabel = node(documentRef, "label", "ui-field ui-library__sort");
   sortLabel.append(node(documentRef, "span", "ui-field__label", COPY.sort));
-  const sort = node(documentRef, "select", "ui-input");
+  const sort = decorateFieldControl(node(documentRef, "select"));
   sort.setAttribute("aria-label", COPY.sort);
   for (const [value, text] of [
     ["name", COPY.name], ["recent", COPY.recentUse], ["type", COPY.type],
@@ -387,7 +388,7 @@ function toolbar(documentRef, services, state) {
   sortLabel.append(sort);
   const visibilityLabel = node(documentRef, "label", "ui-field ui-library__visibility");
   visibilityLabel.append(node(documentRef, "span", "ui-field__label", COPY.visibility));
-  const visibility = node(documentRef, "select", "ui-input");
+  const visibility = decorateFieldControl(node(documentRef, "select"));
   visibility.setAttribute("aria-label", COPY.visibility);
   for (const [value, text] of [["active", COPY.activeItems], ["archived", COPY.archivedItems]]) {
     const option = node(documentRef, "option", "", text);

@@ -40,6 +40,10 @@
   .ui-tabs__tab:focus-visible,
   .ui-menu__item:focus-visible,
   .ui-list-row:focus-visible { outline: 0; box-shadow: var(--ui-focus-ring); }
+  :where(h1, h2, h3, [role="heading"], main, section).ui-route-focus-target:focus {
+    outline: 0;
+    box-shadow: none;
+  }
   .ui-button:disabled { cursor: not-allowed; opacity: .48; }
   .ui-button--primary { color: var(--ui-color-interactive-strong); border-color: var(--ui-color-interactive); background: var(--ui-color-interactive-soft); font-weight: 600; }
   .ui-button--quiet { border-color: transparent; background: transparent; }
@@ -209,7 +213,7 @@
 }
 .ui-lived-location {
   border: 1px solid var(--ui-color-border);
-  border-radius: var(--ui-radius-compact);
+  border-radius: var(--ui-radius-sm);
   background: color-mix(in srgb, var(--ui-color-surface-muted) 72%, transparent);
 }
 .ui-lived-location__summary { min-height: 44px; padding: 10px 12px; cursor: pointer; }
