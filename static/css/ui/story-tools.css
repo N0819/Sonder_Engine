@@ -46,18 +46,18 @@
 
   .ui-story-tools__index {
     color: var(--ui-color-text-faint);
-    font: 650 .625rem var(--ui-font-mono);
+    font: 650 var(--ui-text-micro)/var(--ui-leading-micro) var(--ui-font-mono);
   }
   .ui-story-tools__icon { inline-size: 18px; block-size: 18px; }
   .ui-story-tools__copy { display: block; min-inline-size: 0; }
   .ui-story-tools__copy strong { display: block; }
-  .ui-story-tools__detail { display: block; margin-block-start: 3px; color: var(--ui-color-text-faint); font-size: 12px; line-height: 1.35; }
+  .ui-story-tools__detail { display: block; margin-block-start: 3px; color: var(--ui-color-text-faint); font-size: var(--ui-text-meta); line-height: var(--ui-leading-meta); }
   .ui-story-tools__label { min-inline-size: 0; overflow-wrap: anywhere; }
   .ui-story-tools__panel { min-block-size: 0; overflow: auto; padding-block: var(--ui-space-6); }
   .ui-story-tools__panel[hidden] { display: none; }
   .ui-story-tools__panel > * { margin-block-start: 0; }
   .ui-story-tools__back { min-block-size: 44px; margin-block-end: var(--ui-space-5); }
-  .ui-story-tools__state { padding: var(--ui-space-5); border: 1px solid var(--ui-color-border); background: var(--ui-color-surface-muted); color: var(--ui-color-text-muted); }
+  .ui-story-tools__state { padding: var(--ui-space-5); border: 1px solid var(--ui-color-border); border-radius: var(--ui-radius-md); background: var(--ui-color-surface-muted); color: var(--ui-color-text-muted); }
   .ui-story-tools__content, .ui-tool-stack { display: grid; gap: var(--ui-space-4); min-inline-size: 0; }
   .ui-tool-card { display: grid; gap: var(--ui-space-3); min-inline-size: 0; padding: var(--ui-space-4); border: 1px solid var(--ui-color-border); border-radius: var(--ui-radius-lg); background: var(--ui-color-surface-muted); }
   .ui-tool-card__header, .ui-tool-inline { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--ui-space-3); min-inline-size: 0; }
@@ -77,7 +77,7 @@
   .ui-invite-result__link { display: block; overflow-wrap: anywhere; padding: var(--ui-space-3); font-family: var(--ui-font-mono); }
   .ui-tool-summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(9rem, 100%), 1fr)); gap: var(--ui-space-3); }
   .ui-tool-metric { grid-template-columns: auto minmax(0, 1fr); align-items: baseline; }
-  .ui-tool-metric strong { font: 700 1.35rem/1 var(--ui-font-mono); }
+  .ui-tool-metric strong { font: 700 var(--ui-text-page)/var(--ui-leading-page) var(--ui-font-mono); }
   .ui-document-editor__advanced > summary { display: flex; align-items: center; min-block-size: 44px; cursor: pointer; font-weight: 650; }
   .ui-document-editor__textarea { box-sizing: border-box; inline-size: 100%; min-block-size: 18rem; resize: block; font-family: var(--ui-font-mono); line-height: 1.5; }
   .ui-field-error { color: var(--ui-color-danger); }
@@ -142,9 +142,9 @@
 }
 .ui-charters { display: grid; gap: var(--ui-space-4); margin-block-start: var(--ui-space-5); }
 .ui-charters__summary { margin: 0; color: var(--ui-color-text); }
-.ui-charters__ledger { border: 1px solid var(--ui-color-border); }
+.ui-charters__ledger { overflow: clip; border: 1px solid var(--ui-color-border); border-radius: var(--ui-radius-md); }
 .ui-charters__row { display: flex; justify-content: space-between; gap: var(--ui-space-4); padding: var(--ui-space-4); border-block-end: 1px solid var(--ui-color-border); }
 .ui-charters__row:last-child { border-block-end: 0; }
-.ui-charters__warning { margin: 0; padding: var(--ui-space-4); border-inline-start: 2px solid var(--ui-color-warning); background: var(--ui-color-surface-muted); }
+.ui-charters__warning { margin: 0; padding: var(--ui-space-4); border-inline-start: 2px solid var(--ui-color-warning); border-radius: var(--ui-radius-md); background: var(--ui-color-surface-muted); }
 .ui-charters__raw { max-block-size: 260px; overflow: auto; white-space: pre-wrap; color: var(--ui-color-text-muted); }
 .ui-charters__generation-body { display: grid; gap: var(--ui-space-4); padding-block-start: var(--ui-space-4); }

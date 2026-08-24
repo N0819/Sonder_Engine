@@ -26,9 +26,9 @@
     border-radius: var(--ui-radius-md);
     background: var(--ui-color-surface-muted);
     color: var(--ui-color-text);
-    font-size: .8125rem;
+    font-size: var(--ui-text-control);
     font-weight: 520;
-    line-height: 1.15;
+    line-height: var(--ui-leading-control);
     cursor: pointer;
     transition: border-color var(--ui-motion-fast) var(--ui-ease-standard), background var(--ui-motion-fast) var(--ui-ease-standard), transform var(--ui-motion-fast) var(--ui-ease-standard);
   }
@@ -67,8 +67,8 @@
   .ui-field__control:disabled { opacity: .55; cursor: not-allowed; }
   .ui-field__control[readonly] { background: var(--ui-color-surface-muted); }
   .ui-field__control[aria-invalid="true"] { border-color: var(--ui-color-danger); }
-  .ui-field__help { color: var(--ui-color-text-faint); font-size: .8125rem; }
-  .ui-field__error { display: flex; align-items: center; gap: var(--ui-space-3); color: var(--ui-color-danger); font-size: .8125rem; }
+  .ui-field__help { color: var(--ui-color-text-faint); font-size: var(--ui-text-meta); line-height: var(--ui-leading-meta); }
+  .ui-field__error { display: flex; align-items: center; gap: var(--ui-space-3); color: var(--ui-color-danger); font-size: var(--ui-text-meta); line-height: var(--ui-leading-meta); }
 
   :where(.ui-app, .ui-lab) select {
     appearance: none;
@@ -87,8 +87,8 @@
     background-repeat: no-repeat;
     background-size: 4px 4px;
     color: var(--ui-color-text);
-    font-size: .8125rem;
-    line-height: 1;
+    font-size: var(--ui-text-control);
+    line-height: var(--ui-leading-control);
     cursor: pointer;
   }
   :where(.ui-app, .ui-lab)[dir="rtl"] select {
@@ -143,7 +143,7 @@
   .ui-list-row[aria-current="true"], .ui-list-row[aria-selected="true"] { box-shadow: inset 2px 0 var(--ui-color-interactive); background: var(--ui-color-interactive-soft); }
   .ui-list-row__copy { min-inline-size: 0; }
   .ui-list-row__title { display: block; font-weight: 620; overflow-wrap: anywhere; }
-  .ui-list-row__meta { display: block; color: var(--ui-color-text-faint); font-size: .8125rem; }
+  .ui-list-row__meta { display: block; color: var(--ui-color-text-faint); font-size: var(--ui-text-meta); line-height: var(--ui-leading-meta); }
 
   .ui-card { padding: var(--ui-space-6); border: 1px solid var(--ui-color-border); border-radius: var(--ui-radius-lg); background: var(--ui-color-surface-muted); container-type: inline-size; }
   .ui-card[data-state="selected"] { border-color: var(--ui-color-interactive); box-shadow: inset 2px 0 var(--ui-color-interactive); }
@@ -158,7 +158,7 @@
   :root[data-a11y-status-markers="true"] .ui-notice::before { content: attr(data-marker); font-family: var(--ui-font-mono); font-weight: 700; }
 
   .ui-task { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--ui-space-5); align-items: start; }
-  .ui-task__state { color: var(--ui-color-text-muted); font: 600 .75rem var(--ui-font-mono); text-transform: uppercase; }
+  .ui-task__state { color: var(--ui-color-text-muted); font: 600 var(--ui-text-micro)/var(--ui-leading-micro) var(--ui-font-mono); text-transform: uppercase; }
   .ui-task[data-state="complete"] .ui-task__state { color: var(--ui-color-success); }
   .ui-task[data-state="failed"] .ui-task__state { color: var(--ui-color-danger); }
 

@@ -81,6 +81,60 @@ def test_accessibility_mode_applies_coherent_preset_then_allows_granular_change(
     expect(root).to_have_attribute("data-a11y-high-contrast", "true")
 
 
+def test_formal_type_roles_and_large_interface_scale_are_computed_from_tokens(
+    page: Page, ui_base_url: str
+):
+    _open_lab(page, ui_base_url)
+    page.evaluate(
+        """() => {
+          const fixture = document.createElement('div');
+          fixture.dataset.typeScaleFixture = 'true';
+          fixture.innerHTML = `
+            <span data-role="micro" class="ui-kicker">Micro</span>
+            <span data-role="meta" class="ui-field__help">Metadata</span>
+            <button data-role="control" class="ui-button">Control</button>
+            <span data-role="body">Body</span>
+            <h2 data-role="section" class="ui-heading ui-heading--2">Section</h2>
+            <h1 data-role="page" class="ui-heading ui-heading--1">Page</h1>
+            <h1 data-role="display" class="ui-heading ui-heading--display">Display</h1>
+            <p data-role="prose" class="ui-prose">Prose</p>`;
+          document.body.append(fixture);
+        }"""
+    )
+
+    def scale() -> dict[str, tuple[float, float]]:
+        return page.locator("[data-type-scale-fixture]").evaluate(
+            """node => Object.fromEntries([...node.querySelectorAll('[data-role]')].map(item => {
+              const style = getComputedStyle(item);
+              return [item.dataset.role, [parseFloat(style.fontSize), parseFloat(style.lineHeight)]];
+            }))"""
+        )
+
+    assert scale() == {
+        "micro": [11, 14],
+        "meta": [12, 16],
+        "control": [13, 18],
+        "body": [14, 20],
+        "section": [16, 22],
+        "page": [21, 28],
+        "display": [28, 36],
+        "prose": [17, 28.9],
+    }
+
+    page.get_by_label("Larger interface").check()
+    enlarged = scale()
+    assert enlarged == {
+        "micro": [12, 16],
+        "meta": [14, 18],
+        "control": [15, 20],
+        "body": [16, 23],
+        "section": [18, 25],
+        "page": [24, 32],
+        "display": [32, 41],
+        "prose": [17, 28.9],
+    }
+
+
 def test_tabs_use_roving_focus_and_arrow_activation(page: Page, ui_base_url: str):
     _open_lab(page, ui_base_url)
     summary = page.get_by_role("tab", name="Summary")

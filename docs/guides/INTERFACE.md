@@ -492,6 +492,14 @@ Foundation source responsibilities are fixed: `tokens.css` defines geometry,
 motion, type, layering, and semantic color roles; theme files only override
 semantic values; `components.css` owns reusable component geometry; entry and
 laboratory styles compose those pieces without redefining their contracts.
+The interface scale is deliberately compact for high-density desktop displays:
+11/14 micro, 12/16 metadata, 13/18 controls, 14/20 body, 16/22 sections,
+21/28 page headings, and 28/36 display headings. Every readable component uses
+the matching semantic size and leading tokens; story prose retains its separate
+17 px default and user setting. Every free-standing full-border surface uses
+the 3/4/5 px semantic radius family, with 4 px as the default. Zero-radius
+geometry is reserved for viewport-flush surfaces and internal segments inside
+an outer frame.
 Shared selects use the glass surface, restrained logical radius, one chevron,
 and 36 px comfortable / 32 px compact desktop geometry while retaining the 44
 px touch minimum. Shared buttons use centered inline-flex content, restrained
