@@ -1,5 +1,5 @@
-import { initAccessibility } from "../ui/accessibility.js?release=alpha98-ui5-7fa758fa6df7";
-import { bootRuntime } from "./bootstrap.js?release=alpha98-ui5-7fa758fa6df7";
+import { initAccessibility } from "../ui/accessibility.js?release=alpha98-ui6-57d168ae23cf";
+import { bootRuntime } from "./bootstrap.js?release=alpha98-ui6-57d168ae23cf";
 
 // UI_CATALOG_START: application-start fallback copy used before localization is available.
 const APPLICATION_FAILURE_COPY = Object.freeze({
