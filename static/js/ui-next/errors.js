@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "alpha98-ui5-7fa758fa6df7";
+export const MODULE_RELEASE = "alpha98-ui6-57d168ae23cf";
 
 // UI_CATALOG_START: player-safe error copy.
 const PLAYER_MESSAGES = Object.freeze({

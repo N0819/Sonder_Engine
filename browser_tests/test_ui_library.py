@@ -117,6 +117,48 @@ def test_library_has_one_canonical_material_ledger_and_action_cluster(
     )
 
 
+def test_library_actions_center_compact_icon_and_label_geometry(
+    page: Page, ui_base_url: str
+) -> None:
+    _open(page, ui_base_url)
+    new_story = page.get_by_role("button", name="New story", exact=True)
+    geometry = new_story.evaluate(
+        """node => {
+          const style = getComputedStyle(node);
+          const icon = node.querySelector('.ui-icon').getBoundingClientRect();
+          const label = node.querySelector('span').getBoundingClientRect();
+          return {
+            display: style.display,
+            alignItems: style.alignItems,
+            gap: parseFloat(style.gap),
+            fontSize: parseFloat(style.fontSize),
+            iconCenter: icon.top + icon.height / 2,
+            labelCenter: label.top + label.height / 2,
+          };
+        }"""
+    )
+    assert geometry["display"] in {"flex", "inline-flex"}, geometry
+    assert geometry["alignItems"] == "center", geometry
+    assert geometry["gap"] == 6, geometry
+    assert geometry["fontSize"] == 13, geometry
+    assert abs(geometry["iconCenter"] - geometry["labelCenter"]) <= 1, geometry
+
+    sort_select = page.get_by_role("combobox", name="Sort Library")
+    select_style = sort_select.evaluate(
+        """node => {
+          const style = getComputedStyle(node);
+          return {
+            radius: parseFloat(style.borderRadius),
+            fontSize: parseFloat(style.fontSize),
+            appearance: style.appearance,
+          };
+        }"""
+    )
+    assert 3 <= select_style["radius"] <= 4, select_style
+    assert select_style["fontSize"] == 13, select_style
+    assert select_style["appearance"] == "none", select_style
+
+
 def test_compact_library_navigation_controls_meet_touch_minimum(
     page: Page, ui_base_url: str
 ) -> None:
@@ -150,10 +192,10 @@ def test_library_runtime_rejects_stale_results_and_bounds_identity_state(
     result = page.evaluate(
         """async base => {
           const storeModule = await import(
-            `${base}/static/js/ui-next/store.js?release=alpha98-ui5-7fa758fa6df7`
+            `${base}/static/js/ui-next/store.js?release=alpha98-ui6-57d168ae23cf`
           );
           const libraryModule = await import(
-            `${base}/static/js/ui-next/library-runtime.js?release=alpha98-ui5-7fa758fa6df7`
+            `${base}/static/js/ui-next/library-runtime.js?release=alpha98-ui6-57d168ae23cf`
           );
           const store = storeModule.createStore();
           let current = {
@@ -249,10 +291,10 @@ def test_lore_can_prepare_a_lived_location_for_the_current_story(
     result = page.evaluate(
         """async base => {
           const storeModule = await import(
-            `${base}/static/js/ui-next/store.js?release=alpha98-ui5-7fa758fa6df7`
+            `${base}/static/js/ui-next/store.js?release=alpha98-ui6-57d168ae23cf`
           );
           const libraryModule = await import(
-            `${base}/static/js/ui-next/library-runtime.js?release=alpha98-ui5-7fa758fa6df7`
+            `${base}/static/js/ui-next/library-runtime.js?release=alpha98-ui6-57d168ae23cf`
           );
           const route = {
             destination: "library", segments: ["lore"],
@@ -331,10 +373,10 @@ def test_library_mutations_keep_story_owner_and_undo_expires(
     result = page.evaluate(
         """async base => {
           const storeModule = await import(
-            `${base}/static/js/ui-next/store.js?release=alpha98-ui5-7fa758fa6df7`
+            `${base}/static/js/ui-next/store.js?release=alpha98-ui6-57d168ae23cf`
           );
           const libraryModule = await import(
-            `${base}/static/js/ui-next/library-runtime.js?release=alpha98-ui5-7fa758fa6df7`
+            `${base}/static/js/ui-next/library-runtime.js?release=alpha98-ui6-57d168ae23cf`
           );
           const item = {
             kind: "character", id: 7, key: "character:7", name: "Mara Venn",

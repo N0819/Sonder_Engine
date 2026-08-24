@@ -34,7 +34,17 @@ def test_component_lab_boots_without_api_or_browser_errors(page: Page, ui_base_u
     assert page_errors == []
 
 
-@pytest.mark.parametrize("theme", ["carbon-signal", "ash-brass", "midnight-ink", "parchment-night"])
+@pytest.mark.parametrize(
+    "theme",
+    [
+        "carbon-signal",
+        "ash-brass",
+        "midnight-ink",
+        "parchment-night",
+        "neon-circuit",
+        "modern-slate",
+    ],
+)
 def test_all_curated_themes_apply_semantic_color_roles(page: Page, ui_base_url: str, theme: str):
     _open_lab(page, ui_base_url)
     button = page.locator(f'[data-theme-choice="{theme}"]')
@@ -151,7 +161,7 @@ def test_every_sprite_icon_keeps_fill_and_stroke_inside_its_viewbox(
     _open_lab(page, ui_base_url)
     measurements = page.evaluate(
         """async () => {
-          const source = await fetch('/static/assets/icons/sonder-icons.svg?release=alpha98-ui5-7fa758fa6df7').then(response => response.text());
+          const source = await fetch('/static/assets/icons/sonder-icons.svg?release=alpha98-ui6-57d168ae23cf').then(response => response.text());
           const sprite = new DOMParser().parseFromString(source, 'image/svg+xml');
           const host = document.createElement('div');
           host.style.cssText = 'position:fixed;inset:0 auto auto 0;display:flex;visibility:hidden';

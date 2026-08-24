@@ -70,13 +70,63 @@ def test_tokens_pin_the_bible_geometry_type_motion_and_layers():
 
 
 def test_curated_themes_are_local_semantic_overrides():
-    names = ("carbon-signal", "ash-brass", "midnight-ink", "parchment-night")
+    names = (
+        "carbon-signal",
+        "ash-brass",
+        "midnight-ink",
+        "parchment-night",
+        "neon-circuit",
+        "modern-slate",
+    )
     for name in names:
         text = _read(CSS / "themes" / f"{name}.css")
         assert f'[data-theme="{name}"]' in text
         assert "--ui-color-canvas:" in text
         assert "--ui-color-interactive:" in text
         assert "url(" not in text.lower()
+
+    for entry in (
+        ROOT / "static" / "ui-next.html",
+        ROOT / "static" / "ui-next-runtime.html",
+        ROOT / "static" / "ui-next-lab.html",
+        ROOT / "static" / "login.html",
+        ROOT / "static" / "guest.html",
+    ):
+        html = _read(entry)
+        for name in names:
+            assert f"/static/css/ui/themes/{name}.css" in html, (entry.name, name)
+
+
+def test_modern_slate_is_strictly_warm_neutral_with_no_blue_lean():
+    text = _read(CSS / "themes" / "modern-slate.css")
+    colors = re.findall(r"rgb\(\s*(\d+)\s+(\d+)\s+(\d+)", text)
+    assert len(colors) >= 15
+    for red, green, blue in colors:
+        channels = tuple(map(int, (red, green, blue)))
+        assert channels[0] >= channels[1] >= channels[2], channels
+        assert channels[0] - channels[2] <= 8, channels
+    assert "--ui-color-interactive: rgb(" in text
+    assert "--ui-color-focus-outer: var(--ui-color-interactive-strong)" in text
+
+
+def test_custom_theme_entry_and_preflight_use_only_fixed_semantic_properties():
+    custom_css = _read(CSS / "themes" / "custom.css")
+    module = _read(JS / "custom-theme.js")
+    preflight = _read(JS / "appearance-preflight.js")
+    properties = (
+        "background", "panel", "text", "muted", "accent", "attention", "success", "danger"
+    )
+    for role in properties:
+        assert f"--ui-custom-{role}" in custom_css
+        assert f"--ui-custom-{role}" in module
+        assert f"--ui-custom-{role}" in preflight
+    assert '[data-theme="custom"]' in custom_css
+    assert "url(" not in custom_css.lower()
+    assert "innerHTML" not in module
+    for entry in (
+        "ui-next.html", "ui-next-runtime.html", "ui-next-lab.html", "login.html", "guest.html"
+    ):
+        assert "/static/css/ui/themes/custom.css" in _read(ROOT / "static" / entry)
 
 
 def test_components_are_scoped_and_consume_semantic_tokens():
@@ -88,6 +138,8 @@ def test_components_are_scoped_and_consume_semantic_tokens():
         "card", "cluster", "dialog", "sheet", "notice", "task", "skeleton", "empty",
     ):
         assert f".ui-{family}" in text
+    assert ":where(.ui-app, .ui-lab) select" in text
+    assert "appearance: none" in text
 
 
 def test_replacement_entries_are_head_safe_and_legacy_free():
