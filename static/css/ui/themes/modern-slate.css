@@ -1,0 +1,29 @@
+@layer ui-themes {
+  :root[data-theme="modern-slate"] {
+    --ui-color-canvas: rgb(14 13 12);
+    --ui-color-canvas-subtle: rgb(21 20 18);
+    --ui-color-surface: rgb(27 25 23 / 90%);
+    --ui-color-surface-solid: rgb(22 21 19);
+    --ui-color-surface-raised: rgb(38 36 33 / 96%);
+    --ui-color-surface-muted: rgb(31 29 27 / 68%);
+    --ui-color-text: rgb(236 232 228);
+    --ui-color-text-muted: rgb(187 183 179);
+    --ui-color-text-faint: rgb(133 129 125);
+    --ui-color-border: rgb(222 218 214 / 18%);
+    --ui-color-border-strong: rgb(222 218 214 / 35%);
+    --ui-color-interactive: rgb(214 211 207);
+    --ui-color-interactive-strong: rgb(244 241 236);
+    --ui-color-interactive-soft: rgb(214 211 207 / 11%);
+    --ui-color-callout: rgb(196 192 188);
+    --ui-color-callout-soft: rgb(196 192 188 / 13%);
+    --ui-color-success: rgb(184 181 176);
+    --ui-color-warning: rgb(196 192 188);
+    --ui-color-danger: rgb(205 201 197);
+    --ui-color-info: rgb(165 162 158);
+    --ui-color-on-strong: rgb(24 23 22);
+    --ui-color-scrim: rgb(6 5 4 / 80%);
+    --ui-color-shadow: rgb(0 0 0 / 48%);
+    --ui-color-focus-inner: var(--ui-color-canvas);
+    --ui-color-focus-outer: var(--ui-color-interactive-strong);
+  }
+}

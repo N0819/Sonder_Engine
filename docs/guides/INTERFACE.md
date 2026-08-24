@@ -401,6 +401,16 @@ do not carry persistent work, failures, or choices.
   or confirmation keeps the entered form intact and publishes a visible problem;
   network, server, and unreadable-response failures remain in the shell notice
   host until explicitly dismissed.
+- Every Settings category starts its detail ledger at the same block offset.
+  The Settings search icon is centered from the input's actual block size rather
+  than a fixed top coordinate, so density and touch sizing cannot displace it.
+- Narrator voice examples retain four independent persisted passages but expose
+  one editor at a time through an ARIA tablist. Arrow Left/Right, Home, and End
+  move between the tabs without discarding unsaved drafts.
+- Extension titles preserve the extension-authored name, including a terminal
+  `(demo)` marker. Lifecycle actions derive a clean action name with only that
+  terminal marker removed, and every action has the shared subtle control
+  border. Maintenance uses the reviewed local wrench symbol.
 
 ### Alpha 9.8 lived-location ownership
 
@@ -436,20 +446,36 @@ do not carry persistent work, failures, or choices.
 
 The Bible defines the quiet, precise, genre-neutral product character and the
 semantic visual vocabulary. Curated themes change semantic tokens, never
-layout. Legacy themes may map values into those tokens but do not own component
-geometry. Icons come from the reviewed local SVG family and retain accessible
-names where the symbol alone is not established.
+layout. Unsupported Legacy-theme selection is no longer exposed. Icons come
+from the reviewed local SVG family and retain accessible names where the symbol
+alone is not established.
 
-The curated themes are Carbon Signal, Ash & Brass, Midnight Ink, and Parchment
-Night. Appearance preflight applies the chosen theme synchronously before the
-module graph starts. Legacy palette values map into the same semantic roles;
-effects, contrast, text size, reduced motion, and Accessibility Mode remain
-independent preferences rather than theme side effects.
+The curated themes are Carbon Signal, Ash & Brass, Midnight Ink, Parchment
+Night, Neon Circuit, and Modern Slate. Modern Slate is a deliberately warm
+greyscale palette: no authored token leans blue, and interaction uses subdued
+warm white. Appearance preflight applies the chosen theme synchronously before
+the module graph starts. Effects, contrast, text size, reduced motion, and
+Accessibility Mode remain independent preferences rather than theme side
+effects.
+
+Custom Theme is an eight-role semantic editor for background, panel, primary
+text, muted text, accent, attention, success, and danger. It previews changes
+locally and accepts only normalized colors in a versioned exact-key document.
+Text contrast, non-text contrast, and background/panel distinction must pass
+before activation. Import rejects unknown fields, CSS, URLs, markup, malformed
+versions, and unsafe colors; application can write only the eight fixed custom
+properties. Hex, RGB, reset, import, and export are alternate interfaces to the
+same validated palette. The browser-local theme is synchronous on first paint.
 
 Foundation source responsibilities are fixed: `tokens.css` defines geometry,
 motion, type, layering, and semantic color roles; theme files only override
 semantic values; `components.css` owns reusable component geometry; entry and
 laboratory styles compose those pieces without redefining their contracts.
+Shared selects use the glass surface, restrained logical radius, one chevron,
+and 36 px comfortable / 32 px compact desktop geometry while retaining the 44
+px touch minimum. Shared buttons use centered inline-flex content, restrained
+13 px type, and icon/text gaps so symbols such as New Story's plus align with
+their label.
 `appearance-preflight.js` is the only pre-module behavior and may only stamp
 validated browser-local appearance before paint. Accessibility preferences are
 independent overrides, with Accessibility Mode applying the documented bundle

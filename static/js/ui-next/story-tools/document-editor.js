@@ -1,6 +1,6 @@
-export const MODULE_RELEASE = "alpha98-ui5-98f796584158";
+export const MODULE_RELEASE = "alpha98-ui6-ff8a9b712a2d";
 
-import { button, element, replaceLocalized, stateMessage } from "./shared.js?release=alpha98-ui5-98f796584158";
+import { button, element, replaceLocalized, stateMessage } from "./shared.js?release=alpha98-ui6-ff8a9b712a2d";
 
 // UI_CATALOG_START: shared explicit-save document controls.
 const COPY = Object.freeze({
