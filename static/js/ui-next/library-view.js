@@ -1,10 +1,10 @@
-export const MODULE_RELEASE = "alpha98-ui14-8c5f0c3f2d06";
+export const MODULE_RELEASE = "alpha98-ui15-5b0f039aae29";
 
-import { mountLivedLocationFields } from "./lived-location.js?release=alpha98-ui14-8c5f0c3f2d06";
-import { openNewStory } from "./new-story.js?release=alpha98-ui14-8c5f0c3f2d06";
-import { decorateFieldControl } from "../ui/components/field.js?release=alpha98-ui14-8c5f0c3f2d06";
-import { createFilterSheet } from "./components/filter-sheet.js?release=alpha98-ui14-8c5f0c3f2d06";
-import { createMediaThumb } from "./components/media-row.js?release=alpha98-ui14-8c5f0c3f2d06";
+import { mountLivedLocationFields } from "./lived-location.js?release=alpha98-ui15-5b0f039aae29";
+import { openNewStory } from "./new-story.js?release=alpha98-ui15-5b0f039aae29";
+import { decorateFieldControl } from "../ui/components/field.js?release=alpha98-ui15-5b0f039aae29";
+import { createFilterSheet } from "./components/filter-sheet.js?release=alpha98-ui15-5b0f039aae29";
+import { createMediaThumb } from "./components/media-row.js?release=alpha98-ui15-5b0f039aae29";
 
 const loreLocationDrafts = new Map();
 

@@ -157,10 +157,10 @@
 }
 
 .ui-person-editor__tab[aria-selected="true"] {
-  border-color: color-mix(in srgb, var(--ui-color-interactive) 40%, var(--ui-color-border));
-  color: var(--ui-color-interactive-strong);
-  background: var(--ui-color-interactive-soft);
-  box-shadow: inset 2px 0 var(--ui-color-interactive);
+  border-color: var(--ui-color-border-strong);
+  color: var(--ui-color-text);
+  background: var(--ui-color-surface-muted);
+  box-shadow: none;
 }
 
 .ui-person-editor__panels {
@@ -315,9 +315,9 @@
   gap: 0;
   inline-size: max-content;
   max-inline-size: 100%;
-  border: 1px solid var(--ui-color-border-strong);
+  border: 1px solid var(--ui-color-border);
   border-radius: var(--ui-radius-md);
-  background: var(--ui-color-surface-muted);
+  background: transparent;
 }
 
 .ui-action-cluster > :is(.ui-button, a.ui-button, .ui-action-more),
@@ -544,7 +544,8 @@
   }
 
   .ui-person-editor__tab[aria-selected="true"] {
-    box-shadow: inset 0 -2px var(--ui-color-interactive);
+    border-block-end-color: var(--ui-color-interactive);
+    box-shadow: none;
   }
 
   .ui-person-editor__panels {

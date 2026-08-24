@@ -7,7 +7,9 @@
     text-rendering: optimizeLegibility;
   }
 
-  .ui-heading { font-weight: 650; letter-spacing: -.02em; }
+  :where(.ui-app, .ui-lab) :where(h1, h2, h3) { font-weight: 600; }
+
+  .ui-heading { font-weight: 600; letter-spacing: -.015em; }
   .ui-heading--1 { font-size: var(--ui-text-page); line-height: var(--ui-leading-page); }
   .ui-heading--2 { font-size: var(--ui-text-section); line-height: var(--ui-leading-section); }
   .ui-heading--3 { font-size: var(--ui-text-body); line-height: var(--ui-leading-body); }

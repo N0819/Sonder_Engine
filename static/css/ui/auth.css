@@ -5,7 +5,7 @@
   .ui-auth-header__copy { display: grid; gap: 2px; }
   .ui-auth-header__copy strong { font-size: var(--ui-text-body); line-height: var(--ui-leading-body); }
   .ui-auth-header__copy span { color: var(--ui-color-text-faint); font: var(--ui-text-micro)/var(--ui-leading-micro) var(--ui-font-mono); letter-spacing: .12em; text-transform: uppercase; }
-  #auth-screen { display: grid; place-items: center; min-block-size: 0; padding: 24px; background-image: radial-gradient(circle at 50% 45%, var(--ui-color-interactive-soft), transparent 34%); }
+  #auth-screen { display: grid; place-items: center; min-block-size: 0; padding: 24px; background: var(--ui-color-canvas); }
   .ui-auth-card { box-sizing: border-box; position: relative; inline-size: 430px; max-inline-size: 100%; flex-direction: column; gap: 12px; padding: 30px; border: 1px solid var(--ui-color-border-strong); border-radius: var(--ui-radius-lg); background: color-mix(in srgb, var(--ui-color-surface-raised) 96%, transparent); box-shadow: var(--ui-shadow-modal); }
   .ui-auth-card::before { content: ""; position: absolute; inset: 0 auto auto 0; inline-size: 42px; block-size: 1px; background: var(--ui-color-interactive); }
   .ui-auth-card h1 { margin: 4px 0 14px; font-size: var(--ui-text-page); line-height: var(--ui-leading-page); }

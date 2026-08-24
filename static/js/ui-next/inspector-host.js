@@ -1,7 +1,7 @@
-export const MODULE_RELEASE = "alpha98-ui14-8c5f0c3f2d06";
+export const MODULE_RELEASE = "alpha98-ui15-5b0f039aae29";
 
-import { canPinContext } from "./layout-contract.js?release=alpha98-ui14-8c5f0c3f2d06";
-import { focusRouteTarget } from "../ui/components/route-focus.js?release=alpha98-ui14-8c5f0c3f2d06";
+import { canPinContext } from "./layout-contract.js?release=alpha98-ui15-5b0f039aae29";
+import { focusRouteTarget } from "../ui/components/route-focus.js?release=alpha98-ui15-5b0f039aae29";
 
 const LAYER_ID = "inspector:context";
 

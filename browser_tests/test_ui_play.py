@@ -283,8 +283,8 @@ def test_play_runtime_refuses_a_late_story_response(
     page.goto(f"{ui_base_url}/static/ui-next-lab.html")
     result = page.evaluate(
         """async base => {
-          const storeModule = await import(`${base}/static/js/ui-next/store.js?release=alpha98-ui14-8c5f0c3f2d06`);
-          const playModule = await import(`${base}/static/js/ui-next/play-runtime.js?release=alpha98-ui14-8c5f0c3f2d06`);
+          const storeModule = await import(`${base}/static/js/ui-next/store.js?release=alpha98-ui15-5b0f039aae29`);
+          const playModule = await import(`${base}/static/js/ui-next/play-runtime.js?release=alpha98-ui15-5b0f039aae29`);
           const store = storeModule.createStore({
             library: { status: "ready", chats: [{ id: 1 }, { id: 2 }] },
             route: { status: "ready", destination: "play", query: { chat: "1" },
@@ -333,8 +333,8 @@ def test_stop_targets_the_story_that_started_the_run_after_navigation(
     page.goto(f"{ui_base_url}/static/ui-next-lab.html")
     result = page.evaluate(
         """async base => {
-          const storeModule = await import(`${base}/static/js/ui-next/store.js?release=alpha98-ui14-8c5f0c3f2d06`);
-          const playModule = await import(`${base}/static/js/ui-next/play-runtime.js?release=alpha98-ui14-8c5f0c3f2d06`);
+          const storeModule = await import(`${base}/static/js/ui-next/store.js?release=alpha98-ui15-5b0f039aae29`);
+          const playModule = await import(`${base}/static/js/ui-next/play-runtime.js?release=alpha98-ui15-5b0f039aae29`);
           const route = chat => ({ status: "ready", destination: "play",
             query: { chat: String(chat) }, segments: [], layers: [],
             canonicalHash: `#/play?chat=${chat}` });
@@ -394,9 +394,9 @@ def test_500_turn_render_stays_inside_the_recorded_budget(
     page.goto(f"{ui_base_url}/static/ui-next-lab.html")
     result = page.evaluate(
         """async base => {
-          const storeModule = await import(`${base}/static/js/ui-next/store.js?release=alpha98-ui14-8c5f0c3f2d06`);
-          const viewModule = await import(`${base}/static/js/ui-next/play-view.js?release=alpha98-ui14-8c5f0c3f2d06`);
-          const prose = await import(`${base}/static/js/ui-next/prose.js?release=alpha98-ui14-8c5f0c3f2d06`);
+          const storeModule = await import(`${base}/static/js/ui-next/store.js?release=alpha98-ui15-5b0f039aae29`);
+          const viewModule = await import(`${base}/static/js/ui-next/play-view.js?release=alpha98-ui15-5b0f039aae29`);
+          const prose = await import(`${base}/static/js/ui-next/prose.js?release=alpha98-ui15-5b0f039aae29`);
           const turns = Array.from({ length: 500 }, (_, index) => ({
             id: index + 1, idx: index, player_input: `Action ${index + 1}`,
             prose: `Turn ${index + 1}. Rain crosses the windows while the archive keeper waits.`,
@@ -565,7 +565,7 @@ def test_stream_transport_can_discard_token_history_while_delivering_events(
     page.goto(f"{ui_base_url}/static/ui-next-lab.html")
     result = page.evaluate(
         """async base => {
-          const apiModule = await import(`${base}/static/js/ui-next/api.js?release=alpha98-ui14-8c5f0c3f2d06`);
+          const apiModule = await import(`${base}/static/js/ui-next/api.js?release=alpha98-ui15-5b0f039aae29`);
           const encoder = new TextEncoder();
           const lines = [
             { type: "step_start", key: "narrator", label: "Narrator" },

@@ -12,7 +12,7 @@
   .ui-new-story__route { position: relative; display: flex; min-block-size: 158px; flex-direction: column; align-items: flex-start; justify-content: flex-end; gap: 8px; padding: 18px 16px; border: 0; border-inline-end: 1px solid var(--ui-color-border); border-radius: 0; background: color-mix(in srgb, var(--ui-color-surface-muted) 54%, transparent); color: var(--ui-color-text); text-align: start; }
   .ui-new-story__route:last-child { border-inline-end: 0; }
   .ui-new-story__route:hover { background: color-mix(in srgb, var(--ui-color-interactive) 5%, var(--ui-color-canvas)); }
-  .ui-new-story__route.is-recommended { box-shadow: inset 0 2px var(--ui-color-interactive); background: linear-gradient(180deg, var(--ui-color-interactive-soft), transparent 58%); }
+  .ui-new-story__route.is-recommended { color: var(--ui-color-text); background: var(--ui-color-surface-raised); box-shadow: none; }
   .ui-new-story__route strong { font-size: var(--ui-text-section); line-height: var(--ui-leading-section); }
   .ui-new-story__route small { color: var(--ui-color-text-faint); line-height: 1.45; }
   .ui-new-story__tag { position: absolute; inset: 12px 14px auto auto; color: var(--ui-color-interactive-strong); }

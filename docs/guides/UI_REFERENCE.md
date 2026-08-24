@@ -17,8 +17,9 @@ must look and feel like and how the supplied implementation is reused.
   rubric, checklists, and change-control chapter are normative for UI work.
 - The approved
   [`DB-2026-08-24 Progressive interface redesign`](../design/sonder-ui-bible/amendments/2026-08-24-progressive-interface-redesign.md)
-  Revision supersedes the covered macro compositions, calibrated type/control
-  scale, radii, and progressive-disclosure rules. Its associated
+  Revision supersedes the covered macro compositions and
+  progressive-disclosure rules while retaining the Bible's compact type,
+  control, radius, and Prime-restraint foundation. Its associated
   [implementation specification](../superpowers/specs/2026-08-24-sonder-progressive-interface-redesign.md)
   is the current authority for the redesigned shell, Play, Library, Story
   Tools, Settings, New Story, and authoring presentation.

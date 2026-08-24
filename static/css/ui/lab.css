@@ -1,6 +1,6 @@
 @layer ui-lab {
   html { min-block-size: 100%; background: var(--ui-color-canvas); scroll-behavior: smooth; }
-  .ui-lab { min-block-size: 100dvh; background: radial-gradient(circle at 75% -10%, var(--ui-color-interactive-soft), transparent 42%), var(--ui-color-canvas); }
+  .ui-lab { min-block-size: 100dvh; background: var(--ui-color-canvas); }
   .ui-lab__header { position: sticky; inset-block-start: 0; z-index: var(--ui-z-sticky); display: flex; justify-content: space-between; align-items: center; gap: var(--ui-space-6); padding: var(--ui-space-5) clamp(var(--ui-space-6), 4vw, var(--ui-space-10)); border-block-end: 1px solid var(--ui-color-border); background: var(--ui-color-surface); backdrop-filter: blur(var(--ui-surface-blur)); }
   .ui-lab__nav { position: sticky; inset-block-start: 82px; z-index: var(--ui-z-sticky); display: flex; gap: var(--ui-space-2); padding: var(--ui-space-3) clamp(var(--ui-space-6), 4vw, var(--ui-space-10)); overflow-x: auto; border-block-end: 1px solid var(--ui-color-border); background: var(--ui-color-surface-solid); }
   .ui-lab__nav a { min-block-size: var(--ui-control-compact); display: inline-flex; align-items: center; padding-inline: var(--ui-space-4); border-radius: var(--ui-radius-sm); color: var(--ui-color-text-muted); text-decoration: none; white-space: nowrap; }

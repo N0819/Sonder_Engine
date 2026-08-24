@@ -44,13 +44,17 @@ principles remain unchanged.
 | right inspector may be persistent by default on wide Play | contextual surfaces default closed and overlay; pinning is explicit and expansive-only when at least 680 px remains for primary content |
 | inspector Expanded/Compact/Rail modes and icon-only detail switcher | one grouped labeled landing and one oriented detail; Rail and unlabeled switchers are deprecated |
 | indices may decorate primary destinations, tools, long Library ledgers, setup routes, and themes | decorative indices are absent from ordinary navigation and content; numbers appear only when order is user-meaningful |
-| 3/4/5 px radius family with 4 px default | 6/9/14 px small/medium/large family, applied by component scale and never as universal pills |
-| 11/12/13/14 px micro/meta/control/body defaults | 12/13/14/15 px defaults; routine navigation and tool labels may not use micro type |
-| 36 px ordinary desktop control height | approximately 40 px ordinary desktop controls; 44 px touch remains mandatory |
 | mute and volume remain beside the composer | ambience is secondary to the integrated composer and moves to a compact popover and/or Ambience tool |
 | Library default is a dense ledger with all filters exposed | Library defaults to recognition-rich media rows/cards with a compact toolbar and staged secondary filters |
 | compact Settings combines grouped disclosure navigation and selected detail | compact and medium Settings show overview or detail, never both; desktop retains category navigation plus one detail |
 | supplied screenshots lock the covered macro composition | screenshots remain historical evidence and behavior inventory; this approved Revision controls replaced macro composition |
+
+This Revision changes composition and disclosure, not the compact visual
+foundation. The 3/4/5 px radius family, 11/12/13/14 px
+micro/metadata/control/body scale, 36 px ordinary desktop controls, flat
+neutral button surfaces, and restrained one-pixel selection markers remain
+authoritative. Touch layouts retain 44 px targets without requiring every
+desktop control to render as a 44 px box.
 
 ## Rationale and evidence
 

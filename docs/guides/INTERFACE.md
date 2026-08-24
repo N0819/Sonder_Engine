@@ -230,7 +230,7 @@ control unreachable. Reading content, condition surfaces, utilities, and the
 composer must never overlap continuously at supported sizes.
 
 Compact layouts give every actionable control a minimum 44 px target. Ordinary
-desktop controls target 40 px; Compact density may reduce them to 36 px while
+desktop controls target 36 px; Compact density may reduce them to 32 px while
 never shrinking the compact/touch target contract.
 
 Loading, unavailable, confirmed empty, error, and stale states are distinct.
@@ -506,19 +506,19 @@ Foundation source responsibilities are fixed: `tokens.css` defines geometry,
 motion, type, layering, and semantic color roles; theme files only override
 semantic values; `components.css` owns reusable component geometry; entry and
 laboratory styles compose those pieces without redefining their contracts.
-The interface scale balances calm reading with expert density: 12/16 micro,
-13/18 metadata, 14/20 controls, 15/22 body, 17/24 sections, and 24/31 page
+The interface scale balances calm reading with expert density: 11/14 micro,
+12/16 metadata, 13/18 controls, 14/20 body, 16/22 sections, and 21/28 page
 headings. Routine navigation and tool labels never use micro type. Every readable component uses
 the matching semantic size and leading tokens; story prose retains its separate
 17 px default and user setting. Every free-standing full-border surface uses
-the 6/9/14 px small/medium/large radius family. Large radii belong to cards,
-drawers, and dialogs; ordinary controls do not become pills. Zero-radius
+the 3/4/5 px compact/default/panel radius family. Larger radii belong only to
+semantic round shapes; ordinary controls do not become pills. Zero-radius
 geometry is reserved for viewport-flush surfaces and internal segments inside
 an outer frame.
 Shared selects use the glass surface, restrained logical radius, one chevron,
-and 40 px comfortable / 36 px compact desktop geometry while retaining the 44
+and 36 px comfortable / 32 px compact desktop geometry while retaining the 44
 px touch minimum. Shared buttons use centered inline-flex content, restrained
-14 px type, and icon/text gaps so symbols such as New Story's plus align with
+13 px regular-weight type, flat neutral surfaces, and icon/text gaps so symbols such as New Story's plus align with
 their label.
 Prompt textareas use the 14/20 control scale at regular weight on the near-black
 canvas surface; browser-native bright form surfaces are not allowed inside the
