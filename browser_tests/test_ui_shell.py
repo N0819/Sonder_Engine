@@ -70,7 +70,7 @@ def test_layout_contract_classifies_viewports_and_bounds_pinned_context(
     result = page.evaluate(
         """async (base) => {
           const layout = await import(
-            `${base}/static/js/ui-next/layout-contract.js?release=alpha98-ui13-a39372e1d8d1`
+            `${base}/static/js/ui-next/layout-contract.js?release=alpha98-ui14-8c5f0c3f2d06`
           );
           return {
             states: [
@@ -192,10 +192,10 @@ def test_navigation_state_restores_valid_route_scroll_and_focus_identity(
         """async (base) => {
           history.replaceState(null, "", location.pathname);
           const navigationModule = await import(
-            `${base}/static/js/ui-next/navigation-state.js?release=alpha98-ui13-a39372e1d8d1`
+            `${base}/static/js/ui-next/navigation-state.js?release=alpha98-ui14-8c5f0c3f2d06`
           );
           const routerModule = await import(
-            `${base}/static/js/ui-next/router.js?release=alpha98-ui13-a39372e1d8d1`
+            `${base}/static/js/ui-next/router.js?release=alpha98-ui14-8c5f0c3f2d06`
           );
           let record = {
             route: "#/library/characters",
@@ -286,7 +286,7 @@ def test_library_to_play_transition_cannot_restore_a_removed_library_inspector(
 ) -> None:
     _open_shell(page, ui_base_url, hash_value="#/library")
     page.get_by_role("link", name="Play", exact=True).click()
-    page.get_by_role("button", name="Open context panel").click()
+    page.get_by_role("button", name="Open story tools").click()
 
     inspector = page.get_by_role("dialog", name="Story tools")
     expect(inspector.get_by_role("heading", name="Story tools")).to_be_visible()
@@ -298,7 +298,7 @@ def test_story_tools_opener_keeps_icon_and_label_on_one_row(
     page: Page, ui_base_url: str,
 ) -> None:
     _open_shell(page, ui_base_url)
-    opener = page.get_by_role("button", name="Open context panel")
+    opener = page.get_by_role("button", name="Open story tools")
     expect(opener.get_by_text("Story tools", exact=True)).to_be_visible()
     geometry = opener.evaluate(
         """node => {
@@ -369,7 +369,7 @@ def test_wide_context_is_overlay_and_expansive_context_can_pin_without_crushing_
 ) -> None:
     page.set_viewport_size({"width": 1280, "height": 800})
     _open_shell(page, ui_base_url)
-    opener = page.get_by_role("button", name="Open context panel")
+    opener = page.get_by_role("button", name="Open story tools")
     opener.click()
     dialog = page.get_by_role("dialog", name="Story tools")
     expect(dialog).to_be_visible()
@@ -404,7 +404,7 @@ def test_mobile_inspector_is_a_back_owned_focus_contained_sheet(
 ) -> None:
     page.set_viewport_size({"width": 390, "height": 844})
     _open_shell(page, ui_base_url)
-    opener = page.get_by_role("button", name="Open context panel")
+    opener = page.get_by_role("button", name="Open story tools")
     opener.click()
     dialog = page.get_by_role("dialog", name="Story tools")
     expect(dialog).to_be_visible()
@@ -599,7 +599,7 @@ def test_shortcut_registry_rejects_collisions_and_guards_typing_and_ime(
     result = page.evaluate(
         """async (base) => {
           const { createShortcutRegistry } = await import(
-            `${base}/static/js/ui-next/shortcuts.js?release=alpha98-ui13-a39372e1d8d1`
+            `${base}/static/js/ui-next/shortcuts.js?release=alpha98-ui14-8c5f0c3f2d06`
           );
           let calls = 0;
           let collision = null;

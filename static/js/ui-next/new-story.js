@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "alpha98-ui13-a39372e1d8d1";
+export const MODULE_RELEASE = "alpha98-ui14-8c5f0c3f2d06";
 
 // UI_CATALOG_START: Alpha 9.8 New Story copy.
 const ALPHA98_NEW_STORY_COPY = Object.freeze([
@@ -15,8 +15,8 @@ import {
   generateLivedLocation,
   mountLivedLocationFields,
   normalizeLivedLocation,
-} from "./lived-location.js?release=alpha98-ui13-a39372e1d8d1";
-import { decorateFieldControl } from "../ui/components/field.js?release=alpha98-ui13-a39372e1d8d1";
+} from "./lived-location.js?release=alpha98-ui14-8c5f0c3f2d06";
+import { decorateFieldControl } from "../ui/components/field.js?release=alpha98-ui14-8c5f0c3f2d06";
 
 const DRAFT_TYPE = "new-story";
 const DRAFT_OWNER = "current";

@@ -55,9 +55,9 @@ def test_story_tool_registry_and_route_parser_are_exact(page: Page, ui_base_url:
     result = page.evaluate(
         """async base => {
           const registry = await import(
-            `${base}/static/js/ui-next/story-tools-registry.js?release=alpha98-ui13-a39372e1d8d1`
+            `${base}/static/js/ui-next/story-tools-registry.js?release=alpha98-ui14-8c5f0c3f2d06`
           );
-          const router = await import(`${base}/static/js/ui-next/router.js?release=alpha98-ui13-a39372e1d8d1`);
+          const router = await import(`${base}/static/js/ui-next/router.js?release=alpha98-ui14-8c5f0c3f2d06`);
           const route = router.parseHashRoute(
             "#/play/story-tools?chat=17&tool=conditions"
           );
@@ -108,7 +108,7 @@ def test_desktop_story_tools_select_route_without_resetting_play_state(
     transcript = page.locator("[data-play-transcript]")
     before = transcript.evaluate("node => node.scrollTop")
 
-    page.get_by_role("button", name="Open context panel").click()
+    page.get_by_role("button", name="Open story tools").click()
     inspector = page.get_by_role("dialog", name="Story tools")
     expect(inspector.locator("[data-story-tool-list] button")).to_have_count(10)
     inspector.get_by_role("button", name="World", exact=True).click()
@@ -123,7 +123,7 @@ def test_mobile_story_tools_are_staged_and_back_owned(
     page: Page, ui_base_url: str
 ) -> None:
     _open(page, ui_base_url, width=390)
-    opener = page.get_by_role("button", name="Open context panel")
+    opener = page.get_by_role("button", name="Open story tools")
     opener.click()
     sheet = page.get_by_role("dialog", name="Story tools")
     expect(sheet).to_be_visible()
@@ -146,7 +146,7 @@ def test_story_tools_use_semantic_groups_without_numeric_or_icon_only_modes(
     page: Page, ui_base_url: str
 ) -> None:
     _open(page, ui_base_url)
-    page.get_by_role("button", name="Open context panel").click()
+    page.get_by_role("button", name="Open story tools").click()
     inspector = page.get_by_role("dialog", name="Story tools")
     for group in ("World and cast", "Story setup", "Presentation"):
         expect(inspector.get_by_role("heading", name=group, exact=True)).to_be_visible()
@@ -159,16 +159,16 @@ def test_story_tool_detail_replaces_list_and_uses_distinct_svg_icons(
     page: Page, ui_base_url: str
 ) -> None:
     _open(page, ui_base_url)
-    page.get_by_role("button", name="Open context panel").click()
+    page.get_by_role("button", name="Open story tools").click()
     inspector = page.get_by_role("dialog", name="Story tools")
     hrefs = {
         tool: inspector.locator(f"[data-story-tool='{tool}'] use").first.get_attribute("href")
         for tool in ("conditions", "frames", "multiplayer")
     }
     assert hrefs == {
-        "conditions": "/static/assets/icons/sonder-icons.svg?release=alpha98-ui13-a39372e1d8d1#icon-conditions",
-        "frames": "/static/assets/icons/sonder-icons.svg?release=alpha98-ui13-a39372e1d8d1#icon-frames",
-        "multiplayer": "/static/assets/icons/sonder-icons.svg?release=alpha98-ui13-a39372e1d8d1#icon-multiplayer",
+        "conditions": "/static/assets/icons/sonder-icons.svg?release=alpha98-ui14-8c5f0c3f2d06#icon-conditions",
+        "frames": "/static/assets/icons/sonder-icons.svg?release=alpha98-ui14-8c5f0c3f2d06#icon-frames",
+        "multiplayer": "/static/assets/icons/sonder-icons.svg?release=alpha98-ui14-8c5f0c3f2d06#icon-multiplayer",
     }
     assert inspector.locator(
         "[data-story-tool='cast'] > .ui-icon:last-child use"
@@ -218,7 +218,7 @@ def test_dialogue_tool_owns_charter_summary_and_diagnostics(
         content_type="application/json", body=json.dumps({"lorebooks": []}),
     ))
     _open(page, ui_base_url)
-    page.get_by_role("button", name="Open context panel").click()
+    page.get_by_role("button", name="Open story tools").click()
     inspector = page.get_by_role("dialog", name="Story tools")
     inspector.get_by_role("button", name="Dialogue", exact=True).click()
     expect(inspector.get_by_role("heading", name="Institutions and upkeep")).to_be_visible()

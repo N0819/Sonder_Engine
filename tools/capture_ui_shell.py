@@ -148,7 +148,9 @@ def apply_action(page, action: str) -> None:
         page.get_by_role("button", name="Go To", exact=True).click()
         page.get_by_role("searchbox", name="Find a destination").fill("Library")
     elif action == "inspector":
-        page.get_by_role("button", name="Open context panel").click()
+        opener = page.get_by_role("button", name="Open story tools")
+        if opener.count() and opener.is_visible():
+            opener.click()
     elif action in {"extension", "extension-failure"}:
         failure = action == "extension-failure"
         page.evaluate(

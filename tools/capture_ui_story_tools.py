@@ -194,10 +194,9 @@ def capture() -> dict:
             response = page.goto(f"{base_url}/static/ui-next.html#/play/story-tools?chat=1&tool={tool}")
             if response is None or not response.ok: raise RuntimeError(case_id)
             page.wait_for_function("document.documentElement.dataset.uiNextState === 'ready'")
-            if width < 1100:
-                opener = page.locator("[data-shell-inspector-open]")
-                if opener.count() and opener.is_visible():
-                    opener.click()
+            opener = page.locator("[data-shell-inspector-open]")
+            if opener.count() and opener.is_visible():
+                opener.click()
             page.wait_for_function("[...document.querySelectorAll('[data-story-tool-panel]')].some(node => { const r = node.getBoundingClientRect(); return r.width > 1 && r.height > 1; })")
             if case_id == "desktop-institutions":
                 heading = page.get_by_role("heading", name="Institutions and upkeep")

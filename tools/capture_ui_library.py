@@ -283,8 +283,7 @@ def wait_for_case(page: Page, mode: str) -> None:
 
 def apply_action(page: Page, action: str) -> bool | None:
     if action == "restore":
-        detail = page.get_by_role("complementary", name="Library details")
-        detail.get_by_text("More", exact=True).click()
+        detail = page.locator("[data-shell-inspector]:visible")
         detail.get_by_role("button", name="Restore character").click()
         page.get_by_role("button", name="Undo").wait_for()
         page.wait_for_function("document.querySelectorAll('[data-library-item]').length === 0")

@@ -77,7 +77,7 @@ def _open(page: Page, ui_base_url: str, *, width: int = 1440) -> None:
     page.wait_for_function("document.documentElement.dataset.uiNextState === 'ready'")
     expect(page.get_by_role("heading", name="Library", level=2, exact=True)).to_be_visible()
     expect(page.get_by_role("heading", name="Stories", level=2)).to_have_count(0)
-    expect(page.locator("[data-library-ledger] [data-library-item]")).to_have_count(1)
+    expect(page.locator("[data-library-ledger] [data-library-item]")).to_have_count(3)
     if width > 700:
         geometry = page.locator(".ui-shell").evaluate(
             """node => ({
@@ -111,9 +111,10 @@ def test_library_has_one_workspace_for_filters_ledger_and_actions(
     expect(page.locator(".ui-library__filters")).to_have_count(0)
     expect(workspace.locator("[data-library-ledger]")).to_have_count(1)
     types = workspace.get_by_role("navigation", name="Library material types")
-    expect(types.get_by_role("button", name="Stories", exact=True)).to_have_attribute(
+    expect(types.get_by_role("button", name="All", exact=True)).to_have_attribute(
         "aria-current", "page"
     )
+    expect(types.get_by_role("button", name="Stories", exact=True)).to_be_visible()
     expect(types.get_by_role("button", name="Characters", exact=True)).to_be_visible()
     expect(types.get_by_role("button", name="Personas", exact=True)).to_be_visible()
     expect(types.get_by_role("button", name="Lore", exact=True)).to_be_visible()
@@ -396,10 +397,10 @@ def test_library_runtime_rejects_stale_results_and_bounds_identity_state(
     result = page.evaluate(
         """async base => {
           const storeModule = await import(
-            `${base}/static/js/ui-next/store.js?release=alpha98-ui13-a39372e1d8d1`
+            `${base}/static/js/ui-next/store.js?release=alpha98-ui14-8c5f0c3f2d06`
           );
           const libraryModule = await import(
-            `${base}/static/js/ui-next/library-runtime.js?release=alpha98-ui13-a39372e1d8d1`
+            `${base}/static/js/ui-next/library-runtime.js?release=alpha98-ui14-8c5f0c3f2d06`
           );
           const store = storeModule.createStore();
           let current = {
@@ -495,10 +496,10 @@ def test_lore_can_prepare_a_lived_location_for_the_current_story(
     result = page.evaluate(
         """async base => {
           const storeModule = await import(
-            `${base}/static/js/ui-next/store.js?release=alpha98-ui13-a39372e1d8d1`
+            `${base}/static/js/ui-next/store.js?release=alpha98-ui14-8c5f0c3f2d06`
           );
           const libraryModule = await import(
-            `${base}/static/js/ui-next/library-runtime.js?release=alpha98-ui13-a39372e1d8d1`
+            `${base}/static/js/ui-next/library-runtime.js?release=alpha98-ui14-8c5f0c3f2d06`
           );
           const route = {
             destination: "library", segments: ["lore"],
@@ -577,10 +578,10 @@ def test_library_mutations_keep_story_owner_and_undo_expires(
     result = page.evaluate(
         """async base => {
           const storeModule = await import(
-            `${base}/static/js/ui-next/store.js?release=alpha98-ui13-a39372e1d8d1`
+            `${base}/static/js/ui-next/store.js?release=alpha98-ui14-8c5f0c3f2d06`
           );
           const libraryModule = await import(
-            `${base}/static/js/ui-next/library-runtime.js?release=alpha98-ui13-a39372e1d8d1`
+            `${base}/static/js/ui-next/library-runtime.js?release=alpha98-ui14-8c5f0c3f2d06`
           );
           const item = {
             kind: "character", id: 7, key: "character:7", name: "Mara Venn",

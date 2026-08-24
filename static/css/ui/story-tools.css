@@ -61,6 +61,7 @@
   .ui-story-tools__content, .ui-tool-stack { display: grid; gap: var(--ui-space-4); min-inline-size: 0; }
   .ui-tool-card { display: grid; gap: var(--ui-space-3); min-inline-size: 0; padding: var(--ui-space-4); border: 1px solid var(--ui-color-border); border-radius: var(--ui-radius-lg); background: var(--ui-color-surface-muted); }
   .ui-tool-card__header, .ui-tool-inline { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--ui-space-3); min-inline-size: 0; }
+  .ui-frame-card__identity { display: flex; align-items: center; flex-wrap: wrap; gap: var(--ui-space-2); min-inline-size: 0; }
   .ui-tool-form { display: grid; gap: var(--ui-space-4); }
   .ui-tool-field { display: grid; gap: var(--ui-space-2); min-inline-size: 0; }
   .ui-tool-field__label { font-weight: 650; }

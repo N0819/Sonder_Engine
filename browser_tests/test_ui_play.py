@@ -141,7 +141,7 @@ def test_empty_installation_offers_new_story_without_inert_story_tools(
     expect(page.get_by_role("button", name="Open Library", exact=True)).to_be_visible()
     expect(page.locator("[data-story-tool-list]:visible button")).to_have_count(0)
     expect(page.get_by_role("complementary", name="Story tools")).to_be_hidden()
-    expect(page.get_by_role("button", name="Open context panel")).to_be_visible()
+    expect(page.get_by_role("button", name="Open story tools")).to_be_visible()
     page.get_by_role("button", name="New story", exact=True).click()
     expect(page.get_by_role("dialog", name="New story")).to_be_visible()
 
@@ -283,8 +283,8 @@ def test_play_runtime_refuses_a_late_story_response(
     page.goto(f"{ui_base_url}/static/ui-next-lab.html")
     result = page.evaluate(
         """async base => {
-          const storeModule = await import(`${base}/static/js/ui-next/store.js?release=alpha98-ui13-a39372e1d8d1`);
-          const playModule = await import(`${base}/static/js/ui-next/play-runtime.js?release=alpha98-ui13-a39372e1d8d1`);
+          const storeModule = await import(`${base}/static/js/ui-next/store.js?release=alpha98-ui14-8c5f0c3f2d06`);
+          const playModule = await import(`${base}/static/js/ui-next/play-runtime.js?release=alpha98-ui14-8c5f0c3f2d06`);
           const store = storeModule.createStore({
             library: { status: "ready", chats: [{ id: 1 }, { id: 2 }] },
             route: { status: "ready", destination: "play", query: { chat: "1" },
@@ -333,8 +333,8 @@ def test_stop_targets_the_story_that_started_the_run_after_navigation(
     page.goto(f"{ui_base_url}/static/ui-next-lab.html")
     result = page.evaluate(
         """async base => {
-          const storeModule = await import(`${base}/static/js/ui-next/store.js?release=alpha98-ui13-a39372e1d8d1`);
-          const playModule = await import(`${base}/static/js/ui-next/play-runtime.js?release=alpha98-ui13-a39372e1d8d1`);
+          const storeModule = await import(`${base}/static/js/ui-next/store.js?release=alpha98-ui14-8c5f0c3f2d06`);
+          const playModule = await import(`${base}/static/js/ui-next/play-runtime.js?release=alpha98-ui14-8c5f0c3f2d06`);
           const route = chat => ({ status: "ready", destination: "play",
             query: { chat: String(chat) }, segments: [], layers: [],
             canonicalHash: `#/play?chat=${chat}` });
@@ -394,9 +394,9 @@ def test_500_turn_render_stays_inside_the_recorded_budget(
     page.goto(f"{ui_base_url}/static/ui-next-lab.html")
     result = page.evaluate(
         """async base => {
-          const storeModule = await import(`${base}/static/js/ui-next/store.js?release=alpha98-ui13-a39372e1d8d1`);
-          const viewModule = await import(`${base}/static/js/ui-next/play-view.js?release=alpha98-ui13-a39372e1d8d1`);
-          const prose = await import(`${base}/static/js/ui-next/prose.js?release=alpha98-ui13-a39372e1d8d1`);
+          const storeModule = await import(`${base}/static/js/ui-next/store.js?release=alpha98-ui14-8c5f0c3f2d06`);
+          const viewModule = await import(`${base}/static/js/ui-next/play-view.js?release=alpha98-ui14-8c5f0c3f2d06`);
+          const prose = await import(`${base}/static/js/ui-next/prose.js?release=alpha98-ui14-8c5f0c3f2d06`);
           const turns = Array.from({ length: 500 }, (_, index) => ({
             id: index + 1, idx: index, player_input: `Action ${index + 1}`,
             prose: `Turn ${index + 1}. Rain crosses the windows while the archive keeper waits.`,
@@ -490,7 +490,7 @@ def test_story_chrome_does_not_change_prose_line_breaks(
     before = prose.evaluate(
         "node => ({ width: node.getBoundingClientRect().width, height: node.getBoundingClientRect().height })"
     )
-    page.get_by_role("button", name="Open context panel").click()
+    page.get_by_role("button", name="Open story tools").click()
     after = prose.evaluate(
         "node => ({ width: node.getBoundingClientRect().width, height: node.getBoundingClientRect().height })"
     )
@@ -565,7 +565,7 @@ def test_stream_transport_can_discard_token_history_while_delivering_events(
     page.goto(f"{ui_base_url}/static/ui-next-lab.html")
     result = page.evaluate(
         """async base => {
-          const apiModule = await import(`${base}/static/js/ui-next/api.js?release=alpha98-ui13-a39372e1d8d1`);
+          const apiModule = await import(`${base}/static/js/ui-next/api.js?release=alpha98-ui14-8c5f0c3f2d06`);
           const encoder = new TextEncoder();
           const lines = [
             { type: "step_start", key: "narrator", label: "Narrator" },

@@ -85,7 +85,7 @@
   .ui-shell__destination[aria-current="page"] { color: var(--ui-color-interactive-strong); border-color: var(--ui-color-interactive); background: var(--ui-color-interactive-soft); box-shadow: inset 3px 0 var(--ui-color-interactive); }
   .ui-shell__destination-label { min-inline-size: 0; overflow-wrap: anywhere; font-weight: 620; }
   .ui-shell__nav-collapse { justify-content: flex-start; inline-size: 100%; border-color: transparent; }
-  .ui-shell__nav-collapse [aria-hidden="true"] { inline-size: 1.25rem; font-size: 1.5rem; line-height: 1; }
+  .ui-shell__nav-collapse [aria-hidden="true"] { inline-size: 1.25rem; font-size: var(--ui-text-page); line-height: 1; }
   :root[data-nav-collapsed="true"] :is(.ui-shell__brand-copy, .ui-shell__destination-label, [data-shell-nav-collapse-label]) { display: none; }
   :root[data-nav-collapsed="true"] :is(.ui-shell__brand, .ui-shell__destination, .ui-shell__nav-collapse) { grid-template-columns: 1fr; justify-items: center; padding-inline: 0; }
 

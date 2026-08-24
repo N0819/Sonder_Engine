@@ -1,6 +1,6 @@
-export const MODULE_RELEASE = "alpha98-ui13-a39372e1d8d1";
+export const MODULE_RELEASE = "alpha98-ui14-8c5f0c3f2d06";
 
-import { element, errorState, frameQuery, markData, replaceLocalized, stateMessage, toolScope } from "./shared.js?release=alpha98-ui13-a39372e1d8d1";
+import { element, errorState, frameQuery, markData, replaceLocalized, stateMessage, toolScope } from "./shared.js?release=alpha98-ui14-8c5f0c3f2d06";
 
 const VITALS = Object.freeze([
   Object.freeze({ key: "air", label: "Air", invert: false }),

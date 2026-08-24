@@ -1,10 +1,10 @@
-export const MODULE_RELEASE = "alpha98-ui13-a39372e1d8d1";
+export const MODULE_RELEASE = "alpha98-ui14-8c5f0c3f2d06";
 
-import { focusRouteTarget } from "../ui/components/route-focus.js?release=alpha98-ui13-a39372e1d8d1";
+import { focusRouteTarget } from "../ui/components/route-focus.js?release=alpha98-ui14-8c5f0c3f2d06";
 import {
   LAYOUT_STATES,
   layoutStateFor,
-} from "./layout-contract.js?release=alpha98-ui13-a39372e1d8d1";
+} from "./layout-contract.js?release=alpha98-ui14-8c5f0c3f2d06";
 
 export { LAYOUT_STATES };
 
@@ -70,6 +70,7 @@ export function createApplicationShell(options = {}) {
   const context = required(documentRef, "[data-shell-context]");
   const view = required(documentRef, "[data-shell-destination-view]");
   const noticeHost = required(documentRef, "[data-shell-notice-host]");
+  const saveState = required(documentRef, "[data-shell-save-state]");
   const links = [...documentRef.querySelectorAll("[data-core-destination]")];
   const t = services.localizer.t;
   let stopped = false;
@@ -122,6 +123,7 @@ export function createApplicationShell(options = {}) {
       shellState.route?.destination,
     ) ? shellState.route.destination : "play";
     root.dataset.destination = destination;
+    saveState.hidden = destination !== "play";
     root.dataset.librarySelection = destination === "library" && shellState.route?.query?.item
       ? "true" : "false";
     const segment = shellState.route?.segments?.[0] || "";

@@ -1,7 +1,7 @@
-export const MODULE_RELEASE = "alpha98-ui13-a39372e1d8d1";
+export const MODULE_RELEASE = "alpha98-ui14-8c5f0c3f2d06";
 
-import { appearance } from "../ui/appearance.js?release=alpha98-ui13-a39372e1d8d1";
-import { initAccessibility, updateAccessibility } from "../ui/accessibility.js?release=alpha98-ui13-a39372e1d8d1";
+import { appearance } from "../ui/appearance.js?release=alpha98-ui14-8c5f0c3f2d06";
+import { initAccessibility, updateAccessibility } from "../ui/accessibility.js?release=alpha98-ui14-8c5f0c3f2d06";
 import {
   applyCustomTheme,
   CUSTOM_THEME_ROLES,
@@ -14,9 +14,9 @@ import {
   rgbToHex,
   serializeCustomTheme,
   validateCustomTheme,
-} from "../ui/custom-theme.js?release=alpha98-ui13-a39372e1d8d1";
-import { createOverlayController } from "../ui/components/overlay.js?release=alpha98-ui13-a39372e1d8d1";
-import { projectSettingsNavigation } from "./settings-overview.js?release=alpha98-ui13-a39372e1d8d1";
+} from "../ui/custom-theme.js?release=alpha98-ui14-8c5f0c3f2d06";
+import { createOverlayController } from "../ui/components/overlay.js?release=alpha98-ui14-8c5f0c3f2d06";
+import { projectSettingsNavigation } from "./settings-overview.js?release=alpha98-ui14-8c5f0c3f2d06";
 
 // UI_CATALOG_START: Alpha 9.8 living-world routing copy.
 const ALPHA98_SETTINGS_COPY = Object.freeze([
@@ -221,18 +221,18 @@ function categoryNav(documentRef, services, active, route, groups) {
   nav.setAttribute("aria-label", "Settings categories");
   const activeRow = activeNavigationRow(active, route);
   const activeGroup = groups.find(group => group.rows.some(row => row.id === activeRow))?.id || {
-    experience: "appearance",
-    "ai-connections": "connections",
-    content: "story-host",
-    "add-ons": "story-host",
-    maintenance: "story-host",
+    experience: "appearance-accessibility",
+    "ai-connections": "account-access",
+    content: "story-content",
+    "add-ons": "data-extensions-maintenance",
+    maintenance: "data-extensions-maintenance",
     advanced: "advanced",
-  }[active] || "connections";
+  }[active] || "appearance-accessibility";
   nav.dataset.settingsNavigationActiveGroup = activeGroup;
   for (const group of groups) {
     const section = el(documentRef, "section", "ui-settings__navigation-group");
     section.dataset.settingsNavigationGroup = group.id;
-    const heading = el(documentRef, "h2", "ui-settings__navigation-heading");
+    const heading = el(documentRef, "h3", "ui-settings__navigation-heading");
     heading.dataset.settingsNavigationHeading = "true";
     const disclosure = el(documentRef, "button", "ui-settings__navigation-disclosure");
     disclosure.type = "button";
@@ -276,19 +276,20 @@ function categoryNav(documentRef, services, active, route, groups) {
   return nav;
 }
 
-function bindResponsiveSettingsNavigation(nav, body, content) {
+function bindResponsiveSettingsNavigation(nav, body, content, back, detailRequested) {
   const windowRef = nav.ownerDocument.defaultView;
   const compactQuery = windowRef.matchMedia("(max-width: 1099px)");
   const shortQuery = windowRef.matchMedia("(min-width: 1100px) and (max-height: 799px)");
-  let expandedGroup = nav.dataset.settingsNavigationActiveGroup || "connections";
+  let expandedGroup = nav.dataset.settingsNavigationActiveGroup || "appearance-accessibility";
   const groups = [...nav.querySelectorAll("[data-settings-navigation-group]")];
 
   const sync = () => {
     const compact = compactQuery.matches;
     const disclosures = compact || shortQuery.matches;
     nav.classList.toggle("ui-settings__categories--disclosures", disclosures);
-    if (compact && nav.parentElement !== content) content.prepend(nav);
-    if (!compact && nav.parentElement !== body) body.insertBefore(nav, content);
+    nav.hidden = compact && detailRequested;
+    content.hidden = compact && !detailRequested;
+    back.hidden = !compact || !detailRequested;
     for (const group of groups) {
       const disclosure = group.querySelector("[data-settings-navigation-disclosure]");
       const panel = group.querySelector(".ui-settings__navigation-panel");
@@ -3081,6 +3082,7 @@ export function createSettingsView(options = {}) {
   const { services, state } = options;
   const route = state.route || services.router.current();
   const requested = route.segments?.[0] || "experience";
+  const detailRequested = Boolean(route.segments?.[0]);
   const active = CATEGORIES.some(([id]) => id === requested) ? requested : "experience";
   const panelKey = activeNavigationRow(active, route);
   const root = el(documentRef, "section", "ui-settings");
@@ -3096,9 +3098,15 @@ export function createSettingsView(options = {}) {
   content.tabIndex = 0;
   content.setAttribute("role", "region");
   content.setAttribute("aria-label", `${CATEGORIES.find(([id]) => id === active)?.[1] || "Current"} settings`);
+  const back = el(documentRef, "a", "ui-settings__back ui-button ui-button--quiet", "Back to Settings");
+  back.href = "#/settings";
+  back.addEventListener("click", event => {
+    event.preventDefault();
+    services.router.navigate({ destination: "settings" });
+  });
   const groups = settingsNavigationGroups(documentRef, services, state);
   const nav = categoryNav(documentRef, services, active, route, groups);
-  content.append(
+  content.append(back,
     active === "experience"
       ? experience(documentRef, services, panelKey)
       : active === "ai-connections"
@@ -3114,7 +3122,9 @@ export function createSettingsView(options = {}) {
         : placeholder(documentRef, active),
   );
   body.append(nav, content);
-  const teardownNavigation = bindResponsiveSettingsNavigation(nav, body, content);
+  const teardownNavigation = bindResponsiveSettingsNavigation(
+    nav, body, content, back, detailRequested,
+  );
   root.append(header, body);
   const teardownScrollIntent = bindSettingsScrollIntent(root, content);
   services.localizer.localize(root);

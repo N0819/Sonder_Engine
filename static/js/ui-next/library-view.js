@@ -1,10 +1,10 @@
-export const MODULE_RELEASE = "alpha98-ui13-a39372e1d8d1";
+export const MODULE_RELEASE = "alpha98-ui14-8c5f0c3f2d06";
 
-import { mountLivedLocationFields } from "./lived-location.js?release=alpha98-ui13-a39372e1d8d1";
-import { openNewStory } from "./new-story.js?release=alpha98-ui13-a39372e1d8d1";
-import { decorateFieldControl } from "../ui/components/field.js?release=alpha98-ui13-a39372e1d8d1";
-import { createFilterSheet } from "./components/filter-sheet.js?release=alpha98-ui13-a39372e1d8d1";
-import { createMediaThumb } from "./components/media-row.js?release=alpha98-ui13-a39372e1d8d1";
+import { mountLivedLocationFields } from "./lived-location.js?release=alpha98-ui14-8c5f0c3f2d06";
+import { openNewStory } from "./new-story.js?release=alpha98-ui14-8c5f0c3f2d06";
+import { decorateFieldControl } from "../ui/components/field.js?release=alpha98-ui14-8c5f0c3f2d06";
+import { createFilterSheet } from "./components/filter-sheet.js?release=alpha98-ui14-8c5f0c3f2d06";
+import { createMediaThumb } from "./components/media-row.js?release=alpha98-ui14-8c5f0c3f2d06";
 
 const loreLocationDrafts = new Map();
 
@@ -14,6 +14,7 @@ const COPY = Object.freeze({
   searchAction: "Search",
   sort: "Sort Library",
   filters: "Library material types",
+  all: "All",
   loading: "Loading Library…",
   loadingDetail: "Reading the current Library index.",
   empty: "Your Library is empty",
@@ -151,6 +152,7 @@ const COPY = Object.freeze({
 // UI_CATALOG_END
 
 const TYPES = Object.freeze([
+  ["", COPY.all, COPY.all],
   ["story", COPY.stories, COPY.stories],
   ["character", COPY.characters, COPY.characters],
   ["persona", COPY.personas, COPY.personas],
@@ -264,7 +266,7 @@ function workspaceFilters(documentRef, services, state) {
     const item = node(documentRef, "li");
     const control = button(documentRef, label, "ui-library__filter");
     control.setAttribute("aria-label", accessible);
-    if (type === (activeType || "story")) control.setAttribute("aria-current", "page");
+    if (type === activeType) control.setAttribute("aria-current", "page");
     control.addEventListener("click", () => navigate(services, type, { ...query, item: "" }));
     item.append(control);
     typeList.append(item);
@@ -283,7 +285,7 @@ function workspaceFilters(documentRef, services, state) {
   }
   scope.addEventListener("change", () => {
     const firstStory = state.library?.chats?.[0]?.id;
-    navigate(services, activeType || "story", {
+    navigate(services, activeType, {
       ...query,
       item: "",
       scope: scope.value === "all" ? "" : scope.value,
@@ -319,7 +321,7 @@ function workspaceActions(documentRef, services, activeType) {
     documentRef, "div", "ui-action-cluster ui-library-workspace__actions",
   );
   actions.setAttribute("role", "group");
-  if (activeType === "story") {
+  if (!activeType || activeType === "story") {
     const create = labelWithIcon(documentRef,
       button(documentRef, COPY.newStory, "ui-button ui-button--primary"), "plus", COPY.newStory);
     create.addEventListener("click", () => openNewStory({ document: documentRef, services }));
@@ -569,10 +571,12 @@ function resultState(documentRef, library) {
 }
 
 function libraryWorkspace(documentRef, services, state) {
-  const activeType = typeForRoute(state.route) || "story";
+  const activeType = typeForRoute(state.route);
   const filteredState = { ...state, library: {
     ...(state.library || {}),
-    items: (state.library?.items || []).filter(item => item.kind === activeType),
+    items: activeType
+      ? (state.library?.items || []).filter(item => item.kind === activeType)
+      : (state.library?.items || []),
   } };
   const section = node(documentRef, "section", "ui-library-workspace");
   section.dataset.libraryWorkspace = "true";
@@ -792,6 +796,7 @@ function lifecycleActions(documentRef, services, library, item, viewState, reren
       type: "story",
       query: { ...(route?.query || {}), item: item.key, mode: "edit" },
     });
+    documentRef.dispatchEvent(new CustomEvent("sonder:library-select"));
   });
   section.append(open, edit, exported, archive);
 

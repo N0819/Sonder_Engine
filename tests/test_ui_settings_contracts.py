@@ -9,9 +9,17 @@ def test_settings_overview_contract_keeps_ordered_groups_and_settings_owned_targ
         encoding="utf-8"
     )
 
-    ordered_groups = ["Connections", "Appearance", "Story & host", "Advanced"]
+    ordered_groups = [
+        "Account and access",
+        "AI and models",
+        "Appearance and accessibility",
+        "Story defaults and content",
+        "Data, extensions, and maintenance",
+        "Advanced",
+    ]
     ordered_targets = [
         "#/settings/ai-connections",
+        "#/settings/ai-connections?control=models",
         "#/settings/experience?control=themes",
         "#/settings/experience?control=reading",
         "#/settings/experience?control=sound",
@@ -19,7 +27,6 @@ def test_settings_overview_contract_keeps_ordered_groups_and_settings_owned_targ
         "#/settings/content",
         "#/settings/add-ons",
         "#/settings/maintenance",
-        "#/settings/ai-connections?control=models",
         "#/settings/advanced?tool=prompts",
         "#/settings/advanced?tool=story-data",
     ]
@@ -53,6 +60,8 @@ def test_settings_uses_one_navigation_model_and_routes_remain_compatible():
     ):
         assert f'"{segment}"' in router
     assert 'route.segments?.[0] || "experience"' in view
+    assert 'detailRequested = Boolean(route.segments?.[0])' in view
+    assert '"Back to Settings"' in view
     assert 'data-settings-overview' not in view
     assert '"Settings overview"' not in view
     assert ".scrollIntoView(" not in view

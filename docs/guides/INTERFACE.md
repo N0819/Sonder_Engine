@@ -211,14 +211,16 @@ The primary destinations are Play, Library, and Settings. Story Tools are
 story-scoped; global configuration is not. New Story, host setup/sign-in, and
 guest join/play are complete entry workflows rather than dialog fragments.
 
-The G2 shell makes this topology executable. Wide layouts use a left
-navigation rail, central destination workspace, and right contextual inspector.
-Medium layouts retain the same routes in a compact rail. Compact layouts use a
-three-item bottom navigation and move Go To to the header; the inspector becomes
-a focus-contained, Back-owned sheet. Stable routes, named scroll regions, and
-focus identities are data. No shell service retains a DOM node across a route
-or refresh. Unfinished destination work is presented as a bounded truthful
-summary, never as a synthetic call into the classic interface.
+The application shell uses one progressive layout contract. Wide and expansive
+layouts default to a 192 px labeled rail that the user may collapse to 72 px;
+medium uses the compact rail; compact uses a labeled three-item bottom
+navigation. Context is closed by default and overlays the destination when
+opened. It may be pinned only on expansive layouts where at least 680 px remains
+for primary content. Compact context is a focus-contained, Back-owned sheet.
+One app header owns title, Back, Go To, and scoped context actions so
+destinations do not collide through independently fixed controls. Stable routes,
+named scroll regions, and focus identities are data. No shell service retains a
+DOM node across a route or refresh.
 
 Desktop, tablet, portrait mobile, narrow mobile, landscape mobile, short-height
 windows, 200-percent zoom, long localization, keyboard, pointer, and touch all
@@ -227,9 +229,9 @@ density, but it may not hide a capability such as conditions/vitals or make a
 control unreachable. Reading content, condition surfaces, utilities, and the
 composer must never overlap continuously at supported sizes.
 
-Compact layouts give every actionable control a minimum 44 px target. Desktop
-density may reduce non-target spacing and keep native fields at a 36 px minimum,
-but it never shrinks the compact/touch target contract.
+Compact layouts give every actionable control a minimum 44 px target. Ordinary
+desktop controls target 40 px; Compact density may reduce them to 36 px while
+never shrinking the compact/touch target contract.
 
 Loading, unavailable, confirmed empty, error, and stale states are distinct.
 Recoverable errors stay in context; toasts acknowledge completed actions and
@@ -268,15 +270,14 @@ do not carry persistent work, failures, or choices.
 - `story-tools-registry.js` is the complete current-story tool list.
   `story-tools-runtime.js` captures story, frame, tool, mount, and request
   sequence; a late response cannot repaint another owner.
-- Wide layouts mount Story Tools in the right inspector with exactly three
-  semantic list modes: Expanded shows icon, title, and description; Compact
-  shows icon and title; Rail shows the icon with its accessible name and
-  tooltip intact. Legacy `wide`, `default`, and `narrow` values migrate to
-  Expanded, Expanded, and Compact. A selected tool uses Expanded presentation,
-  retains a compact icon switcher, and exposes `All tools` to restore the saved
-  list mode. Medium and compact layouts mount the same module in a
-  focus-contained staged sheet. Tool changes preserve Play draft, scroll, run,
-  and media state.
+- Story Tools open as context rather than occupying Play by default. Their
+  landing is grouped into World and cast, Story setup, and Presentation, with
+  labeled rows and descriptions. A selected tool replaces the landing and
+  exposes Back plus an optional labeled selector; list and detail are never
+  shown simultaneously on compact layouts. Numeric ordinals, decorative totals,
+  the Rail mode, and icon-only switching are retired. Medium and compact mount
+  the same module in a focus-contained staged sheet. Tool changes preserve Play
+  draft, scroll, run, and media state.
 - Cast, Conditions, Frames, and Multiplayer project current guarded routes.
   They do not create parallel character, condition, frame, invite, or guest
   authority in browser state.
@@ -292,8 +293,9 @@ do not carry persistent work, failures, or choices.
   measure or composer geometry. Effects Off removes decorative weather while
   reduced motion makes it static. Pending generation uses an explicit status
   check and never an idle interval.
-- Mute and Volume remain beside the composer. Provider/source configuration,
-  pins, reroll, credits, unlock, and chime stay in the contextual tool.
+- The composer is one raised writing plate. Ambience controls and generation
+  detail are secondary disclosures; provider/source configuration, pins,
+  reroll, credits, unlock, and chime stay in the contextual tool.
 
 ### Library ownership
 
@@ -317,17 +319,18 @@ do not carry persistent work, failures, or choices.
 - Undo is in-memory, owner-bound, exact-operation, and expires after twelve
   seconds. It is offered only for sound inverses; no receipt or story data is
   persisted in browser-local presentation state.
-- Library has one destination workspace at every viewport. Its header owns the
-  contextual create/import cluster; its filter region owns material type and
-  Library scope; and its toolbar and ledger own search, sort, visibility, and
-  results. Library does not add a persistent sub-sidebar beside the global
-  destination rail. The optional right inspector owns selected-item detail on
-  wide/expansive layouts, while medium/compact layouts stage the same detail in
-  the Back-owned inspector sheet. Direct selected-item links stage that sheet
-  once; Back returns to the retained ledger rather than reopening it. Library
-  detail always uses the readable expanded inspector width; Expanded, Compact,
-  and Rail are Story Tools presentation modes only. Closing Library detail
-  removes its grid track even while the selected-item route remains retained.
+- Library has one destination workspace at every viewport and no persistent
+  sub-sidebar. Its visible toolbar owns category, persistent search, compact
+  sort, Filters, and contextual create/import actions. Scope, visibility, Story
+  association, and secondary constraints are staged in the Filters sheet;
+  active constraints return as removable chips. Results are recognition-rich
+  media rows using real local imagery or an intentional initial/icon fallback,
+  never fabricated metadata or decorative ordinals. At 390 px the first
+  ordinary result begins within 240 px of the destination-content top. Selection
+  opens global overlay detail by default; an expansive user may explicitly pin
+  it when the shell can preserve the reading measure. Compact detail is a
+  Back-owned staged surface. Back restores query, filters, sort, scroll, and
+  focus.
 - Activating a Story row selects it and reveals Library detail; it never enters
   Play. Only the explicit `Open in Play` action commits that navigation. Until
   then the Library route, scope, filters, selection, and scroll remain owned by
@@ -372,25 +375,25 @@ do not carry persistent work, failures, or choices.
 
 ### Settings and appearance ownership
 
-- Settings has one navigation method and one selected detail surface. There is
-  no overview dashboard and no category-level launcher page. `#/settings`, the
-  global Settings destination, and `mod+,` select Theme in the grouped
-  navigation. Each row mounts only its real Settings panel. Story imports,
+- Settings has one navigation method and one selected detail surface. Its six
+  user-facing concepts are Account and access, AI and models, Appearance and
+  accessibility, Story defaults and content, Data/extensions/maintenance, and
+  Advanced. Each row mounts only its real Settings panel. Story imports,
   portable backups, deletion, Turn details, and Institution tools remain in
   Library or Play and are not duplicated as cross-destination Settings links.
-- The navigation projects four ordered groups—Connections, Appearance, Story
-  & host, and Advanced—and 11 rows from one immutable source. Summaries read
+- The navigation projects those six ordered concepts and 11 rows from one
+  immutable source. Summaries read
   only already-loaded Settings/extension state and browser-local presentation
   preferences; rendering navigation cannot discover, mutate, update, or
   persist engine-owned settings. Search resolves aliases to these same
   authoritative routes rather than opening a second Settings taxonomy or
   changing primary destination.
-- Desktop presents the groups as a compact rail. Tablet, mobile, narrow,
-  landscape, and wide short-height layouts use the same groups as accessible
-  single-open disclosures; the active detail's group opens by default and the
-  selected row remains current. At compact widths navigation moves inside
-  `[data-settings-content]`; a short desktop keeps its rail column. Disclosure
-  groups never become secondary scroll owners.
+- Desktop presents the concepts as a 240 px navigation plus one detail. Medium,
+  tablet, mobile, narrow, and landscape layouts stage either the grouped
+  overview or the selected detail, never both. A selected detail has a sticky
+  Back to Settings action. The overview uses accessible single-open disclosures;
+  a short desktop keeps its rail column. Disclosure groups never become
+  secondary scroll owners.
 - The shell gives the destination track `minmax(0, 1fr)`. Settings gives its
   detail track the same bound and makes `[data-settings-content]` the vertical
   scroll owner. The document body is never relied on to reveal clipped settings
@@ -503,20 +506,21 @@ Foundation source responsibilities are fixed: `tokens.css` defines geometry,
 motion, type, layering, and semantic color roles; theme files only override
 semantic values; `components.css` owns reusable component geometry; entry and
 laboratory styles compose those pieces without redefining their contracts.
-The interface scale is deliberately compact for high-density desktop displays:
-11/14 micro, 12/16 metadata, 13/18 controls, 14/20 body, 16/22 sections,
-21/28 page headings, and 28/36 display headings. Every readable component uses
+The interface scale balances calm reading with expert density: 12/16 micro,
+13/18 metadata, 14/20 controls, 15/22 body, 17/24 sections, and 24/31 page
+headings. Routine navigation and tool labels never use micro type. Every readable component uses
 the matching semantic size and leading tokens; story prose retains its separate
 17 px default and user setting. Every free-standing full-border surface uses
-the 3/4/5 px semantic radius family, with 4 px as the default. Zero-radius
+the 6/9/14 px small/medium/large radius family. Large radii belong to cards,
+drawers, and dialogs; ordinary controls do not become pills. Zero-radius
 geometry is reserved for viewport-flush surfaces and internal segments inside
 an outer frame.
 Shared selects use the glass surface, restrained logical radius, one chevron,
-and 36 px comfortable / 32 px compact desktop geometry while retaining the 44
+and 40 px comfortable / 36 px compact desktop geometry while retaining the 44
 px touch minimum. Shared buttons use centered inline-flex content, restrained
-13 px type, and icon/text gaps so symbols such as New Story's plus align with
+14 px type, and icon/text gaps so symbols such as New Story's plus align with
 their label.
-Prompt textareas use the 13/18 control scale at regular weight on the near-black
+Prompt textareas use the 14/20 control scale at regular weight on the near-black
 canvas surface; browser-native bright form surfaces are not allowed inside the
 dark editor.
 `appearance-preflight.js` is the only pre-module behavior and may only stamp

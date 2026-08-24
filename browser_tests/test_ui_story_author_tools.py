@@ -19,7 +19,7 @@ BOOT = {
 }
 
 
-def _open(page: Page, ui_base_url: str, *, width: int = 1280, japanese: bool = False):
+def _open(page: Page, ui_base_url: str, *, width: int = 1440, japanese: bool = False):
     world = {
         "scene": {
             "location": "Archive",
@@ -134,7 +134,19 @@ def _open(page: Page, ui_base_url: str, *, width: int = 1280, japanese: bool = F
     response = page.goto(f"{ui_base_url}/static/ui-next.html#/play/story-tools?chat=1&tool=world")
     assert response and response.ok
     page.wait_for_function("document.documentElement.dataset.uiNextState === 'ready'")
+    if width >= 1440:
+        page.get_by_role("button", name="Open story tools").click()
+        page.get_by_role("dialog", name="Story tools").get_by_role(
+            "button", name="Pin context panel"
+        ).click()
     return state
+
+
+def _select_tool(panel, name: str) -> None:
+    all_tools = panel.get_by_role("button", name="All tools")
+    if all_tools.count() and all_tools.is_visible():
+        all_tools.click()
+    panel.get_by_role("button", name=name, exact=True).click()
 
 
 def test_world_complete_draft_survives_navigation_and_saves_verbatim(page: Page, ui_base_url: str):
@@ -145,9 +157,9 @@ def test_world_complete_draft_survives_navigation_and_saves_verbatim(page: Page,
     editor = panel.get_by_role("textbox", name="world JSON")
     draft = {**state["world"], "manual_note": {"reason": "keep complete payload"}}
     editor.fill(json.dumps(draft, indent=2))
-    panel.get_by_role("button", name="Attire", exact=True).click()
+    _select_tool(panel, "Attire")
     expect(panel.get_by_role("heading", name="Rin", exact=True)).to_be_visible()
-    panel.get_by_role("button", name="World", exact=True).click()
+    _select_tool(panel, "World")
     panel.get_by_text("Advanced JSON", exact=True).click()
     expect(panel.get_by_role("textbox", name="world JSON")).to_have_value(json.dumps(draft, indent=2))
     panel.get_by_role("button", name="Save changes").click()
@@ -158,7 +170,7 @@ def test_world_complete_draft_survives_navigation_and_saves_verbatim(page: Page,
 def test_style_save_changes_story_owned_fields_but_never_host_ui_language(page: Page, ui_base_url: str):
     state = _open(page, ui_base_url)
     panel = page.get_by_role("complementary", name="Story tools")
-    panel.get_by_role("button", name="Style", exact=True).click()
+    _select_tool(panel, "Style")
     panel.get_by_label("Genre").fill("weird western")
     panel.get_by_label("Story language").select_option("ja")
     panel.get_by_label("Player authority").select_option("actor_only")
@@ -177,7 +189,7 @@ def test_style_save_changes_story_owned_fields_but_never_host_ui_language(page: 
 def test_dialogue_validation_blocks_partial_write_then_saves_all_documents(page: Page, ui_base_url: str):
     state = _open(page, ui_base_url)
     panel = page.get_by_role("complementary", name="Story tools")
-    panel.get_by_role("button", name="Dialogue", exact=True).click()
+    _select_tool(panel, "Dialogue")
     panel.get_by_label("Maximum lines").fill("-1")
     panel.get_by_role("button", name="Save changes").click()
     expect(panel.get_by_role("status").filter(has_text="max_lines must be 0 or more.")).to_be_visible()
@@ -196,7 +208,7 @@ def test_dialogue_validation_blocks_partial_write_then_saves_all_documents(page:
 def test_attire_summary_and_advanced_save_preserve_region_structure(page: Page, ui_base_url: str):
     state = _open(page, ui_base_url)
     panel = page.get_by_role("complementary", name="Story tools")
-    panel.get_by_role("button", name="Attire", exact=True).click()
+    _select_tool(panel, "Attire")
     expect(panel.get_by_role("heading", name="Rin", exact=True)).to_be_visible()
     expect(panel.get_by_text("Body regions: torso")).to_be_visible()
     panel.get_by_text("Advanced JSON", exact=True).click()
@@ -209,9 +221,9 @@ def test_attire_summary_and_advanced_save_preserve_region_structure(page: Page, 
 
 def test_mobile_japanese_chrome_keeps_story_data_literal_and_has_no_page_overflow(page: Page, ui_base_url: str):
     _open(page, ui_base_url, width=390, japanese=True)
-    page.get_by_role("button", name="Open context panel").click()
+    page.get_by_role("button", name="Open story tools").click()
     sheet = page.get_by_role("dialog", name="Story tools")
-    sheet.get_by_role("button", name="服装", exact=True).click()
+    _select_tool(sheet, "服装")
     expect(sheet.get_by_role("heading", name="Wearing", exact=True)).to_be_visible()
     expect(sheet.get_by_text("着用中", exact=True).first).to_be_visible()
     assert page.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth")
