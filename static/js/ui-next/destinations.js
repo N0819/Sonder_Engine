@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "alpha98-ui11-0acc47fb0573";
+export const MODULE_RELEASE = "alpha98-ui12-7eaf6b3481a3";
 
 export const CORE_DESTINATIONS = Object.freeze(["play", "library", "settings"]);
 

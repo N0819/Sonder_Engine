@@ -318,6 +318,18 @@ def test_library_details_ignores_story_tool_resize_and_closes_without_a_gap(
     expect(inspector).to_be_visible()
     expect(inspector.get_by_role("button", name="Resize context panel")).to_be_hidden()
     assert inspector.evaluate("node => node.getBoundingClientRect().width") >= 320
+    action_geometry = inspector.locator(".ui-library-detail__actions").evaluate(
+        """node => {
+          const panel = node.closest('.ui-shell__inspector').getBoundingClientRect();
+          const controls = [...node.children].map(child => child.getBoundingClientRect());
+          return {
+            scrollFits: node.scrollWidth <= node.clientWidth + 1,
+            controlsFit: controls.every(control => control.left >= panel.left - 1
+              && control.right <= panel.right + 1),
+          };
+        }"""
+    )
+    assert action_geometry == {"scrollFits": True, "controlsFit": True}
 
     inspector.get_by_role("button", name="Close context panel").click()
     expect(inspector).to_be_hidden()
@@ -341,10 +353,10 @@ def test_library_runtime_rejects_stale_results_and_bounds_identity_state(
     result = page.evaluate(
         """async base => {
           const storeModule = await import(
-            `${base}/static/js/ui-next/store.js?release=alpha98-ui11-0acc47fb0573`
+            `${base}/static/js/ui-next/store.js?release=alpha98-ui12-7eaf6b3481a3`
           );
           const libraryModule = await import(
-            `${base}/static/js/ui-next/library-runtime.js?release=alpha98-ui11-0acc47fb0573`
+            `${base}/static/js/ui-next/library-runtime.js?release=alpha98-ui12-7eaf6b3481a3`
           );
           const store = storeModule.createStore();
           let current = {
@@ -440,10 +452,10 @@ def test_lore_can_prepare_a_lived_location_for_the_current_story(
     result = page.evaluate(
         """async base => {
           const storeModule = await import(
-            `${base}/static/js/ui-next/store.js?release=alpha98-ui11-0acc47fb0573`
+            `${base}/static/js/ui-next/store.js?release=alpha98-ui12-7eaf6b3481a3`
           );
           const libraryModule = await import(
-            `${base}/static/js/ui-next/library-runtime.js?release=alpha98-ui11-0acc47fb0573`
+            `${base}/static/js/ui-next/library-runtime.js?release=alpha98-ui12-7eaf6b3481a3`
           );
           const route = {
             destination: "library", segments: ["lore"],
@@ -522,10 +534,10 @@ def test_library_mutations_keep_story_owner_and_undo_expires(
     result = page.evaluate(
         """async base => {
           const storeModule = await import(
-            `${base}/static/js/ui-next/store.js?release=alpha98-ui11-0acc47fb0573`
+            `${base}/static/js/ui-next/store.js?release=alpha98-ui12-7eaf6b3481a3`
           );
           const libraryModule = await import(
-            `${base}/static/js/ui-next/library-runtime.js?release=alpha98-ui11-0acc47fb0573`
+            `${base}/static/js/ui-next/library-runtime.js?release=alpha98-ui12-7eaf6b3481a3`
           );
           const item = {
             kind: "character", id: 7, key: "character:7", name: "Mara Venn",
