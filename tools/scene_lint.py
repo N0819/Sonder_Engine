@@ -29,7 +29,11 @@ Usage:
 Healing uses `commit._fold_duplicate_shed_garments` (defined in
 `persist/commit_attire.py`, re-exported by the facade), which is the code the
 live path already runs; this only reaches scenes that stopped being written to
-before it existed. It deliberately does NOT use
+before it existed. `--heal` also restores `uncovered` where a chat's own
+checkpoints prove a garment left a region -- see `observe_exposure`, and note
+that this one reads a chat's history in turn order rather than one scene at a
+time, because no single scene carries the difference between a region that was
+stripped and one that was never dressed. It deliberately does NOT use
 `attire.release_removed_garments`, the other canonical repair, because that
 rederives the entry and would rewrite pre-region wardrobes -- the reason, and
 what it was measured to do to this corpus, are in `heal_scene`'s own docstring.
@@ -342,6 +346,193 @@ def check_structure(sc):
     return out
 
 
+# --- exposure history -------------------------------------------------------
+
+# `uncovered` is the flag `perceptible_region_surfaces` reads before it will
+# print a region's authored `beneath`: this region had something on it and no
+# longer does. It is DURABLE history about the body -- a region stays
+# uncovered until something covers it again -- and until `88aee71`
+# `attire.advance` rebuilt each region without carrying it, so the flag lived
+# exactly one beat and the next wardrobe change anywhere on that body wiped
+# it. Measured in chat 86, one checkpoint per turn, garments coming off across
+# t10-t15 (`(worn count, uncovered)` per region):
+#
+#     t10  arms  (0, True)   ->  t12  arms  (0, False)
+#     t12  torso (0, True)   ->  t13  torso (0, False)
+#     t13  waist (0, True)   ->  t14  waist (0, False)
+#     t14  groin (0, True)   ->  t15  groin (0, False)
+#     t14  legs  (0, True)   ->  t15  legs  (0, False)
+#     t15  feet  (0, True)   ->  t45  feet  (0, True)
+#
+# Feet survived only because nothing proposed that region again. The result on
+# the page: a body bare everywhere rendered its authored surface for ONE region
+# and the bare word `bare` for the other five, and the five could never
+# recover -- the licence is earned by a garment leaving, and they had no
+# garment left to lose.
+#
+# THE REPAIR IS NOT INFERENCE. Nothing inside a ledger entry distinguishes
+# "this was stripped in play" from "this was never clothed" -- Tamamo's head
+# and hands and Mirelle's hands and feet are bare, carry authored `beneath`,
+# and are correctly silent, because no garment ever left them. The chat's own
+# checkpoints hold the difference: they recorded the flag on the beat it was
+# set and the garment on the beats before that. This replays that history
+# forward and restores what `advance` should have carried.
+
+
+def _worn_garments(region):
+    """Garments actually covering this region -- ornaments and departed
+    garments are not coverings, which is the same test `attire` itself
+    applies before deciding a region is bare."""
+    return [g for g in (region.get("garments") or [])
+            if isinstance(g, dict) and not g.get("attaches")
+            and g.get("state") != "removed"]
+
+
+def _already_licensed(region):
+    """Whether this region can already print its `beneath`. EITHER signal,
+    matching `attire.perceptible_region_surfaces`: the flag, or a garment
+    still sitting here under `state: "removed"` (an older engine's spelling
+    of the same fact)."""
+    return bool(region.get("uncovered")) or any(
+        isinstance(g, dict) and g.get("state") == "removed"
+        for g in (region.get("garments") or []))
+
+
+def strip_state_word_garments(sc):
+    """Garments whose whole name is a body state, not a thing worn.
+
+    `attire.is_bare_garment_state` is the live path's own test and now refuses
+    these on the way in; what it cannot do is unwear the ones already stored.
+    Measured across this corpus: seven bodies in four stories, every one of
+    them on the TORSO, because a name no garment table recognises falls to the
+    region fallback and lands there. So the fault is never cosmetic -- a body
+    is reported clothed at the chest by the word `removed`, `worn`, or the
+    surface it was meant to describe.
+
+    Removed BEFORE the exposure pass reads a scene, for two reasons: a phantom
+    covering hides the very transition that pass looks for, and a region the
+    phantom is sitting on cannot be relicensed while something appears to
+    cover it.
+
+    Its departure is NOT evidence of a baring, and nothing here sets
+    `uncovered`. It never covered anything, so it cannot have uncovered
+    anything by leaving; only the real garments in a chat's history can earn
+    that flag.
+    """
+    changed = False
+    if not isinstance(sc, dict):
+        return False
+    for entry in (sc.get("attire") or {}).values():
+        if not isinstance(entry, dict):
+            continue
+        gone = []
+        regions = entry.get("regions")
+        if isinstance(regions, dict):
+            for region in regions.values():
+                if not isinstance(region, dict):
+                    continue
+                garments = region.get("garments")
+                if not isinstance(garments, list):
+                    continue
+                kept = [g for g in garments
+                        if not (isinstance(g, dict)
+                                and attire.is_bare_garment_state(g.get("name")))]
+                if len(kept) != len(garments):
+                    gone += [str(g.get("name")) for g in garments
+                             if isinstance(g, dict)
+                             and attire.is_bare_garment_state(g.get("name"))]
+                    region["garments"] = kept
+                    changed = True
+        # By removal, never by recompute -- `heal_scene`'s rule, for its
+        # reason: a pre-region wardrobe rebuilt from `regions` loses names.
+        wearing = [w for w in (entry.get("wearing") or [])
+                   if not attire.is_bare_garment_state(w)]
+        if wearing != (entry.get("wearing") or []):
+            entry["wearing"] = wearing
+            changed = True
+    return changed
+
+
+def observe_exposure(sc, known, worn_before):
+    """Fold one scene from a chat's history into what that history proves.
+
+    `known` is {body: {regions known uncovered by now}} and `worn_before` is
+    {(body, region): was covered at the previous observation}; both are
+    mutated, so calling this over a chat's checkpoints in TURN ORDER leaves
+    `known` holding exactly what was true by the last one. Order is the whole
+    method: a flag restored onto an earlier checkpoint than the beat that
+    earned it would assert a body was bared before it was.
+    """
+    if not isinstance(sc, dict):
+        return
+    for body, entry in (sc.get("attire") or {}).items():
+        regions = (entry or {}).get("regions")
+        if not isinstance(regions, dict):
+            continue
+        for region_name, region in regions.items():
+            if not isinstance(region, dict):
+                continue
+            key = (body, region_name)
+            covered_now = bool(_worn_garments(region))
+            if _already_licensed(region):
+                known.setdefault(body, set()).add(region_name)
+            elif worn_before.get(key) and not covered_now:
+                # A garment was here and is gone. The beat that set the flag
+                # may itself have been overwritten before this checkpoint was
+                # taken, so the transition is evidence in its own right.
+                known.setdefault(body, set()).add(region_name)
+            worn_before[key] = covered_now
+
+
+def heal_exposure(sc, known):
+    """Restore `uncovered` where this chat's history proves it was earned.
+
+    Only where the region is bare NOW: something covering it again is the one
+    state the flag must not be invented under, since the live path would have
+    had its own chance to set it when that covering leaves.
+    """
+    changed = False
+    if not isinstance(sc, dict):
+        return False
+    for body, entry in (sc.get("attire") or {}).items():
+        regions = (entry or {}).get("regions")
+        if not isinstance(regions, dict):
+            continue
+        for region_name in known.get(body) or ():
+            region = regions.get(region_name)
+            if not isinstance(region, dict):
+                continue
+            if _worn_garments(region) or _already_licensed(region):
+                continue
+            region["uncovered"] = True
+            changed = True
+    return changed
+
+
+def muted_surfaces(sc):
+    """Bare regions holding authored `beneath` prose no observer can reach.
+
+    Reported rather than healed on its own: a region that was NEVER covered
+    belongs here too and is correctly silent, so this counts the symptom and
+    `heal_exposure` decides which instances of it were losses.
+    """
+    out = []
+    if not isinstance(sc, dict):
+        return out
+    for body, entry in (sc.get("attire") or {}).items():
+        regions = (entry or {}).get("regions")
+        if not isinstance(regions, dict):
+            continue
+        for region_name, region in regions.items():
+            if not isinstance(region, dict):
+                continue
+            if _worn_garments(region) or _already_licensed(region):
+                continue
+            if str(region.get("beneath") or "").strip():
+                out.append((body, region_name))
+    return out
+
+
 # --- healing ----------------------------------------------------------------
 
 def heal_scene(sc):
@@ -546,6 +737,7 @@ def main():
     # are actually still happening.
     newest = {}
     healable = []
+    muted_examples = {}
 
     for row in rows:
         try:
@@ -567,6 +759,8 @@ def main():
         probe = json.loads(json.dumps(sc))
         if heal_scene(probe):
             healable.append(row["chat_id"])
+        for body, region in muted_surfaces(sc):
+            muted_examples.setdefault((row["chat_id"], body, region), None)
 
     print("=" * 70)
     print(f"INVARIANTS — ledgers that disagree ({len(rows)} scenes)")
@@ -603,12 +797,86 @@ def main():
 
     print()
     print(f"scenes with something healable: {sorted(set(healable))}")
+    if muted_examples:
+        # NOT presented as a defect count. A region that was never dressed
+        # belongs in this list and is correctly silent; only the chat's own
+        # history separates those from the ones that lost the licence, and
+        # only `--heal` walks it.
+        print(f"bare regions whose authored `beneath` prose is unreachable: "
+              f"{len(muted_examples)} "
+              f"(--heal restores the ones a chat's history proves were "
+              f"uncovered in play)")
+        for chat_id, body, region in sorted(muted_examples)[:8]:
+            print(f"         chat {chat_id}: {body} / {region}")
 
     if args.heal:
         target = sqlite3.connect(args.db, timeout=30)
         target.execute("PRAGMA busy_timeout=30000")
         target.row_factory = sqlite3.Row
         healed_scenes = healed_ckpts = 0
+        exposure_regions = exposure_ckpts = stripped_bodies = 0
+        # PER CHAT, IN TURN ORDER, and before the per-scene repairs below:
+        # this one is the only pass whose evidence is a chat's history rather
+        # than a scene, so it cannot ride the loops that walk scenes in
+        # whatever order the table hands them back.
+        chat_ids = [r["chat_id"] for r in target.execute(
+            "SELECT DISTINCT chat_id FROM world WHERE key='scene'"
+            + (" AND chat_id=?" if args.chat else ""),
+            (args.chat,) if args.chat else ()).fetchall()]
+        for chat_id in chat_ids:
+            known, worn_before = {}, {}
+            pending = []
+            for ck in target.execute(
+                    "SELECT id, turn_idx, blob FROM checkpoints WHERE chat_id=? "
+                    "ORDER BY turn_idx, id", (chat_id,)).fetchall():
+                try:
+                    blob = json.loads(ck["blob"])
+                    sc = _scene_of(blob)
+                except Exception:
+                    continue
+                if not isinstance(sc, dict):
+                    continue
+                touched = strip_state_word_garments(sc)
+                observe_exposure(sc, known, worn_before)
+                # Healed with what was known AS OF this turn, which is why the
+                # write is deferred: `known` is still growing.
+                if heal_exposure(sc, {b: set(r) for b, r in known.items()}) \
+                        or touched:
+                    as_str = isinstance(
+                        blob.get("world", {}).get("scene"), str)
+                    blob["world"]["scene"] = (
+                        json.dumps(sc) if as_str else sc)
+                    pending.append((ck["id"], json.dumps(blob)))
+            row = target.execute(
+                "SELECT value FROM world WHERE chat_id=? AND key='scene'",
+                (chat_id,)).fetchone()
+            live = json.loads(row["value"]) if row else None
+            restored = muted = 0
+            phantoms = False
+            if isinstance(live, dict):
+                phantoms = strip_state_word_garments(live)
+                if phantoms:
+                    stripped_bodies += 1
+                before = len(muted_surfaces(live))
+                if heal_exposure(live, known) or phantoms:
+                    muted = len(muted_surfaces(live))
+                    restored = before - muted
+                    exposure_regions += restored
+                    if not args.dry_run:
+                        target.execute(
+                            "UPDATE world SET value=? "
+                            "WHERE chat_id=? AND key='scene'",
+                            (json.dumps(live), chat_id))
+            if pending and not args.dry_run:
+                target.executemany(
+                    "UPDATE checkpoints SET blob=? WHERE id=?",
+                    [(b, i) for i, b in pending])
+            exposure_ckpts += len(pending)
+            if restored or phantoms:
+                print(f"  chat {chat_id}: restored `uncovered` on {restored} "
+                      f"region(s)"
+                      + (", unwore state-word garments" if phantoms else "")
+                      + f", {len(pending)} checkpoint(s)")
         for row in target.execute(
                 "SELECT chat_id, value FROM world WHERE key='scene'"
                 + (" AND chat_id=?" if args.chat else ""),
@@ -644,7 +912,10 @@ def main():
             target.commit()
         target.close()
         print(f"{'would heal' if args.dry_run else 'healed'}: "
-              f"{healed_scenes} scenes, {healed_ckpts} checkpoints")
+              f"{healed_scenes} scenes, {healed_ckpts} checkpoints; "
+              f"exposure restored on {exposure_regions} region(s) "
+              f"across {exposure_ckpts} checkpoint(s); "
+              f"state-word garments unwore on {stripped_bodies} scene(s)")
 
 
 if __name__ == "__main__":
