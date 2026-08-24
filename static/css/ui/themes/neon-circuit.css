@@ -1,0 +1,29 @@
+@layer ui-themes {
+  :root[data-theme="neon-circuit"] {
+    --ui-color-canvas: rgb(7 6 13);
+    --ui-color-canvas-subtle: rgb(12 9 21);
+    --ui-color-surface: rgb(20 14 34 / 88%);
+    --ui-color-surface-solid: rgb(14 10 24);
+    --ui-color-surface-raised: rgb(29 19 47 / 96%);
+    --ui-color-surface-muted: rgb(24 17 39 / 66%);
+    --ui-color-text: rgb(235 237 242);
+    --ui-color-text-muted: rgb(169 172 187);
+    --ui-color-text-faint: rgb(119 117 137);
+    --ui-color-border: rgb(159 135 196 / 21%);
+    --ui-color-border-strong: rgb(159 135 196 / 40%);
+    --ui-color-interactive: rgb(88 220 229);
+    --ui-color-interactive-strong: rgb(181 247 249);
+    --ui-color-interactive-soft: rgb(88 220 229 / 12%);
+    --ui-color-callout: rgb(209 165 87);
+    --ui-color-callout-soft: rgb(209 165 87 / 14%);
+    --ui-color-success: rgb(105 196 161);
+    --ui-color-warning: rgb(209 165 87);
+    --ui-color-danger: rgb(225 104 139);
+    --ui-color-info: rgb(158 119 221);
+    --ui-color-on-strong: rgb(8 13 17);
+    --ui-color-scrim: rgb(3 2 7 / 80%);
+    --ui-color-shadow: rgb(0 0 0 / 48%);
+    --ui-color-focus-inner: var(--ui-color-canvas);
+    --ui-color-focus-outer: var(--ui-color-interactive-strong);
+  }
+}

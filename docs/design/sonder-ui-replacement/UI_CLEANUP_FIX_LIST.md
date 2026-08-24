@@ -54,6 +54,12 @@ contract break, P2 is visible polish/consistency debt, and P3 is minor residue.
 | UI-025 | P2 | Person authoring / compact navigation | Fixed | The compact section strip exposed every peer and technical tab at once with a conspicuous native overflow treatment; the currently selected auxiliary task could scroll entirely out of sight. | Limit the persistent strip to peer content tabs plus More, use a restrained thin overflow treatment, and make the More summary itself carry auxiliary selected state. | Phone, narrow-phone, short-desktop, and short-landscape browser cases retain 44 px targets, horizontal-only section overflow, a visible active auxiliary summary, no page overflow, and no focusable control in a hidden panel or closed disclosure. |
 | UI-026 | P2 | Person authoring / visual evidence | Fixed | Initial evidence concentrated on one dense Character section and five viewports, leaving Persona, story-card, destructive, validation, localization, accessibility, and zoom states underrepresented. | Expand deterministic evidence across shared document owners, high-risk states, long localized labels, Accessibility Mode, and 200% zoom equivalent without treating work-in-progress screenshots as design authority. | Repeatable capture and browser tests cover Character, Persona, story-card, dirty discard, invalid Advanced JSON, English/Japanese copy, Accessibility Mode, 200% zoom equivalent, and the six reference geometry cases; every image is reviewed against the approved replacement composition. |
 | UI-027 | P1 | Library / story Character card | Fixed | The detail action emitted `mode=story-card`, but Library route normalization did not admit that maintained mode and immediately rewrote it to ordinary view. Runtime-only tests therefore passed while the real browser never entered the shared story-card workspace. | Admit story-card as a bounded Library authoring mode only for a selected Character with a valid Story context; keep its existing story-owned load/save authority and immutable identity rules. | In the real application, select a Character used by a Story and choose Edit Story card; the URL retains `mode=story-card` and `story=<id>`, the shared person workspace opens, identifies Story Character card, disables Name, and loads/saves through the Story-owned routes. |
+| UI-028 | P2 | Settings / alignment | Fixed | The search glyph used a fixed top offset, and section-specific empty status rows made the title-to-content gap vary between pages. | Center the glyph from the input's block size, remove empty status rows from layout, and retain one shared section rhythm. | Browser geometry checks the glyph center and equal section starts; desktop captures compare Experience, Content, Add-ons, and Maintenance at one viewport. |
+| UI-029 | P1 | Settings / narrator voice | Fixed | Four independently sized textareas wrapped into an unstable two-row block and obscured their shared purpose. | Preserve four drafts behind a single textarea and four ARIA tabs with complete keyboard movement. | Browser tests prove draft retention, save payload, ARIA state, arrow/Home/End movement, and responsive layout at 1440×900, 390×844, and 844×390. |
+| UI-030 | P2 | Settings / Add-ons | Fixed | Lifecycle buttons inconsistently repeated a terminal `(demo)` title marker and had weak visual boundaries. | Preserve authored extension titles, remove only a terminal case-insensitive `(demo)` from action labels and status copy, and add a subtle 0.5 px authored border to the action set. | A routed demo fixture retains `Campaign (demo)` while exposing Enable Campaign and Remove Campaign; source and computed-style assertions cover the border. |
+| UI-031 | P2 | Settings / iconography | Fixed | Maintenance reused an artifacted update glyph rather than a semantically specific reviewed symbol. | Add the supplied wrench path to the local sprite and map Maintenance to it without a network or font dependency. | Sprite, allowlist, filled-icon, navigation-href, and routed-render checks pass. |
+| UI-032 | P1 | Settings / themes | Fixed | Unsupported Legacy themes remained selectable while the curated set lacked the approved cyberpunk and warm-grey options. | Remove the Legacy selector, migrate its stale local field away, and add Neon Circuit plus a blue-free warm-greyscale Modern Slate. | Browser and source tests prove six curated choices, no Legacy control, first-paint support, reload persistence, and warm-neutral Modern Slate token ordering. |
+| UI-033 | P2 | Shared controls | Fixed | Native selects retained sharp platform geometry and inconsistent height; shared Search, New Story, and related buttons used oversized bold labels and could misalign inline symbols. | Give shared selects a compact glass treatment and common chevron; center button content with restrained type and a fixed icon gap while preserving compact-layout target minimums. | Settings and Library browser tests cover select geometry, focus, disabled and touch states, plus-icon alignment, and no horizontal overflow. |
 
 ## Explicitly investigated and not classified as defects
 
@@ -89,7 +95,8 @@ information-architecture authority.
 
 | ID | Priority | Status | Observed problem | Approved direction | Browser verification after feature approval |
 |---|---:|---|---|---|---|
-| UI-BL-01 | P2 | Backlog | The shipped theme choices do not provide a safe user-authored theme workflow, and unrestricted CSS would compromise layout, accessibility, and upgrade contracts. | Scope a separate semantic-token editor with preview, reset, contrast validation, and safe import/export. Arbitrary CSS and layout overrides remain out of bounds. | Create, preview, persist, reload, reset, export, and import a theme at desktop and compact viewports; block invalid contrast and non-token CSS/layout input without damaging the current theme. |
+| UI-BL-01 | P2 | Fixed | The shipped theme choices did not provide a safe user-authored theme workflow, and unrestricted CSS would compromise layout, accessibility, and upgrade contracts. | Implement the approved eight-role semantic-token editor with preview, reset, contrast validation, and safe import/export. Arbitrary CSS and layout overrides remain out of bounds. | Browser tests create, preview, persist, reload, reset, export, and import at desktop and compact viewports; malformed, extra-key, low-contrast, CSS, URL, and markup payloads fall back safely without damaging the current theme. |
+| UI-BL-02 | P2 | Planned | Direct category entry is efficient for repeat users but gives no clean scan-first map of where Settings tasks live or their current high-level state. | Make `#/settings` a grouped row ledger for Connections, Appearance, Story & host, and Advanced. Each row uses a local icon, plain title, optional owned summary, and chevron into an existing authoritative route. Keep search and every detailed page; copy no external assets, code, branding, or pixel values. | Verify ordered groups and routes, summary ownership, direct deep links, search, browser Back, focus/scroll restoration, unavailable Turn details, 44 px compact targets, and zero horizontal overflow across desktop, phone, short landscape, Japanese, large-interface, and 200-percent zoom-equivalent states. |
 
 The current Design Bible and approved replacement direction remain authoritative.
 This ledger is the sole retained product-facing record; no separate intake
@@ -184,3 +191,23 @@ verified on 2026-08-23 before integration.
 - `tools/project_check.py` continues to report only the seven previously
   recorded direct-import findings in the installed Directive extension test;
   this UI change does not modify that extension boundary.
+
+## Settings and theme polish record
+
+The Settings, curated/custom theme, and shared-control package was verified on
+2026-08-23 before integration.
+
+- The focused foundation, icon, runtime, Settings, custom-theme, and Library
+  gate passed 101 tests.
+- The complete browser suite passed 234 tests.
+- The complete repository suite passed 8,805 tests with 4 platform-specific
+  skips after two unrelated Windows directory-rename flakes passed on exact
+  isolated reruns.
+- The repeatable WP-17 capture produced 14 reviewed states spanning desktop,
+  phone, and short-landscape Settings plus desktop and phone Library controls.
+- The generated code map and complete project structure check passed.
+- The complete immutable UI graph is coherent at
+  `alpha98-ui6-57d168ae23cf`.
+- The grouped Settings overview requested during final review is recorded as
+  UI-BL-02 with its own design and executable follow-up plan; it is intentionally
+  not mixed into the frozen UI6 asset graph.
