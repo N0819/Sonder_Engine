@@ -1,6 +1,12 @@
 export const MODULE_RELEASE = "alpha98-ui13-a39372e1d8d1";
 
-export const LAYOUT_STATES = Object.freeze(["compact", "medium", "wide", "expansive"]);
+import { focusRouteTarget } from "../ui/components/route-focus.js?release=alpha98-ui13-a39372e1d8d1";
+import {
+  LAYOUT_STATES,
+  layoutStateFor,
+} from "./layout-contract.js?release=alpha98-ui13-a39372e1d8d1";
+
+export { LAYOUT_STATES };
 
 // UI_CATALOG_START: global shell shortcut and orientation labels.
 const SHELL_COPY = Object.freeze({
@@ -9,13 +15,6 @@ const SHELL_COPY = Object.freeze({
   closeLayer: "Close the top panel",
 });
 // UI_CATALOG_END
-
-function layoutStateFor(width, height) {
-  if (width < 720 || (height <= 430 && width < 900)) return "compact";
-  if (width < 1100) return "medium";
-  if (width < 1440) return "wide";
-  return "expansive";
-}
 
 function required(documentRef, selector) {
   const node = documentRef.querySelector(selector);
@@ -173,7 +172,7 @@ export function createApplicationShell(options = {}) {
         const restoredFocus = [...view.querySelectorAll("[data-focus-identity]")]
           .find(element => element.dataset.focusIdentity === activeIdentity);
         if (restoredFocus) {
-          target.requestAnimationFrame(() => restoredFocus.focus({ preventScroll: true }));
+          target.requestAnimationFrame(() => focusRouteTarget(restoredFocus));
         }
       }
       renderedData = data;
@@ -187,7 +186,7 @@ export function createApplicationShell(options = {}) {
         const focusTarget = destination === "library"
           ? view.querySelector('[data-focus-identity="destination:library"]')
           : heading;
-        focusTarget?.focus({ preventScroll: true });
+        focusRouteTarget(focusTarget);
       });
     }
   };

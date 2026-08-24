@@ -159,6 +159,22 @@ def test_library_has_one_workspace_for_filters_ledger_and_actions(
     expect(workspace.locator(".ui-library-workspace__actions")).to_have_count(0)
 
 
+def test_library_uses_the_canonical_field_control_contract(
+    page: Page, ui_base_url: str
+) -> None:
+    _open(page, ui_base_url)
+
+    controls = page.locator(
+        ".ui-library-workspace__filters :is(input, select), "
+        ".ui-library__toolbar :is(input, select)"
+    )
+    assert controls.count() >= 4
+    assert controls.evaluate_all(
+        "nodes => nodes.every(node => node.classList.contains('ui-field__control'))"
+    )
+    expect(page.locator(".ui-library-workspace .ui-input")).to_have_count(0)
+
+
 def test_library_actions_center_compact_icon_and_label_geometry(
     page: Page, ui_base_url: str
 ) -> None:
@@ -182,7 +198,7 @@ def test_library_actions_center_compact_icon_and_label_geometry(
     assert geometry["display"] in {"flex", "inline-flex"}, geometry
     assert geometry["alignItems"] == "center", geometry
     assert geometry["gap"] == 6, geometry
-    assert geometry["fontSize"] == 13, geometry
+    assert geometry["fontSize"] == 14, geometry
     assert abs(geometry["iconCenter"] - geometry["labelCenter"]) <= 1, geometry
 
     sort_select = page.get_by_role("combobox", name="Sort Library")
@@ -196,8 +212,8 @@ def test_library_actions_center_compact_icon_and_label_geometry(
           };
         }"""
     )
-    assert 3 <= select_style["radius"] <= 4, select_style
-    assert select_style["fontSize"] == 13, select_style
+    assert select_style["radius"] == 9, select_style
+    assert select_style["fontSize"] == 14, select_style
     assert select_style["appearance"] == "none", select_style
     assert page.get_by_role("heading", name="Library", level=2).evaluate(
         "node => getComputedStyle(node).outlineStyle"

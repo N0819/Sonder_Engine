@@ -60,6 +60,105 @@ def test_shell_exposes_three_destinations_and_truthful_empty_play(
     assert page.get_by_text("Provider", exact=True).count() == 0
 
 
+def test_layout_contract_classifies_viewports_and_bounds_pinned_context(
+    page: Page, ui_base_url: str
+) -> None:
+    page.goto(f"{ui_base_url}/static/ui-next-lab.html")
+    result = page.evaluate(
+        """async (base) => {
+          const layout = await import(
+            `${base}/static/js/ui-next/layout-contract.js?release=alpha98-ui13-a39372e1d8d1`
+          );
+          return {
+            states: [
+              layout.layoutStateFor(390, 844),
+              layout.layoutStateFor(844, 390),
+              layout.layoutStateFor(1024, 768),
+              layout.layoutStateFor(1280, 800),
+              layout.layoutStateFor(1440, 900),
+            ],
+            narrowPin: layout.canPinContext({
+              viewportWidth: 1280, railWidth: 192, drawerWidth: 360,
+            }),
+            expansivePin: layout.canPinContext({
+              viewportWidth: 1440, railWidth: 192, drawerWidth: 360,
+            }),
+            modes: [
+              layout.contextMode({ requestedOpen: false, requestedPinned: true }),
+              layout.contextMode({
+                requestedOpen: true, requestedPinned: true,
+                viewportWidth: 1280, railWidth: 192, drawerWidth: 360,
+              }),
+              layout.contextMode({
+                requestedOpen: true, requestedPinned: true,
+                viewportWidth: 1440, railWidth: 192, drawerWidth: 360,
+              }),
+            ],
+          };
+        }""",
+        ui_base_url,
+    )
+    assert result == {
+        "states": ["compact", "compact", "medium", "wide", "expansive"],
+        "narrowPin": False,
+        "expansivePin": True,
+        "modes": ["closed", "overlay", "pinned"],
+    }
+
+
+def test_programmatic_route_focus_is_quiet_but_keyboard_focus_stays_visible(
+    page: Page, ui_base_url: str
+) -> None:
+    _open_shell(page, ui_base_url)
+
+    heading = page.get_by_role("heading", name="Play", level=1)
+    expect(heading).to_be_focused()
+    expect(heading).to_have_class(re.compile(r"\bui-route-focus-target\b"))
+    quiet_focus = heading.evaluate(
+        """node => ({
+          outline: getComputedStyle(node).outlineStyle,
+          shadow: getComputedStyle(node).boxShadow,
+        })"""
+    )
+    assert quiet_focus == {"outline": "none", "shadow": "none"}
+
+    page.keyboard.press("Tab")
+    focused = page.locator(":focus")
+    assert focused.evaluate("node => node.matches('a, button, input, select, textarea')")
+    assert focused.evaluate("node => getComputedStyle(node).boxShadow") != "none"
+
+
+def test_progressive_interface_tokens_are_the_shared_visual_contract(
+    page: Page, ui_base_url: str
+) -> None:
+    page.goto(f"{ui_base_url}/static/ui-next-lab.html")
+    tokens = page.evaluate(
+        """() => {
+          const style = getComputedStyle(document.documentElement);
+          const values = [
+            '--ui-text-micro', '--ui-text-meta', '--ui-text-control',
+            '--ui-text-body', '--ui-text-section', '--ui-text-page',
+            '--ui-radius-sm', '--ui-radius-md', '--ui-radius-lg',
+            '--ui-control-default', '--ui-target-touch',
+          ];
+          return Object.fromEntries(values.map(name => [name, style.getPropertyValue(name).trim()]));
+        }"""
+    )
+    assert tokens == {
+        "--ui-text-micro": "12px",
+        "--ui-text-meta": "13px",
+        "--ui-text-control": "14px",
+        "--ui-text-body": "15px",
+        "--ui-text-section": "17px",
+        "--ui-text-page": "24px",
+        "--ui-radius-sm": "6px",
+        "--ui-radius-md": "9px",
+        "--ui-radius-lg": "14px",
+        "--ui-control-default": "40px",
+        "--ui-target-touch": "44px",
+    }
+
+
 def test_destination_navigation_refresh_and_history_preserve_orientation(
     page: Page, ui_base_url: str
 ) -> None:
