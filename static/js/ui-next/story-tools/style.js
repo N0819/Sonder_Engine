@@ -1,7 +1,7 @@
-export const MODULE_RELEASE = "alpha98-ui10-0415f377b12f";
+export const MODULE_RELEASE = "alpha98-ui11-0acc47fb0573";
 
-import { element, errorState, fieldLabel, frameQuery, replaceLocalized, stateMessage, toolScope } from "./shared.js?release=alpha98-ui10-0415f377b12f";
-import { mountDocumentEditor } from "./document-editor.js?release=alpha98-ui10-0415f377b12f";
+import { element, errorState, fieldLabel, frameQuery, replaceLocalized, stateMessage, toolScope } from "./shared.js?release=alpha98-ui11-0acc47fb0573";
+import { mountDocumentEditor } from "./document-editor.js?release=alpha98-ui11-0acc47fb0573";
 
 // UI_CATALOG_START: Style tool copy and field labels.
 const COPY = Object.freeze({

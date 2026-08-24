@@ -46,7 +46,7 @@ def test_root_serves_only_the_static_application_to_a_valid_host(
 
     assert response.status_code == 200
     assert 'data-ui-next-entry="application"' in response.text
-    assert '/static/js/ui-next/main.js?release=alpha98-ui10-0415f377b12f' in response.text
+    assert '/static/js/ui-next/main.js?release=alpha98-ui11-0acc47fb0573' in response.text
     assert "/api/" not in response.text
     assert "Baseline Story" not in response.text
 

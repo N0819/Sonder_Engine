@@ -295,7 +295,7 @@ as the UI10 package.
   approved reference-composition departure is recorded in
   DEV-UI-2026-08-24-C above.
 - The complete immutable UI graph is coherent at
-  `alpha98-ui10-0415f377b12f`.
+  `alpha98-ui11-0acc47fb0573`.
 
 ## Single-method Settings correction
 
