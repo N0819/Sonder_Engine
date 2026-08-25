@@ -1794,6 +1794,103 @@ def persona_export_document(sheet: dict, source: dict | None = None) -> dict:
     }
 
 
+@functools.lru_cache(maxsize=1)
+def _canonical_card_shape():
+    """Every path the card schema declares, and the single home of each
+    MAP-valued leaf name.
+
+    The default sheet IS the list of keys the engine reads, so a name that
+    lives at exactly one path there has exactly one reader. Map-valued only:
+    a scalar name like `notes` or `summary` recurs innocently all over a card,
+    and naming a scalar's unrelated home would send an author to the wrong
+    field. Cached, because the map is derived from a constant and nine
+    card-producing routes ask for it. Treat the returned dicts as read-only.
+    """
+    paths, homes = {}, {}
+
+    def walk(node, prefix):
+        for key, value in node.items():
+            path = f"{prefix}.{key}" if prefix else key
+            paths[path] = value
+            if isinstance(value, dict):
+                homes.setdefault(key, []).append(path)
+                walk(value, path)
+
+    walk(default_character_data("x"), "")
+    return paths, {name: found[0] for name, found in homes.items()
+                   if len(found) == 1}
+
+
+def _at_path(sheet, path):
+    node = sheet
+    for part in path.split("."):
+        if not isinstance(node, dict):
+            return None
+        node = node.get(part)
+    return node
+
+
+def _dead_sibling_keys(sheet):
+    """Populated maps authored under a name the schema reads somewhere ELSE.
+
+    A key the engine does not read is silence: it normalizes, archives and
+    round-trips intact, so an author who filled it has every reason to think
+    the story can see it. The recognizable case is the SHADOW -- the same leaf
+    name under a different parent, with the content in the copy nobody reads
+    and the consumed one left at its skeleton.
+
+    Reported only when the dead copy carries MORE content than the live one,
+    which is the test `repair_character_shape` already uses to decide which
+    copy is real: if the read key is filled too, the card behaves as written
+    and a warning would only teach an author to stop reading warnings. An
+    extension key the schema has never heard of is not a dead sibling and is
+    not reported.
+    """
+    paths, homes = _canonical_card_shape()
+    found = []
+
+    def walk(node, prefix):
+        for key, value in node.items():
+            path = f"{prefix}.{key}" if prefix else key
+            if path in paths:
+                if isinstance(value, dict) and isinstance(paths[path], dict):
+                    walk(value, path)
+                continue
+            home = homes.get(key)
+            if (home and isinstance(value, dict)
+                    and _content_weight(value)
+                    > _content_weight(_at_path(sheet, home))):
+                found.append((path, home))
+
+    if isinstance(sheet, dict):
+        walk(sheet, "")
+    return found
+
+
+def _unmatchable_known_by(sheet):
+    """`known_by` entries that no viewer can ever be.
+
+    A private entry is routed to a viewer by exact equality against their
+    display name, folding case and stripping the ends -- nothing else. A
+    separator-joined token is therefore not a name the matcher can reach,
+    whether it was meant as a person written in identifier style or as a class
+    of people; either way the entry stays private forever and nothing says so.
+
+    Only the decidable half is reported: whether a spaced phrase names
+    somebody needs the cast, which a sheet on its own does not have.
+    """
+    out, seen = [], set()
+    for entry in ((sheet.get("knowledge") or {}).get("private_history") or []):
+        if not isinstance(entry, dict):
+            continue
+        for who in (entry.get("known_by") or []):
+            text = str(who).strip()
+            if "_" in text and text.casefold() not in seen:
+                seen.add(text.casefold())
+                out.append(text)
+    return out
+
+
 def character_card_warnings(sheet):
     """What is missing from a character CARD that will make them read as
     passive, as a list of human-readable strings.
@@ -1880,6 +1977,32 @@ def character_card_warnings(sheet):
             "it — nobody in the story will ever notice it. Add it under Extra "
             "body parts in the character editor, or re-import with AI "
             "reinterpretation."
+        )
+    # AUTHORED INTO A KEY WITH NO READER. Content in a dead sibling of a
+    # consumed key is the quietest failure a card has: it survives normalize
+    # (`extra = "allow"`), survives the archive, and the story runs on the
+    # skeleton beside it. Measured on a stored card carrying stance numbers
+    # under `psychology.baseline_stances` while `social.baseline_stances` --
+    # the only one `character_initial_stance` reads -- stayed all zeros.
+    for path, home in _dead_sibling_keys(sheet):
+        warnings.append(
+            "This card fills %s, which nothing in the engine reads. The same "
+            "field is read at %s, and there it is still empty \u2014 move the "
+            "content there, or the story runs without it." % (path, home)
+        )
+    # A NAME LIST HOLDING A DESCRIPTION. Private history reaches a viewer by
+    # exact name match, case aside, so an entry that is not somebody's name is
+    # an entry nobody will ever be.
+    unmatchable = _unmatchable_known_by(sheet)
+    if unmatchable:
+        shown = ", ".join(unmatchable[:5])
+        if len(unmatchable) > 5:
+            shown += " and %d more" % (len(unmatchable) - 5)
+        warnings.append(
+            "knowledge.private_history shares an entry with whoever is named "
+            "in known_by, matched against their name exactly. %s cannot be "
+            "anyone's name, so those entries stay private to this character "
+            "forever. Write the names as the story spells them." % shown
         )
     return warnings
 

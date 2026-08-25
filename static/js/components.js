@@ -1027,7 +1027,7 @@ function phEditor(entries, withAbout) {
   const wrap = el("div"), rows = [];
   const addRow = e => {
     const c = el("textarea", { style: "width:100%", rows: "2" }, e.content || "");
-    const k = el("input", { style: "flex:1", placeholder: "known_by (comma-separated; empty = only owner)", value: (e.known_by || []).join(", ") });
+    const k = el("input", { style: "flex:1", placeholder: "known_by (comma-separated NAMES, matched exactly; empty = only owner)", value: (e.known_by || []).join(", ") });
     const a = withAbout ? el("input", { placeholder: "about (optional)", value: e.about || "" }) : null;
     const row = el("div", { class: "card" }, c, el("div", { class: "row" }, k, a, el("button", { onclick: () => { row.remove(); rows.splice(rows.indexOf(row), 1) } }, "✕")));
     row._read = () => ({ content: c.value, about: a ? a.value : undefined, known_by: k.value.split(",").map(s => s.trim()).filter(Boolean) });

@@ -115,6 +115,7 @@ from .common import (
     assign_event_ids,
     authored_other_subject,
     bind_sequence_targets,
+    collapse_duplicate_events,
     canonicalize_positions,
     reconcile_cast_entity_names,
     character_room,
@@ -1058,9 +1059,21 @@ def _reconcile_interpretation(ctx, out, sc):
         new_elems = assign_event_ids(
             additions["sequence"], f"turn:{ctx.turn.id}:repair")
         if new_elems:
-            out["sequence"] = list(out.get("sequence") or []) + new_elems
-            _sync_sequence_mirrors(out)
-            recon["repaired"] = True
+            # MERGED THROUGH THE COLLAPSE, not concatenated. The repair is
+            # licensed to ADD what the coverage check found uncovered, and an
+            # element restating an already asserted event is by construction
+            # not that. Existing elements come first so they are always the
+            # survivors -- the repair can only lose its own restatements,
+            # never the declaration it was called to supplement.
+            _existing = list(out.get("sequence") or [])
+            _merged = collapse_duplicate_events(
+                _existing + new_elems,
+                warn=lambda _w: ctx.add_warning("interpret repair: %s" % _w),
+                asserted=len(_existing))
+            if len(_merged) > len(_existing):
+                out["sequence"] = _merged
+                _sync_sequence_mirrors(out)
+                recon["repaired"] = True
         rmv = repair.get("movement")
         already_moving = isinstance(out.get("movement"), dict) \
             and out["movement"].get("to_room")

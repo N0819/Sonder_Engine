@@ -9,9 +9,9 @@
 | `agents/__init__.py` | 95 | Backward-compatible facade for the role-specific agent package. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `story.scene` |
 | `agents/background.py` | 1189 |  | `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `persist.commit`, `story.character_schema`, `story.scene`, `world.background_claims`, `world.spatial` |
 | `agents/character.py` | 3695 | Private character decision agent. | `agents.common`, `core.db`, `core.frames`, `llm.prompts`, `llm.schemas`, `mind`, `mind.affect`, `mind.memory`, `mind.memory_judge`, `mind.psychology_runtime`, `mind.theory_of_mind`, `story.character_schema`, `story.scene`, `world.gaps`, `world.place_purpose`, `world.spatial`, `world.survival` |
-| `agents/common.py` | 7639 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.scene`, `world`, `world.spatial` |
+| `agents/common.py` | 7741 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.scene`, `world`, `world.spatial` |
 | `agents/composer.py` | 2585 |  | `agents.common`, `story.scene`, `world.spatial` |
-| `agents/director.py` | 3960 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial`, `world.survival` |
+| `agents/director.py` | 3973 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial`, `world.survival` |
 | `agents/director_contact.py` | 457 |  | `story.character_schema`, `world.spatial` |
 | `agents/director_evidence.py` | 927 |  | `agents.common`, `agents.director_lingua`, `llm`, `world.spatial` |
 | `agents/director_fanout.py` | 631 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
@@ -88,7 +88,7 @@
 | `story/attire.py` | 3029 |  | — |
 | `story/authored_events.py` | 152 |  | `core.db` |
 | `story/carriers.py` | 788 |  | `core.db`, `story.character_schema`, `story.scene`, `world`, `world.spatial` |
-| `story/character_schema.py` | 1915 | Versioned character/persona defaults, normalization, accessors, and export payloads. | `llm.schemas`, `story` |
+| `story/character_schema.py` | 2038 | Versioned character/persona defaults, normalization, accessors, and export payloads. | `llm.schemas`, `story` |
 | `story/couriers.py` | 1122 |  | `story.carriers`, `world` |
 | `story/dialogue_colors.py` | 268 |  | — |
 | `story/greetings.py` | 982 |  | `agents.runtime`, `agents.storage`, `core`, `llm.llm_quality`, `llm.prompts`, `mind.memory`, `mind.theory_of_mind`, `story.character_schema`, `story.importers` |
@@ -197,14 +197,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `norm_sequence()` | 2512 | 283 lines |
-| `_check_narrator_fidelity()` | 7195 | 198 lines |
-| `_scrub_invented_dialogue()` | 6041 | 151 lines |
+| `norm_sequence()` | 2613 | 284 lines |
+| `_check_narrator_fidelity()` | 7297 | 198 lines |
+| `_scrub_invented_dialogue()` | 6143 | 151 lines |
 | `_extract_authority_claims()` | 2024 | 120 lines |
-| `_unknown_actor_label()` | 3136 | 118 lines |
-| `cast_spelling_policy()` | 3657 | 118 lines |
+| `_unknown_actor_label()` | 3238 | 118 lines |
+| `cast_spelling_policy()` | 3759 | 118 lines |
 | `observer_body_regions()` | 1202 | 117 lines |
-| `_check_pronoun_fidelity()` | 6417 | 110 lines |
+| `_check_pronoun_fidelity()` | 6519 | 110 lines |
 
 ### `agents/composer.py`
 
@@ -223,14 +223,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `director_resolve()` | 2361 | 1566 lines |
-| `director_interpret()` | 434 | 567 lines |
-| `_reconcile_resolution()` | 1357 | 490 lines |
-| `_run_specialists()` | 2029 | 224 lines |
-| `director_establish()` | 295 | 137 lines |
-| `_reconcile_interpretation()` | 1003 | 119 lines |
-| `_specialist_repairs()` | 1184 | 119 lines |
-| `_prose_gate_facts()` | 1911 | 92 lines |
+| `director_resolve()` | 2374 | 1566 lines |
+| `director_interpret()` | 435 | 567 lines |
+| `_reconcile_resolution()` | 1370 | 490 lines |
+| `_run_specialists()` | 2042 | 224 lines |
+| `director_establish()` | 296 | 137 lines |
+| `_reconcile_interpretation()` | 1004 | 131 lines |
+| `_specialist_repairs()` | 1197 | 119 lines |
+| `_prose_gate_facts()` | 1924 | 92 lines |
 
 ### `agents/director_contact.py`
 
@@ -1039,8 +1039,8 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `normalize_character_data()` | 1079 | 159 lines |
+| `character_card_warnings()` | 1894 | 114 lines |
 | `default_character_data()` | 590 | 107 lines |
-| `character_card_warnings()` | 1797 | 88 lines |
 | `_normalize_psychology()` | 314 | 83 lines |
 | `repair_character_shape()` | 1020 | 57 lines |
 | `_normalize_extra_parts()` | 536 | 52 lines |

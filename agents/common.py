@@ -2412,6 +2412,107 @@ def _promoted_stage_action(span, speech_elem):
     }
 
 
+def collapse_duplicate_events(sequence, warn=None, asserted=None):
+    """One declared act is one event.
+
+    `speech`, `action` and `actions` are MIRRORS of `sequence`, not additional
+    channels -- and `norm_sequence` treated them as additional, appending every
+    entry of the scalar mirrors on top of a sequence that already held them.
+    Measured on the real validated path:
+    `{"sequence": [speech, "squirm", speech], "actions": [{"attempt": "squirm"}]}`
+    came out as FOUR elements, and `assign_event_ids` labelled the one squirm
+    `turn:1:player:1:action` AND `turn:1:player:3:action`. Nothing downstream
+    collapsed them, so one declared act was adjudicated, perceived and narrated
+    twice.
+
+    IDENTITY IS THE DECLARATION, not the slot it arrived in: type, normalized
+    content, targets, `stage` and `phase`. `stage`/`phase` are IN the key on
+    purpose -- a declaration decomposed into approach-then-contact repeats its
+    own text and is genuinely two events.
+
+    The base tier is EXACT, and that is the whole safety argument. Dropping
+    declared conduct is the failure this seam exists to prevent, so a
+    restatement has to be a restatement: same words, same target, same phase.
+    "grab the rifle" and "grab the rifle and rack it" overlap completely
+    against the shorter and are two different declarations.
+
+    `asserted` opens the narrower second tier for a REPAIR merge: elements at
+    or after that index are additions, licensed only to cover a clause the
+    coverage check found uncovered, and an addition that restates an already
+    asserted action is by construction not that. Only there is content-word
+    overlap used, on the same measure `_dedupe_promoted_actions` applies.
+
+    A dropped element's dependents are rewritten onto its survivor, or
+    `settle_sequence_dispositions` would block them as a missing prerequisite.
+    """
+    rows = [e for e in (sequence or []) if isinstance(e, dict)]
+    if len(rows) < 2:
+        return list(sequence or [])
+
+    def _norm(text):
+        return " ".join(str(text or "").casefold().split())
+
+    def _content(element):
+        kind = str(element.get("type") or "action")
+        if kind == "speech":
+            return _norm(element.get("text"))
+        if kind == "communication":
+            return _norm("%s %s" % (element.get("act") or "",
+                                    element.get("content") or ""))
+        if kind == "event":
+            return _norm(element.get("description"))
+        return _norm(element.get("observable") or element.get("attempt"))
+
+    def _key(element):
+        targets = sorted(str(t or "").strip().casefold()
+                         for t in (element.get("targets") or []))
+        return (str(element.get("type") or "action"), _content(element),
+                tuple(targets), str(element.get("stage") or ""),
+                str(element.get("phase") or ""))
+
+    def _words(text):
+        words = re.sub(r"[^\w\s]", " ", str(text or "")).lower().split()
+        return {w for w in words if w not in _ling("_OVERLAP_STOPWORDS")}
+
+    seen, kept, redirect = {}, [], {}
+    for index, element in enumerate(rows):
+        key = _key(element)
+        survivor = seen.get(key)
+        if survivor is None and asserted is not None and index >= asserted \
+                and str(element.get("type") or "action") == "action":
+            mine = _words(element.get("observable") or element.get("attempt"))
+            if len(mine) >= 3:
+                for earlier in kept:
+                    if str(earlier.get("type") or "action") != "action":
+                        continue
+                    theirs = _words(earlier.get("observable")
+                                    or earlier.get("attempt"))
+                    if len(theirs) >= 3 and (
+                            len(mine & theirs) / min(len(mine), len(theirs))
+                            >= 0.8):
+                        survivor = earlier
+                        break
+        if survivor is None:
+            seen[key] = element
+            kept.append(element)
+            continue
+        for field in ("event_id", "phase_id"):
+            dropped_id = str(element.get(field) or "")
+            if dropped_id:
+                redirect[dropped_id] = str(survivor.get(field) or "")
+        if warn is not None:
+            warn("dropped a restatement of an already declared act: %r"
+                 % (_content(element)[:80],))
+    if redirect:
+        for element in kept:
+            deps = element.get("depends_on")
+            if isinstance(deps, list):
+                element["depends_on"] = [
+                    redirect.get(str(d), d) for d in deps
+                    if redirect.get(str(d), d)]
+    return kept
+
+
 def _dedupe_promoted_actions(clean):
     """Drop a promoted action the character ALSO declared properly.
 
@@ -2741,6 +2842,7 @@ def norm_sequence(out, warn=None):
     # A promoted stage direction the character also declared as a real action
     # is the same act twice, and the narrator rendered both.
     clean = _dedupe_promoted_actions(clean)
+    clean = collapse_duplicate_events(clean, warn=warn)
     # Deterministic concealment backstop (leak-safe). A hushed or unmarked
     # line co-declared with a concealed action is almost always the private
     # communication itself; weak models routinely mark the ACTION concealed

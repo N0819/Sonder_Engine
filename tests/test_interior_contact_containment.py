@@ -416,3 +416,83 @@ class TestAnAuthoredAssertionIsOneRow:
         from story.authored_events import _event_id
 
         assert _event_id(1, "the bell rings") != _event_id(2, "the bell rings")
+
+
+class TestOneDeclaredActIsOneEvent:
+    """`speech`/`action`/`actions` are MIRRORS of `sequence`, not additional
+    channels -- and `norm_sequence` appended the mirrors on top of a sequence
+    that already held them.
+
+    Measured on the real validated path: a sequence of
+    `[speech, "squirm", speech]` plus `actions: [{"attempt": "squirm"}]` came
+    out as FOUR elements, and `assign_event_ids` labelled the one squirm with
+    two different ids. Nothing downstream collapsed them, so one declared act
+    was adjudicated, perceived and narrated twice.
+    """
+
+    def test_a_mirror_of_an_already_declared_act_is_not_a_second_event(self):
+        from agents.common import collapse_duplicate_events
+
+        warns = []
+        out = collapse_duplicate_events([
+            {"type": "speech", "text": "Hello."},
+            {"type": "action", "attempt": "squirm"},
+            {"type": "speech", "text": "Goodbye."},
+            {"type": "action", "attempt": "squirm"}], warn=warns.append)
+        assert [e["type"] for e in out] == ["speech", "action", "speech"]
+        assert warns and "restatement" in warns[0]
+
+    def test_the_base_tier_is_exact_and_that_is_the_safety_argument(self):
+        """Dropping declared conduct is the failure this seam exists to
+        prevent. These two overlap completely against the shorter and are two
+        different declarations."""
+        from agents.common import collapse_duplicate_events
+
+        out = collapse_duplicate_events([
+            {"type": "action", "attempt": "grab the rifle"},
+            {"type": "action", "attempt": "grab the rifle and rack it"}])
+        assert len(out) == 2
+
+    def test_the_same_words_at_a_different_phase_are_two_events(self):
+        """A declaration decomposed into approach-then-contact repeats its own
+        text and is genuinely two events."""
+        from agents.common import collapse_duplicate_events
+
+        out = collapse_duplicate_events([
+            {"type": "action", "attempt": "reach", "phase": "onset"},
+            {"type": "action", "attempt": "reach", "phase": "continuation"}])
+        assert len(out) == 2
+
+    def test_the_same_words_at_a_different_target_are_two_events(self):
+        from agents.common import collapse_duplicate_events
+
+        out = collapse_duplicate_events([
+            {"type": "action", "attempt": "steady", "targets": ["A"]},
+            {"type": "action", "attempt": "steady", "targets": ["B"]}])
+        assert len(out) == 2
+
+    def test_a_dependent_follows_the_survivor(self):
+        """Otherwise `settle_sequence_dispositions` blocks it as a missing
+        prerequisite -- the dependency would point at an id that no longer
+        exists."""
+        from agents.common import collapse_duplicate_events
+
+        out = collapse_duplicate_events([
+            {"type": "action", "attempt": "open", "event_id": "a"},
+            {"type": "action", "attempt": "open", "event_id": "b"},
+            {"type": "action", "attempt": "enter", "depends_on": ["b"]}])
+        assert [e.get("depends_on") for e in out if e.get("depends_on")] \
+            == [["a"]]
+
+    def test_the_repair_tier_only_judges_its_own_additions(self):
+        """A repair element restating an asserted one is not the uncovered
+        clause it was called to add. The asserted half is never judged."""
+        from agents.common import collapse_duplicate_events
+
+        asserted = [{"type": "action", "attempt": "sets a hand on her shoulder"}]
+        addition = [{"type": "action",
+                     "attempt": "sets a hand flat on her shoulder"}]
+        out = collapse_duplicate_events(asserted + addition,
+                                        asserted=len(asserted))
+        assert len(out) == 1
+        assert out[0]["attempt"] == "sets a hand on her shoulder"
