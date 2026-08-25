@@ -15,7 +15,8 @@ Import direction: nothing outside `agents/director*.py` may import an
 from story.character_schema import character_name_from_text
 from core.db import get_setting, wget
 from world.survival import survival_enabled, vitals_of
-from world.spatial import contact_id
+from world.spatial import (contact_action_ledger_index, contact_id,
+                           substance_ledger_index)
 
 from .common import (communication_surface, observable_action_text,
                      scene_compact_attire)
@@ -347,6 +348,25 @@ def _specialist_payload(name, ctx, sc, view, extras):
                 for eid, e in (sc.get("entities") or {}).items()
             },
             "worn_garments": worn_index,
+            # THIS HAND'S OWN TWO LEDGERS, handed back with the ids its
+            # documented ops address. It alone owns `substance_ops` and
+            # `contact_action_ops`, and it had never seen either ledger: its
+            # sheet says "Use {op:'remove',substance_id} when a known record
+            # is drained, washed away..." while no substance_id had ever
+            # reached it, so the op could not be written. Measured
+            # corpus-wide before this: 38 adds against 5 removes and zero
+            # removes after turn 38 of the reference story, which
+            # DESIGN_MATERIAL_MODEL.md §1 reads as prompt efficacy rather
+            # than a missing mechanism -- untestable until the ids arrive.
+            # The effect ledger is the same story: with nothing to name,
+            # `change` was unreachable and a reworded `add` was the only
+            # move, which is how one dynamic came to stand as three rows.
+            #
+            # This widens what the OWNER can ADDRESS, not what any mind
+            # knows: Director payloads are objective-causality surfaces, no
+            # cognition payload changes, and no other hand gains the keys.
+            "substances": substance_ledger_index(sc),
+            "contact_actions": contact_action_ledger_index(sc),
         })
         if extras.get("body_parts"):
             payload["body_parts"] = extras["body_parts"]

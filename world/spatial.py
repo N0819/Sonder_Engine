@@ -131,12 +131,13 @@ from world.spatial_substance import (
     _substance_placement, _SUBSTANCE_PLACEMENTS, _substance_target_exists,
     _substance_text, _material_phrase, actions_for_contact,
     apply_contact_action_ops, apply_substance_ops, contact_action_clause,
+    contact_action_ledger_index,
     contact_actions_for_observer, contact_actions_of,
     resolve_contact_action_ref, SUBSTANCE_AMOUNT_BANDS, SUBSTANCE_PORTIONS,
     substance_amount_band, substance_portion,
     ARTICULATION_SLURRED, ARTICULATION_STIFLED,
     resolve_substance_ops, speech_articulation_impediment,
-    substance_event_clause, substances_for,
+    substance_event_clause, substance_ledger_index, substances_for,
 )
 
 

@@ -140,7 +140,8 @@ from persist.commit_background import (BACKGROUND_PROMOTION_DIALOGUE_THRESHOLD,
     auto_promote_background_characters)
 from persist.commit_scene_state import (_anchor_current_room, sync_anchored_books,
     _guard_occupied_mover_removal, _advance_ground, prepare_scene_commit,
-    commit_scene, _record_subject_last_seen)
+    commit_scene, _record_subject_last_seen, _dedupe_overlay_entries,
+    _merge_overlays, _overlay_handles)
 from persist.commit_mechanics import (commit_transit_sweep, commit_world_event_spine,
     commit_information_carriers, commit_cast_changes)
 from persist.commit_memory import (RECENT_TELLS_CAP, _durable_dialogue_category,

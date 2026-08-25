@@ -259,8 +259,39 @@ _ENTITY_DEFAULT_FIELDS = {
 #: reconciliation problem the S3-A8 detector watches, not an expiry rule to
 #: slip in beside it.
 _TRANSIENT_ENTITY_STATE_KEYS = frozenset({
-    "breath", "breathing", "voice_quality",
+    "breath", "breathing", "voice_quality", "expression", "gaze",
 })
+
+#: The same membership rule stated as a SHAPE rather than a list, because a
+#: momentary key is minted freely: `state` is open free text, so a fixed
+#: allowlist can only ever name the momentary keys some story already wrote.
+#: A name ending in one of these says the value is a PROCESS or a READING --
+#: what a body or a part is doing or registering this instant -- and a
+#: process is false the moment the beat that held it ends.
+#:
+#: `_register` is deliberately NOT here: a compound like a till, a ledger or
+#: a shift `x_register` is a THING, not a reading, and the family therefore
+#: fails open. That is the correct direction to fail: a momentary key that
+#: lingers is stale prose the next beat overwrites, while a configuration
+#: key wrongly called momentary silently DELETES authored state.
+_TRANSIENT_ENTITY_STATE_SUFFIXES = ("_action", "_motion", "_sensation")
+
+
+def _is_transient_state_key(key) -> bool:
+    """Whether one entity-`state` key names a momentary process or reading.
+
+    Calibration, re-measured over all 77 stored scene blobs on 2026-08-25:
+    the predicate captures 31 of 1,270 stored key-occurrences under nine
+    distinct names -- `gaze` 10, `expression` 10, `voice_quality` 2,
+    `breath` 2, and 7 more across five process-suffix keys -- and none of
+    the other 370 distinct keys, every one of which is a configuration:
+    `power_state`, `lock_status`, `held_items`, `posture`. Twenty-seven of
+    those occurrences were newly reachable. The live case is chat 88, where
+    a process key set at turn 56 was still standing at turn 67.
+    """
+    folded = str(key or "").strip().casefold()
+    return (folded in _TRANSIENT_ENTITY_STATE_KEYS
+            or folded.endswith(_TRANSIENT_ENTITY_STATE_SUFFIXES))
 
 
 def _merge_entity(entity_id, existing: dict, incoming: dict) -> dict:
@@ -320,31 +351,87 @@ def _merge_entity(entity_id, existing: dict, incoming: dict) -> dict:
     return merged
 
 
-def _expire_transient_entity_state(entities, incoming_entities):
-    """Drop momentary state keys the incoming diff did not re-assert.
+def _entity_state_by_alias(entities) -> dict:
+    """{folded id/name/alias: that entity's state dict}, for one entity map.
+
+    The same alias folding `_expire_transient_entity_state` matches
+    assertions by, hoisted so the prior scene and the incoming diff are read
+    through one spelling rule.
+    """
+    out: dict[str, dict] = {}
+    for eid, ent in (entities if isinstance(entities, dict) else {}).items():
+        if not isinstance(ent, dict):
+            continue
+        state = ent.get("state")
+        if not isinstance(state, dict):
+            continue
+        for alias in (eid, ent.get("name"), *(ent.get("aliases") or [])):
+            alias = str(alias or "").strip().casefold()
+            if alias:
+                out.setdefault(alias, {}).update(state)
+    return out
+
+
+def _expire_transient_entity_state(entities, incoming_entities,
+                                   prior_entities=None):
+    """Drop momentary state keys the incoming diff did not re-assert with a
+    changed value.
 
     The counterpart of `_merge_entity`'s key-wise state merge: everything
-    durable keeps the silence-is-not-erasure doctrine, and the few keys in
-    `_TRANSIENT_ENTITY_STATE_KEYS` live for exactly the beat that asserted
-    them. Runs over EVERY merged entity, not only the ones this diff
+    durable keeps the silence-is-not-erasure doctrine, and the keys
+    `_is_transient_state_key` recognises live for exactly the beat that
+    asserted them. Runs over EVERY merged entity, not only the ones this diff
     mentions -- an entity the diff is silent about is precisely the one
     whose "running" has gone stale.
+
+    ECHO IS SILENCE. A byte-identical re-emission of a momentary value that
+    was ALREADY standing is the model copying its payload back, not a fresh
+    assertion, so it does not count as one. Without that, expiry is
+    defeated by the cheapest possible model behaviour: chat 88 turns 53-67,
+    where the hand owning `entities` re-emitted the whole state blob
+    verbatim nearly every beat and `throat_action` set at turn 56 was still
+    standing at turn 67, thirteen beats after the act it named.
+
+    It is the doctrinal sibling of `_merge_entity`'s "a schema DEFAULT is
+    silence", but the analogy is weaker than it looks and is not what
+    carries the rule: a default is UNCHOSEN, while an echo was emitted, and
+    a model faithfully restating a momentary fact that genuinely has not
+    changed is punished by this -- its key expires for one beat and comes
+    back the next time the value is written differently. That cost is
+    accepted for the momentary vocabulary only, where byte-identical across
+    two beats is stale by construction, and where a genuinely continuing
+    dynamic has its own channel that persists through silence by contract
+    (`contact_action_ops`). The measured 13-beat carry is the evidence; the
+    analogy is only an echo of it.
 
     Assertion is matched by id, name and aliases, folded, because a diff may
     key an entity by any of them (`_dedup_duplicate_entity_keys` exists for
     the same reason). Mutates `entities` in place.
     """
     incoming = incoming_entities if isinstance(incoming_entities, dict) else {}
+    standing = _entity_state_by_alias(prior_entities)
     asserted: dict[str, set] = {}
     for iid, ient in incoming.items():
         if not isinstance(ient, dict):
             continue
         istate = ient.get("state")
-        keys = set(istate) if isinstance(istate, dict) else set()
-        for alias in (iid, ient.get("name"), *(ient.get("aliases") or [])):
-            alias = str(alias or "").strip().casefold()
-            if alias:
-                asserted.setdefault(alias, set()).update(keys)
+        aliases = [a for a in (str(x or "").strip().casefold() for x in
+                               (iid, ient.get("name"),
+                                *(ient.get("aliases") or []))) if a]
+        keys = set()
+        if isinstance(istate, dict):
+            for key, value in istate.items():
+                # Non-transient keys need no assertion bookkeeping at all --
+                # they are never expired -- so only the momentary ones are
+                # tested against what was already standing.
+                if _is_transient_state_key(key) and any(
+                        alias in standing and key in standing[alias]
+                        and standing[alias][key] == value
+                        for alias in aliases):
+                    continue
+                keys.add(key)
+        for alias in aliases:
+            asserted.setdefault(alias, set()).update(keys)
     for eid, ent in entities.items():
         if not isinstance(ent, dict):
             continue
@@ -355,7 +442,7 @@ def _expire_transient_entity_state(entities, incoming_entities):
         for alias in (eid, ent.get("name"), *(ent.get("aliases") or [])):
             kept |= asserted.get(str(alias or "").strip().casefold(), set())
         for key in [k for k in state
-                    if k in _TRANSIENT_ENTITY_STATE_KEYS and k not in kept]:
+                    if _is_transient_state_key(k) and k not in kept]:
             state.pop(key, None)
 
 
@@ -941,10 +1028,14 @@ def merge_scene_with_diff(
     for _bad in [k for k in merged["entities"] if k in NON_ENTITY_FIELD_KEYS]:
         merged["entities"].pop(_bad, None)
 
-    # Momentary state expires unless this diff re-asserted it -- the one
-    # deliberate exception to key-wise state merging; see
-    # `_TRANSIENT_ENTITY_STATE_KEYS` for the read-back loop it closes.
-    _expire_transient_entity_state(merged["entities"], incoming_entities)
+    # Momentary state expires unless this diff re-asserted it WITH A CHANGED
+    # VALUE -- the one deliberate exception to key-wise state merging; see
+    # `_TRANSIENT_ENTITY_STATE_KEYS` for the read-back loop it closes. The
+    # pre-diff entity map is the echo comparand, and reading it here is safe
+    # because `merged = copy.deepcopy(scene)` above leaves the input pristine.
+    _expire_transient_entity_state(
+        merged["entities"], incoming_entities,
+        prior_entities=(scene or {}).get("entities") or {})
 
     if isinstance(incoming_positions, dict):
         merged["positions"].update(incoming_positions)
