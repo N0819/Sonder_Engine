@@ -21,6 +21,7 @@ from story.scene import (
     awareness_kind_level,
     awareness_of,
 )
+from world.mechanics import read_time_diff
 from world.spatial import room_of
 
 from .common import _mask_quoted_spans
@@ -490,26 +491,24 @@ def _rouse_attempts(interp, char_actions, resolved_event, gated_names):
 def _sleep_elapsed(record, clock, diff_time):
     """Simulation seconds this condition has been in force at the END of this
     beat, or None when the clock cannot say. `started_at_seconds` is
-    model-authored, so a negative or absurd span is treated as unknown."""
-    end = None
-    if isinstance(diff_time, dict):
-        for key in ("end_seconds", "start_seconds"):
-            try:
-                if diff_time.get(key) is not None:
-                    end = float(diff_time[key])
-                    break
-            except (TypeError, ValueError):
-                end = None
-        if end is not None and diff_time.get("end_seconds") is None:
-            try:
-                end += float(diff_time.get("duration_seconds") or 0.0)
-            except (TypeError, ValueError):
-                pass
-    if end is None:
-        try:
-            end = float((clock or {}).get("elapsed_seconds") or 0.0)
-        except (TypeError, ValueError):
-            return None
+    model-authored, so a negative or absurd span is treated as unknown.
+
+    The end of the beat is read through `world.mechanics.read_time_diff`,
+    the one owner of the `state_diff.time` vocabulary, so a sleep is
+    measured on exactly the clock the commit will keep. This ladder used to
+    be private and knew three keys, which cost it twice: a beat naming its
+    position under the clock's own key ended no sleep at all (chat 88 turns
+    61/64/66), and a model-authored bare `start_seconds` OUTRANKED the
+    engine clock -- the same "start resets to 0 every beat" pathology
+    `_monotonic_elapsed` documents, here deciding whether someone wakes up.
+    All three call sites -- the awareness view, the clock exit and the
+    restraint view -- funnel through here.
+    """
+    try:
+        was = float((clock or {}).get("elapsed_seconds") or 0.0)
+    except (TypeError, ValueError):
+        return None
+    end, _backwards, _refused = read_time_diff(was, diff_time)
     try:
         started = float(record.get("started_at_seconds") or 0.0)
     except (TypeError, ValueError):
