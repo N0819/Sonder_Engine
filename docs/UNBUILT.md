@@ -240,6 +240,62 @@ reconciliation and `_PROTECTED_STATE_KEYS` — untouched.
 persisting verbatim — now expire on every merge unless the incoming diff
 re-asserts them, across all entities including ones the diff never mentions.
 
+**Narrowed 2026-08-25, because that rule was defeated by the cheapest model
+behaviour there is.** Expiry counted a re-emission as an assertion, so a
+specialist echoing its whole state blob back verbatim kept every momentary key
+alive forever. Measured on chat 88 turns 53-67: the hand owning `entities`
+re-emitted the blob nearly every beat, and `throat_action` set at turn 56 was
+still standing at turn 67 — thirteen beats after the act it named. Two rules
+answer it, both in `world/spatial_merge.py`:
+
+- **An echo is silence.** A byte-identical re-emission of a value that was
+  ALREADY ASSERTED no longer counts as re-assertion; only a CHANGED value
+  does. The cost is real and accepted: while a model keeps restating a
+  momentary fact word for word, the key stays expired — it does not come back
+  and then go again. For the momentary vocabulary, byte-identical across two
+  beats is stale by construction, and a genuinely continuing dynamic has its
+  own channel that persists through silence by contract
+  (`contact_action_ops`). The `_merge_entity` "a schema default is silence"
+  analogy is weaker than it reads — a default is UNCHOSEN and an echo was
+  emitted — so the 13-beat measurement is what carries the rule, not the
+  analogy.
+
+  **ASSERTED, not STANDING — corrected 2026-08-25, before it shipped.** The
+  first form of this rule compared the incoming value only against the value
+  standing in the scene, and expiry deletes exactly that value: the next
+  identical echo found nothing standing, re-established the key, and the echo
+  after that expired it again. Measured on that form, one diff merged six
+  times running gave `gaze: downcast` / gone / `downcast` / gone / `downcast`
+  / gone — a momentary key blinking forever, on precisely the
+  verbatim-re-emission input the rule exists for, and worse for every reader
+  of the committed blob than the stale value it replaced. So a value
+  suppressed as an echo is remembered under the scene's
+  `expired_entity_state`, and every later echo of it is silence too. The
+  memory lives only as long as the echo run: a beat that says nothing about
+  the key releases it, so a genuine re-assertion after a silence is still an
+  assertion, and suppression is never a standing ban on a word. A scene whose
+  bodies are not mid-echo carries no such key at all.
+- **The vocabulary is a stated class, not a list of names.** `state` is open
+  free text, so an allowlist can only ever name the momentary keys some story
+  already wrote. It is now the exact keys `breath`, `breathing`,
+  `voice_quality`, `expression`, `gaze` plus the process-suffix families
+  `_action`, `_motion`, `_sensation`. Re-measured over all 77 stored scene
+  blobs on 2026-08-25: the predicate captures 31 of 1,270 stored
+  key-occurrences under nine distinct names (27 of them newly reachable) and
+  none of the other 370 distinct keys — every one of those a configuration
+  (`power_state`, `lock_status`, `held_items`, `posture`).
+
+Two residues stay open, deliberately. `_register` is NOT a process family: a
+till or a ledger named `x_register` is a thing, not a reading, so that family
+fails OPEN — as does any momentary key without a process-shaped name (a bare
+participle, an anatomy noun, `taste_register` in the corpus). Failing open is
+the correct direction, because a lingering momentary key is stale prose the
+next beat overwrites while a configuration key wrongly called momentary
+silently DELETES authored state. The general answer for the residue is a
+declarative transience marker on the entity-state schema — the model saying
+whether a key is momentary — which is a schema change with its own
+silence-default question and is not taken here.
+
 `activity`, the sharpest read-back key, deliberately does NOT expire yet:
 `tests/test_body_position.py` pins it as load-bearing standing state, and a
 first attempt at expiring it broke that test. Which of the two contracts wins is
@@ -3749,6 +3805,30 @@ Moved to [`DESIGN_MATERIAL_MODEL.md`](design/DESIGN_MATERIAL_MODEL.md) on
 spellings of one region on one body (was §4.8) are one undecided question about
 MATTER, not two defects; the note holds both and the argument for keeping them
 together.
+
+**Addendum 2026-08-25 — the question was asked again and answered NO
+MECHANISM.** A ledger-accumulation pass over four scene ledgers reached the
+substance ledger and deliberately built nothing: no expiry timer, no cap, no
+displacement, no region fold. The note's standing reasons hold (the amount
+vocabulary is not a magnitude; conservation already means matter on a moved
+body moves with it; the fold point exists but the ruling is world law the
+engine refuses to hard-code), and `AGENTS.md` forbids the universal timer
+outright.
+
+What WAS built is addressability, because the measured cause of remove-op
+disuse turned out not to be prompt wording: the specialist that owns
+`substance_ops` had never been shown the standing records or their
+`substance_id`s, so the removal its own sheet documents could not be written
+at all. Its payload now carries both of its ledgers with their ids
+(`world.spatial.substance_ledger_index` / `contact_action_ledger_index`), which
+is what makes the note's prompt-efficacy hypothesis testable for the first
+time.
+
+Survey 2026-08-25, for whoever reopens this: 5 of 77 stored scene blobs carry
+substance records at all, holding 10, 9, 9, 9 and 3 rows — and four of the
+five are branches of one story. There is no runaway. Re-measure the 38-adds /
+5-removes ratio on stories played AFTER the ids started arriving before
+treating a missing mechanism as the explanation.
 
 
 ## 5. Deferred backlog

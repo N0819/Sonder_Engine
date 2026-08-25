@@ -55,6 +55,16 @@ corpus-wide: 38 adds and deposits against 5 removes, and zero removes after
 turn 38 of the reference story. That is prompt efficacy, not a missing
 mechanism, and it is worth trying before any material model is designed.
 
+**2026-08-25: it was not prompt efficacy either — it was addressability.** The
+one hand entitled to `substance_ops` had never been shown the standing records
+or their `substance_id`s; its sheet said "Use `{op:'remove',substance_id}` when
+a known record is drained, washed away…" while no id had ever reached the
+model, so the removal it was told to write was unwritable. The specialist's
+payload now carries its own ledger with ids
+(`world.spatial.substance_ledger_index`), which makes the efficacy hypothesis
+above testable for the first time; re-measure the ratio on stories played after
+that change before concluding anything from it.
+
 **Open question this section exists to force: does the engine grow a material
 model at all?** Everything above is blocked on that answer rather than on
 difficulty.

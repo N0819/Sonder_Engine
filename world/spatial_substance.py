@@ -622,9 +622,22 @@ def _apply_explicit_transfer(current, record, report=None) -> bool:
     return True
 
 
-def apply_substance_ops(scene: dict, ops, report=None) -> dict:
-    """Apply add/remove/clear operations to ``scene.substances``."""
-    current = {}
+def _standing_substance_pools(scene) -> dict:
+    """The saved ledger read back as {substance_id: record}: one row per pool.
+
+    Hoisted out of `apply_substance_ops` so the ledger's OWNER is offered
+    exactly the rows the next apply will keep. `substance_ledger_index` read
+    the raw stored list instead, so a scene carrying two rows of one pool
+    would hand back two addressable ids where the apply keeps one -- an id
+    quoted from the payload naming nothing. Measured 2026-08-25: 5 of 77
+    stored blobs carry substances and index length equals post-apply length
+    in every one, so this was a divergence waiting rather than a live
+    defect. One reader of the saved ledger, one answer.
+
+    Ordering is the stored order, so the LATER row is the current account of
+    a pool -- which is why the fold absorbs into the row already standing.
+    """
+    current: dict = {}
     for raw_record in ((scene or {}).get("substances") or []):
         if not isinstance(raw_record, dict) or not raw_record.get("source") \
                 or not raw_record.get("substance") or not raw_record.get("target"):
@@ -643,13 +656,18 @@ def apply_substance_ops(scene: dict, ops, report=None) -> dict:
         pooled_id = next((sid for sid, standing in current.items()
                           if _same_pool(scene, standing, record)), None)
         if pooled_id is not None:
-            # A scene saved before the fold below can already carry the stack;
-            # pool it on read so the ledger heals on the next merge rather
-            # than carrying every row forever. Rows arrive in the order they
-            # were written, so the later one is the current account.
+            # A scene saved before the fold in `apply_substance_ops` can
+            # already carry the stack; pool it on read so the ledger heals on
+            # the next merge rather than carrying every row forever.
             _absorb_into_pool(current[pooled_id], record)
             continue
         current[record["substance_id"]] = record
+    return current
+
+
+def apply_substance_ops(scene: dict, ops, report=None) -> dict:
+    """Apply add/remove/clear operations to ``scene.substances``."""
+    current = _standing_substance_pools(scene)
     for raw in resolve_substance_ops(scene, ops, report=report):
         op = raw.get("op")
         if op == "add":
@@ -726,6 +744,43 @@ def substances_for(scene: dict, name: str) -> list[dict]:
             if isinstance(record, dict)
             and (same_subject(scene, record.get("source"), name)
                  or same_subject(scene, record.get("target"), name))]
+
+
+#: What a substance op can name. `detail` is deliberately absent: it is
+#: destination-side prose, not part of the record's address.
+_SUBSTANCE_INDEX_FIELDS = (
+    "substance", "source", "source_part", "target", "target_part",
+    "target_interior", "placement", "amount", "amount_band", "scent",
+)
+
+
+def substance_ledger_index(scene: dict) -> list[dict]:
+    """The standing substance ledger, each row carrying its own id.
+
+    The ledger's OWNER -- the one hand entitled to `substance_ops` -- could
+    not see it. Its prompt documents closing a record by `substance_id` and
+    no id had ever been handed to it, so a drained or washed-away deposit
+    could only be described around, never closed. This is the addressing
+    surface for the ops that already exist; it adds no mechanism, per
+    `docs/design/DESIGN_MATERIAL_MODEL.md` §1.
+
+    Rows come from `_standing_substance_pools`, the same read the next
+    apply does -- ids stamped the same way, the same shedding of an
+    enclosure stored beside a non-interior placement, and the same pool
+    fold. Reading the raw stored list instead would offer an id per stored
+    row where the apply keeps one per pool, and the id quoted back would
+    then name nothing. The id quoted back always finds the row it named
+    because both hands read the ledger through one function.
+    """
+    out = []
+    for record in _standing_substance_pools(scene).values():
+        row = {"substance_id": record["substance_id"]}
+        for field in _SUBSTANCE_INDEX_FIELDS:
+            value = _substance_text(record.get(field), 160)
+            if value:
+                row[field] = value
+        out.append(row)
+    return out
 
 
 def substance_event_clause(event: dict, *, you: str, scene: dict) -> str:
@@ -822,11 +877,27 @@ def resolve_contact_action_ref(scene, value):
     return (contact_id(contact), contact) if contact is not None else ("", None)
 
 
-def _contact_action_key(actor, contact_ref, action):
+def _contact_action_key(actor, contact_ref):
+    """One participant drives ONE ongoing dynamic through one contact.
+
+    The action TEXT is that dynamic's DESCRIPTION and is deliberately NOT
+    part of its identity: a literal identity fails exactly when a model
+    rewrites, and the corpus shows it did. Re-measured 2026-08-25 across
+    every stored scene: 12 effect rows under 3 distinct contact ids across
+    4 chats, in four groups of three, and each of those four groups is one
+    dynamic reworded -- "steady peristaltic wave" /
+    "slow steady peristaltic wave" / "steady pressure" whose rhythm restates
+    the first (chat 88, contact:8a4058a942b38470dbb4). The composer renders
+    one sentence per row, so an observer's four-sentence view carried three
+    saying the same thing, and the narrator's own fidelity check flagged it
+    reusing previous content on 5 of 15 turns. No corpus contact has ever
+    carried two genuinely distinct effects by one participant; distinct
+    part-pairs remain distinct contacts, and each participant keeps its own
+    row, so re-describing is the only thing this collapses.
+    """
     return (
         _contact_action_text(actor, 120).casefold(),
         _contact_action_text(contact_ref, 80).casefold(),
-        _contact_action_text(action, 120).casefold(),
     )
 
 
@@ -843,7 +914,7 @@ def _clean_contact_action(raw, scene=None):
     if not (same_subject(scene, actor, contact.get("actor"))
             or same_subject(scene, actor, contact.get("target"))):
         return None
-    key = _contact_action_key(actor, ref, action)
+    key = _contact_action_key(actor, ref)
     action_id = "contact-action:" + hashlib.sha256(
         "\x1f".join(key).encode("utf-8")).hexdigest()[:20]
     return {
@@ -861,8 +932,17 @@ def _clean_contact_action(raw, scene=None):
 
 
 def _live_contact_actions(scene):
-    """Clean existing records and drop any whose parent contact has ended."""
-    out = []
+    """Clean existing records, drop any whose parent contact has ended, and
+    collapse a saved stack of rewordings to the one current account.
+
+    Cleaning re-derives every row's id from (actor, contact), so a ledger
+    saved while identity still hashed the action text arrives here as
+    several rows under ONE id. The later row is the current description, and
+    it takes the earlier row's position so the ledger's order survives the
+    heal -- which is what lets the measured triples (chats 86, 87, 88) fix
+    themselves on the next read, with no migration.
+    """
+    out, at = [], {}
     for raw in (scene or {}).get("contact_actions") or []:
         if not isinstance(raw, dict):
             continue
@@ -870,8 +950,14 @@ def _live_contact_actions(scene):
         # resolver so an orphan cannot survive a move, scale change, or release.
         candidate = {**raw, "contact_ref": raw.get("contact_id")}
         cleaned = _clean_contact_action(candidate, scene)
-        if cleaned is not None:
+        if cleaned is None:
+            continue
+        seen = at.get(cleaned["action_id"])
+        if seen is None:
+            at[cleaned["action_id"]] = len(out)
             out.append(cleaned)
+        else:
+            out[seen] = cleaned
     return out[-_MAX_CONTACT_ACTIONS:]
 
 
@@ -879,6 +965,26 @@ def contact_actions_of(scene, name):
     """Standing contact effects performed by one body, oldest first."""
     return [dict(record) for record in _live_contact_actions(scene)
             if same_subject(scene, record.get("actor"), name)]
+
+
+def contact_action_ledger_index(scene) -> list[dict]:
+    """The standing effect ledger, each row carrying the id ops address.
+
+    The sibling of `substance_ledger_index` and for the same reason: the one
+    hand entitled to `contact_action_ops` was never shown the effects it had
+    already declared, so `change` and `remove` -- both of which its prompt
+    documents -- had nothing to name, and a reworded add was the only move
+    available to it. `detail` is left out because it is author diagnostics,
+    not part of what an op can address.
+    """
+    return [{
+        "action_id": row.get("action_id"),
+        "actor": row.get("actor"),
+        "contact_id": row.get("contact_id"),
+        "action": row.get("action"),
+        **({"intensity": row["intensity"]} if row.get("intensity") else {}),
+        **({"rhythm": row["rhythm"]} if row.get("rhythm") else {}),
+    } for row in _live_contact_actions(scene)]
 
 
 def actions_for_contact(scene, contact_ref):
@@ -929,6 +1035,14 @@ def apply_contact_action_ops(scene, ops, report=None) -> dict:
             if at is None:
                 rows.append(cleaned)
             else:
+                # An `add` naming a contact this actor already drives is a
+                # RE-DESCRIPTION, and it replaces the row WHOLE. An
+                # `intensity` or `rhythm` the new account omits goes with
+                # the words it qualified: a qualifier kept beside a fresh
+                # description leaves the ledger holding half of one account
+                # and half of another, which is the stacking this identity
+                # rule exists to end. `change` is the op that inherits, and
+                # it does so above by merging onto the standing row.
                 rows[at] = cleaned
             index = rebuild_index()
             continue
