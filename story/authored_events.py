@@ -15,6 +15,15 @@ the point -- NOT dropped: an event the resolution did not cover is re-queued
 back-burner concern about weak models dropping player-narrated world events
 asked for. Coverage is judged by omission-detection (content-token overlap),
 never a keyword list.
+
+Two bounds keep "never dropped" from becoming "never ends". Rows are keyed by
+the ASSERTION rather than by the minting beat, so a rerun -- or the Director
+re-emitting a due event it was asked to fold in -- lands on the one live row
+instead of a fresh copy with a fresh budget. And a due event whose referent
+this beat's committed diff RETIRED goes stale at once rather than spending the
+budget: a future whose subject has ended cannot be enacted by any later beat,
+which is the rule the delay line already applies to a fuse whose cause
+un-happened (world/mechanics.py).
 """
 
 from __future__ import annotations
@@ -31,6 +40,50 @@ MAX_REQUEUES = 2
 # Fraction of the summary's distinctive tokens that must appear in the resolved
 # prose for the event to count as enacted this beat.
 _COVERAGE_RATIO = 0.5
+
+# Op verbs that mean "this row stops standing". A scheduled assertion whose
+# referent the beat RETIRED has been answered -- negatively -- and re-queueing
+# it puts a finished thing back in front of the Director. The delay line
+# already states this rule for the other half of the same table: a fuse whose
+# cause un-happened is "cancelled loudly, never fired" (world/mechanics.py).
+_RETIRING_OPS = ("remove", "clear", "detach", "drop", "delete", "end")
+
+
+def _retired_text(state_diff):
+    """Every word this beat's committed diff spent RETIRING something.
+
+    Channel-agnostic on purpose: any `remove_*` channel, and any op dict whose
+    `op` retires, contributes its own strings. Naming the channels would tie
+    the rule to today's diff shape and to whichever ledger the live case
+    happened to be about; the rule is that a referent ENDED, not which ledger
+    held it.
+    """
+    if not isinstance(state_diff, dict):
+        return ""
+    out = []
+
+    def _collect(value):
+        if isinstance(value, str):
+            out.append(value)
+        elif isinstance(value, dict):
+            for key, inner in value.items():
+                if key != "op":
+                    _collect(inner)
+        elif isinstance(value, (list, tuple)):
+            for inner in value:
+                _collect(inner)
+
+    for channel, value in state_diff.items():
+        if str(channel).startswith("remove_"):
+            _collect(value)
+        elif isinstance(value, list):
+            for item in value:
+                if (isinstance(item, dict)
+                        and str(item.get("op") or "").strip().casefold()
+                        in _RETIRING_OPS):
+                    _collect(item)
+    return " ".join(out)
+
 
 
 def _event_id(cid, summary):
@@ -53,9 +106,11 @@ def _event_id(cid, summary):
 
 def mint_authored_events(cid, turn_idx, scheduled_assertions):
     """Persist flow.scheduled_assertions as pending authored_event rows.
-    due_at = turn_idx + max(1, due_in_turns). Stable ids (INSERT OR REPLACE)
-    keyed by the minting turn so a rerun of the same turn never double-schedules.
-    Returns the count minted."""
+    due_at = turn_idx + max(1, due_in_turns). Ids are keyed by ASSERTION, not
+    by beat, and a row already pending under that id is left exactly as it
+    stands -- so a rerun of a turn AND a later beat re-emitting a due event as
+    a fresh assertion both dedupe onto the one live row. Returns the count
+    minted; an absorbed echo mints nothing."""
     minted = 0
     for assertion in (scheduled_assertions or []):
         if not isinstance(assertion, dict):
@@ -115,13 +170,17 @@ def due_authored_events(cid, turn_idx):
     return out
 
 
-def resolve_authored_events(cid, turn_idx, resolved_text):
+def resolve_authored_events(cid, turn_idx, resolved_text, state_diff=None):
     """After the beat resolves: mark each DUE authored event 'fired' if the
-    resolved prose covers it (content-token overlap), else re-queue to the next
-    turn (bounded) so the player-narrated future beat is never silently dropped.
+    resolved prose covers it (content-token overlap), 'stale' if this beat's
+    committed diff RETIRED what it names, else re-queue to the next turn
+    (bounded) so the player-narrated future beat is never silently dropped.
     Returns (fired, requeued, dropped). Idempotent per (turn, event)."""
     from agents.common import _content_tokens
     rtoks = set(_content_tokens(resolved_text or ""))
+    # What the beat ENDED, judged by the same overlap that judges what it
+    # enacted -- one comparator, two answers.
+    xtoks = set(_content_tokens(_retired_text(state_diff)))
     fired = requeued = dropped = 0
     for ev in due_authored_events(cid, turn_idx):
         row = q("SELECT payload FROM scheduled_events WHERE chat_id=? AND event_id=?",
@@ -136,6 +195,19 @@ def resolve_authored_events(cid, turn_idx, resolved_text):
             qi("UPDATE scheduled_events SET status='fired' "
                "WHERE chat_id=? AND event_id=?", (cid, ev["event_id"]))
             fired += 1
+            continue
+        # FORECLOSED, not merely unenacted. An assertion is a claim on a
+        # world the beat it comes due in may already have ended: if that
+        # beat's own committed diff retires what the assertion names, no later
+        # beat can enact it, so spending the re-queue budget only re-delivers
+        # a finished thing to the Director. Coverage is tested first, so a
+        # beat that retires a thing BY enacting the assertion still fires.
+        # Subtractive: this can only end an event sooner, never create or
+        # extend one, and it needs no cooperation from any model.
+        if stoks and len(stoks & xtoks) / len(stoks) >= _COVERAGE_RATIO:
+            qi("UPDATE scheduled_events SET status='stale' "
+               "WHERE chat_id=? AND event_id=?", (cid, ev["event_id"]))
+            dropped += 1
             continue
         requeues = int(payload.get("requeues", 0)) + 1
         if requeues > MAX_REQUEUES:

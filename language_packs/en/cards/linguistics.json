@@ -1233,6 +1233,16 @@
       "pattern": "\\b(?:back\\s+)?(?:in|inside|within|into|at)\\s+(?:the\\s+)?(?:\\w+[ -]){0,2}?{room}\\b",
       "flags": 34
     },
+    "_EXPOSURE_STATE": {
+      "state": "(?:bare|naked|nude|unclothed|uncovered|exposed|stripped)",
+      "assertion": "\\b(?:{owner})\\s+(?:\\w+[- ]){0,2}?(?:{state})\\s+{region}\\b",
+      "idiom": "\\b(?:with|using)\\s+\\S+\\s+bare\\s+hands?\\b",
+      "person_possessive": {
+        "first": ["my", "our"],
+        "second": ["your"],
+        "third": []
+      }
+    },
     "_PORTAL_STATE": {
       "open": "(?:open|ajar|wide[- ]open)",
       "shut": "(?:shut|closed|sealed|locked)",

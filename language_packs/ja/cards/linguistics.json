@@ -1481,6 +1481,16 @@
       "pattern": "(?:\\b(?:back\\s+)?(?:in|inside|within|into|at)\\s+(?:the\\s+)?(?:\\w+[ -]){0,2}?{room}\\b|{room}(?:の(?:中|なか|奥))?(?:に|で|へ|にて))",
       "flags": 34
     },
+    "_EXPOSURE_STATE": {
+      "state": "(?:bare|naked|nude|unclothed|uncovered|exposed|stripped|\u88f8|\u7d20\u808c|\u3080\u304d\u51fa\u3057|\u525d\u304d\u51fa\u3057|\u9732\u308f|\u3042\u3089\u308f)",
+      "assertion": "(?:\\b(?:{owner})\\s+(?:\\w+[- ]){0,2}?(?:{state})\\s+{region}\\b|(?:{owner})\\s*\u306e?\\s*{state}\\s*(?:\u306e|\u306a)?\\s*{region}|(?:{owner})\\s*\u306e?\\s*{region}\\s*(?:\u304c|\u306f)\\s*{state})",
+      "idiom": "(?:\\b(?:with|using)\\s+\\S+\\s+bare\\s+hands?\\b|\u7d20\u624b\u3067)",
+      "person_possessive": {
+        "first": ["my", "our", "\u79c1\u306e", "\u4ffa\u306e", "\u50d5\u306e"],
+        "second": ["your", "\u3042\u306a\u305f\u306e", "\u541b\u306e"],
+        "third": []
+      }
+    },
     "_PORTAL_STATE": {
       "open": "(?:open|ajar|wide[- ]open|開いて|開いた|開け放たれ|開け放た)",
       "shut": "(?:shut|closed|sealed|locked|閉じ|閉ま|閉ざされ|施錠され)",
