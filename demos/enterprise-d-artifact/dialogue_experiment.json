@@ -1,0 +1,74 @@
+{
+ "A baseline": {
+  "kept": 19,
+  "of": 27,
+  "samples": [
+   {
+    "kept": 8,
+    "of": 9,
+    "seconds": 4.1,
+    "prose": "<p>You speak the suggestion into the quiet hum of the bridge, and the spare upright man acknowledges it with a single nod before issuing the order.</p><p>\"Proceed with the counting-system model, Lieutenant. Incorporate the temporal correlation to our arrival and project the terminus.\"</p><p>The tall turns toward the seated man. \"If it's a counting system, those shortening intervals could be a countdown, Captain. Modelling it that way might tell us how much time we have.\" The tall says in a direct, even voice: \"Captain — while she works the model, I'd recommend yellow alert.\" The tall says in a plain, unhurried voice: \"If it started counting when we arrived, we may be what it's counting toward.\" The tall says in a measured, tactical voice: \"I'd also suggest we open our distance. Give us room to manoeuvre if the terminus isn't friendly.\" The tall says in a quiet, firm voice: \"With respect, sir — I don't like sitting this close to something that just woke up.\"</p><p>The spare upright man turns eyes toward the main viewscreen for a beat before looking back. \"Yellow alert, aye. Your caution is noted, Number One — but if it began when we arrived, then our presence is part of what it is doing. I will not change the conditions before I understand them.\" The spare upright man says with direct, precise, an order that is also a question in their voice: \"Proceed with the counting model. And tell me what zero looks like — not merely when it arrives.\"</p>"
+   },
+   {
+    "kept": 5,
+    "of": 9,
+    "seconds": 3.7,
+    "prose": "<p>\"Nothing in the catalogue matches. Sir, I would like to try modelling it as a counting system rather than a language.\"</p><p>The spare upright man regards you with that measured encouragement, then turns his gaze to the main viewscreen for a long beat. \"Proceed with the counting-system model, Lieutenant. Incorporate the temporal correlation to our arrival and project the terminus.\"</p><p>The tall pivots toward the seated man. \"If it's a counting system, those shortening intervals could be a countdown, Captain. Modelling it that way might tell us how much time we have.\" He keeps his stance square, voice direct and level. \"Captain—while she works the model, I'd recommend yellow alert.\" The words land without hurry. \"If it started counting when we arrived, we may be what it's counting toward.\"</p><p>\"I'd also suggest we open our distance. Give us room to manoeuvre if the terminus isn't friendly.\" The tall's tone stays tactical, quiet but firm. \"With respect, sir—I don't like sitting this close to something that just woke up.\"</p>"
+   },
+   {
+    "kept": 6,
+    "of": 9,
+    "seconds": 5.0,
+    "prose": "<p>The words leave your mouth and the bridge seems to hold its breath for half a second. Then the spare upright man nods once, crisp, and the tall turns toward you with an approving tilt of the head.</p><p>\"Proceed with the counting-system model, Lieutenant. Incorporate the temporal correlation to our arrival and project the terminus.\"</p><p>The tall pivots back to the seated man. \"If it's a counting system, those shortening intervals could be a countdown, Captain. Modelling it that way might tell us how much time we have.\" The tall's gaze stays level. \"Captain — while she works the model, I'd recommend yellow alert.\"</p><p>The tall continues without pause, voice plain and unhurried. \"If it started counting when we arrived, we may be what it's counting toward. I'd also suggest we open our distance. Give us room to manoeuvre if the terminus isn't friendly.\" A beat of quiet firmness follows. \"With respect, sir — I don't like sitting this close to something that just woke up.\"</p>"
+   }
+  ]
+ },
+ "B named": {
+  "kept": 17,
+  "of": 27,
+  "samples": [
+   {
+    "kept": 4,
+    "of": 9,
+    "seconds": 4.3,
+    "prose": "<p>You speak the words, and the bridge falls into a brief, attentive hush. Captain Picard regards you with that measured, encouraging gaze. \"Proceed with the counting-system model, Lieutenant. Incorporate the temporal correlation to our arrival and project the terminus.\"</p><p>Commander Riker cuts in at once, voice direct and level. \"If it's a counting system, those shortening intervals could be a countdown, Captain. Modelling it that way might tell us how much time we have.\" He turns squarely toward Picard. \"Captain—while she works the model, I'd recommend yellow alert.\" His tone stays plain, unhurried. \"If it started counting when we arrived, we may be what it's counting toward.\" Then, measured and tactical: \"I'd also suggest we open our distance. Give us room to manoeuvre if the terminus isn't friendly.\" Finally, quiet and firm: \"With respect, sir—I don't like sitting this close to something that just woke up.\"</p><p>Picard turns his eyes toward the main viewscreen for a beat, then back. \"Yellow alert, aye. Your caution is noted, Number One—but if it began when we arrived, then our presence is part of what it is doing. I will not change the conditions before I understand them.\" His voice is direct, precise, an order that is also a question. \"Proceed with the counting model. And tell me what zero looks like—not merely when it arrives.\"</p>"
+   },
+   {
+    "kept": 7,
+    "of": 9,
+    "seconds": 3.5,
+    "prose": "<p>\"Nothing in the catalogue matches. Sir, I would like to try modelling it as a counting system rather than a language.\"</p><p>Captain Picard regards you with that measured, encouraging gaze. \"Proceed with the counting-system model, Lieutenant. Incorporate the temporal correlation to our arrival and project the terminus.\"</p><p>Commander Riker turns toward Captain Picard. \"If it's a counting system, those shortening intervals could be a countdown, Captain. Modelling it that way might tell us how much time we have.\"</p><p>\"Captain — while she works the model, I'd recommend yellow alert.\" His tone stays direct and even. \"If it started counting when we arrived, we may be what it's counting toward.\" He continues in a measured, tactical voice, \"I'd also suggest we open our distance. Give us room to manoeuvre if the terminus isn't friendly.\" Then quieter, firmer: \"With respect, sir — I don't like sitting this close to something that just woke up.\"</p>"
+   },
+   {
+    "kept": 6,
+    "of": 9,
+    "seconds": 2.9,
+    "prose": "<p>You offer the suggestion, and the bridge crew absorbs it in a ripple of focused glances. Captain Picard meets your eyes with a nod that carries both approval and weight.</p><p>\"Proceed with the counting-system model, Lieutenant. Incorporate the temporal correlation to our arrival and project the terminus.\"</p><p>Commander Riker turns toward Captain Picard.</p><p>\"If it's a counting system, those shortening intervals could be a countdown, Captain. Modelling it that way might tell us how much time we have. Captain — while she works the model, I'd recommend yellow alert. If it started counting when we arrived, we may be what it's counting toward. I'd also suggest we open our distance. Give us room to manoeuvre if the terminus isn't friendly. With respect, sir — I don't like sitting this close to something that just woke up.\"</p>"
+   }
+  ]
+ },
+ "C placeholder": {
+  "kept": 25,
+  "of": 27,
+  "samples": [
+   {
+    "kept": 8,
+    "of": 9,
+    "seconds": 2.5,
+    "prose": "<p>Your words hang in the charged air of the bridge as you finish speaking. Captain Picard meets your gaze with a nod that carries both approval and the full weight of command.</p><p>\"Proceed with the counting-system model, Lieutenant. Incorporate the temporal correlation to our arrival and project the terminus.\"</p><p>Commander Riker leans forward slightly in his chair, his expression sharpening with tactical concern as he addresses the captain directly.</p><p>\"If it's a counting system, those shortening intervals could be a countdown, Captain. Modelling it that way might tell us how much time we have.\" \"Captain — while she works the model, I'd recommend yellow alert.\" \"If it started counting when we arrived, we may be what it's counting toward.\" \"I'd also suggest we open our distance. Give us room to manoeuvre if the terminus isn't friendly.\" \"With respect, sir — I don't like sitting this close to something that just woke up.\"</p><p>Picard turns his eyes toward the main viewscreen for a beat before looking back, the lines of his face set in thoughtful resolve.</p><p>\"Yellow alert, aye. Your caution is noted, Number One — but if it began when we arrived, then our presence is part of what it is doing. I will not change the conditions before I understand them.\" \"Proceed with the counting model. And tell me what zero looks like — not merely when it arrives.\"</p>"
+   },
+   {
+    "kept": 8,
+    "of": 9,
+    "seconds": 2.7,
+    "prose": "<p>You deliver your assessment and proposal. Captain Picard nods once, eyes steady on you as he replies.</p><p>\"Proceed with the counting-system model, Lieutenant. Incorporate the temporal correlation to our arrival and project the terminus.\"</p><p>Commander Riker leans forward slightly, voice cutting in with tactical precision.</p><p>\"If it's a counting system, those shortening intervals could be a countdown, Captain. Modelling it that way might tell us how much time we have.\"</p><p>\"Captain — while she works the model, I'd recommend yellow alert.\"</p><p>\"If it started counting when we arrived, we may be what it's counting toward.\"</p><p>\"I'd also suggest we open our distance. Give us room to manoeuvre if the terminus isn't friendly.\"</p><p>\"With respect, sir — I don't like sitting this close to something that just woke up.\"</p><p>Picard turns his gaze to the viewscreen for a measured beat, then returns it to the bridge crew. His tone is calm, decisive.</p><p>\"Yellow alert, aye. Your caution is noted, Number One — but if it began when we arrived, then our presence is part of what it is doing. I will not change the conditions before I understand them.\"</p><p>\"Proceed with the counting model. And tell me what zero looks like — not merely when it arrives.\"</p>"
+   },
+   {
+    "kept": 9,
+    "of": 9,
+    "seconds": 3.4,
+    "prose": "<p>You offer \"Nothing in the catalogue matches. Sir, I would like to try modelling it as a counting system rather than a language.\", and the bridge seems to hold its breath for the span of a single heartbeat.</p><p>Picard meets your eyes with that measured calm, then nods once. \"Proceed with the counting-system model, Lieutenant. Incorporate the temporal correlation to our arrival and project the terminus.\"</p><p>Riker leans forward in his chair, voice cutting in before the order can settle. \"If it's a counting system, those shortening intervals could be a countdown, Captain. Modelling it that way might tell us how much time we have.\" He turns toward Picard. \"Captain — while she works the model, I'd recommend yellow alert.\" \"If it started counting when we arrived, we may be what it's counting toward.\" \"I'd also suggest we open our distance. Give us room to manoeuvre if the terminus isn't friendly.\" \"With respect, sir — I don't like sitting this close to something that just woke up.\"</p><p>Picard turns his gaze to the main viewscreen for a beat, then back, the weight of decision settling across his shoulders. \"Yellow alert, aye. Your caution is noted, Number One — but if it began when we arrived, then our presence is part of what it is doing. I will not change the conditions before I understand them.\" His tone sharpens into command even as it invites your answer. \"Proceed with the counting model. And tell me what zero looks like — not merely when it arrives.\"</p>"
+   }
+  ]
+ }
+}

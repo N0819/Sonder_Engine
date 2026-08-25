@@ -1,0 +1,115 @@
+{
+ "chat_id": 1,
+ "lorebook_id": 1,
+ "uids": {
+  "Jean-Luc Picard": "enterprise-d-jean-luc-picard",
+  "William T. Riker": "enterprise-d-william-t-riker"
+ },
+ "generation": {
+  "ok": true,
+  "town": "USS Enterprise NCC-1701-D",
+  "structure": {
+   "version": 1,
+   "key": "deck",
+   "name": "USS Enterprise NCC-1701-D",
+   "charters": [
+    "enterprise_crew"
+   ],
+   "max_planned": 42,
+   "grammar": [
+    {
+     "kind": "section",
+     "names": [
+      "saucer",
+      "stardrive"
+     ],
+     "purposes": [
+      "command and habitation",
+      "propulsion and support"
+     ]
+    }
+   ],
+   "revision": 0
+  },
+  "rooms": 20,
+  "charters": [
+   "enterprise_crew"
+  ],
+  "presim": {
+   "advanced": 1,
+   "events": 8,
+   "scheduled": 8
+  },
+  "warnings": [
+   "deck: planned skeleton is disconnected"
+  ],
+  "historian_error": "",
+  "required_rooms_added": [
+   "captain_s_ready_room"
+  ],
+  "source_lorebook_id": 1,
+  "source_lore_entry_ids": [
+   8,
+   1,
+   6,
+   2,
+   3,
+   9,
+   4,
+   5,
+   7
+  ],
+  "featured_residents": {
+   "character:1": {
+    "seed_id": "character:1",
+    "charter": "enterprise_crew",
+    "body": "captain:featured:7f252abcbc",
+    "name": "Jean-Luc Picard",
+    "place": "captains_ready_room"
+   },
+   "canon:laforge": {
+    "seed_id": "canon:laforge",
+    "charter": "enterprise_crew",
+    "body": "chief_engineer:featured:e4384f4fc6",
+    "name": "Geordi La Forge",
+    "place": "main_engineering"
+   },
+   "canon:crusher": {
+    "seed_id": "canon:crusher",
+    "charter": "enterprise_crew",
+    "body": "chief_medical_officer:featured:f5534ca7a6",
+    "name": "Beverly Crusher",
+    "place": "sickbay"
+   },
+   "canon:worf": {
+    "seed_id": "canon:worf",
+    "charter": "enterprise_crew",
+    "body": "chief_of_security:featured:156a87e262",
+    "name": "Worf",
+    "place": "security_office"
+   },
+   "canon:troi": {
+    "seed_id": "canon:troi",
+    "charter": "enterprise_crew",
+    "body": "counselor:featured:7d50e5aee6",
+    "name": "Deanna Troi",
+    "place": "main_bridge"
+   },
+   "character:2": {
+    "seed_id": "character:2",
+    "charter": "enterprise_crew",
+    "body": "first_officer:featured:caa24ca31b",
+    "name": "William T. Riker",
+    "place": "main_bridge"
+   },
+   "canon:data": {
+    "seed_id": "canon:data",
+    "charter": "enterprise_crew",
+    "body": "operations_officer:featured:8351e1c035",
+    "name": "Data",
+    "place": "main_bridge"
+   }
+  },
+  "resumed_plan": false
+ }
+}

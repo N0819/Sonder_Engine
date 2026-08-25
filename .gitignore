@@ -65,3 +65,8 @@ SYNCED.txt
 !/extensions/overlay-demo/
 !/extensions/campaign-demo/
 tools/narrator_sheet_bench_last.json
+
+# Playthrough run logs: story prose interleaved with provider call records.
+# The transcript of a run is evidence and belongs in docs/experiments/ when it
+# is worth keeping; the raw log is neither, and it grows without bound.
+demos/**/*.log

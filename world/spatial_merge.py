@@ -20,6 +20,7 @@ from world.spatial_containment import (
     _clean_containment,
     clamp_scale,
     containment_broken_by_scale_change,
+    derive_containment_from_contacts,
     derive_contained_positions,
     normalize_scene_containment,
     normalize_scene_scales,
@@ -1167,6 +1168,20 @@ def merge_scene_with_diff(
     # so the contact_ref pointers have something to point at, and BEFORE stations
     # are derived (a held hand is not derived from an action).
     apply_contact_action_ops(merged, diff.get("contact_action_ops"))
+
+    # AFTER contacts are settled, and it has to be this way round. Contact
+    # normalisation reads `contained` to decide which side of an interior
+    # relation encloses the other (`_contained_inversion`), so containment is
+    # normalised first at the top of this merge; deriving the other direction
+    # here rather than there is what keeps that from being a cycle. The gap
+    # this fills is a beat that expressed an enclosure ONLY as a contact --
+    # containment then stayed empty and every sight gate answered from it.
+    if derive_containment_from_contacts(merged):
+        # Re-run the hygiene the new records have to satisfy (a container that
+        # has left the scene, a cycle), then put the enclosed body where its
+        # container is -- both already ran, above, before these existed.
+        normalize_scene_containment(merged)
+        derive_contained_positions(merged)
 
     # Within-room position, last of all. Contact is settled by now, and contact
     # is what the derivation reads: a hand on the quilt is a body at the bed.

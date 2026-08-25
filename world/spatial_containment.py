@@ -237,6 +237,12 @@ def _scale_phrase(factor):
 _MAX_CONTAINED = 40
 CONTAINMENT_MODES = (
     "held", "carried", "pocket", "container", "riding", "mounted", "worn",
+    # A body inside another body's own interior -- a mouth, a coil, a pouch.
+    # Named rather than left to the unknown-reads-as-enclosed fallback so it
+    # is a member of the vocabulary a reader can look up, and so the mode a
+    # derivation writes is never mistaken for one a model reached outside the
+    # list to invent.
+    "interior",
 )
 
 
@@ -312,6 +318,74 @@ def contents_of(scene: dict, container: str) -> list:
 _OPEN_CONTAINMENT_MODES = frozenset({
     "held", "carried", "riding", "mounted", "worn",
 })
+
+
+def derive_containment_from_contacts(scene: dict) -> list:
+    """A whole body inside another's interior IS containment. Record it.
+
+    THE LEDGERS DISAGREED AND THE GATE READ THE EMPTY ONE. `contained` is what
+    `containment_conceals` consults, and its rule is already exactly right --
+    "something carried inside a body is not seen BY that body either... what
+    it has instead of sight is touch". Nothing derived it from the contact
+    ledger, so an enclosure the Director expressed as an interior CONTACT
+    concealed nothing at all.
+
+    Measured, chat 86 t49-t50: the contact specialist wrote
+    `containment: {"Hinami": null}` -- explicitly releasing the record -- and
+    expressed the same enclosure as `contact_ops` instead. From that beat the
+    scene held a body at rest inside a mouth in one ledger and nobody inside
+    anything in the other, and the enclosing body's view carried the enclosed
+    one's full appearance region by region, down to "barely visible
+    copper-gold hair on her shins". The touch channel beside it was correct
+    and vivid throughout: the enclosure was modelled, just not for sight.
+
+    THE WHOLE BODY, NOT A PART. A tongue against a torso inside a mouth is
+    contact within an enclosure and says nothing about who is enclosed; a
+    body with no part named, or the part `body` itself, is the enclosed
+    party. That distinction is the whole rule, and it is the one that keeps a
+    hand in a pocket from making its owner a pocket's contents.
+
+    NEVER OVERRIDES AN EXISTING RECORD. Containment stays authoritative --
+    `_contained_inversion` already defers to it on exactly that ground -- so
+    this only fills a gap. A body the scene says is `held` in the open stays
+    held and stays visible.
+
+    Returns the subjects it recorded, for the caller's report.
+    """
+    contacts = (scene or {}).get("contacts")
+    if not isinstance(contacts, list) or not contacts:
+        return []
+    contained = scene.setdefault("contained", {})
+    if not isinstance(contained, dict):
+        contained = scene["contained"] = {}
+    minted = []
+    for row in contacts:
+        if not isinstance(row, dict):
+            continue
+        if str(row.get("relation") or "").strip().casefold() != "interior":
+            continue
+        if not str(row.get("target_interior") or "").strip():
+            continue
+        actor = str(row.get("actor") or "").strip()
+        holder = str(row.get("target") or "").strip()
+        if not actor or not holder:
+            continue
+        if actor.casefold() == holder.casefold():
+            continue
+        part = str(row.get("actor_part") or "").strip().casefold()
+        if part and part not in _WHOLE_BODY_PARTS:
+            continue
+        if _ci_get(contained, actor) is not None:
+            continue
+        contained[actor] = {"in": holder, "mode": "interior"}
+        minted.append(actor)
+    return minted
+
+
+#: The ways a contact names the WHOLE body rather than a part of it. An empty
+#: `actor_part` is the same claim -- the enclosed side named no part because
+#: there is no part to name.
+_WHOLE_BODY_PARTS = frozenset({"body", "whole body", "self", "form"})
 
 
 def containment_hides(mode) -> bool:
