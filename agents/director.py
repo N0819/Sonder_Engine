@@ -283,6 +283,7 @@ from .director_fanout import (
 from .director_reconcile import (
     _deep_audit_mode,
     _player_claim_findings,
+    _scale_relation_conflicts,
     _public_omission,
     _stamp_dialogue_articulation,
     _SETTLING_VERDICTS,
@@ -1587,11 +1588,23 @@ def _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
             "intact while the prose claims otherwise."
         )
 
+    # A committed magnitude against the relations committed beside it (see
+    # `_scale_relation_conflicts`). Warn-only and outside the repair routing,
+    # for the destruction tripwire's own reason and one more: a repair asked
+    # to reconcile these would be asked to invent a ratio, and the number is
+    # precisely what is not trustworthy here. Told to the next beat's
+    # Director, which owns the magnitude, rather than silently committed.
+    scale_conflicts = _scale_relation_conflicts(sc, sd)
+    for conflict in scale_conflicts:
+        ctx.add_warning(conflict)
+        ctx.tell_director(conflict)
+
     recon = {
         "signals": [dict(s) for s in signals],
         "manifest": [dict(m) for m in manifest],
         "claim_notes": claim_notes,
         "destruction_scan": list(destruction_flags),
+        "scale_conflicts": list(scale_conflicts),
         "audited": False, "tripwire": False,
         "omissions": [], "repaired": False,
         "dispositions": [], "unresolved": [],

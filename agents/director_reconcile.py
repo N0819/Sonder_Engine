@@ -18,8 +18,15 @@ from story import attire as attire_model
 from core.db import get_setting
 from world.spatial import (
     ARTICULATION_STIFLED,
+    _clean_containment,
     apply_contact_ops,
     apply_substance_ops,
+    clamp_scale,
+    containment_hides,
+    derive_containment_from_contacts,
+    scale_of,
+    size_relation,
+    size_tier,
     speech_articulation_impediment,
 )
 
@@ -198,6 +205,115 @@ def _stamp_dialogue_articulation(sc, sd, dialogue_log):
                 "line -- or keep the line to a word or two at volume "
                 "'mutter' -- muffled against what blocks it.")
     return notices
+
+
+def _scale_relation_conflicts(sc, sd):
+    """Magnitudes that contradict the relations committed beside them.
+
+    ONE DIFF, TWO HANDS: `scales` and `containment` are the contact
+    specialist's channels, `poses`/`positions` the spatial one's, and no
+    specialist ever sees the merged result -- so one beat can commit a body
+    at a magnitude that its own enclosure relation rules out, and nothing
+    objects. The orchestrator judges the MERGED diff, which is where this
+    belongs.
+
+    THE RULE, in the vocabulary the engine already has: an enclosure that
+    HIDES a body (`containment_hides` -- the modes where the holder's own
+    body or clothing closes around it, as against the five open carries)
+    asserts that the holder can enclose it, and the engine's only
+    enclosure-scale predicate is `size_relation`'s
+    `other_fits_in_actors_hand`, whose boundary IS the `tiny` tier. A
+    committed scale that denies it contradicts the relation committed in the
+    same beat.
+
+    DETECTION ONLY, and deliberately. It rewrites no number and drops no
+    relation: the relation is corroborated by the prose channels and the
+    number is not, so subtracting the relation would delete the witnesses to
+    satisfy the suspect, and inventing a ratio that fits would be the engine
+    fabricating objective state from a heuristic -- which it does nowhere
+    else. `derive_containment_from_contacts` records the same lesson from
+    the same measured beats (chat 86 t45-t50, `scales {"Hinami": 0.25}`
+    beside prose calling her three inches, ~0.05): "a threshold read off a
+    wrong number is a wrong answer with a confident shape". So the number
+    stays the Director's to correct, with the contradiction named to it.
+
+    Gated on the enclosed body carrying a NON-BASELINE scale, because this
+    is a check on a COMMITTED MAGNITUDE: a scene where nobody's size is in
+    play produces nothing, and an object held or pocketed at baseline --
+    where a ratio between two different baselines means nothing -- never
+    reaches the predicate. Gated again on this beat having written one half
+    of the pair, so a contradiction the engine cannot fix warns while it is
+    being made, not once per beat forever. Fail open: an exception anywhere
+    returns no conflicts.
+    """
+    try:
+        scales = dict((sc or {}).get("scales") or {})
+        for name, raw in ((sd or {}).get("scales") or {}).items():
+            label = str(name or "").strip()
+            if label:
+                # `clamp_scale(None)` is the merge's own "back to normal".
+                scales[label] = clamp_scale(raw) or 1.0
+        preview = {
+            "scales": scales,
+            "contained": dict((sc or {}).get("contained") or {}),
+            "contacts": copy.deepcopy((sc or {}).get("contacts") or []),
+        }
+        incoming = (sd or {}).get("containment")
+        if isinstance(incoming, dict):
+            for subject, raw in incoming.items():
+                label = str(subject or "").strip()
+                if not label:
+                    continue
+                record = _clean_containment(raw, label) if raw else None
+                if record is None:
+                    for key in [k for k in preview["contained"]
+                                if str(k).strip().casefold()
+                                == label.casefold()]:
+                        preview["contained"].pop(key, None)
+                else:
+                    preview["contained"][label] = record
+        # The enclosure is as often expressed ONLY as an interior contact op
+        # -- the merge derives the record from it, so the check has to read
+        # the same derivation rather than a channel the beat left empty.
+        apply_contact_ops(preview, (sd or {}).get("contact_ops") or [])
+        touched = {str(k).strip().casefold() for k in
+                   list((sd or {}).get("scales") or {})
+                   + list((sd or {}).get("containment") or {})}
+        for op in (sd or {}).get("contact_ops") or []:
+            if isinstance(op, dict):
+                touched |= {str(op.get("actor") or "").strip().casefold(),
+                            str(op.get("target") or "").strip().casefold()}
+        touched |= {str(n).strip().casefold()
+                    for n in derive_containment_from_contacts(preview)}
+        conflicts = []
+        for subject, record in (preview.get("contained") or {}).items():
+            if not isinstance(record, dict):
+                continue
+            holder = str(record.get("in") or "").strip()
+            mode = str(record.get("mode") or "carried")
+            if not holder or not containment_hides(mode):
+                continue  # carried in the open says nothing about size
+            if str(subject).strip().casefold() not in touched \
+                    and holder.casefold() not in touched:
+                continue  # this beat wrote neither half of the pair
+            factor = scale_of(preview, subject)
+            if factor == 1.0:
+                continue  # no magnitude claimed, so none can conflict
+            if size_relation(preview, holder, subject).get(
+                    "other_fits_in_actors_hand"):
+                continue
+            conflicts.append(
+                f"size: {subject} is committed as {mode!r} by {holder} -- an "
+                "enclosure only a body small enough to be closed a hand "
+                f"around can be inside -- while state_diff.scales puts "
+                f"{subject} at {factor:g} of baseline, size tier "
+                f"{size_tier(factor)!r}. The relation and the number cannot "
+                "both be true, and the relation is the one the prose "
+                "corroborates: if the size the prose gives is the real one, "
+                "write THAT ratio into state_diff.scales.")
+        return conflicts
+    except Exception:
+        return []
 
 
 #: Verdicts that settle an event without a second call. `not_mine` is
