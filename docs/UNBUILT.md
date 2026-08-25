@@ -783,6 +783,54 @@ investigation found and did not close.
   it. Whether it should remains a design question: partial containment is not
   the same as being sealed inside something, and the two remain separate code
   paths describing overlapping physical situations.
+
+  **The third path now exists and is routed** (2026-08-25). There were always
+  three, not two: the ledger form (`contained`), the contact form
+  (`relation: interior`), and the PLACE form -- a room whose `parent_entity`
+  is the body around it. Nothing converted anything into the third, so an
+  enclosure a beat declared stayed a one-line ledger entry and its occupant's
+  position derived, every merge, to the holder's own room.
+  `spatial.place_enclosed_bodies` closes that: a `mode: interior` record plus
+  a holder that HAS interior rooms becomes a real position inside them, and
+  contact hygiene admits an enclosure-joined pair so the touch channel across
+  the boundary survives the move. A holder with no interior rooms is
+  untouched, which is why nothing changed for any scene already on disk.
+  The follow-ons below are what that landing did not close.
+- **A body with no authored or declared interior does not become one.** The
+  handoff is conditional by design -- topology is authored content, and
+  auto-minting a single fallback room on every `mode: interior` record would
+  change behaviour for every existing scene that expresses an ordinary partial
+  enclosure as containment (the ledger-form contract
+  `tests/test_body_enclosure_channels.py` holds). So the two producers are the
+  spatial specialist's `rooms` channel (judgment, now prompted for it) and
+  nothing else. A CARD-authored interior -- an `embodiment.interior` section
+  with stations, barriers and an entry, materialized deterministically at
+  commit when an enclosure is actually active -- is the deterministic producer
+  that would make this work without a model remembering: generic place
+  topology, usable by any body, vehicle or structure a card describes.
+  Deferred whole, with the editor UI (`static/js/components.js`) beside it.
+- **Interior passage is undirected.** Interior stations connect by `membrane`
+  in both directions, because the barrier vocabulary has no directed-passage
+  value: `one_way_window`'s asymmetry is SIGHT only, and `neighbor_map`
+  (`world/spatial_barriers.py`) is undirected by documented design across four
+  walks. "Passable inward, and outward only on the container's own action"
+  therefore needs its own vocabulary work in the `one_way_window` mould. Until
+  then, going back out against the body around you is what it already is: a
+  contested act for the reaction/dice machinery, not graph structure.
+- **A room cannot carry a hazard.** A place-form interior is exactly where "a
+  place that acts on the bodies in it over time" becomes expressible -- and
+  there is no room field for it, no sweep that ticks one, and no capability
+  that suppresses one. Declaring `RoomDef.hazard` ahead of a reader would be a
+  field nothing reads, which `llm/schemas.py` deleted 29 models over; the seam
+  is registered here instead, to land with its consumer.
+- **A body that regrows inside a place-form interior is not auto-released.**
+  `containment_broken_by_scale_change` reads the `contained` ledger only, and
+  the handoff empties it. A scale change that makes the enclosure absurd
+  therefore releases nothing, and the Director/movement backstop is the only
+  thing that governs the exit. The scale rule and the place form need to meet.
+- **The occupied-body-is-a-place clause is English-only.** `language_packs/en`
+  carries it in the spatial specialist's `rooms` chunk; the `ja` pack keeps
+  the old text, so a Japanese story's specialist is not told it owns this.
 - **Observation metadata is computed and consumed by nothing.** `intensity`,
   `suddenness`, `ambiguity` and `directed_at_self` are re-derived from the
   scrubbed view for every atom, cost tokens on every character payload, and

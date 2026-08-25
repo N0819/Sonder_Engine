@@ -204,7 +204,7 @@ def is_sealed_in(scene: dict, name: str) -> bool:
     enclosure is still sealed to AIR -- you can be seen through glass and
     suffocate behind it, which is exactly the horror of the thing.
     """
-    from world.spatial import normalize_barrier, room_of
+    from world.spatial import _PASSABLE_BARRIERS, normalize_barrier, room_of
 
     room_id = room_of(scene, name)
     if not room_id:
@@ -213,10 +213,18 @@ def is_sealed_in(scene: dict, name: str) -> bool:
     if not isinstance(room, dict) or not room.get("parent_entity"):
         return False
 
-    # Any adjacency a body could pass through means it is not sealed.
+    # Any adjacency a body could pass through means it is not sealed -- read
+    # from the ONE set that answers "can a body go this way", not from a
+    # hand-written copy of part of it. `membrane` is the rung that copy was
+    # missing: a curtained doorway, a tent flap, the soft wall of an
+    # enclosure you climb into. Bodies pass, sight does not -- and a body
+    # that can walk out is not suffocating, however little it can see. That
+    # gap was invisible while nothing ever put a body in a membrane-doored
+    # interior; the enclosure handoff does exactly that, and would otherwise
+    # have started an air countdown on an occupant with a way out.
     for edge in room.get("adjacent") or []:
         if isinstance(edge, dict) and \
-                normalize_barrier(edge.get("barrier")) in ("open", "open_door"):
+                normalize_barrier(edge.get("barrier")) in _PASSABLE_BARRIERS:
             return False
     return True
 
