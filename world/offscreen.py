@@ -1335,10 +1335,15 @@ def full_agent_candidates(cid, *, frame_id=None, cap=1):
             reasons.append("new_carried_report")
         if not reasons:
             continue
-        out.append({**entry, "reasons": reasons,
-                    "new_report_count": len(new_reports)})
+        # BOUND FIRST, THEN APPEND. Checking after the append means `cap=0`
+        # returns one candidate -- one PAID tick a caller asked not to have.
+        # Unreachable from `schedule_agent_ticks`, which returns early on
+        # `cap <= 0`, and inherited by every new caller. `profile_candidates`
+        # already has this shape; these two now agree.
         if len(out) >= cap:
             break
+        out.append({**entry, "reasons": reasons,
+                    "new_report_count": len(new_reports)})
     return out
 
 

@@ -292,6 +292,7 @@
     "episode_speech": "I heard {label} say: \"{body}\"",
     "episode_speech_via": "Over {via} I heard {label} say: \"{body}\"",
     "exposed_detail": "{subject} is visible: {detail}",
+    "exposed_detail_plural": "{subject} are visible: {detail}",
     "exposed_other": "{label}'s exposed {place}",
     "exposed_self": "Your exposed {place}",
     "fallback_speech": "{label} says: {quote}",

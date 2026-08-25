@@ -461,10 +461,13 @@ def fired_consequences_at(cid, room_id, since_seconds, until_seconds,
         except Exception:
             continue
         what = str(payload.get("what") or "").strip()
-        if what:
-            out.append(what)
+        if not what:
+            continue
+        # Bound first -- see `offscreen.full_agent_candidates`. `cap=0`
+        # returned one item.
         if len(out) >= max(0, int(cap)):
             break
+        out.append(what)
     return out
 
 

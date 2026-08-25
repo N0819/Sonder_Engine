@@ -204,6 +204,7 @@
     "episode_speech": "{label}の言葉を聞いた。「{body}」",
     "episode_speech_via": "{via}越しに{label}の言葉を聞いた。「{body}」",
     "exposed_detail": "{subject}に{detail}が見えている。",
+    "exposed_detail_plural": "{subject}に{detail}が見えている。",
     "exposed_other": "{label}の露出した{place}",
     "exposed_self": "あなたの露出した{place}",
     "fallback_speech": "「{quote}」と{label}が言う。",

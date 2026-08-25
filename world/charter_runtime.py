@@ -820,6 +820,22 @@ def _event_surface(event):
     return phrases.get(kind, f"{subject} changed state")
 
 
+def _event_frame(payload):
+    """Which era a scheduled charter event belongs to, `None` for the present.
+
+    `_scheduled_row` writes `frame_id` straight into the payload, so an older
+    row written before that field existed reads as the present -- which is
+    where those stories were.
+    """
+    value = (payload or {}).get("frame_id")
+    if value in (None, "", 0):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _scheduled_row(cid, frame_id, base_turn, epoch_id, charter_key, event,
                    due_at):
     kind = str(event.get("kind") or "institution_event")
@@ -1163,6 +1179,14 @@ def charter_diagnostics(cid, frame_id=None, *, charter_key="", body_key=""):
             "AND seed LIKE 'charter:%' ORDER BY due_at DESC LIMIT 500", (cid,)):
         try:
             payload = json.loads(row["payload"] or "{}")
+            # ONE ERA'S DIAGNOSTICS. `registry_for` above is frame-scoped and
+            # this listing was not, so a story with frames explained its
+            # present with events another era minted. `scheduled_events` has
+            # no frame column -- the scoping rides in the payload, written by
+            # `_scheduled_row` -- so the filter belongs here rather than in
+            # the SQL. `None` is the present era on both sides.
+            if _event_frame(payload) != (frame_id if frame_id else None):
+                continue
             event = payload.get("charter_event")
             if isinstance(event, dict):
                 event = {"charter": str(

@@ -673,7 +673,7 @@
           "$type": "tuple",
           "items": [
             "; clothing state:",
-            "; with"
+            ";"
           ]
         },
         {

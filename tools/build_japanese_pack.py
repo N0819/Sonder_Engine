@@ -166,6 +166,7 @@ comp["templates"].update({
     "exposed_self": "露出しているあなたの{place}",
     "exposed_other": "露出している{label}の{place}",
     "exposed_detail": "{subject}が見えている：{detail}",
+    "exposed_detail_plural": "{subject}が見えている：{detail}",
     "muffled": "くぐもった声：{fragment}",
     "muffled_indistinct": "……何か聞き取れない……",
     "residue_content": "{lead}{body}。",
