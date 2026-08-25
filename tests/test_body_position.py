@@ -1007,7 +1007,17 @@ class TestLiftingContactWrittenAsThePartsOwnDoing:
         assert scene["entities"]["hinami"]["state"]["position"]
 
     def test_looking_at_someone_is_never_lifted(self):
-        scene = self._lift({"gaze": "half_lidded_looking_down_at_Tamamo"})
+        # This beat ASSERTS the gaze rather than inheriting it, because
+        # `gaze` is momentary state and expires on a silent merge
+        # (world/spatial_merge._is_transient_state_key, 2026-08-25). What
+        # this pins is unchanged and unrelated to that: a look is not a
+        # touch, so the key is neither turned into a contact nor consumed
+        # by the lifter the way `tail_spade` above is.
+        scene = _scene(
+            positions={"Hinami": "bedroom", "Tamamo": "bedroom"},
+            entities={"hinami": {"name": "Hinami", "state": {}}})
+        scene = merge_scene_with_diff(scene, {"entities": {"hinami": {
+            "state": {"gaze": "half_lidded_looking_down_at_Tamamo"}}}})
 
         assert scene["contacts"] == []
         assert scene["entities"]["hinami"]["state"]["gaze"]
