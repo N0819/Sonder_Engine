@@ -622,9 +622,22 @@ def _apply_explicit_transfer(current, record, report=None) -> bool:
     return True
 
 
-def apply_substance_ops(scene: dict, ops, report=None) -> dict:
-    """Apply add/remove/clear operations to ``scene.substances``."""
-    current = {}
+def _standing_substance_pools(scene) -> dict:
+    """The saved ledger read back as {substance_id: record}: one row per pool.
+
+    Hoisted out of `apply_substance_ops` so the ledger's OWNER is offered
+    exactly the rows the next apply will keep. `substance_ledger_index` read
+    the raw stored list instead, so a scene carrying two rows of one pool
+    would hand back two addressable ids where the apply keeps one -- an id
+    quoted from the payload naming nothing. Measured 2026-08-25: 5 of 77
+    stored blobs carry substances and index length equals post-apply length
+    in every one, so this was a divergence waiting rather than a live
+    defect. One reader of the saved ledger, one answer.
+
+    Ordering is the stored order, so the LATER row is the current account of
+    a pool -- which is why the fold absorbs into the row already standing.
+    """
+    current: dict = {}
     for raw_record in ((scene or {}).get("substances") or []):
         if not isinstance(raw_record, dict) or not raw_record.get("source") \
                 or not raw_record.get("substance") or not raw_record.get("target"):
@@ -643,13 +656,18 @@ def apply_substance_ops(scene: dict, ops, report=None) -> dict:
         pooled_id = next((sid for sid, standing in current.items()
                           if _same_pool(scene, standing, record)), None)
         if pooled_id is not None:
-            # A scene saved before the fold below can already carry the stack;
-            # pool it on read so the ledger heals on the next merge rather
-            # than carrying every row forever. Rows arrive in the order they
-            # were written, so the later one is the current account.
+            # A scene saved before the fold in `apply_substance_ops` can
+            # already carry the stack; pool it on read so the ledger heals on
+            # the next merge rather than carrying every row forever.
             _absorb_into_pool(current[pooled_id], record)
             continue
         current[record["substance_id"]] = record
+    return current
+
+
+def apply_substance_ops(scene: dict, ops, report=None) -> dict:
+    """Apply add/remove/clear operations to ``scene.substances``."""
+    current = _standing_substance_pools(scene)
     for raw in resolve_substance_ops(scene, ops, report=report):
         op = raw.get("op")
         if op == "add":
@@ -746,21 +764,17 @@ def substance_ledger_index(scene: dict) -> list[dict]:
     surface for the ops that already exist; it adds no mechanism, per
     `docs/design/DESIGN_MATERIAL_MODEL.md` §1.
 
-    Ids are recomputed the way `apply_substance_ops` stamps them, including
-    the same shedding of an enclosure stored beside a non-interior
-    placement, so a record saved before stamping is addressable too and the
-    id quoted back always finds the row it named.
+    Rows come from `_standing_substance_pools`, the same read the next
+    apply does -- ids stamped the same way, the same shedding of an
+    enclosure stored beside a non-interior placement, and the same pool
+    fold. Reading the raw stored list instead would offer an id per stored
+    row where the apply keeps one per pool, and the id quoted back would
+    then name nothing. The id quoted back always finds the row it named
+    because both hands read the ledger through one function.
     """
     out = []
-    for raw in ((scene or {}).get("substances") or []):
-        if not isinstance(raw, dict) or not raw.get("source") \
-                or not raw.get("substance") or not raw.get("target"):
-            continue
-        record = dict(raw)
-        if _substance_placement(record.get("placement")) != "interior" \
-                and _substance_text(record.get("target_interior"), 160):
-            record["target_interior"] = ""
-        row = {"substance_id": _substance_id(record)}
+    for record in _standing_substance_pools(scene).values():
+        row = {"substance_id": record["substance_id"]}
         for field in _SUBSTANCE_INDEX_FIELDS:
             value = _substance_text(record.get(field), 160)
             if value:
@@ -869,8 +883,9 @@ def _contact_action_key(actor, contact_ref):
     The action TEXT is that dynamic's DESCRIPTION and is deliberately NOT
     part of its identity: a literal identity fails exactly when a model
     rewrites, and the corpus shows it did. Re-measured 2026-08-25 across
-    every stored scene: 11 effect rows on 3 contacts, and each of the four
-    multi-row groups is one dynamic reworded -- "steady peristaltic wave" /
+    every stored scene: 12 effect rows under 3 distinct contact ids across
+    4 chats, in four groups of three, and each of those four groups is one
+    dynamic reworded -- "steady peristaltic wave" /
     "slow steady peristaltic wave" / "steady pressure" whose rhythm restates
     the first (chat 88, contact:8a4058a942b38470dbb4). The composer renders
     one sentence per row, so an observer's four-sentence view carried three
@@ -1020,6 +1035,14 @@ def apply_contact_action_ops(scene, ops, report=None) -> dict:
             if at is None:
                 rows.append(cleaned)
             else:
+                # An `add` naming a contact this actor already drives is a
+                # RE-DESCRIPTION, and it replaces the row WHOLE. An
+                # `intensity` or `rhythm` the new account omits goes with
+                # the words it qualified: a qualifier kept beside a fresh
+                # description leaves the ledger holding half of one account
+                # and half of another, which is the stacking this identity
+                # rule exists to end. `change` is the op that inherits, and
+                # it does so above by merging onto the standing row.
                 rows[at] = cleaned
             index = rebuild_index()
             continue

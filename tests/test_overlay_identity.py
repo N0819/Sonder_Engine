@@ -163,3 +163,33 @@ class TestHeal:
         rows = ["ears drooping", "shoulders squared",
                 {"name": "soot", "description": "streaked at the jaw"}]
         assert _dedupe_overlay_entries(rows) == rows
+
+
+class TestMalformedLedgers:
+    """The heal now runs on EVERY commit, so the shapes it can meet are no
+    longer only the ones a diff brought with it.
+
+    `overlays` present with a JSON null is the one that bites: `get` and
+    `setdefault` both hand back the stored None, so a guard that only turns
+    away a non-dict lets it through -- and the heal then raises inside
+    `persist/commit.py`, the sole persistence boundary, where any domain
+    failure rolls the whole turn back. The EMPTY diff is the crashing case,
+    which is the common one. No in-tree writer produces that shape and none
+    of the 77 stored blobs carries it (scanned 2026-08-25); an archive or
+    checkpoint written elsewhere is the exposure.
+    """
+
+    def test_a_null_overlay_map_is_reset_rather_than_read(self):
+        sc = {"overlays": None}
+        _merge_overlays(sc, {})
+        assert sc["overlays"] == {}
+
+    def test_a_null_overlay_map_still_takes_this_beat_s_overlays(self):
+        sc = {"overlays": None}
+        _merge_overlays(sc, {"Ada": ["flush"]})
+        assert sc["overlays"] == {"Ada": ["flush"]}
+
+    def test_a_scene_with_no_overlay_key_at_all_gains_one(self):
+        sc = {}
+        _merge_overlays(sc, {"Ada": ["flush"]})
+        assert sc["overlays"] == {"Ada": ["flush"]}

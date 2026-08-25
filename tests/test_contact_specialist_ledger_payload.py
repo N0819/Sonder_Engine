@@ -19,11 +19,23 @@ from __future__ import annotations
 import json
 
 from agents import director
-from world.spatial import (
-    apply_contact_ops,
-    contact_action_ledger_index,
-    substance_ledger_index,
-)
+from world.spatial import apply_contact_ops
+
+
+# The two accessors are imported per call, not at module scope, so this file
+# still COLLECTS on a tree that does not have them -- which is what lets
+# TestEntitlement below state its defect as a failed assertion (the owner of
+# `substance_ops` was never handed the ledger those ops address) instead of
+# dragging the whole module down with an ImportError. An ImportError is not a
+# reproduction.
+def substance_ledger_index(scene):
+    from world.spatial import substance_ledger_index as accessor
+    return accessor(scene)
+
+
+def contact_action_ledger_index(scene):
+    from world.spatial import contact_action_ledger_index as accessor
+    return accessor(scene)
 
 
 def _scene():
@@ -69,6 +81,33 @@ class TestSubstanceLedgerIndex:
         [stored] = scene["substances"]
         [row] = substance_ledger_index(scene)
         assert row["substance_id"] == stored["substance_id"]
+
+    def test_two_rows_of_one_pool_are_offered_as_the_one_id_that_survives(
+            self):
+        """The index and the next apply must read the saved ledger the same
+        way, or the payload advertises an id that vanishes when the model
+        quotes it back. A stack held apart only by which part of the source
+        delivered it is ONE pool (`_same_pool`), and both hands now fold it
+        through `_standing_substance_pools`."""
+        import copy
+
+        from world.spatial import apply_substance_ops
+
+        scene = _scene()
+        scene["substances"] = [
+            {"source": "Ada", "source_part": "hand", "substance": "lamp oil",
+             "target": "Bex", "target_part": "shoulder",
+             "placement": "surface", "amount": "a smear"},
+            {"source": "Ada", "source_part": "cloth", "substance": "lamp oil",
+             "target": "Bex", "target_part": "shoulder",
+             "placement": "surface", "amount": "a slick"},
+        ]
+        index = substance_ledger_index(scene)
+        applied = apply_substance_ops(copy.deepcopy(scene), [])["substances"]
+        assert [row["substance_id"] for row in index] == \
+            [row["substance_id"] for row in applied]
+        # ...and it is the LATER account of the pool that is offered.
+        assert index[0]["amount"] == "a slick"
 
     def test_a_malformed_row_is_not_offered_as_addressable(self):
         scene = _scene()

@@ -249,15 +249,32 @@ still standing at turn 67 — thirteen beats after the act it named. Two rules
 answer it, both in `world/spatial_merge.py`:
 
 - **An echo is silence.** A byte-identical re-emission of a value that was
-  ALREADY standing no longer counts as re-assertion; only a CHANGED value
-  does. The cost is real and accepted: a model faithfully restating a
-  momentary fact that genuinely has not changed loses the key for one beat.
-  For the momentary vocabulary, byte-identical across two beats is stale by
-  construction, and a genuinely continuing dynamic has its own channel that
-  persists through silence by contract (`contact_action_ops`). The `_merge_entity`
-  "a schema default is silence" analogy is weaker than it reads — a default is
-  UNCHOSEN and an echo was emitted — so the 13-beat measurement is what carries
-  the rule, not the analogy.
+  ALREADY ASSERTED no longer counts as re-assertion; only a CHANGED value
+  does. The cost is real and accepted: while a model keeps restating a
+  momentary fact word for word, the key stays expired — it does not come back
+  and then go again. For the momentary vocabulary, byte-identical across two
+  beats is stale by construction, and a genuinely continuing dynamic has its
+  own channel that persists through silence by contract
+  (`contact_action_ops`). The `_merge_entity` "a schema default is silence"
+  analogy is weaker than it reads — a default is UNCHOSEN and an echo was
+  emitted — so the 13-beat measurement is what carries the rule, not the
+  analogy.
+
+  **ASSERTED, not STANDING — corrected 2026-08-25, before it shipped.** The
+  first form of this rule compared the incoming value only against the value
+  standing in the scene, and expiry deletes exactly that value: the next
+  identical echo found nothing standing, re-established the key, and the echo
+  after that expired it again. Measured on that form, one diff merged six
+  times running gave `gaze: downcast` / gone / `downcast` / gone / `downcast`
+  / gone — a momentary key blinking forever, on precisely the
+  verbatim-re-emission input the rule exists for, and worse for every reader
+  of the committed blob than the stale value it replaced. So a value
+  suppressed as an echo is remembered under the scene's
+  `expired_entity_state`, and every later echo of it is silence too. The
+  memory lives only as long as the echo run: a beat that says nothing about
+  the key releases it, so a genuine re-assertion after a silence is still an
+  assertion, and suppression is never a standing ban on a word. A scene whose
+  bodies are not mid-echo carries no such key at all.
 - **The vocabulary is a stated class, not a list of names.** `state` is open
   free text, so an allowlist can only ever name the momentary keys some story
   already wrote. It is now the exact keys `breath`, `breathing`,
