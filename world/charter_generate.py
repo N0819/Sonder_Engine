@@ -99,12 +99,35 @@ summary must cite event_ids too. Do not invent an event, private memory,
 relationship, quote, or outcome. Omit anything the chronicle cannot support."""
 
 
-def _json_call(system, payload, *, max_tokens=6000, temperature=0.5):
+#: Token budget for one generation call. A location plan grows with the rooms
+#: and posts it has to describe, and a Galaxy-class starship with six required
+#: rooms and five placed officers overran the old fixed 6000 -- which arrived
+#: as a `JSONDecodeError` from `json.loads` on a half-written object, roughly
+#: 24,000 characters in, naming a line and column in output nobody had asked
+#: to see. The budget is generous because the failure is expensive: the call
+#: has already been paid for by the time the truncation is discovered.
+PLAN_MAX_TOKENS = 16000
+
+
+def _json_call(system, payload, *, max_tokens=PLAN_MAX_TOKENS,
+               temperature=0.5):
     from llm.providers import chat_complete
     raw = chat_complete(
         "utility", system, json.dumps(payload, ensure_ascii=False),
         temperature=temperature, max_tokens=max_tokens, json_mode=True)
-    value = json.loads(raw)
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        # SAY WHICH FAILURE THIS IS. A plan cut off mid-object and a model
+        # that returned prose are both `JSONDecodeError`, and only one of them
+        # is fixed by asking for less. The tail is what tells them apart.
+        raise ValueError(
+            "the location generator returned %d characters of unparseable "
+            "JSON (%s). If it ends mid-object the plan outran its %d-token "
+            "budget -- ask for fewer required_rooms or featured_residents. "
+            "Tail: ...%s"
+            % (len(raw or ""), exc.msg, max_tokens,
+               (raw or "")[-160:].replace("\n", " "))) from exc
     if not isinstance(value, dict):
         raise ValueError("town generator returned a non-object")
     return value
