@@ -522,12 +522,20 @@ def check_prompt_schema_ops(errors: list[str]) -> None:
 _TIME_SHAPE_LINE = re.compile(r"time:\s*\{([^}]*)\}")
 _TIME_PROSE_LINE = re.compile(r"state_diff\.time with ([^.。]*)")
 _TIME_TOKEN = re.compile(r"[a-z_]+")
-# Keys a shape/prose scan can legitimately surface that are not `*_seconds`.
-# Everything else in those spans is ordinary English ("and", "bool") or an
-# enum member ("action", "time_skip"), not a field name.
-_TIME_NON_SECONDS_KEYS = frozenset({
-    "mode", "explicit", "display_advance", "display", "time_scale",
-})
+
+
+def _time_non_seconds_keys() -> frozenset:
+    """Which tokens a shape/prose scan may legitimately surface that are not
+    `*_seconds`. Everything else in those spans is ordinary English ("and",
+    "bool") or an enum member ("action", "time_skip"), not a field name.
+
+    Read from `world.mechanics.TIME_METADATA_KEYS` rather than copied: that
+    set IS "the vocabulary's non-claim half", and a second hand-kept copy of
+    a set whose whole purpose is to be the single authority is the drift this
+    check exists to catch."""
+    from world.mechanics import TIME_METADATA_KEYS
+
+    return TIME_METADATA_KEYS
 
 
 def check_time_channel_vocabulary(errors: list[str]) -> None:
@@ -537,12 +545,13 @@ def check_time_channel_vocabulary(errors: list[str]) -> None:
     `state_diff.time` is `Optional[dict]`, so validation accepts any key and
     the only thing that decides whether a key means anything is
     `world.mechanics.read_time_diff`. That reader knew exactly one absolute
-    spelling for eight months while the resolve payload printed the clock to
-    the model under a different one, and the corpus paid: 18 stored diffs
-    named the position as `elapsed_seconds`, 5 of them with no other numeric
-    key at all, every one silently discarded. Chat 88 turns 61, 64 and 66
-    claimed 1107, 1266 and 7200 seconds and the stored clock never left
-    1136.0, with nothing warned anywhere.
+    spelling from before this repository's first commit while the resolve
+    payload printed the clock to the model under a different one, and the
+    corpus paid: 22 stored diffs named the position as `elapsed_seconds`, 5
+    of them with no other numeric key at all, every one silently discarded.
+    In chat 88, turns 61 and 64 claimed 1107 and 1266 against a clock
+    standing at 1106.0 and turn 66 claimed 7200 against 1136.0; none of the
+    three moved the clock and nothing warned anywhere.
 
     HONEST LIMIT, stated because the general form is the one you would want:
     "any bare-dict channel whose reader ignores keys the schema accepts" is
@@ -568,9 +577,10 @@ def check_time_channel_vocabulary(errors: list[str]) -> None:
 
     def report(source: str, key: str) -> None:
         errors.append(
-            f"the {source} teaches state_diff.time key {key!r} that "
-            "world.mechanics.TIME_DIFF_KEYS does not contain, so the clock "
-            "reader would silently ignore it"
+            f"the {source} teaches state_diff.time key {key!r}, which is not "
+            "in world.mechanics.TIME_DIFF_KEYS -- no reader in the engine "
+            "has any meaning for it, so a beat that spells it advances "
+            "nothing and warns instead"
         )
 
     def walk(node, path: str) -> None:
@@ -588,6 +598,7 @@ def check_time_channel_vocabulary(errors: list[str]) -> None:
 
     walk(schemas.OUTPUT_EXAMPLES, "")
 
+    non_seconds = _time_non_seconds_keys()
     for path in sorted((ROOT / "language_packs").glob("*/cards/"
                                                       "system_prompts.json")):
         try:
@@ -612,7 +623,7 @@ def check_time_channel_vocabulary(errors: list[str]) -> None:
                 for span in pattern.findall(text):
                     for token in _TIME_TOKEN.findall(span):
                         if not (token.endswith("_seconds")
-                                or token in _TIME_NON_SECONDS_KEYS):
+                                or token in non_seconds):
                             continue
                         if token not in TIME_DIFF_KEYS:
                             report(f"{rel} prompt", token)
