@@ -148,7 +148,7 @@
 | `world/spatial_barriers.py` | 509 |  | — |
 | `world/spatial_contact_migration.py` | 331 |  | `world.spatial_contacts`, `world.spatial_identity` |
 | `world/spatial_contacts.py` | 1185 |  | `world.spatial_containment`, `world.spatial_identity` |
-| `world/spatial_containment.py` | 741 |  | `world.spatial_identity`, `world.spatial_transit` |
+| `world/spatial_containment.py` | 786 |  | `world.spatial_identity`, `world.spatial_transit` |
 | `world/spatial_frames.py` | 1087 |  | `core.db`, `core.frames`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial` |
 | `world/spatial_geometry.py` | 1076 |  | `world.spatial_barriers`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_identity`, `world.spatial_orientation` |
 | `world/spatial_identity.py` | 467 |  | — |
@@ -1712,14 +1712,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_body_interior_holder()` | 396 | 75 lines |
-| `derive_containment_from_contacts()` | 323 | 60 lines |
-| `normalize_scene_containment()` | 553 | 60 lines |
-| `derive_contained_positions()` | 615 | 42 lines |
+| `derive_containment_from_contacts()` | 323 | 90 lines |
+| `_body_interior_holder()` | 441 | 75 lines |
+| `normalize_scene_containment()` | 598 | 60 lines |
+| `derive_contained_positions()` | 660 | 42 lines |
 | `size_facts()` | 170 | 40 lines |
 | `size_relation()` | 131 | 37 lines |
 | `normalize_scene_scales()` | 89 | 34 lines |
-| `_hiding_holders()` | 473 | 34 lines |
+| `_hiding_holders()` | 518 | 34 lines |
 
 ### `world/spatial_frames.py`
 

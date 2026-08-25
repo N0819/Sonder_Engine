@@ -373,13 +373,58 @@ def derive_containment_from_contacts(scene: dict) -> list:
         if actor.casefold() == holder.casefold():
             continue
         part = str(row.get("actor_part") or "").strip().casefold()
+        enclosed, container = actor, holder
         if part and part not in _WHOLE_BODY_PARTS:
+            # THE OTHER SPELLING, and it is the commoner one. The row above
+            # says "this body, inside that one" and names the enclosed party
+            # in the actor slot. This one says "my part touches your part, in
+            # a cavity" -- `Mirelle.tongue -> Hinami.torso, interior, mouth`
+            # -- and names NEITHER party as the enclosed one. `target_interior`
+            # does not settle it either: in the first spelling the cavity
+            # belongs to the target, in this one it belongs to the actor, and
+            # the row carries nothing that says which.
+            #
+            # NOT SETTLED BY ANATOMY. `tongue` is not in
+            # `_ENCLOSING_PART_CAVITY` and should not be added to it -- that
+            # table is parts that ARE cavities, and a table of parts that
+            # RESIDE in cavities would be default anatomy, which this engine
+            # deliberately enumerates nowhere.
+            #
+            # NOT SETTLED BY A SCALE THRESHOLD EITHER, measured: the live
+            # scene carries 0.25 for a body its own prose calls three inches
+            # (~0.05), so `other_fits_in_actors_hand` is False for a body
+            # being held in a palm. A threshold read off a wrong number is a
+            # wrong answer with a confident shape.
+            #
+            # WHAT DOES SETTLE IT is the asymmetry, which survives the
+            # magnitude being wrong: one of these bodies can lift the other
+            # and cannot be lifted by it. That is the enclosing one, at 4x and
+            # at 20x alike. Where the scene gives no asymmetry -- two
+            # comparable bodies -- this abstains rather than guessing, and the
+            # explicit spelling above remains the way to say it.
+            enclosed, container = _enclosed_by_asymmetry(scene, actor, holder)
+            if not enclosed:
+                continue
+        if _ci_get(contained, enclosed) is not None:
             continue
-        if _ci_get(contained, actor) is not None:
-            continue
-        contained[actor] = {"in": holder, "mode": "interior"}
-        minted.append(actor)
+        contained[enclosed] = {"in": container, "mode": "interior"}
+        minted.append(enclosed)
     return minted
+
+
+def _enclosed_by_asymmetry(scene, a, b):
+    """Which of two bodies an interior relation must enclose, or (None, None).
+
+    Uses the engine's own size relation rather than a raw ratio: the question
+    is not "how much smaller" but "can one of these lift the other and not the
+    reverse", which stays true when the magnitude on the ledger is wrong.
+    """
+    forward = size_relation(scene, a, b)
+    if forward.get("can_lift_other") and not forward.get("can_be_lifted_by_other"):
+        return b, a
+    if forward.get("can_be_lifted_by_other") and not forward.get("can_lift_other"):
+        return a, b
+    return None, None
 
 
 #: The ways a contact names the WHOLE body rather than a part of it. An empty
