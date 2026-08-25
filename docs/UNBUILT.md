@@ -2312,6 +2312,33 @@ Each enforceable firing costs a whole narrator call, so the question for both
 is their false-positive rate over a live run, and nobody has counted yet.
 
 
+### 1.83 A beat that names only where the clock ENDS ages no body at all
+
+**Found:** 2026-08-25, closing the `state_diff.time` vocabulary.
+
+The vitals tick inside `world.spatial_merge.merge_scene_with_diff` asks
+`world.mechanics.time_diff_duration` how long the beat took, and that helper
+is handed the time block ALONE — no previous clock. So it can answer from
+`duration_seconds`, or from the span between a parseable `start_seconds` and
+`end_seconds`, and from an absolute-only diff it answers 0.0. Hunger, thirst,
+fatigue and every other vitals channel therefore do not move across a beat
+that says only "the clock now reads N", which is precisely the shape the
+clock reader was just taught to accept (5 such diffs in the live corpus: chat
+74 turns 55 and 60, chat 88 turns 61, 64 and 66).
+
+The 0.0 is deliberate and is the safe half of the trade, which is why this is
+a residual and not a defect to fix in place: under-ageing a body is
+recoverable, and ageing it by the story's whole elapsed history — which is
+what subtracting nothing from an absolute position would do — is not. The
+argument is written at `time_diff_duration` itself; this entry exists because
+a docstring is only found by someone already reading that function.
+
+The repair is a seam widening, not a guard: `merge_scene_with_diff` has no
+previous-clock parameter, and the callers that would have to supply one
+include perception's mid-turn merges, where the "previous" clock is a
+different question. Do it with the seam, not around it.
+
+
 ## 2. Roadmap
 
 Features the architecture intends and has not built. Ordered by value per unit

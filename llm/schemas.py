@@ -2019,8 +2019,9 @@ class StateDiff(LenientModel):
     # own keys, printed back to the model in every resolve payload -- and a
     # submodel with extra="forbid" would DROP the fiction's declared time
     # rather than read it, which is the defect this field already had (chat
-    # 88 turns 61, 64 and 66 each named a fresh clock position and the
-    # stored clock never left 1136.0). extra="allow" would validate nothing
+    # 88: turns 61 and 64 named 1107 and 1266 against a clock standing at
+    # 1106.0, turn 66 named 7200 against 1136.0, and none of the three
+    # moved it or warned). extra="allow" would validate nothing
     # the reader does not already guard, at the cost of dual-Pydantic-major
     # surface for zero coverage.
     #

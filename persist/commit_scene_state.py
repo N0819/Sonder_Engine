@@ -27,7 +27,8 @@ from persist.commit_room_registry import (_apply_room_registry,
                                   _refresh_relocated_location,
                                   dedup_minted_rooms, prune_dangling_exits)
 from persist.commit_attire import apply_attire_diff
-from world.mechanics import read_time_diff, time_diff_display
+from world.mechanics import (clock_elapsed, read_time_diff,
+                             time_diff_display)
 
 # ---- Scene commit with entity-aware merge ----
 
@@ -604,30 +605,36 @@ def prepare_scene_commit(ctx):
         td = diff["time"]
         if isinstance(td, dict):
             clock = copy.deepcopy(prev_clock)
-            try:
-                was = float((prev_clock or {}).get("elapsed_seconds", 0.0)
-                            or 0.0)
-            except (TypeError, ValueError):
-                was = 0.0
-            # `read_time_diff` owns what a time block can say; this block
-            # owns only what the world does about it. The claim may arrive
-            # under either name the engine uses for a clock position, so
-            # the warnings below never name a key.
-            claimed, backwards, unread = read_time_diff(was, td)
+            # `read_time_diff` owns what a time block can say and
+            # `clock_elapsed` owns what the stored clock keeps; this block
+            # owns only what the world does about them. The claim may
+            # arrive under either name the engine uses for a clock
+            # position, so the warnings below never name a taught key.
+            claimed, backwards, refused = read_time_diff(
+                clock_elapsed(prev_clock), td)
             if backwards is not None:
                 ctx.add_warning(
                     "state_diff.time claimed a clock position that ran "
                     "backwards (%.0f < %.0f); advanced by its own duration "
                     "instead" % backwards)
-            elif unread and claimed == was:
+            elif refused:
                 # A refusal that says nothing is indistinguishable from a
-                # beat that asserted no time. Chat 88 turns 61, 64 and 66
-                # each declared a fresh position the reader could not spell,
-                # and the clock sat at 1136.0 through all three in silence.
+                # beat that asserted no time, which is how the class this
+                # commit closes stayed invisible for months. `refused` is
+                # non-empty only when the block NAMED a time and the reader
+                # could not act on it -- `{"start_seconds": 1200}` with no
+                # end and no duration, `{"end_seconds": "soon"}`, a
+                # position spelled in a key the vocabulary has no meaning
+                # for. Keyed on whether the reader acted rather than on
+                # whether the number moved: a beat that legitimately
+                # re-asserts the clock's current position must not be
+                # accused of saying nothing, and a beat that was silently
+                # dropped must be reported even when every key it used was
+                # one the prompts teach.
                 ctx.add_warning(
                     "state_diff.time carried no clock position this engine "
-                    "can read (unread keys: %s); the clock did not advance"
-                    % ", ".join(unread))
+                    "could read (%s); the clock did not advance"
+                    % ", ".join(refused))
             clock["elapsed_seconds"] = claimed
             display = time_diff_display(td)
             if display:
@@ -635,7 +642,10 @@ def prepare_scene_commit(ctx):
                 sc["time"] = display
             elif "display_advance" in td:
                 # Present but empty CLEARS the scene's time label, as it
-                # always has -- canonical rows carry "" constantly.
+                # always has -- canonical rows carry "" constantly. The
+                # canonical key wins BY PRESENCE inside `time_diff_display`
+                # too, so an explicit clear is not overridden by the
+                # synonym sitting beside it.
                 sc["time"] = td["display_advance"]
         elif isinstance(td, str):
             sc["time"] = td

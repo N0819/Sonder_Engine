@@ -508,7 +508,7 @@ def _sleep_elapsed(record, clock, diff_time):
         was = float((clock or {}).get("elapsed_seconds") or 0.0)
     except (TypeError, ValueError):
         return None
-    end, _backwards, _unread = read_time_diff(was, diff_time)
+    end, _backwards, _refused = read_time_diff(was, diff_time)
     try:
         started = float(record.get("started_at_seconds") or 0.0)
     except (TypeError, ValueError):

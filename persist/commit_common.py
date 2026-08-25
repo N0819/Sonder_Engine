@@ -10,7 +10,7 @@ import json, re
 from core.db import q, wget
 from story.character_schema import (_UNSPACED_SCRIPT, character_name_from_text,
                               fold_identity_key, persona_name)
-from world.mechanics import read_time_diff, stable_event_key
+from world.mechanics import clock_elapsed, read_time_diff, stable_event_key
 from world.spatial import normalize_room_id
 
 def _keys_str(value):
@@ -100,12 +100,13 @@ def _monotonic_elapsed(prev_clock, time_diff):
     second half of the same defect: a beat that named its position under
     the clock's own key, `elapsed_seconds` -- which the resolve payload
     prints to the model every beat -- read as no claim at all, and the
-    clock held with nothing warned. Chat 88 turns 61, 64 and 66 claimed
-    1107, 1266 and 7200 seconds against a stored clock that never left
-    1136.0.
+    clock held with nothing warned. Chat 88: turns 61 and 64 claimed 1107
+    and 1266 against a clock standing at 1106.0, and turn 66 claimed 7200
+    against 1136.0. Not one of the three moved the clock or warned; the only
+    advance in that stretch came from turn 65's canonically spelled diff.
     """
-    was = float((prev_clock or {}).get("elapsed_seconds", 0.0) or 0.0)
-    elapsed, backwards, _unread = read_time_diff(was, time_diff)
+    elapsed, backwards, _refused = read_time_diff(
+        clock_elapsed(prev_clock), time_diff)
     return elapsed, backwards
 
 # ---- Address forms and the name roster ----
