@@ -320,6 +320,8 @@ cannot leave a stale file executing.
 | `api.chats` | the story lifecycle — create, find yours, read turns (§6a) |
 | `api.provision_story(package, state=..., ...)` | create a whole story atomically |
 | `api.provenance(chat_id)` | what you recorded when you provisioned it |
+| `api.generate_lived_location(chat_id, request)` | add an inhabited place — people, duties, goods, a prehistory (§7.6) |
+| `api.living_world_job(chat_id)` | whether a previous generation was interrupted (§7.6) |
 | `api.add_director_specialist(name, channels=..., prompt=...)` | a seventh Director family |
 | `api.add_route(path, fn, methods=...)` | serve your own HTTP route |
 | `api.llm_json(system, payload, role=...)` / `api.llm_text(...)` | a model call on a configured role |
@@ -981,6 +983,62 @@ Everything above is API. This section is the part you are allowed to *rely* on
 — what the host will tell you about itself, what shapes it accepts, what it
 does when two extensions want the same thing, and what order it runs you in.
 
+
+### A world that runs while nobody is looking
+
+Two optional arguments to the same call set how much of the world keeps working
+between beats:
+
+```python
+result = api.provision_story(
+    package,
+    state={"mission": "survey"},
+    offscreen_life="deterministic",
+    living_world={"routine_residue": "floor", "place_obligations": "floor"},
+)
+result["living_world"]["approaches"]   # what will ACTUALLY run
+```
+
+They land inside the same transaction as everything else, which is the point:
+a campaign whose premise is that the town keeps working without you is not a
+campaign until that is switched on, and a second write afterwards can fail.
+Both are optional and `None` leaves whatever the package or the host chose.
+
+**Read `effective`, never `value`.** `approaches` is the engine's own ladder:
+`value` is what you asked for and `effective` is what the gates will run.
+They differ more often than you would expect — three of the four approaches
+have no built ceiling, and the `offscreen_life` rung caps all four — and the
+lowering is silent by design. A caller that reads back only its own request
+learns nothing.
+
+**These two are refused, not normalized**, unlike every host route. A host
+typing into a panel sees the normalized answer come straight back and can
+correct it; you see nothing, and an unreadable rung falls to the *default*
+rather than to the floor, so a typo would quietly buy more off-screen life
+than you asked for. A bad value raises `ExtensionError` naming the valid set,
+before the archive is touched.
+
+`api.story_view(chat_id)["living_world"]` carries the same slice for a story
+you did not provision, plus the institutions in it and the engine's warnings
+about them. Pass `charters="full"` for the complete registry — the same bytes
+`GET /api/chats/{id}/charters` serves; the default is a summary because a
+populated town is large and this is a per-render read.
+
+`api.generate_lived_location(chat_id, request)` adds one. It is **synchronous
+and slow** — several model calls, a planted room graph and a presimulated
+prehistory: minutes, not seconds — so never call it from a turn hook or
+anything holding a transaction. Name characters by `resource_uid`, the
+identity that survives an archive, rather than by row ids you do not yet have.
+The expensive prefix is persisted before anything writes, so a retry of the
+same request replays it for free; a run interrupted *after* it began planting
+rooms is refused rather than repeated, and `api.living_world_job(chat_id)`
+reports it.
+
+The subsystem itself — the four approaches, the five off-screen rungs, and the
+six gates that must agree before anything happens — is
+[`LIVING_WORLD.md`](LIVING_WORLD.md). Read it before choosing values; the
+defaults do less than they look like they do.
+
 ### Asking the host what it can do
 
 ```python
@@ -1018,9 +1076,18 @@ The names today:
 | `provision_story` | `api.provision_story` |
 | `routes` | `api.add_route` |
 | `install_limits` | the installer audits one manifest against bounded counts and bytes, and reports what it measured |
+| `frame_coherent_reads` | `api.at_frame` — several reads resolving against one chosen era |
+| `living_world_provisioning` | `api.provision_story(..., offscreen_life=, living_world=)`, and the effective ladder read back (§7.6) |
+| `living_world_generation` | `api.generate_lived_location` / `api.living_world_job` (§7.6) |
 
-**Absent on purpose.** `frame_state` is a claim about *scope*, not about
-*coherence*: it says state can belong to one era, not that several reads made
+**Two names for one subject, on purpose** — `frame_state` is a claim about
+*scope* and `frame_coherent_reads` about *coherence*, and the same split is why
+`living_world_provisioning` and `living_world_generation` are separate: an
+extension can want to configure a world without ever generating one, and a name
+covering both would be a promise it could not check. The reasoning, which was
+written when only the first of each pair existed:
+
+`frame_state` says state can belong to one era, not that several reads made
 in one request resolve against one chosen frame. Coordinated frame selection
 across `frame_state`, `char_state` and `player_view` is not declared here,
 because it does not exist yet. A capability set that named work in progress
