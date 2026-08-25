@@ -425,6 +425,33 @@ def normalize_scene_subjects(scene: dict) -> list:
             folded.append((where, str(record[field]), target))
             record[field] = target
 
+    def fold_part_owner(record, field, where):
+        """Fold the OWNER half of a part-qualified value `<owner>.<part>`.
+
+        One ledger field must hold ONE spelling of one body. A part-qualified
+        value is folded by its owner, because only the owner half is a subject
+        spelling. Measured: a pose record held `mirelle_sulmirath.hands` in
+        `support` beside the already-folded `Mirelle Sulmirath` in
+        `relative_to` -- one body under two spellings in one record.
+
+        It is a separate helper rather than a `fold_field` call because
+        `poses.support` also legitimately names a ROOM ANCHOR keyed by id, and
+        `normalize_scene_poses` looks those ids up in the room's `anchors`.
+        Folding a whole support value onto a display name would break that
+        lookup -- the same hazard `canonical_subject_map` guards against.
+        """
+        if not isinstance(record, dict) or not record.get(field):
+            return
+        value = str(record[field])
+        owner, dot, part = value.partition(".")
+        if not dot or not owner.strip() or not part.strip():
+            return
+        target = canon(owner)
+        if target == owner:
+            return
+        folded.append((where, value, f"{target}.{part}"))
+        record[field] = f"{target}.{part}"
+
     contained = scene.get("contained")
     if isinstance(contained, dict):
         for record in contained.values():
@@ -437,6 +464,10 @@ def normalize_scene_subjects(scene: dict) -> list:
     if isinstance(poses, dict):
         for record in poses.values():
             fold_field(record, "relative_to", "poses.relative_to")
+            # A relation referent may be part-qualified too, and `support` is
+            # the field the fold never covered at all.
+            fold_part_owner(record, "relative_to", "poses.relative_to")
+            fold_part_owner(record, "support", "poses.support")
     contacts = scene.get("contacts")
     if isinstance(contacts, list):
         for contact in contacts:

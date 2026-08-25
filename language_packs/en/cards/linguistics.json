@@ -1772,6 +1772,13 @@
       {
         "$type": "tuple",
         "items": [
+          "\\bcontinuous while\\b",
+          "view formula transcribed ('continuous while')"
+        ]
+      },
+      {
+        "$type": "tuple",
+        "items": [
           "\\bshift(?:s|ed|ing)?\\s+(?:her|his|their|my|its)\\s+weight\\b",
           "shifts weight"
         ]

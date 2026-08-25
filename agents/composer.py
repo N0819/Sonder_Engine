@@ -700,6 +700,50 @@ def _names_a_body(scene, text, co_present):
                for eid, entity in (*primary, *aliased))
 
 
+def _part_qualified(scene, text):
+    """Split a part-qualified referent `<owner>.<part>` into its two halves.
+
+    A support or relation referent may name a PART OF a body or entity rather
+    than the whole of it -- `Mirelle Sulmirath.tongue`, `kestrel.hand`. The
+    dotted token is the engine's compound register for that, and it must never
+    reach the page: composed today, a pose read "lying on Mirelle
+    Sulmirath.tongue on you" with the dot token verbatim, while its id-spelled
+    twin `mirelle_sulmirath.hands` hit the id-shaped drop and was lost whole,
+    taking owner and part with it.
+
+    The OWNER half decides whether the referent may be named at all, so this
+    only reports a split when the owner is a spelling the scene knows. A
+    spelling the scene knows AS A WHOLE is never split, which is what keeps a
+    body or entity whose own name carries a period intact. A dot in free text
+    -- "St. Ives", a sentence end -- resolves to nothing and is left exactly
+    as written.
+
+    Returns `(owner, part)`, or `(None, "")` for anything that is not one.
+    """
+    text = str(text or "").strip()
+    if "." not in text:
+        return None, ""
+
+    def _known(name):
+        name = str(name or "").strip()
+        if not name:
+            return False
+        if _entity_named(scene, name):
+            return True
+        return any(
+            same_subject(scene, name, str(key or ""))
+            for table in ("positions", "poses", "attire")
+            for key in ((scene or {}).get(table) or {}))
+
+    if _known(text):
+        return None, ""
+    owner, _dot, part = text.partition(".")
+    owner, part = owner.strip(), part.strip().replace("_", " ")
+    if not owner or not part or not _known(owner):
+        return None, ""
+    return owner, part
+
+
 def _pose_referent(scene, observer_name, display_map, co_present, other,
                    *, is_self=False):
     """What a pose is arranged against, rendered as the KIND OF THING it is.
@@ -746,6 +790,21 @@ def _pose_referent(scene, observer_name, display_map, co_present, other,
     text = str(other or "").strip()
     if not text:
         return None
+    # A part is a referent like any other; only its OWNER decides whether it
+    # may be named, so the part resolves through the owner by this same order
+    # of certainty and can never outrank it.
+    owner, part = _part_qualified(scene, text)
+    if owner is not None:
+        whose = _pose_referent(scene, observer_name, display_map, co_present,
+                               owner, is_self=is_self)
+        if not whose:
+            # The firewall answer at step 3 is INHERITED, not re-decided: a
+            # part of a body this observer was not shown drops exactly as the
+            # body does.
+            return None
+        if whose == "you":
+            return _en("pose_part_self", part=part)
+        return _en("pose_part_other", label=whose, part=part)
     if same_subject(scene, text, observer_name):
         return "you"
     for name, label in (display_map or {}).items():
@@ -784,6 +843,13 @@ def _same_referent(scene, a, b):
     a, b = str(a or "").strip(), str(b or "").strip()
     if not a or not b:
         return False
+    # Two pose fields naming one body at two granularities -- the body in
+    # `relative_to`, a place ON it in `support` -- are still ONE referent.
+    # Comparing whole strings let both render, which is where the second
+    # preposition came from ("on <body>.<part> on you"). Granularity is not
+    # identity.
+    a = _part_qualified(scene, a)[0] or a
+    b = _part_qualified(scene, b)[0] or b
     if a.casefold() == b.casefold():
         return True
     ea, eb = _entity_named(scene, a), _entity_named(scene, b)
@@ -1053,8 +1119,18 @@ def pose_percepts(scene, observer_name, co_present, display_map,
                     # of the two ("restrained in" against a bare "on"), and
                     # let it carry the referent by itself.
                     if str(data.get("relation") or "").strip():
+                        # Relation wins the preposition, the PART wins the
+                        # noun. The rule above keeps the relation because it
+                        # is the more specific of two identical referents; a
+                        # part-qualified support is the more specific NOUN,
+                        # because it says where on the body the arrangement
+                        # bears, which a bare owner cannot.
+                        precise = ref
+                        if (_part_qualified(scene, pose["support"])[0]
+                                and not _part_qualified(scene, other)[0]):
+                            precise = data["support"]
                         data["support"] = ""
-                        data["relative_to"] = ref
+                        data["relative_to"] = precise
                     else:
                         data["support"] = ref
                 elif ref:
