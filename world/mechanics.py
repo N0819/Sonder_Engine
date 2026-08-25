@@ -74,6 +74,193 @@ def stable_event_key(*parts):
     return f"event:{digest}"
 
 
+# ---- The state_diff.time vocabulary, and its ONE reader ----
+#
+# `state_diff.time` is declared `Optional[dict]` (llm/schemas.py), so every
+# key a model can spell validates and nothing downstream is obliged to look
+# at any of them. That is the right declaration -- a typed submodel with
+# extra="forbid" would THROW AWAY declared fiction time, which is the defect
+# itself wearing a validator -- but it means the shape has to be owned
+# somewhere, by one reader, or each caller invents its own subset.
+#
+# Three callers had invented three: the scene commit knew `end_seconds`
+# alone, the sleep floor knew end/start/duration in that order, and the
+# vitals tick knew `duration_seconds` alone. So a beat could end a sleep and
+# not move the clock, or move the clock and not age a body.
+#
+# The spellings below are the ones the ENGINE ITSELF TEACHES, which is why
+# tolerating them is not leniency. The resolve payload prints the clock to
+# the model every beat as `simulation_clock: {elapsed_seconds, display,
+# time_scale}` (agents/director_fanout.py), so a model that answers in the
+# key it was just shown is echoing us. Measured over the live corpus
+# 2026-08-25 (2,450 stored time diffs; these totals grow with play, the
+# five-row set below does not): `display` 38x, `elapsed_seconds` 22x,
+# `time_scale` 10x. Of the 22 `elapsed_seconds` diffs, 17 sit beside a full
+# canonical shape with the value always inside [start_seconds, end_seconds]
+# -- an absolute POSITION, not a duration, which is what fixes its reading
+# -- and 5 carry no other numeric key at all and were dropped whole: chat 74
+# turns 55 and 60, chat 88 turns 61, 64 and 66. In chat 88 turns 61 and 64
+# claimed 1107 and 1266 against a clock standing at 1106.0, and turn 66
+# claimed 7200 against 1136.0; not one of the three moved the clock or
+# warned, and the only advance in that stretch came from turn 65's
+# canonically spelled diff.
+#
+# The house pattern for a natural synonym is weather's `_SYNONYMS`:
+# normalize what the fiction plainly meant, and report only what cannot be
+# read at all. The prompts keep teaching ONE canonical spelling -- the
+# tolerance lives here, not in the prompt, because a prompt naming two
+# spellings encourages the second.
+
+# Keys that ASSERT A TIME. A diff carrying one of these and getting no
+# advance out of the reader has been refused, and a refusal is reportable.
+TIME_CLAIM_KEYS = frozenset({
+    "start_seconds",      # where the beat began on the story clock
+    "duration_seconds",   # how long the beat took
+    "end_seconds",        # where the beat ended: the canonical position
+    "elapsed_seconds",    # the same position under the clock's own name
+})
+
+# Keys this vocabulary KNOWS but does not act on: the beat's own labelling
+# of its time, plus the clock's metadata echoed back. Their presence is
+# never a claim, so a diff carrying only these asserts no time and gets no
+# warning (5 corpus rows carry `display` alone).
+TIME_METADATA_KEYS = frozenset({
+    "mode",               # 'action' | 'time_skip'
+    "explicit",           # did the player ask for the skip
+    "display_advance",    # the phrase a reader sees
+    "display",            # the same phrase under the clock's own name
+    "time_scale",         # the clock's own scale, echoed back
+})
+
+# Everything the vocabulary contains. A key outside it has no meaning to any
+# reader in the engine; `tools/project_check.check_time_channel_vocabulary`
+# holds the prompts and the shipped output examples to exactly this set.
+TIME_DIFF_KEYS = TIME_CLAIM_KEYS | TIME_METADATA_KEYS
+
+
+def clock_elapsed(clock):
+    """Where the STORED simulation clock stands, from its own dict.
+
+    The other half of the same ownership: `read_time_diff` knows the shape a
+    beat's claim arrives in, and this knows the shape the clock is kept in,
+    so neither the scene commit nor the memory commit has to spell
+    `float((clock or {}).get("elapsed_seconds", 0.0) or 0.0)` for itself and
+    drift. Missing, absent or unparseable reads 0.0 -- the story has not
+    started. (`agents.director_floors._sleep_elapsed` deliberately does NOT
+    use this: it returns None for an unreadable clock, because "the clock
+    cannot say how long you have been under" is a different answer from
+    "you have been under since zero".)
+    """
+    try:
+        return float((clock or {}).get("elapsed_seconds", 0.0) or 0.0)
+    except (TypeError, ValueError, AttributeError):
+        return 0.0
+
+
+def read_time_diff(prev_elapsed, time_diff):
+    """What a `state_diff.time` block says about the story clock.
+
+    Returns ``(elapsed_seconds, backwards, refused)``:
+
+    * ``elapsed_seconds`` -- where the clock stands at the END of this beat.
+    * ``backwards`` -- None, or ``(claimed, was)`` when the beat asserted a
+      position EARLIER than the clock already held. TIME DOES NOT RUN
+      BACKWARDS: such a beat advances by its own duration instead, because
+      the elapsed time is the part the fiction actually asserted, and a
+      model emitting `start_seconds: 0` every beat -- an easy and entirely
+      natural reading of a field named "start" -- would otherwise reset the
+      world to the length of its own beat, over and over.
+    * ``refused`` -- sorted keys that made a time claim this reader could
+      NOT act on, and empty whenever it did act. It is empty for a diff
+      that asserts no time at all (`{"display": "later"}` says nothing about
+      the clock and is not a refusal), and it is empty when a position
+      parsed and merely happened to equal the clock. What it names is the
+      real class: `{"start_seconds": 1200}` with no end and no duration,
+      `{"end_seconds": "soon"}`, `{"seconds": 300}` -- a beat that meant to
+      move time and got silence. Keyed on whether the reader ACTED, not on
+      whether the number changed, because those differ in both directions.
+
+    A position may arrive under either name the engine uses for it, and the
+    canonical `end_seconds` outranks the synonym when both are present (17
+    corpus rows carry both; the synonym is the mid-beat position there). A
+    diff carrying ONLY a duration is an advance from where the clock stood,
+    not silence -- it asserted a span, and a span is a claim.
+    """
+    try:
+        was = float(prev_elapsed or 0.0)
+    except (TypeError, ValueError):
+        was = 0.0
+    td = time_diff if isinstance(time_diff, dict) else {}
+
+    duration = 0.0
+    duration_claimed = False
+    if "duration_seconds" in td:
+        try:
+            duration = max(0.0, float(td.get("duration_seconds") or 0.0))
+            duration_claimed = True
+        except (TypeError, ValueError):
+            duration = 0.0
+
+    claim = None
+    for key in ("end_seconds", "elapsed_seconds"):
+        if td.get(key) is None:
+            continue
+        try:
+            claim = float(td[key])
+            break
+        except (TypeError, ValueError):
+            claim = None
+
+    acted = claim is not None or duration_claimed
+    refused = [] if acted else sorted(
+        k for k in td if k in TIME_CLAIM_KEYS or k not in TIME_DIFF_KEYS)
+
+    if claim is None:
+        return (was + duration if duration_claimed else was), None, refused
+    if claim < was:
+        return was + duration, (claim, was), refused
+    return claim, None, refused
+
+
+def time_diff_display(time_diff):
+    """The reader-facing phrase a beat gave its own passage of time, or ""
+    when it gave none. `display_advance` is the taught spelling; `display`
+    is the clock's own key echoed back (38 corpus rows).
+
+    The canonical key wins BY PRESENCE, not by truthiness: a beat that
+    spells `display_advance: ""` has said this beat carries no phrase, and
+    an explicit clear must outrank a synonym rather than be overridden by
+    it. Canonical rows constantly carry the empty string.
+    """
+    td = time_diff if isinstance(time_diff, dict) else {}
+    if "display_advance" in td:
+        return td["display_advance"] or ""
+    return td.get("display") or ""
+
+
+def time_diff_duration(time_diff):
+    """How long a beat took, in story seconds, from the diff ALONE.
+
+    `duration_seconds` when it parses, else the span between a parseable
+    start and end. An absolute-only diff reads 0 here on purpose: this seam
+    (the vitals tick inside `merge_scene_with_diff`) is handed no previous
+    clock to subtract from, so the honest answer to "how long was this
+    beat" is "this block does not say". Under-ageing a body is recoverable;
+    ageing it by the whole elapsed history of the story is not. Registered
+    as a residual in docs/UNBUILT.md 1.83.
+    """
+    td = time_diff if isinstance(time_diff, dict) else {}
+    if "duration_seconds" in td:
+        try:
+            return max(0.0, float(td.get("duration_seconds") or 0.0))
+        except (TypeError, ValueError):
+            pass
+    try:
+        return max(0.0, float(td["end_seconds"]) - float(td["start_seconds"]))
+    except (KeyError, TypeError, ValueError):
+        return 0.0
+
+
 # News latency by distance (movement/space Phase 3b): when a destruction
 # declaration names a news audience WITHOUT an explicit latency_seconds,
 # the minting path (commit._prepare_destruction) derives one from the

@@ -518,6 +518,117 @@ def check_prompt_schema_ops(errors: list[str]) -> None:
             )
 
 
+
+_TIME_SHAPE_LINE = re.compile(r"time:\s*\{([^}]*)\}")
+_TIME_PROSE_LINE = re.compile(r"state_diff\.time with ([^.。]*)")
+_TIME_TOKEN = re.compile(r"[a-z_]+")
+
+
+def _time_non_seconds_keys() -> frozenset:
+    """Which tokens a shape/prose scan may legitimately surface that are not
+    `*_seconds`. Everything else in those spans is ordinary English ("and",
+    "bool") or an enum member ("action", "time_skip"), not a field name.
+
+    Read from `world.mechanics.TIME_METADATA_KEYS` rather than copied: that
+    set IS "the vocabulary's non-claim half", and a second hand-kept copy of
+    a set whose whole purpose is to be the single authority is the drift this
+    check exists to catch."""
+    from world.mechanics import TIME_METADATA_KEYS
+
+    return TIME_METADATA_KEYS
+
+
+def check_time_channel_vocabulary(errors: list[str]) -> None:
+    """Every `state_diff.time` key the engine TEACHES must be one its reader
+    can read.
+
+    `state_diff.time` is `Optional[dict]`, so validation accepts any key and
+    the only thing that decides whether a key means anything is
+    `world.mechanics.read_time_diff`. That reader knew exactly one absolute
+    spelling from before this repository's first commit while the resolve
+    payload printed the clock to the model under a different one, and the
+    corpus paid: 22 stored diffs named the position as `elapsed_seconds`, 5
+    of them with no other numeric key at all, every one silently discarded.
+    In chat 88, turns 61 and 64 claimed 1107 and 1266 against a clock
+    standing at 1106.0 and turn 66 claimed 7200 against 1136.0; none of the
+    three moved the clock and nothing warned anywhere.
+
+    HONEST LIMIT, stated because the general form is the one you would want:
+    "any bare-dict channel whose reader ignores keys the schema accepts" is
+    NOT statically tractable in this checker's style. `Optional[dict]`
+    accepts every key by construction, and reader blindness is a dataflow
+    property, not a shape one. What IS cheap is the narrow fold below --
+    hold the prompts and the shipped output examples to the reader's own key
+    set -- and it catches the drift class from the side that a repository
+    can control.
+
+    The authority is deliberately `TIME_DIFF_KEYS` and not the prompt: the
+    spelling that actually bit was never prompt-taught at all. The payload's
+    own `simulation_clock` key taught it, which is a surface no prompt scan
+    would ever have seen.
+    """
+    sys.path.insert(0, str(ROOT))
+    try:
+        from world.mechanics import TIME_DIFF_KEYS
+        from llm import schemas
+    except Exception as exc:  # pragma: no cover - import failure is its own error
+        errors.append(f"could not check the state_diff.time vocabulary: {exc}")
+        return
+
+    def report(source: str, key: str) -> None:
+        errors.append(
+            f"the {source} teaches state_diff.time key {key!r}, which is not "
+            "in world.mechanics.TIME_DIFF_KEYS -- no reader in the engine "
+            "has any meaning for it, so a beat that spells it advances "
+            "nothing and warns instead"
+        )
+
+    def walk(node, path: str) -> None:
+        if isinstance(node, Mapping):
+            for key, value in node.items():
+                if (key == "state_diff" and isinstance(value, Mapping)
+                        and isinstance(value.get("time"), Mapping)):
+                    for name in sorted(value["time"]):
+                        if name not in TIME_DIFF_KEYS:
+                            report(f"{path}/{key} output example", name)
+                walk(value, f"{path}/{key}")
+        elif isinstance(node, list):
+            for i, value in enumerate(node):
+                walk(value, f"{path}/{i}")
+
+    walk(schemas.OUTPUT_EXAMPLES, "")
+
+    non_seconds = _time_non_seconds_keys()
+    for path in sorted((ROOT / "language_packs").glob("*/cards/"
+                                                      "system_prompts.json")):
+        try:
+            card = json.loads(path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            errors.append(f"could not read {path}: {exc}")
+            continue
+
+        def strings(node):
+            if isinstance(node, str):
+                yield node
+            elif isinstance(node, Mapping):
+                for value in node.values():
+                    yield from strings(value)
+            elif isinstance(node, list):
+                for value in node:
+                    yield from strings(value)
+
+        rel = path.relative_to(ROOT).as_posix()
+        for text in strings(card):
+            for pattern in (_TIME_SHAPE_LINE, _TIME_PROSE_LINE):
+                for span in pattern.findall(text):
+                    for token in _TIME_TOKEN.findall(span):
+                        if not (token.endswith("_seconds")
+                                or token in non_seconds):
+                            continue
+                        if token not in TIME_DIFF_KEYS:
+                            report(f"{rel} prompt", token)
+
+
 def check_specialist_prompt_chunks(errors: list[str]) -> None:
     """The orchestrated Director's scoping is only real if the prompts are
     CHUNKED to match it (design note 19, hierarchical gating): a specialist's
@@ -2669,6 +2780,7 @@ def main() -> int:
     check_empty_tests(errors)
     check_cross_file_duplicate_definitions(errors)
     check_prompt_schema_ops(errors)
+    check_time_channel_vocabulary(errors)
     check_specialist_prompt_chunks(errors)
     check_prose_author_chunks(errors)
     check_language_pack_surfaces(errors)

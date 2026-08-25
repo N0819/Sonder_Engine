@@ -1223,9 +1223,15 @@ def merge_scene_with_diff(
     if incoming_vitals or merged.get("vitals"):
         from world.survival import apply_vitals_diff, tick_vitals
         apply_vitals_diff(merged, incoming_vitals)
-        time_block = diff.get("time")
-        elapsed = (time_block.get("duration_seconds") or 0
-                   if isinstance(time_block, dict) else 0)
+        # LAZY on purpose: world/mechanics imports the world.spatial facade
+        # this module sits behind, so a module-scope import would cycle at
+        # interpreter start. Same reason as the survival import above.
+        from world.mechanics import time_diff_duration
+        # One reader owns what a time block can say (chat 88 turns 61/64/66:
+        # three spellings of the same claim, three callers reading three
+        # different subsets of it). Here that means duration_seconds, else
+        # the span between a parseable start and end.
+        elapsed = time_diff_duration(diff.get("time"))
         # WHO IS ASLEEP comes from the caller (`sleeping=`), because the
         # answer lives in the conditions ledger's awareness levels
         # (story/scene.AWARENESS_LEVELS via awareness_map) -- a layer above
