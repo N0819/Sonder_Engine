@@ -24,6 +24,7 @@ from world.spatial_containment import (
     derive_containment_from_contacts,
     derive_contained_positions,
     normalize_scene_containment,
+    place_enclosed_bodies,
     normalize_scene_scales,
 )
 from world.spatial_geometry import (apply_pose_diff, derive_scene_stations,
@@ -35,7 +36,9 @@ from world.spatial_identity import (_ci_get, _entity_named, room_of,
 from world.spatial_senses import apply_comms_ops, normalize_scene_comms
 from world.spatial_substance import apply_substance_ops, apply_contact_action_ops
 from world.spatial_routing import stamp_sight_direction
-from world.spatial_transit import apply_transit_dock_edges, infer_body_enclosures
+from world.spatial_transit import (apply_transit_dock_edges,
+                                  infer_body_enclosures,
+                                  sync_entity_interior_rooms)
 
 
 def repair_entity_positions(scene: dict) -> list:
@@ -1033,6 +1036,11 @@ def merge_scene_with_diff(
             or str(record.get("target") or "") != str(room_id)
         ]
 
+    # A room that names a parent entity IS that entity's interior, in both of
+    # the places the engine writes that fact down. Runs first of the three,
+    # because the enclosure default below reads the index this maintains and
+    # would otherwise leave a declared body interior see-through.
+    sync_entity_interior_rooms(merged)
     # A body's interior is opaque whether or not anyone declared it so. Runs
     # BEFORE the dock-edge rewrite, which reads `enclosure` to pick the
     # doorway's barrier.
@@ -1146,6 +1154,14 @@ def merge_scene_with_diff(
     stamp_sight_direction(merged)
     normalize_scene_subjects(merged)
     normalize_scene_containment(merged)
+    # A BODY THAT HAS TAKEN ANOTHER BODY INSIDE IS A PLACE, so an occupant of
+    # one stands in a room rather than deriving their holder's. Runs BEFORE
+    # the derivation below, which would otherwise drag them straight back out
+    # to the holder's own exterior room -- the measured chat 88 state, where
+    # both bodies shared one room for fifteen consecutive audited turns. A
+    # holder with no interior rooms is untouched, which is why nothing changes
+    # for a scene already on disk.
+    place_enclosed_bodies(merged)
     # Derived LAST among position writes: whatever else this beat did to
     # positions, a carried body ends up where its carrier is.
     derive_contained_positions(merged)
@@ -1190,6 +1206,7 @@ def merge_scene_with_diff(
         # has left the scene, a cycle), then put the enclosed body where its
         # container is -- both already ran, above, before these existed.
         normalize_scene_containment(merged)
+        place_enclosed_bodies(merged)
         derive_contained_positions(merged)
 
     # Contact and containment are two ledgers describing one arrangement, and

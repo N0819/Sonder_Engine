@@ -3,7 +3,9 @@
 hides, and what a size change breaks."""
 
 from world.spatial_identity import _ci_get, _entity_named, room_of, same_subject
-from world.spatial_transit import _is_body_entity
+from world.spatial_identity import _unique_entity_keyed
+from world.spatial_transit import (_interior_entry_room, _interior_rooms_of,
+                                  _is_body_entity)
 
 
 # Entity kinds that are never anywhere within a room, because they are things
@@ -709,13 +711,183 @@ def derive_contained_positions(scene: dict) -> dict:
             continue
         # Write under the key already in use, so this never mints a second
         # spelling of a name that positions already carries.
-        for key in list(positions):
-            if str(key).strip().casefold() == subject.strip().casefold():
-                positions[key] = room
-                break
-        else:
-            positions[subject] = room
+        _positions_write(positions, subject, room)
     return scene
+
+
+def _positions_write(positions: dict, subject: str, room: str) -> None:
+    """Set a position under the spelling `positions` already uses for this
+    subject, minting the given one only when it holds none. The same rule
+    `derive_contained_positions` follows, and for the same reason: a second
+    spelling of one being is a ledger that disagrees with itself."""
+    folded = str(subject or "").strip().casefold()
+    for key in list(positions):
+        if str(key).strip().casefold() == folded:
+            positions[key] = room
+            return
+    positions[subject] = room
+
+
+def _interior_station_hint(scene: dict, occupant: str, holder: str,
+                           interior_ids: list):
+    """The interior room a standing interior CONTACT already names, or None.
+
+    An interior relation carries `target_interior` -- the region of the
+    holder the contact is inside. Once that holder's inside is rooms, the
+    region and the room are the same fact under two names, so the ledger the
+    beat already wrote decides WHERE inside the occupant lands instead of the
+    entry room. Matched on the room's key or its display name, casefolded:
+    the name is what a model writes and the key is what the engine writes.
+    """
+    wanted = None
+    for row in (scene or {}).get("contacts") or []:
+        if not isinstance(row, dict):
+            continue
+        if str(row.get("relation") or "").strip().casefold() != "interior":
+            continue
+        station = str(row.get("target_interior") or "").strip()
+        if not station:
+            continue
+        pair = {str(row.get("actor") or "").strip().casefold(),
+                str(row.get("target") or "").strip().casefold()}
+        if not ({str(occupant or "").strip().casefold(),
+                 str(holder or "").strip().casefold()} <= pair):
+            continue
+        wanted = station.casefold()
+    if not wanted:
+        return None
+    rooms = (scene or {}).get("rooms") or {}
+    for rid in interior_ids:
+        room = rooms.get(rid) or {}
+        if str(rid).strip().casefold() == wanted:
+            return rid
+        if str(room.get("name") or "").strip().casefold() == wanted:
+            return rid
+    return None
+
+
+def place_enclosed_bodies(scene: dict) -> list:
+    """A body that has taken another body INSIDE is a place. Put them in it.
+
+    THE THIRD PATH, and the one nothing took. The engine has two accounts of
+    one body being within another: a `contained` record (the ledger form --
+    the occupant has no place of their own and derives their carrier's) and a
+    room whose `parent_entity` is the holder (the place form -- the occupant
+    stands somewhere, and that somewhere travels). Every consequence of the
+    place form was already built and tested: the doorway is derived from the
+    holder's own state, `membrane` is opaque in both states, ambient scope
+    stops at the boundary, and the composer renders the inside like any room.
+    Nothing converted the first into the second, so an interior a beat
+    declared stayed a one-line ledger entry and the occupant's position was
+    derived, every merge, to the holder's OWN room -- the two bodies standing
+    in the same place, the inside not existing anywhere the engine could
+    read it.
+
+    Measured, chat 88 across fifteen consecutive audited turns: the holder
+    carried `interior_rooms: []`, `scene.rooms` held one room with
+    `adjacent: []`, `scene.positions` put both bodies in it, and the whole
+    interior was free-text keys on the entity blob that no spatial query
+    reads. The occupant's composed view was four sentences long, because
+    there was no room to compose.
+
+    THE CONVERSION IS DETERMINISTIC AND CONDITIONAL. Existence of the place
+    is not a judgment: a record that says `mode: interior` plus a holder that
+    HAS interior rooms is a body standing in one of them, and no model has to
+    remember to say so. TOPOLOGY is authored content and stays where authored
+    content belongs -- the spatial specialist's `rooms` channel. So a holder
+    with NO interior rooms is left exactly as it was, ledger record intact:
+    that is the whole migration story for every scene already on disk, and
+    the reason nothing here changes behaviour until an interior exists.
+
+    ONLY `mode: interior`. `held`, `pocket`, `carried`, `container`, `riding`
+    are carriage -- cargo with no inside to stand in -- and stay the ledger's
+    business. `interior` is the one mode `CONTAINMENT_MODES` documents as "a
+    body inside another body's own interior".
+
+    ONE TRUTH, NEVER TWO. Where the occupant is ALREADY standing in one of
+    the holder's interior rooms, the record is redundant and is dropped
+    without touching the position: a body cannot be both placed inside and
+    carried by the same holder, and leaving both would let
+    `derive_contained_positions` drag them back out to the holder's exterior
+    room on the next merge.
+
+    Returns the subjects it placed, for the caller's report. Idempotent:
+    a second call finds no mode-interior record left to convert.
+    """
+    contained = (scene or {}).get("contained")
+    if not isinstance(contained, dict) or not contained:
+        return []
+    positions = scene.get("positions")
+    if not isinstance(positions, dict):
+        return []
+    placed = []
+    for subject in list(contained):
+        record = contained.get(subject)
+        if not isinstance(record, dict):
+            continue
+        if str(record.get("mode") or "").strip().casefold() != "interior":
+            continue
+        holder = str(record.get("in") or "").strip()
+        if not holder:
+            continue
+        # The room form is keyed by the entity ID, so an ambiguous holder is
+        # no holder: folding two beings into one would place a body inside
+        # the wrong one, which is strictly worse than leaving the ledger.
+        eid, entity = _unique_entity_keyed(scene, holder)
+        if not eid:
+            continue
+        interior_ids = _interior_rooms_of(scene, eid)
+        if not interior_ids:
+            continue           # no inside to stand in: nothing changes
+        # A holder the scene does not place has no exterior for its interior
+        # to travel with, and an interior that is nowhere is worse than a
+        # ledger entry that at least says who is holding whom.
+        if room_of(scene, holder) is None:
+            continue
+        here = room_of(scene, subject)
+        if here in set(interior_ids):
+            contained.pop(subject, None)
+            continue
+        destination = _interior_station_hint(
+            scene, subject, holder, interior_ids)
+        if destination is None:
+            destination = _interior_entry_room(scene, eid, entity)
+        if destination is None:
+            continue
+        _positions_write(positions, subject, destination)
+        contained.pop(subject, None)
+        placed.append(subject)
+    return placed
+
+
+def enclosure_joins_rooms(scene: dict, room_a, room_b,
+                          name_a: str = "", name_b: str = "") -> bool:
+    """Are these two parties in one place because one is INSIDE the other.
+
+    Two rooms, and the bodies standing in them are as close as bodies get:
+    one of the rooms is the other party's own interior. Room equality cannot
+    see that -- it is the whole point of the place form that the inside is
+    its own room -- so every rule written as "same room" reads a body inside
+    another body as a body across the world from it.
+
+    STRICTLY THE PAIR, never the neighbourhood. A third party in the room the
+    holder is standing in is NOT joined to the occupant: they are outside an
+    enclosure the occupant is inside, and reaching in is an interior relation
+    of its own, not a surface hold. The firewall subtracts here, as everywhere.
+    """
+    rooms = (scene or {}).get("rooms") or {}
+    if not isinstance(rooms, dict):
+        return False
+    for inner, outer_name in ((room_a, name_b), (room_b, name_a)):
+        room = rooms.get(inner)
+        if not isinstance(room, dict):
+            continue
+        parent = str(room.get("parent_entity") or "").strip()
+        if not parent or not str(outer_name or "").strip():
+            continue
+        if same_subject(scene, parent, str(outer_name)):
+            return True
+    return False
 
 
 def scale_changed_names(previous_scales, current_scales) -> set:
@@ -777,8 +949,50 @@ def containment_broken_by_scale_change(scene: dict, previous_scales) -> list:
     return sorted(released)
 
 
+def _display_name(scene: dict, name: str) -> str:
+    """What the story calls this being, given any spelling of it. A scene
+    entity id is an engine handle, and prose that hands one to a mind is
+    naming something nobody in the fiction has ever heard."""
+    entity = _entity_named(scene, name) or {}
+    return str(entity.get("name") or name or "").strip()
+
+
+def interior_occupants(scene: dict, holder: str) -> list:
+    """Everyone standing in a room this body is the `parent_entity` of.
+
+    The place-form counterpart of `contents_of`, which reads the carry ledger
+    and therefore answers nothing once an enclosure has become a place. Both
+    are the same question -- what is inside me -- asked of the two ledgers
+    that can answer it.
+    """
+    eid, _entity = _unique_entity_keyed(scene, holder)
+    if not eid:
+        return []
+    interior = set(_interior_rooms_of(scene, eid))
+    if not interior:
+        return []
+    folded = {str(holder or "").strip().casefold(), str(eid).strip().casefold()}
+    positions = (scene or {}).get("positions") or {}
+    if not isinstance(positions, dict):
+        return []
+    return sorted(
+        str(name) for name, room in positions.items()
+        if room in interior and str(name).strip().casefold() not in folded)
+
+
 def containment_facts(scene: dict, observer: str, source_names) -> list:
-    """What the observer knows about being carried, or carrying."""
+    """What the observer knows about being carried, or carrying.
+
+    TWO LEDGERS, ONE QUESTION. Being inside something is expressed either as
+    a carry record (the body has no place of its own) or as a room parented
+    to the body around it (the body stands somewhere that travels). This read
+    only the first, so the beat an enclosure became a PLACE was the beat the
+    occupant stopped being told they were inside anything at all -- their own
+    situation, deleted from their own view, which is the forbidden direction:
+    a mind concluding LESS than it has a channel for. Both forms are stated
+    here, and only one of them can be true of a given body at a time
+    (`place_enclosed_bodies` drops the record when it writes the position).
+    """
     facts = []
     holder = container_of(scene, observer)
     if holder:
@@ -787,6 +1001,28 @@ def containment_facts(scene: dict, observer: str, source_names) -> list:
         facts.append(
             f"You are {mode} by {holder} — you go where {holder} goes, and "
             "cannot leave on your own until you are out."
+        )
+    else:
+        # The place form. Named as a PLACE rather than as a mode, because
+        # that is what it now is: the occupant has somewhere to be, ways on
+        # from it, and a body around all of it that carries the whole thing.
+        inside = _body_interior_holder(scene, observer)
+        if inside:
+            around = _display_name(scene, inside)
+            room = ((scene.get("rooms") or {}).get(
+                _ci_get(scene.get("positions") or {}, observer)) or {})
+            where = str(room.get("name") or "").strip()
+            facts.append(
+                (f"You are inside {around}, in {where}. " if where
+                 else f"You are inside {around}. ")
+                + f"This place is {around}'s own interior — it goes where "
+                f"{around} goes, and you cannot leave it on your own until "
+                "you are out."
+            )
+    for name in interior_occupants(scene, observer):
+        facts.append(
+            f"{name} is inside you — in your own interior, and they go "
+            "where you go."
         )
     visible = {str(n) for n in (source_names or []) if n} | {observer}
     for name in contents_of(scene, observer):
