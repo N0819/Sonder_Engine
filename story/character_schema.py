@@ -1163,7 +1163,7 @@ def normalize_character_data(value: dict) -> dict:
             "tier": str(value.get("tier") or "mid"),
             "temperature": _float_or(value.get("temperature"), 0.8),
             "sampler": copy.deepcopy(value.get("sampler") or {}),
-            "offscreen_agent": bool(value.get("offscreen_agent", False)),
+            "offscreen_agent": authored_bool(value.get("offscreen_agent", False)),
         },
         "embodiment": {
             "senses": _legacy_senses(value.get("senses")),
@@ -1397,9 +1397,39 @@ def character_tier(sheet: dict) -> str:
     return str(normalize_character_data(sheet).get("simulation", {}).get("tier", "mid"))
 
 
+def authored_bool(value, default=False):
+    """An authored boolean, including the ones that arrive as TEXT.
+
+    `bool("false")` is True, and a card is not always written by the editor:
+    an import, a hand edit or a third-party generator can put the STRING
+    "false" in a field the schema declares as a boolean. Every reader that
+    spelled this `bool(...)` therefore read that card as opted IN -- measured
+    on `simulation.offscreen_agent`, where the consequence is paid model calls
+    for a character the author switched off.
+
+    A real bool passes through. A string is read as a word, which is the whole
+    point: "false", "no", "off" and "0" are how a human writes False and none
+    of them survive `bool()`. Anything else -- a number, a list, an unknown
+    word -- keeps Python's truthiness, because inventing a verdict for a shape
+    nobody meant to write is how a coercion starts lying in the other
+    direction.
+    """
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return bool(default)
+    if isinstance(value, str):
+        word = value.strip().casefold()
+        if word in ("false", "no", "off", "0", ""):
+            return False
+        if word in ("true", "yes", "on", "1"):
+            return True
+    return bool(value)
+
+
 def character_offscreen_agent(sheet: dict) -> bool:
     """Author-owned opt-in for the paid off-screen character ceiling."""
-    return bool(normalize_character_data(sheet).get(
+    return authored_bool(normalize_character_data(sheet).get(
         "simulation", {}).get("offscreen_agent", False))
 
 
@@ -1807,6 +1837,40 @@ def character_card_warnings(sheet):
             "ordinary three wants and four intentions. Set psychology.capacity "
             "(narrow / focused / ordinary / broad / wide) to make them "
             "single-minded or to let them keep more in the air at once."
+        )
+    # AUTHORED AND UNREAD. `character_appearance`/`persona_appearance` return
+    # `embodiment.visible.summary` and nothing else, so `build`, `face`,
+    # `hair`, `eyes` and `distinctive_features` reach no view, no narrator and
+    # no memory (`docs/UNBUILT.md` 1.78). They are offered in the editor, kept
+    # through every normalize, and carried in archives -- so an author who
+    # fills them has every reason to believe the story can see them, and the
+    # only symptom is a body that reads thin beside one whose author happened
+    # to write the same detail into `summary` instead.
+    visible = (sheet.get("embodiment") or {}).get("visible") or {}
+    unread = [name for name in ("build", "face", "hair", "eyes")
+              if str(visible.get(name) or "").strip()]
+    if visible.get("distinctive_features"):
+        unread.append("distinctive features")
+    if unread:
+        warnings.append(
+            "This card describes the body under %s, but only "
+            "embodiment.visible.summary is delivered to anyone in the story — "
+            "no view, narrator or memory reads the other fields. Move what "
+            "should be seen into the appearance summary."
+            % ", ".join(unread)
+        )
+    # A BOOLEAN THAT ARRIVED AS TEXT. `authored_bool` now reads the word, so
+    # the card behaves as written; the author should still be told, because a
+    # field the schema declares as a checkbox holding a string means something
+    # upstream is writing this card by hand.
+    simulation = sheet.get("simulation") or {}
+    if "offscreen_agent" in simulation and not isinstance(
+            simulation.get("offscreen_agent"), bool):
+        warnings.append(
+            "simulation.offscreen_agent holds %r rather than a true/false "
+            "value. It is read as a word, so the card behaves as written — "
+            "but whatever produced this sheet is not writing booleans."
+            % (simulation.get("offscreen_agent"),)
         )
     if _prose_names_a_part(sheet) and not (
             (sheet.get("embodiment") or {}).get("extra_parts")):

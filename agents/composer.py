@@ -1661,6 +1661,13 @@ class RenderedView:
     described: set              # source names whose full appearance rendered
 
 
+#: Region and zone names that take a plural verb. An engine constant because
+#: the NAMES are engine constants (`attire.REGIONS` plus the torso zones);
+#: whether a LANGUAGE agrees in number is the pack's business, and a pack that
+#: does not gives both `exposed_detail` templates the same string.
+PLURAL_PLACES = frozenset({"arms", "hands", "legs", "feet"})
+
+
 def _cap(sentence):
     sentence = str(sentence or "").strip()
     return sentence[:1].upper() + sentence[1:] if sentence else sentence
@@ -1923,7 +1930,14 @@ def _render_standing(p):
         subject = (_en("exposed_self", place=place)
                    if p.source_label == "you" else _en(
                        "exposed_other", label=_cap(p.source_label), place=place))
-        return _en("exposed_detail", subject=subject, detail=detail)
+        # HALF THE PLACE NAMES ARE PLURAL. `place` is an engine constant -- a
+        # member of `attire.REGIONS` or a torso zone -- so the agreement is
+        # decidable here, and "Hinami's exposed feet is visible" was on the
+        # page. Not a spelling rule: `feet` is plural and does not end in `s`,
+        # which is precisely the case a spelling rule gets wrong.
+        template = ("exposed_detail_plural"
+                    if place.casefold() in PLURAL_PLACES else "exposed_detail")
+        return _en(template, subject=subject, detail=detail)
     if p.kind == "ambient":
         desc = str(p.data.get("desc") or "").strip()
         if desc and desc[-1:] not in ".!?":

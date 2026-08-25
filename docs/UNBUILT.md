@@ -2125,39 +2125,6 @@ be read with this beside it; 2.20 notes the separate reason the signal cannot
 fire early in a story (`_RECALL_CONFIDENCE_MIN_BANK = 40`, which the median
 bank does not reach until turn 10).
 
-### 1.77 A derived ledger note is narrated as if it were authored prose
-
-**Found:** chat 86 t45, reading why a body's attire string read as machine
-output. Every observer of Hinami received:
-
-> You see a young woman appearing in golden fox ears and six golden tails,
-> wearing feather hair clip; **with bare at the head, torso, arms, waist,
-> groin, legs, feet**; currently bright red across her cheeks.
-
-`appearance_of` (`story/scene.py:425`) joins the whole of `attire.state`
-verbatim, and the pack maps the label `"; clothing state:"` to `"; with"`.
-That substitution assumes a NOUN-PHRASE state, which is what an authored one
-is — "with black leggings displaced off the groin" reads correctly. But
-`state` also carries notes the engine DERIVED, minted at `story/attire.py:2699`
-in the shape `bare at the <regions>`, which is adjective-shaped and comes out
-as "with bare at the head".
-
-`attire.is_derived_state_note` (`story/attire.py:2709`) already separates the
-two shapes exactly; `appearance_of` never asks it. The reason this shipped is
-in the tests: `tests/test_perception_appearance.py` feeds `state` hand-written
-prose (`"completely nude"`, `"soaked"`, `"torn"`) and never the shape
-production actually stores.
-
-Whether the fix is to omit derived notes from the narrated string (the region
-percepts already carry bareness) or to render them as prose — "bare" for a
-body bare everywhere, "bare at the X and Y" otherwise — is open. Note the
-adjacent read: "wearing feather hair clip; with bare at the head" is CORRECT
-under the ornament rule and still looks like a contradiction.
-
-Adjacent and smaller, same beat: `agents/perception.py:575` builds
-`f"{label}'s exposed {place} is visible"` where `place` is a region name, so a
-plural region reads "Hinami's exposed feet is visible", "arms is visible".
-
 ### 1.78 Four authored body fields reach no reader
 
 **Found:** the same beat, asking why the same engine renders one body richly
@@ -2183,6 +2150,12 @@ that puts them in the correct place, `embodiment.visible.<key>`, is the one
 that loses them. Either compose them the way the misplaced ones are composed,
 or stop offering fields the engine does not read.
 
+**No longer silent.** `character_card_warnings` now names every authored field
+of the five that no reader receives, on all nine card-producing surfaces, and
+tells the author to move what should be seen into the summary. That closes the
+part that made this expensive — an author with every reason to believe the
+story could see what they wrote. The delivery decision above is still open.
+
 
 ### 1.79 What the Living World audit found
 
@@ -2193,20 +2166,27 @@ the behaviour; these are the places the behaviour is wrong.
 
 **Defects.**
 
-- **The string `"false"` opts a character INTO paid off-screen ticks.**
+- ~~**The string `"false"` opts a character INTO paid off-screen ticks.**~~
+  **Landed.** `character_schema.authored_bool` reads the word a human wrote,
+  both card readers use it, and `character_card_warnings` tells the author
+  that whatever produced the sheet is not writing booleans. Original finding:
   `character_offscreen_agent` applies `bool()`, and `bool("false")` is `True`.
   The legacy branch applies the same `bool()`, so neither path is safe
   (`story/character_schema.py:1166`, `:1400`). An imported or hand-edited sheet
   carrying `"offscreen_agent": "false"` buys model calls. The card default is a
   real boolean, so this reaches only sheets that have been through a text
   editor or a lenient importer — which is exactly where it will not be noticed.
-- **Two `cap=0` off-by-ones**, both appending before the bound check:
+- ~~**Two `cap=0` off-by-ones**~~ **Landed** — both now bound before they
+  append, matching `profile_candidates`, which already did. Original finding:
   `full_agent_candidates(cap=0)` returns one candidate
   (`world/offscreen.py:1338`) and `fired_consequences_at(cap=0)` returns one
   item (`world/living_world.py:463`). Unreachable from today's callers, which
   guard `cap <= 0` first; inherited by any new caller. `profile_candidates`
   has the correct shape beside one of them (`:1399`).
-- **Charter diagnostics leak across frames.** `charter_diagnostics` selects
+- ~~**Charter diagnostics leak across frames.**~~ **Landed** —
+  `charter_runtime._event_frame` filters the listing to the requested era, in
+  Python because `scheduled_events` has no frame column and the scoping rides
+  in the payload. Original finding: `charter_diagnostics` selects
   `scheduled_events` with `seed LIKE 'charter:%'` and no `frame_id` predicate
   (`world/charter_runtime.py:1161`), so the diagnostics surface for one era
   lists charter events minted in every era of the chat — unlike `registry_for`
