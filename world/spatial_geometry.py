@@ -753,6 +753,12 @@ def _clean_pose(raw):
     return pose if any(pose.values()) else None
 
 
+#: The fields that state HOW a body is arranged. `detail` is deliberately not
+#: one of them: it qualifies an arrangement, it does not constitute one.
+_POSE_ARRANGEMENT_FIELDS = ("posture", "support", "relative_to", "relation",
+                            "constraint")
+
+
 def normalize_scene_poses(scene: dict) -> dict:
     """Prune pose relations invalidated by departure or room separation."""
     poses = scene.get("poses")
@@ -900,11 +906,34 @@ def apply_pose_diff(scene: dict, incoming) -> dict:
         label = str(name or "").strip()
         if not label:
             continue
+        standing = None
         for old in [key for key in scene["poses"]
                     if str(key).strip().casefold() == label.casefold()]:
-            scene["poses"].pop(old, None)
+            standing = _clean_pose(scene["poses"].pop(old, None)) or standing
         pose = _clean_pose(raw)
         if pose is not None:
+            # DETAIL ALONE IS NOT AN ARRANGEMENT. A snapshot carrying no
+            # arrangement field says nothing about how the body is arranged,
+            # so it ANNOTATES the standing pose instead of erasing it.
+            #
+            # Clearing a pose has its own spelling and keeps it: an entry with
+            # nothing in it at all, which `_clean_pose` already turns into
+            # None above. This is the other case, and the schema is what makes
+            # them collide -- `PoseEntry` defaults every field to `""`
+            # (llm/schemas.py), so "I did not mention posture this beat" and
+            # "posture ended" arrive identical, and reading both as ended
+            # destroys state on the commoner one.
+            #
+            # Measured by running the merge rather than reading it: merging
+            # `poses: {A: {detail: "looks down at her lap"}}` over a standing
+            # `{posture: seated, support: low_table, relative_to: B,
+            # relation: astride}` left posture, support, relative_to,
+            # relation and constraint all empty -- a body that had been seated
+            # astride another on a table was, from that beat, nowhere and on
+            # nothing.
+            if standing and pose["detail"] and not any(
+                    pose[field] for field in _POSE_ARRANGEMENT_FIELDS):
+                pose = dict(standing, detail=pose["detail"])
             scene["poses"][label] = pose
     return scene
 

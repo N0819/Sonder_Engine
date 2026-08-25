@@ -957,7 +957,40 @@ def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None):
     )
 
     def _restore_and_refresh():
-        """Restore durable state and invalidate the pre-restore cast cache."""
+        """Restore durable state, drop the snapshots of the lineage being
+        discarded, and invalidate the pre-restore cast cache.
+
+        A CHECKPOINT IS A PRE-TURN SNAPSHOT, so a checkpoint at a turn_idx
+        GREATER than this one is a picture of the world that THIS turn's
+        now-superseded commit produced. Recomputing this turn discards that
+        commit, and every snapshot downstream of it describes a lineage the
+        story no longer has.
+
+        `turn_del` already states this rule for the other way of discarding a
+        commit -- `DELETE FROM checkpoints WHERE chat_id=? AND turn_idx>=?`
+        (web/app.py), because deleting turn N invalidates every snapshot taken
+        at or after it. Recompute is the same act with the turn row kept, and
+        it stated no such rule.
+
+        MEASURED, chat 87. A branch writes a checkpoint at `idx + 1` from the
+        branch-moment state; turn 49 was then rerolled three more times and
+        nothing refreshed it. Checkpoints 46-50 all carry `created` 22:35:44,
+        while turn 49's ACTIVE commit was written at 22:40:10 and turn 50 did
+        not exist until 22:47:16 -- so a snapshot of "the world before turn
+        50" predated turn 50 by twelve minutes and predated the commit it is
+        supposed to depict by five. `ensure_checkpoint` returns early when a
+        row exists, so the new lineage could never write its own.
+
+        STRICTLY GREATER, never `>=`: this turn's own checkpoint is the state
+        BEFORE it ran, which a recompute does not change and which the restore
+        on the line below is about to read.
+
+        NOT `refresh_checkpoint`, which patches only the lore sections and
+        deliberately leaves the rest alone -- it exists to REMOVE a whole-chat
+        re-snapshot that was itself a bug.
+        """
+        qi("DELETE FROM checkpoints WHERE chat_id=? AND turn_idx>?",
+           (chat_id, turn_row["idx"]))
         restore_checkpoint(chat_id, turn_row["idx"])
         ctx.cast = active_cast(chat_id, turn_row["frame_id"])
 
