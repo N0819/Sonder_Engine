@@ -2250,6 +2250,38 @@ docstring or fix the code; do not leave both.
   (`:145`). The real closed set is `charter_decide.ORDER_ACTIONS`.
 
 
+### 1.80 A spoken line shorter than four characters is invisible, and takes the next one with it
+
+**Found:** building the narrator placeholder protocol, 2026-08-24.
+
+`_QUOTE_BODY_RE` matches an opening quote mark, then a run of at least
+**four** non-quote characters, then a closing mark. That `{4,}` means a quoted
+line of three characters or fewer -- `"No."`, `"Aye."`, `"Sir."` -- never
+matches, so DIALOGUE FIDELITY does not check it and the narrator may drop it
+freely.
+
+**The second half is worse than the first.** The two quote marks the regex
+skipped do not disappear; they pair with their neighbours. Given two short
+lines in one view, the span BETWEEN them matches instead:
+
+    'Picard says in a flat voice: "No." Riker says in a quiet voice: "No."'
+    -> [' Riker says in a quiet voice: ']
+
+So the check can be handed the composer's own attribution formula as though it
+were a delivered line, and then complain that the narrator failed to reproduce
+it. Every fidelity finding on a beat containing an odd number of sub-four
+character quotes is therefore suspect.
+
+`agents/common._dialogue_tokens` guards its own output with
+`_reads_as_attribution`, because feeding that span to the narrator as a line to
+PLACE would print `Riker says in a quiet voice:` inside quotation marks. The
+underlying regex is untouched: raising `{4,}` to `{1,}` would admit stray
+inch-marks and initials as dialogue, and the right fix is probably to match
+quoted spans pairwise rather than by content length -- `static/js/chat.js`
+already does exactly that (`quotedRegions`) for the speaker tinting, and its
+comment explains why the region rather than the match is the unit.
+
+
 ## 2. Roadmap
 
 Features the architecture intends and has not built. Ordered by value per unit

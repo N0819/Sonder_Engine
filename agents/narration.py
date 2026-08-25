@@ -85,6 +85,7 @@ from .common import (
     _dedupe_view_sentences,
     _narration_person_counts,
     _protected_view_quotes,
+    _dialogue_tokens,
     _quote_body,
     _recognizes,
     _self_second_person,
@@ -1163,11 +1164,38 @@ def _extension_narration_payload(ctx, payload, *, scope, player=""):
         return payload
 
 
+def _substitute_dialogue_tokens(prose, lines):
+    """Put the exact words where the model put the token.
+
+    Returns the prose and the lines whose token never appeared. An OMITTED
+    token is the residual failure mode, and it is a strictly better one than a
+    paraphrase: it is countable before the reader sees anything, and the
+    engine knows exactly which line is missing. A paraphrase is neither.
+    """
+    text = str(prose or "")
+    missing = []
+    for index, line in enumerate(lines, 1):
+        token = "{{L%d}}" % index
+        if token in text:
+            text = text.replace(token, '"%s"' % line)
+        else:
+            missing.append((index, line))
+    # A token for a line that does not exist is the model inventing an index.
+    # Strip it rather than leaving `{{L9}}` on the page.
+    text = re.sub(r"\{\{L\d+\}\}", "", text)
+    return re.sub(r"[ \t]{2,}", " ", text), missing
+
+
 def _generate_narration(payload, view, prev, p_lines, correction_notes=None,
                         fidelity_facts=None, language="en"):
     call_payload = dict(payload)
     if correction_notes:
         call_payload["correction_notes"] = correction_notes
+    tokens = _dialogue_tokens(view, p_lines)
+    if tokens:
+        call_payload["dialogue_lines"] = [
+            {"token": "{{L%d}}" % (i + 1), "line": line}
+            for i, line in enumerate(tokens)]
     out = _agent_json(
         "narrator",
         "narrator",
@@ -1187,6 +1215,16 @@ def _generate_narration(payload, view, prev, p_lines, correction_notes=None,
     # field it reached for, has no reader either -- its deletion is Slice 8's,
     # since `llm/schemas.py` is theirs.
     out.setdefault("new_specifics", [])
+    if tokens:
+        # BEFORE the fidelity check, which is what makes the check measure the
+        # page the reader gets rather than a draft that still holds tokens.
+        prose, unplaced = _substitute_dialogue_tokens(
+            out.get("prose", ""), tokens)
+        out["prose"] = prose
+        for _index, line in unplaced:
+            warnings.append(
+                "Narrator omitted a delivered line's placeholder: "
+                f"\"{line[:80]}\"")
     # The player's own declared lines must NOT count toward DIALOGUE
     # FIDELITY -- PLAYER ECHO RULE requires the opposite of them (excluded,
     # not present), so scoring them here would make the two rules fight and

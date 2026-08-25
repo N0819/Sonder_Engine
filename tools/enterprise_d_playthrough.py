@@ -696,6 +696,19 @@ def seed(args):
     db.wset(cid, "background_config", {"scene_life": "ambient",
                                        "max_reactors": 2, "max_managed": 6})
     db.wset(cid, "simulation_clock", {"elapsed_seconds": 0.0})
+    # WHO KNOWS WHOM BY SIGHT. Without this the identity ledger is empty and
+    # every mind renders every other by appearance -- the first run read "the
+    # spare upright man" and "the tall" for the captain and first officer of
+    # the ship the player has served on for three years, on every line of
+    # every turn. A junior officer knows her senior staff; they know her.
+    #
+    # It also costs model calls, which was not obvious until it was measured:
+    # the recycled-prose check compares six-word runs, and "the spare upright
+    # man" is four words of that window before any content, so two unrelated
+    # sentences about one stranger collide on the label alone.
+    crew = [PLAYER] + [sheet["identity"]["name"] for sheet in (PICARD, RIKER)]
+    db.wset(cid, "known", {who: [other for other in crew if other != who]
+                           for who in crew})
 
     print("story %d created; generating the ship..." % cid, flush=True)
     started = time.time()
