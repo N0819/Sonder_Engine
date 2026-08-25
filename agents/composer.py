@@ -70,6 +70,7 @@ from world.spatial import (
     sense_adjusted,
     proximity_rel,
     same_subject,
+    size_relation,
     visual_level_between,
 )
 
@@ -556,6 +557,33 @@ def _visible_room_label(scene, name):
     return label
 
 
+def _size_label(scene, observer_name, name):
+    """How big that body is RELATIVE TO THIS ONE, as a closed engine token.
+
+    Minted only from `size_relation`'s own predicates, extreme-first because
+    the hand-held readings are a strict subset of the liftable ones. Returns
+    None for every ordinary pair by construction -- all four predicates are
+    false between 0.5x and 2.0x -- so a scene that never writes a `scales`
+    entry composes byte-identically.
+
+    A size STATEMENT starts at 2x while DETAIL stops resolving at 4x, and the
+    two thresholds are deliberately different: between them the view says how
+    big the other is and still delivers texture, because knowing someone is
+    twice your size is not the same question as whether you can read their
+    skin. Do not tidy them into agreement.
+    """
+    rel = size_relation(scene, observer_name, name)
+    if rel["other_fits_in_actors_hand"]:
+        return "palm_sized"
+    if rel["fits_in_other_hand"]:
+        return "hand_holds_you"
+    if rel["can_lift_other"]:
+        return "much_smaller"
+    if rel["can_be_lifted_by_other"]:
+        return "much_larger"
+    return None
+
+
 def presence_percepts(scene, observer_name, co_present, display_map,
                       senses=None):
     """Presence -- a tier, a side, an arc -- for every co-present body the
@@ -563,7 +591,12 @@ def presence_percepts(scene, observer_name, co_present, display_map,
     for (unlit, concealed by containment, behind a barrier) does not arrive;
     a body in the observer's rear arc gives no new visual detail and is not
     admitted (sound still rides the event channels); a body seen only as
-    shapes is a bare figure."""
+    shapes is a bare figure.
+
+    Adds one thing, and it is the only addition here: RELATIVE MAGNITUDE. It
+    is a standing presence fact the observer's own eyes have and no channel
+    was delivering, so it rides the presence percept the way tier, side and
+    arc already do."""
     out = []
     for body in co_present or []:
         name = str(body.get("name") or "")
@@ -622,15 +655,21 @@ def presence_percepts(scene, observer_name, co_present, display_map,
         # rule is a classifier waiting to drift. Opaque by `body_key`'s own
         # contract: a canonical name never rides a Percept, even as
         # bookkeeping.
+        # A closed engine token carrying no canonical name, so `body_key`'s
+        # IR invariant still holds. Absent rather than null when there is no
+        # gap, so an unscaled scene's percept record is unchanged.
+        size = _size_label(scene, observer_name, name)
         out.append(Percept(
             kind="presence", channel="sight",
             source_label=label,
             fidelity="full" if level == "full" else "degraded",
             data={"tier": tier, "side": side, "arc": arc, "sight": level,
                   "body": body_key(name),
+                  **({"size": size} if size else {}),
                   **({"room": room} if room else {})},
             salience=0.35,
-            dedupe_key="presence:" + _short_hash(name, tier, arc, level),
+            dedupe_key="presence:" + _short_hash(
+                name, tier, arc, level, size or ""),
         ))
     return out
 
@@ -1721,6 +1760,7 @@ def _is_own_body_description(p):
 
 
 _TIER_PHRASES = dict(_ENGLISH_COMPOSITOR["tier_phrases"])
+_SIZE_PHRASES = dict(_ENGLISH_COMPOSITOR["size_phrases"])
 
 
 # A placeholder holding the position the presence group will occupy, so
@@ -1764,7 +1804,13 @@ def _presence_clause(p):
                                    _TIER_PHRASES["default"]))
     side = p.data.get("side")
     side_clause = _en("side", side=side) if side in ("left", "right") else ""
-    return f"{p.source_label} is {tier}{side_clause}"
+    # Relative magnitude qualifies every other clause in the view -- what can
+    # be reached, held, or resolved at all -- so it rides the STANDING
+    # presence sentence rather than waiting for an act to make it visible. An
+    # unknown or absent label costs wording and never the beat.
+    size = _SIZE_PHRASES.get(str(p.data.get("size") or ""), "")
+    size_clause = f", {size}" if size else ""
+    return f"{p.source_label} is {tier}{side_clause}{size_clause}"
 
 
 def _join_clauses(clauses):

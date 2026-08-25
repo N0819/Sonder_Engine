@@ -167,6 +167,23 @@ def size_relation(scene: dict, a: str, b: str) -> dict:
     }
 
 
+def detail_resolves_between(scene: dict, observer: str, target: str) -> bool:
+    """Can this observer resolve TEXTURE on that body, or only its form.
+
+    ACUITY IS PROPORTIONALITY, not distance. A body far off its counterpart's
+    scale reads as form and mass and never as texture -- the larger observer
+    is above the detail, the smaller one is inside it, and neither is reading
+    a REGION as a surface. Symmetric on purpose, which is why the band is
+    taken from `can_do_fine_work_on_other` rather than a fresh constant: that
+    band is already the engine's declared precision boundary, and the hand and
+    the eye must not drift apart.
+
+    True whenever nothing is off baseline, and a body is always proportionate
+    to itself, so the self row can never be coarsened.
+    """
+    return bool(size_relation(scene, observer, target)["can_do_fine_work_on_other"])
+
+
 def size_facts(scene: dict, observer: str, source_names) -> list:
     """Plain statements about relative size, for the observer's frame.
 

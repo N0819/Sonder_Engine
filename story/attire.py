@@ -2408,6 +2408,26 @@ def describe(regions, beneath_visible=False, body=""):
     return lines
 
 
+# EVERY branch of `perceptible_region_surfaces` writes its authored
+# description as `" \u2014 %s"` and joins parts with `"; "` -- a covering
+# garment, a zone garment, a bare zone's `beneath`, a bare region's `beneath`,
+# an ornament -- so one rule over that grammar covers a garment's weave and
+# bare skin's texture alike.
+_SURFACE_DETAIL_TAIL = re.compile(r"\s+\u2014\s+[^;]*")
+
+
+def coarsen_region_surface(surface):
+    """The same surface with its authored DETAIL removed.
+
+    What survives is what an observer who cannot resolve texture still gets:
+    whether the region is covered, and by what. Attire owns the surface
+    grammar, so attire owns what stripping detail from it means; the dim-light
+    fact already says this in words ("shapes and movement, not detail"), and
+    this is the same subtraction applied per region.
+    """
+    return _SURFACE_DETAIL_TAIL.sub("", str(surface or "")).strip()
+
+
 def perceptible_region_surfaces(regions, beneath_visible=False):
     """The visible surface of each authored region, without hidden layers.
 

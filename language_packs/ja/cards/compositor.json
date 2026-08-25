@@ -86,6 +86,12 @@
     "8": "八人",
     "9": "九人"
   },
+  "size_phrases": {
+    "palm_sized": "手のひらに収まるほど小さい",
+    "hand_holds_you": "あなたを手に握れるほど大きい",
+    "much_smaller": "あなたよりはるかに小さい",
+    "much_larger": "あなたよりはるかに大きい"
+  },
   "tier_phrases": {
     "within_reach": "手の届く距離",
     "near": "すぐ近く",
