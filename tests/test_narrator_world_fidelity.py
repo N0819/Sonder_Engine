@@ -334,7 +334,8 @@ def test_position_delta_payload_reports_unmoved_and_moved(temp_db):
         {"Mara": {"appearance": "", "aliases": []}})
     assert payload["Mara"]["moved"] is False
     assert payload["Mara"]["room"] == "Bridge"
-    assert facts == [{"name": "Mara", "room_id": "bridge", "moved": False}]
+    assert facts == [{"name": "Mara", "key": "Mara",
+                     "room_id": "bridge", "moved": False}]
     assert room_names["ready_room"] == "Ready Room"
 
     moved_scene = json.loads(json.dumps(committed))
@@ -380,7 +381,8 @@ def test_position_delta_payload_gates_on_sight(temp_db):
         ctx, {"id": ctx.chat.id}, "Player", "bridge", {"Mara"},
         {"Mara": {"appearance": "", "aliases": []}})
     assert payload["Mara"]["moved"] is True
-    assert facts == [{"name": "Mara", "room_id": "bridge", "moved": True}]
+    assert facts == [{"name": "Mara", "key": "Mara",
+                     "room_id": "bridge", "moved": True}]
     # No sight line into the ready room -> the origin is withheld even though
     # the arrival itself is perceived.
     assert payload["Mara"]["prev_room"] is None

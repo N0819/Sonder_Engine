@@ -987,6 +987,51 @@ def attire_view(entry, body=""):
     }
 
 
+def attire_exposure_facts(sc, bodies):
+    """Which regions the ledger still has COVERED, per body, for the screen.
+
+    `bodies` is [(ledger_key, [ownership token, ...])] and the CALLER decides
+    who is in it -- this function has no perception opinion, the same division
+    `_position_delta_payload` keeps for rooms.
+
+    A partially exposed region is left OUT: a garment worn open still counts
+    as concealing, so prose calling that region bare is defensible and
+    warning about it would spend a rewrite on a true sentence.
+    """
+    out, ledger = [], (sc or {}).get("attire") or {}
+    for key, refs in bodies or ():
+        entry = ledger.get(key)
+        refs = [str(r).strip() for r in (refs or ()) if str(r).strip()]
+        if not isinstance(entry, dict) or not refs:
+            continue
+        regions = (attire_model.rederive_entry(entry) or {}).get("regions") or {}
+        partial = set(attire_model.partially_exposed_regions(regions))
+        covered = [r for r in attire_model.covered_regions(regions)
+                   if r not in partial]
+        if covered:
+            out.append({"refs": refs, "covered": covered})
+    return out
+
+
+def exposure_owner_refs(narration_person, display, pronouns=None):
+    """Every word in prose that would OWN this body's regions.
+
+    The possessive that means "the player" is decided by narration person,
+    not by the persona's pronouns, which is why the person table is language
+    data beside the exposure vocabulary rather than a constant here.
+    """
+    shape = _ling("_EXPOSURE_STATE")
+    refs = list((shape.get("person_possessive") or {}).get(
+        str(narration_person or "").strip().lower()) or ())
+    display = str(display or "").strip()
+    if display:
+        refs.append(display + "'s")
+    poss = str((pronouns or {}).get("possessive") or "").strip()
+    if poss:
+        refs.append(poss)
+    return refs
+
+
 def scene_attire_view(sc):
     """`attire_view` across every body in the scene."""
     return {
@@ -7315,11 +7360,104 @@ def _reads_as_attribution(text):
 
 
 
+def _check_speech_marking(prose, view_quotes, excluded_bodies=()):
+    """A delivered line that reached the page unquoted was re-costumed.
+
+    DIALOGUE FIDELITY asks only whether the WORDS survived: `_contains_quote`
+    strips markup for comparison (deliberately -- a tag inside a quote must
+    not read as a dropped line) and then substring-searches, so an emphasised
+    span with no quote marks passes it. Measured: view `Mara says in a quiet
+    voice: "We should not be here."` with prose `She looks away. <i>We should
+    not be here.</i>` raised no warning at all. A delivered line is SPEECH,
+    and the page marks speech with quotation marks; the same words outside
+    every quoted region are a different speech act, which is why the reader's
+    own contract reserves emphasis for a thought the prose is voicing rather
+    than quoting.
+
+    Regions rather than a quote regex, the way the frontend and the schema
+    both do it: `_QUOTE_BODY_RE` needs four characters between the marks, so
+    a short line is invisible to it and the marks it skips then pair with
+    their neighbours.
+
+    The player's own lines are excluded: PLAYER ECHO RULE requires their
+    ABSENCE, so their marking is a different rule's business.
+    """
+    scan = re.sub(r"\s+", " ",
+                  _fold_typography(strip_prose_markup(str(prose or ""))))
+    regions = [m.span() for m in _ling("_NARRATION_QUOTE_RE").finditer(scan)]
+    folded = scan.casefold()
+    warnings = []
+    for quote in view_quotes or ():
+        body = re.sub(r"\s+", " ",
+                      _fold_typography(quote)).casefold().rstrip(".,!?…;:")
+        if not body or body in (excluded_bodies or ()):
+            continue
+        placed, marked, at = False, False, folded.find(body)
+        while at >= 0:
+            placed = True
+            end = at + len(body)
+            if any(s <= at and end <= e for s, e in regions):
+                marked = True
+                break
+            at = folded.find(body, at + 1)
+        if placed and not marked:
+            warnings.append(
+                "Delivered line rendered without quotation marks: "
+                f"\"{quote[:80]}\"")
+    return warnings
+
+
+def _check_attire_fidelity(prose, attire_facts):
+    """A region the ledger still COVERS may not be narrated bare.
+
+    The same shape as `_check_portal_fidelity`: a committed two-valued state
+    and a prose assertion of its opposite. `attire_facts` is [{refs,
+    covered}], built in agents/narration.py behind the same perception gate
+    `_position_delta_payload` uses, so an unperceived body can never raise a
+    warning about prose that rightly omits it.
+
+    Three narrowings, each subtracting: quoted speech is scrubbed first (a
+    speaker's CLAIM about a body is not narration); a partially exposed
+    region never reaches `covered`; and the exposure word must be bound to
+    the region noun by an ownership token of that body, so scenery is never a
+    body.
+    """
+    if not prose or not attire_facts:
+        return []
+    shape = _ling("_EXPOSURE_STATE")
+    scan = _ling("_NARRATION_QUOTE_RE").sub(" ", str(prose))
+    # An idiom that names a REGION by accident -- being unarmed, not being
+    # undressed. Masked at equal length so nothing shifts under a later match.
+    scan = re.sub(str(shape["idiom"]), lambda m: " " * len(m.group(0)),
+                  scan, flags=re.I)
+    warnings = []
+    for fact in attire_facts:
+        refs = [re.escape(str(r)) for r in (fact.get("refs") or ()) if str(r)]
+        if not refs:
+            continue
+        for region in (fact.get("covered") or ()):
+            region = str(region or "").strip()
+            if not region:
+                continue
+            pattern = (str(shape["assertion"])
+                       .replace("{owner}", "|".join(refs))
+                       .replace("{state}", str(shape["state"]))
+                       .replace("{region}", re.escape(region)))
+            if re.search(pattern, scan, re.I):
+                warnings.append(
+                    "Narrated exposure contradicts the attire ledger: the "
+                    f"{region} is narrated bare while this beat's ledger "
+                    "still has it covered. Describe it as the ledger has it.")
+                break
+    return warnings
+
+
 def _check_narrator_fidelity(out, view, recent_prose=None, exclude_quotes=None,
                              cast_pronouns=None, player_name=None,
                              narration_person=None, player_aliases=None,
                              event_order=None, position_facts=None,
-                             room_names=None, portal_states=None):
+                             room_names=None, portal_states=None,
+                             attire_facts=None):
     warnings = []
     view_text = str(view or "")
     prose = out.get("prose") or ""
@@ -7511,6 +7649,11 @@ def _check_narrator_fidelity(out, view, recent_prose=None, exclude_quotes=None,
         prose, position_facts, room_names))
     warnings.extend(_check_portal_fidelity(prose, portal_states))
     warnings.extend(_check_action_direction(prose, event_order))
+
+    # F5-F6: the page against the two records it was written from. Neither is
+    # in `_ENFORCEABLE_PREFIXES` -- promotion is a measurement, not an edit.
+    warnings.extend(_check_speech_marking(prose, view_quotes, excluded_bodies))
+    warnings.extend(_check_attire_fidelity(prose, attire_facts))
 
     return warnings
 

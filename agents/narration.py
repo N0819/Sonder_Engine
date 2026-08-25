@@ -80,6 +80,8 @@ from .common import (
     scene_extra_parts,
     _already_established_phrases,
     _cap_repeated_quotes,
+    attire_exposure_facts,
+    exposure_owner_refs,
     _overused_phrases,
     _check_narrator_fidelity,
     _dedupe_view_sentences,
@@ -817,7 +819,10 @@ def _position_delta_payload(ctx, chat, p_name, p_room, recognized, cast_info):
             "prev_room": prev_display,
             "moved": moved,
         }
-        facts.append({"name": display, "room_id": now_room, "moved": moved})
+        # The display is what prose says; the key is what the ledger is filed
+        # under, and the attire screen needs both.
+        facts.append({"name": display, "key": name, "room_id": now_room,
+                      "moved": moved})
     return payload, facts, room_names
 
 
@@ -1239,7 +1244,8 @@ def _generate_narration(payload, view, prev, p_lines, correction_notes=None,
         event_order=facts.get("event_order"),
         position_facts=facts.get("position_facts"),
         room_names=facts.get("room_names"),
-        portal_states=facts.get("portal_states"))
+        portal_states=facts.get("portal_states"),
+        attire_facts=facts.get("attire_facts"))
     return out, warnings, fidelity_warnings
 
 
@@ -1444,6 +1450,19 @@ def narrator(ctx, nonce):
             if isinstance(r, dict) and r.get("room_id")
         } | ({p_room} if p_room else set())
         portal_states = _visible_portal_states(_scene_for_frame, p_room, _visible)
+        # WHOSE DRESS THE PAGE MAY SPEAK FOR. The player's own body always --
+        # a mind has a channel to its own clothing -- plus exactly the bodies
+        # `_position_delta_payload` already admitted, which is the perception
+        # gate (`_player_sees_character`), not co-location. A check fact is
+        # not a payload field: this reaches the deterministic screen and never
+        # the model, so nothing here widens what the narrator may know.
+        _attire_facts = attire_exposure_facts(_scene_for_frame, [
+            (player_name, exposure_owner_refs(
+                narration_person, player_name, player_pronouns)),
+            *((f["key"], exposure_owner_refs(
+                None, f["name"], cast_pronouns.get(f["key"])))
+              for f in pos_facts),
+        ])
         # PERCEPTION'S OWN RECORD is what the model reads (see
         # `_render_observed_events`). `event_order` is still built above: it
         # stays on `_fidelity_facts` for the deterministic checks, which score
@@ -1473,6 +1492,7 @@ def narrator(ctx, nonce):
             "position_facts": pos_facts,
             "room_names": room_names,
             "portal_states": portal_states,
+            "attire_facts": _attire_facts,
         }
 
     _abp = _authored_body_parts(ctx, pers, player_name)

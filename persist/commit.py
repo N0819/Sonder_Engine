@@ -206,16 +206,21 @@ def commit_authored_events(ctx, nonce):
     from story.authored_events import mint_authored_events, resolve_authored_events
     cid = ctx.chat.id
     res = ctx.director_resolve or ctx.director_establish or {}
+    # The MERGED committed diff -- `director_fanout` writes the merged
+    # specialist output back to `state_diff` -- so the referent check reads
+    # what the beat actually retired. Establish has none; `or {}` covers it.
     fired, requeued, dropped = resolve_authored_events(
-        cid, ctx.turn.idx, str(res.get("resolved_event") or ""))
+        cid, ctx.turn.idx, str(res.get("resolved_event") or ""),
+        state_diff=(res.get("state_diff") or {}))
     if requeued:
         ctx.add_warning(
             f"{requeued} authored future-event(s) not enacted this beat; "
             "re-queued to next turn rather than dropped")
     if dropped:
         ctx.add_warning(
-            f"{dropped} authored future-event(s) went unresolved past the "
-            "re-queue limit and were marked stale")
+            f"{dropped} authored future-event(s) can no longer be enacted "
+            "(this beat retired what they name, or they went unresolved past "
+            "the re-queue limit) and were marked stale")
     interp = ctx.director_interpret or {}
     minted = mint_authored_events(
         cid, ctx.turn.idx, (interp.get("flow") or {}).get("scheduled_assertions"))
