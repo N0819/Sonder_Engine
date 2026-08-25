@@ -511,3 +511,75 @@ an adapter turned out not to be missing code at all.
 Left: extension-declared model lanes, document storage, a settings-section
 mount point, and `on_admission`/`on_view` — none of which blocks a first
 integration on the integrator's own assessment.
+
+---
+
+## 10. The Living World, from Python — 2026-08-24
+
+Answers an extension-facing provisioning request written against alpha 9.8. The
+request is right that the gap is real and right about where it is; two of its
+premises are not, and the difference is worth recording because both would have
+produced worse hooks.
+
+| Ask | State |
+|---|---|
+| Read the living-world configuration and what it will actually run | **Built** — `story_view(...)["living_world"]`, unconditional, no schema bump |
+| Read the institutions in a story | **Built** — a summary row each, `charters="full"` for the whole registry |
+| Set the ladder atomically with the story | **Built** — `provision_story(..., offscreen_life=, living_world=)`, capability `living_world_provisioning` |
+| Name characters by an identity that survives an archive | **Built** — `resource_uid` beside `char_id` in `character_histories` |
+| Generation that survives an interruption | **Built** — the pure prefix is persisted, a retry replays it free, capability `living_world_generation` |
+| Generation as one atomic synchronous call | **Not built, and refused** — see below |
+| A story that is not listable until initialization completes | **Not built** — see below |
+
+**The first premise that was wrong: that this is a firewall question.** The
+request is careful about not exposing Charter internals, and an early draft of
+these hooks followed it — counts only, no bodies, no belief. That was theatre.
+The firewall constrains what reaches a fictional MIND; an extension is not one,
+and `GET /api/chats/{cid}/charters` has always served the complete registry,
+belief and private habits included, to any host session that asks. A Python
+caller getting less than the browser would have been a weaker path, not a safer
+one. `charters="full"` returns the same bytes the route does. What the default
+summary is for is SIZE — a populated town on a per-render read — and nothing
+else.
+
+**The second: that atomicity and generation can be had together.**
+`provision_story` is atomic *because* it is one transaction containing no model
+calls, which its own docstring argues at length. Generation makes several and
+writes as it goes. The request asks for both, and for staging plus
+reconciliation to bridge them. What landed instead is the cheaper half of that
+which carries most of the value: the expensive PURE prefix — the two model
+calls that propose the town and its history — is persisted before anything
+writes, so a lost run is not paid for twice. The destructive half is not
+resumed automatically and never will be silently: `_remap_generated_town` reads
+live state, so replaying it plants the same town twice, and a run interrupted
+after that point is refused with the stage named. `GET /charters/job` reports
+it; `DELETE` is the author's acknowledgement that they have looked.
+
+The `lore_gen_jobs` pattern is what this copies, including the part that
+matters most — a per-process owner token, so a `running` job owned by a dead
+process *is* an interruption, detected exactly, with no staleness timeout to
+tune. It is stored in a chat-global `world` key rather than a table, which buys
+archive, checkpoint, branch and delete coverage for free and correctly.
+
+**Not listable until ready** is declined for now, and the reason is not
+difficulty. It is a readiness column on `chats` and a change to every listing
+path, for a requirement one consumer has — and the consumer can already solve
+it: it owns documents and commit domains, so it can mark its own state
+`initializing` and refuse to run its stages. A host-wide lifecycle concept
+should be earned by more than one campaign.
+
+Two smaller asks were declined as stated and answered differently. **Refusing
+unknown options** rather than clamping: taken for the two provisioning
+arguments, where a caller sees no echo and `normalize_offscreen_life` falls to
+the *default* rather than the floor — a typo would buy more off-screen life
+than was asked for. Not taken for depth clamping, where the request already
+carved out the exception and the honest answer is the one it proposed itself:
+report `value` beside `effective`. **A versioned DTO** on top of `ext_api` and
+`schema` would have been a third version axis; the capability names carry it,
+which is this repo's own convention.
+
+What an author needs is [`docs/guides/EXTENSIONS.md`](../guides/EXTENSIONS.md)
+§7 and, before choosing any value,
+[`docs/guides/LIVING_WORLD.md`](../guides/LIVING_WORLD.md) — the six gates that
+must agree before anything happens, and the traps in each. The defaults do less
+than they look like they do.

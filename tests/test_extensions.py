@@ -1164,7 +1164,13 @@ class TestTheHostSaysWhatItOffers:
             "list_channels": "add_director_specialist",
             "model_lanes": "add_model_lane",
             "payload_routing": "on_character_payload",
-            "provision_story": "provision_story", "routes": "add_route",
+            "provision_story": "provision_story",
+            # Same method, second promise: the arguments that set how much of
+            # the world runs unwatched. Named separately because an extension
+            # can have `provision_story` on an older host without them.
+            "living_world_provisioning": "provision_story",
+            "living_world_generation": "generate_lived_location",
+            "routes": "add_route",
             "stage_anchors": "add_stage",
         }
         for capability in extension_runtime.HOST_CAPABILITIES:

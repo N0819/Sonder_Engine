@@ -13,7 +13,9 @@ the opt-in.
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
+import uuid
 
 from core import jobs
 from core.logging_utils import logger
@@ -77,6 +79,113 @@ def normalize_registry(stored):
     return {"version": REGISTRY_VERSION, "items": items}
 
 
+# ---------------------------------------------------------------- job store
+
+#: Stamped on every generation this process starts. A `running` job carrying a
+#: DIFFERENT token was orphaned when that process died, which is an
+#: interruption -- detected exactly, with no staleness timeout to tune. The
+#: `lore_gen_jobs` pattern (`story/importers.py`), which exists for the same
+#: reason: a multi-call generation can be lost to a dropped stream, an
+#: exhausted retry budget, a closed tab or a restart, and before it there was
+#: nothing to recover.
+_GEN_OWNER = uuid.uuid4().hex
+
+#: Chat-global world key. NOT a table, deliberately. A job is per-chat, and a
+#: `world` row already rides `chat_archive.WORLD_TABLES`, the checkpoint
+#: snapshot, branch cloning and story delete -- four of the eight items on
+#: `docs/guides/DATABASE.md`'s schema-change checklist, for free and correctly.
+#: `lore_gen_jobs` is a table because it is keyed per-LOREBOOK, which `world`
+#: cannot express.
+LIVED_LOCATION_JOB_KEY = "lived_location_job"
+
+#: The stages, in order. `planned` is the boundary that matters: everything
+#: before it is pure and replays for free, everything after it has written to
+#: the world.
+JOB_STAGES = ("planning", "planned", "planted", "presimmed", "done")
+
+#: The stages a rerun cannot safely follow. By the time any of these is
+#: recorded, rooms may already exist and the registry may already be saved --
+#: and `_remap_generated_town` reads LIVE state, so a second run over the top
+#: of an unfinished one plants a second town.
+PAST_BOUNDARY_STAGES = frozenset({"planting", "planted", "presimmed"})
+
+
+def _request_digest(cid, request, frame_id):
+    """A stable fingerprint of what was asked for.
+
+    A stored plan may only be reused for the SAME request. Sorting keys makes
+    it independent of dict order, and the model output is excluded because it
+    is what the digest identifies rather than part of the question.
+    """
+    payload = json.dumps(
+        {"cid": int(cid), "frame": frame_id,
+         "request": request if isinstance(request, dict) else {}},
+        sort_keys=True, ensure_ascii=False, default=str)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def lived_location_job(cid):
+    """The stored job for this chat, or `None`.
+
+    `interrupted` is DERIVED rather than stored: a `running` row whose owner
+    is not this process can only be a crash or a restart, and deriving it
+    means a job cannot be left claiming to be live by a process that is gone.
+    """
+    from core.db import wget
+
+    stored = wget(int(cid), LIVED_LOCATION_JOB_KEY, None)
+    if not isinstance(stored, dict) or not stored.get("job_id"):
+        return None
+    job = dict(stored)
+    if job.get("status") == "running" and job.get("owner") != _GEN_OWNER:
+        job["status"] = "interrupted"
+        job["error"] = job.get("error") or (
+            "Interrupted: the server stopped while this generation was "
+            "running.")
+    return job
+
+
+def _save_job(cid, job):
+    from core.db import wset
+
+    job = dict(job)
+    job["updated"] = job.get("updated") or 0.0
+    wset(int(cid), LIVED_LOCATION_JOB_KEY, job)
+    return job
+
+
+def clear_lived_location_job(cid):
+    """Forget the job. Called on success, and by an author abandoning one."""
+    from core.db import wset
+
+    wset(int(cid), LIVED_LOCATION_JOB_KEY, {})
+
+
+#: Everything the pure prefix produces that anything after the boundary needs.
+#: Stored whole, because a resume that restored only SOME of it would carry the
+#: town from one run and the lore provenance from another.
+_ARTIFACT_FIELDS = ("town", "required_rooms_added", "lore_manifest",
+                    "source_book", "owning_book", "horizon", "wants_history")
+
+
+def _resumable_plan(cid, digest):
+    """The stored pure prefix this call may reuse instead of paying again.
+
+    Only from a job for the SAME request that reached `planned` and no
+    further. Past that the run has written to the world, and the caller
+    refuses outright rather than resuming -- see `PAST_BOUNDARY_STAGES`.
+    """
+    job = lived_location_job(cid)
+    if not job or job.get("digest") != digest:
+        return None, job
+    artifact = job.get("artifact")
+    if job.get("stage") != "planned" or not isinstance(artifact, dict):
+        return None, job
+    if not isinstance(artifact.get("town"), dict):
+        return None, job
+    return copy.deepcopy(artifact), job
+
+
 def registry_for(cid, frame_id=None):
     from core.db import wget_for_frame
     return normalize_registry(
@@ -108,19 +217,71 @@ def _prepare_cast_histories(cid, request, *, frame_id=None):
     raw = request.get("character_histories")
     if not isinstance(raw, list):
         return request, []
+    # TWO SPELLINGS OF ONE ANSWER. `char_id` is this install's row id and is
+    # the only key that existed; `resource_uid` is the identity that survives
+    # an archive, which is what a caller provisioning a story HAS -- the local
+    # ids are minted by the import that has not happened yet from its point of
+    # view, and remapped again on every branch and clone. Both resolve through
+    # the same `chat_chars` join below, so attachment to THIS story and the
+    # per-story card override are enforced in one place for either spelling.
     requested = []
-    seen = set()
+    seen_ids, seen_uids, uid_rows = set(), set(), []
     for value in raw:
         if not isinstance(value, dict):
+            continue
+        uid = str(value.get("resource_uid") or "").strip()
+        if uid:
+            if uid in seen_uids:
+                continue
+            seen_uids.add(uid)
+            uid_rows.append((uid, value))
             continue
         try:
             char_id = int(value.get("char_id"))
         except (TypeError, ValueError):
             continue
-        if char_id <= 0 or char_id in seen:
+        if char_id <= 0 or char_id in seen_ids:
             continue
-        seen.add(char_id)
+        seen_ids.add(char_id)
         requested.append((char_id, value))
+    if len(uid_rows) + len(requested) > CAST_HISTORY_REQUEST_CAP:
+        # BEFORE THE SQL. The `char_id` spelling reaches the cap check below
+        # with no query behind it; the uid spelling builds one placeholder per
+        # entry, so an oversized request would have raised sqlite's "too many
+        # SQL variables" -- a 500, not the documented refusal.
+        raise ValueError(
+            "a lived-location start can generate history for at most "
+            f"{CAST_HISTORY_REQUEST_CAP} full characters at once; Charter "
+            "residents themselves are not limited by this cognition budget")
+    if uid_rows:
+        marks = ",".join("?" for _ in uid_rows)
+        resolved = {
+            str(row["resource_uid"]): int(row["char_id"])
+            for row in q(
+                "SELECT cc.char_id, ch.resource_uid FROM chat_chars cc "
+                "JOIN characters ch ON ch.id=cc.char_id "
+                f"WHERE cc.chat_id=? AND ch.resource_uid IN ({marks})",
+                (cid, *(uid for uid, _value in uid_rows)))
+            if row["resource_uid"]
+        }
+        missing = [uid for uid, _value in uid_rows if uid not in resolved]
+        if missing:
+            # REFUSED, not skipped. An unresolvable `char_id` is dropped
+            # silently below and always was -- a browser sending a stale id
+            # is a UI bug the author cannot act on. A `resource_uid` is
+            # supplied by a caller that believes it attached that character,
+            # and silently generating a location without them is the failure
+            # they most need told about.
+            raise ValueError(
+                "character_histories names %s no character in this story "
+                "carries; attach the character before requesting its "
+                "history" % ", ".join(repr(uid) for uid in sorted(missing)))
+        for uid, value in uid_rows:
+            char_id = resolved[uid]
+            if char_id in seen_ids:
+                continue
+            seen_ids.add(char_id)
+            requested.append((char_id, value))
     if len(requested) > CAST_HISTORY_REQUEST_CAP:
         raise ValueError(
             "a lived-location start can generate history for at most "
@@ -510,8 +671,79 @@ def generate_lived_location(cid, request, *, frame_id=None):
     chat = q("SELECT * FROM chats WHERE id=?", (cid,), one=True)
     if not chat:
         raise ValueError("story not found")
-    request, cast_histories = _prepare_cast_histories(
-        cid, request, frame_id=frame_id)
+    digest = _request_digest(cid, request, frame_id)
+    artifact, prior = _resumable_plan(cid, digest)
+    if prior and prior.get("stage") in PAST_BOUNDARY_STAGES:
+        # PAST THE BOUNDARY, whatever else is true of it. Rooms may already be
+        # planted and the registry saved, and `_remap_generated_town` reads
+        # LIVE state, so a second run over an unfinished one plants a second
+        # town.
+        #
+        # ON STAGE ALONE, deliberately, and this is the correction that
+        # matters. `status` only ever distinguishes a foreign OWNER, so a run
+        # that died inside a live process still reads `running` and would have
+        # sailed straight past a status test. Nor on the digest: a story with
+        # half-planted rooms is in that state whatever is asked for next, and
+        # the obvious thing an author does after a failure is retry with one
+        # field changed.
+        raise ValueError(
+            "a previous generation of this story was interrupted after it had "
+            "begun planting rooms (stage %r). Inspect the story's locations, "
+            "then clear the job (DELETE /api/chats/<id>/charters/job) before "
+            "generating again." % prior.get("stage"))
+    if prior and prior.get("status") == "running" \
+            and prior.get("owner") == _GEN_OWNER:
+        # A LIVE ONE, in this process. `_require_frame_idle` cannot see this:
+        # it reads the turn pipeline's `ABORTS`, which generation never
+        # registers in, so a double-click or two hooks give two runs that
+        # would both claim the single job slot -- and the loser's `planted`
+        # marker would be erased by the winner's `planning`. A `running` job
+        # this process owns can only be a live one, because every failure
+        # path marks or clears it (`_fail_job`); one owned by a DEAD process
+        # reads as `interrupted` instead and does not land here.
+        raise ValueError(
+            "a generation is already running for this story. Wait for it to "
+            "finish, or clear it (DELETE /api/chats/<id>/charters/job).")
+    _save_job(cid, {"version": 1, "job_id": uuid.uuid4().hex,
+                    "owner": _GEN_OWNER, "status": "running",
+                    "stage": "planning", "digest": digest,
+                    "error": "", "resumed": bool(artifact)})
+    try:
+        return _generate_lived_location(
+            cid, request, chat, frame_id, digest, artifact)
+    except Exception as exc:
+        _fail_job(cid, exc)
+        raise
+
+
+def _fail_job(cid, exc):
+    """Record a failure so the next call can see it.
+
+    BEFORE THE BOUNDARY there is nothing to recover and nothing was written,
+    so the job is forgotten -- leaving a `running` claim owned by THIS process
+    would not read as an interruption (the owner matches) and would look live
+    forever. AFTER it, the record is the whole point: it is what refuses the
+    next run, so it is kept and marked, never cleared.
+    """
+    job = lived_location_job(cid) or {}
+    if job.get("stage") in PAST_BOUNDARY_STAGES:
+        _save_job(cid, {**job, "status": "failed",
+                        "error": f"{type(exc).__name__}: {str(exc)[:240]}"})
+        return
+    clear_lived_location_job(cid)
+
+
+def _plan_lived_location(cid, request, chat):
+    """The pure prefix: two model calls, a deterministic closure, no writes.
+
+    Returned whole as the artifact a resume restores. Everything downstream
+    needs all seven fields, so restoring only some would carry the town from
+    one run beside the lore provenance of another.
+    """
+    from core.db import q
+    from world.charter_generate import (
+        close_plan, ensure_required_rooms, propose_history, propose_town)
+
     lore = request.get("lore")
     source_book = request.get("lorebook_id")
     brief = str(request.get("brief") or chat["scenario"]
@@ -593,6 +825,45 @@ def generate_lived_location(cid, request, *, frame_id=None):
         # punctuation and case exactly as the author supplied them.
         town["name"] = requested_name
         town["structure"]["name"] = requested_name
+    return {"town": town, "required_rooms_added": required_rooms_added,
+            "lore_manifest": lore_manifest, "source_book": source_book,
+            "owning_book": owning_book, "horizon": horizon,
+            "wants_history": wants_history}
+
+
+def _generate_lived_location(cid, request, chat, frame_id, digest, artifact):
+    """The body, with the job's lifecycle owned by the caller."""
+    from core.db import q, wget_for_frame
+    from world.charter_generate import narrate_actual_history
+    from world.structure import plant_structure, structure_warnings
+
+    was_resumed = artifact is not None
+
+    request, cast_histories = _prepare_cast_histories(
+        cid, request, frame_id=frame_id)
+    if artifact is None:
+        artifact = _plan_lived_location(cid, request, chat)
+        # THE BOUNDARY. Everything above is pure -- two model calls and no
+        # writes -- so it is exactly what is worth not paying for twice, and
+        # exactly what is safe to replay. Everything below writes.
+        _save_job(cid, {**(lived_location_job(cid) or {}),
+                        "owner": _GEN_OWNER, "status": "running",
+                        "stage": "planned",
+                        "artifact": copy.deepcopy(artifact)})
+    town = copy.deepcopy(artifact["town"])
+    required_rooms_added = artifact["required_rooms_added"]
+    lore_manifest = artifact["lore_manifest"]
+    source_book = artifact["source_book"]
+    owning_book = artifact["owning_book"]
+    horizon = artifact["horizon"]
+    wants_history = artifact["wants_history"]
+    # BEFORE THE FIRST WRITE, not after it. A marker that claims a write which
+    # did not happen costs one wasted regeneration; a marker that misses a
+    # write which DID happen costs a second town on the same ground. Only one
+    # of those is recoverable, so the marker leads.
+    _save_job(cid, {**(lived_location_job(cid) or {}),
+                    "owner": _GEN_OWNER, "stage": "planting",
+                    "artifact": None})
     existing = registry_for(cid, frame_id)
     town = _remap_generated_town(cid, town, existing)
     structure, rooms = plant_structure(
@@ -606,6 +877,9 @@ def generate_lived_location(cid, request, *, frame_id=None):
     combined["items"].update(copy.deepcopy(generated["items"]))
     combined = save_registry(cid, combined, frame_id)
     source_revision = registry_revision(combined)
+    # Rooms are planted and the registry is saved.
+    _save_job(cid, {**(lived_location_job(cid) or {}),
+                    "owner": _GEN_OWNER, "stage": "planted"})
     tail_places = list(request.get("tail_places") or list(rooms)[:8])
     # Featured residents must receive recent-resolution life where they
     # actually work and live; otherwise the arbitrary first eight rooms can
@@ -664,6 +938,11 @@ def generate_lived_location(cid, request, *, frame_id=None):
     }
     _complete_cast_histories(
         cid, request, cast_histories, result, frame_id=frame_id)
+    # Terminal. The job existed to make a LOST run recoverable, so a finished
+    # one is not history worth keeping -- what happened is in the registry,
+    # the rooms and the scheduled events, which is where a reader should look.
+    clear_lived_location_job(cid)
+    result["resumed_plan"] = bool(was_resumed)
     return result
 
 

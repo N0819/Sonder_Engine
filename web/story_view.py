@@ -36,7 +36,9 @@ import hashlib
 import json
 import secrets
 
-from core.db import q, wget, wset
+from core.db import q, wget, wget_for_frame, wset
+from world.charter_runtime import REGISTRY_VERSION
+from world.living_world import OFFSCREEN_CEILING_KEY
 
 #: Bump when a consumer could break. Callers are outside this repository and
 #: cannot be migrated in the same commit, which is the whole reason a read this
@@ -286,7 +288,8 @@ def _events(chat_id, limit):
             for row in reversed(rows)]
 
 
-def story_view(chat_id, *, events=DEFAULT_EVENT_LIMIT, frame_id=_LATEST_FRAME):
+def story_view(chat_id, *, events=DEFAULT_EVENT_LIMIT,
+               frame_id=_LATEST_FRAME, charters=None):
     """Canonical story state, versioned, read-only, serialisable.
 
     Ordinary values throughout: no ORM rows, no live scene dict, no mutation
@@ -309,10 +312,134 @@ def story_view(chat_id, *, events=DEFAULT_EVENT_LIMIT, frame_id=_LATEST_FRAME):
 
     turn, frame_id = _resolve_reading(chat_id, frame_id)
     with _reading_frame_id(frame_id):
-        return _story_view_in_frame(chat_id, chat, turn, events, frame_id)
+        return _story_view_in_frame(
+            chat_id, chat, turn, events, frame_id, charters)
 
 
-def _story_view_in_frame(chat_id, chat, turn, events, frame_id):
+def _living_world(chat_id, frame_id, scene, detail):
+    """The Living World as a caller outside this process can act on it.
+
+    GENEROUS ON PURPOSE. The firewall constrains what reaches a fictional
+    MIND; an extension is not one, and this whole module exists so an
+    integrator does not have to import an engine module or open the database
+    to answer a question. Nothing here is withheld for information-boundary
+    reasons -- `GET /api/chats/{cid}/charters` already serves the complete
+    registry, belief and all, to any host session, so a Python caller getting
+    less than the browser would be a weaker path rather than a safer one.
+
+    THE ENGINE'S OWN COMPOSED ANSWER, not a second one. `living_world_levels`
+    computes `effective` through `effective_depth` with the off-screen ceiling
+    folded in, so `value` (what was asked for) and `effective` (what will
+    actually run) cannot drift from what the gates do. Reporting `value`
+    alone would be the trap the ladder is full of: two of the four approaches
+    have no built ceiling, and `effective_depth` lowers a request silently and
+    never says why. The ceiling rides along because it is half the answer.
+
+    `detail` bounds SIZE, never disclosure. The default carries a row per
+    institution and the counts a panel renders from; `"full"` carries
+    `registry_for`'s complete output -- the same bytes the HTTP route serves.
+    A registry is a per-render read and a populated town is large, which is
+    the only reason there is a choice here at all.
+    """
+    from world.living_world import (living_world_config, living_world_levels,
+                                    normalize_living_world)
+    from story.scene import background_config
+
+    config = living_world_config(chat_id)
+    out = {
+        # The four author-selectable approaches, as stored.
+        "living_world": normalize_living_world(config),
+        # The authority ceiling over all four, and the actor cap. Not
+        # decoration: `effective` below is computed against them.
+        "offscreen_life": config.get(OFFSCREEN_CEILING_KEY),
+        "max_offscreen_actors": _dialogue_actor_cap(chat_id),
+        # Requested vs effective per approach, with `built` and `permitted`
+        # per depth -- the engine's ladder, not a copy of it.
+        "approaches": living_world_levels(config),
+        # The sixth gate, and the one that governs bodies IN the room rather
+        # than absent ones. Included because an integrator configuring a world
+        # should not need a second call to see a setting this one composes with.
+        "background": background_config(chat_id),
+        "charters": [],
+        "registry_warnings": [],
+    }
+    # Gate on the RAW row, not on `items`: `normalize_registry` accepts a bare
+    # `{key: charter}` map as an authoring convenience, so an `items` test
+    # would drop a hand-authored registry. Frame-scoped, so read it for the
+    # era this view reports (`charters\x1efr<id>` on disk) rather than
+    # ambiently.
+    full = str(detail or "").casefold() == "full"
+    raw = wget_for_frame(chat_id, "charters", frame_id, None)
+    if not raw:
+        # ONE SHAPE PER ARGUMENT VALUE. `full` promises the registry dict, so
+        # an empty story must return an empty REGISTRY rather than the summary
+        # form's list -- a consumer that indexes `["items"]` should not have to
+        # know whether this story happens to have institutions yet.
+        if full:
+            out["charters"] = {"version": REGISTRY_VERSION, "items": {}}
+        return out
+
+    from world.charter_runtime import (normalize_registry, registry_warnings)
+
+    # Normalized ONCE. `registry_for` would re-read and re-parse the row this
+    # gate has already loaded, and `registry_warnings` normalizes defensively
+    # for its route callers -- three passes over every body, post and upkeep
+    # on a per-render read.
+    registry = normalize_registry(raw)
+    # `scene` AND `cid`/`frame_id`: the frame-sensitive warning class starts
+    # from the scene's rooms UNIONed with this structure's planted skeleton,
+    # so passing the scene alone silently checks nothing for a
+    # structure-backed charter.
+    out["registry_warnings"] = list(registry_warnings(
+        registry, scene=scene, cid=chat_id, frame_id=frame_id) or [])
+    if full:
+        out["charters"] = registry
+        return out
+
+    names = _structure_names(chat_id)
+    rows = []
+    for key, item in sorted((registry.get("items") or {}).items()):
+        state = (item or {}).get("state") or {}
+        structure = str(state.get("structure") or "")
+        rows.append({
+            "key": key,
+            "structure": structure,
+            "name": names.get(structure) or structure or key,
+            "clock_hours": state.get("clock_hours"),
+            "window_hours": (item or {}).get("window_hours"),
+            "last_epoch_id": (item or {}).get("last_epoch_id"),
+            "counts": {name: len(state.get(name) or ())
+                       for name in ("bodies", "posts", "upkeeps", "figures",
+                                    "commitments", "decisions", "practices")},
+        })
+    out["charters"] = rows
+    return out
+
+
+def _structure_names(chat_id):
+    """Display names for planted structures, `{key: name}`.
+
+    A charter state carries a `structure` key and no display name; only the
+    structure has one. Chat-global rather than frame-scoped, which is
+    `world/structure.py`'s own choice and not this module's to second-guess.
+    """
+    stored = wget(chat_id, "structures", None)
+    items = (stored or {}).get("items") if isinstance(stored, dict) else None
+    if not isinstance(items, dict):
+        return {}
+    return {str(key): str((value or {}).get("name") or "")
+            for key, value in items.items() if isinstance(value, dict)}
+
+
+def _dialogue_actor_cap(chat_id):
+    """`max_offscreen_actors`, through the reader that clamps it."""
+    from story.scene import dialogue_config
+
+    return dialogue_config(chat_id).get("max_offscreen_actors")
+
+
+def _story_view_in_frame(chat_id, chat, turn, events, frame_id,
+                         charters=None):
     """The body of `story_view`, run with the reported frame held open."""
     from story.scene import get_scene, player_authority, simulation_clock
 
@@ -348,6 +475,11 @@ def _story_view_in_frame(chat_id, chat, turn, events, frame_id):
         "cast": _cast(chat_id),
         "events": _events(chat_id, limit),
         "player_authority": player_authority(chat_id),
+        # UNCONDITIONAL, and therefore no schema bump: a key always present
+        # once it exists keeps absence meaning "engine predates the field", so
+        # the key IS the capability check -- the `frame` precedent above,
+        # not the `people` one.
+        "living_world": _living_world(chat_id, frame_id, scene, charters),
     }
     if persona:
         view["player"] = {"persona_id": persona["id"], "name": persona["name"]}

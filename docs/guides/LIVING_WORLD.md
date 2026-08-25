@@ -221,7 +221,7 @@ it. Direct sibling imports work. That is not permission.
 | planted town skeletons | world KV `structures` (`world/structure.py`) | **no** — chat-global |
 | off-screen epoch / plans | world KV, per frame | **yes** |
 | `offscreen_log` — the append-only tick ledger | world KV, per frame | **yes** |
-| background presences | world KV `background_presences` | no |
+| background presences | world KV `background_presences` | **yes** |
 | fired consequences, Charter incidents | `scheduled_events` → `world_events` | rows carry `frame_id` |
 
 `charters` being frame-scoped has a sharp edge: a bare `wget(cid, "charters")`
@@ -284,9 +284,11 @@ first paragraph as a reading of the mechanism, not as a guarantee.
 | `GET /api/chats/{id}/charters/diagnostics` | inspect belief, judgment and planning state; `?body=` selects one body |
 | `POST /api/chats/{id}/charters/generate` | generate one lore-grounded lived location |
 
-All four take a `frame_id` query parameter, and every mutating one calls
-`_require_frame_idle` first — a turn in flight refuses a Charter write with a
-409. `GET /charters` returns the registry plus `character_history_routes`,
+The three `charters` routes take a `frame_id` query parameter, and the
+mutating ones call `_require_frame_idle` first — a turn in flight refuses a
+Charter write with a 409. **`PUT /living_world` does neither**: it takes no
+frame and holds no guard, which is coherent (the ladder is chat-global) and
+worth knowing before you assume the four behave alike. `GET /charters` returns the registry plus `character_history_routes`,
 `character_journey_histories` and `registry_warnings`; `GET
 /charters/diagnostics` returns beliefs, judgments, provenance, obligations and
 decisions, and `?body=` unlocks the per-body belief fields. Those two are the
@@ -298,16 +300,44 @@ Charter bodies resolving to the same display name means scene presence is
 WITHHELD, and `apply_presence_conduct` refuses with
 `ambiguous_charter_identity`.
 
-**Nothing above is reachable from the Python extension API.**
-`HOST_CAPABILITIES` (`extension_runtime/api.py:1614`) has no living-world name,
-`provision_story` takes no living-world argument, and `story_view` — the
-canonical read — returns `schema`, `story`, `frame`, `turn`, `clock`, `scene`,
-`rooms`, `cast`, `events`, `player_authority` and **no Charter or Living World
-state at all**. `docs/guides/EXTENSIONS.md` does not mention either subsystem.
+### From Python
 
-An extension can reach the routes from the browser through `Sonder.api(...)`
-(`static/js/extensions.js:382`), which is how this is done today. Importing
-`world.charter_runtime` from an extension is outside the boundary.
+Four hooks, behind two capability names. Importing `world.charter_runtime`
+directly is still outside the boundary; these are the supported path.
+
+| Surface | Capability | Does |
+|---|---|---|
+| `story_view(...)["living_world"]` | none — the key is always present | the ladder as stored **and as it will actually run**, the off-screen ceiling and actor cap, the background config, a row per institution, and `registry_warnings` |
+| `story_view(..., charters="full")` | as above | the complete registry — the same bytes `GET /charters` serves |
+| `provision_story(..., offscreen_life=, living_world=)` | `living_world_provisioning` | set the ladder inside the same transaction that creates the story; the result carries the effective ladder back |
+| `api.generate_lived_location(...)` / `api.living_world_job(...)` | `living_world_generation` | add an inhabited place, and see whether a previous attempt was interrupted |
+
+Two things about that table are load-bearing.
+
+**Read `effective`, never `value`.** The provisioning result and the slice both
+carry `approaches`, which is `living_world_levels`' own output — so `value`
+(what was asked for) and `effective` (what will run) come from the same
+`effective_depth` the gates use and cannot drift. A caller that reads back only
+its own request learns nothing, because the clamp is silent.
+
+**The arguments are refused, not normalized** — the opposite of the HTTP
+routes, and deliberate. A host typing into a panel sees the normalized answer
+come straight back and can correct it. A campaign sees nothing, and
+`normalize_offscreen_life` falls to the DEFAULT rather than the floor, so a
+typo would buy *more* off-screen life than was asked for.
+
+A lived-location request may name characters by `resource_uid` — the identity
+that survives an archive — instead of by this install's row ids, which is what
+a caller that has just provisioned a story actually holds. An unresolvable uid
+is refused; an unresolvable `char_id` is still skipped, because a stale id from
+a browser is a UI bug the author cannot act on while a uid is a claim the
+caller made.
+
+Generation persists its expensive pure prefix — the two model calls — before
+anything writes, so a retry of the same request replays it for free. A run
+interrupted **after** it began planting rooms is refused rather than repeated,
+because `_remap_generated_town` reads live state and replaying it would plant
+the same town twice; `GET /charters/job` reports it and `DELETE` clears it.
 
 The ladders **are** served to the UI as data — `offscreen_life_levels`
 (`web/app.py:4454`) and `LIVING_WORLD_DESCRIPTIONS` ride with the config, on the

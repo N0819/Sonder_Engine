@@ -4651,6 +4651,42 @@ def charters_generate(cid: int, body: dict = Body(...),
         raise HTTPException(502, _lived_location_llm_detail(exc)) from exc
 
 
+@app.get("/api/chats/{cid}/charters/job")
+def charters_job_get(cid: int):
+    """Whether a lived-location generation is running, or was interrupted.
+
+    Chat-global, like the job itself. `interrupted` is derived from the owner
+    token rather than stored, so a server restart is reported as one the first
+    time anybody asks.
+    """
+    from world.charter_runtime import lived_location_job
+
+    if not q("SELECT id FROM chats WHERE id=?", (cid,), one=True):
+        raise HTTPException(404, "Chat not found")
+    job = lived_location_job(cid)
+    if not job:
+        return {"job": None}
+    return {"job": {k: v for k, v in job.items() if k != "artifact"},
+            "has_stored_plan": bool(job.get("artifact"))}
+
+
+@app.delete("/api/chats/{cid}/charters/job")
+def charters_job_clear(cid: int):
+    """Abandon a stored generation.
+
+    The author's escape hatch from a run interrupted after it began planting:
+    the engine refuses to repeat that half automatically, so somebody has to
+    look at what landed and say it is dealt with. Clearing forgets the stored
+    plan too, so the next attempt pays for the model calls again.
+    """
+    from world.charter_runtime import clear_lived_location_job
+
+    if not q("SELECT id FROM chats WHERE id=?", (cid,), one=True):
+        raise HTTPException(404, "Chat not found")
+    clear_lived_location_job(cid)
+    return {"ok": True}
+
+
 @app.get("/api/chats/{cid}/background_config")
 def bg_cfg_get(cid: int):
     return background_config(cid)
@@ -4682,7 +4718,8 @@ def bg_cfg_put(cid: int, body: dict = Body(...)):
     return config
 
 @app.get("/api/chats/{cid}/story_view")
-def story_view_get(cid: int, events: int = 20, frame: int | None = None):
+def story_view_get(cid: int, events: int = 20, frame: int | None = None,
+                   charters: str = ""):
     """Canonical story state, versioned. The read `story_view.py` documents.
 
     THE OUT-OF-PROCESS SURFACE, and nothing in this repository calls it.
@@ -4707,6 +4744,8 @@ def story_view_get(cid: int, events: int = 20, frame: int | None = None):
     # two doors onto one room, which is how a caller ends up straddling eras
     # without being able to say so.
     kwargs = {} if frame is None else {"frame_id": frame}
+    if charters:
+        kwargs["charters"] = charters
     try:
         return story_view.story_view(cid, events=events, **kwargs)
     except ValueError as exc:

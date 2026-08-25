@@ -967,8 +967,9 @@ class ExtensionFrameView:
         """The resolved selection. `None` is the implicit present era."""
         return self._frame_id
 
-    def story_view(self, *, events=None):
+    def story_view(self, *, events=None, charters=None):
         return self._api.story_view(self._chat_id, events=events,
+                                    charters=charters,
                                     frame_id=self._frame_id)
 
     def player_view(self, viewer="player", *, memories=12):
@@ -1644,12 +1645,33 @@ HOST_CAPABILITIES = frozenset({
     # `api.provision_story(...)` -- create a story with cast and state in one
     # atomic call.
     "provision_story",
+    # `api.provision_story(..., offscreen_life=, living_world=)` -- set how
+    # much of the world runs unwatched, in the same atomic call, and read the
+    # EFFECTIVE ladder back from `story_view`'s `living_world` slice. Named
+    # separately from `provision_story` for the reason `frame_state` and
+    # `frame_coherent_reads` are: an extension can have the second without
+    # the first, and one name covering both would be a promise it could not
+    # check.
+    "living_world_provisioning",
+    # `api.generate_lived_location(...)` + `api.living_world_job(...)` -- add
+    # an inhabited place to a story from Python, and see whether a previous
+    # attempt was interrupted.
+    "living_world_generation",
     # `api.add_route` -- your own HTTP endpoints under the host session.
     "routes",
     # `api.add_stage(anchor="after:<step>"|"before:<step>")` with a validated
     # anchor grammar and reserved prefixes. See EXTENSIONS.md section 4a.
     "stage_anchors",
 })
+
+
+def _wget_living_world(chat_id):
+    """The stored living-world config, or `{}`. Chat-global, so no frame."""
+    from core.db import wget
+    from world.living_world import LIVING_WORLD_KEY
+
+    stored = wget(int(chat_id), LIVING_WORLD_KEY, None)
+    return stored if isinstance(stored, dict) else {}
 
 
 class SonderExtensionAPI:
@@ -2076,7 +2098,8 @@ class SonderExtensionAPI:
     def provision_story(self, package, *, state=None, frame_state=None,
                         package_id="", package_version="",
                         player_authority=None, director_context=None,
-                        narration_context=None, documents=None):
+                        narration_context=None, documents=None,
+                        offscreen_life=None, living_world=None):
         """Create a whole playable story in one act, or create nothing.
 
         `package` is a chat archive -- the engine's own portable format, the
@@ -2105,6 +2128,25 @@ class SonderExtensionAPI:
         its authority mode, and missing the one rule that made its sealed wing
         mean anything. That is not a race, it is failure atomicity, and the only
         cure is being inside the same transaction.
+
+        `offscreen_life` and `living_world` set how much of the world runs
+        while nobody is looking, and they are here for the same reason the
+        four above are: a campaign whose premise is that the town keeps
+        working without you is not a campaign until that is switched on, and
+        a second write afterwards can fail. Both are OPTIONAL and `None`
+        means "leave whatever the package or the host already chose" -- these
+        are settings a story can legitimately arrive with.
+
+        Both are REFUSED rather than normalized, which is the opposite of the
+        HTTP routes and deliberate. A host typing into a panel sees the
+        normalized answer come straight back and can correct it; a campaign
+        calling this sees nothing, so a typo'd `offscreen_life` would land as
+        the DEFAULT rung (`normalize_offscreen_life` falls to the default,
+        never to the floor) and buy more off-screen life than was asked for,
+        silently. `living_world` MERGES over what is stored rather than
+        replacing it, because `normalize_living_world` is total over the four
+        approaches: naming one and replacing would set the other three to
+        `off`, including any the package meant to arrive with.
 
         Data rather than a callback, deliberately (the report that asked for
         this recommended the same and the reasoning holds): every value is
@@ -2169,6 +2211,36 @@ class SonderExtensionAPI:
             except (TypeError, ValueError):
                 raise ExtensionError(
                     f"document {path!r} is not JSON-serialisable")
+        if offscreen_life is not None:
+            from story.scene import OFFSCREEN_LIFE_LADDER
+
+            if offscreen_life not in OFFSCREEN_LIFE_LADDER:
+                raise ExtensionError(
+                    f"offscreen_life must be one of "
+                    f"{', '.join(OFFSCREEN_LIFE_LADDER)}")
+        ladder = {}
+        if living_world is not None:
+            from world.living_world import (LIVING_WORLD_APPROACHES,
+                                            LIVING_WORLD_DEPTHS)
+
+            if not isinstance(living_world, dict):
+                raise ExtensionError("living_world must be a mapping of "
+                                     "approach to depth")
+            for approach, depth in living_world.items():
+                # Named rather than dropped. `normalize_living_world` drops an
+                # unknown approach silently, which is right for a panel that
+                # echoes the result back and wrong for a caller who is told
+                # nothing -- a typo'd approach would simply never run.
+                if approach not in LIVING_WORLD_APPROACHES:
+                    raise ExtensionError(
+                        f"unknown living_world approach {approach!r}; the "
+                        f"approaches are "
+                        f"{', '.join(LIVING_WORLD_APPROACHES)}")
+                if depth not in LIVING_WORLD_DEPTHS:
+                    raise ExtensionError(
+                        f"living_world[{approach!r}] must be one of "
+                        f"{', '.join(LIVING_WORLD_DEPTHS)}")
+                ladder[approach] = depth
         for label, value in (("state", state), ("frame_state", frame_state)):
             if value is None:
                 continue
@@ -2215,6 +2287,38 @@ class SonderExtensionAPI:
                         f"player_authority must be one of "
                         f"{', '.join(PLAYER_AUTHORITY_MODES)}")
                 set_player_authority(chat_id, player_authority, turn_idx=0)
+            if offscreen_life is not None:
+                from core.db import wget as _wget
+                from story.scene import dialogue_config
+
+                # ONE KEY MERGED IN, not a whole-blob write. The archive
+                # importer writes the package's own `dialogue_config` row
+                # verbatim, so replacing the blob here would discard the
+                # autonomy, line budgets, parallel-reactor count and
+                # promotion threshold it arrived with -- and nothing would
+                # fail, because `dialogue_config()` re-fills every missing
+                # key from the schema default. Read what is stored, change
+                # the one field, write it back; the host route does the same
+                # thing through its own `submitted()` fallback.
+                stored = dict(_wget(chat_id, "dialogue_config", None) or {})
+                stored["offscreen_life"] = offscreen_life
+                wset(chat_id, "dialogue_config", stored)
+                # Read it back through the reader that clamps, so a story
+                # provisioned this way is in exactly the state the panel
+                # would have left it in.
+                dialogue_config(chat_id)
+            if ladder:
+                from world.living_world import (LIVING_WORLD_KEY,
+                                                normalize_living_world)
+
+                # MERGE, for the reason in the docstring: normalization is
+                # total over the four approaches, so a replace would switch
+                # off every approach this call did not name.
+                merged = normalize_living_world(
+                    _wget_living_world(chat_id))
+                merged.update(ladder)
+                wset(chat_id, LIVING_WORLD_KEY,
+                     normalize_living_world(merged))
             if state is not None:
                 self.state(chat_id).set_now(state)
             if frame_state is not None:
@@ -2234,8 +2338,93 @@ class SonderExtensionAPI:
                 "version": str(package_version or ""),
                 "at": time.time(),
             })
+        view = self.story_view(chat_id)
         return {"chat_id": chat_id, "name": chat.get("name"),
-                "schema": self.story_view(chat_id)["schema"]}
+                "schema": view["schema"],
+                # WHAT ACTUALLY RUNS, not what was asked for. Two of the four
+                # approaches have no built ceiling and the off-screen rung
+                # caps all of them, so a caller that reads back only its own
+                # request learns nothing about the clamp -- and the clamp is
+                # silent by design (`effective_depth` never raises).
+                "living_world": view["living_world"]}
+
+    def generate_lived_location(self, chat_id, request, *, frame_id=None):
+        """Add one lore-grounded inhabited place to a story, and wait for it.
+
+        The same operation the host's own Story Quick Start runs. `request` is
+        the documented lived-location shape: `brief`, `required_rooms`,
+        `featured_residents`, `character_histories`, `horizon_hours`,
+        `active_tail_hours`, `generate_history`. Characters may be named by
+        `resource_uid` -- the identity that survives an archive -- rather than
+        by this install's row ids, which is what a caller that just
+        provisioned a story actually holds.
+
+        SYNCHRONOUS, AND IT IS NOT QUICK. Several model calls, a
+        deterministic closure, a planted room graph and a presimulated
+        prehistory: minutes, not seconds. Do not call it from a turn hook or
+        anything holding a transaction. `lore_gen_jobs` made the same choice
+        for the same reason -- what makes a lost run recoverable is that each
+        unit is DURABLE, not that the call returns early.
+
+        Recoverable, though. The expensive pure prefix -- the two model calls
+        that propose the town and its history -- is persisted before anything
+        writes, so a retry of the same request replays it for free
+        (`result["resumed_plan"]` says whether it did). A run interrupted
+        AFTER it began planting rooms is refused rather than repeated, and
+        `living_world_job` reports it: replaying that half would plant the
+        same town twice.
+
+        Raises `ExtensionError` on a refused request.
+        """
+        from web.app import _require_frame_idle, story_language_scope
+        from world.charter_runtime import generate_lived_location
+
+        if not isinstance(request, dict):
+            raise ExtensionError(
+                "generate_lived_location needs a request dict")
+        chat_id = int(chat_id)
+        frame = _validate_frame(chat_id, frame_id)
+        # THE SAME TWO GUARDS THE HTTP ROUTE HOLDS, because this reaches the
+        # same writes. Without the first, a generation can plant rooms and
+        # rewrite the frame-scoped registry while a turn is mid-pipeline in
+        # that frame, and the turn's own commit races it. Without the second,
+        # a story written in another language gets an English town planted in
+        # it permanently -- the model calls read the active language from a
+        # context var the route sets and this method did not.
+        try:
+            _require_frame_idle(chat_id, frame)
+        except Exception as exc:
+            raise ExtensionError(
+                "a turn is running in this frame; generation would race its "
+                "commit. Wait for the beat to finish. (%s)"
+                % (getattr(exc, "detail", None) or exc))
+        try:
+            with story_language_scope(chat_id):
+                return generate_lived_location(
+                    chat_id, dict(request), frame_id=frame)
+        except ExtensionError:
+            raise
+        except ValueError as exc:
+            raise ExtensionError(str(exc))
+
+    def living_world_job(self, chat_id):
+        """The state of this story's lived-location generation, or `None`.
+
+        `status` is `running`, `interrupted` or absent. `interrupted` is
+        DERIVED, not stored -- a `running` job whose owner is not the live
+        process can only be a crash or a restart, so a job cannot be left
+        claiming to be alive by a process that is gone. `stage` says how far
+        it got, and `planted` or later means rooms exist in the story.
+        """
+        from world.charter_runtime import lived_location_job
+
+        job = lived_location_job(int(chat_id))
+        if not job:
+            return None
+        # The stored plan is a model artefact of no use to a caller and is
+        # large; the STATUS is the answer.
+        return {key: value for key, value in job.items()
+                if key != "artifact"}
 
     def provenance(self, chat_id):
         """What this extension recorded when it provisioned this story.
@@ -2251,7 +2440,8 @@ class SonderExtensionAPI:
 
     # -- reading the story
 
-    def story_view(self, chat_id, *, events=None, frame_id=_LATEST_FRAME):
+    def story_view(self, chat_id, *, events=None, frame_id=_LATEST_FRAME,
+                   charters=None):
         """Canonical story state as a versioned, read-only, plain-value dict.
 
         What is objectively true right now: ids, clock, frame, scene, rooms,
@@ -2285,6 +2475,8 @@ class SonderExtensionAPI:
         kwargs = {}
         if events is not None:
             kwargs["events"] = events
+        if charters is not None:
+            kwargs["charters"] = charters
         if frame_id is not _LATEST_FRAME:
             kwargs["frame_id"] = _validate_frame(chat_id, frame_id)
         return facade.story_view(chat_id, **kwargs)
