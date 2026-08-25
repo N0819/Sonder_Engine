@@ -728,6 +728,47 @@ def substances_for(scene: dict, name: str) -> list[dict]:
                  or same_subject(scene, record.get("target"), name))]
 
 
+#: What a substance op can name. `detail` is deliberately absent: it is
+#: destination-side prose, not part of the record's address.
+_SUBSTANCE_INDEX_FIELDS = (
+    "substance", "source", "source_part", "target", "target_part",
+    "target_interior", "placement", "amount", "amount_band", "scent",
+)
+
+
+def substance_ledger_index(scene: dict) -> list[dict]:
+    """The standing substance ledger, each row carrying its own id.
+
+    The ledger's OWNER -- the one hand entitled to `substance_ops` -- could
+    not see it. Its prompt documents closing a record by `substance_id` and
+    no id had ever been handed to it, so a drained or washed-away deposit
+    could only be described around, never closed. This is the addressing
+    surface for the ops that already exist; it adds no mechanism, per
+    `docs/design/DESIGN_MATERIAL_MODEL.md` §1.
+
+    Ids are recomputed the way `apply_substance_ops` stamps them, including
+    the same shedding of an enclosure stored beside a non-interior
+    placement, so a record saved before stamping is addressable too and the
+    id quoted back always finds the row it named.
+    """
+    out = []
+    for raw in ((scene or {}).get("substances") or []):
+        if not isinstance(raw, dict) or not raw.get("source") \
+                or not raw.get("substance") or not raw.get("target"):
+            continue
+        record = dict(raw)
+        if _substance_placement(record.get("placement")) != "interior" \
+                and _substance_text(record.get("target_interior"), 160):
+            record["target_interior"] = ""
+        row = {"substance_id": _substance_id(record)}
+        for field in _SUBSTANCE_INDEX_FIELDS:
+            value = _substance_text(record.get(field), 160)
+            if value:
+                row[field] = value
+        out.append(row)
+    return out
+
+
 def substance_event_clause(event: dict, *, you: str, scene: dict) -> str:
     """First-person immediate percept for a newly added substance record.
 
@@ -822,11 +863,26 @@ def resolve_contact_action_ref(scene, value):
     return (contact_id(contact), contact) if contact is not None else ("", None)
 
 
-def _contact_action_key(actor, contact_ref, action):
+def _contact_action_key(actor, contact_ref):
+    """One participant drives ONE ongoing dynamic through one contact.
+
+    The action TEXT is that dynamic's DESCRIPTION and is deliberately NOT
+    part of its identity: a literal identity fails exactly when a model
+    rewrites, and the corpus shows it did. Re-measured 2026-08-25 across
+    every stored scene: 11 effect rows on 3 contacts, and each of the four
+    multi-row groups is one dynamic reworded -- "steady peristaltic wave" /
+    "slow steady peristaltic wave" / "steady pressure" whose rhythm restates
+    the first (chat 88, contact:8a4058a942b38470dbb4). The composer renders
+    one sentence per row, so an observer's four-sentence view carried three
+    saying the same thing, and the narrator's own fidelity check flagged it
+    reusing previous content on 5 of 15 turns. No corpus contact has ever
+    carried two genuinely distinct effects by one participant; distinct
+    part-pairs remain distinct contacts, and each participant keeps its own
+    row, so re-describing is the only thing this collapses.
+    """
     return (
         _contact_action_text(actor, 120).casefold(),
         _contact_action_text(contact_ref, 80).casefold(),
-        _contact_action_text(action, 120).casefold(),
     )
 
 
@@ -843,7 +899,7 @@ def _clean_contact_action(raw, scene=None):
     if not (same_subject(scene, actor, contact.get("actor"))
             or same_subject(scene, actor, contact.get("target"))):
         return None
-    key = _contact_action_key(actor, ref, action)
+    key = _contact_action_key(actor, ref)
     action_id = "contact-action:" + hashlib.sha256(
         "\x1f".join(key).encode("utf-8")).hexdigest()[:20]
     return {
@@ -861,8 +917,17 @@ def _clean_contact_action(raw, scene=None):
 
 
 def _live_contact_actions(scene):
-    """Clean existing records and drop any whose parent contact has ended."""
-    out = []
+    """Clean existing records, drop any whose parent contact has ended, and
+    collapse a saved stack of rewordings to the one current account.
+
+    Cleaning re-derives every row's id from (actor, contact), so a ledger
+    saved while identity still hashed the action text arrives here as
+    several rows under ONE id. The later row is the current description, and
+    it takes the earlier row's position so the ledger's order survives the
+    heal -- which is what lets the measured triples (chats 86, 87, 88) fix
+    themselves on the next read, with no migration.
+    """
+    out, at = [], {}
     for raw in (scene or {}).get("contact_actions") or []:
         if not isinstance(raw, dict):
             continue
@@ -870,8 +935,14 @@ def _live_contact_actions(scene):
         # resolver so an orphan cannot survive a move, scale change, or release.
         candidate = {**raw, "contact_ref": raw.get("contact_id")}
         cleaned = _clean_contact_action(candidate, scene)
-        if cleaned is not None:
+        if cleaned is None:
+            continue
+        seen = at.get(cleaned["action_id"])
+        if seen is None:
+            at[cleaned["action_id"]] = len(out)
             out.append(cleaned)
+        else:
+            out[seen] = cleaned
     return out[-_MAX_CONTACT_ACTIONS:]
 
 
@@ -879,6 +950,26 @@ def contact_actions_of(scene, name):
     """Standing contact effects performed by one body, oldest first."""
     return [dict(record) for record in _live_contact_actions(scene)
             if same_subject(scene, record.get("actor"), name)]
+
+
+def contact_action_ledger_index(scene) -> list[dict]:
+    """The standing effect ledger, each row carrying the id ops address.
+
+    The sibling of `substance_ledger_index` and for the same reason: the one
+    hand entitled to `contact_action_ops` was never shown the effects it had
+    already declared, so `change` and `remove` -- both of which its prompt
+    documents -- had nothing to name, and a reworded add was the only move
+    available to it. `detail` is left out because it is author diagnostics,
+    not part of what an op can address.
+    """
+    return [{
+        "action_id": row.get("action_id"),
+        "actor": row.get("actor"),
+        "contact_id": row.get("contact_id"),
+        "action": row.get("action"),
+        **({"intensity": row["intensity"]} if row.get("intensity") else {}),
+        **({"rhythm": row["rhythm"]} if row.get("rhythm") else {}),
+    } for row in _live_contact_actions(scene)]
 
 
 def actions_for_contact(scene, contact_ref):

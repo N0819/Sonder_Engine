@@ -208,6 +208,103 @@ def _advance_ground(cid, sc):
         sc.pop("ground", None)
 
 
+#: Overlay-entry fields that can IDENTIFY the overlay: the handle a beat
+#: addresses it by, and the reader-facing fact it states. `description` and
+#: `desc` are one field under two stored spellings.
+#:
+#: `subject` is deliberately ABSENT. On the spelling chat 78 wrote, the map is
+#: keyed by overlay name and `subject` names the BODY the overlay is about --
+#: which is how `commit_attire._overlay_texts_by_subject` reads it. Three
+#: distinct overlays there share one subject, so folding on it would delete
+#: two authored appearance facts, the precise failure this rule exists to
+#: prevent. `id` is absent for the same reason: on the one corpus entry
+#: carrying it, it names the place the overlay is about.
+_OVERLAY_HANDLE_FIELDS = ("name", "description", "desc")
+
+#: How many overlay entries one body's ledger keeps. Ageing them is a
+#: separate, unsolved problem (docs/UNBUILT.md 1.10): this cap is the only
+#: thing that bounds an overlay's life, and nothing here expires one.
+_MAX_OVERLAY_ENTRIES = 6
+
+
+def _overlay_handles(item) -> set:
+    """The casefolded strings by which one overlay entry can be recognised.
+
+    A record is known by its name and by the fact it states; a bare line of
+    prose is known by itself. An entry carrying neither -- some future or
+    malformed shape -- has NO handle and is therefore never matched against
+    anything, which is what keeps this rule incapable of deleting a shape it
+    does not understand.
+    """
+    if isinstance(item, dict):
+        return {value for value in
+                (str(item.get(field) or "").strip().casefold()
+                 for field in _OVERLAY_HANDLE_FIELDS) if value}
+    if isinstance(item, str):
+        folded = item.strip().casefold()
+        return {folded} if folded else set()
+    return set()
+
+
+def _dedupe_overlay_entries(entries) -> list:
+    """Collapse one body's overlay list to one entry per named thing.
+
+    The rule: entries sharing a handle are the SAME overlay, and the later
+    account of it replaces the earlier -- except that a bare line restating
+    a standing record is silence, because the record is the richer account
+    of the identical fact and losing it to a fragment of itself would be a
+    downgrade rather than an update.
+
+    Measured 2026-08-25 over all 77 stored scene blobs: this prunes 11 of 91
+    overlay entries, every one a verified restatement (chats 78, 86, 87, 88),
+    and touches none of them without a handle -- the corpus holds zero
+    handle-less entries, so nothing was at risk there and nothing was lost.
+    Because it runs over the whole map on every commit, a ledger that is
+    already dirty heals on its next beat with no migration.
+    """
+    out: list = []
+    for item in (entries if isinstance(entries, list) else [entries]):
+        handles = _overlay_handles(item)
+        if not handles:
+            out.append(item)
+            continue
+        clashes = [i for i, old in enumerate(out)
+                   if _overlay_handles(old) & handles]
+        if not isinstance(item, dict) \
+                and any(isinstance(out[i], dict) for i in clashes):
+            continue
+        for i in reversed(clashes):
+            out.pop(i)
+        out.append(item)
+    return out
+
+
+def _merge_overlays(sc, incoming) -> None:
+    """Fold this beat's overlays into the scene's, then heal every body.
+
+    An overlay is a mutable temporary fact about how a body looks, not an
+    append-only event, and the channel accepts two representations of one
+    fact: a bare line and a `{name, description}` record. Deduping each
+    representation only against its own kind meant they never met -- chat 88
+    turn 67 stood one overlay three times, as its bare name, as its bare
+    description, and as the record carrying both, and every observer's
+    appearance view rendered all three.
+    """
+    overlays = sc.get("overlays")
+    if not isinstance(overlays, dict):
+        if overlays is not None:
+            return
+        overlays = sc.setdefault("overlays", {})
+    for key, value in (incoming if isinstance(incoming, dict) else {}).items():
+        standing = overlays.get(key)
+        overlays[key] = (standing if isinstance(standing, list) else
+                         ([] if standing is None else [standing])) + \
+            list(value if isinstance(value, list) else [value])
+    for key in list(overlays):
+        overlays[key] = _dedupe_overlay_entries(
+            overlays[key])[-_MAX_OVERLAY_ENTRIES:]
+
+
 def prepare_scene_commit(ctx):
     """Build the exact post-turn scene without mutating durable state.
 
@@ -470,24 +567,7 @@ def prepare_scene_commit(ctx):
                     if not (isinstance(e, dict) and e.get("to") in removed)
                 ]
 
-    for k, v in (diff.get("overlays") or {}).items():
-        cur = sc.setdefault("overlays", {}).setdefault(k, [])
-        for it in (v if isinstance(v, list) else [v]):
-            # A named overlay is a mutable temporary fact (flush, soot,
-            # swelling), not an append-only event. Replace its earlier value
-            # in place so a changing description does not accumulate six
-            # contradictory copies and re-earn the body's full appearance on
-            # every beat. Bare prose overlays retain legacy exact-dedupe
-            # behaviour because they carry no safe identity to replace by.
-            if isinstance(it, dict) and str(it.get("name") or "").strip():
-                handle = str(it["name"]).strip().casefold()
-                cur = [old for old in cur
-                       if not (isinstance(old, dict)
-                               and str(old.get("name") or "").strip().casefold()
-                               == handle)]
-            if it not in cur:
-                cur.append(it)
-        sc["overlays"][k] = cur[-6:]
+    _merge_overlays(sc, diff.get("overlays") or {})
 
     # An approach in flight. `MovementDecl.arrives=false` means the mover is
     # closing on somewhere and does not get there this beat; recording it is
