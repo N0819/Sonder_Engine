@@ -5962,8 +5962,43 @@ def _overused_phrases(recent_prose, current_prose="", n=3, min_hits=2, cap=12):
     return kept[:cap]
 
 
-def _word_shingles(text, n=6):
-    words = re.findall(r"[a-z0-9']+", str(text or "").lower())
+#: Words that carry no content in a recycling comparison: the attribution
+#: formula the composer emits around every line, and the label-shaped words a
+#: descriptor is built from. Stripped before shingling, because a shingle is
+#: supposed to catch a RECYCLED BEAT and these catch the same person speaking
+#: twice.
+#:
+#: Measured, Enterprise run turns 8-15: four of five "reuse" findings were the
+#: attribution itself -- `spare upright man says in a`, `the spare upright man
+#: speaks in`, `the tall turns back to the`, `he turns in the command chair`.
+#: Only one was real prose recycling. An unrecognised body renders by its
+#: appearance ("the spare upright man"), which is FOUR words of a six-word
+#: window before any content reaches it, so two unrelated sentences about one
+#: stranger collide on the label alone.
+_SHINGLE_STOPWORDS = frozenset({
+    "says", "said", "say", "speaks", "spoke", "asks", "asked", "replies",
+    "replied", "adds", "added", "answers", "answered", "in", "a", "an",
+    "the", "his", "her", "their", "its", "with", "voice", "tone", "and",
+    "then", "to", "of", "at", "on", "he", "she", "they", "it",
+})
+
+
+def _word_shingles(text, n=6, *, labels=()):
+    """Six-word runs of CONTENT, for the recycled-prose comparison.
+
+    `labels` are the display names in play this beat -- an unrecognised body's
+    descriptor is long and recurs in every sentence about them, so leaving it
+    in makes the label the match rather than the prose. Stripping the
+    attribution vocabulary alongside it leaves the shingle measuring what it
+    was built to measure: whether the BEAT was rewritten from an earlier one.
+    """
+    lowered = str(text or "").lower()
+    for label in sorted((str(x or "").lower() for x in labels or ()),
+                        key=len, reverse=True):
+        if len(label) > 2:
+            lowered = lowered.replace(label, " ")
+    words = [w for w in re.findall(r"[a-z0-9']+", lowered)
+             if w not in _SHINGLE_STOPWORDS]
     return {
         " ".join(words[i:i + n])
         for i in range(len(words) - n + 1)
@@ -7098,6 +7133,65 @@ def _check_portal_fidelity(prose, portal_states):
 # answerable question.
 
 
+def _dialogue_tokens(view, p_lines):
+    """The delivered lines, numbered, for the narrator to place not retype.
+
+    THE MODEL CANNOT PARAPHRASE A LINE IT NEVER TYPES. That is the whole
+    mechanism, and it is the move this codebase already made once: perception
+    stopped repairing model prose when the composer began writing percepts,
+    because chronology became a field rather than a pass. Dialogue fidelity is
+    the same shape -- a property of the assembly, not a behaviour to request.
+
+    Measured (`docs/experiments/NARRATOR_DIALOGUE_PLACEHOLDERS_2026-08-24.md`)
+    on the beat that prompted it: 75% of delivered lines survived under the
+    shipped prompt, 100% under this. The prompt was not the variable --
+    DIALOGUE FIDELITY is already "ABSOLUTE", already says "NEVER SUMMARISE A
+    SPOKEN LINE", and had already failed three times on that beat with the
+    dropped lines named in correction notes.
+
+    The player's own lines are excluded, because PLAYER ECHO RULE requires
+    their ABSENCE -- handing them back as tokens to place would push the model
+    to violate one rule to satisfy the other.
+    """
+    excluded = {
+        re.sub(r"\s+", " ", _quote_body(q).casefold()).rstrip(".,!?…;:")
+        for q in (p_lines or []) if _quote_body(q)
+    }
+    lines, seen = [], set()
+    for match in _ling("_QUOTE_BODY_RE").finditer(str(view or "")):
+        quote = re.sub(r"\s+", " ", match.group(1).strip())
+        key = quote.casefold().rstrip(".,!?…;:")
+        if not quote or key in excluded or key in seen:
+            continue
+        if _reads_as_attribution(quote):
+            # NOT A LINE, AND WORSE THAN USELESS AS ONE. `_QUOTE_BODY_RE`
+            # requires four characters between the marks, so a spoken line
+            # shorter than that ("No.", "Aye.") is invisible to it -- and the
+            # two quote marks it skipped then pair with their neighbours, so
+            # the ATTRIBUTION between two short lines matches as a quote. The
+            # fidelity check has always had this and merely gets confused by
+            # it; handing it to the narrator as a line to place would put
+            # "Riker says in a quiet voice:" on the page inside quotation
+            # marks. Registered in `docs/UNBUILT.md`; guarded here.
+            continue
+        seen.add(key)
+        lines.append(quote)
+    return lines
+
+
+#: The composer's own attribution formula. A span carrying one is the text
+#: BETWEEN two quoted lines, never a line.
+_ATTRIBUTION_TELLS = (" says in a ", " says in an ", " says under ",
+                      " speaks in a ", " asks in a ", " replies in a ",
+                      " says:", " speaks:", " asks:")
+
+
+def _reads_as_attribution(text):
+    lowered = " %s " % str(text or "").casefold()
+    return any(tell in lowered for tell in _ATTRIBUTION_TELLS)
+
+
+
 def _check_narrator_fidelity(out, view, recent_prose=None, exclude_quotes=None,
                              cast_pronouns=None, player_name=None,
                              narration_person=None, player_aliases=None,
@@ -7158,10 +7252,23 @@ def _check_narrator_fidelity(out, view, recent_prose=None, exclude_quotes=None,
     # six-word runs between this turn's prose and a recent turn's prose
     # essentially can't happen by coincidence; it means this turn's beats
     # were recycled rather than drawn from the current view.
-    current_shingles = _word_shingles(prose)
+    # STRIP THE SPEAKERS FIRST. The labels in play come from the view, which
+    # is where the composer wrote them -- a recognised name is short and
+    # harmless, an unrecognised body's descriptor is long ("the spare upright
+    # man") and recurs in every sentence about them, so two unrelated
+    # sentences about one stranger overlap on the label rather than on any
+    # recycled content. See `_word_shingles`.
+    speaker_labels = set(re.findall(
+        r"(?:^|[.!?]\s+)([A-Za-z][^.!?\n]{0,40}?)\s+(?:says|asks|replies|"
+        r"speaks|adds|answers)\b", view_text))
+    speaker_labels |= {str(x) for x in (player_aliases or ())}
+    if player_name:
+        speaker_labels.add(str(player_name))
+    current_shingles = _word_shingles(prose, labels=speaker_labels)
     if current_shingles:
         for prev_prose in (recent_prose or []):
-            overlap = current_shingles & _word_shingles(prev_prose)
+            overlap = current_shingles & _word_shingles(
+                prev_prose, labels=speaker_labels)
             if len(overlap) >= 2:
                 sample = next(iter(overlap))
                 warnings.append(
