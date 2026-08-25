@@ -738,6 +738,13 @@ def _interior_station_hint(scene: dict, occupant: str, holder: str,
     beat already wrote decides WHERE inside the occupant lands instead of the
     entry room. Matched on the room's key or its display name, casefolded:
     the name is what a model writes and the key is what the engine writes.
+
+    THE FIRST STANDING ROW WINS, stated rather than left to list order. Two
+    interior rows naming different stations for one pair is the ledger
+    disagreeing with itself, and no fact in the scene decides which is right
+    -- so the answer is the one the scene lists first, and it is an answer
+    rather than an artefact of where in a list a row happened to land.
+    Wherever no row resolves against a real room, the entry room answers.
     """
     wanted = None
     for row in (scene or {}).get("contacts") or []:
@@ -754,6 +761,7 @@ def _interior_station_hint(scene: dict, occupant: str, holder: str,
                  str(holder or "").strip().casefold()} <= pair):
             continue
         wanted = station.casefold()
+        break
     if not wanted:
         return None
     rooms = (scene or {}).get("rooms") or {}
@@ -860,6 +868,117 @@ def place_enclosed_bodies(scene: dict) -> list:
     return placed
 
 
+def _interior_counterpart(row: dict, subject: str) -> str:
+    """The OTHER party of an interior contact row, given one of them."""
+    folded = str(subject or "").strip().casefold()
+    actor = str(row.get("actor") or "").strip()
+    target = str(row.get("target") or "").strip()
+    if actor.casefold() == folded:
+        return target
+    if target.casefold() == folded:
+        return actor
+    return ""
+
+
+def release_declared_departures(scene: dict, declared) -> list:
+    """A body DECLARED into a room its holder's interior does not hold has
+    left it. Release the ledgers that still say otherwise.
+
+    A DECLARED POSITION IS A DECLARED ACT. `AGENTS.md` states the general
+    prohibition -- the engine must not silently replace what the beat
+    declared -- and once a body that takes another body inside is a PLACE,
+    two derivations stand between a declared exit and the scene. The first
+    is the carry derivation, which puts a contained body wherever its holder
+    is. The second is new with the place form, and it closes a LOOP:
+    `derive_containment_from_contacts` mints a fresh `mode: interior` record
+    off any standing interior contact, and `place_enclosed_bodies` reads that
+    record and puts the body back inside. Neither derivation is wrong on its
+    own; together, with a declared position between them, they undo it every
+    beat and the occupant can never leave.
+
+    Measured in the worktree that first built the handoff, on that landing's
+    own fixture: t0 placed the occupant at the interior entry room; a merge
+    with `positions: {occupant: exterior}` came back with the occupant at the
+    entry room again, and repeated forever. The only test for the exit used a
+    contact-free scene -- exactly the case the same landing's contact hygiene
+    makes rare, since keeping the interior contact alive across the boundary
+    is the point of it.
+
+    THE STALE LEDGER IS THE CONTACT, NOT THE POSITION, which is why this
+    retires the interior row as well as the containment record. Dropping the
+    record alone buys one beat: the row survives, mints again on the next
+    merge, and the body is back inside.
+
+    SCOPED TO THE PLACE FORM. A holder with no interior rooms is untouched --
+    a body in a pocket cannot walk out of the pocket, and the carry ledger
+    that says so is not this rule's business. Scoped to THIS BEAT'S declared
+    positions, too, and it runs before the beat's own containment and contact
+    declarations are applied: a beat that re-asserts the enclosure keeps it,
+    and only the STANDING ledger yields.
+
+    Returns the subjects released, for the caller's report. Mutates.
+    """
+    if not isinstance(declared, dict) or not declared:
+        return []
+    contained = (scene or {}).get("contained")
+    contacts = (scene or {}).get("contacts")
+    released = []
+    for subject, destination in declared.items():
+        label = str(subject or "").strip()
+        dest = str(destination or "").strip()
+        if not label or not dest:
+            continue
+        holders = []
+        record = _ci_get(contained, label) if isinstance(contained, dict) \
+            else None
+        if isinstance(record, dict) and str(
+                record.get("mode") or "").strip().casefold() == "interior":
+            holders.append(str(record.get("in") or "").strip())
+        if isinstance(contacts, list):
+            for row in contacts:
+                if not isinstance(row, dict):
+                    continue
+                if str(row.get("relation") or "").strip().casefold() \
+                        != "interior":
+                    continue
+                holders.append(_interior_counterpart(row, label))
+        left = False
+        for holder in holders:
+            if not holder:
+                continue
+            eid, _entity = _unique_entity_keyed(scene, holder)
+            if not eid:
+                continue
+            interior = {str(rid) for rid in _interior_rooms_of(scene, eid)}
+            # Not a place: the ledger form's own rules stand, unchanged.
+            if not interior or dest in interior:
+                continue
+            left = True
+            if isinstance(contained, dict):
+                current = _ci_get(contained, label)
+                if isinstance(current, dict) and same_subject(
+                        scene, str(current.get("in") or ""), holder):
+                    for key in [k for k in contained
+                                if str(k).strip().casefold()
+                                == label.casefold()]:
+                        contained.pop(key, None)
+            if isinstance(contacts, list):
+                contacts = [
+                    row for row in contacts
+                    if not (isinstance(row, dict)
+                            and str(row.get("relation") or "").strip()
+                            .casefold() == "interior"
+                            and same_subject(
+                                scene,
+                                _interior_counterpart(row, label) or "\x00",
+                                holder))
+                ]
+                scene["contacts"] = contacts
+        if left:
+            released.append(label)
+    return sorted(set(released))
+
+
 def enclosure_joins_rooms(scene: dict, room_a, room_b,
                           name_a: str = "", name_b: str = "") -> bool:
     """Are these two parties in one place because one is INSIDE the other.
@@ -874,6 +993,18 @@ def enclosure_joins_rooms(scene: dict, room_a, room_b,
     holder is standing in is NOT joined to the occupant: they are outside an
     enclosure the occupant is inside, and reaching in is an interior relation
     of its own, not a surface hold. The firewall subtracts here, as everywhere.
+
+    ANY HOLDER WHOSE INSIDE IS ROOMS, not only a body -- and the wider rule is
+    the stated one because it is the true one. A passenger standing in a
+    ship's hold with a hand on the bulkhead has a hand on the ship, and room
+    equality cannot see that either. The rest of this landing is about bodies
+    because a body is where the missing route showed up; this predicate is
+    about the PLACE FORM, which vehicles and structures have had all along.
+    Measured across the author's 77 stored scenes: widening the gate changes
+    exactly ONE of them, chat 43, and its holder is a body -- a contact the
+    old rule severed for standing in the holder's own interior now survives.
+    Failing toward KEEPING a contact is the additive direction: a wrong answer
+    here is a stale hold for the ageing rule to clear, never a leak.
     """
     rooms = (scene or {}).get("rooms") or {}
     if not isinstance(rooms, dict):
@@ -958,12 +1089,25 @@ def _display_name(scene: dict, name: str) -> str:
 
 
 def interior_occupants(scene: dict, holder: str) -> list:
-    """Everyone standing in a room this body is the `parent_entity` of.
+    """Every BODY standing in a room this one is the `parent_entity` of,
+    under the name the story calls it.
 
     The place-form counterpart of `contents_of`, which reads the carry ledger
     and therefore answers nothing once an enclosure has become a place. Both
     are the same question -- what is inside me -- asked of the two ledgers
     that can answer it.
+
+    TWO THINGS `positions` HOLDS THAT THIS MUST NOT HAND TO A MIND. It is not
+    a map of bodies: it legitimately keys objects, fixtures and unregistered
+    presences, and it keys them BY ENTITY ID. So an occupant is resolved to
+    its entity and named by `_display_name` -- an engine handle is not a name
+    anybody in the fiction has heard -- and anything that is not a body is
+    not an occupant. The enclosure vocabulary is body-scoped everywhere else
+    it is asked (`infer_body_enclosures`, `_body_interior_holder`, the
+    enclosure default itself); this was the one place it was not, and it
+    answered a holder that a dropped lamp was somebody who goes where it
+    goes. A non-body inside a place-form interior is in no view at all yet;
+    that gap is on the register rather than papered over here.
     """
     eid, _entity = _unique_entity_keyed(scene, holder)
     if not eid:
@@ -975,9 +1119,17 @@ def interior_occupants(scene: dict, holder: str) -> list:
     positions = (scene or {}).get("positions") or {}
     if not isinstance(positions, dict):
         return []
-    return sorted(
-        str(name) for name, room in positions.items()
-        if room in interior and str(name).strip().casefold() not in folded)
+    out = set()
+    for name, room in positions.items():
+        if room not in interior:
+            continue
+        if str(name).strip().casefold() in folded:
+            continue
+        entity = _entity_named(scene, str(name)) or {}
+        if not _is_body_entity(scene, str(name), entity):
+            continue
+        out.add(_display_name(scene, str(name)))
+    return sorted(n for n in out if n)
 
 
 def containment_facts(scene: dict, observer: str, source_names) -> list:

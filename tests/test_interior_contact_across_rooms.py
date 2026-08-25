@@ -35,20 +35,20 @@ HOLDER_ID = "vessel_entity"
 BYSTANDER = "Corin"
 
 
-def _scene(*, occupant_room="vessel_throat", contacts=()):
+def _scene(*, occupant_room="vessel_antechamber", contacts=()):
     return {
         "rooms": {
             "hall": {"name": "Hall", "desc": "A hall.", "adjacent": []},
             "yard": {"name": "Yard", "desc": "Outside.", "adjacent": []},
-            "vessel_throat": {
-                "name": "Throat", "desc": "A close passage.",
+            "vessel_antechamber": {
+                "name": "Antechamber", "desc": "A close passage.",
                 "parent_entity": HOLDER_ID,
                 "adjacent": [{"to": "vessel_core", "barrier": "membrane"}],
             },
             "vessel_core": {
                 "name": "Core", "desc": "Deeper still.",
                 "parent_entity": HOLDER_ID,
-                "adjacent": [{"to": "vessel_throat", "barrier": "membrane"}],
+                "adjacent": [{"to": "vessel_antechamber", "barrier": "membrane"}],
             },
         },
         "positions": {
@@ -58,7 +58,7 @@ def _scene(*, occupant_room="vessel_throat", contacts=()):
         },
         "entities": {
             HOLDER_ID: {"name": HOLDER, "kind": "person", "aliases": [],
-                        "interior_rooms": ["vessel_throat", "vessel_core"]},
+                        "interior_rooms": ["vessel_antechamber", "vessel_core"]},
         },
         "attire": {HOLDER: {}, OCCUPANT: {}, BYSTANDER: {}},
         "scales": {OCCUPANT: 0.05},
@@ -67,7 +67,7 @@ def _scene(*, occupant_room="vessel_throat", contacts=()):
     }
 
 
-def _interior_row(actor, target, station="Gullet"):
+def _interior_row(actor, target, station="Deep chamber"):
     return {
         "actor": actor, "actor_part": "body",
         "target": target, "target_part": "torso",
@@ -99,12 +99,12 @@ class TestTheHolderKeepsItsChannel:
         display name. Five separate defects here were a single `==`."""
         scene = _scene()
         assert enclosure_joins_rooms(
-            scene, "vessel_throat", "hall", OCCUPANT, HOLDER) is True
+            scene, "vessel_antechamber", "hall", OCCUPANT, HOLDER) is True
 
     def test_the_join_is_directionless(self):
         scene = _scene()
         assert enclosure_joins_rooms(
-            scene, "hall", "vessel_throat", HOLDER, OCCUPANT) is True
+            scene, "hall", "vessel_antechamber", HOLDER, OCCUPANT) is True
 
 
 class TestWhatStillGoes:
@@ -135,7 +135,7 @@ class TestWhatStillGoes:
     def test_the_join_is_the_pair_and_not_the_neighbourhood(self):
         scene = _scene()
         assert enclosure_joins_rooms(
-            scene, "vessel_throat", "hall", OCCUPANT, BYSTANDER) is False
+            scene, "vessel_antechamber", "hall", OCCUPANT, BYSTANDER) is False
 
     def test_an_unparented_room_joins_nothing(self):
         scene = _scene()
@@ -149,7 +149,7 @@ class TestTheStationTracksTheBody:
         for eight turns while the body it described moved."""
         scene = _scene(occupant_room="vessel_core",
                        contacts=[_interior_row(OCCUPANT, HOLDER,
-                                               station="Throat")])
+                                               station="Antechamber")])
         normalize_scene_contacts(scene)
         assert scene["contacts"][0]["target_interior"] == "Core"
 
@@ -165,7 +165,7 @@ class TestTheStationTracksTheBody:
     def test_a_surface_relation_is_never_restationed(self):
         scene = _scene(contacts=[{
             "actor": OCCUPANT, "actor_part": "hand",
-            "target": HOLDER, "target_part": "throat",
+            "target": HOLDER, "target_part": "shoulder",
             "relation": "surface", "manner": "press",
         }])
         normalize_scene_contacts(scene)
@@ -177,6 +177,6 @@ class TestTheStationTracksTheBody:
         stands."""
         scene = _scene(occupant_room="hall",
                        contacts=[_interior_row(OCCUPANT, HOLDER,
-                                               station="Gullet")])
+                                               station="Deep chamber")])
         normalize_scene_contacts(scene)
-        assert scene["contacts"][0]["target_interior"] == "Gullet"
+        assert scene["contacts"][0]["target_interior"] == "Deep chamber"

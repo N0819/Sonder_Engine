@@ -794,8 +794,36 @@ investigation found and did not close.
   a holder that HAS interior rooms becomes a real position inside them, and
   contact hygiene admits an enclosure-joined pair so the touch channel across
   the boundary survives the move. A holder with no interior rooms is
-  untouched, which is why nothing changed for any scene already on disk.
-  The follow-ons below are what that landing did not close.
+  untouched. The migration was MEASURED rather than asserted: all 77 stored
+  scenes were re-merged with an empty diff on the branch and on `main` and the
+  results compared whole -- 76 byte-identical, and the one that differs is the
+  story that already stands in this shape, where a surface contact between a
+  body and the body it is inside now survives room hygiene instead of being
+  severed. The follow-ons below are what that landing did not close.
+- **The two spellings of "this room is that entity's interior" agree only for
+  bodies.** `sync_entity_interior_rooms` derives `entities[eid].interior_rooms`
+  from `rooms[rid].parent_entity`, and is scoped to bodies on purpose. The
+  index is not only an index: `agents/director_scopes.py` gates the destruction
+  specialist on it and `persist/commit_scene_state.py` folds it into the set of
+  rooms the mapping stage may not prune. Measured read-only against the live
+  corpus while the landing was being repaired: 53 rooms carry `parent_entity`,
+  15 of them across 13 chats are NOT indexed on their entity, and every one of
+  those 15 belongs to a non-body -- lift cars, turbolifts, a ship, a police
+  box. Deriving them would switch a Director specialist on in five stories and
+  make six stories' interiors permanently un-prunable, untested and unasked
+  for. The two spellings still ought to agree everywhere; making them agree is
+  a change with a blast radius, and it needs its own landing with those two
+  readers tested rather than a free ride on a body-interior fix.
+- **A non-body inside a place-form interior is in no view.** `contents_of`
+  answers the carry ledger for anything; `interior_occupants` answers the place
+  form for BODIES only, because it feeds prose that says an occupant "goes
+  where you go" and because `positions` keys objects and fixtures by entity id
+  -- an engine handle, which is not a name anybody in the fiction has heard.
+  So a lamp dropped inside a body-place is currently in nobody's account of
+  anything: the holder cannot see into its own interior (the membrane is opaque
+  in both directions, correctly) and is told nothing about what is in there
+  that is not a body. The fix is a percept for the objects of an interior room,
+  not a widening of this one function.
 - **A body with no authored or declared interior does not become one.** The
   handoff is conditional by design -- topology is authored content, and
   auto-minting a single fallback room on every `mode: interior` record would
