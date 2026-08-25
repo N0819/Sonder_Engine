@@ -1618,7 +1618,6 @@
   "kind 'spatial' cannot be created directly": "kind 'spatial' は直接作成できません",
   "kind must be 'past', 'future', 'other', or 'spatial' -- 'present' is reserved for the implicit frame_id=None era": "kind は 'past'、'future'、'other'、または 'spatial' である必要があります -- 'present' は暗黙的な frame_id=None の時代のために予約されています",
   "know — never on where you are or what you just did. Someone who has not been told cannot react to it.": "知っているかどうかにのみ基づきます — あなたがどこにいるか、今何をしたかには決して基づきません。伝えられていない者は、それに反応できません。",
-  "known_by (comma-separated; empty = only owner)": "known_by（カンマ区切り；空欄の場合は所有者のみ）",
   "language is required": "言語を指定してください",
   "language.name": "日本語",
   "last shift triggered by event": "イベントによってトリガーされた最後のシフト",
@@ -2062,5 +2061,6 @@
   "a lived-location start can generate history for at most ${CAST_HISTORY_REQUEST_CAP} full characters at once; Charter residents themselves are not limited by this cognition budget": "生活史のある場所の開始時に一度に経歴を生成できる完全な人物は最大${CAST_HISTORY_REQUEST_CAP}人です。Charterの住民数はこの認知処理上限の対象外です。",
   "A lived-location start can prepare at most 16 full characters at once. Background Charter residents do not share this limit.": "生活史のある場所の開始時に準備できる完全な人物は一度に最大16人です。背景のCharter住民にはこの上限はありません。",
   "Could not remove incomplete story setup": "未完了の物語設定を削除できませんでした",
-  "The location is planned using only public card details; private card details never enter the location planner. The recent-life pass uses the named roster, real rooms and duties, simulation anchors, the card, and your guidance to create 10–16 separate memories. After handoff, Charter stops speaking or deciding for them.": "場所の設計にはカードの公開情報だけを使用し、非公開情報は場所の設計処理へ渡しません。最近の生活の生成では、名前付きの人物一覧、実在する部屋と任務、シミュレーションの根拠、カード、作者の補足を用いて10～16件の個別記憶を作ります。引き継ぎ後、Charterはその人物の発言や判断を代行しません。"
+  "The location is planned using only public card details; private card details never enter the location planner. The recent-life pass uses the named roster, real rooms and duties, simulation anchors, the card, and your guidance to create 10–16 separate memories. After handoff, Charter stops speaking or deciding for them.": "場所の設計にはカードの公開情報だけを使用し、非公開情報は場所の設計処理へ渡しません。最近の生活の生成では、名前付きの人物一覧、実在する部屋と任務、シミュレーションの根拠、カード、作者の補足を用いて10～16件の個別記憶を作ります。引き継ぎ後、Charterはその人物の発言や判断を代行しません。",
+  "known_by (comma-separated NAMES, matched exactly; empty = only owner)": "known_by（カンマ区切りの名前、完全一致；空欄なら所有者のみ）"
 }

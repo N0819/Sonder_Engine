@@ -983,7 +983,7 @@
   "Knowledge locations": "Knowledge locations",
   "Knowledge range": "Knowledge range",
   "Knowledge tag": "Knowledge tag",
-  "known_by (comma-separated; empty = only owner)": "known_by (comma-separated; empty = only owner)",
+  "known_by (comma-separated NAMES, matched exactly; empty = only owner)": "known_by (comma-separated NAMES, matched exactly; empty = only owner)",
   "Label": "Label",
   "Label, e.g. \"Far future\"": "Label, e.g. \"Far future\"",
   "Language": "Language",
