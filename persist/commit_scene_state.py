@@ -18,7 +18,7 @@ from world.spatial_frames import (_cast_changes_leaving, infer_companion_carry,
                             infer_vehicle_zones,
                             infer_came_from, infer_focus, infer_facing,
                             infer_threshold_crossings)
-from persist.commit_common import _monotonic_elapsed, _player_name_or_none
+from persist.commit_common import _player_name_or_none
 from persist.commit_destruction import (_apply_destruction,
                                 _finalize_destruction_news,
                                 _prepare_destruction)
@@ -27,6 +27,7 @@ from persist.commit_room_registry import (_apply_room_registry,
                                   _refresh_relocated_location,
                                   dedup_minted_rooms, prune_dangling_exits)
 from persist.commit_attire import apply_attire_diff
+from world.mechanics import read_time_diff, time_diff_display
 
 # ---- Scene commit with entity-aware merge ----
 
@@ -603,15 +604,39 @@ def prepare_scene_commit(ctx):
         td = diff["time"]
         if isinstance(td, dict):
             clock = copy.deepcopy(prev_clock)
-            claimed, backwards = _monotonic_elapsed(prev_clock, td)
+            try:
+                was = float((prev_clock or {}).get("elapsed_seconds", 0.0)
+                            or 0.0)
+            except (TypeError, ValueError):
+                was = 0.0
+            # `read_time_diff` owns what a time block can say; this block
+            # owns only what the world does about it. The claim may arrive
+            # under either name the engine uses for a clock position, so
+            # the warnings below never name a key.
+            claimed, backwards, unread = read_time_diff(was, td)
             if backwards is not None:
                 ctx.add_warning(
-                    "state_diff.time.end_seconds ran backwards (%.0f < %.0f); "
-                    "advanced by its own duration instead" % backwards)
+                    "state_diff.time claimed a clock position that ran "
+                    "backwards (%.0f < %.0f); advanced by its own duration "
+                    "instead" % backwards)
+            elif unread and claimed == was:
+                # A refusal that says nothing is indistinguishable from a
+                # beat that asserted no time. Chat 88 turns 61, 64 and 66
+                # each declared a fresh position the reader could not spell,
+                # and the clock sat at 1136.0 through all three in silence.
+                ctx.add_warning(
+                    "state_diff.time carried no clock position this engine "
+                    "can read (unread keys: %s); the clock did not advance"
+                    % ", ".join(unread))
             clock["elapsed_seconds"] = claimed
-            if td.get("display_advance"):
-                clock["display"] = td["display_advance"]
-            sc["time"] = td.get("display_advance", sc.get("time"))
+            display = time_diff_display(td)
+            if display:
+                clock["display"] = display
+                sc["time"] = display
+            elif "display_advance" in td:
+                # Present but empty CLEARS the scene's time label, as it
+                # always has -- canonical rows carry "" constantly.
+                sc["time"] = td["display_advance"]
         elif isinstance(td, str):
             sc["time"] = td
 

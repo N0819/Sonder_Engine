@@ -34,7 +34,8 @@ make test-fast  # NOT a tier to check your own work with; deselects every
 make test-browser # optional real Chromium behavior tests
 make map        # regenerate docs/CODE_MAP.md
 make structure  # run tools/project_check.py (duplicate-symbol, patch-debris, empty-test,
-                #   prompt/schema-op drift, specialist + prose-author chunk ownership,
+                #   prompt/schema-op drift, prompt/example time-channel vocabulary,
+                #   specialist + prose-author chunk ownership,
                 #   supported-Python agreement across pyproject/launchers/CI, machine
                 #   paths in runnable files, docs naming files or imports that do not
                 #   resolve, uncleared turn-scoped contextvars, new package import
