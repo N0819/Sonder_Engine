@@ -1,5 +1,134 @@
 # Changelog
 
+## alpha 9.8.2 — A campaign can build a world and watch it run
+
+Charter and the Living World were reachable only by orchestrating browser
+calls. An extension can now provision them at the moment it creates a story,
+and read back not what was stored but what will actually run. The surface is
+four hooks; most of this release is the adversarial review behind them, which
+found that the recovery path for an interrupted world generation destroyed the
+work it existed to recover and reported success.
+
+### An extension can see the Living World as it will actually run
+
+- `story_view` carries a `living_world` slice: the four approaches **as stored
+  and as they will actually run**, the off-screen ceiling, the actor cap, the
+  background config, a row per institution, and the engine's own warnings about
+  them. The distinction is the point — six independent gates compose here, each
+  defaulting to less than a reader expects, and none of them raises when they
+  disagree.
+- `charters="full"` returns the whole registry — the same bytes
+  `GET /api/chats/{cid}/charters` has always served a host session, belief and
+  private habits included. The summary default is about size on a per-render
+  read and nothing else.
+- Both are unconditional, so there is no schema bump. A key that is always
+  present keeps absence meaning "this engine predates the field", which makes
+  the key its own capability check.
+
+### A campaign can set them when it creates the story
+
+- `provision_story` gained `offscreen_life=` and `living_world=`, applied
+  inside the transaction that already creates the story.
+- Both **refuse** an unreadable value rather than normalizing it — deliberately
+  the opposite of the HTTP routes. A host typing into a panel sees the
+  normalized answer come back and can correct it; a campaign sees nothing, and
+  `normalize_offscreen_life` falls to the DEFAULT rather than the floor, so a
+  silent normalization would have bought a story MORE off-screen life than it
+  asked for.
+- `living_world` merges rather than replaces, because normalization is total
+  over the four approaches: a replace would switch off every approach the call
+  did not happen to name.
+
+### A caller can name characters by the identity that survives an archive
+
+A lived-location request may name characters by `resource_uid`, which is what a
+caller that has just provisioned a story actually holds. An unresolvable uid is
+refused; an unresolvable `char_id` is still skipped. The asymmetry is
+deliberate — a stale numeric id from a browser is a UI bug the extension author
+cannot act on, while a uid is a claim the caller made and should hear about.
+
+### The recovery path destroyed the thing it existed to recover
+
+Found by four independent review lenses, and the reason the review was worth
+running. `_resumable_plan` returned the stored plan and nothing bound it to the
+town: the resume fed `None` to `close_plan`, which returns an EMPTY town rather
+than raising. So the recovery path planted an empty structure over a real one,
+reported success, and cleared the job holding the only copy of the work.
+
+The tests did not catch it because they drove `_resumable_plan` in isolation and
+never ran a resume end to end. The unit was right and the seam it sat in was
+not.
+
+Five more in the same lifecycle, each fixed here:
+
+- The past-the-boundary refusal was gated on `status == "interrupted"`, which is
+  only ever derived for a foreign owner — so a run that died inside a live
+  process kept `running`, and the retry replanted the town. It is now gated on
+  STAGE alone: a story with half-planted rooms is in that state whatever is
+  asked for next.
+- The `planted` marker was written AFTER the writes, so a failure inside
+  `plant_structure` recorded `planned` with a stored plan and the next run
+  resumed over the top of it. A `planting` marker now leads the first write. A
+  marker claiming a write that did not happen costs one wasted regeneration; one
+  that misses a write that did happen costs a second town on the same ground,
+  and only the first is recoverable.
+- Only the pure prefix had a failure handler, so every later failure left a
+  `running` claim owned by this process — which by construction never reads as
+  interrupted. `_fail_job` now clears a pre-boundary job and MARKS a
+  post-boundary one.
+- Nothing serialized two generations on one chat. `_require_frame_idle` cannot
+  see them, because it reads the turn pipeline's registry and generation never
+  joins it, so a double-click gave two runs claiming one job slot and the
+  loser's marker was erased by the winner's.
+- `charters=` was documented in two guides and forwarded by nothing — not
+  `api.story_view`, not the frame-bound view, not the HTTP route. Three
+  signatures, and its test now goes through the public surface rather than the
+  in-repo function.
+
+`api.generate_lived_location` was also missing both guards the HTTP route holds:
+`_require_frame_idle`, without which a generation plants rooms while a turn is
+mid-pipeline in that frame, and `story_language_scope`, without which a Japanese
+story gets an English town planted in it permanently. The uid cap is now checked
+before its SQL is built, so 1,000 uids get the documented refusal rather than
+sqlite's variable limit.
+
+### The firewall was not the constraint here
+
+An early draft of these hooks withheld Charter internals from the Python
+surface — counts only, no bodies, no belief — on the assumption that this was
+the careful thing to do. It was theatre. The firewall bounds what reaches a
+fictional MIND; an extension is not one, and the HTTP route has always served
+the complete registry to any host session. A Python caller getting less than the
+browser is a weaker path, not a safer one.
+
+### The guide that made any of this documentable
+
+`docs/guides/LIVING_WORLD.md` did not exist: twenty-nine `charter_*` modules,
+`world/offscreen.py` at 2,223 lines, six design notes that `docs/README.md`
+labels argument rather than authority, and zero mentions of Charter or Living
+World in `EXTENSIONS.md`. An integrator's entry point was a facade with a
+sixty-name `__all__`.
+
+Four things were named as though they were tiers of one thing and are not:
+Charter is the institution simulator, Living World is four author-selectable
+policies over which machinery runs, off-screen life is the authority ceiling
+above both, and background life is a different subsystem whose subjects are IN
+the room. They share no setting, no step and no ledger. Two different things
+were called "ceiling"; two different things were spelled `place_obligations`.
+
+The guide now carries the composition table, which cannot be derived from any
+one module — six independent gates, every one defaulting to less than a reader
+expects. A chat raised to `offscreen_life = character_agent` and nothing else
+fires zero agent ticks, silently, because that rung composes with
+`antagonist_ladder`, whose default is `off`. The converse is worse:
+`antagonist_ladder = ceiling` without the rung does not turn the mechanism off,
+it clamps to `floor` and keeps firing.
+
+`EXTENSIONS.md` gains the two capability names in its §4a table — which the
+review caught listing 13 against an actual 16 — and a §7 section.
+`DIRECTIVE_HOST_SURFACE.md` §10 answers the originating request, including the
+two asks that were declined and why.
+
 ## alpha 9.8.1 — The body and the beat agree again
 
 This corrective release keeps complex physical scenes causal without making
