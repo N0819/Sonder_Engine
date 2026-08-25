@@ -204,3 +204,93 @@ class TestWhatTheOwnMindStillReads:
         assert percept is not None
         assert percept.data["posture"] == "crouched low"
         assert percept.data["held_items"] == ["wrench"]
+
+
+class TestEchoIsSilenceIsSticky:
+    """An echo must cost the key its life, not make it blink.
+
+    The first form of this rule compared the incoming value only against the
+    value STANDING in the scene -- and expiry deletes exactly that value, so
+    the next identical echo found nothing standing, re-established the key,
+    and the echo after that expired it again. Measured on the first form:
+    the same diff merged six times running gave
+    {'gaze': 'downcast'} / {} / {'gaze': 'downcast'} / {} / ... forever.
+    That is worse than the stale value it replaced, and it lands on exactly
+    the input the rule was built for (chat 88 turns 53-67, a hand re-emitting
+    its whole state blob verbatim nearly every beat).
+
+    The comparand is therefore what was last ASSERTED, not what is standing:
+    a momentary value suppressed as an echo is remembered under
+    `expired_entity_state`, so every later echo of it is silence too. The
+    memory lives only as long as the echoing does -- a beat that says nothing
+    about the key releases it, and the next write of that value is a fresh
+    assertion again.
+    """
+
+    def _echo(self, times, key="gaze", value="downcast"):
+        scene = _scene()
+        scene["entities"]["mora_uid"]["state"][key] = value
+        seen = []
+        for _ in range(times):
+            scene = merge_scene_with_diff(scene, {
+                "entities": {"mora_uid": {"state": {key: value}}}})
+            seen.append(_state(scene).get(key))
+        return scene, seen
+
+    def test_a_repeated_identical_echo_never_re_establishes_the_key(self):
+        _, seen = self._echo(6)
+        assert seen == [None] * 6, seen
+
+    def test_the_same_holds_for_a_process_suffix_key(self):
+        _, seen = self._echo(4, "arm_motion", "sweeping upward")
+        assert seen == [None] * 4, seen
+
+    def test_an_echo_keyed_by_display_name_stays_silent_too(self):
+        """The memory is folded over id, name and alias like the assertion
+        side, so switching spelling mid-run cannot revive the key.
+
+        Two beats, not more: `_dedup_duplicate_entity_keys` rekeys the
+        record to whichever spelling the diff used, and a body whose id key
+        has been replaced by its name no longer answers to the id at all --
+        older behaviour than this rule and not what it is pinning.
+        """
+        scene = _scene()
+        for spelling in ("mora_uid", "Mora"):
+            scene = merge_scene_with_diff(scene, {
+                "entities": {spelling: {"state": {"breath": "caught"}}}})
+            assert not any(
+                (e.get("state") or {}).get("breath")
+                for e in scene["entities"].values() if isinstance(e, dict)
+            ), spelling
+
+    def test_a_changed_value_is_still_an_assertion_after_any_echoes(self):
+        scene, _ = self._echo(3)
+        merged = merge_scene_with_diff(scene, {
+            "entities": {"mora_uid": {"state": {"gaze": "levelled"}}}})
+        assert _state(merged)["gaze"] == "levelled"
+
+    def test_a_beat_of_silence_releases_the_memory(self):
+        """Suppression is not a permanent ban on a word. A beat that does
+        not mention the key at all ends the echo run, so writing that value
+        again is a body doing the thing again, not a payload copied back."""
+        scene, _ = self._echo(3)
+        scene = merge_scene_with_diff(scene, {})
+        merged = merge_scene_with_diff(scene, {
+            "entities": {"mora_uid": {"state": {"gaze": "downcast"}}}})
+        assert _state(merged)["gaze"] == "downcast"
+
+    def test_the_memory_is_carried_on_the_scene_and_is_bounded(self):
+        """It is scene state because a pure merge has nowhere else to keep
+        it, and it holds one value per momentary key per echoing body --
+        nothing durable, nothing that grows with the story's length."""
+        scene, _ = self._echo(3)
+        assert scene["expired_entity_state"]["mora_uid"] == {
+            "gaze": "downcast"}
+        quiet = merge_scene_with_diff(scene, {})
+        assert not quiet.get("expired_entity_state")
+
+    def test_a_body_that_leaves_the_scene_takes_its_memory_with_it(self):
+        scene, _ = self._echo(3)
+        gone = merge_scene_with_diff(scene, {"remove_entities": ["mora_uid"]})
+        gone = merge_scene_with_diff(gone, {})
+        assert not gone.get("expired_entity_state")

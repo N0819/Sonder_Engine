@@ -357,6 +357,14 @@ def _entity_state_by_alias(entities) -> dict:
     The same alias folding `_expire_transient_entity_state` matches
     assertions by, hoisted so the prior scene and the incoming diff are read
     through one spelling rule.
+
+    Two records that share an id, name or alias are merged under it, so a
+    scene still carrying an id-keyed AND a name-keyed copy of one body makes
+    one comparand out of both -- the same duplicate-key hazard
+    `_dedup_duplicate_entity_keys` exists to heal, and it runs on `merged`
+    rather than on the pre-diff `scene` read here. Merging is the safe
+    direction: the comparand can only ever say a value was already standing,
+    and the cost of that is a momentary key expiring a beat early.
     """
     out: dict[str, dict] = {}
     for eid, ent in (entities if isinstance(entities, dict) else {}).items():
@@ -372,10 +380,17 @@ def _entity_state_by_alias(entities) -> dict:
     return out
 
 
+def _folded_aliases(entity_key, entity) -> list:
+    """One entity's id, display name and aliases, casefolded and non-empty."""
+    return [a for a in (str(x or "").strip().casefold() for x in
+                        (entity_key, (entity or {}).get("name"),
+                         *((entity or {}).get("aliases") or []))) if a]
+
+
 def _expire_transient_entity_state(entities, incoming_entities,
-                                   prior_entities=None):
+                                   prior_entities=None, expired=None):
     """Drop momentary state keys the incoming diff did not re-assert with a
-    changed value.
+    changed value; return the echo memory the next merge needs.
 
     The counterpart of `_merge_entity`'s key-wise state merge: everything
     durable keeps the silence-is-not-erasure doctrine, and the keys
@@ -385,22 +400,41 @@ def _expire_transient_entity_state(entities, incoming_entities,
     whose "running" has gone stale.
 
     ECHO IS SILENCE. A byte-identical re-emission of a momentary value that
-    was ALREADY standing is the model copying its payload back, not a fresh
+    was ALREADY ASSERTED is the model copying its payload back, not a fresh
     assertion, so it does not count as one. Without that, expiry is
     defeated by the cheapest possible model behaviour: chat 88 turns 53-67,
     where the hand owning `entities` re-emitted the whole state blob
     verbatim nearly every beat and `throat_action` set at turn 56 was still
     standing at turn 67, thirteen beats after the act it named.
 
+    ALREADY ASSERTED, not already STANDING -- and the difference is the
+    whole reason this function carries memory. Comparing only against the
+    value standing in the scene made the rule oscillate rather than
+    subtract: expiry deletes exactly the value it compared to, so the next
+    identical echo found nothing standing, re-established the key, and the
+    echo after that expired it again. Measured on that form, one diff
+    merged six times running gave gaze downcast / gone / downcast / gone /
+    downcast / gone -- a momentary key blinking forever, on precisely the
+    verbatim-re-emission input the rule was built for. So a value suppressed
+    as an echo is remembered (`expired`, returned for the caller to carry on
+    the scene) and every later echo of it is silence too.
+
+    The memory lives only as long as the echo run does. A beat that says
+    nothing about the key releases it, and the next write of that value is a
+    fresh assertion again -- suppression is a reading of THIS payload, never
+    a standing ban on a word. An entity the diff drops keeps its memory for
+    one more beat and loses it on the next merge, since the rebuild below
+    only records bodies still in the scene.
+
     It is the doctrinal sibling of `_merge_entity`'s "a schema DEFAULT is
     silence", but the analogy is weaker than it looks and is not what
     carries the rule: a default is UNCHOSEN, while an echo was emitted, and
     a model faithfully restating a momentary fact that genuinely has not
-    changed is punished by this -- its key expires for one beat and comes
-    back the next time the value is written differently. That cost is
-    accepted for the momentary vocabulary only, where byte-identical across
-    two beats is stale by construction, and where a genuinely continuing
-    dynamic has its own channel that persists through silence by contract
+    changed is punished by this -- the key stays expired for as long as the
+    restatement keeps arriving word for word. That cost is accepted for the
+    momentary vocabulary only, where byte-identical across two beats is
+    stale by construction, and where a genuinely continuing dynamic has its
+    own channel that persists through silence by contract
     (`contact_action_ops`). The measured 13-beat carry is the evidence; the
     analogy is only an echo of it.
 
@@ -410,28 +444,39 @@ def _expire_transient_entity_state(entities, incoming_entities,
     """
     incoming = incoming_entities if isinstance(incoming_entities, dict) else {}
     standing = _entity_state_by_alias(prior_entities)
+    remembered = {
+        str(alias or "").strip().casefold(): values
+        for alias, values in (expired if isinstance(expired, dict)
+                              else {}).items()
+        if isinstance(values, dict) and str(alias or "").strip()
+    }
     asserted: dict[str, set] = {}
+    echoed: dict[str, dict] = {}
     for iid, ient in incoming.items():
         if not isinstance(ient, dict):
             continue
         istate = ient.get("state")
-        aliases = [a for a in (str(x or "").strip().casefold() for x in
-                               (iid, ient.get("name"),
-                                *(ient.get("aliases") or []))) if a]
-        keys = set()
+        aliases = _folded_aliases(iid, ient)
+        keys, echo = set(), {}
         if isinstance(istate, dict):
             for key, value in istate.items():
                 # Non-transient keys need no assertion bookkeeping at all --
                 # they are never expired -- so only the momentary ones are
-                # tested against what was already standing.
+                # tested against what this body last had asserted of it:
+                # the value standing in the scene, or the one an earlier
+                # beat of this same echo run already spent.
                 if _is_transient_state_key(key) and any(
-                        alias in standing and key in standing[alias]
-                        and standing[alias][key] == value
+                        (key in standing.get(alias, {})
+                         and standing[alias][key] == value)
+                        or (key in remembered.get(alias, {})
+                            and remembered[alias][key] == value)
                         for alias in aliases):
+                    echo[key] = value
                     continue
                 keys.add(key)
         for alias in aliases:
             asserted.setdefault(alias, set()).update(keys)
+            echoed.setdefault(alias, {}).update(echo)
     for eid, ent in entities.items():
         if not isinstance(ent, dict):
             continue
@@ -439,11 +484,25 @@ def _expire_transient_entity_state(entities, incoming_entities,
         if not isinstance(state, dict):
             continue
         kept: set = set()
-        for alias in (eid, ent.get("name"), *(ent.get("aliases") or [])):
-            kept |= asserted.get(str(alias or "").strip().casefold(), set())
+        for alias in _folded_aliases(eid, ent):
+            kept |= asserted.get(alias, set())
         for key in [k for k in state
                     if _is_transient_state_key(k) and k not in kept]:
             state.pop(key, None)
+    out: dict[str, dict] = {}
+    for eid, ent in entities.items():
+        if not isinstance(ent, dict):
+            continue
+        aliases = _folded_aliases(eid, ent)
+        live = ent.get("state") if isinstance(ent.get("state"), dict) else {}
+        spent = {}
+        for alias in aliases:
+            spent.update(echoed.get(alias, {}))
+        spent = {k: v for k, v in spent.items()
+                 if _is_transient_state_key(k) and k not in live}
+        for alias in aliases if spent else ():
+            out.setdefault(alias, {}).update(spent)
+    return out
 
 
 def _dedupe_adjacent(edges):
@@ -1033,9 +1092,25 @@ def merge_scene_with_diff(
     # `_TRANSIENT_ENTITY_STATE_KEYS` for the read-back loop it closes. The
     # pre-diff entity map is the echo comparand, and reading it here is safe
     # because `merged = copy.deepcopy(scene)` above leaves the input pristine.
-    _expire_transient_entity_state(
+    #
+    # `expired_entity_state` is the second half of that comparand: the
+    # momentary values THIS body already spent, without which a repeated
+    # verbatim echo makes the key blink present/absent forever instead of
+    # expiring once. It is written back only while an echo run is live -- a
+    # scene whose bodies stop echoing carries no such key at all, which is
+    # every one of the 77 stored blobs measured 2026-08-25. Carried inside
+    # the scene blob because the merge is a pure function with nowhere else
+    # to keep it; it holds nothing durable, nothing an id can dangle from,
+    # and nothing a reader of the world needs, so archive, checkpoint and
+    # branch carry it the way they carry the rest of the blob.
+    _echo_memory = _expire_transient_entity_state(
         merged["entities"], incoming_entities,
-        prior_entities=(scene or {}).get("entities") or {})
+        prior_entities=(scene or {}).get("entities") or {},
+        expired=(scene or {}).get("expired_entity_state") or {})
+    if _echo_memory:
+        merged["expired_entity_state"] = _echo_memory
+    else:
+        merged.pop("expired_entity_state", None)
 
     if isinstance(incoming_positions, dict):
         merged["positions"].update(incoming_positions)

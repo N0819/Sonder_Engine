@@ -141,8 +141,9 @@ class TestOneDynamicPerParticipantPerContact:
 
     Identity used to hash the text, so a rewording minted a new row on the
     same (actor, contact) and the ledger stacked synonyms of one effect.
-    Measured 2026-08-25 across the stored corpus: 11 contact-effect rows on
-    3 contacts, and all four multi-row groups are one dynamic reworded --
+    Measured 2026-08-25 across the stored corpus: 12 contact-effect rows
+    under 3 distinct contact ids across 4 chats, in four groups of three,
+    and every one of those groups is one dynamic reworded --
     chat 88's contact:8a4058a942b38470dbb4 carried "steady peristaltic
     wave", "slow steady peristaltic wave", and "steady pressure" whose
     rhythm restated the first. The composer renders one sentence per row, so
@@ -160,6 +161,40 @@ class TestOneDynamicPerParticipantPerContact:
 
         [effect] = scene["contact_actions"]
         assert effect["action"] == "slow steady pressure"
+
+    def test_an_add_re_describes_the_effect_WHOLE(self):
+        """The other half of "one effect": a re-description replaces the
+        row, it does not patch it. A qualifier the new account leaves out
+        goes with the words it qualified -- keeping it would leave the
+        ledger holding half of one description and half of another, which is
+        the stacking this identity rule exists to end. `change` is the op
+        that inherits omitted fields from the standing row."""
+        scene = _scene()
+        _add_contact(scene)
+        _add_effect(scene, action="steady pressure",
+                    intensity="light", rhythm="constant")
+        _add_effect(scene, action="slow steady pressure",
+                    intensity="", rhythm="")
+
+        [effect] = scene["contact_actions"]
+        assert effect["action"] == "slow steady pressure"
+        assert effect["intensity"] == ""
+        assert effect["rhythm"] == ""
+
+    def test_change_is_the_op_that_keeps_what_it_does_not_restate(self):
+        scene = _scene()
+        _add_contact(scene)
+        _add_effect(scene, action="steady pressure",
+                    intensity="light", rhythm="constant")
+        [standing] = scene["contact_actions"]
+        apply_contact_action_ops(scene, [{
+            "op": "change", "action_id": standing["action_id"],
+            "actor": "Ada", "action": "slow steady pressure"}])
+
+        [effect] = scene["contact_actions"]
+        assert effect["action"] == "slow steady pressure"
+        assert effect["intensity"] == "light"
+        assert effect["rhythm"] == "constant"
 
     def test_the_action_id_is_stable_across_the_redescription(self):
         scene = _scene()

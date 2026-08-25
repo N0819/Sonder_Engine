@@ -255,6 +255,15 @@ def _dedupe_overlay_entries(entries) -> list:
     of the identical fact and losing it to a fragment of itself would be a
     downgrade rather than an update.
 
+    Identity is handle-set INTERSECTION, not equality: two entries are the
+    same overlay when they share ANY handle, which is what lets a bare line
+    meet the record that carries it as its name. The rule is therefore wider
+    than "one entry per named thing" -- two records whose name and
+    description sets merely cross (a record named for what another one
+    describes) fold together too. That shape does not occur in the corpus,
+    and narrowing it would cost the bare-line-meets-record case this exists
+    for, so it is stated here rather than guarded against.
+
     Measured 2026-08-25 over all 77 stored scene blobs: this prunes 11 of 91
     overlay entries, every one a verified restatement (chats 78, 86, 87, 88),
     and touches none of them without a handle -- the corpus holds zero
@@ -289,12 +298,26 @@ def _merge_overlays(sc, incoming) -> None:
     turn 67 stood one overlay three times, as its bare name, as its bare
     description, and as the record carrying both, and every observer's
     appearance view rendered all three.
+
+    The heal runs over the WHOLE map, not only the bodies this beat named,
+    which is what lets an already-dirty ledger recover with no migration --
+    and means an untouched body's entries are normalized in shape on every
+    commit too (a lone bare line becomes a one-element list). That rewrite
+    adds, reorders and rewords nothing; it only settles the container.
+
+    An `overlays` key present but NULL is reset rather than read.
+    `setdefault` hands back the stored None, so the heal below would raise
+    inside the sole persistence boundary and roll the entire turn back --
+    and it would do so on the EMPTY diff, the common case, because the heal
+    no longer runs under the incoming loop. No in-tree writer produces that
+    shape and none of the 77 stored blobs carries it (scanned 2026-08-25);
+    the exposure is an archive or checkpoint written elsewhere.
     """
     overlays = sc.get("overlays")
     if not isinstance(overlays, dict):
         if overlays is not None:
             return
-        overlays = sc.setdefault("overlays", {})
+        overlays = sc["overlays"] = {}
     for key, value in (incoming if isinstance(incoming, dict) else {}).items():
         standing = overlays.get(key)
         overlays[key] = (standing if isinstance(standing, list) else
