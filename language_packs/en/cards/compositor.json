@@ -312,6 +312,8 @@
     "pose_entity": "the {name}",
     "pose_other_past": "{label} was",
     "pose_other_present": "{label} is",
+    "pose_part_other": "{label}'s {part}",
+    "pose_part_self": "your {part}",
     "pose_relation": "against {other}",
     "pose_self_past": "I was",
     "pose_self_present": "You are",

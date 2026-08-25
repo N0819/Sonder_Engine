@@ -39,6 +39,38 @@ def substance_portion(value) -> str:
     return raw if raw in SUBSTANCE_PORTIONS else ""
 
 
+# A band names HOW MUCH, not a thing, so it cannot stand where a noun phrase
+# does. Every phrase keeps "of" because mass-vs-count cannot be recovered from
+# free text: "a small amount of fluids" is grammatical where "a little fluids"
+# is not.
+_AMOUNT_BAND_PHRASES = {
+    "trace": "a trace of",
+    "small": "a small amount of",
+    "moderate": "a moderate amount of",
+    "large": "a large amount of",
+    "flooding": "a flood of",
+}
+
+
+def _material_phrase(amount, substance) -> str:
+    """Name a quantity of a substance in language rather than in register.
+
+    `amount` is free text and the Director routinely writes the BAND
+    VOCABULARY itself into it. A band is a magnitude, not a noun phrase, so
+    the naive join put the engine's own register on the page: measured, the
+    view read "Your palm registers moderate of oil being deposited on it".
+
+    Any other wording is the fiction's own and passes through untouched --
+    `substance_amount_band` matches the whole string only, so "a thin smear"
+    is not a band.
+    """
+    amount = str(amount or "").strip()
+    band = substance_amount_band(amount)
+    if band:
+        return f"{_AMOUNT_BAND_PHRASES[band]} {substance}"
+    return f"{amount} of {substance}" if amount else str(substance)
+
+
 # Part kinds (per `_part_identity`) whose engagement mis-forms speech, split
 # by HOW. Deliberately narrow: lips resting ON something (a hair-kiss residue,
 # a shoulder) leave the mouth free to turn and speak -- measured live, lips on
@@ -158,8 +190,8 @@ def speech_articulation_impediment(scene: dict, speaker: str) -> tuple:
         cavity = _substance_text(record.get("target_interior"), 160) \
             or interior
         return (impediment,
-                f"{name}'s {cavity} holds {_substance_text(record.get('amount'), 80)} "
-                f"of {substance}")
+                f"{name}'s {cavity} holds "
+                f"{_material_phrase(_substance_text(record.get('amount'), 80), substance)}")
     return slurred or ("", "")
 
 
@@ -713,7 +745,7 @@ def substance_event_clause(event: dict, *, you: str, scene: dict) -> str:
     target_is_you = same_subject(scene, event.get("target"), you)
     source_is_you = same_subject(scene, event.get("source"), you)
     placement = _substance_placement(event.get("placement"))
-    material = f"{amount} of {substance}" if amount else substance
+    material = _material_phrase(amount, substance)
     if target_is_you:
         if placement == "interior":
             interior = _substance_text(event.get("target_interior"), 160)

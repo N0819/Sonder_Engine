@@ -128,7 +128,7 @@ from world.spatial_substance import (
     _resolved_substance_add, _same_pool, _SPEECH_CAVITY_INTERIORS,
     _SPEECH_MOUTH_KINDS, _stock_consumed_by, _substance_id,
     _substance_placement, _SUBSTANCE_PLACEMENTS, _substance_target_exists,
-    _substance_text, actions_for_contact,
+    _substance_text, _material_phrase, actions_for_contact,
     apply_contact_action_ops, apply_substance_ops, contact_action_clause,
     contact_actions_for_observer, contact_actions_of,
     resolve_contact_action_ref, SUBSTANCE_AMOUNT_BANDS, SUBSTANCE_PORTIONS,

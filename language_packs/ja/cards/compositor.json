@@ -225,6 +225,8 @@
     "pose_entity": "{name}",
     "pose_other_past": "{label}は",
     "pose_other_present": "{label}は",
+    "pose_part_other": "{label}の{part}",
+    "pose_part_self": "あなたの{part}",
     "pose_relation": "{other}にもたれて",
     "pose_self_past": "私は",
     "pose_self_present": "あなたは",
