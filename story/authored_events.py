@@ -33,9 +33,21 @@ MAX_REQUEUES = 2
 _COVERAGE_RATIO = 0.5
 
 
-def _event_id(cid, turn_idx, idx, summary):
-    digest = hashlib.sha256(
-        f"{cid}:{turn_idx}:{idx}:{summary}".encode("utf-8")).hexdigest()[:20]
+def _event_id(cid, summary):
+    """Identity of an authored assertion: the chat and the ASSERTION, never
+    the beat that minted it.
+
+    Two mints of the same text are ONE scheduled event, which is what makes a
+    re-mint idempotent instead of multiplying. Whitespace and case are
+    normalised so a re-emission that only reflows the string is still the same
+    assertion.
+
+    Keyed on `turn_idx`, one assertion could exist as three pending rows, each
+    with its own untouched re-queue budget -- measured three identical copies
+    at one beat and two at another, the earliest minted nine beats before.
+    """
+    key = " ".join(str(summary or "").casefold().split())
+    digest = hashlib.sha256(f"{cid}:{key}".encode("utf-8")).hexdigest()[:20]
     return f"authored:{digest}"
 
 
@@ -45,7 +57,7 @@ def mint_authored_events(cid, turn_idx, scheduled_assertions):
     keyed by the minting turn so a rerun of the same turn never double-schedules.
     Returns the count minted."""
     minted = 0
-    for i, assertion in enumerate(scheduled_assertions or []):
+    for assertion in (scheduled_assertions or []):
         if not isinstance(assertion, dict):
             continue
         summary = str(assertion.get("summary") or "").strip()
@@ -55,7 +67,23 @@ def mint_authored_events(cid, turn_idx, scheduled_assertions):
             due_in = max(1, int(assertion.get("due_in_turns")))
         except (TypeError, ValueError):
             due_in = 1
-        eid = _event_id(cid, turn_idx, i, summary)
+        eid = _event_id(cid, summary)
+        # IDEMPOTENT RE-MINT. A due event is handed back to the Director as
+        # `due_authored_events`, and the interpret prompt asks it to fold that
+        # into THIS beat -- so a still-standing assertion is routinely
+        # re-emitted in `flow.scheduled_assertions` on later turns. Keyed by
+        # the minting turn, every echo became a NEW row with a fresh re-queue
+        # budget.
+        #
+        # A live row absorbs its own echo: `due_at` and the requeue count are
+        # left exactly as they stand, so an assertion ages out on the budget it
+        # was minted with rather than being reset by the fold-in it caused. A
+        # row that has already fired or gone stale is NOT live, so scheduling
+        # the same thing again later legitimately re-arms it.
+        live = q("SELECT status FROM scheduled_events WHERE chat_id=? "
+                 "AND event_id=?", (cid, eid), one=True)
+        if live and str(live["status"] or "") == "pending":
+            continue
         payload = json.dumps({
             "summary": summary, "source": "player",
             "minted_turn_idx": int(turn_idx), "requeues": 0,
@@ -64,7 +92,7 @@ def mint_authored_events(cid, turn_idx, scheduled_assertions):
            "(event_id,chat_id,due_at,kind,location_id,payload,seed,status)"
            " VALUES(?,?,?,?,?,?,?,?)",
            (eid, cid, float(int(turn_idx) + due_in), "authored_event", None,
-            payload, f"authored:{cid}:{turn_idx}:{i}", "pending"))
+            payload, f"{eid}:{turn_idx}", "pending"))
         minted += 1
     return minted
 

@@ -5,7 +5,8 @@ classification, cleaning, and op application."""
 import hashlib
 import re
 
-from world.spatial_containment import (hiding_holders_of,
+from world.spatial_containment import (_WHOLE_BODY_PARTS,
+                                 containment_conceals, hiding_holders_of,
                                  scale_changed_names)
 from world.spatial_identity import _ci_get, canonical_subject, same_subject
 
@@ -625,6 +626,76 @@ def contacts_broken_by_scale_change(scene: dict, previous_scales) -> list:
 
     scene["contacts"] = kept
     return sorted(changed)
+
+
+def contacts_across_enclosure(scene: dict, report=None) -> list:
+    """Retire a surface contact the scene's own enclosures deny.
+
+    Sight has always answered this question -- `containment_conceals` says
+    whether two bodies are on the same side of every closed thing -- and
+    touch was never asked it. So an enclosure recorded in one ledger and a
+    hold recorded in the other stood side by side, both delivered as live
+    present sensation, with the hold's detail frozen at whatever beat last
+    wrote it.
+
+    THE ENCLOSURE IS ITSELF A CONTACT, which is why this cannot simply drop
+    everything that crosses one. A WHOLE-BODY contact between a body and what
+    encloses it IS that enclosure stated as touch -- the same whole-body/part
+    distinction `derive_containment_from_contacts` turns on -- and it is the
+    only channel an enclosed body has left, so it survives. So does any
+    `interior` contact: interior is the relation an enclosure permits. What
+    is denied is a named PART reaching the enclosed body's surface from
+    outside the enclosure, the holder's own parts included -- a holder is not
+    inside its own enclosure.
+
+    Deliberately not conditional on the Director agreeing with itself: the
+    measured beat both put a body inside another and re-asserted the surface
+    holds that were true before it, and ageing cannot retire a row that was
+    just asserted. Containment is the authoritative ledger (the ground
+    `_contained_inversion` already defers on), so contact is the one that
+    yields, and the report tells the Director what was read.
+
+    Returns the dropped rows; appends one finished sentence per row to
+    `report`, which is a list, as everything else here appends to it.
+    """
+    contacts = scene.get("contacts")
+    if not isinstance(contacts, list) or not contacts:
+        return []
+
+    def _whole(part):
+        folded = str(part or "").strip().casefold()
+        return not folded or folded in _WHOLE_BODY_PARTS
+
+    def _encloses(outer, inner):
+        return any(same_subject(scene, holder, outer)
+                   for holder in hiding_holders_of(scene, inner))
+
+    kept, dropped = [], []
+    for row in contacts:
+        if not isinstance(row, dict):
+            kept.append(row)
+            continue
+        actor, target = row.get("actor"), row.get("target")
+        if str(row.get("relation") or "").strip().casefold() == "interior" \
+                or not containment_conceals(scene, actor, target):
+            kept.append(row)
+            continue
+        if _whole(row.get("actor_part")) and _whole(row.get("target_part")) \
+                and (_encloses(actor, target) or _encloses(target, actor)):
+            kept.append(row)
+            continue
+        dropped.append(row)
+    if not dropped:
+        return []
+    scene["contacts"] = kept
+    if report is not None:
+        for row in dropped:
+            report.append(
+                f"contact {row.get('actor')} -> {row.get('target')} was "
+                "dropped: an enclosure is between them, so a surface contact "
+                "cannot stand. Reaching into an enclosure is relation "
+                "'interior' with the cavity in target_interior.")
+    return dropped
 
 
 def normalize_scene_contacts(scene: dict) -> dict:

@@ -108,6 +108,7 @@ from world.spatial_contacts import (
     CONTACT_MANNERS, CONTACT_MOMENTARY_MANNERS, contact_motion,
     CONTACT_MOVING_MANNERS, contact_id, contact_relation,
     contacts_broken_by_scale_change,
+    contacts_across_enclosure,
     contacts_of, normalize_scene_contacts, owned_region, same_owned_region,
 )
 
@@ -147,6 +148,7 @@ from world.spatial_geometry import (
     door_anchor_id, effective_anchors, effective_facing, effective_room_size,
     effective_station, egocentric_frame, entity_arc, entity_side,
     guessed_room_sizes, invalidate_contact_bound_poses,
+    poses_broken_by_scale_change,
     measured_proximity_rel, normalize_scene_poses,
     normalize_scene_stations, pose_facts, proximity_rel, room_layout,
     spatial_digest, THRESHOLD_CROSSING_BEATS,
