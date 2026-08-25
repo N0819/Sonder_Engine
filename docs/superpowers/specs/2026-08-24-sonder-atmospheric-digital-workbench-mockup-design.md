@@ -155,6 +155,43 @@ Calibration scale:
 Uppercase is limited to short machine labels. Explanations use sentence case.
 Bold weight is rare. No marketing-scale display heading is permitted.
 
+### Measured Prime Intellect reference profile
+
+The live Prime Intellect hero was inspected at a 1586 x 901 CSS-pixel viewport
+on 2026-08-24. These measurements are reference proportions, not copied source:
+
+- navigation cells use `ABC Favorit Mono` at 12 px / 16 px, weight 400,
+  uppercase, with no added letter spacing;
+- each primary navigation cell is 124 x 30 px with 8 px horizontal padding and
+  a 4 px gap to its neighbor;
+- primary navigation glass uses 25-percent white, 88-percent white text,
+  12 px backdrop blur, and square corners;
+- the announcement strip is 36 px high with 14-percent black glass, 12 px
+  backdrop blur, a 4.5-percent white lower border, and 13.12 px mono text;
+- the hero eyebrow uses `ABC Favorit Mono` at 14 px / 14 px and 30-percent
+  white;
+- the hero title uses variable `Geist` at 36 px / 39.6 px, weight 400, and
+  90-percent white;
+- the title carries a restrained green-white wash over 9 seconds at 28-percent
+  opacity plus a 44 px green text shadow at low opacity;
+- hero body copy uses `Geist` at 18 px / 27 px, weight 400, 45-percent white,
+  and a 480 px maximum measure;
+- primary actions use `ABC Favorit Mono` at 12 px / 12 px in a 28 px square-
+  cornered white control;
+- secondary actions use the same mono at weight 500 over 10-percent white
+  glass, a 16-percent white border, 12 px blur, and 10 px horizontal padding;
+- the hero media field is 640 px high and edge-blends into a `#0e0e0e` surface
+  over the outer 8 percent horizontally and final 18 percent vertically.
+
+The site also registers variable `Geist Mono`, `ABC Favorit Mono` weights 400,
+500, and 700, and `OCR X`; the observed hero primarily uses `Geist` plus
+`ABC Favorit Mono`.
+
+`ABC Favorit Mono` is a licensed commercial typeface and the inspected site
+loads trial binaries. The mockup must not copy, embed, redistribute, or hotlink
+those binaries. It will preserve the measured typography and geometry using a
+licensed open mono substitute, with `Geist` retained where legally available.
+
 ## Geometry and spacing
 
 - The top shelf is 38-42 px high.
