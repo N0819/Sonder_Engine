@@ -13,7 +13,8 @@ from story import attire as attire_model
 # can reach. Re-exported here under both names because `persist/commit.py`'s
 # facade imports them from this module and every `from commit import X` in the
 # tree resolves through it.
-from story.attire import _NON_ATTIRE_TERMS, sanitize_attire_items
+from story.attire import (_NAME_FUNCTION_WORDS, _NON_ATTIRE_TERMS,
+                          sanitize_attire_items)
 from persist.commit_common import _player_name_or_none
 
 def _unstated(value):
@@ -538,26 +539,62 @@ def _is_clothing_entity(entity):
     return isinstance(state, dict) and bool(state.get("clothing"))
 
 
-def _adopt_shed_record(entities, projected, owner, garment):
-    """The id of an EXISTING record for this garment, or None to mint.
+def _record_describes_garment(entity, garment):
+    """Does this record's DESCRIPTION say it is this garment?
 
-    Deliberately conservative: only clothing-flagged records, only those
-    either unowned or owned by this same body, and only where
-    `attire.resolve_garment` -- the engine's one garment-naming authority,
-    already tuned against live wardrobes -- says the names are the same
-    garment. Two records that both match fold to the first in scan order,
-    which is deterministic because `entities` preserves insertion order.
+    A record carries two handles on what it is -- what it is CALLED and what it
+    SAYS it is -- and only the first was ever consulted. The two disagree
+    exactly when one beat's `entities` channel mints an object under an
+    invented display name for the garment the same beat's `attire` channel is
+    removing.
 
-    A wrong adoption is reported and visible; a wrong duplicate is silent
-    and permanent, and compounds every beat. That asymmetry is why this
-    resolves rather than requiring an exact key match.
+    STRICTER THAN `resolve_garment`'S HEAD-NOUN TIER, deliberately. A whole
+    sentence swallows a head noun -- "coat" is inside "a rack for coats" -- so
+    one word of a description names a RELATED thing at least as often as the
+    thing itself. Every content word of the garment must appear, and a record
+    that declares itself a container is refused outright: a thing that holds
+    things is not the thing it holds.
+    """
+    if not isinstance(entity, dict):
+        return False
+    state = entity.get("state") or {}
+    if state.get("container") or entity.get("container") \
+            or entity.get("interior_rooms"):
+        return False
+    body = str(entity.get("description") or "").casefold()
+    if not body:
+        return False
+    words = [w for w in re.findall(r"[a-z0-9]+", str(garment).casefold())
+             if len(w) > 2 and w not in _NAME_FUNCTION_WORDS]
+    if len(words) < 2:
+        return False
+    return all(re.search(r"\b%ss?\b" % re.escape(w), body) for w in words)
+
+
+def _shed_record_candidates(entities, projected, owner, garment):
+    """EVERY existing record for this garment, best identity first.
+
+    One beat can mint two records for one garment, and adopting only the first
+    left the second unstamped -- and therefore invisible to the duplicate fold
+    that runs immediately after, so both survived to the end of the story.
+    Stamping them all makes the pair legible to that fold, which already owns
+    collapsing them and already reports every collapse.
     """
     from story.attire import resolve_garment
 
     name = str(garment)
-    candidates = []
+    minted_now = projected if isinstance(projected, dict) else {}
+    strong, weak = [], []
     for eid, entity in entities.items():
-        if not _is_clothing_entity(entity):
+        fresh = eid in minted_now
+        # THE `clothing` FLAG IS A MODEL COURTESY AND A DETERMINISTIC FLOOR
+        # MAY NOT REST ON ONE. A record written by THIS beat's own entities
+        # channel, for the garment THIS beat's attire channel is taking off,
+        # is the same object whether or not the writer flagged it. Standing
+        # scene objects keep the old gate: this is a fold across two channels
+        # of ONE merged diff, and furniture already in the room is not part
+        # of it.
+        if not _is_clothing_entity(entity) and not fresh:
             continue
         state = entity.get("state") or {}
         worn_by = str(state.get("worn_by") or "").strip()
@@ -566,11 +603,33 @@ def _adopt_shed_record(entities, projected, owner, garment):
         handles = [str(entity.get("name") or "")]
         handles += [str(a) for a in (entity.get("aliases") or [])]
         handles = [h for h in handles if h.strip()]
-        if not handles:
-            continue
-        if resolve_garment(name, handles) or any(
-                resolve_garment(h, [name]) for h in handles):
-            candidates.append(eid)
+        # Relaxing the flag exposes tier 4's looseness, which the flag was
+        # masking: `resolve_garment("coat", ["coat rack"])` matches on the
+        # head noun. An unflagged fresh mint must clear the stricter phrase
+        # test `resolve_garment`'s own docstring reserves for merging callers.
+        loose = _is_clothing_entity(entity)
+        named = bool(handles) and (
+            resolve_garment(name, handles, allow_head_noun=loose)
+            or any(resolve_garment(h, [name], allow_head_noun=loose)
+                   for h in handles))
+        if named:
+            strong.append(eid)
+        elif fresh and _record_describes_garment(entity, name):
+            weak.append(eid)
+    return strong + weak
+
+
+def _adopt_shed_record(entities, projected, owner, garment):
+    """The id of an EXISTING record for this garment, or None to mint.
+
+    Two records that both match fold to the first in scan order, which is
+    deterministic because `entities` preserves insertion order.
+
+    A wrong adoption is reported and visible; a wrong duplicate is silent and
+    permanent, and compounds every beat. That asymmetry is why this resolves
+    rather than requiring an exact key match.
+    """
+    candidates = _shed_record_candidates(entities, projected, owner, garment)
     return candidates[0] if candidates else None
 
 
@@ -630,14 +689,21 @@ def _mint_shed_garments(sc, shed, diff=None):
         # carrying worn_by with no shed flag while the attire ledger
         # correctly showed the body bare. The garment is the same thing in
         # the fiction; it gets one record.
-        adopted = _adopt_shed_record(entities, projected, owner, garment)
+        # EVERY matching record, not just the first. One beat can mint two for
+        # one garment, and stamping only the first left the second unstamped
+        # -- and therefore invisible to the duplicate fold that runs
+        # immediately after, so both survived to the end of the story.
+        # Stamping them all makes the pair legible to that fold, which already
+        # owns collapsing them and already reports every collapse.
+        adopted = _shed_record_candidates(entities, projected, owner, garment)
+        for eid in adopted:
+            _stamp_shed(entities[eid], garment, owner, condition)
+            if projected is not None and eid in projected:
+                _stamp_shed(projected[eid], garment, owner, condition)
         if adopted:
-            _stamp_shed(entities[adopted], garment, owner, condition)
-            if projected is not None and adopted in projected:
-                _stamp_shed(projected[adopted], garment, owner, condition)
             where = positions.get(owner)
-            if where and not positions.get(adopted):
-                positions[adopted] = where
+            if where and not positions.get(adopted[0]):
+                positions[adopted[0]] = where
             continue
         entities[key] = {
             "name": str(garment),

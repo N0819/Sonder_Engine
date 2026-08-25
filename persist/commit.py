@@ -102,6 +102,7 @@ from persist.commit_attire import (_NON_ATTIRE_TERMS, sanitize_attire_items,
     _garment_named_in, interpret_attire_notes, _fold_duplicate_shed_garments,
     _fold_worn_garment_entities, _set_worn_garment_condition,
     _is_clothing_entity, _adopt_shed_record, _stamp_shed, _mint_shed_garments,
+    _record_describes_garment, _shed_record_candidates,
     apply_attire_diff)
 from persist.commit_entities import (_is_gated_awareness, _subjects_that_moved,
     _subjects_targeted_by_an_action, _supersede_disguises, _inherit_known_to,

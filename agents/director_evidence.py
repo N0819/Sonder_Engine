@@ -604,6 +604,30 @@ def _evidence_present(sd, omission, forms=None):
             or any(hits(k) for k in (sd.get("positions") or {}))
     if category == "poses":
         return any(hits(k) for k in (sd.get("poses") or {}))
+    if category == "scales":
+        # THE PARTIAL-ENCODING TRAP, for the magnitude channel. Both this
+        # category and `containment` were reachable -- the aliases fold
+        # size/scale and contained/container/enclosure onto them, and
+        # `_CATEGORY_CHANNELS` routes both to the contact specialist -- yet
+        # neither had an evidence class, so both fell through to the shallow
+        # containment check, whose fields are rooms/entities/attire/positions/
+        # poses and the op lists and which reads neither `scales` nor
+        # `containment`. Measured: a manifest item asserting a size change,
+        # with `sd.scales` empty and the same body present in `sd.poses`, was
+        # reported ENCODED. A body being re-posed is not a record of how big
+        # it now is.
+        return any(hits(k) for k in (sd.get("scales") or {}))
+    if category == "containment":
+        # A RELEASE COUNTS, exactly as an ending condition does: the channel
+        # spells "out of the pocket" as a null value under the subject's own
+        # key, so the key IS the encoding. The holder's name counts too --
+        # the manifest subject is as often the container as the contained.
+        for subject, record in (sd.get("containment") or {}).items():
+            if hits(subject):
+                return True
+            if isinstance(record, dict) and hits(record.get("in")):
+                return True
+        return False
     if category in ("adjacency", "transit"):
         if room_hit_with_adjacency() or removal_edge_hit() \
                 or entity_transit_hit():

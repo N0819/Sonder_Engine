@@ -11,14 +11,14 @@
 | `agents/character.py` | 3695 | Private character decision agent. | `agents.common`, `core.db`, `core.frames`, `llm.prompts`, `llm.schemas`, `mind`, `mind.affect`, `mind.memory`, `mind.memory_judge`, `mind.psychology_runtime`, `mind.theory_of_mind`, `story.character_schema`, `story.scene`, `world.gaps`, `world.place_purpose`, `world.spatial`, `world.survival` |
 | `agents/common.py` | 7741 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.scene`, `world`, `world.spatial` |
 | `agents/composer.py` | 2585 |  | `agents.common`, `story.scene`, `world.spatial` |
-| `agents/director.py` | 3973 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial`, `world.survival` |
+| `agents/director.py` | 3986 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial`, `world.survival` |
 | `agents/director_contact.py` | 457 |  | `story.character_schema`, `world.spatial` |
-| `agents/director_evidence.py` | 927 |  | `agents.common`, `agents.director_lingua`, `llm`, `world.spatial` |
+| `agents/director_evidence.py` | 951 |  | `agents.common`, `agents.director_lingua`, `llm`, `world.spatial` |
 | `agents/director_fanout.py` | 631 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
 | `agents/director_floors.py` | 1197 |  | `agents.common`, `agents.director_lingua`, `story.character_schema`, `story.scene`, `world.spatial` |
 | `agents/director_lingua.py` | 29 |  | — |
 | `agents/director_movement.py` | 969 |  | `agents.director_lingua`, `story.character_schema`, `world.spatial` |
-| `agents/director_reconcile.py` | 437 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story`, `world.spatial` |
+| `agents/director_reconcile.py` | 553 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story`, `world.spatial` |
 | `agents/director_scopes.py` | 658 |  | `agents.director_views`, `core.db`, `world.survival` |
 | `agents/director_views.py` | 434 |  | `agents.common`, `story.character_schema`, `story.scene` |
 | `agents/loops.py` | 1147 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `core.db`, `story.character_schema`, `story.scene`, `world.spatial` |
@@ -68,8 +68,8 @@
 | `persist/chat_archive.py` | 1186 | Typed, atomic chat archive export/import service and HTTP routes. | `core.db`, `llm.schemas`, `mind.memory`, `persist.checkpoints`, `story.character_schema` |
 | `persist/chat_delete.py` | 42 |  | `core.db` |
 | `persist/checkpoints.py` | 1300 | Whole-chat snapshots and checkpoint restore orchestration. | `core.db`, `mind.memory` |
-| `persist/commit.py` | 633 | Atomic commit orchestrator, per-turn lock, thin tail domains, and the facade re-exporting every commit_* name. | `core.db`, `core.frames`, `llm.prompts`, `llm.providers`, `mind`, `mind.memory`, `mind.theory_of_mind`, `persist.commit_attire`, `persist.commit_background`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_entities`, `persist.commit_ledgers`, `persist.commit_mapping`, `persist.commit_mechanics`, `persist.commit_memory`, `persist.commit_memory_write`, `persist.commit_place_graph`, `persist.commit_room_registry`, `persist.commit_scene_state`, `story`, `story.character_schema`, `story.scene`, `world.comfort`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.spatial_frames`, `world.survival`, `world.weather` |
-| `persist/commit_attire.py` | 1266 | The mutable clothing ledger: attire notes, shed/worn garment entities, the validated attire diff. | `persist.commit_common`, `story`, `story.attire` |
+| `persist/commit.py` | 634 | Atomic commit orchestrator, per-turn lock, thin tail domains, and the facade re-exporting every commit_* name. | `core.db`, `core.frames`, `llm.prompts`, `llm.providers`, `mind`, `mind.memory`, `mind.theory_of_mind`, `persist.commit_attire`, `persist.commit_background`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_entities`, `persist.commit_ledgers`, `persist.commit_mapping`, `persist.commit_mechanics`, `persist.commit_memory`, `persist.commit_memory_write`, `persist.commit_place_graph`, `persist.commit_room_registry`, `persist.commit_scene_state`, `story`, `story.character_schema`, `story.scene`, `world.comfort`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.spatial_frames`, `world.survival`, `world.weather` |
+| `persist/commit_attire.py` | 1332 | The mutable clothing ledger: attire notes, shed/worn garment entities, the validated attire diff. | `persist.commit_common`, `story`, `story.attire` |
 | `persist/commit_background.py` | 2062 | Background presences: tracking, identity folding, the reactor gate, promotion to cast. | `core.db`, `mind.memory`, `persist.commit_common`, `story.character_schema`, `story.scene`, `world.spatial` |
 | `persist/commit_common.py` | 462 | Leaf helpers shared across commit domains: scalar utilities, name/address roster, entity-id canonicalisation. | `core.db`, `mind.memory`, `story.character_schema`, `world.mechanics`, `world.spatial` |
 | `persist/commit_destruction.py` | 411 | Single- and multi-book destruction cascades, retirement, and latency-gated news. | `core.db`, `mind.memory`, `persist.commit_common`, `world.mechanics`, `world.spatial`, `world.spatial_frames` |
@@ -223,14 +223,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `director_resolve()` | 2374 | 1566 lines |
-| `director_interpret()` | 435 | 567 lines |
-| `_reconcile_resolution()` | 1370 | 490 lines |
-| `_run_specialists()` | 2042 | 224 lines |
-| `director_establish()` | 296 | 137 lines |
-| `_reconcile_interpretation()` | 1004 | 131 lines |
-| `_specialist_repairs()` | 1197 | 119 lines |
-| `_prose_gate_facts()` | 1924 | 92 lines |
+| `director_resolve()` | 2387 | 1566 lines |
+| `director_interpret()` | 436 | 567 lines |
+| `_reconcile_resolution()` | 1371 | 502 lines |
+| `_run_specialists()` | 2055 | 224 lines |
+| `director_establish()` | 297 | 137 lines |
+| `_reconcile_interpretation()` | 1005 | 131 lines |
+| `_specialist_repairs()` | 1198 | 119 lines |
+| `_prose_gate_facts()` | 1937 | 92 lines |
 
 ### `agents/director_contact.py`
 
@@ -249,13 +249,13 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_evidence_present()` | 561 | 258 lines |
+| `_evidence_present()` | 561 | 282 lines |
 | `_merge_repair_into_diff()` | 341 | 59 lines |
 | `_omission_subject_encoded()` | 490 | 59 lines |
-| `_fold_derived_manifest_events()` | 872 | 56 lines |
+| `_fold_derived_manifest_events()` | 896 | 56 lines |
 | `_interpret_coverage_corpus()` | 90 | 53 lines |
 | `_strip_blank_diff_placeholders()` | 255 | 42 lines |
-| `_manifest_items()` | 826 | 37 lines |
+| `_manifest_items()` | 850 | 37 lines |
 | `_normalize_diff_shape()` | 195 | 36 lines |
 
 ### `agents/director_fanout.py`
@@ -307,13 +307,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_verify_already_true()` | 210 | 126 lines |
-| `_player_claim_findings()` | 52 | 80 lines |
-| `_stamp_dialogue_articulation()` | 137 | 64 lines |
-| `_acquit_addressed_events()` | 338 | 52 lines |
-| `_route_repair_omissions()` | 398 | 40 lines |
-| `_deep_audit_mode()` | 40 | 11 lines |
-| `_public_omission()` | 133 | 2 lines |
+| `_verify_already_true()` | 326 | 126 lines |
+| `_scale_relation_conflicts()` | 210 | 107 lines |
+| `_player_claim_findings()` | 59 | 80 lines |
+| `_stamp_dialogue_articulation()` | 144 | 64 lines |
+| `_acquit_addressed_events()` | 454 | 52 lines |
+| `_route_repair_omissions()` | 514 | 40 lines |
+| `_deep_audit_mode()` | 47 | 11 lines |
+| `_public_omission()` | 140 | 2 lines |
 
 ### `agents/director_scopes.py`
 
@@ -815,27 +816,27 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_commit_all_locked()` | 367 | 267 lines |
-| `commit_crowds()` | 247 | 82 lines |
-| `commit_narration_person()` | 166 | 29 lines |
-| `commit_authored_events()` | 198 | 25 lines |
-| `_prepare_turn_commit()` | 344 | 12 lines |
-| `commit_offscreen_epoch()` | 225 | 11 lines |
-| `commit_all()` | 331 | 11 lines |
-| `commit_offscreen_plans()` | 238 | 7 lines |
+| `_commit_all_locked()` | 368 | 267 lines |
+| `commit_crowds()` | 248 | 82 lines |
+| `commit_narration_person()` | 167 | 29 lines |
+| `commit_authored_events()` | 199 | 25 lines |
+| `_prepare_turn_commit()` | 345 | 12 lines |
+| `commit_offscreen_epoch()` | 226 | 11 lines |
+| `commit_all()` | 332 | 11 lines |
+| `commit_offscreen_plans()` | 239 | 7 lines |
 
 ### `persist/commit_attire.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `apply_attire_diff()` | 730 | 537 lines |
-| `interpret_attire_notes()` | 250 | 115 lines |
-| `_fold_duplicate_shed_garments()` | 367 | 85 lines |
-| `_fold_worn_garment_entities()` | 454 | 69 lines |
-| `_mint_shed_garments()` | 596 | 66 lines |
-| `_merge_attire_regions()` | 29 | 65 lines |
-| `_heal_attire_identity_keys()` | 96 | 61 lines |
-| `_drop_overlay_conditions()` | 684 | 44 lines |
+| `apply_attire_diff()` | 796 | 537 lines |
+| `interpret_attire_notes()` | 251 | 115 lines |
+| `_fold_duplicate_shed_garments()` | 368 | 85 lines |
+| `_mint_shed_garments()` | 655 | 73 lines |
+| `_fold_worn_garment_entities()` | 455 | 69 lines |
+| `_merge_attire_regions()` | 30 | 65 lines |
+| `_heal_attire_identity_keys()` | 97 | 61 lines |
+| `_shed_record_candidates()` | 574 | 46 lines |
 
 ### `persist/commit_background.py`
 
