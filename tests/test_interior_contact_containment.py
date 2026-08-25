@@ -261,3 +261,158 @@ class TestTheOtherSpelling:
         in an open palm has not swallowed them."""
         scene = self._touch(relation="surface", target_interior="")
         assert derive_containment_from_contacts(scene) == []
+
+
+class TestAnEnclosureRetiresWhatContradictsIt:
+    """Contact and containment are two ledgers describing one arrangement, and
+    only sight was ever asked whether they agreed.
+
+    `containment_conceals` has always said whether two bodies are on the same
+    side of every closed thing. Touch was never asked, so an enclosure in one
+    ledger and a surface hold in the other stood side by side -- both
+    delivered as live present sensation, the hold's detail frozen at whatever
+    beat last wrote it.
+    """
+
+    def _scene(self, contacts, contained=None):
+        return {"rooms": {"r": {"name": "R"}},
+                "positions": {"A": "r", "B": "r"}, "entities": {},
+                "contacts": list(contacts), "scales": {},
+                "contained": dict(contained or {}), "poses": {},
+                "stations": {}}
+
+    ENCLOSED = {"B": {"in": "A", "mode": "interior"}}
+
+    def test_a_part_reaching_across_an_enclosure_is_dropped(self):
+        from world.spatial import contacts_across_enclosure
+
+        scene = self._scene(
+            [{"actor": "A", "actor_part": "hand", "target": "B",
+              "target_part": "shoulder", "relation": "surface"}],
+            self.ENCLOSED)
+        report = []
+        assert contacts_across_enclosure(scene, report=report)
+        assert scene["contacts"] == []
+        assert "enclosure is between them" in report[0]
+
+    def test_the_holder_is_not_exempt(self):
+        """A holder is not inside its own enclosure, so its own parts reach
+        across it exactly as anyone else's do."""
+        from world.spatial import contacts_across_enclosure
+
+        scene = self._scene(
+            [{"actor": "A", "actor_part": "fingers", "target": "B",
+              "target_part": "body", "relation": "surface"}],
+            self.ENCLOSED)
+        assert contacts_across_enclosure(scene)
+        assert scene["contacts"] == []
+
+    def test_an_interior_contact_survives(self):
+        """Interior is the relation an enclosure PERMITS -- retiring it would
+        delete the only channel an enclosed body has."""
+        from world.spatial import contacts_across_enclosure
+
+        scene = self._scene(
+            [{"actor": "A", "actor_part": "tongue", "target": "B",
+              "target_part": "torso", "target_interior": "mouth",
+              "relation": "interior"}], self.ENCLOSED)
+        assert contacts_across_enclosure(scene) == []
+        assert len(scene["contacts"]) == 1
+
+    def test_the_enclosure_stated_as_touch_survives(self):
+        """A WHOLE-BODY contact between a body and what encloses it IS the
+        enclosure said in the other ledger's words."""
+        from world.spatial import contacts_across_enclosure
+
+        scene = self._scene(
+            [{"actor": "B", "actor_part": "body", "target": "A",
+              "target_part": "", "relation": "surface"}], self.ENCLOSED)
+        assert contacts_across_enclosure(scene) == []
+        assert len(scene["contacts"]) == 1
+
+    def test_two_bodies_in_the_open_are_untouched(self):
+        from world.spatial import contacts_across_enclosure
+
+        scene = self._scene(
+            [{"actor": "A", "actor_part": "hand", "target": "B",
+              "target_part": "shoulder", "relation": "surface"}])
+        assert contacts_across_enclosure(scene) == []
+        assert len(scene["contacts"]) == 1
+
+
+class TestASizeChangeRetiresTheRelationsItInvalidated:
+    def _scene(self, poses, scales):
+        return {"rooms": {"r": {"name": "R"}},
+                "positions": {"A": "r", "B": "r"}, "entities": {},
+                "contacts": [], "contained": {}, "scales": dict(scales),
+                "poses": dict(poses), "stations": {}}
+
+    def test_a_relation_between_two_bodies_does_not_survive_a_resize(self):
+        """A relation is a fact about the sizes they were; one of them
+        changing does not leave a smaller version of it standing."""
+        from world.spatial import poses_broken_by_scale_change
+
+        scene = self._scene(
+            {"A": {"posture": "seated", "support": "", "relative_to": "B",
+                   "relation": "astride", "constraint": "", "detail": ""}},
+            {"A": 0.2})
+        assert poses_broken_by_scale_change(scene, {"A": 1.0}) == ["A"]
+        assert scene["poses"]["A"]["relation"] == ""
+        # Posture is the body's own and survives at any size.
+        assert scene["poses"]["A"]["posture"] == "seated"
+
+    def test_a_pose_restated_this_beat_is_exempt(self):
+        """`apply_pose_diff` has already run, so a Director re-declaring the
+        arrangement the new size permits must survive its own beat."""
+        from world.spatial import poses_broken_by_scale_change
+
+        scene = self._scene(
+            {"A": {"posture": "cupped", "support": "", "relative_to": "B",
+                   "relation": "held by", "constraint": "", "detail": ""}},
+            {"A": 0.2})
+        assert poses_broken_by_scale_change(
+            scene, {"A": 1.0}, {"A": {"posture": "cupped"}}) == []
+        assert scene["poses"]["A"]["relation"] == "held by"
+
+    def test_an_unchanged_scene_retires_nothing(self):
+        from world.spatial import poses_broken_by_scale_change
+
+        scene = self._scene(
+            {"A": {"posture": "seated", "support": "", "relative_to": "B",
+                   "relation": "astride", "constraint": "", "detail": ""}},
+            {"A": 1.0})
+        assert poses_broken_by_scale_change(scene, {"A": 1.0}) == []
+
+
+class TestAnAuthoredAssertionIsOneRow:
+    """Identity keyed on the minting beat let one assertion become many rows.
+
+    A due authored event is handed back to the Director as
+    `due_authored_events`, and the interpret prompt asks it to fold that into
+    THIS beat -- so a still-standing assertion is routinely re-emitted in
+    `flow.scheduled_assertions` on later turns. Keyed by `turn_idx`, every echo
+    became a NEW pending row with its own untouched re-queue budget, so an
+    assertion that should have aged out never could.
+    """
+
+    def test_the_same_assertion_is_the_same_id_from_any_beat(self):
+        from story.authored_events import _event_id
+
+        assert _event_id(1, "the bell rings") == _event_id(1, "the bell rings")
+
+    def test_reflowed_whitespace_and_case_are_the_same_assertion(self):
+        """A re-emission that only reformats the string is not a new claim."""
+        from story.authored_events import _event_id
+
+        assert _event_id(1, "The Bell  rings\n") == _event_id(
+            1, "the bell rings")
+
+    def test_a_different_assertion_is_a_different_row(self):
+        from story.authored_events import _event_id
+
+        assert _event_id(1, "the bell rings") != _event_id(1, "the door opens")
+
+    def test_and_a_different_story_is_a_different_row(self):
+        from story.authored_events import _event_id
+
+        assert _event_id(1, "the bell rings") != _event_id(2, "the bell rings")

@@ -17,7 +17,9 @@ from world.spatial_orientation import (
 )
 
 from world.spatial_barriers import normalize_barrier
-from world.spatial_containment import _NEVER_STATIONED_KINDS
+from world.spatial_containment import (_NEVER_STATIONED_KINDS,
+                                       containment_conceals,
+                                       scale_changed_names)
 from world.spatial_contacts import _clean_contact, _contact_key
 from world.spatial_identity import _ci_get, _entity_named, room_of, same_subject
 
@@ -759,6 +761,25 @@ _POSE_ARRANGEMENT_FIELDS = ("posture", "support", "relative_to", "relation",
                             "constraint")
 
 
+def _retire_pose_relation(pose, other):
+    """Drop the relational half of a pose its partner no longer holds for.
+
+    ONE helper, because the two triggers -- a size change and an enclosure --
+    are the same judgment: a relation is a claim about two bodies at the
+    geometry they had, while posture is the body's own and survives both.
+    `detail` goes only when it NAMES the partner, the same test
+    `invalidate_contact_bound_poses` applies with its own vocabulary.
+    """
+    other = str(other or "").strip()
+    pose["relative_to"] = ""
+    pose["relation"] = ""
+    pose["constraint"] = ""
+    if other and re.search(r"\b%s\b" % re.escape(other),
+                           pose.get("detail") or "", re.I):
+        pose["detail"] = ""
+    return pose
+
+
 def normalize_scene_poses(scene: dict) -> dict:
     """Prune pose relations invalidated by departure or room separation."""
     poses = scene.get("poses")
@@ -795,16 +816,27 @@ def normalize_scene_poses(scene: dict) -> dict:
             # A body turned toward a fixture is exactly as real as a body
             # leaning on one, and the room already says where its fixtures are.
             anchors = effective_anchors(scene, my_room) or {}
-            if other not in anchors and _ci_get(positions, other) != my_room:
-                pose["relative_to"] = ""
-                pose["relation"] = ""
-                pose["constraint"] = ""
+            # AN ENCLOSURE IS BETWEEN THEM. A contained body's position
+            # DERIVES to its holder's room, so the co-location test below
+            # passes for a body shut inside another and the relation stands
+            # for the rest of the story. Same side of every enclosure or no
+            # relation -- the rule `containment_conceals` already states for
+            # sight, asked of arrangement. It covers a fixture too: you are
+            # not oriented to the room's hearth from inside something.
+            if containment_conceals(scene, name, other) or (
+                    other not in anchors
+                    and _ci_get(positions, other) != my_room):
+                _retire_pose_relation(pose, other)
         support = pose.get("support")
         if support:
             anchors = (rooms.get(my_room) or {}).get("anchors") or {}
             support_is_anchor = support in anchors
             support_room = _ci_get(positions, support)
             if not support_is_anchor and support_room not in (None, my_room):
+                pose["support"] = ""
+            # Nothing on the far side of an enclosure bears your weight -- a
+            # body inside another is not still resting on the room's table.
+            if pose["support"] and containment_conceals(scene, name, support):
                 pose["support"] = ""
             station = _ci_get(stations, name)
             if support_is_anchor and isinstance(station, dict) \
@@ -893,6 +925,60 @@ def invalidate_contact_bound_poses(scene: dict, previous_contacts=None) -> dict:
                 pose["detail"] = ""
         poses[subject] = pose
     return scene
+
+
+def poses_broken_by_scale_change(scene: dict, previous_scales,
+                                 stated=None) -> list:
+    """Retire the pose relations a size change invalidated.
+
+    The sibling of `contacts_broken_by_scale_change` and
+    `containment_broken_by_scale_change`, routed through the same
+    `scale_changed_names` so all three agree on what counts as a change. A
+    relation between two bodies is a fact about the sizes they were, and one
+    of them changing does not leave a smaller version of it standing. Posture
+    is the body's own and survives. A support that is another BODY does not;
+    a room anchor still holds up whatever is put on it at any size.
+
+    `stated` is THIS beat's incoming `poses` map, and a pose in it is
+    untouchable -- it already speaks for the new geometry. That exemption is
+    load-bearing rather than polite: `apply_pose_diff` has run by the time
+    this does, so without it a Director re-declaring the arrangement in the
+    same beat as the size change would be wiped -- exactly the ordering the
+    contact cancellation avoids by running before this beat's ops, and the
+    rule `derive_scene_stations` states for stations.
+
+    Returns the subjects whose relation was retired, for the caller to report.
+    """
+    poses = scene.get("poses")
+    if not isinstance(poses, dict) or not poses:
+        return []
+    changed = scale_changed_names(previous_scales, scene.get("scales") or {})
+    if not changed:
+        return []
+    spoken = {str(key).strip().casefold() for key in (stated or {})}
+    positions = scene.get("positions") or {}
+    retired = set()
+    for name, raw in list(poses.items()):
+        folded = str(name).strip().casefold()
+        if folded in spoken:
+            continue
+        pose = _clean_pose(raw)
+        if pose is None:
+            continue
+        subject_changed = folded in changed
+        other = pose.get("relative_to")
+        support = pose.get("support")
+        if other and (subject_changed
+                      or str(other).strip().casefold() in changed):
+            _retire_pose_relation(pose, other)
+            retired.add(str(name))
+        if support and _ci_get(positions, support) is not None and (
+                subject_changed
+                or str(support).strip().casefold() in changed):
+            pose["support"] = ""
+            retired.add(str(name))
+        poses[name] = pose
+    return sorted(retired)
 
 
 def apply_pose_diff(scene: dict, incoming) -> dict:

@@ -14,6 +14,7 @@ from world.spatial_barriers import (_PASSABLE_BARRIERS, normalize_barrier,
                               normalize_scene_barriers)
 from world.spatial_contact_migration import contacts_from_entity_state
 from world.spatial_contacts import (apply_contact_ops,
+                              contacts_across_enclosure,
                               contacts_broken_by_scale_change,
                               normalize_scene_contacts)
 from world.spatial_containment import (
@@ -26,6 +27,7 @@ from world.spatial_containment import (
     normalize_scene_scales,
 )
 from world.spatial_geometry import (apply_pose_diff, derive_scene_stations,
+                              poses_broken_by_scale_change,
                               invalidate_contact_bound_poses,
                               normalize_scene_poses, normalize_scene_stations)
 from world.spatial_identity import (_ci_get, _entity_named, room_of,
@@ -1102,6 +1104,13 @@ def merge_scene_with_diff(
     # The return value is for callers/tests; nothing is stashed in the scene,
     # which is saved verbatim and must not accumulate scratch keys.
     contacts_broken_by_scale_change(merged, previous_scales)
+    # ...and the pose relations that were true at the old geometry, for the
+    # same reason and by the same measure. THIS BEAT'S incoming poses are
+    # exempt: `apply_pose_diff` has already run, so a Director re-declaring
+    # the arrangement the new size permits must survive its own beat --
+    # the ordering the contact cancellation avoids by running before this
+    # beat's ops.
+    poses_broken_by_scale_change(merged, previous_scales, diff.get("poses"))
 
     # Containment. Declared as {subject: {"in": holder, "mode": ...}}, with a
     # null/empty value releasing -- the same shape positions uses, because a
@@ -1182,6 +1191,14 @@ def merge_scene_with_diff(
         # container is -- both already ran, above, before these existed.
         normalize_scene_containment(merged)
         derive_contained_positions(merged)
+
+    # Contact and containment are two ledgers describing one arrangement, and
+    # this is the first point at which both are final -- containment can still
+    # be MINTED from contact just above. A named part reaching a body across
+    # an enclosure is the contact ledger contradicting the containment one,
+    # and containment is the authoritative side (the ground
+    # `_contained_inversion` already defers on), so contact yields.
+    contacts_across_enclosure(merged, report=contact_report)
 
     # Within-room position, last of all. Contact is settled by now, and contact
     # is what the derivation reads: a hand on the quilt is a body at the bed.
