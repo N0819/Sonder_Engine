@@ -2112,7 +2112,7 @@
 | PUT | `/api/providers/{pid}/prompt_cache` | `put_provider_prompt_cache()` | `web/app.py:2455` |
 | PUT | `/api/reasoning_effort` | `put_reasoning_effort()` | `web/app.py:1617` |
 | POST | `/api/steps/{sid}/activate` | `step_activate()` | `web/app.py:5947` |
-| POST | `/api/steps/{sid}/edit` | `_mark_applied_step_stale()` | `web/app.py:5914` |
+| POST | `/api/steps/{sid}/edit` | `step_edit()` | `web/app.py:5936` |
 | POST | `/api/steps/{sid}/reroll` | `step_reroll()` | `web/app.py:5867` |
 | DELETE | `/api/turns/{tid}` | `turn_del()` | `web/app.py:5961` |
 | GET | `/api/turns/{tid}/ambience` | `turn_ambience()` | `web/app.py:6251` |
@@ -2249,11 +2249,11 @@ Declared functions: `readStored()`, `writeStored()`, `normaliseTheme()`, `normal
 
 Declared functions: `themePreview()`, `openAppearanceSettings()`.
 
-### `static/js/utils.js` (346 lines)
+### `static/js/utils.js` (375 lines)
 
-Sections: API (`:235`); Download (`:325`); Card authoring warnings (`:334`).
+Sections: API (`:235`); Download (`:354`); Card authoring warnings (`:363`).
 
-Declared functions: `t()`, `watchUILanguage()`, `localizeDocument()`, `memoryCategories()`, `memoryProvenance()`, `hasDefaultModel()`, `safeId()`, `splitCL()`, `numOr()`, `taggedError()`, `api()`, `streamPost()`, `downloadJSON()`, `showCardWarnings()`.
+Declared functions: `t()`, `watchUILanguage()`, `localizeDocument()`, `memoryCategories()`, `memoryProvenance()`, `hasDefaultModel()`, `safeId()`, `splitCL()`, `numOr()`, `taggedError()`, `errorDetailText()`, `api()`, `streamPost()`, `downloadJSON()`, `showCardWarnings()`.
 
 ### `static/js/weather-fx.js` (548 lines)
 
