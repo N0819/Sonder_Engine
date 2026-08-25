@@ -233,6 +233,33 @@ function taggedError(kind, message) {
 }
 
 // ---- API ----
+// A server error's `detail` is not always a sentence. FastAPI's validation
+// failures arrive as an ARRAY of {loc, msg, type} objects, and handing that to
+// `new Error(...)` stringifies it as "[object Object]" -- which is exactly as
+// informative as no message at all, and is what a mis-wired route reported for
+// every step edit. Render the shape rather than concatenating it.
+function errorDetailText(detail) {
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    const lines = detail.map((item) => {
+      if (typeof item === "string") return item;
+      if (!item || typeof item !== "object") return String(item);
+      // `loc` is the path to the offending field; the last hop is the part a
+      // reader can act on ("content", "s"), the rest is transport plumbing.
+      const where = Array.isArray(item.loc) ? item.loc.slice(-1)[0] : "";
+      const msg = item.msg || item.detail || item.type || "";
+      return where ? where + ": " + msg : String(msg);
+    }).filter(Boolean);
+    if (lines.length) return lines.join("; ");
+  }
+  if (detail && typeof detail === "object") {
+    const msg = detail.msg || detail.error || detail.message;
+    if (msg) return String(msg);
+    try { return JSON.stringify(detail); } catch (e) { /* fall through */ }
+  }
+  return "";
+}
+
 async function api(method, url, body) {
   // Arm on the way IN. Generating a character or a lorebook takes minutes, and
   // this call almost always originates from a click -- which is the gesture
@@ -272,8 +299,8 @@ async function api(method, url, body) {
     let message = await response.text();
     try {
       const parsed = JSON.parse(message);
-      message = parsed.detail
-        || parsed.error
+      message = errorDetailText(parsed.detail)
+        || errorDetailText(parsed.error)
         || message;
     } catch (e) {
       // keep the response body
@@ -305,7 +332,9 @@ async function streamPost(url, body, onEvt) {
       throw new Error("Unauthorized");
     }
     let message = await response.text();
-    try { message = JSON.parse(message).detail || message } catch (e) { }
+    try {
+      message = errorDetailText(JSON.parse(message).detail) || message;
+    } catch (e) { /* keep the response body */ }
     throw new Error(message || `HTTP ${response.status}`);
   }
   if (!response.body) throw new Error("No response stream.");

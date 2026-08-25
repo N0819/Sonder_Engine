@@ -5910,7 +5910,6 @@ def _require_step_turn(sid: int):
     _require_chat_idle(turn["chat_id"])
     return s
 
-@app.post("/api/steps/{sid}/edit")
 def _mark_applied_step_stale(s):
     """A step whose content was APPLIED to durable state cannot have that
     content swapped without re-applying it.
@@ -5933,6 +5932,7 @@ def _mark_applied_step_stale(s):
         qi("UPDATE steps SET stale=1 WHERE id=?", (s["id"],))
 
 
+@app.post("/api/steps/{sid}/edit")
 def step_edit(sid: int, body: dict = Body(...)):
     s = _require_step_turn(sid)
     with transaction():
