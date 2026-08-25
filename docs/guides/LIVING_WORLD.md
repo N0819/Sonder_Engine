@@ -434,12 +434,20 @@ room the player left ten turns ago still qualifies. `managed_presences` **does**
 filter by ambient scope (`agents/background.py:546`), so the two paths
 disagree about co-presence.
 
-**`background_react` is not the rare stage its docstring claims.** The
-docstring says `[]` is "the common case", but non-empty `dialogue_turns` is
-itself a qualifying signal and records are never pruned — so once any tracked
-presence has spoken even once it qualifies on every subsequent turn unless the
-Director voiced it that beat. The same claim is repeated verbatim in
-`agents/runtime.py` and `docs/guides/PIPELINE.md`.
+**The salience backstop is cheap; the scene manager is not.** These are two
+paths through one step and their costs differ by an order of magnitude.
+Measured 2026-08-24 over nine live chats, 816 `background_react` steps: the
+backstop produced a reaction on 0–10% of beats (its docstring's "common case"
+claim holds — `selected: []` on the rest), while chat 67, the one story running
+`scene_life: full`, fired on **48 of 50 beats** and spent 51 model calls. That
+is the setting working as designed — `full` means voice the populace every beat
+— but it is a per-turn cost, and nothing in the config surface says so before
+you turn it on.
+
+Note when instrumenting this: the two paths record their spend in different
+fields. The backstop writes `_engine_notes.llm_calls`; the manager writes
+`agent_calls` and leaves `_engine_notes` null. Counting only the first
+undercounts a `scene_life` story to zero.
 
 **`ambient` refuses divergent perception, not directed lines.** Both
 `story/scene.py:2087` and `agents/background.py:559` say a line "directed at

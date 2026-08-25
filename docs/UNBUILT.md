@@ -2243,11 +2243,18 @@ docstring or fix the code; do not leave both.
 
 - "five approaches" in `world/living_world.py:1` and `web/app.py:4547` —
   `LIVING_WORLD_APPROACHES` has four. Approach C became core carrier physics.
-- `pick_background_reactors` returning `[]` as "the common case"
-  (`persist/commit_background.py:1401`) — `dialogue_turns` is itself a
-  qualifying signal and records are pruned only by promotion, so once any
-  tracked presence has spoken it qualifies on every later turn. Repeated
-  verbatim in `agents/runtime.py:736` and `docs/guides/PIPELINE.md:697`.
+- ~~`pick_background_reactors` returning `[]` as "the common case"~~ —
+  **withdrawn, and worth recording as a method note.** The audit reasoned from
+  the code that `dialogue_turns` is a standalone qualifying signal and records
+  are pruned only by promotion, so any presence that has spoken once qualifies
+  forever. The reading is right and the conclusion is false: measured over 816
+  live `background_react` steps in nine chats, the backstop produced a reaction
+  on 0–10% of beats, and 41 of 69 tracked presences have non-empty
+  `dialogue_turns`. Something downstream of that disjunct — the `roster` /
+  `voiced_this_beat` exclusion is the candidate — keeps it quiet. The
+  docstring stands. A code reading is a hypothesis; this corpus can answer it
+  directly, and the first draft of `LIVING_WORLD.md` shipped the hypothesis as
+  fact.
 - `ambient` withholding "a line directed at one of them"
   (`story/scene.py:2087`, `agents/background.py:559`) — the test is divergent
   hear levels, not direction.
