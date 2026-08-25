@@ -88,7 +88,8 @@ from world.spatial_containment import (
     derive_containment_from_contacts,
     derive_contained_positions, hiding_holders_of,
     normalize_scene_containment, normalize_scene_scales, scale_changed_names,
-    scale_of, scale_ratio, size_facts, size_relation, size_tier,
+    detail_resolves_between, scale_of, scale_ratio, size_facts,
+    size_relation, size_tier,
 )
 
 

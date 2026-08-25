@@ -40,6 +40,7 @@ from world.spatial import (
     _body_interior_holder,
     ambient_scope,
     containment_conceals,
+    detail_resolves_between,
     effective_room_size,
     entity_arc,
     has_visual,
@@ -1210,6 +1211,10 @@ def observer_body_regions(sc, observer, body_labels=None, extra_parts=None):
     ``beneath`` description when the host enabled that feature and a garment
     has actually been removed there.
 
+    A SCALE GAP costs texture, never acquaintance: a body far off this
+    observer's own scale keeps every region it would otherwise deliver, and
+    each arrives without its authored detail (``detail_resolves_between``).
+
     ``extra_parts`` maps canonical subjects to their authored structured
     body parts (character_schema.character_extra_parts). A visible part rides
     the body's row as ``parts``, gated by the SAME region_visibility verdicts
@@ -1248,6 +1253,9 @@ def observer_body_regions(sc, observer, body_labels=None, extra_parts=None):
             regions, beneath_visible=_beneath_visible())
         visibility = region_visibility(
             sc, observer, body, entry=coherent if coherent else None)
+        # The scale gap is a fact about the PAIR, not about a shoulder, so it
+        # is asked once per body rather than once per region.
+        resolves = detail_resolves_between(sc, observer, body)
         delivered = {}
         for region in attire_model.REGIONS:
             surface = surfaces.get(region)
@@ -1258,7 +1266,20 @@ def observer_body_regions(sc, observer, body_labels=None, extra_parts=None):
             if verdict.get("visibility") == "concealed" \
                     and "garments" not in cause:
                 continue
-            delivered[region] = surface
+            # ACUITY IS PROPORTIONALITY. A region on a body far off this
+            # observer's own scale delivers its form and not its texture --
+            # the same subtraction dim light already makes, on the axis the
+            # `scales` ledger measures. Measured: an observer received
+            # "Barely visible copper-gold hair on her shins" and card tan-line
+            # detail verbatim across a 4x gap, because nothing between the
+            # ledger and the composed view ever read the ledger. It SUBTRACTS
+            # only: the region still arrives, still says covered-or-bare,
+            # still names the garment. `same_subject` is deliberately not
+            # consulted -- a body's ratio to itself is 1.0, so the self row is
+            # never coarsened by construction.
+            delivered[region] = (
+                surface if resolves
+                else attire_model.coarsen_region_surface(surface))
         shown_parts = []
         shown_data = []
         self_view = same_subject(sc, observer, body)

@@ -154,6 +154,12 @@
     "8": "Eight",
     "9": "Nine"
   },
+  "size_phrases": {
+    "palm_sized": "small enough to close your hand around",
+    "hand_holds_you": "large enough to close a hand around you",
+    "much_smaller": "far smaller than you",
+    "much_larger": "far larger than you"
+  },
   "tier_phrases": {
     "within_reach": "within arm's reach",
     "near": "close by",
