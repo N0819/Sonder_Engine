@@ -2010,6 +2010,25 @@ class StateDiff(LenientModel):
     # genuinely different place (DW-1). commit.py's _refresh_relocated_location
     # prefers this over the new room's own name.
     location: str = ""
+    # The beat's passage of time. Canonical shape: {start_seconds,
+    # duration_seconds, end_seconds, mode, explicit, display_advance}.
+    #
+    # DELIBERATELY untyped, and the decision is load-bearing rather than
+    # laziness. The live corpus carries synonym spellings the engine itself
+    # teaches -- `elapsed_seconds` and `display` are the simulation clock's
+    # own keys, printed back to the model in every resolve payload -- and a
+    # submodel with extra="forbid" would DROP the fiction's declared time
+    # rather than read it, which is the defect this field already had (chat
+    # 88 turns 61, 64 and 66 each named a fresh clock position and the
+    # stored clock never left 1136.0). extra="allow" would validate nothing
+    # the reader does not already guard, at the cost of dual-Pydantic-major
+    # surface for zero coverage.
+    #
+    # So the vocabulary is owned by ONE reader instead:
+    # world.mechanics.read_time_diff, which normalizes the synonyms and
+    # reports the keys it cannot read, and TIME_DIFF_KEYS beside it is the
+    # authority tools/project_check.check_time_channel_vocabulary folds the
+    # prompts and examples against.
     time: Optional[dict] = None
     # One sky over the whole scene: {sky, precipitation, intensity, wind,
     # temperature}, normalized to a closed vocabulary by weather.py. Emitted

@@ -10,7 +10,7 @@ import json, re
 from core.db import q, wget
 from story.character_schema import (_UNSPACED_SCRIPT, character_name_from_text,
                               fold_identity_key, persona_name)
-from world.mechanics import stable_event_key
+from world.mechanics import read_time_diff, stable_event_key
 from world.spatial import normalize_room_id
 
 def _keys_str(value):
@@ -93,20 +93,20 @@ def _monotonic_elapsed(prev_clock, time_diff):
     commit had already refused. Returns ``(elapsed_seconds, backwards)``
     where ``backwards`` is None or ``(claimed, was)`` for the caller's
     warning.
+
+    The SHAPE of the diff is not this helper's to know -- it belongs to
+    `world.mechanics.read_time_diff`, the one reader of the
+    `state_diff.time` vocabulary. Knowing only `end_seconds` here was the
+    second half of the same defect: a beat that named its position under
+    the clock's own key, `elapsed_seconds` -- which the resolve payload
+    prints to the model every beat -- read as no claim at all, and the
+    clock held with nothing warned. Chat 88 turns 61, 64 and 66 claimed
+    1107, 1266 and 7200 seconds against a stored clock that never left
+    1136.0.
     """
     was = float((prev_clock or {}).get("elapsed_seconds", 0.0) or 0.0)
-    td = time_diff if isinstance(time_diff, dict) else {}
-    try:
-        claimed = float(td.get("end_seconds", was))
-    except (TypeError, ValueError):
-        claimed = was
-    if claimed < was:
-        try:
-            duration = max(0.0, float(td.get("duration_seconds", 0.0) or 0.0))
-        except (TypeError, ValueError):
-            duration = 0.0
-        return was + duration, (claimed, was)
-    return claimed, None
+    elapsed, backwards, _unread = read_time_diff(was, time_diff)
+    return elapsed, backwards
 
 # ---- Address forms and the name roster ----
 #
