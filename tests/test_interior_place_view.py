@@ -49,8 +49,8 @@ def _placed(*, co_occupant=False):
         "location": "Somewhere", "time": "now",
         "rooms": {
             "hall": {"name": "Hall", "desc": "A hall.", "adjacent": []},
-            "vessel_throat": {
-                "name": "Throat", "desc": "A close passage.",
+            "vessel_antechamber": {
+                "name": "Antechamber", "desc": "A close passage.",
                 "parent_entity": HOLDER_ID,
                 "adjacent": [{"to": "hall", "barrier": "open_door"}],
             },
@@ -58,7 +58,7 @@ def _placed(*, co_occupant=False):
         "positions": {OCCUPANT: "hall", HOLDER: "hall", BYSTANDER: "hall"},
         "entities": {
             HOLDER_ID: {"name": HOLDER, "kind": "person", "aliases": [],
-                        "interior_rooms": ["vessel_throat"]},
+                        "interior_rooms": ["vessel_antechamber"]},
         },
         "attire": {HOLDER: {}, OCCUPANT: {}, BYSTANDER: {}},
         "scales": {OCCUPANT: 0.05},
@@ -75,11 +75,16 @@ def _placed(*, co_occupant=False):
     # assertions below are worth nothing if a leftover ledger record is
     # answering them.
     assert merged["contained"] == {}
-    assert merged["positions"][OCCUPANT] == "vessel_throat"
+    assert merged["positions"][OCCUPANT] == "vessel_antechamber"
     return merged
 
 
 class TestTheRelation:
+    """COMPAT PINS, and named as such so a later reader does not over-credit
+    them. `spatial_rel_between` and `hiding_holders_of` already read the room
+    form correctly; what changed is that a merge can now PRODUCE this shape.
+    These assert the machinery still answers once something reaches it."""
+
     def test_the_holder_is_what_the_occupant_is_inside(self):
         sc = _placed()
         assert spatial_rel_between(sc, OCCUPANT, HOLDER).get(
@@ -100,6 +105,11 @@ class TestTheRelation:
 
 
 class TestSubtractedOutward:
+    """COMPAT PINS likewise: `containment_conceals`, `visible_adjacent_rooms`
+    and `ambient_scope` all treated `membrane` as opaque before this landing.
+    The newly correct behaviour in this file is `containment_facts` and
+    `interior_occupants` (below) and `is_sealed_in` (last class)."""
+
     def test_the_world_cannot_see_in(self):
         sc = _placed()
         assert containment_conceals(sc, BYSTANDER, OCCUPANT) is True
@@ -120,7 +130,7 @@ class TestSubtractedOutward:
         """A membrane is walked through and never seen through, so the
         doorway out is not a view out."""
         sc = _placed()
-        seen = visible_adjacent_rooms(sc, "vessel_throat")
+        seen = visible_adjacent_rooms(sc, "vessel_antechamber")
         assert {r["room_id"] for r in seen} == set()
         # The same call over an ordinary open doorway does answer, so the
         # emptiness above is the membrane and not a mis-keyed read.
@@ -133,7 +143,7 @@ class TestSubtractedOutward:
 
     def test_the_interior_is_closed_to_the_world(self):
         sc = _placed()
-        _rooms, open_to_world = ambient_scope(sc, "vessel_throat")
+        _rooms, open_to_world = ambient_scope(sc, "vessel_antechamber")
         assert open_to_world is False
 
 
@@ -143,7 +153,7 @@ class TestNeverSubtractedInward:
         expression changed is a mind concluding LESS."""
         facts = " ".join(containment_facts(_placed(), OCCUPANT, [HOLDER]))
         assert HOLDER in facts
-        assert "Throat" in facts
+        assert "Antechamber" in facts
         assert "inside" in facts.casefold()
 
     def test_the_occupant_is_never_handed_a_raw_entity_id(self):
@@ -168,12 +178,58 @@ class TestNeverSubtractedInward:
         assert OCCUPANT not in facts
 
 
+class TestWhatTheHolderIsToldItHolds:
+    """The same two rules as the occupant's side, applied to the holder's.
+
+    `positions` does not only key bodies. It legitimately keys objects,
+    fixtures and unregistered presences BY ENTITY ID -- that is the live
+    shape, and `_display_name` exists in this module because of it. The
+    occupant's fact was routed through it and the holder's was not, so the
+    holder's own facts could hand a mind an engine handle and call an object
+    somebody who "goes where you go".
+    """
+
+    def _with_an_object_inside(self):
+        sc = _placed()
+        sc["entities"]["carried_lamp_7f3a"] = {
+            "name": "brass lamp", "kind": "object", "aliases": [],
+            "portable": True}
+        sc["positions"]["carried_lamp_7f3a"] = "vessel_antechamber"
+        return sc
+
+    def test_an_object_in_the_interior_is_not_named_as_an_occupant(self):
+        """An occupant of a body is a body. The enclosure vocabulary is
+        body-scoped everywhere else it is asked (`infer_body_enclosures`,
+        `_body_interior_holder`), and this is the one place it was not."""
+        sc = self._with_an_object_inside()
+        assert interior_occupants(sc, HOLDER) == [OCCUPANT]
+        facts = " ".join(containment_facts(sc, HOLDER, [OCCUPANT]))
+        assert "brass lamp" not in facts
+
+    def test_the_holder_is_never_handed_a_raw_entity_id(self):
+        sc = self._with_an_object_inside()
+        facts = " ".join(containment_facts(sc, HOLDER, [OCCUPANT]))
+        assert "carried_lamp_7f3a" not in facts
+
+    def test_an_id_keyed_occupant_is_named_by_what_the_story_calls_them(self):
+        """The same defect with a BODY in it, which is the one that reaches
+        prose: a positions map keyed by entity id, and a mind told a handle."""
+        sc = _placed()
+        sc["entities"]["stray_bly_id"] = {
+            "name": CO_OCCUPANT, "kind": "person", "aliases": []}
+        sc["positions"]["stray_bly_id"] = "vessel_antechamber"
+        sc["attire"][CO_OCCUPANT] = {}
+        facts = " ".join(containment_facts(sc, HOLDER, [OCCUPANT]))
+        assert "stray_bly_id" not in facts
+        assert CO_OCCUPANT in facts
+
+
 class TestCoOccupants:
     def test_two_bodies_in_one_interior_perceive_each_other(self):
         """Nothing is between them, and the wall around them is around them
         both."""
         sc = _placed(co_occupant=True)
-        assert sc["positions"][CO_OCCUPANT] == "vessel_throat"
+        assert sc["positions"][CO_OCCUPANT] == "vessel_antechamber"
         assert containment_conceals(sc, OCCUPANT, CO_OCCUPANT) is False
         assert containment_conceals(sc, CO_OCCUPANT, OCCUPANT) is False
 

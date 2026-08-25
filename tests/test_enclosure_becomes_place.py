@@ -55,17 +55,17 @@ def _scene(*, interior=True, mode="interior", contacts=None,
                     "interior_rooms": []},
     }
     if interior:
-        rooms["vessel_throat"] = {
-            "name": "Throat", "desc": "A close passage.",
+        rooms["vessel_antechamber"] = {
+            "name": "Antechamber", "desc": "A close passage.",
             "parent_entity": HOLDER_ID,
             "adjacent": [{"to": "hall", "barrier": "open_door"}],
         }
         rooms["vessel_core"] = {
             "name": "Core", "desc": "Deeper still.",
             "parent_entity": HOLDER_ID,
-            "adjacent": [{"to": "vessel_throat", "barrier": "membrane"}],
+            "adjacent": [{"to": "vessel_antechamber", "barrier": "membrane"}],
         }
-        entities[HOLDER_ID]["interior_rooms"] = ["vessel_throat", "vessel_core"]
+        entities[HOLDER_ID]["interior_rooms"] = ["vessel_antechamber", "vessel_core"]
     scene = {
         "location": "Somewhere", "time": "now",
         "rooms": rooms,
@@ -93,7 +93,7 @@ def _interior_contact(station):
 class TestTheHandoff:
     def test_the_occupant_is_placed_at_the_entry_room(self):
         merged = merge_scene_with_diff(_scene(), {})
-        assert merged["positions"][OCCUPANT] == "vessel_throat"
+        assert merged["positions"][OCCUPANT] == "vessel_antechamber"
         assert merged["contained"] == {}
 
     def test_the_place_is_not_the_holders_own_room(self):
@@ -117,13 +117,23 @@ class TestTheHandoff:
     def test_an_unresolvable_station_falls_back_to_the_entry(self):
         merged = merge_scene_with_diff(
             _scene(contacts=[_interior_contact("somewhere unnamed")]), {})
-        assert merged["positions"][OCCUPANT] == "vessel_throat"
+        assert merged["positions"][OCCUPANT] == "vessel_antechamber"
+
+    def test_two_disagreeing_stations_answer_by_a_stated_rule(self):
+        """Two standing interior rows naming different stations is the ledger
+        disagreeing with itself, and nothing in the scene decides which is
+        right. The first row listed wins -- an answer, not an artefact of
+        where in a list a row happened to land."""
+        merged = merge_scene_with_diff(
+            _scene(contacts=[_interior_contact("Antechamber"),
+                             _interior_contact("Core")]), {})
+        assert merged["positions"][OCCUPANT] == "vessel_antechamber"
 
     def test_the_record_is_resolved_through_entity_identity(self):
         """The record names the entity id; positions are keyed by the display
         name. Spelling equality has never been enough here."""
         merged = merge_scene_with_diff(_scene(holder_ref=HOLDER), {})
-        assert merged["positions"][OCCUPANT] == "vessel_throat"
+        assert merged["positions"][OCCUPANT] == "vessel_antechamber"
         assert merged["contained"] == {}
 
     def test_the_relation_becomes_inside_source(self):
@@ -195,6 +205,102 @@ class TestOneTruth:
             "inside_source") is not True
 
 
+class TestTheWayOut:
+    """A DECLARED POSITION IS A DECLARED ACT, and the engine may not undo it.
+
+    The case above walks out of a contact-free interior, which is the rare
+    one: an enclosure that is worth having is expressed in BOTH ledgers at
+    once, and the contact row is the half this landing deliberately keeps
+    alive across the boundary. Measured in this worktree before the fix, with
+    the fixture one line below: t0 places the occupant inside; a diff writing
+    `positions: {occupant: exterior}` came back with the occupant inside
+    again, every beat, forever -- `derive_containment_from_contacts` re-minted
+    a record from the surviving interior row and `place_enclosed_bodies` read
+    it straight back in. Two derivations feeding each other, with a declared
+    act caught between them.
+
+    The rule is one sentence and it is not about enclosure: a position this
+    beat DECLARED is the story speaking, and a derivation may not overwrite
+    it. So a body declared into a room that is not inside its holder has left
+    -- and the two ledgers that still say otherwise are the stale ones.
+    """
+
+    def test_a_declared_exit_survives_a_standing_interior_contact(self):
+        placed = merge_scene_with_diff(
+            _scene(contacts=[_interior_contact("Antechamber")]), {})
+        assert placed["positions"][OCCUPANT] == "vessel_antechamber"
+        out = merge_scene_with_diff(placed,
+                                    {"positions": {OCCUPANT: "hall"}})
+        assert out["positions"][OCCUPANT] == "hall"
+        assert out["contained"] == {}
+
+    def test_the_stale_interior_row_is_retired_with_the_body(self):
+        """Not the position, the CONTACT. Leaving the row standing makes the
+        exit last exactly one beat, because the next merge mints from it."""
+        placed = merge_scene_with_diff(
+            _scene(contacts=[_interior_contact("Antechamber")]), {})
+        out = merge_scene_with_diff(placed,
+                                    {"positions": {OCCUPANT: "hall"}})
+        assert [row for row in out["contacts"]
+                if str(row.get("relation")) == "interior"] == []
+
+    def test_the_exit_still_holds_a_beat_later(self):
+        placed = merge_scene_with_diff(
+            _scene(contacts=[_interior_contact("Antechamber")]), {})
+        out = merge_scene_with_diff(placed,
+                                    {"positions": {OCCUPANT: "hall"}})
+        settled = merge_scene_with_diff(out, {})
+        assert settled["positions"][OCCUPANT] == "hall"
+        assert settled["contained"] == {}
+        assert spatial_rel_between(settled, OCCUPANT, HOLDER).get(
+            "inside_source") is not True
+
+    def test_a_declared_exit_releases_the_ledger_before_it_ever_places(self):
+        """The same rule one beat earlier: the record has not been converted
+        yet and the beat declares the occupant elsewhere. Nothing places
+        them, because nothing may."""
+        out = merge_scene_with_diff(_scene(),
+                                    {"positions": {OCCUPANT: "hall"}})
+        assert out["positions"][OCCUPANT] == "hall"
+        assert out["contained"] == {}
+
+    def test_moving_deeper_is_not_an_exit(self):
+        """A declared position INSIDE the holder is not a departure: the
+        release is scoped to a room the holder's interior does not hold."""
+        placed = merge_scene_with_diff(
+            _scene(contacts=[_interior_contact("Antechamber")]), {})
+        deeper = merge_scene_with_diff(
+            placed, {"positions": {OCCUPANT: "vessel_core"}})
+        assert deeper["positions"][OCCUPANT] == "vessel_core"
+        assert [row for row in deeper["contacts"]
+                if str(row.get("relation")) == "interior"]
+
+    def test_the_holder_moving_does_not_evict_its_occupant(self):
+        """The declaration names the HOLDER, and the interior travels with
+        it. Nothing about the occupant was declared, so nothing releases."""
+        placed = merge_scene_with_diff(
+            _scene(contacts=[_interior_contact("Antechamber")]), {})
+        placed["rooms"]["yard"] = {"name": "Yard", "desc": "Out.",
+                                   "adjacent": []}
+        moved = merge_scene_with_diff(placed,
+                                      {"positions": {HOLDER: "yard"}})
+        assert moved["positions"][OCCUPANT] == "vessel_antechamber"
+        assert moved["positions"][HOLDER] == "yard"
+
+    def test_a_carriage_ledger_is_not_released_by_a_declared_position(self):
+        """Scoped to the PLACE form, which is the class this landing created.
+        A body in a pocket cannot walk out of it, and the carry derivation
+        that says so is untouched -- the migration floor again."""
+        scene = _scene(interior=False, mode="pocket")
+        scene["rooms"]["yard"] = {"name": "Yard", "desc": "Out.",
+                                  "adjacent": [{"to": "hall",
+                                                "barrier": "open_door"}]}
+        out = merge_scene_with_diff(scene,
+                                    {"positions": {OCCUPANT: "yard"}})
+        assert out["contained"][OCCUPANT]["mode"] == "pocket"
+        assert out["positions"][OCCUPANT] == "hall"
+
+
 class TestTheIndexAndTheOpacity:
     def test_a_parented_room_indexes_itself_on_its_entity(self):
         """One fact written twice, and only one spelling was ever derived.
@@ -204,7 +310,7 @@ class TestTheIndexAndTheOpacity:
         scene["entities"][HOLDER_ID].pop("interior_rooms")
         merged = merge_scene_with_diff(scene, {})
         assert set(merged["entities"][HOLDER_ID]["interior_rooms"]) == {
-            "vessel_throat", "vessel_core"}
+            "vessel_antechamber", "vessel_core"}
 
     def test_an_unindexed_body_interior_still_defaults_to_membrane(self):
         """A leak OUTWARD if it does not: the room outside looks straight in."""
@@ -212,9 +318,29 @@ class TestTheIndexAndTheOpacity:
         scene["entities"][HOLDER_ID]["interior_rooms"] = []
         merged = merge_scene_with_diff(scene, {})
         assert merged["entities"][HOLDER_ID].get("enclosure") == "membrane"
-        edge = [e for e in merged["rooms"]["vessel_throat"]["adjacent"]
+        edge = [e for e in merged["rooms"]["vessel_antechamber"]["adjacent"]
                 if e.get("to") == "hall"]
         assert edge and edge[0]["barrier"] == "membrane"
+
+    def test_a_non_body_parented_room_is_not_indexed(self):
+        """SCOPED, and the scope is the migration story. The index this pass
+        maintains is read by `infer_body_enclosures` -- which is body-scoped
+        already -- and by two things that are not: the Director's destruction
+        specialist gate and the commit-side room-removal protection set.
+        Measured read-only against the author's live corpus while this landing
+        was being repaired: 53 rooms carry `parent_entity`, 15 of them across
+        13 chats were NOT indexed on their entity, and every one of those 15
+        belongs to a NON-body -- lift cars, turbolifts, a ship, a police box.
+        Indexing them would have flipped a Director specialist on in five
+        stories and made six stories' interiors un-prunable, with nothing
+        asking for either. So the derivation serves the class that needs it,
+        and the corpus is left exactly as it was."""
+        scene = _scene()
+        scene["attire"].pop(HOLDER)
+        scene["entities"][HOLDER_ID]["kind"] = "vehicle"
+        scene["entities"][HOLDER_ID]["interior_rooms"] = []
+        merged = merge_scene_with_diff(scene, {})
+        assert merged["entities"][HOLDER_ID]["interior_rooms"] == []
 
     def test_a_vehicle_interior_keeps_its_see_through_doorway(self):
         """Scoped to bodies. A lift car is not a mass and its open hatch is
