@@ -200,3 +200,64 @@ class TestThroughTheMerge:
         assert merged["contacts"] == []
         assert merged["contained"] == {}
         assert merged["positions"]["Hinami"] == "corridor"
+
+
+class TestTheOtherSpelling:
+    """The commoner one, and the one the first cut missed.
+
+    A row can say "this body, inside that one" -- which names the enclosed
+    party in the actor slot -- or it can say "my part touches your part, in a
+    cavity", which names NEITHER. `target_interior` does not settle it: in the
+    first spelling the cavity belongs to the target, in the second it belongs
+    to the actor, and the row carries nothing that says which.
+
+    Found by an independent audit of a second story after the first fix
+    landed: `Mirelle.tongue -> Hinami.torso, interior, mouth` minted nothing,
+    so a body inside a mouth was again seen by the mouth.
+    """
+
+    _UNSET = object()
+
+    def _touch(self, scales=_UNSET, **over):
+        row = {"actor": "Mirelle", "actor_part": "tongue", "target": "Hinami",
+               "target_part": "torso", "target_interior": "mouth",
+               "manner": "press", "relation": "interior", "motion": "settled"}
+        row.update(over)
+        # A sentinel, not `or`: `{}` is the COMPARABLE-BODIES case and is
+        # falsy, so `scales or default` silently made it the disparate one.
+        if scales is self._UNSET:
+            scales = {"Hinami": 0.25}
+        return _scene(contacts=[row], scales=scales)
+
+    def test_the_asymmetry_names_the_enclosed_body(self):
+        scene = self._touch()
+        assert derive_containment_from_contacts(scene) == ["Hinami"]
+        assert scene["contained"]["Hinami"]["in"] == "Mirelle"
+        assert containment_conceals(scene, "Mirelle", "Hinami")
+
+    def test_it_works_with_the_slots_the_other_way_round(self):
+        scene = self._touch(actor="Hinami", actor_part="hand",
+                            target="Mirelle", target_part="palm")
+        assert derive_containment_from_contacts(scene) == ["Hinami"]
+
+    def test_it_survives_the_magnitude_being_wrong(self):
+        """Measured: the live scene carried 0.25 for a body its own prose
+        called three inches (~0.05), so a hand-fits threshold answered False
+        for a body being held in a palm. The asymmetry holds at both."""
+        for ratio in (0.25, 0.05, 0.4):
+            scene = self._touch(scales={"Hinami": ratio})
+            assert derive_containment_from_contacts(scene) == ["Hinami"], ratio
+
+    def test_two_comparable_bodies_abstain_rather_than_guess(self):
+        """No asymmetry, no answer. The explicit whole-body spelling stays the
+        way to say it, and a wrong guess here would enclose the wrong party."""
+        scene = self._touch(scales={})
+        assert derive_containment_from_contacts(scene) == []
+        assert scene["contained"] == {}
+
+    def test_a_surface_touch_between_unequal_bodies_is_not_an_enclosure(self):
+        """The asymmetry only decides DIRECTION. Whether there is an enclosure
+        at all is still the interior relation's job -- a giant holding someone
+        in an open palm has not swallowed them."""
+        scene = self._touch(relation="surface", target_interior="")
+        assert derive_containment_from_contacts(scene) == []
