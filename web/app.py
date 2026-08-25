@@ -5911,6 +5911,28 @@ def _require_step_turn(sid: int):
     return s
 
 @app.post("/api/steps/{sid}/edit")
+def _mark_applied_step_stale(s):
+    """A step whose content was APPLIED to durable state cannot have that
+    content swapped without re-applying it.
+
+    The `ord>` sweep beside every call site says "everything downstream is now
+    suspect", and for every step but one that is the whole answer. `commit` is
+    the persistence boundary: its variant is the record of what the world
+    ledgers were actually made to hold, and it has NO downstream step for that
+    sweep to mark. So swapping it changed which lineage the turn CLAIMED while
+    the ledgers went on holding the other one, and the swap left no trace --
+    `resume_key_for_turn` reported the turn complete and `_require_turn_resolved`
+    let the next turn start on top of it.
+
+    Marking the step itself stale is the subtracting answer: the turn is
+    recorded as needing recommit, and the resume re-derives durable state
+    through the real restore-and-run path. Re-applying the stored variant
+    directly is not available -- commit's side effects are not idempotent.
+    """
+    if s["key"] == "commit":
+        qi("UPDATE steps SET stale=1 WHERE id=?", (s["id"],))
+
+
 def step_edit(sid: int, body: dict = Body(...)):
     s = _require_step_turn(sid)
     with transaction():
@@ -5918,6 +5940,7 @@ def step_edit(sid: int, body: dict = Body(...)):
         vid = qi("INSERT INTO variants(step_id,content,created,active) VALUES(?,?,?,1)",
                  (sid, json.dumps(body.get("content")), time.time()))
     qi("UPDATE steps SET stale=1 WHERE turn_id=? AND ord>?", (s["turn_id"], s["ord"]))
+    _mark_applied_step_stale(s)
     return {"variant_id": vid}
 
 @app.post("/api/steps/{sid}/activate")
@@ -5931,6 +5954,7 @@ def step_activate(sid: int, body: dict = Body(...)):
         qi("UPDATE variants SET active=0 WHERE step_id=?", (sid,))
         qi("UPDATE variants SET active=1 WHERE id=?", (variant_id,))
     qi("UPDATE steps SET stale=1 WHERE turn_id=? AND ord>?", (s["turn_id"], s["ord"]))
+    _mark_applied_step_stale(s)
     return {"ok": True}
 
 @app.delete("/api/turns/{tid}")
