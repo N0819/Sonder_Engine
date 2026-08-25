@@ -49,6 +49,9 @@ rather than prose, and everything points at them.
 - [`TESTING.md`](guides/TESTING.md) — test tiers, dependency policy, CI layout.
 - [`LANGUAGE_PACKS.md`](guides/LANGUAGE_PACKS.md) — build and validate a full
   story/UI language pack while preserving canonical English schemas.
+- [`LIVING_WORLD.md`](guides/LIVING_WORLD.md) — what happens when nobody is
+  looking: Charter, the Living World ladder, off-screen life and background
+  life, the six gates that must agree, and the traps in each.
 - [`EXTENSIONS.md`](guides/EXTENSIONS.md) — write, install and distribute an
   extension: the manifest, the Python facade, `window.Sonder`, the four state
   homes, and what is and is not actually restricted.

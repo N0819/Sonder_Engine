@@ -2184,6 +2184,85 @@ that loses them. Either compose them the way the misplaced ones are composed,
 or stop offering fields the engine does not read.
 
 
+### 1.79 What the Living World audit found
+
+**Found:** the 2026-08-24 survey behind `docs/guides/LIVING_WORLD.md` — eleven
+agents over `world/living_world.py`, `world/offscreen.py`, the twenty-nine
+`charter_*` modules, background life and the lifecycle paths. The guide states
+the behaviour; these are the places the behaviour is wrong.
+
+**Defects.**
+
+- **The string `"false"` opts a character INTO paid off-screen ticks.**
+  `character_offscreen_agent` applies `bool()`, and `bool("false")` is `True`.
+  The legacy branch applies the same `bool()`, so neither path is safe
+  (`story/character_schema.py:1166`, `:1400`). An imported or hand-edited sheet
+  carrying `"offscreen_agent": "false"` buys model calls. The card default is a
+  real boolean, so this reaches only sheets that have been through a text
+  editor or a lenient importer — which is exactly where it will not be noticed.
+- **Two `cap=0` off-by-ones**, both appending before the bound check:
+  `full_agent_candidates(cap=0)` returns one candidate
+  (`world/offscreen.py:1338`) and `fired_consequences_at(cap=0)` returns one
+  item (`world/living_world.py:463`). Unreachable from today's callers, which
+  guard `cap <= 0` first; inherited by any new caller. `profile_candidates`
+  has the correct shape beside one of them (`:1399`).
+- **Charter diagnostics leak across frames.** `charter_diagnostics` selects
+  `scheduled_events` with `seed LIKE 'charter:%'` and no `frame_id` predicate
+  (`world/charter_runtime.py:1161`), so the diagnostics surface for one era
+  lists charter events minted in every era of the chat — unlike `registry_for`
+  beside it, which is frame-scoped.
+- **Frame split and merge drop Charter and off-screen state.** A split seeds
+  the away frame from seven parent keys and `charters`, `offscreen_epoch` and
+  `offscreen_plans` are not among them (`world/spatial_frames.py:844`); a merge
+  reconciles four keys, so nothing a Charter, a plan or a standing intention
+  did in the away frame comes back (`:998`). Whether that is a defect or a
+  deliberate severance is undecided — it is undocumented either way, which is
+  the part that is certainly wrong.
+- **`pick_background_reactors` has no room filter.** `here` is computed and
+  used for only two of the eight qualifying signals
+  (`persist/commit_background.py:1541`), so a presence with dialogue history in
+  a room the player left ten turns ago still qualifies and can be picked.
+  `managed_presences` DOES filter by ambient scope
+  (`agents/background.py:553`), so the two paths disagree about co-presence.
+
+**Untested.** No test in the suite covers Charter, Living World or off-screen
+state across archive, branch or checkpoint. The coverage is real — every table
+and key involved is in `chat_archive.WORLD_TABLES` and
+`checkpoints.snapshot_state` — but it is inferred from those lists rather than
+demonstrated, and the frame-split gap above is what an untested inference
+looks like when it is wrong.
+
+**Unwired.** `world/structure.py`'s frontier-expansion trio —
+`materialize_planned_fringe` (`:184`), `prepare_frontier_expansion` (`:266`),
+`apply_frontier_mutations` (`:350`) — is exported at `:410` and has no
+production caller anywhere in `agents/`, `persist/`, `web/`, `story/` or
+`tools/`.
+
+**Docstrings that overstate, each now contradicted by the guide.** Fix the
+docstring or fix the code; do not leave both.
+
+- "five approaches" in `world/living_world.py:1` and `web/app.py:4547` —
+  `LIVING_WORLD_APPROACHES` has four. Approach C became core carrier physics.
+- `pick_background_reactors` returning `[]` as "the common case"
+  (`persist/commit_background.py:1401`) — `dialogue_turns` is itself a
+  qualifying signal and records are pruned only by promotion, so once any
+  tracked presence has spoken it qualifies on every later turn. Repeated
+  verbatim in `agents/runtime.py:736` and `docs/guides/PIPELINE.md:697`.
+- `ambient` withholding "a line directed at one of them"
+  (`story/scene.py:2087`, `agents/background.py:559`) — the test is divergent
+  hear levels, not direction.
+- `agents/background.py:16` naming the gate `pick_background_reactor`
+  (singular); the stage calls the plural with `cap`.
+- `agents/background.py:32` calling `pending_reply` "a one-beat debt"; the
+  write sets `expires_turn = turn_idx + 2`.
+- `world/charter_run.py:20` saying the consequence-fuse wiring is "deliberately
+  NOT done here" — it exists, in `charter_runtime`.
+- `world/charter_model.py`'s "five primitives" headline, against four
+  normalizers, with `normalize_body` outside the five; and its `authority`
+  described as "a closed list" where `normalize_post` closes nothing
+  (`:145`). The real closed set is `charter_decide.ORDER_ACTIONS`.
+
+
 ## 2. Roadmap
 
 Features the architecture intends and has not built. Ordered by value per unit
