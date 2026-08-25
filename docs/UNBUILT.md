@@ -2282,6 +2282,36 @@ already does exactly that (`quotedRegions`) for the speaker tinting, and its
 comment explains why the region rather than the match is the unit.
 
 
+### 1.81 A part-qualified pose support is invisible to the pose sweeper
+
+**Found:** closing the chat-87 view-register class, 2026-08-25.
+
+`_pose_referent` now resolves `<owner>.<part>` through its owner, and
+`normalize_scene_subjects` folds the owner half so one field holds one
+spelling. `normalize_scene_poses` was not touched: it still checks a support
+against `positions` and the room's `anchors` **by whole string**, so
+`Kestrel.hand` matches neither and the sweeper never clears it. The pose keeps
+naming a body after that body has left the room.
+
+Adjacent and real, and deliberately left out of the render fix: it changes
+what gets CLEARED rather than what gets rendered, and it belongs with the
+contact-bound pose invalidation rather than with the referent resolver.
+
+### 1.82 Two narrator checks that fire and buy nothing
+
+**Found:** the same day, adding them.
+
+`_check_speech_marking` and `_check_attire_fidelity` score the page against
+records the payload was already entitled to, and both ship as plain warnings
+-- not in `_ENFORCEABLE_PREFIXES`, so neither buys a correction rewrite.
+
+That is the right default and not the right resting place. Promotion is a
+MEASUREMENT: 0fec229 measured the reuse check being fooled 4 of 5 times by the
+attribution label, and demoted the ordering check on exactly that evidence.
+Each enforceable firing costs a whole narrator call, so the question for both
+is their false-positive rate over a live run, and nobody has counted yet.
+
+
 ## 2. Roadmap
 
 Features the architecture intends and has not built. Ordered by value per unit
