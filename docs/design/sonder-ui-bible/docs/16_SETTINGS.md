@@ -2,163 +2,91 @@
 
 ## Purpose
 
-Settings should make a complex engine configurable without presenting a wall of internals.
+Settings makes a complex engine configurable without placing every system on
+the Scene canvas. It is a full workspace and the canonical home of detachable
+configuration modules.
 
 ## Categories
 
-### Experience
+- **Presentation**: canvas, Custom Theme, reading, interface scale, sound,
+  motion/effects, language, and accessibility.
+- **AI Connections**: providers, credentials, models, connection tests, and
+  generation defaults.
+- **Content**: content preferences, data handling, export, and deletion.
+- **Add-ons**: extensions, permissions, state, and extension settings.
+- **Maintenance**: updates, storage, backups, logs, repair, and rebuild.
+- **Advanced**: prompts, raw parameters, diagnostics, experiments, and
+  developer-facing controls.
 
-- theme;
-- interface scale and density;
-- story typography and width;
-- language;
-- sound and notifications;
-- motion and effects;
-- transparency;
-- Accessibility Mode and granular accessibility controls.
+Presentation is intentionally in Settings. It does not become a top-shelf
+destination. Frequent access is solved by docking Custom Theme or another
+eligible subsection.
 
-### AI Connections
+## Workspace composition
 
-- provider setup;
-- credentials;
-- model selection;
-- connection tests;
-- generation defaults;
-- context/cost information where available;
-- advanced per-role configuration behind disclosure.
+Settings uses one compact searchable category/section navigator and one focused
+detail workspace. It may use a single ledger, in-page anchors, or staged
+overview/detail based on width; it must not recreate the old rail plus card
+dashboard or expose a second Settings taxonomy.
 
-### Content
+## Detachable sections
 
-- adult-content preference;
-- safety-related presentation;
-- data handling;
-- exports and deletion;
-- privacy-related explanation.
+An eligible section bar may be dragged or moved to a toolbar, tab group, or
+floating layer. Its source then becomes `Locate in Workbench`. Full category
+navigation, dangerous operations, and long editors remain in Settings.
 
-### Add-ons
+One live module rule applies. Docking AI Connections or Custom Theme does not
+create a second editor with independent save state.
 
-- extension list;
-- enable/disable state;
-- permissions;
-- update status;
-- extension-specific settings.
+## Custom Theme
 
-### Maintenance
+Custom Theme exposes:
 
-- application updates;
-- storage use;
-- backups;
-- logs;
-- repair and rebuild tools;
-- database or cache maintenance in plain language.
+- six role swatches: Canvas ink, Glass panel, Control chrome, Ambient accent,
+  Interface text, Source accent;
+- Glass Density 0-100%, default 20%;
+- Bar Opacity 0-100%, default 60%;
+- Selected Strength 0-100%, default 6%;
+- Frost Level 0-100%, default 50%;
+- Ambient Light X/Y, radius, and intensity;
+- canvas library and gradient authoring;
+- Reset and save/preset actions.
 
-### Advanced
+All values update the live workbench preview immediately. Invalid palettes do
+not replace the last valid applied palette. Save and reset ownership remains in
+Settings even when the module is docked.
 
-- prompt editing;
-- raw generation parameters;
-- technical-detail stream;
-- diagnostics;
-- experimental features;
-- developer-oriented controls.
+## Ambient-light instrument
 
-## Layout
+The control depicts the screen with simple crosshairs. A diamond moves the
+light source. Two concentric controls adjust size and intensity. Pointer,
+keyboard arrows, Home/End, numeric values, and screen-reader labels provide
+equivalent operation.
 
-Desktop uses:
+## Color picker
 
-- searchable category column;
-- full detail pane;
-- sticky save/apply status where needed;
-- section anchors for long pages.
+The picker is compact, frosted, and built from the same material. It provides
+saturation/value, hue, swatch, hex, RGB, and eyedropper when available. It must
+fit inside a docked Custom Theme module without overflowing the viewport.
 
-Mobile uses:
+## AI Connections
 
-- searchable category list;
-- full-screen section pages;
-- visible Back to category list;
-- selected category brought into view when using horizontal subnavigation;
-- sticky action footer for explicit Apply/Connect operations.
-
-## Search
-
-Settings search should match:
-
-- labels;
-- descriptions;
-- common synonyms;
-- old names where terminology changed;
-- related concepts.
-
-Results show category context and navigate directly to the setting. Search must not expose secret values.
-
-## Section design
-
-Settings sections use flat framed groups or continuous forms, not a dashboard of independent cards.
-
-Each section should include:
-
-- heading;
-- concise description when the consequence is not obvious;
-- controls aligned to a consistent field grid;
-- save state;
-- optional reset for that section;
-- errors near affected controls.
-
-## Advanced disclosure
-
-Advanced settings remain a stable top-level category rather than an invisible "expert mode" that makes features appear and disappear.
-
-Within Advanced:
-
-- group by task;
-- warn before expensive or dangerous changes;
-- use monospace only for genuine technical data;
-- include reset/default controls;
-- explain when a change affects current stories versus future generation;
-- preserve raw editors for expert use without making them the only editor.
-
-## AI Connections UX
-
-Provider setup should follow a staged pattern:
-
-1. Choose provider.
-2. Enter credentials or endpoint.
-3. Test connection.
-4. Choose default model.
-5. Confirm and save.
-
-The flow should explain failures in plain language and preserve entered values where safe. A user should not need to interpret an HTTP error before learning that the key is invalid or the server cannot be reached.
-
-## Appearance and themes
-
-Theme choices should use compact visual previews and clear names:
-
-- Carbon Signal;
-- Ash and Brass;
-- Midnight Ink;
-- Parchment Night;
-- Legacy section.
-
-Theme selection may use a ledger or card grid, but selection should be restrained. Do not fill a large card with cyan.
-
-## Accessibility
-
-Accessibility Mode is visible in Experience, not hidden inside Advanced. Individual controls remain available after the preset is enabled.
+The compact module may show route health, selected models, and latency. Secret
+entry, provider creation, and complex role mapping open the full Settings
+workspace. Connection failures use plain language and retain safe input.
 
 ## Saving
 
-- Browser-local appearance changes may apply immediately.
-- Credentials require explicit Connect/Save.
-- Expensive or structural changes require Apply.
-- Long prompt editors retain drafts.
-- Save status is visible.
-- Leaving with invalid unsaved changes prompts the user.
+- Presentation preview applies immediately and persists only after a valid
+  theme update according to the implementation contract.
+- Credentials require explicit Save/Connect.
+- Long prompts retain drafts.
+- Structural, expensive, destructive, or security-sensitive changes require
+  explicit action.
+- Leaving invalid unsaved work prompts the user.
 
 ## Dangerous operations
 
-Delete, reset, rebuild, repair, or clear operations must:
-
-- state the affected object;
-- state whether the action is reversible;
-- avoid ambiguous labels such as Confirm;
-- require a dedicated confirmation for high-impact actions;
-- separate the destructive action from ordinary control clusters.
+Delete, reset, repair, rebuild, and clear actions name the affected data,
+reversibility, and consequence. They never appear in a draggable module merely
+because the source section is detachable.

@@ -1,68 +1,49 @@
 # Visual Polish Checklist
 
+## Composition
+
+- [ ] Canvas owns the field; prose remains unboxed.
+- [ ] Top shelf is one integrated material band.
+- [ ] Toolbars look translucent and belong to the same material family.
+- [ ] Story/composer measure remains visually fixed.
+- [ ] Workbench and Focus both look intentional.
+
 ## Geometry
 
-- [ ] Ordinary free-standing controls use 3-5 px radii.
-- [ ] Equivalent controls use the same radius.
-- [ ] Nested radii descend logically.
-- [ ] No unexplained pills or large SaaS-style radii.
-- [ ] No repeated literal chamfers or sci-fi corner brackets.
-- [ ] Focus geometry matches control geometry.
-
-## Spacing and alignment
-
-- [ ] All peer controls have identical height.
-- [ ] Spacing values come from the approved scale.
-- [ ] Headings, fields, and content share clear alignment axes.
-- [ ] Icons sit inside fixed boxes.
-- [ ] Icon visible mass is optically centered.
-- [ ] Labels in one row share a baseline or exact vertical center.
-- [ ] Chevrons and trailing actions use a fixed column.
-- [ ] Badges do not float above or below text.
-- [ ] Selected/hover/loading states do not shift layout.
+- [ ] Every free-standing edge uses 4 px rounded corners.
+- [ ] Internal shared edges are square and single-bordered.
+- [ ] No chamfers, pills, large card radii, or corner brackets.
+- [ ] Tonal top/bottom bevel is restrained and consistent.
 
 ## Typography
 
-- [ ] Interface sans is the default UI voice.
-- [ ] Serif is limited to prose and composer roles.
-- [ ] Monospace is limited to genuine technical/index content.
-- [ ] Uppercase is limited to short metadata.
-- [ ] No essential text is smaller than the approved minimum.
-- [ ] Long labels wrap or truncate intentionally.
-- [ ] Numeric columns use tabular figures where appropriate.
+- [ ] Geist Sans owns ordinary UI.
+- [ ] Geist Mono is limited to small values/status/technical detail.
+- [ ] Newsreader owns story prose and title.
+- [ ] Ordinary UI remains in the 8-13 px hierarchy.
+- [ ] No oversized destination heading or decorative index remains.
 
-## Color and surfaces
+## Material and color
 
-- [ ] Cyan is sparse and semantic.
-- [ ] Amber signals attention or warning, not decoration.
-- [ ] Surface hierarchy is clear without large shadows.
-- [ ] Glass is controlled and has a solid fallback.
-- [ ] Scene imagery does not tint application chrome.
-- [ ] Status is not color-only.
-- [ ] Curated themes preserve the same state semantics.
+- [ ] Glass, bars, selection, and frost use shared theme values.
+- [ ] Text/focus remain readable on worst-case canvas.
+- [ ] Accent is sparse and semantic.
+- [ ] No CRT grain, scanline, RGB mask, dither, noise, or shimmer.
+- [ ] Solid and high-contrast fallbacks preserve hierarchy.
 
-## Icons
+## Modules and feedback
 
-- [ ] No emoji or platform text glyph remains as a primary icon.
-- [ ] Stroke weights are consistent.
-- [ ] Icon style is consistent within a cluster.
-- [ ] Icon-only controls have tooltips and accessible names.
-- [ ] Unfamiliar actions retain visible labels.
+- [ ] Title/tab hover communicates drag without a separate glyph.
+- [ ] Tab insertion caret aligns exactly.
+- [ ] Neighbor movement previews resulting order.
+- [ ] Shelf rail and ghost match actual destination geometry.
+- [ ] Floating has no trailing duplicate target.
+- [ ] Splitters are visually quiet but discoverable.
 
-## Control clusters
+## Details
 
-- [ ] Related controls are clustered where appropriate.
-- [ ] Unrelated controls remain separate.
-- [ ] Internal separators are subtle and consistent.
-- [ ] Cluster does not wrap.
-- [ ] Destructive segment is separated or moved to More.
-- [ ] Focus identifies the exact segment.
-
-## Composition
-
-- [ ] Primary action is visible.
-- [ ] Negative space feels deliberate.
-- [ ] No large unfinished black region.
-- [ ] Indexing is restrained.
-- [ ] Decorative technical motifs earn their place.
-- [ ] Screen remains coherent with accents desaturated.
+- [ ] Peer bars are exactly 30 px; top shelf exactly 40 px.
+- [ ] Labels share baselines and trailing actions occupy stable columns.
+- [ ] Portraits are approximately 90% of row height.
+- [ ] Borderless minus/plus align bottom-right and highlight on hover/focus.
+- [ ] State changes do not shift layout.

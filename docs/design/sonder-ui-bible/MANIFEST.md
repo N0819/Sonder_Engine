@@ -1,50 +1,55 @@
 # Package Manifest
 
-**Package:** Sonder UI Design Bible 1.2
-**Generated:** 2026-08-24
-**Markdown documents:** 39  
-**Total bytes excluding this manifest:** 137,530
+**Package:** Sonder UI Design Bible 2.0
 
-All package content is UTF-8 Markdown containing ASCII text. SHA-256 values below apply to the individual files.
+**Generated:** 2026-08-25
 
-| File | Description | Bytes | SHA-256 |
-|---|---|---:|---|
-| `CHANGELOG.md` | Design bible version history. | 1,829 | `d50a0ff198cd913b7f33919e6eec7a85cffe59b6b1507be9069dda1e55bc9023` |
-| `README.md` | Package index, authority, and usage instructions. | 5,278 | `fcf6875c7eac94c96c5601d83df635245faac847356436df3ceeb2c52a25cc9a` |
-| `checklists/DESIGN_REVIEW_RELEASE_GATE.md` | Evidence and blocker checklist for release sign-off. | 1,399 | `530122c9265f1763def006d8cfb7f6fde3be3c455a8c6d4cc1b198bb4447624b` |
-| `checklists/RESPONSIVE_CHECKLIST.md` | Desktop, tablet, mobile, and short-height checklist. | 1,509 | `cec2560dd1ab63f666f999011df5350d6fe64413bf85a8829394ed21719b9738` |
-| `checklists/UX_FLOW_CHECKLIST.md` | Concise user-flow and recovery checklist. | 1,832 | `33e7382174040565e80b1694f8ef9d068c8ef77d32be52287febe757325cbd66` |
-| `checklists/VISUAL_POLISH_CHECKLIST.md` | Concise visual and optical review checklist. | 2,445 | `d6dd353929e83a53e06681dbbcfb4583f088dca20033b9169a2d0e54e2104596` |
-| `docs/00_NORTH_STAR.md` | One-page product and visual north star. | 2,686 | `e78ae3de3849be55219a50f2aae8a53738969fcb8cfcfa90da7663828dadeefa` |
-| `docs/01_SCOPE_AND_GOVERNANCE.md` | Scope, authority, deviation policy, and completion definition. | 3,314 | `d29bbdaab19d65e819b89d1690f799642d39a1286bb87b449280e0c8a4aa6d65` |
-| `docs/02_REFERENCE_TRANSLATION.md` | Translation of Prime Intellect and EVE Photon references into Sonder principles. | 3,408 | `c5c5d4029d067c191a8134bbb76de93d36adf51809fda8bed40dcdcde2ece967` |
-| `docs/03_PRODUCT_CHARACTER.md` | Sonder interface personality, emotional qualities, and signature traits. | 2,350 | `c54f0a603914846985b21d0c927677478b34c89309c7f79811ee97a673502a92` |
-| `docs/04_EXPERIENCE_PRINCIPLES.md` | Core UX principles for novice clarity and expert capability. | 4,009 | `210954bb8e34a11b4554762f4ab1f43864cb2fe3c03952d220a93af9e4b86871` |
-| `docs/05_INFORMATION_ARCHITECTURE.md` | Play, Library, Settings architecture and spatial rules. | 3,367 | `355f2b45968b4e46e6d6988746036437c4812df2149154f93d15c3eaf24e07b0` |
-| `docs/06_VISUAL_GRAMMAR.md` | Atmosphere, chrome, hierarchy, glass, indexing, depth, and composition rules. | 4,420 | `e8b574705bb4fba918be37db4a5c9b8a4c03c54170ddd2d8becba48aca7c2770` |
-| `docs/07_SOFT_PRECISION_GEOMETRY.md` | Tight 3-5 px corner and bevel system. | 3,502 | `59b3ff5c0dd4ae5d8e35a4a28e17a9ad7c4bfb03d68f63f62fe982d493404f69` |
-| `docs/08_SPACING_ALIGNMENT_AND_DENSITY.md` | Spacing scale, optical alignment, control heights, and density modes. | 4,197 | `05aa24570828fdd87d8110e64fac35d81bc515cbcd63c6ff64d333bbe7942fb0` |
-| `docs/09_TYPOGRAPHY.md` | Three-role typography, sizes, hierarchy, and usage limits. | 4,674 | `8d8422c0bf6b0c7c77b5d40f9da5768db7990f30b5c570e699c110d40c5b1c6f` |
-| `docs/10_COLOR_SURFACES_AND_THEMES.md` | Semantic color, Carbon Signal palette, controlled glass, and curated themes. | 4,725 | `61204c4dec4f6b32f8f15678e71ef5d74ad22f588bdf9826aeef3e79e8d7a125` |
-| `docs/11_ICONOGRAPHY.md` | Original SVG icon construction and optical-alignment rules. | 4,000 | `401e1848b75233171c27f05d3026ea090df7635763dfea47fa3523a9f39d9417` |
-| `docs/12_INTEGRATED_CONTROL_CLUSTERS.md` | Action, selector, split-action, and instrument cluster design. | 5,702 | `403702af94a84e2140f5271d1d8be438755432caad5a64d974ffacc7b6fe15aa` |
-| `docs/13_COMPONENT_CONTRACTS.md` | Shared contracts for controls, lists, panels, dialogs, states, and feedback. | 5,903 | `b4a1d0bb75d422b362776563696ab455ed7c5d34aa01389e2983374a4db199e3` |
-| `docs/14_PLAY_WORKSPACE.md` | Story-first Play workspace, transcript, composer, inspector, and mobile rules. | 5,118 | `80ed63e397ae9a29da3e25da04ea953028b8db5a063614d951f179bfcf20ddfd` |
-| `docs/15_LIBRARY.md` | Unified Library, story scopes, search, ledgers, associations, and editors. | 4,359 | `a593e5ed3317ecc29ad90b4fd37ddcdf4ab3bfb6a36d6677976d884ea3ccc8e9` |
-| `docs/16_SETTINGS.md` | Layered Settings structure, search, AI connections, Advanced, and saving. | 4,091 | `a0293571ce3c9ba572312c3b9c1890be22ba6b5b4726f1168a679c47eb45887c` |
-| `docs/17_NEW_STORY_AND_FIRST_RUN.md` | Unified setup routes, review, onboarding, authentication, and guest join. | 3,386 | `a902da1e656909e364aa4ae2b15be8dbb2eadc3a9bb8c91f2d446f42a85476e9` |
-| `docs/18_RESPONSIVE_AND_MOBILE.md` | Feature-parity responsive doctrine and reference viewports. | 4,070 | `4a32bc759aa5a07dea2b5608c46e4b34bd027569514645bac4fb421891b692d7` |
-| `docs/19_ACCESSIBILITY_AND_PERSONALIZATION.md` | Structural accessibility, Accessibility Mode, and personalization. | 4,076 | `6d7b885f76385afa9f41db6709f2f16e41f6be18c5ec497430ce9b75b3c306ac` |
-| `docs/20_CONTENT_AND_TERMINOLOGY.md` | Plain-language voice, names, actions, errors, progress, and localization. | 2,984 | `6109df5d51935b39f26f912b42be6ddf78468e0af190449309252c92ba6a4216` |
-| `docs/21_MOTION_SOUND_AND_FEEDBACK.md` | Motion, sound, status, save feedback, and effects-level rules. | 2,856 | `cd6c4ca1f27b66f74904caafa60035366dfb31bcee35cd6f64507075fef53d6f` |
-| `docs/22_UX_FLOWS_AND_EXPERT_ACCELERATION.md` | New/returning/expert flows, shortcuts, pinning, recents, and friction budgets. | 4,266 | `15ffbc77a3801867b59974dc9b30876ff8f99fac7737086649e591edc8092c31` |
-| `docs/23_ANTI_PATTERNS.md` | Named visual, alignment, interaction, and UX failure modes. | 6,303 | `646f894bc3cdc89e518079f612dbb11b11f15a959cbc7cd2bd98e174aa82547d` |
-| `docs/24_TOKENS_AND_MEASUREMENTS.md` | Reference CSS tokens, dimensions, colors, opacity, motion, and layout ranges. | 4,218 | `949e12a33e4cf09c7271f2c1768a622ed1d3ac6447e890b7ca9192a30deb3849` |
-| `docs/25_AUDIT_RUBRIC_AND_QUALITY_GATES.md` | Severity model, visual/UX review, state matrix, screenshot matrix, and release evidence. | 4,929 | `8d00fb58a1493ffd7a29d43ae7146d24972d30767a1d0b3b2321e79a48568060` |
-| `docs/26_DECISION_REGISTER.md` | Locked design decisions consolidated from discovery. | 3,887 | `7d84077f33dbd59bf71eedd186c368f47911c11ee6370a5313ef7cca22ca1a74` |
-| `docs/27_REFERENCE_NOTES.md` | Official reference links, source interpretation, and originality policy. | 2,681 | `3be497705fd98d71fa6153a3695479211bcc1d5878ac3d87b9a15719c86edbd0` |
-| `docs/28_GLOSSARY.md` | Defined design-system and UX terminology. | 2,614 | `2bf69833e5cba60796d31c3be01af6b2a2cb3b769a7c99a4da5a8358d185be95` |
-| `docs/29_CHANGE_CONTROL.md` | Amendment categories, approval, exception, and versioning process. | 2,239 | `1433dbdc62bea9b6939406025c7ca40fde5ec97d9ef4d29d68d8d54920f5bf0b` |
-| `templates/COMPONENT_SPEC_TEMPLATE.md` | Reusable component specification template. | 1,912 | `45db636a630561ad82075a875b831a8da7384435b3322ab9978a42a8f9309ab6` |
-| `templates/SCREEN_POLISH_AUDIT_TEMPLATE.md` | Reusable screen-level visual polish audit template. | 1,492 | `c241e8cf639f2d6ebcc2557180de723d37b7468281978bffad69daf218ff9ce2` |
-| `templates/UX_FLOW_AUDIT_TEMPLATE.md` | Reusable task-flow UX audit template. | 1,500 | `d085d39d25356cb28a830a581b22b3677d6daafc788eff15abc9873b25b7dd87` |
+**Canonical Markdown documents:** 39
+
+**Total bytes excluding this manifest:** 105,647
+
+All canonical package content is UTF-8 Markdown. SHA-256 values apply to the
+individual files at Design Bible 2.0 publication. Retired amendments and
+link-preserving tombstones are excluded because they are non-normative.
+
+| File | Bytes | SHA-256 |
+|---|---:|---|
+| [CHANGELOG.md](CHANGELOG.md) | 1602 | `2b0233a768331eb073cc08c3712c1bd2de9ce677db002bc24aabadaf711ab52f` |
+| [checklists/DESIGN_REVIEW_RELEASE_GATE.md](checklists/DESIGN_REVIEW_RELEASE_GATE.md) | 2029 | `89319b7a7f3058de894e1ebf7c572c2d2108e1384b5ed19c93287d0179dd9aea` |
+| [checklists/RESPONSIVE_CHECKLIST.md](checklists/RESPONSIVE_CHECKLIST.md) | 1502 | `aa1d84dac1b7d8a18df0f3219ef04c51d5bc3013088af6529cbce9b9cce0428f` |
+| [checklists/UX_FLOW_CHECKLIST.md](checklists/UX_FLOW_CHECKLIST.md) | 1759 | `abb8de6b05fa80adb5ee089887048cc1b24331e99b2207587dd67d92ccfcffa1` |
+| [checklists/VISUAL_POLISH_CHECKLIST.md](checklists/VISUAL_POLISH_CHECKLIST.md) | 1831 | `b1f2ee9149d87a86e8f9d658857897ef83ed389b37dc9ea806243b35f9332200` |
+| [docs/00_NORTH_STAR.md](docs/00_NORTH_STAR.md) | 2447 | `353d722665fcd1bf8ac900d12b78a39c15555a1ad68d8a7bcbacabffe7f1eb78` |
+| [docs/01_SCOPE_AND_GOVERNANCE.md](docs/01_SCOPE_AND_GOVERNANCE.md) | 3255 | `506e4337a80c75916fa8fbfbe4c9bd5ff6a48184c5d74ed6658933217dae4a67` |
+| [docs/02_REFERENCE_TRANSLATION.md](docs/02_REFERENCE_TRANSLATION.md) | 2491 | `9426f98bea5ecac859cf224f3fe96ca6ed48258585f39e665ae8e4034d600b85` |
+| [docs/03_PRODUCT_CHARACTER.md](docs/03_PRODUCT_CHARACTER.md) | 2102 | `09745156bca163923ae4850da76ba21d8074efb3030101b4608ee801c3c153f4` |
+| [docs/04_EXPERIENCE_PRINCIPLES.md](docs/04_EXPERIENCE_PRINCIPLES.md) | 2759 | `ff9d8ccc6231ec342b1040b50fd3cdea11eac9dff82bad2270bbb213d81b4741` |
+| [docs/05_INFORMATION_ARCHITECTURE.md](docs/05_INFORMATION_ARCHITECTURE.md) | 3047 | `65c8dc9ed91daf05db580e2c6810aec50b72f7950a88c595fd41d1f1cbe5573e` |
+| [docs/06_VISUAL_GRAMMAR.md](docs/06_VISUAL_GRAMMAR.md) | 3243 | `f10d2dae0b93b200efe0e545d9dd9dc534bd521b9cce487b82a4f4fc953efd39` |
+| [docs/07_SOFT_PRECISION_GEOMETRY.md](docs/07_SOFT_PRECISION_GEOMETRY.md) | 2128 | `5b63c24446bd98ee09008e0d42b59f545437583372294a733fd0fde95ed80b7c` |
+| [docs/08_SPACING_ALIGNMENT_AND_DENSITY.md](docs/08_SPACING_ALIGNMENT_AND_DENSITY.md) | 2946 | `63f0bda49ebcc6399e0aa51993ab3568b466aa26b2523b2f5d0a08ae3b2dd39b` |
+| [docs/09_TYPOGRAPHY.md](docs/09_TYPOGRAPHY.md) | 2894 | `1b04743d10af9dc8f22831e1ab0986ad7185be39c7756d94cc5e862c4aae0f6a` |
+| [docs/10_COLOR_SURFACES_AND_THEMES.md](docs/10_COLOR_SURFACES_AND_THEMES.md) | 3306 | `173639cee55b122cfb4eb14731f909c154e478e877cab5e7f5394ec0fa91b52c` |
+| [docs/11_ICONOGRAPHY.md](docs/11_ICONOGRAPHY.md) | 1858 | `11835c36350463e81cc6a7f30fc020d7f9dbbf26b15e4baecba34e454c057182` |
+| [docs/12_INTEGRATED_CONTROL_CLUSTERS.md](docs/12_INTEGRATED_CONTROL_CLUSTERS.md) | 2375 | `83d9a09793c44c8b3d17b19c3b8b515b1c4406850a8abc3c191561fd355701be` |
+| [docs/13_COMPONENT_CONTRACTS.md](docs/13_COMPONENT_CONTRACTS.md) | 4456 | `0f71a7df903c11f2e22e95a982d880c9a6dacffa547ce3f0f5f51850b9fb2708` |
+| [docs/14_SCENE_WORKSPACE.md](docs/14_SCENE_WORKSPACE.md) | 3748 | `cb9b49acfc3f03480ff7b17ce1315e22720f8b8f01dba903553b9889f363be08` |
+| [docs/15_LIBRARY.md](docs/15_LIBRARY.md) | 3073 | `eba4a736bb4e65ab60323ee35262b6e1b71fe82746f3705a9d039a5d96681d25` |
+| [docs/16_SETTINGS.md](docs/16_SETTINGS.md) | 3588 | `8144a8f65839e8bbb780b2c66de967782b8358b7f1537c95e17765f2c6403433` |
+| [docs/17_NEW_STORY_AND_FIRST_RUN.md](docs/17_NEW_STORY_AND_FIRST_RUN.md) | 1771 | `d10e333bbfd6e38ca3e1e9deaf1d9b0349c6efb8035f81ab69080e9a1ae9f895` |
+| [docs/18_RESPONSIVE_AND_MOBILE.md](docs/18_RESPONSIVE_AND_MOBILE.md) | 3352 | `c83d4124dc63dfceb7c16d811af49b549ef7f1d44de87546dbe78bc60941b7e2` |
+| [docs/19_ACCESSIBILITY_AND_PERSONALIZATION.md](docs/19_ACCESSIBILITY_AND_PERSONALIZATION.md) | 2713 | `fdfc70ad633497969c5a84c78dac39551909f186a5ce563632584fcafaab9794` |
+| [docs/20_CONTENT_AND_TERMINOLOGY.md](docs/20_CONTENT_AND_TERMINOLOGY.md) | 2395 | `39f63d566e0efcb94d2ad4a3f13c27f997d6f268c56e1ca980823bbf45b853fa` |
+| [docs/21_MOTION_SOUND_AND_FEEDBACK.md](docs/21_MOTION_SOUND_AND_FEEDBACK.md) | 2135 | `65e3ee38b4e07944cfc0b3001ee58a9e65a3d1342a107de31d4a4e082da80c39` |
+| [docs/22_UX_FLOWS_AND_EXPERT_ACCELERATION.md](docs/22_UX_FLOWS_AND_EXPERT_ACCELERATION.md) | 3069 | `ece74ef8daad20bacc728bd3b6f61e9f1cba4e5476a1aa47b13ac0cba8f71dcb` |
+| [docs/23_ANTI_PATTERNS.md](docs/23_ANTI_PATTERNS.md) | 4840 | `4b9f0349fef77bac374cfb9db3c2b624c4ef336600def9765454efc46ba4ea50` |
+| [docs/24_TOKENS_AND_MEASUREMENTS.md](docs/24_TOKENS_AND_MEASUREMENTS.md) | 3110 | `7f1604ca0c5146d90ace2bfc743dbebe68a83d8010d6371d6e58cf36d9ed8a44` |
+| [docs/25_AUDIT_RUBRIC_AND_QUALITY_GATES.md](docs/25_AUDIT_RUBRIC_AND_QUALITY_GATES.md) | 3817 | `1e9b9c95bdbbcd8313f69860e7dcd8033871a87d7250ecc021da4b99095ad01f` |
+| [docs/26_DECISION_REGISTER.md](docs/26_DECISION_REGISTER.md) | 3432 | `34b718812ebaa984b097e134c0008b715cf3a82828f83359a01fb88ede8b75a5` |
+| [docs/27_REFERENCE_NOTES.md](docs/27_REFERENCE_NOTES.md) | 2556 | `6e01c1936d4ce7b9a8e69cb7a5ae27c23fdef24005232c6094dc13c74e948489` |
+| [docs/28_GLOSSARY.md](docs/28_GLOSSARY.md) | 1966 | `f0408c604ec1644fcf5fffa9f18d7902d82734b3f256841503bbdd21628e36fa` |
+| [docs/29_CHANGE_CONTROL.md](docs/29_CHANGE_CONTROL.md) | 2440 | `260ace8f68ab2fd9286779a723da518397a4164d7f57a590dec88f1b2044e494` |
+| [README.md](README.md) | 5492 | `6c4256755983c8f39cd5d1d2e3fb301e48bbb625cd7b7e1026c32f962449e182` |
+| [templates/COMPONENT_SPEC_TEMPLATE.md](templates/COMPONENT_SPEC_TEMPLATE.md) | 1794 | `5f2ed931b6c40a309c838bf725c83f1dd28545c7ab5442ae782a1cc3d059766e` |
+| [templates/SCREEN_POLISH_AUDIT_TEMPLATE.md](templates/SCREEN_POLISH_AUDIT_TEMPLATE.md) | 1196 | `bb1c1a8c81f0a604d3f2f1d1435477cb584661853c4ad7306b3c8ea56a6555d1` |
+| [templates/UX_FLOW_AUDIT_TEMPLATE.md](templates/UX_FLOW_AUDIT_TEMPLATE.md) | 1130 | `5e5e2bc88afb9ab042e5ee4948da592e1ad1a14406ed6cf6ec392c0b169e6b48` |

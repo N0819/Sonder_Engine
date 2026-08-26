@@ -2,80 +2,57 @@
 
 **Date:**  
 **Auditor:**  
-**Bible version:** 1.0  
+**Bible version:** 2.0
 **Build/commit:**  
-**User type:** new / returning / experienced / guest
+**Input:** pointer / keyboard / touch / screen reader
 
-## Goal
+**Viewport:**
 
-Describe the outcome the user is trying to achieve.
+## Goal and starting state
 
-## Starting conditions
-
-- Device:
-- Viewport:
-- Existing data:
-- Connection state:
-- User knowledge:
+- User outcome:
+- Active workspace/story:
+- Toolbar/module arrangement:
+- Connection/save state:
 
 ## Expected path
 
-1. [Step]
-2. [Step]
-3. [Step]
+1. [Action]
+2. [Feedback/preview]
+3. [Completion/recovery]
 
 ## Observed path
 
-1. [Step and hesitation/error]
-2. [Step]
-3. [Step]
+1. [Action and hesitation]
+2. [Feedback]
+3. [Outcome]
 
 ## Metrics
 
-- Actions to completion:
+- Actions to result:
+- Incorrect target changes:
 - Backtracks:
-- Dead ends:
+- Precision retries:
+- Arrangement/work lost:
 - Labels requiring explanation:
-- Errors encountered:
-- Work lost:
-- Time to first useful result:
 
-## Findings
+## Finding
 
-### [Finding ID] [Title]
-
-- **Severity:** P0 / P1 / P2 / P3
-- **Stage:** orientation / action / feedback / recovery / completion
+- **ID/severity:**
+- **Stage:** orientation / direct manipulation / feedback / recovery / persistence
 - **Observed problem:**
-- **Why it matters:**
-- **Bible principle:**
-- **Recommended correction:**
-- **Acceptance criteria:**
+- **Bible decision:**
+- **Correction:**
+- **Acceptance:**
 
-## New-user review
+## Parity
 
-- [ ] Primary action obvious.
-- [ ] Internal concepts deferred.
-- [ ] No blocked first screen.
-- [ ] Help is contextual.
-- [ ] Error recovery is plain.
-
-## Expert review
-
-- [ ] Frequent actions are direct.
-- [ ] Keyboard path exists where appropriate.
-- [ ] State is remembered.
-- [ ] More menu is stable.
-- [ ] Compact mode remains usable.
-
-## Mobile parity
-
-- [ ] Same capability is reachable.
-- [ ] Back returns to preserved context.
-- [ ] Touch targets are adequate.
-- [ ] Software keyboard does not block completion.
-- [ ] No hover-only dependency.
+- [ ] Pointer and keyboard/menu reach the same result.
+- [ ] Touch does not require precision impossible at 44 px targets.
+- [ ] Escape/invalid release restores origin.
+- [ ] Responsive transition preserves state.
+- [ ] Screen-reader announcement identifies result.
 
 ## Outcome
 
-Pass / Pass with P2/P3 / Blocked by P0/P1
+Pass / Pass with P2-P3 / Blocked by P0-P1

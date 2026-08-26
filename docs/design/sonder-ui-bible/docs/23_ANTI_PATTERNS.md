@@ -1,283 +1,149 @@
 # 23. Anti-Patterns
 
-## Purpose
+## Generic glass dashboard
 
-This catalog names recurring failure modes so review discussions can be specific. These are not minor style preferences; repeated violations create visible inconsistency and UX friction.
+**Symptoms:** dark cards, blur, cyan accents, and modern fonts are present, but
+the result is still a conventional dashboard.
 
-## Visual anti-patterns
+**Correction:** restore the living canvas, integrated top shelf, unboxed prose,
+fixed reading measure, modular docks, and shared material hierarchy. Ingredients
+without composition do not constitute the style.
 
-### Dark SaaS cards
+## Opaque sidebars
 
-Symptoms:
+**Symptoms:** top shelf is frosted while sidebars become solid black columns.
 
-- large rounded cards;
-- broad shadows;
-- generous empty padding;
-- every section floating independently;
-- dashboard statistics without task value.
+**Correction:** toolbar bodies follow Glass Density; bars follow Bar Opacity;
+both use Frost Level and canvas-derived ambient light.
 
-Correction:
+## Detached primary buttons
 
-- use continuous ledgers, section frames, split panes, and 3-5 px geometry;
-- reserve cards for discrete objects or choices.
+**Symptoms:** Scene, Library, and Settings appear as three bordered buttons
+floating inside or beside the top bar.
 
-### Cyan flood
+**Correction:** merge them into one connected shelf object with centered labels,
+shared hairlines, and outer corners only.
 
-Symptoms:
+## Numbered chrome
 
-- multiple large filled cyan controls;
-- cyan selected cards, tabs, borders, links, and icons all at once;
-- accent used as decoration.
+**Symptoms:** `01`, `02`, `03`, figure numbers, or machine codes decorate
+destinations and module headers.
 
-Correction:
+**Correction:** remove them. Use labels and spatial hierarchy. Numbers remain
+only when the content itself is ordered or measured.
 
-- reserve cyan for current selection, focus, and one immediate primary action;
-- use neutral tone and hairline structure for ordinary grouping.
+## Oversized type
 
-### Over-indexing
+**Symptoms:** destination headings reach 20-36 px, module text grows to body-copy
+scale, or story prose looks low-resolution.
 
-Symptoms:
+**Correction:** use the canonical 8-13 px UI hierarchy and 15 px prose default.
+Reserve 18-22 px for exceptional setup/empty states.
 
-- numbers on every row, button, field, and heading;
-- decorative `01` labels with no navigational value;
-- indices louder than the content.
+## Sci-fi font saturation
 
-Correction:
+**Symptoms:** every title and label is mono, uppercase, tracked, or rendered in
+a display-tech font.
 
-- use indices only for major destinations, tools, long ledgers, and real sequences.
+**Correction:** Geist Sans owns ordinary UI, Geist Mono owns small technical
+values, and Newsreader owns fiction.
 
-### Monospace saturation
+## CRT material simulation
 
-Symptoms:
+**Symptoms:** scanlines, RGB pixels, grain, sparkling additive noise, dithering,
+or animated screen texture overlays.
 
-- all navigation, headings, labels, and metadata rendered as monospace;
-- interface feels like a terminal;
-- small technical text becomes tiring.
+**Correction:** remove the layer. Use clean translucent material, fine bevels,
+ambient light, and state accents.
 
-Correction:
+## Chamfer confusion
 
-- restore sans-serif as the default UI voice;
-- keep monospace for identifiers, indices, code, and diagnostics.
+**Symptoms:** 45-degree cut corners are added because the design calls for a
+bevel.
 
-### Unstructured black space
+**Correction:** use 4 px rounded corners with tonal top/bottom edges. No
+chamfers.
 
-Symptoms:
+## Redundant title switcher
 
-- a small content fragment floating in a large plain black region;
-- no reading stage, contextual empty state, or deliberate alignment;
-- interface looks unfinished.
+**Symptoms:** clicking the current story title opens a story picker while
+Library already owns the archive.
 
-Correction:
+**Correction:** keep story identity informational and switching in Library.
 
-- maintain the content measure, stage treatment, contextual framing, and clear next action.
+## Permanent system exposure
 
-### Glass everywhere
+**Symptoms:** all engine systems are visible in Scene, or Story Tools becomes a
+fixed inspector regardless of use.
 
-Symptoms:
+**Correction:** expose eligible systems through modules, Library, Settings, and
+Widget Shelf. The default shows only what earns permanent space.
 
-- every panel translucent;
-- story imagery changes chrome hue;
-- blur hurts performance and readability;
-- no clear surface hierarchy.
+## Duplicate module state
 
-Correction:
+**Symptoms:** Settings keeps one Custom Theme editor while a docked copy has its
+own draft or controls.
 
-- use controlled glass only on contextual or atmospheric surfaces;
-- keep dense forms and primary chrome more solid.
+**Correction:** one live instance. The source locates the existing module.
 
-### Decorative HUD drift
+## Separate drag handles
 
-Symptoms:
+**Symptoms:** a tiny glyph or handle must be grabbed while the title/tab looks
+draggable, or dragging selects page text.
 
-- scanlines, glowing brackets, crosshairs, dense grids, pulsing status lights;
-- interface clashes with fantasy and contemporary stories.
+**Correction:** make the title/tab the drag surface, apply hover/cursor feedback,
+and suppress selection only during an active drag.
 
-Correction:
+## Ambiguous docking
 
-- use restrained instrument precision through geometry and alignment, not cockpit decoration.
+**Symptoms:** tiny tab targets compete with above/below targets; the target
+switches unexpectedly; no exact preview is shown.
 
-## Alignment anti-patterns
+**Correction:** reserve the full title strip for tabbing, use broad visible rails
+for shelves, preview order live, and apply stable target ownership.
 
-### Icon-box drift
+## Lagging float target
 
-Symptoms:
+**Symptoms:** a second ghost trails the actual window or is labeled `Float
+target`.
 
-- icons have different visible sizes;
-- some sit high or low;
-- labels shift based on SVG path bounds;
-- chevrons and trailing actions wander.
+**Correction:** use the dragged module as the floating preview. The canvas itself
+is the destination.
 
-Correction:
+## Silent removal
 
-- fixed icon boxes, grid-authored SVGs, optical corrections recorded per icon, common alignment axes.
+**Symptoms:** dropping in arbitrary empty space removes a module or loses it.
 
-### Mixed control heights
+**Correction:** invalid release restores origin. Only Widget Shelf target/menu
+stores a module.
 
-Symptoms:
+## Capacity lies
 
-- adjacent buttons and inputs differ by 2-6 px;
-- text looks vertically misaligned;
-- clusters feel assembled rather than designed.
+**Symptoms:** a full dock shows a shelf target, or tab count is mistaken for
+shelf count.
 
-Correction:
+**Correction:** compute capacity from usable height and count shelf groups only.
 
-- use tokenized heights and exact peer dimensions.
+## Breathing story measure
 
-### Arbitrary padding
+**Symptoms:** composer and prose stretch when toolbars close and rewrap when
+they open.
 
-Symptoms:
+**Correction:** anchor them to a fixed reading token independent of dock tracks.
 
-- 7, 9, 11, 13, 15, 17 px values scattered across components;
-- no repeated rhythm;
-- adjacent panels feel unrelated.
+## Bottom-navigation fork
 
-Correction:
+**Symptoms:** mobile replaces the integrated top shelf with a different bottom
+navigation architecture.
 
-- use the spacing scale; document rare optical exceptions.
+**Correction:** preserve the top-shelf workspaces and stage toolbars/modules as
+overlays or sheets.
 
-### State-induced layout shift
+## Decorative canvas chrome
 
-Symptoms:
+**Symptoms:** crosshair glyphs, vertical lines, rulers, `Scene / Live`, or
+unrelated diagnostic labels float over the story.
 
-- selected border becomes thicker;
-- loading label changes button width;
-- validation pushes actions unexpectedly;
-- hover changes geometry.
-
-Correction:
-
-- reserve space; use inset or color changes; keep dimensions stable.
-
-## Interaction anti-patterns
-
-### Button field
-
-Symptoms:
-
-- five separate small buttons with repeated borders and gaps;
-- weak relationship between actions;
-- excessive visual noise.
-
-Correction:
-
-- use an Action Cluster when actions belong to one task.
-
-### Cluster misuse
-
-Symptoms:
-
-- unrelated actions merged because they fit;
-- destructive action beside primary action;
-- mixed toggles and commands with unclear states;
-- cluster wraps on mobile.
-
-Correction:
-
-- split by task, separate danger, move low-frequency actions to More, never wrap.
-
-### Hover-only capability
-
-Symptoms:
-
-- essential actions appear only on mouse hover;
-- touch and keyboard users cannot discover them.
-
-Correction:
-
-- maintain visible or focus-revealed routes; keep touch actions accessible.
-
-### More-menu dumping ground
-
-Symptoms:
-
-- frequent actions hidden in More;
-- menu order changes by screen;
-- user must hunt for basic tasks.
-
-Correction:
-
-- direct display for frequent actions; stable More ordering for secondary actions.
-
-### Duplicate homes
-
-Symptoms:
-
-- the same global feature appears in Play, Library, and Settings;
-- users cannot predict where to return.
-
-Correction:
-
-- one primary home, optional contextual shortcut that links back to the canonical surface.
-
-## UX anti-patterns
-
-### Internal model first
-
-Symptoms:
-
-- onboarding asks about personas, roles, schemas, raw state, or prompts before the story goal is clear.
-
-Correction:
-
-- ask in player language; reveal internal structure after the user has a reason to understand it.
-
-### Blocked first screen
-
-Symptoms:
-
-- missing AI provider prevents any story setup;
-- user cannot start blank or use existing material.
-
-Correction:
-
-- gate only the generation action that requires AI.
-
-### Mobile compression
-
-Symptoms:
-
-- desktop columns simply narrow;
-- tiny labels, fixed-width fields, hidden actions, horizontal toolbars.
-
-Correction:
-
-- recompose into staged views, sheets, bottom navigation, and reduced visible actions.
-
-### Empty state without recovery
-
-Symptoms:
-
-- "No data" or "Select an item" in a large blank panel;
-- no create, import, or clear-filter action.
-
-Correction:
-
-- explain context and provide the next useful action.
-
-### Save ambiguity
-
-Symptoms:
-
-- user cannot tell whether changes are saved;
-- autosave and explicit save are mixed without explanation;
-- leaving may lose long text.
-
-Correction:
-
-- hybrid saving with stable status and recoverable drafts.
-
-### Technical error leakage
-
-Symptoms:
-
-- raw HTTP or stack errors shown as the primary message;
-- no recovery guidance;
-- user work disappears.
-
-Correction:
-
-- plain outcome, likely cause, next step, work-preservation statement; raw detail expandable in Advanced.
-
-## Review rule
-
-Finding one anti-pattern is not permission to patch only the visible instance. Review the component family and root cause so the same defect does not survive elsewhere.
+**Correction:** remove them unless they communicate a real current state. The
+canonical low-contrast Story identity and scene/location figure label are
+allowed instrument metadata; arbitrary numbers and decorative geometry are not.

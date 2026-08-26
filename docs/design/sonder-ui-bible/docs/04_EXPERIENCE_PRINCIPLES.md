@@ -1,133 +1,71 @@
 # 04. Experience Principles
 
-## 1. Story first
+## 1. Atmosphere owns the field
 
-The transcript, composer, and immediate story state receive the strongest visual priority in Play. Interface chrome should become quieter as the user reads.
+The canvas is full-screen and visually continuous. Chrome sits over it; it does
+not partition it into a dashboard background.
 
-## 2. Obvious first action
+## 2. Prose is not a panel
 
-Every screen must make the most likely next action clear. A screen with many capabilities but no visible next step is unfinished.
+Story text receives a stable measure, contrast veil, and typographic hierarchy,
+but no enclosing glass card. The composer is operable chrome and may use glass.
 
-Examples:
+## 3. Deliberate beats more
 
-- Empty Play: create or open a story.
-- Empty Library: create, import, or browse by type.
-- Disconnected AI: connect a provider, with a plain explanation of why.
-- New Story: choose one of three understandable starting paths.
+Expose only the top shelf, story, composer, current status, and intentionally
+opened modules. Complexity belongs in Library, Settings, and the Widget Shelf.
 
-## 3. Clear places for clear jobs
+## 4. One canonical home, many useful placements
 
-- Play is for the current story.
-- Library is for reusable material and story associations.
-- Settings is for the application and engine configuration.
+Library owns reusable material. Settings owns application configuration. Scene
+owns immediate story operation. A docked module is a live view of its owner,
+not a duplicate home or copied state.
 
-Do not place a global maintenance action in the Play toolbar because space is available.
+## 5. Arrangement is a user tool
 
-## 4. Progressive disclosure
+Users may collapse either toolbar, resize it, resize shelves, merge modules as
+tabs, reorder tabs, split a tab into a shelf, float a module, or return it to
+the Widget Shelf. Every operation must be predictable, reversible, and
+available without drag.
 
-New users should see the minimum required to proceed. Advanced functions remain discoverable through:
+## 6. Drop intent must be obvious
 
-- contextual inspector sections;
-- More menus;
-- Settings search;
-- Advanced settings;
-- tooltips and help;
-- optional pinned tools;
-- keyboard accelerators.
+The title/tab strip means tab. A visible horizontal rail means new shelf. The
+Scene canvas means float. The explicit return zone means Widget Shelf. Targets
+must not oscillate across tiny pointer movements, and the preview must not lag
+behind the dragged object.
 
-Progressive disclosure must not become feature hiding. A secondary action should remain reachable in a predictable place.
+## 7. The reading measure does not breathe with chrome
 
-## 5. Expert acceleration without novice clutter
+Opening or closing toolbars changes surrounding workspace, not the width of the
+story composer or prose. Layout movement must never make text rewrap merely
+because a toolbar closes.
 
-Experienced users need speed through:
+## 8. Theme control is real control
 
-- stable keyboard shortcuts;
-- recent items;
-- pinned contextual tools;
-- remembered panel state;
-- search and quick navigation;
-- compact desktop density;
-- control clusters that reduce travel and repeated chrome.
+Canvas, palette roles, glass density, bar opacity, selected strength, frost,
+and ambient-light position/size/intensity are user-adjustable. Defaults are
+calibrated, not minimums disguised as sliders.
 
-These features should not add permanent visual noise to the novice path.
+## 9. Static at rest
 
-## 6. Same capability, adapted presentation
+No CRT grain, sparkling noise, scanline, shimmer, or ornamental loop runs at
+rest or during activity. State is communicated by text, restrained color,
+progress, and purposeful structural motion.
 
-Desktop and mobile may differ in arrangement, density, and disclosure. They may not differ in essential capability.
+## 10. Compact is the default
 
-Desktop may use:
+Ordinary interface text lives mainly between 9 and 12 px on desktop; story
+prose defaults to 15 px. Large headings are reserved for exceptional entry or
+empty states and must not break the workbench scale.
 
-- persistent navigation;
-- resizable inspectors;
-- multi-pane Library views;
-- keyboard and hover enhancements;
-- denser rows.
+## 11. Accessibility is equivalent control
 
-Mobile may use:
+Keyboard and menu actions can perform every module move. Reduced motion,
+solid surfaces, high contrast, larger text, and touch geometry preserve the
+same mental model rather than creating a separate interface.
 
-- bottom navigation;
-- staged views;
-- full-screen sheets;
-- explicit overflow menus;
-- larger touch targets;
-- fewer simultaneously visible actions.
+## 12. Story choice belongs in Library
 
-## 7. Plain language before implementation language
-
-Use the language of the player's goal.
-
-Prefer:
-
-- AI Connections;
-- Story Tools;
-- Appearance;
-- Background work;
-- Current Story;
-- Start blank;
-- Use my Library.
-
-Reserve implementation terms such as raw state, schema, API role, context length, and prompt template for Advanced or help text.
-
-## 8. Stable location and memory
-
-Users should not relearn where an action lives after each redesign or viewport change. Preserve conceptual location even when the presentation changes.
-
-Examples:
-
-- Story-specific style remains in Story Tools on desktop and the equivalent Story Tools sheet on mobile.
-- AI provider settings remain in AI Connections.
-- Reusable characters remain in Library even when shown through a story scope.
-
-## 9. Visible system state
-
-The interface must communicate:
-
-- saving;
-- saved;
-- save failure;
-- generation in progress;
-- background work;
-- disconnected state;
-- validation problems;
-- unavailable features;
-- destructive consequences.
-
-Do not rely on color alone. Do not use indefinite spinners without explanatory text when the wait is meaningful.
-
-## 10. Forgiving editing
-
-Use hybrid saving:
-
-- autosave small, low-risk edits after a short delay;
-- retain local drafts for long text;
-- require explicit Apply, Connect, Install, Generate, Delete, or similar actions for consequential changes;
-- warn before losing invalid or unsaved work;
-- offer undo where practical.
-
-## 11. Quiet at rest, clear in response
-
-Inactive surfaces should be serene. Interaction feedback should become precise and obvious only when the user acts or the system needs attention.
-
-## 12. No decorative debt
-
-Every line, index, grid, glow, animation, and tonal layer must earn its place by clarifying hierarchy, state, grouping, or atmosphere. Decoration that cannot explain its purpose is debt.
+The top-shelf story identity is static context. Clicking it must not create a
+second story picker that competes with the full archive.

@@ -1,127 +1,75 @@
 # 19. Accessibility and Personalization
 
-## Design position
+## Position
 
-The default interface preserves the approved visual reference. Structural accessibility is mandatory. Visual changes that materially alter contrast, transparency, motion, density, or typography are available through an Accessibility Mode preset and granular controls.
+The compact atmospheric reference is the default. Accessibility is not a
+different product skin; it is equivalent control and readable material within
+the same workbench architecture.
 
 ## Structural requirements
 
-All player-facing surfaces must provide:
+Every surface provides:
 
-- semantic landmarks;
-- correct control roles;
-- accessible names for icon-only controls;
-- logical heading hierarchy;
-- full keyboard operation;
-- visible focus;
-- focus containment and restoration in dialogs/sheets;
-- no essential hover-only action;
-- touch targets appropriate for mobile;
-- browser text scaling without broken layouts;
-- errors described in text;
-- status not communicated by color alone;
-- reduced-motion support from first paint.
+- semantic landmarks and workspace-current state;
+- correctly labeled tabs, toolbars, separators, dialogs, and status;
+- logical keyboard order and visible focus;
+- non-drag commands for all module placement and ordering;
+- focus containment/restoration for overlays and Widget Shelf;
+- text errors and non-color status;
+- reduced-motion support from first paint;
+- browser zoom and text scaling without lost controls;
+- 44 px touch hit regions where touch input is expected.
 
-## Accessibility Mode preset
+## Module keyboard model
 
-Accessibility Mode enables a recommended combination of:
+Module action menus provide Move left/right, Merge as tab, Separate, Float, and
+Return to Widget Shelf. Arrow keys resize vertical/horizontal separators in
+announced steps. Tab strips use arrow navigation and an accessible reorder
+command. Escape cancels a drag and restores the exact origin.
 
-- high contrast;
-- solid surfaces or reduced transparency;
-- stronger focus indicators;
-- reduced motion;
-- larger interface text;
-- larger story text;
-- increased spacing and touch targets;
-- color-independent status markers.
+## Theme accessibility
 
-After enabling the preset, each option remains independently editable.
+- Every color role has a name and textual value.
+- Range controls announce 0-100 values and their effect.
+- Ambient X/Y, radius, and intensity expose numeric values and keyboard input.
+- Invalid contrast is explained before a theme can be persisted.
+- Essential state never depends on faint text or color alone.
 
-## Granular controls
+## Presets and controls
 
-### High contrast
+Accessibility controls include:
 
-Strengthens text, borders, selected state, and status differentiation. It should not invert the entire design or introduce uncontrolled bright surfaces.
+- Solid surfaces;
+- High contrast;
+- Strong focus;
+- Reduced motion;
+- Larger interface;
+- Larger story text;
+- Roomy controls/hit targets;
+- Color-independent status;
+- Canvas/effects reduction.
 
-### Solid surfaces
+Each control remains independently editable after any preset is applied.
 
-Disables or substantially reduces glass and backdrop transparency while preserving hierarchy.
+## Compact text
 
-### Strong focus
+Eight-to-ten-pixel text is allowed only for supplementary coordinates, values,
+and status. It may not be the sole label for an essential action. Larger
+Interface scales the role system together; it does not selectively inflate
+headings and break cohesion.
 
-Uses a more prominent 2-3 px focus treatment and optional focus fill.
+## Transparency and contrast
 
-### Reduced motion
+Glass controls must pass contrast against the worst supported canvas. A local
+veil or higher material alpha is preferred to text outlines. Solid surfaces
+remove blur/transparency without changing layout. High contrast strengthens
+text, edge, focus, and selection while preserving restrained accent semantics.
 
-Removes nonessential transitions, weather movement, parallax, and animated stage effects. It should not merely slow them.
+## Screen readers
 
-### Larger UI
-
-Scales navigation, controls, labels, and hit targets without scaling story prose unless requested.
-
-### Larger story text
-
-Scales prose and composer independently.
-
-### Increased spacing
-
-Moves Comfortable density toward larger row heights and gaps.
-
-### Color-independent status
-
-Adds icons, labels, patterns, or shapes so warning, success, selected, and error states remain distinguishable.
-
-## Contrast policy
-
-Default primary text and critical controls should aim for strong contrast. Secondary nonessential metadata may remain quieter to preserve the reference treatment, but it must not carry essential information alone. Accessibility Mode corrects low-contrast secondary presentation.
-
-## Keyboard model
-
-- Tab reaches primary regions and controls in a logical order.
-- Arrow keys operate tabs, segmented selectors, menus, and roving-focus toolbars where appropriate.
-- Escape closes transient layers when safe.
-- Focus returns to the invoking control.
-- Keyboard users can reach turn actions, Story Tools, Library row actions, Settings search, and dialog actions.
-- Focus does not become trapped in code editors or extension views.
-
-## Screen-reader behavior
-
-- Primary destinations expose current state.
-- Dialogs and sheets have labels and descriptions.
-- Save state and background work are announced politely.
-- Raw token streaming is not announced by default.
-- Repeated decorative indices are hidden when they add no semantic value.
-- Icon-only controls expose action-specific labels.
-- Error summaries link to affected fields when practical.
-
-## Personalization
-
-Personalization should improve comfort without changing meaning:
-
-- curated themes;
-- Legacy themes;
-- interface density;
-- interface scale;
-- prose size and width;
-- motion/effects level;
-- transparency;
-- pinned Story Tools;
-- remembered pane width;
-- notification and sound preferences.
-
-Personalization settings should be browser-local unless there is a clear account-level reason to synchronize them.
-
-## Accessibility review states
-
-Every major surface must be reviewed in:
-
-- default reference mode;
-- Accessibility Mode;
-- solid surfaces only;
-- reduced motion only;
-- largest UI size;
-- largest prose size;
-- keyboard only;
-- touch only;
-- 200 percent browser zoom;
-- long localized labels.
+- Workspace changes announce Scene, Library, or Settings.
+- Module location changes announce destination and order.
+- Shelf capacity and invalid destinations are explained.
+- Saving/generation status is polite and concise.
+- Decorative canvas/grid layers are hidden.
+- Story prose remains ordinary readable document content.

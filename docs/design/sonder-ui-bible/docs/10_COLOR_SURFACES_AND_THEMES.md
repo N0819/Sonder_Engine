@@ -1,125 +1,95 @@
 # 10. Color, Surfaces, and Themes
 
-## Semantic color model
+## Theme model
 
-Color is assigned by meaning, not by component.
+A Sonder theme is a complete workbench material definition:
 
-- **Cyan**: selection, focus, primary immediate action, active navigation, links, current context.
-- **Amber**: warning, attention, pending operational state, important callout.
-- **Green**: success, connected, complete, healthy.
-- **Red**: error, destructive action, blocked state.
-- **Neutral**: ordinary surfaces, secondary actions, inactive state, structure.
+- canvas;
+- six editable color roles;
+- Glass Density;
+- Bar Opacity;
+- Selected Strength;
+- Frost Level;
+- ambient-light position, size, and intensity;
+- accessibility overrides.
 
-Status must not rely on color alone. Use text, icon, marker, or shape as a second channel.
+The old fixed Carbon Signal/Ash and Brass/Midnight Ink/Parchment Night doctrine
+is retired. Presets may be shipped, but they use this same model and do not
+define different component systems.
 
-## Accent budget
+## Deep Current default
 
-A typical screen should use cyan on:
-
-- the active primary destination;
-- the focused or selected local item;
-- one primary action;
-- links or interactive detail as needed.
-
-Avoid multiple large cyan fills. Most buttons should remain neutral until hover, selection, or active state.
-
-Amber should be rarer than cyan. It is not a secondary decorative accent; it signals attention or operational context.
-
-## Carbon Signal reference palette
-
-The following values are the reference starting point for the default theme:
-
-| Token | Reference value | Purpose |
+| Role | Default | Meaning |
 |---|---|---|
-| `ground-0` | `#080B0D` | deepest application ground |
-| `ground-1` | `#0C1114` | main content ground |
-| `surface-1` | `#11181C` | persistent chrome |
-| `surface-2` | `#172126` | raised surfaces |
-| `surface-3` | `#1D292F` | hover/selected neutral layer |
-| `text-1` | `#E6ECEF` | primary text |
-| `text-2` | `#A7B2B7` | secondary text |
-| `text-3` | `#77858C` | subdued metadata |
-| `border-1` | `#263238` | standard hairline |
-| `border-2` | `#35454D` | strong/focus-adjacent border |
-| `accent-cyan` | `#54CFE2` | selection and primary action |
-| `accent-cyan-soft` | `rgba(84,207,226,.14)` | selected tint |
-| `accent-amber` | `#D5A64A` | warning and callout |
-| `success` | `#69B98F` | success/connected |
-| `error` | `#D56B75` | error/destructive |
+| Canvas ink | `#06090A` | deepest canvas/gradient ground |
+| Glass panel | `#040708` | module bodies and composer |
+| Control chrome | `#0B1213` | top shelf, title bars, tabs |
+| Ambient accent | `#94D9D0` | selection, focus, environmental light |
+| Interface text | `#EFF4F1` | UI text source color |
+| Source accent | `#D2B57A` | source/configuration/attention |
+| Ready | `#86EF79` | ready/healthy state |
+| Error | `#DF7B70` | failure/destructive state |
 
-Values may be tuned through documented visual calibration, but the semantic relationships must remain intact.
+Derived text alpha:
 
-## Surface behavior
+- primary: 88%;
+- muted: 46%;
+- faint: 27% and never essential alone.
 
-### Ground
+## Material controls
 
-The ground may include a subtle radial tonal shift or story backdrop. It must remain quiet enough that content and chrome are stable.
+Every listed slider spans 0-100%:
 
-### Persistent chrome
+| Control | Default | Effect |
+|---|---:|---|
+| Glass Density | 20% | alpha of module bodies and composer |
+| Bar Opacity | 60% | top shelf cells, module bars, tabs, handles, and related bars |
+| Selected Strength | 6% | ambient tint added to selected/current surfaces |
+| Frost Level | 50% | blur from 0 to 24 px; 50% = 12 px |
 
-Navigation, composer, settings shells, and primary inspectors use neutral surfaces with high enough opacity to resist scene tint.
+Bar Opacity applies consistently to Scene/Library/Settings cells, module title
+bars, tab bars, splitters, toolbar reveal controls, and Widget Shelf chrome.
+No family may use an unrelated fixed opacity.
 
-### Raised surfaces
+## Canvas library
 
-Cards, list selection, menus, and local panels use a small tonal step plus a hairline border. Do not use a large shadow as their primary distinction.
+Full Atmospheric is the default. The canvas library also includes named
+gradient presets such as Deep Current and user-authored gradients with two or
+three color stops, direction/focal point, luminance, vignette, and reading
+veil. A canvas can be previewed without changing story data.
 
-### Overlay surfaces
+## Ambient light
 
-Dialogs and sheets use stronger separation and a scrim. High-risk or text-heavy overlays should be more opaque than contextual glass.
+The ambient-light control is a screen-proportion field:
 
-## Controlled transparency
+- crosshairs represent screen X/Y;
+- a central diamond sets light position;
+- one circular handle controls radius/size;
+- one circular handle controls intensity;
+- position, radius, and intensity provide keyboard-adjustable values;
+- the preview updates the canvas and glass together.
 
-Recommended opacity ranges:
+Reference default: X 68%, Y 38%, radius 54%, intensity 64%.
 
-- persistent chrome over backdrop: 0.90-0.97;
-- inspector/context panel: 0.84-0.94;
-- turn plate over imagery: 0.36-0.62 with readability treatment;
-- floating compact utility: 0.82-0.92;
-- solid-surfaces mode: 1.0.
+## Color picker
 
-Blur is optional and should remain mild, generally 2-6 px. Blur must be removed when animated weather, low-power mode, reduced effects, or browser support makes it expensive or unreliable.
+The picker uses the same compact digital material. It includes a saturation/
+value plane, hue strip, live swatch, eyedropper where supported, RGB fields,
+hex value, and explicit accessible labels. It must not fall back to a visually
+unrelated browser control when a custom picker is available; native fallback
+remains acceptable for reliability.
 
-## Curated themes
+## State semantics
 
-### Carbon Signal
+- Ambient accent: current, selected, focus, active drag target.
+- Ready green: connected, saved, available, complete.
+- Source amber: edited, source-owned, configuration attention, pending.
+- Error red: failure, blocked, destructive confirmation.
 
-Charcoal and carbon grounds, signal cyan, amber operational callouts. Default and calibration reference.
+State never relies on color alone.
 
-### Ash and Brass
+## Fallbacks
 
-Warm graphite, muted brass primary accent, restrained cool-blue secondary accent. It should feel material and neutral, not steampunk.
-
-### Midnight Ink
-
-Deep blue-black, desaturated violet, and silver-blue. It should feel quiet and nocturnal, not neon.
-
-### Parchment Night
-
-Dark umber and ink grounds, warm cream text, patinated teal or subdued brass accents. It should support fantasy and historical reading without literal paper texture or ornamental borders.
-
-### Legacy
-
-Existing themes remain available through a compatibility layer. They are clearly labeled Legacy and are not allowed to define new component geometry or state semantics.
-
-## Theme invariants
-
-Every curated theme must preserve:
-
-- surface hierarchy;
-- cyan-equivalent selection semantics;
-- amber-equivalent warning semantics;
-- readable focus;
-- selected versus hover distinction;
-- error/success differentiation;
-- controlled glass behavior;
-- the same geometry and component dimensions.
-
-Themes may change mood and palette. They may not change interaction meaning.
-
-## Scene backdrop rules
-
-- Scene imagery belongs to the story stage, not the application frame.
-- Navigation and settings must not shift hue with the scene.
-- Text plates must maintain readability without reflowing line length when a backdrop appears.
-- Weather and scene effects must sit behind interactive chrome.
-- Backdrop visibility must have a solid and effects-off fallback.
+Solid surfaces force material alpha to 100% and may disable blur. Reduced
+effects removes expensive canvas effects. Neither fallback changes geometry,
+workspace ownership, or selected-state meaning.

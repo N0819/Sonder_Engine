@@ -79,13 +79,15 @@ What any of these has **not** built is registered in
 
 Interface replacement:
 
-- [`sonder-ui-bible/README.md`](design/sonder-ui-bible/README.md) — approved
-  visual, interaction, responsive, accessibility, and terminology direction.
-  It is design context reconciled by the maintained
-  [`INTERFACE.md`](guides/INTERFACE.md); historical completion claims are not
-  current implementation status.
+- [`sonder-ui-bible/README.md`](design/sonder-ui-bible/README.md) — authoritative
+  Design Bible 2.0 for visual, interaction, responsive, accessibility, and
+  terminology direction. Its hash-identified Atmospheric Workbench artifact is
+  the canonical rendered reference. Runtime integration remains reconciled by
+  the maintained [`INTERFACE.md`](guides/INTERFACE.md); design authority does
+  not turn historical completion claims into current implementation status.
 - [`SONDER_UI_DESIGN_BIBLE_ADOPTION_AUDIT_2026-08-21.md`](design/SONDER_UI_DESIGN_BIBLE_ADOPTION_AUDIT_2026-08-21.md)
-  — current-source disposition of the supplied candidate and its evidence.
+  — historical Design Bible 1.x candidate disposition and implementation
+  evidence; superseded for target presentation by Design Bible 2.0.
 - [`EXTERNAL_UI_UX_REFERENCE_REVIEWS.md`](design/sonder-ui-replacement/EXTERNAL_UI_UX_REFERENCE_REVIEWS.md)
   — snapshot-scoped UI/UX reviews of AstraProjecta and ChungusHub: interaction
   ideas to adapt, existing Sonder contracts they corroborate, and patterns to

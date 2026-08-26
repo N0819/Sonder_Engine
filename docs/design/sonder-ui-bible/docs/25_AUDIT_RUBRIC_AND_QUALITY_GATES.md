@@ -1,207 +1,104 @@
 # 25. Audit Rubric and Quality Gates
 
-## Audit model
+## Audit dimensions
 
-Every screen and major component is reviewed in six dimensions:
+Review every major surface in seven dimensions:
 
-1. Visual system conformance.
-2. Alignment and optical polish.
-3. UX clarity and flow.
-4. Responsive behavior.
-5. Accessibility and input method.
-6. State completeness and reliability.
+1. canonical composition;
+2. material and typography coherence;
+3. module/docking behavior;
+4. task clarity and state preservation;
+5. responsive height and width behavior;
+6. accessibility and input parity;
+7. runtime integration and recovery.
 
 ## Severity
 
-### P0 -- Broken
+- **P0 Broken:** data loss, security/runtime authority regression, unreachable
+  core workflow, or arrangement loss.
+- **P1 High:** wrong macro composition, unusable docking, hidden capability,
+  inaccessible drag-only workflow, broken responsive state, or persistent
+  conflict with the canonical reference.
+- **P2 Polish:** visible density, alignment, opacity, type, focus, or feedback
+  defect that weakens cohesion.
+- **P3 Refinement:** nonblocking calibration improvement.
 
-- data loss or security regression;
-- inaccessible core workflow;
-- application cannot boot or navigate;
-- essential capability absent on desktop or mobile;
-- destructive action targets the wrong object;
-- overlapping controls prevent use;
-- save state lies or loses work.
+No P0 may remain. No P1 may remain without a product-owner deviation.
 
-### P1 -- High friction
+## Same-viewport visual review
 
-- primary action unclear;
-- frequent action buried unpredictably;
-- mobile layout unusable;
-- focus trap or restoration failure;
-- severe alignment or overflow defect;
-- theme/accessibility mode breaks the surface;
-- major design-bible violation repeated across a component family.
+At 1600 x 900 compare the implementation directly with the standalone
+Atmospheric Workbench preview. Review in this order:
 
-### P2 -- Polish
+1. full canvas and top-shelf silhouette;
+2. toolbar widths, Scene measure, composer position;
+3. shelf/tab geometry and module order;
+4. type scale and role assignment;
+5. glass, bars, frost, edges, and state strength;
+6. details and optical alignment.
 
-- visible misalignment;
-- inconsistent spacing or radius;
-- icon optical issue;
-- weak copy;
-- nonblocking state inconsistency;
-- localized layout problem;
-- excessive visual noise.
+An implementation that merely contains the named controls does not pass.
 
-### P3 -- Refinement
+## Required interaction evidence
 
-- optional motion tuning;
-- subtle tone or shadow calibration;
-- minor density improvement;
-- secondary metadata refinement.
+- collapse/reopen each toolbar smoothly;
+- composer/prose measure remains unchanged;
+- resize each toolbar and shelf with pointer and keyboard;
+- merge Personas onto Scene Effects as a tab without precision struggle;
+- separate a merged tab;
+- reorder left/middle/right tabs naturally;
+- create shelves only at visible valid rails;
+- reject impossible shelf drops at capacity;
+- float without a lagging duplicate ghost;
+- return explicitly to Widget Shelf;
+- restore origin after invalid drop or Escape;
+- reopen/locate every stored, docked, tabbed, and floating module;
+- preserve arrangement across workspace/viewport changes.
 
-No P0 may remain. No P1 may remain without an explicit approved release deviation.
+## Required height evidence
 
-## Visual conformance review
+- ordinary height exposes two shelf spaces per side;
+- sufficiently tall height exposes three;
+- 2160 px-tall workbench exposes four;
+- tabs do not consume shelf count;
+- shrinking height does not lose modules.
 
-Check:
+## Required theme evidence
 
-- 3-5 px geometry;
-- no unexplained pills or large radii;
-- spacing tokens;
-- exact peer control heights;
-- common alignment axes;
-- sparse accent use;
-- surface hierarchy;
-- controlled glass;
-- typography roles;
-- restrained indexing;
-- no emoji/text glyph icons;
-- control clusters used appropriately;
-- no state-induced layout shift.
+- Glass Density reaches true 0% and 100%; default 20%;
+- Bar Opacity reaches true 0% and 100%; default 60%;
+- Selected Strength reaches true 0% and 100%; default 6%;
+- Frost reaches true 0% and 100%; default 50%;
+- bars across top shelf/module tabs respond together;
+- all six color roles update correctly;
+- ambient X/Y/radius/intensity work by pointer and keyboard;
+- atmospheric and gradient canvases retain readable prose;
+- no grain/noise/activity layer remains.
 
-## Optical review
+## Typography and geometry evidence
 
-At 100 and 200 percent zoom, verify:
+- Geist Sans/Mono/Newsreader roles match the canonical scale;
+- no ordinary heading exceeds the allowed hierarchy;
+- Scene/Library/Settings and module titles have no indices;
+- all free-standing corners are rounded 4 px;
+- no chamfers or unrelated card radius family remains;
+- borderless portrait minus/plus work at all five steps.
 
-- icon visible sizes match;
-- icon centers align;
-- labels share baseline;
-- chevrons and trailing actions align;
-- badges do not float;
-- separators have equal insets;
-- selected indicators are centered;
-- borders remain one pixel where intended;
-- focus ring follows geometry;
-- no half-pixel blur from transforms.
+## Responsive matrix
 
-## UX review
-
-For each surface, answer:
-
-- What is the user trying to accomplish?
-- Is the next action obvious?
-- Is the most frequent action within one action from context?
-- Are secondary actions predictable?
-- Does the screen expose implementation concepts too early?
-- Is work preserved on error or Back?
-- Is save state visible?
-- Is a destructive action clearly separated?
-- Can a new user recover from empty and error states?
-- Can an experienced user move quickly without cluttering the default state?
-
-## State matrix
-
-Every component family must be checked in:
-
-- idle;
-- hover;
-- active/pressed;
-- focus-visible;
-- selected/current;
-- disabled;
-- loading;
-- saving;
-- saved;
-- save failed;
-- validation error;
-- warning;
-- success;
-- destructive;
-- empty;
-- no results;
-- offline;
-- unavailable/permission-restricted;
-- reduced motion;
-- solid surfaces;
-- high contrast;
-- large UI and prose text;
-- long localized content.
-
-## Screenshot matrix
-
-Capture representative screenshots at:
-
-- 1440 x 900;
-- 1280 x 800;
-- 1024 x 768;
-- 768 x 1024;
-- 430 x 932;
-- 390 x 844;
-- 360 x 800;
-- 844 x 390;
-- 1024 x 600.
-
-For each major surface, include:
-
-- populated state;
-- empty state;
-- loading or background task;
-- error/validation state;
-- long-name or localization stress state;
-- default and Accessibility Mode where relevant.
-
-## Required user journeys
-
-- host setup and sign-in;
-- connect AI provider;
-- create story through each setup route;
-- continue and stop a turn;
-- edit/reroll/version a turn;
-- open and pin Story Tools;
-- attach/detach Library material;
-- create/import/export each asset type;
-- edit long character/persona/lore content;
-- search and filter Library;
-- change theme, density, and accessibility settings;
-- install/disable extension;
-- run update/backup/maintenance action;
-- join and play as guest;
-- perform all journeys on mobile.
-
-## New-user audit
-
-Use a tester or review stance with no knowledge of Sonder's internals. Measure:
-
-- time to identify the primary destinations;
-- time to create/open a story;
-- concepts that require explanation;
-- places where the user hesitates;
-- misleading labels;
-- dead ends;
-- errors without recovery.
-
-## Expert-user audit
-
-Use repeat workflows and measure:
-
-- number of actions to frequent tools;
-- keyboard path availability;
-- persistence of pane and filter state;
-- action-cluster efficiency;
-- whether More hides frequent actions;
-- whether compact density remains legible;
-- whether search/Go To reduces repeated navigation.
+Capture 1600x900, 1440x900, 1280x800, 1180x800, 1024x768,
+768x1024, 430x932, 390x844, 360x800, 844x390, 1024x600, and a
+2160 px-tall state. Include Workbench, Focus, Library, Settings, Widget Shelf,
+floating module, tab drag, shelf drag, solid surfaces, reduced motion, high
+contrast, and long-label states.
 
 ## Completion evidence
 
-A release design review should include:
-
-- annotated screenshots;
-- open-findings list by severity;
-- state matrix results;
-- responsive matrix results;
-- keyboard and touch notes;
-- theme and accessibility review;
-- known deviations;
-- before/after evidence for corrected component families.
+- canonical and implementation screenshots side by side;
+- interaction regression results;
+- keyboard/touch notes;
+- state and recovery matrix;
+- responsive shelf-capacity evidence;
+- theme boundary evidence;
+- runtime contract tests;
+- list of deliberate deviations with owner approval.

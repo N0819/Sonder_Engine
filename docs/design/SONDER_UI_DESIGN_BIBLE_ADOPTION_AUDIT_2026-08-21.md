@@ -1,5 +1,10 @@
 # Sonder UI Design Bible adoption audit
 
+> **Historical Design Bible 1.x evidence.** Design Bible 2.0 and its canonical
+> Atmospheric Workbench supersede this audit's target-presentation decisions.
+> Retain this file only for candidate provenance, runtime risk, and behavior
+> inventory.
+
 **Audit date:** 2026-08-21
 
 **Current repository authority:** `1accd28` (branch `interface`, matching `origin/offscreen` after the offscreen fast-forward; `main`/`origin/main` remain at `09985af`)

@@ -1,45 +1,49 @@
 # Design Review Release Gate
 
-## Required evidence
+## Canonical evidence
 
-- [ ] Annotated desktop screenshots at approved viewports.
-- [ ] Annotated mobile screenshots at approved viewports.
-- [ ] Populated, empty, loading, error, and long-content states.
-- [ ] Default theme plus all curated themes.
-- [ ] Accessibility Mode and reduced-motion evidence.
-- [ ] Keyboard and touch review notes.
-- [ ] New-user flow audit.
-- [ ] Expert-user flow audit.
-- [ ] Open findings list with severity.
-- [ ] Approved deviations.
+- [ ] Same-viewport comparison against the Atmospheric Workbench at 1600x900.
+- [ ] Workbench and Focus compositions match macro geometry.
+- [ ] Scene, Library, Settings form one unnumbered integrated top shelf.
+- [ ] Full Atmospheric and gradient canvases reviewed.
+- [ ] Both translucent toolbars use the same material as the top shelf.
+- [ ] No old rail, inspector, bottom navigation, or parallel component family remains.
 
-## Blocking criteria
+## Interaction evidence
 
-- [ ] No open P0 findings.
-- [ ] No open P1 findings without explicit approved deviation.
-- [ ] No essential desktop/mobile parity gap.
-- [ ] No overlapping or unreachable controls.
-- [ ] No known work-loss path.
-- [ ] No emoji/text glyph primary icon remains.
-- [ ] No repeated component-family geometry or alignment defect.
-- [ ] No raw technical error as the only player-facing message.
+- [ ] Toolbar open/close preserves story/composer measure.
+- [ ] Toolbar and shelf resizing work by pointer and keyboard.
+- [ ] Tab merge, separate, and left/right reorder are natural.
+- [ ] Shelf rails are clear and appear only at real capacity.
+- [ ] Floating uses the dragged object without a lagging ghost.
+- [ ] Invalid drop/Escape restores exact origin.
+- [ ] Widget Shelf can locate and restore every module.
+- [ ] Arrangement persists across workspace and viewport changes.
 
-## System conformance
+## Visual system
 
-- [ ] Soft-Precision Geometry applied.
-- [ ] Spacing and height tokens applied.
-- [ ] Typography roles applied.
-- [ ] Accent budget respected.
-- [ ] Controlled glass applied with fallbacks.
-- [ ] Integrated Control Clusters used appropriately.
-- [ ] Stable IA preserved.
-- [ ] Plain-language terminology preserved.
+- [ ] Geist Sans, Geist Mono, and Newsreader roles match the scale.
+- [ ] Every free-standing corner is a rounded 4 px bevel; no chamfers.
+- [ ] Glass 20%, Bars 60%, Selected 6%, Frost 50% defaults verified.
+- [ ] All material sliders genuinely span 0-100%.
+- [ ] Theme roles and ambient-light controls work.
+- [ ] No CRT grain, scanline, animated noise, or material activity remains.
+- [ ] Character portrait scale works from names-only through portrait view.
+
+## Quality and safety
+
+- [ ] No P0 finding.
+- [ ] No P1 finding without approved revision/exception.
+- [ ] Keyboard, touch, reduced-motion, solid, high-contrast, and larger-text states pass.
+- [ ] Runtime ownership, saving, error recovery, and extensions remain authoritative.
+- [ ] Long labels and localization do not break bars or tabs.
+- [ ] Approved deviations and updated artifact hashes are recorded.
 
 ## Sign-off
 
-- Product flow review:
-- Visual-system review:
-- Responsive review:
-- Accessibility review:
-- Implementation review:
+- Product flow:
+- Visual conformance:
+- Docking/direct manipulation:
+- Responsive/accessibility:
+- Runtime integration:
 - Release decision:

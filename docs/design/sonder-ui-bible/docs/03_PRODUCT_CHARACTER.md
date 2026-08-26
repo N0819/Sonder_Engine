@@ -2,86 +2,59 @@
 
 ## Personality
 
-Sonder's interface personality is quiet confidence. It should appear designed by people who understand complex systems but have chosen not to burden the player with that complexity.
+Sonder is a quiet, exacting creative instrument. It understands a complicated
+engine but does not force that complexity into the user's face.
 
-The voice is:
+Its voice is calm, direct, compact, and specific. Its visual personality is
+dark digital material floating over a world-sized canvas. It is neither a
+terminal fiction nor a generic productivity app.
 
-- direct;
-- calm;
-- plain;
-- specific;
-- never patronizing;
-- never corporate;
-- never theatrically futuristic.
+## Charm through cohesion
 
-## Emotional qualities
+Sonder's charm comes from repetition with purpose:
 
-The interface should create:
+- every free corner uses the same 4 px radius;
+- every bar belongs to the same translucent material family;
+- every label follows one compact type hierarchy;
+- every module can be moved through the same interaction grammar;
+- environmental light appears through glass without replacing state color;
+- story prose remains visibly more human than surrounding controls.
 
-- **invitation** for a new player;
-- **orientation** when the story or library is complex;
-- **confidence** during saving, generation, import, and destructive actions;
-- **focus** during reading and writing;
-- **control** for experienced users;
-- **quiet atmosphere** without reducing legibility.
-
-## Relationship to the story
-
-The UI is not the fiction. It should not pretend to be an in-world terminal, grimoire, ship console, or magical object. It is the stable frame through which any fiction can be experienced.
-
-This distinction allows:
-
-- a fantasy backdrop to remain fantasy;
-- a contemporary scene to remain contemporary;
-- technical controls to remain understandable;
-- themes to change mood without changing meaning.
+Do not manufacture charm with mascots, cute copy, ornamental glyphs, random
+texture, novelty animations, or decorative pseudo-technology.
 
 ## Signature traits
 
-### 1. Soft precision
+### Living field
 
-Tight 3-5 px corners, hairline borders, controlled tonal layering, and careful optical alignment create precision without harshness.
+The selected canvas fills the application and acts as the environmental light
+source. Atmospheric imagery is the default; authored gradients are first-class
+alternatives.
 
-### 2. Integrated instruments
+### Digital material
 
-Related controls are grouped into shared control clusters instead of becoming a field of disconnected buttons.
+Operable chrome is translucent, frosted, fine-edged, and internally lit. It
+must remain coherent from top shelf to module bar to composer.
 
-### 3. Editorial hierarchy
+### Modular authorship
 
-Large content, compact context, clear headings, and deliberate negative space establish reading order.
+Complexity is available as movable modules rather than permanent dashboards.
+Users may work in Focus, use balanced default docks, or compose a specialized
+arrangement.
 
-### 4. Sparse signal color
+### Literary center
 
-Cyan identifies focus, selection, and immediate action. Amber identifies attention, operational state, and warnings. Neither color becomes a general surface fill.
+Newsreader prose, a narrow stable measure, and an unboxed transcript keep the
+fiction distinct from the instrument.
 
-### 5. Progressive capability
+### Restrained signal
 
-The default path remains simple. Advanced controls are searchable, contextual, pinnable, and keyboard-accessible rather than permanently exposed.
+Ambient cyan, ready green, source amber, and error red are sparse. Selection is
+a low-strength material tint plus an edge, not a bright tile.
 
-## Visual adjectives
+## Genre neutrality
 
-Use these as review language:
-
-- precise;
-- restrained;
-- atmospheric;
-- editorial;
-- instrument-like;
-- compact;
-- neutral;
-- tactile enough to understand;
-- quiet at rest;
-- decisive in action.
-
-Reject these descriptions:
-
-- bubbly;
-- glossy;
-- cyberpunk;
-- cockpit-like;
-- neon;
-- dashboard-heavy;
-- enterprise;
-- ornamental;
-- game-menu generic;
-- glass everywhere.
+The shell remains neutral graphite glass. Genre comes from the canvas, story
+content, and user-authored theme. A fantasy, contemporary, horror, romance, or
+science-fiction story must fit without changing component geometry or state
+meaning.

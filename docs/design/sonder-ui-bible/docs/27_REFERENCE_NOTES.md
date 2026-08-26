@@ -1,76 +1,55 @@
 # 27. Reference Notes
 
+## Canonical Sonder artifact
+
+The committed Atmospheric Workbench is the visual and interaction reference:
+
+- `docs/experiments/sonder-atmospheric-workbench/sonder-workbench-calibration.html`
+  - SHA-256 `1E827341F69FAC44DC79FD85E7B5F1C55B78C05E90DEE4B8FD59F9A07B6F3F98`
+- `docs/experiments/sonder-atmospheric-workbench/sonder-workbench-calibration-preview.html`
+  - SHA-256 `C4324CDC55C38FCF9E6B7C9F3852DF2BEF03A1618DE6E07D480F2085133BB165`
+- `docs/experiments/sonder-atmospheric-workbench/sonder-drag-regression.html`
+  - SHA-256 `9BA00EF47EA170F74309D7EE933B8B553D67DE353E6D9DB285FFFF05D3BE2FFD`
+
+The artifact passed 14 focused docking/drag regressions at preservation time.
+Those tests are calibration evidence, not a substitute for production runtime,
+accessibility, persistence, or responsive tests.
+
 ## Prime Intellect
 
 Official site: <https://www.primeintellect.ai/>
 
-Observed reference characteristics used in this bible:
+The desired influence is specifically the top atmospheric section: compact
+integrated glass navigation, small modern type, dark media field, thin edges,
+and restrained diagrammatic accents. The large marketing headings lower on the
+site are not a Sonder reference.
 
-- numbered primary navigation;
-- figure and section indexing;
-- compact technical labels;
-- restrained black/charcoal palette;
-- thin structural frames;
-- large atmospheric image stages;
-- sparse accent use;
-- editorial alignment;
-- data and command fragments used as visual context.
+## Other influences
 
-The site is a marketing and product interface, not a long-form fiction workspace. Sonder translates its visual discipline rather than its page structure.
+- EVE/Photon contributes cohesion, modular instrument logic, and user control,
+  not cockpit ornament.
+- PS2-era interfaces contributed an interest in tangible digital material, but
+  the attempted CRT/pixel implementation was rejected and is not canonical.
+- ChungusHub contributes the value of collapsible side regions and economical
+  organization, not a layout to copy.
+- Photoshop/VS Code contribute tab, shelf, split, float, and rearrangement
+  expectations. Sonder uses a bounded two-dock model rather than an unbounded
+  IDE layout engine.
 
-## EVE Online Photon UI
+## Historical Sonder material
 
-Official sources:
+The Design Bible 1.x, old supplied screenshots, candidate implementation,
+progressive-redesign amendment, and replacement work-package screenshots remain
+historical evidence. They may answer what capability existed or reveal a past
+failure. They do not override Design Bible 2.0 presentation.
 
-- <https://www.eveonline.com/news/view/a-new-way-to-test-features>
-- <https://www.eveonline.com/news/view/photon-ui-iterating-and-improving>
-- <https://www.eveonline.com/news/view/building-the-future-of-eve>
-- <https://www.eveonline.com/news/view/february-update-photon-ui-full-rollout>
-- <https://www.eveonline.com/news/view/ui-modernization-icon-strategy>
+## Originality and provenance
 
-Relevant principles documented by EVE's team include:
-
-- UI unification to improve consistency and onboarding;
-- margin and spacing updates to reduce cognitive load;
-- feedback color semantics such as blue for calls to action and orange for warnings;
-- coherent buttons, tabs, headers, fonts, and color rules;
-- compact modes;
-- transparency and scaling controls;
-- a holistic icon strategy;
-- customization for different play styles.
-
-Sonder borrows the coherence, efficiency, personalization, and instrument precision. It does not borrow the franchise's cockpit aesthetic or tactical density.
-
-## User-provided reference capture
-
-The original supplied Prime Intellect capture remains a visual reference for:
-
-- atmospheric hero imagery;
-- quiet chrome over a large central stage;
-- compact indexed navigation;
-- subdued neutral palette;
-- restrained green/amber-like accents;
-- low-radius framing;
-- selective monospaced labels.
-
-The capture is not redistributed in this package.
-
-## Earlier Sonder design material
-
-This bible consolidates:
-
-- the approved remaster decision register;
-- the full UI/UX design specification;
-- the first implementation review;
-- the Prime reference visual realignment audit;
-- the latest discussion on polish, alignment, soft-precision geometry, and integrated control clusters.
-
-Where earlier visual guidance differs, this bible supersedes it.
-
-## Originality policy
-
-- Do not copy reference HTML, CSS, icons, imagery, fonts, or branding.
-- Sonder icons remain original.
-- Theme names and palettes remain original.
-- Reference motifs are translated into general design principles.
-- Genre-neutrality remains a stronger requirement than visual similarity.
+- Do not copy external source, markup, styles, icons, imagery, fonts, or
+  branding.
+- Bundle reviewed open-license font files for production rather than hotlinking
+  the mockup's development URLs.
+- Record provenance for every shipped atmospheric canvas.
+- Preserve each published mockup revision byte-for-byte at its recorded hash;
+  a visual change creates a new hash-identified revision under change control.
+  Production implementation is an independent port.

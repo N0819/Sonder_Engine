@@ -1,147 +1,85 @@
 # 22. UX Flows and Expert Acceleration
 
-## UX doctrine
+## Doctrine
 
-The interface should serve two groups without splitting into separate products:
+The default arrangement teaches the workbench by example. Experienced users
+gain speed by rearranging modules, collapsing toolbars, using direct commands,
+and preserving state—not by enabling a separate expert interface.
 
-- new users who need orientation and a clear next action;
-- experienced users who need speed, density, and direct access.
+## Open a story
 
-The strategy is progressive disclosure plus invisible acceleration.
+1. Open Library.
+2. Select a Story in the archive.
+3. Choose Open in Scene.
+4. Scene restores its canvas, transcript, composer, and saved module layout.
 
-## New-user path
+The story title in the top shelf never starts a competing picker.
 
-A new user should be able to:
+## Enter Focus
 
-1. create or sign into the host account;
-2. understand Play, Library, and Settings;
-3. connect an AI provider when generation is requested;
-4. create a story through one of three plain routes;
-5. enter Play with a clear next action;
-6. discover Story Tools when needed;
-7. find reusable material in Library.
+1. Collapse left or right toolbar independently, or choose Focus for both.
+2. Toolbars animate out without changing prose/composer width.
+3. Edge labels remain faint but discoverable.
+4. Reopen restores exact shelves, tabs, widths, and active tabs.
 
-The first-run path must not require understanding personas, lore inheritance, model roles, raw prompts, or world-state JSON.
+## Merge modules as tabs
 
-## Returning-user path
+1. Drag a module title or tab.
+2. Move over the destination title/tab strip.
+3. The entire strip becomes the tab target and shows an insertion caret.
+4. Existing tabs shift to preview order.
+5. Release commits; Escape or invalid release restores origin.
 
-Returning users should see:
+The same result is available through `Merge as tab`.
 
-- last active story;
-- recent stories;
-- preserved reading position;
-- remembered inspector state;
-- visible connection or save problems only when relevant;
-- quick access to New Story and Library.
+## Create or reorder shelves
 
-## Experienced-user acceleration
+1. Begin module drag.
+2. Available shelf rails appear only where capacity exists.
+3. Hovering a rail shows the exact new shelf outline and rearranges neighbors.
+4. Release commits and the nearest splitter becomes adjustable.
 
-### Keyboard shortcuts
+At full capacity, the UI offers tab targets instead of impossible rails.
 
-Core recommended shortcuts:
+## Separate a tab
 
-- `Ctrl/Cmd+K`: Go To / command-search launcher when implemented;
-- `Ctrl/Cmd+Enter`: Send story input;
-- `Esc`: close transient layer or return one staged level;
-- `/`: focus current-surface search when not editing text;
-- `Ctrl/Cmd+,`: Settings when platform/browser conventions allow.
+Drag the tab to a valid shelf rail or choose `Separate into shelf`. If capacity
+is full, explain why and keep the tab in place. No tab becomes trapped inside a
+group.
 
-Shortcuts must be discoverable in tooltips, More menus, or a shortcut reference. They must not conflict with text editing.
+## Float and store
 
-### Go To launcher
+- Release over Scene to float the dragged module itself.
+- Use the explicit return target/menu to store it in Widget Shelf.
+- Invalid blank-space release is not deletion.
+- Widget Shelf locates any existing instance and allows direct placement.
 
-A global launcher is a preferred expert accelerator, not a replacement for visible navigation. It may search:
+## Customize presentation
 
-- destinations;
-- stories and Library items;
-- Settings sections;
-- Story Tools;
-- common actions.
+1. Open Settings > Presentation or locate Custom Theme.
+2. Adjust canvas, role colors, glass, bars, selection, frost, and ambient light.
+3. Preview updates live.
+4. Save a valid theme or reset.
+5. Dock Custom Theme for frequent tuning without moving Presentation out of
+   Settings.
 
-New users can ignore it entirely. Results use plain labels and show context.
+## Character scale
 
-### Pinned tools
+Use borderless minus/plus at the Characters module's lower-right. Each action
+moves one deterministic step and announces the resulting mode. The minimum is
+names only; the maximum is portrait view.
 
-Users may pin frequent Story Tools or Library scopes. Pinning should not create duplicate controls or a crowded header. A small fixed capacity is preferable to unlimited accumulation.
+## Keyboard acceleration
 
-### Recents
+- `Ctrl/Cmd+Enter`: Send when available.
+- `Escape`: cancel drag/close transient layer/return one staged level.
+- Arrow keys: navigate/reorder tabs and resize focused separators.
+- Module menu: complete placement control without pointer drag.
+- Search shortcuts remain contextual to Library or Settings.
 
-Recent stories and Library items should be available where they reduce repeated search. Recents must remain secondary to the current context.
+## Persistence
 
-### Compact density
-
-Compact density is a user preference for desktop. It reduces row and panel padding while preserving legibility, hit targets, labels, and state clarity.
-
-### Stable More menus
-
-Low-frequency actions belong in predictable More menus. An action should not move between direct display and More unpredictably at the same width and state.
-
-## Core flow reviews
-
-### Create story
-
-- User can choose a route without AI connection.
-- Generation asks for connection only when needed.
-- Draft survives Back/exit.
-- Review explains created records.
-- Result opens in Play.
-
-### Continue story
-
-- Input is obvious.
-- Turn state is visible.
-- Stop is available when possible.
-- New turn does not disrupt scrollback review.
-- Error preserves input.
-
-### Add character to story
-
-- User can search Library.
-- User understands whether the character is reusable.
-- Attach does not duplicate unexpectedly.
-- Remove from story is not Delete.
-
-### Edit long lore
-
-- Draft is retained.
-- Save state is visible.
-- Validation is near the field.
-- Raw/advanced structure is optional.
-- Mobile editor remains usable with keyboard.
-
-### Connect provider
-
-- Staged setup.
-- Test result is plain.
-- Secret handling is clear.
-- Failure preserves safe input.
-- Default model selection follows connection.
-
-### Change appearance
-
-- Applies immediately where safe.
-- Does not alter story data.
-- Reset is available.
-- Accessibility controls remain independent.
-
-## Friction budget
-
-A common action should generally be reachable within:
-
-- one action from its primary context;
-- two actions from a predictable destination;
-- three actions only for advanced or high-risk functions.
-
-If a frequently used action requires repeated navigation through unrelated categories, the flow needs redesign.
-
-## Complexity budget
-
-The default Play surface should expose:
-
-- the story;
-- composer;
-- current status;
-- one route to Story Tools;
-- only the most immediate utility controls.
-
-Everything else must earn permanent space through frequency and context.
+Persist toolbar open state, widths, shelf proportions, module location, tab
+order, active tabs, character portrait scale, valid theme, and relevant
+workspace context. Persistence must be versioned and recover safely when a
+module is removed or a viewport cannot express the prior arrangement.

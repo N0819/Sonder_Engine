@@ -2,97 +2,64 @@
 
 ## Principle
 
-> Tight, engineered corners with enough softness to avoid feeling brittle, harsh, or overly technical.
+> One rounded 4 px bevel, repeated everywhere a free edge is visible.
 
-Sonder favors tight corners, not sharp edges and not soft SaaS rounding. Geometry should feel lightly machined rather than cut from glass or inflated from plastic.
+Sonder does not use chamfered corners. The word bevel describes tonal edge
+construction—upper highlight, lower shadow, and a slight rounded corner—not a
+cut diagonal silhouette.
 
-## Radius scale
+## Radius contract
 
-| Token | Value | Primary use |
+| Token | Value | Use |
 |---|---:|---|
-| `radius-compact` | 3 px | compact controls, icon buttons, menu rows, segmented controls, inline fields |
-| `radius-default` | 4 px | buttons, inputs, list rows, cards, navigation elements, control clusters |
-| `radius-panel` | 5 px | dialogs, inspectors, composer surfaces, larger panels, prominent containers |
-| `radius-round` | 999 px | status dots, avatar crops, progress indicators, genuinely pill-shaped tags only |
+| `radius-none` | 0 px | internal shared edges, flush viewport edges, tracks |
+| `radius-default` | 4 px | every free-standing bar, panel, field, button, menu, composer, and preview |
+| `radius-round` | 999 px | circular handles, lamps, and genuinely round indicators only |
 
-Four pixels is the default. Three and five pixels exist to express scale, not theme variation.
+Three- and five-pixel variants from the former Bible are retired. Equivalent
+surfaces use 4 px without component-by-component interpretation.
 
-## Square geometry
+## Shared edges
 
-Zero-radius corners are permitted only when the corner is not visually free-standing:
+When cells touch inside one object:
 
-- a panel flush to a viewport edge;
-- a continuous table or ledger grid;
-- an image crop;
-- an internal segment inside a control cluster;
-- adjacent surfaces that share one outer frame;
-- structural dividers.
+- the object owns the 4 px outer radius;
+- internal cells use 0 px at shared edges;
+- adjacent borders collapse to one hairline;
+- the first and last cell inherit the appropriate outer corners;
+- hover, selected, and focus states never change geometry.
 
-Ordinary interactive controls must not use completely sharp free-standing corners.
-Every free-standing bordered surface MUST declare one of the semantic radius
-tokens. A full border without a semantic radius is a conformance defect. Zero
-radius remains valid only for the internal and viewport-flush cases above.
+This rule governs the top shelf, tab groups, composer action cells, color
+swatches, segmented controls, and adjacent toolbar shelves.
 
-## Nested radius relationship
+## Tonal bevel
 
-Nested geometry follows a descending relationship:
+A standard material edge uses:
 
-- outer panel: 5 px;
-- nested card or list container: 4 px;
-- controls inside: 3-4 px;
-- internal cluster segments: 0 px except at the outer ends.
+- 1 px top/leading highlight at low opacity;
+- 1 px bottom/trailing dark edge;
+- optional faint inner top highlight;
+- no metallic gradient, embossed lip, or corner bracket.
 
-Do not place a 5 px control inside a 4 px card or a 12 px card inside a 5 px panel.
+## Floating geometry
 
-## Bevel interpretation
-
-The desired bevel is tonal, not a literal cut corner.
-
-Use:
-
-- one-pixel neutral border;
-- a faint top or inner highlight;
-- a minimal lower-edge shadow or tonal shift;
-- restrained state changes.
-
-Avoid:
-
-- glossy gradients;
-- thick embossed frames;
-- strong inset shadows;
-- metallic shine;
-- repeated 45-degree chamfers;
-- glowing corner brackets.
-
-Literal chamfers may be used only for rare operational callouts where the shape itself communicates exceptional state. They must never become the default panel language.
-
-## Adjacent controls
-
-When controls touch:
-
-- the group owns the outer radius;
-- internal controls have zero radius at shared edges;
-- borders do not double in thickness;
-- focus remains visible on the individual control;
-- separators remain subtle.
+A floating module retains the same 4 px frame and bar as a docked module. It
+may add a compact shadow for canvas separation, but it must not become a
+different card family.
 
 ## Focus geometry
 
-Focus indicators must follow the control's shape. A focus ring may sit 2 px outside the control or use a 2 px inset treatment inside a cluster. It must not turn a 4 px control into a large rounded glow.
+Focus follows the 4 px shape with an inset or 2 px offset ring. Splitters and
+bare plus/minus controls use a line/text treatment plus an adequately sized
+invisible hit area.
 
-## Mobile geometry
+## Prohibited geometry
 
-Mobile uses the same 3-5 px language. Touch targets grow through height, padding, and spacing, not larger radii.
-
-## Geometry violations
-
-The following are defects:
-
-- 8-20 px card radii in ordinary application surfaces;
-- pill-shaped navigation buttons without semantic reason;
-- different radii for equivalent controls;
-- a rounded card containing sharp buttons or the reverse;
-- rounded backgrounds behind plain section headings;
-- literal chamfers repeated across every panel;
-- focus rings with a different radius family;
-- border thickness changing between idle and selected states and causing layout shift.
+- 45-degree chamfers;
+- 8-20 px dashboard-card radii;
+- pill navigation;
+- mixed 3/4/5 px component radii;
+- sharp free-standing boxes;
+- rounded section-title capsules;
+- borders that become thicker when selected;
+- floating windows with unrelated rounded-card styling.

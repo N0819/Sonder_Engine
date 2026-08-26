@@ -2,104 +2,60 @@
 
 ## Motion principle
 
-Motion should explain cause, continuity, or state. It should not exist merely to make the interface feel technological.
+The workbench is static at rest. Motion explains structure, direct
+manipulation, or state change. It does not simulate electronic activity.
 
-## Motion categories
+## Canonical timing
 
-### Structural transitions
+| Motion | Duration | Purpose |
+|---|---:|---|
+| Hover/focus material response | 120 ms | local control feedback |
+| Tab reorder preview | 150 ms | reveal resulting order |
+| Module/shelf rearrangement | 180-190 ms | preserve spatial continuity |
+| Toolbar open/close | 260 ms | reveal/collapse dock |
+| Backdrop/canvas change | 260-500 ms | nonblocking atmospheric continuity |
 
-Used for:
+Use restrained cubic-bezier easing. Dragged objects follow the pointer directly
+and do not ease behind it.
 
-- opening/closing inspector;
-- destination change;
-- dialog/sheet appearance;
-- list-to-detail transition on mobile;
-- expanding a section.
+## Docking feedback
 
-Duration guidance: approximately 120-220 ms with restrained easing.
+- Title/tab target: highlight bar, show insertion caret, shift tabs live.
+- Shelf target: reveal broad horizontal rail and exact ghost outline.
+- Float: dragged module itself remains the preview.
+- Widget Shelf: explicit return target highlights.
+- Invalid: show no false positive; release restores origin.
 
-### Content transitions
-
-Used for:
-
-- new turn appearance;
-- backdrop dissolve;
-- status change;
-- save confirmation.
-
-Content motion must not shift reading position unexpectedly.
-
-### Ambient effects
-
-Weather, hearth, backdrop movement, or other continuous effects are optional atmosphere. They must respect effects settings, reduced motion, tab visibility, and power constraints.
+Target state must not flicker between tab and shelf across a one-pixel boundary.
+Use stable target ownership and generous hit regions.
 
 ## Prohibited motion
 
+- material activity loops;
+- animated grain/noise;
+- CRT sparkle or pixel crawl;
+- scanlines;
 - pulsing borders at rest;
-- continuous scanning lines;
-- animated noise/grain;
-- repeated glow cycles;
-- motion on every hover;
-- large panel bounce;
-- decorative parallax that competes with prose;
-- layout movement caused by border-width changes.
+- repeated glow breathing;
+- a trailing float ghost;
+- bounce or springy dashboard motion;
+- border-width layout shift.
 
-## Feedback hierarchy
+## Activity and progress
 
-### Immediate interaction
+Generation, saving, connection, and background work use concise text, status
+markers, progress/elapsed state where useful, and Stop/Cancel when supported.
+Do not turn operation state into ambient sparkling material.
 
-Hover, pressed, selected, and focus states respond within the control.
+## Reduced motion
 
-### Short result
-
-Use inline status or a toast for quick success/failure.
-
-### Long task
-
-Use background activity with task name, progress or elapsed time, cancelability, and completion result.
-
-### Persistent problem
-
-Use an inline notice or status panel, not a transient toast alone.
-
-## Save feedback
-
-Long-form editors should show:
-
-- Saving...
-- Saved
-- Could not save
-
-The indicator should remain in a stable location and not cause layout shift.
+Reduced motion removes rearrangement interpolation, toolbar translation,
+backdrop dissolves, and decorative canvas movement. Direct manipulation still
+updates position and target instantly. State remains understandable without
+transition.
 
 ## Sound
 
-Sonder may use sound for:
-
-- ambience selected by the story;
-- optional completion chime;
-- explicit preview actions.
-
-Application interaction sounds are off by default unless separately approved. The interface must not become noisy or game-like.
-
-## Ambience controls
-
-Ambience uses an Instrument Cluster or compact contextual panel. Mute remains immediately available. Reroll/change and detailed settings may be one level deeper on mobile.
-
-## Reduced effects
-
-Effects levels:
-
-- **Full**: approved atmosphere and transitions.
-- **Reduced**: visual layers remain where useful, but continuous movement and most transitions stop.
-- **Off**: decorative overlays are not drawn; content backdrops may remain static.
-
-Reduced motion from the operating system should apply before first paint and map to Reduced unless the user has explicitly chosen a stronger preference.
-
-## Performance
-
-- Avoid permanent full-viewport compositing when the page is hidden.
-- Disable blur behind animated weather where necessary.
-- Prefer transform/opacity for short transitions.
-- Avoid unbounded animation loops.
-- Motion must not reduce composer responsiveness or transcript scrolling.
+Story ambience and explicit previews are content. Optional completion chimes
+may exist. Generic UI clicks and electronic bleeps are off by default and are
+not part of the signature style.

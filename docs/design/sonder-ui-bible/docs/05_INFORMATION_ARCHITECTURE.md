@@ -1,114 +1,89 @@
 # 05. Information Architecture
 
-## Primary destinations
+## Primary workspaces
 
-Sonder has three primary destinations:
+Sonder has exactly three primary workspaces:
 
-1. **Play**
+1. **Scene**
 2. **Library**
 3. **Settings**
 
-These names are short, plain, and player-facing. They remain stable across desktop and mobile.
+Their labels are centered inside one integrated top-shelf control. They do not
+carry `01`, `02`, `03`, icons, or detached button frames.
 
-## Play
+## Top shelf
 
-Play contains:
+The shelf is one 40 px material band containing:
 
-- active story title and context;
-- transcript;
-- composer;
-- turn progress and background work relevant to the story;
-- scene ambience and immediate playback controls;
-- Story Tools for Cast, World, Style, Dialogue, Attire, Backdrops, Ambience, and other current-story controls;
-- contextual history, versions, rerolls, and turn actions.
+- Sonder identity at the leading edge;
+- the integrated Scene/Library/Settings cells;
+- static current-story identity;
+- concise global status at the trailing edge.
 
-Global application controls do not belong in the Play header.
+The story identity is not interactive story navigation. Story switching,
+archive browsing, creation, and restore live in Library.
+
+## Scene
+
+Scene contains:
+
+- the atmospheric canvas;
+- story context and unboxed transcript;
+- the fixed-measure composer and Continue/Send state;
+- left and right modular toolbars;
+- floating modules;
+- toolbar reveal controls and Widget Shelf triggers.
+
+Scene has two default compositions:
+
+- **Workbench**: both toolbars open with the calibrated modules.
+- **Focus**: both toolbars collapsed while the top shelf, story, composer, and
+  discreet reveal controls remain.
 
 ## Library
 
-Library contains reusable and story-associated material:
+Library is the full archive and authoring workspace for Stories, Characters,
+Personas, Lore, associations, import/export, and lifecycle actions. It is the
+only place that changes the active story.
 
-- Stories;
-- Characters;
-- Personas;
-- Lore;
-- imports and exports;
-- recent and favorite items;
-- search and type filters;
-- story scopes;
-- associations and usage information.
-
-Library scopes:
-
-- All Library;
-- Current Story;
-- Choose a Story;
-- Unassigned;
-- Used in Multiple Stories.
-
-Scopes are filters and associations, not ownership folders. Detaching an item from a story must not delete or relocate the reusable record.
+Eligible Library sections expose a drag/move affordance that can place their
+live module into a toolbar, tab group, or floating layer. The underlying record
+continues to belong to Library.
 
 ## Settings
 
-Settings uses these top-level categories:
+Settings is the full configuration workspace. Presentation is a normal
+Settings category, not a fourth top-shelf destination. Custom Theme, Scene
+Effects, AI Connections, and other eligible sections may be moved into the
+workbench as live modules.
 
-- **Experience**: appearance, reading, language, sound, notifications, motion, transparency, accessibility.
-- **AI Connections**: providers, models, credentials, connection tests, generation defaults.
-- **Content**: adult-content preferences, data handling, imports, exports, deletion, privacy-related presentation.
-- **Add-ons**: extensions and permissions.
-- **Maintenance**: updates, storage, backups, logs, repair tools.
-- **Advanced**: prompts, raw parameters, diagnostics, technical detail, experiments, developer-facing controls.
+## Toolbars, shelves, and tabs
 
-## Desktop spatial model
+- The left and right toolbar are peer modular docks.
+- Each dock contains vertically stacked shelves.
+- Each shelf contains one module or a tab group.
+- Tabs are naturally reorderable left/right.
+- Dragging a tab to another title/tab strip joins that group.
+- Dropping on a visible rail creates a shelf.
+- Shelf boundaries and toolbar widths are adjustable.
+- Collapsing a toolbar preserves its arrangement.
 
-Desktop uses three conceptual zones:
+## Widget Shelf
 
-- **Left**: destination and selection navigation.
-- **Center**: current content or work.
-- **Right**: contextual inspector or detail.
+The Widget Shelf is the inventory and recovery surface for modules. It shows
+whether a module is Left, Right, Floating, or Stored. Dropping a module outside
+all valid targets returns it to origin; removal occurs only through the
+explicit Widget Shelf target or menu command.
 
-The right inspector may be resized or pinned. It should never force the story below a usable reading measure.
+## Ownership rule
 
-## Mobile spatial model
-
-Mobile uses:
-
-- persistent bottom navigation for Play, Library, Settings;
-- one primary content surface at a time;
-- full-screen Story Tools and editors;
-- sheets for temporary contextual actions;
-- explicit Back behavior;
-- retained context when returning to Play.
+No module may have two simultaneous live copies. Source workspaces locate or
+activate the existing instance when a module is docked. Removing a module from
+a toolbar returns it to the Widget Shelf; it does not delete data or capability.
 
 ## Secondary navigation
 
-Secondary navigation should use the simplest appropriate pattern:
-
-- category rail on wide desktop;
-- tab or segmented selector for a small set of peer views;
-- searchable list for many categories;
-- staged list-to-detail flow on mobile;
-- More menu for low-frequency actions.
-
-Avoid nesting more than three visible navigation levels. If a fourth level appears necessary, reconsider the grouping or use in-content sections.
-
-## Search
-
-Search is contextual by default:
-
-- Library search searches Library material.
-- Settings search searches settings and help text.
-- Story Tools search, if added, searches current-story tools only.
-
-A global Go To launcher may provide expert navigation without replacing visible primary navigation.
-
-## Orientation requirements
-
-Every destination must show:
-
-- where the user is;
-- what scope or item is active;
-- how to return to the parent level;
-- whether changes are saved;
-- what the primary action is;
-- where secondary actions are located.
+Use tabs for peer modules within one shelf, compact ledgers for categories, and
+focused full-workspace views for substantial authoring. Do not reintroduce a
+persistent left navigation rail, default right inspector, or parallel mobile
+destination bar.

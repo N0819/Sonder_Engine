@@ -1,180 +1,111 @@
 # 13. Component Contracts
 
-## Purpose
+## Top shelf
 
-Every reusable component must have a visual and behavioral contract. One-off CSS that resembles a component is not a component.
+- Height: 40 px.
+- Material: Bar Opacity plus Frost Level.
+- Layout: brand, integrated workspace cells, flexible story identity, status.
+- Workspace labels: Scene, Library, Settings; centered; no indices.
+- Story identity: read-only context.
+- Status: concise text plus a non-color-only marker.
 
-## Buttons
+## Modular toolbar
 
-### Primary
+- Left and right docks are peers.
+- Default width: `min(286px, 18vw)`; adjustable 200-420 px.
+- Body material follows Glass Density and Frost Level.
+- Bar material follows Bar Opacity.
+- Collapse animates opacity, translation, and workspace columns over 260 ms.
+- Arrangement and width persist without changing module ownership.
 
-- One dominant primary action per local decision region.
-- Cyan fill or strong accent edge, depending on context.
-- Plain action label.
-- Disabled, loading, focus, and pressed states required.
-- Do not use for passive selection.
+## Shelf
 
-### Secondary
+- A shelf contains one module or one tab group.
+- Shelf count is constrained by usable height, not tab count.
+- Horizontal separator exposes a one-pixel cue inside a larger pointer/keyboard
+  hit region.
+- Adjacent shelf proportions are resizable and retained.
+- A full dock does not show a new-shelf rail.
 
-- Neutral surface and border.
-- Used for ordinary actions.
-- Hover may introduce a subtle cyan border or tint.
+## Module and tab
 
-### Ghost
+- Bar height: 30 px.
+- Title uses Geist Sans 11/14; tabs use 10/14.
+- Bar/title is the drag surface; text selection is suppressed only during drag.
+- Hover subtly raises opacity and edge light.
+- Active tab uses Selected Strength plus a one-pixel lower edge.
+- Tabs reorder by midpoint with immediate animated preview.
+- Action menu exposes all placement commands.
 
-- No persistent frame unless hovered/focused.
-- Use in quiet toolbars and headers.
-- Must retain a visible hit target.
+## Drag preview
 
-### Danger
+- The dragged module or compact tab proxy follows the pointer directly.
+- There is no separately titled “float target” trailing behind it.
+- Tab insertion uses a vertical caret and live tab reshuffle.
+- Shelf insertion uses broad horizontal rails labeled by result.
+- Docking uses an exact ghost outline at the destination.
+- Floating uses the dragged object itself; the canvas need not display a second
+  ghost.
+- Invalid release restores origin without data or layout loss.
 
-- Neutral or lightly red at rest.
-- Red becomes stronger on hover/focus and confirmation.
-- Destructive confirmation must state the object and consequence.
+## Floating module
 
-### Icon button
+- Retains the standard module bar and 4 px material frame.
+- Is constrained to the Scene workspace.
+- Moves by its tab/title bar and may be resized where the module supports it.
+- Can join any valid tab/shelf or return to the Widget Shelf.
+- Must not cover the fixed composer by default placement.
 
-- Fixed square box.
-- Original SVG icon.
-- Tooltip and accessible name.
-- 3-4 px radius.
-- No text glyph fallback in final production.
+## Widget Shelf
 
-## Inputs and textareas
+- Inventories all eligible modules and their location: Left, Right, Floating,
+  or Stored.
+- Opens from discreet edge `+` triggers or Settings/Library source actions.
+- Supports drag-out and direct menu placement.
+- Explicit return to the shelf removes a module from the active workspace; an
+  arbitrary invalid drop does not.
 
-- Labels are explicit; placeholders do not replace labels.
-- Help text explains consequence, not obvious mechanics.
-- Focus uses cyan border and controlled ring.
-- Error state uses red plus text and an icon/marker.
-- Long editors retain drafts.
-- Mobile inputs use a safe font size and keyboard-appropriate input type.
-- Inline save state appears near the field group or editor header.
+## Characters module
 
-## Selects and comboboxes
+- Rows show a portrait at approximately 90% of row height, name, optional
+  location, and state.
+- Five scale steps range from names-only to 141 px portraits.
+- The smallest step hides portrait, location, and state.
+- Borderless `−` and `+` sit bottom-right and highlight on hover/focus.
+- Current character uses a restrained ambient edge/tint, not a bright card.
 
-- Use a select for a bounded set of options.
-- Use a combobox for searchable or large sets.
-- Trailing chevron occupies a fixed column.
-- Selected values must not collide with the chevron.
-- Native controls may be used where they improve mobile reliability, provided visual alignment remains acceptable.
+## Custom Theme module
 
-## Switches and checkboxes
+- Six swatches edit Canvas ink, Glass panel, Control chrome, Ambient accent,
+  Interface text, and Source accent.
+- Glass Density, Bar Opacity, Selected Strength, and Frost Level each span
+  0-100%.
+- Ambient Light uses X/Y crosshairs, diamond position handle, and two circular
+  radius/intensity controls.
+- The color picker follows the same material, typography, and density.
+- Preview is immediate; persistence and reset follow Settings ownership.
 
-- Use a switch for immediate on/off state.
-- Use a checkbox for selection, consent, or multi-choice.
-- Labels remain clickable.
-- Explain consequences beneath consequential switches.
-- Do not hide the state inside color alone.
+## Composer
 
-## Tabs and segmented selectors
+- Stays centered to the reading measure and anchored near the bottom of Scene.
+- Minimum height: 56 px.
+- Input region and action cell share one material frame.
+- Send becomes Stop only when cancellable; Continue is stable in width.
+- Input and draft survive recoverable generation failure.
 
-- Use for peer views at the same hierarchy.
-- Keep the set short.
-- Selected state uses tone, text strength, and a restrained accent marker.
-- Avoid pill tabs.
-- Mobile may scroll a category strip only when the active category is automatically visible.
+## Buttons and fields
 
-## Navigation rail
+- Free-standing outer radius: 4 px.
+- Default desktop visual height: 24-30 px; touch hit target: 44 px.
+- Primary action is restrained ambient material, not a saturated block.
+- Focus, hover, selected, disabled, loading, error, and success are distinct
+  without changing dimensions.
+- Labels remain explicit; placeholders do not replace them.
 
-- Play, Library, Settings remain visible and stable.
-- Indices may support the label but never replace it.
-- Active state is obvious through accent edge, tone, and text/icon treatment.
-- The product lockup remains compact and genre-neutral.
-- Extension destinations must follow the same spacing and icon contract.
+## Dialogs, menus, and notices
 
-## Page and section headers
-
-A header contains, in order:
-
-1. optional eyebrow or index;
-2. title;
-3. optional description or context;
-4. optional action cluster.
-
-Do not place headings inside arbitrary dark bars. A header surface is justified only when it is persistent, sticky, or structurally separates a pane.
-
-## Lists and ledgers
-
-- Rows share a stable grid.
-- Primary label and secondary metadata are visually distinct.
-- Selection and hover are different states.
-- Actions use a trailing cluster or More menu.
-- Empty results explain how to recover.
-- Bulk actions appear only after selection.
-- Long labels wrap before actions disappear.
-
-## Cards
-
-Cards are not the default solution for grouping. Use them only when content is a discrete object or decision.
-
-A card should have:
-
-- 4 px radius;
-- one-pixel border;
-- minimal shadow;
-- clear internal hierarchy;
-- no excessive padding;
-- no decorative gradient unless it communicates state.
-
-Prefer continuous ledgers, section frames, and split panes over a dashboard of disconnected cards.
-
-## Inspector
-
-- Right-side contextual surface on desktop.
-- Full-screen or large sheet on mobile.
-- Header contains title, context, and integrated Pin/Collapse/More/Close cluster.
-- Tool list uses clear names and optional indices.
-- Active tool state remains visible.
-- Inspector remembers reasonable width and pinned state.
-- Inspector content does not silently autosave high-risk changes.
-
-## Dialogs and sheets
-
-- Dialogs are for focused decisions, confirmations, or short editors.
-- Large editing workflows should use a dedicated page, inspector, or full-screen sheet.
-- Header, body, and footer align to the same inset.
-- Primary action appears at the trailing end; Cancel or Back remains available.
-- Focus is trapped and restored.
-- Escape closes when safe.
-- Mobile dialogs generally become full-screen sheets.
-
-## Toasts and notices
-
-- Toasts confirm transient outcomes.
-- Persistent problems use inline notices or status panels.
-- Toasts contain a concise title and optional one-line detail.
-- Do not use toast-only error reporting for work the user must fix.
-- Multiple toasts stack without covering primary navigation or composer.
-
-## Empty states
-
-Every empty state includes:
-
-- plain explanation;
-- one primary next action;
-- optional secondary action;
-- no decorative illustration that overwhelms the task;
-- no technical cause unless useful.
-
-## Loading and progress
-
-- Skeletons are appropriate for predictable content structure.
-- Spinners are appropriate for short, indeterminate waits.
-- Long operations need a label, progress or elapsed state, and background behavior.
-- The user must know whether they can leave the surface safely.
-
-## Menus and More
-
-- More contains low-frequency contextual actions.
-- Menu order follows frequency, then danger.
-- Destructive actions are separated.
-- Checkable states use clear markers.
-- Menus close on selection, Escape, and outside click.
-- The trigger remains visually associated with the object or window it controls.
-
-## Tooltips
-
-- Use for icon meaning, shortcut hints, or concise clarification.
-- Do not hide essential instructions in tooltips.
-- Delay should be short enough for discovery but not intrusive.
-- Touch interfaces need an alternate discovery path.
+- Use the same digital material with enough opacity for content risk.
+- Align header, body, and actions to the compact spacing scale.
+- Preserve focus containment/restoration and Escape where safe.
+- Persistent errors remain inline; toasts are not the sole recovery route.
+- Destructive confirmation names the object and consequence.

@@ -2,92 +2,81 @@
 
 ## Purpose
 
-The bible is intended to evolve, but not through silent one-off implementation decisions.
+Design Bible 2.0 is a coherent system. Changes must not reintroduce a rejected
+1.x pattern through a local implementation shortcut.
 
-## Amendment categories
-
-### Clarification
-
-Explains an existing rule without changing its intent.
+## Change categories
 
 ### Calibration
 
-Adjusts a value such as color, spacing, width, or timing after visual testing while preserving the system.
+Adjusts a token such as color, opacity, timing, or measurement after evidence
+without changing the workbench model.
 
 ### Extension
 
-Adds a new component, state, or pattern consistent with existing principles.
+Adds a module or component that uses existing ownership, material, geometry,
+and interaction rules.
 
 ### Exception
 
-Allows a specific surface to deviate because of a documented constraint.
+Allows one bounded surface to diverge because of a documented platform,
+security, or content constraint.
 
 ### Revision
 
-Changes a locked design decision or system principle.
+Changes a locked outcome such as primary navigation, module ownership, docking,
+font roles, texture policy, theme model, or geometry.
 
-## Amendment record
+## Required record
 
-Every amendment should include:
+Every approved change records:
 
-- identifier;
-- date;
-- author/reviewer;
-- category;
-- affected documents and sections;
-- current rule;
-- proposed rule;
-- rationale;
-- screenshots or evidence;
-- desktop impact;
-- mobile impact;
-- accessibility impact;
-- localization impact;
-- migration impact;
+- identifier and date;
+- category and owner;
+- affected Bible decisions/files;
+- current and proposed outcome;
+- reason and user benefit;
+- canonical-artifact impact;
+- desktop, height, compact, and mobile impact;
+- accessibility/localization impact;
+- runtime and migration impact;
+- same-viewport evidence;
 - approval status.
 
-## Approval level
+## Artifact synchronization
 
-- Clarification and calibration: design review.
-- Extension: design and implementation review.
-- Exception: design review plus explicit scope and expiration/reassessment date.
-- Revision: product-owner approval.
+If a calibration or revision changes visible canonical behavior, update the
+reference artifact or provide a new frozen reference in the same change. Record
+its SHA-256 values in [27 Reference Notes](27_REFERENCE_NOTES.md) and regenerate
+the package manifest.
 
-## Exception rules
+Implementation screenshots never silently replace the canonical artifact.
 
-An exception must be narrow. It must not become a reusable precedent unless promoted to an extension or revision.
+## Revision threshold
 
-Example:
+Product-owner approval is required before any of these changes:
 
-> A code editor may use 2 px radius inside an existing 5 px editor frame because its scrollable canvas is visually structural. This does not authorize 2 px buttons elsewhere.
-
-## Review cadence
-
-Review the bible after:
-
-- a major UI release;
-- the introduction of a new destination or editor family;
-- repeated audit findings in the same component category;
-- major mobile changes;
-- a new curated theme;
-- substantial extension-host changes;
-- user research that contradicts a current assumption.
+- a fourth primary workspace;
+- left rail, bottom navigation, or default inspector;
+- multiple live copies of one module;
+- nested horizontal docking or unbounded IDE layout;
+- a new font role or geometry family;
+- CRT grain, scanline, noise, shimmer, or persistent material animation;
+- story-title switching outside Library;
+- material controls that do not reach their documented bounds.
 
 ## Deprecation
 
-When a pattern is replaced:
+When replacing a pattern:
 
-- mark it deprecated;
-- identify replacement;
-- define migration scope;
-- prevent new usage;
-- remove or update examples;
-- retain a short historical note only when it helps avoid regression.
+1. remove it from every normative chapter, example, checklist, and template;
+2. update maintained authority guides;
+3. retain only a short non-normative tombstone where an old link must survive;
+4. prevent new use through review/tests;
+5. migrate current implementation without preserving hidden duplicates.
 
 ## Versioning
 
-Use semantic bible versions:
-
-- major: locked design direction changes;
-- minor: new component families or substantial extensions;
-- patch: clarifications and calibration.
+- major: composition or locked-system revision;
+- minor: coherent new module/component family;
+- patch: clarification or token calibration.
