@@ -217,9 +217,9 @@ class TestACapOfZeroReturnsNothing:
 class TestTheCardSaysWhatNobodyReads:
     """The warning that ends the class rather than one instance of it.
 
-    `character_appearance` returns `embodiment.visible.summary` and nothing
-    else, so four richly authored fields reach no view, no narrator and no
-    memory -- and the only symptom is a body that reads thin.
+    `build`, `face`, `hair` and `eyes` are delivered now, so the warning that
+    named them would be telling an author to move work that is already being
+    read. What is left is the field that is still authored and still unread.
     """
 
     def _card(self, **visible):
@@ -233,18 +233,26 @@ class TestTheCardSaysWhatNobodyReads:
     def _warning(self, sheet, needle):
         return [w for w in character_card_warnings(sheet) if needle in w]
 
-    def test_an_unread_field_is_named(self):
-        found = self._warning(
-            self._card(hair="Long copper-gold, worn loose."), "hair")
-        assert found, "an authored, unread field warned about nothing"
-        assert "summary" in found[0]
+    def test_a_delivered_field_is_not_warned_about(self):
+        """The four body fields reach a view now, so nothing tells the author
+        to move them somewhere they would be read."""
+        sheet = self._card(build="Slight.", face="Youthful.",
+                           hair="Copper.", eyes="Amber.")
+        assert not self._warning(sheet, "no view")
+        assert not self._warning(sheet, "delivered to anyone")
 
-    def test_every_unread_field_is_named_at_once(self):
-        found = self._warning(self._card(
-            build="Slight.", face="Youthful.", hair="Copper.",
-            eyes="Amber."), "build")
-        assert found and all(
-            name in found[0] for name in ("build", "face", "hair", "eyes"))
+    def test_the_delivered_fields_reach_the_shape_that_delivers_them(self):
+        """And the warning is quiet for the right reason: the projection ran.
+
+        A silent warning would otherwise be indistinguishable from a warning
+        somebody deleted."""
+        from story.character_schema import character_visible_body
+
+        body = character_visible_body(self._card(
+            build="Slight.", face="Youthful.", hair="Copper.", eyes="Amber."))
+        assert body["build"] == "Slight."
+        assert body["regions"]["head"] == {
+            "face": "Youthful.", "hair": "Copper.", "eyes": "Amber."}
 
     def test_distinctive_features_counts(self):
         assert self._warning(
@@ -252,11 +260,10 @@ class TestTheCardSaysWhatNobodyReads:
             "distinctive features")
 
     def test_a_card_that_only_fills_the_summary_is_quiet(self):
-        assert not self._warning(self._card(), "delivered to anyone")
+        assert not self._warning(self._card(), "no view")
 
     def test_an_empty_string_is_not_authored(self):
-        assert not self._warning(
-            self._card(build="", face="   "), "delivered to anyone")
+        assert not self._warning(self._card(build="", face="   "), "no view")
 
     def test_a_text_boolean_is_reported_to_the_author(self):
         sheet = self._card()
