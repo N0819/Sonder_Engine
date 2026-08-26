@@ -45,6 +45,61 @@ function appearanceFillButton(kind, card, readDraft, reopen) {
   return button;
 }
 
+// "Read the inside out of this card's own prose", the third fill surface.
+//
+// It is the first one whose output is a MECHANISM rather than a description:
+// once saved, the engine carries bodies from station to station on the clock
+// with no beat and no model involved. So this reports what actually came back
+// -- how many stations, and how many of them are new -- rather than letting a
+// populated form pass for a reviewed one, and an empty answer is stated out
+// loud instead of looking like a form that failed to change.
+function interiorFillButton(card, readDraft, reopen) {
+  const button = el("button", {
+    title: "Read this card's own prose and propose the stations of its inside",
+    onclick: async () => {
+      const before = (readDraft().interior || []).length;
+      const answer = await promptModal(
+        "Anything already declared below is kept. Add a note if the route is "
+        + "written somewhere unusual on this card, or leave it blank and let "
+        + "the card's own abilities, history and capabilities decide. A body "
+        + "whose prose describes no inside gets no stations.");
+      if (answer === null) return;
+      const label = button.textContent;
+      button.textContent = "Reading…";
+      button.disabled = true;
+      try {
+        const r = await api("POST", `/api/characters/${card.id}/fill_interior`,
+          { prompt: answer, draft: readDraft() });
+        const after = (r.sheet?.embodiment?.interior || []).length;
+        if (!after && !before) {
+          // Not a silent no-op: the author asked a question and this is the
+          // answer. Most bodies have no inside, and inventing one would be
+          // the failure this whole surface is built to avoid.
+          toast("This card's prose describes no inside; nothing was added.", "ok");
+          button.textContent = label;
+          button.disabled = false;
+          return;
+        }
+        const refreshed = { ...card, sheet: JSON.stringify(r.sheet) };
+        closeAllModals();
+        await boot();
+        reopen(refreshed);
+        const added = after - before;
+        toast(added > 0
+          ? `${added} new stations proposed, ${after} in all. Review the order and the crossing times, then save.`
+          : `${after} stations refined — nothing added. Review, then save.`,
+          "ok");
+        showCardWarnings(r);
+      } catch (e) {
+        toast(`Interior fill failed: ${e.message}`, "err");
+        button.textContent = label;
+        button.disabled = false;
+      }
+    }
+  }, "✨ Read the inside from this card");
+  return button;
+}
+
 function defaultCharacterSheet() {
   return {
     identity: { name: "New Character", aliases: [], pronouns: { subject: "they", object: "them", possessive: "their" } },
@@ -313,6 +368,7 @@ function charEditor(c, options = {}) {
   f.distinctive = fLineList("Distinctive features (one per line)", sheet.embodiment?.visible?.distinctive_features);
   f.latent = fLatent("Latent/hidden capabilities (powers, secret identities, equipment functions)", sheet.embodiment?.latent);
   f.extra_parts = fExtraParts("Extra body parts (tails, wings, horns…) — where each emerges, from menus", sheet.embodiment?.extra_parts);
+  f.interior = fInteriorStations("Inside this body — the stations another body can be moved through, outermost first", sheet.embodiment?.interior);
   f.intero_acuity = fNum("Interoceptive acuity (0..1)", sheet.embodiment?.interoception?.acuity, "0.1");
   f.pain_sensitivity = fNum("Pain sensitivity (0..1)", sheet.embodiment?.interoception?.pain_sensitivity, "0.1");
   f.fatigue_sensitivity = fNum("Fatigue sensitivity (0..1)", sheet.embodiment?.interoception?.fatigue_sensitivity, "0.1");
@@ -427,6 +483,11 @@ function charEditor(c, options = {}) {
       }), refreshed => charEditor(refreshed))
     : null;
 
+  const fillInterior = c && !isChatCard
+    ? interiorFillButton(c, () => ({ interior: f.interior.read() }),
+        refreshed => charEditor(refreshed))
+    : null;
+
   modal(
     isChatCard
       ? "Edit story card — " + sheet.identity?.name
@@ -485,6 +546,16 @@ function charEditor(c, options = {}) {
           + "over that region are worn around it (a tail through a skirt); "
           + "unchecked, the part hides under clothing that covers the region."),
         f.extra_parts.node,
+        el("div", { class: "small dim", style: "margin-top:8px" },
+          "Most bodies have no inside the story can move through, and leave "
+          + "this empty. Declare it once and the engine builds the rooms, "
+          + "derives the way in, and carries an occupant from one station to "
+          + "the next on the clock — no beat has to remember to move them. "
+          + "The ORDER is the anatomy: outermost first. A crossing time in "
+          + "seconds makes a station a passage; leave it blank and the "
+          + "station holds whoever is in it until the story moves them."),
+        fillInterior,
+        f.interior.node,
         el("div", { class: "small dim", style: "margin-top:8px" },
           "Interoception controls how strongly this character notices internal "
           + "body signals. Pain and pleasure work even when survival mode is off."),
@@ -554,6 +625,7 @@ function charEditor(c, options = {}) {
               scent: f.scent.read(),
               latent: f.latent.read(),
               extra_parts: f.extra_parts.read(),
+              interior: f.interior.read(),
               interoception: {
                 acuity: f.intero_acuity.read() ?? 0.5,
                 pain_sensitivity: f.pain_sensitivity.read() ?? 0.5,

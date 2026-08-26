@@ -1017,6 +1017,176 @@ def materialize_enclosure_interiors(scene: dict) -> list:
     return minted
 
 
+#: Exactly the keys `_mint_minimal_interior` writes. The replacement below
+#: compares the WHOLE key set against this rather than checking three fields,
+#: and that is the difference between a safe pass and a destructive one:
+#: measured read-only against the author's corpus 2026-08-25, chat 91's minted
+#: stub carries `exposure: "enclosed"` and `size: "tight"` -- Director-declared
+#: room facts (`spatial_merge._ROOM_SILENT_WHEN_EMPTY`) merged onto the stub
+#: after it was minted. A field-by-field check passes that room and deletes
+#: story fact; a key-set check refuses it.
+_MINIMAL_INTERIOR_KEYS = frozenset(
+    ("name", "desc", "light", "parent_entity", "adjacent", "dock_exit"))
+
+
+def _is_engine_minted_stub(scene: dict, room_id: str) -> bool:
+    """Is this room the engine's OWN unmodified one-room mint?
+
+    The one state in which the card may beat the scene. Gate 5 of
+    `materialize_enclosure_interiors` states the standing doctrine -- scene
+    topology beats the card, which is also what makes the mint idempotent --
+    and this is its single exception, on the ground that the exception loses
+    nothing BY CONSTRUCTION. `_mint_minimal_interior` derives its room
+    entirely from the enclosure record: one room, dark, prose-free, timeless,
+    named out of the ledger the beat already wrote. A stub in exactly that
+    state restates a fact the record still entails and carries nothing else,
+    so an authored chain can replace it without deleting anything the story
+    said.
+
+    Anything the story has SINCE written on it is lived topology: a merged
+    description, a crossing time, a declared exposure or size, a second room
+    grown by `materialize_named_stations`. Those the card does not get to
+    overwrite, and the whole-key-set test is what tells the two apart.
+    """
+    room = ((scene or {}).get("rooms") or {}).get(room_id)
+    if not isinstance(room, dict):
+        return False
+    if set(room) != _MINIMAL_INTERIOR_KEYS:
+        return False
+    if not room.get("dock_exit"):
+        return False
+    if str(room.get("desc") or "").strip():
+        return False
+    if str(room.get("light") or "").strip().casefold() != "dark":
+        return False
+    return room_transit_seconds(room) is None
+
+
+def replace_engine_minted_interiors(scene: dict) -> list:
+    """Let a card's authored chain replace the engine's own one-room mint.
+
+    THE SECOND HALF OF THE ON-RAMP. `materialize_enclosure_interiors` mints
+    the authored chain when a holder has no interior rooms at all, and skips
+    every holder that already has one (its gate 5). Every live story that
+    needs a chain already carries the engine's own minimal mint, so an
+    authored chain could never reach the stories it was written for --
+    measured 2026-08-25 against the author's corpus: of the six scenes holding
+    this arrangement, two (chats 90 and 91) already stand on a minted room.
+
+    IT CANNOT LIVE INSIDE GATE 5, and the corpus is why. That function walks
+    `scene["contained"]`, and `place_enclosed_bodies` POPS the containment
+    record after the first placement -- chat 90 stores `contained: {}` with
+    its occupant standing in the mint. A bypass inside the contained-walk
+    would never fire for the very scenes it exists for. So this walks
+    ENTITIES, and runs beside the mint rather than inside it.
+
+    FOUR REFUSALS, EACH A SKIP:
+    1. No authored spec, or the holder is not a body: nothing to replace it
+       with, and the body scope is `materialize_enclosure_interiors` gate 3's
+       firewall bound, unchanged.
+    2. The interior is anything but exactly ONE room in the engine's own
+       unmodified minted state (`_is_engine_minted_stub`). Scene topology
+       beats the card everywhere else.
+    3. The mint's name already matches the spec's sole station. That is the
+       fixpoint guard: a one-station spec mints a room structurally identical
+       to the stub, so without this the pass would replace its own output
+       forever and two consecutive empty-diff merges would serialize one
+       scene two different ways -- the exact non-fixpoint W8 measured.
+    4. Somebody is STANDING in the mint and its name matches no authored
+       station. The engine cannot map the lived position onto the chain, and
+       the two available answers are both worse than doing nothing: dropping
+       them in the entry station carries a body OUTWARD from where the story
+       put it, and inventing a destination is anatomy nobody wrote. A mint
+       left standing is strictly better than a body moved backwards.
+
+    NOBODY CAN LAND IN NOWHERE, which is what fixes the order: mint the
+    authored chain FIRST (`_station_room_id`'s collision loop keeps the new
+    ids clear of the old room), and only once it exists relocate, retarget,
+    and retire. A failure anywhere before that leaves the old room standing
+    with its occupants in it.
+
+    Returns the holder entity ids it replaced for. Mutates; idempotent.
+    """
+    entities = (scene or {}).get("entities")
+    rooms = (scene or {}).get("rooms")
+    positions = (scene or {}).get("positions")
+    if not isinstance(entities, dict) or not isinstance(rooms, dict):
+        return []
+    if not isinstance(positions, dict):
+        return []
+    replaced = []
+    for eid, entity in list(entities.items()):
+        if not isinstance(entity, dict):
+            continue
+        spec = entity.get("interior_spec")
+        if not isinstance(spec, (list, tuple)) or not spec:
+            continue                                            # refusal 1
+        if not _is_body_entity(scene, eid, entity):
+            continue                                            # refusal 1
+        existing = _interior_rooms_of(scene, eid)
+        if len(existing) != 1:
+            continue                                            # refusal 2
+        old_id = existing[0]
+        if not _is_engine_minted_stub(scene, old_id):
+            continue                                            # refusal 2
+        old_name = str((rooms.get(old_id) or {}).get("name") or "").strip()
+        wanted = old_name.casefold()
+        station_names = [
+            " ".join(str((s or {}).get("name") if isinstance(s, dict) else s
+                         or "").split())
+            for s in spec]
+        station_names = [n for n in station_names if n]
+        if not station_names:
+            continue
+        if len(station_names) == 1 and station_names[0].casefold() == wanted:
+            continue                                            # refusal 3
+        occupants = [subject for subject, room in positions.items()
+                     if room == old_id]
+        if occupants and wanted not in {n.casefold() for n in station_names}:
+            continue                                            # refusal 4
+
+        if not _mint_authored_interior(scene, eid, spec):
+            continue
+        minted = [rid for rid in _interior_rooms_of(scene, eid)
+                  if rid != old_id]
+        if not minted:
+            continue
+        destination = next(
+            (rid for rid in minted
+             if str((rooms.get(rid) or {}).get("name") or "").strip()
+             .casefold() == wanted), None)
+        holder_name = _display_name(scene, eid)
+        for subject in occupants:
+            # Refusal 4 has already proven a destination exists whenever
+            # anybody is standing here.
+            _positions_write(positions, subject, destination)
+            # The ledger follows the body, by the same rule the crossing
+            # itself follows: a contact still naming the room behind them is
+            # what `_interior_station_hint` would read to drag them back.
+            retarget_interior_contacts(
+                scene, subject, holder_name,
+                str((rooms.get(destination) or {}).get("name") or ""))
+        # Retire the stub LAST, and take its edges with it: the exterior
+        # room's reverse dock edge outlives the room it points at otherwise.
+        rooms.pop(old_id, None)
+        for room in rooms.values():
+            if not isinstance(room, dict):
+                continue
+            edges = room.get("adjacent")
+            if isinstance(edges, list):
+                room["adjacent"] = [
+                    e for e in edges
+                    if not (isinstance(e, dict) and e.get("to") == old_id)]
+        # `sync_entity_interior_rooms` is ADD-ONLY by documented design, so
+        # the pass that retires a room does its own removal from the index.
+        listed = entity.get("interior_rooms")
+        if isinstance(listed, list):
+            entity["interior_rooms"] = [
+                rid for rid in listed if str(rid) != str(old_id)]
+        replaced.append(str(eid))
+    return replaced
+
+
 def place_enclosed_bodies(scene: dict) -> list:
     """A body that has taken another body INSIDE is a place. Put them in it.
 
