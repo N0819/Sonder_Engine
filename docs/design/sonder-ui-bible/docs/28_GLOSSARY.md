@@ -1,81 +1,81 @@
 # 28. Glossary
 
-## Accessibility Mode
+## Ambient Light
 
-A preset that enables recommended high-contrast, solid-surface, focus, motion, scale, spacing, and color-independent status options while leaving each control independently editable.
+The theme-controlled environmental light field defined by screen X/Y position,
+radius, intensity, and ambient color.
 
-## Action Cluster
+## Atmospheric Canvas
 
-An integrated group of related commands that operate on the same object or context.
+The full-screen image or gradient layer that supplies story atmosphere and
+environmental lighting behind the workbench.
 
-## Atmospheric content layer
+## Bar Opacity
 
-The story-facing visual ground: scene backdrop, weather, story imagery, and reading stage.
+The 0-100% alpha control for top-shelf cells, module title/tab bars, and related
+bar surfaces. Default 60%.
 
-## Chrome
+## Digital Material
 
-Persistent application surfaces such as navigation, headers, composer, and inspector frames.
+Sonder's shared translucent near-black chrome made from role color, alpha,
+frost, one-pixel bevel edges, and restrained ambient lighting.
 
-## Compact density
+## Focus
 
-An optional desktop presentation with reduced padding and tighter rows while preserving labels, state clarity, and minimum interaction dimensions.
+Scene with both modular toolbars collapsed while the story, composer, top
+shelf, status, and reveal controls remain.
 
-## Control Cluster
+## Frost Level
 
-The general shared-frame pattern for multiple independently interactive segments.
+The 0-100% control mapped to 0-24 px backdrop blur. Default 50% / 12 px.
 
-## Curated themes
+## Full Atmospheric
 
-The four first-class remastered themes: Carbon Signal, Ash and Brass, Midnight Ink, Parchment Night.
+The default image-based canvas treatment.
 
-## Go To launcher
+## Glass Density
 
-An optional global search/command launcher used as an expert accelerator without replacing visible navigation.
+The 0-100% alpha control for module bodies, composer, and glass-panel surfaces.
+Default 20%.
 
-## Hairline
+## Module
 
-A one-pixel structural border or divider.
+A live compact view of a Library-, Settings-, Scene-, or system-owned
+capability. A module has one live instance.
 
-## Hybrid saving
+## Modular Toolbar
 
-Autosave for low-risk changes, recoverable drafts for long work, and explicit actions for structural, destructive, security-sensitive, or expensive changes.
+The left or right Scene dock containing vertically stacked shelves and tab
+groups. It can be resized and collapsed.
 
-## Instrument Cluster
+## Scene
 
-A Control Cluster combining actions, state, or continuous controls, such as ambience mute, volume, change, and settings.
+The primary story workspace, replacing the visible `Play` destination label.
 
-## Legacy theme
+## Selected Strength
 
-An existing pre-remaster theme maintained through compatibility but not allowed to define the new component system.
+The 0-100% ambient tint added to selected/current surfaces. Default 6%.
 
-## Optical correction
+## Shelf
 
-A small per-icon or per-shape adjustment that centers visible mass rather than mathematical bounds.
+One vertical allocation inside a modular toolbar. It contains one module or one
+tab group.
 
-## Progressive disclosure
+## Tab Group
 
-Showing only the controls needed for the current task while keeping secondary and advanced capability discoverable and predictable.
+Two or more modules sharing one shelf and one 30 px tab strip.
 
-## Segmented Selector
+## Widget Shelf
 
-A Control Cluster containing mutually exclusive peer choices.
+The inventory/recovery surface showing every eligible module and whether it is
+Left, Right, Floating, or Stored.
 
-## Soft-Precision Geometry
+## Workbench
 
-Sonder's 3-5 px corner system: tight and engineered, but neither sharp nor broadly rounded.
+Scene with one or both modular toolbars open. Also the general name for the
+Atmospheric Digital Workbench system.
 
-## Split Action
+## 4 px rounded bevel
 
-A primary action paired with a narrow menu segment containing related alternatives.
-
-## Story scope
-
-A Library filter showing material associated with a selected story without changing global ownership.
-
-## Story Tools
-
-The contextual current-story inspector containing Cast, World, Style, Dialogue, Attire, Backdrops, Ambience, and related controls.
-
-## Structural accessibility
-
-Semantics, keyboard access, focus, labels, touch targets, scaling, and non-color state communication required regardless of visual mode.
+The universal free-standing corner and tonal edge treatment. It is not a
+chamfer.

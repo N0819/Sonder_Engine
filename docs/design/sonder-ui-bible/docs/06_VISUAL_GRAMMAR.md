@@ -1,140 +1,93 @@
 # 06. Visual Grammar
 
-## Visual model
+## Four layers
 
-Sonder uses three visual layers:
+Sonder is composed from four distinct layers:
 
-1. **Atmospheric content layer**: scene backdrops, story imagery, weather, and the reading field.
-2. **Structural chrome layer**: navigation, headers, inspector frames, composer frame, and application surfaces.
-3. **Control and feedback layer**: buttons, fields, clusters, focus, status, warnings, progress, and transient overlays.
+1. **Canvas**: full atmospheric image or authored gradient.
+2. **Story**: unboxed transcript and fixed reading measure.
+3. **Digital material**: top shelf, module bars/bodies, composer, menus, and
+   transient operation surfaces.
+4. **Signal**: selection edges, status lamps, focus, progress, and drag targets.
 
-These layers must remain distinct. Story atmosphere may appear behind the reading stage, but it must not unpredictably recolor navigation, settings, or text-heavy editors.
+Each layer has one job. The canvas supplies mood and environmental light; it
+does not supply UI state. Signal color remains legible when the canvas changes.
 
-## Primary visual rules
+## Atmospheric field
 
-### Quiet neutral grounds
+The canvas fills the viewport and remains visually continuous behind Scene.
+The default canvas is a full atmospheric image with focal-position, luminance,
+vignette, and reading-veil controls. Preset and custom gradients are equal
+first-class options.
 
-Most of the interface is composed from carbon, charcoal, and subdued grey. Surface contrast should establish depth before borders or shadows are added.
+A faint diagrammatic grid may organize empty canvas space only when it remains
+subordinate to the story. Decorative crosshairs, vertical rulers, detached
+glyphs, or scene labels are not part of the default composition.
 
-### Hairline structure
+## Digital material
 
-Use one-pixel borders, separators, and accent edges to define structure. Avoid thick frames, double outlines, or decorative corner hardware.
+All operable chrome derives from one recipe:
 
-### Deliberate negative space
+- near-black role color;
+- user-controlled alpha;
+- local backdrop blur;
+- one-pixel cool upper edge and dark lower edge;
+- restrained internal lighting from the ambient-light field;
+- 4 px rounded outer corners where the surface is free-standing.
 
-Negative space must support focus or composition. Large empty black regions without structure are not atmospheric; they look unfinished.
+Top-shelf cells, module bars, tab bars, toolbars, composer, color picker, menus,
+and drag previews must look cut from the same material. Sidebars may not become
+opaque blocks while the top shelf remains glass.
 
-Use negative space to:
+## Transparency hierarchy
 
-- center the reading measure;
-- separate navigation from content;
-- create calm around a primary action;
-- reveal scene imagery;
-- allow dense controls to breathe.
+- Canvas: fully visual.
+- Module body: Glass Density.
+- Bars and top-shelf cells: Bar Opacity.
+- Selected surfaces: Bar/Glass base plus Selected Strength.
+- Modal or high-risk text surface: raised toward opacity as required.
+- Solid-surfaces mode: 100% opaque without changing hierarchy.
 
-Do not use negative space to compensate for missing hierarchy.
+Never apply CSS `opacity` to a whole interactive subtree; mix alpha into
+surface colors so text and focus remain independently legible.
 
-### Sparse accent
+## Texture policy
 
-A region should rarely contain more than one strong cyan element and one amber callout. Accent is a signal, not a background treatment.
+The canonical material has no CRT pixel mask, material grain, scanline,
+sparkling noise, RGB separation, dither, or animated additive texture. Earlier
+experiments with those motifs are rejected. Future texture requires a Design
+Bible revision, not a local effect toggle.
 
-### Editorial alignment
+## Accent discipline
 
-Headings, metadata, content, controls, and dividers should share clear vertical and horizontal axes. The interface should look composed before it looks decorated.
+Ambient cyan marks current selection and focus. Green marks ready or healthy.
+Amber marks source/configuration/attention. Red marks failure or destructive
+action. Large saturated fills are rare; edge, text, and low-strength tint are
+preferred.
 
-### Restrained indexing
+## Depth order
 
-Indices such as `01`, `02`, or `FIG. 1` may organize primary destinations, major tools, or substantial content records. They must not appear on every button, label, or setting.
+Create depth in this order:
 
-Indexing is appropriate for:
+1. transparency and backdrop separation;
+2. one-pixel bevel edges;
+3. restrained internal lighting;
+4. small shadow for floating/overlay separation;
+5. blur.
 
-- Play, Library, Settings navigation;
-- Story Tools sections;
-- major setup routes;
-- long Library ledgers;
-- diagnostic or technical sequences.
+Do not compensate for weak hierarchy with large shadows, heavy borders, or
+brighter accent.
 
-Indexing is inappropriate for:
+## Composition tests
 
-- ordinary form fields;
-- dialog actions;
-- short lists where labels are already clear;
-- decorative numbering with no navigational value.
+A conforming screen remains coherent when:
 
-## Surface hierarchy
+- the canvas is replaced with black;
+- glass is made solid;
+- accents are desaturated;
+- blur is disabled;
+- both toolbars are collapsed;
+- all module bodies contain long real data.
 
-Use four surface levels:
-
-- **Ground**: application background or scene stage.
-- **Chrome**: navigation, headers, composer, persistent inspector.
-- **Raised**: cards, list selections, menus, temporary panels.
-- **Overlay**: dialogs, sheets, tooltips, toasts.
-
-Each level must be visually distinct through tone and border. Do not create depth solely through large blur shadows.
-
-## Glass policy
-
-Sonder uses controlled technical glass, not unrestricted glassmorphism.
-
-Glass may be used for:
-
-- contextual inspector surfaces over atmospheric stages;
-- compact floating utilities;
-- transient sheets and popovers;
-- story turn plates over a backdrop;
-- marginal status plates.
-
-Glass should not be used for:
-
-- long text editors;
-- dense settings forms;
-- authentication forms;
-- high-risk confirmation dialogs;
-- surfaces over highly animated weather unless blur is disabled;
-- surfaces whose readability depends on unknown imagery.
-
-Every glass surface must have:
-
-- a neutral tint;
-- sufficient opacity;
-- a solid-surface fallback;
-- a performance fallback;
-- a predictable border;
-- no ambient hue shift into application chrome.
-
-## Grid and technical motifs
-
-Subtle grids, index marks, or technical rules may appear only where they organize space. They must remain faint and non-interactive.
-
-The following are prohibited as persistent decoration:
-
-- scanlines;
-- animated noise;
-- glowing wireframes;
-- crosshair corners;
-- circuit-board motifs;
-- dense measurement ticks;
-- artificial terminal text.
-
-## Depth
-
-Depth is created in this order:
-
-1. tone;
-2. border;
-3. subtle inner highlight;
-4. restrained shadow;
-5. blur only where necessary.
-
-Large floating shadows and pronounced elevation should be reserved for modal overlays or temporary surfaces that must separate from the application.
-
-## Composition test
-
-A conforming screen should still read clearly when:
-
-- all accent colors are temporarily desaturated;
-- all shadows are disabled;
-- the scene backdrop is removed;
-- labels become 30 percent longer.
-
-If hierarchy collapses under those conditions, the composition is relying on decoration rather than structure.
+If the result reads as a generic dashboard or loses orientation, the visual
+grammar has not been implemented.

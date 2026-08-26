@@ -1,43 +1,39 @@
 # Responsive Checklist
 
-## Desktop
+## Width
 
-- [ ] Left navigation, center work, right inspector remain legible.
-- [ ] Inspector width does not destroy the story measure.
-- [ ] Dense rows align in comfortable and compact modes.
-- [ ] Hover enhancements do not hide keyboard/touch routes.
-- [ ] Large monitors do not produce unstructured empty space.
+- [ ] 1600/1440 desktop supports the calibrated three-column workbench.
+- [ ] 1180 px uses reduced dock widths without compressing the fixed story measure.
+- [ ] At 860 px and below, toolbars stage closed/overlay rather than squeezing Scene.
+- [ ] Phone retains top-shelf Scene/Library/Settings; no bottom-navigation fork.
+- [ ] Brand/story/status simplify before primary workspace labels disappear.
 
-## Tablet
+## Height
 
-- [ ] Two-pane layout remains only where content is usable.
-- [ ] Touch targets remain at least 44 px.
-- [ ] Inspector becomes overlay when needed.
-- [ ] Forms do not create narrow fixed-width columns.
+- [ ] Ordinary height exposes two shelf spaces per toolbar.
+- [ ] Tall height exposes three only when each shelf remains usable.
+- [ ] 2160 px-tall workspace exposes four.
+- [ ] Tabs do not count as shelves.
+- [ ] Shrinking height never discards a module.
 
-## Mobile portrait
+## Scene
 
-- [ ] Play, Library, Settings remain in bottom navigation.
-- [ ] Header contains only essential actions plus More.
-- [ ] Story Tools and editors use staged full-screen surfaces.
-- [ ] Composer remains above software keyboard.
-- [ ] Control clusters reduce to frequent actions plus More.
-- [ ] Lists preserve search, scope, and scroll state.
-- [ ] Active horizontal category is brought into view.
+- [ ] Transcript/composer width is independent of dock state.
+- [ ] Composer remains above the software keyboard.
+- [ ] Story text does not rewrap during toolbar transition.
+- [ ] Floating modules avoid the composer and remain recoverable.
 
-## Mobile landscape / short height
+## Input
 
-- [ ] Decorative chrome reduces before text size.
-- [ ] Composer remains usable.
-- [ ] Technical panes have height caps.
-- [ ] Sticky headers/footers do not consume the entire viewport.
+- [ ] Touch hit regions reach 44 px without inflating visible chrome.
+- [ ] Module placement has menu/keyboard equivalents.
+- [ ] Tabs can reorder and merge without precision dragging.
+- [ ] Splitters work by touch and arrow keys.
 
-## General
+## Stress
 
-- [ ] No primary navigation requires horizontal scrolling.
-- [ ] No cluster wraps.
-- [ ] No essential action is clipped.
-- [ ] Long labels remain usable.
-- [ ] Safe-area insets are applied.
-- [ ] Browser zoom to 200 percent does not break the flow.
-- [ ] All desktop capabilities have a mobile route.
+- [ ] 200% zoom remains usable.
+- [ ] Long localized labels preserve orientation.
+- [ ] Short landscape preserves prose and composer before modules.
+- [ ] Safe areas and browser chrome do not obscure primary controls.
+- [ ] Arrangement, selection, scroll, and drafts survive breakpoint changes.

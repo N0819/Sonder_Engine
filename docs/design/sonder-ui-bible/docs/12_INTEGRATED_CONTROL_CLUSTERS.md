@@ -2,186 +2,75 @@
 
 ## Principle
 
-> Related controls should share a visual structure whenever doing so strengthens their semantic relationship and reduces repeated chrome.
+The workbench integrates controls that form one object and leaves quiet actions
+bare when a frame would add noise. Clustering is structural, not decorative.
 
-A Control Cluster presents multiple independently interactive segments as one integrated instrument. It replaces a row of disconnected buttons with one outer frame, subtle internal separation, consistent geometry, and distinct per-segment states.
+## Top-shelf cluster
 
-The pattern is preferred, not universal. The deciding question is:
+Scene, Library, and Settings form one connected control with:
 
-> Would users describe these controls as parts of one task, or as separate decisions?
+- one outer material frame;
+- centered labels;
+- shared internal hairlines;
+- 4 px outer corners only;
+- transparent idle cells;
+- low-strength selected tint and lower accent edge;
+- no gaps, individual card borders, icons, or numbers.
 
-If they are parts of one task, a cluster is usually appropriate.
+## Module tab cluster
 
-## Cluster types
+When a shelf contains multiple modules:
 
-### Action Cluster
+- its 30 px bar becomes a tab strip;
+- each tab is both selector and drag surface;
+- tabs reorder naturally as the pointer crosses their midpoints;
+- an insertion caret and animated neighboring tabs show the exact order;
+- dropping on another title/tab strip joins that group;
+- the action menu remains at the trailing edge.
 
-Multiple related commands affecting the same object or context.
+One-module shelves use the same bar as a title, not a separate tab style.
 
-```text
-[ Edit | Reroll | Versions | More ]
-```
+## Composer cluster
 
-Use for:
+The composer is one fixed-measure material object containing the input region
+and Continue/Send/Stop cell. Shared edges are internal and square. Toolbar
+collapse must not change its width.
 
-- turn actions;
-- Library record actions;
-- inspector header actions;
-- import/export/duplicate groups;
-- undo/redo groups.
+## Parameter controls
 
-### Segmented Selector
+Theme rows use a label, tabular output, and a two-pixel track. Their sliders
+share one grid and use narrow handles. Color role swatches form a six-cell
+strip. Ambient-light controls form one compact diagrammatic instrument.
 
-Mutually exclusive choices.
+## Bare controls
 
-```text
-[ All | Stories | Characters | Lore ]
-```
+Use unframed controls when the symbol and location already explain the task:
 
-Use radio-group or tab semantics. One segment is selected at a time.
+- Characters portrait `−` and `+`;
+- toolbar reveal labels at the canvas edge;
+- unobtrusive Widget Shelf `+` triggers;
+- splitter cues.
 
-### Split Action
+The hit region remains large enough even when visible chrome is minimal.
 
-One primary action plus a related menu.
+## Menus and alternatives
 
-```text
-[ Create story | v ]
-```
+Each module action menu provides equivalent non-drag commands:
 
-Use only when the menu genuinely modifies or expands the primary action.
+- Move left;
+- Move right;
+- Merge as tab;
+- Separate tab;
+- Float;
+- Return to Widget Shelf.
 
-### Instrument Cluster
+Commands that cannot succeed at current shelf capacity are disabled with a
+plain explanation.
 
-A mixed assembly of action, state, or continuous controls.
+## Cluster limits
 
-```text
-[ Mute | Volume | Change sound | Settings ]
-```
-
-Use for ambience, playback, generation state, scale, or other persistent utilities.
-
-## Visual anatomy
-
-A conforming cluster has:
-
-- one outer surface;
-- one outer border;
-- 4 px default outer radius;
-- no gaps between segments;
-- zero internal radii;
-- subtle one-pixel separators;
-- consistent segment height;
-- fixed icon boxes;
-- hover and pressed state confined to one segment;
-- focus that clearly identifies the focused segment;
-- no double borders.
-
-Separators should be slightly inset vertically, generally occupying 55-70 percent of the control height. They must not read as a heavy table grid.
-
-## Segment sizing
-
-- Compact icon segment: 28-32 px desktop, 44 px touch.
-- Default icon segment: 32-36 px desktop, 44 px touch.
-- Text segment: content width plus 10-14 px horizontal padding per side.
-- More segment: fixed compact width.
-- Continuous control segment: receives a defined minimum and maximum width.
-
-## State model
-
-### Resting
-
-Shared neutral surface and low-contrast separators.
-
-### Hover
-
-Only the hovered segment changes tone. The group silhouette remains unchanged.
-
-### Pressed
-
-The segment uses a restrained inset or darker tonal state. Avoid exaggerated translation.
-
-### Selected
-
-Use a soft accent tint, stronger label, or thin accent edge. Avoid turning every selected segment into a bright filled cyan tile.
-
-### Focused
-
-Use an inset 2 px focus outline or carefully clipped outer ring on the focused segment. Keyboard users must be able to identify the exact segment.
-
-### Disabled
-
-Only the affected segment becomes disabled unless the whole instrument is unavailable. Neighboring segments must retain normal contrast and interactivity.
-
-### Loading
-
-Replace the affected segment's icon or label with progress. Do not block the full cluster unless the whole task is locked.
-
-### Destructive
-
-Destructive actions normally sit outside the cluster or behind More. When inclusion is necessary:
-
-- separate the segment with a stronger divider;
-- keep it neutral at rest;
-- introduce red on hover/focus and confirmation;
-- never place Delete beside a primary action without separation.
-
-## Semantics and keyboard behavior
-
-- Action Cluster: `role="toolbar"` where appropriate; each segment remains a button.
-- Segmented Selector: tabs, radio group, or pressed buttons based on behavior.
-- Split Action: two buttons with related accessible labels.
-- Instrument Cluster: grouped controls with a shared accessible label.
-- Arrow-key navigation may use roving focus for dense clusters.
-- Tab order must not become excessive; a toolbar may be one tab stop with arrow navigation when implemented correctly.
-
-## Labels and discovery
-
-New or unfamiliar actions should retain labels. Expert compact mode may reduce familiar actions to icons, but tooltips, shortcuts, and accessible names remain mandatory.
-
-Do not use icon-only clusters as the default merely because they look clean.
-
-## Mobile adaptation
-
-Clusters must not wrap.
-
-On mobile:
-
-- maintain 44 px touch segments;
-- show no more than approximately three frequent actions before More;
-- move low-frequency actions to overflow;
-- convert long segmented selectors to a select or staged filter when labels no longer fit;
-- keep the selected segment visible;
-- avoid horizontal scrolling unless the cluster is clearly a selector and the active item is brought into view.
-
-Example:
-
-```text
-Desktop: [ Edit | Reroll | Versions | Duplicate | More ]
-Mobile:  [ Edit | Reroll | More ]
-```
-
-The omitted actions remain available through More.
-
-## Good candidates in Sonder
-
-- Turn controls.
-- Composer ambience utilities.
-- Inspector Pin, Collapse, More, Close.
-- Library Open, Duplicate, Export, More.
-- Story scope and asset-type selectors.
-- Theme, text-size, and density selectors.
-- Undo/redo and version navigation.
-- Dialog footer actions when tightly related.
-
-## Misuse
-
-Do not cluster:
-
-- unrelated actions that happen to share a row;
-- navigation with destructive commands;
-- toggles and immediate commands without clear state treatment;
-- more than five or six visible segments on desktop;
-- long text actions that become hard to scan;
-- controls with different heights;
-- a primary action with several equally loud alternatives;
-- actions whose boundaries become unclear on touch devices.
+- Never wrap the top shelf or a module tab strip into two rows.
+- Overflow tabs use a compact overflow mechanism while preserving order.
+- Do not group unrelated actions merely to reduce gaps.
+- Destructive data actions do not belong in module-placement clusters.
+- State changes never alter cluster dimensions.

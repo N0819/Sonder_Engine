@@ -2,186 +2,79 @@
 
 ## Purpose
 
-Library is the single place for finding, creating, connecting, importing, exporting, and maintaining story material.
+Library is the canonical archive, lifecycle, association, and authoring
+workspace for Stories, Characters, Personas, and Lore. It is also the source
+from which eligible material tools can be added to the modular workbench.
 
-It must support both mental models:
+## Story ownership
 
-- "Show me everything I own."
-- "Show me everything connected to this story."
+Library is the only story switcher. Selecting a story reveals its detail;
+`Open in Scene` changes the active story and returns to Scene. The current-story
+identity in the top shelf never duplicates this archive.
 
-## Core model
+## Composition
 
-Library contains:
+Library occupies the central workspace beneath the same integrated top shelf.
+It uses a compact searchable ledger and focused detail/authoring view rather
+than the former fixed left category pane + center ledger + right inspector.
 
-- Stories;
-- Characters;
-- Personas;
-- Lore;
-- recent items;
-- favorites or pinned items where implemented;
-- story associations;
-- import/export tools;
-- search and filtering.
+The workspace owns:
 
-## Scope selector
+- category and story scope;
+- search, sort, filters, and archive visibility;
+- current selection and list scroll;
+- detail, lifecycle actions, and authoring;
+- association to stories;
+- import and export;
+- Add to Workbench / Locate Module for eligible sections.
 
-The primary Library scope selector includes:
+Only one primary navigation method is visible at a time. A concise toolbar may
+expose category, scope, search, and the current create action without becoming
+a row of framed buttons.
 
-- All Library;
-- Current Story;
-- Choose a Story;
-- Unassigned;
-- Used in Multiple Stories.
+## Records and associations
 
-The selector should be an integrated control or a compact scope picker, not a row of unrelated buttons.
+Stories, Characters, Personas, and Lore remain distinct real records. Story
+scope is a filter over associations, not an ownership folder. Remove from Story
+does not delete. Reusable records can belong to multiple stories.
 
-Story scopes are views over associations. They do not create ownership folders.
+## Authoring
 
-## Desktop layout
+Substantial editors replace the Library body as a focused workspace. They use
+compact section navigation, explicit save state, recoverable drafts, and one
+document scroll owner. Returning restores the exact query, selection, and
+scroll state.
 
-Preferred wide layout:
+Authoring must preserve unknown/extension-owned fields and expose Additional
+fields/Advanced without making raw data the default.
 
-- left category/scope column;
-- central searchable item ledger;
-- right detail/editor pane.
+## Workbench modules
 
-The detail pane may collapse when no item is selected. The central ledger should expand rather than leave a large empty region.
+Characters, Personas, Lore views, and other approved Library subsections may
+be module-capable. Their source action behaves as follows:
 
-At narrower desktop/tablet widths, use list-to-detail navigation or a two-pane layout.
+- Stored: Add to left/right toolbar, float, or drag from Widget Shelf.
+- Docked/floating: Locate and focus the existing instance.
+- Tabbed: activate the owning tab; do not create a second copy.
 
-## Mobile layout
+The module is a compact operational view. Full creation, destructive lifecycle,
+archive, and long-form authoring remain in Library.
 
-Mobile uses:
+## Rows
 
-- persistent Library title and scope;
-- search;
-- type filter;
-- full-width item list;
-- full-screen detail/editor after selection;
-- predictable Back to the prior filtered list;
-- retained scroll position and query.
+Rows use Geist Sans 12 px names, restrained 9-10 px metadata, one stable
+selected treatment, and a trailing More action. Characters may show portraits
+when the selected density supports them. Oversized cards, statistic dashboards,
+and ornamental indices are prohibited.
 
-## Search
+## Mobile
 
-Search should cover:
+Library remains under the top shelf. It stages ledger and focused detail as
+full-width states with explicit Back, preserved filters, and 44 px hit regions.
+It does not introduce bottom navigation or a separate mobile archive model.
 
-- item names;
-- summaries/descriptions;
-- relevant tags or categories;
-- story associations;
-- lore keys where useful.
+## Empty and error states
 
-Search state remains visible. No-results state suggests clearing filters or changing scope.
-
-## Type filters
-
-Type filters may use a segmented selector when labels fit:
-
-```text
-[ All | Stories | Characters | Personas | Lore ]
-```
-
-On narrow mobile widths, use a compact filter sheet or select. Do not shrink labels into unreadable abbreviations.
-
-## Item ledger
-
-Each row should include:
-
-- leading icon or index;
-- primary name;
-- item type when not already filtered;
-- concise secondary metadata;
-- usage or story association when relevant;
-- selected state;
-- trailing action cluster or More.
-
-Suggested action cluster:
-
-```text
-[ Open | Duplicate | Export | More ]
-```
-
-Delete and Archive normally live in More, separated from ordinary actions.
-
-## Story-scoped view
-
-A selected story scope may show:
-
-- story overview;
-- attached characters;
-- player persona;
-- connected lore;
-- recent activity;
-- unresolved or missing references;
-- shared items used elsewhere.
-
-The view should resemble a coherent collection without implying that attached items cease to be globally reusable.
-
-## Associations
-
-Attach and detach actions must use plain language:
-
-- Add to story;
-- Remove from story;
-- Used in 3 stories;
-- Set as player persona.
-
-Avoid database language such as link row, join, foreign key, or binding in ordinary UI.
-
-## Create and import
-
-The primary Library action is contextual:
-
-- New Story in Stories;
-- New Character in Characters;
-- New Persona in Personas;
-- New Lorebook in Lore;
-- Add or Import in broader views.
-
-Use split actions only when the relationship is clear:
-
-```text
-[ New Character | v ]
-```
-
-The menu may offer Import or Generate. Do not hide the ordinary creation route behind a dropdown.
-
-## Editors
-
-Editors should be dedicated surfaces rather than oversized generic dialogs when the content is long or structured.
-
-Editing contract:
-
-- clear title and item type;
-- save state;
-- recoverable draft for long text;
-- sections with plain labels;
-- advanced/raw representation behind disclosure;
-- story usage visible but not dominant;
-- import warnings and validation near affected content.
-
-## Empty and first-use states
-
-Library home should show:
-
-- recent stories or assets when available;
-- one clear create action;
-- one clear import action;
-- short explanation of reusable material;
-- story scope only when a story exists.
-
-Avoid a dashboard of decorative statistic cards with little action value.
-
-## Expert acceleration
-
-Experienced users benefit from:
-
-- saved search/scope state;
-- keyboard focus for search;
-- recent items;
-- duplicate/export in integrated row clusters;
-- multi-select and bulk actions when justified;
-- compact density;
-- quick switcher or Go To launcher.
-
-These features should not add permanent complexity for new users.
+Every empty/no-results/error state explains the active scope and offers a
+recovery action. Import, create, and clear-filter routes remain direct. Work is
+preserved when a save or import fails.

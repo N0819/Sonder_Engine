@@ -1,129 +1,72 @@
 # 09. Typography
 
-## Three-role system
+## Canonical font set
 
-Sonder uses three typographic roles:
+Sonder uses exactly three primary families:
 
-1. **Interface sans** for navigation, controls, forms, dialogs, Library, and Settings.
-2. **Literary serif** for story prose, player input echoes, and the composer.
-3. **Restrained monospace** for diagnostics, identifiers, code, numeric technical data, and selected indices.
+- **Geist Sans**: navigation, module titles, controls, forms, Library, Settings,
+  and player-facing explanations.
+- **Geist Mono**: micro labels, values, status, coordinates, shortcuts, compact
+  technical data, and the restrained machine layer.
+- **Newsreader**: story title, narration, dialogue, and literary input where it
+  belongs to the fiction.
 
-The roles are semantic. A font is not chosen because a surface looks empty or needs more technical personality.
+Fallbacks must preserve metrics and role: a modern neutral sans, a restrained
+mono, and a readable literary serif. Do not introduce display sci-fi fonts.
 
-## Interface scale
+## Desktop scale
 
-This table is the formal, normative interface scale. The default is deliberately
-compact for modern high-density desktop displays. Components MUST consume the
-semantic size and line-height tokens for their role; they MUST NOT introduce a
-one-off numeric font size to make one screen denser or louder. Library details,
-Settings copy, inspector text, and equivalent interface prose all use this same
-scale. Story prose is the only independent reading scale.
+| Role | Family | Size / line | Weight |
+|---|---|---:|---:|
+| Micro coordinate/status | Geist Mono | 8-9 / 11-12 px | 400-500 |
+| Detail metadata | Geist Mono or Sans | 9-10 / 12-14 px | 400-500 |
+| Module tab | Geist Sans | 10 / 14 px | 500 |
+| Module title | Geist Sans | 11 / 14 px | 500 |
+| Top-shelf navigation | Geist Sans | 12 / 16 px | 500 |
+| List name/default control | Geist Sans | 12 / 16 px | 400-500 |
+| Local emphasized title | Geist Sans | 13 / 17 px | 400-500 |
+| Story title | Newsreader | 12 / 16 px | 500 |
+| Story prose | Newsreader | 15 / 1.62 | 400 |
+| Exceptional setup heading | Geist Sans | 18-22 / 1.2 | 500-600 |
 
-| Role | Size | Weight | Line height | Notes |
-|---|---:|---:|---:|---|
-| Micro index | 11 px | 500-600 | 14 px | desktop only; nonessential; never primary copy |
-| Metadata | 12 px | 450-550 | 16 px | minimum persistent metadata size |
-| Compact control | 13 px | 500-600 | 16-18 px | compact desktop controls |
-| Default UI | 14 px | 400-500 | 20 px | default body and fields |
-| Emphasized UI | 14 px | 600 | 20 px | selected items, strong labels |
-| Section heading | 16 px | 600 | 22 px | local sections |
-| Page heading | 20-22 px | 600 | 28 px | destination-level heading |
-| Display/setup heading | 26-32 px | 550-650 | 34-40 px | onboarding and empty-state focus only |
+Ordinary pages must not introduce 26-36 px headings. Destination identity comes
+from the top shelf and layout, not marketing-scale type.
 
-Mobile should not reduce core UI text below 14 px. Inputs should render at 16 px where needed to prevent mobile browser zoom.
+## Story settings
 
-The Larger interface accessibility preference remaps the same roles. It does
-not permit individual components to enlarge themselves, and it does not change
-the independently configured story-prose size.
+Story prose and interface scaling remain independent. The default prose is
+15 px at a 650 px measure. User preferences may increase prose size and width
+without scaling module chrome. The composer follows the story/interface role of
+its content while retaining a 12 px compact placeholder by default.
 
-## Story typography
+## Monospace discipline
 
-Default story settings:
+Geist Mono is a precision layer, not the entire interface. Use it for:
 
-- prose size: 17 px;
-- line height: 1.65-1.75;
-- reading width: approximately 680-760 px, default 720 px;
-- paragraph spacing: 0.75-1.0 em where prose structure permits;
-- player-input echo: 0.88-0.94 of prose size;
-- composer: same serif family and closely related size.
+- status and concise state values;
+- numeric outputs and slider values;
+- shortcuts and coordinates;
+- source/system metadata;
+- code, models, identifiers, and diagnostics.
 
-Story size and interface size remain independently configurable.
+Do not use it for Scene/Library/Settings, Characters, Personas, AI Connections,
+long descriptions, dialogs, or ordinary form labels merely to appear technical.
 
-## Monospace limits
+## Uppercase
 
-Monospace is appropriate for:
+Uppercase is allowed for short state, source, shortcut, and coordinate labels.
+Navigation and module titles use title case. Sentences use sentence case.
+Tracking stays modest; tiny wide-tracked copy is decorative and nonconforming.
 
-- `01`, `02`, `FIG. 1`, turn numbers, or diagnostic sequence labels;
-- model names and identifiers;
-- code or raw JSON;
-- token counts, durations, and technical metrics;
-- keyboard shortcuts.
+## Indices
 
-Monospace is not appropriate for:
+Decorative `01`, `02`, `03`, figure numbers, and chapter codes are removed from
+ordinary navigation and module bars. Numbers appear only when the underlying
+content is ordered or the value itself is meaningful.
 
-- ordinary navigation labels;
-- all headings;
-- help text;
-- player-facing descriptions;
-- button labels without technical meaning;
-- large blocks of settings copy.
+## Accessibility
 
-If more than approximately 15 percent of an ordinary screen's visible text is monospace, review whether the interface has become too technical.
-
-## Uppercase policy
-
-Use uppercase only for:
-
-- very short metadata labels;
-- rare status labels;
-- compact section codes;
-- tiny inspector eyebrow text.
-
-Do not use uppercase for:
-
-- sentences;
-- long navigation labels;
-- form labels;
-- descriptive copy;
-- dialog titles;
-- primary calls to action.
-
-Letter spacing should be modest. Wide tracking on small text reduces readability and should be reserved for very short labels.
-
-## Heading hierarchy
-
-Every screen should have one page-level heading or an equivalent clear title. Section headings use sentence case and do not sit inside decorative dark bars unless the bar is a real header surface.
-
-Hierarchy is established by:
-
-1. size;
-2. weight;
-3. spacing;
-4. tone;
-5. optional index.
-
-Do not establish hierarchy through uppercase and color alone.
-
-## Truncation and wrapping
-
-- Story titles may truncate in persistent headers but must be fully available through title, tooltip, or detail view.
-- List titles should wrap before actions are pushed off-screen.
-- Button labels should not truncate; use a shorter label or move the action to overflow.
-- Form labels may wrap to two lines on mobile.
-- Technical identifiers may use middle truncation where the prefix and suffix are meaningful.
-- Long localized labels must not overlap icons or chevrons.
-
-## Numeric typography
-
-Use tabular numbers for:
-
-- durations;
-- turn counts;
-- usage counts;
-- model cost/context metrics;
-- progress percentages;
-- indexed lists where vertical alignment matters.
-
-## Font selection and licensing
-
-Implementation may use bundled open-license fonts or robust system stacks. Font files and licenses must be reviewed separately. The design bible defines roles and metrics, not a proprietary font requirement.
+Micro text may not carry essential information alone. Larger Interface remaps
+roles as a system, preserves hierarchy, and allows reflow. Touch inputs may use
+16 px internally where required to prevent browser zoom without changing the
+visible desktop scale.

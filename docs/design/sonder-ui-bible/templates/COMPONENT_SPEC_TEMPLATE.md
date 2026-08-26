@@ -1,131 +1,93 @@
 # Component Specification: [Component Name]
 
 **Status:** Draft / Review / Approved / Deprecated  
-**Owner:** [Name or team]  
-**Bible version:** 1.0  
-**Related surfaces:** [Play / Library / Settings / shared / extension host]
+**Bible version:** 2.0
 
-## Purpose
+**Owner workspace:** Scene / Library / Settings / system
 
-Describe the user problem this component solves in one or two sentences.
+**Module-capable:** yes / no
 
-## When to use
+## User purpose
 
-- [Use case]
-- [Use case]
+[One concise problem and outcome.]
 
-## When not to use
+## Canonical reference
 
-- [Misuse]
-- [Alternative component]
+- Artifact region/state:
+- Same-viewport evidence:
+- Related DB2 decisions:
+
+## Ownership
+
+- Runtime source of truth:
+- Save/draft behavior:
+- Live-instance identity:
+- Source workspace locate behavior:
 
 ## Anatomy
 
-1. [Part]
-2. [Part]
-3. [Part]
+1. [Bar/title/tab]
+2. [Body/content]
+3. [Actions/status]
 
-## Content rules
+## Material
 
-- Label length:
-- Help text:
-- Icon use:
-- Empty state:
-- Error text:
-
-## Geometry
-
-- Outer radius:
-- Height:
-- Padding:
-- Icon box:
-- Separator:
-- Minimum/maximum width:
+- Glass Density consumer:
+- Bar Opacity consumer:
+- Selected Strength consumer:
+- Frost consumer:
+- 4 px outer/shared-edge treatment:
 
 ## Typography
 
-- Primary label:
-- Secondary metadata:
-- Monospace usage:
-
-## Color and surface
-
-- Surface level:
-- Border:
-- Accent usage:
-- Glass/solid behavior:
+- Geist Sans role/size:
+- Geist Mono role/size:
+- Newsreader role/size:
+- Long-label behavior:
 
 ## States
 
-| State | Visual treatment | Behavior | Announcement |
+| State | Visual | Behavior | Announcement |
 |---|---|---|---|
 | Idle |  |  |  |
 | Hover |  |  |  |
 | Focus |  |  |  |
-| Active |  |  |  |
 | Selected |  |  |  |
-| Disabled |  |  |  |
-| Loading |  |  |  |
+| Dragging |  |  |  |
+| Invalid drop |  |  |  |
+| Loading/saving |  |  |  |
 | Error |  |  |  |
 
-## Interaction
+## Placement and interaction
 
-- Pointer:
-- Keyboard:
-- Touch:
-- Focus management:
-- Shortcut:
+- Pointer drag:
+- Keyboard/menu equivalent:
+- Tab merge/reorder:
+- Shelf/float/store behavior:
+- Capacity failure:
+- Escape/recovery:
 
 ## Responsive behavior
 
-### Desktop
-
-[Behavior]
-
-### Tablet
-
-[Behavior]
-
-### Mobile
-
-[Behavior]
-
-### Short-height / landscape
-
-[Behavior]
+- Wide:
+- Constrained:
+- Compact/phone:
+- Short height:
+- Touch:
 
 ## Accessibility
 
-- Role:
-- Accessible name:
-- Current/selected state:
-- Error association:
-- Touch target:
-- High contrast:
-- Reduced motion:
+- Role/name/current state:
+- Focus order/restoration:
+- Hit region:
+- Non-color state:
+- Reduced motion/solid/high contrast:
 
-## Localization
+## Acceptance
 
-- Expansion allowance:
-- Wrapping/truncation:
-- RTL considerations:
-
-## Data and persistence
-
-- Source of truth:
-- Save behavior:
-- Draft/recovery:
-- Error recovery:
-
-## Acceptance criteria
-
-- [ ] Uses approved token values.
-- [ ] Meets all required states.
-- [ ] Passes keyboard and touch review.
-- [ ] Passes mobile and desktop screenshots.
-- [ ] Handles long labels and errors.
-- [ ] Does not introduce a one-off pattern.
-
-## Known deviations
-
-None / [Link to amendment]
+- [ ] Matches canonical composition and token values.
+- [ ] Uses one live instance and correct owner.
+- [ ] Provides non-drag placement routes when module-capable.
+- [ ] Passes width/height/zoom/touch/keyboard states.
+- [ ] Handles error, recovery, and persistence.
+- [ ] Introduces no old 1.x component family.

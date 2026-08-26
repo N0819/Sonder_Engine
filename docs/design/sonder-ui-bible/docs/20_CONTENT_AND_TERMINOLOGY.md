@@ -2,138 +2,89 @@
 
 ## Voice
 
-Sonder speaks like a calm, capable assistant. Copy should be concise, direct, and specific.
+Sonder speaks calmly, directly, and compactly. Use concrete verbs, sentence
+case, and plain consequences. Avoid corporate filler, theatrical computer
+language, jokes, exclamation marks, and raw implementation terms.
 
-Use:
+## Canonical names
 
-- sentence case;
-- active voice;
-- concrete verbs;
-- plain descriptions of consequence;
-- short headings;
-- helpful error recovery.
+- Scene
+- Library
+- Settings
+- Characters
+- Personas
+- Lore
+- Custom Theme
+- Scene Effects
+- AI Connections
+- Widget Shelf
+- left toolbar / right toolbar
+- shelf
+- tab group
+- floating module
+- canvas
+- Full Atmospheric
+- Deep Current
+- Glass Density
+- Bar Opacity
+- Selected Strength
+- Frost Level
+- Ambient Light
 
-Avoid:
+`Play` is retired as the visible primary-workspace label. It may remain an
+internal route or historical term until implementation migration completes.
+`Inspector`, `rail`, `pane mode`, and `Story Tools Rail` are not names for the
+new modular toolbars.
 
-- corporate language;
-- marketing language inside the application;
-- unnecessary technical jargon;
-- playful exclamation marks;
-- vague confirmation labels;
-- anthropomorphizing the engine when it obscures responsibility;
-- overly formal or legalistic phrasing in ordinary flows.
+## Edge controls
 
-## Naming rules
+The calibrated visible labels are `Open Toolbar LFT` and `Open Toolbar RGT`.
+Accessible names and help text spell out `Open left toolbar` and `Open right
+toolbar`. If later user testing replaces the visible abbreviations, it requires
+one coherent pair rather than local variants.
 
-Preserve established Sonder names when they are clear. Rename when a term is confusing, internal, or inconsistent.
+## Module actions
 
-Ordinary UI prefers:
+Use result-oriented labels:
 
-- Play;
-- Library;
-- Settings;
-- Story Tools;
-- AI Connections;
-- Appearance;
-- Current Story;
-- Background work;
-- Technical detail;
-- Add-ons;
-- Maintenance;
-- Advanced.
+- Move to left toolbar;
+- Move to right toolbar;
+- Merge as tab;
+- Separate into shelf;
+- Float;
+- Return to Widget Shelf;
+- Locate in Workbench;
+- Add to Workbench.
 
-Advanced may expose internal terms with explanation.
+Do not use `Float target`, `dock zone 03`, `detach instance`, or other
+implementation-facing wording.
 
-## Action labels
+## Story actions
 
-Use verb + object when ambiguity exists:
-
-- Create Story;
-- Save Character;
-- Remove from Story;
-- Test Connection;
-- Install Extension;
-- Delete Lorebook;
-- Export Story.
-
-Use short verbs when context is unambiguous:
-
-- Send;
-- Stop;
-- Edit;
-- Reroll;
-- Close;
-- Back.
-
-Avoid:
-
-- OK;
-- Confirm;
-- Submit;
-- Proceed;
-- Execute;
-- Apply Changes when a more specific action exists.
-
-## Descriptions
-
-Help text should answer one of these questions:
-
-- What does this affect?
-- When should I use it?
-- Is it reversible?
-- Does it change existing stories or only future output?
-- Does it cost time or model usage?
-
-Do not explain obvious mechanics such as "Click this button to save."
+Use `Open in Scene`, `Continue`, `Send`, `Stop`, `Edit`, `Reroll`, and
+`Versions`. Use `Create Story`, `Save Character`, `Test Connection`, and other
+verb-object forms when context is not obvious.
 
 ## Errors
 
-An error message should contain:
+An error states:
 
 1. what failed;
-2. likely cause when known;
-3. what the user can do next;
-4. whether their work was preserved.
+2. why when known;
+3. what the user can do;
+4. whether their work and arrangement were preserved.
 
 Example:
 
-> Could not connect to the provider. The server did not accept this key. Your entry is still here; check the key and try again.
-
-Avoid raw HTTP status or stack text in ordinary UI. Technical detail may be expandable.
-
-## Empty states
-
-Use plain orientation and a next step.
-
-Good:
-
-> No characters in this story yet. Add one from your Library or create a new character.
-
-Poor:
-
-> No data found.
-
-## Progress and background work
-
-Use task names:
-
-- Generating character;
-- Importing lorebook;
-- Rebuilding search index;
-- Saving story;
-- Checking for updates.
-
-Do not use Working without context when the operation lasts more than a moment.
-
-## Content preferences
-
-Adult-content and safety-related controls should be plain, neutral, and nonjudgmental. Avoid playful toggles or loud badges in the primary Play header.
+> Personas could not move to the right toolbar because all shelf spaces are in
+> use. Merge it as a tab or return another module to the Widget Shelf.
 
 ## Localization
 
-- Do not concatenate translated sentence fragments.
-- Allow labels to expand by at least 30 percent.
-- Preserve user-authored names and model prose from interface translation.
-- Avoid English-only abbreviations in primary navigation.
-- Keep index codes separate from translated labels.
-- Review mobile layouts with long translated labels.
+- Translate complete strings, never fragments.
+- Allow at least 30% label expansion.
+- Keep labels separate from technical values.
+- Preserve user-authored names and story prose.
+- Do not rely on English-only numeric prefixes for orientation.
+- Visible `LFT`/`RGT` labels require localized equivalents or may be replaced by
+  compact directional labels while accessible names remain explicit.

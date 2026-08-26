@@ -2,84 +2,59 @@
 
 **Date:**  
 **Auditor:**  
-**Bible version:** 1.0  
+**Bible version:** 2.0
 **Build/commit:**  
-**Viewports reviewed:**  
-**Themes reviewed:**  
+**Canonical artifact state:**
+
+**Viewports:**
 
 ## User goal
 
-What is the primary user goal on this screen?
+[Primary outcome.]
 
-## First-impression assessment
+## Macro comparison
 
-- Is the location obvious?
-- Is the primary action obvious?
-- Is visual hierarchy clear in five seconds?
-- Does the screen feel like Sonder?
+- Canvas and story hierarchy:
+- Top-shelf integration:
+- Toolbar/shelf geometry:
+- Fixed reading/composer measure:
+- Old-pattern remnants:
 
 ## Findings
 
-### [Finding ID] [Title]
+### [ID] [Title]
 
 - **Severity:** P0 / P1 / P2 / P3
-- **Category:** alignment / typography / geometry / color / icon / responsive / state / content / performance
-- **Affected viewport/state:**
-- **Observed problem:**
+- **Category:** composition / material / typography / geometry / docking / responsive / accessibility / runtime
+- **Observed:**
+- **Canonical expectation:**
 - **Root cause:**
-- **Bible rule violated:**
-- **Recommended correction:**
-- **Acceptance criteria:**
-- **Likely files/components:**
-- **Evidence:** screenshot or measurement
+- **Correction:**
+- **Acceptance evidence:**
 
-## Alignment measurements
+## Measurements
 
-| Element group | Expected | Observed | Result |
+| Element | Expected | Observed | Result |
 |---|---:|---:|---|
-| Peer control height |  |  |  |
-| Icon box |  |  |  |
-| Label baseline |  |  |  |
-| Left inset |  |  |  |
-| Trailing action inset |  |  |  |
+| Top shelf | 40 px |  |  |
+| Module bar | 30 px |  |  |
+| Rounded bevel | 4 px |  |  |
+| Dock width | 200-420 px |  |  |
+| Reading measure | <= 680 px |  |  |
 
-## State coverage
+## Required states
 
-- [ ] Idle
-- [ ] Hover
+- [ ] Workbench
 - [ ] Focus
-- [ ] Active
-- [ ] Selected
-- [ ] Disabled
-- [ ] Loading
-- [ ] Error
-- [ ] Empty/no results
-- [ ] Accessibility Mode
-- [ ] Reduced motion
-- [ ] Long localized content
+- [ ] Dock/tab/shelf drag
+- [ ] Floating and Widget Shelf
+- [ ] Full/short/tall height
+- [ ] Atmospheric/gradient canvas
+- [ ] Solid/high contrast/reduced motion
+- [ ] Long labels and 200% zoom
 
-## Responsive notes
+## Recommendation
 
-### Desktop
-
-[Notes]
-
-### Tablet
-
-[Notes]
-
-### Mobile portrait
-
-[Notes]
-
-### Mobile landscape / short height
-
-[Notes]
-
-## Summary
-
-- Open P0:
-- Open P1:
-- Open P2:
-- Open P3:
-- Release recommendation:
+- Open P0/P1:
+- Remaining P2/P3:
+- Conformance decision:

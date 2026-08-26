@@ -2,81 +2,67 @@
 
 ## Core statement
 
-> Sonder is a quiet instrument surrounding the story, not a technical display competing with it.
+> Sonder is a quiet fiction instrument made from black digital material,
+> suspended over a living atmosphere.
 
-The story is the subject. The interface is the frame, instrument panel, and library that lets the player enter, shape, and maintain that story.
+The canvas is the world. The prose is the human center. The interface is a
+precise, configurable instrument that appears only where the user can act.
 
 ## Five-second test
 
-A new user should understand within five seconds:
+A user should understand within five seconds:
 
-1. where the current story is;
-2. where to write or continue;
-3. where to find saved material;
-4. where application settings live;
-5. what the next useful action is.
+1. which workspace is active: Scene, Library, or Settings;
+2. which story is open;
+3. where the story continues and where input is sent;
+4. which toolbars are open and how to reveal a closed one;
+5. where reusable material and application configuration live.
 
-If the interface makes the user interpret decorative codes, scan a dense toolbar, or understand engine terminology before those five questions are answered, it has failed.
+No icon legend, destination number, hidden title switcher, or developer model
+may be required for orientation.
 
-## Visual character
+## Product character
 
-Sonder should feel:
+Sonder MUST feel:
 
-- dark, restrained, and atmospheric;
-- precise without feeling severe;
-- compact without feeling cramped;
-- capable without feeling corporate;
-- modern without looking like a generic SaaS dashboard;
-- subtly technical without becoming a science-fiction HUD;
-- compatible with any story genre.
+- atmospheric, compact, and composed;
+- modern at high-resolution desktop scale;
+- quietly technical without becoming a cockpit;
+- literary at the story layer and precise at the control layer;
+- personal through canvases, color, glass, and module arrangement;
+- charming because every bar, bevel, label, and interaction belongs together.
 
-Sonder should not feel:
+Sonder MUST NOT feel:
 
-- glossy, bubbly, or toy-like;
-- aggressively futuristic;
-- covered in neon, scanlines, grids, or glowing frames;
-- dominated by cyan or any other accent color;
-- dependent on tiny technical labels for comprehension;
-- assembled from unrelated generic cards and buttons;
-- like a developer console presented to a player.
+- like a generic three-pane dashboard;
+- like the current UI with smaller fonts applied afterward;
+- opaque, heavy, or card-driven;
+- decorated by gratuitous indices, glyphs, grids, grain, or glow;
+- dependent on a single science-fiction genre;
+- like a developer console exposed to a player.
 
-## Product priorities
+## Priority order
 
-When priorities conflict, resolve them in this order:
+When rules compete:
 
-1. Preserve the story and the player's work.
-2. Make the current task obvious and reliable.
-3. Preserve feature parity across desktop and mobile.
-4. Maintain consistent visual and interaction grammar.
-5. Keep advanced capability available without placing it in the novice path.
-6. Preserve atmosphere and visual identity.
-7. Add decoration only when it clarifies structure or state.
+1. Preserve user work and engine truth.
+2. Preserve story readability and the stable composer measure.
+3. Make the current action and current system state clear.
+4. Preserve the workbench composition and module model.
+5. Preserve accessibility and equivalent non-drag routes.
+6. Preserve atmosphere and material cohesion.
+7. Remove anything that does not improve the whole.
 
-## Design equation
+## Non-negotiable outcomes
 
-The intended balance is:
+Every major surface MUST:
 
-```text
-Prime Intellect restraint
-+ EVE Photon coherence and efficiency
-+ literary reading space
-- cockpit ornament
-- enterprise-dashboard language
-- excessive technical signaling
-= Sonder
-```
-
-## Mandatory outcomes
-
-Every conforming surface MUST:
-
-- provide an obvious primary action or clear resting state;
-- use plain player-facing language;
-- use the shared geometry, spacing, typography, and icon rules;
-- avoid hover-only access to essential actions;
-- adapt its hierarchy rather than merely shrink on mobile;
-- preserve keyboard and touch access;
-- expose advanced functions through progressive disclosure;
-- handle empty, loading, error, success, and destructive states;
-- look intentional with short, long, and translated content;
-- remain visually compatible with non-science-fiction stories.
+- live inside the integrated top-shelf frame;
+- use the same 4 px material, typography, and state grammar;
+- keep large headings and oversized controls out of ordinary workflows;
+- expose advanced systems through Library, Settings, modules, and the Widget
+  Shelf instead of permanent front-facing chrome;
+- remain understandable with the canvas disabled, glass made solid, and motion
+  reduced;
+- provide keyboard/touch alternatives for every drag operation;
+- adapt through deliberate staging rather than a second mobile design language.

@@ -13,20 +13,21 @@ For interface work, resolve disagreements in this order:
 1. Engine behavior, persistence, security, information-firewall, archive,
    checkpoint, authentication, guest, and extension contracts in current
    source and maintained guides.
-2. This guide, [`UI_REFERENCE.md`](UI_REFERENCE.md), and an approved
-   feature-specific interface specification.
-3. For presentation covered by the supplied evidence, the matching reference
-   screenshots and candidate visual source, interpreted through the Design
-   Bible.
-4. For general and uncovered presentation, the Design Bible's visual,
-   responsive, accessibility, terminology, and interaction rules.
+2. The [UI Design Bible 2.0](../design/sonder-ui-bible/README.md), its canonical
+   Atmospheric Workbench artifact named by [`UI_REFERENCE.md`](UI_REFERENCE.md),
+   and an approved feature-specific interface specification.
+3. This guide for implemented frontend ownership, migration boundaries, and
+   current runtime integration.
+4. Historical screenshots, candidate source, and completed work-package
+   evidence for behavior inventory only.
 5. Existing interface presentation.
 
-The current replacement's appearance gains no authority merely by being newer.
-It must reproduce the supplied visual composition unless an approved
-specification or recorded Design Bible deviation says otherwise. Candidate
-behavior is never runtime authority: current server and engine contracts still
-own data and effects.
+The current replacement's appearance gains no authority merely by being
+implemented. Its rail, inspector, bottom navigation, and other Design Bible
+1.x presentation are migration source, not target composition. Production work
+must move current behavior into the Atmospheric Workbench unless an approved
+Design Bible change says otherwise. Candidate behavior is never runtime
+authority: current server and engine contracts still own data and effects.
 
 The approved outcome is a **full replacement** of the classic host and player
 interface. The product has one host application, not a legacy/replacement
@@ -37,6 +38,13 @@ The program and gates are in
 and the completed G8 qualification is in the
 [WP14 release audit](../design/sonder-ui-replacement/wp14/REVIEW.md).
 
+### Implementation history, not presentation authority
+
+The WP summaries below establish shipped runtime owners, routes, services,
+accessibility utilities, and behavioral evidence. Names such as `Play`, rail,
+and inspector describe the implementation being migrated. They do not preserve
+that presentation against Design Bible 2.0.
+
 WP-00 is complete and G0 is locked. The exact current-source captures,
 performance ceilings, qualification commands, and all failures encountered
 during qualification are recorded in
@@ -45,7 +53,7 @@ This establishes the control plane only; replacement product requirements stay
 open until their owning work package provides implementation and evidence.
 
 WP-01 establishes the G1 visual foundation under `static/css/ui/` and
-`static/js/ui/`. Semantic tokens and curated-theme overrides own appearance;
+`static/js/ui/`. Semantic tokens and appearance overrides own appearance;
 component modules own focus, overlays, roving focus, live announcements, and
 primitive state. The reviewed local SVG family is served from
 `static/assets/icons/sonder-icons.svg`. The authenticated `/ui-next/lab`
@@ -63,28 +71,29 @@ extension adapter. Its [runtime review and browser
 matrix](../design/sonder-ui-replacement/WP02_RUNTIME_REVIEW.md) qualify those
 boundaries without claiming a product shell.
 
-WP-03 closed G2 with the replacement application frame, now served at `/`. It owns
-exactly three primary destinations (Play, Library, and Settings), four explicit
-layout states, versioned route/focus/scroll restoration, the desktop and mobile
-inspector frame, Go To, overlay/notice/task hosts, and the first visible
+WP-03 closed G2 with the replacement application frame, now served at `/`. Its
+historical shell owns the three destination routes, four explicit layout
+states, versioned route/focus/scroll restoration, contextual detail, Go To,
+overlay/notice/task hosts, and the first visible
 extension-v1 route consumer. The [G2 review and deterministic browser
 matrix](../design/sonder-ui-replacement/G2_SHELL_REVIEW.md) qualify that shell
 without claiming the destination workflows.
 
-WP-04 established the accepted Play-core tranche of G3. One runtime-owned coordinator owns
+WP-04 established the historically named Play-core tranche of G3. One runtime-owned coordinator owns
 selected story/frame identity, story loading, generation, stop/retry, reroll,
 variants, mutations, and authoritative refresh across destination remounts.
 The view owns the literary transcript, story-scoped composer, current story
-and turn actions, explicit Play states, and responsive presentation. The
+and turn actions, explicit Scene states, and responsive presentation. The
 [G3 review and deterministic browser matrix](../design/sonder-ui-replacement/G3_PLAY_REVIEW.md)
 qualified those behaviors without then claiming Story Tools or Library
 lifecycle.
 
 WP-05 completes G3. A stable ten-tool registry owns Cast, World, Style,
-Dialogue, Attire, Backdrops, Ambience, Conditions, Frames, and Multiplayer in
-the desktop inspector and compact staged sheet. Structural editors preserve
+Dialogue, Attire, Backdrops, Ambience, Conditions, Frames, and Multiplayer.
+Its historical inspector/sheet hosts are migration sources; Design Bible 2.0
+places eligible tools as workbench modules. Structural editors preserve
 complete server documents and owner-scoped drafts. The runtime owns backdrop,
-weather, ambience, and completion-chime lifetime independently of inspector
+weather, ambience, and completion-chime lifetime independently of module-host
 DOM. The [Story Tools review and deterministic browser
 matrix](../design/sonder-ui-replacement/G3_STORY_TOOLS_REVIEW.md) qualify all
 current-story surfaces without claiming Library lifecycle or later global
@@ -101,7 +110,7 @@ surfaces without claiming the long-form editors and complete action parity
 owned by WP-07 or the later product-surface gate.
 
 WP-12 closes G5 after the intervening Library-authoring, Settings, New Story,
-authentication, and guest packages. Its curated/Legacy theme matrix and mixed
+authentication, and guest packages. Its historical theme matrix and mixed
 installed extension corpus prove the native UI API 2 facade, explicit v1
 adapter, destination-specific consumers, owner teardown, plain-language
 capability disclosure, and contained semantic-token CSS. The [WP12
@@ -144,9 +153,10 @@ records the port, responsive renders, and current-endpoint evidence.
   moved between owners.
 - The application store separates server slices (`session`, `story`,
   `transcript`, `library`, `settings`, `extensions`) from presentation slices
-  (`route`, `composer`, `inspector`, `tasks`, `notices`, `appearance`,
-  `atmosphere`, `diagnostics`). State enters by named owner actions and leaves as copied,
-  frozen snapshots.
+  (`route`, `composer`, legacy `inspector` migration state, `tasks`, `notices`,
+  `appearance`, `atmosphere`, `diagnostics`). The legacy slice is an adapter to
+  retire as module layout ownership lands; it prescribes no inspector surface.
+  State enters by named owner actions and leaves as copied, frozen snapshots.
 - The shared API client owns same-origin/no-store requests, response parsing,
   correlation identity, cancellation, and stale-owner rejection. It never
   retries a write automatically. A 401 requests login once; a 403 stays an
@@ -207,20 +217,19 @@ uses public semantic tokens. See [`EXTENSIONS.md`](EXTENSIONS.md).
 
 ## Product and responsive contract
 
-The primary destinations are Play, Library, and Settings. Story Tools are
-story-scoped; global configuration is not. New Story, host setup/sign-in, and
-guest join/play are complete entry workflows rather than dialog fragments.
+The visible primary workspaces are Scene, Library, and Settings. Story-scoped
+capabilities remain story-scoped; global configuration does not move into Scene
+merely because an eligible Settings module is docked. New Story, host
+setup/sign-in, and guest join/play remain complete entry workflows.
 
-The application shell uses one progressive layout contract. Wide and expansive
-layouts default to a 192 px labeled rail that the user may collapse to 72 px;
-medium uses the compact rail; compact uses a labeled three-item bottom
-navigation. Context is closed by default and overlays the destination when
-opened. It may be pinned only on expansive layouts where at least 680 px remains
-for primary content. Compact context is a focus-contained, Back-owned sheet.
-One app header owns title, Back, Go To, and scoped context actions so
-destinations do not collide through independently fixed controls. Stable routes,
-named scroll regions, and focus identities are data. No shell service retains a
-DOM node across a route or refresh.
+The application shell is the Atmospheric Workbench: one integrated top shelf,
+one atmospheric central workspace, and optional peer left/right modular
+toolbars. Wide layouts may show two to four vertical shelves per toolbar based
+on usable height. Compact layouts stage the same modules as edge overlays or
+full-width sheets. They do not introduce a rail, inspector column, or bottom
+navigation. Stable routes, module owners, tab/shelf layout, named scroll
+regions, and focus identities are data. No shell service retains a DOM node
+across a route or refresh.
 
 Desktop, tablet, portrait mobile, narrow mobile, landscape mobile, short-height
 windows, 200-percent zoom, long localization, keyboard, pointer, and touch all
@@ -229,15 +238,15 @@ density, but it may not hide a capability such as conditions/vitals or make a
 control unreachable. Reading content, condition surfaces, utilities, and the
 composer must never overlap continuously at supported sizes.
 
-Compact layouts give every actionable control a minimum 44 px target. Ordinary
-desktop controls target 36 px; Compact density may reduce them to 32 px while
-never shrinking the compact/touch target contract.
+Compact layouts give every actionable control a minimum 44 px hit region.
+Visible desktop bars and controls use the Bible's 24-30 px geometry while
+retaining that larger touch target where needed.
 
 Loading, unavailable, confirmed empty, error, and stale states are distinct.
 Recoverable errors stay in context; toasts acknowledge completed actions and
 do not carry persistent work, failures, or choices.
 
-### Play-core ownership
+### Scene ownership and legacy `play-*` source names
 
 - `static/js/ui-next/play-runtime.js` is the sole client owner of selected
   story/frame loads and active generation lifetime. Every async result is
@@ -261,23 +270,21 @@ do not carry persistent work, failures, or choices.
 - Transcript scroll is internal and named. Initial/current reading stays
   pinned; prior-turn review preserves its offset and announces a New turn
   affordance without stealing scroll.
-- Compact Play retains every current action and a minimum 44 px target.
+- Compact Scene retains every current action and a minimum 44 px hit region.
   Short-landscape treatment prioritizes the active field and primary action;
-  safe-area padding belongs to the composer and bottom navigation.
+  safe-area padding belongs to the composer and staged module overlays.
 
 ### Story Tools and atmosphere ownership
 
 - `story-tools-registry.js` is the complete current-story tool list.
   `story-tools-runtime.js` captures story, frame, tool, mount, and request
   sequence; a late response cannot repaint another owner.
-- Story Tools open as context rather than occupying Play by default. Their
-  landing is grouped into World and cast, Story setup, and Presentation, with
-  labeled rows and descriptions. A selected tool replaces the landing and
-  exposes Back plus an optional labeled selector; list and detail are never
-  shown simultaneously on compact layouts. Numeric ordinals, decorative totals,
-  the Rail mode, and icon-only switching are retired. Medium and compact mount
-  the same module in a focus-contained staged sheet. Tool changes preserve Play
-  draft, scroll, run, and media state.
+- The registry is the source inventory for story-scoped module capability. An
+  eligible tool may occupy a shelf, tab group, floating layer, or Widget Shelf;
+  long structural editors open their canonical Library/Settings workspace.
+  Numeric ordinals, decorative totals, the old Rail mode, and icon-only
+  switching are retired. Moving a module preserves Scene draft, scroll, run,
+  and media state and never creates a second live editor.
 - Cast, Conditions, Frames, and Multiplayer project current guarded routes.
   They do not create parallel character, condition, frame, invite, or guest
   authority in browser state.
@@ -289,7 +296,7 @@ do not carry persistent work, failures, or choices.
   tokens, visibility pause, unlock, mute, volume, and optional completion
   chime. Only mute, volume, and chime preferences persist locally; URLs,
   credits, story data, and credentials do not.
-- Backdrop and weather layers are absolute behind Play and cannot affect prose
+- Backdrop and weather layers are absolute behind Scene and cannot affect prose
   measure or composer geometry. Effects Off removes decorative weather while
   reduced motion makes it static. Pending generation uses an explicit status
   check and never an idle interval.
@@ -319,20 +326,16 @@ do not carry persistent work, failures, or choices.
 - Undo is in-memory, owner-bound, exact-operation, and expires after twelve
   seconds. It is offered only for sound inverses; no receipt or story data is
   persisted in browser-local presentation state.
-- Library has one destination workspace at every viewport and no persistent
-  sub-sidebar. Its visible toolbar owns category, persistent search, compact
-  sort, Filters, and contextual create/import actions. Scope, visibility, Story
-  association, and secondary constraints are staged in the Filters sheet;
-  active constraints return as removable chips. Results are recognition-rich
-  media rows using real local imagery or an intentional initial/icon fallback,
-  never fabricated metadata or decorative ordinals. At 390 px the first
-  ordinary result begins within 240 px of the destination-content top. Selection
-  opens global overlay detail by default; an expansive user may explicitly pin
-  it when the shell can preserve the reading measure. Compact detail is a
-  Back-owned staged surface. Back restores query, filters, sort, scroll, and
-  focus.
+- Library has one workspace at every viewport. Its compact toolbar owns
+  category, persistent search, sort, Filters, and contextual create/import
+  actions. Scope, visibility, Story association, and secondary constraints are
+  staged in Filters; active constraints return as removable chips. Results are
+  recognition-rich rows using real local imagery or an intentional fallback,
+  never fabricated metadata or decorative ordinals. Selection opens focused
+  Library detail within the central workspace. Compact detail is a Back-owned
+  full-width state. Back restores query, filters, sort, scroll, and focus.
 - Activating a Story row selects it and reveals Library detail; it never enters
-  Play. Only the explicit `Open in Play` action commits that navigation. Until
+  Scene. Only the explicit `Open in Scene` action commits that navigation. Until
   then the Library route, scope, filters, selection, and scroll remain owned by
   Library. A row's trailing ellipsis is a bare 44 px target inside the row's
   outer frame. It opens the record's action menu without selecting the row;
@@ -342,9 +345,8 @@ do not carry persistent work, failures, or choices.
   make an archived, missing, or server-rejected item appear available.
 - Reusable Character, reusable Persona, and story-specific Character-card
   editing use one focused Library authoring framework. Entering authoring
-  replaces the Library destination body while leaving concise selection detail
-  as the inspector's responsibility outside authoring. The inspector is hidden
-  for the task without changing its persisted open, pin, or size preference.
+  replaces the Library body. Returning restores its prior selection and
+  scroll; no parallel inspector copy remains alive.
 - The shared authoring framework assigns maintained fields through one semantic
   path registry to Basics, Appearance, History, and the applicable Character or
   Persona sections. The registry owns plain labels, consequence-oriented help,
@@ -357,7 +359,7 @@ do not carry persistent work, failures, or choices.
   summary names the active auxiliary section. Start a Story uses the explicit
   `Save and start Story` boundary and does not become a parallel workflow.
 - Person authoring has one vertical document scroll owner. Wide layouts use a
-  restrained section rail; compact and short-landscape layouts stage the same
+  restrained section navigator; compact and short-landscape layouts stage the same
   peer sections plus More as a horizontal strip. Back and save state share one
   topbar, and the editor frame owns the persistent action footer. Hidden panels
   and closed More controls leave the focus order, visible controls retain the
@@ -375,12 +377,12 @@ do not carry persistent work, failures, or choices.
 
 ### Settings and appearance ownership
 
-- Settings has one navigation method and one selected detail surface. Its six
-  user-facing concepts are Account and access, AI and models, Appearance and
-  accessibility, Story defaults and content, Data/extensions/maintenance, and
-  Advanced. Each row mounts only its real Settings panel. Story imports,
-  portable backups, deletion, Turn details, and Institution tools remain in
-  Library or Play and are not duplicated as cross-destination Settings links.
+- Settings has one navigation method and one selected detail surface. Its
+  canonical categories are Presentation, AI Connections, Content, Add-ons,
+  Maintenance, and Advanced. Each row mounts only its real Settings panel.
+  Story imports, portable backups, deletion, Turn details, and Institution
+  tools remain in Library or Scene and are not duplicated as cross-workspace
+  Settings links.
 - The navigation projects those six ordered concepts and 11 rows from one
   immutable source. Summaries read
   only already-loaded Settings/extension state and browser-local presentation
@@ -388,12 +390,11 @@ do not carry persistent work, failures, or choices.
   persist engine-owned settings. Search resolves aliases to these same
   authoritative routes rather than opening a second Settings taxonomy or
   changing primary destination.
-- Desktop presents the concepts as a 240 px navigation plus one detail. Medium,
-  tablet, mobile, narrow, and landscape layouts stage either the grouped
-  overview or the selected detail, never both. A selected detail has a sticky
-  Back to Settings action. The overview uses accessible single-open disclosures;
-  a short desktop keeps its rail column. Disclosure groups never become
-  secondary scroll owners.
+- Settings uses one compact searchable category navigator plus one focused
+  detail. Medium, tablet, mobile, narrow, and landscape layouts stage either
+  the grouped overview or selected detail, never both. A selected detail has a
+  sticky Back to Settings action. The overview uses accessible single-open
+  disclosures; it never becomes a second rail system or scroll owner.
 - The shell gives the destination track `minmax(0, 1fr)`. Settings gives its
   detail track the same bound and makes `[data-settings-content]` the vertical
   scroll owner. The document body is never relied on to reveal clipped settings
@@ -474,55 +475,35 @@ do not carry persistent work, failures, or choices.
 
 ## Design-system boundary
 
-The Bible defines the quiet, precise, genre-neutral product character and the
-semantic visual vocabulary. Curated themes change semantic tokens, never
-layout. Unsupported Legacy-theme selection is no longer exposed. Icons come
-from the reviewed local SVG family and retain accessible names where the symbol
-alone is not established.
+The Bible and hash-identified workbench artifact define the quiet Atmospheric
+Digital Workbench. Deep Current is the default preset; preset and user-authored
+themes change semantic roles and material controls, never layout or ownership.
+Icons come from the reviewed local SVG family and retain accessible names where
+the symbol alone is not established.
 
-The curated themes are Carbon Signal, Ash & Brass, Midnight Ink, Parchment
-Night, Neon Circuit, and Modern Slate. Modern Slate is a deliberately warm
-greyscale palette: no authored token leans blue, and interaction uses subdued
-warm white. Appearance preflight applies the chosen theme synchronously before
-the module graph starts. Effects, contrast, text size, reduced motion, and
-Accessibility Mode remain independent preferences rather than theme side
-effects.
-
-Custom Theme is an eight-role semantic editor for background, panel, primary
-text, muted text, accent, attention, success, and danger. It previews changes
-locally and accepts only normalized colors in a versioned exact-key document.
-Text contrast, non-text contrast, and background/panel distinction must pass
-before activation. A syntactically valid individual role may be saved into the
-draft while the palette is incomplete; the exact validation issue remains
-visible and activation stays disabled until the complete draft passes. Import
-rejects unknown fields, CSS, URLs, markup, malformed
-versions, and unsafe colors; application can write only the eight fixed custom
-properties. Hex, RGB, reset, import, and export are alternate interfaces to the
-same validated palette. RGB controls sit behind a compact disclosure; the
-primary editing surface is the color chip and hex value. The browser-local
-theme is synchronous on first paint.
+Custom Theme owns Canvas ink, Glass panel, Control chrome, Ambient accent,
+Interface text, and Source accent, plus Glass Density, Bar Opacity, Selected
+Strength, Frost Level, Ambient Light, canvas selection, and gradient authoring.
+It previews normalized values locally and applies only a valid versioned
+document. Contrast and surface distinction must pass before activation. Import
+rejects CSS, URLs, markup, malformed versions, and unsafe values. Hex, RGB,
+eyedropper, reset, preset, import, and export are alternate interfaces to the
+same validated theme. Appearance preflight applies that theme synchronously
+before the module graph starts. Contrast, text size, reduced motion, solid
+surfaces, and Accessibility Mode remain independent preferences.
 
 Foundation source responsibilities are fixed: `tokens.css` defines geometry,
-motion, type, layering, and semantic color roles; theme files only override
-semantic values; `components.css` owns reusable component geometry; entry and
-laboratory styles compose those pieces without redefining their contracts.
-The interface scale balances calm reading with expert density: 11/14 micro,
-12/16 metadata, 13/18 controls, 14/20 body, 16/22 sections, and 21/28 page
-headings. Routine navigation and tool labels never use micro type. Every readable component uses
-the matching semantic size and leading tokens; story prose retains its separate
-17 px default and user setting. Every free-standing full-border surface uses
-the 3/4/5 px compact/default/panel radius family. Larger radii belong only to
-semantic round shapes; ordinary controls do not become pills. Zero-radius
-geometry is reserved for viewport-flush surfaces and internal segments inside
-an outer frame.
-Shared selects use the glass surface, restrained logical radius, one chevron,
-and 36 px comfortable / 32 px compact desktop geometry while retaining the 44
-px touch minimum. Shared buttons use centered inline-flex content, restrained
-13 px regular-weight type, flat neutral surfaces, and icon/text gaps so symbols such as New Story's plus align with
-their label.
-Prompt textareas use the 14/20 control scale at regular weight on the near-black
-canvas surface; browser-native bright form surfaces are not allowed inside the
-dark editor.
+motion, Geist Sans/Mono and Newsreader roles, layering, semantic colors, and
+material controls; theme files override semantic values only;
+`components.css` owns reusable geometry. Ordinary UI stays within the canonical
+8-13 px scale, story prose defaults to Newsreader 15 px/1.62, and exceptional
+setup headings alone may exceed it. Every free-standing surface uses the same
+4 px rounded tonal bevel; viewport-flush edges and internal segments may be
+square. Visible desktop controls use compact 24-30 px geometry while preserving
+44 px touch hit regions. Shared controls use glass/chrome material, centered
+Geist Sans labels, stable border geometry, and no pills or chamfers. Prompt
+textareas use the same compact scale on the near-black canvas; browser-native
+bright form surfaces are not allowed inside the dark editor.
 `appearance-preflight.js` is the only pre-module behavior and may only stamp
 validated browser-local appearance before paint. Accessibility preferences are
 independent overrides, with Accessibility Mode applying the documented bundle

@@ -1,40 +1,75 @@
 # Sonder UI Design Bible
 
-**Version:** 1.2
-**Date:** 2026-08-24
-**Status:** Authoritative UI/UX design direction  
-**Applies to:** Sonder Engine player-facing web interface, host setup, guest play, extensions hosted inside Sonder, desktop, tablet, and mobile
+**Version:** 2.0
+
+**Date:** 2026-08-25
+
+**Status:** Authoritative UI/UX direction
+
+**Applies to:** Sonder Engine player-facing and host-facing web interfaces
 
 ## Purpose
 
-This package is the canonical design language for Sonder. It gathers the approved visual direction, information architecture, interaction rules, mobile doctrine, component contracts, accessibility choices, control-cluster pattern, quality gates, and reference interpretation into a set of dedicated Markdown documents.
+This package defines Sonder's Atmospheric Digital Workbench. It replaces the
+earlier rail-and-inspector redesign with the approved modular workbench
+calibration. The interface is now designed from one coherent object: a living
+canvas, an integrated top shelf, a fixed reading stage, and configurable
+left/right toolbars made from translucent digital material.
 
-The bible exists to prevent the interface from drifting into one-off styling decisions. A screen is not considered finished because it looks attractive in isolation. It must use the same geometry, alignment, typography, color semantics, interaction grammar, responsive behavior, and UX priorities as the rest of the product.
+The bible is normative. Historical screenshots, earlier remaster documents,
+the retired progressive-redesign amendment, and the current production layout
+remain useful implementation evidence, but they do not authorize conflicting
+presentation.
 
 ## North star
 
-> Sonder is a quiet instrument surrounding the story, not a technical display competing with it.
+> Sonder is a quiet fiction instrument made from black digital material,
+> suspended over a living atmosphere.
 
-The interface should feel precise, atmospheric, capable, and intentional. It should not feel corporate, toy-like, overly futuristic, or genre-specific. Fantasy, historical, horror, contemporary, romance, mystery, and science-fiction stories must all feel native inside the same shell.
+The atmosphere owns the field. Prose remains human and unboxed. Chrome appears
+only where the user can operate the system. Charm comes from cohesion,
+proportion, material consistency, and subtle response—not ornament.
 
-## Authority
+## Canonical reference
 
-For UI and UX decisions, use this order:
+The rendered and interactive authority for this revision is the committed
+[Atmospheric Workbench](../../experiments/sonder-atmospheric-workbench/README.md).
+Its editable fragment, standalone preview, and docking regression harness are
+preserved together. The artifact controls the composition, geometry, material,
+and interactions it concretely demonstrates. This bible controls the system's
+principles and states the artifact does not show. A later approved change must
+name any deliberate departure from either; implementation convenience resolves
+neither.
 
-1. This design bible.
-2. An approved feature-specific design specification that explicitly amends the bible.
-3. Current implementation constraints and extension contracts.
-4. Existing UI behavior.
+## Authority order
 
-For engine behavior, persistence, security, and repository architecture, the maintained repository guidance remains authoritative. This bible does not override engine invariants.
+For presentation and interaction:
 
-## Normative language
+1. This Design Bible 2.0 and its committed Atmospheric Workbench artifact,
+   using the division of authority above.
+2. An approved feature specification that explicitly changes this bible.
+3. The maintained interface implementation contract for runtime integration.
+4. Existing UI presentation and historical evidence.
 
-- **MUST**: required for conformance.
-- **MUST NOT**: prohibited.
-- **SHOULD**: expected unless a documented reason justifies deviation.
-- **SHOULD NOT**: normally avoided; exceptions require rationale.
-- **MAY**: optional.
+For persistence, security, engine behavior, localization, accessibility
+semantics, extensions, and server ownership, current source and maintained
+repository guidance remain authoritative. Port behavior into this composition;
+do not preserve obsolete presentation because it already exists.
+
+## Locked product frame
+
+- Primary workspaces are **Scene**, **Library**, and **Settings**.
+- They are centered cells inside one integrated top shelf; they have no numeric
+  prefixes.
+- Scene is the atmospheric story workspace.
+- The left and right toolbars are modular docks containing vertical shelves and
+  tab groups.
+- Library and Settings are both full workspaces and canonical sources from
+  which eligible modules can be docked.
+- A module has one live instance. Moving it never creates a hidden duplicate.
+- The Widget Shelf inventories available, docked, floating, and stored modules.
+- Story selection belongs to Library. The story identity in the top shelf is
+  informative, not a second switcher.
 
 ## Package map
 
@@ -60,7 +95,7 @@ For engine behavior, persistence, security, and repository architecture, the mai
 
 ### Product surfaces
 
-- [14 Play Workspace](docs/14_PLAY_WORKSPACE.md)
+- [14 Scene Workspace](docs/14_SCENE_WORKSPACE.md)
 - [15 Library](docs/15_LIBRARY.md)
 - [16 Settings](docs/16_SETTINGS.md)
 - [17 New Story and First Run](docs/17_NEW_STORY_AND_FIRST_RUN.md)
@@ -80,30 +115,13 @@ For engine behavior, persistence, security, and repository architecture, the mai
 - [28 Glossary](docs/28_GLOSSARY.md)
 - [29 Change Control](docs/29_CHANGE_CONTROL.md)
 
-### Templates
+Templates and checklists live in `templates/` and `checklists/`.
 
-- [Component Specification Template](templates/COMPONENT_SPEC_TEMPLATE.md)
-- [Screen Polish Audit Template](templates/SCREEN_POLISH_AUDIT_TEMPLATE.md)
-- [UX Flow Audit Template](templates/UX_FLOW_AUDIT_TEMPLATE.md)
+## Conformance rule
 
-### Checklists
-
-- [Visual Polish Checklist](checklists/VISUAL_POLISH_CHECKLIST.md)
-- [UX Flow Checklist](checklists/UX_FLOW_CHECKLIST.md)
-- [Responsive Checklist](checklists/RESPONSIVE_CHECKLIST.md)
-- [Design Review Release Gate](checklists/DESIGN_REVIEW_RELEASE_GATE.md)
-
-## How to use the bible
-
-Before designing or changing a surface:
-
-1. Read [00 North Star](docs/00_NORTH_STAR.md) and [04 Experience Principles](docs/04_EXPERIENCE_PRINCIPLES.md).
-2. Read the relevant product-surface document.
-3. Read the relevant visual and component contracts.
-4. Create a screen or component specification using the provided template.
-5. Review the result with the audit rubric and checklists.
-6. Record any approved deviation using [29 Change Control](docs/29_CHANGE_CONTROL.md).
-
-## Relationship to earlier remaster documents
-
-This bible consolidates and refines the earlier Sonder UI remaster specification, visual realignment audit, and approved design discussion. It supersedes their visual-language guidance where the documents differ. Their implementation history and source audit remain useful evidence, but this package is the current design authority.
+A surface is not conforming because it uses dark glass, small text, or cyan
+accents. It must preserve the whole system: top-shelf integration, atmospheric
+priority, fixed reading measure, modular ownership, clear docking targets,
+4 px rounded bevels, compact typography, theme control, responsive capacity,
+and quiet static material. A generic dashboard wearing those ingredients is a
+failure.

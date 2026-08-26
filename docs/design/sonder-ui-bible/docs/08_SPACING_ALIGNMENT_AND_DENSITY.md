@@ -1,8 +1,13 @@
 # 08. Spacing, Alignment, and Density
 
-## Spacing scale
+## Density doctrine
 
-All spacing should come from this scale unless a documented optical correction is required:
+The default workbench is compact. It is designed for modern high-resolution
+displays rather than enlarged desktop controls. Accessibility and touch modes
+increase targets deliberately; there is no visually spacious default mode that
+changes the product's character.
+
+## Spacing scale
 
 | Token | Value |
 |---|---:|
@@ -11,119 +16,76 @@ All spacing should come from this scale unless a documented optical correction i
 | `space-2` | 4 px |
 | `space-3` | 6 px |
 | `space-4` | 8 px |
-| `space-5` | 12 px |
-| `space-6` | 16 px |
-| `space-7` | 20 px |
-| `space-8` | 24 px |
-| `space-9` | 32 px |
-| `space-10` | 40 px |
-| `space-11` | 48 px |
+| `space-5` | 10 px |
+| `space-6` | 12 px |
+| `space-7` | 16 px |
+| `space-8` | 20 px |
+| `space-9` | 24 px |
+| `space-10` | 32 px |
 
-Use 6 px and 12 px deliberately; they help Sonder remain compact without becoming cramped.
+Use 2, 4, 6, 8, and 12 px most often. Large empty areas belong to the canvas
+and reading composition, not to padding inside controls.
 
-## Density modes
+## Canonical dimensions
 
-Sonder supports two presentation densities:
+| Element | Reference |
+|---|---:|
+| Top shelf | 40 px |
+| Module/title/tab bar | 30 px |
+| Desktop compact control | 24-30 px |
+| Composer minimum height | 56 px |
+| Default toolbar width | `min(286px, 18vw)` |
+| Toolbar resize range | 200-420 px |
+| Reading width | `clamp(320px, 43vw, 680px)` |
+| Story prose measure | 650-680 px |
+| Touch target | 44 px minimum hit region |
 
-- **Comfortable**: default for new users and touch devices.
-- **Compact**: optional on desktop for experienced users and dense management surfaces.
+## Stable center
 
-Compact mode must reduce padding and nonessential metadata spacing. It must not reduce hit targets below the desktop minimum, hide labels required for understanding, or change feature availability.
+The transcript and composer are centered to their own reading token. Opening
+or closing a toolbar must not stretch their measure. Prose must not rewrap when
+toolbars animate, and the Continue/Send cell must not grow into abandoned dock
+space.
 
-## Control heights
+## Toolbar shelves
 
-| Control | Desktop comfortable | Desktop compact | Touch/mobile |
-|---|---:|---:|---:|
-| Small inline control | 30 px | 28 px | 44 px |
-| Default button/input | 36 px | 32 px | 44 px |
-| Prominent action | 40 px | 36 px | 48 px |
-| Icon button | 32-36 px | 28-32 px | 44 px |
-| Navigation row | 40-44 px | 36-40 px | 48 px |
+Usable dock height determines shelf capacity:
 
-Equivalent controls in one region must have exactly the same height.
+```text
+capacity = clamp(floor((usableDockHeight + 20) / 420), 2, 4)
+```
 
-## Panel padding
+Two shelves are available at ordinary heights, three when each can retain a
+usable body, and four on very tall displays such as 2160 px. Tab count never
+consumes additional shelf capacity. Full docks do not advertise impossible
+new-shelf targets.
 
-- Compact panel: 12 px.
-- Default panel: 16 px.
-- Spacious reading/setup panel: 20-24 px.
-- Mobile edge padding: 16 px default, 12 px only at very narrow widths.
+## Character roster scale
 
-Do not mix 9, 13, 17, and 19 px padding values across peer components.
+Characters provide five steps:
 
-## Alignment axes
+| Step | Portrait | Row | Visible secondary content |
+|---|---:|---:|---|
+| Compact names | none | 28 px | names only |
+| Standard | 47 px | 52 px | name, location, state |
+| Medium | 72 px | 78 px | name, location, state |
+| Large | 96 px | 102 px | name, location, state |
+| Portrait | 141 px | 147 px | name, location, state |
 
-Every screen should establish clear axes for:
+Portraits occupy approximately 90% of row height. Borderless minus and plus
+controls sit at the bottom-right of the Characters module.
 
-- left edge of headings;
-- left edge of body content;
-- start of field labels;
-- start of field controls;
-- trailing actions;
-- icon centers;
-- dividers;
-- reading measure.
+## Alignment
 
-Controls that appear to belong to one row must share a common vertical center or text baseline.
-
-## Baseline rules
-
-- Icon and label combinations use an explicit icon box and a shared line-height.
-- Text buttons align labels optically, not through arbitrary top padding.
-- Monospace indices align to the cap-height of adjacent labels.
-- Badges align to the text baseline or vertical center consistently; they must not float a few pixels high.
-- Chevrons and trailing icons occupy a fixed trailing column.
-- Form help text starts on the same horizontal axis as the control, not the label unless the layout explicitly uses stacked fields.
-
-## Optical tolerance
-
-During polish review:
-
-- peer control heights should differ by 0 px;
-- icon centers should differ by no more than 1 px optically;
-- text baselines in a row should differ by no more than 1 px;
-- repeated left and right insets should differ by no more than 1 px;
-- border thickness should not change across states;
-- state changes should not shift layout.
-
-## Icon spacing
-
-- Icon to short label: 6 px.
-- Icon to long label: 8 px.
-- Icon-only controls: center within a fixed square box.
-- Leading icons in lists: fixed 20 or 24 px column.
-- Trailing actions: fixed-width action region or integrated cluster.
-
-Never let individual SVG view boxes determine layout spacing.
-
-## List and ledger rhythm
-
-A list row should use:
-
-- fixed or minimum row height;
-- predictable leading icon/index column;
-- flexible main text column;
-- optional metadata column;
-- fixed trailing action region.
-
-Long labels may wrap to a second line. When they do, the action region remains aligned and the row grows deliberately. Do not allow labels to collide with actions or force controls into irregular narrow columns.
-
-## Negative space
-
-Negative space should be structured. When content is short:
-
-- maintain the reading column;
-- use a subtle stage treatment or contextual empty state;
-- keep the composer anchored;
-- avoid centering small fragments in an enormous undifferentiated black field.
+- Top-shelf titles are centered within equal conceptual cells.
+- Module titles, tabs, trailing metadata, and action menus share one baseline.
+- Fields use fixed value/output columns where repeated.
+- Tabs reorder without changing bar height.
+- Splitter hit regions may be larger than their visible one-pixel cue.
+- Drag previews align to the actual destination, not an offset proxy.
 
 ## Responsive density
 
-Density changes at breakpoints must be semantic:
-
-- reduce simultaneous columns;
-- move secondary actions to overflow;
-- increase touch height;
-- preserve content padding;
-- remove nonessential metadata before shrinking text;
-- avoid horizontal compression that produces misalignment.
+Remove secondary metadata before reducing core text. Increase hit regions for
+touch without inflating visible chrome. Short height reduces available shelves,
+never transcript/composer usability.

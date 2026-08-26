@@ -23,39 +23,39 @@ component geometry, responsive behavior, or frontend interaction:
 1. Read [`docs/guides/INTERFACE.md`](docs/guides/INTERFACE.md), the maintained
    implementation contract.
 2. Read [`docs/guides/UI_REFERENCE.md`](docs/guides/UI_REFERENCE.md), which
-   identifies the approved Design Bible, reference screenshots, reference
-   implementation snapshot, provenance, and the port-versus-adapt rules.
+   identifies Design Bible 2.0, the canonical Atmospheric Workbench artifact,
+   historical evidence, provenance, and the port-versus-adapt rules.
 3. Read the Design Bible foundation chapters and the chapter for the surface
    being changed. The package index is
    [`docs/design/sonder-ui-bible/README.md`](docs/design/sonder-ui-bible/README.md).
-4. Open the matching supplied reference screenshots at every applicable
-   desktop, tablet, mobile, narrow, landscape, and short-height state. Do not
-   substitute screenshots of the work in progress for the supplied reference.
-5. Inspect the matching frontend files in the supplied implementation snapshot
-   before writing replacement markup or CSS. Port its visual structure and
-   styling where they satisfy current contracts; preserve current engine-owned
-   behavior through explicit adapters and services.
+4. Open the committed Atmospheric Workbench preview and the matching Design
+   Bible states at every applicable desktop, tablet, mobile, narrow, landscape,
+   short-height, and tall-height viewport. Do not substitute a work-in-progress
+   screenshot for the frozen artifact.
+5. Inspect current frontend owners and historical candidate files only to map
+   behavior and runtime seams. Port current engine-owned behavior through
+   explicit adapters and services into the canonical workbench composition.
 6. Read the
    [`candidate salvage ledger`](docs/design/sonder-ui-replacement/CANDIDATE_SALVAGE_LEDGER.md)
    for known reusable files and rejected legacy mechanisms, then read the
    applicable work-package plan and review record.
 
-The supplied screenshot set is the visual composition reference for this full
-replacement. Its shell geometry, region order, density, hierarchy, spacing,
-control grouping, typography, and responsive staging are not suggestions to be
-reinterpreted. The Design Bible explains and generalizes that reference. When
-the two appear ambiguous, reproduce the screenshot and candidate-source
-behavior first, then resolve the ambiguity through the Bible and recorded
-change control.
+The committed Atmospheric Workbench is the visual and interaction reference
+for this redesign. Its shell geometry, region order, density, hierarchy,
+spacing, control grouping, typography, modular docking, and responsive capacity
+are not ingredients to be reinterpreted into the former rail/inspector layout.
+Design Bible 2.0 explains and generalizes that artifact. The artifact controls
+the states it demonstrates; the Bible controls unshown states. Resolve any real
+conflict through recorded change control rather than choosing whichever result
+is easier to implement.
 
-Do not invent a parallel visual language, change the information architecture,
-or replace a reference composition with a generic dashboard, three-pane CRUD
-layout, card grid, or inspector pattern merely because existing primitives make
-that easier. Reuse includes DOM hierarchy, CSS measurements, responsive
-breakpoints, and interaction staging—not just colors and tokens. A deliberate
-departure requires an approved feature specification or a deviation record
-under the Design Bible change-control process; implementation convenience is
-not a deviation reason.
+Do not retain or invent a parallel visual language, left navigation rail,
+default right inspector, mobile bottom navigation, generic dashboard, three-pane
+CRUD layout, or card grid merely because current primitives make that easier.
+Conformance includes composition, CSS measurements, responsive height/width
+behavior, and interaction staging—not just colors and tokens. A deliberate
+departure requires an approved feature specification or a Design Bible change
+record; implementation convenience is not a deviation reason.
 
 Reference frontend code is a porting source, not runtime authority. Do not copy
 its stale `window.S` access, polling, synthetic legacy clicks, hidden duplicate
@@ -65,9 +65,10 @@ and extension contracts remain authoritative. Adapt those seams without
 redesigning the visible result.
 
 No UI surface is review-ready until a real browser render has been compared
-side by side with its matching supplied screenshot at the same viewport.
-Record both the comparison and any approved differences. Behavioral tests do
-not prove visual conformance; screenshots do not prove behavior.
+side by side with its matching Atmospheric Workbench/Design Bible state at the
+same viewport. Record both the comparison and any approved differences.
+Behavioral tests do not prove visual conformance; screenshots do not prove
+behavior.
 
 `docs/CODE_MAP.md` is generated; never hand-edit it. Regenerate and verify it
 after moving or adding functions:
@@ -79,12 +80,12 @@ make structure
 
 `AGENTS.md`, `Design.md` and everything in `docs/guides/` are the maintained
 guidance set — current implementation authority, changed in the same commit as
-the behaviour. `docs/design/`, `docs/experiments/` and `docs/archive/` are
-context rather than authority: a design note argues for one subsystem, an
-experiment record reports one unrepeatable run, and an archived document has
-been superseded. Check any of their claims against source and the maintained
-guides before acting on them. [`docs/README.md`](docs/README.md) is the index
-and says which is which.
+the behaviour. Most of `docs/design/`, `docs/experiments/`, and `docs/archive/`
+is context rather than authority. The explicit exceptions are the authoritative
+Sonder UI Design Bible 2.0 and its hash-identified Atmospheric Workbench
+artifact named by `docs/guides/UI_REFERENCE.md`. Check all other design,
+experiment, and archive claims against source and maintained guides.
+[`docs/README.md`](docs/README.md) is the index and says which is which.
 
 ## Edit routing
 

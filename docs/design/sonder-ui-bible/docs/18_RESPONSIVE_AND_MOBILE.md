@@ -2,133 +2,97 @@
 
 ## Principle
 
-Mobile is not a reduced product and not a compressed desktop layout. It is the same capability model expressed through staged interaction, touch geometry, and progressive disclosure.
+The Atmospheric Workbench adapts one mental model. It does not swap to the old
+rail, inspector, card dashboard, or mobile bottom navigation at a breakpoint.
 
 ## Reference viewports
 
-Design and test at minimum:
+Review at minimum:
 
+- 1600 x 900 canonical workbench;
 - 1440 x 900 desktop;
 - 1280 x 800 desktop;
-- 1024 x 768 small desktop/tablet landscape;
+- 1180 x 800 constrained three-column state;
+- 1024 x 768 tablet landscape;
 - 768 x 1024 tablet portrait;
-- 430 x 932 large phone;
-- 390 x 844 common phone;
+- 430 x 932 and 390 x 844 phones;
 - 360 x 800 narrow phone;
 - 844 x 390 phone landscape;
-- short-height desktop at 1024 x 600.
+- 1024 x 600 short height;
+- 2160 px-tall workspace for four-shelf capacity.
 
-## Breakpoint strategy
+## Width behavior
 
-Breakpoints should respond to available component space rather than arbitrary device names. Container queries are preferred for local components where practical.
+### Wide: above 1180 px
 
-Key transitions:
+Both toolbars may remain open around a minimum 420 px Scene column. Default
+toolbar width is `min(286px, 18vw)`.
 
-- three-zone desktop to two-pane layout;
-- persistent inspector to overlay/sheet;
-- Library multi-pane to list-to-detail;
-- desktop rail to mobile bottom navigation;
-- visible action cluster to reduced cluster plus More;
-- side-by-side forms to stacked forms.
+### Constrained: 861-1180 px
 
-## Mobile primary navigation
+Toolbars reduce toward 230 px. If the Scene cannot preserve its minimum and
+fixed reading measure, collapse the least recently used toolbar rather than
+compress the story.
 
-- Play, Library, Settings remain visible in bottom navigation.
-- Each item uses icon plus label.
-- Active state uses restrained cyan and tone.
-- Bottom navigation respects safe areas.
-- The software keyboard may temporarily reduce or hide the bar only when the composer remains understandable and navigation restores reliably.
+### Compact: 860 px and below
 
-## Mobile headers
+The Scene uses the full content width. Toolbars are closed by default and open
+as full-height edge overlays or staged module sheets using the same shelf/tab
+model. The integrated top shelf remains the primary navigation. The calibrated
+compact state keeps the active Scene cell visible and stages Library and
+Settings inside one workspace chooser occupying the same top-shelf cluster; it
+does not merely delete access to those workspaces.
 
-A mobile header should contain:
+### Phone: 680 px and below
 
-- Back when inside a subview;
-- concise title;
-- one or two essential actions;
-- More for secondary actions.
+The top shelf prioritizes the active workspace and one compact workspace
+chooser. Scene, Library, and Settings remain the only destinations and remain
+plain unnumbered labels inside that chooser. Brand, story identity, and status
+may reduce to compact disclosures. No bottom navigation is introduced.
 
-Avoid horizontally scrolling toolbars in primary flows.
+## Height behavior
 
-## Sheets and staged views
+Shelf capacity follows usable toolbar height:
 
-Use full-screen or near-full-screen sheets for:
+```text
+clamp(floor((usableDockHeight + 20) / 420), 2, 4)
+```
 
-- Story Tools;
-- Library editors;
-- Settings sections;
-- complex pickers;
-- import workflows;
-- long forms.
+Capacity is calculated independently of tabs. A height change makes new shelf
+rails available only when a shelf can retain useful content. If height shrinks,
+existing arrangements are preserved by tabbing, scrolling, or staged recovery;
+modules are never silently discarded.
 
-Sheets require:
+## Touch
 
-- stable header;
-- explicit Back or Close;
-- safe-area padding;
-- scrollable body;
-- sticky action footer when required;
-- focus and keyboard management;
-- preserved parent state.
+- Hit regions are at least 44 px even when the visible bar remains 30 px.
+- Long-press may begin drag only after clear feedback.
+- Every drag action is available from the module action menu.
+- Splitters expose keyboard/touch step controls.
+- Tabs remain reorderable without requiring pixel-perfect drops.
 
-## Touch targets
+## Composer and keyboard
 
-- Minimum interactive target: 44 x 44 px.
-- Visual icon may remain 20-24 px inside the target.
-- Adjacent targets must not overlap.
-- Destructive actions should not sit immediately beside frequent actions without separation.
+The composer stays above the software keyboard, preserves its fixed reading
+measure within available width, and remains reachable with one thumb. Open
+module overlays cannot cover the focused input without a clear Back/Close path.
 
-## Composer and software keyboard
+## Short height and landscape
 
-- Composer remains above the software keyboard.
-- Textarea growth must not push all story content off-screen.
-- Send remains reachable with one thumb.
-- Ambience utilities move to a second row, compact cluster, or sheet.
-- Safe-area inset is applied beneath controls.
-- Landscape short-height mode reduces secondary chrome before reducing text.
+Reduce in this order:
 
-## Mobile lists
+1. available shelf count;
+2. secondary module metadata;
+3. canvas-only ornament;
+4. toolbar visibility;
 
-- Use full-width rows.
-- Keep primary label and one line of useful metadata.
-- Move low-frequency actions to More.
-- Preserve search and scope.
-- Return from detail to the same scroll position.
-- Bring active horizontal filters into view automatically.
+The default 15 px prose may optically reduce to 13 px in the calibrated compact
+state. A user-selected larger text size or Accessibility Mode overrides that
+reduction. Never hide the composer or allow sticky chrome to consume the
+viewport.
 
-## Mobile forms
+## State preservation
 
-- Stack labels and controls.
-- Use appropriate keyboard types.
-- Keep error text near the field.
-- Avoid tiny two-column grids.
-- Sticky Save/Apply is appropriate for long explicit-save forms.
-- Do not rely on hover tooltips; include visible help or an info action.
-
-## Tablet
-
-Tablet is not automatically mobile. At 768-1024 px, use available space to preserve two-pane views when content remains readable. Touch targets still apply.
-
-## Landscape and short-height
-
-Prioritize vertical space:
-
-1. reduce decorative header height;
-2. collapse nonessential descriptions;
-3. move utilities into More;
-4. cap technical panes;
-5. preserve transcript and composer.
-
-Do not hide the primary action or make the composer unusable.
-
-## Responsive anti-patterns
-
-- shrinking desktop panels until text and icons misalign;
-- horizontal scrolling for primary navigation;
-- hiding features with no mobile route;
-- wrapping control clusters;
-- relying on hover-revealed actions;
-- desktop fixed widths inside mobile forms;
-- bottom navigation covered by browser or safe-area UI;
-- active category off-screen in a horizontal strip;
-- modal boxes that exceed viewport height without internal scrolling.
+Workspace, module, tab, shelf, query, selection, scroll, and draft state survive
+responsive transitions. Returning to a wider viewport restores the prior
+arrangement when it is still valid.

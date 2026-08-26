@@ -1,48 +1,39 @@
 # Changelog
 
+## 2.0 -- 2026-08-25
+
+Replaces the prior rail-and-inspector direction with the approved Atmospheric
+Digital Workbench.
+
+- renames the primary story workspace from Play to Scene;
+- moves Scene, Library, and Settings into one integrated top shelf and removes
+  decorative destination indices;
+- establishes two collapsible, resizable modular toolbars with shelves, tabs,
+  floating modules, a Widget Shelf, and clear drag previews;
+- makes shelf capacity respond to usable height, from two to four shelves;
+- adopts Geist Sans, Geist Mono, and Newsreader at the mockup's compact scale;
+- makes full atmospheric canvases the default and adds preset/configurable
+  gradients;
+- adopts translucent adjustable glass with 20% Glass Density, 60% Bar Opacity,
+  6% Selected Strength, and 50% Frost Level defaults;
+- standardizes 4 px rounded bevels and rejects chamfers;
+- removes CRT grain, animated noise, and decorative numeric indices from
+  workspace/module tabs and window titles while retaining canonical Story and
+  scene instrument metadata; retires fixed curated-theme doctrine, the left
+  navigation rail, default right inspector, and mobile bottom navigation;
+- promotes the committed mockup and interaction harness to canonical visual
+  evidence.
+
 ## 1.2 -- 2026-08-24
 
-Formalizes the compact, high-density interface type scale as a site-wide
-contract, keeps story prose independently configurable, and makes a semantic
-3-5 px bevel mandatory on every free-standing bordered surface. One-off
-numeric component font sizes and unrounded full-border boxes are now audited
-as conformance defects.
+Historical release. Formalized the compact type scale and 3-5 px geometry.
+Superseded by 2.0 where its composition, theme, navigation, or component rules
+differ.
 
 ## 1.1 -- 2026-08-23
 
-Extends the approved Library direction with a focused person-authoring
-workspace:
-
-- one sectioned framework for reusable Characters, reusable Personas, and
-  story-specific Character cards;
-- destination-owned desktop presentation and equivalent compact/short-height
-  staging without retaining an empty inspector track;
-- lossless Additional fields and Advanced access for extension-owned data;
-- explicit local-draft versus Library-save language, validation focus, and
-  exact parent-route selection/scroll restoration;
-- semantic tabs, 44 px controls, one vertical document scroll owner, and
-  reduced-motion-compatible behavior;
-- no change to the approved palette, typography, Library information
-  architecture, or reusable-versus-story-owned data boundaries.
+Historical release. Added focused person-authoring guidance.
 
 ## 1.0 -- 2026-08-20
 
-Initial consolidated Sonder UI Design Bible.
-
-Includes:
-
-- approved Play, Library, and Settings architecture;
-- Prime Intellect and EVE Photon reference translation;
-- genre-neutral compact technical minimalism;
-- Carbon Signal palette and curated themes;
-- controlled technical glass;
-- three-role typography;
-- original SVG icon system;
-- Soft-Precision Geometry with 3-5 px corner range;
-- Integrated Control Clusters;
-- desktop/mobile feature parity;
-- accessibility preset and granular controls;
-- new-story, Library, Settings, Play, and expert-flow doctrine;
-- anti-pattern catalog;
-- token contract;
-- audit rubric, templates, and release checklists.
+Historical initial consolidated Design Bible.

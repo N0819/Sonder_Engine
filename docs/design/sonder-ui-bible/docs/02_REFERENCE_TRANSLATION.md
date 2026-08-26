@@ -1,81 +1,63 @@
 # 02. Reference Translation
 
-## Purpose
+## Canonical visual reference
 
-The references are directional inputs, not templates to copy. Sonder must translate their useful principles into a reading- and authoring-centered fiction product.
+The committed [Atmospheric Workbench](../../../experiments/sonder-atmospheric-workbench/README.md)
+is the direct reference for Sonder's composition, material, density, typography,
+module behavior, and docking feedback. It is no longer merely a mood board.
 
-## Prime Intellect: what to borrow
+The reference establishes:
 
-The official Prime Intellect site establishes a compact editorial-technical language through numbered navigation, figure labels, thin framing, restrained neutral surfaces, sparse accent color, small metadata, and large atmospheric content stages.
+- an integrated 40 px top shelf;
+- Scene, Library, and Settings as unnumbered centered cells;
+- a full atmospheric canvas and fixed story reading measure;
+- two translucent modular toolbars;
+- 30 px module bars that double as drag surfaces;
+- shelves, tab groups, floating modules, and a Widget Shelf;
+- compact Geist Sans/Mono interface text and Newsreader prose;
+- 4 px rounded bevels;
+- adjustable palette, glass, bar opacity, selection, frost, and ambient light;
+- static material without CRT grain or animated noise.
 
-Sonder should borrow:
+## External influences
 
-- disciplined black, charcoal, and subdued grey grounds;
-- hairline structure instead of heavy card chrome;
-- numbered or indexed labels used selectively;
-- strong alignment across columns and sections;
-- large atmospheric or story-led central space;
-- accent colors reserved for action, focus, and state;
-- compact navigation and metadata;
-- technical typography used as seasoning, not as the entire voice;
-- low-radius geometry and quiet depth.
+### Prime Intellect
 
-Sonder should not copy:
+Borrow the top-of-page restraint: integrated glass navigation, compact type,
+atmospheric media, fine lines, and deliberate contrast. Do not borrow the later
+marketing-page oversized headings, proprietary fonts, branding, or source.
 
-- marketing-page proportions;
-- Prime Intellect branding, assets, illustrations, or iconography;
-- dense product-specification content where a player needs plain language;
-- repeated numeric indexing on every ordinary control;
-- technology-company tone.
+### EVE and PS2-era interfaces
 
-## EVE Photon: what to borrow
+Borrow cohesion, modular instrumentation, restrained state accents, and the
+sense of digital material. Do not add cockpit ornament, tactical density,
+scanlines, CRT pixels, animated noise, or faux hardware. The attempted grain
+language is explicitly not part of the canonical system.
 
-EVE's Photon UI work is relevant because it pursued a single coherent component language, reduced cognitive load through margin and spacing changes, unified feedback colors, introduced compact modes, and provided personalization such as scaling, themes, and transparency controls.
+### ChungusHub and creative tools
 
-Sonder should borrow:
-
-- one coherent language for buttons, tabs, headers, fields, and windows;
-- compact presentation for high-frequency expert surfaces;
-- predictable color semantics;
-- contextual panels that behave as purposeful instruments;
-- configurable density, scale, transparency, and themes;
-- stable More menus for secondary window actions;
-- consistent icon strategy;
-- progressive refinement based on real use.
-
-Sonder should not copy:
-
-- overt cockpit or spacecraft styling;
-- persistent sci-fi ornament;
-- dense tactical information presentation in ordinary player flows;
-- franchise-specific motifs or terminology;
-- complexity that exists because EVE is a live tactical MMO rather than a fiction workspace.
-
-## Combined translation
-
-The combined reference direction is:
-
-> Compact technical minimalism with an atmospheric reading stage and restrained instrument precision.
-
-The interface shell should recede. Precision should come from alignment, consistent geometry, state behavior, and typography--not from decorative technology motifs.
-
-## Genre-neutrality test
-
-A screen must be reviewed against at least four imagined story contexts:
-
-- high fantasy;
-- contemporary drama;
-- gothic or horror;
-- science fiction.
-
-If the interface visually belongs only to the science-fiction example, it is too technological. If it visually belongs only to fantasy through texture or ornament, it is too thematic. The shell should remain neutral while the story image, prose, and selected theme carry atmosphere.
+Borrow the economy of a shell that can reveal or hide side regions, and the
+clarity of tab/shelf organization found in mature creative tools. Do not copy
+branding, assets, source, or whole layouts. Sonder's two-dock workbench and
+Widget Shelf are the approved translation.
 
 ## Reference hierarchy
 
-When the references conflict with Sonder's product needs:
+When a reference conflicts with the canonical workbench:
 
-1. Story readability wins over marketing composition.
-2. Player clarity wins over technical aesthetics.
-3. Feature parity wins over visual minimalism.
-4. Stable locations win over clever novelty.
-5. Genre neutrality wins over stronger sci-fi identity.
+1. the workbench composition wins;
+2. story readability wins;
+3. clear docking and ownership win;
+4. accessibility and runtime truth win;
+5. the external reference is discarded.
+
+Historical Sonder screenshots are behavior inventory only. They no longer
+define the target composition at any viewport.
+
+## Originality and licensing
+
+- Use Geist Sans, Geist Mono, and Newsreader only with reviewed licenses and
+  bundled/local delivery appropriate to production.
+- Do not copy external markup, CSS, imagery, icons, fonts, or branding.
+- Atmospheric images require their own provenance.
+- Sonder's icon and material systems remain original.

@@ -1,10 +1,17 @@
 # Sonder Progressive Interface Redesign
 
 **Date:** 2026-08-24  
-**Status:** Approved for implementation  
+**Status:** Retired by Design Bible 2.0 on 2026-08-25
+
 **Authorization:** Product-owner implementation brief, 2026-08-24  
 **Change class:** Design Bible Revision  
 **Amendment:** [`../../design/sonder-ui-bible/amendments/2026-08-24-progressive-interface-redesign.md`](../../design/sonder-ui-bible/amendments/2026-08-24-progressive-interface-redesign.md)
+
+> This specification is historical implementation evidence. Its rail,
+> inspector, Play naming, and mobile-bottom-navigation presentation must not be
+> used as current design authority. Use the
+> [Design Bible 2.0](../../design/sonder-ui-bible/README.md) and canonical
+> [Atmospheric Workbench](../../experiments/sonder-atmospheric-workbench/README.md).
 
 ## Outcome
 
