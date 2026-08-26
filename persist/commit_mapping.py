@@ -303,9 +303,26 @@ def prepare_mapping_commit(ctx):
         ops = _generate_fallback_ops(
             ok_facts, staged, world_facts, existing_lore=lore_ctx,
         )
+    # An op that CONFIRMS a staged entry inherits that entry's declared
+    # provenance. The declaration is made when the entry is staged; the model
+    # is asked to confirm the stub, not to restate the bookkeeping, so its own
+    # lore_ops carry no `provenance` field. Only `_generate_fallback_ops`
+    # copied it across -- and that branch runs solely when the model returns
+    # no lore_ops at all, so on the COMMON path the signal was dropped.
+    staged_provenance = {}
+    for entry in (staged or []):
+        if not isinstance(entry, dict):
+            continue
+        declared = " ".join(str(entry.get("provenance") or "").split())
+        if declared:
+            staged_provenance[_keys_str(entry.get("keys"))] = declared
     for o in ops:
         if "keys" in o:
             o["keys"] = _keys_str(o["keys"])
+        if not o.get("provenance"):
+            inherited = staged_provenance.get(_keys_str(o.get("keys")))
+            if inherited:
+                o["provenance"] = inherited
         _file_engine_provenance(o)
     # An entry whose whole text was bookkeeping has nothing left to say about
     # the world. The provenance is not lost -- it is simply not worth a lore
