@@ -326,6 +326,7 @@ class TestQuickStartLorebook:
         def journey(chat_id, char_id, sheet, route, **kwargs):
             assert route["opening_relationship"] == "visiting"
             assert route["backends"] == ["authored_history"]
+            assert kwargs["arrival_brief"] == "a distant city"
             order.append("journey")
             return {"events": [{"event_id": "journey:1"}],
                     "memory_event_keys": ["prestory:journey:1"]}

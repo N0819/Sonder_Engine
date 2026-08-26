@@ -342,16 +342,27 @@ function livedLocationControl(options = {}) {
       placeholder: "Past guidance (optional): eras, places, relationships, duties, habits, or canon to emphasize"
     }, prior.brief || "");
     const preview = el("div", { class: "small dim", style: "margin-top:5px" });
+    const events = el("input", {
+      type: "number", min: "3", max: "20", step: "1", style: "width:100%"
+    });
+    events.value = String(Math.max(3, Math.min(20, Number(prior.events) || 12)));
+    const eventsRow = el("label", { class: "small dim", style: "display:block;margin-top:8px" },
+      "How many journey memories?", events);
     const syncRoute = () => {
       preview.textContent = routeCopy[select.value] || routeCopy.auto;
+      // The count only reaches a backend that writes journey events; a
+      // resident past is sized by the recent-life pass instead.
+      eventsRow.style.display =
+        (select.value === "visitor" || select.value === "generated_journey")
+          ? "" : "none";
     };
     select.onchange = syncRoute;
     syncRoute();
     return {
-      key, select, guidance,
+      key, select, guidance, events,
       node: el("div", { class: "card", style: "margin-top:8px" },
         el("strong", {}, `How does ${resident.name || "this character"} relate to this place?`),
-        select, preview, guidance)
+        select, preview, guidance, eventsRow)
     };
   });
   const fields = el("div", { style: "margin-top:8px" },
@@ -404,14 +415,16 @@ function livedLocationControl(options = {}) {
         ...(historyControls.length === 1 && options.featuredResidentName
           ? { character_history: {
               mode: historyControls[0].select.value,
-              brief: historyControls[0].guidance.value.trim()
+              brief: historyControls[0].guidance.value.trim(),
+              events: Number(historyControls[0].events.value) || 12
             }}
           : {}),
         ...(historyControls.length && !options.featuredResidentName
           ? { character_histories: historyControls.map(control => ({
               key: control.key,
               mode: control.select.value,
-              brief: control.guidance.value.trim()
+              brief: control.guidance.value.trim(),
+              events: Number(control.events.value) || 12
             })) }
           : {})
       };

@@ -376,6 +376,9 @@ $("#b-dlg").onclick = async () => {
           const character = (S.boot.characters || []).find(c => String(c.id) === String(charId));
           const handoff = route.handoff || {};
           const reasons = (route.reasons || []).map(r => r.claim).filter(Boolean);
+          // Model-authored strings: text children only, never innerHTML.
+          const journeyEvents =
+            ((ch.character_journey_histories || {})[String(charId)] || {}).events || [];
           return el("div", { style: "margin-top:7px" },
             el("strong", { translate: "no" }, route.character || character?.name || `Character ${charId}`),
             el("div", { class: "small" }, route.summary || route.mode || "Authored history"),
@@ -391,7 +394,13 @@ $("#b-dlg").onclick = async () => {
               : handoff.error
                 ? el("div", { class: "small", style: "color:var(--warn)" },
                     `History generation failed safely: ${handoff.safe_fallback || "no generated past"}`)
-                : null);
+                : null,
+            journeyEvents.length
+              ? el("div", { class: "small dim", style: "margin-top:3px" },
+                  ...journeyEvents.map(ev => el("div", { translate: "no" },
+                    [ev.when, ev.place, ev.kind].map(v => String(v || "").trim())
+                      .filter(Boolean).join(" · "))))
+              : null);
         }))
     : null;
   const generateTown = el("button", { onclick: () => {

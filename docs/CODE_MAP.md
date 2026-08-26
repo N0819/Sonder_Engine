@@ -44,7 +44,7 @@
 | `llm/prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `llm.providers` |
 | `llm/prompts.py` | 494 | Default system prompts and prompt preset access. | `core.db` |
 | `llm/providers.py` | 3308 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `core.db`, `core.logging_utils` |
-| `llm/schemas.py` | 5592 | Pydantic output contracts and semantic validation for agent payloads. | — |
+| `llm/schemas.py` | 5601 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `mind/__init__.py` | 6 |  | — |
 | `mind/affect.py` | 2406 |  | `mind.theory_of_mind` |
 | `mind/canon_provenance.py` | 379 |  | — |
@@ -91,10 +91,10 @@
 | `story/character_schema.py` | 2209 | Versioned character/persona defaults, normalization, accessors, and export payloads. | `llm.schemas`, `story` |
 | `story/couriers.py` | 1122 |  | `story.carriers`, `world` |
 | `story/dialogue_colors.py` | 268 |  | — |
-| `story/greetings.py` | 982 |  | `agents.runtime`, `agents.storage`, `core`, `llm.llm_quality`, `llm.prompts`, `mind.memory`, `mind.theory_of_mind`, `story.character_schema`, `story.importers` |
+| `story/greetings.py` | 992 |  | `agents.runtime`, `agents.storage`, `core`, `llm.llm_quality`, `llm.prompts`, `mind.memory`, `mind.theory_of_mind`, `story.character_schema`, `story.importers` |
 | `story/history_routing.py` | 186 |  | — |
 | `story/importers.py` | 3093 | Native and AI-assisted character, persona, and lorebook import/generation. | `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.memory`, `story.character_schema`, `story.scene` |
-| `story/journey_history.py` | 216 |  | — |
+| `story/journey_history.py` | 335 |  | — |
 | `story/lore_structure.py` | 248 |  | — |
 | `story/scene.py` | 2450 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `core.db`, `story`, `story.attire`, `story.character_schema`, `world.spatial` |
 | `web/__init__.py` | 6 |  | — |
@@ -129,7 +129,7 @@
 | `world/charter_promote.py` | 328 |  | `world.charter_commitment`, `world.charter_feel`, `world.charter_politics`, `world.charter_social` |
 | `world/charter_roster.py` | 134 |  | `world.charter_model` |
 | `world/charter_run.py` | 678 |  | `world.charter_commitment`, `world.charter_decide`, `world.charter_drift`, `world.charter_economy`, `world.charter_feel`, `world.charter_figure`, `world.charter_intervene`, `world.charter_log`, `world.charter_mind`, `world.charter_model`, `world.charter_move`, `world.charter_needs`, `world.charter_news`, `world.charter_plan`, `world.charter_politics`, `world.charter_practice`, `world.charter_roster`, `world.charter_social`, `world.charter_space`, `world.charter_talk` |
-| `world/charter_runtime.py` | 2017 |  | `core`, `core.logging_utils`, `world.charter`, `world.charter_news`, `world.mechanics` |
+| `world/charter_runtime.py` | 2020 |  | `core`, `core.logging_utils`, `world.charter`, `world.charter_news`, `world.mechanics` |
 | `world/charter_social.py` | 226 |  | `world.charter_politics` |
 | `world/charter_space.py` | 101 |  | `world.spatial` |
 | `world/charter_talk.py` | 344 |  | `world.charter_mind`, `world.charter_politics`, `world.charter_roster` |
@@ -563,14 +563,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `preprocess_llm_output()` | 4290 | 344 lines |
+| `preprocess_llm_output()` | 4299 | 344 lines |
 | `_lenient_coerce()` | 745 | 159 lines |
-| `validate_llm_output_strict()` | 5463 | 130 lines |
-| `semantic_output_errors()` | 5256 | 112 lines |
-| `canonicalize_prose_markup()` | 4095 | 102 lines |
-| `_uncross_concealed_speech()` | 4219 | 69 lines |
+| `validate_llm_output_strict()` | 5472 | 130 lines |
+| `semantic_output_errors()` | 5265 | 112 lines |
+| `canonicalize_prose_markup()` | 4104 | 102 lines |
+| `_uncross_concealed_speech()` | 4228 | 69 lines |
 | `_coerce_list_valued_map()` | 128 | 57 lines |
-| `_coerce_conditions()` | 3636 | 55 lines |
+| `_coerce_conditions()` | 3645 | 55 lines |
 
 ### `mind/affect.py`
 
@@ -1080,9 +1080,9 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `start_story()` | 654 | 230 lines |
+| `start_story()` | 654 | 240 lines |
 | `_seed_mind_state()` | 351 | 144 lines |
-| `generate_greeting()` | 886 | 62 lines |
+| `generate_greeting()` | 896 | 62 lines |
 | `_seed_minds()` | 549 | 57 lines |
 | `_route_mind_memories()` | 294 | 55 lines |
 | `_seed_player_mind()` | 497 | 50 lines |
@@ -1117,12 +1117,13 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `compile_journey_history()` | 148 | 63 lines |
-| `ground_journey_history()` | 94 | 52 lines |
-| `_source_rows()` | 49 | 28 lines |
-| `_model_value()` | 79 | 13 lines |
-| `_content_key()` | 42 | 5 lines |
-| `_text()` | 38 | 2 lines |
+| `ground_journey_history()` | 160 | 92 lines |
+| `compile_journey_history()` | 254 | 76 lines |
+| `_source_rows()` | 111 | 28 lines |
+| `_model_value()` | 141 | 17 lines |
+| `journey_event_count()` | 86 | 12 lines |
+| `_content_key()` | 104 | 5 lines |
+| `_text()` | 100 | 2 lines |
 
 ### `story/lore_structure.py`
 
@@ -1496,14 +1497,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_prepare_cast_histories()` | 203 | 139 lines |
-| `_generate_lived_location()` | 834 | 113 lines |
-| `generation_lore()` | 457 | 101 lines |
-| `_plan_lived_location()` | 736 | 96 lines |
-| `cross_charter_gossip()` | 1215 | 92 lines |
-| `charter_diagnostics()` | 1449 | 77 lines |
-| `registry_warnings()` | 985 | 72 lines |
-| `_remap_generated_town()` | 583 | 71 lines |
+| `_prepare_cast_histories()` | 203 | 141 lines |
+| `_generate_lived_location()` | 837 | 113 lines |
+| `generation_lore()` | 460 | 101 lines |
+| `_plan_lived_location()` | 739 | 96 lines |
+| `cross_charter_gossip()` | 1218 | 92 lines |
+| `charter_diagnostics()` | 1452 | 77 lines |
+| `registry_warnings()` | 988 | 72 lines |
+| `_remap_generated_town()` | 586 | 71 lines |
 
 ### `world/charter_social.py`
 
@@ -2189,9 +2190,9 @@ Sections: Room ambience (`:2`); seamless looping (`:214`); one-shots (`:689`); t
 
 Declared functions: `ambienceStored()`, `ambienceElement()`, `entryAudios()`, `ambiencePlayers()`, `applyAmbienceMute()`, `setAmbienceVolume()`, `ambienceLevel()`, `setLayerGain()`, `toggleAmbienceMute()`, `ambienceFadeMix()`, `armSeamlessLoop()`, `crossLoop()`, `retireEntries()`, `stopAmbience()`, `playAmbience()`, `armAmbienceUnlock()`, `ambienceWorking()`, `awaitAmbience()`, `resolveAmbience()`, `ambienceForTurn()`, `rerollAmbience()`, `ambienceOnVisibleTurn()`, `ambienceResetForRender()`, `updateAmbienceBtn()`, `playAmbienceOneshot()`, `ambienceCandidateRow()`, `ambienceLayerRow()`, `ambienceMixPanel()`, `openAmbiencePanel()`, `toggleAmbience()`, `syncAmbience()`.
 
-### `static/js/app.js` (1189 lines)
+### `static/js/app.js` (1192 lines)
 
-Sections: Boot & sidebar (`:1`); and then nothing showed the report, so a host who installed a pack got (`:18`); New chat wizard (`:267`); NSFW (`:874`); Composer (`:902`); Init (`:980`); Embedding reconciler progress (`:1040`).
+Sections: Boot & sidebar (`:1`); and then nothing showed the report, so a host who installed a pack got (`:18`); New chat wizard (`:267`); NSFW (`:877`); Composer (`:905`); Init (`:983`); Embedding reconciler progress (`:1043`).
 
 Declared functions: `boot()`, `renderSide()`, `syncExtensionTabs()`, `renderChatSidebar()`, `newChatWizard()`, `renderWizardChoice()`, `storyLanguagePacks()`, `defaultStoryLanguage()`, `wizardState()`, `wizardHistoryCharacters()`, `discardFailedStorySetup()`, `wizardFromScratch()`, `renderWizardPersona()`, `renderWizardCharacters()`, `renderWizardScenario()`, `runWizard()`, `renderCharacterSidebar()`, `renderPersonaSidebar()`, `renderLegacyLoreSidebar()`, `updateNSFWBtn()`, `toggleNSFW()`, `resizeComposer()`, `erCard()`, `erDismiss()`, `erPoll()`, `erWatch()`, `erOfferRebuild()`.
 
@@ -2213,9 +2214,9 @@ Sections: Turn-completion chime (`:2`); Which other waits are worth a chime (`:1
 
 Declared functions: `chimeContext()`, `chimeArm()`, `chimePlay()`, `chimeWatches()`, `chimeWorkFinished()`, `chimeSetMuted()`, `toggleChimeMute()`, `updateChimeBtn()`.
 
-### `static/js/components.js` (1241 lines)
+### `static/js/components.js` (1254 lines)
 
-Sections: Modal (`:38`); Book covers (`:54`); confirm()/prompt() replacements (`:167`); Toasts (`:487`); Background tasks (`:515`); Form helpers (`:601`); Model picker (`:1091`); made for every combobox that already has a provider saved -- opened its (`:1121`).
+Sections: Modal (`:38`); Book covers (`:54`); confirm()/prompt() replacements (`:167`); Toasts (`:500`); Background tasks (`:528`); Form helpers (`:614`); Model picker (`:1104`); made for every combobox that already has a provider saved -- opened its (`:1134`).
 
 Declared functions: `txt()`, `el()`, `coverOfRow()`, `coverOfTitle()`, `modal()`, `modalOwnership()`, `closeModal()`, `closeAllModals()`, `_confirmOverlay()`, `confirmModal()`, `promptModal()`, `promptModalWithToggle()`, `livedLocationControl()`, `attachStoryLorebook()`, `generateStoryLocation()`, `openLivedLocationDialog()`, `toastHost()`, `toast()`, `renderActivity()`, `elapsedLabel()`, `activityTicking()`, `backgroundTask()`, `buttonTask()`, `loadingBlock()`, `emptyState()`, `fText()`, `fArea()`, `fSelect()`, `fNum()`, `fLineList()`, `fStrList()`, `fCoveragePicker()`, `fAttireGarments()`, `fList()`, `fAbilities()`, `fTraits()`, `fValues()`, `fBeliefs()`, `fCopingStrategies()`, `fAssociations()`, `fGoals()`, `fSenses()`, `fLatent()`, `fExtraParts()`, `fInteriorStations()`, `fPronouns()`, `phEditor()`, `fetchModels()`, `fetchImageModels()`, `modelCombobox()`, `emitChange()`, `load()`, `showDD()`.
 
@@ -2239,9 +2240,9 @@ Sections: Library sidebar (`:252`); Data loading (`:459`); Workspace (`:556`); B
 
 Declared functions: `loreBookTypeIcon()`, `loreLinkTypes()`, `normalizeLoreBook()`, `loreOwnershipKey()`, `loreBooksByParent()`, `loreBookMatches()`, `loreVisibleIds()`, `loreBookLabel()`, `parseStoredJSON()`, `loreField()`, `loreSelect()`, `loreBookOptions()`, `renderLoreLibrarySidebar()`, `renderNode()`, `loadLoreWorkspaceData()`, `collectLoreLinkTargets()`, `loreWorkspaceVisible()`, `renderLoreWorkspaceBody()`, `openLoreWorkspace()`, `renderLoreInspector()`, `selectTab()`, `buildLoreWorkspace()`, `renderWorkspaceTree()`, `renderNode()`, `renderTreeList()`, `renderLoreBookEditor()`, `moveLoreBook()`, `reorderLoreBook()`, `promoteLoreBook()`, `demoteLoreBook()`, `createSiblingLoreBook()`, `createLoreBookDialog()`, `refreshLoreUI()`, `renderLoreEntries()`, `renderList()`, `buildLoreEntryCard()`, `splitNumberList()`, `reinterpretLoreBook()`, `generateLoreEntriesPrompt()`, `buildDirectLoreRequest()`, `renderRelationshipOverview()`, `renderLoreRelationshipEditor()`, `renderRelationshipList()`, `showNewRelationshipForm()`, `renderLoreGenerator()`, `adoptGeneratorPlan()`, `generatorPlanMessage()`, `loreGenAgo()`, `refreshLoreGenRecovery()`, `normalizeGeneratorPlan()`, `renderLorePlanPreview()`, `renderOperations()`, `planStat()`, `renderAnalysisSection()`, `addPlanGroup()`, `stripPlanUIFields()`, `acceptedGeneratorPlan()`.
 
-### `static/js/settings.js` (3994 lines)
+### `static/js/settings.js` (4003 lines)
 
-Sections: Chat tool modals (`:1`); Condition tab (`:893`); Survival tracker (`:953`); Character relocation (`:1265`); API connections (`:1998`); Software updates (host-only; git fast-forward from GitHub origin) (`:3223`); Legacy checkpoint conversion (host-only maintenance) (`:3255`); Prompts (`:3489`); and be able to load that pack's own sheets to edit, rather than (`:3500`); Extensions (`:3667`).
+Sections: Chat tool modals (`:1`); Condition tab (`:902`); Survival tracker (`:962`); Character relocation (`:1274`); API connections (`:2007`); Software updates (host-only; git fast-forward from GitHub origin) (`:3232`); Legacy checkpoint conversion (host-only maintenance) (`:3264`); Prompts (`:3498`); and be able to load that pack's own sheets to edit, rather than (`:3509`); Extensions (`:3676`).
 
 Declared functions: `frameQuery()`, `charterDiagnosticsPanel()`, `selectTab()`, `dialogueColorControl()`, `save()`, `renderCastTab()`, `renderConditionTab()`, `hydrateConditionTab()`, `vitalMeter()`, `syncVitalsGutterNow()`, `syncVitalsGutter()`, `hideVitalsHud()`, `vitalsBlock()`, `refreshVitalsHud()`, `clearVitalsHud()`, `hydrateCastLocations()`, `castRoomLabel()`, `castRoomSelect()`, `renderLorebooksTab()`, `renderBookNode()`, `renderMultiplayerTab()`, `renderFramesTab()`, `renderFramesListPanel()`, `renderPersonaStationingPanel()`, `renderParadoxPanel()`, `renderBackgroundPresencesPanel()`, `renderGuestInvitePanel()`, `renderInsightsTab()`, `renderDramaticIronyPanel()`, `renderPromiseLedgerPanel()`, `embeddingBankBlock()`, `modelRecommendationsBlock()`, `renderFirstRunProviderSetup()`, `preferredBackdropSize()`, `renderFullApiSettings()`, `propagateToFollowers()`, `renderUpdateChecking()`, `renderUpdateError()`, `checkpointCompactionBlock()`, `renderUpdateStatus()`, `runUpdateInstall()`, `renderUpdateDone()`, `openPromptsModal()`, `reopenPromptsIfRequested()`, `extensionTrustNote()`, `extensionCapabilitySummary()`, `extensionSettingsSections()`, `openExtensionsMenu()`.
 
