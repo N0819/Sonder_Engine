@@ -1576,16 +1576,21 @@ def condition_exit_owner(kind, payload):
     Everything else answers None, and that is the population with the
     problem. A NON-gated `dazed` row answers None deliberately: `_awareness_
     exits` covers only `NON_AWAKE_GATED`, so no floor has ever ended a dazed
-    mind, and the corpus shows exactly that -- one chat carries a `dazed`
-    awareness condition from simulation second 880 still in force sixteen
-    turns and two fictional hours later. Saying `awareness_floor` for it
-    would claim an owner that does not exist.
+    mind, and the corpus shows exactly that -- twelve live `dazed` rows over
+    nine chats, none of them ever closed, the oldest standing 1,210
+    simulation seconds (chat 27) and chat 88's still in force thirteen turns
+    after it opened. Saying `awareness_floor` for it would claim an owner
+    that does not exist.
     """
     payload = payload if isinstance(payload, dict) else {}
     kind = str(kind or "")
     # `awareness_cond_level` reads `cond["kind"]` for the kind-word fallback
-    # (the level is filed in the kind slot on 9 live rows), so the kind has
-    # to travel with the payload rather than beside it.
+    # (the level is filed in the kind slot on 8 live rows -- `unconscious` 6,
+    # `asleep` 1, `sleep` 1, counted with `awareness_kind_level`'s own
+    # tokenizer, which is why this is one fewer than the 9 the
+    # `_AWARENESS_KIND_LEVELS` note counts: that one includes the
+    # deliberately-unmapped `consciousness`), so the kind has to travel with
+    # the payload rather than beside it.
     level = awareness_cond_level({**payload, "kind": kind})
     if level in NON_AWAKE_GATED:
         return "awareness_floor"
