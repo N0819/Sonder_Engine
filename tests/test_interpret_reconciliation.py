@@ -261,6 +261,37 @@ def test_dropped_declaration_is_detected_and_repaired(temp_db, monkeypatch):
                for c in fl["authority_claims"])
 
 
+def test_the_repair_carries_arrives_through(temp_db, monkeypatch):
+    """A repaired movement is the ONLY movement on that beat, so dropping
+    `arrives` from the rebuild silently upgraded every repaired approach to an
+    arrival.
+
+    The field defaults True and `_guard_approach_is_not_arrival` fires only on
+    False (`mv.get("arrives", True)`), so the omission was invisible: a repair
+    that correctly read "I head for the treeline" as arrives:false was
+    rewritten into a body standing at the treeline. The repair SHEET already
+    asked for the field; the seam's own dict literal threw it away.
+    """
+    repair = json.loads(json.dumps(_REPAIR))
+    repair["movement"]["arrives"] = False
+    ctx, out, calls = _run_interpret(
+        temp_db, monkeypatch, _WEAK_INTERPRET, repair_out=repair)
+
+    assert "interpret_repair" in calls
+    assert out["movement"]["to_room"] == "armory"
+    assert out["movement"]["arrives"] is False
+
+
+def test_a_repair_that_says_nothing_about_arriving_still_arrives(
+        temp_db, monkeypatch):
+    """The default is the pre-existing behaviour and must stay it: silence on
+    the field is an arrival, not a stalled walk."""
+    ctx, out, calls = _run_interpret(
+        temp_db, monkeypatch, _WEAK_INTERPRET, repair_out=_REPAIR)
+
+    assert out["movement"]["arrives"] is True
+
+
 def test_covered_interpretation_makes_no_repair_call(temp_db, monkeypatch):
     covered = json.loads(json.dumps(_WEAK_INTERPRET))
     covered["sequence"] = [

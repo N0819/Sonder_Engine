@@ -11,7 +11,7 @@
 | `agents/character.py` | 3695 | Private character decision agent. | `agents.common`, `core.db`, `core.frames`, `llm.prompts`, `llm.schemas`, `mind`, `mind.affect`, `mind.memory`, `mind.memory_judge`, `mind.psychology_runtime`, `mind.theory_of_mind`, `story.character_schema`, `story.scene`, `world.gaps`, `world.place_purpose`, `world.spatial`, `world.survival` |
 | `agents/common.py` | 7977 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.scene`, `world`, `world.spatial` |
 | `agents/composer.py` | 2707 |  | `agents.common`, `story.scene`, `world.spatial` |
-| `agents/director.py` | 3997 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial`, `world.survival` |
+| `agents/director.py` | 4005 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial`, `world.survival` |
 | `agents/director_contact.py` | 457 |  | `story.character_schema`, `world.spatial` |
 | `agents/director_evidence.py` | 951 |  | `agents.common`, `agents.director_lingua`, `llm`, `world.spatial` |
 | `agents/director_fanout.py` | 656 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
@@ -44,7 +44,7 @@
 | `llm/prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `llm.providers` |
 | `llm/prompts.py` | 494 | Default system prompts and prompt preset access. | `core.db` |
 | `llm/providers.py` | 3308 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `core.db`, `core.logging_utils` |
-| `llm/schemas.py` | 5601 | Pydantic output contracts and semantic validation for agent payloads. | — |
+| `llm/schemas.py` | 5583 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `mind/__init__.py` | 6 |  | — |
 | `mind/affect.py` | 2406 |  | `mind.theory_of_mind` |
 | `mind/canon_provenance.py` | 379 |  | — |
@@ -223,14 +223,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `director_resolve()` | 2392 | 1572 lines |
+| `director_resolve()` | 2400 | 1572 lines |
 | `director_interpret()` | 437 | 571 lines |
-| `_reconcile_resolution()` | 1376 | 502 lines |
-| `_run_specialists()` | 2060 | 224 lines |
+| `_reconcile_resolution()` | 1384 | 502 lines |
+| `_run_specialists()` | 2068 | 224 lines |
+| `_reconcile_interpretation()` | 1010 | 139 lines |
 | `director_establish()` | 298 | 137 lines |
-| `_reconcile_interpretation()` | 1010 | 131 lines |
-| `_specialist_repairs()` | 1203 | 119 lines |
-| `_prose_gate_facts()` | 1942 | 92 lines |
+| `_specialist_repairs()` | 1211 | 119 lines |
+| `_prose_gate_facts()` | 1950 | 92 lines |
 
 ### `agents/director_contact.py`
 
@@ -563,14 +563,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `preprocess_llm_output()` | 4299 | 344 lines |
+| `preprocess_llm_output()` | 4284 | 344 lines |
 | `_lenient_coerce()` | 745 | 159 lines |
-| `validate_llm_output_strict()` | 5472 | 130 lines |
-| `semantic_output_errors()` | 5265 | 112 lines |
-| `canonicalize_prose_markup()` | 4104 | 102 lines |
-| `_uncross_concealed_speech()` | 4228 | 69 lines |
+| `validate_llm_output_strict()` | 5454 | 130 lines |
+| `semantic_output_errors()` | 5247 | 112 lines |
+| `canonicalize_prose_markup()` | 4089 | 102 lines |
+| `_uncross_concealed_speech()` | 4213 | 69 lines |
 | `_coerce_list_valued_map()` | 128 | 57 lines |
-| `_coerce_conditions()` | 3645 | 55 lines |
+| `_coerce_conditions()` | 3630 | 55 lines |
 
 ### `mind/affect.py`
 
