@@ -408,6 +408,39 @@ def get_scene(chat_id, chat=None):
         _seed_scene_initial_attire(chat_id, sc, chat)
     return sc
 
+def visible_body_text(body, name, scene):
+    """One body's standing description, minus whatever its clothing covers.
+
+    `body` is `character_visible_body`/`persona_visible_body`'s pair: the
+    unlocated half rides unconditionally, and the located half is gated
+    against this body's live garment ledger. The gate is the mirror of
+    `beneath`: what is under clothing is spelled out only once something
+    comes off, and what a body shows of itself is delivered until something
+    goes on (`attire.uncovered_zone_text`).
+
+    Returns "" for a body whose card describes nothing, which is every card
+    written before the fields were delivered -- byte-identical to the
+    behaviour it already had.
+    """
+    body = body if isinstance(body, dict) else {}
+    parts = []
+    build = str(body.get("build") or "").strip()
+    if build:
+        parts.append(build)
+    # Through `entry_for`, not a bare `.get`: a case-variant identity key
+    # would otherwise find no garment for a dressed body, and this gate would
+    # fail OPEN -- delivering the face a covering conceals.
+    entry = attire_model.entry_for((scene or {}).get("attire"), name)
+    regions = (attire_model.rederive_entry(entry) or {}).get("regions") or {} \
+        if entry else {}
+    for zones in attire_model.uncovered_zone_text(
+            body.get("regions") or {}, regions).values():
+        parts.extend(zones.values())
+    return "; ".join(
+        text for text in (str(p or "").strip().rstrip(" .;,") for p in parts)
+        if text)
+
+
 def appearance_of(name, base, scene):
     ov = (scene.get("overlays") or {}).get(name) or []
     att = (scene.get("attire") or {}).get(name) or {}

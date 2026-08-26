@@ -714,6 +714,11 @@ def default_character_data(name: str = "Unnamed") -> dict:
                 "summary": "A person of unremarkable appearance.",
                 "build": "", "face": "", "hair": "", "eyes": "",
                 "distinctive_features": [],
+                # DERIVED, never authored: `_coerce_appearance` projects the
+                # located fields above into it on every normalize. It is the
+                # shape the delivery path reads, and it is here so that a
+                # default sheet and a normalized one have the same keys.
+                "regions": {},
             },
             # What this body standingly SMELLS of, as a short noun phrase.
             # The sibling of `visible.summary` on the channel beside sight:
@@ -826,6 +831,11 @@ def default_persona_data(name: str = "Player") -> dict:
                 "summary": "A person of unremarkable appearance.",
                 "build": "", "face": "", "hair": "", "eyes": "",
                 "distinctive_features": [],
+                # DERIVED, never authored: `_coerce_appearance` projects the
+                # located fields above into it on every normalize. It is the
+                # shape the delivery path reads, and it is here so that a
+                # default sheet and a normalized one have the same keys.
+                "regions": {},
             },
             "scent": "",
             "latent": [],
@@ -1095,7 +1105,41 @@ def _coerce_appearance(target_dict: dict) -> dict:
     visible.setdefault("hair", "")
     visible.setdefault("eyes", "")
     visible.setdefault("distinctive_features", [])
+    visible["regions"] = _project_visible_regions(visible)
     return target_dict
+
+
+#: The card fields that describe a LOCATED part of the body, under the region
+#: each one belongs to. Read from `attire.VISIBLE_ZONES` rather than restated,
+#: so the vocabulary a card is projected into and the vocabulary the gate
+#: delivers cannot drift apart -- a zone nothing knows about is a description
+#: nothing can deliver.
+_LOCATED_VISIBLE_FIELDS = dict(attire.VISIBLE_ZONES)
+
+
+def _project_visible_regions(visible: dict) -> dict:
+    """The located body fields as regions, for the gate that delivers them.
+
+    A PROJECTION, not a decision. The card keeps exactly the fields it always
+    offered; this restates them in the shape the concealment gate reads, so an
+    author who writes what their character's hair looks like gets it delivered
+    -- and concealed the moment something covers that region -- without ever
+    learning the region system exists. There is no authoring surface here and
+    no judgement to make: which region a face is on has one answer, and the
+    fields are the source of truth, so the projection is rebuilt from them on
+    every normalize rather than merged with whatever was there.
+    """
+    out = {}
+    for region, zones in _LOCATED_VISIBLE_FIELDS.items():
+        described = {}
+        for zone in zones:
+            text = " ".join(str(visible.get(zone) or "").split())
+            if text:
+                described[zone] = text
+        if described:
+            out[region] = {"visible_zones": described}
+    return out
+
 
 CHARACTER_SECTIONS = (
     "identity", "initial_outfit", "simulation", "embodiment", "psychology",
@@ -1286,6 +1330,11 @@ def normalize_character_data(value: dict) -> dict:
                 "summary": str(value.get("appearance") or "A person of unremarkable appearance."),
                 "build": "", "face": "", "hair": "", "eyes": "",
                 "distinctive_features": [],
+                # DERIVED, never authored: `_coerce_appearance` projects the
+                # located fields above into it on every normalize. It is the
+                # shape the delivery path reads, and it is here so that a
+                # default sheet and a normalized one have the same keys.
+                "regions": {},
             },
             "latent": copy.deepcopy(value.get("latent_capabilities") or []),
             "extra_parts": _normalize_extra_parts(value.get("extra_parts")),
@@ -1391,6 +1440,11 @@ def normalize_persona_data(value: dict) -> dict:
                 "summary": str(value.get("appearance") or "A person of unremarkable appearance."),
                 "build": "", "face": "", "hair": "", "eyes": "",
                 "distinctive_features": [],
+                # DERIVED, never authored: `_coerce_appearance` projects the
+                # located fields above into it on every normalize. It is the
+                # shape the delivery path reads, and it is here so that a
+                # default sheet and a normalized one have the same keys.
+                "regions": {},
             },
             "latent": copy.deepcopy(value.get("latent_capabilities") or []),
             "extra_parts": _normalize_extra_parts(value.get("extra_parts")),
@@ -1593,6 +1647,40 @@ def character_sampler(sheet: dict) -> dict:
 def character_appearance(sheet: dict) -> str:
     return str(normalize_character_data(sheet).get("embodiment", {}).get("visible", {})
                .get("summary") or "A person of unremarkable appearance.")
+
+
+def _visible_body(visible: dict) -> dict:
+    """The standing body description a card carries beside its summary:
+    ``{"build": str, "regions": {region: {zone: text}}}``.
+
+    Two kinds, and the split is the whole point. `build` is not LOCATED --
+    it is a property of the whole body with no place on it, so nothing worn
+    can cover it: a cloak changes a silhouette without stopping anyone being
+    tall and heavy-shouldered. It belongs with `summary` and `scent`. The
+    regions hold what IS located, and a garment over one conceals it.
+    """
+    visible = visible if isinstance(visible, dict) else {}
+    regions = {}
+    for region, entry in (visible.get("regions") or {}).items():
+        zones = (entry or {}).get("visible_zones") if isinstance(entry, dict) else None
+        if isinstance(zones, dict) and zones:
+            regions[str(region)] = {str(zone): str(text)
+                                    for zone, text in zones.items() if text}
+    return {"build": str(visible.get("build") or "").strip(),
+            "regions": regions}
+
+
+def character_visible_body(sheet: dict) -> dict:
+    """What this body standingly LOOKS like beyond its summary sentence.
+
+    The sibling of `character_appearance`, and separate from it because the
+    two are read by different consumers: the summary is what a stranger's
+    descriptor is cut from, and this is the description a body delivers to
+    someone who can actually see it. Concealment is not decided here -- see
+    `scene.visible_body_text`, which is where the clothing ledger is.
+    """
+    return _visible_body(
+        normalize_character_data(sheet).get("embodiment", {}).get("visible", {}))
 
 
 def character_scent(sheet: dict) -> str:
@@ -1848,6 +1936,13 @@ def character_initial_stance(sheet: dict) -> dict:
 def persona_name(sheet: dict) -> str:
     return str(normalize_persona_data(sheet).get("identity", {}).get("name") or "Player")
 
+def persona_visible_body(sheet: dict) -> dict:
+    """`character_visible_body` for the player's own body. Same card shape,
+    same delivery: the player is a body other minds look at."""
+    return _visible_body(
+        normalize_persona_data(sheet).get("embodiment", {}).get("visible", {}))
+
+
 def persona_appearance(sheet: dict) -> str:
     return str(normalize_persona_data(sheet).get("embodiment", {}).get("visible", {})
                .get("summary") or "A person of unremarkable appearance.")
@@ -2066,26 +2161,21 @@ def character_card_warnings(sheet):
             "(narrow / focused / ordinary / broad / wide) to make them "
             "single-minded or to let them keep more in the air at once."
         )
-    # AUTHORED AND UNREAD. `character_appearance`/`persona_appearance` return
-    # `embodiment.visible.summary` and nothing else, so `build`, `face`,
-    # `hair`, `eyes` and `distinctive_features` reach no view, no narrator and
-    # no memory (`docs/UNBUILT.md` 1.78). They are offered in the editor, kept
-    # through every normalize, and carried in archives -- so an author who
-    # fills them has every reason to believe the story can see them, and the
-    # only symptom is a body that reads thin beside one whose author happened
-    # to write the same detail into `summary` instead.
+    # AUTHORED AND UNREAD. `build`, `face`, `hair` and `eyes` are delivered
+    # now -- `build` beside the summary because nothing worn can cover a
+    # silhouette, the other three through the head region, concealed by
+    # whatever is over it. `distinctive_features` is NOT: it is carried
+    # through every normalize and every archive, and read only by
+    # `_prose_names_a_part`, so an author who fills it has every reason to
+    # believe the story can see it (`docs/UNBUILT.md` 1.78).
     visible = (sheet.get("embodiment") or {}).get("visible") or {}
-    unread = [name for name in ("build", "face", "hair", "eyes")
-              if str(visible.get(name) or "").strip()]
     if visible.get("distinctive_features"):
-        unread.append("distinctive features")
-    if unread:
         warnings.append(
-            "This card describes the body under %s, but only "
-            "embodiment.visible.summary is delivered to anyone in the story — "
-            "no view, narrator or memory reads the other fields. Move what "
-            "should be seen into the appearance summary."
-            % ", ".join(unread)
+            "This card lists distinctive features, but nothing in the story "
+            "reads embodiment.visible.distinctive_features — no view, "
+            "narrator or memory. Move what should be seen into the "
+            "appearance summary, or into the face/hair/eyes fields, which "
+            "are delivered."
         )
     # A BOOLEAN THAT ARRIVED AS TEXT. `authored_bool` now reads the word, so
     # the card behaves as written; the author should still be told, because a

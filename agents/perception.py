@@ -14,10 +14,12 @@ from story.character_schema import (
     character_name,
     character_name_from_text,
     character_senses,
+    character_visible_body,
     name_boundary_regex,
     persona_appearance,
     persona_name,
     persona_senses,
+    persona_visible_body,
 )
 from core.db import q, wget
 from world.mechanics import clock_elapsed
@@ -41,6 +43,7 @@ from story.scene import (
     senses_of,
     scent_of,
     sheet_state,
+    visible_body_text,
 )
 
 from mind import affect
@@ -3038,6 +3041,49 @@ def _body_scents(ctx):
     return out
 
 
+def _body_descriptions(ctx, sc):
+    """{name: the standing body description this body's clothing still shows}
+    for the player and every cast body.
+
+    Read from the cards once per stage exactly like `_body_scents`, and for
+    the same reason: a standing body fact threaded through the places a body
+    record is built ends up present in one stage's view and absent from the
+    next.
+
+    A body whose outward form is NOT its own card's is absent from this map
+    entirely. A disguise decides what every observer sees, and a
+    transformation decides what the body IS -- in both cases the card's own
+    face is precisely the thing that is not on show, and delivering it beside
+    the form that replaced it would hand every observer the truth the
+    condition exists to withhold. The subtraction is the safe direction: a
+    body drops back to the description it had before this delivered anything.
+    """
+    out = {}
+    chat_id = ctx.chat["id"]
+
+    def _own_form(name):
+        key = str(name or "").casefold()
+        return not (active_disguises(chat_id).get(key)
+                    or active_transformations(chat_id).get(key))
+
+    pers = persona_of(ctx.chat)
+    if isinstance(pers, dict):
+        name = str(pers.get("name") or persona_name(pers) or "")
+        if name and _own_form(name):
+            text = visible_body_text(persona_visible_body(pers), name, sc)
+            if text:
+                out[name] = text
+    for c in ctx.cast or []:
+        sh, _, _ = sheet_state(c)
+        name = character_name(sh)
+        if not name or not _own_form(name):
+            continue
+        text = visible_body_text(character_visible_body(sh), name, sc)
+        if text:
+            out[name] = text
+    return out
+
+
 def _scent_sources_for(sc, observer, observer_room, others, display_map,
                        senses, body_scents=None):
     """Every smell reaching one observer, graded and labelled.
@@ -3145,12 +3191,29 @@ def _scent_sources_for(sc, observer, observer_room, others, display_map,
     return sources
 
 
+def _with_body_description(appearance, described):
+    """One body's appearance with its standing body description on the end.
+
+    Appended rather than merged into the summary: `appearance` has already
+    been rendered as prose and carries this body's clothing and overlays,
+    and the two halves are separate facts about the same body rather than
+    one sentence to be rewritten.
+    """
+    appearance = str(appearance or "").strip()
+    described = str(described or "").strip()
+    if not described:
+        return appearance or None
+    if not appearance:
+        return described
+    return "%s; %s" % (appearance.rstrip(" ;"), described)
+
+
 def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
                                 entity_state=None, appearance_changed=(),
                                 appearance_deltas=None, prev_seen=None,
                                 seen_out=None,
                                 gate=None, extra_parts=None,
-                                body_scents=None,
+                                body_scents=None, body_descriptions=None,
                                 prune_appearance=False,
                                 self_forms=(), self_pronouns=None):
     """The standing-state half of one observer's IR: environment, presence,
@@ -3220,12 +3283,20 @@ def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
             continue
         label = display_map.get(b_name) or (
             b_name if recog else "the unfamiliar person")
+        # WHAT THE CARD SAYS THE BODY LOOKS LIKE rides the full description
+        # and nothing else. It is delivered here, past the sight gate above
+        # and the rear-arc gate above that, because this is the only place a
+        # body's own appearance is handed over at all -- the short stranger
+        # LABEL is cut from the summary alone and stays that way, so an
+        # observer holding a silhouette cannot start reading a face off the
+        # name they were given for it.
+        described = _with_body_description(
+            body.get("appearance"), (body_descriptions or {}).get(b_name))
         if recog:
-            description = body.get("appearance")
+            description = described
         else:
             description = _strip_identity_tokens(
-                body.get("appearance"),
-                [b_name, *(body.get("aliases") or [])])
+                described, [b_name, *(body.get("aliases") or [])])
         # `_strip_identity_tokens` removes only the described body's OWN
         # name. A scene overlay describing one body routinely names another
         # ("her arms still around Hinami"), and that third name walked
@@ -3463,6 +3534,7 @@ def _composer_establish(ctx, sc, perceivers, known, p_name, p_appearance,
     identity_space = _composer_identity_space(ctx, p_name, p_appearance)
     cast_parts = _composer_extra_parts(ctx, p_name)
     body_scents = _body_scents(ctx)
+    body_descriptions = _body_descriptions(ctx, sc)
     clean_views, observations, ledger, company = {}, {}, {}, {}
     for p in perceivers:
         pid = str(p["id"])
@@ -3499,6 +3571,7 @@ def _composer_establish(ctx, sc, perceivers, known, p_name, p_appearance,
                 prev_seen=set(), seen_out=seen_bodies,
                 gate=gate, extra_parts=cast_parts,
                 body_scents=body_scents,
+                body_descriptions=body_descriptions,
                 self_forms=self_forms,
                 self_pronouns=p.get("pronouns"))
             percepts.extend(
@@ -3545,6 +3618,7 @@ def _composer_act(ctx, sc, interp, perceivers, known, p_name, p_visible,
     identity_space = _composer_identity_space(ctx, p_name, p_visible)
     cast_parts = _composer_extra_parts(ctx, p_name)
     body_scents = _body_scents(ctx)
+    body_descriptions = _body_descriptions(ctx, sc)
     prev_ledger = _composer_prev_ledger(ctx)
     actor_body = {
         "name": p_name, "room": ctx.get("_player_room"),
@@ -3594,6 +3668,7 @@ def _composer_act(ctx, sc, interp, perceivers, known, p_name, p_visible,
                 gate=_authored_prose_gate(
                     ctx, "perception_act", name, known, identity_space),
                 extra_parts=cast_parts, body_scents=body_scents,
+                body_descriptions=body_descriptions,
                 self_forms=self_forms,
                 self_pronouns=p.get("pronouns"))
             rel = p.get("spatial_to_actor") or {}
@@ -4026,6 +4101,7 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
     # this chat could name. Authored prose is gated against the second.
     cast_parts = _composer_extra_parts(ctx, p_name)
     body_scents = _body_scents(ctx)
+    body_descriptions = _body_descriptions(ctx, sc)
     identity_space = list(ident_roster)
     _space_seen = {str(r["name"]).casefold() for r in identity_space}
     for s in _composer_identity_space(ctx, p_name, appearances.get(p_name)):
@@ -4107,6 +4183,7 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
                 gate=_authored_prose_gate(
                     ctx, "perception_outcome", name, known, identity_space),
                 extra_parts=cast_parts, body_scents=body_scents,
+                body_descriptions=body_descriptions,
                 # Compression belongs only to player-facing prose. NPC
                 # cognition keeps every other visible body's complete
                 # appearance/attire surface. The observer's own body is not
