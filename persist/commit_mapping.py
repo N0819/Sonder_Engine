@@ -13,11 +13,50 @@ from mind.memory import (search_lore, add_lore, update_lore, LORE_CATEGORIES,
 from llm.providers import embed_texts
 from llm.prompts import get_prompt
 from story.character_schema import character_name_from_text, new_uid, persona_name
+from story.provenance_text import split_engine_provenance
 from core.frames import is_recognized_in_frame
 from world.spatial import normalize_room_id
 from persist.commit_common import (_canonical_anchor, _entity_alias_map, _keys_str,
                            _normalized_fact, _registered_name_roster,
                            _resolve_roster_name)
+# A stable, greppable stamp on the provenance column, the same shape
+# `world/background_claims.CANON_SOURCE_PREFIX` uses for a ratified claim. It
+# is also the denominator: `SELECT count(*) FROM lore_entries WHERE
+# source_notes LIKE 'engine-generated%'` is how anyone finds every description
+# the engine invented for a place canon had not described.
+GENERATED_SOURCE_PREFIX = "engine-generated"
+
+
+def _file_engine_provenance(op):
+    """Move the engine's bookkeeping out of a lore entry's prose and into
+    `source_notes`.
+
+    A `layout` entry staged for a room no candidate described is asked to
+    declare that it was generated -- the declaration is what keeps a wrong
+    guess cheap to find and correct. It was declared IN THE ENTRY'S TEXT, and
+    that text is what becomes the room's description and every observer's room
+    notes, so a character standing in the room was told "generated because no
+    candidate described this location" as a fact about the room (measured, chat
+    95 beat 7).
+
+    Same signal, different column. `source_notes` is already the provenance
+    column, is returned by the lore API (`web/app.py`), and reaches no prompt
+    and no view. The model's own structured `provenance` field rides along
+    here too, so the declaration survives whichever way it arrives.
+    """
+    prose, note = split_engine_provenance(op.get("content"))
+    declared = " ".join(str(op.get("provenance") or "").split())
+    stamp = "; ".join(p for p in (declared, note) if p)
+    if not stamp:
+        return op
+    op["content"] = prose
+    existing = str(op.get("source_notes") or "").strip()
+    op["source_notes"] = "; ".join(
+        ([existing] if existing else [])
+        + ["%s: %s" % (GENERATED_SOURCE_PREFIX, stamp)])
+    return op
+
+
 def normalize_offscreen_events(events):
     """Coerce a beat's off-screen ticks to one shape: [{actor, tick}].
 
@@ -267,6 +306,11 @@ def prepare_mapping_commit(ctx):
     for o in ops:
         if "keys" in o:
             o["keys"] = _keys_str(o["keys"])
+        _file_engine_provenance(o)
+    # An entry whose whole text was bookkeeping has nothing left to say about
+    # the world. The provenance is not lost -- it is simply not worth a lore
+    # row on its own.
+    ops = [o for o in ops if o.get("content")]
 
     # Lore embeddings are independent of final routing/book IDs. Compute them
     # in one batch now rather than one remote call per operation while the
@@ -347,6 +391,7 @@ def commit_mapping(ctx, nonce, *, prepared=None):
                         title=o.get("title"), knowledge_tag=o.get("knowledge_tag"),
                         knowledge_range=o.get("knowledge_range"),
                         knowledge_locations=kloc,
+                        source_notes=o.get("source_notes"),
                         embedding=o.get("_embedding"),
                     )
                     applied["updated"] += 1
@@ -357,6 +402,7 @@ def commit_mapping(ctx, nonce, *, prepared=None):
                 knowledge_tag=o.get("knowledge_tag"),
                 knowledge_range=o.get("knowledge_range"),
                 knowledge_locations=kloc,
+                source_notes=o.get("source_notes") or "",
                 embedding=o.get("_embedding"),
             )
             applied["created"] += 1
@@ -476,6 +522,10 @@ def _generate_fallback_ops(ok_facts, staged, world_facts, existing_lore=None):
             "knowledge_tag": entry.get("knowledge_tag"),
             "knowledge_range": entry.get("knowledge_range"),
             "knowledge_locations": entry.get("knowledge_locations"),
+            # The staged entry's own declaration that it was generated without
+            # canon behind it. Carried as a FIELD, never as a sentence in
+            # `content` -- `_file_engine_provenance` files it on `source_notes`.
+            "provenance": entry.get("provenance"),
             "book_id": entry.get("book_id"),
         })
     for world_fact in world_facts:

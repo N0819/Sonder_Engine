@@ -73,9 +73,18 @@ def test_the_generated_room_must_declare_itself_and_stay_thin():
     """The two halves that make a wrong guess cheap: say it was generated, and
     do not furnish it. A thin room costs a sentence to correct; a richly
     furnished wrong one has to be argued with for the rest of the story.
+
+    The declaration is a FIELD, not a sentence. It used to be asked for in the
+    entry's own text, and that text becomes the room's description -- so a
+    character standing in the room was told "generated because no candidate
+    described this location" as a fact about the room (chat 95 beat 7). The
+    signal is what this test protects, and the signal is unharmed by moving it
+    off the prose; see tests/test_engine_provenance_is_not_world_text.py.
     """
     body = _mapping_prompt()
-    assert "generated because no candidate described this floor" in body
+    assert "`provenance`" in body
+    assert "NEVER IN ITS TEXT" in body
+    assert "no candidate described this part of the place" in body
     assert "MINIMAL" in body
     assert "do not invent named sub-rooms" in body
 
