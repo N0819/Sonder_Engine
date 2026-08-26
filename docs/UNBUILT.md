@@ -1806,6 +1806,49 @@ and the note is argument.
   sentence is what is wrong, not the conclusion.
 
 
+### 1.59 A channel census over persisted `state_diff`s cannot see `phase_sources`
+
+**Measured 2026-08-25**, deconstraint branch. A census of all 28 `state_diff`
+channels over 2,723 resolved turns reported `phase_sources` as **never used,
+not once** — and the census is structurally blind to it, not reporting a fact.
+`agents/director.py:3903` pops the key IN PLACE out of `out["state_diff"]`
+before the resolve step row is written, exactly as its docstring says
+("consumed before persistence"), so **a persisted `state_diff` cannot carry
+it**. Where it CAN be seen — `director_interpret.state_assertions` — it fires
+23 times in the same corpus.
+
+It is asked for unconditionally in `language_packs/en/prompt_policy.json` for
+all six specialists and `director_resolve_lean`, and read by
+`agents/common.py:485` `prune_blocked_phase_changes` at
+`agents/director.py:780` and `:3903`. It is a live causal floor. Recorded here
+because a later reader who repeats the census and trusts it will delete a
+working one on "0 uses" evidence.
+
+The same caution, weaker, covers `contradicted_claims` (asked for, 725 stored
+diffs carry the key, 0 non-empty) and `ratified_claims` (1,876 present, 1
+non-empty): both gate on `unratified_claims_present`, and
+`agents/director_scopes.py`'s `_CHANNEL_GATES` granted that scope **0 times in
+1,346 orchestrated Director stages**. They have not had a fair measurement yet;
+§1.30 is the entry that owns them.
+
+### 1.60 The interpret sheet and `agents/common.py` state opposite rules about concealed speech
+
+**Found 2026-08-25**, deconstraint branch, in passing; NOT fixed here because
+it is a concealment path and either direction is a firewall decision.
+
+`prompts.director_interpret` says: *"Concealing the surrounding action
+(stepping aside, opening a channel) does NOT by itself hide what is said — the
+speech element itself needs its own visibility/conceal_from."*
+`agents/common.py:2936-2955` does the opposite: it propagates a concealed
+action's `conceal_from` onto every speech element not explicitly
+`overt`/loud/shout, on the stated grounds that weak models mark the ACTION
+concealed and leave the speech bare.
+
+Both behaviours are defensible; they cannot both be the rule. A model told the
+opposite of what the engine does will mis-set the field in whichever direction
+it believes, and the prompt is what decides which. Settle it, then make the
+loser follow the winner — do not leave the sheet arguing with the code.
+
 ### 1.58 Schema-touching work deferred by owner policy 4
 
 The 2026-08-18 repair wave authorised **exactly one** schema migration
