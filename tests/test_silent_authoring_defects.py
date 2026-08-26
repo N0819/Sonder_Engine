@@ -269,6 +269,27 @@ class TestTheCardSaysWhatNobodyReads:
             sheet["simulation"] = {"offscreen_agent": value}
             assert not self._warning(sheet, "offscreen_agent")
 
+    def test_a_nameless_interior_station_is_named(self):
+        """A station with no name is no handle anything can reach, so
+        `_normalize_interior` drops it -- and an author who typed a
+        description into it has every reason to think the room exists."""
+        sheet = self._card()
+        sheet["embodiment"]["interior"] = [{"name": "Entry Passage"},
+                                           {"desc": "It widens here."}]
+        found = self._warning(sheet, "embodiment.interior")
+        assert found and "position 2" in found[0]
+
+    def test_a_well_formed_interior_is_quiet(self):
+        sheet = self._card()
+        sheet["embodiment"]["interior"] = [{"name": "Entry Passage"},
+                                           {"name": "Deep Hold"}]
+        assert not self._warning(sheet, "embodiment.interior")
+
+    def test_an_ordinary_card_with_no_interior_is_quiet(self):
+        """No noise on the common case: an ordinary human body has no inside
+        the story moves through, and says so by leaving the key out."""
+        assert not self._warning(self._card(), "embodiment.interior")
+
     def test_the_existing_warnings_still_fire(self):
         """This function runs on all nine card-producing surfaces; the three
         it was built for must not be displaced by the two added here."""

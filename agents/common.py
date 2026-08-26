@@ -13,6 +13,7 @@ from story.character_schema import (
     _UNSPACED_SCRIPT,
     _extra_part_placement,
     character_appearance,
+    character_body_interior,
     character_extra_parts,
     character_knowledge_config,
     character_name,
@@ -3942,6 +3943,106 @@ def cast_spelling_policy(cast, player_name=None, *, aliases=True):
     return canonical, forms
 
 
+def _cast_entity_claims(scene, cast, player_name=None):
+    """({entity id -> the cast sheet name it IS}, forms), for the entities
+    that unambiguously belong to exactly one registered character.
+
+    ONE RESOLUTION, TWO WRITERS. `reconcile_cast_entity_names` renames what it
+    finds; `stamp_authored_interiors` stamps the card's authored topology onto
+    it. They ask the identical question -- which scene entity is this sheet's
+    body -- and answering it twice is how two copies of one rule start to
+    disagree, which is the defect `cast_spelling_policy` itself exists to have
+    ended.
+
+    TWO ENTITIES ANSWERING TO ONE CAST MEMBER CLAIM NEITHER. That is two
+    records for one being -- a real defect, but a MERGE one
+    (`_dedup_duplicate_entity_keys`); writing to both here would mint the
+    duplicate the merge exists to collapse, and writing to one would pick a
+    winner on nothing.
+    """
+    entities = (scene or {}).get("entities")
+    if not isinstance(entities, dict):
+        return {}, {}
+    canonical, forms = cast_spelling_policy(cast, player_name)
+    if not forms:
+        return {}, {}
+    registered = {str(v).casefold() for v in forms.values()}
+
+    def belongs_to(entity, eid):
+        """The cast member this entity IS, or None. Asked of a spelling it
+        already answers to correctly as well as one it does not: an entity
+        named right can still carry an alias that is somebody else's name."""
+        for spelling in (eid, entity.get("name"),
+                         *(entity.get("aliases") or [])):
+            found = canonical(spelling)
+            if str(found or "").strip().casefold() in registered:
+                return found
+        return None
+
+    owned, claimed = {}, {}
+    for eid, entity in entities.items():
+        if not isinstance(entity, dict):
+            continue
+        canon = belongs_to(entity, eid)
+        if not canon:
+            continue
+        owned[eid] = canon
+        claimed.setdefault(canon, []).append(eid)
+    return ({eid: canon for eid, canon in owned.items()
+             if len(claimed.get(canon) or []) == 1}, forms)
+
+
+def stamp_authored_interiors(scene, cast, player_name=None):
+    """Put each cast card's authored inside on the scene entity that IS it.
+
+    THE CARD IS NOT IN THE MERGE'S SCOPE. `materialize_enclosure_interiors`
+    runs inside `merge_scene_with_diff`, which is handed a scene and a diff
+    and has no cast, no sheets and no way to reach them -- so the topology an
+    author declared has to be scene-resident before the merge reads it. This
+    is the one seam that carries it across, and it runs at commit beside
+    `reconcile_cast_entity_names`, on both the standing scene and this beat's
+    diff, so a holder the Director just minted is stamped from its first beat.
+
+    NEVER A RETRACTION, and never anything but this one key. An empty card
+    section removes nothing -- clearing a sheet field is not a statement about
+    a body already standing inside one -- and name, aliases, keys, rooms and
+    positions are somebody else's to write. Idempotent, which is what lets a
+    checkpoint restore replay it.
+
+    Returns the entity ids it stamped, for the caller's report.
+    """
+    entities = (scene or {}).get("entities")
+    if not isinstance(entities, dict):
+        return []
+    authored = {}
+    for row in cast or []:
+        try:
+            sheet = json.loads(row["sheet"])
+        except Exception:
+            continue
+        interior = character_body_interior(sheet)
+        if not interior:
+            continue
+        name = str(normalize_character_data(sheet).get(
+            "identity", {}).get("name") or "").strip()
+        if name:
+            authored[name.casefold()] = interior
+    if not authored:
+        return []
+    claims, _forms = _cast_entity_claims(scene, cast, player_name)
+    stamped = []
+    for eid, canon in claims.items():
+        interior = authored.get(str(canon).strip().casefold())
+        if not interior:
+            continue
+        entity = entities[eid]
+        if entity.get("interior_spec") == interior:
+            continue
+        entity["interior_spec"] = interior
+        stamped.append(str(eid))
+    return stamped
+
+
 def reconcile_cast_entity_names(scene, cast, player_name=None):
     """Make `canonical_subject_map`'s assumption TRUE for cast-mirrored bodies.
 
@@ -3975,39 +4076,10 @@ def reconcile_cast_entity_names(scene, cast, player_name=None):
     entities = (scene or {}).get("entities")
     if not isinstance(entities, dict):
         return []
-    canonical, forms = cast_spelling_policy(cast, player_name)
-    if not forms:
-        return []
-    # Two entities answering to one cast member are two records for one being
-    # -- a real defect, but a MERGE one (`_dedup_duplicate_entity_keys`), and
-    # renaming both here would mint the duplicate key it exists to collapse.
-    registered = {str(v).casefold() for v in forms.values()}
-
-    def _belongs_to(entity, eid):
-        """The cast member this entity IS, or None. Asked of a spelling it
-        already answers to correctly as well as one it does not: an entity
-        named right can still carry an alias that is somebody else's name."""
-        for spelling in (eid, entity.get("name"),
-                         *(entity.get("aliases") or [])):
-            found = canonical(spelling)
-            if str(found or "").strip().casefold() in registered:
-                return found
-        return None
-
-    claimed = {}
-    for eid, entity in entities.items():
-        if not isinstance(entity, dict):
-            continue
-        canon = _belongs_to(entity, eid)
-        if canon:
-            claimed.setdefault(canon, []).append(eid)
+    claims, forms = _cast_entity_claims(scene, cast, player_name)
     renamed = []
-    for eid, entity in entities.items():
-        if not isinstance(entity, dict):
-            continue
-        canon = _belongs_to(entity, eid)
-        if not canon or len(claimed.get(canon) or []) != 1:
-            continue
+    for eid, canon in claims.items():
+        entity = entities[eid]
         old = str(entity.get("name") or "").strip()
         aliases = [str(a).strip() for a in (entity.get("aliases") or [])
                    if str(a or "").strip()]

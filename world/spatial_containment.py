@@ -2,8 +2,9 @@
 """Relative scale and enclosure: how big a body is, what encloses it, what that
 hides, and what a size change breaks."""
 
+from world.spatial_barriers import normalize_barrier
 from world.spatial_identity import _ci_get, _entity_named, room_of, same_subject
-from world.spatial_identity import _unique_entity_keyed
+from world.spatial_identity import _unique_entity_keyed, normalize_room_id
 from world.spatial_transit import (_interior_entry_room, _interior_rooms_of,
                                   _is_body_entity)
 
@@ -728,6 +729,38 @@ def _positions_write(positions: dict, subject: str, room: str) -> None:
     positions[subject] = room
 
 
+def _declared_interior_region(scene: dict, occupant: str, holder: str) -> str:
+    """The region of `holder` a standing interior CONTACT says `occupant` is
+    in, or "". One definition, read by two callers.
+
+    `_interior_station_hint` asks it to pick WHICH existing interior room the
+    occupant lands in; `materialize_enclosure_interiors` asks it to NAME the
+    room it is about to mint. Both are the same question -- which region of
+    this body does the ledger already say the other one is inside -- and it
+    had two answers only because the second caller did not exist yet.
+
+    THE FIRST STANDING ROW WINS, as it did when this lived inside the hint:
+    two interior rows naming different regions for one pair is the ledger
+    disagreeing with itself, and no fact in the scene decides which is right,
+    so the answer is the one the scene lists first.
+    """
+    for row in (scene or {}).get("contacts") or []:
+        if not isinstance(row, dict):
+            continue
+        if str(row.get("relation") or "").strip().casefold() != "interior":
+            continue
+        station = str(row.get("target_interior") or "").strip()
+        if not station:
+            continue
+        pair = {str(row.get("actor") or "").strip().casefold(),
+                str(row.get("target") or "").strip().casefold()}
+        if not ({str(occupant or "").strip().casefold(),
+                 str(holder or "").strip().casefold()} <= pair):
+            continue
+        return station
+    return ""
+
+
 def _interior_station_hint(scene: dict, occupant: str, holder: str,
                            interior_ids: list):
     """The interior room a standing interior CONTACT already names, or None.
@@ -746,24 +779,10 @@ def _interior_station_hint(scene: dict, occupant: str, holder: str,
     rather than an artefact of where in a list a row happened to land.
     Wherever no row resolves against a real room, the entry room answers.
     """
-    wanted = None
-    for row in (scene or {}).get("contacts") or []:
-        if not isinstance(row, dict):
-            continue
-        if str(row.get("relation") or "").strip().casefold() != "interior":
-            continue
-        station = str(row.get("target_interior") or "").strip()
-        if not station:
-            continue
-        pair = {str(row.get("actor") or "").strip().casefold(),
-                str(row.get("target") or "").strip().casefold()}
-        if not ({str(occupant or "").strip().casefold(),
-                 str(holder or "").strip().casefold()} <= pair):
-            continue
-        wanted = station.casefold()
-        break
-    if not wanted:
+    region = _declared_interior_region(scene, occupant, holder)
+    if not region:
         return None
+    wanted = region.casefold()
     rooms = (scene or {}).get("rooms") or {}
     for rid in interior_ids:
         room = rooms.get(rid) or {}
@@ -772,6 +791,223 @@ def _interior_station_hint(scene: dict, occupant: str, holder: str,
         if str(room.get("name") or "").strip().casefold() == wanted:
             return rid
     return None
+
+
+# The card may author a body's inside as a chain of stations, outermost
+# first. Eight is a cap rather than a shape: past it a "place" is a dungeon
+# somebody wrote into an appearance field, and the room channel is where a
+# dungeon belongs.
+_MAX_INTERIOR_STATIONS = 8
+# A room NAME is a handle prose says out loud, not a paragraph: a hundred-word
+# name matches nothing when a beat names the region somebody is in, and reads
+# as nothing. Both bounds are stated a second time on the card surface
+# (`story/character_schema.INTERIOR_STATIONS_MAX` / `INTERIOR_NAME_MAX`), which
+# is what an author is held to; these are the engine's own, for a spec that
+# reached the scene by some route other than the card.
+_MINTED_INTERIOR_NAME_MAX = 60
+
+
+def _station_room_id(rooms: dict, eid: str, name: str):
+    """A deterministic room id for one interior station of `eid`, or None.
+
+    Derived from the holder's entity id, so it is chat-local and stable
+    across merges -- re-running the mint on a scene that already has the room
+    is impossible anyway (gate 5), and the collision loop is here for a room
+    id some retired story shape left behind, not for this pass fighting
+    itself.
+    """
+    slug = normalize_room_id(name)
+    if not slug:
+        return None
+    base = "%s_%s" % (eid, slug)
+    rid, n = base, 2
+    while rid in (rooms or {}):
+        rid = "%s_%d" % (base, n)
+        n += 1
+    return rid
+
+
+def _mint_authored_interior(scene: dict, eid: str, spec) -> bool:
+    """Mint the card-authored stations of `eid`, outermost first.
+
+    A linear chain, because a linear chain is what the card declares: the
+    first station carries the derived way in (`dock_exit`), each later one is
+    joined to the one before it by the passage that station names, and the
+    default passage is `membrane` -- the one barrier a body walks through and
+    nothing sees through. A branching inside is not authored here; rooms merge
+    by id, so the spatial specialist's `rooms` channel grafts one on.
+    """
+    if not isinstance(spec, (list, tuple)) or not spec:
+        return False
+    rooms = scene["rooms"]
+    made = []
+    for station in list(spec)[:_MAX_INTERIOR_STATIONS]:
+        if isinstance(station, str):
+            station = {"name": station}
+        if not isinstance(station, dict):
+            continue
+        name = " ".join(str(station.get("name") or "").split())
+        name = name[:_MINTED_INTERIOR_NAME_MAX].strip()
+        if not name:
+            continue
+        rid = _station_room_id(rooms, eid, name)
+        if not rid:
+            continue
+        # LAZY: `world.spatial_light` imports `world.spatial_geometry`, which
+        # imports this module -- the cycle the package layout already has.
+        from world.spatial_light import normalize_light
+        raw_light = str(station.get("light") or "").strip()
+        room = {
+            "name": name,
+            "desc": " ".join(str(station.get("desc") or "").split())[:400],
+            # AN UNAUTHORED INSIDE IS DARK, and the alias table is why it has
+            # to be said: `normalize_light("") == "lit"`, so absent light
+            # means a body's inside renders as though someone had lit it.
+            "light": normalize_light(raw_light) if raw_light else "dark",
+            "parent_entity": eid,
+            "adjacent": [],
+        }
+        if not made:
+            # The way in is DERIVED, never authored: `apply_transit_dock_edges`
+            # reads this marker to decide which station the doorway lands on.
+            room["dock_exit"] = True
+        rooms[rid] = room
+        if made:
+            unresolved = set()
+            barrier = normalize_barrier(
+                str(station.get("barrier") or "").strip() or "membrane",
+                unresolved=unresolved)
+            # A word the barrier vocabulary has not been taught normalizes to
+            # `wall`, which would seal a passage the author wrote as a way
+            # through. Inside a body the stated default answers instead.
+            if unresolved:
+                barrier = "membrane"
+            rooms[made[-1]]["adjacent"].append({"to": rid, "barrier": barrier})
+            room["adjacent"].append({"to": made[-1], "barrier": barrier})
+        made.append(rid)
+    return bool(made)
+
+
+def _mint_minimal_interior(scene: dict, eid: str, occupant: str,
+                           holder: str) -> bool:
+    """Mint ONE room for a body that has taken another body inside.
+
+    ONE ROOM, AND ONE IS THE ARGUMENT. The record already entails that an
+    inside exists, whose it is, and that it is out of the surrounding room's
+    sight. One room restates exactly that claim in place vocabulary and adds
+    nothing. A second room would be invented anatomy: the engine has no fact
+    from which to derive internal structure, so any multi-room default is a
+    lie by construction.
+
+    THE NAME COMES OUT OF THE LEDGER THE BEAT ALREADY WROTE. A standing
+    interior contact names the region (`target_interior`); that region and
+    this room are one fact under two names, so the engine invents no noun
+    where the story supplied one -- and `_interior_station_hint` then resolves
+    against the minted room by name on every later merge.
+    """
+    rooms = scene["rooms"]
+    rid = _station_room_id(rooms, eid, "interior")
+    if not rid:
+        return False
+    name = _declared_interior_region(scene, occupant, holder)
+    name = " ".join(str(name).split())[:_MINTED_INTERIOR_NAME_MAX].strip()
+    if not name:
+        name = "Inside %s" % _display_name(scene, holder)
+    rooms[rid] = {
+        "name": name,
+        # A PROSE-FREE STUB, the `world/structure.py` materialize_planned_fringe
+        # precedent: a later Director declaration merges description onto it by
+        # id, and every room-`desc` reader in the tree reads it as `or ""`.
+        "desc": "",
+        "light": "dark",
+        "parent_entity": eid,
+        "adjacent": [],
+        "dock_exit": True,
+    }
+    return True
+
+
+def materialize_enclosure_interiors(scene: dict) -> list:
+    """A standing `mode: interior` record over a BODY is a place. Mint it.
+
+    THE MISSING ON-RAMP. `place_enclosed_bodies` converts the ledger form of
+    one body inside another into the place form -- but only for a holder that
+    ALREADY has interior rooms, and the only thing that ever produced those
+    was a clause in a prompt asking a model to author them. So the road had no
+    entrance: measured read-only against the author's corpus 2026-08-25, two
+    stored scenes (chats 88, 89) carry a `mode: interior` record whose holder
+    has zero interior rooms, and two more (chats 86, 87) mint one on their
+    very next merge from a standing interior contact. Four scenes, every one
+    of them a body standing in its holder's own exterior room forever.
+
+    EXISTENCE IS A DERIVATION, NOT AUTHORED CONTENT. The scene already states
+    every fact the floor needs -- that the enclosure stands, whose inside it
+    is, where that body is, and (for a body) that the way in is opaque -- so
+    the room follows from the record the way the doorway already follows from
+    the holder's state. `world/spatial_transit.py`'s own docstring rejected
+    the alternative when `infer_body_enclosures` was written: relying on a
+    model to remember a property every time is the wrong shape for this
+    engine, and flesh is opaque whether or not anyone remembered to say so.
+
+    FIVE GATES, EACH A SKIP:
+    1. `mode: interior` exactly. `held`, `pocket`, `carried`, `container`,
+       `riding`, `mounted` and `worn` are carriage -- cargo with no inside to
+       stand in -- and stay the ledger's business.
+    2. The holder resolves to exactly ONE scene entity. The room form is keyed
+       by entity id, and folding two beings into one would build an inside for
+       the wrong body.
+    3. The holder is a BODY, AND THE REASON IS THE FIREWALL RATHER THAN
+       TAXONOMY. `sync_entity_interior_rooms` and `infer_body_enclosures` are
+       both body-scoped, so an interior minted for a non-body is never indexed
+       and never defaulted opaque -- `apply_transit_dock_edges` then derives an
+       `open_door`, and an occupant `containment_hides` was concealing becomes
+       one visible from the room outside. That is information EXPANSION, which
+       the firewall forbids. So the engine mints only where it can also
+       guarantee the way in is not see-through. Serving a crate or a lift car
+       the same way needs the non-body enclosure default first.
+    4. The holder is somewhere. An interior that is nowhere has no exterior to
+       travel with, and a ledger entry that at least says who holds whom is
+       better than a room adrift.
+    5. The holder has NO interior rooms yet. Scene topology beats the card and
+       beats the floor, and this is also what makes the pass idempotent.
+
+    Never writes `interior_rooms` and never writes `enclosure`: both are
+    derived, by the two body-scoped passes that already own them.
+
+    Returns the holder entity ids it minted for. Mutates; idempotent.
+    """
+    contained = (scene or {}).get("contained")
+    if not isinstance(contained, dict) or not contained:
+        return []
+    rooms = scene.get("rooms")
+    if not isinstance(rooms, dict):
+        return []
+    minted = []
+    for subject in list(contained):
+        record = contained.get(subject)
+        if not isinstance(record, dict):
+            continue
+        if str(record.get("mode") or "").strip().casefold() != "interior":
+            continue                                            # gate 1
+        holder = str(record.get("in") or "").strip()
+        if not holder:
+            continue
+        eid, entity = _unique_entity_keyed(scene, holder)
+        if not eid:
+            continue                                            # gate 2
+        if not _is_body_entity(scene, eid, entity):
+            continue                                            # gate 3
+        if room_of(scene, holder) is None:
+            continue                                            # gate 4
+        if _interior_rooms_of(scene, eid):
+            continue                                            # gate 5
+        spec = entity.get("interior_spec") if isinstance(entity, dict) else None
+        made = _mint_authored_interior(scene, eid, spec)
+        if not made:
+            made = _mint_minimal_interior(scene, eid, subject, holder)
+        if made:
+            minted.append(eid)
+    return minted
 
 
 def place_enclosed_bodies(scene: dict) -> list:
@@ -801,11 +1037,14 @@ def place_enclosed_bodies(scene: dict) -> list:
     THE CONVERSION IS DETERMINISTIC AND CONDITIONAL. Existence of the place
     is not a judgment: a record that says `mode: interior` plus a holder that
     HAS interior rooms is a body standing in one of them, and no model has to
-    remember to say so. TOPOLOGY is authored content and stays where authored
-    content belongs -- the spatial specialist's `rooms` channel. So a holder
-    with NO interior rooms is left exactly as it was, ledger record intact:
-    that is the whole migration story for every scene already on disk, and
-    the reason nothing here changes behaviour until an interior exists.
+    remember to say so. A holder with NO interior rooms is still left exactly
+    as it was HERE -- but it no longer stays that way through the merge, and
+    that sentence used to end with "which is the whole migration story for
+    every scene already on disk". It was, and that was the defect: the only
+    producer of interior rooms was a clause in a prompt, so this conversion
+    had no on-ramp and fired in no story. `materialize_enclosure_interiors`
+    runs immediately before every call to this one and mints the inside the
+    record already entails, so what arrives here now HAS rooms.
 
     ONLY `mode: interior`. `held`, `pocket`, `carried`, `container`, `riding`
     are carriage -- cargo with no inside to stand in -- and stay the ledger's
