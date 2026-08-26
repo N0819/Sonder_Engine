@@ -18,9 +18,11 @@ from story.character_schema import (character_name, character_name_from_text,
                               character_initial_active_state, effective_drive,
                               character_standing_intentions,
                               character_projects, persona_name,
+                              name_boundary_pattern,
                               character_appearance as _char_appearance)
 from mind.theory_of_mind import (apply_mind_model_updates, rekey_place_claims,
                             select_active_hypotheses, sheet_capacity)
+from world.spatial import same_subject
 from world.survival import vitals_of
 from world.comfort import comfort_level
 from persist.commit_common import (_clamp, _known_name_roster, _monotonic_elapsed,
@@ -279,6 +281,105 @@ def _inference_memory_text(claim, about="", confidence=0.5, evidence=""):
     if evidence:
         text += f" I based that on: {evidence}."
     return text
+
+
+def _intent_names_term(text, term):
+    """Does this intention's own text NAME this thing?
+
+    The lexical half of the world-closed floor (`affect.settle_intent_world_anchors`),
+    supplied as a callable for the same reason `evidence_ok` is: `mind.affect`
+    cannot import `story.character_schema`, which imports `mind`.
+
+    `name_boundary_pattern` rather than `\\b`: a word boundary asserts a
+    transition between word and non-word characters, which only describes
+    scripts that space their words, so a kana-named party or station never
+    matched and the guard failed open with no warning -- the same failure
+    `director_floors`' clause attribution documents.
+
+    A term recorded under a two-word display name is also tried by its first
+    token, because a text routinely calls a party by given name alone.
+
+    The possessive guard is the distinction that matters: a station word whose
+    immediate left context is a possessive names the OTHER party's anatomy,
+    not the station of the subject's own standing relation, and reading the
+    first as the second would anchor an aim to a place it never named.
+    """
+    text = str(text or "")
+    term = str(term or "").strip()
+    if not text or not term:
+        return False
+    low = text.casefold()
+    parts = term.split()
+    cands = [term.casefold()]
+    if len(parts) > 1:
+        cands.append(parts[0].casefold())
+    guard = _ling("_STATION_POSSESSED_BEFORE")
+    for cand in cands:
+        if len(cand) < 2:
+            continue
+        for m in re.finditer(name_boundary_pattern(cand), low):
+            if guard.search(low[:m.start()]):
+                continue
+            return True
+    return False
+
+
+def _interior_relations_of(scene, cname):
+    """This beat's standing interior relations in which `cname` is the CONTAINER.
+
+    Rows of {"other", "station", "source"} for
+    `affect.settle_intent_world_anchors`, read off the settled scene's contact
+    ledger -- `relation: "interior"`, the container in `target`, the occupant
+    in `actor`, and the region they stand in in `target_interior`, which since
+    the station consolidation is re-derived every beat from the room the
+    occupant actually holds rather than frozen at entry.
+
+    The asymmetry is deliberate: only the CONTAINER's aims are closable by
+    where the contained body now stands within them. The contained party may
+    legitimately strive AGAINST the passage -- an aim pointing back up the
+    route is blocked-but-strivable, not world-closed -- so the contained side
+    is out of this floor's reach by construction.
+
+    `source` distinguishes the two vocabularies a station can arrive in: the
+    display name of an interior room this container carries ("room"), or a
+    free-text ledger region ("ledger"). A station string that changed only
+    because the representation changed is not the world moving, and the floor
+    can only tell the difference if the difference is carried.
+    """
+    sc = scene if isinstance(scene, dict) else {}
+    cname = str(cname or "").strip()
+    if not cname:
+        return []
+    interiors = set()
+    rooms = sc.get("rooms")
+    if isinstance(rooms, dict):
+        for key, room in rooms.items():
+            if not isinstance(room, dict):
+                continue
+            parent = str(room.get("parent_entity") or "").strip()
+            if not parent or not same_subject(sc, parent, cname):
+                continue
+            for form in (room.get("name"), key):
+                form = str(form or "").strip()
+                if form:
+                    interiors.add(form.casefold())
+    out = []
+    for contact in (sc.get("contacts") or []):
+        if not isinstance(contact, dict):
+            continue
+        if str(contact.get("relation") or "").strip().casefold() != "interior":
+            continue
+        if str(contact.get("target") or "").strip().casefold() != cname.casefold():
+            continue
+        other = str(contact.get("actor") or "").strip()
+        station = str(contact.get("target_interior") or "").strip()
+        if not other or not station:
+            continue
+        out.append({"other": other, "station": station,
+                    "source": "room" if station.casefold() in interiors
+                    else "ledger"})
+    return out
+
 
 def prepare_memory_commit(ctx, *, scene=None):
     """Build and embed all per-character memory mutations without writes."""
@@ -1030,6 +1131,31 @@ def prepare_memory_commit(ctx, *, scene=None):
                             ROUTE_CREDIT_CAP, int(_worked.get(_r, 0)) + 1)
                     st["routes_that_worked"] = _worked
                 for w in _iwarn:
+                    ctx.add_warning(f"{cname}: intention -- {w}")
+                # A goal the world has invalidated must be closable by the
+                # world. `nonviable` is the right verb and only the character
+                # may emit it -- which is exactly the mind that can no longer
+                # see the goal is closed. Chat 88 char 72 i6 named a station
+                # the occupant left at turn 54; four commit warnings fired
+                # (54/55/58/64) and nothing acted on any of them, so it was
+                # still `active` at turn 67 with every want serving it.
+                #
+                # `sc` is the SETTLED scene for this beat (commit.py passes
+                # prepare_scene_commit's output), so the ledger this reads is
+                # the one the turn actually committed. The floor runs AFTER
+                # apply_intent_ops, so it has the last word over a
+                # grind-revival, and BEFORE steering/project_boundary, so the
+                # closed state steers its collapse beat once and the existing
+                # "your task closed this beat" review invites the successor
+                # with no new machinery.
+                #
+                # The whole interior block runs only on beats this mind
+                # emitted active_state, so a gated container closes late
+                # rather than never -- as every other interior floor does.
+                intentions, _wclose = affect.settle_intent_world_anchors(
+                    intentions, _interior_relations_of(sc, cname), turn.idx,
+                    _intent_names_term)
+                for w in _wclose:
                     ctx.add_warning(f"{cname}: intention -- {w}")
                 _steering = affect.steering_intent_ids(intentions, turn.idx)
                 # A known id is not automatically a current purpose. Dormant,

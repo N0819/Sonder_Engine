@@ -147,6 +147,7 @@ from persist.commit_mechanics import (commit_transit_sweep, commit_world_event_s
 from persist.commit_memory import (RECENT_TELLS_CAP, _durable_dialogue_category,
     _cited_memory_ids, _marked_for_memory, _quote_body, _is_player,
     _salience_of, _own_sequence_memory, _inference_memory_text,
+    _intent_names_term, _interior_relations_of,
     prepare_memory_commit)
 from persist.commit_memory_write import (_consolidate_committed_memories,
     MEMORY_CONSOLIDATION_JOB_KEY, schedule_memory_consolidation,
