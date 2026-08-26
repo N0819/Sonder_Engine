@@ -1675,6 +1675,31 @@ Do not change a gate on this until one of the three is measured. The v4 lesson
 is that the previous gate change was correct and did not produce an adoption,
 and a second blind change would make the two indistinguishable.
 
+**A long phase-chain arc, measured whole (2026-08-25).** The clearest single
+case the corpus holds, filed here because it is evidence for the three
+candidates above rather than a fourth defect. Chat 88, char 72, 67 turns: six
+sequential dynamic intentions `i1`-`i6`, each one phase of a single continuing
+engagement, every one of them carrying `serves_drive: ""`. `interior.projects`
+and `former_projects` are `[]` for the entire arc, and the two authored
+standing intentions sit at progress 0.0 throughout. Task closings — the beats
+`project_boundary` opens its review on — occurred at turns 6, 19, 22, 33, 39
+and 46, and produced no adoption. The engagement itself is a project wearing a
+chain of intention clothes: durable but not eternal, able to name a place,
+and repeatedly re-authored as a fresh completable goal because that is the only
+tier the mind could reach for.
+
+This is deliberately NOT coded around. `docs/design/DESIGN_LONG_TERM_GOALS.md`
+and `CLAUDE.md` are explicit that projects form dynamically through
+`project_ops` under the adoption deliberation and that seeding is not the
+authoring surface, so the candidate fix is on the invitation/adoption surface —
+why six successive task-closed reviews produced no adopt — not a seeding
+change. The world-closed intention floor
+(`affect.settle_intent_world_anchors`, landed 2026-08-25, `Design.md`'s
+conformance row) closes the STUCK TAIL of such a chain — chat 88's `i6` was
+`active` for thirteen turns after the world left the station it named — but it
+does not create the tier that would have carried the arc, and a closed tail
+just returns the mind to forming the seventh phase-shaped intention.
+
 **Absorbs §1.23(d) and §7's "why 3 of 31" bullet (2026-08-19) — one zero written
 three times.** Do not confuse the two denominators: `tools/fire_rates.py` reports
 `has ever held a project 9.68% (3/31)` across characters with any project
