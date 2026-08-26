@@ -12,6 +12,8 @@ case below is written as a PAIR against the English renderer so a future
 regression shows up as a divergence rather than as prose somebody has to read.
 """
 
+import dataclasses
+
 import pytest
 
 from agents.composer import Percept, render_episode, render_view
@@ -114,11 +116,18 @@ def test_speech_distinguishes_heard_from_seen(japanese):
 
 def test_an_appearance_is_not_redescribed_every_beat(japanese):
     """prev_described was accepted and never consulted, so a body's full
-    description was re-rendered from scratch on every single beat."""
+    description was re-rendered from scratch on every single beat.
+
+    Page compression is the PLAYER view's rule, in both languages: this
+    adapter used to apply it in every mode, which subtracted evidence from
+    an NPC mind that English kept giving it. A stateless character call has
+    only what is in its context."""
     appearance = KINDS["appearance"]
-    assert render_view([appearance], language="ja",
+    assert render_view([appearance], language="ja", mode="player",
                        prev_described={"reya"}).text == ""
-    assert render_view([appearance], language="ja").text != ""
+    assert render_view([appearance], language="ja", mode="player").text != ""
+    assert render_view([appearance], language="ja",
+                       prev_described={"reya"}).text != ""
 
 
 def test_a_non_awake_mind_receives_the_residue_and_nothing_else(japanese):
@@ -158,3 +167,75 @@ def test_a_failing_adapter_costs_wording_not_the_beat(japanese, monkeypatch):
     monkeypatch.setattr(composer, "_safe_renderer", lambda language: Broken())
     text = render_view([KINDS["act"]], language="ja").text
     assert "crosses to the shelf" in text
+
+
+def test_both_renderers_reach_the_same_change_verdicts(japanese):
+    """WHICH percepts a view may carry is an information decision and has one
+    owner; only the wording is the pack's. This adapter carried its own copy
+    of the player delta rule and it had already drifted once, so the moment
+    the English rule was repaired the two disagreed about what the observer
+    receives. Compared on percept identity and beat/background classification
+    rather than on prose."""
+    from agents.composer import standing_verdicts
+
+    changed = dataclasses.replace(_percept("pose", posture="standing"),
+                                  dedupe_key="pose:subj:moved")
+    percepts = [KINDS["environment"], KINDS["presence"], changed,
+                KINDS["appearance"], KINDS["sensation"], KINDS["act"]]
+    # The same subject under different content: the verdict must be
+    # `changed` in both renderers, and both must lead with it.
+    prev = frozenset({"pose:subj:held", KINDS["presence"].dedupe_key})
+
+    english = render_view(percepts, language="en", mode="player",
+                          prev_standing=prev)
+    japanese_view = render_view(percepts, language="ja", mode="player",
+                                prev_standing=prev)
+
+    def verdict_map(rendered):
+        return {p.dedupe_key: bool((p.data or {}).get("beat"))
+                for p, _ in rendered.spans if p.order_key is None}
+
+    assert verdict_map(english) == verdict_map(japanese_view)
+    assert english.described == japanese_view.described
+    # And the shared function is the one both consulted.
+    assert standing_verdicts(percepts, prev)["pose:subj:moved"] == "changed"
+
+
+def test_the_japanese_player_view_leads_with_the_beat(japanese):
+    """The beat half has an INTERNAL order, and a pack that partitions for
+    itself can get it wrong without dropping a single fact.
+
+    The case this must exercise is a beat half holding both an event and a
+    standing percept that CHANGED. A view whose only beat content is the
+    event orders correctly no matter what the rule says, which is why the
+    earlier version of this test passed while the adapter emitted the changed
+    pose first: `pose:Reya` is a two-part key, `_subject_prefix` answers None
+    for it, and the verdict was `first` -- so the pose was background and the
+    beat half had one member. Every standing key below is written in the
+    three-part `<tag>:<subject>:<content>` form the ledger actually stores,
+    and the previous ledger holds the same subjects under different content,
+    so both renderers must call them `changed` and lead with them.
+    """
+    changed_pose = dataclasses.replace(KINDS["pose"],
+                                       dedupe_key="pose:subj:standing")
+    changed_room = dataclasses.replace(KINDS["environment"],
+                                       dedupe_key="environment:room:rain")
+    percepts = [changed_room, changed_pose, KINDS["sensation"],
+                KINDS["act"], KINDS["speech"]]
+    prev = frozenset({"pose:subj:kneeling", "environment:room:dry",
+                      KINDS["sensation"].dedupe_key})
+
+    def shape(rendered):
+        return [(p.kind, bool((p.data or {}).get("beat")))
+                for p, _ in rendered.spans]
+
+    japanese_view = render_view(percepts, language="ja", mode="player",
+                                prev_standing=prev)
+    english = render_view(percepts, language="en", mode="player",
+                          prev_standing=prev)
+    # Events in declared order, then what changed, a changed room last, then
+    # the background -- and the pack must not have its own opinion about it.
+    assert shape(japanese_view) == [
+        ("act", False), ("speech", False),
+        ("pose", True), ("environment", True), ("sensation", False)]
+    assert shape(japanese_view) == shape(english)

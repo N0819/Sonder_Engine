@@ -165,3 +165,37 @@ def test_every_atoms_text_is_a_span_of_the_rendered_view():
         assert atom["observed"]["text"] in rendered.text
     assert "".join(a["observed"]["text"] for a in atoms).replace(" ", "") \
         == rendered.text.replace(" ", "")
+
+
+def test_the_standing_flag_follows_the_renderers_verdict():
+    """`standing` is what the narrator's obligation filter reads. It used to
+    be `order_key is None and not force`, so a pose that MOVED -- the most
+    ordinary thing a beat contains -- was filed as wallpaper and never
+    reached `current_events`. The renderer now marks the percepts it put in
+    the beat half, and the projection asks that instead."""
+    first = composer.render_view([_room()], mode="player")
+    moved = composer.render_view(
+        [_room("The lantern has gone out.")], mode="player",
+        prev_standing=frozenset(first.standing_keys),
+        prev_described=frozenset(first.described))
+    [atom] = composer.observations_from_render("7", moved)
+    assert atom["standing"] is False
+    # And the background half is still reference, not obligation.
+    unchanged = composer.contact_percepts([
+        ({"actor": "Mara", "actor_part": "hand", "target": "7",
+          "target_part": "arm", "manner": "resting"},
+         "your arm registers a hand")])
+    held = composer.render_view(unchanged, mode="player")
+    again = composer.render_view(
+        unchanged, mode="player",
+        prev_standing=frozenset(held.standing_keys),
+        prev_described=frozenset(held.described))
+    [atom] = composer.observations_from_render("7", again)
+    assert atom["standing"] is True
+
+
+def test_a_row_stored_before_the_beat_marker_reads_as_it_always_did():
+    """Replay must never make something skippable that was not. A percept
+    carrying no `beat` key is standing exactly when it was standing before."""
+    atoms = _atoms([_room(), _voice(order_key=1)])
+    assert [a["standing"] for a in atoms] == [True, False]

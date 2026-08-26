@@ -3236,8 +3236,23 @@ def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
             # Computed by the caller, which is the stage that holds the
             # PREVIOUS scene; a stage without one simply has no delta and
             # falls back to the full description.
+            #
+            # TRANSITION PHRASING DISCLOSES THE PAST STATE, not just the
+            # present one. "No longer wearing the robe" hands a returning
+            # observer robe-WAS-worn, which is a fact that reached them
+            # through no channel if they were asleep, in another room, or
+            # behind the body when it came off. The delta is computed from
+            # the objective previous scene, so it may only ride a percept
+            # where that scene is a PROVEN stand-in for this observer's own
+            # last percept: they held this body at full sight last beat, and
+            # attire on a fully seen body is fully seen. `prev_seen` is None
+            # when the previous beat left no record, and unknown must not
+            # pass for proof. Failing the proof costs nothing but wording --
+            # the percept falls back to the current description, and what
+            # they conclude from it stays theirs to conclude.
+            saw_before = prev_seen is not None and b_name in prev_seen
             delta = ((appearance_deltas or {}).get(b_name, "")
-                     if prune_appearance and changed else "")
+                     if prune_appearance and changed and saw_before else "")
             percepts.append(composer.appearance_percept(
                 b_name, label, description, force=changed, delta=delta,
                 reearn=reencountered))
