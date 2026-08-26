@@ -458,6 +458,62 @@ class TestTheOnRamp:
             "an occupant was moved on the strength of a row that never said "
             "which side encloses which")
 
+    def test_an_authored_chain_is_not_grafted_onto_mid_chain(self):
+        """A DECLARED CHAIN IS AN ORDERED DOCUMENT, and a region it does not
+        name has no position in it.
+
+        This pass only knows how to chain DEEPER, and mid-chain the engine
+        cannot tell a region the occupant has already passed from one beyond
+        the last station -- so grafting there puts an outward region behind a
+        body that never reached it, and then walks them into it.
+
+        Measured on a scratch copy of the author's corpus 2026-08-25 with the
+        card filled and saved through the story-card surface: one branch's
+        standing ledger named a region the authored chain omits, the occupant
+        was placed at the entry station, and the next merge minted that
+        region deeper than the entry and moved her OUTWARD into it, where she
+        held for fourteen beats to t=22800.0.
+        """
+        scene = _chain_scene(transit=(None, None, None), motion="moving")
+        scene["entities"][VESSEL]["interior_spec"] = [
+            {"name": "Station 0"}, {"name": "Station 1"}, {"name": "Station 2"}]
+        _contact(scene)["target_interior"] = "Somewhere Unlisted"
+        before = len(scene["rooms"])
+        merged = merge_scene_with_diff(scene, {}, clock_seconds=0.0)
+
+        assert len(merged["rooms"]) == before, (
+            "a region the authored chain never named was minted anyway")
+        assert _where(merged) == "st_0", (
+            "an occupant mid-chain was moved into a station the card's "
+            "order does not place")
+
+    def test_an_authored_chain_still_grows_past_its_deep_end(self):
+        """The skip is scoped to what it can be wrong about. Past the last
+        authored station, deeper is the ONLY place a new one could go, so a
+        story that continues past the card still gets its on-ramp."""
+        scene = _chain_scene(transit=(None, None, None), motion="moving",
+                             start=2)
+        scene["entities"][VESSEL]["interior_spec"] = [
+            {"name": "Station 0"}, {"name": "Station 1"}, {"name": "Station 2"}]
+        _contact(scene)["target_interior"] = "Beyond The Last"
+        merged = merge_scene_with_diff(scene, {}, clock_seconds=0.0)
+
+        here = _where(merged)
+        assert here != "st_2"
+        assert merged["rooms"][here]["name"] == "Beyond The Last"
+
+    def test_a_story_grown_chain_is_unaffected(self):
+        """Where nothing is authored there is no declared order to
+        contradict, so every gate above reads exactly as it did."""
+        scene = _chain_scene(transit=(None, None, None), motion="moving")
+        assert "interior_spec" not in scene["entities"][VESSEL]
+        _contact(scene)["target_interior"] = "Somewhere Unlisted"
+        merged = merge_scene_with_diff(scene, {}, clock_seconds=0.0)
+
+        here = _where(merged)
+        assert here != "st_0"
+        assert merged["rooms"][here]["name"] == "Somewhere Unlisted"
+
 
 class TestTheLedgerFollowsTheBody:
 

@@ -27,6 +27,13 @@ from story.character_schema import (
     normalize_persona_data,
     persona_name,
 )
+# The card a STORY actually reads. `scene.active_cast` resolves
+# `chat_chars.sheet` over `characters.sheet`, so a fill surface that can only
+# see the reusable row is invisible to every story that has a per-story card
+# -- measured read-only against the author's corpus 2026-08-25: 13 of 116
+# `chat_chars` rows carry one, and all seven stories of the line this landing
+# was built for are among them.
+from story.scene import chat_character_sheet
 
 #: Output budget for the whole-sheet authoring generators (character, persona,
 #: promotion draft, psychology fill, lorebook structure and entries).
@@ -1195,7 +1202,7 @@ def _interior_chain_losses(authored, proposed):
     return losses
 
 
-def fill_body_interior(char_id, brief, draft=None):
+def fill_body_interior(char_id, brief, draft=None, chat_id=None):
     """Preview an AI reading of one card's INSIDE, as ordered stations.
 
     THE THIRD SIBLING OF `fill_character_psychology` AND `fill_appearance`,
@@ -1218,11 +1225,27 @@ def fill_body_interior(char_id, brief, draft=None):
 
     WRITES NOTHING, like both siblings: the editor shows the proposal and the
     author's ordinary Save is what commits it.
+
+    SCOPED TO WHICHEVER CARD THE STORY ACTUALLY READS. `chat_id` names a
+    story, and then the sheet read and proposed against is the one
+    `scene.active_cast` resolves -- `chat_chars.sheet` where the story has its
+    own card, the reusable row where it does not. Without that scope this
+    surface cannot reach a story with a per-story card AT ALL: the fill would
+    land in `characters.sheet`, `stamp_authored_interiors` would read the cast
+    row instead, and the author would press a button, review a chain, save it
+    and see nothing change. Measured read-only against the author's corpus
+    2026-08-25: 13 of 116 `chat_chars` rows carry a per-story sheet, including
+    all seven stories of the one line whose card documents a route.
     """
-    row = q("SELECT sheet FROM characters WHERE id=?", (char_id,), one=True)
-    if not row:
-        raise ValueError("Character not found")
-    stored = json.loads(row["sheet"] or "{}")
+    if chat_id is not None:
+        stored = chat_character_sheet(chat_id, char_id)
+        if stored is None:
+            raise ValueError("That character is not in this story")
+    else:
+        row = q("SELECT sheet FROM characters WHERE id=?", (char_id,), one=True)
+        if not row:
+            raise ValueError("Character not found")
+        stored = json.loads(row["sheet"] or "{}")
     normalized = normalize_character_data(stored)
     draft = draft if isinstance(draft, dict) else {}
     # The author's UNSAVED rows, not the saved copy -- the same reason
@@ -1230,7 +1253,15 @@ def fill_body_interior(char_id, brief, draft=None):
     # typing, and generating from the stored sheet would ignore what they just
     # wrote and then refuse the proposal for dropping it.
     authored = draft.get("interior")
-    if not isinstance(authored, (list, tuple)) or not authored:
+    if isinstance(authored, (list, tuple)):
+        # AN EMPTY LIST IS AN ANSWER, not a missing draft. The editor always
+        # sends the widget's current rows, so an empty one means the author
+        # deleted every station by hand and then pressed fill -- and falling
+        # through to the saved chain there would refuse the proposal for
+        # "dropping" precisely what they had just removed. Only a caller with
+        # no draft at all (no editor in the loop) gets the stored chain.
+        authored = list(authored)
+    else:
         authored = (normalized.get("embodiment") or {}).get("interior") or []
     payload = {
         "brief": str(brief or "").strip(),

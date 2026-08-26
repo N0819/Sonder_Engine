@@ -400,3 +400,225 @@ class TestTheRoute:
         assert r.status_code == 200, r.text
         assert any("how long it takes to cross" in w
                    for w in r.json()["warnings"])
+
+
+def _story_with_card(temp_db, char_id, sheet=None):
+    """A story that attaches this character, optionally with its own card.
+
+    `chat_chars.sheet` is the per-story override, and `scene.active_cast`
+    resolves it OVER the reusable row -- so it is the sheet the engine reads.
+    """
+    chat_id = temp_db.qi(
+        "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+        ("A story", "", time.time()))
+    temp_db.qi(
+        "INSERT INTO chat_chars(chat_id,char_id,status,state,sheet) "
+        "VALUES(?,?,?,?,?)",
+        (chat_id, char_id, "active", "{}",
+         json.dumps(sheet) if sheet is not None else None))
+    return chat_id
+
+
+class TestTheCardTheStoryActuallyReads:
+    """A fill that lands in a sheet nothing reads is a silent authoring
+    failure, which is the whole class this surface exists to remove.
+
+    `stamp_authored_interiors` reads the CAST row, and the cast row is
+    `COALESCE(chat_chars.sheet, characters.sheet)`. Measured read-only against
+    the author's corpus 2026-08-25: 13 of 116 `chat_chars` rows carry a
+    per-story sheet, and every story of the one line whose card documents a
+    route is among them -- so a character-scoped fill alone reached none of
+    the stories it was built for.
+    """
+
+    def _story_card(self, interior=None):
+        sheet = {
+            "identity": {"name": "The Vessel", "uid": "char_vessel_fixture"},
+            "embodiment": {"visible": {"summary": "Weathered, in this story."}},
+        }
+        if interior is not None:
+            sheet["embodiment"]["interior"] = interior
+        return sheet
+
+    def test_the_proposal_is_built_on_the_per_story_sheet(
+            self, temp_db, monkeypatch):
+        from story import importers
+
+        char_id = _card(temp_db)
+        chat_id = _story_with_card(temp_db, char_id, self._story_card())
+        seen = {}
+        monkeypatch.setattr(
+            importers, "chat_complete",
+            lambda role, system, user, **k: (
+                seen.update(json.loads(user)), _proposal(CHAIN))[1])
+        sheet = importers.fill_body_interior(
+            char_id, "read the card", chat_id=chat_id)
+
+        # The card handed to the model, and the card the proposal is merged
+        # onto, are both the story's -- not the reusable row's.
+        assert (seen["card"]["embodiment"]["visible"]["summary"]
+                == "Weathered, in this story.")
+        assert (sheet["embodiment"]["visible"]["summary"]
+                == "Weathered, in this story.")
+        assert len(sheet["embodiment"]["interior"]) == 3
+
+    def test_the_rerun_guard_measures_the_story_card(
+            self, temp_db, monkeypatch):
+        """The stations it must not lose are the ones THIS story declared."""
+        from story import importers
+
+        char_id = _card(temp_db, interior=CHAIN)
+        chat_id = _story_with_card(
+            temp_db, char_id,
+            self._story_card(interior=[{"name": "Story Station"}]))
+        monkeypatch.setattr(importers, "chat_complete",
+                            lambda *a, **k: _proposal(CHAIN))
+        with pytest.raises(RuntimeError, match="Story Station"):
+            importers.fill_body_interior(char_id, "", chat_id=chat_id)
+
+    def test_a_story_without_its_own_card_reads_the_reusable_one(
+            self, temp_db, monkeypatch):
+        """COALESCE, not an either/or: most attachments have no override and
+        the story reads the reusable row, so the fill must too."""
+        from story import importers
+
+        char_id = _card(temp_db)
+        chat_id = _story_with_card(temp_db, char_id)
+        seen = {}
+        monkeypatch.setattr(
+            importers, "chat_complete",
+            lambda role, system, user, **k: (
+                seen.update(json.loads(user)), _proposal(CHAIN))[1])
+        importers.fill_body_interior(char_id, "", chat_id=chat_id)
+        assert (seen["card"]["embodiment"]["visible"]["summary"]
+                == "Tall, unhurried.")
+
+    def test_a_character_not_in_the_story_is_a_value_error(
+            self, temp_db, monkeypatch):
+        from story import importers
+
+        char_id = _card(temp_db)
+        chat_id = temp_db.qi(
+            "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+            ("An empty story", "", time.time()))
+        with pytest.raises(ValueError, match="not in this story"):
+            importers.fill_body_interior(char_id, "", chat_id=chat_id)
+
+    def test_it_writes_neither_row(self, temp_db, monkeypatch):
+        from story import importers
+
+        char_id = _card(temp_db)
+        chat_id = _story_with_card(temp_db, char_id, self._story_card())
+        before = (
+            temp_db.q("SELECT sheet FROM characters WHERE id=?",
+                      (char_id,), one=True)["sheet"],
+            temp_db.q("SELECT sheet FROM chat_chars WHERE chat_id=? "
+                      "AND char_id=?", (chat_id, char_id), one=True)["sheet"],
+        )
+        monkeypatch.setattr(importers, "chat_complete",
+                            lambda *a, **k: _proposal(CHAIN))
+        importers.fill_body_interior(char_id, "", chat_id=chat_id)
+        after = (
+            temp_db.q("SELECT sheet FROM characters WHERE id=?",
+                      (char_id,), one=True)["sheet"],
+            temp_db.q("SELECT sheet FROM chat_chars WHERE chat_id=? "
+                      "AND char_id=?", (chat_id, char_id), one=True)["sheet"],
+        )
+        assert after == before
+
+
+class TestAnEmptiedWidgetIsAnAnswer:
+    """The editor always sends the widget's current rows. An author who
+    deleted every station by hand and then pressed fill is not dropping
+    anything -- they already dropped it, deliberately, where it was visible."""
+
+    def test_an_emptied_draft_is_not_refused_for_dropping_the_saved_chain(
+            self, temp_db, monkeypatch):
+        from story import importers
+
+        char_id = _card(temp_db, interior=CHAIN)
+        monkeypatch.setattr(importers, "chat_complete",
+                            lambda *a, **k: _proposal(
+                                [{"name": "A Fresh Station"}]))
+        sheet = importers.fill_body_interior(
+            char_id, "", draft={"interior": []})
+        assert [s["name"] for s in sheet["embodiment"]["interior"]] == [
+            "A Fresh Station"]
+
+    def test_a_caller_with_no_draft_still_gets_the_saved_chain_guarded(
+            self, temp_db, monkeypatch):
+        """No editor in the loop means no rows were shown to anybody, so the
+        stored chain is the only authored work there is to lose."""
+        from story import importers
+
+        char_id = _card(temp_db, interior=CHAIN)
+        monkeypatch.setattr(importers, "chat_complete",
+                            lambda *a, **k: _proposal(
+                                [{"name": "A Fresh Station"}]))
+        with pytest.raises(RuntimeError, match="First Station"):
+            importers.fill_body_interior(char_id, "")
+
+
+class TestTheStoryScopedRoute:
+
+    @pytest.fixture
+    def client(self, temp_db):
+        from fastapi.testclient import TestClient
+
+        from web import app as app_module
+        from web import guest_access as guest
+
+        guest.reset_host_account()
+        with TestClient(app_module.app) as c:
+            r = c.post("/api/auth/setup",
+                       json={"username": "host", "password": "pw12345"})
+            assert r.status_code == 200, r.text
+            yield c
+        guest.reset_host_account()
+
+    def test_it_names_the_story_it_read(self, temp_db, client, monkeypatch):
+        from story.character_schema import normalize_character_data
+        from web import app as app_module
+
+        char_id = _card(temp_db)
+        chat_id = _story_with_card(temp_db, char_id, {
+            "identity": {"name": "The Vessel"}})
+        sheet = normalize_character_data(
+            {"identity": {"name": "The Vessel"},
+             "embodiment": {"interior": CHAIN}})
+        seen = {}
+        monkeypatch.setattr(
+            app_module, "fill_body_interior",
+            lambda *a, **k: (seen.update(k), sheet)[1])
+        r = client.post(
+            f"/api/chats/{chat_id}/characters/{char_id}/fill_interior",
+            json={"prompt": "read the card"})
+
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert set(body) == {"id", "chat_id", "sheet", "warnings"}
+        assert body["id"] == char_id and body["chat_id"] == chat_id
+        # The scope reaches the filler, or the route is the character one
+        # under a different URL.
+        assert seen["chat_id"] == chat_id
+        assert len(body["sheet"]["embodiment"]["interior"]) == 3
+
+    def test_an_unknown_story_is_a_404(self, temp_db, client, monkeypatch):
+        from web import app as app_module
+
+        char_id = _card(temp_db)
+        monkeypatch.setattr(app_module, "fill_body_interior",
+                            lambda *a, **k: {})
+        r = client.post(
+            f"/api/chats/999999/characters/{char_id}/fill_interior", json={})
+        assert r.status_code == 404
+
+    def test_a_character_not_in_the_story_is_a_404(self, temp_db, client):
+        char_id = _card(temp_db)
+        chat_id = temp_db.qi(
+            "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+            ("An empty story", "", time.time()))
+        r = client.post(
+            f"/api/chats/{chat_id}/characters/{char_id}/fill_interior",
+            json={})
+        assert r.status_code == 404

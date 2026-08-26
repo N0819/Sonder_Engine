@@ -1607,6 +1607,23 @@ def materialize_named_stations(scene: dict, prior_positions=None) -> list:
     4. The holder is under `_MAX_INTERIOR_STATIONS` interior rooms. A Director
        that spells one region two ways cannot build a dungeon out of a
        renaming spree.
+    5. Where the holder's inside is an AUTHORED chain, the occupant stands at
+       its DEEP END. A declared chain is an ORDERED DOCUMENT, and a region it
+       does not name has no position in it: mid-chain the engine cannot tell
+       a region the occupant has already PASSED from one beyond the last
+       station, and this pass only knows how to chain deeper, so it would put
+       an outward region behind a body that has not reached it. At the deep
+       end "deeper" is the only place a new station could go, which is why
+       the on-ramp still grows a chain a story continues past its authored
+       end -- and where nothing is authored, every gate above is unchanged,
+       because a story-grown chain has no declared order to contradict.
+       Measured on a scratch copy of the author's corpus 2026-08-25 with the
+       card filled and saved: one branch's ledger names a region the authored
+       chain omits, the occupant was placed at the entry station, and the
+       next merge minted that region DEEPER than the entry and moved her
+       outward into it, where she held for fourteen beats (t=22800.0). The
+       skip leaves her where the chain put her, and `_restation_interior_
+       contact` re-derives the ledger's region from the room she is in.
 
     Measured inert on all 78 stored scenes 2026-08-25: five standing interior
     contacts name a region with no matching room, and in every one of them the
@@ -1654,6 +1671,10 @@ def materialize_named_stations(scene: dict, prior_positions=None) -> list:
             continue                                            # gate 3
         if len(interior_ids) >= _MAX_INTERIOR_STATIONS:
             continue                                            # gate 4
+        spec = entity.get("interior_spec") if isinstance(entity, dict) else None
+        if (isinstance(spec, (list, tuple)) and spec
+                and _onward_room(scene, here) is not None):
+            continue                                            # gate 5
         rid = _station_room_id(rooms, eid, region)
         if not rid:
             continue
