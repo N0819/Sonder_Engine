@@ -27,9 +27,15 @@ consumers with different needs:
   body and attire strings for every OTHER person. A character agent is a
   stateless LLM call; if it is not in context, the mind does not have it. The
   observer's own body/attire remains supplied by its updated card state.
-- ``player`` -- delta only: what CHANGED, plus this beat's events. Standing
-  state is re-rendered only when its content changed (the dedupe key hashes
-  the content) or on an explicit look/examine intent (``full_render=True``).
+- ``player`` -- LEADS WITH WHAT CHANGED. Standing state is the BACKGROUND of
+  a percept, not its content: the view is this beat's events and the standing
+  percepts that CHANGED for this observer first, then what is merely still
+  true (first mentions, re-encounters, live sensations). Change is decided by
+  `standing_verdicts` against this observer's own previous ledger -- never
+  against the objective scene, which is the shape that leaks -- and the
+  changed half is marked `beat`, so those percepts reach the narrator as
+  numbered deliveries instead of wallpaper. An explicit look/examine intent
+  (``full_render=True``) re-renders the whole standing state on purpose.
 - ``memory`` -- `render_episode`: the salient delta, minted from the IR in
   first person, with typed entities. A percept list that is all unchanged
   standing state is a NON-EVENT and returns "" -- nothing is minted (the
@@ -47,6 +53,7 @@ calls down into this module, exactly as it calls into `common`.
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import logging
 import re
@@ -192,6 +199,38 @@ def body_key(name):
     carries a fact the observer has no channel to") is checkable by simple
     string containment over the whole record."""
     return _short_hash("body", str(name or "").strip().casefold())
+
+
+def standing_key(tag, subject_parts, content_parts):
+    """One standing percept's dedupe key, as ``<tag>:<subject>:<content>``.
+
+    THE KEY HAS TO ANSWER TWO QUESTIONS, and one hash could only answer the
+    first. A renderer holding this beat's percepts and the observer's own
+    previous ledger must be able to tell "the same fact, said again" from
+    "this fact about the same thing, different now" from "I have never been
+    told about this thing at all" -- unchanged, changed, first sight. A
+    single hash over subject AND content collapses the last two: a pose that
+    moved and a body that just walked in produce the same verdict, "a key I
+    have not seen", so nothing could lead with what CHANGED.
+
+    Both halves are hashes, so the invariant `body_key` exists for holds
+    unaltered: no canonical name rides a Percept, not even as bookkeeping,
+    and the whole record stays checkable by string containment.
+    """
+    return (f"{tag}:{_short_hash(*subject_parts)}"
+            f":{_short_hash(*content_parts)}")
+
+
+def _subject_prefix(dedupe_key):
+    """``<tag>:<subject>`` of a split standing key, or None for any other
+    shape. Old ledgers hold single-hash keys and every one of them answers
+    None here, which is what makes an upgraded chat read as first sight
+    rather than as a changed anything -- fail toward re-describing, never
+    toward claiming something moved."""
+    parts = str(dedupe_key or "").split(":")
+    if len(parts) != 3 or not all(parts):
+        return None
+    return f"{parts[0]}:{parts[1]}"
 
 
 # --------------------------------------------------------------------------
@@ -512,7 +551,8 @@ def environment_percept(room_id, room_name, room_notes="", light=""):
         data={"room_id": room_id, "room_name": room_name,
               "room_notes": room_notes or "", "light": light},
         salience=0.2,
-        dedupe_key="env:" + _short_hash(room_id, room_name, room_notes, light),
+        dedupe_key=standing_key("env", (room_id,),
+                                (room_name, room_notes, light)),
     )
 
 
@@ -668,8 +708,9 @@ def presence_percepts(scene, observer_name, co_present, display_map,
                   **({"size": size} if size else {}),
                   **({"room": room} if room else {})},
             salience=0.35,
-            dedupe_key="presence:" + _short_hash(
-                name, tier, arc, level, size or ""),
+            dedupe_key=standing_key(
+                "presence", (body_key(name),),
+                (tier, arc, level, size or "")),
         ))
     return out
 
@@ -709,9 +750,10 @@ def body_part_percepts(rows):
                   "tucked": bool(part.get("tucked")),
                   "directed_at_self": str(label) == "you"},
             salience=0.3,
-            dedupe_key="part:" + _short_hash(
-                label, kind, count, part.get("at"), part.get("aspect"),
-                part.get("description"), part.get("tucked")),
+            dedupe_key=standing_key(
+                "part", (body_key(label), kind, part.get("at")),
+                (count, part.get("aspect"), part.get("description"),
+                 part.get("tucked"))),
         ))
     return out
 
@@ -1183,8 +1225,10 @@ def pose_percepts(scene, observer_name, co_present, display_map,
             fidelity="full" if level == "full" else "degraded",
             data={**data, "directed_at_self": is_self},
             salience=0.3,
-            dedupe_key="pose:" + _short_hash(
-                name, *(str(data.get(f) or "") for f in _POSE_RENDER_FIELDS)),
+            dedupe_key=standing_key(
+                "pose", (body_key(name),),
+                tuple(str(data.get(f) or "")
+                      for f in _POSE_RENDER_FIELDS)),
         ))
     return out
 
@@ -1228,7 +1272,8 @@ def appearance_percept(source_name, label, description, *, force=False,
               **({"reearn": True} if reearn else {}),
               **({"delta": str(delta)} if str(delta or "").strip() else {})},
         salience=0.5,
-        dedupe_key="described:" + _short_hash(source_name, description),
+        dedupe_key=standing_key("described", (body_key(source_name),),
+                                (description,)),
     )
 
 
@@ -1240,9 +1285,10 @@ def body_state_percept(entity_state):
     return Percept(
         kind="body_state", channel="interoception", source_label="you",
         data=state, salience=0.3,
-        dedupe_key="state:" + _short_hash(
-            state.get("posture"), state.get("activity"),
-            ",".join(state.get("held_items") or [])),
+        dedupe_key=standing_key(
+            "state", ("self",),
+            (state.get("posture"), state.get("activity"),
+             ",".join(state.get("held_items") or []))),
     )
 
 
@@ -1260,10 +1306,11 @@ def contact_percepts(contacts_with_sensation):
             kind="sensation", channel="touch", source_label="you",
             data={"clause": clause, "directed_at_self": True},
             salience=0.45,
-            dedupe_key="contact:" + _short_hash(
-                contact.get("actor"), contact.get("actor_part"),
-                contact.get("target"), contact.get("target_part"),
-                contact.get("manner")),
+            dedupe_key=standing_key(
+                "contact",
+                (contact.get("actor"), contact.get("actor_part"),
+                 contact.get("target"), contact.get("target_part")),
+                (contact.get("manner"),)),
         ))
     return out
 
@@ -1289,11 +1336,12 @@ def contact_action_percepts(actions_with_sensation):
             kind="sensation", channel="touch", source_label="you",
             data={"clause": clause, "directed_at_self": True},
             salience=0.4,
-            dedupe_key="contact_action:" + _short_hash(
-                record.get("action_id"), record.get("contact_id"),
-                record.get("action"),
-                record.get("actor"), record.get("intensity"),
-                record.get("rhythm")),
+            dedupe_key=standing_key(
+                "contact_action",
+                (record.get("contact_id"), record.get("action"),
+                 record.get("actor")),
+                (record.get("action_id"), record.get("intensity"),
+                 record.get("rhythm"))),
         ))
     return out
 
@@ -1310,7 +1358,8 @@ def body_region_percepts(bare_details):
             source_label=str(body_label or "someone"),
             data={"place": place, "detail": detail},
             salience=0.3,
-            dedupe_key="region:" + _short_hash(body_label, place, detail),
+            dedupe_key=standing_key(
+                "region", (body_key(body_label), place), (detail,)),
         ))
     return out
 
@@ -1369,7 +1418,7 @@ def ambient_percepts(sensory_events, observer_room):
         out.append(Percept(
             kind="ambient", channel=channel, data={"desc": desc},
             salience=0.4,
-            dedupe_key="ambient:" + _short_hash(desc),
+            dedupe_key=standing_key("ambient", (desc,), (desc,)),
         ))
     return out
 
@@ -1421,8 +1470,8 @@ def scent_percepts(sources):
             data={"scent": scent, "level": level,
                   "attributed": bool(label)},
             salience=0.35,
-            dedupe_key="scent:" + _short_hash(
-                source.get("key"), scent, level, label),
+            dedupe_key=standing_key(
+                "scent", (source.get("key"),), (scent, level, label)),
         ))
     return out
 
@@ -1460,7 +1509,7 @@ def room_content_percepts(*groups):
                 kind="ambient", channel="sight",
                 data={"desc": desc},
                 salience=0.35,
-                dedupe_key="content:" + _short_hash(key, desc),
+                dedupe_key=standing_key("content", (key,), (desc,)),
             ))
     return out
 
@@ -1490,7 +1539,7 @@ def micro_round_percept(text):
         kind="ambient", channel="mixed",
         data={"desc": text},
         salience=0.4,
-        dedupe_key="micro:" + _short_hash(text),
+        dedupe_key=standing_key("micro", (text,), (text,)),
     )
 
 
@@ -1503,7 +1552,8 @@ def residue_percepts(level, *, targeted=False, loud_event=False, pain=False):
               "loud_event": bool(loud_event), "pain": bool(pain),
               "directed_at_self": True},
         salience=0.2,
-        dedupe_key="residue:" + _short_hash(level, targeted, loud_event, pain),
+        dedupe_key=standing_key("residue", (level,),
+                                (targeted, loud_event, pain)),
     )]
 
 
@@ -1729,7 +1779,7 @@ _OWN_BODY_DESCRIPTION_KINDS = frozenset(("body_part", "body_region"))
 # true.  Player-mode presentation compression must therefore never dedupe it.
 # Memory keeps a separate rule below: an unchanged sensation by itself is not
 # enough to mint a new autobiographical episode.
-_ACTIVE_STANDING_KINDS = frozenset(("sensation",))
+ACTIVE_STANDING_KINDS = frozenset(("sensation",))
 
 
 def _is_own_body_description(p):
@@ -1767,6 +1817,138 @@ _SIZE_PHRASES = dict(_ENGLISH_COMPOSITOR["size_phrases"])
 # the group can be rendered once the whole set is known without losing
 # where it belongs in the discourse order. Identity comparison only.
 _PRESENCE_SLOT = ("presence-slot", None)
+
+
+#: The four verdicts a standing percept can carry for ONE observer.
+#: `unchanged` -- this observer's own previous ledger holds this exact key.
+#: `changed`   -- it holds this subject under different content.
+#: `first`     -- it holds nothing about this subject at all.
+#: `reearn`    -- first sight again: a body met before, being re-delivered.
+STANDING_VERDICTS = ("unchanged", "changed", "first", "reearn")
+
+
+def standing_verdicts(percepts, prev_standing=frozenset(),
+                      prev_described=frozenset()):
+    """What each standing percept IS for this observer, as {dedupe_key: verdict}.
+
+    THE DIFF OPERANDS ARE NOT TWO SCENES. They are this observer's admitted
+    percepts for this beat and this observer's own ledger from the last one,
+    and that is the whole firewall argument: a subject with no percept here
+    produces no verdict and therefore no sentence, so a change in a room
+    this mind cannot see is not withheld by a rule -- there is nothing for
+    the rule to be about. A world diff is the shape that leaks; this is not
+    one. The signature is Layer B's usual: percepts and mode state, no scene
+    and no database, so the verdict cannot widen what the percepts already
+    admitted.
+
+    An EMPTY previous ledger means "no record", not "nothing was there" --
+    the opening beat, a mind that just woke, a chat stored before the split
+    key existed. Nothing can then read `changed`, because there is no
+    subject to have been holding: the world arrives as background, never as
+    a claim that any of it just moved. Old single-hash keys degrade the same
+    way, by `_subject_prefix` answering None for them, so an upgraded chat
+    costs one re-description per observer and never a false event.
+    """
+    prev_standing = frozenset(prev_standing or ())
+    prev_described = frozenset(prev_described or ())
+    subjects = {sp for sp in (_subject_prefix(k) for k in prev_standing) if sp}
+    out = {}
+    for p in percepts or []:
+        if p.order_key is not None:
+            continue
+        if p.dedupe_key in prev_standing:
+            out[p.dedupe_key] = "unchanged"
+            continue
+        prefix = _subject_prefix(p.dedupe_key)
+        if prefix and prefix in subjects:
+            out[p.dedupe_key] = "changed"
+            continue
+        if p.kind == "appearance" and (
+                p.data.get("reearn")
+                or str(p.data.get("source_key") or "") in prev_described):
+            out[p.dedupe_key] = "reearn"
+            continue
+        out[p.dedupe_key] = "first"
+    return out
+
+
+#: Standing kinds whose arrival IS the beat. A body that was not there and
+#: now is, and a sensation this body was not feeling and now feels, are both
+#: events wearing a standing percept's shape; a room, a smell or an authored
+#: description first perceived is the background arriving, not news.
+_FIRST_SIGHT_LEADS = frozenset(("presence", "sensation"))
+
+
+def appearance_delta(percept):
+    """The transition prose an appearance percept carries, or "".
+
+    A delta is not `force`. `force` says an objective visible-form channel
+    was written this beat, which is a fact about the Director and answers
+    nothing about this observer. A delta is the DIFFERENCE between two
+    states of dress, computed where the previous scene exists and attached
+    only to an observer who held that body at full sight last beat
+    (`perception._composer_standing_percepts`). It is therefore evidence
+    that something moved for this observer, and it outranks a dedupe key
+    that did not move -- an authored summary that never mentions clothing
+    hashes the same whatever the body is wearing.
+    """
+    return str((percept.data or {}).get("delta") or "").strip()
+
+
+def leads_the_beat(percept, verdict, prev_standing):
+    """Does this standing percept belong in the BEAT half of a player view.
+
+    `changed` always does -- something about a subject this observer already
+    held is different now, which is the definition of the beat. `first` does
+    only for the kinds above, and only against a ledger that exists: with no
+    previous record every percept is a first sight, and a view that led with
+    all of them would be claiming the whole world just happened.
+    """
+    if not prev_standing:
+        return False
+    if verdict == "changed":
+        return True
+    if percept.kind == "appearance" and appearance_delta(percept):
+        return True
+    return verdict == "first" and percept.kind in _FIRST_SIGHT_LEADS
+
+
+def as_beat(percept):
+    """The same percept, marked as this beat's content rather than its
+    background. Read by `observations_from_render`, which is how a changed
+    pose reaches the narrator's numbered deliveries instead of its
+    wallpaper. Frozen instances, so this is a copy -- the caller's own
+    percept list is untouched, and `_composer_company` still reads it."""
+    return dataclasses.replace(
+        percept, data={**(percept.data or {}), "beat": True})
+
+
+def player_view_order(spans):
+    """The order a player view's spans render in, for ANY language pack.
+
+    Four ranks, and the sort is stable, so each pack keeps its own discourse
+    order inside a rank: this beat's EVENTS in declared order, then the
+    standing percepts `leads_the_beat` marked as this beat's news, then a
+    changed room, then the background. The room goes last in the beat half
+    for the same reason `_render_episode_english` puts it last -- scene
+    setting read first swallows what happened.
+
+    A pack must not spell this rule itself. `language_adapters/japanese.py`
+    did, and its own partition emitted the changed standing percepts BEFORE
+    the events because that was the order it happened to iterate in, so a
+    Japanese player view opened on a pose while the English one opened on the
+    act that moved it. Rank is read off what the percept already carries --
+    `order_key` for an event, the `beat` mark `as_beat` stamps for the rest --
+    so there is nothing here for a second renderer to re-derive.
+    """
+    def rank(span):
+        percept = span[0]
+        if percept.order_key is not None:
+            return 0
+        if not (percept.data or {}).get("beat"):
+            return 3
+        return 2 if percept.kind == "environment" else 1
+    return sorted(spans, key=rank)
 
 
 @dataclass
@@ -2137,15 +2319,31 @@ def _render_view_english(percepts, *, mode="character",
     complete visible anatomy and attire for every OTHER person. The observer's
     own body description (`_is_own_body_description` -- anatomy and bare
     regions, never pose or place) is delta-suppressed because the updated card
-    and self.attire already carry it into the same call. ``mode='player'``
-    renders only standing state whose content changed (dedupe key not in
-    ``prev_standing``) unless ``full_render`` re-renders everything (explicit
-    look/examine intent). Active sensations are the exception: an unchanged
-    contact is still being felt now, so ``sensation`` percepts render every
-    beat in both modes. Events always render, in declared order -- chronology
-    is authoritative. Full appearance is first-mention/change/re-encounter
-    only in player mode; NPC cognition retains other bodies' complete strings
-    every beat.
+    and self.attire already carry it into the same call.
+
+    ``mode='player'`` LEADS WITH WHAT CHANGED. The view is two halves: the
+    BEAT -- this beat's events in declared order, then the standing percepts
+    `standing_verdicts` calls changed for THIS observer, with a changed room
+    last -- and then the BACKGROUND: first mentions, re-encounters, and the
+    sensations that are still true. What is continuously true is context;
+    what is different since this observer last perceived it is the beat.
+    ``full_render`` (an explicit look) re-renders the whole standing state,
+    which is how the background is asked for on purpose. Active sensations
+    are the standing exception in both modes: an unchanged contact is still
+    being felt now, so it renders every beat -- in the background half.
+
+    Events always render, in declared order -- chronology is authoritative.
+
+    THE APPEARANCE BRANCH ASKS THE LEDGER BEFORE IT ASKS `force`. `force` is
+    an objective judgement ("some visible-form channel moved this beat") and
+    it was deciding a per-observer question. Measured live (chat 89, turns
+    3-27): it fired on every single beat while the composed description
+    stayed byte-identical, and the same 342-character card went to the
+    narrator twenty-five times running. An overlay wiggle whose composed
+    description hashes to the key this observer already holds is no change
+    FOR THIS OBSERVER, and now suppresses; a description that actually moved
+    renders as the change (the attire delta when there is one, the current
+    description when there is not) and leads.
 
     Returns a RenderedView; ``text`` may be "" ("nothing reached this mind"
     -- the caller stores None, as today).
@@ -2169,49 +2367,75 @@ def _render_view_english(percepts, *, mode="character",
         [p for p in percepts if p.order_key is not None],
         key=lambda p: p.order_key)
 
-    delta = (mode == "player") and not full_render
+    player = mode == "player"
+    delta = player and not full_render
     described = set(prev_described)
     standing_keys = set()
     seen_dedupe = set()
+    verdicts = standing_verdicts(
+        standing, prev_standing, prev_described) if player else {}
+    # Presence is ONE observation -- who is here -- so the whole group takes
+    # one side of the partition, decided before the loop reaches the first
+    # of them: if any body in it is new or has moved tier, who is here is
+    # this beat's news.
+    presence_leads = player and any(
+        leads_the_beat(p, verdicts.get(p.dedupe_key, "first"), prev_standing)
+        for p in standing if p.kind == "presence")
 
-    standing_spans = []
+    standing_spans = []         # the background half in player mode
+    beat_spans = []             # player mode only
     presence_group = []
     for p in standing:
         standing_keys.add(p.dedupe_key)
         if p.dedupe_key in seen_dedupe:
             continue
         seen_dedupe.add(p.dedupe_key)
+        verdict = verdicts.get(p.dedupe_key, "first")
+        leads = player and leads_the_beat(p, verdict, prev_standing)
         if p.kind == "appearance":
-            source_key = str(p.data.get("source_key") or "")
-            if mode == "player" and source_key in described \
-                    and not p.data.get("force") \
-                    and not p.data.get("reearn") and not full_render:
+            if (player and not full_render and verdict == "unchanged"
+                    and not appearance_delta(p)):
+                # Already delivered, byte for byte, to this observer. This
+                # is the line `force` used to be able to walk past.
+                continue
+            if (player and not full_render and verdict == "reearn"
+                    and not p.data.get("reearn")
+                    and not p.data.get("force")):
+                # The standing ledger says nothing about this body at all,
+                # and the older first-mention ledger says it was described
+                # once. Nothing here claims it moved, so it stays told.
                 continue
         elif (delta and p.dedupe_key in prev_standing
-              and p.kind not in _ACTIVE_STANDING_KINDS):
+              and p.kind not in ACTIVE_STANDING_KINDS):
             continue
         elif (not full_render and p.dedupe_key in prev_standing
                 and _is_own_body_description(p)):
             continue
-        # Presence is ONE observation -- who is here -- however many bodies
-        # it covers, so it is held back and rendered as a group. Everything
-        # else renders where it stands. `standing` is already sorted by
-        # _STANDING_ORDER, so re-inserting the group at the first presence
-        # position keeps the discourse order intact.
+        # `standing` is already sorted by _STANDING_ORDER, so re-inserting
+        # the presence group at the first presence position keeps the
+        # discourse order of whichever half it belongs to intact.
         if p.kind == "presence":
             presence_group.append(p)
             if len(presence_group) == 1:
-                standing_spans.append(_PRESENCE_SLOT)
+                (beat_spans if presence_leads else standing_spans).append(
+                    _PRESENCE_SLOT)
             continue
         sentence = _render_standing(p)
         if not sentence:
             continue
         if p.kind == "appearance":
             described.add(str(p.data.get("source_key") or ""))
-        standing_spans.append((p, sentence))
-    if _PRESENCE_SLOT in standing_spans:
-        at = standing_spans.index(_PRESENCE_SLOT)
-        standing_spans[at:at + 1] = _render_presence_group(presence_group)
+        if leads:
+            beat_spans.append((as_beat(p), sentence))
+        else:
+            standing_spans.append((p, sentence))
+    for half in (beat_spans, standing_spans):
+        if _PRESENCE_SLOT in half:
+            at = half.index(_PRESENCE_SLOT)
+            group = _render_presence_group(presence_group)
+            if half is beat_spans:
+                group = [(as_beat(gp), sentence) for gp, sentence in group]
+            half[at:at + 1] = group
 
     event_spans = []
     for p in events:
@@ -2222,11 +2446,16 @@ def _render_view_english(percepts, *, mode="character",
         if sentence:
             event_spans.append((p, _cap(sentence)))
 
-    # Discourse rule: a sudden event chain leads; otherwise standing state
-    # anchors the view and the beat follows.
-    sudden = any(p.suddenness >= 0.6 for p, _ in event_spans)
-    spans = (event_spans + standing_spans) if sudden \
-        else (standing_spans + event_spans)
+    if player:
+        # The ordering rule itself lives in `player_view_order`, which every
+        # pack calls, so the reference renderer cannot drift from one.
+        spans = player_view_order(event_spans + beat_spans + standing_spans)
+    else:
+        # Discourse rule: a sudden event chain leads; otherwise standing state
+        # anchors the view and the beat follows.
+        sudden = any(p.suddenness >= 0.6 for p, _ in event_spans)
+        spans = (event_spans + standing_spans) if sudden \
+            else (standing_spans + event_spans)
     text = " ".join(sentence for _, sentence in spans).strip()
     return RenderedView(text=text, spans=spans,
                         standing_keys=standing_keys, described=described)
@@ -2598,9 +2827,15 @@ def observations_from_render(pid, rendered):
             # A re-encounter is deliberately NOT excluded here: meeting
             # someone again is standing state that became sayable again,
             # not something that happened, so it stays reference and the
-            # narrator owes it nothing. Only `force` -- an actual change --
-            # promotes an appearance to an obligation.
-            "standing": p.order_key is None and not p.data.get("force"),
+            # narrator owes it nothing. Only an actual change promotes a
+            # standing percept to an obligation -- and `beat`, set by the
+            # renderer from this observer's own ledger, is what says one
+            # changed. `force` still counts because it is what a stage
+            # without a ledger (an opening view) has instead; the renderer
+            # never marks a percept it suppressed, so a forced-but-identical
+            # appearance is no longer in `spans` to be asked.
+            "standing": p.order_key is None and not p.data.get("force")
+            and not p.data.get("beat"),
             "text": sentence,
             "intensity": min(1.0, 0.35 + 0.4 * p.salience),
             "suddenness": p.suddenness,
