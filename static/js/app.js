@@ -643,8 +643,11 @@ async function runWizard(state) {
         locationRequest.character_histories = (
           state.livedLocation.character_histories || []).flatMap(row => {
             const charId = historyCharacterIds.get(String(row.key));
+            // This rebuild is by hand, so every field the dialog collects has
+            // to be named here or it is silently dropped on the way out.
             return charId ? [{
-              char_id: charId, mode: row.mode || "auto", brief: row.brief || ""
+              char_id: charId, mode: row.mode || "auto", brief: row.brief || "",
+              events: row.events
             }] : [];
           });
         await generateStoryLocation(

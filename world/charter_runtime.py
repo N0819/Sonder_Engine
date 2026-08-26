@@ -211,6 +211,7 @@ def _prepare_cast_histories(cid, request, *, frame_id=None):
     from story.character_schema import normalize_character_data
     from story.history_routing import (
         resolve_character_history_route, route_uses_charter)
+    from story.journey_history import journey_event_count
     from world.charter_history import (
         featured_resident_private_habits, featured_resident_seed)
 
@@ -324,6 +325,7 @@ def _prepare_cast_histories(cid, request, *, frame_id=None):
             sheet, requested=value, opening=opening,
             location_brief=clean.get("brief") or "")
         route["guidance"] = str(value.get("brief") or "")[:2000]
+        route["event_count"] = journey_event_count(value.get("events"))
         routes[str(char_id)] = copy.deepcopy(route)
         prepared.append({"char_id": char_id, "sheet": sheet, "route": route})
         if route_uses_charter(route):
@@ -392,6 +394,7 @@ def _complete_cast_histories(cid, request, prepared, generated, *,
         try:
             result = compile_journey_history(
                 cid, char_id, sheet, route, lore=lore, opening=opening,
+                arrival_brief=str(request.get("brief") or ""),
                 frame_id=frame_id)
             routes[str(char_id)]["handoff"] = {
                 "complete": True,

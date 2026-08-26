@@ -1999,6 +1999,7 @@
   "Generate and add location": "場所を生成して追加",
   "Generate it without a simulated past": "過去をシミュレーションせず生成",
   "Generating and pre-simulating location": "場所を生成し、事前シミュレーションしています",
+  "How many journey memories?": "旅の記憶をいくつ生成しますか？",
   "How much recent history should its residents live through?": "住民にどれだけの直近の歴史を経験させますか？",
   "Location generation failed": "場所の生成に失敗しました",
   "Open a story first, then choose which lore should become a location.": "まず物語を開き、場所にするロアを選んでください。",

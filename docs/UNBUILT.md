@@ -3273,11 +3273,31 @@ constrained to the pre-named roster, real rooms/duties, actual anchors, card
 and author guidance. Each episode is an independent memory row; a sparse result
 aborts instead of becoming canon. The planner still sees only public placement
 material. `story.journey_history` is the
-initial itinerary backend: cited mode compiles card/lore journeys and explicit
+itinerary backend: cited mode compiles card/lore journeys and explicit
 generated mode may invent a bounded event ledger. Greeting launch and the
 multi-character Story Quick Start expose one route and optional past guidance
 per selected character before turn zero; diagnostics show the resulting
 handoff.
+
+**The itinerary backend converged on the resident one (2026-08-26).** It had
+been the resident path's poor sibling on four measured axes and is no longer:
+the event count is the author's (`journey_event_count`, default 12 against the
+resident target of 12, band 3–20) rather than a hardcoded 6/8; each event
+carries the resident vocabulary's `tone`/`lesson`/`valence`/`arousal`/
+`salience`, imported from `world.charter_history` rather than restated, so a
+journey row reaches retrieval with the same things to rank on (measured before:
+59 of 91 prestory memories at exactly salience 0.6); the ordinal welding
+(`"<when>: Early in my travels, …"`) is gone, because when and place have their
+own retrievable fields; the first-person requirement is enforced by the
+pack-scoped `_FIRST_PERSON_RE` the narration-person machinery already reads,
+as a grounding drop rather than a second instruction; and the lived-location
+brief now reaches the generator as `arrival_brief`, so the last events may run
+toward the place the story opens at. Arriving still is not residing: residence
+remains a `story.history_routing` topology decision this generator never makes.
+
+Still unbuilt on that axis: `importance` stays NULL on both paths by design
+(NULL reads as the salience and only a consequence the engine can point at
+revises it), so mint-time ranking is salience alone.
 
 Still unbuilt: deeper resident eras beyond the recent-life window, direct
 Scene Life use of the compact reciprocal episode records before a background
