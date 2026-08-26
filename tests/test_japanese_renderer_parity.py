@@ -114,11 +114,18 @@ def test_speech_distinguishes_heard_from_seen(japanese):
 
 def test_an_appearance_is_not_redescribed_every_beat(japanese):
     """prev_described was accepted and never consulted, so a body's full
-    description was re-rendered from scratch on every single beat."""
+    description was re-rendered from scratch on every single beat.
+
+    Page compression is the PLAYER view's rule, in both languages: this
+    adapter used to apply it in every mode, which subtracted evidence from
+    an NPC mind that English kept giving it. A stateless character call has
+    only what is in its context."""
     appearance = KINDS["appearance"]
-    assert render_view([appearance], language="ja",
+    assert render_view([appearance], language="ja", mode="player",
                        prev_described={"reya"}).text == ""
-    assert render_view([appearance], language="ja").text != ""
+    assert render_view([appearance], language="ja", mode="player").text != ""
+    assert render_view([appearance], language="ja",
+                       prev_described={"reya"}).text != ""
 
 
 def test_a_non_awake_mind_receives_the_residue_and_nothing_else(japanese):
@@ -158,3 +165,46 @@ def test_a_failing_adapter_costs_wording_not_the_beat(japanese, monkeypatch):
     monkeypatch.setattr(composer, "_safe_renderer", lambda language: Broken())
     text = render_view([KINDS["act"]], language="ja").text
     assert "crosses to the shelf" in text
+
+
+def test_both_renderers_reach_the_same_change_verdicts(japanese):
+    """WHICH percepts a view may carry is an information decision and has one
+    owner; only the wording is the pack's. This adapter carried its own copy
+    of the player delta rule and it had already drifted once, so the moment
+    the English rule was repaired the two disagreed about what the observer
+    receives. Compared on percept identity and beat/background classification
+    rather than on prose."""
+    from agents.composer import standing_verdicts
+
+    import dataclasses
+
+    changed = dataclasses.replace(_percept("pose", posture="standing"),
+                                  dedupe_key="pose:subj:moved")
+    percepts = [KINDS["environment"], KINDS["presence"], changed,
+                KINDS["appearance"], KINDS["sensation"], KINDS["act"]]
+    # The same subject under different content: the verdict must be
+    # `changed` in both renderers, and both must lead with it.
+    prev = frozenset({"pose:subj:held", KINDS["presence"].dedupe_key})
+
+    english = render_view(percepts, language="en", mode="player",
+                          prev_standing=prev)
+    japanese_view = render_view(percepts, language="ja", mode="player",
+                                prev_standing=prev)
+
+    def verdict_map(rendered):
+        return {p.dedupe_key: bool((p.data or {}).get("beat"))
+                for p, _ in rendered.spans if p.order_key is None}
+
+    assert verdict_map(english) == verdict_map(japanese_view)
+    assert english.described == japanese_view.described
+    # And the shared function is the one both consulted.
+    assert standing_verdicts(percepts, prev)["pose:subj:moved"] == "changed"
+
+
+def test_the_japanese_player_view_leads_with_the_beat(japanese):
+    changed = KINDS["pose"]
+    prev = frozenset({KINDS["environment"].dedupe_key})
+    rendered = render_view([KINDS["environment"], changed, KINDS["act"]],
+                           language="ja", mode="player", prev_standing=prev)
+    spans = [p.kind for p, _ in rendered.spans]
+    assert spans[0] == "act", "the event leads"

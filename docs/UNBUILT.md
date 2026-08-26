@@ -2697,6 +2697,51 @@ behind it; the second is a payload-assembly change and should not be made
 before somebody measures what the three copies actually cost.
 
 
+### 1.80 Residuals from the change tier
+
+Landed with `Design.md` § A view leads with what changed: a player view is now
+partitioned into a beat half and a background half by
+`composer.standing_verdicts`, reading each observer's own previous ledger.
+Three things that work names for and does not close.
+
+- **The content hash is LEXICAL, so a re-wording reads as a change.** A
+  standing key's content half hashes the rendered fields, and a specialist
+  that re-phrases a pose or a contact manner without moving anything mints a
+  new hash. Measured on the replayed corpus (chats 86-92, 389 player views),
+  the beat half carries 16.9% contact and 7.2% pose atoms per beat, and some
+  unknown share of that is re-phrasing rather than movement. **The cost is
+  bounded and is not an information leak**: every sentence still realises
+  admitted percept data, so a false "changed" verdict buys a re-description
+  the observer was already entitled to, never a fact they were not. Semantic,
+  wording-invariant keys are the fix and they are a separate change with a
+  separate argument — a pose is not obviously equal to a paraphrase of
+  itself, and deciding it is has consequences for memory minting too.
+- **The episode renderer keeps its own changed-list logic.**
+  `_render_episode_english` still asks `dedupe_key not in prev_standing` plus
+  `force`/`prev_described` directly rather than calling `standing_verdicts`.
+  It is correct as it stands (the split key is still an exact match), but it
+  is a second spelling of one rule, which is the shape this repo has watched
+  drift before — the Japanese adapter's copy of the player delta rule had
+  already drifted once when this work found it. Unifying it is a tidy-up, not
+  a defect.
+- **An adapter that implements `render_view` without calling
+  `standing_verdicts` re-forks the rule.**
+  `tests/test_japanese_renderer_parity.py` now compares the two renderers'
+  beat/background classification, so the shipped pack cannot drift silently;
+  a THIRD pack could. A malformed adapter still falls through to the English
+  reference renderer, which carries the tier, so the failure mode is wording
+  rather than information.
+
+One thing the replay surfaced that is NOT a residual, recorded so the next
+reader does not re-open it: the stored corpus shows a structured overlay
+reaching the page as a Python `repr` (`currently {'name': 'tail',
+'description': '...'}`, chat 89, every beat). `story/scene.appearance_of`
+already renders overlay dicts by description and has since before this work;
+those rows are historical prose, not live behaviour. A stored view is a
+record of what an older engine composed, and reading one as evidence about
+the current one is the mistake this paragraph exists to stop.
+
+
 ## 2. Roadmap
 
 Features the architecture intends and has not built. Ordered by value per unit

@@ -295,6 +295,7 @@ class JapaneseRenderer:
     def render_view(self, percepts, *, mode="character",
                     prev_standing=frozenset(), prev_described=frozenset(),
                     full_render=False):
+        from agents import composer
         from agents.composer import RenderedView
 
         percepts = list(percepts or [])
@@ -318,7 +319,21 @@ class JapaneseRenderer:
                 text="".join(sentence for _, sentence in spans), spans=spans,
                 standing_keys=standing_keys, described=described)
 
-        spans = []
+        # THE VERDICT IS SHARED, THE WORDING IS THE PACK'S. This adapter
+        # carried its own copy of the player delta rule and it had already
+        # drifted once -- `prev_described` was accepted and never consulted,
+        # so a body's full appearance was re-described from scratch every
+        # beat. Which percepts a view may carry is an information decision
+        # and belongs to one function; how the sentence reads is the pack's.
+        player = mode == "player"
+        verdicts = composer.standing_verdicts(
+            percepts, prev_standing, prev_described) if player else {}
+        presence_leads = player and any(
+            composer._leads_the_beat(
+                p, verdicts.get(p.dedupe_key, "first"), prev_standing)
+            for p in percepts if p.kind == "presence")
+
+        beat, background = [], []
         seen = set()
         ordered = sorted(
             enumerate(percepts),
@@ -329,22 +344,42 @@ class JapaneseRenderer:
             if p.dedupe_key and p.dedupe_key in seen:
                 continue
             seen.add(p.dedupe_key)
-            if (mode == "player" and p.order_key is None and not full_render
-                    and p.dedupe_key in (prev_standing or ())):
-                continue
+            verdict = verdicts.get(p.dedupe_key, "first")
+            if player and p.order_key is None and not full_render:
+                if p.kind == "appearance":
+                    if (verdict == "unchanged"
+                            and not composer.appearance_delta(p)):
+                        continue
+                    if (verdict == "reearn" and not (p.data or {}).get("reearn")
+                            and not (p.data or {}).get("force")):
+                        continue
+                elif (p.dedupe_key in (prev_standing or ())
+                      and p.kind not in composer._ACTIVE_STANDING_KINDS):
+                    continue
             source_key = str((p.data or {}).get("source_key") or "")
-            # prev_described was accepted and never consulted, so a body's
-            # full appearance was re-described from scratch every single beat.
-            if (p.kind == "appearance" and source_key
-                    and source_key in described
-                    and not (p.data or {}).get("force")):
-                continue
             sentence = _full_stop(self._sentence(p))
             if not sentence:
                 continue
-            spans.append((p, sentence))
+            # Character mode keeps the sequence it always had: standing
+            # state in percept order, then the beat. Only the player view
+            # partitions.
+            leads = player and (
+                p.order_key is not None
+                or composer._leads_the_beat(p, verdict, prev_standing)
+                or (p.kind == "presence" and presence_leads))
+            if leads:
+                beat.append((composer._as_beat(p)
+                             if p.order_key is None else p, sentence))
+            else:
+                background.append((p, sentence))
             if p.kind == "appearance" and source_key:
                 described.add(source_key)
+        if player:
+            changed_env = [x for x in beat if x[0].kind == "environment"]
+            spans = ([x for x in beat if x[0].kind != "environment"]
+                     + changed_env + background)
+        else:
+            spans = beat + background
         return RenderedView(
             text="".join(sentence for _, sentence in spans), spans=spans,
             standing_keys=standing_keys, described=described)

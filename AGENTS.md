@@ -246,6 +246,23 @@ for the extension registry, not for this boundary.
   (`_per_observer_model_views`, long gone) — the boundary is now the admission
   gate rather than a separate prompt, which is why there is no `perception`
   entry in `providers.ROLES`, `prompts`, or `schemas.SCHEMA_MAP`.
+- **"What changed" is computed per observer, never from the scene.** A player
+  view leads with the beat and trails with the background
+  (`composer.standing_verdicts`, `Design.md` § A view leads with what changed),
+  and a diff of the WORLD is exactly the shape that would leak here. The
+  operands are therefore this observer's admitted percepts and this observer's
+  own previous ledger: a subject with no percept produces no verdict and no
+  sentence, so a door that opened in a room this mind cannot see is not
+  withheld by a rule — there is nothing for a rule to be about. Two corollaries,
+  each got wrong once. `force` (an objective "some visible-form channel was
+  written this beat") may not decide that something changed FOR AN OBSERVER;
+  only their own content hash may. And TRANSITION PHRASING DISCLOSES THE PAST
+  STATE — "no longer wearing the robe" hands a returning observer
+  robe-was-worn — so the attire delta, which is computed from the objective
+  previous scene, may only ride a percept for an observer whose own `seen`
+  record held that body at full sight last beat (attire on a fully seen body is
+  fully seen). Fail that proof and they receive current state alone; what they
+  infer from it stays theirs to infer.
 - The delivery gate `_delivery_ok` in `agents/common.py` consolidates containment, awareness, sight (including rear-arc/`behind_sources`), and hearing (with proximity) checks. **It is not universal, and this line used to claim it was.** Its only callers are the two micro-round deliveries in `agents/loops.py`; `agents/perception.py` and `agents/composer.py` re-derive the same four questions themselves (`hear_level`, `_in_plain_view`, `spatial_rel_between`, `composer._sense_graded`). Two families of delivery gate exist and can drift apart — registered as a structural risk in `docs/UNBUILT.md` §3.8, which is the entry to fix, not this row. Consolidating them is still the right change; asserting it has happened is what let the drift go unmeasured.
 - **Containment has two forms, and both must be read through
   `spatial.hiding_holders_of`.** A scene expresses one entity inside another
