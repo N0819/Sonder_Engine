@@ -3,7 +3,7 @@
   "\" stroke-width=\"1.2\"/>": "\" stroke-width=\"1.2\"/>",
   "${(p.done || 0).toLocaleString()} done before it stopped${p.error ? \": \" + p.error : \"\"}. It will pick up where it left off next time — nothing was lost.": "${(p.done || 0).toLocaleString()} 件を処理した時点で停止しました${p.error ? \": \" + p.error : \"\"}。次回は中断したところから再開されます — 失われたものはありません。",
   "${(p.done || 0).toLocaleString()} memories re-read. Older memories are searchable by meaning again.": "${(p.done || 0).toLocaleString()} 件の記憶を読み直しました。古い記憶も再び意味で検索できます。",
-  "${added} new stations proposed, ${after} in all. Review the order and the crossing times, then save.": "新しい区画を${added}個提案しました（全体で${after}個）。順序と通過時間を確認してから保存してください。",
+  "${added} new stations proposed, ${after} in all — nothing is stored until you save. Check each one is this card's own, in order, with the right crossing times.": "新しい区画を${added}個提案しました（全体で${after}個）。保存するまで何も記録されません。どれもこのカード自身のものか、順序は正しいか、通過時間は妥当かを確認してください。",
   "${after} stations refined — nothing added. Review, then save.": "${after}個の区画を精緻化しました――追加はありません。確認してから保存してください。",
   "${Math.round(seconds / 3600)} hours ago": "${Math.round(seconds / 3600)}時間前",
   "${Math.round(seconds / 60)} minutes ago": "${Math.round(seconds / 60)}分前",

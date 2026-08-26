@@ -4,7 +4,7 @@
   "\" stroke-width=\"1.2\"/>": "\" stroke-width=\"1.2\"/>",
   "${(p.done || 0).toLocaleString()} done before it stopped${p.error ? \": \" + p.error : \"\"}. It will pick up where it left off next time — nothing was lost.": "${(p.done || 0).toLocaleString()} done before it stopped${p.error ? \": \" + p.error : \"\"}. It will pick up where it left off next time — nothing was lost.",
   "${(p.done || 0).toLocaleString()} memories re-read. Older memories are searchable by meaning again.": "${(p.done || 0).toLocaleString()} memories re-read. Older memories are searchable by meaning again.",
-  "${added} new stations proposed, ${after} in all. Review the order and the crossing times, then save.": "${added} new stations proposed, ${after} in all. Review the order and the crossing times, then save.",
+  "${added} new stations proposed, ${after} in all — nothing is stored until you save. Check each one is this card's own, in order, with the right crossing times.": "${added} new stations proposed, ${after} in all — nothing is stored until you save. Check each one is this card's own, in order, with the right crossing times.",
   "${after} stations refined — nothing added. Review, then save.": "${after} stations refined — nothing added. Review, then save.",
   "${arrow} ${link.relation_type}": "${arrow} ${link.relation_type}",
   "${c.requested} → ${c.served}": "${c.requested} → ${c.served}",

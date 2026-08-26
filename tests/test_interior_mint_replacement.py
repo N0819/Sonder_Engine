@@ -2,11 +2,18 @@
 
 THE GAP W9 LEFT, and the reason a filled card would still have helped nobody:
 `materialize_enclosure_interiors` mints the authored chain only for a holder
-with NO interior rooms (its gate 5), and every live story that needs a chain
-already stands on the engine's own minimal mint. Measured read-only against
-the author's corpus 2026-08-25 at a2bc44f: six scenes hold one body inside
-another (chats 86-91, all one card); two of them (90 and 91) already carry a
-minted `<eid>_interior` room with the occupant standing in it.
+with NO interior rooms (its gate 5), and a live story that needs a chain may
+already stand on the engine's own minimal mint. Measured read-only against
+the author's corpus 2026-08-25 at a2bc44f, over EVERY stored scene rather
+than one story's branches: 7 scenes store a `contained` record (41, 44, 52,
+60, 61, 88, 89) of which 2 use `mode: interior`, and 38 scenes carry a room
+with a `parent_entity`. Exactly TWO of those rooms are the engine's own mint
+-- chats 90 and 91, `<eid>_interior`, occupant standing inside. Every other
+interior room in the corpus carries a story-written `desc` (vessels, lift
+cars, a police box, and a second card's authored interior in chats 42/43/44),
+so the replacement is permanently inert for all of them by its own key-set
+test, whatever their cards later declare. The scope of this pass is the mint,
+not the interior.
 
 THE ONE STATE IN WHICH THE CARD BEATS THE SCENE, and it loses nothing by
 construction: `_mint_minimal_interior` derives its room entirely from the

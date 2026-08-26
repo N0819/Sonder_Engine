@@ -2661,6 +2661,25 @@ def char_fill_psychology(cid: int, body: dict = Body(default={})):
     return {"id": cid, "sheet": sheet,
             "warnings": character_card_warnings(sheet)}
 
+def _interior_fill(char_id, body, chat_id=None):
+    """Shared handler for the reusable card and the per-story card.
+
+    ONE FUNCTION BECAUSE IT IS ONE QUESTION. Which row the answer is proposed
+    against is the story's business, not the reader's: `scene.active_cast`
+    resolves `chat_chars.sheet` over `characters.sheet`, so a fill offered
+    only on the reusable card is inert for every story that has its own --
+    the author presses the button, reviews a chain, saves, and the cast row
+    the engine reads is untouched."""
+    brief = str(body.get("prompt") or body.get("brief") or "").strip()
+    try:
+        with language_scope(_require_story_language(body.get("language"))):
+            return fill_body_interior(
+                char_id, brief, draft=body.get("draft"), chat_id=chat_id)
+    except ValueError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(502, f"Interior fill failed: {exc}") from exc
+
 @app.post("/api/characters/{cid}/fill_interior")
 def char_fill_interior(cid: int, body: dict = Body(default={})):
     """Preview this card's inside, read out of its own prose. Writes nothing.
@@ -2668,15 +2687,24 @@ def char_fill_interior(cid: int, body: dict = Body(default={})):
     CHARACTER ONLY, and deliberately: `stamp_authored_interiors` walks the
     cast, so a persona's interior would be a field nothing reads
     (`tests/test_card_interior_spec.py` pins the absence)."""
-    brief = str(body.get("prompt") or body.get("brief") or "").strip()
-    try:
-        with language_scope(_require_story_language(body.get("language"))):
-            sheet = fill_body_interior(cid, brief, draft=body.get("draft"))
-    except ValueError as exc:
-        raise HTTPException(404, str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(502, f"Interior fill failed: {exc}") from exc
+    sheet = _interior_fill(cid, body)
     return {"id": cid, "sheet": sheet,
+            "warnings": character_card_warnings(sheet)}
+
+@app.post("/api/chats/{cid}/characters/{ch}/fill_interior")
+def chat_char_fill_interior(cid: int, ch: int, body: dict = Body(default={})):
+    """The same reading, against the card THIS story reads. Writes nothing.
+
+    The story-card editor's Save already PUTs `embodiment.interior` to
+    `/api/chats/{cid}/characters/{ch}/card`, so the round trip closes here;
+    what was missing was the read. Measured read-only against the author's
+    corpus 2026-08-25: 13 of 116 `chat_chars` rows carry a per-story sheet,
+    and the seven stories of the line this was built for are all among them,
+    so without this route the surface reached none of them."""
+    if not q("SELECT 1 FROM chats WHERE id=?", (cid,), one=True):
+        raise HTTPException(404, "Chat not found")
+    sheet = _interior_fill(ch, body, chat_id=cid)
+    return {"id": ch, "chat_id": cid, "sheet": sheet,
             "warnings": character_card_warnings(sheet)}
 
 def _appearance_fill(kind, entity_id, body):

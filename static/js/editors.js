@@ -53,7 +53,11 @@ function appearanceFillButton(kind, card, readDraft, reopen) {
 // -- how many stations, and how many of them are new -- rather than letting a
 // populated form pass for a reviewed one, and an empty answer is stated out
 // loud instead of looking like a form that failed to change.
-function interiorFillButton(card, readDraft, reopen) {
+// `chatId` is the story whose card this is, or null for the reusable one.
+// It is not decoration: `scene.active_cast` reads a per-story sheet OVER the
+// reusable row, so proposing against the wrong one is a button that reviews a
+// chain, saves it, and changes nothing the engine will ever read.
+function interiorFillButton(card, readDraft, reopen, chatId = null) {
   const button = el("button", {
     title: "Read this card's own prose and propose the stations of its inside",
     onclick: async () => {
@@ -68,7 +72,9 @@ function interiorFillButton(card, readDraft, reopen) {
       button.textContent = "Reading…";
       button.disabled = true;
       try {
-        const r = await api("POST", `/api/characters/${card.id}/fill_interior`,
+        const r = await api("POST", chatId === null
+          ? `/api/characters/${card.id}/fill_interior`
+          : `/api/chats/${chatId}/characters/${card.id}/fill_interior`,
           { prompt: answer, draft: readDraft() });
         const after = (r.sheet?.embodiment?.interior || []).length;
         if (!after && !before) {
@@ -82,11 +88,16 @@ function interiorFillButton(card, readDraft, reopen) {
         }
         const refreshed = { ...card, sheet: JSON.stringify(r.sheet) };
         closeAllModals();
-        await boot();
+        // A story card is not in the character list `boot()` reloads, and
+        // reloading it there would discard the proposal being reviewed.
+        if (chatId === null) await boot();
         reopen(refreshed);
         const added = after - before;
+        // Proposed, not stored, and nothing deterministic tells a chain
+        // read off this card from one the model made up -- so the message
+        // says what it is and what it is not.
         toast(added > 0
-          ? `${added} new stations proposed, ${after} in all. Review the order and the crossing times, then save.`
+          ? `${added} new stations proposed, ${after} in all — nothing is stored until you save. Check each one is this card's own, in order, with the right crossing times.`
           : `${after} stations refined — nothing added. Review, then save.`,
           "ok");
         showCardWarnings(r);
@@ -483,9 +494,15 @@ function charEditor(c, options = {}) {
       }), refreshed => charEditor(refreshed))
     : null;
 
-  const fillInterior = c && !isChatCard
+  // Offered on BOTH cards, unlike the two sibling fills: those propose a
+  // description and this one proposes a MECHANISM the engine walks bodies
+  // through, and the sheet it has to land in is whichever one this story
+  // reads. Gating it to the reusable card made it inert for all seven
+  // stories it was built for (13 of 116 `chat_chars` rows carry a per-story
+  // sheet, measured 2026-08-25).
+  const fillInterior = c
     ? interiorFillButton(c, () => ({ interior: f.interior.read() }),
-        refreshed => charEditor(refreshed))
+        refreshed => charEditor(refreshed, options), chatId)
     : null;
 
   modal(

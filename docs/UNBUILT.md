@@ -924,15 +924,36 @@ investigation found and did not close.
   dock marker: a per-edge `downstream` flag, or a room-level flow direction.
   Pinned by `tests/test_room_transit_clock.py`.
 - **Every stored card's interior is still empty until somebody runs the
-  fill.** The reader now exists -- `POST /api/characters/{cid}/fill_interior`
-  reads a card's own prose ONCE, at authoring time, and proposes the
+  fill.** The reader now exists on BOTH card surfaces --
+  `POST /api/characters/{cid}/fill_interior` for the reusable card and
+  `POST /api/chats/{cid}/characters/{ch}/fill_interior` for the per-story one
+  -- and reads a card's own prose ONCE, at authoring time, proposing the
   structured chain with its magnitudes; there is still deliberately no
   runtime prose-duration parser, because one is shaped by the phrasings one
-  story happens to use. What remains is that running it is an authoring act:
-  measured read-only 2026-08-25, 0 of the 79 stored sheets (61 characters, 18
-  personas) carry a non-empty `embodiment.interior`, so every live story is
-  byte-identical to before this landing until its author opens the card,
-  presses the button, reviews the stations and saves.
+  story happens to use. What remains is that running it is an authoring act,
+  and it has to be run on the card THIS STORY READS: `scene.active_cast`
+  resolves `chat_chars.sheet` over `characters.sheet`, and measured read-only
+  2026-08-25, 13 of 116 `chat_chars` rows carry a per-story sheet, so a story
+  that has its own card is filled from the story-card editor (Cast -> ✏️
+  card) and a story that does not is filled from the reusable one. 0 of the
+  79 stored sheets (61 characters, 18 personas) carry a non-empty
+  `embodiment.interior`, so every live story is byte-identical to before this
+  landing until its author opens the card the story reads, presses the
+  button, reviews the stations and saves.
+- **A region the ledger names that an authored chain omits is dropped rather
+  than placed.** `materialize_named_stations` gate 5: where the holder's
+  inside is a card-declared chain and the occupant stands mid-way along it, a
+  standing contact naming a region no station matches mints nothing, and
+  `_restation_interior_contact` re-derives the ledger's region from the room
+  the occupant is actually in. It is a SUBTRACTION and the alternative was
+  measured worse -- on a scratch corpus copy with the card filled, the graft
+  chained the omitted region DEEPER than the entry station and walked the
+  occupant outward into it, where she held for fourteen beats -- but the
+  region the beat named is still a fact the engine now discards. THE MISSING
+  FACT IS WHERE IN THE CHAIN IT BELONGS: the card states an order and the
+  ledger states a name, and nothing relates them. The author's own fix today
+  is to add the station to the card, which is why this is a residual rather
+  than a defect; a real one needs a way to say "between these two".
 - **Two read-only Director views lag the floored clock.** A resolved beat
   that asserts no readable time is now charged `UNCLAIMED_BEAT_SECONDS`, and
   three readers of the beat's end clock apply it through
