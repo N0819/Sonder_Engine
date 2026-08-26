@@ -329,7 +329,7 @@ class JapaneseRenderer:
         verdicts = composer.standing_verdicts(
             percepts, prev_standing, prev_described) if player else {}
         presence_leads = player and any(
-            composer._leads_the_beat(
+            composer.leads_the_beat(
                 p, verdicts.get(p.dedupe_key, "first"), prev_standing)
             for p in percepts if p.kind == "presence")
 
@@ -354,7 +354,7 @@ class JapaneseRenderer:
                             and not (p.data or {}).get("force")):
                         continue
                 elif (p.dedupe_key in (prev_standing or ())
-                      and p.kind not in composer._ACTIVE_STANDING_KINDS):
+                      and p.kind not in composer.ACTIVE_STANDING_KINDS):
                     continue
             source_key = str((p.data or {}).get("source_key") or "")
             sentence = _full_stop(self._sentence(p))
@@ -365,21 +365,22 @@ class JapaneseRenderer:
             # partitions.
             leads = player and (
                 p.order_key is not None
-                or composer._leads_the_beat(p, verdict, prev_standing)
+                or composer.leads_the_beat(p, verdict, prev_standing)
                 or (p.kind == "presence" and presence_leads))
             if leads:
-                beat.append((composer._as_beat(p)
+                beat.append((composer.as_beat(p)
                              if p.order_key is None else p, sentence))
             else:
                 background.append((p, sentence))
             if p.kind == "appearance" and source_key:
                 described.add(source_key)
-        if player:
-            changed_env = [x for x in beat if x[0].kind == "environment"]
-            spans = ([x for x in beat if x[0].kind != "environment"]
-                     + changed_env + background)
-        else:
-            spans = beat + background
+        # WHERE the halves sit is the composer's rule, not the pack's. This
+        # adapter spelled it itself and got it wrong: it emitted the beat in
+        # the order it iterated -- standing before events -- so a Japanese
+        # player view opened on the changed pose where English opened on the
+        # act that moved it.
+        spans = (composer.player_view_order(beat + background) if player
+                 else beat + background)
         return RenderedView(
             text="".join(sentence for _, sentence in spans), spans=spans,
             standing_keys=standing_keys, described=described)

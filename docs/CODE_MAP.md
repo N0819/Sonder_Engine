@@ -10,7 +10,7 @@
 | `agents/background.py` | 1189 |  | `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `persist.commit`, `story.character_schema`, `story.scene`, `world.background_claims`, `world.spatial` |
 | `agents/character.py` | 3695 | Private character decision agent. | `agents.common`, `core.db`, `core.frames`, `llm.prompts`, `llm.schemas`, `mind`, `mind.affect`, `mind.memory`, `mind.memory_judge`, `mind.psychology_runtime`, `mind.theory_of_mind`, `story.character_schema`, `story.scene`, `world.gaps`, `world.place_purpose`, `world.spatial`, `world.survival` |
 | `agents/common.py` | 7977 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.scene`, `world`, `world.spatial` |
-| `agents/composer.py` | 2919 |  | `agents.common`, `story.scene`, `world.spatial` |
+| `agents/composer.py` | 2942 |  | `agents.common`, `story.scene`, `world.spatial` |
 | `agents/director.py` | 4005 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial`, `world.survival` |
 | `agents/director_contact.py` | 457 |  | `story.character_schema`, `world.spatial` |
 | `agents/director_evidence.py` | 951 |  | `agents.common`, `agents.director_lingua`, `llm`, `world.spatial` |
@@ -210,13 +210,13 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_render_view_english()` | 2285 | 154 lines |
+| `_render_view_english()` | 2313 | 149 lines |
 | `pose_percepts()` | 1090 | 144 lines |
-| `observations_from_render()` | 2779 | 141 lines |
+| `observations_from_render()` | 2802 | 141 lines |
 | `_pose_referent()` | 828 | 91 lines |
 | `presence_percepts()` | 627 | 89 lines |
-| `_render_episode_english()` | 2580 | 84 lines |
-| `_render_standing()` | 2148 | 77 lines |
+| `_render_episode_english()` | 2603 | 84 lines |
+| `_render_standing()` | 2176 | 77 lines |
 | `_pose_owner_second_person()` | 942 | 76 lines |
 
 ### `agents/director.py`

@@ -249,7 +249,10 @@ for the extension registry, not for this boundary.
 - **"What changed" is computed per observer, never from the scene.** A player
   view leads with the beat and trails with the background
   (`composer.standing_verdicts`, `Design.md` § A view leads with what changed),
-  and a diff of the WORLD is exactly the shape that would leak here. The
+  and a diff of the WORLD is exactly the shape that would leak here. A language
+  pack asks the same public seam and does not spell either half itself:
+  `standing_verdicts`, `leads_the_beat`/`as_beat`/`ACTIVE_STANDING_KINDS` for
+  the classification, and `player_view_order` for where the two halves sit. The
   operands are therefore this observer's admitted percepts and this observer's
   own previous ledger: a subject with no percept produces no verdict and no
   sentence, so a door that opened in a room this mind cannot see is not
