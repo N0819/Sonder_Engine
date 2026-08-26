@@ -2402,6 +2402,23 @@ be read with this beside it; 2.20 notes the separate reason the signal cannot
 fire early in a story (`_RECALL_CONFIDENCE_MIN_BANK = 40`, which the median
 bank does not reach until turn 10).
 
+### 1.79 Four readers spell the same tolerant ledger lookup
+
+`story.attire.entry_for` is the shared casefold-tolerant lookup of a body's
+attire entry, added because `scene.visible_body_text` did a bare `.get(name)`
+and a case-variant identity key therefore found no garment for a dressed body
+— a gate that failed OPEN, delivering the face a covering conceals. Three
+inline copies of the same fallback remain in `agents/common.py` (around the
+`observer_body_regions`, region-coverage and per-body ledger reads). They are
+correct today and independently maintained, which is the same second-copy risk
+`_co_present_company` was just collapsed to remove. Adopting `entry_for` at all
+three is pure subtraction and wants no design decision.
+
+The key is unreliable in the first place because
+`persist.commit_attire._heal_attire_identity_keys` heals on the WRITE path and
+nothing heals on the read path. Healing on read, or canonicalising the key at
+one boundary, would retire all four call sites rather than unify them.
+
 ### 1.78 One authored body field reaches no reader
 
 **Found:** the same beat, asking why the same engine renders one body richly
