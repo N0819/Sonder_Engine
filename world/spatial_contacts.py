@@ -6,8 +6,8 @@ import hashlib
 import re
 
 from world.spatial_containment import (_WHOLE_BODY_PARTS,
-                                 containment_conceals, hiding_holders_of,
-                                 scale_changed_names)
+                                 containment_conceals, enclosure_joins_rooms,
+                                 hiding_holders_of, scale_changed_names)
 from world.spatial_identity import _ci_get, canonical_subject, same_subject
 
 
@@ -698,6 +698,44 @@ def contacts_across_enclosure(scene: dict, report=None) -> list:
     return dropped
 
 
+def _restation_interior_contact(scene, contact, actor_room, target_room):
+    """An interior relation's station is the room the occupant is standing in.
+
+    `target_interior` names the region of the enclosing body the contact is
+    inside. Once that inside is rooms, the region and the room are one fact
+    under two names -- so the room the occupant currently holds is what the
+    ledger must say, in every beat after the one that wrote it.
+
+    THE LEDGER FROZE, MEASURED. In chat 88 the same `target_interior` value
+    stood unchanged from t59 to t67 while the prose moved the occupant
+    steadily deeper; nothing anywhere re-read it, because the value was
+    written once by the op that established the relation and only a `cross`
+    op ever rewrote it. A station the world can move through must be derived
+    from where the body IS, not remembered from where it entered.
+
+    The room's DISPLAY NAME, never its key: this value is read lexically by
+    prose and by the contact ledger's own consumers, and a synthetic room id
+    is not a place anybody can name.
+    """
+    if str(contact.get("relation") or "").strip().casefold() != "interior":
+        return
+    rooms = (scene or {}).get("rooms") or {}
+    if not isinstance(rooms, dict):
+        return
+    for inner, outer in ((actor_room, contact.get("target")),
+                         (target_room, contact.get("actor"))):
+        room = rooms.get(inner)
+        if not isinstance(room, dict):
+            continue
+        parent = str(room.get("parent_entity") or "").strip()
+        if not parent or not str(outer or "").strip():
+            continue
+        if same_subject(scene, parent, str(outer)):
+            contact["target_interior"] = _contact_text(
+                room.get("name") or inner)
+            return
+
+
 def normalize_scene_contacts(scene: dict) -> dict:
     """Contact hygiene, run at merge -- the sibling of normalize_scene_stations.
 
@@ -735,7 +773,25 @@ def normalize_scene_contacts(scene: dict) -> dict:
         if actor_room is None or target_room is None:
             continue
         if actor_room != target_room:
-            continue
+            # SAME ROOM IS NOT THE ONLY WAY TO BE TOUCHING. Once a body that
+            # has taken another body inside is a PLACE, the occupant stands
+            # in a room of their own and the holder stands outside it -- two
+            # different room ids for the two bodies in the world that are
+            # closest of all. Room equality alone therefore severs exactly
+            # the contact that must survive, and the touch channel is the ONE
+            # channel the firewall permits across an enclosure: sever it and
+            # the holder loses its only legitimate account of what it is
+            # holding, which is a mind concluding LESS.
+            #
+            # Strictly the pair. A third party standing in the room the
+            # holder is in is NOT joined to the occupant -- reaching into an
+            # enclosure is relation 'interior' of its own, never a surface
+            # hold, and `contacts_across_enclosure` still says so.
+            if not enclosure_joins_rooms(scene, actor_room, target_room,
+                                         contact["actor"], contact["target"]):
+                continue
+            _restation_interior_contact(scene, contact,
+                                        actor_room, target_room)
         key = _contact_key(contact)
         if _mirror_key(key) in kept:
             continue  # already recorded from the other side
