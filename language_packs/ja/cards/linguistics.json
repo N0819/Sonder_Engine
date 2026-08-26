@@ -4125,6 +4125,11 @@
     }
   },
   "persist.commit_memory": {
+    "_STATION_POSSESSED_BEFORE": {
+      "$type": "regex",
+      "pattern": "(?:\u306e)$",
+      "flags": 32
+    },
     "_SALIENCE_CUES": {
       "$type": "tuple",
       "items": [
