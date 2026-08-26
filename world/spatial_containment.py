@@ -2,7 +2,8 @@
 """Relative scale and enclosure: how big a body is, what encloses it, what that
 hides, and what a size change breaks."""
 
-from world.spatial_barriers import normalize_barrier
+from world.spatial_barriers import (_PASSABLE_BARRIERS, neighbor_map,
+                                    normalize_barrier)
 from world.spatial_identity import _ci_get, _entity_named, room_of, same_subject
 from world.spatial_identity import _unique_entity_keyed, normalize_room_id
 from world.spatial_transit import (_interior_entry_room, _interior_rooms_of,
@@ -867,6 +868,12 @@ def _mint_authored_interior(scene: dict, eid: str, spec) -> bool:
             "parent_entity": eid,
             "adjacent": [],
         }
+        # HOW LONG THIS STATION TAKES TO CROSS, when the card said. Absent
+        # means the place imposes no time and holds its occupant, which is
+        # every room's behaviour before this field existed.
+        crossing = room_transit_seconds(station)
+        if crossing is not None:
+            room["transit_seconds"] = crossing
         if not made:
             # The way in is DERIVED, never authored: `apply_transit_dock_edges`
             # reads this marker to decide which station the doorway lands on.
@@ -1105,6 +1112,530 @@ def place_enclosed_bodies(scene: dict) -> list:
         contained.pop(subject, None)
         placed.append(subject)
     return placed
+
+
+# ---------------------------------------------------------------------------
+# A PLACE MAY TAKE TIME TO CROSS, AND AN OCCUPANT CROSSES IT ON THE CLOCK.
+#
+# Advancing through a passage is a deterministic consequence of elapsed time,
+# not a Director decision and not a player prompt. Measured read-only against
+# the author's corpus 2026-08-25 at 49ea899: chat 89 entered a holder's
+# interior at turn 54 and was still in the same station at turn 62 -- nine
+# beats -- while the sibling chat 88, on identical entry, crossed three
+# stations in four turns because its player happened to keep feeding beats the
+# Director could read continuation into. That is luck, not mechanism.
+#
+# DERIVED AT MERGE, NOT SCHEDULED. Position inside a passage is a pure
+# function of (entry stamp, simulation clock), recomputed here exactly the way
+# `infer_body_enclosures`, `place_enclosed_bodies`, `derive_contained_positions`
+# and `materialize_enclosure_interiors` already recompute their facts. Reroll,
+# branch, checkpoint restore and replay are correct by construction, because
+# all three inputs are already snapshotted together -- which a scheduled
+# arrival event would have had to earn per kind, while also opening a second
+# authority over `positions` outside the merge, where none of the station,
+# pose and contact hygiene that hangs off a room ever re-runs.
+#
+# WHAT DECIDES A CONDUIT FROM A CHAMBER: THE MAGNITUDE IS THE DECLARATION.
+# A room that declares `transit_seconds` is crossed in exactly that many story
+# seconds, and dwelling past it is impossible by construction; a room that
+# declares none holds its occupant until the story moves them. No `role` enum
+# ships, and that is a judgement rather than an omission -- an enum saying
+# "conduit" with no magnitude gives the crosser nothing to cross, which is a
+# declared-and-unreferenced field wearing a syntax, and a threshold-derived
+# split ("short means conduit") would have to invent a constant no fact
+# supplies. Three precedents in this tree already decide the same way:
+# `world.mechanics._tick_interval` makes a condition act SOLELY by carrying a
+# parseable positive interval, `_schedule_new_arrivals` schedules SOLELY on a
+# parseable positive eta, and news latency derives SOLELY when none is stated.
+# A chamber is therefore a large magnitude or no magnitude at all: a place
+# that kneads its occupant for hours authors 25200 and IS crossed, slowly.
+
+# What an unauthored station costs to cross, while the ledger says a crossing
+# is running. Ordinary beats measured 2026-08-25 are p25 10s / median 25s, so
+# a minute is two to six beats of dwelling before the engine acts -- against
+# the nine beats chat 89 spent in a place its own card measures in seconds.
+#
+# GATED ON THE LEDGER'S OWN CLAIM, NOT ON THE SHAPE OF THE CHAIN. The
+# tempting structural rule -- "you do not live in the middle of a chain, so
+# every non-terminal station marches" -- is wrong in the expensive direction,
+# and the corpus says so: chat 88's standing interior contact reads
+# `motion: "settled"` while chats 89 and 90 read `motion: "moving"`. Under the
+# structural rule, the moment 88's Director grafts one more station its
+# occupant is marched out of a place its card measures in HOURS, in sixty
+# seconds -- the reported defect inverted at the same three orders of
+# magnitude. The ledger already distinguishes them, per occupant, per beat, in
+# the engine's own two-word vocabulary, so the ledger decides.
+_UNSTATED_CROSSING_SECONDS = 60.0
+
+# How many stations one merge may carry a body through. A long skip should
+# still land somewhere reachable rather than teleport to the deep end of an
+# arbitrarily long chain, and `_MAX_INTERIOR_STATIONS` is the chain's own
+# ceiling, so this can never silently truncate a crossing that had somewhere
+# left to go without the remainder being carried into the next beat.
+_CROSSING_HOP_CAP = _MAX_INTERIOR_STATIONS
+
+
+def room_transit_seconds(room):
+    """How long this PLACE takes to cross, in story seconds, or None.
+
+    A property of the place, in the scene's own room vocabulary, so one field
+    serves a throat, a chute, a lift shaft, a mine gallery and a river reach
+    alike. Positive and finite or it is not a magnitude: `_tick_interval`
+    already states the doctrine this follows -- a field filled in with nothing
+    is not a cadence -- and it was earned on 48 of 131 corpus rows spelling
+    `0` where they meant "unset".
+    """
+    if not isinstance(room, dict):
+        return None
+    raw = room.get("transit_seconds")
+    if raw is None or isinstance(raw, bool):
+        return None
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        return None
+    if value <= 0 or value != value or value in (float("inf"), float("-inf")):
+        return None
+    return value
+
+
+def _onward_room(scene: dict, room_id: str):
+    """The station one step DEEPER than this one, or None.
+
+    ANATOMY-FREE BY CONSTRUCTION. The only order used is "strictly farther
+    from the way in", and the way in is a marker the engine itself writes
+    (`dock_exit`, via `_interior_entry_room`'s precedence) rather than a noun
+    anyone authors. It reads identically for a throat chain, a chute, a duct,
+    a lift shaft and a mine gallery.
+
+    NONE MEANS THE ENGINE REFUSES TO MOVE ANYBODY, and every branch below is
+    a case where no fact in the scene picks a destination:
+
+    * a room with no `parent_entity` -- an exterior conduit has no derivable
+      entry anchor, so there is no "deeper"; this landing's stated bound.
+    * an interior whose entry room cannot be resolved.
+    * the deep end: no strictly-deeper neighbour exists.
+    * a BRANCH: two strictly-deeper neighbours, a grafted topology where the
+      scene states no preference. Guessing one would be invention.
+    * an impassable or shut boundary on the way. `closed_door` is not in
+      `_PASSABLE_BARRIERS`, so a shut door in a lift shaft holds you, and the
+      crossing resumes by itself on the beat something opens it.
+
+    NEVER OUTWARD. Hops are strictly deeper, so leaving stays a declared act
+    -- which `release_declared_departures` already honours -- and the walk is
+    RESTRICTED to the holder's own interior set, which is what makes this pass
+    unable to eject anyone: the exterior room on the far side of the way in is
+    excluded by construction rather than by a check that could be forgotten.
+
+    Re-derived from live topology every merge, so a Director graft or a
+    barrier change is respected mid-crossing.
+
+    The registered residual "Interior passage is undirected" (one-way VALVE
+    passability -- walking OUTBOUND against a passage) is a DIFFERENT fact and
+    is deliberately not consumed here: this derivation needs no new stored
+    fact, and closing that one would not change any answer above.
+    """
+    rooms = (scene or {}).get("rooms") or {}
+    room = rooms.get(room_id)
+    if not isinstance(room, dict):
+        return None
+    parent = str(room.get("parent_entity") or "").strip()
+    if not parent:
+        return None
+    interior = _interior_rooms_of(scene, parent)
+    if room_id not in set(interior):
+        return None
+    entry = _interior_entry_room(scene, parent)
+    if entry is None:
+        return None
+    inside = set(interior)
+    neighbors = neighbor_map(scene, barriers=_PASSABLE_BARRIERS)
+    # Breadth-first from the way in, over passable edges, inside the holder.
+    dist = {entry: 0}
+    queue = [entry]
+    while queue:
+        current = queue.pop(0)
+        for nxt in sorted(neighbors.get(current) or ()):
+            if nxt in inside and nxt not in dist:
+                dist[nxt] = dist[current] + 1
+                queue.append(nxt)
+    here = dist.get(room_id)
+    if here is None:
+        return None
+    deeper = sorted(nxt for nxt in (neighbors.get(room_id) or ())
+                    if nxt in inside and dist.get(nxt) == here + 1)
+    return deeper[0] if len(deeper) == 1 else None
+
+
+def _interior_contact_rows(scene: dict, occupant: str, holder: str) -> list:
+    """Every standing interior contact row covering this pair, in scene order.
+
+    The same pair test `_declared_interior_region` uses, returning the rows
+    themselves because two callers here need to WRITE them.
+    """
+    want = {str(occupant or "").strip().casefold(),
+            str(holder or "").strip().casefold()}
+    out = []
+    for row in (scene or {}).get("contacts") or []:
+        if not isinstance(row, dict):
+            continue
+        if str(row.get("relation") or "").strip().casefold() != "interior":
+            continue
+        pair = {str(row.get("actor") or "").strip().casefold(),
+                str(row.get("target") or "").strip().casefold()}
+        if want <= pair:
+            out.append(row)
+    return out
+
+
+def _crossing_is_running(scene: dict, occupant: str, holder: str) -> bool:
+    """Does the ledger say a crossing is IN PROGRESS for this pair?
+
+    `settled|moving` is the contact vocabulary's own two words
+    (`_normalize_contact_motion`), written per occupant per beat. THE FIRST
+    STANDING ROW WINS, the rule `_declared_interior_region` already states for
+    the same ledger and the same reason: two rows disagreeing about one pair
+    is the ledger disagreeing with itself, and no fact in the scene breaks the
+    tie, so the answer is the one the scene lists first.
+    """
+    for row in _interior_contact_rows(scene, occupant, holder):
+        return str(row.get("motion") or "").strip().casefold() == "moving"
+    return False
+
+
+def _transit_bound(scene: dict, subject: str, room_id: str, holder: str):
+    """How long `subject` may stay in `room_id` before the clock carries them
+    onward, or None for a place that holds its occupant.
+
+    Two sources, in this order:
+
+    1. AN AUTHORED MAGNITUDE ON THE ROOM WINS ANYWHERE, whatever kind of
+       enclosure it belongs to. The place said how long it takes to cross.
+    2. Otherwise, a station inside a BODY'S interior is bounded ONLY while
+       that occupant's own standing interior contact says the crossing is
+       running. Body-scoped for the same firewall-grounded reason
+       `materialize_enclosure_interiors` gate 3 and `sync_entity_interior_rooms`
+       are: a lift car, a crate or a cargo hold moves nobody by default, and
+       serving them needs the non-body enclosure default first.
+
+    A holder never crosses its own interior: an enclosure standing inside
+    itself is not a crossing, and reading the pair test against one being
+    would answer yes for both slots of the row.
+    """
+    rooms = (scene or {}).get("rooms") or {}
+    room = rooms.get(room_id)
+    authored = room_transit_seconds(room)
+    if authored is not None:
+        return authored
+    if not holder or same_subject(scene, subject, holder):
+        return None
+    eid, entity = _unique_entity_keyed(scene, holder)
+    if not eid or not _is_body_entity(scene, eid, entity):
+        return None
+    if not _crossing_is_running(scene, subject, holder):
+        return None
+    return _UNSTATED_CROSSING_SECONDS
+
+
+def retarget_interior_contacts(scene: dict, occupant: str, holder: str,
+                               station_name: str) -> bool:
+    """Point this pair's standing interior contacts at the station the
+    occupant has just been carried into.
+
+    The region and the room are one fact under two names once a holder's
+    inside is rooms (`_interior_station_hint` rests on exactly that), so a
+    contact still naming the station behind them is a ledger that contradicts
+    the position ledger -- and it is the one `_interior_station_hint` reads to
+    decide where they land on the NEXT merge, which would drag them back.
+
+    `target_part` is BLANKED, which is the cross op's own never-carry rule:
+    omitting the new endpoint means no downstream point is currently touched,
+    and the boundary just crossed must never be carried forward as one.
+    """
+    changed = False
+    for row in _interior_contact_rows(scene, occupant, holder):
+        if str(row.get("target_interior") or "").strip() != station_name:
+            row["target_interior"] = station_name
+            row["target_part"] = ""
+            changed = True
+    return changed
+
+
+def settle_interior_motion(scene: dict, occupant: str, holder: str) -> bool:
+    """Retire a crossing claim nothing is advancing. SUBTRACTION ONLY.
+
+    A crossing the world cannot advance is not running, whatever the ledger
+    says, and the ledger asserting one forever is what kept a Director
+    re-declaring a crossing into the station its occupant was already in
+    (chat 89 turn 62 emitted a crossing from a place into itself). This
+    removes a claim; it never adds one, and it never touches a row that
+    already says `settled`.
+    """
+    changed = False
+    for row in _interior_contact_rows(scene, occupant, holder):
+        if str(row.get("motion") or "").strip().casefold() == "moving":
+            row["motion"] = "settled"
+            changed = True
+    return changed
+
+
+def _holder_of_room(scene: dict, room_id: str) -> str:
+    """The display name of the entity whose interior this room is, or ""."""
+    room = ((scene or {}).get("rooms") or {}).get(room_id)
+    if not isinstance(room, dict):
+        return ""
+    parent = str(room.get("parent_entity") or "").strip()
+    if not parent:
+        return ""
+    return _display_name(scene, parent) or parent
+
+
+def materialize_named_stations(scene: dict, prior_positions=None) -> list:
+    """A standing interior contact naming a region the holder's inside has no
+    room for is a station the story declared and the engine never built. Mint
+    it.
+
+    THE ON-RAMP, and without it the crossing above has no chain to run along
+    in any live story. `place_enclosed_bodies` pops the containment record
+    after the first placement, and `materialize_enclosure_interiors` mints
+    only where there are NO interior rooms yet (its gate 5), so nothing in the
+    tree ever converted a newly named region into a second station. Chat 88's
+    three transitions in four turns went through the rooms channel by luck;
+    every later beat that renamed the region moved nobody.
+
+    PROGRESSION, NEVER ARRIVAL, and `prior_positions` is what tells them
+    apart. A body ENTERING an enclosure names the region it arrives in, and
+    that region is already answered twice over -- `_mint_minimal_interior`
+    names the room it mints from it, and `_interior_station_hint` resolves it
+    against an existing chain, falling back to the way in when it resolves to
+    nothing. Minting there would build a second room for one arrival and put
+    the entry room behind a body that never crossed it. So this fires only
+    for a body that was ALREADY standing in one of this holder's interior
+    rooms BEFORE this merge: the beat named somewhere further in, which is
+    the one reading no existing pass answers. Without the prior ledger
+    (a caller that has none) the pass is a no-op, because it cannot tell the
+    two apart and arrival is the commoner case.
+
+    THE STATION IS CHAINED TO WHERE THE OCCUPANT ALREADY STANDS, joined by
+    `membrane` -- the one barrier a body passes through and nothing sees
+    through, the same default `_mint_authored_interior` uses -- and the
+    occupant is placed in it. That is the smallest claim the ledger entails:
+    the beat said this body is now in a region of that holder which is not the
+    region it was in, so the region is somewhere further along from there.
+
+    FOUR GATES, EACH A SKIP:
+    1. The holder resolves to exactly one entity, is a BODY, and already has
+       interior rooms. No interior yet is `materialize_enclosure_interiors`'s
+       job and it has already run; a non-body is the firewall bound its gate 3
+       states.
+    2. The occupant is standing in one of those interior rooms. A stray row
+       about somebody outside the holder cannot mint anything.
+    2b. The occupant was ALREADY in one of them before this merge -- see
+       PROGRESSION above.
+    3. The region matches no interior room by id or display name, casefolded.
+       A region that resolves is the room they are already in.
+    4. The holder is under `_MAX_INTERIOR_STATIONS` interior rooms. A Director
+       that spells one region two ways cannot build a dungeon out of a
+       renaming spree.
+
+    Measured inert on all 78 stored scenes 2026-08-25: five standing interior
+    contacts name a region with no matching room, and in every one of them the
+    occupant is standing in the holder's EXTERIOR room, so gate 2 skips them
+    all -- the merge's own mint names the same region from the same ledger one
+    step earlier. The exposure is entirely forward.
+
+    Returns the room ids minted. Mutates; idempotent.
+    """
+    rooms = (scene or {}).get("rooms")
+    positions = (scene or {}).get("positions")
+    if not isinstance(rooms, dict) or not isinstance(positions, dict):
+        return []
+    if not isinstance(prior_positions, dict) or not prior_positions:
+        return []
+    minted = []
+    for row in list((scene or {}).get("contacts") or []):
+        if not isinstance(row, dict):
+            continue
+        if str(row.get("relation") or "").strip().casefold() != "interior":
+            continue
+        region = " ".join(str(row.get("target_interior") or "").split())
+        region = region[:_MINTED_INTERIOR_NAME_MAX].strip()
+        if not region:
+            continue
+        holder = str(row.get("target") or "").strip()
+        occupant = str(row.get("actor") or "").strip()
+        if not holder or not occupant or same_subject(scene, occupant, holder):
+            continue
+        eid, entity = _unique_entity_keyed(scene, holder)
+        if not eid or not _is_body_entity(scene, eid, entity):
+            continue                                            # gate 1
+        interior_ids = _interior_rooms_of(scene, eid)
+        if not interior_ids:
+            continue                                            # gate 1
+        here = room_of(scene, occupant)
+        if here not in set(interior_ids):
+            continue                                            # gate 2
+        if _ci_get(prior_positions, occupant) not in set(interior_ids):
+            continue                                            # gate 2b
+        wanted = region.casefold()
+        if any(str(rid).strip().casefold() == wanted
+               or str((rooms.get(rid) or {}).get("name") or "").strip()
+               .casefold() == wanted for rid in interior_ids):
+            continue                                            # gate 3
+        if len(interior_ids) >= _MAX_INTERIOR_STATIONS:
+            continue                                            # gate 4
+        rid = _station_room_id(rooms, eid, region)
+        if not rid:
+            continue
+        rooms[rid] = {
+            "name": region,
+            # A PROSE-FREE STUB, the same `materialize_planned_fringe`
+            # precedent `_mint_minimal_interior` cites: a later declaration
+            # merges description onto it by id.
+            "desc": "",
+            "light": "dark",
+            "parent_entity": eid,
+            "adjacent": [{"to": here, "barrier": "membrane"}],
+        }
+        prior = rooms.get(here)
+        if isinstance(prior, dict):
+            prior.setdefault("adjacent", []).append(
+                {"to": rid, "barrier": "membrane"})
+        _positions_write(positions, occupant, rid)
+        minted.append(rid)
+    return minted
+
+
+def advance_room_transits(scene: dict, now_seconds=None, report=None) -> list:
+    """Carry every occupant of a timed passage onward on the clock.
+
+    A HARD NO-OP WITHOUT A CLOCK. `now_seconds is None` means the caller is
+    merging for some purpose other than living a beat -- a paradox probe, a
+    Director preview, a migration re-merge -- and this pass must leave such a
+    merge byte-identical to what it produced before this landing existed.
+
+    THE STAMP IS THE STATE, and it is derived rather than declared:
+    `scene["room_since"][subject] = {"room", "since"}` records where a body
+    was when the clock last saw it here. It resets whenever the ledger's room
+    differs from the stamped one, which is what makes a DECLARED position beat
+    the derivation automatically -- a body the beat moved starts its new
+    crossing from now -- and what backfills every enclosure that was entered
+    before this landing existed, since the first clocked merge to see them
+    stamps them.
+
+    THE REMAINDER IS CARRIED, never discarded: `since` advances by the bound
+    that was spent, not to `now`. A beat covering an hour therefore crosses as
+    many stations as an hour buys, and the leftover seconds count toward the
+    next one -- which a one-shot scheduled arrival could only have got by
+    chaining events per hop.
+
+    A BOUND REACHED WITH NOWHERE ONWARD REPORTS ONCE AND THEN SUBTRACTS. The
+    engine will not invent a station to deliver anybody into: the world does
+    not contain one, and minting a nameless room per expiry would be exactly
+    the invented anatomy `_mint_minimal_interior` already refuses. What it
+    does instead is say out loud which fact is missing, to the one party that
+    can supply it, and retire the ledger's claim that a crossing is running --
+    because a crossing nothing is advancing is not running. `told` on the
+    stamp keeps every later beat quiet about the same standing situation.
+
+    Returns the subjects moved. Mutates. Idempotent at a fixed clock.
+    """
+    if now_seconds is None:
+        return []
+    try:
+        now = float(now_seconds)
+    except (TypeError, ValueError):
+        return []
+    positions = (scene or {}).get("positions")
+    rooms = (scene or {}).get("rooms")
+    if not isinstance(positions, dict) or not isinstance(rooms, dict):
+        return []
+    notes = report if isinstance(report, list) else []
+    stamps = (scene or {}).get("room_since")
+    stamps = dict(stamps) if isinstance(stamps, dict) else {}
+    moved = []
+
+    for subject in list(positions):
+        here = positions.get(subject)
+        if not isinstance(here, str) or here not in rooms:
+            continue
+        holder = _holder_of_room(scene, here)
+        bound = _transit_bound(scene, subject, here, holder)
+        prior = stamps.get(subject)
+        if not isinstance(prior, dict) or prior.get("room") != here:
+            prior = {"room": here, "since": now}
+        if bound is None:
+            # Not a timed passage for this body. Keep the stamp only while it
+            # says something -- a body standing in an ordinary room needs no
+            # entry time recorded, and writing one for every position would
+            # put the whole cast in the blob.
+            stamps.pop(subject, None)
+            continue
+        stamps[subject] = prior
+        try:
+            since = float(prior.get("since"))
+        except (TypeError, ValueError):
+            since = now
+            prior["since"] = now
+
+        hops = 0
+        while now - since >= bound and hops < _CROSSING_HOP_CAP:
+            onward = _onward_room(scene, here)
+            if onward is None:
+                if not prior.get("told"):
+                    prior["told"] = True
+                    where = _display_name(scene, subject)
+                    place = str((rooms.get(here) or {}).get("name") or here)
+                    if holder:
+                        notes.append(
+                            "%s is past the crossing time of %s inside %s, "
+                            "and that interior declares no station beyond it "
+                            "-- the crossing has been recorded as ended "
+                            "rather than advanced; declare the next station "
+                            "if the passage continues"
+                            % (where, place, holder))
+                    else:
+                        # The stated bound of this landing, said out loud
+                        # rather than silently ignored: an authored crossing
+                        # time on a room that is nobody's interior is READ
+                        # and refused, because nothing outside an enclosure
+                        # supplies a way in to measure "onward" from.
+                        notes.append(
+                            "%s declares a crossing time and the engine "
+                            "cannot derive which way is onward outside an "
+                            "enclosure -- %s was not moved" % (place, where))
+                    if holder:
+                        settle_interior_motion(scene, subject, holder)
+                break
+            _positions_write(positions, subject, onward)
+            since += bound
+            prior["room"] = onward
+            prior["since"] = since
+            prior.pop("told", None)
+            station = str((rooms.get(onward) or {}).get("name") or onward)
+            if holder:
+                retarget_interior_contacts(scene, subject, holder, station)
+            notes.append(
+                "%s was carried onward into %s on the clock after %gs"
+                % (_display_name(scene, subject), station, bound))
+            moved.append(subject)
+            here = onward
+            holder = _holder_of_room(scene, here)
+            bound = _transit_bound(scene, subject, here, holder)
+            hops += 1
+            if bound is None:
+                stamps.pop(subject, None)
+                break
+
+    # Written only while a crossing is live, and popped when none is -- the
+    # `expired_entity_state` pattern and its stated ruling: a scene that is
+    # not mid-crossing carries no such key at all, which is every one of the
+    # 78 stored blobs measured 2026-08-25.
+    if stamps:
+        scene["room_since"] = stamps
+    else:
+        scene.pop("room_since", None)
+    return moved
 
 
 def _interior_counterpart(row: dict, subject: str) -> str:

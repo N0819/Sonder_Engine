@@ -224,6 +224,98 @@ def read_time_diff(prev_elapsed, time_diff):
     return claim, None, refused
 
 
+# What a resolved beat that asserts NO time still costs the story clock.
+#
+# A BEAT HAPPENED. The world is not entitled to stand still because the block
+# that was meant to say how long it took arrived empty: a clock that stops
+# whenever a model forgets a field is a clock the whole engine's windowing
+# reads through -- condition ticks, scheduled events, weather drift, the
+# off-screen epoch, affect decay, strain and belief provenance all compare
+# against it, and every one of them went quiet together.
+#
+# Measured read-only against the author's corpus 2026-08-25 at 49ea899: of
+# 2,614 active non-stale `director_resolve` outputs, 130 (5.0%) assert no time
+# this reader can act on, and 109 of the 130 sit in six chats of one story line
+# (88:24, 89:24, 90:20, 86:15, 87:15, 85:11). Chat 89 turns 58-62 are five of
+# them consecutively: the clock stood at 1098.0 for nine turns while its own
+# Director wrote notes about a transit in progress.
+#
+# TEN SECONDS is the p25 of the 2,479 beats that DO declare a positive
+# duration (p10 5.0, p25 10.0, median 25.0, p75 30.0, p90 45.0, mean 42.1).
+# The quartile rather than the median, on `time_diff_duration`'s own stated
+# doctrine one screen below: "Under-ageing a body is recoverable; ageing it by
+# the whole elapsed history of the story is not." A floor is a guess about a
+# beat that told us nothing, so it takes the cautious end of the distribution
+# it is guessing from.
+UNCLAIMED_BEAT_SECONDS = 10.0
+
+
+def time_diff_claims(time_diff) -> bool:
+    """Did this time block make a claim `read_time_diff` could ACT on?
+
+    Exactly that reader's own `acted` test, extracted so the two can never
+    drift: a parseable `duration_seconds`, or a parseable position under
+    either name the engine uses for one. Everything else -- an absent block,
+    `{}`, `{"display": "later"}`, `{"start_seconds": 1200}` alone,
+    `{"end_seconds": "soon"}` -- claims nothing this engine can move a clock
+    with, and is what `beat_end_elapsed` charges the floor for.
+
+    Silence and a REFUSED claim are deliberately the same answer here. They
+    differ in whether anyone should be warned, which is the caller's business
+    and which `read_time_diff.refused` already answers; they do not differ in
+    what the world did, which is pass.
+    """
+    td = time_diff if isinstance(time_diff, dict) else {}
+    if "duration_seconds" in td:
+        try:
+            float(td.get("duration_seconds") or 0.0)
+            return True
+        except (TypeError, ValueError):
+            pass
+    for key in ("end_seconds", "elapsed_seconds"):
+        if td.get(key) is None:
+            continue
+        try:
+            float(td[key])
+            return True
+        except (TypeError, ValueError):
+            continue
+    return False
+
+
+def beat_end_elapsed(prev_elapsed, time_diff, *, floor=False):
+    """Where the clock stands at the END of a beat. THE ONE PLACE THIS IS
+    COMPUTED.
+
+    Returns ``(elapsed, backwards, refused, floored)`` -- `read_time_diff`'s
+    three answers plus whether this beat was charged
+    `UNCLAIMED_BEAT_SECONDS` for saying nothing.
+
+    ONE HELPER, AND THE REASON IS A CLASS THAT HAS ALREADY BITTEN TWICE.
+    Three separate readers decide what the beat's end clock is for something
+    STORED -- the scene commit writes `simulation_clock`, the memory commit
+    stamps affect decay, strain windows and belief provenance, and the
+    perception mirror merges the scene the narrator composes. When they read
+    the diff themselves they disagreed: first about a beat that ran backwards
+    (`persist/commit_memory` carries that regression's own comment), and then
+    about a beat that claimed a position under a key one of them did not
+    know. A caller that computes its own end clock re-opens exactly that
+    class. Do not.
+
+    `floor` is the caller saying THIS BEAT HAPPENED -- a resolved turn, not an
+    establish. Assertion is the off switch: any claim `time_diff_claims`
+    can read, including `duration_seconds: 0` and a re-asserted current
+    position, turns the floor off completely, so a beat keeps the authority to
+    say no time passed by SAYING it. Only silence and an unreadable claim are
+    charged, and an unreadable claim is charged AND still reported: a refusal
+    that also froze the world was the double defect.
+    """
+    elapsed, backwards, refused = read_time_diff(prev_elapsed, time_diff)
+    if floor and not time_diff_claims(time_diff):
+        return elapsed + UNCLAIMED_BEAT_SECONDS, backwards, refused, True
+    return elapsed, backwards, refused, False
+
+
 def time_diff_display(time_diff):
     """The reader-facing phrase a beat gave its own passage of time, or ""
     when it gave none. `display_advance` is the taught spelling; `display`

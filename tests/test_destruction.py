@@ -137,7 +137,9 @@ def test_destruction_retires_book_and_rooms_and_drops_live_scene(temp_db):
         "SELECT * FROM scheduled_events WHERE chat_id=? AND "
         "kind='news_arrival'", (cid,), one=True)
     assert ev is not None and ev["status"] == "pending"
-    assert ev["due_at"] == 600.0  # clock 0 + latency
+    # clock 0, charged the unclaimed-beat floor for a resolved beat that
+    # declared no time, + latency.
+    assert ev["due_at"] == 620.0
     payload = json.loads(ev["payload"])
     assert payload["audience"] == "Port Authority"
     assert payload["provenance"] == "told"

@@ -614,6 +614,25 @@ def _interior_station_name(item: Any) -> str:
                         or item.get("room") or "").split())
 
 
+def _positive_seconds(value: Any):
+    """A duration in story seconds, or None for anything that is not one.
+
+    Shape only, and deliberately strict: prose ("several seconds"), zero and
+    a negative are all "this station declares no crossing time", which is a
+    different claim from a wrong one and must not be stored as a number.
+    """
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        seconds = float(value)
+    except (TypeError, ValueError):
+        return None
+    if seconds <= 0 or seconds != seconds or seconds in (
+            float("inf"), float("-inf")):
+        return None
+    return seconds
+
+
 def _normalize_interior(value: Any) -> list[dict]:
     """The stations of a body's inside, outermost first. Junk tolerated.
 
@@ -659,6 +678,17 @@ def _normalize_interior(value: Any) -> list[dict]:
             # through and nothing sees through.
             "barrier": " ".join(str(item.get("barrier") or "").split()).casefold(),
         })
+        # HOW LONG THIS STATION TAKES TO CROSS, in story seconds. Kept only
+        # when it parses to a positive finite number, and OMITTED otherwise
+        # rather than written as 0 -- the doctrine
+        # `world.mechanics._tick_interval` states for the same shape of
+        # field: a field filled in with nothing is not a cadence, earned on
+        # 48 of 131 corpus rows spelling `0` where they meant unset. Absent
+        # means the station holds its occupant until the story moves them,
+        # which is every place's behaviour before this field existed.
+        crossing = _positive_seconds(item.get("transit_seconds"))
+        if crossing is not None:
+            out[-1]["transit_seconds"] = crossing
         if len(out) >= INTERIOR_STATIONS_MAX:
             break
     return out
@@ -2086,6 +2116,24 @@ def character_card_warnings(sheet):
                 "embodiment.interior carries %s. A station with no name is no "
                 "handle anything can reach, so it is dropped \u2014 give every "
                 "station the name the story will call the place." % where)
+        # AUTHORED AS A PLACE, NEVER AS A PASSAGE. A chain of stations with
+        # no crossing time anywhere is a chain nothing advances anyone
+        # along: the engine holds an occupant in each station until the
+        # story moves them by hand, which is exactly the "transit as a state
+        # someone is in rather than a process that runs" this field exists
+        # to end. Silent for a single station, which is a place and not a
+        # passage.
+        if len([1 for item in authored_interior
+                if _interior_station_name(item)]) >= 2 and not any(
+                    isinstance(item, dict)
+                    and _positive_seconds(item.get("transit_seconds"))
+                    is not None for item in authored_interior):
+            warnings.append(
+                "embodiment.interior declares a chain of stations and none "
+                "of them says how long it takes to cross. Without a "
+                "transit_seconds the engine holds an occupant in each "
+                "station until something moves them by hand \u2014 give the "
+                "stations that are CROSSED a crossing time in story seconds.")
         if len(authored_interior) > INTERIOR_STATIONS_MAX:
             warnings.append(
                 "embodiment.interior declares %d stations; only the first %d "

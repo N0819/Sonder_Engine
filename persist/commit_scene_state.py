@@ -27,8 +27,8 @@ from persist.commit_room_registry import (_apply_room_registry,
                                   _refresh_relocated_location,
                                   dedup_minted_rooms, prune_dangling_exits)
 from persist.commit_attire import apply_attire_diff
-from world.mechanics import (clock_elapsed, read_time_diff,
-                             time_diff_display)
+from world.mechanics import (UNCLAIMED_BEAT_SECONDS, beat_end_elapsed,
+                             clock_elapsed, time_diff_display)
 
 # ---- Scene commit with entity-aware merge ----
 
@@ -353,6 +353,22 @@ def prepare_scene_commit(ctx):
     prev_clock = copy.deepcopy(wget(
         cid, "simulation_clock", {"elapsed_seconds": 0.0, "display": "now"}
     ) or {"elapsed_seconds": 0.0, "display": "now"})
+    # THE BEAT'S END CLOCK, COMPUTED ONCE, HERE, BEFORE ANYTHING READS IT.
+    # Four things downstream in this one function need it and used to get it
+    # from three different places: the clock block below wrote it, the
+    # weather drift re-read whatever the clock block happened to leave, the
+    # transit sweep reads `prepared["clock"]`, and now the scene merge
+    # carries an occupant across a passage on it. Computing it up here is
+    # what lets the merge see the same number the commit stores.
+    #
+    # `floor=` is the resolved-beat test: an establish turn has no beat to
+    # charge, and `world.mechanics.beat_end_elapsed` owns what the charge is
+    # and when it applies.
+    _td_block = diff.get("time") if isinstance(diff.get("time"), dict) else None
+    (_beat_end, _clock_backwards, _clock_refused,
+     _clock_floored) = beat_end_elapsed(
+        clock_elapsed(prev_clock), _td_block,
+        floor=bool(ctx.director_resolve))
     destruction = _prepare_destruction(
         cid, prev_scene, diff, add_warning=ctx.add_warning)
     room_renames = dedup_minted_rooms(
@@ -433,6 +449,10 @@ def prepare_scene_commit(ctx):
 
     _contact_report = []
     _substance_report = []
+    # What a passage did to the bodies crossing it, and what it could not do.
+    # Director-facing rather than a warning: every note it carries names a
+    # fact the world is missing, which only the Director can supply.
+    _crossing_report = []
     # WHO IS ASLEEP, from the ledger that actually answers that question.
     # `merge_scene_with_diff` used to read it off `contained[...]["mode"]`,
     # which is a containment vocabulary (carried/held/pocket/enclosed) and has
@@ -458,7 +478,8 @@ def prepare_scene_commit(ctx):
     sc = merge_scene_with_diff(
         prev_scene, diff, contact_report=_contact_report,
         substance_report=_substance_report.append,
-        sleeping=_sleeping)
+        sleeping=_sleeping,
+        clock_seconds=_beat_end, crossing_report=_crossing_report)
     # Tell the Director how its contact ops were read -- a re-description taken
     # as the same limb moving, a part refused as not being one, an envelopment
     # folded onto the enclosed side. Corrections it can only make if it knows
@@ -479,6 +500,8 @@ def prepare_scene_commit(ctx):
     # write a report at all. A two-character report would have unpacked
     # silently into its own letters, which is the worse half of the same bug.
     for _note in _contact_report:
+        ctx.tell_director(str(_note))
+    for _note in _crossing_report:
         ctx.tell_director(str(_note))
     for _note in _substance_report:
         ctx.add_warning(f"substance: {_note}")
@@ -712,54 +735,70 @@ def prepare_scene_commit(ctx):
         _refresh_relocated_location(sc, prev_scene, diff, ctx)
 
     clock = None
-    if diff.get("time"):
-        td = diff["time"]
-        if isinstance(td, dict):
-            clock = copy.deepcopy(prev_clock)
-            # `read_time_diff` owns what a time block can say and
-            # `clock_elapsed` owns what the stored clock keeps; this block
-            # owns only what the world does about them. The claim may
-            # arrive under either name the engine uses for a clock
-            # position, so the warnings below never name a taught key.
-            claimed, backwards, refused = read_time_diff(
-                clock_elapsed(prev_clock), td)
-            if backwards is not None:
-                ctx.add_warning(
-                    "state_diff.time claimed a clock position that ran "
-                    "backwards (%.0f < %.0f); advanced by its own duration "
-                    "instead" % backwards)
-            elif refused:
-                # A refusal that says nothing is indistinguishable from a
-                # beat that asserted no time, which is how the class this
-                # commit closes stayed invisible for months. `refused` is
-                # non-empty only when the block NAMED a time and the reader
-                # could not act on it -- `{"start_seconds": 1200}` with no
-                # end and no duration, `{"end_seconds": "soon"}`, a
-                # position spelled in a key the vocabulary has no meaning
-                # for. Keyed on whether the reader acted rather than on
-                # whether the number moved: a beat that legitimately
-                # re-asserts the clock's current position must not be
-                # accused of saying nothing, and a beat that was silently
-                # dropped must be reported even when every key it used was
-                # one the prompts teach.
-                ctx.add_warning(
-                    "state_diff.time carried no clock position this engine "
-                    "could read (%s); the clock did not advance"
-                    % ", ".join(refused))
-            clock["elapsed_seconds"] = claimed
-            display = time_diff_display(td)
-            if display:
-                clock["display"] = display
-                sc["time"] = display
-            elif "display_advance" in td:
-                # Present but empty CLEARS the scene's time label, as it
-                # always has -- canonical rows carry "" constantly. The
-                # canonical key wins BY PRESENCE inside `time_diff_display`
-                # too, so an explicit clear is not overridden by the
-                # synonym sitting beside it.
-                sc["time"] = td["display_advance"]
-        elif isinstance(td, str):
-            sc["time"] = td
+    # A BEAT THAT SAID NOTHING STILL HAPPENED, so the clock is built for a
+    # silent resolved beat too -- `_clock_floored` is that beat, and writing
+    # nothing there is the frozen clock this landing closes (chat 89 turns
+    # 58-62: five resolved beats, empty player input, `simulation_clock`
+    # standing at 1098.0 for nine turns).
+    if _td_block is not None or _clock_floored:
+        td = _td_block or {}
+        clock = copy.deepcopy(prev_clock)
+        # `beat_end_elapsed` owns what a time block can say, what a
+        # silent beat costs, and what the stored clock keeps; this block
+        # owns only what the world does about them. Read from the
+        # quadruple computed once at the top of this function, so the
+        # merge that carried bodies across passages, the weather drift,
+        # the transit sweep and this write cannot land on four different
+        # numbers for one beat.
+        claimed, backwards, refused = (
+            _beat_end, _clock_backwards, _clock_refused)
+        if backwards is not None:
+            ctx.add_warning(
+                "state_diff.time claimed a clock position that ran "
+                "backwards (%.0f < %.0f); advanced by its own duration "
+                "instead" % backwards)
+        elif refused:
+            # A refusal that says nothing is indistinguishable from a
+            # beat that asserted no time, which is how the class this
+            # commit closes stayed invisible for months. `refused` is
+            # non-empty only when the block NAMED a time and the reader
+            # could not act on it -- `{"start_seconds": 1200}` with no
+            # end and no duration, `{"end_seconds": "soon"}`, a
+            # position spelled in a key the vocabulary has no meaning
+            # for. Keyed on whether the reader acted rather than on
+            # whether the number moved: a beat that legitimately
+            # re-asserts the clock's current position must not be
+            # accused of saying nothing, and a beat that was silently
+            # dropped must be reported even when every key it used was
+            # one the prompts teach.
+            #
+            # WHAT HAPPENED INSTEAD IS NOW PART OF THE SENTENCE. A refusal
+            # used to end "the clock did not advance", which was true and
+            # was half the defect: the beat was dropped AND the world
+            # froze. The reader is charged the floor now, so the warning
+            # names the number that moved rather than reporting a stop.
+            _tail = ("the beat was charged the unclaimed-beat floor of %gs "
+                     "instead" % UNCLAIMED_BEAT_SECONDS) if _clock_floored \
+                else "the clock did not advance"
+            ctx.add_warning(
+                "state_diff.time carried no clock position this engine "
+                "could read (%s); %s" % (", ".join(refused), _tail))
+        clock["elapsed_seconds"] = claimed
+        display = time_diff_display(td)
+        if display:
+            clock["display"] = display
+            sc["time"] = display
+        elif "display_advance" in td:
+            # Present but empty CLEARS the scene's time label, as it
+            # always has -- canonical rows carry "" constantly. The
+            # canonical key wins BY PRESENCE inside `time_diff_display`
+            # too, so an explicit clear is not overridden by the
+            # synonym sitting beside it.
+            sc["time"] = td["display_advance"]
+    # A time block that is a bare STRING is a scene label and nothing else:
+    # it makes no clock claim, so it never reaches the reader above.
+    if isinstance(diff.get("time"), str):
+        sc["time"] = diff["time"]
 
     # Weather. The Director's own change wins outright; otherwise the sky
     # drifts on the simulation clock, deterministically and idempotently, so a
