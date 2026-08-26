@@ -19,11 +19,13 @@ from world.spatial_contacts import (apply_contact_ops,
                               normalize_scene_contacts)
 from world.spatial_containment import (
     _clean_containment,
+    advance_room_transits,
     clamp_scale,
     containment_broken_by_scale_change,
     derive_containment_from_contacts,
     derive_contained_positions,
     materialize_enclosure_interiors,
+    materialize_named_stations,
     normalize_scene_containment,
     place_enclosed_bodies,
     release_declared_departures,
@@ -203,7 +205,7 @@ def _merge_room(existing: dict, incoming: dict, room_id=None) -> dict:
 
 # Room fields whose empty value means "unmentioned" rather than "cleared".
 _ROOM_SILENT_WHEN_EMPTY = frozenset({"anchors", "size", "zone", "light",
-                                     "exposure"})
+                                     "exposure", "transit_seconds"})
 
 # Every SceneEntityDef field whose schema default is indistinguishable from
 # "the model did not mention this". A diff carrying one of these cannot be
@@ -1055,7 +1057,17 @@ def merge_scene_with_diff(
     contact_report=None,
     substance_report=None,
     sleeping=(),
+    clock_seconds=None,
+    crossing_report=None,
 ) -> dict:
+    """`clock_seconds` is where the STORY clock stands at the end of this
+    beat, and it is what lets a passage carry its occupants onward (see
+    `advance_room_transits`). None is a hard no-op for that pass: a caller
+    merging for a purpose other than living a beat -- a paradox probe, a
+    Director preview, a migration re-merge -- gets exactly the scene this
+    function produced before crossings existed. `crossing_report` collects
+    Director-facing notes about what a passage did, and what it could not do
+    for want of a fact only the Director can supply."""
     diff = diff or {}
     # A scene is a nested mutable structure.  A shallow copy allowed
     # downstream normalization and deterministic backstops (zone stamping,
@@ -1236,6 +1248,15 @@ def merge_scene_with_diff(
             or str(record.get("target") or "").strip().casefold()
             not in folded_names
         ]
+        # A body that has left the scene is crossing nothing.
+        if isinstance(merged.get("room_since"), dict):
+            merged["room_since"] = {
+                name: stamp
+                for name, stamp in merged["room_since"].items()
+                if str(name).strip().casefold() not in folded_names
+            }
+            if not merged["room_since"]:
+                merged.pop("room_since", None)
 
     occupied_rooms = set(merged["positions"].values())
 
@@ -1412,6 +1433,17 @@ def merge_scene_with_diff(
     _contacts_before_ops = copy.deepcopy(merged.get("contacts") or [])
     apply_contact_ops(merged, diff.get("contact_ops"),
                       report=contact_report)
+    # BEFORE contact hygiene, and that is the whole of it. A beat that names
+    # a region of an enclosure its inside has no room for has DECLARED a
+    # station, and `_restation_interior_contact` -- one line below, inside
+    # `normalize_scene_contacts` -- re-derives `target_interior` from the
+    # room the occupant currently stands in. So the newly named region
+    # survives for exactly the span between these two calls, and a `cross`
+    # op naming anything the world does not already contain was erased here
+    # every beat, silently. Chat 89 turn 62 emitted a crossing into the
+    # station its occupant was already in for that reason.
+    materialize_named_stations(
+        merged, prior_positions=(scene or {}).get("positions"))
     normalize_scene_contacts(merged)
 
     # Contact actions ride standing contacts: apply AFTER contacts are settled
@@ -1448,6 +1480,17 @@ def merge_scene_with_diff(
     # and containment is the authoritative side (the ground
     # `_contained_inversion` already defers on), so contact yields.
     contacts_across_enclosure(merged, report=contact_report)
+
+    # TIME INSIDE A PLACE, and this slot is chosen against the real ordering
+    # rather than for convenience. Contact and containment are BOTH final by
+    # here -- `derive_containment_from_contacts` can still mint a record just
+    # above, and re-runs the placement passes inside its own branch -- so this
+    # reads settled positions and may legitimately rewrite the settled
+    # contact. And it is BEFORE station hygiene, so `derive_scene_stations`
+    # and `normalize_scene_stations` below prune a carried body's stale
+    # in-room anchor in the SAME merge; a mover written from outside this
+    # function would keep an anchor pinned to the room it left.
+    advance_room_transits(merged, clock_seconds, report=crossing_report)
 
     # Within-room position, last of all. Contact is settled by now, and contact
     # is what the derivation reads: a hand on the quilt is a body at the bed.

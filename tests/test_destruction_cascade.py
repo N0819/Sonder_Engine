@@ -255,11 +255,22 @@ def test_news_latency_derived_from_book_graph_distance(temp_db):
             "SELECT * FROM scheduled_events WHERE chat_id=? AND "
             "kind='news_arrival'", (ids["chat"],))
     }
+    # MEASURED AS LATENCY, not as an absolute due time. What this test is
+    # about is hop distance -- near regions hear sooner -- and a due time is
+    # `clock + latency`, so pinning the absolute number silently pinned the
+    # clock at zero as well. It no longer stands at zero: these beats
+    # declare no time and a resolved beat that declares none is charged the
+    # unclaimed-beat floor. Subtracting the clock the beat actually
+    # committed says what the test means.
+    now = float(temp_db.wget(ids["chat"], "simulation_clock",
+                             {}).get("elapsed_seconds") or 0.0)
     # kingdom: region-canon-kingdom = 2 hops; capital: +1 = 3 hops.
-    assert due["The Harbor District burned"] == 2 * NEWS_HOP_LATENCY_SECONDS
-    assert due["The kingdom's port is gone"] == 3 * NEWS_HOP_LATENCY_SECONDS
-    assert due["A light went out"] == NEWS_UNREACHABLE_LATENCY_SECONDS
-    assert due["Signal flash: port lost"] == 60.0
+    assert due["The Harbor District burned"] - now == \
+        2 * NEWS_HOP_LATENCY_SECONDS
+    assert due["The kingdom's port is gone"] - now == \
+        3 * NEWS_HOP_LATENCY_SECONDS
+    assert due["A light went out"] - now == NEWS_UNREACHABLE_LATENCY_SECONDS
+    assert due["Signal flash: port lost"] - now == 60.0
 
 
 def test_distant_region_unaware_until_news_arrives(temp_db):

@@ -375,7 +375,13 @@ def test_next_tick_initializes_on_one_turn_and_advances_on_the_next(temp_db):
     commit_scene(ctx1, 0, prepared=prepared1)
     row = temp_db.q("SELECT * FROM world_conditions WHERE chat_id=?",
                     (cid,), one=True)
-    assert row["next_tick"] == 1015.0
+    # RE-EARNED. Turn 1 is a RESOLVED beat carrying no time block at all, so
+    # it is charged `UNCLAIMED_BEAT_SECONDS` and the clock stands at 1010.0
+    # when the cadence is scheduled: 1010 + 15. Before the floor this beat
+    # left the clock at 1000.0, which is precisely the class the floor
+    # closes -- a cadence driven by a clock that stops whenever a model
+    # forgets a field never comes due.
+    assert row["next_tick"] == 1025.0
     assert r1["ticked"] == 1
     assert temp_db.wget(cid, "scene", {})["vitals"]["Mara"]["air"] == 1.0
 
@@ -386,10 +392,13 @@ def test_next_tick_initializes_on_one_turn_and_advances_on_the_next(temp_db):
     commit_scene(ctx2, 0, prepared=prepared2)
     row = temp_db.q("SELECT * FROM world_conditions WHERE chat_id=?",
                     (cid,), one=True)
-    assert row["next_tick"] == 1075.0            # 1015, 1030, 1045, 1060
+    assert row["next_tick"] == 1070.0            # 1025, 1040, 1055, 1070
     assert r2["ticked"] == 1
     sc = temp_db.wget(cid, "scene", {})
-    assert abs(sc["vitals"]["Mara"]["air"] - 0.8) < 1e-9
+    # Three ticks due in the window (1025, 1040, 1055) rather than four:
+    # the cadence starts one floored beat later, and the tick count follows
+    # the clock rather than the other way round.
+    assert abs(sc["vitals"]["Mara"]["air"] - 0.85) < 1e-9
     assert any("the water is still rising" in n
                for n in temp_db.wget(cid, "engine_notices", []))
 

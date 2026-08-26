@@ -756,7 +756,16 @@ class TestEveryClockReaderSharesTheMonotonicRule:
 
         from persist import commit
         body = inspect.getsource(commit.prepare_memory_commit)
-        assert "_monotonic_elapsed(_clock, _time_diff)" in body
+        # The spelling gained the floor flag when a silent beat started
+        # costing the clock: this seam stamps affect, strain and belief
+        # windows, so it must charge exactly what the scene commit charges
+        # or a story's psychology runs ten seconds behind its world on
+        # every timeless beat (130 of 2,614 resolved turns, measured
+        # 2026-08-25). The pin's intent is unchanged -- one helper, no
+        # local arithmetic.
+        assert "_monotonic_elapsed(" in body
+        assert "_clock, _time_diff" in body
+        assert "floor=" in body
         assert 'get("end_seconds"' not in body
 
 

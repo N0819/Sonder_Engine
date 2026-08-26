@@ -495,15 +495,20 @@ def prepare_memory_commit(ctx, *, scene=None):
     ) or {}
     _time_diff = ((res.get("state_diff") or {}).get("time")
                   if isinstance(res.get("state_diff"), dict) else None)
-    if isinstance(_time_diff, dict):
-        # The same monotonic read as the scene commit's, from the same
-        # helper. This site read the raw `end_seconds` for two releases
-        # after the clock itself was guarded, so a backwards beat stamped
-        # affect decay, strain windows and belief provenance with a clock
-        # the scene commit had just refused to store.
-        _clock_seconds, _ = _monotonic_elapsed(_clock, _time_diff)
-    else:
-        _clock_seconds = float(_clock.get("elapsed_seconds") or 0.0)
+    # The same monotonic read as the scene commit's, from the same helper.
+    # This site read the raw `end_seconds` for two releases after the clock
+    # itself was guarded, so a backwards beat stamped affect decay, strain
+    # windows and belief provenance with a clock the scene commit had just
+    # refused to store.
+    #
+    # UNCONDITIONALLY, and the guard that used to stand here IS the case it
+    # was hiding. `if isinstance(_time_diff, dict)` sent every beat whose
+    # time block was absent -- 130 of 2,614 resolved turns, measured
+    # 2026-08-25 -- to the raw previous clock, which is precisely the beat
+    # the floor exists to charge. `read_time_diff` has always tolerated a
+    # non-dict, so the guard bought nothing and cost the silent beat.
+    _clock_seconds, _ = _monotonic_elapsed(
+        _clock, _time_diff, floor=bool(ctx.director_resolve))
 
     # Loop-invariant inputs to the place-claim rekey below, hoisted: the scene
     # rooms, the cast roster, and the persona do not change while this loop

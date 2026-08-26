@@ -20,6 +20,7 @@ from story.character_schema import (
     persona_senses,
 )
 from core.db import q, wget
+from world.mechanics import clock_elapsed
 from story.scene import (
     NON_AWAKE_GATED,
     active_disguises,
@@ -2184,7 +2185,21 @@ def perception_outcome(ctx, nonce):
     prev_scene = sc
     substance_events = resolve_substance_ops(
         prev_scene, diff.get("substance_ops"))
-    sc = merge_scene_with_diff(sc, diff)
+    # THE SAME END-OF-BEAT CLOCK THE COMMIT WILL STORE, computed from the same
+    # stored clock and the same diff through the one helper that owns it. A
+    # passage carries its occupants onward on that clock inside the merge, so
+    # a mirror merged without it would compose the beat from the room a body
+    # has already left -- the same commit-equality this stage's own
+    # `dedup_minted_rooms` comment demands, for the same reason. No crossing
+    # report: the notices belong to the commit alone, which is the only side
+    # that speaks to the Director.
+    from world.mechanics import beat_end_elapsed
+
+    _td = diff.get("time") if isinstance(diff.get("time"), dict) else None
+    _beat_end, _b, _r, _floored = beat_end_elapsed(
+        clock_elapsed(wget(chat["id"], "simulation_clock", {}) or {}),
+        _td, floor=bool(res))
+    sc = merge_scene_with_diff(sc, diff, clock_seconds=_beat_end)
     # Attire is commit-owned and intentionally absent from spatial's generic
     # merge. Preview the exact same canonicalized/region-derived result commit
     # will persist, on copies, before any observer-specific body projection.

@@ -1320,6 +1320,45 @@ class RoomDef(LenientModel):
     # intimate as a wardrobe. Survived until now purely by the same accident
     # `anchors` did.
     size: Optional[str] = None
+    # How long this place takes to CROSS, in story seconds. A room that
+    # declares one carries its occupants onward on the simulation clock
+    # (world.spatial_containment.advance_room_transits); a room that
+    # declares none holds them until the story moves them, which is every
+    # room's behaviour before this field existed. Declared here for the same
+    # reason `zone`, `light`, `exposure`, `anchors` and `size` are -- the
+    # validation round-trip drops what it does not declare, so a specialist
+    # grafting or repairing a crossing time would have it stripped before
+    # any reader saw it. Optional-None, not 0.0, so `exclude_none` keeps
+    # silence silent and a room the Director merely echoes cannot demote a
+    # conduit to a chamber.
+    transit_seconds: Optional[float] = None
+
+    # A PROSE MAGNITUDE MUST NOT COST THE BEAT. Left undefended, `"a few
+    # seconds"` raises `float_parsing` and the whole state_diff fails
+    # validation -- the same class `_coerce_candidate_response` exists for,
+    # where rejecting one badly typed field lost the entire turn and the
+    # only signal was a type error naming a field the author never sees.
+    # Unreadable heals to None, which is exactly "this place declares no
+    # crossing time"; the reader
+    # (`world.spatial_containment.room_transit_seconds`) refuses the same
+    # set independently, so the two agree without either trusting the other.
+    _coerce_transit = validator(
+        "transit_seconds", pre=True, allow_reuse=True
+    )(lambda cls, value: _positive_float_or_none(value))
+
+
+def _positive_float_or_none(value):
+    """A duration in story seconds, or None for anything that is not one."""
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        seconds = float(value)
+    except (TypeError, ValueError):
+        return None
+    if seconds <= 0 or seconds != seconds or seconds in (
+            float("inf"), float("-inf")):
+        return None
+    return seconds
 
 # The macro-world declarations that lived here and in five other sections are
 # gone -- twenty-nine models reachable from no entry in SCHEMA_MAP, no other
