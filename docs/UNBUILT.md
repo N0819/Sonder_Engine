@@ -880,19 +880,29 @@ investigation found and did not close.
   in both directions, correctly) and is told nothing about what is in there
   that is not a body. The fix is a percept for the objects of an interior room,
   not a widening of this one function.
-- **A body with no authored or declared interior does not become one.** The
-  handoff is conditional by design -- topology is authored content, and
-  auto-minting a single fallback room on every `mode: interior` record would
-  change behaviour for every existing scene that expresses an ordinary partial
-  enclosure as containment (the ledger-form contract
-  `tests/test_body_enclosure_channels.py` holds). So the two producers are the
-  spatial specialist's `rooms` channel (judgment, now prompted for it) and
-  nothing else. A CARD-authored interior -- an `embodiment.interior` section
-  with stations, barriers and an entry, materialized deterministically at
-  commit when an enclosure is actually active -- is the deterministic producer
-  that would make this work without a model remembering: generic place
-  topology, usable by any body, vehicle or structure a card describes.
-  Deferred whole, with the editor UI (`static/js/components.js`) beside it.
+- **A card interior has no editor widget.** `embodiment.interior` is
+  authorable by native import, by AI generation and reinterpretation (the
+  `interior_note` fragment), and by hand-edited card JSON -- but there is no
+  field for it in the character editor beside Extra body parts
+  (`static/js/components.js` `fExtraParts`). Narrowed rather than deferred
+  whole, on a verified basis: `carryUnpresentedFields`
+  (`static/js/editors.js`) preserves un-widgeted sheet keys through both save
+  sites, so an authored interior is not destroyed by an ordinary card edit --
+  it is only invisible to the author who did not write it.
+- **A persona cannot author an interior.** `stamp_authored_interiors` walks
+  the CAST, and a player persona is not in it, so the field is deliberately
+  absent from `default_persona_data`/`normalize_persona_data` and has no
+  persona accessor -- a field with no reader is what `llm/schemas.py` deleted
+  29 models over. `tests/test_card_interior_spec.py` pins the absence, so a
+  reader cannot appear without the field appearing with it.
+- **A non-body holder never gets an engine-minted interior.** Not a taxonomy
+  preference: `sync_entity_interior_rooms` and `infer_body_enclosures` are
+  both body-scoped, so a minted crate or lift-car interior is never indexed
+  and never defaulted opaque, `apply_transit_dock_edges` derives an
+  `open_door`, and an occupant `containment_hides` was concealing becomes one
+  visible from the room outside -- information EXPANSION. Serving a container
+  the same way needs the non-body enclosure default first, which is its own
+  landing with the bullet above it.
 - **Interior passage is undirected.** Interior stations connect by `membrane`
   in both directions, because the barrier vocabulary has no directed-passage
   value: `one_way_window`'s asymmetry is SIGHT only, and `neighbor_map`
@@ -915,6 +925,11 @@ investigation found and did not close.
 - **The occupied-body-is-a-place clause is English-only.** `language_packs/en`
   carries it in the spatial specialist's `rooms` chunk; the `ja` pack keeps
   the old text, so a Japanese story's specialist is not told it owns this.
+  The card-side `interior_note` fragment is NOT in this class and cannot be:
+  the pack loader checks every story pack's `system_prompts` card against
+  English key by key, so an EN-only fragment fails the `ja` pack's load
+  outright -- measured 2026-08-25. Both packs carry it, and the Japanese copy
+  is a model draft like the rest of that pack.
 - **Observation metadata is computed and consumed by nothing.** `intensity`,
   `suddenness`, `ambiguity` and `directed_at_self` are re-derived from the
   scrubbed view for every atom, cost tokens on every character payload, and

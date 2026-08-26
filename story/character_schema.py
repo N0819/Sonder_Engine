@@ -508,6 +508,17 @@ EXTRA_PART_ASPECTS = ("front", "back", "top", "underside", "left", "right",
                       "sides")
 EXTRA_PART_COUNT_MAX = 12
 
+# A body whose inside the story can be moved through declares its stations
+# here, outermost first. Eight is a cap rather than a shape: past it a "place"
+# is a dungeon somebody wrote into an appearance field, and a dungeon belongs
+# to the room channel. `world/spatial_containment.py` carries its own copy of
+# this bound for a spec that reached the scene by some other route -- this one
+# is what the author is held to and what `character_card_warnings` reports.
+INTERIOR_STATIONS_MAX = 8
+# A room NAME is a handle prose says out loud, not a paragraph: a hundred-word
+# name matches nothing when somebody says "go deeper" and reads as nothing.
+INTERIOR_NAME_MAX = 60
+
 # Where a part goes when the author did not say: an authoring default in the
 # attire.region_of spirit (a guess visible in the editor, recoverable), NEVER
 # an identity fold -- spatial.py's ban on body-part synonym tables is about
@@ -587,6 +598,72 @@ def _normalize_extra_parts(value: Any) -> list[dict]:
     return out
 
 
+def _interior_station_name(item: Any) -> str:
+    """The name an authored interior station carries, or "".
+
+    One definition, because two readers ask it: `_normalize_interior` drops a
+    station that has none, and `character_card_warnings` says so. A warning
+    that disagreed with the normalizer about what counts as a name would be
+    worse than no warning at all.
+    """
+    if isinstance(item, str):
+        return " ".join(item.split())
+    if not isinstance(item, dict):
+        return ""
+    return " ".join(str(item.get("name") or item.get("station")
+                        or item.get("room") or "").split())
+
+
+def _normalize_interior(value: Any) -> list[dict]:
+    """The stations of a body's inside, outermost first. Junk tolerated.
+
+    A LINEAR CHAIN, not a graph. The first station is where the derived way in
+    lands; every later one is joined to the one before it. That is enough to
+    say what an inside IS, and a branching inside belongs where branching
+    topology already lives -- the spatial specialist's `rooms` channel, which
+    merges onto these by room id.
+
+    SHAPE ONLY. `light` and `barrier` are world vocabulary and are resolved
+    once at mint (`world.spatial_containment.materialize_enclosure_interiors`)
+    rather than here, so this module keeps its shape as a card schema with no
+    dependency on the spatial package. A bare string is a station with
+    everything else defaulted, matching how every sibling list field reads
+    leniency; a nameless entry is dropped, because a room with no name is no
+    handle for anything to reach.
+    """
+    if isinstance(value, dict):
+        # {"Entry Passage": {...}} -- the keyed spelling a model plausibly
+        # writes. Insertion order is the chain order.
+        value = [dict(v, name=k) if isinstance(v, dict) else k
+                 for k, v in value.items()]
+    if not isinstance(value, (list, tuple)):
+        return []
+    out = []
+    for item in value:
+        name = _interior_station_name(item)
+        if not name:
+            continue
+        if isinstance(item, str):
+            item = {"name": item}
+        if not isinstance(item, dict):
+            continue
+        out.append({
+            "name": name[:INTERIOR_NAME_MAX],
+            "desc": " ".join(str(item.get("desc")
+                                 or item.get("description") or "").split())[:400],
+            "light": " ".join(str(item.get("light") or "").split()).casefold(),
+            # The passage between this station and the one BEFORE it. Empty on
+            # the first, whose way in is derived from the body rather than
+            # authored, and empty anywhere the author did not say -- the mint
+            # supplies the default, which is the one barrier a body walks
+            # through and nothing sees through.
+            "barrier": " ".join(str(item.get("barrier") or "").split()).casefold(),
+        })
+        if len(out) >= INTERIOR_STATIONS_MAX:
+            break
+    return out
+
+
 def default_character_data(name: str = "Unnamed") -> dict:
     result = {
         "identity": {
@@ -618,6 +695,12 @@ def default_character_data(name: str = "Unnamed") -> dict:
             "latent": [],
             # Structured extra body parts -- see _normalize_extra_parts.
             "extra_parts": [],
+            # The stations of this body's inside, outermost first, for a body
+            # the story can move another body through. Empty on every ordinary
+            # card, and empty is not a gap: the engine derives a one-room floor
+            # from the enclosure record itself, so an unauthored inside still
+            # exists the moment one is standing.
+            "interior": [],
             "interoception": {
                 "acuity": 0.5,
                 "pain_sensitivity": 0.5,
@@ -1115,6 +1198,8 @@ def normalize_character_data(value: dict) -> dict:
         result["embodiment"]["interoception"] = interoception
         result["embodiment"]["extra_parts"] = _normalize_extra_parts(
             result["embodiment"].get("extra_parts"))
+        result["embodiment"]["interior"] = _normalize_interior(
+            result["embodiment"].get("interior"))
         stress = result["initial_state"].get("stress")
         if not isinstance(stress, dict):
             stress = {}
@@ -1174,6 +1259,7 @@ def normalize_character_data(value: dict) -> dict:
             },
             "latent": copy.deepcopy(value.get("latent_capabilities") or []),
             "extra_parts": _normalize_extra_parts(value.get("extra_parts")),
+            "interior": _normalize_interior(value.get("interior")),
             "interoception": {
                 "acuity": 0.5, "pain_sensitivity": 0.5,
                 "fatigue_sensitivity": 0.5, "pleasure_sensitivity": 0.5,
@@ -1529,6 +1615,21 @@ def character_extra_parts(sheet: dict) -> list[dict]:
         normalize_character_data(sheet).get("embodiment", {}).get(
             "extra_parts", [])
     )
+
+
+def character_body_interior(sheet: dict) -> list[dict]:
+    """The stations of this body's inside, outermost first.
+
+    Named for the BODY, because `interior` alone is already taken in this
+    engine by the mind's interior (`cstate.interior`, `effective_drive`'s
+    second argument) and the two have nothing to do with each other. Read live
+    from the card like senses and extra parts, so a sheet edit changes the
+    topology without a migration, and a sheet without the section normalizes
+    to [] -- which leaves the engine's own one-room floor in charge.
+    """
+    return copy.deepcopy(
+        normalize_character_data(sheet).get("embodiment", {}).get(
+            "interior", []))
 
 
 def character_abilities(sheet: dict) -> list[dict]:
@@ -1969,6 +2070,28 @@ def character_card_warnings(sheet):
             "but whatever produced this sheet is not writing booleans."
             % (simulation.get("offscreen_agent"),)
         )
+    # AUTHORED AND DROPPED. A station with no name is no handle -- nothing can
+    # route to it, so `_normalize_interior` drops it -- and an author who typed
+    # a description into it has every reason to think the room exists.
+    authored_interior = (sheet.get("embodiment") or {}).get("interior")
+    if isinstance(authored_interior, (list, tuple)):
+        nameless = [n for n, item in enumerate(authored_interior, start=1)
+                    if not _interior_station_name(item)]
+        if nameless:
+            where = ("a station with no name at position %d" % nameless[0]
+                     if len(nameless) == 1 else
+                     "stations with no name at positions %s"
+                     % ", ".join(str(n) for n in nameless))
+            warnings.append(
+                "embodiment.interior carries %s. A station with no name is no "
+                "handle anything can reach, so it is dropped \u2014 give every "
+                "station the name the story will call the place." % where)
+        if len(authored_interior) > INTERIOR_STATIONS_MAX:
+            warnings.append(
+                "embodiment.interior declares %d stations; only the first %d "
+                "are built. Put the rest of the topology in the story's rooms "
+                "rather than on the card."
+                % (len(authored_interior), INTERIOR_STATIONS_MAX))
     if _prose_names_a_part(sheet) and not (
             (sheet.get("embodiment") or {}).get("extra_parts")):
         warnings.append(
