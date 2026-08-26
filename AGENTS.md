@@ -275,6 +275,27 @@ for the extension registry, not for this boundary.
   `routes_that_worked`, surfaced to the character as `worked_before`. That is
   the ONLY marker anywhere that says something succeeded rather than that it
   happened; everything else revises a belief by contradiction.
+- **A goal the world has invalidated is closable by the world.**
+  `affect._advance_intent` deliberately never stalls a slow intention below the
+  ceiling, and `nonviable` — the op that closes a goal the world has sealed —
+  can only be emitted by the mind holding the goal, which is exactly the mind
+  that can no longer see it is closed.
+  `affect.settle_intent_world_anchors` (called from `persist/commit_memory.py`
+  after the intent ops and before steering) is the deterministic floor: an
+  active intention that names the other party of a standing interior relation
+  AND the station that relation then stood at becomes ANCHORED to that station;
+  when the relation moves on and settles elsewhere for `WORLD_DRIFT_SETTLE`
+  beats without the text naming the new station, the floor closes the goal with
+  the `nonviable` semantics — status `blocked`, an engine-authored
+  `blocked_why` the character reads in its own intentions payload, revivable by
+  engagement if the world returns. The closing beat steers at full weight, and
+  `project_boundary`'s existing task-closed review invites the successor.
+  Only the CONTAINER's aims are in reach: the contained party may legitimately
+  strive against the passage. Absence of the relation is never evidence, and a
+  station string that changed only because the representation changed is not
+  the world moving — the anchor carries its `source`, and a changed source
+  discards the binding rather than drifting against a stale one. The evidence
+  is the subject's own interoceptive channel, so the firewall loses nothing.
 - **`schemas.LenientModel`** is the base every schema model inherits. It accepts
   a structured value where a field is declared `str`, reducing it to the prose
   inside. Five separate crashes were this one shape, each discarding an entire

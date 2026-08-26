@@ -1283,6 +1283,28 @@ def apply_intent_ops(intentions, ops, turn_idx, evidence_ok, *,
             continue
 
         if kind in ("progress", "block"):
+            # An op that MOVES a goal does not rewrite it, and the silence
+            # about that cost a live story thirteen turns: chat 88 turn 64,
+            # the model tried to repair a goal the world had left behind by
+            # emitting `progress` carrying a rewritten `intent` string. The
+            # rewrite was dropped without a word, so nothing downstream --
+            # not the ledger, not the warning channel, not the author reading
+            # it later -- recorded that the mind had tried. It stays dropped
+            # (that text scores claim_similarity 0.286 against the stored
+            # one, below the _INTENT_SIMILARITY 0.4 fold bound, so even a
+            # similarity-gated rename would have refused it); what changes is
+            # that the attempt is now named, along with the channel that does
+            # accept it -- `add`, which folds a near-duplicate into progress
+            # on the original and forms a successor from anything genuinely
+            # new.
+            claimed = str(op.get("intent") or "").strip()
+            if claimed and claimed != str(target.get("intent") or "").strip():
+                warnings.append(
+                    f"intent {target.get('id')!r}: restated text on a {kind} "
+                    "op ignored -- an op that moves a goal does not rewrite "
+                    "it; a changed aim travels through `add`, which folds a "
+                    "near-duplicate into progress on the original and forms a "
+                    "successor from anything genuinely new")
             if kind == "block":
                 # The world pushing back IS engagement: it moves the goal (down)
                 # and re-opens room above it, so the barren count starts over.
@@ -1346,6 +1368,201 @@ def apply_intent_ops(intentions, ops, turn_idx, evidence_ok, *,
                 f"({turn_idx - last} turns without progress)")
 
     return (result, warnings)
+
+# ---- World-closed intentions ----
+#
+# A goal the world has invalidated must be closable by the world, not only by
+# the mind that can no longer see it is closed.
+#
+# `_advance_intent` above states the other half of this deliberately: "a
+# barren beat below the ceiling counts and warns but does NOT stall,
+# deliberately -- a slow intention is not a stuck one... Closing a goal still
+# needs evidence." That refusal is correct, and this floor is the evidence it
+# asks for, taken from OUTSIDE the mind -- the same posture
+# agents/director_floors.py takes when it reports a waking exit the character
+# could not have narrated for itself. `apply_intent_ops`'s `nonviable` branch
+# already holds the right close verb; what it lacks is a speaker, because the
+# only speaker it accepts is the mind whose goal has quietly stopped being
+# reachable.
+#
+# Provenance (chat 88, char 72, intention i6, "Begin oral route mouth play"):
+# formed turn 46, its named station left behind at turn 54, still `status:
+# "active"` at turn 67 with every want that character generated carrying
+# `serves: "i6"`. The engine DETECTED it and warned four separate times
+# (commit warnings on turns 54, 55, 58 and 64: "progress claimed on a beat
+# that repeated an earlier move"); nothing acted on the warning, because the
+# stall rung only fires AT the ceiling and i6 sat at progress 0.6. At turn 64
+# the model tried to repair itself by restating the intent text on a
+# `progress` op -- which is ignored, so the stored text never changed either.
+#
+# Corpus survey (engine.db read-only, all 329 intentions across the live
+# corpus's 75 state rows, replaying this floor against every committed scene):
+# it closes exactly two, and both are that one intention -- chat 88 i6 at turn
+# 55, one beat after its precondition ended and twelve turns before the
+# measured stuck state, and its sibling branch chat 89 i6 at turn 55, stuck the
+# same way through that branch's last beat. It is silent on the same intention
+# text in branch chats 86 and 87, which ended while the named station was still
+# live; on a two-barren-then-satisfied arc; and on standing intentions idle for
+# the whole 67-turn run.
+WORLD_DRIFT_SETTLE = 2
+
+
+def _names(names_term, text, term):
+    """The caller's matcher, never allowed to raise into a commit."""
+    try:
+        return bool(names_term(text, term))
+    except Exception:
+        return False
+
+
+def _view_source(row):
+    """Which representation this station string came from.
+
+    Two representations of one interior name the same place in different
+    vocabularies -- a free-text ledger station, and the display name of a room
+    the body has been materialized into. A station string that changed only
+    because the representation changed is NOT the world moving, and this is
+    what makes that distinguishable at all: comparing two strings can never
+    recover WHY one of them changed, so the answer must be carried alongside
+    them. Rows that do not say default to the ledger form, so a caller that
+    stamps nothing is internally consistent.
+    """
+    return str(row.get("source") or "ledger").strip().casefold() or "ledger"
+
+
+def settle_intent_world_anchors(intentions, interior_view, turn_idx, names_term):
+    """Close an active intention whose named station the world has left behind.
+
+    `interior_view` is this beat's SETTLED standing interior relations in which
+    the subject is the CONTAINER: rows of {"other", "station", "source"}. Only
+    the container's aims are in reach -- see the caller's
+    `_interior_relations_of` for why the contained side is out of this floor's
+    reach by construction. `names_term(text, term) -> bool` is caller-supplied,
+    on the `evidence_ok` precedent: this module must not import
+    story.character_schema, which imports mind and would close a cycle.
+
+    Passes, over active rows only (closed, dormant and junk rows pass through
+    untouched):
+
+    REBIND -- the text names both the other party and the station they stand
+    at right now, so text and world agree: stamp the anchor and clear all
+    closure bookkeeping. A goal is live where it points.
+
+    REPRESENTATION -- the anchored pair still stands, but no row carries the
+    anchor's `source`. The two station strings are then incomparable, so the
+    anchor is discarded rather than drifted against, and REBIND re-derives one
+    on this or a later beat if the text names the new station. It fails toward
+    silence on purpose: an anchor bound to a free-text station in a chat that
+    later materializes interior rooms would otherwise accumulate drift against
+    a stale string and close a goal the world never closed.
+
+    DRIFT -- the pair stands somewhere the text does not name. After
+    WORLD_DRIFT_SETTLE settled beats the goal closes with the `nonviable`
+    semantics already in this module: status "blocked", an engine-authored
+    `blocked_why` the character reads in its own intentions payload, revivable
+    by engagement (`_revive_intent`) if the world comes back.
+
+    Absence of the relation is not evidence and resets the clock: an
+    unmentioned, retired or ended contact must never close a goal. The error
+    direction is chosen -- a wrong closure costs a character its agency; a
+    missed one costs no more than today already costs.
+
+    Returns (intentions, warnings).
+    """
+    result = [dict(i) if isinstance(i, dict) else i for i in (intentions or [])]
+    warnings: list[str] = []
+    turn_idx = int(_float_or(turn_idx))
+    view = [r for r in (interior_view or [])
+            if isinstance(r, dict) and str(r.get("other") or "").strip()
+            and str(r.get("station") or "").strip()]
+
+    for intent in result:
+        if not isinstance(intent, dict) or intent.get("status") != "active":
+            continue
+        text = str(intent.get("intent") or "")
+        if not text:
+            continue
+
+        rebound = False
+        for row in view:
+            other = str(row["other"]).strip()
+            station = str(row["station"]).strip()
+            if _names(names_term, text, other) and _names(names_term, text, station):
+                intent["world_anchor"] = {"other": other, "station": station,
+                                          "source": _view_source(row),
+                                          "turn": turn_idx}
+                intent.pop("world_drift", None)
+                intent.pop("world_closed", None)
+                rebound = True
+                break
+        if rebound:
+            continue
+
+        anchor = intent.get("world_anchor")
+        if not isinstance(anchor, dict):
+            continue
+        a_other = str(anchor.get("other") or "").strip()
+        a_station = str(anchor.get("station") or "").strip()
+        if not a_other or not a_station:
+            continue
+        rows = [r for r in view
+                if str(r["other"]).strip().casefold() == a_other.casefold()]
+        if not rows:
+            # the clock needs standing positive evidence; absence is none
+            intent.pop("world_drift", None)
+            continue
+        a_source = str(anchor.get("source") or "").strip().casefold()
+        if not any(_view_source(r) == a_source for r in rows):
+            intent.pop("world_anchor", None)
+            intent.pop("world_drift", None)
+            intent.pop("world_closed", None)
+            continue
+        if any(str(r["station"]).strip().casefold() == a_station.casefold()
+               or _names(names_term, text, str(r["station"]).strip())
+               for r in rows):
+            intent.pop("world_drift", None)
+            continue
+
+        drift = int(_float_or(intent.get("world_drift"))) + 1
+        intent["world_drift"] = drift
+        if drift < WORLD_DRIFT_SETTLE:
+            continue
+        current = str(rows[0]["station"]).strip()
+        intent["status"] = "blocked"
+        intent["blocked_turn"] = turn_idx
+        intent["blocked_why"] = (
+            f"the {a_station} this aim names has been left behind -- what "
+            f"stands with {a_other} now is the {current}")
+        closed = intent.get("world_closed")
+        if isinstance(closed, dict):
+            # `_revive_intent` pops only blocked_why/blocked_turn/stalled_turn,
+            # so world_drift and world_closed survive a revival -- which is
+            # what makes this re-close land on the next settled beat. A grind
+            # past a world-closure buys nothing back, and the clock is NOT
+            # restamped, so a grinding model cannot keep a closed goal
+            # steering. Only a REBIND clears the bookkeeping, which a
+            # genuinely returned world triggers by construction: the anchor
+            # station is named in the text.
+            intent["progress"] = _clamp01(_float_or(closed.get("progress")))
+            warnings.append(
+                f"intent {intent.get('id')!r} re-closed by the world: a grind "
+                f"revived it while the standing relation with {a_other} was "
+                f"still at the {current}, not the {a_station} it names")
+        else:
+            intent["world_closed"] = {
+                "turn": turn_idx,
+                "progress": _clamp01(_float_or(intent.get("progress")))}
+            # the beat a goal collapses is the beat it matters most: stamp the
+            # clock so steering_intent_ids scores it at full weight once
+            intent["last_progress_turn"] = turn_idx
+            warnings.append(
+                f"intent {intent.get('id')!r} closed by the world: it names "
+                f"the {a_station} and the standing relation with {a_other} has "
+                f"moved to the {current} -- blocked after "
+                f"{WORLD_DRIFT_SETTLE} settled beat(s)")
+
+    return (result, warnings)
+
 
 # ---- Projects (Tier 1.5) ----
 #
