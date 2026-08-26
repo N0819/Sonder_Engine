@@ -1335,28 +1335,27 @@ class RoomDef(LenientModel):
 # is a deletion rather than a wiring: nothing validates against it, so it
 # states a shape the engine does not enforce while reading as the contract.
 # That is not hypothetical -- the body specialist's sheet asks for
-# `tick_interval_seconds`, and the only place that field exists in code is a
+# `tick_interval_seconds`, and the only place that field existed in code was a
 # model no call has ever validated. Same removal as `PerceptionOutput`
 # further down, for the same reason.
 #
-# `PersistentCondition` is kept until the open question about condition
-# ticking (build the due-tick sweep, or drop the field, the NULL `next_tick`
-# column and its index) is answered; `CausalRegime`, `FictionFrame` and
+# `PersistentCondition` was the thirtieth, and it was held back rather than
+# deleted with the others while ONE open question stood: build the due-tick
+# sweep, or drop the field, the NULL `next_tick` column and the index that
+# served no query. THE ANSWER IS BUILD, and it landed -- `world.mechanics`
+# pass (c1) fires due ticks against the simulation clock, `next_tick` is
+# written on every sweep, and `_tick_spec` there is the one reader of what a
+# tick declares (a signed move of a survival vital the scene already tracks,
+# and one clause the world re-announces), clamping both. So the reason for
+# the exemption is spent, and the model goes the way of the other twenty-
+# nine: `StateDiff.conditions` is `dict[str, list[dict]]` and stays lenient
+# dicts on purpose -- the channel is open vocabulary (106 distinct active
+# `kind` strings in the author's corpus), and the deterministic clamps
+# belong commit-side where model output becomes durable, per the
+# provisional-until-commit invariant. `CausalRegime`, `FictionFrame` and
 # `SpeechElement` are kept because tests use them as fixtures.
 
 # ---- Conditions and Scheduling ----
-
-class PersistentCondition(LenientModel):
-    condition_id: str
-    subject_id: str
-    kind: str
-    severity: float = 0.0
-    started_at_seconds: float = 0.0
-    expires_at_seconds: Optional[float] = None
-    tick_interval_seconds: Optional[float] = None
-    next_tick_seconds: Optional[float] = None
-    state: dict[str, Any] = Field(default_factory=dict)
-    source_event_id: Optional[str] = None
 
 class DestructionEffect(LenientModel):
     """REVIVED (movement/space Phase 2, item 4) as the Director's

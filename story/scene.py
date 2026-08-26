@@ -1511,6 +1511,91 @@ def awareness_of(chat_id_or_map, name):
     return entry["level"] if entry else "awake"
 
 
+#: THE WHOLE TABLE, NOT ONE FAMILY OF IT.
+#:
+#: `awareness_conditions` and `restraint_conditions` above each answer "what
+#: is standing on this world, of the kind I own". Nothing answered the
+#: general question, and the measurement says the general question is the one
+#: with the problem: read-only on the author's engine.db 2026-08-25, 444
+#: `world_conditions` rows across 50 chats, 363 active, and 360 of those
+#: active rows carry NO `expires_at` at all -- unreachable by the clock
+#: expiry in `world.mechanics`, and unreachable by the awareness and
+#: restraint floors, which only look at their own families. 106 distinct
+#: `kind` strings are active, so `kind` is open vocabulary and no per-kind
+#: table could ever hold the class.
+def active_condition_rows(chat_id):
+    """Every active `world_conditions` row for `chat_id`, in the story's order.
+
+    Each entry: condition_id, subject, kind, started_at, expires_at,
+    next_tick, and the parsed `payload` dict (tolerating the malformed legacy
+    rows `_condition_state` tolerates). Deliberately does NOT collapse by
+    subject: several rows are routinely active on one body, and a reader that
+    collapses them cannot end the ones it did not surface -- the same lesson
+    `awareness_conditions` records.
+    """
+    rows = []
+    for row in q(
+        "SELECT condition_id, subject_id, kind, started_at, expires_at, "
+        f"next_tick, payload FROM world_conditions WHERE chat_id=? "
+        f"AND active=1 {_CONDITION_ORDER}", (chat_id,),
+    ):
+        try:
+            payload = json.loads(row["payload"])
+        except (TypeError, ValueError):
+            payload = {}
+        if not isinstance(payload, dict):
+            payload = {}
+        rows.append({
+            "condition_id": str(row["condition_id"]),
+            "subject": str(payload.get("subject_id")
+                           or row["subject_id"] or "").strip(),
+            "kind": str(row["kind"] or ""),
+            "started_at": row["started_at"],
+            "expires_at": row["expires_at"],
+            "next_tick": row["next_tick"],
+            "payload": payload,
+        })
+    return rows
+
+
+def condition_exit_owner(kind, payload):
+    """Which deterministic floor already owns ENDING this condition, or None.
+
+    Three families of condition have an engine-side exit, and each of them
+    lives somewhere else:
+
+    * `awareness_floor` -- a GATED awareness row (asleep/sedated/unconscious)
+      is ended by `agents.director_floors._awareness_exits`: the player's own
+      declaration, a deliberate rouse, or a full night on the clock.
+    * `restraint_floor` -- a live restraint is ended by the RELEASE rules in
+      the same module.
+    * `standing_body` -- a disguise or a transformation is superseded at the
+      write (`persist.commit_entities._supersede_disguises`), because one
+      body presents one outward form.
+
+    Everything else answers None, and that is the population with the
+    problem. A NON-gated `dazed` row answers None deliberately: `_awareness_
+    exits` covers only `NON_AWAKE_GATED`, so no floor has ever ended a dazed
+    mind, and the corpus shows exactly that -- one chat carries a `dazed`
+    awareness condition from simulation second 880 still in force sixteen
+    turns and two fictional hours later. Saying `awareness_floor` for it
+    would claim an owner that does not exist.
+    """
+    payload = payload if isinstance(payload, dict) else {}
+    kind = str(kind or "")
+    # `awareness_cond_level` reads `cond["kind"]` for the kind-word fallback
+    # (the level is filed in the kind slot on 9 live rows), so the kind has
+    # to travel with the payload rather than beside it.
+    level = awareness_cond_level({**payload, "kind": kind})
+    if level in NON_AWAKE_GATED:
+        return "awareness_floor"
+    if _is_restraint_kind(kind):
+        return "restraint_floor"
+    if kind.strip().casefold() in SINGULAR_BODY_CONDITIONS:
+        return "standing_body"
+    return None
+
+
 def senses_of(sheet):
     if "psychology" in sheet or "core" in sheet:
         return senses_as_text(character_senses(sheet))

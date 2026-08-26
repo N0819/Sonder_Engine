@@ -1749,10 +1749,6 @@ accident**, so every read site has to be re-examined for whether it wants
   (`fiction_worlds`, `fiction_locations`, `transit_edges`). The doc correction
   landed; dropping them is a schema change. `transit_edges` is the cheap one —
   nothing snapshots, exports or restores it, so there is nothing to migrate.
-- **LLM-6's remove path.** Dropping `idx_world_conditions_due` and the
-  `next_tick` column, IF the answer to "remove `tick_interval_seconds` or build
-  the due-tick sweep" is remove. The index shipped, so this is a schema change
-  either way round; the question itself is an owner decision.
 - **RUNTIME-6's stored-data purge.** The write-side fix landed — the
   `candidates` payload is no longer persisted with each step. The
   already-written payloads remain: measured read-only on the owner's install
@@ -2469,6 +2465,52 @@ The repair is a seam widening, not a guard: `merge_scene_with_diff` has no
 previous-clock parameter, and the callers that would have to supply one
 include perception's mid-turn merges, where the "previous" clock is a
 different question. Do it with the seam, not around it.
+
+
+### 1.84 A condition with no declared end and no owning floor still stands forever
+
+**Found:** 2026-08-25, landing the due-tick sweep. Half of that landing; this
+is the half that was deliberately NOT shipped.
+
+A condition now has three ways to be seen and two ways to end. It can end on
+the clock (`expires_at`, `world.mechanics._expire_conditions`) or by an act
+(the Director re-emitting the same `condition_id` with `active: 0`, which
+`_conditions_view` finally equips it to do by showing every live row's id).
+What it still has is no way to end when the fiction simply moved on and
+nobody said so. Measured read-only on the author's `engine.db` 2026-08-25:
+444 `world_conditions` rows across 50 chats, 363 active, and **360 of those
+active rows carry no `expires_at` at all** — spread over 106 distinct free-
+text `kind` strings, so no per-kind duration table could hold the class.
+
+The mechanism designed for it was an idle-review backstop in the same sweep:
+a row that declares no clock end and whose family owns no deterministic exit
+(`story.scene.condition_exit_owner` returns None) closes with a stated reason
+after long idleness. It was deferred because BOTH of its arms were measured
+to close zero of the 360 rows they were built for:
+
+* the **simulation-clock arm** needed 24 story hours (86,400s). No chat in
+  the corpus has ever reached it: the maximum `simulation_clock.elapsed_
+  seconds` over 74 chats is 29,145 (chat 40) and the median is 372.5. The
+  threshold is 209x the p90 of the 76 authored condition durations (414s),
+  and unreachable in every story that exists.
+* the **turn arm** needed `last_asserted_turn_idx`, which this landing began
+  stamping at the write — so it exists only on rows written after it, and
+  not one of the 360 legacy rows has it.
+
+Shipping it would have been a mechanism whose measured effect is zero while
+its register entry claimed the rows "drain organically", which is the exact
+failure mode this table already has too much of. The two things it needs are
+both small and both real work: (1) an initialization op in the sweep that
+stamps `last_asserted_turn_idx` on un-stamped rows the first time it sees
+them (the `next_tick` initialization is the shape to copy), and (2) a
+turn-count threshold argued from something — `mind/affect.py`'s
+`_INTENT_DORMANT_AFTER` of 30 turns is a borrowed constant, not a measured
+one. The clock arm should probably be dropped rather than lowered: story
+clocks in this corpus do not move far enough to carry a rule.
+
+The cost asymmetry that justifies building it at all is the awareness floor's
+own, generalized: closing a condition wrongly costs one beat the Director can
+re-narrate, and never closing one is the 360-row ledger.
 
 
 ## 2. Roadmap

@@ -25,7 +25,8 @@ def commit_transit_sweep(ctx, nonce, *, prepared=None):
 
     The ordered passes themselves -- (a) fire due scheduled events for THIS
     frame (transit arrivals + news arrivals), (b) schedule new arrivals,
-    (c) condition expiry, (d) dock-edge recompute, (e) vehicle-zone/
+    (c1) condition ticks, (c2) condition expiry, (d) dock-edge recompute,
+    (e) vehicle-zone/
     companion-carry inference -- live in mechanics.py (see its module
     docstring for the contract). This wrapper only feeds it the database
     rows and applies the event_ops it returns: all writes run inside the
@@ -62,8 +63,14 @@ def commit_transit_sweep(ctx, nonce, *, prepared=None):
             "ORDER BY due_at",
             (cid,),
         )]
+        # The WHOLE row, not the two columns expiry needed: pass (c1) reads
+        # the payload for its cadence and its declared effects, and the
+        # `next_tick` column it was built to advance. The sweep parses the
+        # payload itself (`mechanics._payload_of`), so the rows travel
+        # verbatim and one module owns the shape.
         conditions = [dict(r) for r in q(
-            "SELECT condition_id, expires_at FROM world_conditions "
+            "SELECT condition_id, subject_id, kind, started_at, expires_at, "
+            "next_tick, payload FROM world_conditions "
             "WHERE chat_id=? AND active=1",
             (cid,),
         )]
@@ -87,7 +94,7 @@ def commit_transit_sweep(ctx, nonce, *, prepared=None):
         fired = counts["fired"]
         news_fired = counts["news_fired"]
         consequences_fired = counts["consequences_fired"]
-        scheduled = expired = 0
+        scheduled = expired = ticked = 0
         fired_consequence_rows = []
         fired_events = []
         for op in event_ops:
@@ -127,6 +134,16 @@ def commit_transit_sweep(ctx, nonce, *, prepared=None):
                 qtx("UPDATE world_conditions SET active=0 "
                     "WHERE chat_id=? AND condition_id=?", (cid, op[1]))
                 expired += 1
+            elif op[0] == "tick_condition":
+                # The first write this column has ever had. `next_tick` and
+                # `idx_world_conditions_due` shipped with the table and were
+                # NULL in all 444 rows of the author's corpus; the sweep owns
+                # the cadence, this applies it. Same per-chat scoping as
+                # every other condition write above.
+                qtx("UPDATE world_conditions SET next_tick=? "
+                    "WHERE chat_id=? AND condition_id=?",
+                    (float(op[2]), cid, op[1]))
+                ticked += 1
 
         # Living world, approach B: mint this resolution's declared fuses.
         # Gated by the chat's setting (the mint is the feature's surface);
@@ -184,7 +201,7 @@ def commit_transit_sweep(ctx, nonce, *, prepared=None):
         wset(cid, "engine_notices", notices)
 
     return {"fired": fired, "scheduled": scheduled, "expired": expired,
-            "news_fired": news_fired,
+            "ticked": ticked, "news_fired": news_fired,
             "consequences_fired": consequences_fired,
             "consequences_minted": consequences_minted,
             "fired_events": fired_events, "notices": notices}

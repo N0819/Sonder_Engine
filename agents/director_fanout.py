@@ -316,6 +316,11 @@ def _specialist_payload(name, ctx, sc, view, extras):
             "overlays": sc.get("overlays") or {},
             "active_awareness": extras.get("active_awareness"),
             "active_restraints": extras.get("active_restraints"),
+            # `director_scopes` gives the `conditions` channel to
+            # this hand, so it is the one that must re-assert a row
+            # that still holds or end one that has ended -- and the
+            # only one entitled to the ledger.
+            "active_conditions": extras.get("active_conditions"),
             "simulation_clock": extras.get("clock"),
             "rooms": rooms_index,
         })
