@@ -70,10 +70,12 @@ from world.spatial_barriers import (
 
 
 from world.spatial_transit import (
-    _closed_enclosure_barrier, _entity_exterior_room, _is_body_entity,
+    _closed_enclosure_barrier, _entity_exterior_room, _interior_entry_room,
+    _interior_rooms_of, _is_body_entity,
     _link_state, _open_enclosure_barrier, _TRANSIT_CLOSED_PHASES,
     _transit_state, ambient_scope, apply_transit_dock_edges,
     CONTAINER_ENCLOSURES, containment_chain, infer_body_enclosures,
+    sync_entity_interior_rooms,
 )
 
 
@@ -86,8 +88,10 @@ from world.spatial_containment import (
     containment_broken_by_scale_change, containment_conceals,
     containment_facts, containment_hides, CONTAINMENT_MODES, contents_of,
     derive_containment_from_contacts,
-    derive_contained_positions, hiding_holders_of,
-    normalize_scene_containment, normalize_scene_scales, scale_changed_names,
+    derive_contained_positions, enclosure_joins_rooms, hiding_holders_of,
+    interior_occupants,
+    normalize_scene_containment, normalize_scene_scales,
+    place_enclosed_bodies, scale_changed_names,
     detail_resolves_between, scale_of, scale_ratio, size_facts,
     size_relation, size_tier,
 )

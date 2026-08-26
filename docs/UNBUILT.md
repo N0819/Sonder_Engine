@@ -839,6 +839,82 @@ investigation found and did not close.
   it. Whether it should remains a design question: partial containment is not
   the same as being sealed inside something, and the two remain separate code
   paths describing overlapping physical situations.
+
+  **The third path now exists and is routed** (2026-08-25). There were always
+  three, not two: the ledger form (`contained`), the contact form
+  (`relation: interior`), and the PLACE form -- a room whose `parent_entity`
+  is the body around it. Nothing converted anything into the third, so an
+  enclosure a beat declared stayed a one-line ledger entry and its occupant's
+  position derived, every merge, to the holder's own room.
+  `spatial.place_enclosed_bodies` closes that: a `mode: interior` record plus
+  a holder that HAS interior rooms becomes a real position inside them, and
+  contact hygiene admits an enclosure-joined pair so the touch channel across
+  the boundary survives the move. A holder with no interior rooms is
+  untouched. The migration was MEASURED rather than asserted: all 77 stored
+  scenes were re-merged with an empty diff on the branch and on `main` and the
+  results compared whole -- 76 byte-identical, and the one that differs is the
+  story that already stands in this shape, where a surface contact between a
+  body and the body it is inside now survives room hygiene instead of being
+  severed. The follow-ons below are what that landing did not close.
+- **The two spellings of "this room is that entity's interior" agree only for
+  bodies.** `sync_entity_interior_rooms` derives `entities[eid].interior_rooms`
+  from `rooms[rid].parent_entity`, and is scoped to bodies on purpose. The
+  index is not only an index: `agents/director_scopes.py` gates the destruction
+  specialist on it and `persist/commit_scene_state.py` folds it into the set of
+  rooms the mapping stage may not prune. Measured read-only against the live
+  corpus while the landing was being repaired: 53 rooms carry `parent_entity`,
+  15 of them across 13 chats are NOT indexed on their entity, and every one of
+  those 15 belongs to a non-body -- lift cars, turbolifts, a ship, a police
+  box. Deriving them would switch a Director specialist on in five stories and
+  make six stories' interiors permanently un-prunable, untested and unasked
+  for. The two spellings still ought to agree everywhere; making them agree is
+  a change with a blast radius, and it needs its own landing with those two
+  readers tested rather than a free ride on a body-interior fix.
+- **A non-body inside a place-form interior is in no view.** `contents_of`
+  answers the carry ledger for anything; `interior_occupants` answers the place
+  form for BODIES only, because it feeds prose that says an occupant "goes
+  where you go" and because `positions` keys objects and fixtures by entity id
+  -- an engine handle, which is not a name anybody in the fiction has heard.
+  So a lamp dropped inside a body-place is currently in nobody's account of
+  anything: the holder cannot see into its own interior (the membrane is opaque
+  in both directions, correctly) and is told nothing about what is in there
+  that is not a body. The fix is a percept for the objects of an interior room,
+  not a widening of this one function.
+- **A body with no authored or declared interior does not become one.** The
+  handoff is conditional by design -- topology is authored content, and
+  auto-minting a single fallback room on every `mode: interior` record would
+  change behaviour for every existing scene that expresses an ordinary partial
+  enclosure as containment (the ledger-form contract
+  `tests/test_body_enclosure_channels.py` holds). So the two producers are the
+  spatial specialist's `rooms` channel (judgment, now prompted for it) and
+  nothing else. A CARD-authored interior -- an `embodiment.interior` section
+  with stations, barriers and an entry, materialized deterministically at
+  commit when an enclosure is actually active -- is the deterministic producer
+  that would make this work without a model remembering: generic place
+  topology, usable by any body, vehicle or structure a card describes.
+  Deferred whole, with the editor UI (`static/js/components.js`) beside it.
+- **Interior passage is undirected.** Interior stations connect by `membrane`
+  in both directions, because the barrier vocabulary has no directed-passage
+  value: `one_way_window`'s asymmetry is SIGHT only, and `neighbor_map`
+  (`world/spatial_barriers.py`) is undirected by documented design across four
+  walks. "Passable inward, and outward only on the container's own action"
+  therefore needs its own vocabulary work in the `one_way_window` mould. Until
+  then, going back out against the body around you is what it already is: a
+  contested act for the reaction/dice machinery, not graph structure.
+- **A room cannot carry a hazard.** A place-form interior is exactly where "a
+  place that acts on the bodies in it over time" becomes expressible -- and
+  there is no room field for it, no sweep that ticks one, and no capability
+  that suppresses one. Declaring `RoomDef.hazard` ahead of a reader would be a
+  field nothing reads, which `llm/schemas.py` deleted 29 models over; the seam
+  is registered here instead, to land with its consumer.
+- **A body that regrows inside a place-form interior is not auto-released.**
+  `containment_broken_by_scale_change` reads the `contained` ledger only, and
+  the handoff empties it. A scale change that makes the enclosure absurd
+  therefore releases nothing, and the Director/movement backstop is the only
+  thing that governs the exit. The scale rule and the place form need to meet.
+- **The occupied-body-is-a-place clause is English-only.** `language_packs/en`
+  carries it in the spatial specialist's `rooms` chunk; the `ja` pack keeps
+  the old text, so a Japanese story's specialist is not told it owns this.
 - **Observation metadata is computed and consumed by nothing.** `intensity`,
   `suddenness`, `ambiguity` and `directed_at_self` are re-derived from the
   scrubbed view for every atom, cost tokens on every character payload, and

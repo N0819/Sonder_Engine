@@ -87,6 +87,113 @@ def _is_body_entity(scene: dict, eid: str, ent: dict) -> bool:
     return False
 
 
+def _interior_rooms_of(scene: dict, eid: str) -> list:
+    """Every room this entity's id is the `parent_entity` of, in scene order.
+
+    The ROOM's own claim is the authority, exactly as `apply_transit_dock_edges`
+    reads it: `entities[eid]["interior_rooms"]` is a convenience index kept in
+    step by `sync_entity_interior_rooms`, never a second truth.
+    """
+    target = str(eid or "").strip()
+    if not target:
+        return []
+    rooms = (scene or {}).get("rooms") or {}
+    if not isinstance(rooms, dict):
+        return []
+    return [rid for rid, room in rooms.items()
+            if isinstance(room, dict)
+            and str(room.get("parent_entity") or "").strip() == target]
+
+
+def sync_entity_interior_rooms(scene: dict) -> bool:
+    """A room that names a parent entity is that entity's interior. Index it.
+
+    ONE FACT, WRITTEN TWICE, and only one of the two spellings was ever
+    derived. `rooms[rid]["parent_entity"]` is what the dock rewrite, the
+    ambient scope and the enclosure gates all read; `entities[eid]
+    ["interior_rooms"]` is what `infer_body_enclosures`, the Director's
+    place-aware scopes, the room-registry rename pass and the destruction
+    guard read. Nothing kept them in step, so a room authored with
+    `parent_entity` and nothing else was an interior to half the engine and
+    not an interior to the other half -- and the half that missed it includes
+    the ONE function that makes a body's inside opaque by default. An
+    interior nobody indexed therefore kept a see-through doorway, which is a
+    leak outward: the room outside looked straight into the enclosure.
+
+    ADD-ONLY. A stale id in `interior_rooms` names a room that may simply be
+    absent this beat (retired, sealed away, not yet minted), and that list is
+    read as a protection set at commit -- pruning here would let one merge
+    unprotect a room another pass is about to restore. Idempotent; mutates.
+
+    SCOPED TO BODIES, which is the class the missing index actually harmed.
+    `interior_rooms` is not only an index: `agents/director_scopes` gates a
+    Director specialist on it and `persist/commit_scene_state` folds it into
+    the set of rooms the mapping stage may not prune. Filling it for an
+    entity whose interior nobody had indexed is therefore a behaviour change,
+    not a repair, and it must be one somebody asked for. Measured read-only
+    against the author's live corpus: 53 rooms carry `parent_entity`, 15 of
+    them across 13 chats were unindexed, and all 15 belong to non-bodies --
+    lift cars, turbolifts, a ship, a police box. Indexing those would have
+    switched a Director specialist on in five stories and made six stories'
+    interiors permanently un-prunable, silently. A body's interior is the one
+    that leaks when it is missed, because the enclosure default that makes
+    flesh opaque reads this list and is itself body-scoped; so this derives
+    exactly as far as that leak reaches, and every scene already on disk is
+    left byte-identical. The wider "both spellings of one fact should agree
+    for every entity" pass is a separate change with its own consequences
+    (docs/UNBUILT.md).
+    """
+    rooms = (scene or {}).get("rooms") or {}
+    entities = (scene or {}).get("entities") or {}
+    if not isinstance(rooms, dict) or not isinstance(entities, dict):
+        return False
+    changed = False
+    for eid, ent in entities.items():
+        if not isinstance(ent, dict):
+            continue
+        owned = _interior_rooms_of(scene, eid)
+        if not owned:
+            continue
+        if not _is_body_entity(scene, eid, ent):
+            continue
+        listed = ent.get("interior_rooms")
+        if not isinstance(listed, list):
+            listed = []
+        known = {str(r) for r in listed}
+        missing = [rid for rid in owned if str(rid) not in known]
+        if missing:
+            ent["interior_rooms"] = list(listed) + missing
+            changed = True
+    return changed
+
+
+def _interior_entry_room(scene: dict, eid: str, ent=None):
+    """The room a body entering this entity's interior arrives in, or None.
+
+    The same precedence `apply_transit_dock_edges` already uses to decide
+    which interior room carries the doorway, read rather than rewritten: a
+    sole interior room IS the dock; otherwise the remembered `dock_exit`
+    marker; otherwise whichever room still holds an edge out of the interior;
+    otherwise the first one the scene lists, so the answer is deterministic
+    rather than absent.
+    """
+    interior_ids = _interior_rooms_of(scene, eid)
+    if not interior_ids:
+        return None
+    if len(interior_ids) == 1:
+        return interior_ids[0]
+    rooms = (scene or {}).get("rooms") or {}
+    same = set(interior_ids)
+    for rid in interior_ids:
+        if (rooms.get(rid) or {}).get("dock_exit"):
+            return rid
+    for rid in interior_ids:
+        for edge in (rooms.get(rid) or {}).get("adjacent") or []:
+            if isinstance(edge, dict) and edge.get("to") not in same:
+                return rid
+    return interior_ids[0]
+
+
 def infer_body_enclosures(scene: dict) -> bool:
     """Default a BODY's interior to an opaque way in. Idempotent; mutates.
 
