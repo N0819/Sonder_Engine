@@ -3263,9 +3263,18 @@ class PrestoryJourneyEvent(LenientModel):
     when: str = ""
     place: str = ""
     people: list[str] = Field(default_factory=list)
+    kind: str = "journey_event"
     memory: str = ""
     consequence: str = ""
     source_ids: list[str] = Field(default_factory=list)
+    # Affect and ranking, identical in name, type, and default to the resident
+    # episode below: both mint rows into the same memory bank, and a journey
+    # event that carried none of them left retrieval nothing to rank on.
+    tone: str = "neutral"
+    lesson: str = "none"
+    valence: float = 0.0
+    arousal: float = 0.0
+    salience: float = 0.58
 
 
 class PrestoryJourneyHistory(LenientModel):
