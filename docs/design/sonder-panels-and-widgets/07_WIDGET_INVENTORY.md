@@ -16,9 +16,9 @@ Main actions such as import, export, delete, confirm, and generate remain action
 inside their owning Widget unless they have enough durable state and independent
 purpose to become a Widget themselves.
 
-This is an initial catalog inventory, not a final multiplicity audit. Every
-definition still requires confirmation against its runtime owner, minimum
-geometry, and safe draft behavior.
+This is the catalog inventory. Runtime owner, minimum geometry, multiplicity,
+safe draft behavior, and individual design/disposition are audited in the
+[Widget Design Workbook](10_WIDGET_DESIGN_WORKBOOK.md).
 
 ## Granularity rules
 
@@ -85,7 +85,7 @@ These Widgets follow the active story unless noted otherwise.
 |---|---|---|
 | Cast | Active story | Manage participants, state, positions, colors, activation, and story-card access. |
 | Background Presences | Active story | Inspect and promote unsheeted recurring presences. |
-| World State | Active story/frame | Inspect and explicitly save structured world state. |
+| World State | Active story/frame | Inspect structured world state; edit only through specialized typed owners. |
 | Attire | Active story/frame | Inspect and edit participant clothing and state. |
 | Genre and Style | Active story | Configure story language, genre, tone, authority, weather, condition visibility, and author guidance. |
 | Dialogue and Agency | Active story | Configure autonomy, initiative, NPC exchange, silence, and prose pacing. |
@@ -94,12 +94,12 @@ These Widgets follow the active story unless noted otherwise.
 | Institutions and Charter | Active story | Configure lived-town generation and inspect story institutions. |
 | Institution Diagnostics | Active story/institution | Inspect Charter histories, state, and diagnostics. |
 | Background Life / Scene Life | Active story | Configure managed background activity, reactors, and promotion threshold. |
-| Character Relationships | Selected active-story Character | Inspect and edit relationship projections. |
+| Character Relationships | Selected active-story Character | Inspect relationship evidence and projections. |
 | Memory Browser | Selected active-story Character | Search, filter, add, edit, archive, import/export, consolidate, and repair memories. |
 | Character Private History | Selected active-story Character | Inspect and author story-qualified private history. |
-| Persona Private History | Selected active-story Persona | Inspect and author Persona private history. |
-| Dramatic Irony | Active story | Inspect player-known and character-unknown information. |
-| Promise Ledger | Active story | Inspect promises and commitments chronologically. |
+| Persona Private History | Active story's primary Persona | Inspect and author the primary Persona private-history override. |
+| Dramatic Irony | Active story | Inspect non-witnessed character-held information across minds. |
+| Promise Ledger | Active story | Inspect subjective promise memories chronologically. |
 | Multiplayer and Guest Invites | Active story | Manage additional Personas, invitations, and guest state. |
 | Frames | Active story | Create and manage diegetic eras and continuity. |
 | Who's Where | Active story | Station attached Personas in frames. |
@@ -200,4 +200,3 @@ durable independent surface:
 - single generate, reroll, delete, rename, or archive buttons;
 - extension step renderers already contained by Turn Inspector;
 - transient drag previews and placement targets.
-
