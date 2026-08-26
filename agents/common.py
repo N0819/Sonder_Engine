@@ -34,6 +34,7 @@ from llm.llm_quality import complete_validated_json
 from mind.memory import chat_lorebook_ids, chat_lorebook_weights
 from llm.providers import chat_complete
 from llm.prompts import get_prompt
+from story.provenance_text import strip_engine_provenance
 from story.scene import (get_scene, persona_of, sheet_state, NON_AWAKE_GATED,
                    normalize_player_authority, PLAYER_AUTHORITY_GRANTS)
 from llm.schemas import normalize_speech_volume
@@ -2351,13 +2352,38 @@ def _keys_reference_blocked(keys, blocked):
                 return True
     return False
 
+def _room_notes_for_view(rdata, room_id, ctx, scene=None):
+    """The room's description as a MIND receives it.
+
+    One spelling of `(the scene's own notes) or (the lore layer's)`, which six
+    perceiver payloads in `agents/perception` had written out by hand -- so a
+    rule taught to one of them was taught to none of the others. The rule is
+    that engine bookkeeping is not world text: both sources can carry a note
+    the engine wrote about its own retrieval, and neither may deliver it. See
+    `story/provenance_text`.
+    """
+    notes = (rdata or {}).get("notes") if isinstance(rdata, dict) else None
+    if notes:
+        return strip_engine_provenance(notes)
+    return _room_notes_from_lore(room_id, ctx, scene)
+
+
 def _room_notes_from_lore(room_id, ctx, scene=None):
+    """The room's description as PROSE, for delivery to a mind.
+
+    Every return runs through `strip_engine_provenance`: a `layout` entry the
+    engine wrote for a room it had no canon for may carry the reason it was
+    written, and that reason is bookkeeping about a retrieval, not a fact about
+    the room. It stays on the lore row's `source_notes` where an author and an
+    audit can read it; it does not travel into a view. See
+    `story/provenance_text` for the measurement.
+    """
     if not room_id:
         return ""
     sc = scene if scene is not None else get_scene(ctx.chat.id, ctx.chat)
     rdata = (sc.get("rooms") or {}).get(room_id)
     if rdata and rdata.get("notes"):
-        return rdata["notes"]
+        return strip_engine_provenance(rdata["notes"])
     # Coarse scope-by-nesting-depth: for a sealed nested observer, an entry
     # whose keys ALSO name an ancestor-scope room/location carries ambient
     # information they cannot perceive right now -- skip it.
@@ -2372,7 +2398,7 @@ def _room_notes_from_lore(room_id, ctx, scene=None):
         if (room_norm in keys or room_id.lower() in keys) and content:
             if blocked and _keys_reference_blocked(keys, blocked):
                 continue
-            return content[:600]
+            return strip_engine_provenance(content)[:600]
     for entry in lore_for(ctx):
         _k = entry.get("keys")
         keys = (" ".join(map(str, _k)) if isinstance(_k, list) else str(_k or "")).lower()
@@ -2380,7 +2406,7 @@ def _room_notes_from_lore(room_id, ctx, scene=None):
         if (room_norm in keys or room_id.lower() in keys) and content:
             if blocked and _keys_reference_blocked(keys, blocked):
                 continue
-            return content[:600]
+            return strip_engine_provenance(content)[:600]
     return ""
 
 # A stage direction written INSIDE a speech element: "*leans in* Sit down."
