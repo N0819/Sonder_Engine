@@ -2887,6 +2887,28 @@ def release_removed_garments(entry):
     return rederive_entry(entry)
 
 
+def entry_for(ledger, name):
+    """One body's ledger entry, tolerating a case-variant identity key.
+
+    The attire ledger is keyed on the identity name, and three separate
+    readers in `agents/common.py` already carry a casefold fallback because
+    the key is NOT reliably canonical -- `persist.commit_attire`'s
+    `_heal_attire_identity_keys` exists precisely to repair it, and nothing
+    heals on the read path. A reader that does a bare `.get(name)` therefore
+    finds no garment for a body that is dressed, and a gate built on that
+    lookup fails OPEN: it delivers what a covering conceals.
+
+    Returns {} when the body has no entry under any spelling.
+    """
+    ledger = ledger if isinstance(ledger, dict) else {}
+    entry = ledger.get(name)
+    if entry is None:
+        folded = str(name or "").strip().casefold()
+        entry = next((value for key, value in ledger.items()
+                      if str(key).strip().casefold() == folded), None)
+    return entry if isinstance(entry, dict) else {}
+
+
 def rederive_entry(entry):
     """One attire ledger entry with its three representations agreeing again.
 

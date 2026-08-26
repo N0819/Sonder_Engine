@@ -427,7 +427,10 @@ def visible_body_text(body, name, scene):
     build = str(body.get("build") or "").strip()
     if build:
         parts.append(build)
-    entry = ((scene or {}).get("attire") or {}).get(name) or {}
+    # Through `entry_for`, not a bare `.get`: a case-variant identity key
+    # would otherwise find no garment for a dressed body, and this gate would
+    # fail OPEN -- delivering the face a covering conceals.
+    entry = attire_model.entry_for((scene or {}).get("attire"), name)
     regions = (attire_model.rederive_entry(entry) or {}).get("regions") or {} \
         if entry else {}
     for zones in attire_model.uncovered_zone_text(
