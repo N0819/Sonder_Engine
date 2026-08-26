@@ -24,7 +24,7 @@
 | `agents/loops.py` | 1147 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `core.db`, `story.character_schema`, `story.scene`, `world.spatial` |
 | `agents/mapping.py` | 337 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `core.db`, `llm.prompts`, `mind.memory`, `story.character_schema`, `story.scene` |
 | `agents/narration.py` | 1824 | Player-facing narration agent. | `agents`, `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `story.character_schema`, `story.scene`, `world.spatial`, `world.weather` |
-| `agents/perception.py` | 4307 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `mind`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
+| `agents/perception.py` | 4384 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `mind`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
 | `agents/runtime.py` | 1335 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `core.db`, `core.pipeline_context`, `llm.providers`, `persist.checkpoints`, `persist.commit`, `story.character_schema`, `story.scene` |
 | `agents/storage.py` | 123 | Step and active-variant persistence helpers. | `core.db` |
 | `core/__init__.py` | 6 |  | — |
@@ -85,10 +85,10 @@
 | `persist/pipeline_trace.py` | 413 | Privacy-conscious export, validation, and offline replay of persisted pipeline history. | `core.db` |
 | `story/__init__.py` | 6 |  | — |
 | `story/artifacts.py` | 566 |  | `llm.prompts` |
-| `story/attire.py` | 3049 |  | — |
+| `story/attire.py` | 3136 |  | — |
 | `story/authored_events.py` | 224 |  | `core.db` |
 | `story/carriers.py` | 788 |  | `core.db`, `story.character_schema`, `story.scene`, `world`, `world.spatial` |
-| `story/character_schema.py` | 2209 | Versioned character/persona defaults, normalization, accessors, and export payloads. | `llm.schemas`, `story` |
+| `story/character_schema.py` | 2299 | Versioned character/persona defaults, normalization, accessors, and export payloads. | `llm.schemas`, `story` |
 | `story/couriers.py` | 1122 |  | `story.carriers`, `world` |
 | `story/dialogue_colors.py` | 268 |  | — |
 | `story/greetings.py` | 992 |  | `agents.runtime`, `agents.storage`, `core`, `llm.llm_quality`, `llm.prompts`, `mind.memory`, `mind.theory_of_mind`, `story.character_schema`, `story.importers` |
@@ -96,7 +96,7 @@
 | `story/importers.py` | 3093 | Native and AI-assisted character, persona, and lorebook import/generation. | `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.memory`, `story.character_schema`, `story.scene` |
 | `story/journey_history.py` | 335 |  | — |
 | `story/lore_structure.py` | 248 |  | — |
-| `story/scene.py` | 2450 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `core.db`, `story`, `story.attire`, `story.character_schema`, `world.spatial` |
+| `story/scene.py` | 2480 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `core.db`, `story`, `story.attire`, `story.character_schema`, `world.spatial` |
 | `web/__init__.py` | 6 |  | — |
 | `web/app.py` | 6444 | FastAPI application assembly, resource CRUD, turn control, and streaming endpoints. | `agents`, `core`, `core.db`, `core.frames`, `core.paths`, `dressing.ambience`, `dressing.backdrops`, `llm`, `llm.prompts`, `llm.providers`, `mind.memory`, `persist.chat_archive`, `persist.chat_delete`, `persist.checkpoints`, `persist.commit`, `story`, `story.character_schema`, `story.dialogue_colors`, `story.importers`, `story.scene`, `web`, `web.auth_routes`, `world`, `world.survival` |
 | `web/auth_routes.py` | 279 | Typed host-authentication HTTP routes and cookie transport. | `web` |
@@ -382,14 +382,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_composer_outcome()` | 3890 | 418 lines |
-| `perception_outcome()` | 2163 | 272 lines |
-| `perception_act()` | 1742 | 174 lines |
-| `_composer_standing_percepts()` | 3143 | 168 lines |
-| `_composer_act()` | 3519 | 167 lines |
-| `_outcome_event_stream()` | 652 | 152 lines |
-| `_previous_open_group_continuity()` | 168 | 117 lines |
-| `_strip_self_narration()` | 1047 | 107 lines |
+| `_composer_outcome()` | 3965 | 420 lines |
+| `perception_outcome()` | 2166 | 272 lines |
+| `_composer_standing_percepts()` | 3206 | 176 lines |
+| `perception_act()` | 1745 | 174 lines |
+| `_composer_act()` | 3592 | 169 lines |
+| `_outcome_event_stream()` | 655 | 152 lines |
+| `_previous_open_group_continuity()` | 171 | 117 lines |
+| `_strip_self_narration()` | 1050 | 107 lines |
 
 ### `agents/runtime.py`
 
@@ -1005,14 +1005,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `advance()` | 2167 | 141 lines |
-| `normalize_regions()` | 505 | 133 lines |
-| `garments_named_in()` | 1860 | 126 lines |
-| `coerce_diff_shape()` | 1384 | 124 lines |
-| `compact_line()` | 2908 | 123 lines |
-| `perceptible_region_surfaces()` | 2431 | 100 lines |
-| `_attributed_targets()` | 1598 | 90 lines |
-| `apply_flat_change()` | 2533 | 89 lines |
+| `advance()` | 2254 | 141 lines |
+| `normalize_regions()` | 516 | 133 lines |
+| `garments_named_in()` | 1947 | 126 lines |
+| `coerce_diff_shape()` | 1471 | 124 lines |
+| `compact_line()` | 2995 | 123 lines |
+| `perceptible_region_surfaces()` | 2518 | 100 lines |
+| `_attributed_targets()` | 1685 | 90 lines |
+| `apply_flat_change()` | 2620 | 89 lines |
 
 ### `story/authored_events.py`
 
@@ -1041,14 +1041,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `normalize_character_data()` | 1192 | 162 lines |
-| `character_card_warnings()` | 2025 | 154 lines |
-| `default_character_data()` | 697 | 113 lines |
+| `normalize_character_data()` | 1236 | 167 lines |
+| `character_card_warnings()` | 2120 | 149 lines |
+| `default_character_data()` | 697 | 118 lines |
 | `_normalize_psychology()` | 314 | 83 lines |
 | `_normalize_interior()` | 636 | 59 lines |
-| `repair_character_shape()` | 1133 | 57 lines |
+| `repair_character_shape()` | 1177 | 57 lines |
+| `normalize_persona_data()` | 1404 | 55 lines |
 | `_normalize_extra_parts()` | 547 | 52 lines |
-| `_as_profile_list()` | 38 | 50 lines |
 
 ### `story/couriers.py`
 
@@ -1140,14 +1140,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `active_disguises()` | 475 | 82 lines |
-| `normalize_transformed_parts()` | 566 | 60 lines |
-| `recent_events_for_observer()` | 1696 | 59 lines |
-| `_positive_presented_appearance()` | 763 | 58 lines |
-| `awareness_conditions()` | 1092 | 58 lines |
-| `active_transformations()` | 628 | 54 lines |
-| `director_context()` | 1756 | 53 lines |
-| `conceal_disguised_parts()` | 878 | 48 lines |
+| `active_disguises()` | 505 | 82 lines |
+| `normalize_transformed_parts()` | 596 | 60 lines |
+| `recent_events_for_observer()` | 1726 | 59 lines |
+| `_positive_presented_appearance()` | 793 | 58 lines |
+| `awareness_conditions()` | 1122 | 58 lines |
+| `active_transformations()` | 658 | 54 lines |
+| `director_context()` | 1786 | 53 lines |
+| `conceal_disguised_parts()` | 908 | 48 lines |
 
 ### `web/app.py`
 

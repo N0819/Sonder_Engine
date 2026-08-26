@@ -2402,7 +2402,7 @@ be read with this beside it; 2.20 notes the separate reason the signal cannot
 fire early in a story (`_RECALL_CONFIDENCE_MIN_BANK = 40`, which the median
 bank does not reach until turn 10).
 
-### 1.78 Four authored body fields reach no reader
+### 1.78 One authored body field reaches no reader
 
 **Found:** the same beat, asking why the same engine renders one body richly
 and another thinly.
@@ -2427,11 +2427,25 @@ that puts them in the correct place, `embodiment.visible.<key>`, is the one
 that loses them. Either compose them the way the misplaced ones are composed,
 or stop offering fields the engine does not read.
 
-**No longer silent.** `character_card_warnings` now names every authored field
-of the five that no reader receives, on all nine card-producing surfaces, and
-tells the author to move what should be seen into the summary. That closes the
-part that made this expensive — an author with every reason to believe the
-story could see what they wrote. The delivery decision above is still open.
+**Four of the five landed.** `build`, `face`, `hair` and `eyes` are delivered.
+`_coerce_appearance` projects the located three into
+`embodiment.visible.regions.head.visible_zones` on every normalize — no new
+authoring surface, no re-authoring, and one correct answer per field — and
+`attire.uncovered_zone_text` gates them on the mirror of the `beneath` rule:
+delivered until something covers the region, delivered again when it comes off
+or is pushed aside. `build` is not located, so nothing worn can cover it and it
+rides beside the summary. Delivery is on the description path only
+(`perception._body_descriptions`), behind the sight and arc gates that were
+already there, and the stranger LABEL still comes from the summary alone so an
+observer holding a silhouette gains nothing. See `Design.md`.
+
+**`distinctive_features` remains.** It is offered in the editor, kept through
+every normalize, carried in archives, and read by exactly one thing —
+`_prose_names_a_part`, a card-warning heuristic. It is also the natural source
+for the stranger descriptor that `observer_display_map` currently cuts from
+`visible.summary`, so the field literally named "what distinguishes this
+person" is not used to distinguish them. `character_card_warnings` says so, on
+every card-producing surface.
 
 
 ### 1.79 What the Living World audit found

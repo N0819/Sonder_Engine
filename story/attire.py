@@ -103,6 +103,17 @@ REGION_ZONES = {
     "torso": ("chest", "midriff"),
 }
 
+# A SECOND AXIS, AND DELIBERATELY NOT THE SAME ONE. `REGION_ZONES` answers
+# "can a still-worn garment expose part of this region?", and every reader of
+# it takes the answer as bareness -- skin, exposure, what a body is showing.
+# This map answers "where on the body does a standing DESCRIPTION sit?", and a
+# face is not nakedness. Measured while building it: folding the head into the
+# coverage axis made every head line in every payload report "face bare, hair
+# bare, eyes bare" for a body wearing a ribbon. Two questions, two vocabularies.
+VISIBLE_ZONES = {
+    "head": ("face", "hair", "eyes"),
+}
+
 
 def zones_of(region):
     """Every region is coverable-or-not; the torso is finer.
@@ -766,6 +777,82 @@ def partially_exposed_regions(regions):
         bare = [zone for zone in REGION_ZONES[region] if not by_zone[zone]]
         if bare and len(bare) < len(REGION_ZONES[region]):
             out[region] = bare
+    return out
+
+
+def _clean_visible_zones(region, value):
+    """Validated body descriptions for one region's described surfaces.
+
+    `_clean_beneath_zones` for the other axis, on the same length budget: a
+    description of a face is the same kind of text as a description of what is
+    under a shirt, and the only difference between them is when it is
+    delivered.
+    """
+    allowed = VISIBLE_ZONES.get(region) or ()
+    if not allowed or not isinstance(value, dict):
+        return {}
+    out = {}
+    for zone in allowed:
+        text = _clean(value.get(zone), BENEATH_LIMIT)
+        if text:
+            out[zone] = text
+    return out
+
+
+def region_is_covered(regions, region):
+    """Is anything worn still covering this one region at all?
+
+    `concealing_garments` asks this of a whole wardrobe and answers with
+    names; this asks it of one place, so a caller holding a body description
+    can ask about the place that description sits on.
+    """
+    entry = (regions or {}).get(region)
+    for garment in ((entry or {}).get("garments") or []):
+        if not isinstance(garment, dict):
+            continue
+        if garment.get("state") == "removed" or garment.get("attaches"):
+            continue
+        # A garment displaced off the region is still worn and covers nothing
+        # here -- the same distinction `describe` draws between a covering and
+        # something hanging where it now hangs.
+        if covered_zones_for(garment, region):
+            return True
+    return False
+
+
+def uncovered_zone_text(described, regions):
+    """A body's own account of itself, minus whatever its clothing covers.
+
+    ``described`` is what the BODY says about itself (``{region: {zone:
+    text}}``); ``regions`` is the live garment ledger. This is the mirror of
+    `beneath_zones` and runs on exactly the opposite gate: what is UNDER
+    clothing is spelled out only once something comes OFF, and what a body
+    shows of itself is delivered until something goes ON.
+
+    The ledger's own coverage record is the only judgement made here, so
+    nothing has to recognise any particular kind of thing to wear. Something
+    still covering the region conceals every description on it; something
+    displaced off the region (`covered_zones` empty) conceals nothing, so a
+    hood pushed back shows the hair again without the word "hood" appearing
+    anywhere; and something merely worn AT the region -- a pin, a ring -- was
+    never covering anything to begin with.
+
+    ALL OF THE REGION, not the one surface a particular covering would really
+    hide. That is the subtracting reading, and it is the right default while a
+    garment has no way to state its own exception: the cost is a description
+    withheld from someone who could have had it, which is exactly what every
+    one of these fields already did for everybody. The finer answer arrives
+    the day a covering can say what it leaves showing, and until something
+    writes that, a field for it would be a field nothing reads.
+    """
+    out = {}
+    for region in REGIONS:
+        zones = _clean_visible_zones(region, (described or {}).get(region))
+        if not zones:
+            continue
+        if region_is_covered(regions, region):
+            continue
+        out[region] = zones
     return out
 
 
