@@ -479,6 +479,13 @@ _TICK_FIRE_CAP = 500
 #: five-second cadence would empty a body inside one beat; the CADENCE is how
 #: a condition gets to be lethal, not the size of a single step.
 _TICK_VITAL_STEP_CAP = 0.25
+#: Most tick notices one sweep may stage. The sibling of
+#: `director_floors._CONDITIONS_VIEW_CAP` (40) and set lower on purpose: the
+#: view is a ledger the Director reads to ACT on, and these are the world
+#: saying the same sentence again. One corpus chat carries 24 active rows
+#: (engine.db 2026-08-25), so an uncapped sweep can spend a beat's whole
+#: notice budget on ongoing processes and crowd out what just happened.
+_TICK_NOTICE_CAP = 8
 
 
 def _condition_field(payload, key):
@@ -486,11 +493,22 @@ def _condition_field(payload, key):
 
     Both spellings are live across the table (`story.scene._condition_state`
     tolerates the same pair), so a reader that knows only one of them is a
-    reader that silently ignores half the rows."""
-    if key in payload:
-        return payload.get(key)
+    reader that silently ignores half the rows.
+
+    A root spelling present but NULL is silence, not an answer: a model that
+    emits the whole field list with the ones it has nothing to say about left
+    null would otherwise mask the value it did fill in under `state`. Latent
+    today (0 of 444 corpus rows are in that shape, measured 2026-08-25), and
+    the docstring above is the reason to close it anyway -- the failure it
+    describes is exactly a reader ignoring the half of the row that speaks.
+    """
+    value = payload.get(key)
+    if value is not None:
+        return value
     state = payload.get("state")
-    return state.get(key) if isinstance(state, dict) else None
+    if isinstance(state, dict) and state.get(key) is not None:
+        return state.get(key)
+    return value
 
 
 def _tick_interval(payload):
@@ -571,7 +589,7 @@ def _tick_conditions(scene, conditions, elapsed):
     """
     from world.survival import _stored_vitals
 
-    event_ops, notices = [], []
+    event_ops, notices, unnamed = [], [], []
     for cond in conditions or []:
         payload = _payload_of(cond)
         interval = _tick_interval(payload)
@@ -650,11 +668,29 @@ def _tick_conditions(scene, conditions, elapsed):
             notices.append(
                 f"Ongoing ({label}, {fires}x): " + "; ".join(parts))
         for subject in missing:
-            notices.append(
-                f"Ongoing ({label}): the standing condition declares a change "
-                f"to {subject}'s vitals, and no body of that name is in this "
-                "scene's vitals ledger -- name the subject as the scene names "
-                "them, or the change goes nowhere.")
+            if subject not in unnamed:
+                unnamed.append(subject)
+
+    if len(notices) > _TICK_NOTICE_CAP:
+        # Truncated, and SAID. A silently dropped notice is a process the
+        # world stopped mentioning while it kept running.
+        dropped = len(notices) - _TICK_NOTICE_CAP
+        notices = notices[:_TICK_NOTICE_CAP]
+        notices.append(
+            f"Ongoing: {dropped} further standing condition"
+            f"{'s are' if dropped != 1 else ' is'} also acting this beat, "
+            "not listed here.")
+    if unnamed:
+        # ONE line per sweep, not one per row. This notice restages every
+        # beat until the Director re-emits with a subject the ledger names,
+        # so N rows naming the same absent body is that body's name repeated
+        # N times every beat for the rest of the story.
+        notices.append(
+            "Ongoing: standing conditions declare vitals changes for "
+            + ", ".join(unnamed)
+            + ", and no body of that name is in this scene's vitals ledger "
+            "-- name the subject as the scene names them, or the change goes "
+            "nowhere.")
 
     return event_ops, notices
 

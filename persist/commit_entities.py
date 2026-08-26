@@ -445,19 +445,25 @@ def commit_world_entities(ctx, nonce, *, prepared=None):
             prev_scene=(prepared or {}).get("prev_scene"))
         targeted_this_beat = _subjects_targeted_by_an_action(ctx)
 
-        # WHEN THIS CONDITION WAS LAST ASSERTED, on both clocks the engine
-        # keeps. Nothing recorded it, which is why "has anybody mentioned
-        # this in the last thirty turns" was an unanswerable question about
-        # the 360 active, never-expiring rows in the author's corpus
-        # (engine.db 2026-08-25, chat 88 the instance: ten rows, all active,
-        # not one with an `expires_at`). The Director's `active_conditions`
-        # view reads these stamps to show how long a row has stood
-        # unmentioned. Pure functions of (clock, turn), so a rerolled turn
-        # reproduces them byte-for-byte.
-        _asserted_at = float(
-            ((prepared or {}).get("clock")
-             or wget(cid, "simulation_clock", {}) or {}
-             ).get("elapsed_seconds") or 0.0)
+        # WHEN THIS CONDITION WAS LAST ASSERTED, in turns. Nothing recorded
+        # it, which is why "has anybody mentioned this in the last thirty
+        # turns" was an unanswerable question about the 360 active,
+        # never-expiring rows in the author's corpus (engine.db 2026-08-25,
+        # chat 88 the instance: ten rows, all active, not one with an
+        # `expires_at`). The Director's `active_conditions` view reads this
+        # stamp to show how long a row has stood unmentioned
+        # (`last_asserted_turns_ago`). A pure function of the turn index, so a
+        # rerolled turn reproduces it byte-for-byte.
+        #
+        # ONE STAMP, NOT TWO. The simulation-second twin was written and read
+        # by nothing -- the view already carries `age_seconds` off
+        # `started_at`, so a second clock number per row per beat states an
+        # idleness measure nothing computes. A field nothing reads is worse
+        # than no field (this file's own rule; llm/schemas.py deleted 29
+        # models over it), and docs/UNBUILT.md 1.84 records that the
+        # simulation-clock arm of the idle backstop should probably be
+        # dropped rather than lowered -- so the stamp it would have wanted has
+        # no argued reader either.
         try:
             _asserted_turn = int(ctx.turn.idx)
         except (TypeError, ValueError, AttributeError):
@@ -491,28 +497,39 @@ def commit_world_entities(ctx, nonce, *, prepared=None):
                 # variant's stored record of what the model said, not a
                 # scratchpad for the commit.
                 payload = json.dumps(
-                    {**cond, "last_asserted_at_seconds": _asserted_at,
-                     "last_asserted_turn_idx": _asserted_turn},
+                    {**cond, "last_asserted_turn_idx": _asserted_turn},
                     ensure_ascii=False)
                 if existing:
                     # THE SAME NOTHING-EVER-ENDS CLASS, on the UPDATE branch.
-                    # The INSERT below has always read `expires_at_seconds`
-                    # and `next_tick_seconds`; this named only subject_id,
-                    # kind, payload and active, so a Director granting a
-                    # standing condition an end on RE-EMISSION had that end
-                    # silently discarded and the row stayed immortal.
-                    # COALESCE, not a plain assignment: a re-emission that
-                    # authors no timing keeps the row's own -- the guard
-                    # subtracts, and a re-assertion is not a retraction.
+                    # The INSERT below has always read `expires_at_seconds`;
+                    # this named only subject_id, kind, payload and active, so
+                    # a Director granting a standing condition an end on
+                    # RE-EMISSION had that end silently discarded and the row
+                    # stayed immortal. COALESCE, not a plain assignment: a
+                    # re-emission that authors no expiry keeps the row's own
+                    # -- the guard subtracts, and a re-assertion is not a
+                    # retraction.
+                    #
+                    # `next_tick` IS NOT HERE, and is bound NULL below.
+                    # CADENCE IS OWNED BY THE SWEEP, NEVER BY THE WRITER
+                    # (world/mechanics.py pass (c1)): a row is scheduled from
+                    # the clock the sweep first SEES it on. Letting a
+                    # re-emission move the column re-opens the never-fires
+                    # class this landing closed -- `_tick_conditions` loops
+                    # `while t <= elapsed`, so a value past any reachable
+                    # clock freezes that row's cadence forever with no reader
+                    # able to see it (the view does not surface `next_tick`),
+                    # and a far-past one burns the fire cap. Measured
+                    # read-only 2026-08-25: 0 of 444 corpus rows author
+                    # `next_tick_seconds`, no prompt in either language pack
+                    # teaches it, and nothing else in the engine spells it.
                     c.execute(
                         """UPDATE world_conditions SET subject_id=?,kind=?,payload=?,active=?,
-                        expires_at=COALESCE(?,expires_at),
-                        next_tick=COALESCE(?,next_tick)
+                        expires_at=COALESCE(?,expires_at)
                         WHERE condition_id=? AND chat_id=?""",
                         (cond.get("subject_id", ""), cond.get("kind", ""),
                          payload, int(cond.get("active", 1)),
-                         cond.get("expires_at_seconds"),
-                         cond.get("next_tick_seconds"), cid_val, cid),
+                         cond.get("expires_at_seconds"), cid_val, cid),
                     )
                 else:
                     c.execute(
@@ -521,7 +538,12 @@ def commit_world_entities(ctx, nonce, *, prepared=None):
                         (cid_val, cid, cond.get("subject_id", ""), cond.get("kind", ""),
                          cond.get("started_at_seconds", 0.0),
                          cond.get("expires_at_seconds"),
-                         cond.get("next_tick_seconds"),
+                         # NULL, always: see the UPDATE branch above. The
+                         # sweep schedules this row from the clock it first
+                         # sees it on, and a writer that could seed a cadence
+                         # it may not later move would own it exactly once,
+                         # which is the same ownership under a different name.
+                         None,
                          # The row's own `active`, not a hardcoded 1. An
                          # ENDING that names an id no row carries yet (a
                          # Director closing a condition under a rekeyed id, an

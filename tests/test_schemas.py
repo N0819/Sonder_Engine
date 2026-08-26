@@ -279,10 +279,12 @@ def test_no_schema_model_is_declared_without_anything_reaching_it():
 
     Nothing validates against it, so it states a shape the engine does not
     enforce while reading, to anyone opening this file, as the contract. That
-    is not hypothetical: the body specialist's sheet asks the Director for
-    `tick_interval_seconds`, and the only place that field exists in code is
-    `PersistentCondition` -- a model no call has ever validated -- while the
-    commit path reads a different field name entirely.
+    That was not hypothetical: the body specialist's sheet asked the Director
+    for `tick_interval_seconds` while the only place that field existed in
+    code was `PersistentCondition`, a model no call has ever validated. The
+    resolution was to give the field a real reader (`world.mechanics.
+    _tick_interval`, the due-tick sweep) and DELETE the model, not to extend
+    it -- an unvalidated shape does not become a contract by growing.
 
     Twenty-nine such models were deleted: the fiction/time/authority models,
     the early entity ontology, and the shapes naming the

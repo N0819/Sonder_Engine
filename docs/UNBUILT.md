@@ -2497,6 +2497,16 @@ to close zero of the 360 rows they were built for:
   stamping at the write — so it exists only on rows written after it, and
   not one of the 360 legacy rows has it.
 
+A simulation-second twin of that stamp (`last_asserted_at_seconds`) shipped
+with the landing and was removed in the repair pass the same day: nothing read
+it, `_conditions_view` already reports `age_seconds` off `started_at`, and the
+arm that would have wanted it is the clock arm this entry says should probably
+be dropped. A field nothing reads is worse than no field, and that rule does
+not stop applying to the fields this landing added. If the clock arm is ever
+argued for rather than assumed, the stamp is two lines in
+`persist/commit_entities.commit_world_entities` and belongs in the commit that
+argues it.
+
 Shipping it would have been a mechanism whose measured effect is zero while
 its register entry claimed the rows "drain organically", which is the exact
 failure mode this table already has too much of. The two things it needs are
@@ -2511,6 +2521,18 @@ clocks in this corpus do not move far enough to carry a rule.
 The cost asymmetry that justifies building it at all is the awareness floor's
 own, generalized: closing a condition wrongly costs one beat the Director can
 re-narrate, and never closing one is the 360-row ledger.
+
+**And the ledger is now charged per beat.** `active_conditions` reaches the
+Director in `director_interpret`, in `director_resolve` and inside the body
+specialist's payload, so a live row is spelled three times a beat (four for a
+gated awareness row, which `active_awareness` also carries). The view is
+capped at 40 rows and one corpus chat carries 24 active at once, so the worst
+case is real and recurring rather than theoretical. Two separate reductions
+are available and neither is free: closing the un-owned rows (this entry) so
+the ledger is short, or composing the Director's condition blocks once per
+beat instead of once per stage. The first is the one with the design argument
+behind it; the second is a payload-assembly change and should not be made
+before somebody measures what the three copies actually cost.
 
 
 ## 2. Roadmap

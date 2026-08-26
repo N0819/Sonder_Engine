@@ -32,6 +32,8 @@ from __future__ import annotations
 import json
 import time
 
+import pytest
+
 from persist.checkpoints import ensure_checkpoint, restore_checkpoint
 from persist.commit import (commit_scene, commit_transit_sweep,
                             commit_world_entities, prepare_scene_commit)
@@ -286,6 +288,55 @@ def test_the_tick_pass_reads_a_state_nested_tick_block_too():
     assert abs(scene["vitals"]["Mara"]["stamina"] - 0.8) < 1e-9
 
 
+def test_a_null_root_spelling_does_not_mask_the_state_spelling():
+    """`_condition_field` reads the root spelling first and `state` second.
+    Reading "the key is present" rather than "the key has a value" makes a
+    payload that lists every field and nulls the ones it has nothing to say
+    about hide the value it DID fill in. 0 of 444 corpus rows are in that
+    shape today, so this is latent -- and the helper's whole stated purpose
+    is that a reader knowing one spelling must not ignore half the rows."""
+    scene = _scene({"Mara": {"stamina": 1.0}})
+    _, ops, notices, _ = _sweep(
+        scene,
+        [_cond(next_tick=100.0,
+               payload={"tick_interval_seconds": None, "tick": None,
+                        "state": {"tick_interval_seconds": 10,
+                                  "tick": {"vitals": {"stamina": -0.1},
+                                           "percept": "water at the ankles"}}})],
+        120.0)
+    assert _ticks(ops) == [("tick_condition", "c1", 130.0)]
+    assert scene["vitals"]["Mara"]["stamina"] == pytest.approx(0.7)
+    assert any("water at the ankles" in n for n in notices)
+
+
+def test_tick_notices_are_capped_and_an_unnamed_subject_is_said_once():
+    """A sibling of `director_floors._CONDITIONS_VIEW_CAP`, which had none.
+    One corpus chat carries 24 active rows (engine.db 2026-08-25), and these
+    notices restage EVERY beat for as long as the processes run, so an
+    uncapped sweep spends the beat's whole notice budget on the world
+    repeating itself. The truncation is SAID, and rows naming the same body
+    the vitals ledger cannot match collapse to one line rather than N."""
+    scene = _scene({"Mara": {"stamina": 1.0}})
+    conds = [
+        _cond(f"c{n}", next_tick=0.0,
+              payload={"tick_interval_seconds": 10,
+                       "tick": {"percept": f"process {n} continues"}})
+        for n in range(12)
+    ]
+    _, _, notices, _ = _sweep(scene, conds, 10.0)
+    assert len(notices) == 9          # 8 processes + the truncation line
+    assert "4 further standing condition" in notices[-1]
+
+    conds = [
+        _cond(f"c{n}", subject="ent_7f2", next_tick=0.0,
+              payload={"tick_interval_seconds": 10,
+                       "tick": {"vitals": {"stamina": -0.1}}})
+        for n in range(3)
+    ]
+    _, _, notices, _ = _sweep(_scene({"Mara": {"stamina": 1.0}}), conds, 10.0)
+    assert len([n for n in notices if "ent_7f2" in n]) == 1
+
+
 def test_the_sweep_counts_dict_keeps_exactly_its_three_keys():
     """`counts` is what pass (a) fired; `ticked` is a count of ops the
     CALLER applies, and belongs to whoever applies them -- the same split
@@ -414,7 +465,12 @@ def _write_condition(temp_db, cid, turn_idx, cond, clock=500.0):
 def test_a_written_condition_is_stamped_with_when_it_was_last_asserted(temp_db):
     """Idleness is only measurable if assertion is recorded. Nothing in the
     corpus records it, which is why "has anyone mentioned this in the last
-    thirty turns" was an unanswerable question about 360 immortal rows."""
+    thirty turns" was an unanswerable question about 360 immortal rows.
+
+    ONE stamp, in turns, because one is what `_conditions_view` reads. The
+    simulation-second twin was dropped in the repair pass: the view already
+    carries `age_seconds`, so the second clock number was a persisted field
+    nothing read."""
     cid = _make_chat(temp_db)
     temp_db.wset(cid, "scene", _scene())
     cond = {"condition_id": "k1", "subject_id": "Mara", "kind": "chilled"}
@@ -424,7 +480,7 @@ def test_a_written_condition_is_stamped_with_when_it_was_last_asserted(temp_db):
                     (cid,), one=True)
     stored = json.loads(row["payload"])
     assert stored["last_asserted_turn_idx"] == 7
-    assert stored["last_asserted_at_seconds"] == 610.0
+    assert "last_asserted_at_seconds" not in stored
     # The stage variant's own diff dict is never mutated: it is the stored
     # record of what the model said, not a scratchpad for the commit.
     assert "last_asserted_turn_idx" not in cond
@@ -434,36 +490,49 @@ def test_a_written_condition_is_stamped_with_when_it_was_last_asserted(temp_db):
         "SELECT payload FROM world_conditions WHERE chat_id=?",
         (cid,), one=True)["payload"])
     assert stored["last_asserted_turn_idx"] == 19
-    assert stored["last_asserted_at_seconds"] == 980.0
+    assert "last_asserted_at_seconds" not in stored
 
 
-def test_a_re_emission_that_authors_an_expiry_finally_reaches_the_column(
-        temp_db):
-    """THE SAME NOTHING-EVER-ENDS CLASS, on the UPDATE branch. The insert
-    read `expires_at_seconds` and `next_tick_seconds`; the update named only
-    subject_id/kind/payload/active, so a Director granting a standing
-    condition an end on re-emission had that end silently discarded and the
-    row stayed immortal. COALESCE, so a re-emission that authors no timing
-    keeps the row's own -- the guard subtracts."""
+def test_a_re_emission_authors_an_expiry_and_never_the_cadence(temp_db):
+    """THE SAME NOTHING-EVER-ENDS CLASS, on the UPDATE branch -- and the
+    ownership line that keeps the repair from re-opening it.
+
+    `expires_at`: the insert always read `expires_at_seconds`; the update
+    named only subject_id/kind/payload/active, so a Director granting a
+    standing condition an end on re-emission had that end silently discarded
+    and the row stayed immortal. COALESCE, so a re-emission that authors no
+    expiry keeps the row's own -- the guard subtracts.
+
+    `next_tick`: NEVER, on either branch. CADENCE IS OWNED BY THE SWEEP
+    (world/mechanics.py pass (c1)), which schedules a row from the clock it
+    first SEES it on. A writer-set value past any reachable clock freezes
+    that row's cadence forever -- `_tick_conditions` loops `while t <=
+    elapsed`, so it emits no op, and nothing surfaces `next_tick` to any
+    reader who could repair it -- and a far-past one burns the 500-fire cap
+    every beat. Measured read-only 2026-08-25: 0 of 444 corpus rows author
+    `next_tick_seconds` and no prompt in either language pack teaches it."""
     cid = _make_chat(temp_db)
     temp_db.wset(cid, "scene", _scene())
     base = {"condition_id": "k1", "subject_id": "Mara", "kind": "chilled"}
-    _write_condition(temp_db, cid, 1, dict(base))
+    _write_condition(temp_db, cid, 1,
+                     dict(base, next_tick_seconds=600.0))
     row = temp_db.q("SELECT * FROM world_conditions WHERE chat_id=?",
                     (cid,), one=True)
-    assert row["expires_at"] is None and row["next_tick"] is None
+    assert row["expires_at"] is None
+    assert row["next_tick"] is None      # the INSERT does not take it either
 
     _write_condition(temp_db, cid, 2,
                      dict(base, expires_at_seconds=900.0,
-                          next_tick_seconds=600.0))
+                          next_tick_seconds=999999.0))
     row = temp_db.q("SELECT * FROM world_conditions WHERE chat_id=?",
                     (cid,), one=True)
-    assert row["expires_at"] == 900.0 and row["next_tick"] == 600.0
+    assert row["expires_at"] == 900.0
+    assert row["next_tick"] is None
 
     _write_condition(temp_db, cid, 3, dict(base))
     row = temp_db.q("SELECT * FROM world_conditions WHERE chat_id=?",
                     (cid,), one=True)
-    assert row["expires_at"] == 900.0 and row["next_tick"] == 600.0
+    assert row["expires_at"] == 900.0 and row["next_tick"] is None
 
 
 # --------------------------------------------------------------------------

@@ -572,8 +572,12 @@ def _conditions_view(chat_id, clock, turn_idx, sd_time=None):
     everything else is where the population is. Measured read-only on the
     author's engine.db 2026-08-25: 444 rows over 50 chats, 363 active, 360 of
     those with NO `expires_at`, spread over 106 distinct active `kind`
-    strings -- one chat carrying a `dazed` awareness row from simulation
-    second 880, still in force sixteen turns and two fictional hours later.
+    strings. Twelve of them are live `dazed` rows no floor can end: chat 88's
+    opened at simulation second 880 and was still in force thirteen turns and
+    256 simulation seconds later, and the oldest un-owned `dazed` row in the
+    corpus (chat 27) has stood 1,210 simulation seconds. Nothing ends any of
+    them -- the ceiling is how long the story ran, not how long the row can
+    last.
 
     HOW THIS COMPOSES WITH THE FLOORS, because they overlap and must not
     fight. `exit_owner` names the deterministic floor that can already end a
