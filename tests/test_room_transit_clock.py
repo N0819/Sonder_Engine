@@ -424,6 +424,40 @@ class TestTheOnRamp:
             stamped, {}, clock_seconds=_UNSTATED_CROSSING_SECONDS)
         assert _where(carried) == deeper
 
+    def test_the_row_names_the_holder_in_one_slot_and_only_that_slot(self):
+        """A ROW THAT NAMES NEITHER SIDE AS THE ENCLOSED ONE MINTS NOTHING.
+
+        The on-ramp reads `target` as the holder and `actor` as the occupant,
+        which is the contact vocabulary's own orientation, and it must keep
+        reading exactly those slots. A "resolve the unordered pair instead"
+        change was considered against the live corpus and rejected: an
+        interior contact row is `derive_containment_from_contacts`'s own
+        documented ambiguity -- in one spelling the cavity belongs to the
+        target and in the other it belongs to the actor -- so promoting a
+        pair into "A contains B's whole body" asserts a fact the row does not
+        carry. Once any chain exists, a row naming a region of the INNER body
+        would then mint a station inside the holder and teleport the occupant
+        into it, out of the station they were crossing. That is information
+        EXPANSION; the firewall subtracts.
+
+        Measured read-only against the author's corpus 2026-08-25: no scene
+        stores an inverted enclosure row, and the two rows that read that way
+        (chats 86 and 87) are part-in-cavity rows of exactly this shape,
+        already served by `_enclosed_by_asymmetry` one step earlier.
+        """
+        scene = _chain_scene(transit=(None,), motion="moving")
+        row = _contact(scene)
+        row["actor"], row["target"] = row["target"], row["actor"]
+        row["target_interior"] = "Deeper"
+        before = len(scene["rooms"])
+        merged = merge_scene_with_diff(scene, {}, clock_seconds=0.0)
+
+        assert len(merged["rooms"]) == before, (
+            "a row whose named side has no inside minted a station anyway")
+        assert _where(merged) == "st_0", (
+            "an occupant was moved on the strength of a row that never said "
+            "which side encloses which")
+
 
 class TestTheLedgerFollowsTheBody:
 

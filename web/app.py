@@ -82,7 +82,7 @@ from story.importers import (
     generate_character, generate_persona, generate_lore_entries,
     reinterpret_lorebook, resolve_import_card, draft_promoted_character,
     recover_greetings_from_source,
-    fill_character_psychology, fill_appearance,
+    fill_character_psychology, fill_appearance, fill_body_interior,
 )
 from persist.commit import (promotable_background_presences,
                     promote_background_character,
@@ -2658,6 +2658,24 @@ def char_fill_psychology(cid: int, body: dict = Body(default={})):
         raise HTTPException(404, str(exc)) from exc
     except Exception as exc:
         raise HTTPException(502, f"Psychology fill failed: {exc}") from exc
+    return {"id": cid, "sheet": sheet,
+            "warnings": character_card_warnings(sheet)}
+
+@app.post("/api/characters/{cid}/fill_interior")
+def char_fill_interior(cid: int, body: dict = Body(default={})):
+    """Preview this card's inside, read out of its own prose. Writes nothing.
+
+    CHARACTER ONLY, and deliberately: `stamp_authored_interiors` walks the
+    cast, so a persona's interior would be a field nothing reads
+    (`tests/test_card_interior_spec.py` pins the absence)."""
+    brief = str(body.get("prompt") or body.get("brief") or "").strip()
+    try:
+        with language_scope(_require_story_language(body.get("language"))):
+            sheet = fill_body_interior(cid, brief, draft=body.get("draft"))
+    except ValueError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(502, f"Interior fill failed: {exc}") from exc
     return {"id": cid, "sheet": sheet,
             "warnings": character_card_warnings(sheet)}
 

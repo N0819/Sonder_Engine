@@ -2199,6 +2199,21 @@ def perception_outcome(ctx, nonce):
     _beat_end, _b, _r, _floored = beat_end_elapsed(
         clock_elapsed(wget(chat["id"], "simulation_clock", {}) or {}),
         _td, floor=bool(res))
+    # THE CARD'S AUTHORED INSIDE, ON BOTH SCOPES, EXACTLY AS COMMIT DOES IT.
+    # `merge_scene_with_diff` builds a body's interior from the scene alone
+    # and cannot reach a sheet, so the topology has to be standing on the
+    # entity before the merge reads it -- and `stamp_authored_interiors` ran
+    # at commit and nowhere else. This mirror would then compose the beat the
+    # chain lands on from the OLD interior while the commit built the new one
+    # and moved the body into it: the same composed-versus-committed skew
+    # `dedup_minted_rooms` above exists to prevent, made worse by including
+    # where somebody is standing. Deterministic and idempotent (the commit
+    # re-runs it to the same result), and it writes nothing.
+    from agents.common import stamp_authored_interiors
+
+    for _scope in (sc, diff):
+        stamp_authored_interiors(_scope, ctx.cast,
+                                 player_name=persona_name(pers) or None)
     sc = merge_scene_with_diff(sc, diff, clock_seconds=_beat_end)
     # Attire is commit-owned and intentionally absent from spatial's generic
     # merge. Preview the exact same canonicalized/region-derived result commit

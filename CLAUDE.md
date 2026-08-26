@@ -179,11 +179,11 @@ Frontend (`static/js/`) uses browser globals, not ES modules. `theme-init.js` lo
     empty drive.** The character emitted drive-serving wants for 150 beats
     against three empty strings, and nothing anywhere objected.
     `character_card_warnings` catches this. It ran on the import path alone
-    until 2026-08-18; it now runs on all nine surfaces that hand back a card
+    until 2026-08-18; it now runs on all ten surfaces that hand back a card
     — blank-card creation, AI generation, hand edit, the per-story card
-    override, promotion confirm, psychology fill, appearance fill, import and
-    the greeting launch — because nothing about the answer depends on where
-    the sheet came from. `importers.character_import_warnings` is an alias
+    override, promotion confirm, psychology fill, appearance fill, interior
+    fill, import and the greeting launch — because nothing about the answer
+    depends on where the sheet came from. `importers.character_import_warnings` is an alias
     kept for the import path's own readers.
   - **Phrase `values` as trade-offs that name what yields** ("speed over
     thoroughness"), not as a flat list of virtues or prohibitions. A flat list
