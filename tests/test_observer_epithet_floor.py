@@ -56,6 +56,16 @@ CORIN = "A young smith's apprentice with a borrowed sword."
 SQUARE = [("Sera", PLAIN, []), ("Bryn", PLAIN, []),
           ("Wren", PLAIN, []), ("Corin", CORIN, [])]
 
+# All four standing together in one lit place. `observer_display_map` hands
+# out an appearance descriptor only where sight is `full`, so a scene with no
+# positions in it puts every body out of sight of every other and the epithets
+# under test are never minted at all -- the assertions below would pass
+# against a map holding nothing but the sightless fallback.
+SQUARE_SCENE = {
+    "rooms": {"square": {"name": "The Village Square", "light": "bright"}},
+    "positions": {name: "square" for name, _a, _al in SQUARE},
+}
+
 
 class TestTheLabelsThemselves:
     def test_the_observed_labels_are_still_what_gets_minted(self):
@@ -194,7 +204,7 @@ class TestTheDeliverySites:
         bodies = self._bodies()
         joint = _joint_stranger_labels(bodies)
         display = composer.observer_display_map(
-            {"positions": {}}, "Corin",
+            SQUARE_SCENE, "Corin",
             [b for b in bodies if b["name"] != "Corin"], {})
         forms = _composer_self_forms(
             "Corin", ["Corin"],
@@ -211,7 +221,7 @@ class TestTheDeliverySites:
         bodies = self._bodies()
         joint = _joint_stranger_labels(bodies)
         display = composer.observer_display_map(
-            {"positions": {}}, "Sera",
+            SQUARE_SCENE, "Sera",
             [b for b in bodies if b["name"] != "Sera"], {})
         forms = _composer_self_forms(
             "Sera", ["Sera"], {"appearance": PLAIN, "aliases": []},

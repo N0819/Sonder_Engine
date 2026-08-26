@@ -1311,8 +1311,19 @@ def _co_present_company(scene, observer_name, bodies, known):
     - a disguised body whose truth this observer is not in `known_to` for
       is never connected to its name, however well the observer knows
       the name -- that connection is the thing the disguise conceals.
+
+    Every one of those five is `composer.observer_display_map`'s rule, and
+    the labels are now READ from it rather than restated here. They were
+    restated, and the restatement was the correct half of a pair that
+    disagreed: one body could be a silhouette in this payload and an
+    appearance epithet in the composed view of the same beat. A second copy
+    of a naming rule is a classifier waiting to drift, exactly as the
+    admission comment in `presence_percepts` says of a second copy of an
+    admission rule. What stays local is the DEDUPE: this field is a dict
+    keyed by label, and two bodies the observer genuinely cannot tell apart
+    share one label by design, so they need distinct keys to both survive.
     """
-    recognized = known.get(observer_name) or []
+    display = composer.observer_display_map(scene, observer_name, bodies, known)
     prox, behind = {}, []
     for body in bodies:
         name = body.get("name")
@@ -1324,16 +1335,9 @@ def _co_present_company(scene, observer_name, bodies, known):
         tier = proximity_rel(scene, observer_name, name)
         if tier is None:
             continue            # co-located only, like the field it feeds
-        hidden = disguise_breaks_recognition(
-            body.get("disguise_known_to"), observer_name,
-            body.get("disguise_conceals_identity"))
-        if not hidden and _recognizes(name, recognized):
-            label = name
-        elif level == "full":
-            label = _unknown_actor_label(
-                name, body.get("appearance"), body.get("aliases"))
-        else:
-            label = "an indistinct figure"
+        label = display.get(name)
+        if not label:
+            continue
         stem, n = label, 2
         while label in prox:    # two strangers can share a descriptor
             label, n = f"{stem} ({n})", n + 1
@@ -3471,7 +3475,7 @@ def _composer_establish(ctx, sc, perceivers, known, p_name, p_appearance,
             others = [b for b in bodies
                       if not _is_the_observer(sc, b["name"], name)]
             display_map = composer.observer_display_map(
-                sc, name, others, known)
+                sc, name, others, known, p.get("sense_card"))
             own_body = bodies_by_name.get(name)
             own_aliases = (own_body or {}).get("aliases") or []
             self_forms = _composer_self_forms(
@@ -3576,7 +3580,7 @@ def _composer_act(ctx, sc, interp, perceivers, known, p_name, p_visible,
                       if not _is_the_observer(sc, b["name"], name)]
             others.append(actor_body)
             display_map = composer.observer_display_map(
-                sc, name, others, known)
+                sc, name, others, known, p.get("sense_card"))
             self_forms = _composer_self_forms(
                 name, self_forms_by_name.get(name),
                 bodies_by_name.get(name), joint_labels, display_map)
@@ -4086,7 +4090,7 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
             others = [b for b in bodies
                       if not _is_the_observer(sc, b["name"], name)]
             display_map = composer.observer_display_map(
-                sc, name, others, known)
+                sc, name, others, known, p.get("sense_card"))
             self_forms = _composer_self_forms(
                 name, self_forms_by_name.get(name),
                 bodies_by_name.get(name), joint_labels, display_map)
