@@ -11,6 +11,7 @@ import copy
 from core.db import q, qi, transaction, wget, wset
 from mind.memory import add_lorebook_link
 from story.character_schema import character_name_from_text, persona_name
+from story.provenance_text import strip_engine_provenance
 from world.weather import advance_weather, normalize_weather
 from world.spatial import (contradictory_sight_edges, guessed_room_sizes,
                            merge_scene_with_diff)
@@ -543,9 +544,17 @@ def prepare_scene_commit(ctx):
         # (chat 58): t25's movement targeted `alley_mouth`, an ANCHOR inside
         # `street_outside` rather than a room; nothing staged layout lore for
         # it, so nothing was made.
-        _desc = next((entry["content"] for entry in staged
-                      if entry.get("category") == "layout"
-                      and entry.get("content")), "")
+        # The room's DESCRIPTION, with the engine's own bookkeeping split off.
+        # A `layout` entry staged for a room canon never described may carry
+        # the reason it was staged, and this value becomes both `desc` and
+        # `notes` -- the text every observer's view is built from. The
+        # provenance is filed on the lore row's `source_notes`
+        # (persist/commit_mapping), not into the room. See
+        # story/provenance_text for the measurement.
+        _desc = strip_engine_provenance(
+            next((entry["content"] for entry in staged
+                  if entry.get("category") == "layout"
+                  and entry.get("content")), ""))
         # Somewhere to come back from. A room with no edges is unreachable
         # from every other room in the scene -- perception then treats it as
         # `separated`/`far`, which is how an interior falls out of the world.

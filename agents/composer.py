@@ -65,6 +65,7 @@ from language_runtime import (
 
 logger = logging.getLogger(__name__)
 from story.scene import disguise_breaks_recognition
+from story.provenance_text import strip_engine_provenance
 from world.spatial import (
     _clean_pose,
     _entities_named,
@@ -592,6 +593,16 @@ def environment_percept(room_id, room_name, room_notes="", light=""):
     if not room_id or not str(room_name or "").strip() \
             or str(room_name).strip().casefold() == "an unspecified area":
         return None
+    # THE DELIVERY FLOOR for engine provenance. Room notes are the one field in
+    # a view whose text the ENGINE may have written about itself -- a
+    # synthesised description can carry the reason it was synthesised, and that
+    # reason is bookkeeping, not a property of the room. Measured live (chat 95
+    # beat 7): "You are in Harbour Office. generated because no candidate
+    # described this location." reached a character agent as world text. The
+    # signal is kept where provenance belongs (story/provenance_text); what a
+    # mind receives is the place. Stripped HERE, at percept construction, so
+    # the render and `observations_from_render` cannot disagree about it.
+    room_notes = strip_engine_provenance(room_notes)
     light = str(light or "")
     return Percept(
         kind="environment", channel="sight",
