@@ -343,10 +343,14 @@ def test_no_schema_model_is_declared_without_anything_reaching_it():
     # Kept deliberately, each for a stated reason. Removing a name from this
     # allowlist means deleting the model, not silencing the test.
     allowed = {
-        # Held until the open question about condition ticking is answered:
-        # build the due-tick sweep, or drop the prompt field, the NULL
-        # `next_tick` column and the index that serves no query.
-        "PersistentCondition",
+        # `PersistentCondition` used to sit here, held while one open
+        # question stood: build the due-tick sweep, or drop the prompt
+        # field, the NULL `next_tick` column and the index that serves no
+        # query. The sweep was built (`world.mechanics` pass (c1)), which
+        # spent the exemption -- the shape a tick declares is now read and
+        # clamped by `world.mechanics._tick_spec` from the lenient dict the
+        # channel actually carries, so the unvalidated model went with the
+        # other twenty-nine. One fewer name here is the point of the test.
         # Fixtures: tests/test_schema_leniency.py exercises the shared
         # coercion through these two, and tests/test_speech_concealment.py
         # through SpeechElement.

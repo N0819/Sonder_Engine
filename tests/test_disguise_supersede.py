@@ -111,8 +111,12 @@ def test_the_rule_runs_on_the_live_commit_path():
     src = (Path(__file__).resolve().parents[1]
            / "persist" / "commit_entities.py").read_text(encoding="utf-8")
     block = src[src.index("for cond_id, cond_list in"):]
-    block = block[:block.index("\n    for ", 200)] if "\n    for " in block[200:] \
-        else block[:4000]
+    # Bounded by the FUNCTION's own end, not by a character count. The
+    # window used to stop at 4000 characters, which is not a boundary of
+    # anything: adding provenance comments inside the loop moved the call
+    # past it and failed a test about whether the call exists. A syntactic
+    # end cannot drift with the prose around it.
+    block = block[:block.index('\n    return {"entities_committed"')]
     assert "_supersede_disguises(c, cid, cond, cid_val)" in block
 
 

@@ -445,6 +445,24 @@ def commit_world_entities(ctx, nonce, *, prepared=None):
             prev_scene=(prepared or {}).get("prev_scene"))
         targeted_this_beat = _subjects_targeted_by_an_action(ctx)
 
+        # WHEN THIS CONDITION WAS LAST ASSERTED, on both clocks the engine
+        # keeps. Nothing recorded it, which is why "has anybody mentioned
+        # this in the last thirty turns" was an unanswerable question about
+        # the 360 active, never-expiring rows in the author's corpus
+        # (engine.db 2026-08-25, chat 88 the instance: ten rows, all active,
+        # not one with an `expires_at`). The Director's `active_conditions`
+        # view reads these stamps to show how long a row has stood
+        # unmentioned. Pure functions of (clock, turn), so a rerolled turn
+        # reproduces them byte-for-byte.
+        _asserted_at = float(
+            ((prepared or {}).get("clock")
+             or wget(cid, "simulation_clock", {}) or {}
+             ).get("elapsed_seconds") or 0.0)
+        try:
+            _asserted_turn = int(ctx.turn.idx)
+        except (TypeError, ValueError, AttributeError):
+            _asserted_turn = 0
+
         for cond_id, cond_list in (diff.get("conditions") or {}).items():
             if not isinstance(cond_list, list):
                 cond_list = [cond_list]
@@ -469,13 +487,32 @@ def commit_world_entities(ctx, nonce, *, prepared=None):
                 existing = q("SELECT condition_id FROM world_conditions "
                              "WHERE condition_id=? AND chat_id=?",
                              (cid_val, cid), one=True)
-                payload = json.dumps(cond, ensure_ascii=False)
+                # A COPY, never the diff dict itself: `cond` is the stage
+                # variant's stored record of what the model said, not a
+                # scratchpad for the commit.
+                payload = json.dumps(
+                    {**cond, "last_asserted_at_seconds": _asserted_at,
+                     "last_asserted_turn_idx": _asserted_turn},
+                    ensure_ascii=False)
                 if existing:
+                    # THE SAME NOTHING-EVER-ENDS CLASS, on the UPDATE branch.
+                    # The INSERT below has always read `expires_at_seconds`
+                    # and `next_tick_seconds`; this named only subject_id,
+                    # kind, payload and active, so a Director granting a
+                    # standing condition an end on RE-EMISSION had that end
+                    # silently discarded and the row stayed immortal.
+                    # COALESCE, not a plain assignment: a re-emission that
+                    # authors no timing keeps the row's own -- the guard
+                    # subtracts, and a re-assertion is not a retraction.
                     c.execute(
-                        """UPDATE world_conditions SET subject_id=?,kind=?,payload=?,active=?
+                        """UPDATE world_conditions SET subject_id=?,kind=?,payload=?,active=?,
+                        expires_at=COALESCE(?,expires_at),
+                        next_tick=COALESCE(?,next_tick)
                         WHERE condition_id=? AND chat_id=?""",
                         (cond.get("subject_id", ""), cond.get("kind", ""),
-                         payload, int(cond.get("active", 1)), cid_val, cid),
+                         payload, int(cond.get("active", 1)),
+                         cond.get("expires_at_seconds"),
+                         cond.get("next_tick_seconds"), cid_val, cid),
                     )
                 else:
                     c.execute(

@@ -8,7 +8,9 @@ prepare_scene_commit's tail:
         the entity and docks it; news_arrival stages latency-gated
         awareness -- see the news note below);
     (b) schedule new arrivals from entity.state.transit eta declarations;
-    (c) expire due world_conditions;
+    (c1) fire due world_conditions ticks -- a condition that declares a
+        cadence ACTS while it lasts (see the pass (c1) block below), and
+        (c2) expire due world_conditions;
     (d) recompute derived dock edges (when an arrival fired);
     (e) vehicle-zone / companion-carry inference.
 
@@ -288,8 +290,14 @@ def news_latency_seconds(distance_hops):
 
 
 def _payload_of(row):
+    """A row's payload as a dict. Already-parsed payloads pass through, so a
+    caller that hands rows straight out of SQL and one that builds them in
+    memory reach the same code -- the sweep owns the shape either way."""
+    raw = row.get("payload")
+    if isinstance(raw, dict):
+        return raw
     try:
-        payload = json.loads(row.get("payload") or "{}")
+        payload = json.loads(raw or "{}")
     except Exception:
         payload = {}
     return payload if isinstance(payload, dict) else {}
@@ -439,8 +447,220 @@ def _schedule_new_arrivals(scene, elapsed, frame_id, pending_entity_ids,
     return event_ops, scheduled
 
 
+# ---- Conditions that ACT while they last (pass (c1)) ----
+#
+# `world_conditions` shipped with a `next_tick` column and an
+# `idx_world_conditions_due` index over it, and nothing ever wrote either.
+# Measured read-only on the author's engine.db 2026-08-25: 444 rows across
+# 50 chats, `next_tick` NULL in all 444, while 131 ACTIVE rows carried an
+# authored `tick_interval_seconds` (0, 5, 10, 15, 20, 30, 45, 60, 300) that
+# no reader in the engine consumed. The body specialist's own sheet asks for
+# the field; llm/schemas.py stated the open question in its own comment --
+# build the due-tick sweep, or drop the field, the column and the index.
+# This pass is the build, and it runs BEFORE expiry so a condition's last
+# due tick lands before the clock closes it.
+#
+# WHAT A TICK MAY DO IS DELIBERATELY SMALL, because the engine must not learn
+# what any particular condition MEANS -- 106 distinct `kind` strings are
+# active in the corpus, so `kind` is open vocabulary and a per-kind effects
+# table would be an instance fix wearing a general syntax. A tick may move a
+# survival vital the scene ALREADY tracks, and it may re-announce one clause
+# as an engine notice. Everything else a condition does stays the Director's.
+#
+# Cadence is owned by THIS pass, never by the writer: a row is scheduled from
+# the clock the sweep first sees it on. Every existing row meets this
+# uninitialized, and an initialization that also fired would charge each of
+# them for the whole of the story that happened before the sweep existed.
+
+#: Most fires one row may take in one beat. Not a rate limit on fiction --
+#: a rate limit on arithmetic, for a five-second cadence meeting a time skip.
+_TICK_FIRE_CAP = 500
+#: Most one tick may move one vital. A model authoring `-1.0` against a
+#: five-second cadence would empty a body inside one beat; the CADENCE is how
+#: a condition gets to be lethal, not the size of a single step.
+_TICK_VITAL_STEP_CAP = 0.25
+
+
+def _condition_field(payload, key):
+    """A condition field, spelled at the payload root or inside `state`.
+
+    Both spellings are live across the table (`story.scene._condition_state`
+    tolerates the same pair), so a reader that knows only one of them is a
+    reader that silently ignores half the rows."""
+    if key in payload:
+        return payload.get(key)
+    state = payload.get("state")
+    return state.get(key) if isinstance(state, dict) else None
+
+
+def _tick_interval(payload):
+    """The declared cadence in simulation seconds, or None when there is not
+    one. Zero is NOT "tick constantly" -- 48 of the 131 interval-bearing
+    corpus rows spell `0`, the commonest authored value, and a field filled
+    in with nothing is not a cadence (it is also a divisor of zero)."""
+    try:
+        interval = float(_condition_field(payload, "tick_interval_seconds"))
+    except (TypeError, ValueError):
+        return None
+    if interval <= 0 or interval != interval or interval in (
+            float("inf"), float("-inf")):
+        return None
+    return interval
+
+
+def _tick_spec(payload):
+    """What one tick of this condition DOES: (vitals_deltas, percept).
+
+    `vitals` is restricted to the four keys `world.survival.VITALS` defines
+    and each per-tick step is clamped -- the guard SUBTRACTS, so a vital the
+    ledger does not track is dropped rather than invented. `percept` is one
+    short clause the world keeps saying while the process runs.
+    """
+    from world.survival import VITALS
+
+    block = _condition_field(payload, "tick")
+    if not isinstance(block, dict):
+        return {}, ""
+    deltas = {}
+    raw = block.get("vitals")
+    for vital, value in (raw.items() if isinstance(raw, dict) else ()):
+        name = str(vital or "").strip().casefold()
+        if name not in VITALS:
+            continue
+        try:
+            delta = float(value)
+        except (TypeError, ValueError):
+            continue
+        if delta != delta or delta in (float("inf"), float("-inf")):
+            continue
+        deltas[name] = max(-_TICK_VITAL_STEP_CAP,
+                           min(delta, _TICK_VITAL_STEP_CAP))
+    return deltas, str(block.get("percept") or "").strip()
+
+
+def _tick_subjects(scene, cond):
+    """Whose bodies one ticking condition acts on.
+
+    The row's own subject, and only that. This is the SINGLE place a ticking
+    condition's subject is resolved to bodies, so a later landing that lets a
+    PLACE carry a ticking condition has one function to change and nothing in
+    the firing, the batching, the clamps or the op family moves. Nothing is
+    declared for that here: a seam gets its fields when its consumer arrives.
+    """
+    subject = str(cond.get("subject_id") or "").strip()
+    return [subject] if subject else []
+
+
+def _vitals_entry_key(table, name):
+    """The key under which `name`'s vitals are stored, or None. Casefolded,
+    matching `survival.vitals_of` -- the table is keyed by display name."""
+    target = str(name or "").strip().casefold()
+    if not target:
+        return None
+    for key, record in table.items():
+        if str(key).strip().casefold() == target and isinstance(record, dict):
+            return key
+    return None
+
+
+def _tick_conditions(scene, conditions, elapsed):
+    """Pass (c1). Returns (event_ops, notices).
+
+    One op shape: ("tick_condition", condition_id, new_next_tick), applied by
+    the commit domain as the `next_tick` column write the table was built for.
+    """
+    from world.survival import _stored_vitals
+
+    event_ops, notices = [], []
+    for cond in conditions or []:
+        payload = _payload_of(cond)
+        interval = _tick_interval(payload)
+        if interval is None:
+            continue
+        cid = cond.get("condition_id")
+        raw_next = cond.get("next_tick")
+        if raw_next is None:
+            event_ops.append(("tick_condition", cid, elapsed + interval))
+            continue
+        try:
+            t = float(raw_next)
+        except (TypeError, ValueError):
+            event_ops.append(("tick_condition", cid, elapsed + interval))
+            continue
+        try:
+            expires = None if cond.get("expires_at") is None \
+                else float(cond["expires_at"])
+        except (TypeError, ValueError):
+            expires = None
+
+        fires = 0
+        while t <= elapsed and fires < _TICK_FIRE_CAP:
+            if expires is not None and t >= expires:
+                break
+            fires += 1
+            t += interval
+        if not fires:
+            continue
+        if fires >= _TICK_FIRE_CAP and t <= elapsed:
+            # THE CAP CATCHES UP; IT DOES NOT LAG. The story clock is free to
+            # jump hours in one beat (`read_time_diff`, alpha 9.8.2), so
+            # carrying the capped cadence forward as next_tick + fires*
+            # interval would leave the row permanently behind the clock and
+            # re-hit the cap on every beat for the rest of the story.
+            t = elapsed + interval
+        event_ops.append(("tick_condition", cid, t))
+
+        deltas, percept = _tick_spec(payload)
+        table = scene.get("vitals") if isinstance(scene, dict) else None
+        moved, missing = [], []
+        for subject in _tick_subjects(scene, cond):
+            if not deltas:
+                break
+            if not isinstance(table, dict) or not table:
+                # ABSENCE IS THE OFF SWITCH (world/survival.py: "nothing
+                # creates the table but an explicit write"). A tick may MOVE
+                # a vital; it may never CREATE the ledger. 131 active corpus
+                # rows carry intervals, so a seeding tick would have started
+                # a hunger clock in every story that never enabled survival.
+                # Dropped in silence: the setting being off is not a failure.
+                break
+            key = _vitals_entry_key(table, subject)
+            if key is None:
+                # The ledger EXISTS and this subject is not in it -- a real
+                # miss worth saying, not a setting. Condition subjects are
+                # free model text and some rows carry scene uids
+                # (docs/UNBUILT.md 1.65). A mechanism that silently never
+                # fires is this table's whole failure history.
+                missing.append(subject)
+                continue
+            record = table[key]
+            current = _stored_vitals(record)
+            for vital, delta in deltas.items():
+                before = current.get(vital, 0.0)
+                after = max(0.0, min(before + delta * fires, 1.0))
+                record[vital] = after
+                if after != before:
+                    moved.append(f"{subject} {vital} {after - before:+.2f}")
+
+        label = str(cond.get("subject_id") or cond.get("kind") or "").strip()
+        parts = [p for p in (percept, ", ".join(moved)) if p]
+        if parts:
+            # ONE notice per condition per sweep however many times it fired:
+            # a clause repeated four times is the same fact four times.
+            notices.append(
+                f"Ongoing ({label}, {fires}x): " + "; ".join(parts))
+        for subject in missing:
+            notices.append(
+                f"Ongoing ({label}): the standing condition declares a change "
+                f"to {subject}'s vitals, and no body of that name is in this "
+                "scene's vitals ledger -- name the subject as the scene names "
+                "them, or the change goes nowhere.")
+
+    return event_ops, notices
+
+
 def _expire_conditions(conditions, elapsed):
-    """Pass (c): active conditions whose expires_at has passed on this
+    """Pass (c2): active conditions whose expires_at has passed on this
     frame's clock. world_conditions is chat-scoped (no frame column); the
     committing frame's clock is used, matching how started_at is written."""
     event_ops = []
@@ -464,6 +684,8 @@ def mechanics_sweep(scene, clock, frame_id, pending, *,
         ("status", event_id, new_status)   -- scheduled_events row update
         ("schedule", row_dict)             -- scheduled_events upsert
         ("expire_condition", condition_id) -- world_conditions deactivate
+        ("tick_condition", condition_id, next_tick) -- world_conditions
+                                              cadence advance (pass (c1))
     notices is the engine_notices list for this beat (overwritten every
     sweep, so notices self-expire after one beat).
 
@@ -472,8 +694,8 @@ def mechanics_sweep(scene, clock, frame_id, pending, *,
     because the commit domain reports these numbers, and a caller that has to
     rebuild them from `event_ops` is writing a second implementation of a
     count this function already has -- which is what it did until WORLD-F3.
-    `scheduled` and `expired` are NOT here: those are counts of ops the
-    caller applies, and belong to whoever applies them.
+    `scheduled`, `expired` and `ticked` are NOT here: those are counts of ops
+    the caller applies, and belong to whoever applies them.
     """
     elapsed = float((clock or {}).get("elapsed_seconds") or 0.0)
 
@@ -488,7 +710,11 @@ def mechanics_sweep(scene, clock, frame_id, pending, *,
         chat_id, turn_id, turn_idx)
     event_ops.extend(schedule_ops)
 
-    # (c) condition expiry.
+    # (c1) conditions that act while they last, then (c2) condition expiry.
+    # Ticks FIRST so a row's last due tick lands before the clock closes it.
+    tick_ops, tick_notices = _tick_conditions(scene, conditions, elapsed)
+    event_ops.extend(tick_ops)
+    notices.extend(tick_notices)
     event_ops.extend(_expire_conditions(conditions, elapsed))
 
     # (d) dock-edge recompute: an arrival changed the inputs the dock-edge
