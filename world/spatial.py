@@ -89,7 +89,7 @@ from world.spatial_containment import (
     containment_facts, containment_hides, CONTAINMENT_MODES, contents_of,
     derive_containment_from_contacts,
     derive_contained_positions, enclosure_joins_rooms, hiding_holders_of,
-    interior_occupants,
+    interior_occupants, materialize_enclosure_interiors,
     normalize_scene_containment, normalize_scene_scales,
     place_enclosed_bodies, scale_changed_names,
     detail_resolves_between, scale_of, scale_ratio, size_facts,

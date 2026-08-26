@@ -20,9 +20,21 @@ sentences, because there was no room to compose.
 
 The conversion here is deterministic and CONDITIONAL. Existence of the place
 is not a judgment -- `mode: interior` plus a holder that HAS interior rooms is
-a body standing in one of them. Topology is authored content and stays with
-the producer that owns it. A holder with no interior rooms is left exactly as
-it was, which is the entire migration story for every scene already on disk.
+a body standing in one of them.
+
+THE MIGRATION SENTENCE THAT USED TO END THIS DOCSTRING IS GONE, deliberately.
+It said a holder with no interior rooms is left exactly as it was, "which is
+the entire migration story for every scene already on disk" -- true while the
+only producer of interior rooms was a clause in a prompt, and the reason this
+whole feature never fired: measured over the author's 80 stored scene rows,
+FOUR carried a standing `mode: interior` record over a holder with no inside,
+and every one of them left a body in its holder's own exterior room forever.
+`materialize_enclosure_interiors` mints that inside now, at both merge sites,
+so existence has a deterministic floor and the card supplies the richer
+topology on top of it. The never-converted class survives as five gates, each
+with its own test in `tests/test_interior_materialization.py`; the ledger form
+(`mode: "inside"`) and every carriage mode are held by the neighbouring tests
+here and by `tests/test_body_enclosure_channels.py`, both unmodified.
 """
 
 from __future__ import annotations
@@ -143,19 +155,32 @@ class TestTheHandoff:
 
 
 class TestWhatIsNeverConverted:
-    def test_a_holder_with_no_interior_is_untouched(self):
-        """THE MIGRATION FLOOR, and it PASSES ON MAIN -- a no-regression pin,
-        not a reproduction. Every stored scene holds contained-but-not-placed
-        bodies; nothing about them may move until an interior exists."""
+    def test_a_holder_with_no_interior_is_given_one(self):
+        """THE PIN THAT INVERTED, and it says so out loud.
+
+        Until 2026-08-25 this asserted the opposite -- a holder with no
+        interior rooms left exactly as it was, ledger record intact -- as a
+        no-regression pin whose own docstring said it existed so a later
+        change to this floor could not hide behind the file. This is that
+        change. Nothing produced interior rooms except a prompt clause, so the
+        conversion above had no on-ramp: measured read-only over the author's
+        80 stored scene rows, four carry this exact shape and four bodies
+        stand in their holder's own room forever.
+
+        The five gates that keep every OTHER class untouched have their own
+        tests in tests/test_interior_materialization.py.
+        """
         before = merge_scene_with_diff(_scene(interior=False), {})
-        # `in` reads as the display name because `normalize_scene_subjects`
-        # folds every subject-keyed ledger onto the entity's own name -- that
-        # is the standing merge behaviour, and this pin includes it verbatim
-        # so a later change to it cannot hide behind this file.
-        assert before["contained"] == {OCCUPANT: {"in": HOLDER,
-                                                  "mode": "interior"}}
-        assert before["positions"][OCCUPANT] == "hall"
+        minted = HOLDER_ID + "_interior"
+        assert before["contained"] == {}
+        assert before["positions"][OCCUPANT] == minted
         assert before["positions"][HOLDER] == "hall"
+        room = before["rooms"][minted]
+        assert room["parent_entity"] == HOLDER_ID
+        assert room["light"] == "dark"
+        assert room["dock_exit"] is True
+        assert [e for e in room["adjacent"]
+                if e.get("to") == "hall" and e.get("barrier") == "membrane"]
 
     def test_carriage_modes_are_never_placed(self):
         """Cargo has no inside to stand in. `interior` is the one mode
