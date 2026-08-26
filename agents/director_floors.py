@@ -16,10 +16,12 @@ import re
 from story.character_schema import name_boundary_pattern
 from story.scene import (
     NON_AWAKE_GATED,
+    active_condition_rows,
     awareness_cond_level,
     awareness_conditions,
     awareness_kind_level,
     awareness_of,
+    condition_exit_owner,
 )
 from world.mechanics import read_time_diff
 from world.spatial import room_of
@@ -546,6 +548,103 @@ def _awareness_view(chat_id, clock, interp, char_actions, sd_time=None):
                 record["level"] == "asleep" and elapsed is not None
                 and elapsed >= _NATURAL_SLEEP_SECONDS),
             "someone_is_trying_to_wake_them": record["subject"] in roused,
+        })
+    return view
+
+
+#: How many rows the general conditions view may carry. Oldest first,
+#: because the oldest are the ones nothing has ended. Chats in the corpus
+#: carry up to 24 active rows at once, so the cap is headroom rather than a
+#: routine truncation -- but the payload is charged every beat and this is a
+#: ledger, not a document.
+_CONDITIONS_VIEW_CAP = 40
+
+
+def _conditions_view(chat_id, clock, turn_idx, sd_time=None):
+    """The `active_conditions` block: EVERY live condition, with its id.
+
+    This is Reason 1 of the WAKING block above, generalized from one family
+    to the whole table. That block measured the Director never once ending an
+    awareness condition across 1483 live resolves, and named the first cause:
+    it was never shown the `condition_id`, and cannot re-emit an id it has
+    never been given. `_awareness_view` fixed that for awareness and
+    `_restraint_view` for restraints; nothing fixed it for anything else, and
+    everything else is where the population is. Measured read-only on the
+    author's engine.db 2026-08-25: 444 rows over 50 chats, 363 active, 360 of
+    those with NO `expires_at`, spread over 106 distinct active `kind`
+    strings. Twelve of them are live `dazed` rows no floor can end: chat 88's
+    opened at simulation second 880 and was still in force thirteen turns and
+    256 simulation seconds later, and the oldest un-owned `dazed` row in the
+    corpus (chat 27) has stood 1,210 simulation seconds. Nothing ends any of
+    them -- the ceiling is how long the story ran, not how long the row can
+    last.
+
+    HOW THIS COMPOSES WITH THE FLOORS, because they overlap and must not
+    fight. `exit_owner` names the deterministic floor that can already end a
+    row -- `awareness_floor` for a GATED awareness row, `restraint_floor` for
+    a live restraint, `standing_body` for a disguise or transformation the
+    write supersedes. This view adds no exit of its own and makes nothing in
+    `_awareness_exits` redundant: it adds VISIBILITY, which is the half of
+    the WAKING argument that was never generalized. A row answering
+    `exit_owner: None` is the class no floor can reach, and a non-gated
+    `dazed` row is deliberately in it -- `_awareness_exits` covers only
+    `NON_AWAKE_GATED`, so nothing has ever ended one.
+
+    Each entry states the two facts an ending needs: the id to re-emit with
+    `active: 0`, and whether anything else will ever close this row
+    (`expires_in_seconds: None` means nothing will).
+    """
+    rows = active_condition_rows(chat_id)
+    if not rows:
+        return []
+    try:
+        was = float((clock or {}).get("elapsed_seconds") or 0.0)
+    except (TypeError, ValueError, AttributeError):
+        was = 0.0
+    now, _backwards, _refused = read_time_diff(was, sd_time)
+    try:
+        turn_idx = int(turn_idx)
+    except (TypeError, ValueError):
+        turn_idx = None
+
+    view = []
+    for row in rows[:_CONDITIONS_VIEW_CAP]:
+        payload = row["payload"]
+
+        def _num(value):
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                return None
+
+        started = _num(payload.get("started_at_seconds"))
+        if started is None:
+            started = _num(row["started_at"]) or 0.0
+        expires = _num(row["expires_at"])
+        interval = _num(payload.get("tick_interval_seconds"))
+        if interval is None:
+            state = payload.get("state")
+            interval = _num((state or {}).get("tick_interval_seconds")) \
+                if isinstance(state, dict) else None
+        asserted = payload.get("last_asserted_turn_idx")
+        try:
+            asserted = int(asserted)
+        except (TypeError, ValueError):
+            asserted = None
+        view.append({
+            "condition_id": row["condition_id"],
+            "subject": row["subject"],
+            "kind": row["kind"],
+            "age_seconds": round(max(0.0, now - started)),
+            "expires_in_seconds": (None if expires is None
+                                   else round(expires - now, 1)),
+            "tick_interval_seconds": interval,
+            # None where the row predates the assertion stamp (every row
+            # written before this landed) -- "unknown", never "zero".
+            "last_asserted_turns_ago": (
+                None if asserted is None or turn_idx is None
+                else max(0, turn_idx - asserted)),
+            "exit_owner": condition_exit_owner(row["kind"], payload),
         })
     return view
 

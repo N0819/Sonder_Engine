@@ -199,6 +199,7 @@ from .director_floors import (
     _rouse_attempts,
     _sleep_elapsed,
     _awareness_view,
+    _conditions_view,
     _already_ended,
     _ending_condition,
     _awareness_exits,
@@ -736,6 +737,10 @@ def director_interpret(ctx, nonce):
                 restraint_conditions(chat["id"]), sc,
                 awareness_map(chat["id"]), clock, None,
                 _restraint_holder_pool(sc, [p_name])),
+            # And the same two facts for EVERY other live condition, which
+            # is where the population is (see `_conditions_view`).
+            "active_conditions": _conditions_view(
+                chat["id"], clock, ctx.turn.idx),
             "body_parts": ({name: extra_parts_lines(parts)
                             for name, parts in _iparts.items()}
                            if _iparts else None),
@@ -2705,6 +2710,11 @@ def director_resolve(ctx, nonce, _corrections=None):
         "active_restraints": _restraint_view(
             restraint_conditions(chat["id"]), sc, awareness_map(chat["id"]),
             clock, None, _restraint_holder_pool(sc, [p_name])),
+        # Every OTHER live condition, under the same contract, because the
+        # two blocks above cover two families and 360 of the corpus's 363
+        # active rows can be ended by nothing at all. See `_conditions_view`.
+        "active_conditions": _conditions_view(
+            chat["id"], clock, ctx.turn.idx),
         "paradox": paradox_visible_to(chat["id"], ctx.turn.frame_id),
         "fiction_model": fm,
         "fiction_frame": _dict(flow.get("fiction_frame")),
@@ -3163,6 +3173,7 @@ def director_resolve(ctx, nonce, _corrections=None):
         "clock": clock,
         "active_awareness": payload.get("active_awareness"),
         "active_restraints": payload.get("active_restraints"),
+        "active_conditions": payload.get("active_conditions"),
         "body_parts": (payload.get("scene") or {}).get("body_parts"),
         "contacts": resolve_sc.get("contacts") or [],
         "contact_endings": character_contact_endings,
