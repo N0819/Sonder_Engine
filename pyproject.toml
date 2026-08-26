@@ -68,7 +68,21 @@ testpaths = ["tests"]
 pythonpath = ["."]
 # --strict-markers: an unregistered marker is an error, not a silent no-op.
 # Without it `-m "not sloow"` selects everything and reports success.
-addopts = "-ra --strict-markers"
+#
+# -n auto: PARALLEL IS THE DEFAULT, and it is here rather than in the Makefile
+# so that it holds for every caller -- a bare `pytest`, a targeted file, an
+# agent, an IDE runner -- and not only for `make test`. Measured on this tree:
+# ~65s parallel against ~340s serial, so a serial run is not a slower way to
+# get the same answer, it is an hour of a working day spent on nothing. A
+# later `-n` on the command line wins, so `make test-full JOBS=4` still works;
+# serial is available as `-n 0`, which is what `make test-serial` and
+# `make test JOBS=0` now pass explicitly.
+#
+# The one caller this would break is an interpreter without xdist, where `-n`
+# is an unrecognized argument -- `make test-full` detects that and strips the
+# flag with `-o addopts=...` rather than failing a developer who did nothing
+# wrong.
+addopts = "-ra --strict-markers -n auto"
 markers = [
   "slow: database-backed tests (they request the temp_db fixture); deselected only by make test-fast, which is a CI matrix-breadth job",
 ]
