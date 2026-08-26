@@ -26,6 +26,7 @@ from world.spatial_containment import (
     derive_contained_positions,
     materialize_enclosure_interiors,
     materialize_named_stations,
+    replace_engine_minted_interiors,
     normalize_scene_containment,
     place_enclosed_bodies,
     release_declared_departures,
@@ -594,8 +595,18 @@ def _materialize_interior_places(merged):
 
     All three are documented idempotent, so re-running them mid-merge costs a
     pass and changes nothing when nothing was minted.
+
+    TWO PRODUCERS, ONE SET OF RE-DERIVATIONS. The mint serves a holder with no
+    interior at all; `replace_engine_minted_interiors` serves the one that
+    already stands on the engine's own unmodified stub, which is what every
+    live story needing a chain actually carries (chats 90 and 91, measured
+    2026-08-25). Both must be followed by the three passes below -- an early
+    return on an empty MINT would skip the dock rewrite after a replacement,
+    leaving the occupant behind a doorway that names a room just retired.
     """
-    if not materialize_enclosure_interiors(merged):
+    minted = bool(materialize_enclosure_interiors(merged))
+    replaced = bool(replace_engine_minted_interiors(merged))
+    if not minted and not replaced:
         return False
     sync_entity_interior_rooms(merged)
     infer_body_enclosures(merged)

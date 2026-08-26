@@ -880,15 +880,21 @@ investigation found and did not close.
   in both directions, correctly) and is told nothing about what is in there
   that is not a body. The fix is a percept for the objects of an interior room,
   not a widening of this one function.
-- **A card interior has no editor widget.** `embodiment.interior` is
-  authorable by native import, by AI generation and reinterpretation (the
-  `interior_note` fragment), and by hand-edited card JSON -- but there is no
-  field for it in the character editor beside Extra body parts
-  (`static/js/components.js` `fExtraParts`). Narrowed rather than deferred
-  whole, on a verified basis: `carryUnpresentedFields`
-  (`static/js/editors.js`) preserves un-widgeted sheet keys through both save
-  sites, so an authored interior is not destroyed by an ordinary card edit --
-  it is only invisible to the author who did not write it.
+- **A story-written mint never gets the card's chain, and has to grow one.**
+  `replace_engine_minted_interiors` swaps the engine's own one-room mint for
+  an authored chain only where that room still carries EXACTLY the key set
+  `_mint_minimal_interior` writes. Anything the story has since written on it
+  -- a description, a crossing time, a declared `exposure` or `size`, a second
+  room -- is lived topology the card does not get to overwrite, so the
+  replacement skips and the story grows its chain station by station through
+  `materialize_named_stations` or the spatial specialist's `rooms` channel.
+  Measured live 2026-08-25 against a scratch copy of the author's corpus with
+  the card filled: chat 90's stub is replaced and its occupant advances on the
+  clock from the first silent beat; chat 91's carries `exposure: "enclosed"`
+  and `size: "tight"` and is left standing, correctly and permanently. What is
+  missing is an author-facing way to say "this stub was the engine's guess,
+  take the card's chain instead" -- a per-holder re-derive, which is an
+  authoring surface rather than a merge rule and must not be a looser trigger.
 - **A persona cannot author an interior.** `stamp_authored_interiors` walks
   the CAST, and a player persona is not in it, so the field is deliberately
   absent from `default_persona_data`/`normalize_persona_data` and has no
@@ -917,26 +923,37 @@ investigation found and did not close.
   said out loud. THE MISSING FACT IS A DIRECTION SOURCE for rooms with no
   dock marker: a per-edge `downstream` flag, or a room-level flow direction.
   Pinned by `tests/test_room_transit_clock.py`.
-- **Prose magnitudes on existing cards stay unread.** A card that describes
-  its inside in prose ("an intense muscular massage over several seconds",
-  "duration 6-10 hours for full passage") supplies real numbers that nothing
-  parses, and this landing deliberately does not add a parser: a prose
-  duration reader is shaped by the phrasings one story happens to use, and
-  the structured field is the fix for the class. `character_card_warnings`
-  now names a multi-station interior that declares no crossing time anywhere,
-  which is the ask; converting a given card is authoring work, not engine
-  work. Measured 2026-08-25: 0 of 73 stored sheets carry
-  `embodiment.interior` at all.
-- **An engine-minted one-room interior is never replaced by an authored
-  chain.** `materialize_enclosure_interiors` gate 5 skips a holder that
-  already has interior rooms -- which is what makes it idempotent, and is
-  right -- so a story that already minted the floor's single room before its
-  card authored a full chain never gets the chain from the card. It has to
-  arrive station by station, through `materialize_named_stations` or the
-  spatial specialist's `rooms` channel. Affects chats 86-90, measured. A
-  gate-5 bypass keyed to "the only interior room is the engine's own minimal
-  mint" is defensible and is its own landing; special-casing it inside the
-  mint is not.
+- **Every stored card's interior is still empty until somebody runs the
+  fill.** The reader now exists on BOTH card surfaces --
+  `POST /api/characters/{cid}/fill_interior` for the reusable card and
+  `POST /api/chats/{cid}/characters/{ch}/fill_interior` for the per-story one
+  -- and reads a card's own prose ONCE, at authoring time, proposing the
+  structured chain with its magnitudes; there is still deliberately no
+  runtime prose-duration parser, because one is shaped by the phrasings one
+  story happens to use. What remains is that running it is an authoring act,
+  and it has to be run on the card THIS STORY READS: `scene.active_cast`
+  resolves `chat_chars.sheet` over `characters.sheet`, and measured read-only
+  2026-08-25, 13 of 116 `chat_chars` rows carry a per-story sheet, so a story
+  that has its own card is filled from the story-card editor (Cast -> ✏️
+  card) and a story that does not is filled from the reusable one. 0 of the
+  79 stored sheets (61 characters, 18 personas) carry a non-empty
+  `embodiment.interior`, so every live story is byte-identical to before this
+  landing until its author opens the card the story reads, presses the
+  button, reviews the stations and saves.
+- **A region the ledger names that an authored chain omits is dropped rather
+  than placed.** `materialize_named_stations` gate 5: where the holder's
+  inside is a card-declared chain and the occupant stands mid-way along it, a
+  standing contact naming a region no station matches mints nothing, and
+  `_restation_interior_contact` re-derives the ledger's region from the room
+  the occupant is actually in. It is a SUBTRACTION and the alternative was
+  measured worse -- on a scratch corpus copy with the card filled, the graft
+  chained the omitted region DEEPER than the entry station and walked the
+  occupant outward into it, where she held for fourteen beats -- but the
+  region the beat named is still a fact the engine now discards. THE MISSING
+  FACT IS WHERE IN THE CHAIN IT BELONGS: the card states an order and the
+  ledger states a name, and nothing relates them. The author's own fix today
+  is to add the station to the card, which is why this is a residual rather
+  than a defect; a real one needs a way to say "between these two".
 - **Two read-only Director views lag the floored clock.** A resolved beat
   that asserts no readable time is now charged `UNCLAIMED_BEAT_SECONDS`, and
   three readers of the beat's end clock apply it through
@@ -2673,7 +2690,7 @@ The heuristic path derives psychology from the card's `personality` field, so a
 v2 card that puts everything in `description` — common — yields a sparse first
 pass. The opt-in v3 gap-filler mitigates sparse old cards but does not remove the
 value of a better deterministic first pass.
-`character_card_warnings` now fires on all nine surfaces that hand back a card
+`character_card_warnings` now fires on all ten surfaces that hand back a card
 (`8ddcc1e`), so a heuristic import that lands sparse is reported wherever it
 was made; what is still missing is the populated-field THRESHOLD that would
 make "sparse" a warning of its own.
