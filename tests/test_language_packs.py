@@ -676,14 +676,22 @@ def test_no_english_compat_export_survives_without_a_reader():
 
 #: Authored fragments the prompt card embeds inside prompt bodies, with the
 #: number of `{{fragment:<name>}}` references each pack's RAW card carries.
-#: Four fragments, seventeen embeddings. Resolution happens at pack load
+#: Five fragments, nineteen embeddings. Resolution happens at pack load
 #: (`language_runtime._resolve_prompt_fragments`), so the loaded card holds
 #: only resolved text; the references live in the file on disk.
+#:
+#: `interior_note` is the newest, and it landed in BOTH packs rather than in
+#: English alone because it could not land in English alone: the pack loader
+#: checks every story pack's system_prompts card against English key by key
+#: (`language_runtime.installed_language_packs`), so an EN-only fragment fails
+#: the ja pack's load outright -- measured 2026-08-25, "story language pack
+#: 'ja' has incomplete system_prompts card: interior_note".
 _EMBEDDED_FRAGMENTS = {
     "category_note": 5,
     "book_type_note": 3,
     "transit_note": 3,
     "extra_parts_note": 6,
+    "interior_note": 2,
 }
 
 

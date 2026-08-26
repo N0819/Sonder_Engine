@@ -23,6 +23,7 @@ from world.spatial_containment import (
     containment_broken_by_scale_change,
     derive_containment_from_contacts,
     derive_contained_positions,
+    materialize_enclosure_interiors,
     normalize_scene_containment,
     place_enclosed_bodies,
     release_declared_departures,
@@ -562,11 +563,42 @@ def _dedup_duplicate_position_keys(positions, entities, incoming_positions=None)
 _ENTITY_STRUCTURAL_FIELDS = (
     "kind", "subtype", "name", "description", "aliases", "interior_rooms",
     "portable", "container", "ubiquitous", "parent_entity",
+    # The card's authored inside. Durable by the same test as `interior_rooms`
+    # beside it, and it has to be listed here or a collapse of an id-keyed and
+    # a name-keyed record for one holder -- the shape this corpus produces
+    # routinely -- drops the topology silently.
+    "interior_spec",
     # What the thing is made of and what it gives off are as durable as what
     # it is -- and were being lost whenever two records for one entity
     # collapsed, which is the other half of the same gap.
     "enclosure", "light_source",
 )
+
+
+def _materialize_interior_places(merged):
+    """Mint the interior a standing `mode: interior` record over a body
+    entails, then re-derive the three facts that depend on it.
+
+    Runs immediately before every `place_enclosed_bodies` call, because that
+    conversion needs the rooms to exist in the SAME merge. The three
+    re-derivations are the ones that stand between a minted room and a correct
+    one, in the order the merge already runs them: the room's `parent_entity`
+    claim becomes the holder's `interior_rooms` index, the index makes the
+    body's way in default to `membrane`, and the dock rewrite turns that into
+    the actual doorway. Skipping them would leave the occupant behind a
+    doorway that does not exist yet -- and `is_sealed_in`, reading the same
+    edges at the end of this merge, would start an air countdown on a body
+    with a way out.
+
+    All three are documented idempotent, so re-running them mid-merge costs a
+    pass and changes nothing when nothing was minted.
+    """
+    if not materialize_enclosure_interiors(merged):
+        return False
+    sync_entity_interior_rooms(merged)
+    infer_body_enclosures(merged)
+    apply_transit_dock_edges(merged)
+    return True
 
 
 def _dedup_duplicate_entity_keys(entities, incoming_entities=None):
@@ -1339,15 +1371,21 @@ def merge_scene_with_diff(
     stamp_sight_direction(merged)
     normalize_scene_subjects(merged)
     normalize_scene_containment(merged)
+    # ...and a body that has taken another one inside HAS an inside, whether or
+    # not any model remembered to author it. The floor mints one room from the
+    # record itself; the holder's card mints the stations it declares. Runs
+    # before the conversion below, which does nothing for a holder with no
+    # interior rooms -- which was every holder on disk.
+    _materialize_interior_places(merged)
     # A BODY THAT HAS TAKEN ANOTHER BODY INSIDE IS A PLACE, so an occupant of
     # one stands in a room rather than deriving their holder's. Runs BEFORE
     # the derivation below, which would otherwise drag them straight back out
     # to the holder's own exterior room -- the measured chat 88 state, where
-    # both bodies shared one room for fifteen consecutive audited turns. A
-    # holder with no interior rooms is untouched: re-merging all 77 of the
-    # author's stored scenes with an empty diff gives a byte-identical result
-    # to main for 76 of them, and the one that differs is the story that
-    # already stands in this shape.
+    # both bodies shared one room for fifteen consecutive audited turns. What
+    # reaches this line now always HAS rooms, because the mint above put them
+    # there: re-merging all 80 of the author's stored scene rows with an empty
+    # diff gives a byte-identical result to main for 76 of them, and the four
+    # that differ -- chats 86, 87, 88, 89 -- are this defect healing.
     place_enclosed_bodies(merged)
     # Derived LAST among position writes: whatever else this beat did to
     # positions, a carried body ends up where its carrier is.
@@ -1393,6 +1431,13 @@ def merge_scene_with_diff(
         # has left the scene, a cycle), then put the enclosed body where its
         # container is -- both already ran, above, before these existed.
         normalize_scene_containment(merged)
+        # NOT OPTIONAL, and the measurement is why. A scene whose only
+        # enclosure evidence is a standing interior CONTACT stores
+        # `contained: {}` and mints its record right here -- chats 86 and 87,
+        # both of them, measured 2026-08-25. A producer at the first call site
+        # alone leaves those stories a beat behind the fact they already
+        # stated.
+        _materialize_interior_places(merged)
         place_enclosed_bodies(merged)
         derive_contained_positions(merged)
 

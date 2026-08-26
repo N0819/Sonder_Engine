@@ -413,7 +413,8 @@ def prepare_scene_commit(ctx):
     # Director just minted under an honorific is spelled the sheet's way from
     # its first beat). Idempotent, and it must stay so -- a checkpoint restore
     # replays it. Argument: `docs/design/DESIGN_SUBJECT_SPELLING_AUTHORITY.md`.
-    from agents.common import reconcile_cast_entity_names
+    from agents.common import (reconcile_cast_entity_names,
+                               stamp_authored_interiors)
 
     for _scope in (prev_scene, diff):
         for _eid, _old, _new in reconcile_cast_entity_names(
@@ -422,6 +423,13 @@ def prepare_scene_commit(ctx):
                 f"identity: scene entity {_eid!r} was named {_old!r}; the cast "
                 f"sheet spells that character {_new!r}, so the ledgers are "
                 f"keyed {_new!r} and {_old!r} is kept as an alias.")
+        # ...and the same body's authored INSIDE, on the same two scopes and
+        # for the same reason: the merge builds a body's interior from the
+        # scene alone and cannot reach a sheet, so the card's topology has to
+        # be standing on the entity before `merge_scene_with_diff` below reads
+        # it. Idempotent, like the reconcile above it.
+        stamp_authored_interiors(
+            _scope, ctx.cast, player_name=_player_name_or_none(ctx))
 
     _contact_report = []
     _substance_report = []
