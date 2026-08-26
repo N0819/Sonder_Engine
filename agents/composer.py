@@ -378,12 +378,49 @@ def _collided_names(labels):
     return out
 
 
-def observer_display_map(scene, observer_name, co_present, known):
+def observer_display_map(scene, observer_name, co_present, known,
+                         senses=None):
     """canonical name -> what THIS observer may call them, for every
     co-present body. Recognition through the `known` ledger; a stranger gets
     a distinguishing appearance descriptor; a disguised body whose truth this
     observer is not in `known_to` for is treated as unrecognized however well
-    the observer knows the name."""
+    the observer knows the name.
+
+    A STRANGER'S DESCRIPTOR IS AN APPEARANCE FACT AND IS GATED ON SIGHT.
+    This map is the single source every other builder in this module reads
+    for what to call a body -- poses, acts, speech attribution, region
+    labels, scent sources -- and it was the only one of the three renderers
+    naming bodies that never consulted `visual_level_between`. The other two
+    (`presence_percepts` here, `_co_present_company` in perception) both
+    subtracted -- and the second of them now reads its labels from HERE
+    rather than restating the rule, so there is one source and not three.
+    This one expanded, so one body arrived in one composed view
+    under two names at once: the silhouette the presence line admitted, and
+    the build-and-age epithet every following clause used. Measured live: an
+    observer read both, counted a person who was not there, and spent the
+    beat looking for them. Counting one body twice is the mild reading; the
+    firewall reading is that a descriptor cut from an appearance summary
+    hands a silhouette-holder the build and the age a silhouette does not
+    show.
+
+    Three tiers, and the two degraded ones are deliberately different words:
+
+    * `full` -- the appearance descriptor, jointly assigned against the
+      other bodies seen in full (`assign_stranger_labels`).
+    * anything else with a visual channel -- the fixed silhouette label. Two
+      silhouettes deliberately COLLIDE on it: an observer who cannot tell
+      them apart must not be handed a view that can, and the label is one of
+      `generic_labels`, which is what keeps it out of memory as an entity.
+    * `none` -- no visual channel at all, so not even a figure. The body is
+      here through some other channel (a smell, a voice) and gets the
+      appearance-free fallback the standing-percept builder already uses in
+      the same position.
+
+    `senses` is the observer's sense card, graded through `_sense_graded`
+    exactly as `presence_percepts` grades it: an impaired eye that turns
+    `full` into `shapes` must take the descriptor with it, or the split
+    reopens one card down.
+    """
     recognized = set((known or {}).get(observer_name) or [])
     strangers = []
     out = {}
@@ -395,10 +432,20 @@ def observer_display_map(scene, observer_name, co_present, known):
             body.get("disguise_known_to"), observer_name,
             body.get("disguise_conceals_identity"))
         if not hidden and _recognizes(name, recognized):
+            # DEGRADED SIGHT COSTS DETAIL, NOT ACQUAINTANCE -- the same rule
+            # `presence_percepts` states at length. A name is knowledge the
+            # observer already holds; the dark takes the face, not the name.
             out[name] = name
-        else:
+            continue
+        level = _sense_graded(
+            visual_level_between(scene, observer_name, name), "sight", senses)
+        if level == "full":
             strangers.append(
                 (name, body.get("appearance"), body.get("aliases") or []))
+        elif level == "none":
+            out[name] = _unfamiliar_person()
+        else:
+            out[name] = _dim_figure()
     out.update(assign_stranger_labels(strangers))
     return out
 
