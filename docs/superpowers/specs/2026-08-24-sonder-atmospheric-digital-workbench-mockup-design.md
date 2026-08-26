@@ -10,6 +10,14 @@
 and does not authorize production integration, route changes, persistence, or
 backend work.
 
+**Preserved artifact:** The evolved interactive calibration and its focused
+browser regression harness are committed under
+[`docs/experiments/sonder-atmospheric-workbench/`](../../experiments/sonder-atmospheric-workbench/README.md).
+The artifact now explores floating modules, height-derived shelf capacity, and
+deterministic tab and shelf drag interactions beyond this brief's original
+static scope. That expansion remains exploratory and does not change this
+document's production-authority boundary.
+
 ## Purpose
 
 Create a visual calibration artifact for a new Sonder interface direction

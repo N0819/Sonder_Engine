@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Sonder drag regression</title>
+  <style>
+    body { margin: 0; background: #111; color: #ddd; font: 14px/1.5 system-ui, sans-serif; }
+    #results { padding: 16px; }
+    .pass { color: #82e89a; }
+    .fail { color: #ff8a8a; }
+    iframe { position: absolute; left: -10000px; width: 1440px; height: 900px; border: 0; }
+  </style>
+</head>
+<body>
+  <main id="results" aria-live="polite">Running drag regressions…</main>
+  <script>
+    const results = document.getElementById('results');
+
+    const nextFrame = (view) => new Promise((resolve) => view.requestAnimationFrame(() => view.requestAnimationFrame(resolve)));
+
+    const loadWorkbench = (height = 900) => new Promise((resolve, reject) => {
+      const frame = document.createElement('iframe');
+      frame.style.height = `${height}px`;
+      frame.src = `./sonder-workbench-calibration.html?test=${Date.now()}-${Math.random()}`;
+      frame.addEventListener('load', async () => {
+        try {
+          frame.contentDocument.body.style.margin = '0';
+          await nextFrame(frame.contentWindow);
+          resolve(frame);
+        } catch (error) {
+          reject(error);
+        }
+      }, { once: true });
+      document.body.append(frame);
+    });
+
+    const center = (element) => {
+      const rect = element.getBoundingClientRect();
+      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    };
+
+    const pointer = (target, type, point) => target.dispatchEvent(new PointerEvent(type, {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+      buttons: type === 'pointerup' ? 0 : 1,
+      clientX: point.x,
+      clientY: point.y,
+      isPrimary: true,
+      pointerId: 1,
+      pointerType: 'mouse'
+    }));
+
+    const beginDrag = (doc, handle) => {
+      const start = center(handle);
+      pointer(handle, 'pointerdown', start);
+      pointer(doc, 'pointermove', { x: start.x + 8, y: start.y + 1 });
+    };
+
+    const run = async (name, test, height = 900) => {
+      const frame = await loadWorkbench(height);
+      try {
+        await test(frame.contentDocument, frame.contentWindow);
+        return { name, passed: true };
+      } catch (error) {
+        return { name, passed: false, error: error.message };
+      } finally {
+        frame.remove();
+      }
+    };
+
+    const assert = (condition, message) => {
+      if (!condition) throw new Error(message);
+    };
+
+    Promise.all([
+      run('Workbench fills the usable browser height', async (doc, view) => {
+        const workbench = doc.querySelector('.sonder-window');
+        assert(workbench, 'Workbench window was not rendered');
+        const bottomGap = Math.abs(view.innerHeight - workbench.getBoundingClientRect().bottom);
+        assert(bottomGap <= 2, `Workbench leaves ${Math.round(bottomGap)}px of unused vertical space`);
+      }),
+      run('Current-height toolbars expose two shelf spaces', async (doc) => {
+        assert(doc.getElementById('sonder-calibration').dataset.dockCapacity === '2', 'Current-height dock capacity is not two shelves');
+      }, 900),
+      run('Tall toolbars expose three shelf spaces', async (doc) => {
+        assert(doc.getElementById('sonder-calibration').dataset.dockCapacity === '3', 'Tall dock capacity is not three shelves');
+      }, 1440),
+      run('2160px toolbars expose four shelf spaces', async (doc) => {
+        assert(doc.getElementById('sonder-calibration').dataset.dockCapacity === '4', 'Very tall dock capacity is not four shelves');
+      }, 2160),
+      run('Dragging Personas onto the Scene Effects title bar merges it as a tab', async (doc) => {
+        const personasTab = doc.querySelector('[data-group-tab="personas"]');
+        const effectsHead = doc.querySelector('[data-widget-id="effects"] [data-widget-drag-surface]');
+        assert(personasTab && effectsHead, 'Required widget handles were not rendered');
+        beginDrag(doc, personasTab);
+        const target = center(effectsHead);
+        pointer(doc, 'pointermove', target);
+        pointer(doc, 'pointerup', target);
+        const effectsGroup = doc.querySelector('[data-widget-id="effects"]').closest('.sonder-widget-group');
+        assert(effectsGroup.querySelector('[data-widget-id="personas"]'), 'Personas was stacked near Scene Effects instead of becoming its tab');
+      }),
+      run('Dragging a tab left reshuffles it before its neighbor', async (doc) => {
+        const connectionsTab = doc.querySelector('[data-group-tab="connections"]');
+        const personasTab = doc.querySelector('[data-group-tab="personas"]');
+        assert(connectionsTab && personasTab, 'Required tabs were not rendered');
+        const targetRect = personasTab.getBoundingClientRect();
+        beginDrag(doc, connectionsTab);
+        const target = { x: targetRect.left + 4, y: targetRect.top + targetRect.height / 2 };
+        pointer(doc, 'pointermove', target);
+        pointer(doc, 'pointerup', target);
+        const group = doc.querySelector('[data-widget-id="connections"]').closest('.sonder-widget-group');
+        const order = Array.from(group.querySelectorAll('[data-group-tab]')).map((tab) => tab.dataset.groupTab);
+        assert(order.join(',') === 'connections,personas', `Expected Connections before Personas, got ${order.join(',')}`);
+      }),
+      run('A three-tab strip accepts a precise middle-tab insertion', async (doc) => {
+        const personasTab = doc.querySelector('[data-group-tab="personas"]');
+        const effectsHead = doc.querySelector('[data-widget-id="effects"] [data-widget-drag-surface]');
+        assert(personasTab && effectsHead, 'Initial tab transfer handles were not rendered');
+        beginDrag(doc, personasTab);
+        const effectsTarget = center(effectsHead);
+        pointer(doc, 'pointermove', effectsTarget);
+        pointer(doc, 'pointerup', effectsTarget);
+
+        const connectionsHead = doc.querySelector('[data-widget-id="connections"] [data-widget-drag-surface]');
+        const effectsGroup = doc.querySelector('[data-widget-id="effects"]').closest('.sonder-widget-group');
+        const currentTabs = Array.from(effectsGroup.querySelectorAll('[data-group-tab]'));
+        assert(connectionsHead && currentTabs.length === 2, 'The three-tab setup did not reach its intermediate state');
+        const finalTabRect = currentTabs.at(-1).getBoundingClientRect();
+        beginDrag(doc, connectionsHead);
+        const appendTarget = { x: finalTabRect.right - 2, y: finalTabRect.top + finalTabRect.height / 2 };
+        pointer(doc, 'pointermove', appendTarget);
+        pointer(doc, 'pointerup', appendTarget);
+
+        const middleTab = doc.querySelector('[data-group-tab="personas"]');
+        const firstTab = doc.querySelector('[data-group-tab="effects"]');
+        assert(middleTab && firstTab, 'The three-tab strip was not created');
+        const firstRect = firstTab.getBoundingClientRect();
+        beginDrag(doc, middleTab);
+        const reorderTarget = { x: firstRect.left + 3, y: firstRect.top + firstRect.height / 2 };
+        pointer(doc, 'pointermove', reorderTarget);
+        pointer(doc, 'pointerup', reorderTarget);
+
+        const reorderedGroup = doc.querySelector('[data-widget-id="effects"]').closest('.sonder-widget-group');
+        const order = Array.from(reorderedGroup.querySelectorAll('[data-group-tab]')).map((tab) => tab.dataset.groupTab);
+        assert(order.join(',') === 'personas,effects,connections', `Expected Personas, Effects, Connections; got ${order.join(',')}`);
+      }),
+      run('Returning from a shelf rail to the title bar resolves as a tab', async (doc) => {
+        const personasTab = doc.querySelector('[data-group-tab="personas"]');
+        const effectsHead = doc.querySelector('[data-widget-id="effects"] [data-widget-drag-surface]');
+        assert(personasTab && effectsHead, 'Required widget handles were not rendered');
+        const headRect = effectsHead.getBoundingClientRect();
+        const target = center(effectsHead);
+        beginDrag(doc, personasTab);
+        pointer(doc, 'pointermove', { x: target.x, y: headRect.top + 5 });
+        pointer(doc, 'pointermove', target);
+        pointer(doc, 'pointerup', target);
+        const effectsGroup = doc.querySelector('[data-widget-id="effects"]').closest('.sonder-widget-group');
+        assert(effectsGroup.querySelector('[data-widget-id="personas"]'), 'A previously entered shelf rail overrode the final title-bar target');
+      }, 1440),
+      run('A full two-shelf dock does not advertise an impossible third shelf', async (doc) => {
+        const personasTab = doc.querySelector('[data-group-tab="personas"]');
+        assert(personasTab, 'Personas tab was not rendered');
+        beginDrag(doc, personasTab);
+        const rightRails = Array.from(doc.querySelectorAll('[data-drop-rail]')).filter((item) => item.dataset.dropSide === 'right');
+        assert(rightRails.length === 0, 'The full right dock still advertises an extra shelf');
+      }, 900),
+      run('Separating a tab cannot exceed the current shelf capacity', async (doc) => {
+        doc.querySelector('[data-widget-actions="personas"]').click();
+        doc.querySelector('[data-widget-command="separate"]').click();
+        const personasGroup = doc.querySelector('[data-widget-id="personas"]').closest('.sonder-widget-group');
+        const connectionsGroup = doc.querySelector('[data-widget-id="connections"]').closest('.sonder-widget-group');
+        assert(personasGroup === connectionsGroup, 'Separating Personas created a forbidden third right-hand shelf');
+        assert(doc.querySelector('[data-widget-announcement]').textContent.includes('all 2 shelf spaces'), 'The full toolbar did not explain why separation was unavailable');
+      }, 900),
+      run('Menu docking cannot overfill the destination toolbar', async (doc) => {
+        doc.querySelector('[data-widget-actions="effects"]').click();
+        doc.querySelector('[data-widget-command="left"]').click();
+        const effectsDock = doc.querySelector('[data-widget-id="effects"]').closest('[data-dock]');
+        assert(effectsDock?.dataset.dock === 'right', 'Scene Effects overfilled the left toolbar');
+        assert(doc.querySelector('[data-widget-announcement]').textContent.includes('all 2 shelf spaces'), 'The full destination did not explain why docking was unavailable');
+      }, 900),
+      run('Widget Shelf placement respects the destination capacity', async (doc) => {
+        doc.querySelector('[data-widget-actions="effects"]').click();
+        doc.querySelector('[data-widget-command="shelf"]').click();
+        doc.querySelector('[data-shelf-widget="effects"]').click();
+        const effects = doc.querySelector('[data-widget-id="effects"]');
+        assert(effects.parentElement.matches('[data-shelf-storage]'), 'Widget Shelf placement overfilled the left toolbar');
+        assert(doc.querySelector('[data-widget-announcement]').textContent.includes('all 2 shelf spaces'), 'The full destination did not explain why shelf placement was unavailable');
+      }, 900),
+      run('Available shelf capacity uses a visible, explicit rail', async (doc) => {
+        const personasTab = doc.querySelector('[data-group-tab="personas"]');
+        assert(personasTab, 'Personas tab was not rendered');
+        beginDrag(doc, personasTab);
+        const rails = Array.from(doc.querySelectorAll('[data-drop-rail]'));
+        const rail = rails.find((item) => item.dataset.dropSide === 'right' && item.dataset.dropPosition === 'after');
+        assert(rail, 'No explicit shelf insertion rail was exposed');
+        const target = center(rail);
+        pointer(doc, 'pointermove', target);
+        assert(rail.classList.contains('is-active'), 'Shelf rail did not clearly activate under the pointer');
+      }, 1440),
+      run('Floating uses the dragged window without a duplicate trailing ghost', async (doc) => {
+        const effectsHead = doc.querySelector('[data-widget-id="effects"] [data-widget-drag-surface]');
+        const scene = doc.querySelector('.sonder-scene');
+        assert(effectsHead && scene, 'Required drag surfaces were not rendered');
+        beginDrag(doc, effectsHead);
+        const target = center(scene);
+        pointer(doc, 'pointermove', target);
+        const ghost = doc.querySelector('[data-snap-ghost]');
+        const module = doc.querySelector('[data-widget-id="effects"]');
+        assert(ghost.hidden, 'A duplicate floating ghost is still visible');
+        assert(module.classList.contains('is-float-ready'), 'The dragged window does not indicate that it will remain floating');
+      })
+    ]).then((tests) => {
+      const passed = tests.filter((test) => test.passed).length;
+      results.innerHTML = `<h1>${passed}/${tests.length} passed</h1>` + tests.map((test) =>
+        `<p class="${test.passed ? 'pass' : 'fail'}">${test.passed ? 'PASS' : 'FAIL'} — ${test.name}${test.error ? `<br>${test.error}` : ''}</p>`
+      ).join('');
+      document.title = `${passed === tests.length ? 'PASS' : 'FAIL'} — Sonder drag regression`;
+    });
+  </script>
+</body>
+</html>
