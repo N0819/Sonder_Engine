@@ -92,6 +92,9 @@ from world.spatial_containment import (
     interior_occupants, materialize_enclosure_interiors,
     normalize_scene_containment, normalize_scene_scales,
     place_enclosed_bodies, scale_changed_names,
+    advance_room_transits, materialize_named_stations,
+    room_transit_seconds, _UNSTATED_CROSSING_SECONDS,
+    _MAX_INTERIOR_STATIONS,
     detail_resolves_between, scale_of, scale_ratio, size_facts,
     size_relation, size_tier,
 )

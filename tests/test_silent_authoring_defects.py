@@ -281,9 +281,24 @@ class TestTheCardSaysWhatNobodyReads:
 
     def test_a_well_formed_interior_is_quiet(self):
         sheet = self._card()
+        # A chain of stations that says how long the crossed one takes. A
+        # chain that says nothing anywhere is its own silent defect and has
+        # its own case below.
+        sheet["embodiment"]["interior"] = [
+            {"name": "Entry Passage", "transit_seconds": 8},
+            {"name": "Deep Hold"}]
+        assert not self._warning(sheet, "embodiment.interior")
+
+    def test_a_chain_with_no_crossing_time_anywhere_is_named(self):
+        """The same class as the empty drive: authored, plausible-looking,
+        and silently inert. A chain no station gives a crossing time to
+        holds its occupant in every station until something moves them by
+        hand -- transit as a state someone is in rather than a process that
+        runs."""
+        sheet = self._card()
         sheet["embodiment"]["interior"] = [{"name": "Entry Passage"},
                                            {"name": "Deep Hold"}]
-        assert not self._warning(sheet, "embodiment.interior")
+        assert self._warning(sheet, "transit_seconds")
 
     def test_an_ordinary_card_with_no_interior_is_quiet(self):
         """No noise on the common case: an ordinary human body has no inside

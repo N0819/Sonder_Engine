@@ -318,25 +318,37 @@ class TestTheCommitKeepsTheTimeItWasGiven:
         assert not [w for w in ctx.warnings if "state_diff.time" in w]
 
     def test_a_refused_advance_says_so(self, temp_db):
+        """RE-EARNED. This pin used to assert the clock HELD at 1136.0, and
+        holding was the second half of the same defect: the beat was dropped
+        AND the world froze. A refusal is still reported -- that is what this
+        test is for -- but the beat is charged the unclaimed-beat floor now
+        instead of stopping time, and the warning names the number that
+        moved rather than reporting a stop."""
+        from world.mechanics import UNCLAIMED_BEAT_SECONDS
+
         chat_id = _make_chat(temp_db)
         ctx, clock = _run_turn(
             temp_db, chat_id, {"time": {"seconds": 300}},
             clock={"elapsed_seconds": 1136.0, "display": "moments later"})
-        assert clock["elapsed_seconds"] == 1136.0
+        assert clock["elapsed_seconds"] == 1136.0 + UNCLAIMED_BEAT_SECONDS
         assert any("no clock position" in w and "seconds" in w
+                   and "unclaimed-beat floor" in w
                    for w in ctx.warnings)
 
     def test_a_refusal_spelled_in_taught_keys_says_so_too(self, temp_db):
         """The shape the warning exists for. Every key here is one the
         prompts teach, so a guard keyed on unknown keys would be blind to
-        it, and the clock is held exactly as chat 88's three beats were."""
+        it. Chat 88's three beats were held exactly here; they are charged
+        the floor now, and still reported."""
+        from world.mechanics import UNCLAIMED_BEAT_SECONDS
+
         chat_id = _make_chat(temp_db)
         ctx, clock = _run_turn(
             temp_db, chat_id,
             {"time": {"start_seconds": 1200, "mode": "action",
                       "explicit": False}},
             clock={"elapsed_seconds": 1136.0, "display": "moments later"})
-        assert clock["elapsed_seconds"] == 1136.0
+        assert clock["elapsed_seconds"] == 1136.0 + UNCLAIMED_BEAT_SECONDS
         assert any("no clock position" in w and "start_seconds" in w
                    for w in ctx.warnings)
 
@@ -353,15 +365,23 @@ class TestTheCommitKeepsTheTimeItWasGiven:
         assert clock["elapsed_seconds"] == 1136.0
         assert not any("no clock position" in w for w in ctx.warnings)
 
-    def test_a_display_only_beat_asserts_no_time_and_is_silent(self, temp_db):
-        """5 corpus rows carry a phrase and no number. Labelling time is not
-        claiming it, so the clock holds with nothing said."""
+    def test_a_display_only_beat_asserts_no_time_and_is_charged_in_silence(
+            self, temp_db):
+        """5 corpus rows carry a phrase and no number. LABELLING TIME IS
+        STILL NOT CLAIMING IT -- so nothing is warned, because there was no
+        refusal to report -- but silence is charged now: the beat happened,
+        and a clock that stops whenever the number is missing is exactly the
+        class `UNCLAIMED_BEAT_SECONDS` closes."""
+        from world.mechanics import UNCLAIMED_BEAT_SECONDS
+
         chat_id = _make_chat(temp_db)
         ctx, clock = _run_turn(
             temp_db, chat_id, {"time": {"display": "a moment later"}},
             clock={"elapsed_seconds": 1136.0, "display": "moments later"})
-        assert clock["elapsed_seconds"] == 1136.0
+        assert clock["elapsed_seconds"] == 1136.0 + UNCLAIMED_BEAT_SECONDS
         assert not [w for w in ctx.warnings if "state_diff.time" in w]
+        # The phrase still reaches the clock and the scene label.
+        assert clock["display"] == "a moment later"
 
     def test_an_explicit_clear_outranks_the_synonym(self, temp_db):
         """`display_advance: ""` is the beat saying it carries no phrase.

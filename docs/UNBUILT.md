@@ -903,6 +903,51 @@ investigation found and did not close.
   visible from the room outside -- information EXPANSION. Serving a container
   the same way needs the non-body enclosure default first, which is its own
   landing with the bullet above it.
+- **An exterior conduit declares a crossing time nothing can direct.** A room
+  may now carry `transit_seconds`, and `world.spatial_containment` carries an
+  occupant onward on the simulation clock -- but only inside a
+  `parent_entity` enclosure, because "onward" is derived as "strictly farther
+  from the way in" and the way in is `_interior_entry_room`'s `dock_exit`
+  marker, which only an enclosure has. A river reach, a conveyor hall or a
+  sloped chute between two ordinary rooms therefore has no derivable
+  direction. The field is READ and REFUSED there with a named notice through
+  `crossing_report` ("this place declares a crossing time and the engine
+  cannot derive which way is onward outside an enclosure"), never a guessed
+  move -- so the declaration is not silently ignored, and what is missing is
+  said out loud. THE MISSING FACT IS A DIRECTION SOURCE for rooms with no
+  dock marker: a per-edge `downstream` flag, or a room-level flow direction.
+  Pinned by `tests/test_room_transit_clock.py`.
+- **Prose magnitudes on existing cards stay unread.** A card that describes
+  its inside in prose ("an intense muscular massage over several seconds",
+  "duration 6-10 hours for full passage") supplies real numbers that nothing
+  parses, and this landing deliberately does not add a parser: a prose
+  duration reader is shaped by the phrasings one story happens to use, and
+  the structured field is the fix for the class. `character_card_warnings`
+  now names a multi-station interior that declares no crossing time anywhere,
+  which is the ask; converting a given card is authoring work, not engine
+  work. Measured 2026-08-25: 0 of 73 stored sheets carry
+  `embodiment.interior` at all.
+- **An engine-minted one-room interior is never replaced by an authored
+  chain.** `materialize_enclosure_interiors` gate 5 skips a holder that
+  already has interior rooms -- which is what makes it idempotent, and is
+  right -- so a story that already minted the floor's single room before its
+  card authored a full chain never gets the chain from the card. It has to
+  arrive station by station, through `materialize_named_stations` or the
+  spatial specialist's `rooms` channel. Affects chats 86-90, measured. A
+  gate-5 bypass keyed to "the only interior room is the engine's own minimal
+  mint" is defensible and is its own landing; special-casing it inside the
+  mint is not.
+- **Two read-only Director views lag the floored clock.** A resolved beat
+  that asserts no readable time is now charged `UNCLAIMED_BEAT_SECONDS`, and
+  three readers of the beat's end clock apply it through
+  `world.mechanics.beat_end_elapsed` -- the scene commit, the memory commit
+  and the perception mirror, which are the three that decide what is STORED.
+  `agents.director_floors._sleep_elapsed` and `_conditions_view` are the
+  fourth reader and are NOT floored: they take `sd_time=None` on pre-resolve
+  calls, so a blanket floor would be wrong there. BOUNDED: they lag by at
+  most `UNCLAIMED_BEAT_SECONDS` per silent beat, and the only decision they
+  gate is `_NATURAL_SLEEP_SECONDS = 28800`, which a ten-second lag cannot
+  flip. Closing it needs those views given a resolved-beat flag.
 - **Interior passage is undirected.** Interior stations connect by `membrane`
   in both directions, because the barrier vocabulary has no directed-passage
   value: `one_way_window`'s asymmetry is SIGHT only, and `neighbor_map`
@@ -911,6 +956,10 @@ investigation found and did not close.
   therefore needs its own vocabulary work in the `one_way_window` mould. Until
   then, going back out against the body around you is what it already is: a
   contested act for the reaction/dice machinery, not graph structure.
+  Untouched by the crossing landing above and deliberately not consumed by
+  it: `_onward_room` only ever walks strictly DEEPER, so it needs no
+  outbound-passability fact and closing this one would change none of its
+  answers.
 - **A room cannot carry a hazard.** A place-form interior is exactly where "a
   place that acts on the bodies in it over time" becomes expressible -- and
   there is no room field for it, no sweep that ticks one, and no capability
@@ -2505,6 +2554,19 @@ The repair is a seam widening, not a guard: `merge_scene_with_diff` has no
 previous-clock parameter, and the callers that would have to supply one
 include perception's mid-turn merges, where the "previous" clock is a
 different question. Do it with the seam, not around it.
+
+**The seam now exists, and this entry is still open.** `merge_scene_with_diff`
+gained a keyword-only `clock_seconds` when a passage learned to carry its
+occupants on the clock (`world.spatial_containment.advance_room_transits`),
+and both stored-side callers pass the same end-of-beat value through
+`world.mechanics.beat_end_elapsed`. The vitals tick was deliberately NOT
+rewired onto it: this entry is about which QUANTITY ages a body, and moving
+it from `time_diff_duration` to a clock delta is a change to how every
+survival channel advances, which wants its own measurement rather than a
+free ride. Note also that a beat charged `UNCLAIMED_BEAT_SECONDS` shares
+this entry's shape exactly -- the clock moves and the bodies do not -- so
+the floor makes the class visible on 130 more corpus beats without widening
+it.
 
 
 ### 1.84 A condition with no declared end and no owning floor still stands forever

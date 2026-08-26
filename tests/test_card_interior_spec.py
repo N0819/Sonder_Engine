@@ -47,10 +47,14 @@ HOLDER_ID = "reya_entity"
 OCCUPANT = "Wren"
 
 STATIONS = [
+    # The first two are CROSSED and say how long that takes; the last is
+    # dwelt in and says nothing, which is how a chamber is spelled -- the
+    # magnitude is the declaration, and its absence is one too.
     {"name": "Entry Passage", "desc": "A close, yielding passage just within "
-                                      "the way in.", "light": "dark"},
+                                      "the way in.", "light": "dark",
+     "transit_seconds": 8},
     {"name": "Middle Chamber", "desc": "It widens here.", "light": "dark",
-     "barrier": "membrane"},
+     "barrier": "membrane", "transit_seconds": 30},
     {"name": "Deep Hold", "desc": "The furthest the inside goes."},
 ]
 
@@ -159,7 +163,8 @@ class TestTheWarning:
 
     def test_an_overlong_list_is_reported(self):
         found = [w for w in character_card_warnings(
-            _sheet([{"name": "S%d" % n} for n in range(12)]))
+            _sheet([{"name": "S%d" % n, "transit_seconds": 5}
+                    for n in range(12)]))
             if "embodiment.interior" in w]
         assert found and "12" in found[0]
 
@@ -170,6 +175,50 @@ class TestTheWarning:
     def test_an_ordinary_card_with_no_interior_is_quiet(self):
         assert not [w for w in character_card_warnings(_sheet())
                     if "embodiment.interior" in w]
+
+    def test_a_chain_that_never_says_how_long_it_takes_to_cross_is_named(self):
+        """The class the empty-drive warning exists for, applied to the field
+        that decides whether a passage RUNS. A chain with no crossing time
+        anywhere holds its occupant in every station until something moves
+        them by hand -- transit as a state someone is in rather than a
+        process that runs, which is the measured defect this field ends."""
+        found = [w for w in character_card_warnings(
+            _sheet([{"name": "First"}, {"name": "Second"}]))
+            if "transit_seconds" in w]
+        assert found
+
+    def test_one_station_is_a_place_not_a_passage_and_is_quiet(self):
+        assert not [w for w in character_card_warnings(
+            _sheet([{"name": "Only"}])) if "transit_seconds" in w]
+
+    def test_one_declared_crossing_time_answers_for_the_chain(self):
+        assert not [w for w in character_card_warnings(
+            _sheet([{"name": "First", "transit_seconds": 8},
+                    {"name": "Second"}])) if "transit_seconds" in w]
+
+
+class TestTheCrossingTimeIsShapeOnly:
+    def test_a_parseable_positive_number_is_kept_as_a_float(self):
+        spec = character_body_interior(
+            _sheet([{"name": "A", "transit_seconds": 8},
+                    {"name": "B", "transit_seconds": "14400"}]))
+        assert spec[0]["transit_seconds"] == 8.0
+        assert spec[1]["transit_seconds"] == 14400.0
+
+    def test_prose_zero_and_nonsense_leave_the_key_off_entirely(self):
+        """A prose magnitude stays UNREAD rather than becoming a wrong
+        number, and zero is not a cadence -- `_tick_interval`'s doctrine,
+        earned on 48 of 131 corpus rows spelling `0` for unset. Writing
+        `0` here would demote a conduit to a chamber silently."""
+        for bad in ("several seconds", "6-10 hours", 0, -5, "", None,
+                    float("inf"), float("nan"), True):
+            spec = character_body_interior(
+                _sheet([{"name": "A", "transit_seconds": bad}]))
+            assert "transit_seconds" not in spec[0], bad
+
+    def test_a_station_that_declares_none_carries_no_key(self):
+        spec = character_body_interior(_sheet([{"name": "A"}]))
+        assert "transit_seconds" not in spec[0]
 
 
 class TestTheStamper:
