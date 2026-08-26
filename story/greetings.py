@@ -761,6 +761,10 @@ def start_story(char_id: int, persona_id: int, greeting_index: int = 0,
         route["guidance"] = str(
             (route_request if isinstance(route_request, dict) else {}).get(
                 "brief") or "")[:2000]
+        from story.journey_history import journey_event_count
+        route["event_count"] = journey_event_count(
+            (route_request if isinstance(route_request, dict) else {}).get(
+                "events"))
         db.wset(cid, "character_history_routes", {str(char_id): route})
         history_route = route
         if route_uses_charter(route):
@@ -816,7 +820,13 @@ def start_story(char_id: int, persona_id: int, greeting_index: int = 0,
             with language_scope(language or DEFAULT_LANGUAGE):
                 journey_result = compile_journey_history(
                     cid, char_id, sheet, history_route, lore=journey_lore,
-                    opening=prose_final)
+                    opening=prose_final,
+                    # A journey ends where the story begins: the lived-location
+                    # brief was computed for routing and then thrown away, so
+                    # nothing could author the approach to the opening place.
+                    arrival_brief=str(
+                        lived_location.get("brief") or ""
+                        if isinstance(lived_location, dict) else ""))
             routes = db.wget(cid, "character_history_routes", {}) or {}
             routes[str(char_id)]["handoff"] = {
                 "complete": True,

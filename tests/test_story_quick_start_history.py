@@ -110,7 +110,7 @@ def test_quick_start_visitor_uses_journey_history_not_charter(
     request, prepared = charter_runtime._prepare_cast_histories(cid, {
         "brief": "the port", "character_histories": [
             {"char_id": char_id, "mode": "generated_journey",
-             "brief": "She owes someone passage."}],
+             "brief": "She owes someone passage.", "events": 14}],
     })
     assert "featured_residents" not in request
     monkeypatch.setattr(charter_runtime, "generation_lore",
@@ -128,5 +128,9 @@ def test_quick_start_visitor_uses_journey_history_not_charter(
 
     assert journeys[0][0] == char_id
     assert journeys[0][1]["guidance"] == "She owes someone passage."
+    assert journeys[0][1]["event_count"] == 14
+    # A journey ends where the story begins: the location the route was
+    # decided from reaches the generator instead of being thrown away.
+    assert journeys[0][2]["arrival_brief"] == "the port"
     route = temp_db.wget(cid, "character_history_routes", {})[str(char_id)]
     assert route["handoff"]["journey_events"] == 1
