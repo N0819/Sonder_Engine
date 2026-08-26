@@ -65,17 +65,17 @@ test-fast:
 # "unrecognized arguments: -n" for a developer who did nothing wrong.
 test-full:
 	@if [ "$(JOBS)" = "0" ]; then \
-		$(PYTEST) -q; \
+		$(PYTEST) -q -n 0; \
 	elif $(PYTHON) -c "import xdist" 2>/dev/null; then \
 		$(PYTEST) -q -n $(JOBS); \
 	else \
 		echo "note: pytest-xdist not installed for '$(PYTHON)' -- running serially (~3x slower)."; \
 		echo "      pip install -r requirements-dev.txt, or run: make test JOBS=0 to silence this."; \
-		$(PYTEST) -q; \
+		$(PYTEST) -q -o addopts="-ra --strict-markers"; \
 	fi
 
 test-serial:
-	$(PYTEST) -q
+	$(PYTEST) -q -n 0
 
 # The fix-verify loop: last-failed first, then the rest. Free -- the pytest
 # cache is already on -- and the right tool while iterating on one bug.
