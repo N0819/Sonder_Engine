@@ -1004,11 +1004,6 @@ class FictionFrame(LenientModel):
 
 # ---- Actions ----
 
-class DurationHint(LenientModel):
-    value: Optional[float] = None
-    unit: str = "seconds"
-    explicit: bool = False
-
 class IntendedEffect(LenientModel):
     target_id: Optional[str] = None
     kind: str
@@ -1027,13 +1022,6 @@ class ActionElement(LenientModel):
     # purely mental beat) and must not be surfaced to observers at all. See
     # agents/common.observable_action_text and norm_sequence.
     observable: str = ""
-    # Authorship mode of a player-authored element. 'pc_action' (default) is
-    # the player's character acting. 'npc_offer' is the player authoring another
-    # character's interior/behavior -- rerouted to that character's own agent as
-    # an offer rather than enacted as truth (the character owns its psychology).
-    # 'world_assertion'/'ooc_directive' name the authorial and out-of-character
-    # channels. Legacy payloads with no mode default to pc_action.
-    mode: str = "pc_action"
     verb: str = ""
     commitment: ActionCommitment = ActionCommitment.contestable
     stage: ActionStage = ActionStage.immediate
@@ -1042,10 +1030,8 @@ class ActionElement(LenientModel):
         lambda cls, v: normalize_action_stage(v)
     )
     targets: list[str] = Field(default_factory=list)
-    instruments: list[str] = Field(default_factory=list)
     intended_effects: list[IntendedEffect] = Field(default_factory=list)
     asserted_effects: list[IntendedEffect] = Field(default_factory=list)
-    duration: DurationHint = Field(default_factory=DurationHint)
     visibility: ActionVisibility = ActionVisibility.overt
     conceal_from: list[str] = Field(default_factory=list)
     conditions: list[dict] = Field(default_factory=list)
@@ -1634,7 +1620,6 @@ class DirectorEstablish(LenientModel):
     substance_ops: list[dict] = Field(default_factory=list)
     sensory_events: list[dict] = Field(default_factory=list)
     world_facts: list = Field(default_factory=list)
-    opening: str = ""
     fiction_frame: dict[str, Any] = Field(default_factory=dict)
     simulation_clock: dict[str, Any] = Field(default_factory=dict)
     # World-pressure openers (F5): scenario objects/processes established
@@ -4754,9 +4739,6 @@ OUTPUT_EXAMPLES = {
             "display": "before dawn",
             "time_scale": "scene",
         },
-        "opening": (
-            "The fog has not lifted. Maren waits under the lamp at the head "
-            "of the pier, watching the water rather than the road."),
     },
     # This is the PROSE AUTHOR's example -- `director_resolve` is the step
     # key its call runs under. It owns the beat's prose, its dialogue, the

@@ -1088,6 +1088,14 @@ def _reconcile_interpretation(ctx, out, sc):
                 "to_room": str(rmv["to_room"]),
                 "why": str(rmv.get("why") or ""),
                 "mover": str(rmv.get("mover") or "self"),
+                # `arrives` is the ONLY thing that separates a declared
+                # approach from a declared arrival, and nothing downstream
+                # can re-derive it (see
+                # director_movement._guard_approach_is_not_arrival). The
+                # rebuild used to drop it, so a repair that correctly read
+                # "I head for the treeline" as arrives:false was silently
+                # upgraded to an arrival by this dict literal.
+                "arrives": bool(rmv.get("arrives", True)),
             }
             recon["repaired"] = True
         extra_request = str(repair.get("mapping_request") or "").strip()

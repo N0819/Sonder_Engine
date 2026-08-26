@@ -20,7 +20,7 @@ from agents.director import (
 )
 from story.character_schema import default_character_data, default_persona_data
 from core.pipeline_context import ChatData, PipelineContext, TurnData
-from llm.prompts import DEFAULT_PROMPTS
+from llm.prompts import DEFAULT_PROMPTS, interpret_delegation_note
 from llm.schemas import validate_llm_output
 from world.spatial import apply_contact_ops
 
@@ -64,18 +64,40 @@ def _assertion(target_part="cervix"):
 
 
 def test_interpret_schema_and_prompt_carry_exact_contact_assertions():
+    """The channel is still the interpret contract; the VOCABULARY now lives
+    on the hand that writes it.
+
+    The interpret sheet taught the full contact grammar for its own
+    `contact_assertions`, and `interpret_delegation_note` -- appended
+    unconditionally at agents/director.py:595, there being no monolithic
+    Director path left -- then told the same model to leave that channel
+    empty because a specialist re-encodes it. 1,890 characters of instruction
+    followed by an instruction voiding them, on every beat. The grammar moved
+    to the contact specialist's own sheet, which is the sheet whose output
+    actually reaches `_validated_player_contact_assertions`.
+    """
     parsed, warnings = validate_llm_output(
         "director_interpret", {"contact_assertions": [_assertion()]})
 
     assert not warnings
     assert parsed["contact_assertions"][0]["target_part"] == "cervix"
-    prompt = DEFAULT_PROMPTS["director_interpret"]
-    assert "contact_assertions" in prompt
-    assert "'cervix', not the coarse visibility region 'groin'" in prompt
-    assert "relation is surface|interior" in prompt
-    assert "motion is settled|moving" in prompt
-    assert "target_interior names the passage, chamber, material" in prompt
-    assert "use op:'cross'" in prompt
+    # The interpret contract still NAMES the channel -- the specialist's
+    # answer is merged into it -- and the delegation note still says who fills
+    # it in.
+    assert "contact_assertions" in DEFAULT_PROMPTS["director_interpret"]
+    assert "contact_assertions empty" in interpret_delegation_note()
+
+    contact = DEFAULT_PROMPTS["director_contact"]
+    assert "coarse visibility region" in contact
+    assert "relation is surface|interior" in contact
+    assert "motion is settled|moving" in contact
+    assert "target_interior names what currently encloses" in contact
+    assert "op:'cross'" in contact
+    # The firewall half moved with the rest and is now pinned, which it never
+    # was: `detail` is free prose, so no key whitelist can hold this and the
+    # sheet is the only thing standing there.
+    assert ("never the other participant's thoughts, pleasure, pain, or "
+            "intention") in contact
 
     character, warnings = validate_llm_output(
         "character", {"contact_ops": [
