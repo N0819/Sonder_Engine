@@ -1779,7 +1779,7 @@ _OWN_BODY_DESCRIPTION_KINDS = frozenset(("body_part", "body_region"))
 # true.  Player-mode presentation compression must therefore never dedupe it.
 # Memory keeps a separate rule below: an unchanged sensation by itself is not
 # enough to mint a new autobiographical episode.
-_ACTIVE_STANDING_KINDS = frozenset(("sensation",))
+ACTIVE_STANDING_KINDS = frozenset(("sensation",))
 
 
 def _is_own_body_description(p):
@@ -1895,7 +1895,7 @@ def appearance_delta(percept):
     return str((percept.data or {}).get("delta") or "").strip()
 
 
-def _leads_the_beat(percept, verdict, prev_standing):
+def leads_the_beat(percept, verdict, prev_standing):
     """Does this standing percept belong in the BEAT half of a player view.
 
     `changed` always does -- something about a subject this observer already
@@ -1913,7 +1913,7 @@ def _leads_the_beat(percept, verdict, prev_standing):
     return verdict == "first" and percept.kind in _FIRST_SIGHT_LEADS
 
 
-def _as_beat(percept):
+def as_beat(percept):
     """The same percept, marked as this beat's content rather than its
     background. Read by `observations_from_render`, which is how a changed
     pose reaches the narrator's numbered deliveries instead of its
@@ -1921,6 +1921,34 @@ def _as_beat(percept):
     percept list is untouched, and `_composer_company` still reads it."""
     return dataclasses.replace(
         percept, data={**(percept.data or {}), "beat": True})
+
+
+def player_view_order(spans):
+    """The order a player view's spans render in, for ANY language pack.
+
+    Four ranks, and the sort is stable, so each pack keeps its own discourse
+    order inside a rank: this beat's EVENTS in declared order, then the
+    standing percepts `leads_the_beat` marked as this beat's news, then a
+    changed room, then the background. The room goes last in the beat half
+    for the same reason `_render_episode_english` puts it last -- scene
+    setting read first swallows what happened.
+
+    A pack must not spell this rule itself. `language_adapters/japanese.py`
+    did, and its own partition emitted the changed standing percepts BEFORE
+    the events because that was the order it happened to iterate in, so a
+    Japanese player view opened on a pose while the English one opened on the
+    act that moved it. Rank is read off what the percept already carries --
+    `order_key` for an event, the `beat` mark `as_beat` stamps for the rest --
+    so there is nothing here for a second renderer to re-derive.
+    """
+    def rank(span):
+        percept = span[0]
+        if percept.order_key is not None:
+            return 0
+        if not (percept.data or {}).get("beat"):
+            return 3
+        return 2 if percept.kind == "environment" else 1
+    return sorted(spans, key=rank)
 
 
 @dataclass
@@ -2351,7 +2379,7 @@ def _render_view_english(percepts, *, mode="character",
     # of them: if any body in it is new or has moved tier, who is here is
     # this beat's news.
     presence_leads = player and any(
-        _leads_the_beat(p, verdicts.get(p.dedupe_key, "first"), prev_standing)
+        leads_the_beat(p, verdicts.get(p.dedupe_key, "first"), prev_standing)
         for p in standing if p.kind == "presence")
 
     standing_spans = []         # the background half in player mode
@@ -2363,7 +2391,7 @@ def _render_view_english(percepts, *, mode="character",
             continue
         seen_dedupe.add(p.dedupe_key)
         verdict = verdicts.get(p.dedupe_key, "first")
-        leads = player and _leads_the_beat(p, verdict, prev_standing)
+        leads = player and leads_the_beat(p, verdict, prev_standing)
         if p.kind == "appearance":
             if (player and not full_render and verdict == "unchanged"
                     and not appearance_delta(p)):
@@ -2378,7 +2406,7 @@ def _render_view_english(percepts, *, mode="character",
                 # once. Nothing here claims it moved, so it stays told.
                 continue
         elif (delta and p.dedupe_key in prev_standing
-              and p.kind not in _ACTIVE_STANDING_KINDS):
+              and p.kind not in ACTIVE_STANDING_KINDS):
             continue
         elif (not full_render and p.dedupe_key in prev_standing
                 and _is_own_body_description(p)):
@@ -2398,7 +2426,7 @@ def _render_view_english(percepts, *, mode="character",
         if p.kind == "appearance":
             described.add(str(p.data.get("source_key") or ""))
         if leads:
-            beat_spans.append((_as_beat(p), sentence))
+            beat_spans.append((as_beat(p), sentence))
         else:
             standing_spans.append((p, sentence))
     for half in (beat_spans, standing_spans):
@@ -2406,7 +2434,7 @@ def _render_view_english(percepts, *, mode="character",
             at = half.index(_PRESENCE_SLOT)
             group = _render_presence_group(presence_group)
             if half is beat_spans:
-                group = [(_as_beat(gp), sentence) for gp, sentence in group]
+                group = [(as_beat(gp), sentence) for gp, sentence in group]
             half[at:at + 1] = group
 
     event_spans = []
@@ -2419,14 +2447,9 @@ def _render_view_english(percepts, *, mode="character",
             event_spans.append((p, _cap(sentence)))
 
     if player:
-        # A changed ROOM goes last in the beat half for the same reason the
-        # episode renderer puts it last (composer.py `_render_episode_english`):
-        # scene-setting read first swallows what happened.
-        changed_env = [span for span in beat_spans
-                       if span[0].kind == "environment"]
-        changed_rest = [span for span in beat_spans
-                        if span[0].kind != "environment"]
-        spans = event_spans + changed_rest + changed_env + standing_spans
+        # The ordering rule itself lives in `player_view_order`, which every
+        # pack calls, so the reference renderer cannot drift from one.
+        spans = player_view_order(event_spans + beat_spans + standing_spans)
     else:
         # Discourse rule: a sudden event chain leads; otherwise standing state
         # anchors the view and the beat follows.

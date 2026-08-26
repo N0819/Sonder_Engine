@@ -2726,11 +2726,21 @@ Three things that work names for and does not close.
   a defect.
 - **An adapter that implements `render_view` without calling
   `standing_verdicts` re-forks the rule.**
-  `tests/test_japanese_renderer_parity.py` now compares the two renderers'
-  beat/background classification, so the shipped pack cannot drift silently;
-  a THIRD pack could. A malformed adapter still falls through to the English
-  reference renderer, which carries the tier, so the failure mode is wording
-  rather than information.
+  `tests/test_japanese_renderer_parity.py` compares the two renderers'
+  beat/background classification AND the order of their spans, so the shipped
+  pack cannot drift silently; a THIRD pack could. The classification half of
+  that comparison shipped a beat behind the ordering half: the first version
+  of the ordering test rendered a beat containing exactly one member, which
+  orders correctly whatever the rule says, and it passed while the Japanese
+  adapter emitted the changed standing percepts before the events. The three
+  private composer names the pack reached across for are now public
+  (`leads_the_beat`, `as_beat`, `ACTIVE_STANDING_KINDS`) and the ordering
+  itself is `composer.player_view_order`, which both renderers call, so the
+  ORDER is no longer a thing a pack can hold an opinion about. What a pack
+  still spells for itself is admission -- the appearance and standing-dedupe
+  branches -- and that is the remaining fork. A malformed adapter still falls
+  through to the English reference renderer, which carries the tier, so the
+  failure mode is wording rather than information.
 
 One thing the replay surfaced that is NOT a residual, recorded so the next
 reader does not re-open it: the stored corpus shows a structured overlay
