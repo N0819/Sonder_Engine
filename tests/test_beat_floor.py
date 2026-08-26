@@ -153,17 +153,20 @@ def _make_chat(temp_db):
         ("Test", None, "", time.time()))
 
 
+STRANGER = "The Stranger"
+
+
 def _hall_scene():
     return {
         "location": "Kessler Tower", "time": "night",
         "rooms": {"hall": {"name": "Hall", "desc": "A hall.", "adjacent": []}},
         "entities": {},
-        "positions": {"The Stranger": "hall"},
+        "positions": {STRANGER: "hall"},
         "attire": {}, "overlays": {},
     }
 
 
-def _make_ctx(temp_db, chat_id, *, diff, resolved=True):
+def _make_ctx(temp_db, chat_id, *, diff, resolved=True, cast=()):
     from core.pipeline_context import ChatData, PipelineContext, TurnData
 
     turn_id = temp_db.qi(
@@ -174,7 +177,7 @@ def _make_ctx(temp_db, chat_id, *, diff, resolved=True):
                       lorebook_id=None, scenario="", created=time.time()),
         turn=TurnData(id=turn_id, chat_id=chat_id, idx=1,
                       player_input="", created=time.time()),
-        cast=[], input="",
+        cast=list(cast), input="",
     )
     if resolved:
         ctx.director_resolve = {"resolved_event": "The beat passes.",
@@ -182,12 +185,27 @@ def _make_ctx(temp_db, chat_id, *, diff, resolved=True):
     return ctx
 
 
-def _run_scene_commit(temp_db, chat_id, diff, *, clock, resolved=True):
+def _one_mind(temp_db):
+    """One cast row, as `prepare_memory_commit` reads it: id, sheet, cstate.
+
+    Plain dicts rather than a database round trip -- the row is read by key
+    and nothing here depends on the join, so the test says what it depends
+    on (`docs/guides/TESTING.md`'s standing preference)."""
+    import json
+
+    from story.character_schema import default_character_data
+
+    return [{"id": 7, "sheet": json.dumps(default_character_data(STRANGER)),
+             "cstate": "{}"}]
+
+
+def _run_scene_commit(temp_db, chat_id, diff, *, clock, resolved=True,
+                      cast=()):
     from persist.commit import commit_scene, prepare_scene_commit
 
     temp_db.wset(chat_id, "scene", _hall_scene())
     temp_db.wset(chat_id, "simulation_clock", clock)
-    ctx = _make_ctx(temp_db, chat_id, diff=diff, resolved=resolved)
+    ctx = _make_ctx(temp_db, chat_id, diff=diff, resolved=resolved, cast=cast)
     prepared = prepare_scene_commit(ctx)
     commit_scene(ctx, 0, prepared=prepared)
     return ctx, temp_db.wget(chat_id, "simulation_clock", {})
@@ -255,3 +273,71 @@ class TestBothStoredReadersLandOnOneNumber:
         td = {"duration_seconds": 0}
         assert _monotonic_elapsed(prev, td, floor=True)[0] == 1098.0
         assert beat_end_elapsed(1098.0, td, floor=True)[0] == 1098.0
+
+
+class TestTheSecondReaderIsDrivenAtItsCallSite:
+    """Two of the three legs above were held by no test at all.
+
+    The pair above drives `_monotonic_elapsed` DIRECTLY, and says so. That
+    leaves the argument the memory commit passes it -- `floor=bool(
+    ctx.director_resolve)` at `persist/commit_memory.py:511` -- unread by the
+    suite: changing it to `floor=False` left all 9573 tests green, while
+    `Design.md` asserted "three readers, one number" as Built. So the stamp is
+    read where it actually lands: `state_updates` carries the character state
+    the turn will store, and `active_state.affect_seconds` inside it is the
+    number every psychology window is measured from.
+    """
+
+    def _both_stamps(self, temp_db, chat_id, *, resolved=True):
+        """One beat through both readers, in `commit_all`'s own order:
+        prepare the scene, prepare the memory off the same stored clock, then
+        write. Returns (memory stamp, stored simulation clock)."""
+        import json
+
+        from persist.commit import (commit_scene, prepare_memory_commit,
+                                    prepare_scene_commit)
+
+        temp_db.wset(chat_id, "scene", _hall_scene())
+        temp_db.wset(chat_id, "simulation_clock",
+                     {"elapsed_seconds": 1098.0, "display": "moments later"})
+        ctx = _make_ctx(temp_db, chat_id, diff={}, resolved=resolved,
+                        cast=_one_mind(temp_db))
+        if not resolved:
+            ctx.director_establish = {"resolved_event": "The scene opens.",
+                                      "dialogue_log": [], "state_diff": {}}
+        # A mind that reported an interior at all; every floor under it is the
+        # engine's, which is the point.
+        ctx.character_results[7] = {"speech": "", "action": "",
+                                    "active_state": {}}
+
+        prepared = prepare_scene_commit(ctx)
+        memories = prepare_memory_commit(ctx, scene=prepared["scene"])
+        commit_scene(ctx, 0, prepared=prepared)
+
+        updates = memories.get("state_updates") or []
+        assert updates, (
+            "the memory commit staged no character state, so its clock stamp "
+            "is unreadable and this test would prove nothing")
+        state = json.loads(updates[0][2])
+        stamped = (state.get("active_state") or {}).get("affect_seconds")
+        return stamped, temp_db.wget(chat_id, "simulation_clock", {})
+
+    def test_the_memory_stamp_is_the_committed_clock_on_a_silent_beat(
+            self, temp_db):
+        """Chat 89 turn 58 replayed with a mind present: clock 1098.0, no
+        time block, one character who felt something about it."""
+        chat_id = _make_chat(temp_db)
+        stamped, clock = self._both_stamps(temp_db, chat_id)
+
+        assert clock["elapsed_seconds"] == 1098.0 + UNCLAIMED_BEAT_SECONDS
+        assert stamped == clock["elapsed_seconds"] == 1108.0, (
+            f"the memory commit stamped {stamped!r} while the scene commit "
+            f"stored {clock['elapsed_seconds']!r}: one beat, two clocks")
+
+    def test_an_establish_turn_stamps_the_unfloored_clock(self, temp_db):
+        """The other side of the same argument. No resolved beat is nothing
+        to charge for, and the memory stamp must agree about that too."""
+        chat_id = _make_chat(temp_db)
+        stamped, clock = self._both_stamps(temp_db, chat_id, resolved=False)
+
+        assert stamped == clock["elapsed_seconds"] == 1098.0

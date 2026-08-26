@@ -424,6 +424,96 @@ class TestTheOnRamp:
             stamped, {}, clock_seconds=_UNSTATED_CROSSING_SECONDS)
         assert _where(carried) == deeper
 
+    def test_the_row_names_the_holder_in_one_slot_and_only_that_slot(self):
+        """A ROW THAT NAMES NEITHER SIDE AS THE ENCLOSED ONE MINTS NOTHING.
+
+        The on-ramp reads `target` as the holder and `actor` as the occupant,
+        which is the contact vocabulary's own orientation, and it must keep
+        reading exactly those slots. A "resolve the unordered pair instead"
+        change was considered against the live corpus and rejected: an
+        interior contact row is `derive_containment_from_contacts`'s own
+        documented ambiguity -- in one spelling the cavity belongs to the
+        target and in the other it belongs to the actor -- so promoting a
+        pair into "A contains B's whole body" asserts a fact the row does not
+        carry. Once any chain exists, a row naming a region of the INNER body
+        would then mint a station inside the holder and teleport the occupant
+        into it, out of the station they were crossing. That is information
+        EXPANSION; the firewall subtracts.
+
+        Measured read-only against the author's corpus 2026-08-25: no scene
+        stores an inverted enclosure row, and the two rows that read that way
+        (chats 86 and 87) are part-in-cavity rows of exactly this shape,
+        already served by `_enclosed_by_asymmetry` one step earlier.
+        """
+        scene = _chain_scene(transit=(None,), motion="moving")
+        row = _contact(scene)
+        row["actor"], row["target"] = row["target"], row["actor"]
+        row["target_interior"] = "Deeper"
+        before = len(scene["rooms"])
+        merged = merge_scene_with_diff(scene, {}, clock_seconds=0.0)
+
+        assert len(merged["rooms"]) == before, (
+            "a row whose named side has no inside minted a station anyway")
+        assert _where(merged) == "st_0", (
+            "an occupant was moved on the strength of a row that never said "
+            "which side encloses which")
+
+    def test_an_authored_chain_is_not_grafted_onto_mid_chain(self):
+        """A DECLARED CHAIN IS AN ORDERED DOCUMENT, and a region it does not
+        name has no position in it.
+
+        This pass only knows how to chain DEEPER, and mid-chain the engine
+        cannot tell a region the occupant has already passed from one beyond
+        the last station -- so grafting there puts an outward region behind a
+        body that never reached it, and then walks them into it.
+
+        Measured on a scratch copy of the author's corpus 2026-08-25 with the
+        card filled and saved through the story-card surface: one branch's
+        standing ledger named a region the authored chain omits, the occupant
+        was placed at the entry station, and the next merge minted that
+        region deeper than the entry and moved her OUTWARD into it, where she
+        held for fourteen beats to t=22800.0.
+        """
+        scene = _chain_scene(transit=(None, None, None), motion="moving")
+        scene["entities"][VESSEL]["interior_spec"] = [
+            {"name": "Station 0"}, {"name": "Station 1"}, {"name": "Station 2"}]
+        _contact(scene)["target_interior"] = "Somewhere Unlisted"
+        before = len(scene["rooms"])
+        merged = merge_scene_with_diff(scene, {}, clock_seconds=0.0)
+
+        assert len(merged["rooms"]) == before, (
+            "a region the authored chain never named was minted anyway")
+        assert _where(merged) == "st_0", (
+            "an occupant mid-chain was moved into a station the card's "
+            "order does not place")
+
+    def test_an_authored_chain_still_grows_past_its_deep_end(self):
+        """The skip is scoped to what it can be wrong about. Past the last
+        authored station, deeper is the ONLY place a new one could go, so a
+        story that continues past the card still gets its on-ramp."""
+        scene = _chain_scene(transit=(None, None, None), motion="moving",
+                             start=2)
+        scene["entities"][VESSEL]["interior_spec"] = [
+            {"name": "Station 0"}, {"name": "Station 1"}, {"name": "Station 2"}]
+        _contact(scene)["target_interior"] = "Beyond The Last"
+        merged = merge_scene_with_diff(scene, {}, clock_seconds=0.0)
+
+        here = _where(merged)
+        assert here != "st_2"
+        assert merged["rooms"][here]["name"] == "Beyond The Last"
+
+    def test_a_story_grown_chain_is_unaffected(self):
+        """Where nothing is authored there is no declared order to
+        contradict, so every gate above reads exactly as it did."""
+        scene = _chain_scene(transit=(None, None, None), motion="moving")
+        assert "interior_spec" not in scene["entities"][VESSEL]
+        _contact(scene)["target_interior"] = "Somewhere Unlisted"
+        merged = merge_scene_with_diff(scene, {}, clock_seconds=0.0)
+
+        here = _where(merged)
+        assert here != "st_0"
+        assert merged["rooms"][here]["name"] == "Somewhere Unlisted"
+
 
 class TestTheLedgerFollowsTheBody:
 

@@ -691,7 +691,7 @@ _EMBEDDED_FRAGMENTS = {
     "book_type_note": 3,
     "transit_note": 3,
     "extra_parts_note": 6,
-    "interior_note": 2,
+    "interior_note": 3,
 }
 
 

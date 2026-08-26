@@ -1009,6 +1009,56 @@ function fExtraParts(label, parts) {
   }, () => ({ kind: "", count: 1, at: "waist", aspect: "back", through_clothing: true, description: "" }));
 }
 
+// The stations of a body's inside, OUTERMOST FIRST. The list ORDER is the
+// topology -- the engine chains each station to the one before it and walks
+// strictly deeper from the derived way in -- so dragging a row is an anatomy
+// edit, not a display preference, and the up/down controls say so.
+//
+// `transit_seconds` blank means the station HOLDS its occupant until the story
+// moves them, which is what a place to stay in is. A number means the clock
+// carries them onward by itself once it is spent. The way in and out is never
+// a station: it is derived from the body.
+const INTERIOR_LIGHTS = ["dark", "dim", "lit", "bright"];
+function fInteriorStations(label, stations) {
+  const wrap = el("div"), rows = [];
+  const move = (card, by) => {
+    const at = rows.indexOf(card), to = at + by;
+    if (at < 0 || to < 0 || to >= rows.length) return;
+    rows.splice(at, 1); rows.splice(to, 0, card);
+    wrap.replaceChildren(...rows);
+  };
+  const addRow = x => {
+    x = x || {};
+    const name = el("input", { value: x.name || "", placeholder: "station name (the handle the story says out loud)", style: "flex:1" });
+    const desc = el("input", { value: x.desc || "", placeholder: "what standing there is like", style: "flex:2" });
+    const light = el("select", { title: "how much can be seen there; unstated reads as dark" },
+      INTERIOR_LIGHTS.map(v => el("option", { value: v, ...(v === (x.light || "dark") ? { selected: "" } : {}) }, v)));
+    const barrier = el("input", { value: x.barrier || "", placeholder: "passage in (membrane)", style: "width:130px", title: "the passage from the station before this one. Blank means membrane — a body passes through, nothing sees through. The first station has none: the way in is derived from the body." });
+    const transit = el("input", { type: "number", min: "0", step: "1", value: x.transit_seconds ?? "", placeholder: "crossing s", style: "width:110px", title: "how long passing through this station takes, in story seconds. Blank = the station holds its occupant until the story moves them." });
+    const up = el("button", { title: "move outward (earlier in the chain)", onclick: () => move(card, -1) }, "↑");
+    const down = el("button", { title: "move deeper (later in the chain)", onclick: () => move(card, +1) }, "↓");
+    const card = el("div", { class: "card row" }, name, desc, light, barrier, transit, up, down,
+      el("button", { title: "remove this station", onclick: () => { card.remove(); rows.splice(rows.indexOf(card), 1) } }, "✕"));
+    card._read = () => {
+      if (!name.value.trim()) return null;
+      const row = { name: name.value.trim(), desc: desc.value, light: light.value, barrier: barrier.value.trim() };
+      // Blank is "declares no crossing time", which is a different claim from
+      // zero -- the engine reads 0 as unset and the editor must not spell one
+      // as the other.
+      const seconds = parseFloat(transit.value);
+      if (transit.value !== "" && isFinite(seconds) && seconds > 0) row.transit_seconds = seconds;
+      return row;
+    };
+    rows.push(card); wrap.append(card);
+  };
+  (stations || []).forEach(addRow);
+  const add = el("button", { onclick: () => addRow({ light: "dark" }) }, "+ station");
+  return {
+    node: el("div", { class: "ff" }, el("label", {}, label), wrap, add),
+    read: () => rows.map(r => r._read()).filter(Boolean),
+  };
+}
+
 function fPronouns(label, pronouns) {
   const subj = el("input", { value: pronouns?.subject || "they", placeholder: "subject", style: "flex:1" });
   const obj = el("input", { value: pronouns?.object || "them", placeholder: "object", style: "flex:1" });

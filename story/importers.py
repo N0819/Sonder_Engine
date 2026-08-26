@@ -15,6 +15,8 @@ from language_runtime import language_pack
 from story.character_schema import (
     _outfit_items as character_schema_outfit_items,
     character_card_warnings,
+    _interior_station_name,
+    _positive_seconds,
     CHARACTER_SCHEMA,
     PERSONA_SCHEMA,
     character_name,
@@ -25,6 +27,13 @@ from story.character_schema import (
     normalize_persona_data,
     persona_name,
 )
+# The card a STORY actually reads. `scene.active_cast` resolves
+# `chat_chars.sheet` over `characters.sheet`, so a fill surface that can only
+# see the reusable row is invisible to every story that has a per-story card
+# -- measured read-only against the author's corpus 2026-08-25: 13 of 116
+# `chat_chars` rows carry one, and all seven stories of the line this landing
+# was built for are among them.
+from story.scene import chat_character_sheet
 
 #: Output budget for the whole-sheet authoring generators (character, persona,
 #: promotion draft, psychology fill, lorebook structure and entries).
@@ -1123,6 +1132,198 @@ def fill_appearance(kind, entity_id, brief, include_beneath=False, draft=None):
                     entry["beneath_zones"] = {}
         merged["initial_outfit"] = outfit
     return normalize(merged)
+
+
+def _interior_chain_losses(authored, proposed):
+    """What a proposed interior chain would DESTROY, as sentences. [] is safe.
+
+    THE THIRD FILL SURFACE IS THE FIRST ONE WHOSE OUTPUT IS A MECHANISM.
+    `fill_appearance` proposes prose: an author who does not read it closely
+    has lost a paragraph. An interior chain is read by `advance_room_transits`
+    every beat, so its ORDER is the topology and its magnitudes are the clock
+    -- losing one silently does not degrade a description, it re-plumbs a body
+    and starts moving people through the result.
+
+    So this refuses on LOSS, in the four shapes a whole-document proposal can
+    lose authored work while looking complete:
+      * a station dropped -- its name is simply gone;
+      * a station renamed -- indistinguishable from a drop, and it is one:
+        the old handle is what beats, contacts and rooms already match on;
+      * the chain reordered -- `_mint_authored_interior` chains in list order
+        and `_onward_room` walks strictly deeper from the way in, so a
+        permutation with every name intact is a different anatomy;
+      * a declared crossing time taken away -- the magnitudes are the whole
+        reason this surface exists, and a chain that loses them reverts to a
+        set of rooms nothing advances anyone along.
+    Refinement is untouched: a desc, a light, a barrier, a magnitude the prose
+    supports and a wholly new station all pass. Removal, renaming and
+    reordering stay the author's own acts in the editor, where they are
+    visible.
+
+    Extracted rather than inlined because both the guard and its test ask the
+    identical question, and `commit`'s two-copies-of-one-rule lesson applies
+    to authoring code as much as to merge code.
+    """
+    def _chain(value):
+        out = []
+        for item in value or []:
+            name = _interior_station_name(item)
+            if not name:
+                continue
+            seconds = (_positive_seconds(item.get("transit_seconds"))
+                       if isinstance(item, dict) else None)
+            out.append((name, name.casefold(), seconds))
+        return out
+
+    before, after = _chain(authored), _chain(proposed)
+    if not before:
+        return []
+    kept = {name for _display, name, _s in after}
+    missing = [display for display, name, _s in before if name not in kept]
+    losses = []
+    if missing:
+        losses.append(
+            "the fill dropped or renamed authored station(s) %s"
+            % ", ".join(repr(name) for name in missing))
+    surviving = [name for _d, name, _s in before if name in kept]
+    order_after = [name for _d, name, _s in after if name in set(surviving)]
+    if not missing and order_after != surviving:
+        losses.append(
+            "the fill reordered the authored stations (%s became %s), which "
+            "is a different anatomy, not a different description"
+            % (" -> ".join(surviving), " -> ".join(order_after)))
+    after_seconds = {name: seconds for _d, name, seconds in after}
+    untimed = [display for display, name, seconds in before
+               if seconds is not None and after_seconds.get(name) is None]
+    if untimed:
+        losses.append(
+            "the fill took the crossing time off authored station(s) %s"
+            % ", ".join(repr(name) for name in untimed))
+    return losses
+
+
+def fill_body_interior(char_id, brief, draft=None, chat_id=None):
+    """Preview an AI reading of one card's INSIDE, as ordered stations.
+
+    THE THIRD SIBLING OF `fill_character_psychology` AND `fill_appearance`,
+    and it exists for the same reason both of those do: the structure the
+    engine reads is empty on every stored sheet while the answer is already
+    written on the card in prose. Measured read-only against the author's
+    corpus 2026-08-25: 79 stored sheets, 0 with a non-empty
+    `embodiment.interior`, and one of them documents a complete ordered
+    passage with magnitudes across `competence.abilities` and
+    `knowledge.private_history` that no stage reads as topology.
+
+    AN AUTHOR DECLARES THE ANATOMY ONCE; THE ENGINE DERIVES EVERY TRANSITION
+    FROM IT. That is why the model call lives HERE, at authoring time, under
+    review, and not in the beat: a runtime prose-duration parser would be
+    shaped by whichever card's phrasing it was written against, and a per-beat
+    model choosing the next station is the guessing that made one chat cross
+    three stations in four turns and its sibling stall for nine on identical
+    input. One conversion, one review, and everything downstream is
+    deterministic.
+
+    WRITES NOTHING, like both siblings: the editor shows the proposal and the
+    author's ordinary Save is what commits it.
+
+    SCOPED TO WHICHEVER CARD THE STORY ACTUALLY READS. `chat_id` names a
+    story, and then the sheet read and proposed against is the one
+    `scene.active_cast` resolves -- `chat_chars.sheet` where the story has its
+    own card, the reusable row where it does not. Without that scope this
+    surface cannot reach a story with a per-story card AT ALL: the fill would
+    land in `characters.sheet`, `stamp_authored_interiors` would read the cast
+    row instead, and the author would press a button, review a chain, save it
+    and see nothing change. Measured read-only against the author's corpus
+    2026-08-25: 13 of 116 `chat_chars` rows carry a per-story sheet, including
+    all seven stories of the one line whose card documents a route.
+    """
+    if chat_id is not None:
+        stored = chat_character_sheet(chat_id, char_id)
+        if stored is None:
+            raise ValueError("That character is not in this story")
+    else:
+        row = q("SELECT sheet FROM characters WHERE id=?", (char_id,), one=True)
+        if not row:
+            raise ValueError("Character not found")
+        stored = json.loads(row["sheet"] or "{}")
+    normalized = normalize_character_data(stored)
+    draft = draft if isinstance(draft, dict) else {}
+    # The author's UNSAVED rows, not the saved copy -- the same reason
+    # `fill_appearance` carries a draft: they press this button right after
+    # typing, and generating from the stored sheet would ignore what they just
+    # wrote and then refuse the proposal for dropping it.
+    authored = draft.get("interior")
+    if isinstance(authored, (list, tuple)):
+        # AN EMPTY LIST IS AN ANSWER, not a missing draft. The editor always
+        # sends the widget's current rows, so an empty one means the author
+        # deleted every station by hand and then pressed fill -- and falling
+        # through to the saved chain there would refuse the proposal for
+        # "dropping" precisely what they had just removed. Only a caller with
+        # no draft at all (no editor in the loop) gets the stored chain.
+        authored = list(authored)
+    else:
+        authored = (normalized.get("embodiment") or {}).get("interior") or []
+    payload = {
+        "brief": str(brief or "").strip(),
+        "card": normalized,
+        "author_draft": {"interior": list(authored)},
+    }
+    with _silent_provider_stream():
+        raw = chat_complete(
+            "utility",
+            get_prompt("fill_body_interior"),
+            json.dumps(payload, ensure_ascii=False),
+            # Extraction, not invention: the route is on the card already and
+            # this call's job is to restate it. Lower than either sibling for
+            # that reason alone.
+            temperature=0.4,
+            # None means the configured ceiling, not a hardcoded budget --
+            # `fill_appearance`'s reasoning-model finding, unchanged.
+            max_tokens=None,
+        )
+    proposed = _jparse_salvage(raw)
+    if not proposed:
+        if not str(raw or "").strip():
+            raise RuntimeError(
+                "The model returned nothing. This usually means the output "
+                "budget ran out before any JSON was written — a reasoning "
+                "model spends its thinking on that budget. Raise "
+                "'Max output tokens' in Settings, or point the `utility` role "
+                "at a non-reasoning model."
+            )
+        raise RuntimeError(
+            "Interior fill returned no usable data.\n"
+            f"Raw output:\n{raw[:800]}"
+        )
+    _require_whole_json(raw)
+    # RESTRICTED to the one field this surface is for. A chatty model that
+    # also rewrote identity, psychology or clothing gets none of it: the
+    # `fill_character_psychology` restriction, for the same reason -- a
+    # button labelled with one field must not be a way to edit every field.
+    embodiment = proposed.get("embodiment")
+    stations = (embodiment.get("interior")
+                if isinstance(embodiment, dict) else None)
+    if not isinstance(stations, list) or not stations:
+        # SILENCE IS NOT A DELETION. A proposal that omitted the field, or
+        # answered with an empty chain against one the author has written, is
+        # the model declining -- not an instruction to demolish an anatomy.
+        # Against an EMPTY stored chain the empty answer is the correct and
+        # complete one: most bodies have no inside, and this surface must
+        # never invent one.
+        return normalize_character_data(copy.deepcopy(stored))
+    losses = _interior_chain_losses(authored, stations)
+    if losses:
+        raise RuntimeError(
+            "; ".join(losses)
+            + ". Authored stations are removed, renamed and reordered by hand "
+              "in the editor, where the change is visible — a fill that loses "
+              "one is refused rather than shown."
+        )
+    merged = copy.deepcopy(stored)
+    if not isinstance(merged.get("embodiment"), dict):
+        merged["embodiment"] = {}
+    merged["embodiment"]["interior"] = stations
+    return normalize_character_data(merged)
 
 
 def generate_persona(brief, language="en"):
