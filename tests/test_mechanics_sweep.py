@@ -165,7 +165,12 @@ def test_end_to_end_schedule_fire_expire_and_persist(temp_db):
     assert r1["scheduled"] == 1 and r1["fired"] == 0 and r1["expired"] == 0
     row = temp_db.q("SELECT * FROM scheduled_events WHERE chat_id=?",
                     (chat_id,), one=True)
-    assert row["status"] == "pending" and row["due_at"] == 1180.0
+    # RE-EARNED: turn 1 is a resolved beat with no time block, so it is
+    # charged the unclaimed-beat floor and the eta is measured from 1010.0
+    # rather than a clock frozen at 1000.0. A scheduled arrival whose due
+    # time is set from a clock that never moves never arrives, which is the
+    # class the floor closes.
+    assert row["status"] == "pending" and row["due_at"] == 1190.0
 
     ctx2 = _make_ctx(
         temp_db, chat_id, None, turn_idx=2,

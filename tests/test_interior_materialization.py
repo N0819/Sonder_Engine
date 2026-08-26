@@ -390,6 +390,67 @@ class TestNothingAnyMindReceivesGrew:
             "inside_source") is True
 
 
+class TestTheAuthoredCrossingTimeReachesTheRoom:
+    """`transit_seconds` is a property of the PLACE, so the card's magnitude
+    has to arrive on the minted room -- one field serving a throat, a chute,
+    a lift shaft, a mine gallery and a river reach alike."""
+
+    TIMED = [
+        {"name": "Entry Passage", "transit_seconds": 8},
+        {"name": "Middle Chamber", "transit_seconds": "30"},
+        {"name": "Deep Hold"},
+    ]
+
+    def test_the_magnitude_stands_on_the_minted_room(self):
+        merged = merge_scene_with_diff(_scene(spec=self.TIMED), {})
+        rooms = merged["rooms"]
+        assert rooms[HOLDER_ID + "_entry_passage"]["transit_seconds"] == 8.0
+        assert rooms[HOLDER_ID + "_middle_chamber"]["transit_seconds"] == 30.0
+
+    def test_a_station_that_declares_none_mints_without_the_key(self):
+        """Absent means the place imposes no time, which is what a chamber
+        is. No enum, and no invented default."""
+        merged = merge_scene_with_diff(_scene(spec=self.TIMED), {})
+        assert "transit_seconds" not in merged["rooms"][
+            HOLDER_ID + "_deep_hold"]
+
+    def test_a_spec_with_no_magnitudes_mints_no_magnitudes(self):
+        merged = merge_scene_with_diff(_scene(spec=SPEC), {})
+        for rid in _interiors_of(merged):
+            assert "transit_seconds" not in merged["rooms"][rid]
+
+    def test_the_minimal_one_room_mint_never_carries_one(self):
+        """The engine has no fact from which to derive a crossing time it
+        was not given, and inventing one would make every enclosure a
+        conduit."""
+        merged = merge_scene_with_diff(_scene(), {})
+        assert "transit_seconds" not in merged["rooms"][MINTED]
+
+    def test_a_room_re_echo_carrying_nothing_cannot_erase_it(self):
+        """`_ROOM_SILENT_WHEN_EMPTY`. A Director re-declaring a room it did
+        not mean to change writes `transit_seconds: 0` or null, and an
+        empty value read as an erasure would silently demote a conduit to a
+        chamber -- the same trap `anchors` and `light` already carry."""
+        merged = merge_scene_with_diff(_scene(spec=self.TIMED), {})
+        rid = HOLDER_ID + "_entry_passage"
+        echoed = merge_scene_with_diff(
+            merged, {"rooms": {rid: {"name": "Entry Passage",
+                                     "transit_seconds": 0}}})
+        assert echoed["rooms"][rid]["transit_seconds"] == 8.0
+        blanked = merge_scene_with_diff(
+            merged, {"rooms": {rid: {"name": "Entry Passage",
+                                     "transit_seconds": None}}})
+        assert blanked["rooms"][rid]["transit_seconds"] == 8.0
+
+    def test_an_explicit_new_magnitude_still_lands(self):
+        """Silence is silence, but a real declaration is a declaration."""
+        merged = merge_scene_with_diff(_scene(spec=self.TIMED), {})
+        rid = HOLDER_ID + "_entry_passage"
+        regrafted = merge_scene_with_diff(
+            merged, {"rooms": {rid: {"transit_seconds": 45}}})
+        assert regrafted["rooms"][rid]["transit_seconds"] == 45
+
+
 class TestGettingOutStillWorks:
     def test_a_declared_exit_releases_the_body_from_the_minted_room(self):
         """`release_declared_departures` is untouched by this landing, and the

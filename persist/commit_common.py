@@ -10,7 +10,7 @@ import json, re
 from core.db import q, wget
 from story.character_schema import (_UNSPACED_SCRIPT, character_name_from_text,
                               fold_identity_key, persona_name)
-from world.mechanics import clock_elapsed, read_time_diff, stable_event_key
+from world.mechanics import beat_end_elapsed, clock_elapsed, stable_event_key
 from world.spatial import normalize_room_id
 
 def _keys_str(value):
@@ -69,9 +69,9 @@ def _player_name_or_none(ctx):
 
 
 
-def _monotonic_elapsed(prev_clock, time_diff):
+def _monotonic_elapsed(prev_clock, time_diff, *, floor=False):
     """The story clock this beat's time diff yields. TIME DOES NOT RUN
-    BACKWARDS.
+    BACKWARDS, AND A BEAT THAT SAYS NOTHING STILL TAKES TIME.
 
     `end_seconds` is an absolute position on the story clock, and a model
     that emits `start_seconds: 0` every beat -- an easy and entirely natural
@@ -104,9 +104,20 @@ def _monotonic_elapsed(prev_clock, time_diff):
     and 1266 against a clock standing at 1106.0, and turn 66 claimed 7200
     against 1136.0. Not one of the three moved the clock or warned; the only
     advance in that stretch came from turn 65's canonically spelled diff.
+
+    `floor=True` is the caller saying THIS BEAT HAPPENED, and it is the
+    third instalment of the same class. The scene commit charges a resolved
+    beat that asserts no readable time `UNCLAIMED_BEAT_SECONDS`; this seam
+    stamps affect decay, strain windows and belief provenance, so a memory
+    commit that did not charge the same beat would leave a story's
+    psychology ten seconds behind its world on every one of the 130 corpus
+    beats measured in that shape. Both routes reach the arithmetic through
+    `world.mechanics.beat_end_elapsed` and neither computes an end clock of
+    its own -- a caller that does re-opens exactly the disagreement this
+    helper exists to have closed.
     """
-    elapsed, backwards, _refused = read_time_diff(
-        clock_elapsed(prev_clock), time_diff)
+    elapsed, backwards, _refused, _floored = beat_end_elapsed(
+        clock_elapsed(prev_clock), time_diff, floor=floor)
     return elapsed, backwards
 
 # ---- Address forms and the name roster ----
