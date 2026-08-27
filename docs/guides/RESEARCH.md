@@ -332,7 +332,100 @@ by ~70×.
   dependency. Nothing from it is in the code.
 - **Ensemble / Comme il Faut** (UC Santa Cruz; *Prom Week*) —
   <https://github.com/ensemble-engine/ensemble>. Identified as the social-
-  physics lineage Versu descends from. Not read in depth; nothing taken.
+  physics lineage Versu descends from. **Superseded 2026-08-27 by §1.7.6,
+  which reads it properly.** The line below is kept because the reason it was
+  skipped is itself a finding: it was recorded as "the lineage Versu descends
+  from", and Versu had already been read, so it looked like ancestry rather
+  than a live source. What it actually holds is the half Versu does not —
+  Versu says what a character MAY do in a situation, CiF says why they WANT to
+  and what it costs them afterwards. Original note: *Not read in depth;
+  nothing taken.*
+
+#### 1.7.6 Comme il Faut / Ensemble — social physics (read 2026-08-27)
+
+McCoy, J., Treanor, M., Samuel, B., Reed, A. A., Mateas, M., & Wardrip-Fruin,
+N. (2011). *Prom Week: Social Physics as Gameplay.* FDG 2011. And Samuel, B.,
+Reed, A. A., et al. (2015). *The Ensemble Engine: Next-Generation Social
+Physics.* FDG 2015. Read via the FDG papers and Guimaraes, Santos & Jhala
+(2017), *CiF-CK: An Architecture for Social NPCs in Commercial Games*, IEEE
+CIG — the last read in full, being the clearest statement of the data model.
+
+Read to answer one question: what makes a background population feel deep and
+BELIEVABLE rather than merely busy. Nothing below is built yet; this section
+is the argument, and the gaps it names are measured, not supposed.
+
+**The architecture.** Four components — Social State, Characters, Social
+Exchanges, Trigger Rules. *"NPCs perceive the Social State around them and try
+to change it to accomplish their Social Goals."* The Social State is itself
+four representations: **social networks** (directional numeric links, every
+character to every other, on axes such as coolness/friendliness/romance),
+**relationships** (discrete symmetric ties — friends, dating, enemies), a
+**cultural knowledge base** (what this world treats as normal), and a **social
+facts knowledge base** — the record of what has actually passed between
+people. A Character holds a name, permanent **traits**, temporary **status**,
+and a prospective memory of desires toward specific others. A Social Exchange
+holds an intent, *initiator influence rules*, *responder influence rules*, and
+effects; volition is *"the sum of true rules that pertain"*, and the responder
+independently accepts or rejects on its own rules.
+
+**What this repository already has, under other names.** More than expected.
+`world/charter_social.py`'s judgments are a directional five-axis social
+network (trust/warmth/fear/respect/suspicion) and its `DEFAULT_SIGNALS` with
+`social_norms.signals` is a cultural knowledge base with an author override.
+`world/charter_practice.py` is the exchange layer, from Versu rather than CiF
+but the same seam, and `offers` computing utility per affordance is volition
+under another name. Since 2026-08-27 `experiences` is a real social facts
+store. So the shapes are largely present.
+
+**The gap, and it is one line.** `charter_practice._state_of` builds what
+every affordance may reason over, and it is `bodies, figures, minds, needs,
+regard, blame, at`. Not `experiences`. Not `judgments`. Not `served_beside`,
+not `commitments`. **A Charter character deciding what to do cannot see
+anything that has ever passed between them and the person in front of them.**
+CiF's entire claim to believability is the opposite of this: an exchange is
+scored against the social facts, so a refusal has a reason and the reason is a
+specific remembered thing. Prom Week's own worked example is Simon refusing to
+carry Cassandra's gossip because his friendship with Naomi outweighs her
+influence — legible, cited, and false in this engine, where the same character
+would decide from need levels and a scalar regard.
+
+**Taken, as design; ordered by depth bought.** None of these are built.
+
+1. **Volition reads history.** Widen `_state_of` to carry the pair's shared
+   record and let affordances weight on it. This is the change that turns
+   "acted because the state permitted it" into "acted because of what
+   happened", and everything else here is smaller.
+2. **Ordinary evidence, not only failure.** The five-axis network exists and
+   measures EMPTY across four charters of a real story, because judgments form
+   only from witnessed events and every event the sim can emit is an
+   institutional failure. CiF's networks move on ordinary exchanges. Same
+   finding as `charter_run`'s amended docstring, with a name.
+3. **Discrete relationships beside the numeric axes.** CiF keeps both on
+   purpose: numbers drive scoring, labels drive legibility. Charter has no
+   discrete tie, and a label is what a narrator can state plainly and a reader
+   can hold.
+4. **Status as temporary traits.** Charter has needs and felt state and
+   nothing socially temporary — newly raised, in disgrace, owed a favour.
+   These are what make a beat read as motivated rather than merely caused.
+5. **Trigger rules.** *"Trigger Rules can be fired at any point and have
+   cascading effects in the Social State."* Charter has none: an act changes
+   state and nothing fires off the change, which is why the social layer needs
+   prodding to stay in motion.
+
+**Refused, with the reason.** CiF's rulebase is hand-authored at scale — *"over
+5,000"* social considerations, *"over 40"* exchanges, 20+ templated dialogue
+scenes per outcome. That authoring burden is the thing this engine exists to
+avoid: prose belongs to the model over cited surfaces, not to a template
+library. Take the SCORING discipline and leave the script.
+
+**On believability, which is the whole reason to read them.** Their finding is
+that believability comes from MANY SMALL WEIGHTED REASONS rather than one
+strong rule — five thousand considerations exist so that no single factor
+dominates any decision. The corollary is the failure mode Talk of the Town
+already taught this repository (§1.7.2): one mis-tuned rate produced characters
+who could not remember where their own parents lived. Depth and believability
+are the same mechanism read from two ends — a decision is believable when the
+reason behind it is specific, remembered, and one of many.
 
 #### 1.7.4 Consulted in summary; informed decisions rather than code
 
