@@ -535,14 +535,19 @@ class TestFrameScopedVisibilityAndLockouts:
                 "positions": {}, "entities": {}, "attire": {}, "overlays": {},
             })
 
+            # Same counter, same reason as the sibling below: a literal index
+            # collides with `_make_ctx`'s module-scoped counter as soon as the
+            # xdist split puts enough context-building tests in one worker.
+            _ctx_idx_counter[0] += 1
+            _future_idx = _ctx_idx_counter[0]
             turn_id = temp_db.qi(
                 "INSERT INTO turns(chat_id,idx,player_input,created,frame_id) VALUES(?,?,?,?,?)",
-                (chat_id, 5, "hello", time.time(), future),
+                (chat_id, _future_idx, "hello", time.time(), future),
             )
             future_ctx = PipelineContext(
                 chat=ChatData(id=chat_id, name="Test", persona_id=None, lorebook_id=None,
                               scenario="", created=time.time()),
-                turn=TurnData(id=turn_id, chat_id=chat_id, idx=5, player_input="hello",
+                turn=TurnData(id=turn_id, chat_id=chat_id, idx=_future_idx, player_input="hello",
                               created=time.time(), frame_id=future),
                 cast=[], input="hello",
             )
@@ -623,9 +628,17 @@ class TestFrameScopedVisibilityAndLockouts:
                                       "positions": {"pete": "road"}, "entities": {}})
             paradox.check_and_apply_paradox(ctx, 0)
 
+        # Through the same counter `_make_ctx` uses, never a literal. The
+        # counter is module-scoped and never resets, so it keeps handing out
+        # indices for the life of the worker process -- a hardcoded 9 collides
+        # with it as soon as nine contexts have been built in that process, and
+        # WHICH tests share a process is decided by the xdist split. Adding
+        # tests elsewhere in the suite moved this one later in its worker and
+        # the literal started failing on `UNIQUE(turns.chat_id, turns.idx)`.
+        _ctx_idx_counter[0] += 1
         turn_id = temp_db.qi(
             "INSERT INTO turns(chat_id,idx,player_input,created,frame_id) VALUES(?,?,?,?,?)",
-            (chat_id, 9, "hi", time.time(), future),
+            (chat_id, _ctx_idx_counter[0], "hi", time.time(), future),
         )
         branched = app.turn_branch(turn_id)
         assert branched["id"] is not None
