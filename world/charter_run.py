@@ -7,11 +7,29 @@ path-dependent half: what can be recomputed from the clock stays in
 TWO PROPERTIES THIS MODULE EXISTS TO HOLD, both of them testable and both of
 them cheap to lose:
 
-  * **Storage grows with incident, not with time.** A window in which nothing
+  * **EVENTS grow with incident, not with time.** A window in which nothing
     crossed a floor, nothing went unfilled and nothing was restored emits
     ZERO events. A well-run year is a handful of rows; a bad week is a
     hundred. A tick that writes "nothing happened" every window is the thing
     that makes a long story expensive, and it is the easy mistake here.
+
+    THE EVENT LOG, THOUGH, IS NOT THE PEOPLE. This rule was written for the
+    institution's incident ledger and then applied to everything, and the
+    result was measurable: a healthy 40-body charter emitted zero events
+    across a simulated YEAR, and every social source in the module was gated
+    on something going wrong -- `tending` opens only when a body is under its
+    floor, `greeting` only between people who have not met, `converse` was
+    switched off offscreen for cost. So the only thing an institution could
+    ever be found to have done was fail, and a year of it promoted a
+    character with 17.6 memories against a month's 16.7. "All systems
+    nominal" is a REPORT; it is not what happened to these people.
+
+    So autobiographical rows are held to a WEAKER bound than events, and
+    deliberately: `ENCOUNTER_ODDS` draws a specific occasion out of the
+    ordinary ones a pair share, at a rate slow enough that a body keeps about
+    seventy rows per simulated year and `EXPERIENCE_CAP` still holds decades.
+    The same year now promotes at 93.8. The institution's ledger stays
+    incident-only; the lives inside it do not.
   * **Nothing learns anything.** An event is layer-1 fact in the sense
     ``world/living_world.py`` already uses: it happened, at a place, at an
     hour, before anyone asks. Who comes to know it is a separate, channelled
@@ -23,6 +41,8 @@ mechanism first, and a pure function is testable in ways a commit path is not.
 """
 
 from __future__ import annotations
+
+import hashlib
 
 from .charter_drift import advance_level, starving_input, supply_factor
 from .charter_model import (EXPERIENCE_CAP, normalize_charter,
@@ -40,7 +60,7 @@ from .charter_mind import cap_minds, decay_minds
 from .charter_move import ERRAND_RATE, errands, homecomings, relocate, walk
 from .charter_news import decay_news, news_keys_in, witness
 from .charter_practice import (
-    close_stale, enact, normalize_practices, opportunities)
+    COARSE_PRACTICES, close_stale, enact, normalize_practices, opportunities)
 from .charter_needs import advance_needs, mood, pressure, unmet
 from .charter_talk import converse, report_to_superiors, report_up
 from .charter_commitment import advance_commitments
@@ -59,6 +79,13 @@ def _event(kind, at_hours, place, **payload):
 #: familiarity. A room of this many is people you served beside; a hall of
 #: five hundred is a crowd, and pairing it is quadratic for no depth.
 CO_PRESENCE_WIDTH = 64
+
+#: One window in this many, per pair sharing a place, becomes a specific
+#: occasion rather than another tick of the tally. Tuned so a pair together
+#: through a simulated year keeps a handful of them: often enough that the
+#: system is always in motion, rare enough that storage stays sub-linear in
+#: time, which is the bound this module has always been held to.
+ENCOUNTER_ODDS = 96
 
 
 def _remember_experience(store, holder, row, fold=True):
@@ -151,7 +178,7 @@ def _run_private_habits(experiences, habit_runs, bodies, watch, at_hours):
 
 def _record_coarse_experiences(experiences, bodies, watch, stood_before,
                                posts, events, known_before, minds, at_hours,
-                               feel=None):
+                               feel=None, encounters=()):
     """The past a body keeps at COARSE resolution, where nobody is watching.
 
     THE GAP THIS CLOSES. `active_places` is documented three hundred lines
@@ -257,6 +284,24 @@ def _record_coarse_experiences(experiences, bodies, watch, stood_before,
                 "firsthand": (held.get(other) or {}).get("heard_from") is None,
                 **felt(body_key),
             })
+
+    # AN OCCASION WITH SOMEBODY, drawn in `step` from the pairs actually
+    # sharing a place. Both parties keep it, because both were there -- and
+    # only the two of them, because nobody else was. Not folded: this is the
+    # one row per pair that is NOT the tally, and collapsing two occasions
+    # into a repetition count is precisely what the tally already does better.
+    for one, other, where in encounters or ():
+        if one not in (bodies or {}) or other not in (bodies or {}):
+            continue
+        post_of = {body: post for post, body in (watch or {}).items()}
+        for holder, companion in ((one, other), (other, one)):
+            _remember_experience(experiences, holder, {
+                "id": f"encounter:{holder}:{companion}:{at_hours:0.4f}",
+                "kind": "encounter", "role": "self", "at_hours": at_hours,
+                "place": where, "other": str(companion),
+                "during": str(post_of.get(holder) or ""),
+                **felt(holder),
+            }, fold=False)
 
     # A HAPPENING STOOD THROUGH. Presence is the whole test, exactly as it is
     # for `charter_news.witness` -- a body standing where something crossed a
@@ -690,8 +735,26 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
             in_focus, minds, needs_after, events, practices, at + hours,
             seed=seed, figures=figs_in_focus))
     else:
-        in_focus = {}
+        # OFF THE SCENE, THE SOCIAL WORLD STILL TURNS -- just not at beat
+        # resolution. This branch used to be empty, and an empty branch is a
+        # claim: that a place nobody is looking at contains no relationships
+        # forming, nobody helped off the floor, and nobody meeting anybody.
+        # Measured on the 40-body site_17 charter, a healthy simulated YEAR
+        # emitted zero events of any kind, so the only thing an institution
+        # could ever be found to have done was fail. "All systems nominal" is
+        # a report; it is not what happened to these people.
+        #
+        # `COARSE_PRACTICES` is the subset that does not saturate: somebody
+        # under their floor and somebody standing over them, and two people
+        # who have not met. Both are bounded by the shape of the institution
+        # rather than by how long it runs, which is the same rule the event
+        # log has always been held to. Gossip stays where it belongs, on
+        # screen.
+        in_focus = {k: b for k, b in bodies.items() if k not in external}
         figs_in_focus = {}
+        practices.update(opportunities(
+            in_focus, minds, needs_after, events, practices, at + hours,
+            seed=seed, kinds=COARSE_PRACTICES))
     regard = dict(politics.get("regard") or {})
     acts, spawned, closed, heard, refused = enact(
         in_focus, minds, needs_after, practices, regard,
@@ -703,6 +766,42 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
         practices.setdefault(key, entry)
     politics = dict(politics, regard=regard)
     told += len(acts)
+
+    # AN ACT THAT CHANGES WHAT PEOPLE ARE TO EACH OTHER IS AN EVENT.
+    # `aid_given` was declared witnessable ("aid visibly given"), given
+    # judgment weights (trust +0.08, warmth +0.06, respect +0.03) and given
+    # narration phrasing -- and NOTHING in the repository emitted it, not even
+    # a test. Three quarters of a social event with no producer. The `tending`
+    # practice is that event: somebody under their floor and somebody standing
+    # over them. Landing it here connects a machine that was already built to
+    # the only thing that was missing.
+    #
+    # Witnessed immediately, judged next window. `update_judgments_from_minds`
+    # runs before `enact`, so an act cannot move an opinion in the window it
+    # happens; `minds` carries the claim across and the opinion forms on the
+    # next one. That is the right lag anyway -- nobody revises their view of a
+    # person in the same instant they watch them act.
+    aid_events = []
+    for act in acts or ():
+        if str(act.get("act") or "") != "tend":
+            continue
+        carer = str(act.get("actor") or "")
+        subject = str(act.get("other") or "")
+        if not carer or carer not in bodies:
+            continue
+        aid_events.append(_event(
+            "aid_given", at + hours,
+            str((bodies.get(carer) or {}).get("place") or ""),
+            # `about` and `actor` both name the CARER: the signal reader takes
+            # whichever it finds, and what an onlooker learns is who helped.
+            about=carer, actor=carer, body=carer, subject=subject))
+    if aid_events:
+        events.extend(aid_events)
+        minds, aid_witnessed = witness(
+            minds, owned_bodies, aid_events, at + hours)
+        witnessed += aid_witnessed
+        if aid_witnessed:
+            news_keys = news_keys_in(minds)
 
     # COPY-ON-WRITE, per holder. The lists are shared in by reference and
     # `_remember_experience` replaces the one it touches, so a window costs the
@@ -767,7 +866,38 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
         where = str(body.get("place") or "")
         if where:
             _company.setdefault(where, []).append(body_key)
-    for company in _company.values():
+    # AND SOMETIMES SOMETHING HAPPENS BETWEEN THEM. A counter says a pair
+    # stood three hundred watches together and says nothing about any of them;
+    # the tally is the right way to carry the VOLUME and the wrong way to
+    # carry a life. Every social source in this module used to be gated on
+    # something going wrong -- `tending` opens only when a body is under its
+    # floor, `greeting` only between people who have not met -- so a healthy
+    # institution produced no social life at all, and the only thing anyone
+    # could be found to have done was fail.
+    #
+    # A shared watch is the ordinary source. Deterministically drawn from the
+    # run's own seed so it replays byte-identically, and rare enough that the
+    # rows stay sub-linear in time while never stopping: a pair standing
+    # together for a year gets a handful of specific occasions out of hundreds
+    # of ordinary ones. The row carries only the fact -- who, where, which
+    # watch, and how it landed. What it MEANT is the historian pass's job over
+    # cited surfaces, which is where prose belongs and this is not.
+    encounters = []
+    for where, company in sorted(_company.items()):
+        if len(company) > CO_PRESENCE_WIDTH:
+            continue
+        roster_here = sorted(company)
+        for index, one in enumerate(roster_here):
+            for other in roster_here[index + 1:]:
+                draw = int(hashlib.sha256(
+                    ("%s|%0.4f|%s|%s|%s" % (seed, at + hours, where, one,
+                                            other)).encode("utf-8")
+                ).hexdigest()[:8], 16)
+                if draw % ENCOUNTER_ODDS:
+                    continue
+                encounters.append((one, other, where))
+
+
         # WHERE THE BODIES ACTUALLY ARE, on watch or off it. Keying this to
         # post places instead reached 9 of 40 bodies on the site_17 charter,
         # because most posts stand alone in a room and everybody off the bill
@@ -805,7 +935,8 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
     # only, so stamping it here costs nothing and no second opinion is invented.
     _record_coarse_experiences(
         experiences, bodies, plan["watch"], charter.get("stood") or {},
-        charter["posts"], events, known_before, minds, at + hours, feel)
+        charter["posts"], events, known_before, minds, at + hours, feel,
+        encounters)
 
     after_charter = dict(charter)
     after_charter["upkeeps"] = upkeeps
