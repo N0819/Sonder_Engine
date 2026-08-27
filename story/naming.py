@@ -44,8 +44,8 @@ import re
 
 from core.db import q, wget, wset
 from world.charter_identity import (
-    generated_name_parts, identity_reservation, name_is_reserved,
-    normalize_naming_profile)
+    components_repeat, extension_profile, generated_name_parts,
+    identity_reservation, name_is_reserved, normalize_naming_profile)
 
 NAMING_PROFILE_KEY = "naming_profile"
 
@@ -327,14 +327,27 @@ def minted_presence_name(chat_id, uid, used=(), lanes=None, reservation=None):
     taken = {str(u or "").strip().casefold() for u in used}
     taken.discard("")
     scope = "chat:%s" % chat_id
-    for attempt in range(_MINT_ATTEMPTS):
-        lane = lanes[_lane_number(
-            "%s|%s|%s" % (scope, uid, attempt)) % len(lanes)]
-        candidate, given, family = generated_name_parts(
-            scope, str(uid), lane, attempt)
-        if not candidate or candidate.casefold() in taken:
-            continue
-        if name_is_reserved(candidate, lane, reservation, given, family):
-            continue
-        return candidate
+    # The authored/derived pools first; once their combinations are spent,
+    # each lane's extension (`extension_profile`: authored syllable parts,
+    # or parts derived from the lane's own pool) widens the space in the
+    # same phonology. A lane that does not extend simply offers no second
+    # round, and a story with thin material still mints nothing.
+    rounds = [("", lanes)]
+    extended = [p for p in (extension_profile(lane) for lane in lanes) if p]
+    if extended:
+        rounds.append(("extension", extended))
+    for label, round_lanes in rounds:
+        for attempt in range(_MINT_ATTEMPTS):
+            lane = round_lanes[_lane_number(
+                "%s|%s|%s%s" % (scope, uid, label, attempt))
+                % len(round_lanes)]
+            candidate, given, family = generated_name_parts(
+                scope, str(uid), lane, attempt)
+            if not candidate or candidate.casefold() in taken:
+                continue
+            if components_repeat(given, family):
+                continue
+            if name_is_reserved(candidate, lane, reservation, given, family):
+                continue
+            return candidate
     return ""

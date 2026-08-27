@@ -61,7 +61,10 @@ from .charter_model import (
 )
 from .charter_identity import (
     address_components,
+    components_repeat,
+    derived_name_parts,
     display_name,
+    extension_profile,
     generated_name,
     generated_name_parts,
     identity_aliases,
@@ -70,6 +73,7 @@ from .charter_identity import (
     materialize_body_names,
     name_is_reserved,
     normalize_naming_profile,
+    spread_components,
     strip_reserved_pools,
     title_for,
 )
@@ -230,7 +234,10 @@ __all__ = [
     "walk",
     "FIGURE_ACTS",
     "address_components",
+    "components_repeat",
+    "derived_name_parts",
     "display_name",
+    "extension_profile",
     "generated_name",
     "generated_name_parts",
     "identity_aliases",
@@ -239,6 +246,7 @@ __all__ = [
     "materialize_body_names",
     "name_is_reserved",
     "normalize_naming_profile",
+    "spread_components",
     "strip_reserved_pools",
     "title_for",
     "REFUSED_ABSENT",

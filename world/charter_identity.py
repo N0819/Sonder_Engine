@@ -6,10 +6,13 @@ dict key remains the permanent identity.  This module only materialises the
 human-facing name and presentation attached to that key.
 
 Authors opt in with a small cultural ``naming`` profile.  Curated given and
-family pools form a deterministic Cartesian name space; optional syllable
-parts extend it when a setting needs more variety.  A generated name is
-written into the body once.  Existing names therefore survive changes to the
-profile, insertion of new bodies, checkpoint restore and promotion.
+family pools form a deterministic Cartesian name space; syllable parts --
+authored, or derived from the pools' own words (`derived_name_parts`) --
+extend that space when the population outgrows it, so a pool sized for a
+cast decides what a large population SOUNDS like rather than how much of a
+name space it gets.  A generated name is written into the body once.
+Existing names therefore survive changes to the profile, insertion of new
+bodies, checkpoint restore and promotion.
 """
 
 from __future__ import annotations
@@ -98,6 +101,124 @@ def _component(pool, parts, seed, lane):
     if pool:
         return pool[_number(seed, lane) % len(pool)]
     return _syllable_name(parts, f"{seed}|{lane}")
+
+
+#: One run of letters -- derivation reads a pool word as its letter runs, so
+#: a hyphen or an apostrophe splits rather than entering a syllable.
+_LETTER_RUN_RE = re.compile(r"[^\W\d_]+", re.UNICODE)
+
+#: The vowel letters the syllable splitter understands (matched
+#: case-insensitively). A script whose vowel structure this class cannot see
+#: derives nothing: the engine extends a law only where it can follow the
+#: law's own phonology, never by inventing one.
+_VOWEL_CLASS = "aeiouyàáâäåæèéêëìíîïòóôöøùúûüāēīōū"
+_SYLLABLE_RE = re.compile(
+    "[^%s]*[%s]+" % (_VOWEL_CLASS, _VOWEL_CLASS), re.IGNORECASE)
+
+
+def _syllable_chunks(run):
+    """One letter run split at its vowel groups; trailing consonants join
+    the final chunk. Every chunk but possibly the last ends in a vowel,
+    which is what makes a first chunk join cleanly onto a later word's
+    remainder. Empty for a run with no recognised vowel."""
+    chunks = _SYLLABLE_RE.findall(run)
+    if not chunks:
+        return []
+    tail = run[sum(len(chunk) for chunk in chunks):]
+    if tail:
+        chunks[-1] += tail
+    return chunks
+
+
+def derived_name_parts(pool):
+    """Syllable parts learned from an authored pool's own words.
+
+    The extension lane for a population larger than its authored name
+    space: recombining the pool's own openings and endings yields new names
+    inside the law's phonology, so the engine never invents a culture --
+    an empty pool, or one whose vowel structure the splitter cannot read,
+    derives nothing and the caller's law simply does not extend.
+
+    Only a word that splits contributes: its first chunk (vowel-final by
+    construction, original casing kept) becomes an opening, the rest its
+    ending. A single-chunk word offers nothing, because gluing two whole
+    names together is a collision wearing a hyphen's clothes, and fewer
+    than two distinct openings recombine into nothing the pool did not
+    already say.
+    """
+    starts, ends = {}, {}
+    for word in _strings(pool):
+        for run in _LETTER_RUN_RE.findall(word):
+            chunks = _syllable_chunks(run)
+            if len(chunks) < 2:
+                continue
+            starts.setdefault(chunks[0].casefold(), chunks[0])
+            tail = "".join(chunks[1:]).lower()
+            ends.setdefault(tail.casefold(), tail)
+    if len(starts) < 2 or not ends:
+        return {"starts": [], "middles": [], "ends": []}
+    return {
+        "starts": [starts[key] for key in sorted(starts)],
+        "middles": [],
+        "ends": [ends[key] for key in sorted(ends)],
+    }
+
+
+def spread_components(profile):
+    """Which name components an allocator spreads breadth-first.
+
+    Two class reasons a shared component ASSERTS something a mint has no
+    business asserting: kinship -- a family name recurring inside one
+    generated population reads as a household the fiction never authored
+    (measured: 42 bodies drawn from a twelve-family pool held four
+    same-surname clusters, each implying relatives of a registered
+    character) -- and address, where `address_components` finds the law
+    calling people by one element alone. Given names spread freely; two
+    people sharing one is ordinary. Spreading is preference, not refusal:
+    exhaustion of the whole name space still permits reuse, unlike the hard
+    bar `name_is_reserved` holds for registered minds.
+    """
+    return frozenset({"family"}) | address_components(profile)
+
+
+def components_repeat(given, family):
+    """A name that repeats its own component is an allocator artifact, not
+    a name -- one word sitting in both pools should never become both
+    halves of one person (measured: a body named by doubling a single pool
+    word reached play as `lieutenant <word> <word>`, chat 95)."""
+    given = " ".join(str(given or "").split()).casefold()
+    family = " ".join(str(family or "").split()).casefold()
+    return bool(given) and given == family
+
+
+def extension_profile(profile):
+    """The same law with each spread component moved onto syllable parts,
+    or ``None`` when nothing extends.
+
+    Authored parts are the author's own extension and are used as written;
+    parts derived from the pool serve only where the author supplied none.
+    A field whose pool is already empty gains nothing (the base law draws
+    it from parts already), and fields the law does not spread keep their
+    pools, so an extended family name still pairs with an authored given.
+    """
+    base = normalize_naming_profile(profile)
+    out = None
+    for field in spread_components(base):
+        if field not in ("given", "family"):
+            continue
+        pool = base[field]
+        if not pool:
+            continue
+        parts = base[field + "_parts"]
+        if not (parts["starts"] and parts["ends"]):
+            parts = derived_name_parts(pool)
+        if not (parts["starts"] and parts["ends"]):
+            continue
+        if out is None:
+            out = dict(base)
+        out[field] = []
+        out[field + "_parts"] = parts
+    return out
 
 
 def generated_name_parts(charter_key, body_key, profile, attempt=0):
@@ -341,6 +462,40 @@ def strip_reserved_pools(profile, reservation):
     return profile
 
 
+def _lane_spaces(lane, spread):
+    """Per spread field, the casefolded value space this lane can draw, or
+    ``None`` when the space is too large to enumerate cheaply. A field the
+    lane has no source for is omitted -- it yields the empty component and
+    constrains nothing."""
+    spaces = {}
+    for field in spread:
+        pool = lane[field]
+        if pool:
+            spaces[field] = frozenset(value.casefold() for value in pool)
+            continue
+        parts = lane[field + "_parts"]
+        starts, middles, ends = (
+            parts["starts"], parts["middles"] or [""], parts["ends"])
+        if not starts or not ends:
+            continue
+        if len(starts) * len(middles) * len(ends) > 1024:
+            spaces[field] = None
+            continue
+        spaces[field] = frozenset(
+            (start + middle + end).casefold()
+            for start in starts for middle in middles for end in ends)
+    return spaces
+
+
+def _components_fresh(used_spread, given, family):
+    for field, taken in used_spread.items():
+        value = given if field == "given" else family
+        folded = " ".join(str(value or "").split()).casefold()
+        if folded and folded in taken:
+            return False
+    return True
+
+
 def materialize_body_names(charter_key, raw_bodies, profile, reservation=None):
     """Copy ``raw_bodies`` and give every unnamed body one stable name.
 
@@ -353,36 +508,92 @@ def materialize_body_names(charter_key, raw_bodies, profile, reservation=None):
     a featured resident is placed here under the registered character's own
     name on purpose -- so the refusal only ever applies to what this
     allocator itself mints.
+
+    Allocation is CAPACITY-AWARE: each `spread_components` element is
+    handed out breadth-first, authored pool values before values built on
+    the extension lane (`extension_profile` -- authored syllable parts, or
+    parts derived from the pool's own words), and reuse is permitted only
+    once that whole space is spent. A pool sized for a cast does not decide
+    how large a population may be; it decides what the population sounds
+    like. A candidate that doubles its own component is refused everywhere
+    (`components_repeat`).
     """
     raw_bodies = raw_bodies if isinstance(raw_bodies, dict) else {}
     out = {str(key): dict(value) if isinstance(value, dict) else {}
            for key, value in raw_bodies.items()}
-    used = {
-        str(body.get("name") or "").strip().casefold()
-        for body in out.values() if str(body.get("name") or "").strip()
-    }
+    profile = normalize_naming_profile(profile)
+    spread = {field for field in spread_components(profile)
+              if field in ("given", "family")}
+    used = set()
+    used_spread = {field: set() for field in spread}
+
+    def note(name, given, family):
+        used.add(str(name).casefold())
+        for field, value in (("given", given), ("family", family)):
+            folded = " ".join(str(value or "").split()).casefold()
+            if field in used_spread and folded:
+                used_spread[field].add(folded)
+
+    for body in out.values():
+        name = str(body.get("name") or "").strip()
+        if not name:
+            continue
+        given, family = _stored_name_components(body, profile)
+        note(name, given, family)
+    lanes = [(profile, _lane_spaces(profile, spread), True)]
+    extended = extension_profile(profile)
+    if extended is not None:
+        lanes.append((extended, _lane_spaces(extended, spread), True))
+    lanes.append((profile, {}, False))
+    attempts = max(32, len(out) * 2)
     for body_key in sorted(out):
         body = out[body_key]
         if str(body.get("name") or "").strip():
             continue
         chosen = chosen_given = chosen_family = ""
-        for attempt in range(max(32, len(out) * 2)):
-            candidate, given, family = generated_name_parts(
-                charter_key, body_key, profile, attempt)
-            if not candidate:
+        for lane, spaces, fresh in lanes:
+            if fresh and any(
+                    space is not None and space <= used_spread[field]
+                    for field, space in spaces.items()):
+                continue  # every value this lane offers is already carried
+            # An unenumerable space cannot be declared spent, so its lane's
+            # search is bounded instead of exhaustive; the relaxed lane
+            # below still guarantees a name.
+            lane_attempts = attempts
+            if fresh and any(space is None for space in spaces.values()):
+                lane_attempts = min(attempts, 64)
+            for attempt in range(lane_attempts):
+                candidate, given, family = generated_name_parts(
+                    charter_key, body_key, lane, attempt)
+                if not candidate:
+                    break
+                if candidate.casefold() in used:
+                    continue
+                if components_repeat(given, family):
+                    continue
+                if name_is_reserved(
+                        candidate, lane, reservation, given, family):
+                    continue
+                if fresh and not _components_fresh(
+                        used_spread, given, family):
+                    continue
+                chosen, chosen_given, chosen_family = candidate, given, family
                 break
-            if candidate.casefold() in used:
-                continue
-            if name_is_reserved(candidate, profile, reservation, given, family):
-                continue
-            chosen, chosen_given, chosen_family = candidate, given, family
-            break
+            if chosen:
+                break
         # A very small authored pool may genuinely be exhausted.  A stable
         # disambiguator is better than silently merging two people, and it is
         # only reached after every authored combination/part attempt failed.
         if not chosen:
-            base, given, family = generated_name_parts(
-                charter_key, body_key, profile, 0)
+            base = given = family = ""
+            for attempt in range(32):
+                base, given, family = generated_name_parts(
+                    charter_key, body_key, profile, attempt)
+                # The disambiguator inherits every candidate rule the lanes
+                # enforce except uniqueness (the body key supplies that);
+                # a doubled component is no more a name here than above.
+                if not base or not components_repeat(given, family):
+                    break
             candidate = f"{base} {body_key}".strip() if base else body_key
             # Never past the reservation, even here: a body left unnamed is
             # caught loudly by the generator's own unnamed check, while a
@@ -402,7 +613,7 @@ def materialize_body_names(charter_key, raw_bodies, profile, reservation=None):
             body.setdefault("given_name", given)
         if family:
             body.setdefault("family_name", family)
-        used.add(chosen.casefold())
+        note(chosen, given, family)
     return out
 
 
