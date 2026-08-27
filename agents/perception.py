@@ -54,6 +54,7 @@ from world.spatial import (
     contact_sensation,
     contact_action_clause,
     contact_actions_for_observer,
+    effective_adjacent,
     egocentric_frame,
     _entity_named,
     entity_arc,
@@ -1190,9 +1191,14 @@ def _behind_rooms(scene, observer):
     if not facing:
         return behind                    # movement fallback only; no guessing
 
-    room = (scene.get("rooms") or {}).get(room_of(scene, observer)) or {}
-    for edge in room.get("adjacent") or []:
-        if not isinstance(edge, dict) or not edge.get("to"):
+    # Undirected, like `visible_adjacent_rooms` on the other side of the
+    # subtraction. While this loop read `room["adjacent"]` alone and that one
+    # read both sides, an observer with their back to a doorway their own room
+    # never declared stayed OUTSIDE this list and went on receiving fresh
+    # sight of the room behind them -- the two paths computing one fact and
+    # only one of them taught the rule. Gaining edges here subtracts more.
+    for edge in effective_adjacent(scene, room_of(scene, observer)):
+        if not edge.get("to"):
             continue
         rel = relative_bearing(facing, normalize_bearing(edge.get("dir")))
         if str(rel or "").startswith("behind") and edge["to"] not in behind:

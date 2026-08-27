@@ -8,7 +8,8 @@ from typing import Optional
 from world.spatial_orientation import normalize_bearing, opposite_bearing
 
 from world.spatial_barriers import (_PASSABLE_BARRIERS, _SIGHT_BARRIERS,
-                              neighbor_map, normalize_barrier)
+                              edge_passable, effective_adjacent, neighbor_map,
+                              normalize_barrier)
 from world.spatial_containment import container_of
 from world.spatial_light import _LIGHT_SIGHT, effective_light, light_blocks_sight
 
@@ -349,13 +350,16 @@ def spatial_rel(
 def passable_neighbors(scene: dict) -> dict:
     """{room_id: {rooms reachable in one step}} over passable edges only.
 
-    Undirected, following the `nearby_rooms` precedent: an open doorway
-    declared from either side can be walked through either way. Lifted out of
+    Undirected in the edges it reads -- an open doorway declared from either
+    side can be walked through either way, the `nearby_rooms` precedent -- and
+    DIRECTED where an edge says so: a `passage_from` names the one room a
+    chute or a door that locks behind you may be crossed from, and this is the
+    graph that must honour it, since it is the one bodies walk. Lifted out of
     `passable_route_exists` when crowds needed the same graph -- a crowd moves
     on the one graph everyone else walks, and §5 of the crowd proposal asks for
     exactly no second pathfinder.
     """
-    return neighbor_map(scene, _PASSABLE_BARRIERS)
+    return neighbor_map(scene, _PASSABLE_BARRIERS, directional=True)
 
 
 def passable_route_next_step(
@@ -573,12 +577,11 @@ def corridor_sightlines(scene, room_id):
     there is no line to follow and guessing one would invent a sense.
     """
     rooms = (scene or {}).get("rooms") or {}
-    start = rooms.get(room_id)
-    if not isinstance(start, dict):
+    if not isinstance(rooms.get(room_id), dict):
         return []
     out = []
-    for edge in start.get("adjacent") or []:
-        if not isinstance(edge, dict) or not edge.get("dir"):
+    for edge in effective_adjacent(scene, room_id):
+        if not edge.get("dir"):
             continue
         heading = str(edge["dir"]).lower()
         if normalize_barrier(edge.get("barrier")) not in _SIGHT_BARRIERS:
@@ -604,9 +607,13 @@ def corridor_sightlines(scene, room_id):
             if _LIGHT_SIGHT.get(effective_light(scene, cur), "full") != "full":
                 terminus = "darkness"
                 break
+            # Undirected, like the first step: a chamber whose way on was
+            # declared only from the far side is not a dead end, and
+            # `_onward_exits` was already repaired for exactly this error
+            # ("Inventing a dead end is the worse error of the two").
             onward = [
-                e for e in (room.get("adjacent") or [])
-                if isinstance(e, dict) and str(e.get("to")) != str(prev)
+                e for e in effective_adjacent(scene, cur)
+                if str(e.get("to")) != str(prev)
                 and normalize_barrier(e.get("barrier")) not in ("wall",)
             ]
             if not onward:
@@ -669,18 +676,12 @@ def passable_path(scene, from_room, to_room, limit=12):
     """
     if not from_room or not to_room or from_room == to_room:
         return []
-    rooms = scene.get("rooms") or {}
-    neighbors: dict[str, set] = {}
-    for room_id, room in rooms.items():
-        if not isinstance(room, dict):
-            continue
-        for edge in room.get("adjacent") or []:
-            if not isinstance(edge, dict) or not edge.get("to"):
-                continue
-            if normalize_barrier(edge.get("barrier")) not in _PASSABLE_BARRIERS:
-                continue
-            neighbors.setdefault(str(room_id), set()).add(str(edge["to"]))
-            neighbors.setdefault(str(edge["to"]), set()).add(str(room_id))
+    # The one passable graph everybody walks, rather than a fourth private
+    # copy of it -- and the copy this replaced was symmetric by construction,
+    # so it could not have refused a one-way passage against its direction
+    # however the edge was declared.
+    neighbors = {str(k): {str(v) for v in vs}
+                 for k, vs in passable_neighbors(scene).items()}
 
     from collections import deque
     prev = {str(from_room): None}
@@ -788,15 +789,12 @@ def sprint_reach(scene, room_id, known_rooms=None):
     passage is omitted.
     """
     rooms = (scene or {}).get("rooms") or {}
-    start = rooms.get(room_id)
-    if not isinstance(start, dict):
+    if not isinstance(rooms.get(room_id), dict):
         return []
     known = None if known_rooms is None else {str(r) for r in known_rooms}
     out = []
-    for edge in start.get("adjacent") or []:
-        if not isinstance(edge, dict) or not edge.get("to"):
-            continue
-        if normalize_barrier(edge.get("barrier")) not in _PASSABLE_BARRIERS:
+    for edge in effective_adjacent(scene, room_id):
+        if not edge_passable(edge, room_id):
             continue
         # A doorway with no bearing is still a doorway, and a run through it
         # is still a run. Requiring `dir` here silently deleted the passage
@@ -841,15 +839,13 @@ def sprint_reach(scene, room_id, known_rooms=None):
             spent += cost
             path.append(cur)
             onward = [
-                e for e in (room.get("adjacent") or [])
-                if isinstance(e, dict) and str(e.get("to")) != str(prev)
-                and e.get("to")
+                e for e in effective_adjacent(scene, cur)
+                if str(e.get("to")) != str(prev) and e.get("to")
             ]
             if not onward:
                 stops = "dead_end"
                 break
-            passable = [e for e in onward if normalize_barrier(
-                e.get("barrier")) in _PASSABLE_BARRIERS]
+            passable = [e for e in onward if edge_passable(e, cur)]
             if len(passable) > 1:
                 # A junction is a decision, and a decision is a beat. Running
                 # blind through one would be choosing without looking.
