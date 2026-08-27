@@ -514,31 +514,54 @@ problem. That gate is a guard, not an answer: with three Daleks in a room the
 engine has three presences it cannot tell apart, and the first one to speak
 collects everything.
 
-The real fix is that an unregistered presence should be identified by the scene
-ENTITY it belongs to — entities already have stable ids (`45c0c640bb354e97`),
-and the ledger should key on that, falling back to the name only for presences
-with no entity (a voice through a door). That is a schema change to
-`background_presences` plus a migration, and it wants doing before any story
-seriously tries to run a crowd of identical bodies.
-
-Until then, the practical guidance is the one the failure teaches: **a fiction
-with several of the same thing needs several names.** The engine cannot count
-`a Dalek`.
-
-**The fragmentation half landed 2026-08-19.** Records now carry `entity_id` (a
+**The fragmentation half landed 2026-08-19.** Records gained `entity_id` (a
 stable scene-entity binding, made only when EXACTLY one body answers to the
-identity) and `aka` (former spellings). A presence that acquires a proper name
-mid-story keeps its dialogue turns, `addressed_turns`, sketch, blurb and
-promotion progress across the rename, and promotion cleanup sweeps the
-entity-bound and `aka`-connected spellings so an orphan cannot react alongside
-its own sheet. The ledger's keys stay display-name strings, so the raw readers
-named below need no change and no SQL migration was required —
-`background_presences` is a frame-scoped world key and rides the existing
-whole-`world` carriage.
+identity) and `aka` (former spellings), so a presence that acquires a proper
+name mid-story keeps its history across the rename, and promotion cleanup
+sweeps the connected spellings.
 
-The collision half above is UNCHANGED and still correct: ambiguity refuses to
-merge, because an over-merge welds two characters into one and a split is the
-recoverable direction.
+**The keying half landed 2026-08-26.** The ledger now keys each record on a
+minted presence uid (`p_` + 16 hex); the name is an ATTRIBUTE
+(`record["name"]`, former spellings in `aka`), so a rename is a field update
+rather than a new person, two people who share a name stay two records, and
+an id stored where a name belongs cannot be confused with a name. A mint is
+needed because an id does not exist for every candidate source — measured
+before the re-key, 18 of 38 presences across 19 chats were never scene
+entities. `presence_record_for` is the permanent name→record resolver seam
+(models speak names forever); `_resolve_or_mint_presence` binds
+charter_refs → entity_id → unambiguous name → fresh mint, deterministic in
+its seed so pre-commit readers and the commit writer agree on a key; and
+`_fold_duplicate_presences` migrates a legacy name-keyed bank on load — no
+SQL, the fold's own heal-on-load precedent — in three tiers: charter binding,
+provable single-entity binding (which merges two spellings only on ID
+AGREEMENT, never string similarity), and a fresh mint that merges nothing.
+Attribution refuses to guess: a candidate name two tracked records answer to,
+with nothing this beat telling them apart, stays in the objective record
+unattributed (a turn warning), and promotion refuses the same ambiguity
+rather than seeding one person's sheet from both people's lines.
+
+The collision doctrine above is UNCHANGED and still correct: ambiguity
+refuses to merge, because an over-merge welds two characters into one and a
+split is the recoverable direction.
+
+**Residuals the re-key does not close, registered here:**
+- **Objects tracked as presences are untouched by the key** — an object has
+  a perfectly valid entity id, so `_presence_speech_verdict` /
+  `_is_inert_presence_candidate` remain the guard; the record's `entity_id`
+  binding now makes their scene lookup reliable under a shared display name.
+- **The `known` recognition ledger is still keyed by the recognizing mind's
+  own NAME** (`agents/background.py`, `_presence_recognizes`) — a presence
+  rename orphans its recognition entries.
+- **`world/subjects.py` still answers a tracked presence with a refusal**;
+  a record bound to a scene entity could resolve positively through its
+  binding instead of falling to the bodiless-presence reason.
+- **Promotion evidence is still a corpus-wide casefolded speaker scan**
+  (`story/importers._promotion_evidence`); drafting now refuses when two
+  records share the name, but record-scoped evidence (the presence's own
+  `dialogue_turns`/`recent`) would remove the scan's ambiguity entirely.
+- **An id-shaped display name is refused as an identity** (unpromotable,
+  `presence_is_unnamed`) but nothing yet MINTS a real name for such a
+  record — that is the J2 name generator's input.
 
 ### 1.18 The fallback is doing all the work
 

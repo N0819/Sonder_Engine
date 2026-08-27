@@ -10,7 +10,8 @@ from __future__ import annotations
 import json
 import time
 
-from persist.commit import prepare_memory_commit, track_background_presences
+from persist.commit import (prepare_memory_commit, presence_record_for,
+                            track_background_presences)
 from core.pipeline_context import ChatData, PipelineContext, TurnData
 
 
@@ -82,6 +83,7 @@ def test_backstop_firing_counts_dialogue_turn_without_double_count(temp_db):
         {"fired": True, "name": "Doran", "dialogue_log_entry": _BR_ENTRY, "action": ""},
     )
     track_background_presences(ctx, nonce=0)
-    rec = temp_db.wget(chat_id, "background_presences", {})["Doran"]
+    rec = presence_record_for(
+        temp_db.wget(chat_id, "background_presences", {}), "Doran")[1]
     assert rec["dialogue_turns"] == [2]
     assert 2 not in rec["mention_turns"]

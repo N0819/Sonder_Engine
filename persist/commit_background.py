@@ -7,7 +7,7 @@ background_claims) are the existing cycle-breakers and stay deferred.
 See docs/experiments/AUDIT_COMMIT.md for the split record.
 """
 
-import copy, json, re, time
+import copy, hashlib, json, re, time, uuid
 from core.db import q, qi, wget, wset, get_setting
 from mind.memory import add_memories_batch
 from story.character_schema import (character_name, character_initial_outfit,
@@ -119,6 +119,105 @@ def _presence_identity(name):
     return cf
 
 
+# ---- Presence identity: durable uid keys ----
+#
+# The ledger keys each record on a minted `uid`, never on a name. A name is an
+# ATTRIBUTE (`record["name"]`, with former spellings in `aka`), so a rename is
+# a field update rather than a new person, two people who share a name stay two
+# records, and an id stored where a name should be cannot be confused with one.
+# Models will speak names forever, so name-to-record resolution
+# (`presence_record_for`) is permanent infrastructure, not migration scaffolding.
+
+PRESENCE_UID_PREFIX = "p_"
+_PRESENCE_UID_RE = re.compile(r"p_[0-9a-f]{16}")
+# An id-shaped string is not a name (one live ledger stored three raw entity
+# ids in its name fields). Mirrors llm/schemas._OPAQUE_ID.
+_OPAQUE_NAME_RE = re.compile(r"(?:[0-9a-f]{12,}|[0-9]{6,})", re.I)
+
+
+def _mint_presence_uid(seed=None):
+    """A fresh presence uid. With `seed`, DETERMINISTIC: the same binding
+    always mints the same uid, so a pre-commit reader (the reactor gate) and
+    the commit writer agree on a record's key before anything is persisted,
+    and two legacy records that prove the same binding converge on one key --
+    which is how the load-time migration merges exactly what id agreement
+    proves and nothing else."""
+    if seed is not None:
+        digest = hashlib.sha1(str(seed).encode("utf-8")).hexdigest()
+        return PRESENCE_UID_PREFIX + digest[:16]
+    return PRESENCE_UID_PREFIX + uuid.uuid4().hex[:16]
+
+
+def is_presence_uid(value):
+    """Does this string have the shape of a minted presence key?"""
+    return bool(_PRESENCE_UID_RE.fullmatch(str(value or "")))
+
+
+def presence_display_name(key, record=None):
+    """The name a tracked presence answers to. The ledger keys on a minted
+    uid and the name is an attribute; a legacy record not yet migrated is
+    keyed BY its name, so the key doubles as the fallback."""
+    if isinstance(record, dict):
+        name = str(record.get("name") or "").strip()
+        if name:
+            return name
+    key = str(key or "").strip()
+    return "" if is_presence_uid(key) else key
+
+
+def presence_name_items(presences):
+    """(display name, record) pairs for iteration. Every reader that used to
+    read the dict key as the name reads this instead; a legacy name-keyed
+    ledger passes through unchanged."""
+    out = []
+    for key, record in (presences or {}).items():
+        record = record if isinstance(record, dict) else {}
+        name = presence_display_name(key, record)
+        if name:
+            out.append((name, record))
+    return out
+
+
+def presence_is_unnamed(key, record=None):
+    """True when this presence has no real name to be known by: none at all,
+    or an id-shaped string standing where a name should (a live ledger
+    tracked `a23653c914bf40a8` and two siblings as 'names'). Such a record is
+    still a person the engine keeps -- but nothing may treat the string AS a
+    name: promotion must not mint a sheet under it, and any naming surface
+    should treat the presence as awaiting one."""
+    name = presence_display_name(key, record)
+    if not name:
+        return True
+    return bool(_OPAQUE_NAME_RE.fullmatch(re.sub(r"[\s_\-]+", "", name)))
+
+
+def _charter_uid_seed(record):
+    """The deterministic uid seed a charter-bound record keys on: the charter
+    body key is permanent identity (AGENTS.md's charter section), so it
+    outranks every other binding."""
+    for ref in ((record or {}).get("charter_refs") or []):
+        if isinstance(ref, dict) and ref.get("charter") and ref.get("body"):
+            return "charter:%s:%s" % (ref["charter"], ref["body"])
+    return None
+
+
+def _entity_key_for_name(name, scene):
+    """The scene-entity KEY this name is a respelling of, or None.
+    Underscore-as-space equivalence on the KEY only ('station engineer'
+    names the entity keyed `station_engineer`) -- the same doctrine the
+    tracker's inert-verdict index applies to entity keys; display names get
+    identity matching (`_entity_uid_answering_to`) instead."""
+    folded = re.sub(r"[\s_]+", " ", str(name or "")).strip().casefold()
+    if not folded:
+        return None
+    for eid, ent in ((scene or {}).get("entities") or {}).items():
+        if not isinstance(ent, dict):
+            continue
+        if re.sub(r"[\s_]+", " ", str(eid)).strip().casefold() == folded:
+            return str(eid)
+    return None
+
+
 def _bodies_answering_to(identity, scene):
     """How many entities in the scene answer to this identity.
 
@@ -176,12 +275,15 @@ def _scene_entity_names_by_id(scene):
     }
 
 
-def _presence_names(name, record):
-    """Every spelling this record has answered to: the current key plus the
-    former names `aka` carries. Prose does not switch spellings overnight --
-    "the guard" in a later resolved_event still means Mara -- so mention and
-    addressed matching must hear the old names too."""
-    names = [name]
+def _presence_names(name_or_key, record):
+    """Every spelling this record has answered to: its current display name
+    plus the former names `aka` carries. Prose does not switch spellings
+    overnight -- "the guard" in a later resolved_event still means Mara -- so
+    mention and addressed matching must hear the old names too."""
+    names = []
+    display = presence_display_name(name_or_key, record)
+    if display:
+        names.append(display)
     for alias in ((record or {}).get("aka") or []):
         alias = str(alias or "").strip()
         if alias and alias not in names:
@@ -213,11 +315,19 @@ def _canonical_presence_name(name, scene):
     return raw
 
 
-def _presence_scene_entity(scene, name):
+def _presence_scene_entity(scene, name, record=None):
     """The scene entity a presence name denotes -- by entity id or display
     name -- as (entity_id, entity_def), or (None, None) when the name has no
     entity record at all (a presence tracked from a dialogue speaker or a
-    bare positions key)."""
+    bare positions key). With `record`, its stored `entity_id` binding
+    outranks every string comparison: an id denotes exactly one body, it
+    survives a rename, and it cannot be fooled by a second entity sharing
+    the display name."""
+    bound = str((record or {}).get("entity_id") or "").strip()
+    if bound:
+        ent = ((scene or {}).get("entities") or {}).get(bound)
+        if isinstance(ent, dict):
+            return bound, ent
     cf = str(name or "").strip().casefold()
     if not cf:
         return None, None
@@ -247,7 +357,7 @@ def presence_room(scene, name, record=None):
     room = room_of(scene, name)
     if room:
         return room
-    eid, _ent = _presence_scene_entity(scene, name)
+    eid, _ent = _presence_scene_entity(scene, name, record)
     if eid:
         room = (scene.get("positions") or {}).get(eid) or room_of(scene, eid)
         if room:
@@ -363,7 +473,7 @@ def _presence_speech_verdict(scene, name, record=None):
     if nature in ("thing", "voice"):
         return "thing"
 
-    eid, ent = _presence_scene_entity(scene, name)
+    eid, ent = _presence_scene_entity(scene, name, record)
     if ent is None:
         return "person"
     try:
@@ -425,56 +535,193 @@ def _merge_presence_record(target, other):
     for alias in (other.get("aka") or []):
         if alias not in target.setdefault("aka", []):
             target["aka"].append(alias)
+    # The absorbed record's own spellings and keys stay resolvable: its name
+    # becomes an alias, and its uid (plus any it had absorbed in turn) joins
+    # `former_uids` so a stale reference -- a promotable row held open in a
+    # UI, a reader mid-beat -- still finds the merged record.
+    other_name = str(other.get("name") or "").strip()
+    target_name = str(target.get("name") or "").strip()
+    if other_name and other_name != target_name:
+        if other_name not in target.setdefault("aka", []):
+            target["aka"].append(other_name)
+    for former in [other.get("uid")] + list(other.get("former_uids") or []):
+        former = str(former or "")
+        if (former and former != target.get("uid")
+                and former not in target.setdefault("former_uids", [])):
+            target["former_uids"].append(former)
+    if not target.get("former_uids", True):
+        del target["former_uids"]
 
 
-def _resolve_presence_name(name, presences, scene=None):
-    """The key `name` should be filed under, given what is already tracked.
+def _presence_lookup(presences, ref, scene=None):
+    """Resolve `ref` -- a model-authored name, a presence uid, a former uid,
+    or a scene entity id -- to ``(key, record, status)``.
 
-    First-seen spelling wins, so an established presence keeps the name every
-    other record already refers to it by rather than being renamed by whichever
-    determiner the model reached for this beat.
+    `status` is "hit", "miss", or "ambiguous". Ambiguity is its own answer,
+    distinct from a miss, because the two demand opposite reactions: a miss
+    may mint, while two records answering to one name must REFUSE to guess --
+    picking one hands a person somebody else's history, and minting a third
+    invents a stranger (`room_of`'s refuse-to-pick precedent).
     """
-    name = _canonical_presence_name(name, scene)
+    presences = presences or {}
+    ref = str(ref or "").strip()
+    if not ref:
+        return None, None, "miss"
+    record = presences.get(ref)
+    if record is not None:
+        return ref, record, "hit"
+    for key, rec in presences.items():
+        if isinstance(rec, dict) and ref in (rec.get("former_uids") or ()):
+            return key, rec, "hit"
+    # A scene entity id: a stored binding, or the raw key models sometimes
+    # write where a name belongs. An id denotes exactly one body, so a single
+    # binding match settles it.
+    entity_matches = [
+        (key, rec) for key, rec in presences.items()
+        if isinstance(rec, dict) and str(rec.get("entity_id") or "") == ref
+    ]
+    if len(entity_matches) == 1:
+        return entity_matches[0][0], entity_matches[0][1], "hit"
+    name = _canonical_presence_name(ref, scene)
     identity = _presence_identity(name)
     if not identity:
-        return name
-    if _bodies_answering_to(identity, scene) > 1:
-        return name          # more than one such body; the article may be doing work
-    for existing in presences:
-        if _presence_identity(existing) == identity:
-            return existing
+        return None, None, "miss"
+    exact, folded = [], []
+    for key, rec in presences.items():
+        names = _presence_names(key, rec if isinstance(rec, dict) else None)
+        if any(str(n).casefold() == name.casefold() for n in names):
+            exact.append((key, rec))
+        elif any(_presence_identity(n) == identity for n in names):
+            folded.append((key, rec))
+    if len(exact) == 1:
+        return exact[0][0], exact[0][1], "hit"
+    if len(exact) > 1:
+        return None, None, "ambiguous"
+    if folded and _bodies_answering_to(identity, scene) > 1:
+        return None, None, "miss"   # a crowd; the article may be doing work
+    if len(folded) == 1:
+        return folded[0][0], folded[0][1], "hit"
+    if len(folded) > 1:
+        return None, None, "ambiguous"
     # No string identity matches -- but the BODY might already be tracked
-    # under a former name (docs/UNBUILT.md 1.17's fragmentation half: an
-    # entity renamed "the guard" -> "Mara" shares no identity across the
-    # rename). When this name denotes exactly one scene entity and some
-    # record is bound to that entity's id, file under the record: the fold
-    # re-keys it to the current display name on its next pass.
-    eid = _entity_uid_answering_to(name, _scene_entity_names_by_id(scene))
+    # under a former name (an entity renamed "the guard" -> "Mara" shares no
+    # identity across the rename). When this name denotes exactly one scene
+    # entity and some record is bound to that entity's id, that record is it.
+    eid = (_entity_key_for_name(name, scene)
+           or _entity_uid_answering_to(name, _scene_entity_names_by_id(scene)))
     if eid:
-        for existing, record in presences.items():
-            if (isinstance(record, dict)
-                    and str(record.get("entity_id") or "") == eid):
-                return existing
-    return name
+        for key, rec in presences.items():
+            if (isinstance(rec, dict)
+                    and str(rec.get("entity_id") or "") == eid):
+                return key, rec, "hit"
+    return None, None, "miss"
+
+
+def presence_record_for(presences, ref, scene=None):
+    """``(key, record)`` for the tracked presence `ref` denotes, else
+    ``(None, None)`` -- including when two tracked records answer to one name,
+    because two people can share a name now and guessing between them would
+    hand one person the other's history. Callers already treat a missing
+    record as "untracked", which is exactly the right reading of a refusal.
+    This seam is permanent, not transitional: models speak names, the ledger
+    keys on uids, and this is the one function that connects them."""
+    key, record, status = _presence_lookup(presences, ref, scene)
+    if status != "hit":
+        return None, None
+    return key, record
+
+
+def _resolve_or_mint_presence(name, presences, scene=None, entity_id=None):
+    """The uid key `name` should be filed under, minting the record slot when
+    nothing tracked answers to it. THE MINT IS A WRITE: a uid is minted once
+    and every later spelling resolves to it, which is what makes "a name,
+    once minted, is permanent" enforceable rather than requested. With
+    `entity_id`, the binding outranks every string test -- an id denotes
+    exactly one body -- and the uid is deterministic in it. Returns None when
+    two tracked records answer to the name and nothing this beat tells them
+    apart: refusing to guess neither merges strangers nor mints a third.
+    """
+    name = _canonical_presence_name(name, scene)
+    if entity_id:
+        entity_id = str(entity_id)
+        for key, rec in (presences or {}).items():
+            if (isinstance(rec, dict)
+                    and str(rec.get("entity_id") or "") == entity_id):
+                return key
+        # A record tracked from a nameless channel (a dialogue speaker, a
+        # bare positions key) has no binding yet; an unambiguous name match
+        # connects them once, and the binding does the work thereafter. A
+        # name match already bound to a DIFFERENT body falls through to the
+        # mint: same name, two bodies, two records -- the point of the key.
+        key, rec, status = _presence_lookup(presences, name, scene)
+        if (status == "hit" and isinstance(rec, dict)
+                and not rec.get("entity_id")):
+            rec["entity_id"] = entity_id
+            return key
+        key = _mint_presence_uid("entity:%s" % entity_id)
+        record = presences.setdefault(key, {})
+        record["uid"] = key
+        record.setdefault("entity_id", entity_id)
+        if not str(record.get("name") or "").strip():
+            record["name"] = name
+        return key
+    key, _record, status = _presence_lookup(presences, name, scene)
+    if status == "hit":
+        return key
+    if status == "ambiguous":
+        return None
+    eid = (_entity_key_for_name(name, scene)
+           or _entity_uid_answering_to(name, _scene_entity_names_by_id(scene)))
+    if eid:
+        return _resolve_or_mint_presence(name, presences, scene,
+                                         entity_id=eid)
+    key = _mint_presence_uid()
+    presences[key] = {"uid": key, "name": name}
+    return key
 
 
 def _fold_duplicate_presences(presences, scene=None):
-    """Merge presences that were split -- by an article, or by being tracked
-    under both an entity id and its display name -- before they were resolved
-    on write. Runs on load, so a story already carrying the split heals on its
-    next turn instead of needing a migration.
+    """Migrate a legacy name-keyed ledger onto uid keys, and merge records
+    that are provably one body. Runs on load, so every existing story
+    converts on its next read instead of needing a SQL migration --
+    `background_presences` is a frame-scoped world key riding the whole-
+    `world` carriage, and heal-on-load has been this fold's contract all
+    along. Idempotent: a migrated ledger passes through with only the
+    provable merges re-checked.
 
-    The id fold runs first and is unconditional: an entity id denotes exactly
-    one entity, so unlike the article fold there is no crowd ambiguity to
-    respect, and the display name always wins the key -- the id was never a
-    name (chat 80: "cfc004eb2c174286" tracked beside "Scranton Reality
-    Anchors", "ab1299cb69244904" beside "Guard 1", "eef58c8d667f414f" beside
-    "Guard 2" -- every presence doubled, each twin with half the history).
+    THE MIGRATION IS TIERED, and every uid it mints is deterministic, so
+    repeated un-persisted loads agree with each other and with the commit
+    that finally writes the result:
 
-    For the article fold, the earliest first_turn wins the name -- that is
-    the spelling the rest of the story has been using.
+      1. a record carrying a charter binding keys on it (a charter body key
+         is permanent identity);
+      2. a record that provably binds to ONE scene entity keys on the entity
+         id -- including a name that is the entity KEY under underscore-as-
+         space equivalence, which is how two spellings of one person merge on
+         ID AGREEMENT (both bind to the same body) rather than on string
+         similarity;
+      3. everything else mints fresh from its own legacy key, which merges
+         nothing and risks nothing.
+
+    Ambiguity refuses to merge, unchanged (docs/UNBUILT.md 1.17's settled
+    rule): an over-merge welds two characters into one and a split is the
+    recoverable direction. Two records with DIFFERENT entity bindings never
+    merge however exactly their names collide -- that pair staying two
+    records is the point of the uid key.
     """
+    presences = presences if isinstance(presences, dict) else {}
     for key in list(presences):
+        if not isinstance(presences[key], dict):
+            presences[key] = {}
+    entity_names = _scene_entity_names_by_id(scene)
+
+    # Legacy article/id-display fold, among name-keyed records only (these
+    # keys ARE names; chat 80's "cfc004eb2c174286" tracked beside "Scranton
+    # Reality Anchors" is the id-display case, chat 57's three Daleks the
+    # article case).
+    for key in list(presences):
+        if is_presence_uid(key):
+            continue
         canon = _canonical_presence_name(key, scene)
         if canon == key:
             continue
@@ -483,68 +730,98 @@ def _fold_duplicate_presences(presences, scene=None):
             _merge_presence_record(presences[canon], other)
         else:
             presences[canon] = other
-    # Entity fold (docs/UNBUILT.md 1.17, fragmentation half). First bind:
-    # an unbound record whose name the scene answers UNAMBIGUOUSLY (exactly
-    # one body with that identity -- the same crowd guard the article fold
-    # respects) is stamped with that body's id. Then fold: records sharing
-    # an entity_id merge unconditionally, because an id denotes exactly one
-    # body -- and the CURRENT display name wins the key, so a record bound
-    # while the body was still "the guard" follows it to "Mara", history,
-    # sketch, blurb and promotion progress intact. Former spellings are
-    # kept in `aka`: the prose does not switch names overnight, and mention
-    # matching still has to hear the old one. The ledger stays keyed by
-    # display-name strings throughout -- raw readers (agents/director.py,
-    # agents/perception.py, world/subjects.py) consume name lists and
-    # already tolerate one beat of un-healed ledger.
-    entity_names = _scene_entity_names_by_id(scene)
-    for name, record in presences.items():
-        if not isinstance(record, dict) or record.get("entity_id"):
+
+    # Re-key every legacy record onto its minted uid (the tiers above).
+    for key in list(presences):
+        record = presences[key]
+        if is_presence_uid(key) and str(record.get("uid") or "") == key:
             continue
-        eid = _entity_uid_answering_to(name, entity_names)
+        record = presences.pop(key)
+        name = presence_display_name(key, record) or str(key)
+        if not str(record.get("entity_id") or "").strip():
+            eid = (_entity_key_for_name(name, scene)
+                   or _entity_uid_answering_to(name, entity_names))
+            if eid:
+                record["entity_id"] = eid
+        seed = _charter_uid_seed(record)
+        if seed is None and record.get("entity_id"):
+            seed = "entity:%s" % record["entity_id"]
+        if seed is None:
+            seed = "legacy:%s" % name
+        new_key = _mint_presence_uid(seed)
+        record["uid"] = new_key
+        record.setdefault("name", name)
+        if new_key in presences:
+            # Id agreement: two legacy spellings proved the same binding
+            # (e.g. a bare positions key and the display name of one body).
+            _merge_presence_record(presences[new_key], record)
+        else:
+            presences[new_key] = record
+
+    # Bind: an unbound record whose name the scene answers UNAMBIGUOUSLY
+    # (exactly one body with that identity -- the crowd guard) is stamped
+    # with that body's id. The binding is what survives a rename.
+    for key, record in presences.items():
+        if record.get("entity_id"):
+            continue
+        eid = _entity_uid_answering_to(
+            presence_display_name(key, record), entity_names)
         if eid:
             record["entity_id"] = eid
+
+    # Entity fold: records sharing an entity_id merge unconditionally,
+    # because an id denotes exactly one body. The earliest record keeps the
+    # key (its uid is what anything holding a reference knows); the body's
+    # CURRENT display name wins the `name` attribute, so a record bound
+    # while the body was still "the guard" follows it to "Mara" -- history,
+    # sketch, blurb and promotion progress intact, former spellings in
+    # `aka`. A placeholder the validator derived from the key, or an
+    # id-shaped string, is not adopted as a name: a rename is a fact about
+    # the fiction, not about the serializer.
     by_entity = {}
-    for name, record in presences.items():
-        if isinstance(record, dict) and record.get("entity_id"):
-            by_entity.setdefault(str(record["entity_id"]), []).append(name)
-    for eid, names in by_entity.items():
-        live_name = entity_names.get(eid, "")
-        names.sort(key=lambda n: (presences[n].get("first_turn", 0), n))
-        # The body's current name keys the record; a body no longer in the
-        # scene keeps the earliest spelling (that is what the story called
-        # it while it existed).
-        keeper_key = live_name or names[0]
-        if keeper_key not in presences:
-            source = names.pop(0)
-            target = presences.pop(source)
-            if source != keeper_key and source not in target.setdefault("aka", []):
-                target["aka"].append(source)
-            presences[keeper_key] = target
-        else:
-            target = presences[keeper_key]
-        for other_name in names:
-            if other_name == keeper_key:
-                continue
-            _merge_presence_record(target, presences.pop(other_name))
-            if other_name not in target.setdefault("aka", []):
-                target["aka"].append(other_name)
-        if "aka" in target:
-            target["aka"] = [a for a in target["aka"] if a != keeper_key]
+    for key, record in presences.items():
+        if record.get("entity_id"):
+            by_entity.setdefault(str(record["entity_id"]), []).append(key)
+    for eid, keys in by_entity.items():
+        keys.sort(key=lambda k: (presences[k].get("first_turn", 0), k))
+        target = presences[keys[0]]
+        for other_key in keys[1:]:
+            _merge_presence_record(target, presences.pop(other_key))
+        live_name = str(entity_names.get(eid) or "").strip()
+        current = str(target.get("name") or "").strip()
+        if live_name and live_name != current:
+            from llm.schemas import is_derived_entity_name
+            if not is_derived_entity_name(eid, live_name):
+                if current and current not in target.setdefault("aka", []):
+                    target["aka"].append(current)
+                target["name"] = live_name
+        if target.get("aka"):
+            target["aka"] = [a for a in target["aka"]
+                             if a != str(target.get("name") or "")]
             if not target["aka"]:
                 del target["aka"]
+
+    # Identity fold, for splits that predate the uid key: records answering
+    # to one identity merge only when nothing proves them distinct -- no
+    # crowd of such bodies in the scene, and no CONFLICTING entity bindings.
     by_identity = {}
-    for name in list(presences):
-        by_identity.setdefault(_presence_identity(name), []).append(name)
-    for identity, names in by_identity.items():
-        if len(names) < 2:
+    for key, record in presences.items():
+        identity = _presence_identity(presence_display_name(key, record))
+        if identity:
+            by_identity.setdefault(identity, []).append(key)
+    for identity, keys in by_identity.items():
+        if len(keys) < 2:
             continue
         if _bodies_answering_to(identity, scene) > 1:
             continue         # genuinely a crowd; see _bodies_answering_to
-        names.sort(key=lambda n: (presences[n].get("first_turn", 0), n))
-        keeper, rest = names[0], names[1:]
-        target = presences[keeper]
-        for other_name in rest:
-            _merge_presence_record(target, presences.pop(other_name))
+        bindings = {str(presences[k].get("entity_id") or "")
+                    for k in keys} - {""}
+        if len(bindings) > 1:
+            continue         # two proven bodies share the name; keep both
+        keys.sort(key=lambda k: (presences[k].get("first_turn", 0), k))
+        target = presences[keys[0]]
+        for other_key in keys[1:]:
+            _merge_presence_record(target, presences.pop(other_key))
     return presences
 
 
@@ -568,11 +845,29 @@ def with_charter_presences(cid, presences, scene=None, *, places=None,
             record = copy.deepcopy(record)
             record["first_turn"] = int(turn_idx)
             record["last_turn"] = int(turn_idx)
-        key = _resolve_presence_name(name, merged, scene)
-        if key in merged:
-            _merge_presence_record(merged[key], record)
+        refs = [r for r in (record.get("charter_refs") or [])
+                if isinstance(r, dict)]
+        key = None
+        # The charter body key is permanent identity: a record already
+        # carrying this ref is this person, whatever it is currently named.
+        for existing_key, existing in merged.items():
+            if isinstance(existing, dict) and any(
+                    r in (existing.get("charter_refs") or []) for r in refs):
+                key = existing_key
+                break
+        if key is None:
+            key, _rec, status = _presence_lookup(merged, name, scene)
+            if status == "ambiguous":
+                continue    # two tracked records answer; refuse to guess
+        if key is None:
+            seed = _charter_uid_seed(record) or ("legacy:%s" % name)
+            fresh = copy.deepcopy(record)
+            key = _mint_presence_uid(seed)
+            fresh["uid"] = key
+            fresh.setdefault("name", str(name))
+            merged[key] = fresh
         else:
-            merged[key] = copy.deepcopy(record)
+            _merge_presence_record(merged[key], record)
     return merged
 
 
@@ -851,6 +1146,9 @@ def track_background_presences(ctx, nonce, *, prepared=None):
     candidates = set()
     dialogue_speakers = set()  # names that spoke a dialogue_log line this beat
     sketches = {}              # name -> {role_hint, station_room} from structured defs
+    candidate_ids = {}         # name -> {entity ids the beat proved for it}:
+                               # the durable key the harvests used to resolve
+                               # into names and throw away
 
     # Scene entities are keyed by an opaque id ("char_guard_alpha") but carry
     # a human display name ("Security Guard Alpha"). The director normally
@@ -895,13 +1193,15 @@ def track_background_presences(ctx, nonce, *, prepared=None):
         _ubiquitous, is_ubiquitous_entity = frozenset(), (lambda e: False)
 
     for d in (res.get("dialogue_log") or []):
-        speaker = str(d.get("speaker") or "").strip()
-        speaker = entity_id_to_name.get(speaker, speaker)
+        raw_speaker = str(d.get("speaker") or "").strip()
+        speaker = entity_id_to_name.get(raw_speaker, raw_speaker)
         if speaker.casefold() in _ubiquitous:
             continue
         if speaker and not name_in_roster(speaker, roster):
             candidates.add(speaker)
             dialogue_speakers.add(speaker.casefold())
+            if raw_speaker in entity_id_to_name:
+                candidate_ids.setdefault(speaker, set()).add(raw_speaker)
 
     # Structured person/npc entity defs: state_diff.entities on a normal
     # turn, plus director_establish's TOP-LEVEL entities/positions on the
@@ -944,6 +1244,7 @@ def track_background_presences(ctx, nonce, *, prepared=None):
             if is_ubiquitous_entity(entity_def) or name.casefold() in _ubiquitous:
                 continue
             candidates.add(name)
+            candidate_ids.setdefault(name, set()).add(str(entity_id))
             sk = sketches.setdefault(name, {})
             desc = str(entity_def.get("description") or "").strip()
             if desc:
@@ -1036,6 +1337,9 @@ def track_background_presences(ctx, nonce, *, prepared=None):
         if _inert_by_key.get(_name.casefold()):
             continue
         candidates.add(_name)
+        if str(_placed or "").strip() in entity_id_to_name:
+            candidate_ids.setdefault(_name, set()).add(
+                str(_placed or "").strip())
         sk = sketches.setdefault(_name, {})
         sk.setdefault("station_room", str(_diff_positions[_placed]))
 
@@ -1047,11 +1351,13 @@ def track_background_presences(ctx, nonce, *, prepared=None):
     # force-set to its gate-picked name in background_react.
     br = ctx.get("background_react") or {}
     for _r in _background_fired_reactions(br):
-        br_name = str((_r.get("dialogue_log_entry") or {}).get("speaker") or "").strip()
-        br_name = entity_id_to_name.get(br_name, br_name)
+        br_raw = str((_r.get("dialogue_log_entry") or {}).get("speaker") or "").strip()
+        br_name = entity_id_to_name.get(br_raw, br_raw)
         if br_name and not name_in_roster(br_name, roster):
             candidates.add(br_name)
             dialogue_speakers.add(br_name.casefold())
+            if br_raw in entity_id_to_name:
+                candidate_ids.setdefault(br_name, set()).add(br_raw)
 
     live_scene = wget(cid, "scene", {}) or {}
     presences = _fold_duplicate_presences(
@@ -1063,34 +1369,58 @@ def track_background_presences(ctx, nonce, *, prepared=None):
         cid, presences, live_scene,
         names=(set(candidates) | _selected_for_charter),
         frame_id=ctx.turn.frame_id, turn_idx=turn_idx)
-    for name in candidates:
+    touched = set()
+    for name in sorted(candidates):
         # `A Dalek`, `Dalek` and `The Dalek` are one creature WHEN THE ROOM
-        # HOLDS ONE DALEK -- the scene decides that, not the string. Resolve to
-        # the name already tracked before creating anything, or the ledger
-        # grows a fresh presence every time the prose changes its determiner.
-        key = _resolve_presence_name(name, presences, live_scene)
-        record = presences.setdefault(key, {
-            "first_turn": turn_idx, "last_turn": turn_idx,
-            "dialogue_turns": [], "mention_turns": [],
-        })
-        record["last_turn"] = turn_idx
-        # Bind the record to its scene body while the name still answers
-        # unambiguously (entity_id_to_name already includes entities minted
-        # this very beat). The binding is what survives a RENAME: once the
-        # body is called something else, no string comparison can connect
-        # the spellings, but the id still does (docs/UNBUILT.md 1.17).
-        if not record.get("entity_id"):
-            _eid = _entity_uid_answering_to(key, entity_id_to_name)
-            if _eid:
-                record["entity_id"] = _eid
-        if name.casefold() in dialogue_speakers:
-            if turn_idx not in record["dialogue_turns"]:
-                record["dialogue_turns"].append(turn_idx)
-        sk = sketches.get(name)
-        if sk:
-            # Director restated this presence's own description/position ->
-            # objective self-knowledge wins; overwrite the prior sketch.
-            record.setdefault("sketch", {}).update(sk)
+        # HOLDS ONE DALEK -- the scene decides that, not the string. Resolve
+        # to the record already tracked before creating anything, or the
+        # ledger grows a fresh presence every time the prose changes its
+        # determiner. A candidate the beat PROVED an entity id for resolves
+        # by that binding -- which is what lets two bodies sharing a display
+        # name stay two records instead of silently merging.
+        keys = []
+        for _eid in sorted(candidate_ids.get(name) or ()):
+            keys.append(_resolve_or_mint_presence(
+                name, presences, live_scene, entity_id=_eid))
+        if not keys:
+            key = _resolve_or_mint_presence(name, presences, live_scene)
+            if key is None:
+                # Two tracked records answer to this name and nothing this
+                # beat tells them apart. Attributing to either hands one
+                # person the other's history; minting a third invents a
+                # stranger. Refuse to guess -- the conduct stays in the
+                # objective record, unattributed.
+                ctx.add_warning(
+                    "Background presence %r not attributed: two tracked "
+                    "presences answer to that name and nothing this beat "
+                    "tells them apart." % name)
+                continue
+            keys.append(key)
+        for key in keys:
+            record = presences[key]
+            record.setdefault("uid", key)
+            record.setdefault("first_turn", turn_idx)
+            record.setdefault("dialogue_turns", [])
+            record.setdefault("mention_turns", [])
+            record["last_turn"] = turn_idx
+            # Bind the record to its scene body while the name still answers
+            # unambiguously (entity_id_to_name already includes entities
+            # minted this very beat). The binding is what survives a RENAME:
+            # once the body is called something else, no string comparison
+            # can connect the spellings, but the id still does.
+            if not record.get("entity_id"):
+                _eid = _entity_uid_answering_to(name, entity_id_to_name)
+                if _eid:
+                    record["entity_id"] = _eid
+            if name.casefold() in dialogue_speakers:
+                if turn_idx not in record["dialogue_turns"]:
+                    record["dialogue_turns"].append(turn_idx)
+            sk = sketches.get(name)
+            if sk:
+                # Director restated this presence's own description/position
+                # -> objective self-knowledge wins; overwrite the prior sketch.
+                record.setdefault("sketch", {}).update(sk)
+            touched.add(key)
 
     # Scene-manager bookkeeping (docs/design/BACKGROUND_LIFE_DESIGN.md §3.8, §3.11).
     _persist_blurbs(br, presences)
@@ -1102,8 +1432,9 @@ def track_background_presences(ctx, nonce, *, prepared=None):
         if not isinstance(conduct, dict):
             continue
         reaction_name = str(reaction.get("name") or "").strip()
-        key = _resolve_presence_name(reaction_name, presences, live_scene)
-        record = presences.get(key) or {}
+        _ckey, record = presence_record_for(
+            presences, reaction_name, live_scene)
+        record = record or {}
         if not record.get("charter_refs"):
             continue
         try:
@@ -1139,15 +1470,15 @@ def track_background_presences(ctx, nonce, *, prepared=None):
                   canon_embeddings=(prepared or {}).get("canon_embeddings"))
 
     resolved_event = str(res.get("resolved_event") or "")
-    for name, record in presences.items():
-        if name in candidates:
+    for key, record in presences.items():
+        if key in touched:
             continue
         # Former spellings count too: after a rename the prose keeps saying
         # "the guard" for a while, and it still means her.
         if any(_background_name_mentioned(n, resolved_event)
-               for n in _presence_names(name, record)):
+               for n in _presence_names(key, record)):
             record["last_turn"] = turn_idx
-            if turn_idx not in record["mention_turns"]:
+            if turn_idx not in record.setdefault("mention_turns", []):
                 record["mention_turns"].append(turn_idx)
 
     # Owed-reply bookkeeping: a registered character (or the player) addressed
@@ -1182,11 +1513,14 @@ def track_background_presences(ctx, nonce, *, prepared=None):
     # outlives the beat and is the counter that earns a passer-by a sheet.
     player_input = overt_declaration_text(ctx)
     sc = wget(cid, "scene", {}) or {}
-    for name, record in presences.items():
+    for key, record in presences.items():
+        name = presence_display_name(key, record)
+        if not name:
+            continue
         addressed = any(
             _presence_in_addressed_refs(n, addressed_refs)
             or _background_name_mentioned(n, player_input)
-            for n in _presence_names(name, record)
+            for n in _presence_names(key, record)
         )
         pr = record.get("pending_reply")
         if isinstance(pr, dict) and turn_idx > (pr.get("expires_turn")
@@ -1240,7 +1574,7 @@ def _persist_blurbs(br, presences):
     rewritten -- immutability is the feature, and it is the anchor against the
     self-feeding drift §3.11 describes."""
     for name, blurb in ((br or {}).get("blurbs") or {}).items():
-        rec = presences.get(name)
+        _key, rec = presence_record_for(presences, name)
         if rec is None or rec.get("blurb") or not isinstance(blurb, dict):
             continue
         if any(str(v or "").strip() for v in blurb.values()):
@@ -1256,7 +1590,7 @@ def _append_manager_conduct(br, presences, turn_idx):
     """
     for r in _background_fired_reactions_any(br):
         name = str(r.get("name") or "").strip()
-        rec = presences.get(name)
+        _key, rec = presence_record_for(presences, name)
         if rec is None:
             continue
         entry = r.get("dialogue_log_entry") or {}
@@ -1497,12 +1831,15 @@ def pick_background_reactors(ctx, dr_output, cap=1):
     # salience finding.
     ranked = dict(presences)
     for name in forced_routed:
-        if name.casefold() not in {n.casefold() for n in ranked}:
+        if presence_record_for(ranked, name, sc)[1] is None:
             ranked[name] = {}
 
     candidates = []
     forced = 0
-    for name, record in ranked.items():
+    for _rkey, record in ranked.items():
+        name = presence_display_name(_rkey, record)
+        if not name:
+            continue
         cf = name.casefold()
         if cf in roster or cf in voiced_this_beat:
             continue
@@ -1579,8 +1916,20 @@ def pick_background_reactors(ctx, dr_output, cap=1):
     # Every flow-addressed presence sorts first (top priority bit) and must
     # answer THIS beat: widen the cap to fit them all, then fill any slots
     # left up to `cap` with the normally-ranked candidates.
+    #
+    # The stage downstream voices a presence BY NAME, so two records sharing
+    # a display name collapse to one pick here: dispatching the same name
+    # twice would voice one body with two turns.
     slots = max(forced, max(0, int(cap)))
-    return [name for _, name in candidates[:slots]]
+    picks, seen = [], set()
+    for _, name in candidates:
+        if len(picks) >= slots:
+            break
+        if name.casefold() in seen:
+            continue
+        seen.add(name.casefold())
+        picks.append(name)
+    return picks
 
 def promotable_background_presences(chat_id):
     sc = wget(chat_id, "scene", {}) or {}
@@ -1588,7 +1937,8 @@ def promotable_background_presences(chat_id):
         wget(chat_id, "background_presences", {}) or {}, sc)
     limits = promotion_thresholds(chat_id)
     out = []
-    for name, record in presences.items():
+    for key, record in presences.items():
+        name = presence_display_name(key, record)
         promotable = (
             len(record.get("dialogue_turns") or []) >= limits["dialogue"]
             or len(record.get("mention_turns") or []) >= limits["mention"]
@@ -1616,7 +1966,16 @@ def promotable_background_presences(chat_id):
         # "person" the moment anything actually asks the question.
         if promotable and _presence_speech_verdict(sc, name, record) != "person":
             promotable = False
+        # A presence with no real name -- none at all, or an id-shaped string
+        # standing where a name should (a live ledger tracked three raw hex
+        # ids as "names") -- is still a person the engine keeps, but promotion
+        # writes the name into a sheet's permanent identity, so an unnamed
+        # presence is never OFFERED. It stays listed and becomes promotable
+        # the moment the story names it.
+        if promotable and presence_is_unnamed(key, record):
+            promotable = False
         out.append({
+            "id": key,
             "name": name,
             "first_turn": record.get("first_turn"),
             "last_turn": record.get("last_turn"),
@@ -1691,9 +2050,30 @@ def promote_background_character(cid, name, sheet=None, memory_seeds=None,
     scene_for_identity = wget(cid, "scene", {}) or {}
     presences_for_identity = _fold_duplicate_presences(
         wget(cid, "background_presences", {}) or {}, scene_for_identity)
-    presence_key = _resolve_presence_name(
-        name, presences_for_identity, scene_for_identity)
-    presence_record = presences_for_identity.get(presence_key) or {}
+    # `name` may be the tracked record's uid (the promotion routes pass the
+    # id) or a display name (older callers, hand promotion of an untracked
+    # figure). Two tracked records answering to one display name REFUSE to
+    # resolve -- promoting under an ambiguous name would seed one person's
+    # sheet and first-person memories from the other's history, and that
+    # weld is permanent (characters row, memories, relationships).
+    presence_key, presence_record = presence_record_for(
+        presences_for_identity, name, scene_for_identity)
+    if presence_record is None and _presence_lookup(
+            presences_for_identity, name,
+            scene_for_identity)[2] == "ambiguous":
+        raise ValueError(
+            "Refusing to promote %r: more than one tracked presence answers "
+            "to that name. Promote by presence id instead." % name)
+    presence_record = presence_record or {}
+    _display = presence_display_name(presence_key, presence_record)
+    if _display:
+        name = _display
+    if presence_key is not None and presence_is_unnamed(
+            presence_key, presence_record):
+        raise ValueError(
+            "Refusing to promote an unnamed presence: promotion writes the "
+            "name into a permanent character identity, and this record has "
+            "no real name yet.")
     from world.charter_runtime import promotion_bundle
     charter_bundle = promotion_bundle(
         cid, name, record=presence_record, frame_id=frame_id)
@@ -1912,24 +2292,44 @@ def promote_background_character(cid, name, sheet=None, memory_seeds=None,
     identity = _presence_identity(name)
     # ...and every spelling of the same BODY: a record bound to the promoted
     # presence's entity id, or one whose former names (`aka`) include it, is
-    # the same person under a name the rename left behind.
-    doomed_identities = {identity}
+    # the same person under a name the rename left behind. A record PROVEN to
+    # be a different body -- bound to another entity -- survives however
+    # exactly its name collides: two people may share a name now, and
+    # promoting one must not delete the other.
+    doomed_keys = set()
     doomed_entities = set()
+    doomed_identities = {identity} if identity else set()
+    if presence_key is not None:
+        doomed_keys.add(presence_key)
+        doomed_keys.update(
+            str(f) for f in (presence_record.get("former_uids") or []))
+        if presence_record.get("entity_id"):
+            doomed_entities.add(str(presence_record["entity_id"]))
     for tracked, record in presences.items():
         if not isinstance(record, dict):
             continue
-        if (_presence_identity(tracked) == identity
-                or identity in {_presence_identity(a)
-                                for a in (record.get("aka") or [])}):
-            if record.get("entity_id"):
-                doomed_entities.add(str(record["entity_id"]))
-            doomed_identities.update(
-                _presence_identity(a) for a in (record.get("aka") or []))
+        spellings = {_presence_identity(n)
+                     for n in _presence_names(tracked, record)} - {""}
+        if not (doomed_identities & spellings) and tracked not in doomed_keys:
+            continue
+        eid = str(record.get("entity_id") or "")
+        if (tracked not in doomed_keys and eid and doomed_entities
+                and eid not in doomed_entities):
+            continue        # same name, different proven body: keep them
+        if eid:
+            doomed_entities.add(eid)
+        doomed_identities.update(spellings)
+        doomed_keys.add(tracked)
     for tracked in list(presences):
         record = presences[tracked] if isinstance(presences[tracked], dict) else {}
-        if (_presence_identity(tracked) in doomed_identities
-                or (record.get("entity_id")
-                    and str(record["entity_id"]) in doomed_entities)):
+        eid = str(record.get("entity_id") or "")
+        spellings = {_presence_identity(n)
+                     for n in _presence_names(tracked, record)} - {""}
+        if tracked in doomed_keys or (eid and eid in doomed_entities):
+            presences.pop(tracked, None)
+        elif doomed_identities & spellings:
+            if eid and doomed_entities and eid not in doomed_entities:
+                continue    # proven different body
             presences.pop(tracked, None)
     wset(cid, "background_presences", presences)
 
@@ -1999,7 +2399,7 @@ def auto_promote_background_characters(ctx):
         return {"promoted": []}
 
     promotable = {
-        r["name"] for r in promotable_background_presences(cid) if r["promotable"]
+        r["id"] for r in promotable_background_presences(cid) if r["promotable"]
     }
     # How many turns of DELIBERATE interaction earn a sheet. Zero means never,
     # which is what the dialogue menu's own control offers as its low end -- a
@@ -2019,9 +2419,14 @@ def auto_promote_background_characters(ctx):
     addressed_refs = _flow_addressed_refs(ctx)
 
     candidates = []
-    for name, record in presences.items():
-        if name not in promotable:
+    # The promotable set carries migrated (uid) keys; read the raw ledger
+    # through the same fold so a legacy bank's keys agree with it.
+    presences = _fold_duplicate_presences(
+        dict(presences), wget(cid, "scene", {}) or {})
+    for key, record in presences.items():
+        if key not in promotable:
             continue
+        name = presence_display_name(key, record)
         dialogue_turns = record.get("dialogue_turns") or []
         # The gate that matters: turns the player or a real character
         # deliberately turned toward this person. Counting the turns they
@@ -2050,13 +2455,15 @@ def auto_promote_background_characters(ctx):
         if not active:
             continue
         candidates.append(
-            (len(dialogue_turns), record.get("last_turn") or -1, name))
+            (len(dialogue_turns), record.get("last_turn") or -1, key, name))
 
     if not candidates:
         return {"promoted": []}
     candidates.sort(reverse=True)
-    name = candidates[0][-1]
+    key, name = candidates[0][-2], candidates[0][-1]
+    # Promote by the record's own id: a display name two records share
+    # would refuse to resolve, and the id never does.
     char_id = promote_background_character(
-        cid, name, frame_id=ctx.turn.frame_id,
+        cid, key, frame_id=ctx.turn.frame_id,
         promoted_turn=ctx.turn.idx)
-    return {"promoted": [{"name": name, "char_id": char_id}]}
+    return {"promoted": [{"id": key, "name": name, "char_id": char_id}]}

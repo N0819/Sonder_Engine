@@ -124,7 +124,7 @@ class TestCharacters:
         assert res and res.subject.id == "guinan_x9"
         assert res.authority == "scene_entity"
 
-    def test_a_name_keyed_presence_resolves_to_nothing_with_the_reason(self, temp_db):
+    def test_a_bodiless_presence_resolves_to_nothing_with_the_reason(self, temp_db):
         """The other 18 of 38: a presence that was never an entity has no id
         in any ledger. Minting one here is the Guinan defect restated, so the
         answer is a refusal that says why -- silence is how add_lore ran
@@ -133,7 +133,7 @@ class TestCharacters:
         temp_db.wset(cid, "background_presences", {"Mot the Barber": {}})
         res = subjects.resolve_subject(cid, {}, "character", "Mot the Barber")
         assert not res
-        assert "name-keyed" in res.reason
+        assert "not a scene entity" in res.reason
 
     def test_two_cast_rows_with_one_name_resolve_to_nothing(self, temp_db):
         """Two beings folded into one is strictly worse than two spellings of

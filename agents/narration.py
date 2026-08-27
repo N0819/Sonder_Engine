@@ -500,9 +500,10 @@ def _presence_room_of(ctx, scene, name, reaction=None):
     # Local import: `persist.commit` reaches back into `agents.common` from
     # inside its own functions, and this is a cold path -- the same shape
     # `agents/perception.py` uses for `presence_has_an_identity`.
-    from persist.commit import presence_room
+    from persist.commit import presence_record_for, presence_room
     records = wget(ctx.chat["id"], "background_presences", {}) or {}
-    return presence_room(scene, name, records.get(name) or {}) or None
+    record = presence_record_for(records, name, scene)[1] or {}
+    return presence_room(scene, name, record) or None
 
 
 def _ordered_beat_events(ctx, p_name, view, recognized, cast_info,

@@ -1833,7 +1833,7 @@ function renderBackgroundPresencesPanel(chatId) {
           `${p.dialogue_turns.length} line(s), ${p.mention_turns.length} mention(s)`));
       if (p.promotable) {
         row.append(el("button", {
-          onclick: () => promoteBackgroundPresence(chatId, p.name),
+          onclick: () => promoteBackgroundPresence(chatId, p.name, p.id),
         }, "✨ Promote to character"));
       } else {
         row.append(el("span", { class: "badge" }, "not yet"));

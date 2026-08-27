@@ -96,9 +96,11 @@ def test_bodiless_voice_is_never_tracked_as_a_presence(temp_db):
         }},
     }
     track_background_presences(ctx, nonce=0)
+    from persist.commit import presence_name_items
     tracked = temp_db.wget(cid, "background_presences", {}) or {}
-    assert "Computer" not in tracked      # a voice, not a bystander
-    assert "Guinan" in tracked            # an ordinary extra still is one
+    names = {n for n, _ in presence_name_items(tracked)}
+    assert "Computer" not in names        # a voice, not a bystander
+    assert "Guinan" in names              # an ordinary extra still is one
 
 
 # ---- the rescue must be asked of the ENTITY, not of the position ---------

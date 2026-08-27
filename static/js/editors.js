@@ -864,7 +864,7 @@ function personaEditor(p) {
 // per-line memory list matches how this app already lets you hand-edit
 // less-common shapes (e.g. the pipeline drawer's step editor) rather
 // than inventing a second bespoke form.
-function promotionReviewModal(cid, name, draft) {
+function promotionReviewModal(cid, name, draft, id) {
   const sheetTa = el("textarea", { style: "width:100%;height:340px" },
     JSON.stringify(draft.sheet, null, 2));
   const seedsTa = el("textarea", { style: "width:100%;height:90px" },
@@ -886,7 +886,7 @@ function promotionReviewModal(cid, name, draft) {
         const memory_seeds = seedsTa.value.split("\n").map(s => s.trim()).filter(Boolean);
         try {
           const r = await api("POST", `/api/chats/${cid}/promotions/confirm`,
-            { name, sheet, memory_seeds });
+            { name, id, sheet, memory_seeds });
           closeModal();
           await boot();
           toast(name + " is now a full character.", "ok");
@@ -897,15 +897,17 @@ function promotionReviewModal(cid, name, draft) {
       } }, "✨ Confirm & attach"))));
 }
 
-async function promoteBackgroundPresence(cid, name) {
+async function promoteBackgroundPresence(cid, name, id) {
   let draft;
   try {
-    draft = await api("POST", `/api/chats/${cid}/promotions/draft`, { name });
+    // The id is the tracked record's own key; the name rides along for
+    // display and for servers that predate presence ids.
+    draft = await api("POST", `/api/chats/${cid}/promotions/draft`, { name, id });
   } catch (e) {
     toast(`Could not draft promotion: ${e.message}`, "err");
     return;
   }
-  promotionReviewModal(cid, name, draft);
+  promotionReviewModal(cid, name, draft, id);
 }
 
 // ---- Import (file upload) ----
