@@ -27,6 +27,20 @@ remains `Open Widget Catalog`.
 The launcher stays available on every Panel and has an active state while
 either catalog presentation is open.
 
+## Icon language
+
+Catalog and Widget chrome follow the accepted
+[Icon Source and Usage](11_ICON_SOURCE_AND_USAGE.md) contract. Identifying and
+action icons come from the local manifest-backed SVG Repo Minimal UI Icons
+artifact. The Catalog and placed Widget reuse the same semantic icon mapping;
+they do not paste anonymous paths or create separate thumbnail glyphs.
+
+Familiar, repeated, low-risk controls may be icon-only with explicit accessible
+names. Primary, ambiguous, destructive, expensive, security-sensitive, and
+first-use actions keep visible labels or icon-plus-label treatment. At narrow
+widths, visible text collapses only when context keeps the control recognizable
+and its accessible name remains intact.
+
 ## One catalog, two presentations
 
 The catalog has one result model, filter state, registry, and placement engine.
@@ -197,4 +211,3 @@ the user to the catalog with a plain explanation and recovery action.
 Opening the catalog loads manifest metadata and lightweight previews only.
 Full Widget code and live data subscriptions load when the Widget is placed or
 when an explicitly supported detailed preview needs them.
-

@@ -23,6 +23,19 @@ As width contracts:
 The Widgets launcher remains on the trailing side before status. It is not
 moved into a hidden Settings destination at small sizes.
 
+## Icons and control labels
+
+The [Icon Source and Usage](11_ICON_SOURCE_AND_USAGE.md) contract applies at
+every viewport. Real collection SVGs may replace visible text where the action
+is familiar, repeated, low risk, and unambiguous in context. Icon-only controls
+retain accessible names, focus-visible treatment, semantic pressed/expanded
+state, and focus-accessible explanation where needed.
+
+Primary, ambiguous, destructive, expensive, security-sensitive, and uncommon
+actions retain visible text or icon-plus-label treatment. Status uses icon plus
+text and never relies on shape, color, animation, or position alone. Touch
+targets remain at least 44 px regardless of visible SVG size.
+
 ## Catalog responsiveness
 
 ### Desktop and wide tablet
@@ -182,4 +195,3 @@ Performance qualification should measure:
 - start/cancel/confirm placement;
 - active-story refresh with several visible story Widgets;
 - compact mobile and 200% zoom behavior.
-

@@ -41,7 +41,8 @@ The complete primary package is:
 7. [Widget Inventory](07_WIDGET_INVENTORY.md)
 8. [Decision Register](08_DECISION_REGISTER.md)
 9. [Adoption and Change Control](09_ADOPTION_AND_CHANGE_CONTROL.md)
-10. this Widget Design Workbook.
+10. this Widget Design Workbook;
+11. [Icon Source and Usage](11_ICON_SOURCE_AND_USAGE.md).
 
 ### Presentation and interaction authority
 
@@ -209,6 +210,7 @@ undocumented one-off.
 | WDW-021 | One settings owner | A panel and each placed subwidget bind one scope-qualified draft, save service, task/poll owner, and fresh authoritative projection. |
 | WDW-022 | Dangerous commands stay contained | Host session is not a Widget because its only behavior is sign out; raw/destructive tools stay in their full owner treatment until stated safety prerequisites exist. |
 | WDW-023 | Extension manifest boundary | Only owner-bound definitions with explicit context, geometry, multiplicity, state, lifecycle, and trust metadata enter the Catalog; infrastructure and embedded renderers do not. |
+| WDW-024 | Real collection icons | Widget identity and control chrome use manifest-backed SVGs from the local Minimal UI Icons artifact; icons are favored where clear, labels remain where needed, and generated substitutes require an explicit exception. |
 
 ## Design progress
 
@@ -5830,3 +5832,95 @@ eligible-subwidget list, then requires an exact matching `Widget design` or
 The final repository checks also require valid relative links, no placeholder
 markers, no trailing whitespace, and a clean Markdown diff check for the files
 tracked before this workbook was created.
+
+## Mockup implementation record — 2026-08-26
+
+**Status:** All 94 current mockup definitions are implemented and browser-
+reviewed in the canonical Atmospheric Workbench artifact. This record
+supersedes the earlier `First draft, ready for mockup translation` labels for
+the mockup only; production/runtime integration remains a separate adoption
+phase governed by the maintained interface guide and change-control chapter.
+
+### Implemented surface
+
+- `91` built-in definitions: Story `12`, Library `19`, Systems `21`, and
+  Settings `39`;
+- `3` owner-registered synthetic extension definitions in the live Catalog;
+- `1` embedded extension renderer in Turn Inspector, deliberately outside the
+  Catalog;
+- `16` normalized state families exercised through every definition's declared
+  states: ready, loading, empty, unavailable, access denied, stale, dirty,
+  saving, conflict, review, running, partial, refused, success, offline, and
+  failure;
+- real placement, persistence, rendering, and removal traversal for every
+  documented Widget definition;
+- compact Catalog discovery, pointer and keyboard placement, tabs, shelves,
+  bounded floats, singleton treatment, Undo, reset, and persistence reload;
+- extension registration, teardown, retained host placeholder, rehydration,
+  third-fault retirement, and stored Inspector-evidence fallback;
+- mock-only state exploration with an ARIA live announcement and no persisted
+  demo state.
+
+The 94 ready renderers share the Design Bible anatomy where behavior is shared,
+but each has its own safe blueprint content, scope label, visible regions,
+authority boundary, and representative action set. Catalog previews use
+synthetic bounded data and contain no authored Story, Character, Persona, Lore,
+credential, or secret value.
+
+### Icon and self-contained-runtime evidence
+
+The mockup uses `18` actual SVG Repo Minimal UI records selected from the local
+collection and reused by semantic identity. Each record was matched by id,
+name, filename, `CC0` license, local file, source URL, and inline symbol id
+against all `1,796` manifest entries; the audit reported `0` errors. Product
+controls no longer use the retired Unicode placeholders for Catalog, Close,
+add/decrease, menu, drag, audio, or status functions. Ambiguous and destructive
+controls retain visible text where the icon alone would not communicate the
+consequence.
+
+| Evidence | SHA-256 |
+|---|---|
+| Minimal UI collection manifest | `66B2CBD9D4E5A9D40D959C49362D707225C16BEAA4A7163FC96F2484D6DA30CF` |
+| Normalized `ICON_DEFINITIONS` selection block | `47594AD0EC4E9401EFC4E0774D9895098C23629580D433EB950EAFDA2F4C72E1` |
+
+The canonical runtime has no remote font or icon dependency. Newsreader, Geist,
+and Geist Mono are local, licensed assets; the harness waits for all three
+faces and rejects cross-origin performance resources.
+
+| Local asset | Bytes | SHA-256 |
+|---|---:|---|
+| `Newsreader-Variable.ttf` | 451,664 | `8A08D13F8A6C0D51BE379A60AF84F945F65369A67E509EE3C3BDCC421254D7C1` |
+| `Geist-Variable.woff2` | 56,800 | `28258D0621216948416A859D32487AB6AD1C9EFFA0D08795698E70BE3C917630` |
+| `GeistMono-Variable.woff2` | 58,048 | `5BC6413E82BE410DC057FECCEE55160495B999D0FE212B7B6C6499B29B8B1E4A` |
+
+### Canonical artifact record
+
+| Artifact | Bytes | SHA-256 |
+|---|---:|---|
+| Editable source `sonder-workbench-calibration.html` | 532,970 | `464D6CBB5B24B92576AC8F688E07FEF124D9EDE4C59F600525FC6D2BE26B9CE4` |
+| Generated preview `sonder-workbench-calibration-preview.html` | 628,448 | `999C8D58ED65CC4C5C749040743BDC34A79AE440A4802A1B2F2852CCAEE80BD6` |
+| Regression harness `sonder-drag-regression.html` | 85,181 | `3EC9322132FC0C35CD727E958618925A7677DF421A105E143EAA6F15094FBA2C` |
+
+The preview was regenerated from the editable source with the installed
+Visualize renderer and was not hand-edited. The staged and canonical hashes
+matched byte-for-byte after publication.
+
+### Browser evidence and reviewed differences
+
+The fresh canonical run at
+`http://127.0.0.1:8765/sonder-drag-regression.html` reported **79/79 passed**
+with no failed result rows. Its matrix covers `1600×900`, `1180×800`,
+`1024×768`, `768×1024`, `430×932`, `390×844`, `844×390`, `1024×600`, and an
+`800×450` 200%-zoom equivalent. It also covers 44 px targets, keyboard-only
+placement, visible focus, reduced motion, solid surfaces, high contrast,
+coarse pointer behavior, live announcements, no color-only state, and no
+horizontal document overflow.
+
+Manual browser review covered the full desktop Catalog, the `390×844` phone
+Catalog, a placed Story and Frame Context module, an access-denied state, and
+the regenerated preview shell. The canonical workbench composition, region
+order, 4 px geometry, type hierarchy, compact density, modal staging, and
+responsive capacity remain intact. The recorded adaptations are confined to
+the new documented Widget contents and the safe mock-only state explorer;
+there is no restored left rail, default inspector, mobile bottom navigation,
+generic dashboard, or retired Widget Shelf control.

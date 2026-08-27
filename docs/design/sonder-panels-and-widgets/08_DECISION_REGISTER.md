@@ -20,6 +20,7 @@
 | PWC-014 | Contextual launch | Empty-slot Add, Replace, Add tab, and toolbar Add use the same catalog with visible compatibility filters. |
 | PWC-015 | Placement access | Drag is optional; Add, Choose placement, keyboard, touch, and Widget menus provide equivalent control. |
 | PWC-016 | Story resource model | Characters (Story) filters reusable Characters by active-story association; Library may show all reusable resources and their associations. |
+| PWC-017 | Icon source and usage | Real SVGs from the local SVG Repo Minimal UI Icons artifact are the primary icon language; favor icons where clear, retain labels where meaning or consequence requires them, and do not generate substitutes without an explicit exception. |
 
 ## Architectural consequences
 
@@ -32,6 +33,7 @@
 | PWC-C05 | Layouts outlive releases and extensions. | Panel and Widget configuration are versioned and recover with placeholders. |
 | PWC-C06 | Default Panels are editable. | Shipped origins and versioned reset definitions remain separate from user data. |
 | PWC-C07 | Settings groups and panels may both be Widgets. | Composite and direct projections share one runtime/save owner. |
+| PWC-C08 | Icon choices are reusable product semantics, not anonymous decoration. | One manifest-backed semantic mapping, centralized SVG sprite, accessible names, and provenance govern built-in icon use. |
 
 ## Design Bible decisions affected
 
@@ -89,7 +91,7 @@ foundation.
 - whether Visual or last-used mode wins on first launch after migration;
 - preview density and virtualization threshold;
 - keyboard shortcut, if any;
-- final icon and narrow-screen filter staging.
+- exact per-Widget icon mapping and narrow-screen filter staging within the accepted icon-source contract.
 
 ### Migration
 
@@ -104,4 +106,3 @@ A later implementation may choose a value only where this register identifies a
 calibration or open tranche. It may not silently restore fixed destinations,
 story-pinned Widgets, separate drawer/browser inventories, or inaccessible
 drag-only placement.
-
