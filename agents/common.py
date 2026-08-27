@@ -670,34 +670,131 @@ def adjudicated_player_action_text(elem, resolved=None):
     return observable_action_onset_text(elem)
 
 
+#: Characters of one speech line worth searching for provenance. A merged
+#: player line is a sentence or three; past this it is not a speech line and
+#: the coverage search is not owed to it.
+_SPEECH_ANCHOR_MAX_CHARS = 4000
+
+
+def _speech_anchor_atoms(value):
+    """The comparable characters of a text: case, spacing, punctuation gone.
+
+    The unit is the alphanumeric CHARACTER and not the word, because the
+    engine runs stories in scripts that do not space their words -- a
+    word-split provenance test answers nothing in Japanese. Both sides of
+    every comparison are reduced the same way, so the reduction can only
+    forgive punctuation the model re-styled, never invent a word.
+    """
+    return "".join(ch for ch in str(value or "").casefold() if ch.isalnum())
+
+
+def _input_quoted_spans(raw_input):
+    """The bodies of the input's quoted spans, in the order the player wrote
+    them. The quote vocabulary is the language pack's, so a story written in
+    corner brackets has spans too."""
+    segments = _ling("_QUOTED_SPAN_RE").split(str(raw_input or ""))
+    # split() alternates residue/span/residue...; odd indices are the spans.
+    bodies = (_quote_body(s) for i, s in enumerate(segments) if i % 2 == 1)
+    return [body for body in bodies if body.strip()]
+
+
+def _covered_by_spans(atoms, spans):
+    """Can this text be read off those spans, in order, in unbroken runs?
+
+    Each span contributes at most one run and the spans are consumed in the
+    order they were written, so a line that reorders the player's speech, that
+    breaks a span to skip words inside it and rejoin later, or that carries one
+    word from nowhere, is not covered.
+    """
+    if not atoms:
+        return True
+    if not spans or len(atoms) > _SPEECH_ANCHOR_MAX_CHARS:
+        return False
+    failed = set()
+
+    def walk(pos, first):
+        # Every step consumes a span, so recursion is bounded by the number of
+        # spans rather than by the length of the line.
+        if pos >= len(atoms):
+            return True
+        if (pos, first) in failed:
+            return False
+        for index in range(first, len(spans)):
+            span = spans[index]
+            start = span.find(atoms[pos])
+            while start != -1:
+                run = 0
+                while (pos + run < len(atoms) and start + run < len(span)
+                       and span[start + run] == atoms[pos + run]):
+                    run += 1
+                for take in range(run, 0, -1):
+                    if walk(pos + take, index + 1):
+                        return True
+                start = span.find(atoms[pos], start + 1)
+        failed.add((pos, first))
+        return False
+
+    return walk(0, 0)
+
+
+def player_speech_anchored(line, raw_input):
+    """Is every word of this player speech line the player's own?
+
+    Provenance is COVERAGE, not containment. A player who writes several
+    quoted spans separated by narration -- the ordinary way anyone writes a
+    turn -- gets one merged `speech` element back from interpret, and that
+    merge is a contiguous run of nothing. Measured (15-beat run, the beat whose
+    question no character ever answered): the merged line read False against
+    the raw input while every span of it read True, so the guard dropped the
+    whole line and nulled the speech, and the player's question reached no
+    mind. A neighbouring beat whose speech happened to be one unbroken quote
+    survived and was answered; that was the entire difference.
+
+    So a line is anchored when it is a contiguous run of the input (the old
+    floor, kept whole) or when its characters can be read off the input's
+    quoted spans in the order written. Narration BETWEEN the spans is not a
+    span and does not anchor anything, and text the model invented matches
+    nothing and is still refused.
+    """
+    atoms = _speech_anchor_atoms(line)
+    if not atoms:
+        return True
+    flat_line = re.sub(r"\s+", " ", str(line or "")).strip().casefold()
+    flat_source = re.sub(r"\s+", " ", str(raw_input or "")).strip().casefold()
+    if flat_line and flat_line in flat_source:
+        return True
+    return _covered_by_spans(
+        atoms,
+        [_speech_anchor_atoms(body) for body in _input_quoted_spans(raw_input)])
+
+
 def discard_unanchored_player_speech(out, raw_input):
-    """Drop exact player lines whose words were not copied from the input.
+    """Drop exact player lines whose words were not the player's own.
 
     A description such as ``I explain the warning signs`` does not authorize
     the interpreter to write a speech for the player. Downstream ownership
     checks trust the interpreter, so provenance has to be enforced here.
+    `player_speech_anchored` is the test, and it is span-aware: merging the
+    input's quoted spans into one line is legitimate authorship, inventing
+    words is not.
     """
     if not isinstance(out, dict):
         return []
 
-    def _flat(value):
-        return re.sub(r"\s+", " ", str(value or "")).strip().casefold()
-
-    source = _flat(raw_input)
     dropped, kept = [], []
     for event in out.get("sequence") or []:
         if not isinstance(event, dict) or event.get("type") != "speech":
             kept.append(event)
             continue
         line = str(event.get("text") or "").strip()
-        if line and _flat(line) not in source:
+        if line and not player_speech_anchored(line, raw_input):
             dropped.append(line)
             continue
         kept.append(event)
     out["sequence"] = kept
 
     flat = str(out.get("speech") or "").strip()
-    if flat and _flat(flat) not in source:
+    if flat and not player_speech_anchored(flat, raw_input):
         if flat not in dropped:
             dropped.append(flat)
         out["speech"] = None
