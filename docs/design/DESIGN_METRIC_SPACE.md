@@ -4,9 +4,22 @@ Status: ARGUMENT. Nothing here is built. Written 2026-08-26 from a design
 conversation while standing up a starship story, because the shape of the ask
 turned out to be mostly reuse and the reuse is not obvious.
 
-The ask: render complex scenes in open space — several vehicles at real
-distances, navigation, weapons fire that can miss and hit something else, ships
-with sections rather than points, and crew who read instruments.
+The ask arrived as starships — several vehicles at real distances, navigation,
+weapons fire that can miss and hit something else, ships with sections rather
+than points, crew who read instruments. **It is not a starship feature.** Every
+mechanism below is answered equally by a boulder rolling down a hill, and the
+boulder is the better test case precisely because there is no console in it:
+
+    a boulder comes loose             a change of motion, adjudicated once
+    gravity keeps acting on it        a STANDING force, nobody declares it
+    it rolls                          stored velocity, propagated (§ 10)
+    somebody sees it coming           ordinary perception, no instrument
+    somebody shouts                   speech, and that is the scene (§ 7)
+    it arrives in four seconds        time-to-contact, which is the drama
+
+A starship bridge is the same six lines with an instrument between the third and
+the fourth. If a decision here only makes sense with a console in it, it is
+wrong — that is the class-not-instance rule applied to physics.
 
 ---
 
@@ -475,6 +488,36 @@ independent.
      rather than asserted. It also happens to be the case this engine is best
      at, because the interesting part is not the physics -- it is five people
      on a bridge disagreeing about what to do with four minutes.
+
+  2a. **SOME FORCES ARE STANDING, and belong to the PLACE.** The boulder makes
+     this visible where the starship hides it. Gravity is not declared per beat
+     by anyone; it is a property of being on a slope, and it acts whether or not
+     the Director mentions it. So the model is not only "stored velocity
+     persists" — a place may carry forces that continuously modify motion within
+     it, and those are authored ONCE as part of what the place IS, not as an act.
+
+     Current, drift, wind, a decaying orbit, a slope. Each is the same shape: a
+     standing property of a region that changes velocity over time, and which no
+     character can order away — only work against, which is § 8c's upkeep again.
+
+  2b. **AN INSTRUMENT IS ONE DELIVERY PATH, NOT THE PATH.** § 8a is right about
+     a bridge and would be wrong as a general rule. On a hillside nobody reads a
+     console: they SEE the boulder and they HEAR it, through ordinary perception
+     with ordinary gates — sight lines, light, distance, noise. The geometry
+     produces the same facts either way; what differs is the channel that
+     carries them, and instrumentation is simply the channel available when the
+     thing is too far to see.
+
+     This matters for what gets built: the metric facts must be deliverable
+     through the EXISTING percept channels first, with the instrument kind as an
+     addition for range. Building instruments first would make a console the
+     price of entry for physical causality.
+
+  2c. **TIME-TO-CONTACT IS THE DRAMATIC UNIT, at both scales.** Four minutes on
+     a bridge, four seconds on a hillside — the same geometry output, and in
+     both cases it is what the scene is actually about. That makes it the first
+     thing the layer should compute and the first thing it should deliver, and
+     it ties this work to declared durations rather than leaving it independent.
 
 **STILL OPEN, and deferred deliberately:**
 
