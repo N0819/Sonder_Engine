@@ -291,3 +291,30 @@ class TestAcquaintanceIsAnEdge:
         edge = promotion_handoff("guard", mutual)["acquaintances"][0]
 
         assert edge["regard"] == 1.0, "hana's low opinion is hana's, not the guard's"
+
+    def test_a_tie_says_nothing_about_how_they_hold_back(self):
+        """The same claim for the discrete label, which is the newest thing
+        to cross this seam and exactly the kind of small addition that widens
+        a payload without anyone noticing. `tie` is derived from the guard's
+        OWN stance, OWN regard and OWN co-presence; hana holding the guard
+        `close` is hana's, and it must not appear on the guard's row in any
+        shape -- not as the label, not as a reciprocity flag, not as a
+        `since` reading off her row."""
+        mutual = _guard_charter()
+        mutual["served_beside"] = {"guard": {"hana": 100},
+                                   "hana": {"guard": 100}}
+        mutual["judgments"] = {"hana": {"guard": {
+            "trust": 1.0, "warmth": 1.0, "fear": 0.0, "respect": 1.0,
+            "suspicion": 0.0, "reasons": [], "seen": []}}}
+        mutual["ties"] = {"hana": {"guard": {
+            "tie": "close", "since_hours": 12.0, "because": []}}}
+        mutual = normalize_charter(mutual)
+
+        edge = promotion_handoff("guard", mutual)["acquaintances"][0]
+
+        assert mutual["ties"]["hana"]["guard"]["tie"] == "close", \
+            "the fixture has to actually hold the tie for this to prove anything"
+        assert edge["tie"] == "familiar", \
+            "the guard read a bond out of hana's head"
+        assert edge["tie_since_hours"] == 0.0
+        assert "mutual" not in edge and "held_by" not in edge

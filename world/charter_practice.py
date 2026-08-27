@@ -46,6 +46,36 @@ with somebody who blamed you: none of those names a genre, and a lorebook
 supplies what they are called and what is said. No noun in this module comes
 from any fixture.
 
+VOLITION READS HISTORY, and only its own side of it. `_state_of` is the one
+place that builds what an affordance may reason over, and until 2026-08-27 it
+was `{bodies, figures, minds, needs, regard, blame, at}` -- so a body deciding
+what to do could not see anything that had ever passed between it and the
+person in front of it. Comme il Faut scores every exchange against the social
+facts and that is the whole of its believability (McCoy et al., *Prom Week*,
+FDG 2011; `docs/guides/RESEARCH.md` §1.7.6). `_between` is that scoring
+surface here, and three invariants hold it:
+
+  * **Every field is the DECIDING BODY'S OWN.** `experiences[actor]` is the
+    actor's own diary, `served_beside[actor][other]` its own tally of its own
+    co-presence, `judgments[actor][other]` its own stance, and a commitment
+    is read only where the actor is a party to it. The other head's rows, the
+    other head's stance and the other head's needs are never consulted --
+    that is the 634-of-2,413 failure `_afford_ask` records, one tier out.
+    Symmetric data is not shared data: `served_beside[a][b]` equals
+    `served_beside[b][a]` because both are records of the same fact, held
+    separately, and reading how an occasion LANDED on the other body is
+    refused however symmetric the occasion was.
+  * **Cost is constant in charter age.** Depth comes from the O(1)
+    `served_beside` counter; the specific occasions come from ONE bounded
+    `PAIR_TAIL` pass per holder per window, memoised in the throwaway state
+    dict. A per-call scan of a body's whole life would be quadratic against
+    an `EXPERIENCE_CAP` of 4,000.
+  * **The memo assumes the four stores do not move under it.** True today:
+    `enact` writes `minds`, `needs` and `regard` only, and `charter_run`
+    writes experiences and tallies after `enact` returns. An affordance that
+    minted an experience row inside its own effect would silently invalidate
+    the cache, so it must not.
+
 Pure and deterministic: no clock beyond what it is handed, no model, no
 randomness beyond the caller's seed.
 """
@@ -54,6 +84,7 @@ from __future__ import annotations
 
 import zlib
 
+from .charter_commitment import OPEN_STATES
 from .charter_figure import figure_claim
 from .charter_mind import PERSONAL_FLOOR, hear, see
 from .charter_politics import regard_key, regard_value
@@ -73,6 +104,50 @@ IDLE_CLOSE_HOURS = 2.0
 #: How much of a claim's strength an ASKED answer carries. Higher than an
 #: unprompted telling: somebody who asked is listening.
 ASKED_RETENTION = 0.75
+
+#: How far the pair's shared history may move any single utility.
+#:
+#: Bounded against the two numbers already in the module. It is 7.5x the
+#: seeded tie-break jitter (`_roll(...) * 0.02` in `enact`), so a body with a
+#: reason decides by the reason rather than by a coin flip -- which is the
+#: whole point of the change. And it is BELOW the smallest dynamic range any
+#: affordance already computes from present state (`tell` and `tend` both
+#: swing 0.2; `ask` and `accuse` swing 0.3), so what is happening now still
+#: outranks what happened before. One constant caps every history term
+#: together, which is this repo's answer to the problem CiF solved with five
+#: thousand hand-authored considerations: no single factor dominates a
+#: decision.
+HISTORY_WEIGHT = 0.15
+
+#: How many of a holder's most recent experience rows the pair digest reads.
+#:
+#: The bound is what makes cost constant in charter age rather than merely
+#: small. Measured 2026-08-27 on `tests/charter_worlds.big_ship(crew=40)`
+#: over a simulated year: rows per body came out 11 at the quietest, 195 at
+#: the busiest, median 30. So 256 is a year and a third of the busiest body
+#: in the fixture and is essentially never reached, which is what a bound
+#: should be -- `EXPERIENCE_CAP` is 4,000 and a body that lived to it would
+#: otherwise be scanned in full, four practices deep, every window.
+PAIR_TAIL = 256
+
+#: Windows-plus-occasions with one person at which familiarity reads 1.0.
+#:
+#: Measured 2026-08-27 over a simulated year: the nonzero `served_beside`
+#: distribution has median 272 on `big_ship(crew=40)` and median 219 on the
+#: healthy six-body `SHIP` harness (`tests/test_charter_run.py`'s `KEPT`
+#: needs, everybody in `galley`, `active_places = []`). 250 sits between the
+#: two, so on either fixture about half the pairs who have stood a year
+#: together read above 0.5 -- a year of somebody being the person you were
+#: beside, not the ceiling of what a friendship can be.
+FAMILIAR_SATURATION = 250.0
+
+#: The judgment axes that say whether a body is easy to be near, signed so
+#: they sum toward liking. `charter_social.JUDGMENT_AXES`'s fifth, `respect`,
+#: is deliberately absent: it is orthogonal to fondness -- a body can respect
+#: one it fears and hold none for one it is fond of -- and folding it in here
+#: would make competence read as warmth.
+AFFECT_AXES = (("trust", 1.0), ("warmth", 1.0),
+               ("fear", -1.0), ("suspicion", -1.0))
 
 
 def _roll(*parts):
@@ -136,6 +211,122 @@ def _within_speech(actor, other, state):
     return bool(place) and place == _whereabouts(other, state)
 
 
+def _counterpart(row, holder):
+    """Which party of an experience row is the OTHER one, per row kind.
+
+    A row naming nobody -- a post stood, a private habit, a happening lived
+    through -- is not about anybody and returns "", which is most of a quiet
+    body's diary and the reason the pass is cheap even before `PAIR_TAIL`
+    bites.
+    """
+    kind = str(row.get("kind") or "")
+    if kind == "social":
+        # Written to both participants with a `role` saying which end the
+        # holder was (`charter_run._record_social_experiences`), so the
+        # counterpart is the field the holder is NOT.
+        if str(row.get("role") or "") == "actor":
+            return str(row.get("other") or "")
+        actor = str(row.get("actor") or "")
+        return actor if actor != holder else str(row.get("other") or "")
+    if kind in ("acquaintance", "encounter"):
+        return str(row.get("other") or "")
+    if kind == "shared_prestory":
+        return str(row.get("with") or "")
+    return ""
+
+
+def _pair_rows(state, holder):
+    """One bounded pass over a holder's own diary, keyed by counterpart.
+
+    Memoised in the throwaway `state` dict, so four practices deep and six
+    affordances wide a holder's rows are visited ONCE per window rather than
+    once per offer. The tail bound is what makes this constant in charter
+    age: `EXPERIENCE_CAP` is 4,000 and `PAIR_TAIL` is 256, so a body that has
+    lived a long time costs exactly what a body that has lived a short one
+    does. Same shape as `charter_news.decay_news`'s `keys` index.
+    """
+    held = state["pairs"].get(holder)
+    if held is not None:
+        return held
+    held = {}
+    rows = (state["experiences"].get(holder) or ())
+    for row in rows[-PAIR_TAIL:]:
+        if not isinstance(row, dict):
+            continue
+        other = _counterpart(row, holder)
+        if not other or other == holder:
+            continue
+        acc = held.get(other)
+        if acc is None:
+            acc = held[other] = [0, 0.0, 0, 0.0]
+        # occasions, valence sum, valence count, last hour.
+        acc[0] += 1
+        if "valence" in row:
+            acc[1] += float(row.get("valence") or 0.0)
+            acc[2] += 1
+        at = float(row.get("at_hours") or 0.0)
+        if at > acc[3]:
+            acc[3] = at
+    state["pairs"][holder] = held
+    return held
+
+
+def _clamp_unit(value):
+    return max(-1.0, min(1.0, float(value)))
+
+
+def _between(state, actor, other):
+    """What has passed between these two, as the ACTOR holds it.
+
+    ``{familiar, affect, debt, owed}`` -- the surface every affordance
+    weights on and the only one they may. Each field is read out of the
+    deciding body's own side of a store; the other body's rows, stance and
+    needs are never touched. See the module docstring for why symmetry does
+    not make the other side readable.
+    """
+    beside = float(((state["served_beside"].get(actor) or {})
+                    .get(other) or 0))
+    acc = _pair_rows(state, actor).get(other) or (0, 0.0, 0, 0.0)
+
+    # ONE UNIT, DELIBERATELY. A window stood beside somebody and a specific
+    # occasion with them are both "time with this person" at the resolution
+    # this layer works at, and keeping them apart would need a second
+    # constant nobody can set from evidence. The tally carries the volume
+    # (it is what a quiet institution deposits) and the rows carry the
+    # occasions (they are what a busy one does); a pair has whichever of the
+    # two its life actually produced.
+    familiar = min(1.0, (beside + acc[0]) / FAMILIAR_SATURATION)
+
+    # HOW THEY SIT WITH ME, from the two records of that the actor holds:
+    # the affect stamped on its own rows by `charter_feel` at the time, and
+    # its own five-axis stance. Both are already normalised readings, so
+    # they are summed and clamped rather than mixed at some authored ratio
+    # -- either alone can carry the axis, and where both exist they agree or
+    # they cancel.
+    #
+    # MEASURED THIN TODAY, and this is the honest reading of it:
+    # `charter_run._record_social_experiences` stamps no valence, and
+    # judgments measured EMPTY across a simulated year of `big_ship(crew=40)`
+    # and across four charters of a real story (RESEARCH.md §1.7.6). So the
+    # axis is fed by `encounter`/`acquaintance` rows only until design 2 --
+    # ordinary evidence, not only failure -- lands. Do not compensate by
+    # raising `HISTORY_WEIGHT`; that would make the constant mean something
+    # different once the evidence arrives.
+    affect = acc[1] / acc[2] if acc[2] else 0.0
+    stance = (state["judgments"].get(actor) or {}).get(other)
+    if stance:
+        affect += sum(sign * float(stance.get(axis) or 0.0)
+                      for axis, sign in AFFECT_AXES) / len(AFFECT_AXES)
+
+    # An unsettled matter between the two of them, in the actor's own
+    # direction. `debt` is what the actor owes; `owed` is anything open
+    # either way, because being at odds with somebody you have business with
+    # is its own reason to stop being at odds.
+    open_between = (state["between"].get(actor) or {}).get(other) or (0, 0)
+    return {"familiar": familiar, "affect": _clamp_unit(affect),
+            "debt": float(open_between[0]), "owed": float(open_between[1])}
+
+
 def _afford_greet(actor, other, practice, state):
     if (state["minds"].get(actor) or {}).get(other):
         return None
@@ -161,7 +352,16 @@ def _afford_greet(actor, other, practice, state):
 
     # Meeting somebody unknown outranks almost anything: it is the only
     # affordance that creates a relationship where there was none.
-    return 0.9, effect
+    #
+    # A RE-MEETING IS NOT A MEETING. This affordance opens whenever the
+    # actor's claim on the other is gone, and `charter_mind.decay_minds`
+    # takes claims away while `experiences` keeps rows forever -- so the
+    # second time two people are strangers, the actor still has its own
+    # record of the first time. Only affect moves the number: warmth makes
+    # somebody easier to walk back up to, and a body with genuinely no
+    # history reads exactly 0.9, which is the old constant untouched.
+    return 0.9 + HISTORY_WEIGHT * _between(state, actor, other)["affect"], \
+        effect
 
 
 def _afford_ask(actor, other, practice, state):
@@ -211,7 +411,18 @@ def _afford_ask(actor, other, practice, state):
             return f"{actor} asked {other} about {subject}"
         return ""
 
-    return 0.35 + (1.0 - weakest) * 0.3, effect
+    # WHO YOU ASK, not what you ask about: the subject is already the
+    # asker's own thinnest claim and the gap sets most of the number. History
+    # decides between two people who could both answer -- you take a question
+    # to somebody you have a life with, and slightly more readily to somebody
+    # you like. Only the POSITIVE half of affect counts: disliking somebody
+    # is a reason to ask them less, not a reason to be less curious, and
+    # regard already applies that penalty at uptake inside `hear` (the
+    # `regard_value` argument in the effect below). Counting it twice would
+    # make dislike weigh on both the wanting and the getting.
+    pair = _between(state, actor, other)
+    return 0.35 + (1.0 - weakest) * 0.3 + HISTORY_WEIGHT * (
+        0.6 * pair["familiar"] + 0.4 * max(0.0, pair["affect"])), effect
 
 
 def _afford_tell(actor, other, practice, state):
@@ -243,7 +454,14 @@ def _afford_tell(actor, other, practice, state):
             return f"{actor} told {other} about {subject}"
         return ""
 
-    return 0.25 + strength * 0.2, effect
+    # Telling is the affordance that saturates, so what history adds here is
+    # only WHO you would rather tell. Familiarity alone: you carry a thing to
+    # the person you have a life with. Affect is deliberately absent -- a
+    # grievance is at least as tellable to somebody you dislike as to
+    # somebody you like, and the uptake half already weighs the listener's
+    # regard inside `hear`.
+    return 0.25 + strength * 0.2 + HISTORY_WEIGHT * 0.5 * _between(
+        state, actor, other)["familiar"], effect
 
 
 def _afford_tend(actor, other, practice, state):
@@ -265,7 +483,15 @@ def _afford_tend(actor, other, practice, state):
         return f"{actor} tended {other} ({worst['key']})"
 
     # Somebody in front of you and under their floor outranks conversation.
-    return 0.8 + min(0.2, gap), effect
+    #
+    # ADDITIVE ONLY, AND NOT FAMILIARITY. A body does not walk past somebody
+    # on the floor because it dislikes them, so nothing here may subtract and
+    # affect is not read at all: who you help is not a popularity question.
+    # What history contributes is the one thing that genuinely changes the
+    # answer -- an open commitment the actor itself undertook toward this
+    # person. A debt is a reason to be the one who steps forward.
+    return 0.8 + min(0.2, gap) + HISTORY_WEIGHT * 0.5 * _between(
+        state, actor, other)["debt"], effect
 
 
 def _afford_accuse(actor, other, practice, state):
@@ -295,7 +521,25 @@ def _afford_accuse(actor, other, practice, state):
         state["spawned"].append(spawn)
         return f"{actor} accused {other}"
 
-    return 0.55 + min(0.3, 0.1 * int(state["blame"].get(other, 0))), effect
+    # SUBTRACTION ONLY, which is Prom Week's Simon: he refuses to carry
+    # Cassandra's gossip about Naomi because the friendship outweighs the
+    # influence, and the refusal is legible precisely because it names a
+    # specific remembered thing. A life with somebody is a reason to hold
+    # your tongue about them; it is never a reason to accuse somebody else
+    # harder, so this term cannot raise the number. Affect gates it: the
+    # reluctance comes from a life you VALUE -- two hundred windows beside
+    # somebody you have come to dislike buys them nothing.
+    #
+    # NAMED APART FROM `pair`, and this is not style. `pair` is the regard key
+    # the closure above writes through, and `effect` resolves it at CALL time
+    # from this scope -- so rebinding it to the digest made every accusation
+    # raise `TypeError: unhashable type: 'dict'`. Nothing caught it because
+    # `quarrel` had no opener until the same day: the affordance was dead code
+    # from the moment the history term was added to it.
+    history = _between(state, actor, other)
+    return 0.55 + min(0.3, 0.1 * int(state["blame"].get(other, 0))) \
+        - HISTORY_WEIGHT * history["familiar"] \
+        * max(0.0, history["affect"]), effect
 
 
 def _afford_reconcile(actor, other, practice, state):
@@ -313,7 +557,16 @@ def _afford_reconcile(actor, other, practice, state):
         state["closed"].append(practice["key"])
         return f"{actor} made peace with {other}"
 
-    return 0.4, effect
+    # The flat 0.4 said a quarrel with a stranger and a quarrel with the hand
+    # you have stood four hundred watches beside are worth ending equally,
+    # which is the exact claim this design exists to stop making. Two reasons
+    # to make peace, both the actor's own: a life together, and an unsettled
+    # matter between you that being at odds is in the way of.
+    # Named apart from the regard key `pair` for the reason `_afford_accuse`
+    # states above: the closure resolves that name when the act lands.
+    history = _between(state, actor, other)
+    return 0.4 + HISTORY_WEIGHT * (
+        0.7 * history["familiar"] + 0.3 * history["owed"]), effect
 
 
 #: Affordances by practice kind, each NAMED. The name is the shared
@@ -339,12 +592,65 @@ REFUSED_NO_SITUATION = "no_situation"
 REFUSED_OUTSIDE_LICENCE = "outside_licence"
 
 
-def _state_of(bodies, minds, needs, regard, blame, at_hours, figures=None):
+def _state_of(bodies, minds, needs, regard, blame, at_hours, figures=None,
+              *, experiences=None, served_beside=None, judgments=None,
+              commitments=None):
+    """Everything an affordance may reason over, built in ONE place.
+
+    The four history stores are keyword-only with `None` defaults so every
+    existing caller and every existing test keeps working unchanged, and so
+    that a caller which forgets them gets the old behaviour rather than a
+    wrong answer. Nothing here is persisted: the dict is created per call,
+    mutated by effects, and dropped.
+    """
     return {
         "bodies": bodies, "figures": figures or {}, "minds": minds,
         "needs": needs, "regard": regard, "blame": blame,
         "at": float(at_hours), "spawned": [], "closed": [], "heard_blame": {},
+        "experiences": experiences or {}, "judgments": judgments or {},
+        "served_beside": served_beside or {},
+        "between": _open_between(commitments), "pairs": {},
     }
+
+
+def _open_between(commitments):
+    """Open commitments, indexed by a reader LICENSED for them.
+
+    ``{reader: {counterparty: (owes_them, they_owe_me)}}``. Eager rather than
+    lazy because `COMMITMENT_CAP` is 64 and the whole index costs less than
+    one lazy miss would.
+
+    THE GATE IS THE LINE, and it is enforced here so no affordance can go
+    round it: `charter_commitment`'s own docstring says each record "names who
+    inside that Charter has actually received evidence of it". A record is
+    read only by a party to it or by somebody in `recognized_by` -- and only
+    the two PARTIES get a pair entry out of it, because knowing that two other
+    people have business is not having business with either of them. Parties
+    are licensed by identity, so the `recognized_by` half currently admits
+    nobody new; it is written out because the condition is the rule, and a
+    later record kind that names a pair the reader merely heard about must
+    not slip in behind it.
+    """
+    index = {}
+    for record in (commitments or {}).values():
+        if not isinstance(record, dict):
+            continue
+        if str(record.get("state") or "") not in OPEN_STATES:
+            continue
+        promisor = str(record.get("promisor") or "")
+        beneficiary = str(record.get("beneficiary") or "")
+        if not promisor or not beneficiary or promisor == beneficiary:
+            continue
+        licensed = {promisor, beneficiary} | {
+            str(x) for x in record.get("recognized_by") or ()}
+        for reader, counterparty, owes in ((promisor, beneficiary, True),
+                                           (beneficiary, promisor, False)):
+            if reader not in licensed:
+                continue
+            held = index.setdefault(reader, {})
+            debt, owed = held.get(counterparty, (0, 0))
+            held[counterparty] = (1 if owes else debt, 1)
+    return index
 
 
 def _by_body(practices):
@@ -399,7 +705,7 @@ COARSE_PRACTICES = frozenset({"tending", "greeting"})
 
 
 def opportunities(bodies, minds, needs, events, practices, at_hours, seed=0,
-                  figures=None, kinds=None):
+                  figures=None, kinds=None, *, blame=None):
     """Practices the world has just made available. Returns new instances.
 
     Situations are OPENED BY CIRCUMSTANCE, not by anybody deciding to have
@@ -412,6 +718,11 @@ def opportunities(bodies, minds, needs, events, practices, at_hours, seed=0,
 
     ``kinds`` restricts which of them may open. None is every kind, which is
     what a scene gets; `COARSE_PRACTICES` is what the rest of the world gets.
+
+    ``blame`` is the institution's own ledger, keyword-only and defaulting to
+    none so every existing caller keeps its behaviour. It opens `quarrel` and
+    nothing else; what any body then SAYS about it still goes through
+    `_afford_accuse`'s own gates.
     """
     opened = {}
     allowed = None if kinds is None else frozenset(str(k) for k in kinds)
@@ -460,11 +771,42 @@ def opportunities(bodies, minds, needs, events, practices, at_hours, seed=0,
                                    at_hours, about=subject)
                 if key not in practices:
                     opened[key] = entry
+        # A BLAME THAT HAS LANDED -- the third circumstance this function's own
+        # docstring has always claimed to open, and the one it never did.
+        # `quarrel` had exactly ONE opener in the package: `_afford_accuse`,
+        # which is an affordance OF quarrel. So no state the simulation can
+        # reach ever produced a quarrel, `accuse` and `reconcile` were
+        # unreachable, and `charter_social.DEFAULT_SIGNALS`' `accusation` and
+        # `apology` weights sat beside `aid_given`'s in the same
+        # three-quarters-of-a-feature state. Measured: zero `accuse` acts in a
+        # simulated quarter of `twin_towns(40)` on screen and off, in health
+        # and in famine, against 10 `post_unfilled` events that had already
+        # attributed blame to somebody.
+        #
+        # Opening it is not accusing: `_afford_accuse` still requires speech
+        # range, a live blame count and regard at or above 0.45, and each
+        # accusation costs 0.1 of that regard, so a pair is self-limiting at
+        # roughly two. Capped at the two most able bodies to hand, the same
+        # bound `tending` uses, because forty people do not all round on the
+        # same person at once and pairing a room is quadratic.
+        if blame and _permits("quarrel"):
+            for subject in sorted(present):
+                if int((blame or {}).get(subject, 0) or 0) <= 0:
+                    continue
+                for actor in able_here[:2]:
+                    if actor == subject:
+                        continue
+                    key, entry = _open("quarrel", place,
+                                       {"a": actor, "b": subject},
+                                       at_hours, about=subject)
+                    if key not in practices:
+                        opened[key] = entry
     return opened
 
 
 def offers(bodies, minds, needs, practices, regard, blame, at_hours,
-           figures=None, actor=None):
+           figures=None, actor=None, *, experiences=None, served_beside=None,
+           judgments=None, commitments=None):
     """The action instances: every act each participant could take right now.
 
     ``{actor: [{act, other, practice, utility}, ...]}``, utility-sorted.
@@ -472,9 +814,16 @@ def offers(bodies, minds, needs, practices, regard, blame, at_hours,
     in ``enact`` picks from, handed outward instead, for a scene manager to
     put in front of a model or a player. Reading it costs nothing and
     licenses nothing; conduct still lands only through ``enact``.
+
+    The four history stores are keyword-only and MUST be passed the same way
+    ``enact`` is passed them. This seam and the chooser have to score
+    identically -- an author handed numbers computed without history while
+    the engine chooses with it is a seam that lies about what the body wants.
     """
     state = _state_of(bodies, minds, needs, regard, blame, at_hours,
-                      figures=figures)
+                      figures=figures, experiences=experiences,
+                      served_beside=served_beside, judgments=judgments,
+                      commitments=commitments)
     held = _by_body(practices)
     out = {}
     for key in sorted(held) if actor is None else [str(actor)]:
@@ -501,7 +850,8 @@ def offers(bodies, minds, needs, practices, regard, blame, at_hours,
 
 
 def enact(bodies, minds, needs, practices, regard, blame, at_hours, seed=0,
-          figures=None, conduct=None):
+          figures=None, conduct=None, *, experiences=None, served_beside=None,
+          judgments=None, commitments=None):
     """One beat of everybody choosing -- or being written.
 
     Returns ``(acts, spawned, closed, heard_blame, refused)``. Each body's
@@ -523,9 +873,17 @@ def enact(bodies, minds, needs, practices, regard, blame, at_hours, seed=0,
     Each act is a record ``{actor, act, other, line}`` rather than a bare
     line, so an author can replay conduct and a ledger can say who did what
     to whom without parsing prose.
+
+    The four history stores are the pair's shared record, read only from the
+    deciding body's own side (see the module docstring). They are read and
+    never written: everything this function mutates is `minds`, `needs`,
+    `regard` and the practice set, which is what lets the digest be memoised
+    for the life of the call.
     """
     state = _state_of(bodies, minds, needs, regard, blame, at_hours,
-                      figures=figures)
+                      figures=figures, experiences=experiences,
+                      served_beside=served_beside, judgments=judgments,
+                      commitments=commitments)
     by_body = _by_body(practices)
     conduct = conduct or {}
 

@@ -29,6 +29,7 @@ plumbing.
 from __future__ import annotations
 
 from .charter_mind import PERSONAL_FLOOR
+from .charter_model import out_of_band
 from .charter_talk import co_present
 
 #: Event kinds that have a public surface -- something a body standing there
@@ -61,6 +62,30 @@ WITNESSABLE = {
     "report_refuted": "a report publicly refuted",
     "aid_given": "aid visibly given",
     "harm_done": "harm visibly done",
+    # A speech act between two co-present bodies is heard by the room. Same
+    # rule `story/carriers.py` holds one tier up, and the same one `aid_given`
+    # was admitted under. What makes it legitimate is that the payload carries
+    # only what a bystander perceives -- who spoke, whom they spoke to, where
+    # -- and NOTHING from the institution's blame register. A payload field
+    # naming the blame count, or a surface phrase built from one, would hand
+    # the character tier the register's own conclusion, because
+    # `charter_runtime._scheduled_row` puts a WITNESSABLE kind's surface onto
+    # the objective carrier rail.
+    "accusation": "an accusation made aloud",
+    "apology": "a public reconciliation",
+}
+
+#: Claims a body can settle by LOOKING, and what each one asserts about the
+#: place. A holder standing where the rumour named compares the assertion with
+#: `out_of_band` and comes to a view about whoever told it.
+#:
+#: Only the condition of a PLACE is checkable. A body's own state is not
+#: something a bystander reads off a room, and the institution's register is
+#: not in the room at all -- so `post_unfilled` and the commitment kinds are
+#: absent from this map for the same reason they are absent from WITNESSABLE.
+CHECKABLE = {
+    "upkeep_out_of_band": True,
+    "upkeep_restored": False,
 }
 
 #: What a fresh witnessing is worth. Full: you saw it.
@@ -182,12 +207,24 @@ def report_from_claim(claim, *, current_location=""):
 def _native_news_phrase(claim):
     about = str(claim.get("about") or "something")
     place = str(claim.get("place") or "somewhere")
+    toward = str(claim.get("toward") or "")
     phrases = {
         "upkeep_out_of_band": f"{about} fell below its operating floor at {place}",
         "upkeep_restored": f"{about} returned to working order at {place}",
         "body_unable": f"{about} became unable to continue at {place}",
         "body_recovered": f"{about} recovered enough to continue at {place}",
         "post_filled_again": f"{about} was staffed again at {place}",
+        # WHOM, not only who. A witness standing there saw which body the act
+        # was directed at; dropping the target left every retelling of an act
+        # between two people as "somebody did something at the dock".
+        "aid_given": f"{about} gave aid to {toward} at {place}"
+                     if toward else f"{about} gave aid at {place}",
+        "accusation": f"{about} accused {toward} at {place}"
+                      if toward else f"{about} made an accusation at {place}",
+        "apology": f"{about} made peace with {toward} at {place}"
+                   if toward else f"{about} made peace at {place}",
+        "report_confirmed": f"what {about} said about {place} was borne out",
+        "report_refuted": f"what {about} said about {place} was not so",
     }
     return phrases.get(str(claim.get("event_kind") or ""),
                        f"{about} changed at {place}")
@@ -218,6 +255,12 @@ def news_claim(event, at_hours, strength=WITNESS_STRENGTH, heard_from=None):
                      or event.get("order_id") or event.get("good") or ""),
         "actor": str(event.get("actor") or event.get("by")
                      or event.get("seller") or event.get("holder") or ""),
+        # WHOM IT WAS DIRECTED AT. This dict is FIXED -- every payload key
+        # not named here is silently dropped -- which is why the existing
+        # `aid_given` event set `subject` and no witness ever received it.
+        # Carrying it subtracts nothing: a body standing in the room saw who
+        # was helped, or accused, as plainly as it saw who acted.
+        "toward": str(event.get("subject") or ""),
         "place": str(event.get("place") or ""),
         "happened_at": float(event["at_hours"]),
         "strength": float(strength),
@@ -248,6 +291,100 @@ def witness(minds, bodies, events, at_hours):
             held[key] = news_claim(event, at_hours)
             seen += 1
     return minds, seen
+
+
+def check_reports(minds, bodies, upkeeps, at_hours, keys=None):
+    """A body standing where a rumour said something, checking the rumour.
+
+    Returns ``(minds, checks)``. This is the only ordinary-evidence source in
+    the package that is not an institutional failure, and it exists because
+    `report_confirmed`/`report_refuted` shipped with judgment weights
+    (`charter_social.DEFAULT_SIGNALS`), a WITNESSABLE entry, runtime phrasing
+    and NO PRODUCER ANYWHERE IN THE REPOSITORY -- three quarters of a feature,
+    exactly the shape `aid_given` was found in. Measured before this landed: a
+    healthy simulated YEAR of the 40-body `twin_towns` charter emitted 0
+    events and left 0 heads holding a judgment, while depositing 6,742
+    experience rows. The people were living and none of it was evidence.
+
+    THE HOLDER'S OWN, END TO END. Everything read here belongs to the head
+    drawing the conclusion: a claim it holds, whom that claim says it heard it
+    from, and the condition of the place its own feet are standing in -- the
+    same channel `charter_feel.advance_feel` appraises a window from. Nothing
+    is read out of the teller's head, and no event is minted, so the
+    conclusion exists only in the head that reached it. That its holder may
+    later TELL somebody, and that the listener then judges the teller at
+    `hearsay_weight`, is the uptake machinery already built, not a second
+    channel.
+
+    INFERENCE IS THE PRODUCT. What this builds is a body concluding that its
+    informant was wrong, from what it was told set against what it can see;
+    the answer to that is never to make the body conclude less.
+    """
+    checks = 0
+    if keys is not None and not keys:
+        return minds, checks
+    for holder, claims in (minds or {}).items():
+        if not isinstance(claims, dict):
+            continue
+        place = str(((bodies or {}).get(holder) or {}).get("place") or "")
+        if not place:
+            continue
+        # THE SAME INDEX `decay_news` TAKES, and for the same measured
+        # reason: a full scan of every claim in every head every window cost
+        # nine seconds of a seventeen-second month.
+        held = ([s for s in keys if s in claims] if keys is not None
+                else list(claims))
+        for subject in held:
+            claim = claims.get(subject)
+            if not isinstance(claim, dict) or claim.get("kind") != "news":
+                continue
+            teller = str(claim.get("heard_from") or "")
+            # A claim with no teller has nobody to be right or wrong about.
+            # Firsthand is not evidence about anyone; it is just what you saw.
+            if not teller or teller == str(holder):
+                continue
+            asserted = CHECKABLE.get(str(claim.get("event_kind") or ""))
+            if asserted is None:
+                continue
+            upkeep = (upkeeps or {}).get(str(claim.get("about") or ""))
+            if not isinstance(upkeep, dict):
+                continue
+            # CO-LOCATION IS THE WHOLE TEST, as it is for `witness`. A body
+            # elsewhere is not looking at the thing and settles nothing.
+            if str(upkeep.get("place") or "") != place:
+                continue
+            key = f"check:{subject}:{teller}"
+            # Idempotent on the same rumour from the same mouth, exactly as
+            # `witness` is on the same happening: standing there twice is one
+            # conclusion, not two.
+            if key in claims:
+                continue
+            try:
+                actual = bool(out_of_band(upkeep))
+            except (KeyError, TypeError, ValueError):
+                continue
+            claims[key] = {
+                "kind": "news",
+                "body": key,
+                "event_kind": ("report_confirmed" if actual is bool(asserted)
+                               else "report_refuted"),
+                # Both name the TELLER. What the holder now holds is a fact
+                # about the person who told it, not about the road.
+                "about": teller,
+                "actor": teller,
+                "toward": "",
+                "place": place,
+                "happened_at": float(at_hours),
+                # You looked at it yourself, so it is firsthand and full
+                # strength -- and it fades on the ordinary news curve like
+                # anything else in this store.
+                "strength": WITNESS_STRENGTH,
+                "as_of_hours": float(at_hours),
+                "heard_from": None,
+                "checked": subject,
+            }
+            checks += 1
+    return minds, checks
 
 
 def decay_news(minds, hours, keys=None):

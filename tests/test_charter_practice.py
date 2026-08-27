@@ -20,8 +20,9 @@ consumer was never called.
 from __future__ import annotations
 
 from world.charter import (
-    IDLE_CLOSE_HOURS, close_stale, enact, hear, known_news, offers,
-    opportunities, report_up, witness)
+    IDLE_CLOSE_HOURS, PAIR_TAIL, PRACTICE_CAP, close_stale, enact, hear,
+    known_news, offers, opportunities, report_up, witness)
+from world.charter_model import EXPERIENCE_CAP
 from world.charter_news import news_key
 from world.charter_practice import _open
 from world.charter_talk import RETOLD_RETENTION
@@ -200,3 +201,262 @@ class TestSituationsOpenAndFeed:
 
         assert {r["act"] for r in rows["a"]} >= {"ask", "tell"}
         assert minds == before
+
+
+class TestVolitionReadsHistory:
+    """`_state_of` built `{bodies, figures, minds, needs, regard, blame, at}`,
+    so a body deciding what to do could not see anything that had ever passed
+    between it and the person in front of it — the one-line gap
+    `docs/guides/RESEARCH.md` §1.7.6 names against Comme il Faut, whose whole
+    claim to believability is that an exchange is scored against the social
+    facts.
+
+    Measured on `tests/charter_worlds.big_ship(crew=40)`, 480 simulated hours
+    onscreen, seed 3, against the identical run with the four stores withheld:
+    86 distinct `(actor, act, other)` triples moved, and the mean
+    `served_beside` count of the body a question was taken to rose from 63.8
+    to 71.3. The population did not act more; it acted toward different
+    people, and toward the people it had a life with.
+    """
+
+    @staticmethod
+    def _quarrel(actor, other, at=24.0):
+        return _open("quarrel", "p1", {"a": actor, "b": other}, 0.0,
+                     about=other)
+
+    @staticmethod
+    def _encounters(holder, other, count, valence, at=1.0):
+        return [{"id": f"encounter:{holder}:{other}:{n}", "kind": "encounter",
+                 "role": "self", "at_hours": float(at), "place": "p1",
+                 "other": other, "valence": float(valence)}
+                for n in range(count)]
+
+    @staticmethod
+    def _utility(rows, act, other):
+        return next(r["utility"] for r in rows
+                    if r["act"] == act and r["other"] == other)
+
+    def test_a_body_is_slower_to_accuse_somebody_it_has_a_life_with(self):
+        """Prom Week's worked example is Simon refusing to carry Cassandra's
+        gossip about Naomi: the friendship outweighs the influence, and the
+        refusal is legible because it names a specific remembered thing. Here
+        the two targets are identical in blame, in regard and in need — the
+        only difference between them is two hundred windows stood beside one
+        of them, and the accusation must cost more against that one.
+        """
+        bodies = {"a": _body("a", "p1"), "mate": _body("mate", "p1"),
+                  "stranger": _body("stranger", "p1")}
+        minds = {"a": {"mate": _claim("mate", 1.0),
+                       "stranger": _claim("stranger", 1.0)}}
+        blame = {"mate": 2, "stranger": 2}
+        regard = {}
+        practices = dict((self._quarrel("a", "mate"),
+                          self._quarrel("a", "stranger")))
+        served = {"a": {"mate": 200}}
+        warm = self._encounters("a", "mate", 4, 0.6)
+
+        rows = offers(bodies, minds, {}, practices, regard, blame, 24.0,
+                      experiences={"a": warm}, served_beside=served)["a"]
+
+        assert self._utility(rows, "accuse", "mate") < \
+            self._utility(rows, "accuse", "stranger"), (
+                "a life together bought the mate nothing")
+
+        # AND THE RELUCTANCE IS BOUGHT BY AFFECT, NOT BY HOURS. Two hundred
+        # windows beside somebody you have come to dislike is not a reason to
+        # spare them, so the term must fall back to the bare constant rather
+        # than invert into an argument for accusing them harder — this
+        # affordance may only ever subtract.
+        cold = self._encounters("a", "mate", 4, -0.6)
+        rows = offers(bodies, minds, {}, practices, regard, blame, 24.0,
+                      experiences={"a": cold}, served_beside=served)["a"]
+
+        assert self._utility(rows, "accuse", "mate") == \
+            self._utility(rows, "accuse", "stranger")
+
+    def test_a_question_goes_to_the_person_you_have_a_life_with(self):
+        """The measured headline, in one pair. Two bodies who could both
+        answer, identical in every present-state term the affordance reads;
+        the asker takes it to the one it has stood beside."""
+        bodies = {"a": _body("a", "p1"), "mate": _body("mate", "p1"),
+                  "stranger": _body("stranger", "p1")}
+        minds = {"a": {"s1": _claim("s1", 0.2), "mate": _claim("mate", 1.0),
+                       "stranger": _claim("stranger", 1.0)}}
+        practices = dict((_open("converse", "p1", {"a": "a", "b": "mate"}, 0.0),
+                          _open("converse", "p1",
+                                {"a": "a", "b": "stranger"}, 0.0)))
+
+        rows = offers(bodies, minds, {}, practices, {}, {}, 4.0,
+                      served_beside={"a": {"mate": 250}})["a"]
+
+        assert self._utility(rows, "ask", "mate") > \
+            self._utility(rows, "ask", "stranger")
+
+    def test_a_stranger_is_greeted_at_exactly_the_old_constant(self):
+        """The subtraction guard. Where there is no history the new term
+        contributes NOTHING, so every constant in the affordance table still
+        means exactly what it meant before this existed. A body with no rows,
+        no tally and no stance greets at 0.9, to the digit."""
+        bodies = {"a": _body("a", "p1"), "b": _body("b", "p1")}
+        practices = dict([_open("greeting", "p1", {"a": "a", "b": "b"}, 0.0)])
+
+        rows = offers(bodies, {}, {}, practices, {}, {}, 0.0,
+                      experiences={}, served_beside={}, judgments={},
+                      commitments={})["a"]
+
+        assert self._utility(rows, "greet", "b") == 0.9
+
+    def test_a_re_meeting_is_not_a_meeting(self):
+        """`charter_mind.decay_minds` takes claims away and `experiences`
+        keeps rows forever, so the greeting affordance reopens on a pair who
+        have met before — and the actor still holds its own record of how the
+        first time went. That asymmetry between the two stores is the whole
+        reason this case exists."""
+        bodies = {"a": _body("a", "p1"), "b": _body("b", "p1")}
+        practices = dict([_open("greeting", "p1", {"a": "a", "b": "b"}, 0.0)])
+
+        def greeting(valence):
+            rows = offers(bodies, {}, {}, practices, {}, {}, 40.0,
+                          experiences={"a": self._encounters(
+                              "a", "b", 3, valence)})["a"]
+            return self._utility(rows, "greet", "b")
+
+        assert greeting(0.8) > 0.9, "a welcome re-meeting reads as a stranger"
+        assert greeting(-0.8) < 0.9, "a sour one too"
+
+    def test_a_body_never_reads_the_other_heads_record(self):
+        """The firewall test, one tier below
+        `tests/test_charter_promote.py::TestWhatMayNotCross`. Symmetric data
+        is not shared data: `served_beside[a][b]` equals `served_beside[b][a]`
+        because both are records of the same fact held separately, and that
+        makes reaching for the other side look harmless. It is not — how an
+        occasion LANDED on the other body, what the other body concluded, and
+        what the other body needs are its own, and reading them to decide your
+        own action is a leak however useful.
+
+        Two states differing ONLY in the other party's four stores, at
+        extremes, must produce byte-identical utility rows for the actor.
+        """
+        bodies = {"a": _body("a", "p1"), "b": _body("b", "p1")}
+        minds = {"a": {"s1": _claim("s1", 0.2), "b": _claim("b", 1.0)},
+                 "b": {"a": _claim("a", 1.0)}}
+        practices = dict((_open("converse", "p1", {"a": "a", "b": "b"}, 0.0),
+                          self._quarrel("a", "b")))
+        mine = {"a": self._encounters("a", "b", 2, 0.1)}
+
+        bare = offers(bodies, minds, {}, practices, {}, {"b": 1}, 24.0,
+                      experiences=dict(mine),
+                      served_beside={"a": {"b": 3}}, judgments={},
+                      commitments={})
+
+        loud = offers(
+            bodies, minds, {}, practices, {}, {"b": 1}, 24.0,
+            experiences=dict(mine, b=self._encounters("b", "a", 250, -1.0)),
+            served_beside={"a": {"b": 3}, "b": {"a": 999_999}},
+            judgments={"b": {"a": {"trust": -1.0, "warmth": -1.0,
+                                   "fear": 1.0, "respect": -1.0,
+                                   "suspicion": 1.0}}},
+            commitments={"c1": {"id": "c1", "state": "open", "promisor": "b",
+                                "beneficiary": "third",
+                                "recognized_by": ["b"]}})
+
+        assert bare["a"] == loud["a"]
+
+    def test_recognising_a_promise_is_not_being_party_to_one(self):
+        """`charter_commitment`'s docstring: each record "names who inside
+        that Charter has actually received evidence of it." Evidence licenses
+        a reader to KNOW a promise exists; it does not make the promise
+        theirs. An open commitment between two other bodies, which the actor
+        witnessed and is recorded as recognising, must move nothing about how
+        the actor feels toward either of them."""
+        bodies = {"a": _body("a", "p1"), "b": _body("b", "p1")}
+        practices = dict([self._quarrel("a", "b")])
+        theirs = {"c1": {"id": "c1", "state": "open", "promisor": "b",
+                         "beneficiary": "third", "recognized_by": ["a", "b"]}}
+
+        # Reconcile is only offered below full regard; NEUTRAL_REGARD is the
+        # ceiling, so a quarrel needs a body that has actually lost some.
+        cooled = {"a->b": 0.7}
+        without = offers(bodies, {}, {}, practices, cooled, {}, 24.0)["a"]
+        with_it = offers(bodies, {}, {}, practices, cooled, {}, 24.0,
+                         commitments=theirs)["a"]
+
+        assert self._utility(without, "reconcile", "b") == 0.4
+        assert with_it == without
+
+    def test_an_unsettled_matter_is_a_reason_to_make_peace(self):
+        """The other half of the gate: the same record, now naming the actor
+        as a party. Being at odds with somebody you have business with is its
+        own argument for ending the quarrel, and the actor is licensed for
+        this one by being in it."""
+        bodies = {"a": _body("a", "p1"), "b": _body("b", "p1")}
+        practices = dict([self._quarrel("a", "b")])
+        ours = {"c1": {"id": "c1", "state": "open", "promisor": "b",
+                       "beneficiary": "a", "recognized_by": ["a", "b"]}}
+
+        rows = offers(bodies, {}, {}, practices, {"a->b": 0.7}, {}, 24.0,
+                      commitments=ours)["a"]
+
+        assert self._utility(rows, "reconcile", "b") > 0.4
+
+    def test_a_debt_is_a_reason_to_be_the_one_who_steps_forward(self):
+        """`tend` may only ever ADD: a body does not walk past somebody on
+        the floor because it dislikes them, so affect is not read here at
+        all. What history contributes is the one thing that genuinely changes
+        who steps forward — an open commitment this body itself undertook."""
+        bodies = {"a": _body("a", "p1"), "b": _body("b", "p1", available=False)}
+        needs = {"b": {"rest": {"key": "rest", "level": 0.1, "floor": 0.4}}}
+        practices = dict([_open("tending", "p1", {"a": "a", "b": "b"}, 0.0,
+                                about="b")])
+        owed = {"c1": {"id": "c1", "state": "open", "promisor": "a",
+                       "beneficiary": "b", "recognized_by": ["a", "b"]}}
+
+        plain = offers(bodies, {}, needs, practices, {}, {}, 4.0)["a"]
+        indebted = offers(bodies, {}, needs, practices, {}, {}, 4.0,
+                          commitments=owed)["a"]
+
+        assert self._utility(indebted, "tend", "b") > \
+            self._utility(plain, "tend", "b")
+
+    def test_the_digest_is_one_pass_and_does_not_grow_with_a_long_life(self):
+        """The two things a later refactor will quietly drop: the memo and the
+        tail bound. `EXPERIENCE_CAP` is 4,000 and a body may hold four
+        practices at once, so an unmemoised per-offer scan of a long life
+        would visit rows in the tens of thousands. Bounded and memoised, a
+        holder's rows are visited exactly once per window and never more than
+        `PAIR_TAIL` of them — the same shape `charter_news.decay_news`'s
+        `keys` index uses.
+        """
+        from world import charter_practice as practice_module
+
+        partners = ["p%d" % n for n in range(PRACTICE_CAP)]
+        bodies = {"a": _body("a", "p1")}
+        bodies.update({k: _body(k, "p1") for k in partners})
+        minds = {"a": {"s1": _claim("s1", 0.2)}}
+        minds["a"].update({k: _claim(k, 1.0) for k in partners})
+        practices = dict(
+            _open("converse", "p1", {"a": "a", "b": partner}, 0.0)
+            for partner in partners)
+        rows = [{"id": "encounter:a:%s:%d" % (partners[n % len(partners)], n),
+                 "kind": "encounter", "role": "self", "at_hours": float(n),
+                 "place": "p1", "other": partners[n % len(partners)]}
+                for n in range(EXPERIENCE_CAP)]
+
+        visits = []
+        original = practice_module._counterpart
+
+        def counted(row, holder):
+            visits.append(holder)
+            return original(row, holder)
+
+        practice_module._counterpart = counted
+        try:
+            offers(bodies, minds, {}, practices, {}, {}, 4000.0,
+                   experiences={"a": rows})
+        finally:
+            practice_module._counterpart = original
+
+        assert len(visits) <= PAIR_TAIL, (
+            "%d row visits over a %d-row life: the tail bound or the memo is "
+            "gone" % (len(visits), EXPERIENCE_CAP))
+        assert visits, "the digest read nothing at all"

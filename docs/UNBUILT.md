@@ -3219,6 +3219,230 @@ Not designed here. The observation is the owner's; the measurement is that one
 direction is wired, the other is absent, and the door the other direction needs
 already documents this exact traffic as its own use case.
 
+### 1.97 Volition reads history; the rest of the social physics does not
+
+Landed 2026-08-27. `charter_practice._state_of` built
+`{bodies, figures, minds, needs, regard, blame, at}`, so a Charter body
+deciding what to do could not see anything that had ever passed between it
+and the person in front of it. It now carries four holder-owned stores —
+`experiences`, `served_beside`, `judgments`, `commitments` — and `_between`
+derives a per-pair digest (`familiar`, `affect`, `debt`, `owed`) that the six
+affordance builders weight utility on. Design 1 of
+[`docs/guides/RESEARCH.md`](guides/RESEARCH.md) §1.7.6. No new persisted
+state: the digest is derived per window and discarded. Measured on
+`big_ship(crew=40)`, 480 h onscreen, seed 3, against the identical run with
+the stores withheld — 86 `(actor, act, other)` triples moved and the mean
+`served_beside` count of the body a question was taken to rose 63.8 → 71.3.
+What that leaves open:
+
+- **Designs 4–5 of §1.7.6 are unbuilt.** *Status as temporary traits*;
+  *trigger rules*. Design 2 landed 2026-08-27 and has its own entry at
+  §1.98, including what it did NOT close: `harm_done` still has no producer
+  at all, and a HEALTHY institution's judgment network is still empty on
+  purpose. Design 3 landed the same day at §1.99.
+- **The `affect` axis is still thin in HEALTH, and half of that is now
+  answered.** `charter_run._record_social_experiences` stamps no
+  `valence`/`arousal` — only `_record_coarse_experiences`' `felt()` does — so
+  the row half of the axis is fed by `encounter`/`acquaintance` rows alone.
+  The `judgments` half arrived with design 2: measured on the famine arm of
+  `twin_towns(40)` over a simulated quarter, judgment holders went 6 → 40
+  and stances 29 → 149. On the HEALTHY arm both halves are still zero, and
+  §1.98 argues that is the design rather than a gap. **Do not compensate by
+  raising `HISTORY_WEIGHT`**; that would make the constant mean something
+  different once the evidence arrives.
+- **`STALE_HOURS` was designed, measured and not built.** The proposed sixth
+  term ("we have not spoken in a while" as a reason to tell) was dropped on
+  measurement, and the measurement is not the one that was predicted. The
+  prediction was that `stale` would saturate offscreen and carry no
+  information; measured over 9,024 digest reads on the 40-body fixture it
+  discriminates well onscreen (gap median 16 h, p90 96 h, only 14.9 %
+  saturated at a 72 h constant). It was dropped for two other reasons. First,
+  it attaches to `tell`, and `tell` fired **zero** times in 480 onscreen
+  hours on `big_ship(40)` and on `twin_towns(60)` alike — a constant that
+  moves nothing in either of the repo's own large fixtures cannot be set from
+  evidence. Second, it breaks the subtraction guard: a pair with no rows at
+  all has no last hour, so the term must read either 0.0 ("we just spoke",
+  false) or 1.0 (which makes a total stranger the most tellable body in the
+  room). Neither default is neutral, and a term with no neutral is not
+  additive. Revisit if and when `tell` is observed firing.
+- **`_afford_tend` reads `state["needs"][other]` and names the other's worst
+  need key in its own `line`.** Pre-existing and untouched by design 1, but
+  it is the nearest thing to a live leak in the module: being on the floor is
+  visible from across a room, and *which* need put you there is interior.
+  The affordance would still work off the visible fact alone.
+- **`_afford_accuse` reads `state["blame"][other]` — the institution's
+  private register — to decide whether to speak, and since design 2 so does
+  `opportunities`, to open the quarrel at all.** `heard_blame` is the
+  channel by which blame reaches the person blamed; there is no equivalent
+  channel by which an ordinary body learns whom the books hold responsible.
+  Pre-existing and load-bearing (removing the read disables the affordance),
+  registered because design 1 makes accusation more legible and therefore
+  more noticeable.
+- **The memo assumes the four stores do not move under a `state` dict.**
+  True today — `enact` writes `minds`, `needs` and `regard` only. An
+  affordance that minted an experience row inside its own effect would
+  silently serve a stale digest for the rest of the window. Stated as an
+  invariant in the module docstring; nothing enforces it.
+
+### 1.98 Ordinary evidence, and the healthy institution that is still empty
+
+Landed 2026-08-27. Design 2 of
+[`docs/guides/RESEARCH.md`](guides/RESEARCH.md) §1.7.6. The five-axis
+judgment network measured EMPTY across four charters of a real story and
+across a simulated YEAR of `tests/charter_worlds.twin_towns(40)` — 0 events
+and 0 judgment holders, while that same year deposited 6,742 experience rows.
+The people were living and none of it was evidence.
+
+What landed: `charter_news.check_reports` (a body standing where a
+second-hand rumour named settles it against the place and judges the teller —
+`report_confirmed`/`report_refuted`, which had weights, a `WITNESSABLE` entry
+and runtime phrasing and no producer anywhere); `accusation` and `apology`
+minted from the `accuse` and `reconcile` acts, plus the `quarrel` opener that
+made those acts reachable at all; `institution_order_executed` spelled the way
+the event is spelled; `toward` carried through `news_claim`; and diminishing
+returns on the judgment update. Measured on `twin_towns(40)`, window 4.0, seed
+7, before → after: healthy year off screen 0 → 0 events, 0 → 0 judgment
+holders; famine quarter off screen 6 → 40 holders and 29 → 149 stances, 130
+surviving `reasons` citations naming `report_confirmed`, and no axis above
+0.999994 against 63 of 145 axes sitting at exactly 1.000 before; famine quarter on screen 0 → 14 accusations and 27 checks. Coarse cost,
+best-of-3 interleaved on the healthy year: 1.953 → 1.979 ms/simulated hour.
+
+What that leaves open:
+
+- **A HEALTHY institution's judgment network is still empty, and this entry
+  claims that is the design.** None of the three producers fires in a
+  well-run institution: there are no rumours to check because there are no
+  events to be second-hand about, and nobody is blamed because nothing
+  failed. If the intent behind design 2 was a non-empty healthy network then
+  this does not deliver it, and the two honest routes remain what they were:
+  a new signal kind for ordinary exchange — the strongest candidate is
+  `post_filled_again`, already witnessable and carrying no `body` field, so
+  "somebody turned up" cannot be evidence about the person who turned up —
+  or moving familiarity into judgments, which
+  `persist/commit_background.py:2271-2288` argues against because
+  `served_beside` already has its own store and its own promotion path.
+- **`harm_done` still has no producer at all.** Declared witnessable, given
+  the heaviest negative weights in `DEFAULT_SIGNALS` (trust −0.13, fear
+  +0.10, suspicion +0.08), phrased in two places, and emitted by nothing.
+  There is no act in `charter_practice._AFFORDANCES` that harms anybody, so
+  unlike `accusation` this is not a wiring gap: the practice does not exist.
+- **`reconcile` fired ZERO times, so `apology` has a producer that has never
+  been observed producing.** Measured over a simulated quarter of
+  `twin_towns(40)` on screen in famine: 7,769 `ask`, 527 `greet`, 14
+  `accuse`, 1 `tell`, 0 `reconcile`, 0 `tend`. `_afford_reconcile` returns
+  0.4 and `_afford_ask` returns 0.35 + 0.3·(1 − what the listener already
+  holds), so an actor with any converse practice open outbids making peace,
+  and the quarrel then dies of `IDLE_CLOSE_HOURS` instead. The producer is
+  right; whether a quarrel can ever END in this population is not proven.
+  Pinned by unit test, not by observation.
+- **A refuted teller may have been telling the truth when they told it.**
+  A claim that was true when spoken and stale by the time somebody stood at
+  the place is refuted exactly like a lie, which is systematic injustice and
+  erodes trust for everybody. Not observed as a problem — the famine arm
+  measured 130 `report_confirmed` citations and no refutations reaching a
+  stance — but nothing bounds it. If a confirm:refute ratio below 1.0 is ever
+  measured in a healthy-then-broken arm, the fix is a freshness bound on the
+  claim's `as_of_hours`, and the comment should say that beyond it a stale
+  claim is the world changing rather than the teller lying.
+- **A check-claim is a news claim, so `charter_talk.tellable` may select it
+  and it will spread.** A listener then forms a judgment about the teller at
+  `hearsay_weight` — which is `normalize_social_norms`' `hearsay_weight`
+  finally carrying something, and legitimate speech. It is also a behaviour
+  nobody has watched yet, and the spread should be measured before it is
+  called a feature.
+- **`news_key` stamps the hour and derives its subject from a fixed field
+  chain, so two acts by the same actor in the same window collide into one
+  claim.** `enact` gives each body exactly one act per beat, so this cannot
+  happen today and will start happening the day that changes. The same
+  exposure sits at `charter_runtime._scheduled_row`, which uses
+  `INSERT OR IGNORE` on `(kind, subject, at_hours)`.
+
+### 1.99 The discrete tie, and the health that only ever earns one label
+
+Landed 2026-08-27. Design 3 of
+[`docs/guides/RESEARCH.md`](guides/RESEARCH.md) §1.7.6. Charter had a
+directional five-axis judgment network and no word for what it said, so
+nothing downstream — a narrator, a scene ledger, a promoted character's
+relationship graph — could state a relationship plainly. `world/charter_social`
+now derives six labels (`close`, `at_odds`, `wary`, `afraid_of`,
+`looks_up_to`, `familiar`) from state that already existed: the holder's own
+stance, its own directed regard, and its own `served_beside` count. Stored
+sparsely as the charter's `ties`, formed off dirty sets `charter_run.step` and
+`charter_observe.apply_public_evidence` already compute, surfaced inside
+`scene_ledger`'s existing `knows_here` block and on `promotion_handoff`'s
+existing `acquaintances` rows — no new key on either payload, so the presence
+allowlist at `tests/test_charter_runtime.py` did not widen.
+
+Measured on `tests/charter_worlds.twin_towns(40)`. Window 8 h, seed 5,
+healthy: `familiar` labels 0.0 % of 1560 directed pairs after a simulated
+week, 14.7 % after a month, 26.4 % after a year against a 27.9 % ceiling of
+pairs that ever shared a place — which is what set `FAMILIAR_FLOOR = 24`
+shared windows. Window 4 h, seed 7, driven into famine: 40 judgment holders,
+149 stances, 16 `close` and 11 `looks_up_to` labels across the quarter, 11 of
+them requited. Coarse cost with the tie pass swapped for a no-op: healthy
+simulated year 17.59 s → 17.69 s, famine quarter 15.31 s → 15.52 s.
+
+What that leaves open:
+
+- **A HEALTHY institution produces `familiar` AND NOTHING ELSE, measured, and
+  this entry claims that is §1.98's gap re-measured rather than a defect in
+  this layer.** A simulated year of `twin_towns(40)` at window 8 h holds 4
+  judgment holders, 7 stances and ZERO signed labels; the signed half only
+  fires once something goes wrong, because that is the only circumstance in
+  which the evidence layer under it fills. Pinned by
+  `test_a_healthy_year_of_this_engine_forms_no_signed_tie`, which is written
+  to FAIL the day §1.98's first bullet is closed. **Do not close it by
+  lowering `TIE_FORM` until `familiar` pairs start reading as friends** —
+  that is precisely the tie-that-contradicts-the-numbers failure the
+  validator exists to prevent. The threshold is re-set from the new
+  distribution or it is not re-set.
+- **`TIE_FORM = 0.30` is derived from `DEFAULT_SIGNALS`' per-event magnitudes
+  (0.02–0.18) and not from an observed distribution.** It says "about five
+  ordinary acts in one direction, or two grave ones", which is defensible and
+  is still a prediction. The famine arm now gives it something to bite on;
+  nothing has measured what an ORDINARY year's distribution looks like,
+  because there is not one yet.
+- **The incremental updater's completeness rests on three properties nothing
+  enforces.** `served_beside` only rises, judgments never decay, and
+  `TIE_WEIGHTS["regard"] = 0.15` is below every form threshold. The third is
+  guarded by `test_regard_alone_cannot_form_a_tie`; the first two are stated
+  at the `update_ties` call site and in its docstring and are otherwise
+  properties of today's code. A judgment-decay feature landing later makes
+  unvisited pairs genuinely stale, and this walk then has to become a full
+  sweep or gain a decay-driven dirty set of its own.
+- **A body wrongly blamed can lose a tie it should keep.** `attribute_blame`
+  costs 0.15 of everyone else's regard per incident, the validator deletes a
+  contradicted label instantly and with no dwell, and blame is an
+  INSTITUTIONAL conclusion that may be exactly wrong (`charter_politics.py`
+  says so in its own docstring). The bound is regard's 0.15 weight: it can
+  push a bond by that much and no more, and it can never form one. If that
+  weight is ever raised this becomes a real defect rather than a bounded one.
+- **The lorebook owns what a tie is CALLED in this world, and nothing wires
+  that up.** `knows_here` now carries a short English word into a model
+  payload for every presence in a scene, and `scene_ledger`'s own docstring
+  is the warning: a payload large enough to restate gets restated. One capped
+  token per already-capped entry is small, but `close` is a word a model will
+  say aloud verbatim, and no prompt-side vocabulary hook exists.
+- **The label does not cross promotion into the character tier.** It rides
+  `promotion_handoff`'s `acquaintances` rows as `tie`/`tie_since_hours` and
+  `persist/commit_background.py`'s acquaintance-edge writer drops it on the
+  floor, because `mind/memory_relationships.Relationship` has no `tie` field.
+  Adding one is the full `docs/guides/DATABASE.md` new-persistent-field
+  checklist — the graph is a persisted world-key blob crossing archive,
+  checkpoint and branch paths — and was deliberately left out of the charter
+  change.
+- **`test_ties_do_not_grow_with_time` was planned as a decade against a year
+  and is not built in that shape.** On today's engine a healthy decade and a
+  healthy year both hold ZERO signed rows, so the comparison proves nothing,
+  and the run costs 90–110 s. The bound is asserted directly instead — rows
+  are capped per holder at `TIE_CAP` and a window in which nothing moved
+  rewrites nothing (`test_ties_are_capped_per_holder_however_long_the_run`,
+  `test_a_quiet_window_writes_no_tie_row`). What is NOT asserted is the
+  behaviour under a long CATASTROPHE: a famine arm's rows go 9 → 16 → 27 as
+  480 h becomes 1920 h, which tracks the events (292 → 1763) rather than the
+  clock, and is bounded by bodies × `TIE_CAP`, but nobody has run it to the
+  cap.
+
 ### 1.85 A memory's age off a per-beat estimate, not a per-beat record
 
 **Found:** 2026-08-26, landing `memories.encoded_at_seconds`.

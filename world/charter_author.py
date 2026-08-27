@@ -126,7 +126,11 @@ def authored(charter, actor, act, other, claim=None, retention=None):
                    (charter.get("heard_blame") or {}).items()}
 
     state = _state_of(bodies, minds, needs, regard, blame, at,
-                      figures=figures)
+                      figures=figures,
+                      experiences=charter.get("experiences"),
+                      served_beside=charter.get("served_beside"),
+                      judgments=charter.get("judgments"),
+                      commitments=charter.get("commitments"))
 
     if actor in bodies:
         record = _body_act(actor, act, other, bodies, state, practices,
@@ -253,9 +257,17 @@ def action_instances(charter, actor=None):
     """
     charter = normalize_charter(charter)
     politics = normalize_politics(charter.get("politics"))
+    # The same four history stores the chooser reads, and passed for the same
+    # reason: `charter_runtime` puts these utility numbers in front of a
+    # scene-manager model (`agents/background.py`), and numbers computed
+    # without history beside a chooser that decides with it would be a seam
+    # lying about what the body wants.
     return offers(
         charter["bodies"], charter["minds"], charter["needs"],
         normalize_practices(charter.get("practices")),
         regard_map(politics), dict(politics.get("blame") or {}),
         float(charter["clock_hours"]), figures=charter["figures"],
-        actor=actor)
+        actor=actor, experiences=charter.get("experiences"),
+        served_beside=charter.get("served_beside"),
+        judgments=charter.get("judgments"),
+        commitments=charter.get("commitments"))

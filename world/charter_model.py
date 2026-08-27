@@ -289,8 +289,19 @@ def normalize_charter(stored, reservation=None):
     from .charter_commitment import normalize_commitments
     from .charter_decide import normalize_decisions
     from .charter_economy import normalize_economy
-    from .charter_social import normalize_judgments, normalize_social_norms
+    from .charter_social import (normalize_judgments, normalize_social_norms,
+                                 normalize_ties)
     from .charter_intervene import normalize_interventions
+
+    # HOISTED OUT OF THE LITERAL because `ties` is validated against them.
+    # No behaviour change to either -- the literal below references these
+    # locals -- but a validator cannot read a sibling entry of the dict it is
+    # being built inside, and the alternative is normalizing judgments twice.
+    judgments = normalize_judgments(stored.get("judgments"))
+    served_beside = {
+        str(key): {str(other): int(n) for other, n in held.items()}
+        for key, held in (stored.get("served_beside") or {}).items()
+        if isinstance(held, dict)}
 
     return {
         "key": str(stored.get("key") or "charter"),
@@ -340,7 +351,18 @@ def normalize_charter(stored, reservation=None):
         # Local, evidence-citing stances.  These do not replace `politics`:
         # regard remains the narrow credibility weight used by telling.
         "social_norms": normalize_social_norms(stored.get("social_norms")),
-        "judgments": normalize_judgments(stored.get("judgments")),
+        "judgments": judgments,
+        # The discrete tie beside the numeric axes (`RESEARCH.md` §1.7.6 item
+        # 3). NORMALIZATION IS A VALIDATOR HERE, not a coercion: a label the
+        # numbers no longer support is DELETED, which is what makes a tie that
+        # contradicts the axes unrepresentable on every path into this state --
+        # archive import, checkpoint restore of an older charter shape, a
+        # hand-edited registry, and any future writer that moves a judgment
+        # without calling `update_ties`. Sparse and derived, so a charter saved
+        # before this existed loads with `{}` and rebuilds on its next window.
+        "ties": normalize_ties(
+            stored.get("ties"), bodies=bodies, judgments=judgments,
+            politics=stored.get("politics"), served_beside=served_beside),
         # Locally recognised social commitments, distinct from both the
         # beat-level pending-obligations ledger and place owed-history.
         "commitments": normalize_commitments(stored.get("commitments")),
@@ -459,10 +481,7 @@ def normalize_charter(stored, reservation=None):
         # Who each body stood its watches BESIDE, counted the same way. The
         # companion to `stood`: that one says what a body did with its life,
         # this one says who it did it with, and neither grows with time.
-        "served_beside": {
-            str(key): {str(other): int(n) for other, n in held.items()}
-            for key, held in (stored.get("served_beside") or {}).items()
-            if isinstance(held, dict)},
+        "served_beside": served_beside,
         "travelled": {str(k): int(v)
                       for k, v in (stored.get("travelled") or {}).items()},
     }
