@@ -168,6 +168,14 @@ def remembered(charter, body_key, events=(), cap=REMEMBERED_CAP):
                        else f"heard tell of {body_name(other)}")
             entities = [other] if other else []
             salience = 0.55
+        elif experience_kind == "encounter":
+            other = str(experience.get("other") or "")
+            during = str(experience.get("during") or "")
+            content = f"passed a watch with {body_name(other)}"
+            if during:
+                content += f" on {during.replace('_', ' ')}"
+            entities = [other] if other else []
+            salience = 0.58
         elif experience_kind == "stood_through":
             about = str(experience.get("about") or "something")
             content = f"was there when {about.replace('_', ' ')} gave way"

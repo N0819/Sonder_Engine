@@ -383,8 +383,23 @@ def _offer_for(actor, act, other, participations, state):
                         else REFUSED_NO_SITUATION)
 
 
+#: The situations worth opening where nobody is watching. A quiet institution
+#: is not an absence of story -- "all systems nominal" is a REPORT, and the
+#: story was never in the systems. But `converse` is the kind that saturates:
+#: every acquainted pair in a room, every window, forever, which is what took
+#: a simulated month from 3.6s to 32.7s and got beat-scale social detail
+#: switched off offscreen wholesale. These two do not saturate. `tending`
+#: opens only when somebody is actually under their floor, which is rare and
+#: consequential; `greeting` opens only between people who do not yet know
+#: each other, which is bounded by the pairs an institution contains. So the
+#: resolution dial is per-KIND as well as per-place: offscreen you do not get
+#: gossip, and you do get the handful of things that change who people are to
+#: one another.
+COARSE_PRACTICES = frozenset({"tending", "greeting"})
+
+
 def opportunities(bodies, minds, needs, events, practices, at_hours, seed=0,
-                  figures=None):
+                  figures=None, kinds=None):
     """Practices the world has just made available. Returns new instances.
 
     Situations are OPENED BY CIRCUMSTANCE, not by anybody deciding to have
@@ -394,8 +409,16 @@ def opportunities(bodies, minds, needs, events, practices, at_hours, seed=0,
     exists for. Only bodies ever act; a figure's half of any situation is
     authored, which is the author-switch working rather than an exception
     to it.
+
+    ``kinds`` restricts which of them may open. None is every kind, which is
+    what a scene gets; `COARSE_PRACTICES` is what the rest of the world gets.
     """
     opened = {}
+    allowed = None if kinds is None else frozenset(str(k) for k in kinds)
+
+    def _permits(kind):
+        return allowed is None or kind in allowed
+
     rooms = co_present(bodies)
     figures = figures or {}
     for place, present in sorted(rooms.items()):
@@ -404,6 +427,8 @@ def opportunities(bodies, minds, needs, events, practices, at_hours, seed=0,
             for other in able_here[index + 1:index + 3]:
                 known = (minds.get(actor) or {}).get(other)
                 kind = "converse" if known else "greeting"
+                if not _permits(kind):
+                    continue
                 key, entry = _open(kind, place, {"a": actor, "b": other},
                                    at_hours)
                 if key not in practices:
@@ -417,6 +442,8 @@ def opportunities(bodies, minds, needs, events, practices, at_hours, seed=0,
             for actor in able_here[:2]:
                 known = (minds.get(actor) or {}).get(fig_key)
                 kind = "converse" if known else "greeting"
+                if not _permits(kind):
+                    continue
                 key, entry = _open(kind, place, {"a": actor, "b": fig_key},
                                    at_hours)
                 if key not in practices:
@@ -425,6 +452,8 @@ def opportunities(bodies, minds, needs, events, practices, at_hours, seed=0,
         for subject in present:
             held = (needs or {}).get(subject) or {}
             if not held or bodies[subject].get("available"):
+                continue
+            if not _permits("tending"):
                 continue
             for carer in able_here[:2]:
                 key, entry = _open("tending", place, {"a": carer, "b": subject},

@@ -316,3 +316,92 @@ class TestTheQuietYearsAreRememberedToo:
 
         assert state["experiences"].get("vega"), "the featured body again"
         assert state["served_beside"].get("vega")
+
+
+class TestTheSocialWorldTurnsOffscreen:
+    """Every social source in this module used to be gated on something going
+    wrong: `tending` opens only when a body is under its floor, `greeting`
+    only between people who have not met, `converse` was switched off
+    offscreen for cost. Measured on the 40-body site_17 charter, a healthy
+    simulated YEAR emitted zero events of any kind -- so the only thing an
+    institution could ever be found to have done was fail, and a year of it
+    promoted a character with 17.6 memories against a month's 16.7.
+    """
+
+    @staticmethod
+    def _fresh(hours, bodies=6):
+        charter = _ready(SHIP)
+        for body in charter["bodies"].values():
+            body["place"] = "galley"
+            body["berth"] = "galley"
+        charter["needs"] = seed_needs(
+            charter["bodies"],
+            TestTheQuietYearsAreRememberedToo.KEPT)
+        charter["active_places"] = []
+        return run(charter, hours=hours, window=8.0, seed=5)[0]
+
+    def test_a_shared_watch_is_more_than_a_tally(self):
+        """A counter says a pair stood three hundred watches together and says
+        nothing about any of them. It is the right way to carry the volume and
+        the wrong way to carry a life."""
+        state = self._fresh(2400.0)
+
+        rows = [row for held in state["experiences"].values() for row in held
+                if row["kind"] == "encounter"]
+        assert rows, "a year together and not one occasion out of it"
+        assert all(row.get("other") for row in rows)
+        # Both parties were there, so both keep it.
+        one = rows[0]
+        theirs = state["experiences"][one["other"]]
+        assert any(row["kind"] == "encounter" and row["at_hours"] ==
+                   one["at_hours"] for row in theirs)
+
+    def test_occasions_stay_rarer_than_the_watches_that_hold_them(self):
+        """Always in motion, and still sub-linear: the tally carries the
+        volume so the rows do not have to."""
+        state = self._fresh(2400.0)
+
+        occasions = sum(1 for held in state["experiences"].values()
+                        for row in held if row["kind"] == "encounter")
+        shared = sum(sum(v.values()) for v in state["served_beside"].values())
+        assert occasions < shared / 4, "every watch cannot be an occasion"
+
+    def test_the_draw_replays(self):
+        """Seeded, because a checkpoint restore and a branch have to land on
+        the same encounters or the past changes under the player."""
+        a = self._fresh(720.0)["experiences"]
+        b = self._fresh(720.0)["experiences"]
+
+        def occasions(store):
+            return sorted(row["id"] for held in store.values() for row in held
+                          if row["kind"] == "encounter")
+
+        assert occasions(a) == occasions(b)
+        assert occasions(a), "nothing drawn is not a replay"
+
+    def test_the_dial_is_per_kind_and_not_only_per_place(self):
+        """`COARSE_PRACTICES` is the half that was missing: offscreen you do
+        not get gossip, and you do get the handful of situations that change
+        who people are to one another. `converse` is the kind that saturates
+        -- every acquainted pair in a room, every window, forever -- and it is
+        the one that stays on screen.
+        """
+        from world.charter_practice import COARSE_PRACTICES, opportunities
+
+        bodies = {
+            "a": {"place": "hold", "available": True},
+            "b": {"place": "hold", "available": True},
+            "c": {"place": "hold", "available": True},
+        }
+        # `a` and `b` have met; `c` is a stranger to both.
+        minds = {"a": {"b": {"strength": 0.9}}, "b": {"a": {"strength": 0.9}}}
+
+        everything = opportunities(bodies, minds, {}, (), {}, 8.0)
+        coarse = opportunities(bodies, minds, {}, (), {}, 8.0,
+                               kinds=COARSE_PRACTICES)
+
+        kinds = lambda opened: {row["kind"] for row in opened.values()}
+        assert "converse" in kinds(everything), "a scene still gets gossip"
+        assert "greeting" in kinds(coarse), "strangers still meet offscreen"
+        assert "converse" not in kinds(coarse), (
+            "the kind that saturates is the kind that stays on screen")
