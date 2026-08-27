@@ -407,6 +407,79 @@ no `reports_to`, which means no chain, which means no authority, which means
 every order is a request and every crew member is a peer. That is a description
 of what these stories have actually been doing.
 
+## 8e. THE GOAL IS THAT A COMBAT SYSTEM IS EASY TO AUTHOR
+
+The sharpest statement of what this is for, and it changes what the deliverable
+is: **the engine ships physics; a combat system is something an author writes on
+top, and should not require writing physics to get.**
+
+So the product is not a combat system. It is a substrate plus an authoring
+surface, and the surface is the part people touch.
+
+### What "fairly decent" has to mean
+
+A scoping decision, and wrong in either direction the authoring story dies —
+too thin and an author has to model physics themselves, too thick and they have
+to fill in fields that change nothing.
+
+    IN THE SUBSTRATE          3D position and velocity in a shared frame
+                              ray against volume: what a line crosses, and
+                                  into which region
+                              cones, for arcs
+                              TIME-TO-CONTACT
+                              regions on bodies, so a hit lands somewhere
+
+    DELIBERATELY OUT          acceleration curves and thrust integration --
+                                  velocity changes are DECLARED and adjudicated
+                                  (§ 10), never integrated from a force
+                              orbital mechanics, n-body, relativity
+                              heat, power budgets, ammunition -- those are
+                                  UPKEEPS if an author wants them (§ 8c), and
+                                  not everybody does
+
+THE TEST FOR THE LINE: **does the fiction change if this is modelled?** How far,
+which way, how long until, did it hit, where did it hit — every one of those
+changes a scene. Whether a beam diverges over 40,000 km does not, and modelling
+it costs an author a field they now have to fill.
+
+### The authoring surface is the actual product
+
+Hold it to a hard target, because a soft one produces a library:
+
+  * A WEAPON is about six declarative fields — range, arc, effect category,
+    magnitude, what it cannot pass through, how long it takes.
+  * A SHIP is a region list plus systems.
+  * IF AN AUTHOR HAS TO WRITE A FUNCTION TO ADD A TORPEDO, THE DESIGN FAILED.
+
+Declarative wherever it can be, because the same substrate has to carry a
+Federation phaser, a broadside of cannon and a thrown spear — identical
+ray-and-region needs, completely different semantics. That is also the clean
+engine/extension split (§ 8b): physics in the engine, the combat system in an
+extension.
+
+### On being "gamed": it is the point, not the risk
+
+A first draft of this section warned that a physics model good enough to be
+interesting is good enough to be gamed, and proposed guarding against it. That
+was wrong and contradicts the engine's own principle — CLAUDE.md: **inference is
+the product, not the risk**; never harden a guard by making minds conclude less.
+
+A player who works out that a nebula masks their approach, or that a hull has a
+blind spot aft, is understanding the world. That is the good outcome, and the
+alternative — outcomes that cannot be reasoned about — is worse.
+
+What is a real risk is a DOMINANT strategy, where one approach always wins and
+every battle becomes the same battle. That is a balance flaw in the system an
+author writes, not in having decent physics, and it belongs to them.
+
+And the engine already produces the interesting version without a rule: nobody
+holds the objective picture (§ 8, § 10.1), so an optimal firing solution cannot
+be computed from a readout that may be degraded, stale or lying. Optimising
+against an uncertain picture is simply tactics — commit on incomplete
+information, be wrong sometimes, find out when the torpedo arrives. Better
+physics gives more to reason about; the firewall guarantees the reasoning runs
+on a picture that might be wrong. Those two together are the appeal.
+
 ## 9. Ship state is probably vitals plus conditions
 
 Hull, shields, power and life support look like `vitals`, which are name-keyed
@@ -532,3 +605,75 @@ independent.
      the design gets expensive, and it wants deeper thought than a passing
      answer. Do not design for nesting speculatively; find out whether a story
      needs it first.
+
+---
+
+## 11. What this reuses, in one list
+
+Almost nothing below is new. The point of the document is that the ask is mostly
+a decision to let existing machinery take a wider subject.
+
+    metres from authored distance      spatial_routing._DISTANCE_UNIT_METERS
+    a room belonging to a vehicle      room_registry.parent_entity
+    named regions with coverage        story/attire (REGIONS, exposed_regions)
+    regions as delivered percepts      composer PERCEPT_KINDS: body_region
+    graded delivery of a fact          composer fidelity
+    who is standing at what            scene.stations (`at`, 52% populated)
+    bearing math                       world/spatial_orientation
+    ongoing damage on a cadence        world/mechanics conditions + tick
+    a resource with an operating floor  charter upkeeps + FAIL/RESTORE_HOURS
+    a chain of command                 charter posts (reports_to, authority)
+    a dependency between resources     charter upkeeps (requires, depends_on)
+    two institutions sharing a room    charter_runtime.cross_charter_gossip
+    atmosphere inside a hull           world/survival (reads parent_entity)
+    channels between distant parties   spatial_senses.apply_comms_ops
+    a stage or specialist from outside  runtime.register_step,
+                                       director_scopes._extension_specialist_call
+    declare-then-adjudicate            the character/Director loop itself
+
+The genuinely new parts are four: keeping the metric value, per-body region
+sets, the ray/cone primitives, and one percept kind for an instrument readout.
+Everything else in this document is an argument for pointing something that
+exists at a subject it was not written for.
+
+## 12. If this were built, in this order
+
+Nothing here is scheduled. The ordering is forced by dependency, not preference,
+and each step is independently useful — which is the test of whether the
+decomposition is honest.
+
+  1. **KEEP THE NUMBER** (§ 2). Stop discarding metres at
+     `normalize_edge_distance`; carry them beside the tier. Additive, nothing
+     downstream changes, and every later step needs it. Smallest possible start.
+
+  2. **PER-BODY REGION SETS** (§ 3). `story/attire.REGIONS` stops being a global
+     human tuple and becomes a property of the body. Buys ship sections,
+     non-humanoid characters and vehicles at once, and is worth doing on its own
+     merits whether or not any of the rest lands.
+
+  3. **CHARTER BODIES** (§ 8c, § 8d — and register item J1). Every charter that
+     ships is empty, which means no posts, no `reports_to`, no authority and no
+     upkeeps. This is a dependency rather than a neighbour: without it there is
+     no command structure and no managed resource to instrument.
+
+  4. **GEOMETRY AS A DETERMINISTIC MODULE** (§ 4, § 6). Positions, velocities,
+     ray-against-volume, cones, time-to-contact. Pure and total, no model, no
+     I/O — the same shape as `agents/perception`. Cones alone unblock the
+     aperture item, which has been waiting on them.
+
+  5. **DELIVERY THROUGH EXISTING CHANNELS** (§ 10.2b). Metric facts reach minds
+     through sight and sound first, with their existing gates. The boulder works
+     at this step and no console exists yet.
+
+  6. **THE INSTRUMENT PERCEPT AND THE STATION** (§ 8, § 8a). The seventeenth
+     percept kind, delivered by `stations.at`. This is where the bridge becomes
+     possible, and it is deliberately late — building it earlier would make a
+     console the price of entry for physical causality.
+
+  7. **THE AUTHORING SURFACE** (§ 8e, § 8b). Declarative systems and weapons,
+     in an extension. Last because it is the layer that must not change once
+     authors have used it.
+
+The first two steps are small, self-justifying, and touch nothing else. If this
+document is ever acted on, they are the honest place to find out whether the
+rest of it is right.
