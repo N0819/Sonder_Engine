@@ -3112,6 +3112,38 @@ ALSO VISIBLE IN THAT LEDGER: `"lieutenant_commander Lieutenant Commander Data"`
 KEY beside the unprefixed form. 1.84d's rank-in-the-name defect is now minting
 duplicate identities in the ledger that decides who you know.
 
+### 1.96a The stateless rule was written for one population and applied to two
+
+`CLAUDE.md:101` states, as a property of the STAGE:
+
+    `agents/background.py` gives named, unregistered background presences a
+    stateless reaction per beat -- no persistent memory or psychology (that
+    requires promotion to a real character).
+
+The stage voices TWO populations and the sentence is true of only one:
+
+  * **Tracked presences** -- names harvested from the Director's own prose into
+    the `background_presences` world key by `track_background_presences`. These
+    genuinely have no persistent inner state, and the rule describes them
+    correctly.
+  * **Charter bodies** -- reached through `background_presence_records`
+    (`agents/background.py:323`) and `presence_view` (:1131). These carry
+    `state.minds`: ~14 claims per head across 42 heads, each with a decaying
+    `strength`, an `as_of_hours` and a `heard_from`. The Charter EXISTS to give
+    them persistent belief cheaply. The rule is false of them by design.
+
+WHY THIS MATTERS BEYOND TIDINESS. A doc that says the stage is stateless is a
+doc that says the return path in 1.96 should not exist -- there is no reason to
+translate an on-screen encounter back into a ledger if the presence has no
+ledger. **The architecture was closed off by a description rather than by a
+decision.** The engine's owner's stated intent is the opposite: the Charter is
+the cheap persistent mind, and that is its job.
+
+The correction is not to delete the sentence -- it is right about tracked
+presences, and the promotion boundary it names is real. It is to say which
+population it governs, and to state the other case beside it: a Charter body
+voiced through this stage brings a persisted mind with it and may carry one away.
+
 ### 1.96 One body, two simulations, and a door that only opens one way
 
 The architecture the engine's owner names: **background life is the on-screen
