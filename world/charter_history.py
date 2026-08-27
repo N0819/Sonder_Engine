@@ -15,9 +15,19 @@ import json
 import re
 
 
-PERSONAL_MEMORY_CAP = 16
+#: How many subjective memories the model pass may author over the simulated
+#: past. Raised with `charter_promote.REMEMBERED_CAP`, which feeds it: these
+#: were sized against a substrate that held 16 rows per body and truncated
+#: everything past them, and the substrate now holds a life. One call, once,
+#: at generation -- the cost is output tokens on a single model pass, against
+#: a character the player will spend a whole story with.
+PERSONAL_MEMORY_CAP = 60
+#: The floor is an ACHIEVABILITY gate, not a depth lever: falling under it
+#: raises rather than trims (:639), so a floor above what the evidence can
+#: supply fails generation outright. It stays where it was proven; the target
+#: and the cap are what buy depth.
 PERSONAL_MEMORY_FLOOR = 10
-PERSONAL_MEMORY_TARGET = 12
+PERSONAL_MEMORY_TARGET = 32
 PERSONAL_SALIENCE_CAP = 0.7
 PERSONAL_TONES = frozenset({
     "neutral", "steadying", "burdensome", "meaningful", "alienating",

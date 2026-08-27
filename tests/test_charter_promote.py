@@ -65,7 +65,12 @@ class TestSelectionNotTranscription:
 
     def test_quiet_hours_add_nothing(self):
         """The whole cost model, applied to memory: a stretch in which
-        nothing branched converts to nothing at promotion."""
+        nothing branched converts to nothing at promotion.
+
+        Everything EXCEPT first meetings, which are keyed to people rather
+        than to hours -- see the acquaintance test below for the bound that
+        replaces this one for that kind.
+        """
         charter = normalize_charter(twin_towns(40))
         charter["roster"] = seed_roster(charter["bodies"])
         charter["needs"] = seed_needs(charter["bodies"])
@@ -74,11 +79,41 @@ class TestSelectionNotTranscription:
         short, events_a = run(charter, hours=48.0, window=4.0)
         long, events_b = run(charter, hours=336.0, window=4.0)
 
-        a = remembered(short, key, events=events_a)
-        b = remembered(long, key, events=events_b)
+        def timed(memories):
+            return [m for m in memories
+                    if m.get("experience_kind") != "acquaintance"]
+
+        a = timed(remembered(short, key, events=events_a))
+        b = timed(remembered(long, key, events=events_b))
         assert len(b) <= len(a) or \
             {m["event_key"] for m in b} == {m["event_key"] for m in a}, \
             "time alone grew the past"
+
+    def test_acquaintance_is_bounded_by_the_population(self):
+        """Meeting somebody for the first time IS an incident, so it may add a
+        row -- but only once per person, and the belief store cannot be the
+        judge of that on its own because it DECAYS. Left appending on every
+        absence-from-`known_before`, a quiet 40-body town wrote 8 acquaintance
+        rows in 48 hours, 94 in two months and 1134 in two years: twenty-eight
+        rows per person known, growing with time exactly as `charter_run`'s
+        docstring forbids. Folding on the stable per-pair id is what keeps it
+        keyed to the shape of the institution, and the volume rides on
+        `repetitions` instead of on new rows.
+        """
+        charter = normalize_charter(twin_towns(40))
+        charter["roster"] = seed_roster(charter["bodies"])
+        charter["needs"] = seed_needs(charter["bodies"])
+        key = sorted(charter["bodies"])[0]
+        population = len(charter["bodies"])
+
+        two_years, _ = run(charter, hours=17_520.0, window=4.0)
+
+        met = [row for row in two_years["experiences"].get(key) or []
+               if row["kind"] == "acquaintance"]
+        assert met, "two years alone in a town of forty"
+        assert len(met) < population, "one row per person known, at most"
+        assert max(int(row.get("repetitions") or 1) for row in met) > 1, (
+            "re-meeting has to deepen the row rather than mint another")
 
     def test_the_cap_is_a_budget(self):
         charter = _guard_charter()

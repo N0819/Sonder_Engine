@@ -55,12 +55,25 @@ from .charter_social import judgment_view
 
 #: Memories a promotion mints, total. A budget, not a target: a quiet life
 #: promotes with two or three rows, and that is a correct answer.
-REMEMBERED_CAP = 12
+#:
+#: THIS IS A ONE-TIME CAP AND WAS PRICED AS A PER-BEAT ONE. Promotion happens
+#: once and the character keeps what it inherits for the rest of the story, so
+#: this number is not protecting any turn's payload or any turn's wall clock --
+#: it is deciding how much of a life a person arrives with. At 12 it was also
+#: the neck of the whole depth pipeline: `charter_history.resident_history_packet`
+#: builds its evidence from these rows, so the model pass that turns a simulated
+#: past into subjective memory could never see more than twelve things however
+#: deep the substrate underneath got. Selection is salience-ranked (`out.sort`
+#: below) and then truncated, so raising this keeps the same best rows and adds
+#: the ones that were being discarded.
+REMEMBERED_CAP = 120
 
 #: Acquaintances that cross as relationship memories. The same cap family as
 #: `charter_log.scene_ledger`'s `knows_here`, for the same reason: a roll
-#: call of everyone ever shared a room with is a payload, not a past.
-RELATIONSHIP_CAP = 4
+#: call of everyone ever shared a room with is a payload, not a past. Raised on
+#: the same argument as the cap above -- a scene payload is rebuilt every beat
+#: and must stay small; an inheritance is paid for once.
+RELATIONSHIP_CAP = 24
 
 #: Event kinds that may become a memory because this body was their SUBJECT.
 #: An allowlist, like `charter_news.WITNESSABLE` and for the same reason:
@@ -162,10 +175,27 @@ def remembered(charter, body_key, events=(), cap=REMEMBERED_CAP):
             salience = 0.62
         else:
             continue
+        # HOW IT LANDED, carried rather than invented. `charter_feel` appraised
+        # the window this row was laid down in, from the body's own needs and
+        # its own place, and `_record_coarse_experiences` stamped the reading
+        # onto the row. A moment that shook somebody is more memorable than one
+        # that did not -- so intensity lifts salience instead of every row of a
+        # kind sharing one constant. Rows written before the stamp existed, and
+        # rows for a body with nothing to feel about, carry no affect and keep
+        # the flat salience; absent is not neutral.
+        valence = experience.get("valence")
+        arousal = experience.get("arousal")
+        felt = {}
+        if valence is not None or arousal is not None:
+            felt = {"valence": round(float(valence or 0.0), 4),
+                    "arousal": round(float(arousal or 0.0), 4)}
+            intensity = max(abs(float(valence or 0.0)), abs(float(arousal or 0.0)))
+            salience = round(min(1.0, salience + 0.35 * intensity), 4)
         out.append({
             "kind": "episodic", "provenance": "remembered",
             "salience": salience, "content": content,
             "location": place, "entities": entities, "confidence": 1.0,
+            **felt,
             "event_key": str(experience.get("id") or
                              f"experience:{key}:{at_hours}"),
             "at_hours": at_hours, "experience_kind": experience_kind,
@@ -240,7 +270,7 @@ def remembered(charter, body_key, events=(), cap=REMEMBERED_CAP):
     # Unlike the foreground pending-obligation ledger these can remain open
     # for years; their lifecycle and provenance are the memory.
     for commitment in commitment_view(
-            charter.get("commitments"), key, cap=4):
+            charter.get("commitments"), key, cap=16):
         if key == commitment.get("promisor"):
             relation = "promised"
             other = commitment.get("beneficiary") or "someone"
@@ -342,7 +372,7 @@ def promotion_handoff(body_key, charter, events=()):
     subjects = list((charter.get("bodies") or {})) + list(
         (charter.get("figures") or {}))
     payload["social_judgments"] = judgment_view(
-        charter.get("judgments"), body_key, subjects=subjects, cap=8)
+        charter.get("judgments"), body_key, subjects=subjects, cap=24)
     payload["commitments"] = commitment_view(
-        charter.get("commitments"), body_key, cap=8)
+        charter.get("commitments"), body_key, cap=24)
     return payload
