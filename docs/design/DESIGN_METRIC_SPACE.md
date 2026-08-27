@@ -304,17 +304,37 @@ whoever is posted to it, announcing itself when it crosses.
 An engineering department is an institution. It was built for villages and it
 does not care.
 
-### Which makes J1 a dependency, not a neighbour
+### CORRECTION: the model is not inert. It is already running.
 
-Every charter that ships is EMPTY — five for five, `posts=0 bodies=0
-upkeeps=0`. That defect was registered as a background-population problem. It is
-not only that. **It is the resource-and-labour model this section depends on,
-shipping inert in every story ever run**, which is also why nothing has ever
-noticed: an upkeep that does not exist cannot fall below a floor, and the epoch
-that would tick it has fired zero times.
+An earlier revision of this note said every charter ships EMPTY and therefore
+blocked all of the above. **That was a measurement error, and the opposite is
+true.** Read at the right level — `item["state"]`, not the registry wrapper —
+every generated charter is populated:
 
-So the ordering is forced. Player-commanded system management is not buildable
-on an institution that cannot hold a member or a task.
+    chat 83 site_17_ops      posts 9  bodies 40  upkeeps 3
+    chat 84 site17_staff     posts 9  bodies 37  upkeeps 2
+    chat 93 village_council  posts 2  bodies  8  upkeeps 2
+    chat 94 management       posts 2  bodies  6  upkeeps 2
+    a fresh starship         posts 7  bodies 42  upkeeps 6, across 43 rooms
+
+The wrapper carries exactly four keys — `state`, `window_hours`,
+`last_elapsed_seconds`, `last_epoch_id` — and the first of them is the whole
+institution. The original reading listed those four keys as evidence of
+emptiness without opening the one named `state`.
+
+So the reuse argument in this section stands entirely and gets STRONGER: an
+upkeep with an operating floor, fail and restore rates, posts with `reports_to`
+and `authority`, and bodies to fill them are not a model waiting to be built.
+They exist, they are populated in every story, and the simulator already reads
+them — `charter_run.run` plans watches and services upkeeps from bodies;
+`advance_snapshot`, `cross_charter_gossip`, `background_presence_records`,
+`presence_view`, `charter_speaker_records` and `promotion_bundle` all consume
+them.
+
+What remains genuinely open is narrower and more interesting: the offscreen
+epoch's `time` reason has fired ZERO times across 25 records, and that can no
+longer be explained by an empty institution. The chain has populated
+institutions at one end and has never run. That zero wants its own audit.
 
 ### Player command is an action against a post
 
@@ -399,13 +419,18 @@ Authority does not compel; it changes what refusing COSTS, which is the correct
 model of a chain of command and the reason a Klingon security chief accepts a
 refusal without resentment while still having recommended the aggressive option.
 
-### The consequence for J1
+### What this actually means for a ship
 
-If the hierarchy is where a ship's structure lives, then an empty charter is not
-missing decoration — it is missing the ENTIRE COMMAND STRUCTURE. No posts means
-no `reports_to`, which means no chain, which means no authority, which means
-every order is a request and every crew member is a peer. That is a description
-of what these stories have actually been doing.
+The hierarchy is where a ship's structure lives, and it is populated — so a
+starship's command tree is not something to build but something to USE. A fresh
+Galaxy-class generation carried seven posts and forty-two bodies across
+forty-three rooms without being asked for a crew.
+
+The open question is therefore not whether the structure exists. It is whether
+anything in a played beat ever CONSULTS it: whether an order travels down a
+`reports_to` chain, whether `authority` changes what refusing costs, and whether
+a body at a post is ever the person who answers. Those are play-test questions,
+not schema questions.
 
 ## 8e. THE GOAL IS THAT A COMBAT SYSTEM IS EASY TO AUTHOR
 
