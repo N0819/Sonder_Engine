@@ -25,7 +25,8 @@ mechanism first, and a pure function is testable in ways a commit path is not.
 from __future__ import annotations
 
 from .charter_drift import advance_level, starving_input, supply_factor
-from .charter_model import normalize_charter, out_of_band
+from .charter_model import (EXPERIENCE_CAP, normalize_charter,
+                            out_of_band)
 from .charter_plan import plan_watch, tended_upkeeps
 from .charter_politics import (
     attribute_blame, normalize_politics, regard_map, regard_pair,
@@ -53,17 +54,6 @@ def _event(kind, at_hours, place, **payload):
     return {"kind": kind, "at_hours": round(float(at_hours), 6),
             "place": str(place or ""), **payload}
 
-
-#: How many autobiographical rows one body may carry. This was 16, chosen when
-#: the only writer was beat-scale gossip in a 96-hour tail and the cost of a
-#: row had not been measured. It has been: a row is ~324 bytes of JSON and
-#: carries NO embedding, where a registered character's memory row costs ~718
-#: bytes of text plus ~20.5 KB of vector -- Charter memory is about 65x cheaper
-#: per row than the tier it feeds. At this cap a body holding a full life costs
-#: well under a megabyte, against presim arithmetic that runs at ~1.8 ms per
-#: simulated hour. The old number was not protecting anything that needed
-#: protecting; it was throwing away the depth the promoted character is for.
-EXPERIENCE_CAP = 4000
 
 #: How many bodies may share a place before co-presence stops depositing
 #: familiarity. A room of this many is people you served beside; a hall of
@@ -159,7 +149,7 @@ def _run_private_habits(experiences, habit_runs, bodies, watch, at_hours):
             })
 
 
-def _record_coarse_experiences(experiences, bodies, watch, previous_watch,
+def _record_coarse_experiences(experiences, bodies, watch, stood_before,
                                posts, events, known_before, minds, at_hours):
     """The past a body keeps at COARSE resolution, where nobody is watching.
 
@@ -189,14 +179,18 @@ def _record_coarse_experiences(experiences, bodies, watch, previous_watch,
     place_of = {key: str((body or {}).get("place") or "")
                 for key, body in (bodies or {}).items()}
 
-    # A POST TAKEN. Written when the watch bill CHANGES, because the bill is
-    # re-planned every window and a row per window is the diary of nothing
-    # that the module docstring warns about. The standing of it is counted
-    # rather than narrated -- see `stood` and `served_beside` in `step`.
+    # A POST STOOD FOR THE FIRST TIME. Not every change of the bill: the bill
+    # is re-planned every window, and on a short-handed institution it churns
+    # constantly as hands tire and recover -- measured on the six-body ship,
+    # writing every change grew service rows 35x for 36x the hours, which is
+    # exactly the storage-grows-with-time failure this module's docstring
+    # forbids. Taking the engine watch the first time is an event in a life;
+    # taking it the three hundredth is a shift. The volume is already counted
+    # by `stood`, and who it was stood beside by `served_beside`.
     for post_key, body_key in sorted((watch or {}).items()):
         if body_key not in (bodies or {}):
             continue
-        if str((previous_watch or {}).get(post_key) or "") == str(body_key):
+        if (stood_before.get(body_key) or {}).get(post_key):
             continue
         post = (posts or {}).get(post_key) or {}
         _remember_experience(experiences, body_key, {
@@ -688,7 +682,7 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
     _run_private_habits(
         experiences, habit_runs, bodies, plan["watch"], at + hours)
     _record_coarse_experiences(
-        experiences, bodies, plan["watch"], charter.get("watch"),
+        experiences, bodies, plan["watch"], charter.get("stood") or {},
         charter["posts"], events, known_before, minds, at + hours)
 
     heard_blame = {k: set(v) for k, v in

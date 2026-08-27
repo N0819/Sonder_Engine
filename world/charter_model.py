@@ -235,6 +235,18 @@ def normalize_body(key, entry):
     return body
 
 
+#: How many autobiographical rows one body may carry. This was 16, chosen when
+#: the only writer was beat-scale gossip in a 96-hour tail and the cost of a
+#: row had not been measured. It has been: a row is ~324 bytes of JSON and
+#: carries NO embedding, where a registered character's memory row costs ~718
+#: bytes of text plus ~20.5 KB of vector -- Charter memory is about 65x cheaper
+#: per row than the tier it feeds. At this cap a body holding a full life costs
+#: well under a megabyte, against presim arithmetic that runs at ~1.8 ms per
+#: simulated hour. The old number was not protecting anything that needed
+#: protecting; it was throwing away the depth the promoted character is for.
+EXPERIENCE_CAP = 4000
+
+
 def normalize_charter(stored, reservation=None):
     """A whole institution, from any shape, with its priority ordering closed.
 
@@ -391,9 +403,16 @@ def normalize_charter(stored, reservation=None):
         # their participants; private-habit rows only to the body itself.
         # Bounded per body, so history grows with meaningful intersections,
         # never with every quiet simulation window.
+        #
+        # THE BOUND LIVES HERE, and this is the enforcement point that counts:
+        # `normalize_charter` runs at the head of every `step`, so a cap raised
+        # only where the rows are WRITTEN is inert -- the next window boundary
+        # truncates them again. Measured with the writer's constant already at
+        # 4000: 1091 rows minted, 639 kept, 39 of 40 holders pinned at exactly
+        # 16, and the losses were entirely the coarse writer's own kinds.
         "experiences": {
             str(holder): [dict(row) for row in rows
-                          if isinstance(row, dict)][-16:]
+                          if isinstance(row, dict)][-EXPERIENCE_CAP:]
             for holder, rows in (stored.get("experiences") or {}).items()
             if str(holder) in bodies and isinstance(rows, list)},
         "habit_runs": {

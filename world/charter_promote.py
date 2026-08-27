@@ -140,6 +140,26 @@ def remembered(charter, body_key, events=(), cap=REMEMBERED_CAP):
                 content = f"{body_name(actor)} {act} them"
                 entities = [actor]
             salience = 0.5
+        elif experience_kind == "service":
+            # What the body DID with its time. `stood` counts the windows;
+            # this is the one row that says taking the post was an event in
+            # a life, which is what a memory is and what a counter is not.
+            post = str(experience.get("post") or "a post")
+            content = f"took {post.replace('_', ' ')}"
+            entities = [key]
+            salience = 0.45
+        elif experience_kind == "acquaintance":
+            other = str(experience.get("other") or "")
+            content = (f"came to know {body_name(other)}"
+                       if experience.get("firsthand")
+                       else f"heard tell of {body_name(other)}")
+            entities = [other] if other else []
+            salience = 0.55
+        elif experience_kind == "stood_through":
+            about = str(experience.get("about") or "something")
+            content = f"was there when {about.replace('_', ' ')} gave way"
+            entities = [key]
+            salience = 0.62
         else:
             continue
         out.append({
