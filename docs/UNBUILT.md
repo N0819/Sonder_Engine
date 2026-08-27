@@ -2828,6 +2828,43 @@ half (1.84b) can land on its own — a singular post holding one body is
 enforceable from `reports_to` alone and needs no theory of how holders change.
 Do that; leave this.
 
+### 1.84d A character has nowhere to carry a rank, so the rank goes in the name
+
+`identity` on a character sheet holds exactly `aliases`, `name`, `pronouns`,
+`uid`. There is no field for a rank, title or honorific, so a generator asked
+for a ranked character puts the rank in the only field that will hold it.
+Measured across generations from the same briefs: `Lieutenant Commander Data`,
+`Worf, son of Mogh` — a rank and a patronymic, both sitting in `name`.
+
+THE ASYMMETRY IS THE EVIDENCE. A Charter body carries `rank` as its own field
+(`{"key": "captain:0001", "name": "...", "rank": "captain", "home_post":
+"captain"}`), and a naming law carries `titles.ranks` mapping post keys to
+display titles. So an institution can express rank and a registered character
+cannot — which is why placing a cast member into a post needs a rank supplied
+from outside their sheet, and why `{title} {name}` renders correctly for a
+generated body and not for a cast member whose title is already inside `name`.
+
+WHAT IT COSTS, beyond tidiness. Name IS identity here: `scene.positions`, the
+active cast, addressing, perception routing and every psychology write are keyed
+on it. A key with a rank baked in means:
+
+  * the reservation that stops a generated body taking a registered identity
+    holds `"lieutenant commander data"` and not `"data"`, so a component check
+    had to strip titles to recover the person — a downstream compensator for
+    an upstream gap (`world/charter_identity.name_is_reserved` now compares
+    against the untitled runs for exactly this reason);
+  * a promotion, demotion or transfer changes the key a mind is addressed by,
+    which is the same class as 1.84a's name-permanence problem;
+  * two stories that disagree about whether to include the rank produce two
+    different keys for one character.
+
+`aliases` is not the answer: it is for names a person is also known by, not for
+a rank that is orthogonal to their name and changes independently of it.
+
+Not built, and not obviously small — every reader keyed on `identity.name`
+would need to know which part is address and which is identity, which is the
+same distinction `address_components` already draws for a naming law.
+
 ### 1.85 A memory's age off a per-beat estimate, not a per-beat record
 
 **Found:** 2026-08-26, landing `memories.encoded_at_seconds`.

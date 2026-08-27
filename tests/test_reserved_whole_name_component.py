@@ -67,3 +67,49 @@ def test_a_paired_address_law_still_permits_a_shared_family():
     paired = {"name_format": "{given} {family}", "formal_format": "{title} {name}"}
     assert not name_is_reserved(
         "Katherine Crusher", paired, _res(), "Katherine", "Crusher")
+
+
+# --- a rank is how a story addresses somebody, not part of who they are ------
+
+RANKED_CAST = ["Jean-Luc Picard", "Worf", "Lieutenant Commander Data",
+               "Beverly Crusher", "Geordi La Forge"]
+RANKED_LAW = {
+    "name_format": "{given} {family}", "formal_format": "{title} {name}",
+    "titles": {"ranks": {"lieutenant_commander": "Lieutenant Commander"},
+               "posts": {}},
+}
+
+
+def _ranked():
+    return identity_reservation(RANKED_CAST, RANKED_LAW)
+
+
+def test_a_registered_name_carrying_a_rank_still_reserves_the_bare_identity():
+    """A cast member registered as "Lieutenant Commander Data" holds the bare
+    identity `data`; the rank is how the story addresses him, not who he is.
+
+    Measured: comparing components against the STORED whole names alone let
+    `Data Picard`, `Data Soong`, `Data Ogawa` through in one generation,
+    because "data" is not "lieutenant commander data" as a string.
+    """
+    assert name_is_reserved("Data Picard", RANKED_LAW, _ranked(), "Data", "Picard")
+    assert name_is_reserved("Data Soong", RANKED_LAW, _ranked(), "Data", "Soong")
+
+
+def test_a_one_word_registered_name_needs_no_stripping_and_still_holds():
+    assert name_is_reserved("Worf Yar", RANKED_LAW, _ranked(), "Worf", "Yar")
+
+
+def test_a_half_of_a_multi_word_identity_is_still_not_reserved():
+    """The subtraction stays narrow. `Geordi` is not the whole of
+    `Geordi La Forge`, so it is a shared given name like any other -- refusing
+    it would be an expansion, and two people sharing a given name is ordinary.
+    """
+    assert not name_is_reserved(
+        "Geordi Picard", RANKED_LAW, _ranked(), "Geordi", "Picard")
+    assert not name_is_reserved(
+        "Beverly Pulaski", RANKED_LAW, _ranked(), "Beverly", "Pulaski")
+
+
+def test_an_unrelated_name_still_passes_under_a_ranked_cast():
+    assert not name_is_reserved("Sonya Ogawa", RANKED_LAW, _ranked(), "Sonya", "Ogawa")

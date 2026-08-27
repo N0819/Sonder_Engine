@@ -298,10 +298,18 @@ def name_is_reserved(name, profile, reservation, given="", family=""):
     # reserves is a body whose component IS the whole identity somebody
     # already answers to, which is what a one-word name like `Worf` or `Data`
     # makes possible.
-    whole = reservation.get("whole") or frozenset()
+    # Compared against the UNTITLED runs, not the stored whole names. A cast
+    # member registered as "Lieutenant Commander Data" holds the bare identity
+    # `data` -- the rank is how the story addresses him, not part of who he is
+    # -- and `identity_reservation` already strips titles into `runs` for
+    # exactly this reason. Measured: checking `whole` alone let `Data Picard`,
+    # `Data Soong`, `Data Ogawa` and `Geordi Picard` through in one generation,
+    # because "data" is not "lieutenant commander data" as a string.
+    bare = {" ".join(run) for run in (reservation.get("runs") or ())}
+    bare |= set(reservation.get("whole") or ())
     for value in (given, family):
         folded = " ".join(str(value or "").split()).casefold()
-        if folded and folded in whole:
+        if folded and folded in bare:
             return True
     fields = address_components(profile)
     for field, value in (("given", given), ("family", family)):
