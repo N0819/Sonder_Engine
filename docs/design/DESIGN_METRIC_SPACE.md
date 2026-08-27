@@ -406,36 +406,53 @@ tactical exchange — but it means declared durations matter more here than
 anywhere, which ties this to the fiction-time work rather than leaving it
 independent.
 
-**Open, and each changes the design:**
+**DECIDED 2026-08-26, by the engine's owner:**
 
-  1. Does anyone ever see the objective picture, INCLUDING THE NARRATOR? The
-     strong version is no, never: the narrator renders what the bridge crew
-     have, so if the sensors are wrong the prose is wrong and the player learns
-     it when the torpedo arrives. The weak version leaks omniscience into
-     narration.
-  2. Is position CONTINUOUS or DECLARED? Does a contact keep closing each beat
-     because it carries a velocity, or only when the Director says it moved?
-     Continuous means the world moves with nobody driving it, which is a real
-     change in what the engine is. Declared is cheaper and keeps causality in
-     the Director's hands.
-  3. How many metric spaces? One per scene, or nested — system, then orbit, then
-     surface? Nesting is where this gets expensive.
+  1. **THE NARRATOR RENDERS PLAYER PERSPECTIVE, NOT TRUTH.** Settled, and it is
+     the strong version. Nobody sees the objective picture, the narrator
+     included. If the sensors are wrong the prose is wrong, and the player finds
+     out when the torpedo arrives. The alternative leaks omniscience into
+     narration and silently suspends the firewall for anything at range, which
+     is exactly where the firewall was going to earn its keep.
 
-## 11. What this reuses, in one list
+  2. **VELOCITY IS DECLARED; PROPAGATION IS DERIVED.** Position is neither fully
+     continuous nor fully declared, and the split is on WHO SETS MOTION rather
+     than on who computes it.
 
-Nothing below is new. The point of the document is that the ask is mostly a
-decision to let existing machinery take a wider subject.
+     The Director declares a velocity -- "closing at 400 m/s" -- as an ordinary
+     adjudicated statement it owns and can change. Geometry then propagates it
+     deterministically for as long as it stands, with no further Director
+     involvement.
 
-    metres from authored distance      spatial_routing._DISTANCE_UNIT_METERS
-    a room belonging to a vehicle      room_registry.parent_entity
-    named regions with coverage        story/attire (REGIONS, exposed_regions)
-    regions as delivered percepts      composer PERCEPT_KINDS: body_region
-    graded delivery of a fact          composer fidelity
-    bearing math                       world/spatial_orientation
-    ongoing damage on a cadence        world/mechanics conditions + tick
-    atmosphere inside a hull           world/survival (reads parent_entity)
-    channels between distant parties   spatial_senses.apply_comms_ops
-    declare-then-adjudicate            the character/Director loop itself
+     Both halves of the ask:
+       * NOBODY TRACKS POSITIONS. The Director never says "now they are at
+         41,600 km"; that is derived. This was the stated advantage of going
+         continuous, and it survives.
+       * NOTHING MOVES THAT NOBODY SET MOVING. No drift through a conversation
+         the scene wanted to hold.
 
-The genuinely new parts are: keeping the metric value, per-body region sets, the
-ray/cone primitives, and one percept kind for an instrument readout.
+     Three troubles avoided, and the third is why the shape matters:
+       * a fully continuous world moves when the story wanted to hold;
+       * a physics tick that moves things is a SECOND AUTHOR over objective
+         causality, and this engine is single-ownership-per-domain throughout;
+       * advancing position by velocity x elapsed recomputes from a MOVING
+         DENOMINATOR, so rerolling a beat with a different duration moves
+         everything -- the identical coupling that made the memory backfill
+         wrong (see UNBUILT 1.85). A STORED velocity rolls back with its beat;
+         a recomputed position does not.
+
+     The pacing objection dissolves into the fiction's own vocabulary: if a
+     scene should hold, velocity is zero. "Hold position" is a real order and
+     matching orbit is a real manoeuvre.
+
+     The one case this does not cover is motion nobody can declare away -- a
+     decaying orbit, a hull on momentum with the engines dead. Those are
+     interesting BECAUSE they cannot be ordered to stop, so they belong as an
+     explicit exception rather than as the default everything inherits.
+
+**STILL OPEN, and deferred deliberately:**
+
+  3. Do metric spaces NEST -- system, then orbit, then surface? This is where
+     the design gets expensive, and it wants deeper thought than a passing
+     answer. Do not design for nesting speculatively; find out whether a story
+     needs it first.
