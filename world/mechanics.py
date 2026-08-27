@@ -172,16 +172,41 @@ def clock_elapsed(clock):
 def read_time_diff(prev_elapsed, time_diff):
     """What a `state_diff.time` block says about the story clock.
 
-    Returns ``(elapsed_seconds, backwards, refused)``:
+    THE ENGINE OWNS THE CLOCK'S POSITION; A BEAT CONTRIBUTES A SPAN. Nothing
+    a model emits measures where the story clock stands -- the payload
+    PRINTS the clock to it, but a model is free to run its arithmetic from
+    another zero entirely (a time of day, the story's first line, nothing),
+    and an absolute produced there is a guess wearing the authority of a
+    measurement. Measured live, chat 95 second pass beat 2: a conversation
+    declared `{start_seconds: 20520, duration_seconds: 45, end_seconds:
+    20565}` against a clock standing at 20.0; the forward absolute won under
+    the old contract and four people talking moved the story clock five and
+    a half hours, while the 45-second duration -- the one correct number in
+    the block -- was discarded.
+
+    So an absolute is read only IN THE FRAME THE BLOCK ITSELF DECLARES.
+    `start_seconds` is the block's own anchor: where the model says this
+    beat began. A beat begins where the clock stands -- that is a
+    definition, not an assumption -- so a block whose anchor IS the clock
+    (or that declares none) has its claimed end adopted verbatim, which is
+    every canonical corpus row behaving exactly as it always did. A block
+    anchored ANYWHERE ELSE is internally coherent and externally
+    meaningless: the only part of it the fiction actually asserted is the
+    SPAN, so the clock advances from where the ENGINE stood, by the declared
+    duration (or by end-minus-start when no duration parses), and the caller
+    is told.
+
+    Returns ``(elapsed_seconds, displaced, refused)``:
 
     * ``elapsed_seconds`` -- where the clock stands at the END of this beat.
-    * ``backwards`` -- None, or ``(claimed, was)`` when the beat asserted a
-      position EARLIER than the clock already held. TIME DOES NOT RUN
-      BACKWARDS: such a beat advances by its own duration instead, because
-      the elapsed time is the part the fiction actually asserted, and a
-      model emitting `start_seconds: 0` every beat -- an easy and entirely
-      natural reading of a field named "start" -- would otherwise reset the
-      world to the length of its own beat, over and over.
+    * ``displaced`` -- None, or ``(claimed, was)`` when the beat asserted a
+      position the engine did not adopt. Two ways that happens, one rule
+      under both: a position EARLIER than the clock (TIME DOES NOT RUN
+      BACKWARDS -- a model emitting `start_seconds: 0` every beat, an easy
+      and entirely natural reading of a field named "start", would
+      otherwise reset the world to the length of its own beat, over and
+      over), and a position anchored AWAY from the clock (the bridge beat
+      above). Both advance by the span the fiction asserted instead.
     * ``refused`` -- sorted keys that made a time claim this reader could
       NOT act on, and empty whenever it did act. It is empty for a diff
       that asserts no time at all (`{"display": "later"}` says nothing about
@@ -196,7 +221,10 @@ def read_time_diff(prev_elapsed, time_diff):
     canonical `end_seconds` outranks the synonym when both are present (17
     corpus rows carry both; the synonym is the mid-beat position there). A
     diff carrying ONLY a duration is an advance from where the clock stood,
-    not silence -- it asserted a span, and a span is a claim.
+    not silence -- it asserted a span, and a span is a claim. A time skip is
+    a duration too -- `duration_seconds: 28800` for a night's sleep lands
+    whole from any frame, because a span survives the translation that a
+    position does not.
     """
     try:
         was = float(prev_elapsed or 0.0)
@@ -229,6 +257,25 @@ def read_time_diff(prev_elapsed, time_diff):
 
     if claim is None:
         return (was + duration if duration_claimed else was), None, refused
+
+    anchor = None
+    if td.get("start_seconds") is not None:
+        try:
+            anchor = float(td["start_seconds"])
+        except (TypeError, ValueError):
+            anchor = None
+
+    if anchor is not None and anchor != was:
+        # The block's absolutes live in a frame of its own declaring. The
+        # span survives the translation onto the engine clock; the position
+        # does not. Duration first, on the same ground as the backwards
+        # branch below and `time_diff_duration`'s precedence: it is the
+        # beat's direct statement of its own length, and end-minus-start is
+        # the model's arithmetic about it. (Chat 95 second pass beat 2:
+        # anchor 20520 against a clock at 20.0 -- the model was working in
+        # a time of day the engine never held.)
+        span = duration if duration_claimed else max(0.0, claim - anchor)
+        return was + span, (claim, was), refused
     if claim < was:
         return was + duration, (claim, was), refused
     return claim, None, refused
@@ -297,7 +344,7 @@ def beat_end_elapsed(prev_elapsed, time_diff, *, floor=False):
     """Where the clock stands at the END of a beat. THE ONE PLACE THIS IS
     COMPUTED.
 
-    Returns ``(elapsed, backwards, refused, floored)`` -- `read_time_diff`'s
+    Returns ``(elapsed, displaced, refused, floored)`` -- `read_time_diff`'s
     three answers plus whether this beat was charged
     `UNCLAIMED_BEAT_SECONDS` for saying nothing.
 
@@ -320,10 +367,10 @@ def beat_end_elapsed(prev_elapsed, time_diff, *, floor=False):
     charged, and an unreadable claim is charged AND still reported: a refusal
     that also froze the world was the double defect.
     """
-    elapsed, backwards, refused = read_time_diff(prev_elapsed, time_diff)
+    elapsed, displaced, refused = read_time_diff(prev_elapsed, time_diff)
     if floor and not time_diff_claims(time_diff):
-        return elapsed + UNCLAIMED_BEAT_SECONDS, backwards, refused, True
-    return elapsed, backwards, refused, False
+        return elapsed + UNCLAIMED_BEAT_SECONDS, displaced, refused, True
+    return elapsed, displaced, refused, False
 
 
 def normalize_time_of_day(value):

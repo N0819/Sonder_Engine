@@ -399,7 +399,7 @@ def prepare_scene_commit(ctx):
     # charge, and `world.mechanics.beat_end_elapsed` owns what the charge is
     # and when it applies.
     _td_block = diff.get("time") if isinstance(diff.get("time"), dict) else None
-    (_beat_end, _clock_backwards, _clock_refused,
+    (_beat_end, _clock_displaced, _clock_refused,
      _clock_floored) = beat_end_elapsed(
         clock_elapsed(prev_clock), _td_block,
         floor=bool(ctx.director_resolve))
@@ -810,13 +810,26 @@ def prepare_scene_commit(ctx):
         # merge that carried bodies across passages, the weather drift,
         # the transit sweep and this write cannot land on four different
         # numbers for one beat.
-        claimed, backwards, refused = (
-            _beat_end, _clock_backwards, _clock_refused)
-        if backwards is not None:
-            ctx.add_warning(
-                "state_diff.time claimed a clock position that ran "
-                "backwards (%.0f < %.0f); advanced by its own duration "
-                "instead" % backwards)
+        claimed, displaced, refused = (
+            _beat_end, _clock_displaced, _clock_refused)
+        if displaced is not None:
+            # Two spellings of one refusal -- a position the engine did not
+            # adopt -- worded apart because they read apart in a debug log.
+            # The first is the reset-to-zero class; the second is a block
+            # doing its arithmetic in a frame the engine never held (chat 95
+            # second pass beat 2: end 20565 anchored at start 20520 against
+            # a clock at 20.0 -- adopted verbatim, four people talking moved
+            # the clock five and a half hours).
+            if displaced[0] < displaced[1]:
+                ctx.add_warning(
+                    "state_diff.time claimed a clock position that ran "
+                    "backwards (%.0f < %.0f); advanced by its own duration "
+                    "instead" % displaced)
+            else:
+                ctx.add_warning(
+                    "state_diff.time claimed a clock position anchored "
+                    "away from the engine clock (claimed %.0f against "
+                    "%.0f); advanced by its own span instead" % displaced)
         elif refused:
             # A refusal that says nothing is indistinguishable from a
             # beat that asserted no time, which is how the class this

@@ -2740,37 +2740,46 @@ behind it; the second is a payload-assembly change and should not be made
 before somebody measures what the three copies actually cost.
 
 
-### 1.84a A model-declared absolute clock position outruns the beat
+### 1.84a A condition's start is still a model-declared clock position
 
-Measured live, chat 95 second pass, beat 2: four people talking on a bridge,
-`state_diff.time` = `{start_seconds: 20520, duration_seconds: 45,
-end_seconds: 20565}` against a simulation clock standing at 20.0. The absolute
-ran forward so it won, and a conversation moved the story clock FIVE AND A HALF
-HOURS. The duration it carried was correct and was discarded.
+The question this entry used to hold is DECIDED AND BUILT: the engine owns
+the clock's position, and a beat contributes a span. `read_time_diff` now
+reads every absolute in the frame the block itself declares -- its
+`start_seconds` is the block's own anchor. Anchored where the clock stands,
+or declaring no anchor, the claimed end is adopted verbatim (every canonical
+corpus row, byte-identical to before, and the bare-absolute chat 88 rows
+with them); anchored anywhere else, only the SPAN crosses -- the declared
+duration, else end-minus-start -- from where the ENGINE stood, and the
+commit warns ("anchored away from the engine clock"). The measured beat
+(chat 95 second pass, beat 2: start 20520 / duration 45 / end 20565 against
+a clock at 20.0) now advances the clock 45 seconds, not five and a half
+hours. A skip still lands whole from any frame, because a skip is a
+duration and a span survives the translation a position does not. Sleep
+still measures: `_sleep_elapsed` subtracts a stored `started_at_seconds`
+from a beat end that is now always engine-framed, and the three tests that
+pinned the old contract were rewritten to worlds whose clock and triple
+agree (`test_time_channel.py`, `test_awareness_waking.py`,
+`test_time_of_day.py` -- each says so at the site).
 
-**A fix was written and reverted, and the reason is the design question.**
-Preferring the declared duration whenever one is present -- the rule
-`read_time_diff` already applies when an absolute runs BACKWARDS, on the stated
-ground that a model emitting `start_seconds: 0` every beat is mechanical error
-and the duration is what the fiction asserted -- fixes this beat and breaks
-sleep measurement. `director_floors._sleep_elapsed` routes through the same
-reader precisely so it can subtract a stored `started_at_seconds` from the
-beat's ABSOLUTE end, and `test_the_canonical_shape_is_unchanged` pins
-`{start_seconds: 1000, duration_seconds: 60, end_seconds: 1060}` against a clock
-at 0.0 to yield 1060.
-
-The two cases are structurally identical: a coherent triple whose declared start
-disagrees with the engine clock. Nothing in the shape separates them, so the
-reader cannot decide it. The choice is upstream:
-
-  * the clock's position is the ENGINE's and a model may only declare a
-    duration -- which means sleep needs its span from somewhere other than a
-    model-declared absolute; or
-  * a model may declare an absolute, and something must reconcile a declared
-    start against the clock before its absolutes are trusted.
-
-Not a patch. Whoever takes it should decide which of those the engine means,
-because both readings are currently live in one function.
+What remains is the OTHER operand of the sleep subtraction, and it is the
+same ownership question one table over. A condition row's
+`started_at_seconds` is model-authored at creation (`llm/schemas.py`
+defaults it to 0.0; `persist/commit_entities` stores it verbatim), so the
+anchor a sleep is measured FROM is still a model-declared clock position: a
+model that leaves the default reads as "asleep since the story began", and
+one that stamps a foreign frame reads negative and falls to
+`_sleep_elapsed`'s unknown-guard -- honest, and one rung poorer than a
+number. Under the decided ownership the engine knows when a row began (the
+beat its INSERT committed, whose end clock the scene commit computes two
+domains earlier), so the close is the condition commit stamping that
+reading when the payload's own anchor is absent or not credible. Two
+things make it not a two-line change: 0.0 is also a legitimate reading at
+a story's opening, and a Director recording a condition RETROACTIVELY
+("asleep since dusk") is asserting a past start the stamp must not
+overwrite -- which is the reconciliation problem again, one field over.
+Sibling of 1.84's `last_asserted_at_seconds` note: the stamp itself is two
+lines in `persist/commit_entities`, and it belongs in the commit that
+argues the credibility test.
 
 ### 1.85 A memory's age off a per-beat estimate, not a per-beat record
 

@@ -261,8 +261,15 @@ class TestBeingWokenBySomebodyElse:
 
 class TestTheNightEnding:
     def test_a_full_sleep_ends_by_itself(self):
+        # clock 300, matching the triple's own anchor: since the engine took
+        # ownership of the clock's position (docs/UNBUILT.md 1.84a), a triple
+        # anchored away from the clock contributes only its span, so the old
+        # fixture's clock of 0.0 against an anchor of 300 measured a sleep 300
+        # seconds short. A real night looks like this: the sleep began at
+        # 300, the skip beat starts there too, and the skip is a DURATION.
         endings, warnings = _exits(
             [_record(subject=SLEEPER, started=300.0)], "",
+            clock={"elapsed_seconds": 300.0},
             sd_time={"start_seconds": 300, "duration_seconds": 28800,
                      "end_seconds": 29100})
         assert "c1" in endings
@@ -271,6 +278,7 @@ class TestTheNightEnding:
     def test_a_nap_does_not(self):
         assert _exits(
             [_record(subject=SLEEPER, started=300.0)], "",
+            clock={"elapsed_seconds": 300.0},
             sd_time={"start_seconds": 300, "duration_seconds": 600,
                      "end_seconds": 900})[0] == {}
 

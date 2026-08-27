@@ -202,10 +202,15 @@ class TestABeatsPassagePhraseCannotTouchIt:
         `display_advance: ""` beside a perfectly ordinary span, and the scene
         lost `dusk` after nineteen beats of holding it."""
         chat_id = _make_chat(temp_db)
+        # The stored clock stands where the triple is anchored: a triple
+        # anchored away from the clock contributes only its span now
+        # (docs/UNBUILT.md 1.84a), and this test is about the phrase, not
+        # about frame reconciliation.
         scene, clock = _beat(temp_db, chat_id, {
             "time": {"start_seconds": 170, "duration_seconds": 12,
                      "end_seconds": 182, "mode": "action", "explicit": False,
-                     "display_advance": ""}})
+                     "display_advance": ""}},
+            clock={"elapsed_seconds": 170.0, "display": "dusk"})
         assert scene["time_of_day"] == "dusk"
         assert clock["display"] == "dusk"
         assert clock["elapsed_seconds"] == 182.0

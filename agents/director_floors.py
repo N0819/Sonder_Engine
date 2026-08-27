@@ -497,7 +497,13 @@ def _sleep_elapsed(record, clock, diff_time):
 
     The end of the beat is read through `world.mechanics.read_time_diff`,
     the one owner of the `state_diff.time` vocabulary, so a sleep is
-    measured on exactly the clock the commit will keep. This ladder used to
+    measured on exactly the clock the commit will keep -- and since the
+    engine took ownership of the clock's POSITION (a beat whose absolutes
+    are anchored away from the clock contributes only its span), both ends
+    of this subtraction live in the engine's frame, never the model's. A
+    sleep's whole span therefore arrives as DURATIONS accumulated on the
+    engine clock -- `duration_seconds: 28800` is how a night lands -- not
+    as a model-declared absolute. This ladder used to
     be private and knew three keys, which cost it twice: a beat naming its
     position under the clock's own key ended no sleep at all (chat 88 turns
     61/64/66), and a model-authored bare `start_seconds` OUTRANKED the
@@ -510,7 +516,7 @@ def _sleep_elapsed(record, clock, diff_time):
         was = float((clock or {}).get("elapsed_seconds") or 0.0)
     except (TypeError, ValueError):
         return None
-    end, _backwards, _refused = read_time_diff(was, diff_time)
+    end, _displaced, _refused = read_time_diff(was, diff_time)
     try:
         started = float(record.get("started_at_seconds") or 0.0)
     except (TypeError, ValueError):
@@ -601,7 +607,7 @@ def _conditions_view(chat_id, clock, turn_idx, sd_time=None):
         was = float((clock or {}).get("elapsed_seconds") or 0.0)
     except (TypeError, ValueError, AttributeError):
         was = 0.0
-    now, _backwards, _refused = read_time_diff(was, sd_time)
+    now, _displaced, _refused = read_time_diff(was, sd_time)
     try:
         turn_idx = int(turn_idx)
     except (TypeError, ValueError):
