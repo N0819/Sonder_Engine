@@ -369,11 +369,12 @@ class TestTheRecoveryOfExistingStories:
     copy of the live corpus: 7 of 84 scene rows carried a readable time of day
     before, 81 of 84 after."""
 
-    def _story_with_a_lost_time(self, temp_db, *, establish, scene_time):
-        chat_id = _make_chat(temp_db)
+    def _story_with_a_lost_time(self, temp_db, *, establish, scene_time,
+                                frame_id=None, chat_id=None):
+        chat_id = chat_id or _make_chat(temp_db)
         turn_id = temp_db.qi(
-            "INSERT INTO turns(chat_id,idx,player_input,created) "
-            "VALUES(?,?,?,?)", (chat_id, 0, "", time.time()))
+            "INSERT INTO turns(chat_id,idx,player_input,created,frame_id) "
+            "VALUES(?,?,?,?,?)", (chat_id, 0, "", time.time(), frame_id))
         step_id = temp_db.qi(
             "INSERT INTO steps(turn_id,key,label,ord,stale) VALUES(?,?,?,?,?)",
             (turn_id, "director_establish", "Establish", 0, 0))
@@ -457,10 +458,39 @@ class TestTheRecoveryOfExistingStories:
         recover_scene_time_of_day(chat_id)
         assert temp_db.wget(chat_id, "scene", {})["time_of_day"] == "midnight"
 
-    def test_an_eras_own_scene_row_is_recovered_too(self, temp_db):
-        """Frame-scoped scenes are real rows under a separator-suffixed key
-        (three of them in the corpus) and would otherwise be the one place
-        the old field survived."""
+    def test_an_eras_own_scene_row_is_recovered_from_its_own_opening(
+            self, temp_db):
+        """Frame-scoped scenes are real rows under a separator-suffixed key,
+        and an era is recovered from THE OPENING THAT RAN IN IT."""
+        from core.db import _FRAME_KEY_SEP, recover_scene_time_of_day
+
+        chat_id = _make_chat(temp_db)
+        era = temp_db.qi(
+            "INSERT INTO frames(chat_id,label,ordinal,kind,created) "
+            "VALUES(?,?,?,?,?)", (chat_id, "Era", 1, "other", time.time()))
+        chat_id = self._story_with_a_lost_time(
+            temp_db, establish={"time": "dusk"}, scene_time="moments later",
+            frame_id=era, chat_id=chat_id)
+        scene = _scene()
+        scene.pop("time_of_day")
+        scene["time"] = "a few seconds"
+        temp_db.wset(chat_id, f"scene{_FRAME_KEY_SEP}{era}", scene)
+        recover_scene_time_of_day(chat_id)
+        assert temp_db.wget(
+            chat_id, f"scene{_FRAME_KEY_SEP}{era}", {})["time_of_day"] == "dusk"
+
+    def test_an_era_that_ran_no_opening_of_its_own_is_told_nothing(
+            self, temp_db):
+        """It used to inherit the story's earliest opening, and that is where
+        a plot countdown from one era became three other eras' standing time
+        of day -- measured at 3 of 3 frame-scoped rows in the corpus, onto
+        clocks whose elapsed_seconds were 2143 / 1630 / 1975 / 142.
+
+        A frame is a different moment by construction. The one thing another
+        era's opening cannot supply is when THIS one is, so it supplies
+        nothing, which is the same rule this change applies when it refuses to
+        call an unstated hour "now".
+        """
         from core.db import _FRAME_KEY_SEP, recover_scene_time_of_day
 
         chat_id = self._story_with_a_lost_time(
@@ -471,4 +501,4 @@ class TestTheRecoveryOfExistingStories:
         temp_db.wset(chat_id, f"scene{_FRAME_KEY_SEP}7", scene)
         recover_scene_time_of_day(chat_id)
         assert temp_db.wget(
-            chat_id, f"scene{_FRAME_KEY_SEP}7", {})["time_of_day"] == "dusk"
+            chat_id, f"scene{_FRAME_KEY_SEP}7", {}).get("time_of_day", "") == ""

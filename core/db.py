@@ -1651,23 +1651,28 @@ MIGRATIONS = [
         # declaration about the door lock ten beats ago"). A beat is a frame
         # of construction, not a duration anybody in the fiction can feel.
         "ALTER TABLE memories ADD COLUMN encoded_at_seconds REAL",
-        # Backfill at the rate the live clock already charges a beat that
-        # claimed no duration (world/mechanics.UNCLAIMED_BEAT_SECONDS, 10.0),
-        # so existing rows come out consistent with new ones by construction
-        # rather than by a number invented for the migration. Written as a
-        # literal because a migration is a historical record: it must keep
-        # producing this result even if the live constant is retuned later.
+        # EXISTING ROWS ARE LEFT NULL, DELIBERATELY.
         #
-        # It is an ESTIMATE, and the one place in this change that is. The
-        # replacement is a stored per-turn clock history; when one exists,
-        # `mind/memory_time.turn_clock_reading` is the seam that reads it and
-        # nothing downstream changes.
+        # The obvious backfill -- turn_idx * UNCLAIMED_BEAT_SECONDS -- was
+        # written first and then measured, and it fails the standard this
+        # change exists to enforce. It is a rate off a fixed denominator, which
+        # is exactly the derivation the stored column replaces: a chat that
+        # actually ran at ~18s/beat comes back "about 9 minutes ago" for a
+        # memory 30 seconds old -- an 18x error delivered as a confident
+        # number -- and where the estimate overshoots the live clock the
+        # interval goes negative and the legacy bank silently reads as
+        # unplaceable anyway. `mind/memory_time`'s own docstring is the rule it
+        # breaks: a confident wrong age is worse than an honest shrug.
         #
-        # Rows with a NULL turn_idx stay NULL: they belong to no beat, so
-        # there is no beat to charge, and their readers keep the qualitative
-        # phrasing they already had.
-        "UPDATE memories SET encoded_at_seconds = turn_idx * 10.0 "
-        "WHERE turn_idx IS NOT NULL AND encoded_at_seconds IS NULL",
+        # So a row written before this column existed carries no reading, says
+        # so, and its readers keep the qualitative phrasing they already had.
+        # New rows carry a measurement from the first beat after the migration.
+        # A bank therefore dates precisely what it can and declines the rest,
+        # which is also how a memory actually behaves.
+        #
+        # The replacement for the estimate is a stored per-turn clock history,
+        # not a better rate: `mind/memory_time.turn_clock_reading` is the seam
+        # that would read one, and nothing downstream changes when it lands.
     ],
 ]
 
@@ -1978,13 +1983,24 @@ def _opening_time_of_day(c, chat_id, frame_id):
     # Earliest turn, active variant: the opening, and only the opening.
     order = " ORDER BY t.idx ASC, v.id DESC LIMIT 1"
     if frame_id is not None:
+        # AN ERA THAT RAN NO OPENING OF ITS OWN GETS NOTHING, and telling it
+        # nothing is the right answer rather than the fallback's cost.
+        #
+        # This inherited the story's earliest opening, on the reasoning that a
+        # split or a branch is the same world at another time. Measured, it is
+        # every frame-scoped row in the corpus -- 3 of 3 -- and what they
+        # inherit is not a neutral hour: all three plus the frameless base take
+        # one era's plot countdown as their standing time of day, onto clocks
+        # whose elapsed_seconds are 2143 / 1630 / 1975 / 142. A frame is a
+        # different moment BY CONSTRUCTION; that is what makes it a frame. So
+        # the one thing its opening cannot supply is when it is.
+        #
+        # The subtracting branch is also the rule this change applies
+        # everywhere else: it removed "now" from five defaults on exactly the
+        # ground that a story which has not said what time it is says nothing.
         row = c.execute(sql + " AND t.frame_id=?" + order,
                         (chat_id, frame_id)).fetchone()
-        if row is not None:
-            return _establish_time_of_day_from_variant(row["content"])
-        # An era that never ran an opening of its own inherits the story's.
-        # A split or a branch is the same world at another time, and the
-        # alternative is telling that era nothing at all.
+        return _establish_time_of_day_from_variant(row["content"]) if row else ""
     row = c.execute(sql + order, (chat_id,)).fetchone()
     return _establish_time_of_day_from_variant(row["content"]) if row else ""
 

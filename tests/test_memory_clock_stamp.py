@@ -398,42 +398,47 @@ def test_the_reading_survives_an_archive_round_trip(temp_db):
 
 # ---- the migration ----------------------------------------------------------
 
-def test_the_migration_backfills_at_the_rate_the_clock_already_charges(temp_db):
-    """An existing bank has no readings, and the estimate is not invented.
+def test_the_migration_estimates_nothing_and_says_so(temp_db):
+    """A row written before the column existed carries NO reading.
 
-    `world.mechanics.UNCLAIMED_BEAT_SECONDS` is what the live clock charges a
-    beat that claimed no duration, so backfilled rows come out consistent with
-    new ones by construction. Rows belonging to no beat stay NULL -- there is
-    no beat to charge them for.
+    The obvious backfill -- turn_idx * UNCLAIMED_BEAT_SECONDS -- was written
+    first and measured second, and it is the same derivation-off-a-fixed-rate
+    the stored column exists to replace. Measured against a real clock: a chat
+    that ran at ~18s/beat returns "about 9 minutes ago" for a memory 30 seconds
+    old, and where the estimate overshoots the live clock the interval goes
+    negative and the row reads as unplaceable regardless. A confident wrong age
+    is worse than an honest shrug, so the migration adds the column and stops.
+
+    This asserts the ABSENCE of a backfill, which is a thing a test has to say
+    out loud: nothing else fails if one is quietly reintroduced.
     """
-    from world.mechanics import UNCLAIMED_BEAT_SECONDS
-
     chat_id, char_id = _story(temp_db)
-    with_turn = _row(temp_db, chat_id, char_id, turn_idx=7, seconds=None)
-    no_turn = temp_db.qi(
-        "INSERT INTO memories(chat_id,char_id,kind,category,provenance,"
-        "salience,content,gist,key_phrases,entities,location,"
-        "emotional_context,valence,arousal,confidence,archived,event_key,"
-        "embedding_model) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-        (chat_id, char_id, "episodic", "episode", "remembered", 0.6,
-         "z", "z", "[]", "[]", "", "", 0.0, 0.0, 1.0, 0, "k:z", ""))
+    before_column = _row(temp_db, chat_id, char_id, turn_idx=7, seconds=None)
     already = _row(temp_db, chat_id, char_id, turn_idx=8, seconds=3.0)
 
-    # The migration's own statements, run against rows that predate the column.
-    # The ALTER is already applied on a fresh database; the backfill is the
-    # half under test.
     for statement in db.MIGRATIONS[-1]:
         if statement.strip().upper().startswith("UPDATE"):
             temp_db.qi(statement)
 
     assert temp_db.q("SELECT encoded_at_seconds AS s FROM memories WHERE id=?",
-                     (with_turn,), one=True)["s"] == 7 * UNCLAIMED_BEAT_SECONDS
-    assert temp_db.q("SELECT encoded_at_seconds AS s FROM memories WHERE id=?",
-                     (no_turn,), one=True)["s"] is None
-    # A row that already carries a real reading is never overwritten by the
-    # estimate.
+                     (before_column,), one=True)["s"] is None, (
+        "a legacy row was given an estimated reading; the migration must "
+        "leave it NULL so its readers keep the qualitative phrasing")
     assert temp_db.q("SELECT encoded_at_seconds AS s FROM memories WHERE id=?",
                      (already,), one=True)["s"] == 3.0
+
+
+def test_no_migration_statement_derives_a_reading_from_a_turn_index(temp_db):
+    """The class, not the instance: no migration may compute a clock reading
+    from `turn_idx` at any rate, however the arithmetic is spelled."""
+    for version, statements in enumerate(db.MIGRATIONS):
+        for statement in statements:
+            flat = " ".join(str(statement).split()).upper()
+            if "ENCODED_AT_SECONDS" not in flat:
+                continue
+            assert "TURN_IDX" not in flat, (
+                f"migration {version} derives encoded_at_seconds from "
+                f"turn_idx: {statement}")
 
 
 def test_the_migration_is_the_last_one_and_the_schema_declares_it(temp_db):
