@@ -33,6 +33,7 @@ from core.db import (
     q,
     qi,
     qtx,
+    recover_scene_time_of_day,
     transaction,
     wset,
 )
@@ -988,6 +989,14 @@ class ChatArchiveService:
             self._remap.fixed_point_frames(world, frame_idmap)
             for key, value in world.items():
                 wset(new_chat_id, key, value)
+
+            # An archive written before the time-of-day split carries a scene
+            # whose `time` is whatever passage phrase its last beat happened
+            # to leave there, and the opening that actually named the time of
+            # day -- which this import has already restored as a step. Same
+            # recovery the database migration runs, on the one chat that just
+            # arrived; a no-op for an archive written after the split.
+            recover_scene_time_of_day(new_chat_id)
 
             world_tables = {
                 table: [dict(row) for row in data.get(table) or []]

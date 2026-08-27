@@ -723,8 +723,11 @@ def start_story(char_id: int, persona_id: int, greeting_index: int = 0,
     db.wset(cid, "fiction_model", {"genre": {"primary": "as written in the card"},
                                    "ontology": {}, "causal_regimes": [],
                                    "scale_rules": {}, "abstraction_rules": {}})
+    # `display` is the scene's TIME OF DAY restated on the clock, and turn 0's
+    # establish inherits this where it names none of its own. "now" as the
+    # fallback made a story that said nothing about time claim a time anyway.
     db.wset(cid, "simulation_clock", {"elapsed_seconds": 0.0,
-                                      "display": sub(extraction.get("time") or "now"),
+                                      "display": sub(extraction.get("time") or ""),
                                       "time_scale": "scene"})
 
     # Attach the chosen lorebook before turn 0 runs. A global (template) book is

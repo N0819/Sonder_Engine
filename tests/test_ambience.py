@@ -32,7 +32,7 @@ from dressing.ambience import (_safe_relative, acoustic_signature, candidate_key
 
 def _scene():
     return {
-        "location": "USS Enterprise D", "time": "night",
+        "location": "USS Enterprise D", "time_of_day": "night",
         "rooms": {
             "ten_forward": {"name": "Ten Forward",
                             "desc": "Amber light, panoramic windows, a long bar.",
@@ -77,7 +77,7 @@ def test_light_changes_the_picture_but_not_the_sound():
 def test_time_of_day_changes_the_sound():
     sc = _scene()                      # fixture is "night"
     before = acoustic_signature(sc, "ten_forward")
-    sc["time"] = "dawn"
+    sc["time_of_day"] = "dawn"
     assert acoustic_signature(sc, "ten_forward") != before
 
 
@@ -107,7 +107,7 @@ def test_a_pin_collapses_the_signature_to_the_choice():
     pin = {"source": "local", "path": "rain/tin_roof.ogg"}
     pinned = acoustic_signature(sc, "ten_forward", None, pin)
     assert pinned.startswith("pin")
-    sc["time"] = "dawn"
+    sc["time_of_day"] = "dawn"
     sc["weather"] = "storm"
     assert acoustic_signature(sc, "ten_forward", None, pin) == pinned
     # ...and two rooms pinned to the same file share one cache entry.
@@ -155,7 +155,7 @@ def test_soundscape_projection_has_no_concept_of_occupants():
 
 def _hearth_scene():
     return {
-        "time": "evening",
+        "time_of_day": "evening",
         "rooms": {
             "waystation_interior": {
                 "name": "Waystation Main Hall",
@@ -762,7 +762,7 @@ def test_the_veto_list_is_not_truncated():
 def _room_scene(desc, name="Ten Forward", time="night", **extra):
     room = {"name": name, "desc": desc}
     room.update(extra)
-    return {"time": time, "rooms": {"ten_forward": room},
+    return {"time_of_day": time, "rooms": {"ten_forward": room},
             "positions": {"Hinami": "ten_forward"}}
 
 

@@ -126,10 +126,20 @@ TIME_CLAIM_KEYS = frozenset({
 # of its time, plus the clock's metadata echoed back. Their presence is
 # never a claim, so a diff carrying only these asserts no time and gets no
 # warning (5 corpus rows carry `display` alone).
+#
+# THE PASSAGE PHRASE IS A RECORD, NOT A CHANNEL. `display_advance`/`display`
+# reach no live reader anywhere in the engine: they used to be written onto
+# `scene.time` and `simulation_clock.display`, which is how a per-beat phrase
+# came to overwrite -- and, spelled empty, ERASE -- the standing time of day
+# those two fields were documented to carry. That write is gone (see
+# `normalize_time_of_day`), and the phrase survives only as the beat's own
+# words on its persisted resolve variant. They stay in this set because a key
+# the vocabulary does not KNOW is reported as an unreadable claim, and a beat
+# labelling its own passage has made no claim to refuse.
 TIME_METADATA_KEYS = frozenset({
     "mode",               # 'action' | 'time_skip'
     "explicit",           # did the player ask for the skip
-    "display_advance",    # the phrase a reader sees
+    "display_advance",    # the beat's own phrase for its passage; recorded
     "display",            # the same phrase under the clock's own name
     "time_scale",         # the clock's own scale, echoed back
 })
@@ -316,20 +326,33 @@ def beat_end_elapsed(prev_elapsed, time_diff, *, floor=False):
     return elapsed, backwards, refused, False
 
 
-def time_diff_display(time_diff):
-    """The reader-facing phrase a beat gave its own passage of time, or ""
-    when it gave none. `display_advance` is the taught spelling; `display`
-    is the clock's own key echoed back (38 corpus rows).
+def normalize_time_of_day(value):
+    """The scene's standing TIME-OF-DAY label, or "" when the value is not one.
 
-    The canonical key wins BY PRESENCE, not by truthiness: a beat that
-    spells `display_advance: ""` has said this beat carries no phrase, and
-    an explicit clear must outrank a synonym rather than be overridden by
-    it. Canonical rows constantly carry the empty string.
+    THE SPLIT THIS ENFORCES. `scene.time` used to hold two incompatible kinds
+    of statement: a standing world property ("dusk", "Late autumn afternoon")
+    written once by `director_establish`, and a per-beat PASSAGE PHRASE
+    ("moments later") written by every resolved beat. They are not the same
+    kind of sentence -- one says where the world stands, the other says how
+    far this beat moved -- and every reader in the tree wanted the first while
+    the writer that won on almost every beat produced the second. Measured
+    2026-08-25 across the author's 81-chat corpus: 63 of 80 openings named a
+    readable time of day and only 6 live scenes still held one, so 57 stories
+    lost theirs to the passage phrase. `scene.time_of_day` is the standing
+    property; the passage phrase has no scene field at all (it survives as the
+    beat's own record on the persisted resolve variant).
+
+    A LABEL, NOT A CLOCK. Any written form is legitimate -- "dusk", "0830",
+    "Stardate 46357.4, 14:32 hours" -- because a time of day is fiction the
+    story wrote, and `dressing.backdrops.time_bucket` is the one place that
+    has to categorise it. What this refuses is a value that is not written
+    language at all: one live chat holds the bare boolean `False` here, and a
+    non-string reaching an image prompt or a mind's payload is nonsense no
+    reader downstream can detect.
     """
-    td = time_diff if isinstance(time_diff, dict) else {}
-    if "display_advance" in td:
-        return td["display_advance"] or ""
-    return td.get("display") or ""
+    if isinstance(value, str):
+        return value.strip()
+    return ""
 
 
 def time_diff_duration(time_diff):

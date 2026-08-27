@@ -26,7 +26,7 @@ from dressing.backdrops import _setting_only, visual_signature
 
 def _scene():
     return {
-        "location": "USS Enterprise D", "time": "night",
+        "location": "USS Enterprise D", "time_of_day": "night",
         "rooms": {
             "ten_forward": {"name": "Ten Forward",
                             "desc": "Amber light, panoramic windows."},
@@ -63,7 +63,7 @@ def test_a_visible_change_does_invalidate_it():
 def test_time_of_day_changes_the_picture():
     sc = _scene()          # fixture is "night"
     before = visual_signature(sc, "ten_forward")
-    sc["time"] = "dawn"
+    sc["time_of_day"] = "dawn"
     assert visual_signature(sc, "ten_forward") != before
 
 
@@ -219,19 +219,25 @@ def test_narrative_time_flavour_is_bucketed():
 def test_same_room_consecutive_turns_is_a_cache_hit():
     """The bug this guards cost a full regeneration per beat: turns 4 and 6 of
     a real chat had an IDENTICAL room description but times of "a few seconds"
-    and "a few seconds pass", so the raw string produced two different keys."""
+    and "a few seconds pass", so the raw string produced two different keys.
+
+    Those two strings can no longer reach this field at all -- they were the
+    passage phrase, and it has no scene field now -- but the rule that closed
+    the bug is the one still worth pinning and is wider than they were: the
+    key is a function of the BUCKET, not of the wording, so two ways of saying
+    the same hour are one picture."""
     sc = _scene()
-    sc["time"] = "a few seconds"
+    sc["time_of_day"] = "night"
     first = visual_signature(sc, "ten_forward")
-    sc["time"] = "a few seconds pass"
+    sc["time_of_day"] = "just after nightfall"
     assert visual_signature(sc, "ten_forward") == first
 
 
 def test_real_time_of_day_still_changes_the_picture():
     sc = _scene()
-    sc["time"] = "night"
+    sc["time_of_day"] = "night"
     night = visual_signature(sc, "ten_forward")
-    sc["time"] = "high noon"
+    sc["time_of_day"] = "high noon"
     assert visual_signature(sc, "ten_forward") != night
 
 
