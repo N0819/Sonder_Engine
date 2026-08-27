@@ -21,7 +21,7 @@
 | `agents/director_reconcile.py` | 592 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story`, `world.spatial` |
 | `agents/director_scopes.py` | 658 |  | `agents.director_views`, `core.db`, `world.survival` |
 | `agents/director_views.py` | 434 |  | `agents.common`, `story.character_schema`, `story.scene` |
-| `agents/loops.py` | 1174 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `core.db`, `story.character_schema`, `story.scene`, `world.spatial` |
+| `agents/loops.py` | 1199 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `core.db`, `story.character_schema`, `story.scene`, `world.spatial` |
 | `agents/mapping.py` | 337 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `core.db`, `llm.prompts`, `mind.memory`, `story.character_schema`, `story.scene` |
 | `agents/narration.py` | 1853 | Player-facing narration agent. | `agents`, `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `story.character_schema`, `story.scene`, `world.spatial`, `world.weather` |
 | `agents/perception.py` | 4477 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `mind`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
@@ -349,9 +349,9 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `interaction_loop()` | 512 | 592 lines |
+| `interaction_loop()` | 512 | 617 lines |
 | `deterministic_micro_perception()` | 137 | 144 lines |
-| `reaction_loop()` | 1105 | 70 lines |
+| `reaction_loop()` | 1130 | 70 lines |
 | `rehydrate_loop_views()` | 86 | 49 lines |
 | `_isolated_wave()` | 469 | 41 lines |
 | `_defer_to_unrun_reactor()` | 326 | 37 lines |
