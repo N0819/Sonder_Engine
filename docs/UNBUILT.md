@@ -2865,6 +2865,104 @@ Not built, and not obviously small — every reader keyed on `identity.name`
 would need to know which part is address and which is identity, which is the
 same distinction `address_components` already draws for a naming law.
 
+### 1.90 An opening may leave the whole cast nowhere, and nothing objects
+
+`director_establish` writes `positions`. On one generation of a five-character
+scenario it wrote ONE body — the player — and left every attached,
+`status='active'` cast member with no position, no pose and no station.
+
+WHAT THAT COSTS, measured end to end. `agents/common.character_room()` returns
+None for a body with no position; `agents/perception.py` builds `sources` only
+from cast that have a room, so `perception_act` committed
+`{"views": {}, "observations": {}}` with an all-empty `composer_ledger`. The
+character payload then carried `perception.current_room: ""`,
+`view: "Nothing in particular reaches you this beat."`, `observations: []`,
+`spatial_frame: {}`. An officer asked a direct question by name answered
+nothing, and his three considered responses were "remain at station",
+"initiate standard security sweep", "stand ready for any orders" — exactly what
+a mind with an empty beat produces. The Director was correct throughout
+(`flow.addressed_to` resolved, every speech span preserved) and the interaction
+loop called him first. Every stage behaved correctly on data that was already
+wrong before turn 1 ran.
+
+IT IS A SAMPLING FAILURE WITH NO FLOOR UNDER IT. Same scenario, same prompt,
+four runs: three placed all six bodies, one placed one. Nothing objected,
+because the only opening-stage placement checks —
+`llm/schemas.py:5222 _unplaced_establish_entities` and
+`agents/director_floors.py:1287 _unplaced_minted_entities` — iterate
+`state_diff.entities`, things the Director MINTED. **Registered cast are not
+entities**, so no floor covers them, no warning fires, and no test asserts that
+an attached active character receives a room from the opening.
+
+The fix is a floor, not a prompt: an attached, active, non-dormant cast member
+that the opening left unplaced is a defect the engine can see for itself.
+
+### 1.91 Nothing tells a character they were addressed
+
+Confirmed by grepping all 77 character payloads across three instrumented runs:
+zero hits for any representation of addressee-hood. The `decision` block a
+character receives is three keys — `deep_tom_requested`, `dialogue_mode`,
+`speech_budget` — and none of them says a question was put to this mind.
+
+The engine KNOWS: `flow.addressed_to` resolves, `agents/loops.py` uses it for
+speaker ordering and for the silence guard. It reaches the loop and stops there.
+Even on the path that works, a question arrives as a sentence inside
+`perception.view`, attributed to an unrecognised body — "An indistinct figure
+says in an inquiring voice: ..." — with nothing marking it as directed at the
+reader rather than overheard.
+
+AND THE NOTE THAT WOULD SAY SO FIRES ONE BEAT LATE, BY CONSTRUCTION.
+`agents/character.py:339 _unanswered_question_note` is bounded
+`WHERE t.idx >= ? AND t.idx < current_turn_idx`, so the current beat's own
+interpret is out of range. Measured: on the beat a character was asked, no
+note; on the NEXT beat it appears as
+`{"from": "the player", "asked": "...", "turns_ago": 1}`. On the beat it
+matters, it is structurally unable to fire.
+
+RESIDUAL inside it: a line whose vocative names one character was booked as a
+debt owed by ANOTHER — the gate trusts the asking character's own
+`interaction.addresses` list, and a line addressed by name to somebody else can
+still land in it.
+
+### 1.92 A registered character can be voiced by the background path
+
+When a cast member is placed into a Charter post (`featured_residents`), they
+become a Charter BODY — and `pick_background_reactors` selects Charter bodies.
+So a character with a full agent, memory and psychology becomes eligible for the
+stateless background reactor.
+
+Measured: one beat had the captain give two orders as himself, and then a
+background presence named `captain <his own name>` say "Acknowledged,
+Lieutenant" — rendered to the player as "a voice she couldn't place". Every
+subsequent beat carried a cast member as its background presence.
+
+Introduced by opting a story into `featured_residents`, which is otherwise
+correct and is what makes a chain of command reach people who can be spoken to.
+The fix is narrow: registered cast are excluded from background selection. The
+background path exists for presences that have no agent; a body that has one is
+not a candidate, whatever table it also appears in.
+
+### 1.93 A contact with an object is narrated as a contact with a person
+
+The scene held one contact and it was CORRECT: `{actor: <player>, actor_part:
+"hands", target: <a console entity>, target_part: "surface", manner: "pushing
+sequence data", relation: "surface"}`. Hands on a console.
+
+What reached the page, two beats running: "her palms rested against a surface
+that pressed back — steady, warm with something other than her own heat" and
+then "Her hands were against SOMEONE. Not the console, not the chair's arm — a
+surface that gave back warmth and weight of its own." The second explicitly
+rules out the console, which was the right answer.
+
+The data is right and the rendering is wrong: a contact percept applies body
+vocabulary — warmth, weight, pressing back — without asking whether the target
+is a body. Precedent for the shape of the fix is
+`spatial_transit._is_body_entity`, which refuses to read `kind` and derives
+bodyness from attire/scales because the label could not be trusted.
+
+Second half: a settled contact was re-narrated on every subsequent beat. A
+standing contact should become background after the beat that made it.
+
 ### 1.85 A memory's age off a per-beat estimate, not a per-beat record
 
 **Found:** 2026-08-26, landing `memories.encoded_at_seconds`.
