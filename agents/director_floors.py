@@ -24,7 +24,7 @@ from story.scene import (
     condition_exit_owner,
 )
 from world.mechanics import read_time_diff
-from world.spatial import room_of
+from world.spatial import merge_scene_with_diff, room_of
 
 from .common import _mask_quoted_spans
 from .director_lingua import _ling
@@ -1277,6 +1277,60 @@ def _narrated_destruction_subjects(resolved_event, dialogue_log, sd, sc,
                 continue
             flagged[key] = cand["label"]
     return [flagged[key] for key in sorted(flagged)]
+
+def _unplaced_minted_entities(sc, sd):
+    """Things this beat brought into the world and left nowhere.
+
+    MEASURED BY OUTCOME, not by re-deriving where a thing should have gone:
+    the diff is merged and `room_of` is asked, so this cannot drift away from
+    the placement rules (`derive_inventory_placements` and everything else the
+    merge runs) the way a second copy of them would. An entity with no room is
+    excluded from co-presence by construction, so nothing can perceive it,
+    reach it, or act on it -- it exists and is nowhere.
+
+    The equivalent check has existed since the opening stage was written and
+    ran ONLY there (`schemas._unplaced_establish_entities`, under `elif
+    step_key == "director_establish"`) -- on the one Director stage that
+    already places 96.5% of what it mints, and not on the fan-out that places
+    5.8%. It also exempts every `portable` thing on the stated ground that
+    "inventory is not `positions`"; that ground now has a floor under it, so
+    the exemption is unnecessary here and portables are checked like anything
+    else.
+
+    Scoped to entities THIS beat's diff names: a thing left unplaced ten beats
+    ago is not this beat's omission, and re-reporting it every beat would make
+    the warning noise. Skips the three classes that have no room by
+    construction -- a bodiless voice, a portal spanning two rooms, something
+    in transit -- and anything the beat removed outright.
+    """
+    entities = (sd or {}).get("entities")
+    if not isinstance(entities, dict) or not entities:
+        return []
+    removed = {str(e).strip().casefold()
+               for e in ((sd or {}).get("remove_entities") or [])}
+    merged = merge_scene_with_diff(sc or {}, sd or {})
+    missing = []
+    for eid, ent in entities.items():
+        if not isinstance(ent, dict):
+            continue
+        if str(eid).strip().casefold() in removed:
+            continue
+        if ent.get("ubiquitous"):
+            continue
+        state = ent.get("state")
+        if isinstance(state, dict) and (state.get("link")
+                                        or state.get("transit")):
+            continue
+        if ent.get("interior_rooms"):
+            continue
+        if room_of(merged, str(eid)) is not None:
+            continue
+        name = str(ent.get("name") or "").strip()
+        if name and room_of(merged, name) is not None:
+            continue
+        missing.append(str(eid))
+    return sorted(missing)
+
 
 def _scan_for_untracked_restraint(resolved_event, dialogue_log, conditions,
                                    tracked_names):
