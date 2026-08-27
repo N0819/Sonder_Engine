@@ -17,7 +17,8 @@ import json
 import re
 
 from llm import schemas
-from world.spatial import _merge_entity, _merge_room
+from world.spatial import (_merge_entity, _merge_room, resolve_placement_target,
+                           room_of)
 
 from .common import (
     _contextual_rooms,
@@ -558,13 +559,67 @@ def _entity_state_has_transit(entity_def):
     state = entity_def.get("state") if isinstance(entity_def, dict) else None
     return isinstance(state, dict) and ("transit" in state or "link" in state)
 
-def _evidence_present(sd, omission, forms=None):
+def _subject_is_somewhere(sd, scene, subject, hits, forms=None):
+    """Does this beat leave the subject anywhere a mind could reach it?
+
+    A THING THAT EXISTS AND IS NOWHERE IS NOT AN ENCODED CHANGE. `entities`
+    carries no location -- an entity's room is `scene["positions"][id]` and
+    nothing else -- so a mint on its own says a noun now exists and says
+    nothing about where. Two evidence classes were acquitting placements on
+    exactly that: measured, a diff carrying `entities: {x: {...}}` plus an
+    `inventory_ops` entry naming x, with `positions` empty, reported ENCODED
+    under both `entities` and `inventory` while `room_of` answered None. The
+    detector that exists to catch an unencoded change was blind to this one,
+    and the two categories a placement is naturally filed under were the two
+    that acquitted it.
+
+    Located means any of: this beat placed it, this beat put it in something,
+    a transfer op named a destination that RESOLVES (the same resolver the
+    merge derivation uses, so the classifier and the writer cannot disagree),
+    the standing scene already places it, or it is one of the things that has
+    no room by construction -- a bodiless voice, a portal spanning two rooms,
+    or an entity this beat removed outright.
+    """
+    for key in (sd.get("positions") or {}):
+        if hits(key):
+            return True
+    for key, record in (sd.get("containment") or {}).items():
+        if hits(key) and record:
+            return True
+    for item in (sd.get("remove_entities") or []):
+        if hits(item):
+            return True
+    for eid, ed in (sd.get("entities") or {}).items():
+        if not (hits(eid) or (isinstance(ed, dict) and (
+                hits(ed.get("name"))
+                or any(hits(a) for a in (ed.get("aliases") or []))))):
+            continue
+        if isinstance(ed, dict) and (ed.get("ubiquitous")
+                                     or _entity_state_has_transit(ed)):
+            return True
+    for op in (sd.get("inventory_ops") or []):
+        if not isinstance(op, dict) or not hits(op.get("object_id")):
+            continue
+        if resolve_placement_target(scene or {}, op.get("to_id"))[0]:
+            return True
+    for form in [subject] + list(forms or []):
+        if str(form or "").strip() and room_of(scene or {}, str(form)) is not None:
+            return True
+    return False
+
+
+def _evidence_present(sd, omission, forms=None, *, scene=None):
     """CATEGORY-AWARE evidence check: is the omission's subject touched in
     the RIGHT dimension of the diff, not merely mentioned somewhere? This is
     what closes the partial-encoding trap -- a room whose desc was updated
     but whose narrated adjacency change was dropped passes bare containment
     yet fails the 'adjacency' evidence class. Unknown/other categories fall
-    back to the shallow containment check."""
+    back to the shallow containment check.
+
+    `scene` is the beat's ONSET scene, and only the two location-bearing
+    classes read it (see `_subject_is_somewhere`). Omitted, those two keep
+    their old, looser answer -- so a caller that has no scene degrades to the
+    behaviour it had rather than to a wrong one."""
     category = _normalize_omission_category(omission.get("category"))
     subject = omission.get("subject")
     hits = _make_subject_hit(subject, forms)
@@ -658,12 +713,19 @@ def _evidence_present(sd, omission, forms=None):
         return any(isinstance(c, dict) and hits(c.get("who"))
                    for c in (sd.get("cast_changes") or []))
     if category == "entities":
+        named = False
         for eid, ed in (sd.get("entities") or {}).items():
             if hits(eid) or (isinstance(ed, dict) and (
                     hits(ed.get("name"))
                     or any(hits(a) for a in (ed.get("aliases") or [])))):
-                return True
-        return any(hits(e) for e in (sd.get("remove_entities") or []))
+                named = True
+                break
+        if not named:
+            return any(hits(e) for e in (sd.get("remove_entities") or []))
+        # A MINT IS NOT A PLACEMENT. The channel says a noun exists; where it
+        # is lives in `positions`, which this channel's owner cannot write.
+        return True if scene is None \
+            else _subject_is_somewhere(sd, scene, subject, hits, forms)
     if category == "conditions":
         # Any conditions entry for the subject counts, INCLUDING an ending
         # one (active:0 / expires_at set) -- 'the fire burns out' is encoded
@@ -828,12 +890,19 @@ def _evidence_present(sd, omission, forms=None):
             return True
         return False
     if category == "inventory":
-        return any(
+        named = any(
             isinstance(op, dict) and (hits(op.get("object_id"))
                                       or hits(op.get("from_id"))
                                       or hits(op.get("to_id")))
             for op in (sd.get("inventory_ops") or [])
         )
+        if not named:
+            return False
+        # An op whose destination resolves to nothing moved nothing: the
+        # merge derivation refuses it and the thing stays exactly where it
+        # was, which for a thing minted this beat is nowhere at all.
+        return True if scene is None \
+            else _subject_is_somewhere(sd, scene, subject, hits, forms)
     if category == "cast_changes":
         if any(isinstance(c, dict) and hits(c.get("who"))
                for c in (sd.get("cast_changes") or [])):
