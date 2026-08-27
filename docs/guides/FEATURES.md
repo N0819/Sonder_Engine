@@ -35,6 +35,11 @@ narrower than it sounds — those two documents have the detail.
 - **Point of view follows how you write** — First, second or third person is
   detected from your own phrasing, held between turns, and only changed on a
   decisive shift, so one stray "you" cannot flip a whole campaign's voice.
+- **Tense is yours to choose** — Narration can be set to present or past for a
+  story, and changed mid-story; leave it unset and nothing is asked for, which
+  is what every story did before the dial existed. It governs the narrator
+  alone: characters still speak in the present, and your own input stays a
+  claim about what you attempt rather than part of the record.
 - **Style exemplars** — Supply passages that calibrate the prose voice without
   supplying any content.
 - **Genre & style guide** — A standing instruction for everything the engine
