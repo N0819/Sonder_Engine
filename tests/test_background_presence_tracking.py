@@ -13,11 +13,24 @@ from persist.commit import (
     track_background_presences,
     promotable_background_presences,
     _background_name_mentioned,
+    presence_name_items,
+    presence_record_for,
     BACKGROUND_PROMOTION_DIALOGUE_THRESHOLD,
     BACKGROUND_PROMOTION_MENTION_THRESHOLD,
 )
 from story.character_schema import default_character_data
 from core.pipeline_context import ChatData, PipelineContext, TurnData
+
+
+def _rec(presences, name):
+    """The tracked record answering to this display name, or None. The
+    ledger keys on minted uids; every name assertion goes through the same
+    resolver seam production readers use."""
+    return presence_record_for(presences, name)[1]
+
+
+def _names(presences):
+    return {n for n, _ in presence_name_items(presences)}
 
 
 def _make_chat(db):
@@ -82,7 +95,7 @@ def test_registered_cast_members_are_never_tracked(temp_db):
     track_background_presences(ctx, nonce=0)
 
     presences = temp_db.wget(chat_id, "background_presences", {})
-    assert "Jean-Luc Picard" not in presences
+    assert _rec(presences, "Jean-Luc Picard") is None
 
 
 def test_untracked_speaker_gets_tracked_and_counted(temp_db):
@@ -95,10 +108,11 @@ def test_untracked_speaker_gets_tracked_and_counted(temp_db):
     track_background_presences(ctx, nonce=0)
 
     presences = temp_db.wget(chat_id, "background_presences", {})
-    assert "Dr. Crusher" in presences
-    assert presences["Dr. Crusher"]["dialogue_turns"] == [3]
-    assert presences["Dr. Crusher"]["first_turn"] == 3
-    assert presences["Dr. Crusher"]["last_turn"] == 3
+    rec = _rec(presences, "Dr. Crusher")
+    assert rec is not None
+    assert rec["dialogue_turns"] == [3]
+    assert rec["first_turn"] == 3
+    assert rec["last_turn"] == 3
 
 
 def test_entity_with_person_kind_is_tracked(temp_db):
@@ -113,8 +127,8 @@ def test_entity_with_person_kind_is_tracked(temp_db):
     track_background_presences(ctx, nonce=0)
 
     presences = temp_db.wget(chat_id, "background_presences", {})
-    assert "The Innkeeper" in presences
-    assert "The Bar" not in presences
+    assert "The Innkeeper" in _names(presences)
+    assert "The Bar" not in _names(presences)
 
 
 def test_declared_agents_of_any_kind_are_tracked(temp_db):
@@ -144,9 +158,9 @@ def test_declared_agents_of_any_kind_are_tracked(temp_db):
     presences = temp_db.wget(chat_id, "background_presences", {})
     for agent in ("Security Guard Peterson", "The Grendel", "Skitter",
                   "Unit 7", "The Warden"):
-        assert agent in presences, agent
+        assert agent in _names(presences), agent
     for inert in ("Control Panel", "The Kestrel", "Supply Crate"):
-        assert inert not in presences, inert
+        assert inert not in _names(presences), inert
 
 
 def test_id_shaped_speaker_folds_to_entity_display_name(temp_db):
@@ -171,10 +185,10 @@ def test_id_shaped_speaker_folds_to_entity_display_name(temp_db):
     track_background_presences(ctx, nonce=0)
 
     presences = temp_db.wget(chat_id, "background_presences", {})
-    assert "Security Guard Alpha" in presences
-    assert "char_guard_alpha" not in presences
+    assert len(presences) == 1, "exactly one presence, not an id-keyed twin"
+    assert _names(presences) == {"Security Guard Alpha"}
     # The dialogue turn is credited to the real (display-name) presence.
-    assert presences["Security Guard Alpha"]["dialogue_turns"] == [5]
+    assert _rec(presences, "Security Guard Alpha")["dialogue_turns"] == [5]
 
 
 def test_mentions_only_count_for_already_tracked_names(temp_db):
@@ -192,10 +206,10 @@ def test_mentions_only_count_for_already_tracked_names(temp_db):
     track_background_presences(ctx, nonce=0)
 
     presences = temp_db.wget(chat_id, "background_presences", {})
-    assert presences["Dr. Crusher"]["mention_turns"] == [5]
+    assert _rec(presences, "Dr. Crusher")["mention_turns"] == [5]
     # "A stranger" is never seeded as a candidate from free prose alone.
-    assert "A stranger" not in presences
-    assert "stranger" not in {n.lower() for n in presences}
+    assert "A stranger" not in _names(presences)
+    assert "stranger" not in {n.lower() for n in _names(presences)}
 
 
 def test_promotable_after_dialogue_threshold(temp_db):
@@ -234,7 +248,7 @@ def test_state_diff_person_harvests_sketch(temp_db):
     })
     track_background_presences(ctx, nonce=0)
 
-    rec = temp_db.wget(chat_id, "background_presences", {})["Mira"]
+    rec = _rec(temp_db.wget(chat_id, "background_presences", {}), "Mira")
     assert rec["sketch"]["role_hint"] == "harried young serving girl"
     assert rec["sketch"]["station_room"] == "taproom"
 
@@ -252,7 +266,7 @@ def test_sketch_not_clobbered_by_descriptionless_restatement(temp_db):
     })
     track_background_presences(ctx, nonce=0)
 
-    rec = temp_db.wget(chat_id, "background_presences", {})["Mira"]
+    rec = _rec(temp_db.wget(chat_id, "background_presences", {}), "Mira")
     assert rec["sketch"]["role_hint"] == "harried young serving girl"  # preserved
 
 
@@ -269,7 +283,7 @@ def test_sketch_overwritten_by_new_director_description(temp_db):
     })
     track_background_presences(ctx, nonce=0)
 
-    rec = temp_db.wget(chat_id, "background_presences", {})["Mira"]
+    rec = _rec(temp_db.wget(chat_id, "background_presences", {}), "Mira")
     assert rec["sketch"]["role_hint"] == "the innkeeper's daughter"  # director truth wins
     assert rec["sketch"]["station_room"] == "taproom"  # untouched field preserved
 
@@ -295,8 +309,8 @@ def test_establish_entities_register_location_implied_presence(temp_db):
     track_background_presences(ctx, nonce=0)
 
     presences = temp_db.wget(chat_id, "background_presences", {})
-    assert "Doran" in presences
-    rec = presences["Doran"]
+    assert "Doran" in _names(presences)
+    rec = _rec(presences, "Doran")
     assert rec["first_turn"] == 0
     assert rec["dialogue_turns"] == []
     assert rec["mention_turns"] == []
@@ -357,11 +371,18 @@ class TestOneCreatureIsOnePresence:
         assert _presence_identity("Dr. Crusher") != _presence_identity("Crusher")
 
     def test_the_established_spelling_wins(self):
-        from persist.commit import _resolve_presence_name
+        from persist.commit import _resolve_or_mint_presence
         presences = {"A Dalek": {"first_turn": 0}}
-        assert _resolve_presence_name("The Dalek", presences) == "A Dalek"
-        assert _resolve_presence_name("Dalek", presences) == "A Dalek"
-        assert _resolve_presence_name("A Judoon", presences) == "A Judoon"
+        established = presences["A Dalek"]
+        # Both re-spellings file under the ESTABLISHED record rather than
+        # minting a stranger; a genuinely new name mints a fresh one.
+        key = _resolve_or_mint_presence("The Dalek", presences)
+        assert presences[key] is established
+        key = _resolve_or_mint_presence("Dalek", presences)
+        assert presences[key] is established
+        fresh = _resolve_or_mint_presence("A Judoon", presences)
+        assert presences[fresh] is not established
+        assert presences[fresh]["name"] == "A Judoon"
 
     def test_an_already_split_ledger_heals(self):
         """Chat 57's exact shape. Folding happens on load so a story already
@@ -377,8 +398,9 @@ class TestOneCreatureIsOnePresence:
                           "dialogue_turns": [24], "mention_turns": [23],
                           "sketch": {"station_room": "alley_room"}},
         })
-        assert list(folded) == ["A Dalek"], "the first-seen spelling keeps the name"
-        record = folded["A Dalek"]
+        assert len(folded) == 1, "one creature, one record"
+        record = next(iter(folded.values()))
+        assert record["name"] == "A Dalek", "the first-seen spelling keeps the name"
         assert record["dialogue_turns"] == [1, 2, 17, 19, 20, 24]
         assert record["mention_turns"] == [3, 5, 23]
         assert record["first_turn"] == 0 and record["last_turn"] == 25
@@ -392,7 +414,8 @@ class TestOneCreatureIsOnePresence:
             "A Dalek": {"first_turn": 0, "last_turn": 3, "dialogue_turns": []},
             "A Judoon": {"first_turn": 1, "last_turn": 3, "dialogue_turns": []},
         })
-        assert sorted(folded) == ["A Dalek", "A Judoon"]
+        assert len(folded) == 2
+        assert _names(folded) == {"A Dalek", "A Judoon"}
 
     def test_two_bodies_in_the_room_are_left_as_two(self):
         """The scene is the authority on how many there are, not the name.
@@ -402,7 +425,8 @@ class TestOneCreatureIsOnePresence:
         An over-merge silently welds two characters into one, which is worse
         than a split a name would fix -- so two bodies means hands off.
         """
-        from persist.commit import _fold_duplicate_presences, _resolve_presence_name
+        from persist.commit import (_fold_duplicate_presences,
+                                    _resolve_or_mint_presence)
         crowd = {"entities": {
             "e1": {"name": "A Dalek"},
             "e2": {"name": "The Dalek"},
@@ -411,20 +435,30 @@ class TestOneCreatureIsOnePresence:
             "A Dalek": {"first_turn": 0, "last_turn": 3, "dialogue_turns": [1]},
             "The Dalek": {"first_turn": 2, "last_turn": 3, "dialogue_turns": [3]},
         }
-        assert sorted(_fold_duplicate_presences(dict(ledger), crowd)) == [
-            "A Dalek", "The Dalek"]
-        assert _resolve_presence_name("Dalek", ledger, crowd) == "Dalek"
+        folded = _fold_duplicate_presences(dict(ledger), crowd)
+        assert len(folded) == 2
+        assert _names(folded) == {"A Dalek", "The Dalek"}
+        # A bare respelling in a crowd mints its own presence rather than
+        # guessing which of the two bodies it meant.
+        before = set(folded)
+        key = _resolve_or_mint_presence("Dalek", folded, crowd)
+        assert key not in before
 
     def test_one_body_in_the_room_still_merges(self):
-        from persist.commit import _fold_duplicate_presences, _resolve_presence_name
+        from persist.commit import (_fold_duplicate_presences,
+                                    _resolve_or_mint_presence)
         alone = {"entities": {"e1": {"name": "A Dalek",
                                      "kind": "dalek war machine"}}}
         ledger = {
             "A Dalek": {"first_turn": 0, "last_turn": 3, "dialogue_turns": [1]},
             "The Dalek": {"first_turn": 2, "last_turn": 3, "dialogue_turns": [3]},
         }
-        assert list(_fold_duplicate_presences(dict(ledger), alone)) == ["A Dalek"]
-        assert _resolve_presence_name("Dalek", ledger, alone) == "A Dalek"
+        folded = _fold_duplicate_presences(dict(ledger), alone)
+        assert len(folded) == 1
+        (key, record), = folded.items()
+        assert record["name"] == "A Dalek"
+        # A later respelling files under the SAME record, not a new one.
+        assert _resolve_or_mint_presence("Dalek", folded, alone) == key
 
 
 class TestTheTwoTitleListsAreNotOneList:
@@ -508,7 +542,7 @@ class TestAWhisperAddressesNobody:
         track_background_presences(self._whisper_ctx(chat_id, 3, "concealed"),
                                    nonce=0)
 
-        record = temp_db.wget(chat_id, "background_presences", {})["Dr. Crusher"]
+        record = _rec(temp_db.wget(chat_id, "background_presences", {}), "Dr. Crusher")
         assert record.get("addressed_turns", []) == []
 
     def test_the_same_line_spoken_openly_still_does(self, temp_db):
@@ -518,7 +552,7 @@ class TestAWhisperAddressesNobody:
         track_background_presences(self._whisper_ctx(chat_id, 3, "public"),
                                    nonce=0)
 
-        record = temp_db.wget(chat_id, "background_presences", {})["Dr. Crusher"]
+        record = _rec(temp_db.wget(chat_id, "background_presences", {}), "Dr. Crusher")
         assert record.get("addressed_turns", []) == [3]
 
 

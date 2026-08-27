@@ -11,8 +11,13 @@ import json
 import time
 
 from story.character_schema import default_character_data
-from persist.commit import pick_background_reactor, track_background_presences
+from persist.commit import (pick_background_reactor, presence_record_for,
+                            track_background_presences)
 from core.pipeline_context import ChatData, PipelineContext, TurnData
+
+
+def _rec(presences, name):
+    return presence_record_for(presences, name)[1]
 
 
 def _setup(temp_db, *, cast_names=(), scene=None, presences=None,
@@ -147,9 +152,9 @@ def test_displaced_character_address_writes_pending_reply(temp_db):
                                "action": ""}
     track_background_presences(ctx, nonce=0)
     presences = temp_db.wget(chat_id, "background_presences", {})
-    assert presences["Doran"]["pending_reply"]["from"] == "Sara"
-    assert presences["Doran"]["pending_reply"]["expires_turn"] == 7
-    assert "pending_reply" not in presences["Reya"]  # the winner owes nothing
+    assert _rec(presences, "Doran")["pending_reply"]["from"] == "Sara"
+    assert _rec(presences, "Doran")["pending_reply"]["expires_turn"] == 7
+    assert "pending_reply" not in _rec(presences, "Reya")  # the winner owes nothing
 
 
 def test_gate_selects_owed_presence_next_turn(temp_db):
@@ -175,7 +180,7 @@ def test_owed_reply_cleared_after_firing(temp_db):
                                                       "conceal_from": []},
                                "action": ""}
     track_background_presences(ctx, nonce=0)
-    assert "pending_reply" not in temp_db.wget(chat_id, "background_presences", {})["Doran"]
+    assert "pending_reply" not in _rec(temp_db.wget(chat_id, "background_presences", {}), "Doran")
 
 
 def test_stale_pending_reply_ignored_and_swept(temp_db):
@@ -189,7 +194,7 @@ def test_stale_pending_reply_ignored_and_swept(temp_db):
     ctx["background_react"] = {"fired": False, "name": None,
                                "dialogue_log_entry": None, "action": ""}
     track_background_presences(ctx, nonce=0)
-    assert "pending_reply" not in temp_db.wget(chat_id, "background_presences", {})["Doran"]
+    assert "pending_reply" not in _rec(temp_db.wget(chat_id, "background_presences", {}), "Doran")
 
 
 def test_selected_but_silent_presence_gets_no_debt(temp_db):
@@ -202,7 +207,7 @@ def test_selected_but_silent_presence_gets_no_debt(temp_db):
     ctx["background_react"] = {"fired": False, "name": "Doran",
                                "dialogue_log_entry": None, "action": ""}
     track_background_presences(ctx, nonce=0)
-    assert "pending_reply" not in temp_db.wget(chat_id, "background_presences", {})["Doran"]
+    assert "pending_reply" not in _rec(temp_db.wget(chat_id, "background_presences", {}), "Doran")
 
 
 def test_story_character_addresses_npc_reply_lands_next_turn(temp_db, monkeypatch):
@@ -234,7 +239,7 @@ def test_story_character_addresses_npc_reply_lands_next_turn(temp_db, monkeypatc
     ctx5["background_react"] = background.background_react(ctx5, nonce=5)
     assert ctx5["background_react"]["name"] == "Reya"
     track_background_presences(ctx5, nonce=5)
-    assert temp_db.wget(chat_id, "background_presences", {})["Doran"]["pending_reply"]["from"] == "Sara"
+    assert _rec(temp_db.wget(chat_id, "background_presences", {}), "Doran")["pending_reply"]["from"] == "Sara"
 
     # Turn 6: same chat, no new address; Doran answers on the owed reply.
     turn6 = temp_db.qi("INSERT INTO turns(chat_id,idx,player_input,created) VALUES(?,?,?,?)",
@@ -252,7 +257,7 @@ def test_story_character_addresses_npc_reply_lands_next_turn(temp_db, monkeypatc
     assert captured["payload"]["beat"]["addressed_by"]["beats_ago"] == 1
     track_background_presences(ctx6, nonce=6)
     # debt discharged
-    assert "pending_reply" not in temp_db.wget(chat_id, "background_presences", {})["Doran"]
+    assert "pending_reply" not in _rec(temp_db.wget(chat_id, "background_presences", {}), "Doran")
 
 
 def test_track_pending_reply_is_idempotent(temp_db):
@@ -269,7 +274,7 @@ def test_track_pending_reply_is_idempotent(temp_db):
                                                       "conceal_from": []},
                                "action": ""}
     track_background_presences(ctx, nonce=0)
-    first = temp_db.wget(chat_id, "background_presences", {})["Doran"]["pending_reply"]
+    first = _rec(temp_db.wget(chat_id, "background_presences", {}), "Doran")["pending_reply"]
     track_background_presences(ctx, nonce=0)
-    second = temp_db.wget(chat_id, "background_presences", {})["Doran"]["pending_reply"]
+    second = _rec(temp_db.wget(chat_id, "background_presences", {}), "Doran")["pending_reply"]
     assert first == second

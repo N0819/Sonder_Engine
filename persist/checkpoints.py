@@ -574,6 +574,12 @@ MACHINE_MINTED = "machine_minted"
 SETTING_PROVENANCE = {
     "dialogue_config": SET_BY_HAND,     # NPC autonomy, prose pacing, line budgets
     "background_config": SET_BY_HAND,   # background life / scene-manager dials
+    # The authored story-level naming law (story/naming.py). A dial the
+    # author turned; a rewind must not undo it. Names ALREADY MINTED from it
+    # live in `background_presences` records and roll back with the story --
+    # and re-mint identically on replay, the mint being deterministic in the
+    # presence uid.
+    "naming_profile": SET_BY_HAND,
     # genre, tone, register -- and `narration_tense`, the one authored dial
     # the narrator reads. It rides this key rather than taking a key of its
     # own, so it survived a reroll from the day it existed, with no second

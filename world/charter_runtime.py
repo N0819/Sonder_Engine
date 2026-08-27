@@ -45,8 +45,15 @@ def _window_hours(value):
     return max(0.25, min(24.0, value))
 
 
-def normalize_registry(stored):
-    """Normalize author definitions and runtime markers into one JSON shape."""
+def normalize_registry(stored, reservation=None):
+    """Normalize author definitions and runtime markers into one JSON shape.
+
+    ``reservation`` is the story's registered identity forms, passed by every
+    caller that has a story in reach (`save_registry`). Normalization is what
+    mints a name for a body that arrived without one, so a registry saved by
+    hand or by an older generation goes through the same refusal the
+    generator does.
+    """
     stored = stored if isinstance(stored, dict) else {}
     raw_items = stored.get("items")
     if not isinstance(raw_items, dict):
@@ -60,7 +67,7 @@ def normalize_registry(stored):
     for key, raw in raw_items.items():
         raw = raw if isinstance(raw, dict) else {}
         state = raw.get("state") if isinstance(raw.get("state"), dict) else raw
-        state = normalize_charter(state)
+        state = normalize_charter(state, reservation)
         state["key"] = str(state.get("key") or key)
         last = raw.get("last_elapsed_seconds")
         try:
@@ -193,11 +200,38 @@ def registry_for(cid, frame_id=None):
 
 
 def save_registry(cid, stored, frame_id=None):
-    """Persist an explicitly authored registry in one temporal frame."""
+    """Persist an explicitly authored registry in one temporal frame.
+
+    The one write chokepoint for the registry, and therefore where the
+    story's registered identity forms are subtracted from every charter's
+    naming law before it lands. `story/naming.py` reads a stored Charter law
+    as one of its lanes, so a law persisted holding a registered mind's
+    address would keep offering it to readers that never saw this generation.
+    """
     from core.db import wset_for_frame
-    normalized = normalize_registry(stored)
+    from story.naming import story_identity_reservation
+    normalized = normalize_registry(
+        stored, story_identity_reservation(cid, _stored_naming_laws(stored)))
     wset_for_frame(cid, CHARTERS_KEY, normalized, frame_id)
     return normalized
+
+
+def _stored_naming_laws(stored):
+    """Every naming law a registry-shaped blob carries, in either the
+    normalized or the bare authoring shape. Read only for title vocabulary."""
+    stored = stored if isinstance(stored, dict) else {}
+    items = stored.get("items")
+    if not isinstance(items, dict):
+        items = {key: value for key, value in stored.items()
+                 if key not in {"version", "recent_events"}
+                 and isinstance(value, dict)}
+    laws = []
+    for raw in items.values():
+        raw = raw if isinstance(raw, dict) else {}
+        state = raw.get("state") if isinstance(raw.get("state"), dict) else raw
+        if isinstance(state.get("naming"), dict):
+            laws.append(state["naming"])
+    return laws
 
 
 def _prepare_cast_histories(cid, request, *, frame_id=None):
@@ -736,6 +770,15 @@ def _fail_job(cid, exc):
     clear_lived_location_job(cid)
 
 
+def _plan_naming_laws(plan):
+    """The naming laws a raw plan proposes, one per charter. Read only for
+    their title vocabulary, so a registered name that carries a rank is still
+    recognised as the person underneath it."""
+    charters = (plan or {}).get("charters") if isinstance(plan, dict) else None
+    return [raw.get("naming") for raw in (charters or ())
+            if isinstance(raw, dict) and isinstance(raw.get("naming"), dict)]
+
+
 def _plan_lived_location(cid, request, chat):
     """The pure prefix: two model calls, a deterministic closure, no writes.
 
@@ -784,9 +827,19 @@ def _plan_lived_location(cid, request, chat):
     wants_history = bool(request.get("generate_history", True)) and horizon > 0
     if wants_history:
         history = propose_history(plan, lore, horizon)
+    # The cast is not a naming lane, it is the no-fly list. The planner was
+    # handed the same lore the cast came from, so its pools arrive holding
+    # the cast's own name elements unless something subtracts them.
+    from story.naming import (
+        authored_naming_profile, naming_law_exists, story_identity_reservation)
+    authored = authored_naming_profile(cid)
+    naming_law = authored if naming_law_exists(authored) else None
+    laws = [naming_law] if naming_law else _plan_naming_laws(plan)
     town = close_plan(
         plan, history=history,
-        featured_residents=request.get("featured_residents"))
+        featured_residents=request.get("featured_residents"),
+        reservation=story_identity_reservation(cid, laws),
+        naming_law=naming_law)
     unnamed = [
         f"{charter_key}/{body_key}"
         for charter_key, state in town["charters"].items()

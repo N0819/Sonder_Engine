@@ -720,16 +720,14 @@ def _presence_conduct_tail(chat_id, name):
     draft_promoted_character).
     """
     from core.db import wget
+    from persist.commit import presence_record_for
 
     presences = wget(chat_id, "background_presences", {}) or {}
-    record = presences.get(name)
-    if record is None:
-        wanted = name.casefold()
-        record = next(
-            (rec for key, rec in presences.items()
-             if str(key).casefold() == wanted),
-            None,
-        )
+    # `name` may be a display name, a former spelling, or the record's own
+    # uid; the resolver hears all three, and refuses when two tracked
+    # records answer to one name -- a promotion draft seeded from BOTH
+    # people's lines is the weld this key exists to prevent.
+    record = presence_record_for(presences, name)[1]
     if not isinstance(record, dict):
         return []
     return [
@@ -755,6 +753,39 @@ def draft_promoted_character(chat_id, name):
     second call whose payload holds only what this presence itself said and
     did. See the comment at the seed call.
     """
+    from core.db import wget
+    from persist.commit import (_presence_lookup, presence_display_name,
+                                presence_is_unnamed)
+
+    # `name` may be the tracked record's uid (the promotion routes pass the
+    # id) or a display name. Resolve it before gathering evidence: the
+    # evidence scan matches SPEAKER STRINGS, so it must run on the name the
+    # events actually carry -- and when two tracked records answer to one
+    # name, no scan can tell their lines apart, so drafting refuses rather
+    # than seeding one person's sheet and first-person memories from both.
+    presences = wget(chat_id, "background_presences", {}) or {}
+    _pkey, _prec, _status = _presence_lookup(presences, name)
+    if _status == "ambiguous":
+        raise ValueError(
+            f"More than one tracked presence answers to {name!r}; "
+            "promote by presence id instead."
+        )
+    if _prec is not None:
+        if presence_is_unnamed(_pkey, _prec):
+            raise ValueError(
+                "This presence has no real name yet; promotion writes the "
+                "name into a permanent character identity."
+            )
+        _display = presence_display_name(_pkey, _prec)
+        if _display:
+            name = _display
+        if _presence_lookup(presences, name)[2] == "ambiguous":
+            raise ValueError(
+                f"More than one tracked presence answers to {name!r}; "
+                "their recorded lines cannot be told apart, so a draft "
+                "would merge two people's evidence."
+            )
+
     evidence = _promotion_evidence(chat_id, name)
     if not evidence:
         raise ValueError(

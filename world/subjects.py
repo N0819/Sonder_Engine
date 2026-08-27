@@ -164,25 +164,29 @@ def _entity_matches(scene, spelling):
 
 
 def _presence_reason(cid, spelling, frame_id=None):
-    """The name-keyed dead end, said precisely when it is the dead end.
+    """The bodiless-presence dead end, said precisely when it is the dead end.
 
-    ``background_presences`` is keyed by display name, deliberately and on
-    write -- a convention to migrate, not an oversight to patch (proposal
-    section 2A). Measured: 18 of 38 presences across 19 chats were never
-    scene entities under any normalisation, so they have no id anywhere to
-    resolve to, and inventing one here would be the mint this module refuses.
+    ``background_presences`` keys each record on a minted presence uid with
+    the name as an attribute, but that uid names a LEDGER RECORD, not a
+    body: a presence that was never a scene entity (measured before the
+    re-key: 18 of 38 presences across 19 chats, under any normalisation)
+    still has no body id for a Subject to resolve to, and a record bound to
+    a scene entity resolves upstream through the entity table. So the
+    refusal survives the re-key for exactly the records it was written for.
     """
     if frame_id is not None:
         presences = wget_for_frame(cid, "background_presences", frame_id, {}) or {}
     else:
         presences = wget(cid, "background_presences", {}) or {}
+    from persist.commit import presence_name_items
     target = _fold(spelling)
-    for name in presences:
+    for name, rec in presence_name_items(presences):
         if _fold(name) == target:
             return (
-                f"background presence {str(name)!r} is name-keyed and is not a "
-                "scene entity; it has no id in any ledger, and minting one here "
-                "would be a second spelling beside the live name"
+                f"background presence {str(name)!r} is not a scene entity; "
+                "its record tracks a person, not a body, so there is no "
+                "body id to resolve to, and minting one here would be a "
+                "second spelling beside the live name"
             )
     return ""
 

@@ -21,6 +21,7 @@ from persist.commit import (
     track_background_presences,
     promotable_background_presences,
     prepare_memory_commit,
+    presence_name_items,
 )
 from core.pipeline_context import ChatData, PipelineContext, TurnData
 
@@ -75,7 +76,10 @@ class _Story:
         return ctx
 
     def presences(self):
-        return self.db.wget(self.cid, "background_presences", {})
+        # Name-indexed view of the uid-keyed ledger: the story's assertions
+        # speak names, exactly as every production reader does.
+        return dict(presence_name_items(
+            self.db.wget(self.cid, "background_presences", {})))
 
     def promotable_names(self):
         return {r["name"] for r in promotable_background_presences(self.cid) if r["promotable"]}

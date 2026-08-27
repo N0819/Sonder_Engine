@@ -235,13 +235,20 @@ def normalize_body(key, entry):
     return body
 
 
-def normalize_charter(stored):
+def normalize_charter(stored, reservation=None):
     """A whole institution, from any shape, with its priority ordering closed.
 
     An upkeep absent from ``priority`` is appended in key order rather than
     dropped: a charter that silently stops caring about a condition because
     somebody forgot to rank it is the failure this repo keeps paying for in
     other subsystems.
+
+    ``reservation`` (`charter_identity.identity_reservation`) is the story's
+    registered identity forms. It is optional because normalization is
+    story-agnostic -- a charter fixture, a tool run and an archive all
+    normalize with no chat in reach -- and every caller that HAS a story
+    passes it, so the law it stores stops offering a registered mind's
+    address and the mint refuses to take one.
     """
     stored = stored if isinstance(stored, dict) else {}
     upkeeps = {
@@ -251,11 +258,12 @@ def normalize_charter(stored):
         str(k): normalize_post(k, v)
         for k, v in (stored.get("posts") or {}).items()}
     from .charter_identity import (
-        materialize_body_names, normalize_naming_profile)
-    naming = normalize_naming_profile(stored.get("naming"))
+        materialize_body_names, normalize_naming_profile, strip_reserved_pools)
+    naming = strip_reserved_pools(
+        normalize_naming_profile(stored.get("naming")), reservation)
     raw_bodies = materialize_body_names(
         str(stored.get("key") or "charter"), stored.get("bodies") or {},
-        naming)
+        naming, reservation)
     bodies = {
         str(k): normalize_body(k, v)
         for k, v in raw_bodies.items()}

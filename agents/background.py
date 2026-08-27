@@ -61,6 +61,8 @@ from persist.commit import (
     _fold_duplicate_presences,
     _known_name_roster,
     overt_declaration,
+    presence_display_name,
+    presence_record_for,
     presence_room,
     _presence_speech_verdict,
     _quote_body,
@@ -406,13 +408,18 @@ def background_react(ctx, nonce):
     # interaction_loop for minds that lack the state that loop exists to guard).
     reactions = []
     for name in names:
+        # The gate hands back NAMES; the ledger keys on minted uids. The
+        # resolver seam connects them (aka spellings included), and a name
+        # two records share resolves to neither -- an empty record, exactly
+        # how an untracked presence already reads here.
+        rec = presence_record_for(presences, name, sc)[1] or {}
         # Per presence, not once for the batch: each one gets the cast under
         # its OWN recognition (see _present_others).
         present_others = _present_others(
-            ctx, sc, presence_room(sc, name, presences.get(name) or {}),
+            ctx, sc, presence_room(sc, name, rec),
             _presence_recognizes(ctx, name))
         entry = _react_one(ctx, dr, name, present_others, roster, sc,
-                           presences.get(name) or {}, nonce)
+                           rec, nonce)
         if entry:
             reactions.append(entry)
     return _merge_stage_results(
@@ -522,7 +529,10 @@ def managed_presences(ctx, cap):
             scope = None
 
     out = []
-    for name, rec in presences.items():
+    for _key, rec in presences.items():
+        name = presence_display_name(_key, rec)
+        if not name:
+            continue
         # Title-aware: the Enterprise run tracked "Captain Jean-Luc Picard"
         # while the roster held "Jean-Luc Picard", so a REGISTERED character
         # with a sheet, memory and psychology was handed to the stateless
@@ -554,7 +564,10 @@ def managed_presences(ctx, cap):
         if scope is not None and not room:
             continue  # unplaced presence: cannot prove co-presence, leave out
         out.append((rec.get("last_turn") or -1, name, rec, room))
-    out.sort(reverse=True)
+    # Sort on the scalar fields only: two records may share a display name
+    # now, and letting the tuple sort fall through to the record dicts
+    # would raise rather than order them.
+    out.sort(key=lambda t: (t[0], t[1]), reverse=True)
     return out[:max(1, int(cap or 1))], p_room
 
 
