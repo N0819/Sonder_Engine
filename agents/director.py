@@ -185,6 +185,7 @@ from .director_movement import (
     _guard_approach_is_not_arrival,
 )
 from .director_floors import (
+    _unplaced_minted_entities,
     _untracked_restraint_subjects,
     _MAX_UNCONSCIOUSNESS_GAP,
     _sentence_break_positions,
@@ -1571,7 +1572,7 @@ def _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
     manifest_omissions = []
     for item in manifest:
         forms = _subject_match_forms(item["subject"], ctx.cast, sc)
-        if not _evidence_present(sd, item, forms):
+        if not _evidence_present(sd, item, forms, scene=sc):
             manifest_omissions.append({**item, "_forms": forms})
 
     # Destruction tripwire (see _narrated_destruction_subjects): a named,
@@ -1832,7 +1833,7 @@ def _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
         if source == "player_claim":
             encoded = _omission_subject_encoded(sd, om.get("subject"), forms)
         else:
-            encoded = _evidence_present(sd, om, forms)
+            encoded = _evidence_present(sd, om, forms, scene=sc)
         if encoded:
             continue
         status = _disposition_for(om.get("subject"))
@@ -3542,6 +3543,21 @@ def director_resolve(ctx, nonce, _corrections=None):
             f"Unreachable position: nothing declared a move for {_body}, and "
             f"there is no passable route from '{_from}' to '{_to}'; "
             "position unchanged.")
+
+    # A THING THAT EXISTS AND IS NOWHERE. `entities` carries no location, and
+    # the hand that owns it cannot write `positions` -- so a mint plus a
+    # transfer op whose destination resolves to nothing leaves a noun the
+    # fiction is holding and the world cannot place. Measured after the
+    # placement derivation lands, on the merged diff, so it reports only what
+    # is still unplaced once every deterministic pass has had its say.
+    _unplaced = _unplaced_minted_entities(sc, sd)
+    if _unplaced:
+        ctx.add_warning(
+            "Unplaced entities: %s exist after this beat but are in no room, "
+            "so nothing can perceive or act on them. Put each one in "
+            "state_diff.positions, or move it with a state_diff.inventory_ops "
+            "entry whose to_id names a room or a body the scene already "
+            "knows." % ", ".join(_unplaced[:6]))
 
     # `_guard_approach_is_not_arrival` used to run HERE and was undone on every
     # beat it fired. It now runs at the END of this function; see the call site
