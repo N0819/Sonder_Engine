@@ -32,6 +32,7 @@ from world.spatial import (
 
 from .common import _dict, _dict_list
 from .director_evidence import (
+    _claim_subject_in_world,
     _claim_subject_is_referrable,
     _make_subject_hit,
     _normalize_omission_category,
@@ -321,6 +322,44 @@ def _scale_relation_conflicts(sc, sd):
 #: was not granted is REPORTING A GAP, not closing one, and that gap is
 #: exactly what the repair tier exists for.
 _SETTLING_VERDICTS = frozenset({"encoded", "already_true"})
+
+
+#: The verdict a repair returns for a player-asserted effect whose subject
+#: is not a thing the world model can hold. Its own status rather than a
+#: shade of `rejected`, because the two say different things: `rejected`
+#: denies that the change happened, which the player authority contract
+#: forbids for an asserted effect, while this accepts the effect and reports
+#: that there is nothing structured to encode it AS.
+_NO_REFERENT = "no_referent"
+
+
+def _verify_no_referent(om, forms, sc):
+    """Is `no_referent` an admissible answer for this player-claim omission?
+
+    THE CLASS: player authority makes an asserted EFFECT true; it does not
+    make that effect's grammatical subject an object. A column of numbers, a
+    patch of light, a rhythm, a span of time -- each is the real subject of a
+    real sentence, and none of them has a durable record, a position or a
+    room. The repair sheet used to forbid the only correct answer for those
+    ("never 'rejected'"), so the only permitted answer was to encode -- and
+    encoding a subject with no structured home means MINTING IT AS A SCENE
+    ENTITY. Measured over the audited 15-beat run: that is where the minted
+    entities came from.
+
+    Bounded exactly the way `_verify_already_true` is, and for the same
+    reason -- a model verdict is evidence, never authority. Admissible only
+    where the WORLD does not already know the subject. A subject that names a
+    cast member, a scene entity or a room IS a thing, and the refusal is
+    inadmissible there: the non-rejectability warning stands, unchanged.
+
+    The referrability gate upstream lets a subject through on either of two
+    channels, and only one of them is proof of thinghood: what the world
+    holds a record for. The other -- the player typed the word -- is
+    satisfied by every noun in a narrated sentence, so it qualifies a subject
+    for COVERAGE CHECKING and settles nothing about what the subject is.
+    That asymmetry is the whole of this function.
+    """
+    return not _claim_subject_in_world(om.get("subject"), forms, sc)
 
 
 def _verify_already_true(om, sc):

@@ -25,6 +25,7 @@ from world.spatial_containment import (
     derive_containment_from_contacts,
     derive_contained_positions,
     derive_inventory_placements,
+    derive_minted_entity_placements,
     materialize_enclosure_interiors,
     materialize_named_stations,
     replace_engine_minted_interiors,
@@ -1414,6 +1415,21 @@ def merge_scene_with_diff(
     # Yields to any position or containment this beat's diff declared by name.
     derive_inventory_placements(
         merged, diff.get("inventory_ops"),
+        declared=(set(incoming_positions or {})
+                  | set(diff.get("containment") or {})))
+    # ...AND A THING THAT WAS NEVER MOVED IS SOMEWHERE TOO. The transfer
+    # ledger answers only for a beat that wrote one; the larger class is a
+    # thing minted with no transfer at all, which the same ownership split
+    # leaves with no room forever (measured: every minted entity of the
+    # audited 15-beat run, and of the two runs before it, committed with
+    # `room: None`). Placed from who handled it and where it was set down --
+    # the ledgers the hands that own THOSE channels did fill. Runs
+    # immediately after the transfer derivation and yields to it, and to the
+    # same `declared` subtraction: an explicit write outranks both.
+    derive_minted_entity_placements(
+        merged, diff.get("entities"),
+        contact_ops=diff.get("contact_ops"),
+        inventory_ops=diff.get("inventory_ops"),
         declared=(set(incoming_positions or {})
                   | set(diff.get("containment") or {})))
     normalize_scene_containment(merged)

@@ -91,6 +91,7 @@ from world.spatial_containment import (
     containment_facts, containment_hides, CONTAINMENT_MODES, contents_of,
     derive_containment_from_contacts,
     derive_contained_positions, derive_inventory_placements,
+    derive_minted_entity_placements,
     enclosure_joins_rooms, hiding_holders_of,
     resolve_placement_target,
     interior_occupants, materialize_enclosure_interiors,
