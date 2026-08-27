@@ -58,7 +58,8 @@ from .charter_log import window_note
 from .charter_figure import sight_figures
 from .charter_mind import cap_minds, decay_minds
 from .charter_move import ERRAND_RATE, errands, homecomings, relocate, walk
-from .charter_news import decay_news, news_keys_in, witness
+from .charter_news import (check_reports, decay_news, news_keys_in,
+                          witness)
 from .charter_practice import (
     COARSE_PRACTICES, close_stale, enact, normalize_practices, opportunities)
 from .charter_needs import advance_needs, mood, pressure, unmet
@@ -66,13 +67,60 @@ from .charter_talk import converse, report_to_superiors, report_up
 from .charter_commitment import advance_commitments
 from .charter_decide import advance_decisions, deliver_orders, execute_orders
 from .charter_economy import advance_economy
-from .charter_social import update_judgments_from_minds
+from .charter_social import update_judgments_from_minds, update_ties
 from .charter_intervene import apply_due
 
 
 def _event(kind, at_hours, place, **payload):
     return {"kind": kind, "at_hours": round(float(at_hours), 6),
             "place": str(place or ""), **payload}
+
+
+#: WHICH ACTS CHANGE WHAT TWO PEOPLE ARE TO EACH OTHER, and the event each
+#: one is. `aid_given` was declared witnessable ("aid visibly given"), given
+#: judgment weights and given narration phrasing, and NOTHING in the
+#: repository emitted it -- three quarters of a social event with no producer.
+#: `accusation` and `apology` were in exactly the same state, with weights at
+#: `charter_social.DEFAULT_SIGNALS` and no producer, while `accuse` and
+#: `reconcile` were already changing regard and closing quarrels in silence:
+#: nobody else in the room ever learned either had happened.
+#:
+#: Both are self-limiting without a new constant, which is why this is a map
+#: and not a rate. `accuse` dies when regard falls under the 0.45 gate in
+#: `charter_practice._afford_accuse` -- roughly two accusations per pair, each
+#: costing 0.1 -- and `reconcile` closes its own practice.
+_ACT_EVENTS = {
+    "tend": "aid_given",
+    "accuse": "accusation",
+    "reconcile": "apology",
+}
+
+
+def _social_events(acts, bodies, at_hours):
+    """The acts of this beat, as things a body standing there would notice.
+
+    ONLY WHAT A BYSTANDER PERCEIVES: who acted, whom they acted on, and
+    where. No blame count, no attribution, no claim content -- these payloads
+    reach the character tier through `charter_runtime._scheduled_row`, so a
+    field naming the institution's own register would be a leak into it.
+    """
+    out = []
+    for act in acts or ():
+        kind = _ACT_EVENTS.get(str(act.get("act") or ""))
+        if kind is None:
+            continue
+        actor = str(act.get("actor") or "")
+        if not actor or actor not in (bodies or {}):
+            continue
+        out.append(_event(
+            kind, at_hours, str((bodies.get(actor) or {}).get("place") or ""),
+            # `about` and `actor` both name the ACTING body: the signal reader
+            # takes whichever it finds, and what an onlooker learns is who
+            # did it. `subject` is whom to -- carried into the claim by
+            # `charter_news.news_claim`'s `toward` since 2026-08-27.
+            about=actor, actor=actor, body=actor,
+            subject=str(act.get("other") or "")))
+    return out
 
 
 #: How many bodies may share a place before co-presence stops depositing
@@ -275,6 +323,19 @@ def _record_coarse_experiences(experiences, bodies, watch, stood_before,
         seen = known_before.get(body_key) or frozenset()
         for other in sorted(set(held or ()) - set(seen)):
             if other == body_key:
+                continue
+            # A NEWS CLAIM IS NOT A PERSON. `minds` is ONE store with kinds
+            # in it -- a claim about somebody, a sighting of a figure, a
+            # thing that happened -- and this loop read every key in it as
+            # somebody newly met. Measured on the 40-body `twin_towns`
+            # charter driven into famine for a simulated quarter: 9,902
+            # acquaintance rows, 9,284 of which named a news key rather than
+            # a body. Forty-four per cent of the entire experience store was
+            # people who do not exist, evicting real rows under
+            # `EXPERIENCE_CAP` -- a silent quality loss rather than a visible
+            # cost one. Found by measuring the row budget while landing the
+            # rumour-check producer, which added 145 of them.
+            if (held.get(other) or {}).get("kind") == "news":
                 continue
             _remember_experience(experiences, body_key, {
                 "id": f"met:{body_key}:{other}",
@@ -690,6 +751,20 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
     if late_witnessed:
         news_keys = news_keys_in(minds)
 
+    # AND SOME OF WHAT THEY HOLD, THEY CAN SIMPLY LOOK AT. A body standing
+    # where a second-hand rumour named settles it against the place itself
+    # and comes to a view about whoever told it. After `converse`, so a claim
+    # heard this window in a room that contradicts it is refuted at once;
+    # before the judgment fold, because unlike witnessing an act there is
+    # nothing to lag here -- the perception IS the revision, the body is
+    # standing in front of the evidence.
+    checked = 0
+    if news_keys:
+        minds, checked = check_reports(
+            minds, owned_bodies, upkeeps, at + hours, news_keys)
+        if checked:
+            news_keys = news_keys_in(minds)
+
     # What a holder thinks changes only from evidence already in that holder's
     # own head. The reason list doubles as an idempotence guard.
     judgments, judgment_movements = update_judgments_from_minds(
@@ -733,7 +808,8 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
                          if str(f.get("place") or "") in active}
         practices.update(opportunities(
             in_focus, minds, needs_after, events, practices, at + hours,
-            seed=seed, figures=figs_in_focus))
+            seed=seed, figures=figs_in_focus,
+            blame=politics.get("blame") or {}))
     else:
         # OFF THE SCENE, THE SOCIAL WORLD STILL TURNS -- just not at beat
         # resolution. This branch used to be empty, and an empty branch is a
@@ -756,10 +832,20 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
             in_focus, minds, needs_after, events, practices, at + hours,
             seed=seed, kinds=COARSE_PRACTICES))
     regard = dict(politics.get("regard") or {})
+    # AND THEY DECIDE FROM WHAT HAS PASSED BETWEEN THEM. The INCOMING
+    # `charter["experiences"]`, not the copy-on-write local built further
+    # down: that local does not exist yet here, and semantically a body
+    # decides from the record it had when the window opened rather than from
+    # one this window is still writing. `judgments` and `commitments` are
+    # this window's, both already advanced above from evidence their own
+    # holders hold.
     acts, spawned, closed, heard, refused = enact(
         in_focus, minds, needs_after, practices, regard,
         politics.get("blame") or {}, at + hours, seed=seed,
-        figures=figs_in_focus, conduct=conduct)
+        figures=figs_in_focus, conduct=conduct,
+        experiences=charter.get("experiences"),
+        served_beside=charter.get("served_beside"),
+        judgments=judgments, commitments=commitments)
     for key in closed:
         practices.pop(key, None)
     for key, entry in spawned:
@@ -767,40 +853,22 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
     politics = dict(politics, regard=regard)
     told += len(acts)
 
-    # AN ACT THAT CHANGES WHAT PEOPLE ARE TO EACH OTHER IS AN EVENT.
-    # `aid_given` was declared witnessable ("aid visibly given"), given
-    # judgment weights (trust +0.08, warmth +0.06, respect +0.03) and given
-    # narration phrasing -- and NOTHING in the repository emitted it, not even
-    # a test. Three quarters of a social event with no producer. The `tending`
-    # practice is that event: somebody under their floor and somebody standing
-    # over them. Landing it here connects a machine that was already built to
-    # the only thing that was missing.
+    # AN ACT THAT CHANGES WHAT PEOPLE ARE TO EACH OTHER IS AN EVENT. Which
+    # acts those are is `_ACT_EVENTS`, above, with the argument for each.
     #
     # Witnessed immediately, judged next window. `update_judgments_from_minds`
     # runs before `enact`, so an act cannot move an opinion in the window it
     # happens; `minds` carries the claim across and the opinion forms on the
     # next one. That is the right lag anyway -- nobody revises their view of a
-    # person in the same instant they watch them act.
-    aid_events = []
-    for act in acts or ():
-        if str(act.get("act") or "") != "tend":
-            continue
-        carer = str(act.get("actor") or "")
-        subject = str(act.get("other") or "")
-        if not carer or carer not in bodies:
-            continue
-        aid_events.append(_event(
-            "aid_given", at + hours,
-            str((bodies.get(carer) or {}).get("place") or ""),
-            # `about` and `actor` both name the CARER: the signal reader takes
-            # whichever it finds, and what an onlooker learns is who helped.
-            about=carer, actor=carer, body=carer, subject=subject))
-    if aid_events:
-        events.extend(aid_events)
-        minds, aid_witnessed = witness(
-            minds, owned_bodies, aid_events, at + hours)
-        witnessed += aid_witnessed
-        if aid_witnessed:
+    # person in the same instant they watch them act. The rumour-check above
+    # is the deliberate exception and says why.
+    social_events = _social_events(acts, bodies, at + hours)
+    if social_events:
+        events.extend(social_events)
+        minds, act_witnessed = witness(
+            minds, owned_bodies, social_events, at + hours)
+        witnessed += act_witnessed
+        if act_witnessed:
             news_keys = news_keys_in(minds)
 
     # COPY-ON-WRITE, per holder. The lists are shared in by reference and
@@ -965,6 +1033,10 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
     after_charter["served_beside"] = served_beside
     after_charter["told"] = told
     after_charter["witnessed"] = witnessed
+    # Rumours settled by looking at the place this window. Diagnostic only,
+    # exactly as `refused` is: nothing reads it, and `normalize_charter` drops
+    # it at the next persistence boundary along with `told` and `witnessed`.
+    after_charter["checked"] = checked
     after_charter["news_keys"] = sorted(news_keys)
     after_charter["reported"] = {
         "post_unfilled": now_unfilled,
@@ -977,6 +1049,35 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
     # angry with. Correcting that is somebody else's job and may never happen.
     after_charter["politics"] = attribute_blame(
         politics, events, plan["watch"], charter["posts"])
+
+    # THE DISCRETE TIE, LAST, so it reads post-blame regard -- `attribute_blame`
+    # is the one writer in this window that can move a directed opinion after
+    # the acts are in, and a tie derived before it would be a window behind the
+    # numbers it claims to summarize.
+    #
+    # OFF THE DIRTY SETS THIS WINDOW ALREADY PAID FOR. `judgment_movements`
+    # has been computed at the fold above since judgments landed and read by
+    # nothing; `_company` is the same per-place roll `served_beside` counts
+    # from. `update_ties`' docstring carries the argument for why visiting only
+    # those pairs is COMPLETE rather than approximate, and the three properties
+    # of today's code it rests on.
+    #
+    # `CO_PRESENCE_WIDTH` for the same reason the tally uses it: past that
+    # width a place is a concourse, `served_beside` deposits nothing there, so
+    # familiarity never rises there and the only remaining input is regard --
+    # which cannot form a tie on its own (`TIE_WEIGHTS["regard"]` is below
+    # `TIE_FORM`). Skipping a crowd is sound here, not a budget cut, and it is
+    # what stops a second quadratic landing in the same loop.
+    after_charter["ties"], tie_changes = update_ties(
+        charter.get("ties"),
+        company={where: folk for where, folk in _company.items()
+                 if len(folk) <= CO_PRESENCE_WIDTH},
+        movements=judgment_movements, judgments=judgments,
+        politics=after_charter["politics"], served_beside=served_beside,
+        at_hours=at + hours)
+    # Diagnostic, dropped by `normalize_charter` exactly as `told`/`witnessed`/
+    # `checked` are.
+    after_charter["ties_changed"] = len(tie_changes)
     return after_charter, events
 
 

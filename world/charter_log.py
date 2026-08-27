@@ -39,7 +39,7 @@ from .charter_temper import temperament_of
 from .charter_commitment import commitment_view
 from .charter_decide import decision_view
 from .charter_economy import normalize_economy, quote, stock_band
-from .charter_social import judgment_view
+from .charter_social import judgment_view, tie_of, tie_view
 
 
 def window_note(charter, events, told):
@@ -71,6 +71,23 @@ def summarize(charter, events, trace=()):
     for event in events or []:
         kinds[event["kind"]] = kinds.get(event["kind"], 0) + 1
 
+    ties = charter.get("ties") or {}
+    tie_labels = {}
+    mutual = 0
+    for holder, held in ties.items():
+        for other, row in held.items():
+            label = str(row.get("tie") or "")
+            if not label:
+                continue
+            tie_labels[label] = tie_labels.get(label, 0) + 1
+            if str(((ties.get(other) or {}).get(holder) or {}).get("tie")
+                   or "") == label:
+                mutual += 1
+    # Counted once per PAIR, not once per direction: both halves were seen
+    # above, and reporting a requited bond as two would make mutuality read as
+    # twice as common as it is.
+    mutual //= 2
+
     return {
         "hours": float(charter.get("clock_hours") or 0.0),
         "bodies": len(bodies),
@@ -97,6 +114,19 @@ def summarize(charter, events, trace=()):
         # cost model working, and nonzero after one is a leak.
         "feeling_bodies": len(normalize_feel(charter.get("feel"))),
         "overloaded_bodies": overloaded_bodies(charter.get("feel")),
+        # WHETHER THE LABEL LAYER IS DOING ANYTHING, which is the only way an
+        # author finds out: a discrete tie exists to be legible, and a
+        # legibility layer that fires zero times looks exactly like one that is
+        # working. `familiar` is excluded here because it is derived from
+        # `served_beside` at read time and would just re-report that tally.
+        "ties": dict(sorted(tie_labels.items())),
+        # MUTUALITY MAY BE COUNTED HERE AND NOWHERE ELSE. "They hold me close"
+        # is the other head's interior, so it must never reach a mind payload
+        # -- but this module's whole contract is that NOTHING HERE IS CANON
+        # (see the docstring): no mind reads it, nothing commits it, and a run
+        # behaves identically whether it is collected or not. That separation
+        # is exactly what lets an author ask a question a character may not.
+        "mutual_ties": mutual,
         "windows_traced": len(trace or ()),
     }
 
@@ -170,6 +200,12 @@ def life_of(body_key, charter, events, trace=(), hours_per_day=24.0):
             for pair_key, weight in (politics.get("regard") or {}).items()
             if regard_pair(pair_key) is not None
             and regard_pair(pair_key)[0] == key},
+        # This body's OWN ties outward, signed labels first. Not who holds a
+        # tie about it: that is thirty-nine other people's interiors, and the
+        # fact that the author's view could legally show them and does not is
+        # the cheapest way to keep the shape of this store honest.
+        "ties": tie_view(charter.get("ties"), key,
+                         served_beside=charter.get("served_beside"), cap=8),
         "events": chronicle(
             [e for e in (events or [])
              if e.get("body") == key
@@ -216,6 +252,8 @@ def scene_ledger(charter, place, events=(), hours_per_day=24.0):
     judgments = charter.get("judgments") or {}
     commitments = charter.get("commitments") or {}
     decisions = charter.get("decisions") or {}
+    ties = charter.get("ties") or {}
+    served_beside = charter.get("served_beside") or {}
     economy = normalize_economy(charter.get("economy"))
 
     here = sorted(k for k, b in bodies.items()
@@ -272,16 +310,32 @@ def scene_ledger(charter, place, events=(), hours_per_day=24.0):
         ranked = sorted(
             (o for o in company if o != key and o in (minds.get(key) or {})),
             key=lambda o: (_salience(o), o), reverse=True)[:4]
-        known_here = {
-            other: {
+        # THE DISCRETE TIE RIDES INSIDE `knows_here`, next to the `regard`
+        # number it summarizes, and deliberately not beside it as a list of
+        # its own: `presences[key]`'s key set is an allowlist a firewall test
+        # asserts against (`tests/test_charter_runtime.py`), and a placement
+        # that does not have to widen it is evidence the label belongs where
+        # the rest of this body's view of that body already lives.
+        #
+        # SPARSE, matching the `figure` idiom on the next line: no key at all
+        # where there is no tie, rather than an empty string on every entry of
+        # every presence in every scene. `tie_of` is the only reader, so this
+        # surface cannot disagree with the promotion payload about a pair.
+        #
+        # Nothing about how the OTHER head holds this one. There is no
+        # mutuality flag here and there must not be one -- this slice is
+        # copied into a model payload voicing this body.
+        known_here = {}
+        for other in ranked:
+            label = tie_of(ties, key, other, served_beside=served_beside)
+            known_here[other] = {
                 "firsthand": (minds[key][other].get("heard_from") is None),
                 "believes_present": _believes_present(minds[key][other]),
                 "regard": round(regard_value(regard, key, other), 3),
                 **({"figure": True}
                    if minds[key][other].get("kind") == "figure" else {}),
+                **({"tie": label} if label else {}),
             }
-            for other in ranked
-        }
         presences[key] = {
             "competence": dict(body.get("competence") or {}),
             # The exact five dispositions the full character tier reads.

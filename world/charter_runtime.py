@@ -1148,6 +1148,13 @@ def _event_subject(event):
 def _event_surface(event):
     subject = _event_subject(event)
     kind = str(event.get("kind") or "institution_event")
+    # WHOM THE ACT WAS DIRECTED AT, where the event names one. What a
+    # bystander in the room perceives is an act between two people, and a
+    # surface that says only "somebody gave aid" throws away half of what was
+    # standing in front of them. Nothing from the institution's blame register
+    # may join it: this string is what `_scheduled_row` puts on the objective
+    # carrier rail for registered characters.
+    toward = str(event.get("subject") or "")
     phrases = {
         "upkeep_out_of_band": f"{subject} fell below its operating floor",
         "upkeep_restored": f"{subject} returned to its operating band",
@@ -1174,8 +1181,14 @@ def _event_surface(event):
         "commitment_transferred": f"{subject} transferred an undertaking",
         "report_confirmed": f"{subject} confirmed a report",
         "report_refuted": f"{subject} refuted a report",
-        "aid_given": f"{subject} gave aid",
-        "harm_done": f"{subject} caused harm",
+        "aid_given": (f"{subject} gave aid to {toward}" if toward
+                      else f"{subject} gave aid"),
+        "harm_done": (f"{subject} caused harm to {toward}" if toward
+                      else f"{subject} caused harm"),
+        "accusation": (f"{subject} accused {toward}" if toward
+                       else f"{subject} made an accusation"),
+        "apology": (f"{subject} made peace with {toward}" if toward
+                    else f"{subject} made peace"),
     }
     return phrases.get(kind, f"{subject} changed state")
 
@@ -2089,6 +2102,12 @@ def bind_promoted_character(cid, bundle, *, char_id, name, entity_id="",
         (state.get(store) or {}).pop(body_key, None)
     state["bodies"][body_key].pop("private_habits", None)
     (state.get("judgments") or {}).pop(body_key, None)
+    # A tie is cognition, so the promoted body's own ties retire with the rest
+    # of its head. Ties OTHERS hold ABOUT it stay, exactly as their judgments
+    # and their claims about it stay one and three lines up: the institution
+    # keeps its view of a person who has become a character, and that person's
+    # relationships are the character tier's from here.
+    (state.get("ties") or {}).pop(body_key, None)
     state["practices"] = {
         key: practice for key, practice in (state.get("practices") or {}).items()
         if body_key not in set((practice.get("roles") or {}).values())

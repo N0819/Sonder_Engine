@@ -51,7 +51,7 @@ from __future__ import annotations
 from .charter_feel import felt_handoff
 from .charter_politics import regard_value
 from .charter_commitment import commitment_view
-from .charter_social import judgment_view
+from .charter_social import familiarity, judgment_view, tie_of
 
 #: Memories a promotion mints, total. A budget, not a target: a quiet life
 #: promotes with two or three rows, and that is a correct answer.
@@ -374,6 +374,10 @@ def promotion_handoff(body_key, charter, events=()):
     service record. This adds `memories`, the selected past above. One
     payload, both halves in their readers' own vocabularies, so the caller
     copies and never translates.
+
+    The discrete tie rides on the `acquaintances` rows and nowhere else here
+    — one word per edge, beside the `regard` and `familiarity` numbers it is a
+    reading of. No new key on this payload, and no reciprocity anywhere in it.
     """
     payload = felt_handoff(body_key, charter)
     payload["memories"] = remembered(charter, body_key, events=events)
@@ -412,6 +416,13 @@ def acquainted(body_key, charter):
     co-presence count. No other head is read and the institution's register
     is not consulted -- an edge here says "I know them and this is how I hold
     them", never anything about how they hold me.
+
+    `tie` is derived from exactly those three own-inputs and carries no
+    reciprocity for the same reason: it is this head's one-word reading of its
+    own numbers (`charter_social.tie_of`), not a fact about the relationship.
+    A body may arrive holding somebody `close` who holds it nothing at all,
+    and that asymmetry is the feature -- two people do not share a head, so a
+    discrete tie cannot be symmetric here the way CiF's are.
     """
     key = str(body_key)
     charter = charter if isinstance(charter, dict) else {}
@@ -429,8 +440,13 @@ def acquainted(body_key, charter):
         shared = int(beside.get(other) or 0)
         # Familiarity is time served in the same room, and it saturates: the
         # difference between never and often is most of the signal, and the
-        # difference between often and constantly is nearly none.
-        familiarity = round(min(1.0, shared / 200.0), 4)
+        # difference between often and constantly is nearly none. THE
+        # SATURATION LIVES IN `charter_social` now, as `TIE_SATURATION`; it was
+        # inline here as `shared / 200.0` and the tie layer needs the same
+        # number, and two copies of a tuned constant is how they drift.
+        familiar = familiarity(charter.get("served_beside"), key, other)
+        tie = tie_of(charter.get("ties"), key, other,
+                     served_beside=charter.get("served_beside"))
         out.append({
             "body": other,
             "name": str((bodies.get(other) or {}).get("name") or other),
@@ -439,7 +455,11 @@ def acquainted(body_key, charter):
             "strength": round(float(claim.get("strength") or 0.0), 4),
             "regard": round(float(regard_value(regard, key, other)), 4),
             "shared_windows": shared,
-            "familiarity": familiarity,
+            "familiarity": familiar,
+            "tie": tie,
+            "tie_since_hours": round(float(
+                ((charter.get("ties") or {}).get(key) or {}).get(other, {})
+                .get("since_hours") or 0.0), 4),
         })
     out.sort(key=lambda row: (-row["familiarity"], -row["strength"],
                               row["body"]))

@@ -400,10 +400,21 @@ would decide from need levels and a scalar regard.
    only from witnessed events and every event the sim can emit is an
    institutional failure. CiF's networks move on ordinary exchanges. Same
    finding as `charter_run`'s amended docstring, with a name.
-3. **Discrete relationships beside the numeric axes.** CiF keeps both on
-   purpose: numbers drive scoring, labels drive legibility. Charter has no
-   discrete tie, and a label is what a narrator can state plainly and a reader
-   can hold.
+3. **Discrete relationships beside the numeric axes.** *(BUILT 2026-08-27.)*
+   CiF keeps both on purpose: numbers drive scoring, labels drive legibility,
+   and a label is what a narrator can state plainly and a reader can hold.
+   `world/charter_social.py`'s tie layer is six labels — `close`, `at_odds`,
+   `wary`, `afraid_of`, `looks_up_to`, `familiar` — each one a reading of an
+   axis already there plus the holder's own directed regard and its own
+   `served_beside` count, stored sparsely as the charter's `ties` and VALIDATED
+   on every normalize so a label the numbers no longer support is deleted
+   rather than merely discouraged. DIRECTIONAL, unlike CiF's: two people do not
+   share a head, so A may hold B `close` while B holds A merely `familiar`, and
+   the unrequited tie is the more generative one. The signed labels needed
+   design 2 to be reachable at all — before it, the largest axis anywhere in a
+   stressed simulated year of `twin_towns(40)` was 0.142 against a form
+   threshold of 0.30. See `docs/UNBUILT.md` §1.99 for what a HEALTHY
+   institution still produces, which is `familiar` and nothing else.
 4. **Status as temporary traits.** Charter has needs and felt state and
    nothing socially temporary — newly raised, in disgrace, owed a favour.
    These are what make a beat read as motivated rather than merely caused.

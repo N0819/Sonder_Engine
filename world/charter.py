@@ -143,7 +143,9 @@ from .charter_promote import (
     remembered,
 )
 from .charter_news import (
+    CHECKABLE,
     WITNESSABLE,
+    check_reports,
     claim_from_report,
     decay_news,
     known_news,
@@ -156,7 +158,10 @@ from .charter_news import (
 from .charter_plan import criticality, plan_watch, tended_upkeeps
 from .charter_practice import (
     ASKED_RETENTION,
+    FAMILIAR_SATURATION,
+    HISTORY_WEIGHT,
     IDLE_CLOSE_HOURS,
+    PAIR_TAIL,
     PRACTICE_CAP,
     REFUSED_ABSENT,
     REFUSED_NO_SITUATION,
@@ -203,8 +208,11 @@ from .charter_roster import (
 )
 from .charter_run import run, step
 from .charter_social import (
-    DEFAULT_SIGNALS, JUDGMENT_AXES, judgment_of, judgment_view,
-    normalize_judgments, normalize_social_norms, update_judgments_from_minds)
+    CLOSE_FAMILIARITY, DEFAULT_SIGNALS, FAMILIAR_FLOOR, JUDGMENT_AXES,
+    TIE_CAP, TIE_DWELL_HOURS, TIE_FORM, TIE_HOLD, TIE_LABELS, TIE_SATURATION,
+    TIE_WEIGHTS, derive_tie, familiarity, judgment_of, judgment_view,
+    normalize_judgments, normalize_social_norms, normalize_ties, tie_of,
+    tie_strength, tie_view, update_judgments_from_minds, update_ties)
 from .charter_commitment import (
     OPEN_STATES, TERMINAL_STATES, advance_commitments, commitment_id,
     commitment_view, normalize_commitments, observe_public_commitments)
@@ -219,6 +227,10 @@ from .charter_intervene import (
     normalize_interventions)
 
 __all__ = [
+    "CLOSE_FAMILIARITY", "FAMILIAR_FLOOR", "TIE_CAP", "TIE_DWELL_HOURS",
+    "TIE_FORM", "TIE_HOLD", "TIE_LABELS", "TIE_SATURATION", "TIE_WEIGHTS",
+    "derive_tie", "familiarity", "normalize_ties", "tie_of", "tie_strength",
+    "tie_view", "update_ties",
     "DEFAULT_SIGNALS", "JUDGMENT_AXES", "OPEN_STATES", "ORDER_ACTIONS",
     "TERMINAL_STATES", "INTERVENTION_OPS", "advance_commitments", "advance_decisions",
     "advance_economy", "caravan_exchange", "commitment_id",
@@ -271,7 +283,9 @@ __all__ = [
     "tell_ranking",
     "tellable",
     "decay_news",
+    "CHECKABLE",
     "WITNESSABLE",
+    "check_reports",
     "news_key",
     "witness",
     "spread_of",
@@ -284,6 +298,9 @@ __all__ = [
     "PRACTICE_CAP",
     "IDLE_CLOSE_HOURS",
     "ASKED_RETENTION",
+    "HISTORY_WEIGHT",
+    "PAIR_TAIL",
+    "FAMILIAR_SATURATION",
     "NEGLIGIBLE",
     "RECOVERY_MARGIN",
     "SPREAD",

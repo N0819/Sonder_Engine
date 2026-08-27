@@ -217,7 +217,7 @@ def apply_public_evidence(charter, evidence_rows, scene, turn_id):
     # The utterance record is local institutional recognition, not universal
     # validity: only bodies that actually heard the exact source are named.
     from world.charter_commitment import observe_public_commitments
-    from world.charter_social import update_judgments_from_minds
+    from world.charter_social import update_judgments_from_minds, update_ties
 
     charter["commitments"], commitment_metrics = observe_public_commitments(
         charter.get("commitments"), evidence_rows, recipients,
@@ -225,10 +225,27 @@ def apply_public_evidence(charter, evidence_rows, scene, turn_id):
     charter["judgments"], movements = update_judgments_from_minds(
         charter.get("judgments"), charter["minds"],
         politics=charter.get("politics"), norms=charter.get("social_norms"))
+    # AND RELABEL IN THE BEAT IT LANDS. This is the one path where the axes
+    # actually move during play -- it is where the player's own conduct enters
+    # a Charter body's head -- so a betrayal witnessed on screen must be able
+    # to break a bond now rather than waiting for the next offscreen window.
+    # That immediacy is the whole legibility claim of the discrete tie; a
+    # label that arrives four hours after the scene that earned it is a label
+    # nobody can state.
+    #
+    # No `company` here on purpose. Co-presence is what the offscreen window
+    # counts; a scene beat moves judgments and nothing else this layer reads,
+    # so `movements` is the complete dirty set for this path.
+    charter["ties"], tie_changes = update_ties(
+        charter.get("ties"), company=None, movements=movements,
+        judgments=charter["judgments"], politics=charter.get("politics"),
+        served_beside=charter.get("served_beside"),
+        at_hours=float(charter.get("clock_hours") or 0.0))
     return charter, {"opportunities": opportunities, "acquired": acquired,
                      "commitments_opened": int(
                          commitment_metrics.get("opened") or 0),
-                     "judgments_moved": len(movements)}
+                     "judgments_moved": len(movements),
+                     "ties_changed": len(tie_changes)}
 
 
 __all__ = [

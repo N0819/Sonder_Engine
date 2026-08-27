@@ -320,6 +320,11 @@ def test_the_presence_aperture_excludes_the_register(temp_db):
     assert whole and own
     assert "roster" not in own[0]["presence"]
     assert "minds" not in own[0]["presence"]
+    # THIS ALLOWLIST IS ASSERTED UNCHANGED, and that is the check rather than
+    # a formality. The discrete tie (`RESEARCH.md` §1.7.6 item 3) rides INSIDE
+    # `knows_here`, beside the `regard` number it summarizes, so it widened no
+    # key here -- a new field that had needed this set to grow would have been
+    # a field placed outside the per-other slice it belongs in.
     assert set(own[0]["presence"]) <= {
         "competence", "able", "condition", "strain", "standing_post",
         "temperament",
@@ -327,6 +332,12 @@ def test_the_presence_aperture_excludes_the_register(temp_db):
             "blamed", "knows_it_is_blamed", "social_judgments",
             "commitments", "institutional",
         }
+    # And nothing in the slice says how anybody holds THIS body back.
+    for presence in (row["presence"] for row in own):
+        for entry in (presence.get("knows_here") or {}).values():
+            assert set(entry) <= {"firsthand", "believes_present", "regard",
+                                  "figure", "tie"}
+            assert "mutual" not in entry and "held_by" not in entry
 
 
 def test_charter_bodies_are_derived_background_people_with_stable_refs(temp_db):
