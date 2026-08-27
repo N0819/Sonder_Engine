@@ -441,14 +441,40 @@ independent.
          wrong (see UNBUILT 1.85). A STORED velocity rolls back with its beat;
          a recomputed position does not.
 
-     The pacing objection dissolves into the fiction's own vocabulary: if a
-     scene should hold, velocity is zero. "Hold position" is a real order and
-     matching orbit is a real manoeuvre.
+     CORRECTED SAME DAY, by the owner, and the correction improves it: an
+     object in motion stays in motion. The first draft of this decision called
+     zero velocity the natural resting state and motion the thing requiring
+     declaration. That is backwards. VELOCITY IS JUST STATE AND ZERO IS NOT
+     SPECIAL -- a hull "at rest" relative to a star has velocity zero IN THAT
+     FRAME, which is itself an achievement somebody is actively working at.
 
-     The one case this does not cover is motion nobody can declare away -- a
-     decaying orbit, a hull on momentum with the engines dead. Those are
-     interesting BECAUSE they cannot be ordered to stop, so they belong as an
-     explicit exception rather than as the default everything inherits.
+     So the rule is that the Director declares CHANGES to motion -- force, not
+     velocity. Absent a force, stored state persists, which is what a stored
+     value does anyway; the propagation half was already right and only its
+     default was described wrongly.
+
+     AND STATION-KEEPING IS AN UPKEEP (§ 8c). Holding position is continuous
+     work against something, held by a post, with an operating floor. Lose the
+     ability to do that work and nothing stops -- the hull keeps whatever
+     velocity it had. "Hold position" is still a real order; it is an order to
+     SPEND EFFORT, not a request for the universe's default.
+
+     THE PAYOFF, and it is the best argument in this document for building any
+     of it. A damaged ship drifting toward something is a threat NOBODY
+     AUTHORED, assembled entirely from parts that already exist:
+
+         propulsion takes damage       a condition on a region (§ 3, § 9)
+         station-keeping upkeep falls  nobody can do the work (§ 8c)
+         velocity is no longer zeroed  stored state simply persists
+         geometry propagates it        deterministic, un-arguable (§ 4)
+         the conn console shows it     an instrument percept at a station (§ 8a)
+         an officer says it aloud      speech, and THAT is the scene (§ 7)
+
+     Weapons need an author to point them. DRIFT GENERATES STAKES ON ITS OWN,
+     and legible ones: the numbers say four minutes, so the tension is real
+     rather than asserted. It also happens to be the case this engine is best
+     at, because the interesting part is not the physics -- it is five people
+     on a bridge disagreeing about what to do with four minutes.
 
 **STILL OPEN, and deferred deliberately:**
 
