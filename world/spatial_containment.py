@@ -962,6 +962,230 @@ def derive_inventory_placements(scene: dict, inventory_ops,
     return placed
 
 
+
+# ---------------------------------------------------------------------------
+# PLACEMENT DERIVED FROM WHO HANDLED THE THING.
+#
+# The transfer ledger above answers only for a beat that wrote one, and most
+# beats do not. The larger class is a thing MINTED WITH NO TRANSFER AT ALL:
+# the hand that owns `entities` names it, cannot write `positions`, and no
+# other hand has any reason to mention it -- so it commits with no room.
+# Measured over the audited 15-beat run and the two runs before it: EVERY
+# minted entity committed with `room: None`.
+#
+# The evidence to place them is nonetheless already in the merge, written by
+# the hands that own those channels: the body that touched the thing and the
+# room that body stands in, the anchor a station says it was set down at, and
+# the origin a transfer named when its destination resolved to nothing.
+# This reads those and writes the room.
+#
+# It is a projection, never a decider, and it yields in every direction: to a
+# position or containment record any hand declared BY NAME this beat, to
+# `derive_inventory_placements` (which runs first and answers the transfer
+# case properly, with a carrier relation where the destination is a body), and
+# to whatever room the thing already had. It refuses everything it cannot
+# resolve against the scene the merge already holds, so an unresolvable
+# handler leaves the thing exactly as unplaced as it is today.
+
+
+def _handler_room(scene: dict, who) -> str:
+    """The room a named handler or anchor is in, or "" when the scene cannot
+    vouch for one.
+
+    THE FIREWALL LINE IS HERE. A position in a room is perceptible to
+    everyone in that room, so lending a thing the room of a body who is
+    himself shut inside something would show a pocketed thing to the whole
+    room while its holder stays hidden -- an observer gaining a channel it
+    does not have. A CONCEALED HANDLER LENDS NO ROOM; the thing stays as
+    unplaced as its handler is unseen, which is the subtractive direction.
+    `hiding_holders_of` is the engine's one answer to "is this out of sight",
+    read here rather than re-derived so this cannot drift away from it.
+
+    Body-ness is never read off a `kind` label -- `resolve_placement_target`
+    derives it, for the reason stated there.
+    """
+    text = str(who or "").strip()
+    if not text:
+        return ""
+    kind, destination = resolve_placement_target(scene, text)
+    if not kind:
+        return ""
+    if kind == "room":
+        return str(destination)
+    if hiding_holders_of(scene, destination):
+        return ""
+    return room_of(scene, destination) or ""
+
+
+def _anchor_room(scene: dict, anchor_id) -> str:
+    """The room that DECLARES this anchor, or "".
+
+    A station's `at` is an anchor id, and an anchor is a feature of exactly
+    one room -- so it answers "which room" for a thing that has no position
+    yet, which is the one moment nothing else can. Read off `rooms[*].anchors`
+    directly rather than through the derived anchor set: an implicit door
+    pseudo-anchor belongs to both rooms of its edge and so decides nothing.
+    """
+    aid = str(anchor_id or "").strip()
+    if not aid:
+        return ""
+    rooms = (scene or {}).get("rooms")
+    if not isinstance(rooms, dict):
+        return ""
+    for rid, room in rooms.items():
+        anchors = room.get("anchors") if isinstance(room, dict) else None
+        if not isinstance(anchors, dict):
+            continue
+        for key in anchors:
+            if str(key).strip().casefold() == aid.casefold():
+                return str(rid)
+    return ""
+
+
+def _minted_placement_evidence(scene: dict, labels, contact_ops,
+                               inventory_ops):
+    """Which room the merge's own ledgers already put a just-minted thing in.
+
+    Returns (room, source), or ("", "") when nothing resolves. Three evidence
+    classes, most direct first, first answer winning:
+
+      1. A STATION says where it was SET DOWN: the thing is at an anchor, and
+         the anchor's own room is the thing's.
+      2. A CONTACT names it -- this beat's ops before the standing ledger,
+         since an op is this beat's fact and a standing row is an older one --
+         and the body at the other endpoint of that contact is somewhere. An
+         ENDED contact (`remove`/`clear`) is evidence of letting go rather
+         than of holding, and places nothing.
+      3. A TRANSFER names it and its ORIGIN resolves. Only the origin: the
+         destination has already been offered to `derive_inventory_placements`
+         and declined by it, and reading the same token twice would be a
+         second, drifting copy of that judgment.
+    """
+    stations = (scene or {}).get("stations")
+    if isinstance(stations, dict):
+        for name, slot in stations.items():
+            if str(name).strip().casefold() not in labels:
+                continue
+            if not isinstance(slot, dict):
+                continue
+            room = _anchor_room(scene, slot.get("at"))
+            if room:
+                return room, "station"
+            for anchor in [slot.get("at")] + list(slot.get("near") or []):
+                room = _handler_room(scene, anchor)
+                if room:
+                    return room, "station"
+
+    rows = [r for r in (contact_ops or []) if isinstance(r, dict)]
+    rows += [r for r in ((scene or {}).get("contacts") or [])
+             if isinstance(r, dict)]
+    for row in rows:
+        if str(row.get("op") or "").strip().casefold() in ("remove", "clear"):
+            continue
+        actor = str(row.get("actor") or "").strip()
+        target = str(row.get("target") or "").strip()
+        if target.casefold() in labels:
+            counterpart = actor
+        elif actor.casefold() in labels:
+            counterpart = target
+        else:
+            continue
+        room = _handler_room(scene, counterpart)
+        if room:
+            return room, "contact"
+
+    for op in (inventory_ops or []):
+        if not isinstance(op, dict):
+            continue
+        if str(op.get("object_id") or "").strip().casefold() not in labels:
+            continue
+        room = _handler_room(scene, op.get("from_id"))
+        if room:
+            return room, "transfer"
+
+    return "", ""
+
+
+def derive_minted_entity_placements(scene: dict, minted, *, contact_ops=None,
+                                    inventory_ops=None, declared=()) -> list:
+    """Place a thing this beat MINTED, from the ledgers that already name it.
+
+    FOUR RULES, ALL SUBTRACTIVE, and the first three are the ones
+    `derive_inventory_placements` already states:
+
+    1. Evidence that does not resolve against the scene writes nothing --
+       `_handler_room` is the whole of that judgment, and it also refuses a
+       handler the scene keeps out of sight.
+    2. A thing some hand placed BY NAME this beat (`declared`), or that
+       already has a room, or that a carrier relation already holds, keeps
+       what it has. An explicit write outranks a derivation, and this speaks
+       only where nobody else did.
+    3. Nothing is ever UNPLACED here. This writes rooms; it removes none.
+    4. A BODY IS NOT THIS PASS'S BUSINESS. A body is placed by its own
+       machinery and misplacing one is worse than leaving a thing nowhere, so
+       `_is_body_entity` -- which derives body-ness from attire and scale
+       rather than reading a `kind` label -- excludes them. The three classes
+       with no room BY CONSTRUCTION go out for the same reason: a bodiless
+       voice is nowhere, a portal spans two rooms, a thing in transit is
+       between them.
+
+    `minted` is this beat's diff `entities` mapping (or any iterable of the
+    keys it named). Scoped to it deliberately: a thing left nowhere ten beats
+    ago is not this beat's to relocate, and a scene-wide sweep would move
+    things on evidence that has since gone stale.
+
+    Returns [(subject, source, room)] for the caller's report; mutates.
+    """
+    if not minted:
+        return []
+    entities = (scene or {}).get("entities")
+    if not isinstance(entities, dict) or not entities:
+        return []
+    positions = scene.get("positions")
+    if not isinstance(positions, dict):
+        positions = scene["positions"] = {}
+    spoken_for = {str(name).strip().casefold()
+                  for name in (declared or []) if str(name).strip()}
+    contained = (scene or {}).get("contained")
+    held = {str(k).strip().casefold() for k in contained} \
+        if isinstance(contained, dict) else set()
+
+    placed = []
+    for key in minted:
+        eid, entity = _unique_entity_keyed(scene, key)
+        if not eid or not isinstance(entity, dict):
+            continue          # not a thing the merged scene knows
+        if entity.get("ubiquitous"):
+            continue          # a bodiless voice is nowhere by definition
+        if _is_body_entity(scene, eid, entity):
+            continue          # a body is placed by its own machinery
+        if entity.get("interior_rooms"):
+            continue
+        state = entity.get("state")
+        if isinstance(state, dict) and (state.get("link")
+                                        or state.get("transit")):
+            continue          # a portal spans rooms; transit is between them
+        labels = {str(eid).strip().casefold(),
+                  str(entity.get("name") or "").strip().casefold()}
+        labels |= {str(a).strip().casefold()
+                   for a in (entity.get("aliases") or [])}
+        labels.discard("")
+        if labels & spoken_for:
+            continue          # a hand placed it by name; the derivation yields
+        if labels & held:
+            continue          # carried: the containment ledger owns where it is
+        if any(room_of(scene, label) is not None for label in labels):
+            continue          # already somewhere
+        room, source = _minted_placement_evidence(
+            scene, labels, contact_ops, inventory_ops)
+        if not room:
+            continue
+        subject = _placement_subject_key(scene, eid, entity)
+        _positions_write(positions, subject, room)
+        placed.append((subject, source, room))
+    return placed
+
+
 def _declared_interior_region(scene: dict, occupant: str, holder: str) -> str:
     """The region of `holder` a standing interior CONTACT says `occupant` is
     in, or "". One definition, read by two callers.

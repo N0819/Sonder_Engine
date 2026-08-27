@@ -234,6 +234,7 @@ from .director_evidence import (
     _reconcile_scene_slice,
     _merge_repair_into_diff,
     _norm_subject,
+    _claim_subject_in_world,
     _claim_subject_is_referrable,
     _subject_match_forms,
     _make_subject_hit,
@@ -289,6 +290,8 @@ from .director_reconcile import (
     _public_omission,
     _stamp_dialogue_articulation,
     _SETTLING_VERDICTS,
+    _NO_REFERENT,
+    _verify_no_referent,
     _verify_already_true,
     _acquit_addressed_events,
     _REROUTE_FULL_SCOPE,
@@ -1858,6 +1861,26 @@ def _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
                     and _verify_already_true(om, sc or {})[0]:
                 status = "already_encoded"
         if source == "player_claim":
+            # NOT A THING: the effect stands and nothing is minted for it.
+            # The contract protects the player's asserted EFFECT, not the
+            # thinghood of its grammatical subject -- and encoding a subject
+            # the world model has no shape for means minting a scene entity
+            # out of a measure, a pattern or a state of light, which every
+            # later beat then has to carry. Degrades exactly like the
+            # unreferrable-subject case above it: a metadata note, no
+            # warning, no diff. Believed only where the world does not
+            # already hold a record for the subject (_verify_no_referent).
+            if status == _NO_REFERENT and _verify_no_referent(om, forms, sc):
+                claim_notes.append({
+                    "subject": om.get("subject"),
+                    "predicate": om.get("change"),
+                    "note": ("subject has no durable referent in the world "
+                             "model; the asserted effect stands and nothing "
+                             "is minted for it"),
+                })
+                recon["unresolved"].append(
+                    {**_public_omission(om), "disposition": _NO_REFERENT})
+                continue
             # NON-REJECTABLE: the player authority contract makes the effect
             # true; a disposition cannot argue it away -- only actual
             # post-merge evidence silences this warning.
