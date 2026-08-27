@@ -3021,11 +3021,36 @@ in the fiction is missing.
 
 Two things are separable here:
 
-  1. **PRIOR ACQUAINTANCE HAS NO SEEDING SURFACE.** A cast attached to one story
-     may be strangers (the point of a first meeting) or colleagues of twenty
-     years, and the engine cannot currently be told which. Note the shape
-     already exists elsewhere: `story/journey_history` seeds prestory MEMORIES
-     before turn 0, so a pre-play seeding lane is not a new idea.
+  1. **ACQUAINTANCE IS DERIVABLE FROM THE CHARTER AND IS NOT BEING DERIVED.**
+     The engine's owner's rule, and it needs no new authoring surface: bodies
+     presimulated together in one institution KNOW each other, and everybody
+     knows who is in command. The Charter already holds every input:
+
+         reports_to: ""      the root of the tree. COMMAND IS PUBLISHED --
+                             nobody needs to have met the captain to know who
+                             the captain is, and that is what a chain of
+                             command IS.
+         reports_to: <post>  each body's own superior and subordinates. You
+                             know who you report to and who reports to you.
+         serves: <watch>     bodies on one watch have stood it together for the
+                             whole presimulated horizon.
+         authority           who may give an order, which is the other half of
+                             knowing who commands.
+         charter_run.run     already accrues `stood`/`travelled` per body across
+                             the prehistory, so co-presence is recorded rather
+                             than assumed.
+
+     Senior posts know each other most strongly: they are few, they are in each
+     other's chains, and the presim ran them together. Generics on DIFFERENT
+     watches may legitimately not know each other -- that is a real gap in a
+     thousand-person ship, not a defect -- but they all still know who is in
+     command, because that is published rather than met.
+
+     A cast attached to a story WITHOUT a Charter is the other case and still
+     needs an answer; it is not this one. Note the shape exists elsewhere:
+     `story/journey_history` seeds prestory MEMORIES before turn 0, so a
+     pre-play seeding lane is not a new idea.
+
   2. **A SILHOUETTE STILL SHOWS A PERSON.** Even with no acquaintance at all,
      the degraded label discards what a silhouette genuinely delivers, and the
      engine already holds all of it: `stations.at` (`captains_chair`,
