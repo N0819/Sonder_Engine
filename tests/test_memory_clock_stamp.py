@@ -447,3 +447,71 @@ def test_the_migration_is_the_last_one_and_the_schema_declares_it(temp_db):
     assert len(db.MIGRATIONS) + 1 == db.SCHEMA_VERSION
     cols = {r["name"] for r in temp_db.q("PRAGMA table_info(memories)")}
     assert "encoded_at_seconds" in cols
+
+
+# ---- the payload boundary, walked whole -------------------------------------
+
+def _every_string(value, path="payload"):
+    """Every string in a nested payload, with the path that reached it."""
+    if isinstance(value, str):
+        yield path, value
+    elif isinstance(value, dict):
+        for key, item in value.items():
+            yield from _every_string(item, f"{path}.{key}")
+    elif isinstance(value, (list, tuple)):
+        for index, item in enumerate(value):
+            yield from _every_string(item, f"{path}[{index}]")
+
+
+def test_nothing_anywhere_in_a_delivered_payload_names_a_beat(temp_db):
+    """The class, at the only boundary that matters: what a mind is handed.
+
+    Five stamping sites read the clock correctly and NOTHING ASSERTED WHAT THEY
+    PRODUCED, so each could be reverted to a hardcoded "about N beats ago" with
+    a fully green suite -- and one of them was, verbatim, during the adversarial
+    pass: `mind/memory_judge.py`'s recall-review row, put back into beats,
+    9820 passed 0 failed. A per-site test would have to be written again for
+    every site added later. This walks the whole payload instead, so a lane
+    that starts speaking in beats fails here whether or not anyone remembered
+    to cover it.
+
+    The lanes populated below are the five: a single memory, a scoped
+    provenance summary, the autobiographical summary, a row belonging to no
+    beat, and a row carrying no reading at all.
+    """
+    from mind.memory import build_character_memory_context
+    from mind.memory import save_memory_summary
+
+    chat_id, char_id = _story(temp_db)
+    _row(temp_db, chat_id, char_id, turn_idx=1, seconds=30.0,
+         content="a door closed")
+    _row(temp_db, chat_id, char_id, turn_idx=2, seconds=90.0,
+         content="someone spoke")
+    # No reading, and no beat at all -- the two refusal paths.
+    temp_db.qi(
+        "INSERT INTO memories(chat_id,char_id,turn_idx,kind,category,"
+        "provenance,salience,content,gist,key_phrases,entities,location,"
+        "emotional_context,valence,arousal,confidence,archived,event_key,"
+        "embedding_model) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        (chat_id, char_id, 3, "episodic", "episode", "witnessed", 0.6,
+         "no reading", "no reading", "[]", "[]", "", "", 0.0, 0.0, 1.0, 0,
+         "k:nr", ""))
+    temp_db.qi(
+        "INSERT INTO memories(chat_id,char_id,kind,category,"
+        "provenance,salience,content,gist,key_phrases,entities,location,"
+        "emotional_context,valence,arousal,confidence,archived,event_key,"
+        "embedding_model) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        (chat_id, char_id, "semantic", "episode", "remembered", 0.5,
+         "before the record", "before the record", "[]", "[]", "", "", 0.0,
+         0.0, 1.0, 0, "k:pre", ""))
+    save_memory_summary(chat_id, char_id, "A stretch of days.",
+                        start_turn_idx=1, end_turn_idx=2)
+
+    payload = build_character_memory_context(
+        chat_id, char_id, 9, "You are in a room.", {})
+
+    offenders = [(path, text) for path, text in _every_string(payload)
+                 if "beat" in text.casefold()]
+    assert not offenders, (
+        "a delivered payload named the engine's own turn unit: "
+        + "; ".join(f"{path} = {text!r}" for path, text in offenders[:6]))

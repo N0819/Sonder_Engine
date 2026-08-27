@@ -2029,7 +2029,7 @@ def _stamp_clock_display(c, chat_id, frame_id, label):
               (json.dumps(clock), chat_id, key))
 
 
-def _recover_scene_time_of_day(c, chat_id=None):
+def _recover_scene_time_of_day(c, chat_id=None, *, only_pre_split=False):
     """Give every stored scene a `time_of_day`, recovering the one its own
     opening named.
 
@@ -2065,6 +2065,17 @@ def _recover_scene_time_of_day(c, chat_id=None):
             continue
         if not isinstance(scene, dict) or "time_of_day" in scene:
             continue
+        # `only_pre_split` narrows this to rows that ACTUALLY carry the old
+        # shape, for callers that are not the migration. The migration wants
+        # the empty key everywhere -- its presence is what stops it re-querying
+        # every scene on every open. A checkpoint restore does not: it rewrites
+        # every world row this chat owns, including other frames', so stamping
+        # a key onto a scene that never held the corrupt field would let
+        # restoring one era touch another era's row. That is the leak
+        # `test_restoring_mid_a_framed_turn_does_not_clobber_the_present`
+        # exists to catch, and it caught it.
+        if only_pre_split and "time" not in scene:
+            continue
         _, frame_id = parse_scoped_world_key(row["key"])
         label = _opening_time_of_day(c, row["chat_id"], frame_id)
         scene["time_of_day"] = label
@@ -2079,12 +2090,13 @@ def _recover_scene_time_of_day(c, chat_id=None):
             _stamp_clock_display(c, row["chat_id"], frame_id, label)
 
 
-def recover_scene_time_of_day(chat_id=None):
+def recover_scene_time_of_day(chat_id=None, *, only_pre_split=False):
     """`_recover_scene_time_of_day` for callers holding no connection -- the
     archive import path, whose freshly written chat carries a scene from
     before the split and the opening that can repair it."""
     with transaction() as c:
-        _recover_scene_time_of_day(c, chat_id)
+        _recover_scene_time_of_day(c, chat_id,
+                                    only_pre_split=only_pre_split)
 
 
 def init():

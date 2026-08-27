@@ -28,7 +28,7 @@
 | `agents/runtime.py` | 1335 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `core.db`, `core.pipeline_context`, `llm.providers`, `persist.checkpoints`, `persist.commit`, `story.character_schema`, `story.scene` |
 | `agents/storage.py` | 123 | Step and active-variant persistence helpers. | `core.db` |
 | `core/__init__.py` | 6 |  | — |
-| `core/db.py` | 2226 | SQLite schema, migrations, connection management, transactions, and key/value world access. | `core.paths` |
+| `core/db.py` | 2254 | SQLite schema, migrations, connection management, transactions, and key/value world access. | `core.paths` |
 | `core/frames.py` | 220 |  | `core.db` |
 | `core/jobs.py` | 308 |  | `core.logging_utils` |
 | `core/logging_utils.py` | 45 | Structured timing and observability helpers. | — |
@@ -423,14 +423,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `init()` | 2074 | 109 lines |
-| `_recover_scene_time_of_day()` | 2016 | 48 lines |
-| `conn()` | 1733 | 38 lines |
-| `transaction()` | 1773 | 36 lines |
-| `_establish_time_of_day_from_variant()` | 1941 | 28 lines |
-| `_stamp_clock_display()` | 1992 | 22 lines |
-| `_opening_time_of_day()` | 1971 | 19 lines |
-| `_column_addition_already_applied()` | 1890 | 18 lines |
+| `init()` | 2102 | 109 lines |
+| `_recover_scene_time_of_day()` | 2032 | 59 lines |
+| `conn()` | 1738 | 38 lines |
+| `transaction()` | 1778 | 36 lines |
+| `_opening_time_of_day()` | 1976 | 30 lines |
+| `_establish_time_of_day_from_variant()` | 1946 | 28 lines |
+| `_stamp_clock_display()` | 2008 | 22 lines |
+| `_column_addition_already_applied()` | 1895 | 18 lines |
 
 ### `core/frames.py`
 
