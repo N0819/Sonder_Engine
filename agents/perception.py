@@ -846,6 +846,60 @@ def _saw_across_beat(sc, prev_sc, perceiver_name, source_name, rel,
     return _at(sc) or _at(prev_sc)
 
 
+def _player_room_in(sc, pers, interp, ctx, player_name):
+    """The player's room IN THE SCENE THE VIEWS ARE BUILT FROM.
+
+    The scene wins whenever it places the body, because presence and channel
+    have to be two readings of one world. `perception_act` resolved the room
+    against the scene as stored and then merged the player's own asserted
+    state onto a copy fourteen lines later, so every
+    `spatial_rel_between(..., target_room=p_room)` after that graded the
+    player from the room she had left while the same scene said she was
+    somewhere else -- one observer's view carrying her presence in the new
+    room and her lines delivered as co-present in the old one, which is a
+    channel nobody had.
+
+    The cached `ctx["_player_room"]` is a fallback now rather than the first
+    answer, for the same reason: it was written before this beat's assertions
+    reached the scene. It still stands in where the scene tracks no position
+    for the player at all, and the resolver -- which may cost a model call --
+    is still asked only when neither has an answer. The cache is refreshed
+    here, so the stages after this one read the same room these views were
+    built from.
+    """
+    room = room_of(sc, player_name)
+    if not room:
+        room = ctx.get("_player_room")
+    if not room:
+        room = _resolve_player_room(sc, pers, interp, ctx.cast,
+                                    ctx.get("input"))
+    ctx["_player_room"] = room
+    return room
+
+
+def _body_relocated(prev_sc, sc, name, fallback_room=None):
+    """Did THIS body's own position change across the beat.
+
+    The beat's movement record, read off the two scenes that record it: the
+    room a body stands in, and the enclosures shut around it. Both are ways a
+    body relocates, both are written by the same merge, and reading the scenes
+    catches a body carried by a passage or a vehicle exactly as it catches one
+    that walked -- a `state_diff.positions` read would see only the second.
+
+    False whenever either end is unknown. An unplaced body has not been shown
+    to have moved, and the only thing this answer ever does is WITHDRAW a
+    channel, so silence must not withdraw one.
+    """
+    if not prev_sc or not sc or not name:
+        return False
+    then_room = room_of(prev_sc, name)
+    now_room = room_of(sc, name) or fallback_room
+    if then_room and now_room and then_room != now_room:
+        return True
+    return ({str(h).strip().casefold() for h in hiding_holders_of(prev_sc, name)}
+            != {str(h).strip().casefold() for h in hiding_holders_of(sc, name)})
+
+
 def _sense_card(sheet):
     """The STRUCTURED card senses, which are what the G4 gate takes.
 
@@ -921,6 +975,10 @@ def _source_channels(sc, perceiver_name, perceiver_room, sources,
     opens nothing that was closed for the whole beat -- it only refuses to
     pretend the beat's own transition never happened.
     """
+    # WHOSE ACT CLOSED THE CHANNEL, decided once: it is a fact about the
+    # perceiver, not about any one source. See the rescue below.
+    perceiver_relocated = _body_relocated(prev_sc, sc, perceiver_name,
+                                          perceiver_room)
     rels = {}
     for s in sources:
         # THE body-to-body relation builder (see spatial_rel_between): it
@@ -946,7 +1004,30 @@ def _source_channels(sc, perceiver_name, perceiver_room, sources,
             # Only ever upgrades. `has_visual` is the room-level question and
             # is the one that goes false when an edge is severed mid-beat --
             # which is exactly the transition this exists to preserve.
-            if has_visual(prev_rel) and not has_visual(rel):
+            #
+            # AND ONLY WHEN THE PERCEIVER STAYED PUT. The rescue keeps a
+            # channel the beat's own transition closed; it may not keep one
+            # the perceiver walked out of, because a body is graded from
+            # where it IS, and a room it left is not a room it still
+            # perceives from. Keying on the relation alone cannot tell the
+            # two apart -- both read as "visual then, none now" -- so a
+            # perceiver who changed room was handed her old room back for the
+            # whole beat, `same_room` and all: `line_hear_level` then
+            # returned "full" and `speech_percept` emitted no `via`, so lines
+            # spoken after she was gone arrived as unchannelled co-present
+            # voice and nothing downstream could tell they had crossed a
+            # boundary. Measured live: four speeches so delivered, and the
+            # narrator invented a display feed to explain them, two beats
+            # before any comm link existed.
+            #
+            # This withdraws the perceiver-moved half and keeps the whole of
+            # the half the rescue was written for (chat 58 t27), where the
+            # SOURCE is the one whose act severed the channel it was seen
+            # through -- a door slammed, a curtain drawn, a vehicle pulling
+            # away. The asymmetry is the firewall's own direction: where the
+            # perceiver moved, the unrescued relation is the truthful one.
+            if (has_visual(prev_rel) and not has_visual(rel)
+                    and not perceiver_relocated):
                 rel = {**prev_rel, "was_reachable_at_beat_start": True}
         rels[s["name"]] = rel
     return {
@@ -1770,11 +1851,6 @@ def perception_act(ctx, nonce):
     if not isinstance(action, dict):
         action = {}
 
-    p_room = ctx.get("_player_room")
-    if p_room is None:
-        p_room = _resolve_player_room(sc, pers, interp, ctx.cast, ctx.input)
-        ctx["_player_room"] = p_room
-
     p_name = pers.get("name") or persona_name(pers)
     # WHAT THE PLAYER SAID HAPPENED, HAS HAPPENED -- here, before a single
     # observer's view is built. Everything the player asserted about their own
@@ -1791,6 +1867,11 @@ def perception_act(ctx, nonce):
         sc, (interp.get("onset_state_assertions")
              if interp.get("onset_state_assertions") is not None
              else interp.get("state_assertions")), ctx, p_name)
+    # RESOLVED AGAINST THE SCENE THE VIEWS ARE BUILT FROM, which is this one:
+    # the preview above is what puts a declared step into the next room into
+    # `sc`, and a room resolved before it grades every observer's channel to
+    # the player from the room she left. See `_player_room_in`.
+    p_room = _player_room_in(sc, pers, interp, ctx, p_name)
     p_appearance = _appearance_as_prose(appearance_of(
         p_name, pers.get("appearance") or persona_appearance(pers), sc))
     # A physical disguise conceals the actor's real appearance from observers:

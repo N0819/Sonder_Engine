@@ -354,6 +354,17 @@ player who took their top off, knelt, or ducked into an alcove was perceived
 in the previous outfit, the previous posture and a room without the alcove
 for the whole beat in which they changed all three.
 
+The player's ROOM is resolved from that previewed scene, not from the scene as
+stored. It was read fourteen lines earlier, so a declared step into the next
+room reached `sc` and never reached `p_room`, and every
+`spatial_rel_between(..., target_room=p_room)` afterwards graded her from the
+room she had left while the same scene placed her in the new one — one
+observer's view carrying her presence in the room she had entered and her
+lines as co-present in the room she had not. Presence and channel are two
+readings of one world, so they read one scene. The cached `ctx["_player_room"]`
+stands in only where the scene tracks no position at all, and the resolver
+(which may cost a model call) is asked only when neither has an answer.
+
 What bounds it is its SOURCE, not a channel list or a subject guard: interpret
 reads the player's declaration and nothing else. An unfinished attempt, and
 anything acting on another character, is kept out by being classified
