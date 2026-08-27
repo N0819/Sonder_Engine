@@ -362,6 +362,28 @@ class TestTheReadersMoved:
 # --- the stories that already lost theirs ----------------------------------
 
 
+def _story_with_a_lost_time(temp_db, *, establish, scene_time,
+                            frame_id=None, chat_id=None):
+    chat_id = chat_id or _make_chat(temp_db)
+    turn_id = temp_db.qi(
+        "INSERT INTO turns(chat_id,idx,player_input,created,frame_id) "
+        "VALUES(?,?,?,?,?)", (chat_id, 0, "", time.time(), frame_id))
+    step_id = temp_db.qi(
+        "INSERT INTO steps(turn_id,key,label,ord,stale) VALUES(?,?,?,?,?)",
+        (turn_id, "director_establish", "Establish", 0, 0))
+    temp_db.qi(
+        "INSERT INTO variants(step_id,content,created,active) "
+        "VALUES(?,?,?,?)",
+        (step_id, json.dumps(establish), time.time(), 1))
+    scene = _scene()
+    scene.pop("time_of_day")
+    scene["time"] = scene_time
+    temp_db.wset(chat_id, "scene", scene)
+    temp_db.wset(chat_id, "simulation_clock",
+                 {"elapsed_seconds": 192.0, "display": "moments later"})
+    return chat_id
+
+
 class TestTheRecoveryOfExistingStories:
     """80 of the author's 81 chats still hold the opening that named their
     time of day, as an active non-stale `director_establish` variant -- so
@@ -369,31 +391,10 @@ class TestTheRecoveryOfExistingStories:
     copy of the live corpus: 7 of 84 scene rows carried a readable time of day
     before, 81 of 84 after."""
 
-    def _story_with_a_lost_time(self, temp_db, *, establish, scene_time,
-                                frame_id=None, chat_id=None):
-        chat_id = chat_id or _make_chat(temp_db)
-        turn_id = temp_db.qi(
-            "INSERT INTO turns(chat_id,idx,player_input,created,frame_id) "
-            "VALUES(?,?,?,?,?)", (chat_id, 0, "", time.time(), frame_id))
-        step_id = temp_db.qi(
-            "INSERT INTO steps(turn_id,key,label,ord,stale) VALUES(?,?,?,?,?)",
-            (turn_id, "director_establish", "Establish", 0, 0))
-        temp_db.qi(
-            "INSERT INTO variants(step_id,content,created,active) "
-            "VALUES(?,?,?,?)",
-            (step_id, json.dumps(establish), time.time(), 1))
-        scene = _scene()
-        scene.pop("time_of_day")
-        scene["time"] = scene_time
-        temp_db.wset(chat_id, "scene", scene)
-        temp_db.wset(chat_id, "simulation_clock",
-                     {"elapsed_seconds": 192.0, "display": "moments later"})
-        return chat_id
-
     def test_the_opening_is_recovered_over_the_phrase(self, temp_db):
         from core.db import recover_scene_time_of_day
 
-        chat_id = self._story_with_a_lost_time(
+        chat_id = _story_with_a_lost_time(
             temp_db,
             establish={"time": "Late autumn afternoon",
                        "simulation_clock": {"elapsed_seconds": 0.0,
@@ -414,7 +415,7 @@ class TestTheRecoveryOfExistingStories:
         never said."""
         from core.db import recover_scene_time_of_day
 
-        chat_id = self._story_with_a_lost_time(
+        chat_id = _story_with_a_lost_time(
             temp_db, establish={"time": "dusk"}, scene_time="")
         recover_scene_time_of_day(chat_id)
         assert temp_db.wget(chat_id, "scene", {})["time_of_day"] == "dusk"
@@ -423,7 +424,7 @@ class TestTheRecoveryOfExistingStories:
             self, temp_db):
         from core.db import recover_scene_time_of_day
 
-        chat_id = self._story_with_a_lost_time(
+        chat_id = _story_with_a_lost_time(
             temp_db, establish={"time": "dusk"}, scene_time="moments later")
         recover_scene_time_of_day(chat_id)
         assert "time" not in temp_db.wget(chat_id, "scene", {})
@@ -449,7 +450,7 @@ class TestTheRecoveryOfExistingStories:
         the next time the database is opened."""
         from core.db import recover_scene_time_of_day
 
-        chat_id = self._story_with_a_lost_time(
+        chat_id = _story_with_a_lost_time(
             temp_db, establish={"time": "dawn"}, scene_time="moments later")
         recover_scene_time_of_day(chat_id)
         scene = temp_db.wget(chat_id, "scene", {})
@@ -468,7 +469,7 @@ class TestTheRecoveryOfExistingStories:
         era = temp_db.qi(
             "INSERT INTO frames(chat_id,label,ordinal,kind,created) "
             "VALUES(?,?,?,?,?)", (chat_id, "Era", 1, "other", time.time()))
-        chat_id = self._story_with_a_lost_time(
+        chat_id = _story_with_a_lost_time(
             temp_db, establish={"time": "dusk"}, scene_time="moments later",
             frame_id=era, chat_id=chat_id)
         scene = _scene()
@@ -493,7 +494,7 @@ class TestTheRecoveryOfExistingStories:
         """
         from core.db import _FRAME_KEY_SEP, recover_scene_time_of_day
 
-        chat_id = self._story_with_a_lost_time(
+        chat_id = _story_with_a_lost_time(
             temp_db, establish={"time": "dusk"}, scene_time="moments later")
         scene = _scene()
         scene.pop("time_of_day")
@@ -502,3 +503,70 @@ class TestTheRecoveryOfExistingStories:
         recover_scene_time_of_day(chat_id)
         assert temp_db.wget(
             chat_id, f"scene{_FRAME_KEY_SEP}7", {}).get("time_of_day", "") == ""
+
+
+class TestTheRecoveryIsWiredToSomethingThatRuns:
+    """`recover_scene_time_of_day` is correct and was called from two places
+    that NOTHING TESTED. Every recovery test called the function by hand and
+    passed the wiring in itself, so both call sites deleted with a fully green
+    9,817-test suite -- and the entire "existing stories get theirs back" half
+    of this change rests on exactly those two lines.
+
+    These assert the CALL, through the entry points a user actually reaches.
+    """
+
+    def test_opening_a_database_repairs_the_scenes_already_in_it(self, temp_db):
+        """`db.init()` is the only live caller of the migration's recovery."""
+        chat_id = _story_with_a_lost_time(
+            temp_db, establish={"time": "dusk"}, scene_time="moments later")
+        scene = _scene()
+        scene.pop("time_of_day")
+        scene["time"] = "moments later"
+        temp_db.wset(chat_id, "scene", scene)
+
+        temp_db.init()
+
+        assert temp_db.wget(chat_id, "scene", {})["time_of_day"] == "dusk", (
+            "db.init() no longer repairs stored scenes; the migration's only "
+            "live caller is gone and every existing story keeps a passage "
+            "phrase where its time of day belongs")
+
+    def test_importing_an_archive_repairs_the_chat_that_arrived(self, temp_db):
+        """An archive written before the split carries the old shape, and the
+        import is where it becomes this database's problem."""
+        from web import app
+
+        chat_id = _story_with_a_lost_time(
+            temp_db, establish={"time": "dusk"}, scene_time="moments later")
+        service = app._chat_archive_service
+        payload = json.loads(json.dumps(service.export_chat(chat_id),
+                                        default=str))
+
+        # Put the pre-split shape back. The export runs after the repair, so
+        # what a genuinely old archive carries has to be reconstructed here.
+        stripped = False
+        world = payload.get("world")
+        rows = world.items() if isinstance(world, dict) else (
+            (r.get("key"), r) for r in (world or []))
+        for key, holder in list(rows):
+            if key != "scene":
+                continue
+            value = holder if isinstance(world, dict) else holder.get("value")
+            if isinstance(value, str):
+                value = json.loads(value)
+            value.pop("time_of_day", None)
+            value["time"] = "moments later"
+            if isinstance(world, dict):
+                world["scene"] = value
+            else:
+                holder["value"] = value
+            stripped = True
+        assert stripped, "could not find the scene row in the export"
+
+        result = service.import_chat({"data": payload})
+        new_chat_id = (result.get("chat_id") or result.get("id")
+                       or result.get("chat", {}).get("id"))
+        assert new_chat_id, f"import returned no chat id: {sorted(result)}"
+        assert "time_of_day" in temp_db.wget(new_chat_id, "scene", {}), (
+            "an imported archive kept the pre-split shape; the import's "
+            "recovery call is gone")

@@ -2783,6 +2783,34 @@ silent ones (`UNCLAIMED_BEAT_SECONDS`), and every windowed mechanism that
 reads it.
 
 
+### 1.88 A restored checkpoint is as old as the beat it snapshot
+
+A checkpoint restore deletes every world row and writes the snapshot back
+verbatim, so a blob taken before the `scene.time` / `scene.time_of_day` split
+comes back in the pre-split shape: 2,731 of 2,810 stored blobs carry
+`scene.time` and none carries `time_of_day`. Within the session, a restore
+therefore reproduces the empty-clock symptom the split exists to remove. The
+next `db.init()` repairs it, so this is a within-session defect rather than a
+durable one.
+
+**A recovery call on the restore path was built and then REVERTED**, and the
+reason is worth keeping. Restoring a pre-split blob and converting it makes the
+restore a MUTATION, and `test_rerun_of_the_same_turn_produces_an_identical_world`
+is the invariant that forbids it: reroll restores the pre-turn checkpoint and
+re-runs the beat, and the two worlds must come out byte-identical. A conversion
+that fires on the first restore and not the second breaks that. Narrowing the
+call to rows that actually carry the old shape (`only_pre_split`, which is why
+that parameter exists on `recover_scene_time_of_day`) fixed a second, different
+regression — a restore of one era stamping an empty key onto another era's
+scene row, caught by
+`test_restoring_mid_a_framed_turn_does_not_clobber_the_present` — but does not
+fix this one, because the pre-split shape is exactly what the conversion acts on.
+
+So the fix is not a call on the restore path. Either the snapshot is upgraded
+when it is WRITTEN rather than when it is read, or the readers tolerate a
+pre-split scene for the life of a session. Reroll identity is not negotiable
+against a cosmetic within-session gap.
+
 ### 1.87 The beat's own passage phrase is recorded and read by nobody
 
 **Found:** 2026-08-26, in the same landing, and stated here rather than
