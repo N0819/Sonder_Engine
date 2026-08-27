@@ -369,7 +369,11 @@ def get_scene(chat_id, chat=None):
     if not sc:
         sc = {
             "location": "an unspecified place",
-            "time": "now",
+            # EMPTY, not "now". A story that has not said what time it is has
+            # not said it, and "now" is a word that reads as an answer while
+            # carrying none -- exactly what `simulation_clock.display` was
+            # handing every role, every beat, before this field existed.
+            "time_of_day": "",
             "description": _chat_field(chat, "scenario") or "",
             "rooms": {},
             "entities": {},
@@ -379,6 +383,9 @@ def get_scene(chat_id, chat=None):
         }
     for k in ("rooms", "entities", "positions", "overlays", "attire", "orientation"):
         sc.setdefault(k, {})
+    # A scene written before the field existed, or restored from a checkpoint
+    # older than it, reads "the story has not said" rather than KeyError.
+    sc.setdefault("time_of_day", "")
     # A field name can never key an entity or stand in a room. A stored scene
     # can carry such keys from before schemas' hoist covered the specialist
     # path (chat 80: six "entities" keyed remove_entities/inventory_ops/...,
@@ -2386,9 +2393,14 @@ def weather_severity(chat_id):
     return value if value in WEATHER_SEVERITIES else DEFAULT_WEATHER_SEVERITY
 
 def simulation_clock(chat_id):
+    # `display` IS THE TIME OF DAY (the scene's `time_of_day`, restated on the
+    # clock), so a chat with no clock row yet has no time of day to state. It
+    # defaulted to "now", which is a word that reads as an answer and carries
+    # none -- and, being a default, it was the answer every role in a fresh
+    # story received for the whole story.
     return wget(chat_id, "simulation_clock", None) or {
         "elapsed_seconds": 0.0,
-        "display": "now",
+        "display": "",
         "time_scale": "scene",
     }
 

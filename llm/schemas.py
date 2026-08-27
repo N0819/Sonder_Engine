@@ -1576,7 +1576,14 @@ class CrowdOp(LenientModel):
 
 class DirectorEstablish(LenientModel):
     location: str = ""
-    time: str = "now"
+    #: The scene's standing TIME OF DAY, and the only writer of the story's
+    #: `scene.time_of_day` that is not a beat explicitly changing it. Defaults
+    #: EMPTY rather than to "now": an opening that named no time has named
+    #: none, and defaulting to a word that reads as an answer is how every
+    #: role in a fresh story came to be told the time was "now" for its whole
+    #: life. Falls back to `simulation_clock.display` at commit -- the same
+    #: statement under the clock's own name.
+    time: str = ""
     # The sky the story opens under. Same shape as StateDiff.weather; absent
     # means the engine's fair-and-still default rather than "no weather", so
     # an opening that never mentions the sky still has one to drift from.
@@ -3419,8 +3426,16 @@ class GreetingInterpret(LenientModel):
     stored extraction written by an older extractor still reads.
     """
 
-    #: Seeds the chat's `simulation_clock.display` at launch.
-    time: str = "now"
+    #: Seeds the chat's `simulation_clock.display` at launch -- which is the
+    #: scene's TIME OF DAY, restated on the clock (`scene.time_of_day`). The
+    #: opening turn's `director_establish` overrides it where it names one and
+    #: INHERITS it where it does not, so a greeting that read a time out of its
+    #: own passage is what the story starts under.
+    #:
+    #: Defaults EMPTY, not "now": a passage that names no time has named none,
+    #: and a word that reads as an answer while carrying none is what every
+    #: role in a fresh story was told for its whole life.
+    time: str = ""
     #: The point of the call: one whole mind per person present.
     minds: list[GreetingMind] = Field(default_factory=list)
     #: v1's shape -- the card character's own seeds, un-keyed. Kept so a

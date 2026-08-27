@@ -1893,6 +1893,139 @@ def _backfill_resource_uids(c):
                 (value, row["id"]),
             )
 
+def _establish_time_of_day_from_variant(content):
+    """The standing time of day a stored `director_establish` variant named.
+
+    Restates the live rule (`world.mechanics.normalize_time_of_day` and
+    `persist.commit_scene_state._establish_time_of_day`) rather than importing
+    it, for two reasons that point the same way: `core` sits underneath
+    `world` and `persist`, and a recovery pass is FROZEN against the shape it
+    was written for -- it must keep reading a 2026-08 archive the same way
+    after the live reader has moved on.
+
+    The clock's own label leads and the scene's `time` follows -- the same
+    precedence and the same reason as the live reader: both are filled in 80
+    of 80 corpus openings, and in the 17 that disagree it is `time` that
+    holds the situation ("Immediate aftermath of a containment breach",
+    "now") while the clock beside it holds "08:42:15 AM".
+    """
+    try:
+        est = json.loads(content or "")
+    except (TypeError, ValueError):
+        return ""
+    if not isinstance(est, dict):
+        return ""
+    clock = est.get("simulation_clock")
+    for value in (clock.get("display") if isinstance(clock, dict) else None,
+                  est.get("time")):
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
+def _opening_time_of_day(c, chat_id, frame_id):
+    """The opening's time of day for one chat, preferring its own era's."""
+    sql = ("SELECT v.content AS content FROM variants v "
+           "JOIN steps s ON s.id=v.step_id "
+           "JOIN turns t ON t.id=s.turn_id "
+           "WHERE t.chat_id=? AND s.key='director_establish' "
+           "AND s.stale=0 AND v.active=1")
+    # Earliest turn, active variant: the opening, and only the opening.
+    order = " ORDER BY t.idx ASC, v.id DESC LIMIT 1"
+    if frame_id is not None:
+        row = c.execute(sql + " AND t.frame_id=?" + order,
+                        (chat_id, frame_id)).fetchone()
+        if row is not None:
+            return _establish_time_of_day_from_variant(row["content"])
+        # An era that never ran an opening of its own inherits the story's.
+        # A split or a branch is the same world at another time, and the
+        # alternative is telling that era nothing at all.
+    row = c.execute(sql + order, (chat_id,)).fetchone()
+    return _establish_time_of_day_from_variant(row["content"]) if row else ""
+
+
+def _stamp_clock_display(c, chat_id, frame_id, label):
+    """Put the recovered time of day on the clock's own label.
+
+    `elapsed_seconds` IS NEVER TOUCHED. The numeric clock works and is what
+    every windowed thing in the engine compares against; only the reader-
+    facing label was carrying the wrong kind of statement.
+    """
+    key = "simulation_clock" if frame_id is None \
+        else f"simulation_clock{_FRAME_KEY_SEP}{frame_id}"
+    row = c.execute("SELECT value FROM world WHERE chat_id=? AND key=?",
+                    (chat_id, key)).fetchone()
+    if row is None:
+        return                      # no clock yet; the next commit writes one
+    try:
+        clock = json.loads(row["value"])
+    except (TypeError, ValueError):
+        return
+    if not isinstance(clock, dict) or clock.get("display") == label:
+        return
+    clock["display"] = label
+    c.execute("UPDATE world SET value=? WHERE chat_id=? AND key=?",
+              (json.dumps(clock), chat_id, key))
+
+
+def _recover_scene_time_of_day(c, chat_id=None):
+    """Give every stored scene a `time_of_day`, recovering the one its own
+    opening named.
+
+    WHY THERE IS ANYTHING TO RECOVER. `scene.time` held two incompatible
+    kinds of statement at once: a standing time of day, written once by
+    `director_establish`, and a per-beat PASSAGE PHRASE ("moments later"),
+    written over it by every resolved beat -- and written as an ERASURE when
+    the beat carried an empty one. Measured on the author's 81-chat corpus
+    2026-08-25: 63 openings named a time of day a reader could act on, and 6
+    live scenes still held one. The openings are still on disk as active,
+    non-stale `director_establish` variants in 80 of the 81 chats, so what
+    was overwritten comes back with a single join.
+
+    Idempotent, and keyed on the KEY rather than the value: a scene that
+    already carries `time_of_day` is never revisited, so a story that has
+    since moved on from its opening is not dragged back to it. A chat whose
+    opening cannot be found (an import carrying no establish step) gets the
+    key with an EMPTY value -- a story that has not said what time it is --
+    which is also what stops this from re-querying it on every open.
+    """
+    where = "(key=? OR key LIKE ?)"
+    args = ["scene", f"scene{_FRAME_KEY_SEP}%"]
+    if chat_id is not None:
+        where += " AND chat_id=?"
+        args.append(chat_id)
+    rows = c.execute(
+        f"SELECT chat_id, key, value FROM world WHERE {where}", args
+    ).fetchall()
+    for row in rows:
+        try:
+            scene = json.loads(row["value"])
+        except (TypeError, ValueError):
+            continue
+        if not isinstance(scene, dict) or "time_of_day" in scene:
+            continue
+        _, frame_id = parse_scoped_world_key(row["key"])
+        label = _opening_time_of_day(c, row["chat_id"], frame_id)
+        scene["time_of_day"] = label
+        # The corrupt field goes with the split rather than sitting beside
+        # its replacement: what is in it is a passage phrase in most stories,
+        # a bare boolean in one, and a stale copy is how a reader finds its
+        # way back to the wrong answer.
+        scene.pop("time", None)
+        c.execute("UPDATE world SET value=? WHERE chat_id=? AND key=?",
+                  (json.dumps(scene), row["chat_id"], row["key"]))
+        if label:
+            _stamp_clock_display(c, row["chat_id"], frame_id, label)
+
+
+def recover_scene_time_of_day(chat_id=None):
+    """`_recover_scene_time_of_day` for callers holding no connection -- the
+    archive import path, whose freshly written chat carries a scene from
+    before the split and the opening that can repair it."""
+    with transaction() as c:
+        _recover_scene_time_of_day(c, chat_id)
+
+
 def init():
     c = sqlite3.connect(DB, timeout=30)
     c.row_factory = sqlite3.Row
@@ -1996,6 +2129,10 @@ def init():
     c.executescript(LATE_SCHEMA)
 
     _backfill_resource_uids(c)
+    # After the chain and on both paths, like the backfill above: a fresh file
+    # has no scenes to repair, and an existing one is repaired exactly once
+    # (see the function -- the key's presence is the gate).
+    _recover_scene_time_of_day(c)
     c.commit()
     c.close()
 

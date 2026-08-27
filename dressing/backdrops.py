@@ -61,19 +61,54 @@ BACKDROP_DIR = os.environ.get(
 # weather.weather_for_room -- see visual_signature.
 _VISUAL_STATE_KEYS = ("overlays", "conditions", "ground")
 
-# scene.time is freeform narrative text, not a clock: live values include
-# "Night", "a few seconds", "a few seconds pass", "moments pass". Hashing it
-# raw meant the SAME room with an IDENTICAL description produced a different
-# cache key on consecutive turns ("a few seconds" vs "a few seconds pass"),
-# which would have defeated caching on nearly every beat -- the one thing that
-# makes this feature affordable. Only the coarse visual bucket belongs in the
-# key: night really does look different from noon, "moments pass" does not.
+# scene.time_of_day is freeform narrative text, not a clock: live values
+# include "Night", "Late autumn afternoon", "Stardate 46357.4, 14:32 hours",
+# "0830". Hashing it raw would key the SAME room with an IDENTICAL description
+# differently on consecutive turns, defeating the cache on nearly every beat --
+# the one thing that makes this feature affordable. Only the coarse visual
+# bucket belongs in the key: night really does look different from noon.
+#
+# (This table was also the whole defence against the field's OTHER former
+# tenant, a per-beat passage phrase -- "a few seconds", "moments pass" -- which
+# it bucketed to "" and so survived. That writer is gone; the field now holds
+# one kind of statement. See `world.mechanics.normalize_time_of_day`.)
 _TIME_BUCKETS = (
     ("night", ("night", "midnight", "small hours", "after dark", "nocturn")),
     ("evening", ("evening", "dusk", "sunset", "twilight", "nightfall")),
     ("morning", ("morning", "dawn", "sunrise", "daybreak", "first light")),
     ("day", ("noon", "midday", "afternoon", "daylight", "daytime")),
 )
+
+# A CLOCK READING IS A TIME OF DAY TOO, and a closed synonym table cannot read
+# one. Measured across the author's 81-chat corpus 2026-08-25: of the 17
+# openings this could not bucket, 12 said the time in digits -- "09:42",
+# "14:32 hours", "08:42:15 AM", "1430 hours" -- and a whole story line (chats
+# 75-84, an institutional intake) lost its light to nothing but the absence of
+# a numeric branch.
+#
+# Three guards, each earned by a live string. A colon form may not be preceded
+# by a sign, or "Cycle-End -01:45:00" (a COUNTDOWN, not a time) reads as
+# quarter to two. A bare four-digit form is accepted only with a leading zero
+# ("0830") or an explicit unit ("1430 hours"), because otherwise every year in
+# every establish -- "Late night, 2026" -- becomes twenty past eight. And the
+# minute must be a real minute, which is what stops "1893" reading as 18:93.
+_CLOCK_READING = re.compile(
+    r"(?<![-+\d])(\d{1,2}):(\d{2})"
+    r"|(?<![-+\d])0(\d)(\d{2})(?!\d)"
+    r"|(?<![-+\d])(\d{2})(\d{2})(?=\s*(?:hours|hrs|h\b))"
+)
+_PM_MARKER = re.compile(r"^[^a-z0-9]{0,3}(?:\d{1,2}\s*)?p\.?\s?m\.?")
+
+
+def _hour_bucket(hour):
+    """Which coarse bucket an hour of the day falls in."""
+    if 5 <= hour < 11:
+        return "morning"
+    if 11 <= hour < 17:
+        return "day"
+    if 17 <= hour < 21:
+        return "evening"
+    return "night"
 
 
 def time_bucket(value):
@@ -83,6 +118,16 @@ def time_bucket(value):
     for bucket, words in _TIME_BUCKETS:
         if any(word in text for word in words):
             return bucket
+    for match in _CLOCK_READING.finditer(text):
+        # Every alternative captures exactly (hour, minute) -- the leading
+        # zero and the unit suffix are guards, not data.
+        found = [g for g in match.groups() if g is not None]
+        hour, minute = int(found[0]), int(found[1])
+        if hour > 23 or minute > 59:
+            continue
+        if hour < 12 and _PM_MARKER.match(text[match.end():match.end() + 12]):
+            hour += 12
+        return _hour_bucket(hour)
     return ""
 
 
@@ -150,7 +195,7 @@ def visual_signature(scene, room_id, style=None, viewer=None):
         # text would regenerate a room because someone was written into (or out
         # of) its description -- a change the picture cannot show.
         "desc": place_desc(room),
-        "time": time_bucket(scene.get("time")),
+        "time": time_bucket(scene.get("time_of_day")),
         "location": scene.get("location") or "",
         # Without this a room that goes dark keeps serving its lit backdrop --
         # the cache is keyed on what changes how the room LOOKS, and nothing
@@ -565,7 +610,7 @@ def room_projection(scene, room_id, viewer=None):
     # closet still reads "Back Alley, City". A wrong one-line location would
     # render a starship cupboard as a city alley, and the room description
     # already says "standard starship deck plating", so it earns nothing.
-    bucket = time_bucket(scene.get("time"))
+    bucket = time_bucket(scene.get("time_of_day"))
     if bucket:
         out["time"] = bucket
     # Adjacency as pure layout: which way the room opens, never who is through
@@ -758,7 +803,12 @@ def build_backdrop_request(chat_id, turn_idx, player_name=None, style=None):
         # one caller that needs it now calls for itself. Nothing else may put
         # it back: this dict is built on the READ path, which serves cache hits
         # and never writes a prompt.
-        "time": scene.get("time") or "",
+        # NO raw time key. The scene's time of day reaches the prompt through
+        # `place` (bucketed, like every other visual-state field), and the
+        # unbucketed copy that used to sit here was read by nobody: not
+        # `_backdrop_payload`, not the frontend, not the preview tool. A field
+        # nothing reads is worse than no field -- it is the reason the corrupt
+        # value went unnoticed here for as long as it did.
         "location": scene.get("location") or "",
         # For the weather overlay (static/js/weather-fx.js), which draws only
         # where the sky can actually be seen. Handed over as the SCOPED answer

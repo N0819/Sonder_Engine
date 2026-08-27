@@ -376,7 +376,11 @@ def director_establish(ctx, nonce):
     out.setdefault("entities", {})
     out.setdefault("sensory_events", [])
     out.setdefault("fiction_frame", {})
-    out.setdefault("simulation_clock", {"elapsed_seconds": 0.0, "display": "now"})
+    # EMPTY display, not "now". This dict is no longer an orphan -- commit
+    # reads its label as the story's opening time of day -- so a placeholder
+    # here would beat the time the opening actually named. An opening that
+    # said nothing has said nothing.
+    out.setdefault("simulation_clock", {"elapsed_seconds": 0.0, "display": ""})
 
     # Opening entity_states historically reached opening perception and then
     # vanished. Seed the durable pose ledger from them so player personas and
@@ -489,7 +493,12 @@ def director_interpret(ctx, nonce):
     payload = {
         "scene": {
             "location": sc.get("location"),
-            "time": sc.get("time"),
+            # THE STANDING TIME OF DAY, named as what it is. Under the bare
+            # key `time` this block used to hand back last beat's DURATION
+            # PHRASE -- the same string the `simulation_clock` below carried
+            # as `display` -- to the one hand that owns the `time` channel,
+            # which is a payload teaching the model to write the defect back.
+            "time_of_day": sc.get("time_of_day"),
             "rooms": _contextual_rooms(sc, ctx.cast, p_room),
             "entities": sc.get("entities"),
             "positions": sc.get("positions"),
@@ -2703,7 +2712,11 @@ def director_resolve(ctx, nonce, _corrections=None):
                     name: extra_parts_lines(parts)
                     for name, parts in _resolve_parts.items()}}
                if _resolve_parts else {}),
-            "time": sc.get("time"),
+            # The standing time of day -- see the interpret payload's own note
+            # on this key. The prose author owns the `time` channel, so this
+            # is the one place where showing it a passage phrase under the
+            # name `time` taught it to write one back.
+            "time_of_day": sc.get("time_of_day"),
         },
         "simulation_clock": clock,
         # Who is currently under, and the condition_id each one must be
