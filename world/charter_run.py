@@ -150,7 +150,8 @@ def _run_private_habits(experiences, habit_runs, bodies, watch, at_hours):
 
 
 def _record_coarse_experiences(experiences, bodies, watch, stood_before,
-                               posts, events, known_before, minds, at_hours):
+                               posts, events, known_before, minds, at_hours,
+                               feel=None):
     """The past a body keeps at COARSE resolution, where nobody is watching.
 
     THE GAP THIS CLOSES. `active_places` is documented three hundred lines
@@ -178,6 +179,35 @@ def _record_coarse_experiences(experiences, bodies, watch, stood_before,
     at_hours = round(float(at_hours), 6)
     place_of = {key: str((body or {}).get("place") or "")
                 for key, body in (bodies or {}).items()}
+    feel = feel or {}
+
+    def felt(body_key):
+        """How the moment landed, in the affect model's own two numbers.
+
+        Not a second opinion about the event -- `charter_feel` has already
+        appraised this window from the body's own needs, its own place and
+        the events that reached it, and this only carries that reading onto
+        the row so the memory keeps it. A body with nothing to feel about
+        contributes nothing, which is what keeps a quiet institution's feel
+        dict empty and this stamp absent rather than neutral-valued.
+        """
+        held = (feel or {}).get(body_key)
+        if not isinstance(held, dict):
+            return {}
+        hedonic = held.get("hedonic") or {}
+        stress = held.get("stress") or {}
+        # `psychology_runtime`'s own persisted shape, in its own vocabulary:
+        # hedonic carries pain/pleasure/charge and stress carries
+        # activation/strain. Valence is what the two hedonic poles come to;
+        # arousal is the activation already computed beside them. One affect
+        # model across both tiers, so a promoted character's inherited rows
+        # speak the same language as the ones it goes on to lay down itself.
+        valence = (float(hedonic.get("pleasure") or 0.0)
+                   - float(hedonic.get("pain") or 0.0))
+        arousal = float(stress.get("activation") or 0.0)
+        if not valence and not arousal:
+            return {}
+        return {"valence": round(valence, 4), "arousal": round(arousal, 4)}
 
     # A POST STOOD FOR THE FIRST TIME. Not every change of the bill: the bill
     # is re-planned every window, and on a short-handed institution it churns
@@ -199,11 +229,19 @@ def _record_coarse_experiences(experiences, bodies, watch, stood_before,
             "place": str(post.get("place") or place_of.get(body_key) or ""),
             "post": str(post_key),
             "serves": [str(x) for x in (post.get("serves") or ())][:4],
+            **felt(body_key),
         }, fold=False)
 
-    # AN ACQUAINTANCE FORMED. The belief store is the record of who a body has
-    # come to know, so the first appearance of a name in it is the meeting --
-    # no second bookkeeping store, and no row when they merely meet again.
+    # AN ACQUAINTANCE FORMED, and FOLDED, which is the whole of the care here.
+    # The belief store is the record of who a body has come to know, but it
+    # DECAYS: a claim ages out, the two meet again, and the absence-from-
+    # `known_before` test reads that as a first meeting all over again. Left
+    # appending, a quiet 40-body town wrote 8 acquaintance rows in 48 hours,
+    # 94 in two months and 1134 in two years -- twenty-eight rows per person
+    # known, growing with time and not with incident, which is the exact
+    # failure this module's docstring names. The id is stable per pair, so
+    # folding turns every re-meeting into a repetition count on the one row
+    # that says they know each other. An existing test caught this.
     for body_key, held in sorted((minds or {}).items()):
         if body_key not in (bodies or {}):
             continue
@@ -217,7 +255,8 @@ def _record_coarse_experiences(experiences, bodies, watch, stood_before,
                 "place": place_of.get(body_key, ""),
                 "other": str(other),
                 "firsthand": (held.get(other) or {}).get("heard_from") is None,
-            }, fold=False)
+                **felt(body_key),
+            })
 
     # A HAPPENING STOOD THROUGH. Presence is the whole test, exactly as it is
     # for `charter_news.witness` -- a body standing where something crossed a
@@ -237,6 +276,7 @@ def _record_coarse_experiences(experiences, bodies, watch, stood_before,
                 "event_kind": kind,
                 "about": str(event.get("upkeep") or event.get("post")
                              or event.get("body") or ""),
+                **felt(body_key),
             }, fold=False)
 
 
@@ -681,9 +721,6 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
         if isinstance(runs, dict)}
     _run_private_habits(
         experiences, habit_runs, bodies, plan["watch"], at + hours)
-    _record_coarse_experiences(
-        experiences, bodies, plan["watch"], charter.get("stood") or {},
-        charter["posts"], events, known_before, minds, at + hours)
 
     heard_blame = {k: set(v) for k, v in
                    (charter.get("heard_blame") or {}).items()}
@@ -760,6 +797,15 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
         if body is not None and body.get("available") and actually_there:
             held = stood.setdefault(body_key, {})
             held[post_key] = held.get(post_key, 0) + 1
+
+    # AFTER THE APPRAISAL, deliberately. A memory that records only what
+    # happened is a log line; what makes it a memory is how it landed on the
+    # body it happened to. `feel` is this window's appraisal of this window's
+    # events, computed by the engine's own affect model over channelled inputs
+    # only, so stamping it here costs nothing and no second opinion is invented.
+    _record_coarse_experiences(
+        experiences, bodies, plan["watch"], charter.get("stood") or {},
+        charter["posts"], events, known_before, minds, at + hours, feel)
 
     after_charter = dict(charter)
     after_charter["upkeeps"] = upkeeps
