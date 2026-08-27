@@ -4,6 +4,10 @@ vocabulary, and the class sets saying what a barrier passes."""
 
 import re
 
+from world.spatial_orientation import (
+    normalize_bearing, normalize_vertical, opposite_bearing, opposite_vertical,
+)
+
 
 _BARRIER_ALIASES = {
     "": "wall",
@@ -365,11 +369,19 @@ def unresolved_barrier_words(rooms) -> list:
     return sorted(seen)
 
 def normalize_scene_barriers(scene: dict) -> dict:
-    """Normalize every adjacency barrier in a scene in place."""
+    """Normalize every adjacency barrier in a scene in place.
+
+    Also drops a `passage_from` that names neither end of the edge it sits on
+    -- the same refusal `sight_direction` makes for `sight_from`, and for the
+    same reason. A direction has to name one of the two rooms to be a
+    direction; a value naming the doorway, the mechanism, or a room somewhere
+    else would otherwise seal the passage from BOTH sides silently, which is
+    the one failure a directed edge must never have.
+    """
     if not isinstance(scene, dict):
         return scene
 
-    for room in (scene.get("rooms") or {}).values():
+    for room_id, room in (scene.get("rooms") or {}).items():
         if not isinstance(room, dict):
             continue
 
@@ -383,6 +395,9 @@ def normalize_scene_barriers(scene: dict) -> dict:
                 continue
             edge["barrier"] = _barrier_against_its_own_name(
                 normalize_barrier(edge.get("barrier")), edge.get("name"))
+            named = passage_direction(edge)
+            if named and named not in (str(room_id), str(edge.get("to"))):
+                edge.pop("passage_from", None)
 
     return scene
 
@@ -466,7 +481,8 @@ def route_memory_barrier(value) -> bool:
 _AMBIENT_BARRIERS = {"open", "open_door", "bars"}
 
 
-def neighbor_map(scene: dict, barriers=None, *, known_rooms_only=False) -> dict:
+def neighbor_map(scene: dict, barriers=None, *, known_rooms_only=False,
+                 directional=False) -> dict:
     """{room_id: {rooms one step away}}, undirected, over the edges a caller
     is willing to cross.
 
@@ -487,6 +503,14 @@ def neighbor_map(scene: dict, barriers=None, *, known_rooms_only=False) -> dict:
     room record for. Only `ambient_scope` asks for that, because its answer is
     a connected component it then reads `parent_entity` off; the walks that
     only need ids tolerate a dangling edge.
+
+    `directional` honours an edge's `passage_from` field, and the result is
+    then a DIRECTED map: the walk that carries a body must refuse a chute
+    against its fall, while sound and an ambient bed cross it both ways. Off
+    by default, because "undirected" is right for three of the four walks and
+    for every edge that names no direction. See `passage_direction`: the
+    direction is a FIELD, and the absence of a reciprocal edge has never been
+    one.
     """
     rooms = scene.get("rooms") or {}
     neighbors: dict[str, set] = {}
@@ -504,6 +528,139 @@ def neighbor_map(scene: dict, barriers=None, *, known_rooms_only=False) -> dict:
             if barriers is not None \
                     and normalize_barrier(edge.get("barrier")) not in barriers:
                 continue
+            if directional:
+                if edge_crossable_from(edge, room_id):
+                    neighbors.setdefault(room_id, set()).add(target)
+                if edge_crossable_from(edge, target):
+                    neighbors.setdefault(target, set()).add(room_id)
+                neighbors.setdefault(room_id, set())
+                neighbors.setdefault(target, set())
+                continue
             neighbors.setdefault(room_id, set()).add(target)
             neighbors.setdefault(target, set()).add(room_id)
     return neighbors
+
+
+def passage_direction(edge) -> str:
+    """The room a directed edge may be crossed FROM, or "" when it is not
+    directed at all.
+
+    THE DIRECTION IS A FIELD, for the reason `sight_direction` already
+    records for sight: an edge's direction cannot be carried by WHICH SIDE
+    DECLARED IT, because writing adjacency from both sides is the universal
+    habit and is correct for every symmetric barrier. A chute, a drop, a door
+    that locks behind you are legitimate fiction, and the barrier vocabulary
+    has no directed-passage value -- `one_way_window` is sight-only, and
+    every member of `_PASSABLE_BARRIERS` is symmetric (docs/UNBUILT.md, "Interior
+    passage is undirected").
+
+    The absence of a reciprocal edge is NOT that fact and never was. Measured
+    on the live corpus 2026-08-25: 117 of 374 room pairs (31.3%) are declared
+    from one side only, 88 of them plain `open`/`open_door` doorways, and ZERO
+    of the 16 `one_way_window` declarations. One-sidedness is how edges get
+    written, not what a one-way passage looks like -- so a reader that treated
+    silence as a seal would be reading a writing habit as world law, which is
+    precisely the failure `sight_from` was built to end.
+
+    So: `passage_from: "<room_id>"` on the edge, written from either end or
+    both, naming the one room a body may cross from. Both declarations then
+    AGREE instead of contradicting, exactly as `sight_from` made them agree.
+    """
+    if not isinstance(edge, dict):
+        return ""
+    return str(edge.get("passage_from") or "").strip()
+
+
+def edge_crossable_from(edge, from_room) -> bool:
+    """Does this edge's DIRECTION allow a body to cross it starting from
+    `from_room`? Barrier-blind -- ask `edge_passable` for the whole question.
+
+    An undirected edge (the overwhelming majority) is crossable from either
+    end. A directed one is crossable only from the room it names.
+    """
+    named = passage_direction(edge)
+    return not named or named == str(from_room)
+
+
+def edge_passable(edge, from_room) -> bool:
+    """May a body cross this edge, starting from `from_room`?
+
+    The whole question in one place: the barrier lets a body through AND the
+    edge is not declared one-way against this side. Callers that previously
+    tested `normalize_barrier(...) in _PASSABLE_BARRIERS` were asking half of
+    it, which was the entire question while a one-way passage had no spelling.
+    """
+    if not isinstance(edge, dict):
+        return False
+    return (normalize_barrier(edge.get("barrier")) in _PASSABLE_BARRIERS
+            and edge_crossable_from(edge, from_room))
+
+
+def effective_adjacent(scene: dict, room_id) -> list:
+    """Every edge this room has, INCLUDING the ones only its neighbour
+    declared -- the room's own list plus one reversed edge per far-side edge
+    naming it.
+
+    THE ROOM GRAPH IS UNDIRECTED, by this package's stated doctrine
+    (`neighbor_map` above) and by the spatial specialist's own prompt, and
+    ten readers honour it while five read `room["adjacent"]` alone and do not.
+    The asymmetry they see is not a fact about the world: nothing writes a
+    reciprocal edge and nothing drops one, so a room that never declared an
+    edge of its own has none, however many doorways point at it. The room a
+    story STARTS in is guaranteed to hit that -- at establish there is nothing
+    to point at, and every later room is minted with a back-edge only -- and
+    it is far from alone: 20 such rooms in the live corpus, 9 of them with
+    bodies standing in them.
+
+    What it cost, measured on the run-3 shape: `spatial_digest` `{}`,
+    `sprint_reach` `[]`, `corridor_sightlines` `[]`, and `room_layout`
+    reporting two doorways as anchors and no exits at all in the same payload.
+    Worse, `_behind_rooms` is directed while `visible_adjacent_rooms` is not,
+    so an observer standing with their back to a far-declared doorway kept
+    receiving fresh sight of the room behind them -- an information EXPANSION
+    that this closes by SUBTRACTING more.
+
+    The derivation is the one `_onward_exits` and `effective_anchors` had each
+    already written for themselves: the far side's bearing and verticality are
+    reversed, because it is the same doorway seen from the opposite wall.
+    Derived edges are marked `implicit: True` and are never written anywhere;
+    the room's OWN declaration always wins a target it names, so a barrier
+    change made from this side is not overruled by a stale far-side echo.
+
+    A far-side `wall` is NOT derived. A wall is not a way through, and a
+    non-relation nobody on this side declared names a room this side has no
+    relation to -- deriving it would ADD information rather than restore a
+    doorway. `normalize_barrier` folds every unreadable word to `wall` too, so
+    this also declines to invent a doorway out of a word nothing could read.
+    """
+    rooms = (scene or {}).get("rooms") or {}
+    room = rooms.get(room_id)
+    own = [e for e in ((room or {}).get("adjacent") or [])
+           if isinstance(e, dict) and e.get("to")]
+    named = {str(e["to"]) for e in own}
+    out = list(own)
+    for other_id, other in rooms.items():
+        if str(other_id) == str(room_id) or str(other_id) in named \
+                or not isinstance(other, dict):
+            continue
+        for edge in other.get("adjacent") or []:
+            if not isinstance(edge, dict) \
+                    or str(edge.get("to")) != str(room_id):
+                continue
+            if normalize_barrier(edge.get("barrier")) == "wall":
+                continue
+            derived = {k: v for k, v in edge.items()
+                       if k not in ("to", "dir", "vertical")}
+            derived["to"] = other_id
+            derived["implicit"] = True
+            bearing = opposite_bearing(normalize_bearing(edge.get("dir")))
+            if bearing:
+                derived["dir"] = bearing
+            vertical = opposite_vertical(
+                normalize_vertical(edge.get("vertical")))
+            if vertical:
+                derived["vertical"] = vertical
+            out.append(derived)
+            named.add(str(other_id))
+            break
+    return out
