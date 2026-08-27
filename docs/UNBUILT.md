@@ -2753,6 +2753,59 @@ Not urgent: the fallback is a phrase rather than a wrong number, which is the
 posture this whole change insists on. Worth doing when something wants to date
 a window whose memories are gone -- long-bank archival is the likely trigger.
 
+### 1.86 The time of day is set and never advances on its own
+
+**Found:** 2026-08-26, landing the `scene.time`/`scene.time_of_day` split.
+
+`scene.time_of_day` now holds one kind of statement and has exactly two
+writers: the opening (`director_establish`, through
+`commit_scene_state._establish_time_of_day`) and a beat that explicitly
+declares a new one (the bare-string `state_diff.time` channel). Nothing
+advances it from the clock. A story can spend 29,145 story-seconds -- the
+author's chat 40, measured -- standing at the "Late night, 2026" its opening
+named, because the only thing that could say the sun came up is a beat
+choosing to say so.
+
+The missing writer is a BOUNDARY CROSSING: `elapsed_seconds` moved past the
+hour where evening becomes night, so the label changes. It was deliberately
+not built with the split, and the reason is that there is no anchor to
+compute it from. `elapsed_seconds` is seconds since the story began, and the
+story began at a time named in free text -- "dusk", "Stardate 46357.4, 14:32
+hours", "Late autumn afternoon". Deriving an hour-of-day from that pair needs
+either a parsed absolute start (which `dressing.backdrops.time_bucket`'s
+numeric branch can now do for 78 of 80 corpus openings, but only to a coarse
+bucket) or a second authored field saying what time the clock's zero was.
+Both are real designs; neither is a line of code. Until one lands, the field
+is honest about what it is: what the story last SAID the time was.
+
+What is not affected: the numeric clock, which advances every beat including
+silent ones (`UNCLAIMED_BEAT_SECONDS`), and every windowed mechanism that
+reads it.
+
+
+### 1.87 The beat's own passage phrase is recorded and read by nobody
+
+**Found:** 2026-08-26, in the same landing, and stated here rather than
+closed because closing it is a prompt change with its own blast radius.
+
+`state_diff.time.display_advance` ("moments later") is taught by the prose
+author's output shape in both language packs, emitted on most beats, and
+validated into `world.mechanics.TIME_METADATA_KEYS`. It reaches NO reader.
+Its one former consumer wrote it onto `scene.time` and
+`simulation_clock.display`, which is the defect the split removed: a per-beat
+phrase overwriting a standing world property, and erasing it when spelled
+empty. The phrase survives on the persisted resolve variant, which is where a
+record belongs.
+
+That leaves a field the engine solicits and does not use, which this
+repository's own rule calls worse than no field. Two ways out and both need a
+decision rather than a patch. Either stop asking for it -- delete it from the
+two packs' output shapes, leaving it in `TIME_METADATA_KEYS` so a model that
+still writes one is not accused of an unreadable claim -- or give it the one
+reader that would justify it, a player-facing between-beats label the
+narrator or the transcript renders. The second is a product decision; the
+first is free and should be taken if nobody wants the second.
+
 
 ### 1.80 Residuals from the change tier
 

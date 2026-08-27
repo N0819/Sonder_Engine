@@ -139,21 +139,18 @@ class TestTheOwnerOfTheVocabulary:
         assert read_time_diff(100.0, None) == (100.0, None, [])
         assert read_time_diff(100.0, "later") == (100.0, None, [])
 
-    def test_the_display_phrase_prefers_the_canonical_name(self):
-        """By PRESENCE, not by truthiness: `display_advance: ""` is a beat
-        saying it carries no phrase, and an explicit clear on the canonical
-        key outranks a synonym sitting beside it rather than losing to it."""
-        from world.mechanics import time_diff_display
+    def test_the_passage_phrase_is_still_vocabulary_and_still_no_claim(self):
+        """The phrase reaches no reader now (see `tests/test_time_of_day.py`)
+        but must stay in the vocabulary: a key the reader does not KNOW is
+        reported as an unreadable claim, and a beat labelling how long it
+        took has made no claim to refuse."""
+        from world.mechanics import (TIME_DIFF_KEYS, read_time_diff,
+                                     time_diff_claims)
 
-        assert time_diff_display({"display": "moments later"}) == (
-            "moments later")
-        assert time_diff_display({"display_advance": "an hour later",
-                                  "display": "moments later"}) == (
-            "an hour later")
-        assert time_diff_display({"display_advance": "",
-                                  "display": "moments later"}) == ""
-        assert time_diff_display({}) == ""
-        assert time_diff_display(None) == ""
+        assert {"display_advance", "display"} <= TIME_DIFF_KEYS
+        assert not time_diff_claims({"display_advance": "moments later"})
+        assert read_time_diff(100.0, {"display_advance": "an hour later"}) == (
+            100.0, None, [])
 
     def test_the_stored_clock_has_one_reader_too(self):
         """`clock_elapsed` owns the other half of the shape, so no commit
@@ -271,7 +268,7 @@ def _make_chat(temp_db):
 
 def _hall_scene():
     return {
-        "location": "Kessler Tower", "time": "night",
+        "location": "Kessler Tower", "time_of_day": "night",
         "rooms": {"hall": {"name": "Hall", "desc": "A hall.", "adjacent": []}},
         "entities": {},
         "positions": {"The Stranger": "hall"},
@@ -380,33 +377,40 @@ class TestTheCommitKeepsTheTimeItWasGiven:
             clock={"elapsed_seconds": 1136.0, "display": "moments later"})
         assert clock["elapsed_seconds"] == 1136.0 + UNCLAIMED_BEAT_SECONDS
         assert not [w for w in ctx.warnings if "state_diff.time" in w]
-        # The phrase still reaches the clock and the scene label.
-        assert clock["display"] == "a moment later"
 
-    def test_an_explicit_clear_outranks_the_synonym(self, temp_db):
-        """`display_advance: ""` is the beat saying it carries no phrase.
-        The canonical key decides, so the scene's label clears and the
-        clock's own phrase is left where it was."""
+    def test_an_explicit_clear_erases_nothing(self, temp_db):
+        """RE-EARNED, and inverted. This pin used to assert that
+        `display_advance: ""` CLEARED the scene's time label, which was the
+        defect written down as intent: a beat saying "I carry no phrase for
+        how long I took" deleted a standing fact about the world that it
+        never owned. The clock's number still moves; the time of day stands.
+        """
         chat_id = _make_chat(temp_db)
         ctx, clock = _run_turn(
             temp_db, chat_id,
             {"time": {"start_seconds": 430, "duration_seconds": 25,
                       "end_seconds": 455, "display_advance": "",
                       "display": "moments later"}},
-            clock={"elapsed_seconds": 430.0, "display": "now"})
+            clock={"elapsed_seconds": 430.0, "display": "dusk"})
         assert clock["elapsed_seconds"] == 455.0
-        assert clock["display"] == "now"
-        assert temp_db.wget(chat_id, "scene", {})["time"] == ""
+        assert temp_db.wget(chat_id, "scene", {})["time_of_day"] == "night"
+        # The clock's label restates the scene's own answer -- one statement,
+        # two homes, and no way for them to drift apart.
+        assert clock["display"] == "night"
 
-    def test_the_display_synonym_reaches_the_clock_and_the_scene(self, temp_db):
+    def test_the_passage_phrase_reaches_neither_field(self, temp_db):
+        """RE-EARNED, and inverted for the same reason as the test above:
+        this used to assert the phrase reached both. "moments later" is not a
+        time of day and not a clock reading, and there is nowhere for it to
+        land -- it stays the beat's own words on this resolve's variant."""
         chat_id = _make_chat(temp_db)
         ctx, clock = _run_turn(
             temp_db, chat_id,
             {"time": {"elapsed_seconds": 1200.0, "display": "moments later"}},
-            clock={"elapsed_seconds": 1000.0, "display": "now"})
+            clock={"elapsed_seconds": 1000.0, "display": "dusk"})
         assert clock["elapsed_seconds"] == 1200.0
-        assert clock["display"] == "moments later"
-        assert temp_db.wget(chat_id, "scene", {})["time"] == "moments later"
+        assert temp_db.wget(chat_id, "scene", {})["time_of_day"] == "night"
+        assert clock["display"] == "night"
 
     def test_the_canonical_shape_commits_exactly_as_before(self, temp_db):
         chat_id = _make_chat(temp_db)
@@ -415,9 +419,9 @@ class TestTheCommitKeepsTheTimeItWasGiven:
             {"time": {"start_seconds": 430, "duration_seconds": 25,
                       "end_seconds": 455, "mode": "action", "explicit": False,
                       "display_advance": "moments later"}},
-            clock={"elapsed_seconds": 430.0, "display": "now"})
+            clock={"elapsed_seconds": 430.0, "display": "dusk"})
         assert clock["elapsed_seconds"] == 455.0
-        assert clock["display"] == "moments later"
+        assert clock["display"] == "night"
         assert not [w for w in ctx.warnings if "state_diff.time" in w]
 
     def test_a_backwards_claim_still_reports_backwards(self, temp_db):

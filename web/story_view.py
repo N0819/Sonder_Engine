@@ -67,7 +67,17 @@ from world.living_world import OFFSCREEN_CEILING_KEY
 #: present era's identifier, not a default), so absence still unambiguously
 #: means "engine predates the field" and the key itself is the capability
 #: check.
-STORY_VIEW_SCHEMA = 3
+#:
+#: 4: `scene.time` becomes `scene.time_of_day`, and the value changes meaning
+#: with the name. The old key held two incompatible kinds of statement -- a
+#: standing time of day written once by the opening, and a per-beat passage
+#: phrase ("moments later") written over it by every resolved beat, which won
+#: on almost every beat and left 6 of the author's 81 live scenes holding a
+#: time anything could read. `time_of_day` holds only the first. This is the
+#: one case a rename is safer than reuse: a consumer that kept reading `time`
+#: would silently keep getting the corrupt field's semantics, and absence of
+#: the old key is the signal that its meaning is gone.
+STORY_VIEW_SCHEMA = 4
 
 #: How many committed world events a view carries by default. Bounded because
 #: this is a per-render read from a UI, and an unbounded history turns a panel
@@ -466,7 +476,7 @@ def _story_view_in_frame(chat_id, chat, turn, events, frame_id,
         "clock": simulation_clock(chat_id),
         "scene": {
             "location": scene.get("location"),
-            "time": scene.get("time"),
+            "time_of_day": scene.get("time_of_day"),
             "rooms": scene.get("rooms") or {},
             "positions": scene.get("positions") or {},
             "entities": scene.get("entities") or {},
