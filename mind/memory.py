@@ -90,8 +90,13 @@ from mind.memory_summaries import (  # noqa: F401
     save_memory_summary, search_memory_summaries, summary_support,
 )
 from mind.memory_context import (  # noqa: F401
-    _beats_ago_span, _origin_on_drift, _summary_id, _with_reading,
+    _origin_on_drift, _summary_id, _with_reading,
     build_character_memory_context,
+)
+from mind.memory_time import (  # noqa: F401
+    JUST_NOW, MemoryClock, UNIT_LADDER, WHEN_BEFORE_RECORD, WHEN_UNPLACEABLE,
+    current_clock_reading, elapsed_phrase, time_ago_phrase, time_ago_span,
+    window_clock_readings,
 )
 from mind.memory_lore_entries import (  # noqa: F401
     _carried_stamp, _embed_lore_document, _stamped_live_dimensions, add_lore,

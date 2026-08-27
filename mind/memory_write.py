@@ -333,6 +333,11 @@ def _row_memory(row) -> dict:
         "importance_revised": row["importance"] is not None,
         # The character's own later re-reading, if they have made one.
         "disputed": _dispute_of(row["disputed"]),
+        # How long ago, in fiction time rather than in turn indices. Every
+        # reader that stamps a delivered memory with a "when" reads this
+        # (mind/memory_time.py); NULL on rows that predate the column or
+        # belong to no beat, and those keep qualitative phrasing.
+        "encoded_at_seconds": row["encoded_at_seconds"],
         "archived": bool(row["archived"]),
         "event_key": row["event_key"] or "",
         "embedding_model": row["embedding_model"] or "",
@@ -344,7 +349,8 @@ def prepare_memory(chat_id, char_id, turn_id, kind, provenance, salience, conten
                    entities=None, location="", emotional_context="",
                    valence=0.0, arousal=0.0, confidence=1.0, event_key="",
                    encoding_valence=0.0, encoding_arousal=0.0,
-                   frame_id=_UNSET, importance=None, disputed="") -> dict:
+                   frame_id=_UNSET, importance=None, disputed="",
+                   encoded_at_seconds=None) -> dict:
     content = re.sub(r"\s+", " ", str(content or "")).strip()
     entities = list(dict.fromkeys(entities if entities is not None else _extract_entities(content)))
     key_phrases = list(dict.fromkeys(key_phrases if key_phrases is not None else _extract_key_phrases(content, entities)))
@@ -389,6 +395,12 @@ def prepare_memory(chat_id, char_id, turn_id, kind, provenance, salience, conten
         "importance": None if importance is None else _clamp(importance),
         "disputed": _storage_json(disputed) if isinstance(disputed, dict)
                     else str(disputed or ""),
+        # The simulation clock as it stood when this memory was formed. None,
+        # never 0.0: zero is the opening of a story and a real reading a row
+        # can legitimately carry, so it cannot double as "nobody told us". A
+        # row with no reading falls back to qualitative phrasing downstream.
+        "encoded_at_seconds": (None if encoded_at_seconds is None
+                               else float(encoded_at_seconds)),
     }
 
 def _embed_memory(data: dict):
@@ -601,6 +613,7 @@ def _upsert_memory(data: dict, full_vec, cue_vec, embedded):
         _blob(full_vec), _blob(cue_vec),
         embedded.model_key, embedded.dimensions, data.get("frame_id"),
         data.get("importance"), data.get("disputed") or "",
+        data.get("encoded_at_seconds"),
     )
     if existing:
         mid = existing["id"]
@@ -609,15 +622,16 @@ def _upsert_memory(data: dict, full_vec, cue_vec, embedded):
             emotional_context=?,valence=?,arousal=?,encoding_valence=?,
             encoding_arousal=?,confidence=?,embedding=?,cue_embedding=?,
             embedding_model=?,embedding_dim=?,frame_id=?,
-            importance=?,disputed=?,archived=0 WHERE id=?""",
+            importance=?,disputed=?,encoded_at_seconds=?,archived=0 WHERE id=?""",
            values + (mid,))
     else:
         mid = qi("""INSERT INTO memories(chat_id,char_id,turn_id,turn_idx,kind,category,
             provenance,salience,content,gist,key_phrases,entities,location,
             emotional_context,valence,arousal,encoding_valence,encoding_arousal,
             confidence,embedding,cue_embedding,
-            embedding_model,embedding_dim,frame_id,importance,disputed,event_key)
-            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            embedding_model,embedding_dim,frame_id,importance,disputed,
+            encoded_at_seconds,event_key)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
            (data["chat_id"], data["char_id"]) + values + (data["event_key"],))
     _replace_memory_fts(mid, data)
     if getattr(embedded, "fallback", False):

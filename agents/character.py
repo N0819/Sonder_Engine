@@ -39,6 +39,7 @@ from world.gaps import interim_for
 from mind.memory_judge import pending_subject
 from mind.memory import (
     _RECALL_LIMIT,
+    MemoryClock,
     build_character_memory_context,
     contrast_memory,
     declared_circles,
@@ -942,11 +943,18 @@ def _unbidden_trigger(stored_state, active_annotated, refrain, turn_idx,
     return reason, True
 
 
-def _unbidden_entry(mem, turn_idx):
+def _unbidden_entry(mem, clock):
     """The payload shape: the KEY carries the epistemic status (the
     `i_suspect` precedent) -- this arrived on its own and answers no question
     the character asked. Gist only, provenance in the same three labels the
-    summary scopes already teach, no id, no score, no instruction."""
+    summary scopes already teach, no id, no score, no instruction.
+
+    `when` comes off the same `MemoryClock` the ordinary recall lane reads. It
+    said "about N beats ago" here in its own arithmetic while the memory
+    context said it in a second copy and the summary windows in a third; a mind
+    handed two lanes of its own past must not find them measured in different
+    units, and the one that measured in turn indices was measuring in frames of
+    the story's construction."""
     entry = {
         "it_comes_back_to_me": mem.get("gist") or "",
         "memory_ref": mem.get("event_key") or "",
@@ -955,9 +963,7 @@ def _unbidden_entry(mem, turn_idx):
         "non_authoritative": True,
         "from": provenance_context_label(mem.get("provenance")),
     }
-    ti = mem.get("turn_idx")
-    if isinstance(ti, int) and isinstance(turn_idx, int) and turn_idx > ti:
-        entry["when"] = f"about {turn_idx - ti} beats ago"
+    entry["when"] = clock.of_memory(mem)
     if str(mem.get("location") or "").strip():
         entry["where"] = str(mem["location"]).strip()
     return entry
@@ -2952,7 +2958,9 @@ def character_step(ctx, cid, nonce):
             _unbidden_mem_id = _contrast[0]["id"]
             _unbidden_mem_ref = _contrast[0].get("event_key") or ""
             _attach_unbidden(
-                memory_context, _unbidden_entry(_contrast[0], ctx.turn.idx))
+                memory_context,
+                _unbidden_entry(_contrast[0],
+                                MemoryClock(chat.id, cid, ctx.turn.idx)))
 
     # _interior was resolved above, before the memory context, where the
     # unbidden-recall trigger also reads it.

@@ -240,7 +240,10 @@ class TestTheRowRecordsIt:
         chat_id, mara, _other, mid = _bank(temp_db)
         record_dispute(chat_id, mara, "", NOW_READS, 9, memory_ref=MEMORY_REF)
         row = temp_db.q("SELECT * FROM memories WHERE id=?", (mid,), one=True)
-        projected = memory._with_reading(memory._row_memory(row))
+        projected = memory._with_reading(
+            memory._row_memory(row),
+            memory.MemoryClock(chat_id, mara, 10, now_seconds=0.0,
+                               viewer_frame_id=None))
         assert projected["i_now_read_this_differently"] == NOW_READS
 
 

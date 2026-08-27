@@ -163,18 +163,22 @@ def test_the_pair_reads_as_one_beat_not_two_events(temp_db, monkeypatch):
             "INSERT INTO memories(chat_id,char_id,turn_idx,kind,category,"
             "provenance,salience,content,gist,key_phrases,entities,location,"
             "emotional_context,valence,arousal,confidence,access_count,"
-            "archived,event_key,embedding_model) "
-            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "archived,event_key,embedding_model,encoded_at_seconds) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (chat_id, char_id, 7, row["kind"], row["category"],
              row["provenance"], row["salience"], row["content"],
              row.get("gist") or row["content"], "[]", "[]", "", "",
-             0.0, 0.0, 1.0, 0, 0, row["event_key"], ""))
+             0.0, 0.0, 1.0, 0, 0, row["event_key"], "", 120.0))
     buffered = memory.recent_memory_buffer(
         chat_id, char_id, current_turn_idx=8)
-    projected = [memory._with_reading(m, 8) for m in buffered]
+    clock = memory.MemoryClock(chat_id, char_id, 8, now_seconds=300.0,
+                               viewer_frame_id=None)
+    projected = [memory._with_reading(m, clock) for m in buffered]
     assert len(projected) == 2
     assert {p["epistemic_origin"] for p in projected} == {"what_i_experienced"}
-    assert len({p["when"] for p in projected}) == 1
+    # One beat, one moment: both halves of the pair were formed at the same
+    # reading of the story clock and must be stamped with it identically.
+    assert {p["when"] for p in projected} == {"about 3 minutes ago"}
 
 
 def test_the_bound_holds(temp_db, monkeypatch):

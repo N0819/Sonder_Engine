@@ -1753,6 +1753,20 @@ def prepare_memory_commit(ctx, *, scene=None):
         "event": res.get("resolved_event") or "",
         "dialogue_log": dlog,
     })
+    # WHEN each of this beat's memories was formed, in seconds of fiction
+    # time, stamped once here after every append. This is the reading the
+    # commit already held -- the same `_clock_seconds` belief reconciliation,
+    # affect decay and strain windows are dated by -- and until now it simply
+    # never landed on the row, so every downstream reader had nothing but the
+    # turn index and stamped minds in BEATS (94 such stamps across 54
+    # character calls in one instrumented run).
+    #
+    # Stamped in ONE place rather than at each mint site: a second copy of the
+    # rule is a second thing to forget when a mint site is added, and every
+    # row on this list was formed at the same moment of the fiction by
+    # definition.
+    for _memory in pending_memories:
+        _memory["encoded_at_seconds"] = _clock_seconds
     memory_batch = prepare_memories_batch(pending_memories)
     # A missing or failing embeddings provider silently downgrades every
     # vector to the local character-trigram hash, which then scores as a
