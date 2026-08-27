@@ -14,6 +14,7 @@ from persist.commit import (
     pick_background_reactors,
     track_background_presences,
     _background_fired_reactions,
+    presence_record_for,
 )
 from core.pipeline_context import ChatData, PipelineContext, TurnData
 
@@ -99,5 +100,5 @@ def test_ensemble_lines_all_persist_and_count(temp_db):
     assert len(_background_fired_reactions(ctx["background_react"])) == 2
     track_background_presences(ctx, nonce=0)
     presences = temp_db.wget(chat_id, "background_presences", {})
-    assert 6 in presences["Doran"]["dialogue_turns"]
-    assert 6 in presences["Mira"]["dialogue_turns"]
+    assert 6 in presence_record_for(presences, "Doran")[1]["dialogue_turns"]
+    assert 6 in presence_record_for(presences, "Mira")[1]["dialogue_turns"]

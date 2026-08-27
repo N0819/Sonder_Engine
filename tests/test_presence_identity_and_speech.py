@@ -27,9 +27,19 @@ from persist.commit import (
     _fold_duplicate_presences,
     _presence_speech_verdict,
     pick_background_reactors,
+    presence_name_items,
+    presence_record_for,
     track_background_presences,
 )
 from core.pipeline_context import ChatData, PipelineContext, TurnData
+
+
+def _rec(presences, name):
+    return presence_record_for(presences, name)[1]
+
+
+def _names(presences):
+    return {n for n, _ in presence_name_items(presences)}
 
 
 def _make_chat(db):
@@ -114,11 +124,11 @@ def test_entity_harvested_by_def_and_position_yields_one_presence(temp_db):
     track_background_presences(ctx, nonce=0)
 
     presences = temp_db.wget(chat_id, "background_presences", {})
-    assert "Guard 1" in presences
-    assert "ab1299cb69244904" not in presences
+    assert len(presences) == 1, "one presence, not a name/id twin"
+    assert _names(presences) == {"Guard 1"}
     # Both harvests contributed to the ONE record: the def's description and
     # the id-keyed position both landed in the same sketch.
-    sketch = presences["Guard 1"]["sketch"]
+    sketch = _rec(presences, "Guard 1")["sketch"]
     assert sketch.get("role_hint")
     assert sketch.get("station_room") == "obs_room"
 
@@ -154,8 +164,9 @@ def test_split_ledger_heals_into_one_presence_at_next_commit(temp_db):
     track_background_presences(ctx, nonce=0)
 
     presences = temp_db.wget(chat_id, "background_presences", {})
-    assert "cfc004eb2c174286" not in presences
-    rec = presences["Scranton Reality Anchors"]
+    assert len(presences) == 1, "the id-keyed twin folded in"
+    assert _names(presences) == {"Scranton Reality Anchors"}
+    rec = _rec(presences, "Scranton Reality Anchors")
     assert rec["dialogue_turns"] == [3, 7]
     assert rec["mention_turns"] == [2, 6, 7]
     assert rec["sketch"]["station_room"] == "interview_cell"
@@ -445,4 +456,10 @@ def test_fold_helper_is_idempotent_on_healed_ledger():
                              "dialogue_turns": [1]}}
     once = _fold_duplicate_presences(dict(presences), scene)
     twice = _fold_duplicate_presences(json.loads(json.dumps(once)), scene)
-    assert once == twice == presences
+    # The first pass migrates the legacy name key onto a minted uid; a
+    # second pass must change nothing at all.
+    assert once == twice
+    assert len(once) == 1 and _names(once) == {"Guard 1"}
+    rec = _rec(once, "Guard 1")
+    assert rec["dialogue_turns"] == [1]
+    assert rec["first_turn"] == 0 and rec["last_turn"] == 3

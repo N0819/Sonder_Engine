@@ -3671,7 +3671,10 @@ def get_promise_ledger(cid: int):
 
 @app.post("/api/chats/{cid}/promotions/draft")
 def draft_promotion(cid: int, body: dict = Body(...)):
-    name = str(body.get("name") or "").strip()
+    # The tracked record's own id is the reliable handle -- two presences
+    # may share a display name -- and `name` stays accepted for callers
+    # that predate presence ids.
+    name = str(body.get("id") or body.get("name") or "").strip()
     if not name:
         raise HTTPException(400, "Missing name")
     try:
@@ -3690,7 +3693,7 @@ def confirm_promotion(cid: int, body: dict = Body(...)):
     she becomes character_step-eligible starting next turn, the same as
     manually attaching any other character mid-chat.
     """
-    name = str(body.get("name") or "").strip()
+    name = str(body.get("id") or body.get("name") or "").strip()
     sheet = body.get("sheet")
     if not name or not isinstance(sheet, dict):
         raise HTTPException(400, "Missing name or sheet")

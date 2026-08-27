@@ -440,6 +440,7 @@ def director_establish(ctx, nonce):
 
 
 def director_interpret(ctx, nonce):
+    from persist.commit import presence_name_items
     chat = ctx.chat
     sc = get_scene(chat["id"], chat)
     pers = persona_of(chat)
@@ -557,8 +558,8 @@ def director_interpret(ctx, nonce):
                      (room_of(sc, _pn)
                       or ((_pr.get("sketch") or {}).get("station_room") or ""))
                      == p_room)}
-                for _pn, _pr in
-                (wget(chat["id"], "background_presences", {}) or {}).items())
+                for _pn, _pr in presence_name_items(
+                    wget(chat["id"], "background_presences", {}) or {}))
             if _bp["room"]
         ],
         "world_books": world_books,
@@ -2408,6 +2409,7 @@ class CampaignInvariantError(RuntimeError):
 
 
 def director_resolve(ctx, nonce, _corrections=None):
+    from persist.commit import presence_name_items
     chat = ctx.chat
     interp = _dict(ctx.director_interpret)
     flow = _dict(interp.get("flow"))
@@ -2866,8 +2868,8 @@ def director_resolve(ctx, nonce, _corrections=None):
              "room": room_of(sc, _pn)
                      or ((_pr.get("sketch") or {}).get("station_room") or ""),
              "appeared_turn": _pr.get("first_turn")}
-            for _pn, _pr in
-            (wget(chat["id"], "background_presences", {}) or {}).items()
+            for _pn, _pr in presence_name_items(
+                wget(chat["id"], "background_presences", {}) or {})
         ],
         "interaction_rounds": _round_conduct(loop.get("rounds")),
         "reaction_rounds": _round_conduct((ctx.reaction_loop or {}).get("rounds")),
@@ -3671,7 +3673,12 @@ def director_resolve(ctx, nonce, _corrections=None):
                 )
                 continue
         elif speaker_cf and speaker_cf not in _xp_names_cf:
-            _rec = _bg_recs.get(str(speaker).strip()) or {}
+            # The speaker string is and will remain a NAME -- models speak
+            # names, the ledger keys on minted uids -- so resolve it through
+            # the permanent name-to-record seam (aka spellings included).
+            from persist.commit import presence_record_for
+            _rec = presence_record_for(
+                _bg_recs, str(speaker).strip(), sc)[1] or {}
             # DIALOGUE BELONGS TO THE BACKGROUND STAGE, MINTING STAYS HERE.
             # The Director keeps every authority over what EXISTS -- it mints
             # the presence, places it, moves it, gives it an action -- and
