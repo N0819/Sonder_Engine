@@ -996,12 +996,39 @@ def interaction_loop(ctx, nonce):
             )
             break
 
+        # A BEAT MAY NOT END IN SILENCE WHILE THE PERSON IT ASKED HAS NOT
+        # BEEN ASKED.
+        #
+        # One silent speaker closes the exchange, which is right when the
+        # silence is an answer and wrong when the silent body was never the
+        # one addressed. The two orderings above can put somebody else first
+        # -- the debt promotion deliberately outranks direct address -- so a
+        # question can be put to the room, answered by nobody, and closed by
+        # the silence of a third party who had nothing to do with it.
+        #
+        # Measured live, and it is self-sustaining: a lieutenant was addressed
+        # on one beat and stayed silent, which left him owing an answer; two
+        # beats later the player asked the CAPTAIN to decide something, the
+        # debt promoted the lieutenant ahead of him, he was silent again, and
+        # `natural silence` ended the beat with the captain never called. The
+        # debt is discharged by speaking, so a silent debtor keeps his own
+        # promotion and the question addressed to somebody else is never put
+        # to them. Three beats running, the same shape.
+        #
+        # The debt promotion stays: whoever owes an answer still has the
+        # floor. What changes is that their silence cannot close a beat whose
+        # own addressee is still waiting to be called.
+        _addressed_unheard = [
+            cid for cid in addressed
+            if cid not in already_spoke and cid in initial_reactors
+        ]
         if (
             config.get(
                 "silence_ends_exchange",
                 True,
             )
             and no_content_streak >= 1
+            and not _addressed_unheard
         ):
             stop_reason = "natural silence"
             break
