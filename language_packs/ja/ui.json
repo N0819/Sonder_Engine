@@ -2086,5 +2086,15 @@
   "A lived-location start can prepare at most 16 full characters at once. Background Charter residents do not share this limit.": "生活史のある場所の開始時に準備できる完全な人物は一度に最大16人です。背景のCharter住民にはこの上限はありません。",
   "Could not remove incomplete story setup": "未完了の物語設定を削除できませんでした",
   "The location is planned using only public card details; private card details never enter the location planner. The recent-life pass uses the named roster, real rooms and duties, simulation anchors, the card, and your guidance to create 10–16 separate memories. After handoff, Charter stops speaking or deciding for them.": "場所の設計にはカードの公開情報だけを使用し、非公開情報は場所の設計処理へ渡しません。最近の生活の生成では、名前付きの人物一覧、実在する部屋と任務、シミュレーションの根拠、カード、作者の補足を用いて10～16件の個別記憶を作ります。引き継ぎ後、Charterはその人物の発言や判断を代行しません。",
-  "known_by (comma-separated NAMES, matched exactly; empty = only owner)": "known_by（カンマ区切りの名前、完全一致；空欄なら所有者のみ）"
+  "known_by (comma-separated NAMES, matched exactly; empty = only owner)": "known_by（カンマ区切りの名前、完全一致；空欄なら所有者のみ）",
+  "More than one tracked presence answers to ${name}; promote by presence id instead.": "${name} に該当する記録済みプレゼンスが複数あります。プレゼンスIDで昇格してください。",
+  "More than one tracked presence answers to ${name}; their recorded lines cannot be told apart, so a draft would merge two people's evidence.": "${name} に該当する記録済みプレゼンスが複数あり、記録された台詞を区別できないため、下書きは二人分の証拠を混ぜてしまいます。",
+  "Past — the record of what happened (“you pushed through the door”)": "過去形 — 起きたことの記録（「あなたはドアを押し開けた」）",
+  "Present — the beat as it happens (“you push through the door”)": "現在形 — いま起きているビートのまま（「あなたはドアを押し開ける」）",
+  "Refusing to promote an unnamed presence: promotion writes the name into a permanent character identity, and this record has no real name yet.": "名前のないプレゼンスは昇格できません。昇格は名前を恒久的なキャラクター識別として書き込みますが、この記録にはまだ本当の名前がありません。",
+  "Tense": "時制",
+  "This presence has no real name yet; promotion writes the name into a permanent character identity.": "このプレゼンスにはまだ本当の名前がありません。昇格は名前を恒久的なキャラクター識別として書き込みます。",
+  "Unset — the narrator is told nothing, and keeps the story's own tense": "未設定 — ナレーターには何も伝えず、物語自身の時制を保ちます",
+  "Which tense the narration is written in. It changes the narrator only — characters still speak in the present, and your own input is read as what you attempt rather than as part of the record, so writing “I push the door” and reading back “you pushed the door” is the intended shape. Leave it unset and nothing is asked for.": "ナレーションを書く時制です。変わるのはナレーターだけで、キャラクターは現在形で話し続け、あなたの入力は記録の一部ではなく試みとして読まれます。「ドアを押す」と書いて「あなたはドアを押し開けた」と返るのが意図された形です。未設定のままなら何も求められません。",
+  "naming profile must be an object": "命名プロファイルはオブジェクトである必要があります"
 }

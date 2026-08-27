@@ -3671,7 +3671,10 @@ def get_promise_ledger(cid: int):
 
 @app.post("/api/chats/{cid}/promotions/draft")
 def draft_promotion(cid: int, body: dict = Body(...)):
-    name = str(body.get("name") or "").strip()
+    # The tracked record's own id is the reliable handle -- two presences
+    # may share a display name -- and `name` stays accepted for callers
+    # that predate presence ids.
+    name = str(body.get("id") or body.get("name") or "").strip()
     if not name:
         raise HTTPException(400, "Missing name")
     try:
@@ -3690,7 +3693,7 @@ def confirm_promotion(cid: int, body: dict = Body(...)):
     she becomes character_step-eligible starting next turn, the same as
     manually attaching any other character mid-chat.
     """
-    name = str(body.get("name") or "").strip()
+    name = str(body.get("id") or body.get("name") or "").strip()
     sheet = body.get("sheet")
     if not name or not isinstance(sheet, dict):
         raise HTTPException(400, "Missing name or sheet")
@@ -4762,6 +4765,31 @@ def bg_cfg_put(cid: int, body: dict = Body(...)):
         raise HTTPException(400, "background config numeric fields must be numbers")
     wset(cid, "background_config", config)
     return config
+
+@app.get("/api/chats/{cid}/naming_profile")
+def naming_profile_get(cid: int):
+    """The story's naming law (`story/naming.py`): the authored profile plus
+    the effective lanes a minted presence name actually draws from and where
+    they came from -- so an author can see what the harvest yields before
+    deciding whether to write a law of their own."""
+    from story.naming import authored_naming_profile, story_naming_lanes
+
+    lanes, source = story_naming_lanes(cid)
+    return {"authored": authored_naming_profile(cid),
+            "effective": lanes, "source": source}
+
+@app.put("/api/chats/{cid}/naming_profile")
+def naming_profile_put(cid: int, body: dict = Body(...)):
+    """Author-configurable naming law, same shape as a Charter `naming`
+    profile (given/family pools, optional syllable parts, name_format).
+    Normalized on write; an empty body clears the authored law and drops the
+    story back to its Charter and harvested sources. Changing the law never
+    renames anyone already named: a minted name is a stored write."""
+    from story.naming import set_authored_naming_profile
+
+    if not isinstance(body, dict):
+        raise HTTPException(400, "naming profile must be an object")
+    return set_authored_naming_profile(cid, body)
 
 @app.get("/api/chats/{cid}/story_view")
 def story_view_get(cid: int, events: int = 20, frame: int | None = None,

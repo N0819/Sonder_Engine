@@ -332,8 +332,12 @@ def _specialist_payload(name, ctx, sc, view, extras):
                 n: vitals_of(sc, n) for n in names if n
             }
     elif name == "social":
+        from persist.commit import presence_name_items
+        # The specialist sees NAMES: the ledger keys on minted uids, and a
+        # model payload never carries one.
         payload["background_presences"] = sorted(
-            (wget(ctx.chat["id"], "background_presences", {}) or {}).keys())
+            n for n, _r in presence_name_items(
+                wget(ctx.chat["id"], "background_presences", {}) or {}))
         if view.get("public_sources"):
             payload["public_sources"] = list(view.get("public_sources") or [])
     elif name == "contact":

@@ -280,8 +280,28 @@ def _featured_assignments(plan, residents):
     return residents, assigned
 
 
-def close_plan(plan, *, history=None, featured_residents=None):
-    """Convert qualitative model output to bounded executable structures."""
+def close_plan(plan, *, history=None, featured_residents=None,
+               reservation=None, naming_law=None):
+    """Convert qualitative model output to bounded executable structures.
+
+    ``reservation`` is the story's registered identity forms
+    (`charter_identity.identity_reservation`). The model proposes the naming
+    law from the same lore that supplied the cast, so its pools arrive
+    carrying the cast's own name elements: measured 2026-08-27 on chat 95,
+    where 42 generated bodies drew from a family pool holding the registered
+    crew's surnames under ``{rank} {family}``, and two of them landed on
+    them. Both subtractions land before anything persists: the mint refuses
+    a reserved candidate, and `normalize_charter` -- which closes every
+    charter this returns -- removes the reserved elements from the law it
+    STORES, so no later reader is offered them again.
+
+    ``naming_law``, when the story has an authored one, replaces the derived
+    law for every charter in this plan. `story/naming.py` already ranks an
+    authored profile above a Charter's own; a mint that ignored that ranking
+    would be a second naming authority beside the story's.
+    """
+    from world.charter_identity import normalize_naming_profile
+
     plan = plan if isinstance(plan, dict) else {}
     structure = _mapping(plan.get("structure"))
     structure["key"] = _key(structure.get("key"), "town")
@@ -418,7 +438,9 @@ def close_plan(plan, *, history=None, featured_residents=None):
             posts[chosen]["serves"] = sorted(set(
                 _strings(posts[chosen].get("serves")) + [upkeep_key]))
         staffing_reserve_added = _ensure_shift_crews(bodies, posts)
-        bodies = materialize_body_names(ckey, bodies, raw.get("naming"))
+        naming = normalize_naming_profile(
+            naming_law if naming_law else raw.get("naming"))
+        bodies = materialize_body_names(ckey, bodies, naming, reservation)
         from world.charter_economy import ensure_supply_points
         economy = ensure_supply_points(
             copy.deepcopy(raw.get("economy") or {}), rooms)
@@ -441,13 +463,13 @@ def close_plan(plan, *, history=None, featured_residents=None):
         charter = normalize_charter({
             "key": ckey, "structure": structure["key"],
             "upkeeps": upkeeps, "posts": posts, "bodies": bodies,
-            "naming": raw.get("naming") or {},
+            "naming": naming,
             "priority": _strings(raw.get("priority")),
             "needs": seed_needs(bodies), "economy": economy,
             "decisions": raw.get("decisions") or {},
             "interventions": local_interventions,
             "history": {"architecture": history_record},
-        })
+        }, reservation)
         charter["roster"] = seed_roster(charter["bodies"])
         charters[ckey] = charter
     return {"version": GENERATION_VERSION,

@@ -25,8 +25,17 @@ import json
 import time
 
 from story.character_schema import default_character_data
-from persist.commit import track_background_presences
+from persist.commit import (presence_name_items, presence_record_for,
+                            track_background_presences)
 from core.pipeline_context import ChatData, PipelineContext, TurnData
+
+
+def _rec(presences, name):
+    return presence_record_for(presences, name)[1]
+
+
+def _names(presences):
+    return {n for n, _ in presence_name_items(presences)}
 
 
 _UID = [0]
@@ -77,8 +86,8 @@ def test_a_body_the_beat_placed_in_a_room_is_tracked(temp_db):
 
     track_background_presences(ctx, nonce=0)
 
-    assert "Sleepy Hotel Clerk" in temp_db.wget(ctx.chat.id,
-                                                "background_presences", {})
+    assert "Sleepy Hotel Clerk" in _names(
+        temp_db.wget(ctx.chat.id, "background_presences", {}))
 
 
 def test_the_arrival_takes_the_name_the_engine_places_it_under(temp_db):
@@ -99,8 +108,8 @@ def test_the_arrival_takes_the_name_the_engine_places_it_under(temp_db):
     track_background_presences(ctx, nonce=0)
 
     tracked = temp_db.wget(ctx.chat.id, "background_presences", {})
-    assert "Sleepy Hotel Clerk" in tracked
-    assert "young man" not in tracked
+    assert "Sleepy Hotel Clerk" in _names(tracked)
+    assert "young man" not in _names(tracked)
 
 
 def test_a_registered_character_is_never_tracked_as_a_presence(temp_db):
@@ -219,8 +228,8 @@ def test_the_whole_chain_closes_for_the_clerk_who_never_came(temp_db):
     track_background_presences(ctx, nonce=0)
 
     tracked = temp_db.wget(ctx.chat.id, "background_presences", {})
-    assert "Night Clerk" in tracked, "arrived and was never recorded"
-    assert tracked["Night Clerk"]["sketch"]["station_room"] == "office"
+    assert "Night Clerk" in _names(tracked), "arrived and was never recorded"
+    assert _rec(tracked, "Night Clerk")["sketch"]["station_room"] == "office"
 
     # BEAT 2 -- the player rings again. He is one open doorway away, nobody
     # has named him, and nothing else would qualify him.

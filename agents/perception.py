@@ -2155,7 +2155,7 @@ def _background_beats(ctx, scene):
     # Local import: `persist.commit` reaches back into `agents.common` from
     # inside its own functions -- the same shape used for
     # `presence_has_an_identity` below.
-    from persist.commit import presence_room
+    from persist.commit import presence_record_for, presence_room
     records = wget(ctx.chat["id"], "background_presences", {}) or {}
     beats = []
     for r in raw:
@@ -2167,7 +2167,7 @@ def _background_beats(ctx, scene):
         if not name:
             continue
         room = str(r.get("room") or "").strip() or presence_room(
-            scene, name, records.get(name) or {})
+            scene, name, presence_record_for(records, name, scene)[1] or {})
         beats.append({"name": name, "entry": entry, "room": room or None,
                       "action": str(r.get("action") or "").strip()})
     ctx["_background_beats_cache"] = beats
@@ -2706,10 +2706,11 @@ def _composer_identity_space(ctx, p_name, p_appearance):
     # speech gate already refuses these three by name (its docstring records
     # this exact array interrogating a restrained player twice); it is the
     # same question, so it is the same answer, read from the same function.
-    from persist.commit import presence_has_an_identity
+    from persist.commit import presence_has_an_identity, presence_name_items
 
     _scene_now = wget(ctx.chat.id, "scene", {}) or {}
-    for name, rec in (wget(ctx.chat.id, "background_presences", {}) or {}).items():
+    for name, rec in presence_name_items(
+            wget(ctx.chat.id, "background_presences", {}) or {}):
         name = str(name or "").strip()
         if not name or name.casefold() in seen:
             continue

@@ -514,31 +514,55 @@ problem. That gate is a guard, not an answer: with three Daleks in a room the
 engine has three presences it cannot tell apart, and the first one to speak
 collects everything.
 
-The real fix is that an unregistered presence should be identified by the scene
-ENTITY it belongs to — entities already have stable ids (`45c0c640bb354e97`),
-and the ledger should key on that, falling back to the name only for presences
-with no entity (a voice through a door). That is a schema change to
-`background_presences` plus a migration, and it wants doing before any story
-seriously tries to run a crowd of identical bodies.
-
-Until then, the practical guidance is the one the failure teaches: **a fiction
-with several of the same thing needs several names.** The engine cannot count
-`a Dalek`.
-
-**The fragmentation half landed 2026-08-19.** Records now carry `entity_id` (a
+**The fragmentation half landed 2026-08-19.** Records gained `entity_id` (a
 stable scene-entity binding, made only when EXACTLY one body answers to the
-identity) and `aka` (former spellings). A presence that acquires a proper name
-mid-story keeps its dialogue turns, `addressed_turns`, sketch, blurb and
-promotion progress across the rename, and promotion cleanup sweeps the
-entity-bound and `aka`-connected spellings so an orphan cannot react alongside
-its own sheet. The ledger's keys stay display-name strings, so the raw readers
-named below need no change and no SQL migration was required —
-`background_presences` is a frame-scoped world key and rides the existing
-whole-`world` carriage.
+identity) and `aka` (former spellings), so a presence that acquires a proper
+name mid-story keeps its history across the rename, and promotion cleanup
+sweeps the connected spellings.
 
-The collision half above is UNCHANGED and still correct: ambiguity refuses to
-merge, because an over-merge welds two characters into one and a split is the
-recoverable direction.
+**The keying half landed 2026-08-26.** The ledger now keys each record on a
+minted presence uid (`p_` + 16 hex); the name is an ATTRIBUTE
+(`record["name"]`, former spellings in `aka`), so a rename is a field update
+rather than a new person, two people who share a name stay two records, and
+an id stored where a name belongs cannot be confused with a name. A mint is
+needed because an id does not exist for every candidate source — measured
+before the re-key, 18 of 38 presences across 19 chats were never scene
+entities. `presence_record_for` is the permanent name→record resolver seam
+(models speak names forever); `_resolve_or_mint_presence` binds
+charter_refs → entity_id → unambiguous name → fresh mint, deterministic in
+its seed so pre-commit readers and the commit writer agree on a key; and
+`_fold_duplicate_presences` migrates a legacy name-keyed bank on load — no
+SQL, the fold's own heal-on-load precedent — in three tiers: charter binding,
+provable single-entity binding (which merges two spellings only on ID
+AGREEMENT, never string similarity), and a fresh mint that merges nothing.
+Attribution refuses to guess: a candidate name two tracked records answer to,
+with nothing this beat telling them apart, stays in the objective record
+unattributed (a turn warning), and promotion refuses the same ambiguity
+rather than seeding one person's sheet from both people's lines.
+
+The collision doctrine above is UNCHANGED and still correct: ambiguity
+refuses to merge, because an over-merge welds two characters into one and a
+split is the recoverable direction.
+
+**Residuals the re-key does not close, registered here:**
+- **Objects tracked as presences are untouched by the key** — an object has
+  a perfectly valid entity id, so `_presence_speech_verdict` /
+  `_is_inert_presence_candidate` remain the guard; the record's `entity_id`
+  binding now makes their scene lookup reliable under a shared display name.
+- **The `known` recognition ledger is still keyed by the recognizing mind's
+  own NAME** (`agents/background.py`, `_presence_recognizes`) — a presence
+  rename orphans its recognition entries.
+- **`world/subjects.py` still answers a tracked presence with a refusal**;
+  a record bound to a scene entity could resolve positively through its
+  binding instead of falling to the bodiless-presence reason.
+- **Promotion evidence is still a corpus-wide casefolded speaker scan**
+  (`story/importers._promotion_evidence`); drafting now refuses when two
+  records share the name, but record-scoped evidence (the presence's own
+  `dialogue_turns`/`recent`) would remove the scan's ambiguity entirely.
+- ~~An id-shaped display name is refused as an identity but nothing yet
+  MINTS a real name for such a record~~ — landed 2026-08-26: the story-law
+  name generator (`story/naming.py` + `_mint_missing_presence_names`) now
+  names exactly those records, permanently. Its own residuals are §1.89.
 
 ### 1.18 The fallback is doing all the work
 
@@ -2889,6 +2913,92 @@ those rows are historical prose, not live behaviour. A stored view is a
 record of what an older engine composed, and reading one as evidence about
 the current one is the mistake this paragraph exists to stop.
 
+### 1.89 A minted name serves only the unnamed
+
+Landed 2026-08-26 with the story-law name generator (`story/naming.py`;
+the write is `persist/commit_background._mint_missing_presence_names`,
+closing §1.17's last residual): a tracked person with no real name — none,
+or an id-shaped string standing where one should — draws ONE permanent name
+from the story's own law (authored `naming_profile` world key > Charter
+`naming` laws as separate lanes > pools harvested from the cast and the
+lorebook's entries about people), deterministic in (chat, presence uid) so a
+replayed commit re-lands the same name and a replacement (new uid) draws a
+new one. A story yielding no law mints nothing. What the generator does NOT
+serve, registered here:
+
+- **A role-descriptor name is kept, never upgraded.** A presence the story
+  calls "the barkeep" or "station engineer" has a name in the ledger's eyes,
+  so it never enters the mint. Deliberate — renaming it would be the engine
+  reaching for the field, the act permanence forbids — but it means the
+  J2 brief's "ensign at conn" acquires a personal name only if the story
+  (or a future explicit naming surface: promotion, a UI action, the
+  Director introducing them) supplies one.
+- **Charter bodies still fall back to a body key when the Charter has no
+  law of its own.** Closed on 2026-08-27, in part. The AUTHORED story-level
+  law now reaches the Charter mint — `_plan_lived_location` passes it as
+  `close_plan`'s `naming_law`, so an author's explicit profile outranks a
+  Charter's derived one exactly as `story/naming.py` says it should, and the
+  two are no longer separate authorities. What is still unbuilt is the third
+  lane: a Charter with no law, in a story with no authored law, does not
+  fall through to the HARVEST and keeps `materialize_body_names`' body-key
+  fallback (which `_plan_lived_location`'s unnamed check then refuses
+  loudly). Deliberate for now — the harvest's pools are built from the cast,
+  and handing a 42-body population names recombined from the cast's own
+  elements is the contamination §1.90's guard exists to prevent, so that
+  lane needs its own argument before it is opened. (The "mostly moot while
+  every shipped charter is empty" note this entry used to carry was
+  withdrawn with §J1: read at `item['state']` rather than the registry
+  wrapper, every shipped charter is populated — 40, 37, 42, 8 and 6 bodies.)
+- **The authored law has an API and no UI.** GET/PUT
+  `/api/chats/{cid}/naming_profile` (web/app.py) is the configurable
+  surface; nothing in `static/` renders it yet.
+- **Scenario prose is not harvested.** The harvest reads structured
+  evidence only (cast rows, lore `character` entries, Charter laws);
+  deterministically extracting names from freeform scenario text was
+  declined, not forgotten — a capitalization heuristic over prose is the
+  kind of guess this repo keeps finding in the fallback-became-the-mechanism
+  shape (§1.18).
+- **Harvest quality is the lorebook's quality.** An epithet-titled
+  `character` entry ("Sacred Rind") contributes epithet tokens; measured on
+  the corpus copy, chat 67's three id-named records minted
+  harvested-vocabulary names of exactly that flavour. The authored profile
+  exists to outrank the harvest wherever an author cares.
+
+
+### 1.90 A minted person never takes a registered mind's address
+
+Landed 2026-08-27. `_refuse_name_collision` was wired to the promotion path
+and the engine mints people on two paths; the Charter body allocator
+(`world/charter_identity.materialize_body_names`) took the other one.
+`story.naming.registered_identity_names` →
+`charter_identity.identity_reservation` → `name_is_reserved` is now the
+single answer both consult, subtracting at the persisted law
+(`strip_reserved_pools`) and again at the candidate. What it does NOT close,
+registered here:
+
+- **A name element is refused only where the law addresses people by it
+  alone.** `address_components` reads the story's own `name_format` /
+  `formal_format`; under `{given} {family}` two people may share a family,
+  which is correct and is also why a story whose prose calls people by
+  surname while its LAW writes full names gets no protection from the
+  element rule. The whole-name refusal still holds there. The honest fix is
+  an authored law that says how people are addressed, not a heuristic over
+  prose.
+- **Only the head and the tail of a registered name are its address.** A
+  token buried mid-name is not matched, so a three-part name whose middle
+  element is what everyone actually uses is not protected. No measured case;
+  registered because the rule is a choice.
+- **Nothing renames what is already named.** A story that already holds a
+  generated body under a registered surname keeps it: the mint is a write
+  and this is a subtraction at the mint, not a migration. Chat 95's two
+  measured bodies stay as they are unless the author changes them.
+- **The refusal is silent.** A candidate refused is simply not drawn; a
+  generation whose pool is exhausted BY the refusal surfaces as
+  `_plan_lived_location`'s unnamed-body error, which names the bodies but
+  not the reason. A pool small enough for that to happen is rare (the
+  measured laws carried 12 and 27 family elements) and the loud failure is
+  correct; a note saying "the reservation took the last one" would be
+  better.
 
 ## 2. Roadmap
 
