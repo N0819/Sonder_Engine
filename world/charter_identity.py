@@ -278,6 +278,31 @@ def name_is_reserved(name, profile, reservation, given="", family=""):
         return False
     if text.casefold() in (reservation.get("whole") or frozenset()):
         return True
+    # A COMPONENT THAT IS SOMEBODY'S WHOLE NAME IS REFUSED WHATEVER THE LAW
+    # ADDRESSES PEOPLE BY.
+    #
+    # The address-component test below asks "would people call these two the
+    # same word", which is the right question for a SHARED SURNAME and the
+    # wrong one for a registered mind whose entire name turns up as somebody
+    # else's given name. Measured, chat 95 second pass, after the surname half
+    # of this guard was landed and working: a law of `{rank} {family}` reports
+    # only `family` as an address component, so `Worf Yar`, `Data O'Brien`,
+    # `Geordi Ogawa`, `Beverly Pulaski` and `Jean-Luc Pulaski` all passed --
+    # five bodies carrying a registered character's identity in the half of
+    # the name nobody was checking. The surnames were clean; the collision had
+    # simply moved to the other axis.
+    #
+    # `whole` rather than `runs` for this test, deliberately. A registered
+    # `Beverly Crusher` does not reserve every `Beverly` in the story -- that
+    # would be an expansion, and shared given names are ordinary. What it
+    # reserves is a body whose component IS the whole identity somebody
+    # already answers to, which is what a one-word name like `Worf` or `Data`
+    # makes possible.
+    whole = reservation.get("whole") or frozenset()
+    for value in (given, family):
+        folded = " ".join(str(value or "").split()).casefold()
+        if folded and folded in whole:
+            return True
     fields = address_components(profile)
     for field, value in (("given", given), ("family", family)):
         if field in fields and _reserves_component(reservation, value):

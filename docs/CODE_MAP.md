@@ -21,7 +21,7 @@
 | `agents/director_reconcile.py` | 592 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story`, `world.spatial` |
 | `agents/director_scopes.py` | 658 |  | `agents.director_views`, `core.db`, `world.survival` |
 | `agents/director_views.py` | 434 |  | `agents.common`, `story.character_schema`, `story.scene` |
-| `agents/loops.py` | 1147 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `core.db`, `story.character_schema`, `story.scene`, `world.spatial` |
+| `agents/loops.py` | 1174 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `core.db`, `story.character_schema`, `story.scene`, `world.spatial` |
 | `agents/mapping.py` | 337 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `core.db`, `llm.prompts`, `mind.memory`, `story.character_schema`, `story.scene` |
 | `agents/narration.py` | 1853 | Player-facing narration agent. | `agents`, `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `story.character_schema`, `story.scene`, `world.spatial`, `world.weather` |
 | `agents/perception.py` | 4477 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `mind`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
@@ -117,7 +117,7 @@
 | `world/charter_figure.py` | 140 |  | — |
 | `world/charter_generate.py` | 692 |  | `world.charter_identity`, `world.charter_model`, `world.charter_needs`, `world.charter_roster` |
 | `world/charter_history.py` | 834 |  | — |
-| `world/charter_identity.py` | 451 |  | — |
+| `world/charter_identity.py` | 476 |  | — |
 | `world/charter_intervene.py` | 112 |  | `world.charter_model` |
 | `world/charter_log.py` | 374 |  | `world.charter_commitment`, `world.charter_decide`, `world.charter_economy`, `world.charter_feel`, `world.charter_mind`, `world.charter_model`, `world.charter_needs`, `world.charter_news`, `world.charter_politics`, `world.charter_social`, `world.charter_temper` |
 | `world/charter_mind.py` | 262 |  | — |
@@ -349,9 +349,9 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `interaction_loop()` | 512 | 565 lines |
+| `interaction_loop()` | 512 | 592 lines |
 | `deterministic_micro_perception()` | 137 | 144 lines |
-| `reaction_loop()` | 1078 | 70 lines |
+| `reaction_loop()` | 1105 | 70 lines |
 | `rehydrate_loop_views()` | 86 | 49 lines |
 | `_isolated_wave()` | 469 | 41 lines |
 | `_defer_to_unrun_reactor()` | 326 | 37 lines |
@@ -1361,12 +1361,12 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `materialize_body_names()` | 311 | 63 lines |
-| `identity_aliases()` | 409 | 38 lines |
+| `materialize_body_names()` | 336 | 63 lines |
+| `name_is_reserved()` | 263 | 48 lines |
+| `identity_aliases()` | 434 | 38 lines |
 | `normalize_naming_profile()` | 47 | 28 lines |
 | `_stored_name_components()` | 131 | 24 lines |
 | `_title_terms()` | 185 | 23 lines |
-| `name_is_reserved()` | 263 | 23 lines |
 | `address_components()` | 157 | 22 lines |
 | `generated_name_parts()` | 103 | 21 lines |
 

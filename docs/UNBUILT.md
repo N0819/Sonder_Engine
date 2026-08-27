@@ -2740,6 +2740,38 @@ behind it; the second is a payload-assembly change and should not be made
 before somebody measures what the three copies actually cost.
 
 
+### 1.84a A model-declared absolute clock position outruns the beat
+
+Measured live, chat 95 second pass, beat 2: four people talking on a bridge,
+`state_diff.time` = `{start_seconds: 20520, duration_seconds: 45,
+end_seconds: 20565}` against a simulation clock standing at 20.0. The absolute
+ran forward so it won, and a conversation moved the story clock FIVE AND A HALF
+HOURS. The duration it carried was correct and was discarded.
+
+**A fix was written and reverted, and the reason is the design question.**
+Preferring the declared duration whenever one is present -- the rule
+`read_time_diff` already applies when an absolute runs BACKWARDS, on the stated
+ground that a model emitting `start_seconds: 0` every beat is mechanical error
+and the duration is what the fiction asserted -- fixes this beat and breaks
+sleep measurement. `director_floors._sleep_elapsed` routes through the same
+reader precisely so it can subtract a stored `started_at_seconds` from the
+beat's ABSOLUTE end, and `test_the_canonical_shape_is_unchanged` pins
+`{start_seconds: 1000, duration_seconds: 60, end_seconds: 1060}` against a clock
+at 0.0 to yield 1060.
+
+The two cases are structurally identical: a coherent triple whose declared start
+disagrees with the engine clock. Nothing in the shape separates them, so the
+reader cannot decide it. The choice is upstream:
+
+  * the clock's position is the ENGINE's and a model may only declare a
+    duration -- which means sleep needs its span from somewhere other than a
+    model-declared absolute; or
+  * a model may declare an absolute, and something must reconcile a declared
+    start against the clock before its absolutes are trusted.
+
+Not a patch. Whoever takes it should decide which of those the engine means,
+because both readings are currently live in one function.
+
 ### 1.85 A memory's age off a per-beat estimate, not a per-beat record
 
 **Found:** 2026-08-26, landing `memories.encoded_at_seconds`.
