@@ -20,7 +20,8 @@ import time
 
 import pytest
 
-from mind.memory import add_memory, contrast_memory, provenance_context_label
+from mind.memory import (
+    MemoryClock, add_memory, contrast_memory, provenance_context_label)
 from agents.character import (
     _UNBIDDEN_ABSORPTION_CEILING,
     _UNBIDDEN_COOLDOWN_BEATS,
@@ -209,11 +210,15 @@ def test_two_strikes_suppression_holds_until_cleared():
 
 def test_entry_keys_carry_the_epistemic_status():
     mem = {"gist": "lantern light over the orchard wall", "provenance":
-           "inferred", "turn_idx": 3, "location": "Orchard"}
-    entry = _unbidden_entry(mem, 40)
+           "inferred", "turn_idx": 3, "location": "Orchard",
+           "frame_id": None, "encoded_at_seconds": 30.0}
+    clock = MemoryClock(1, 1, 40, now_seconds=430.0, viewer_frame_id=None)
+    entry = _unbidden_entry(mem, clock)
     assert entry["it_comes_back_to_me"] == mem["gist"]
     assert entry["from"] == "what_i_concluded"
-    assert entry["when"] == "about 37 beats ago"
+    # In fiction time, off the reading stored on the row -- not in turn
+    # indices, which are frames of the story's construction.
+    assert entry["when"] == "about 7 minutes ago"
     assert entry["where"] == "Orchard"
     # A stable ref permits consequence telemetry; non_authoritative keeps the
     # intrusion from masquerading as an instruction or fresh perception.

@@ -55,6 +55,31 @@ def _window(bank, text, start, end, who=0, **kw):
                                start_turn_idx=start, end_turn_idx=end, **kw)
 
 
+def _beat(bank, turn, seconds, who=0, text="Something happened that beat."):
+    """One stored memory, carrying the clock reading its beat ended at.
+
+    A summary window names turn indices and carries no reading of its own, so
+    its ends are resolved from the rows the window consolidated
+    (`memory_time.window_clock_readings`). A window whose memories are all gone
+    falls back to a qualitative phrase, which is why these fixtures write them.
+    """
+    from core.db import qi
+    memory.add_memory(bank["chat"], bank["chars"][who], None, "episodic",
+                      "witnessed", 0.6, text, turn_idx=turn)
+    qi("UPDATE memories SET encoded_at_seconds=? WHERE chat_id=? AND char_id=? "
+       "AND turn_idx=?", (seconds, bank["chat"], bank["chars"][who], turn))
+
+
+def _now(bank, seconds):
+    from core.db import wset
+    wset(bank["chat"], "simulation_clock", {"elapsed_seconds": seconds})
+
+
+def _clock(bank, turn=60, who=0):
+    return memory.MemoryClock(bank["chat"], bank["chars"][who], turn,
+                              viewer_frame_id=None)
+
+
 def _context(bank, view, turn=60, who=0, **kw):
     return memory.build_character_memory_context(
         bank["chat"], bank["chars"][who], current_turn_idx=turn,
@@ -140,7 +165,7 @@ def test_origin_never_reaches_forward_from_an_early_rerun(bank):
     _window(bank, "A future origin that has not happened.", 100, 109)
     assert memory._origin_on_drift(
         bank["chat"], bank["chars"][0], 5,
-        {"goal_held": 12, "mood": "neutral"}) == {}
+        {"goal_held": 12, "mood": "neutral"}, clock=_clock(bank, 5)) == {}
 
 
 def test_another_characters_chapters_never_arrive(bank):
@@ -197,23 +222,38 @@ def test_chapters_arrive_in_the_order_they_were_lived(bank):
 def test_when_is_relative_and_never_an_absolute_turn_index(bank):
     """`turn_idx` is GLOBAL play order shared by every frame, so an absolute
     number tells a character where a flash-forward sits in the story's
-    construction — which no mind in the fiction can know."""
+    construction — which no mind in the fiction can know. It is not delivered
+    in turn indices AT ALL any more: the window is dated off the clock readings
+    its own memories were stamped with, in fiction time."""
     _window(bank, FERRY, 10, 20)
     _window(bank, NOW, 41, 50)
+    _beat(bank, 10, 100.0)
+    _beat(bank, 20, 200.0)
+    _now(bank, 500.0)
     ctx = _context(bank, "the ferryman and his silver", turn=60)
     when = ctx["earlier_in_my_life"][0]["when"]
-    assert when == "between about 40 and 50 beats ago"
+    assert when == "between about 5 and 7 minutes ago"
     assert "10" not in when and "20" not in when
+    assert "beat" not in when
 
 
-def test_the_span_helper_reads_plainly_at_the_edges():
-    assert memory._beats_ago_span(60, 10, 20) == "between about 40 and 50 beats ago"
+def test_the_span_helper_reads_plainly_at_the_edges(bank):
+    _beat(bank, 10, 100.0)
+    _beat(bank, 20, 200.0)
+    _beat(bank, 30, 300.0)
+    _now(bank, 500.0)
+    assert _clock(bank, 60).of_window(10, 20) == \
+        "between about 5 and 7 minutes ago"
     # A window one turn wide is a moment, not a stretch.
-    assert memory._beats_ago_span(60, 30, 30) == "about 30 beats ago"
-    # A window still open at the present beat is not yet memory.
-    assert memory._beats_ago_span(30, 20, 30) == ""
-    assert memory._beats_ago_span(30, 30, 30) == ""
-    assert memory._beats_ago_span(None, 0, 10) == ""
+    assert _clock(bank, 60).of_window(30, 30) == "about 3 minutes ago"
+    # A window still open at the present beat is not yet memory. The cutoff
+    # stays in TURN INDICES: the clock does not advance inside a beat, so only
+    # play order can tell this beat's own outcome from the beat before it.
+    assert _clock(bank, 30).of_window(20, 30) == ""
+    assert _clock(bank, 30).of_window(30, 30) == ""
+    assert _clock(bank, None).of_window(0, 10) == ""
+    # A window none of whose memories survive is never given a number.
+    assert _clock(bank, 60).of_window(40, 50) == memory.WHEN_UNPLACEABLE
 
 
 # ---- origin on drift ----
@@ -221,19 +261,23 @@ def test_the_span_helper_reads_plainly_at_the_edges():
 def test_origin_surfaces_when_a_goal_has_been_held_too_long(bank):
     _window(bank, FERRY, 0, 10)
     _window(bank, NOW, 41, 50)
+    _beat(bank, 0, 60.0)
+    _beat(bank, 10, 120.0)
+    _now(bank, 660.0)
     payload = memory._origin_on_drift(
         bank["chat"], bank["chars"][0], 60,
-        {"goal_held": 12, "mood": "neutral"})
+        {"goal_held": 12, "mood": "neutral"}, clock=_clock(bank, 60))
     assert payload["where_i_came_from"]["what_i_lived_through_then"] == FERRY
     assert payload["where_i_came_from"]["when"] == \
-        "between about 50 and 60 beats ago"
+        "between about 9 and 10 minutes ago"
 
 
 def test_origin_is_absent_without_a_drift_signal(bank):
     _window(bank, FERRY, 0, 10)
     assert memory._origin_on_drift(
         bank["chat"], bank["chars"][0], 60,
-        {"goal": "cross the river", "mood": "neutral"}) == {}
+        {"goal": "cross the river", "mood": "neutral"},
+        clock=_clock(bank, 60)) == {}
 
 
 def test_origin_is_not_sent_twice(bank):
@@ -241,7 +285,7 @@ def test_origin_is_not_sent_twice(bank):
     assert memory._origin_on_drift(
         bank["chat"], bank["chars"][0], 60,
         {"projects": [{"id": "p1", "adrift": 8}]},
-        earlier_ids={10}) == {}
+        clock=_clock(bank, 60), earlier_ids={10}) == {}
 
 
 # ---- cost ----
