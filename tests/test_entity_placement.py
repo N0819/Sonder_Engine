@@ -378,3 +378,213 @@ def test_the_floor_measures_the_merged_outcome():
                                         relation="pocket")])
     assert _unplaced_minted_entities(sc, sd) == []
     assert room_of(merge_scene_with_diff(sc, sd), THING) == "room_a"
+
+
+# --- placement derived from who HANDLED the thing ------------------------
+#
+# The transfer ledger above answers only for a beat that wrote one. The
+# larger class is a thing minted with NO transfer at all -- the objects hand
+# names it, cannot write `positions`, and nothing else has any reason to
+# mention it. Measured over the audited 15-beat run and the two before it:
+# every minted entity committed with `room: None`. The evidence is in the
+# merge anyway: who touched it and which room they are in, where a station
+# says it was set down, and the origin a transfer named when its destination
+# resolved to nothing.
+
+
+def anchored():
+    """The same two rooms, with an anchor declared in one of them."""
+    sc = scene()
+    sc["rooms"]["room_b"]["anchors"] = {"anchor_1": {"desc": "an anchor"}}
+    return sc
+
+
+def touch(**over):
+    row = {"op": "add", "actor": BODY, "target": THING,
+           "manner": "holds", "relation": "surface"}
+    row.update(over)
+    return row
+
+
+def test_a_thing_a_body_took_hold_of_ends_the_beat_in_that_bodys_room():
+    merged = merge_scene_with_diff(scene(), dict(mint(), contact_ops=[touch()]))
+    assert room_of(merged, THING) == "room_a"
+
+
+def test_either_endpoint_of_the_contact_answers():
+    """Which side of the contact the thing is written on is the model's
+    wording, not a fact about the world."""
+    merged = merge_scene_with_diff(
+        scene(), dict(mint(), contact_ops=[touch(actor=THING, target=OTHER)]))
+    assert room_of(merged, THING) == "room_b"
+
+
+def test_a_standing_contact_places_a_thing_the_beat_only_now_minted():
+    sc = scene()
+    sc["contacts"] = [{"actor": OTHER, "target": THING, "manner": "holds",
+                       "relation": "surface"}]
+    assert room_of(merge_scene_with_diff(sc, mint()), THING) == "room_b"
+
+
+def test_an_ended_contact_places_nothing():
+    """Letting go is evidence of not holding. The two ops that END a contact
+    place nothing, and this beat's ops are read before the standing ledger so
+    the ending is what is seen."""
+    for op_name in ("remove", "clear"):
+        merged = merge_scene_with_diff(
+            scene(), dict(mint(), contact_ops=[touch(op=op_name)]))
+        assert room_of(merged, THING) is None, op_name
+
+
+def test_a_station_lends_the_room_that_declares_its_anchor():
+    """Where it was SET DOWN. An anchor is a feature of exactly one room, so
+    it answers 'which room' for a thing that has no position yet -- the one
+    moment nothing else can."""
+    merged = merge_scene_with_diff(
+        anchored(), dict(mint(), stations={THING: {"at": "anchor_1"}}))
+    assert room_of(merged, THING) == "room_b"
+
+
+def test_a_station_near_a_body_lends_that_bodys_room():
+    merged = merge_scene_with_diff(
+        scene(), dict(mint(), stations={THING: {"at": None, "near": [OTHER]}}))
+    assert room_of(merged, THING) == "room_b"
+
+
+def test_a_transfer_whose_destination_resolves_to_nothing_falls_to_its_origin():
+    """The destination has already been offered to the transfer derivation and
+    declined by it; the ORIGIN is a second, independent fact in the same row."""
+    merged = merge_scene_with_diff(
+        scene(), dict(mint(), inventory_ops=[
+            op(from_id=OTHER, to_id="a surface nothing knows")]))
+    assert room_of(merged, THING) == "room_b"
+
+
+def test_evidence_that_resolves_to_nothing_places_nothing():
+    for diff in (dict(mint(), contact_ops=[touch(actor="NOBODY")]),
+                 dict(mint(), stations={THING: {"at": "no_such_anchor"}}),
+                 dict(mint(), inventory_ops=[op(from_id="NOBODY")]),
+                 mint()):
+        assert room_of(merge_scene_with_diff(scene(), diff), THING) is None
+
+
+def test_a_declared_position_outranks_the_derivation():
+    """The same `declared=` subtraction the transfer derivation takes: an
+    explicit write by the hand that owns the channel always wins."""
+    merged = merge_scene_with_diff(
+        scene(), dict(mint(), contact_ops=[touch()],
+                      positions={THING: "room_b"}))
+    assert room_of(merged, THING) == "room_b"
+
+
+def test_a_declared_containment_outranks_it_too():
+    merged = merge_scene_with_diff(
+        scene(), dict(mint(), contact_ops=[touch()],
+                      containment={THING: {"in": OTHER, "mode": "pocket"}}))
+    assert merged["contained"].get(THING, {}).get("in") == OTHER
+    assert room_of(merged, THING) == "room_b"
+
+
+def test_a_carrier_relation_from_the_transfer_ledger_outranks_it():
+    """It YIELDS to the pass that runs before it. A thing handed to a body is
+    carried, not lying in that body's room, and the carrier relation is what
+    keeps a pocketed thing out of sight."""
+    merged = merge_scene_with_diff(
+        scene(), dict(mint(), contact_ops=[touch(actor=OTHER)],
+                      inventory_ops=[op(op="give", to_id=BODY,
+                                        relation="pocket")]))
+    assert merged["contained"].get(THING, {}).get("in") == BODY
+    assert hiding_holders_of(merged, THING)
+
+
+def test_a_body_is_never_placed_by_this_derivation():
+    """Body-ness is derived from attire and scale, never read off a `kind`
+    label -- and a body is placed by its own machinery, where misplacing it
+    costs more than leaving a thing nowhere."""
+    sc = scene()
+    sc["attire"]["thing_1"] = {}
+    merged = merge_scene_with_diff(sc, dict(mint(), contact_ops=[touch()]))
+    assert room_of(merged, THING) is None
+
+
+def test_the_classes_with_no_room_by_construction_stay_nowhere():
+    for over in ({"ubiquitous": True},
+                 {"state": {"link": ["room_a", "room_b"]}},
+                 {"state": {"transit": {"phase": "in_flight"}}}):
+        merged = merge_scene_with_diff(
+            scene(), dict(mint(**over), contact_ops=[touch()]))
+        assert room_of(merged, THING) is None, over
+
+
+def test_a_thing_that_is_already_somewhere_is_never_moved():
+    """Nothing is UNPLACED or RELOCATED here; this writes a room where there
+    was none."""
+    sc = scene()
+    sc["entities"][THING] = {"name": "a thing", "kind": "object"}
+    sc["positions"][THING] = "room_b"
+    merged = merge_scene_with_diff(sc, dict(mint(), contact_ops=[touch()]))
+    assert room_of(merged, THING) == "room_b"
+
+
+def test_the_derivation_is_scoped_to_what_this_beat_named():
+    """A thing left nowhere ten beats ago is not this beat's to relocate, and
+    a scene-wide sweep would move things on evidence that has gone stale."""
+    sc = scene()
+    sc["entities"]["thing_2"] = {"name": "an older thing", "kind": "object"}
+    sc["contacts"] = [{"actor": BODY, "target": "thing_2",
+                       "manner": "holds", "relation": "surface"}]
+    merged = merge_scene_with_diff(sc, dict(mint(), contact_ops=[touch()]))
+    assert room_of(merged, THING) == "room_a"
+    assert room_of(merged, "thing_2") is None
+
+
+def test_a_concealed_handler_lends_no_room():
+    """THE FIREWALL LINE. A position in a room is perceptible to everyone in
+    it, so lending a thing the room of a body who is himself shut inside
+    something would show a pocketed thing to the whole room while its holder
+    stays hidden. A concealed handler lends nothing."""
+    sc = scene()
+    sc["entities"]["container_1"] = {"name": "a container", "kind": "object"}
+    sc["positions"]["container_1"] = "room_a"
+    sc["contained"] = {BODY: {"in": "container_1", "mode": "container"}}
+    assert hiding_holders_of(sc, BODY)
+    merged = merge_scene_with_diff(sc, dict(mint(), contact_ops=[touch()]))
+    assert room_of(merged, THING) is None
+
+
+def test_handler_placement_gives_no_channel_to_an_observer_who_has_none():
+    """Placement is a world fact; DELIVERY is still the gate's decision. A
+    body in the other room gains nothing from a thing placed here, and the
+    gate is discriminating rather than uniformly deaf."""
+    from agents.common import _check_presence_knowledge_channel
+
+    named = mint(name="brass token", aliases=[])
+    merged = merge_scene_with_diff(scene(), dict(named,
+                                                 contact_ops=[touch()]))
+    assert room_of(merged, THING) == "room_a"
+    assert _check_presence_knowledge_channel(
+        OTHER, "the brass token is missing", merged,
+        {"sketch": {"station_room": "room_b"}}, "")
+    assert _check_presence_knowledge_channel(
+        "WITNESS", "the brass token is missing", merged,
+        {"sketch": {"station_room": "room_a"}}, "") == []
+
+
+def test_the_floor_stops_reporting_what_the_derivation_now_places():
+    """The floor measures the merged OUTCOME, so the two halves agree by
+    construction rather than by a second copy of the placement rules."""
+    sd = dict(mint(), contact_ops=[touch()])
+    assert _unplaced_minted_entities(scene(), sd) == []
+    assert _unplaced_minted_entities(scene(), mint()) == [THING]
+
+
+def test_the_minted_derivation_is_wired_into_the_merge():
+    """One call in one merge, and a green suite would not otherwise notice it
+    going away: assert the wiring, and that it runs AFTER the transfer
+    derivation it yields to."""
+    import inspect
+
+    source = inspect.getsource(merge_scene_with_diff)
+    assert "derive_minted_entity_placements(" in source
+    assert (source.index("derive_inventory_placements(")
+            < source.index("derive_minted_entity_placements("))

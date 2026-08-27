@@ -1478,3 +1478,133 @@ def test_a_claim_on_a_standing_scene_subject_stays_hard(temp_db, monkeypatch):
     director.director_resolve(ctx, nonce=0)
 
     assert any("PLAYER AUTHORITY" in w for w in ctx.warnings)
+
+
+# ---- Tier 0: a claim subject that is not a THING ----
+#
+# Player authority makes an asserted EFFECT true. It does not make that
+# effect's grammatical subject an object. The referrability gate lets a
+# subject through on either of two channels and only one of them is evidence
+# of thinghood -- the world already holds a record for it; the other, "the
+# player typed the word", is satisfied by every noun in a narrated sentence.
+# The repair sheet then forbade the only correct answer for the second class
+# ("never 'rejected'"), so the only permitted answer was to encode, and
+# encoding a subject the world model has no shape for means MINTING IT AS A
+# SCENE ENTITY. Measured over the audited 15-beat run: that is where the
+# minted entities came from.
+
+def _worldless_claim(subject, predicate, source_text):
+    return [{
+        "claim_id": "claim:0:effect:0", "scope": "effect",
+        "subject_id": subject, "predicate": predicate,
+        "value": {}, "commitment": "asserted", "source_text": source_text,
+    }]
+
+
+def _mint_nothing_resolve():
+    return {
+        "resolved_event": "The reading holds steady.",
+        "summary": "Nothing structural.",
+        "dialogue_log": [], "changes_asserted": [], "state_diff": {},
+    }
+
+
+def test_a_claim_subject_with_no_referent_is_refused_without_a_warning(
+    temp_db, monkeypatch,
+):
+    """A grammatical subject the world model has no shape for -- a measure, a
+    pattern, a state of light -- is not a thing, and the repair may now say
+    so. The effect still stands; what does not happen is a scene entity."""
+    subject = "the ambient level"
+    ctx = _make_ctx(
+        temp_db, "The ambient level steadies.",
+        _action_interp(authority_claims=_worldless_claim(
+            subject, "steadied", "The ambient level steadies")))
+    calls = []
+    monkeypatch.setattr(director, "_agent_json", _dispatching_agent_json({
+        "director_resolve": _mint_nothing_resolve(),
+        "resolve_repair": {"state_diff": {}, "dispositions": [
+            {"subject": subject, "status": "no_referent",
+             "reason": "a measure, not an object"}]},
+    }, calls))
+
+    out = director.director_resolve(ctx, nonce=0)
+
+    assert not any("PLAYER AUTHORITY" in w for w in ctx.warnings), ctx.warnings
+    assert not (out["state_diff"].get("entities") or {}), out["state_diff"]
+    notes = out["reconciliation"]["claim_notes"]
+    assert any(n.get("subject") == subject for n in notes), notes
+    assert [o for o in out["reconciliation"]["unresolved"]
+            if o.get("disposition") == "no_referent"]
+
+
+def test_a_subject_the_world_already_knows_can_never_be_refused(
+    temp_db, monkeypatch,
+):
+    """The verdict is bounded the way `already_true` is. A subject naming a
+    room the scene contains IS a thing, so the refusal is inadmissible there
+    and non-rejectability stands exactly as before."""
+    subject = "elevator_interior"        # a room id in the fixture scene
+    ctx = _make_ctx(
+        temp_db, "I seal the room.",
+        _action_interp(authority_claims=_worldless_claim(
+            subject, "sealed", "I seal the room")))
+    calls = []
+    monkeypatch.setattr(director, "_agent_json", _dispatching_agent_json({
+        "director_resolve": _mint_nothing_resolve(),
+        "resolve_repair": {"state_diff": {}, "dispositions": [
+            {"subject": subject, "status": "no_referent",
+             "reason": "trying it on"}]},
+    }, calls))
+
+    out = director.director_resolve(ctx, nonce=0)
+
+    assert any("PLAYER AUTHORITY" in w for w in ctx.warnings), ctx.warnings
+    notes = out["reconciliation"]["claim_notes"]
+    assert not [n for n in notes if n.get("subject") == subject], notes
+
+
+def test_the_two_referrability_channels_answer_different_questions():
+    """The split the whole fix rests on: what the world knows is evidence of
+    thinghood; what the player typed is not, because every noun of a narrated
+    sentence satisfies it."""
+    from agents.director import (_claim_subject_in_world,
+                                 _claim_subject_is_referrable,
+                                 _subject_match_forms)
+
+    sc = {"rooms": {"room_a": {"name": "Room A"}}, "entities": {}}
+    typed = "the shifting pattern on the wall of room a"
+
+    forms = _subject_match_forms("shifting_pattern", [], sc)
+    assert _claim_subject_is_referrable("shifting_pattern", forms, sc, typed)
+    assert not _claim_subject_in_world("shifting_pattern", forms, sc)
+
+    forms = _subject_match_forms("room_a", [], sc)
+    assert _claim_subject_in_world("room_a", forms, sc)
+
+
+def test_the_repair_sheet_permits_the_refusal_in_every_pack():
+    """The sheet used to forbid the only correct answer, and a prompt is read
+    by every story -- so the vocabulary has to exist in every pack that ships
+    one, not just the one this was found in."""
+    import json as _json
+    import pathlib
+
+    packs = sorted(pathlib.Path("language_packs").glob(
+        "*/cards/system_prompts.json"))
+    assert packs
+    for path in packs:
+        sheet = _json.loads(path.read_text(encoding="utf-8"))
+        text = sheet["prompts"]["resolve_repair"]
+        assert "no_referent" in text, path
+        assert "player_claim" in text, path
+
+
+def test_the_refusal_verdict_is_wired_into_the_seam():
+    """One keyword on one branch, in a function a green suite would not
+    notice losing it from: assert the wiring itself."""
+    import inspect
+
+    source = inspect.getsource(director._reconcile_resolution)
+    assert "_verify_no_referent(" in source
+    assert "_NO_REFERENT" in source
