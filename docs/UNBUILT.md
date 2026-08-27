@@ -2963,6 +2963,33 @@ bodyness from attire/scales because the label could not be trusted.
 Second half: a settled contact was re-narrated on every subsequent beat. A
 standing contact should become background after the beat that made it.
 
+### 1.94 A time block that disagrees with itself is not detected
+
+The anchor rule (1.84a, closed) decides what to do with a block anchored away
+from the engine clock: only its span crosses. It says nothing about a block that
+is incoherent WITH ITSELF.
+
+    read_time_diff(100.0, {"start_seconds": 100, "duration_seconds": 0,
+                           "end_seconds": 9999})  ->  9999.0
+
+That block is anchored correctly — its `start_seconds` matches where the clock
+stands — so its absolutes are trusted verbatim, exactly as the rule intends. But
+it claims a beat that began at 100, took zero seconds, and ended at 9999. Those
+three cannot all be true, and nothing notices: no warning, no `displaced` slot,
+no refusal.
+
+The three fields are over-determined by one: `start + duration` should equal
+`end`. When they disagree, one of the three is wrong and the reader currently
+picks by precedence rather than by noticing the contradiction.
+
+Found by a confirmation test whose own fixture was wrong — it asserted that
+`duration_seconds: 0` beside an absolute should mean no time passed, which is
+not what the documented guarantee says. The guarantee is that a beat keeps the
+authority to say no time passed BY SAYING IT, and `{duration_seconds: 0}` alone
+does exactly that. Registered rather than fixed because the resolution is a
+judgment about which of three contradictory fields to believe, and that is the
+same class of choice as 1.84a — not a patch.
+
 ### 1.85 A memory's age off a per-beat estimate, not a per-beat record
 
 **Found:** 2026-08-26, landing `memories.encoded_at_seconds`.
