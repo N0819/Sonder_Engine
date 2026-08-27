@@ -16,7 +16,7 @@ from world.spatial_orientation import (
     travel_bearing,
 )
 
-from world.spatial_barriers import normalize_barrier
+from world.spatial_barriers import effective_adjacent, normalize_barrier
 from world.spatial_containment import (_NEVER_STATIONED_KINDS,
                                        containment_conceals,
                                        scale_changed_names)
@@ -74,12 +74,18 @@ def egocentric_frame(scene, observer):
     Pass-through inference: with a came_from but no facing, entering a room with
     a single non-vertical, non-behind, un-sided exit makes that exit AHEAD
     ('onward') -- the corridor case that otherwise reads as an unplaceable
-    'aside'."""
-    rooms = scene.get("rooms") or {}
+    'aside'.
+
+    Reads `effective_adjacent`, not `room["adjacent"]`. THIS FUNCTION WAS THE
+    DEFECT'S ROOT READER: it and everything built on it (`spatial_digest`,
+    `room_layout`'s exits, the Director's egocentric exits, a character's
+    spatial frame, perception's rear arc) saw only the edges the observer's
+    own room happened to declare, while ten other readers in this package
+    treat the graph as undirected. A room that declared none -- the room a
+    story starts in, always -- reported no exits at all beside a `room_layout`
+    that listed its doorways as anchors in the same payload."""
     orientation = _ci_get(scene.get("orientation") or {}, observer) or {}
-    room = rooms.get(room_of(scene, observer)) or {}
-    edges = [e for e in (room.get("adjacent") or [])
-             if isinstance(e, dict) and e.get("to")]
+    edges = effective_adjacent(scene, room_of(scene, observer))
 
     came_from = orientation.get("came_from")
     facing = orientation.get("facing")

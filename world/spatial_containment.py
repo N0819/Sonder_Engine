@@ -1632,10 +1632,11 @@ def _onward_room(scene: dict, room_id: str):
     Re-derived from live topology every merge, so a Director graft or a
     barrier change is respected mid-crossing.
 
-    The registered residual "Interior passage is undirected" (one-way VALVE
-    passability -- walking OUTBOUND against a passage) is a DIFFERENT fact and
-    is deliberately not consumed here: this derivation needs no new stored
-    fact, and closing that one would not change any answer above.
+    Directed where the edge says so. A passage declared crossable one way
+    only (`passage_from`) is refused against its direction here as everywhere
+    else a body moves -- the valve case this used to name as a registered
+    residual. It changes no answer for an ordinary interior, whose stations
+    connect by `membrane` in both directions and name no direction at all.
     """
     rooms = (scene or {}).get("rooms") or {}
     room = rooms.get(room_id)
@@ -1651,7 +1652,8 @@ def _onward_room(scene: dict, room_id: str):
     if entry is None:
         return None
     inside = set(interior)
-    neighbors = neighbor_map(scene, barriers=_PASSABLE_BARRIERS)
+    neighbors = neighbor_map(scene, barriers=_PASSABLE_BARRIERS,
+                             directional=True)
     # Breadth-first from the way in, over passable edges, inside the holder.
     dist = {entry: 0}
     queue = [entry]

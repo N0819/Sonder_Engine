@@ -204,7 +204,7 @@ def is_sealed_in(scene: dict, name: str) -> bool:
     enclosure is still sealed to AIR -- you can be seen through glass and
     suffocate behind it, which is exactly the horror of the thing.
     """
-    from world.spatial import _PASSABLE_BARRIERS, normalize_barrier, room_of
+    from world.spatial import edge_passable, effective_adjacent, room_of
 
     room_id = room_of(scene, name)
     if not room_id:
@@ -222,9 +222,14 @@ def is_sealed_in(scene: dict, name: str) -> bool:
     # gap was invisible while nothing ever put a body in a membrane-doored
     # interior; the enclosure handoff does exactly that, and would otherwise
     # have started an air countdown on an occupant with a way out.
-    for edge in room.get("adjacent") or []:
-        if isinstance(edge, dict) and \
-                normalize_barrier(edge.get("barrier")) in _PASSABLE_BARRIERS:
+    # Read undirected, and directed where the edge says so. A doorway
+    # declared only from the room OUTSIDE is still a doorway out of this one,
+    # so reading this room's own list alone started an air countdown on an
+    # occupant who could walk out; and a passage declared crossable only
+    # INWARD (`passage_from`) is not a way out at all, which is the shape a
+    # valve, a chute or a door that locks behind you has always wanted.
+    for edge in effective_adjacent(scene, room_id):
+        if edge_passable(edge, room_id):
             return False
     return True
 
