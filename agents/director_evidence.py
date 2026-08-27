@@ -402,25 +402,19 @@ def _merge_repair_into_diff(sd, patch):
 def _norm_subject(value):
     return re.sub(r"[^a-z0-9]", "", str(value or "").casefold())
 
-def _claim_subject_is_referrable(subject, forms, sc, player_input):
-    """Can anyone point at what this claim is about?
+def _claim_subject_in_world(subject, forms, sc):
+    """Does the WORLD already know this claim's subject?
 
-    Two independent channels, either of which qualifies (see the block
-    comment at the call site for the live case that made this necessary):
+    True when `_subject_match_forms` found more than the bare string it was
+    handed -- the subject matched a cast member's scene keys or an entity's
+    ids and aliases -- or when the subject names a room in the scene.
 
-      * THE WORLD KNOWS IT -- `_subject_match_forms` found more than the
-        bare string it was handed, meaning the subject matched a cast
-        member's scene keys or an entity's ids and aliases, or the subject
-        names a room in the scene.
-      * THE PLAYER SAID IT -- the subject's words appear in what the player
-        typed. This is the channel that keeps "I shatter the vault door" a
-        real claim about a door no scene contains yet, which is exactly
-        what player authority exists to do.
-
-    Normalized to letters and digits on both sides, so `vault_door` matches
-    "the vault door" and casing and punctuation cannot decide it. Fails
-    open: anything this cannot evaluate is referrable, because refusing a
-    claim is the direction that costs the player their authority.
+    ONE OF THE TWO CHANNELS `_claim_subject_is_referrable` accepts, split out
+    because the two answer different questions and only this one may bound a
+    REFUSAL. "The player typed the word" qualifies a subject for coverage
+    checking; it cannot establish that the subject is a THING, because every
+    noun in a narrated sentence satisfies it. What the world already holds a
+    record for is a thing, and that is what this asks.
     """
     normalized = _norm_subject(subject)
     if not normalized:
@@ -432,7 +426,37 @@ def _claim_subject_is_referrable(subject, forms, sc, player_input):
     for rid, room in rooms.items():
         if isinstance(room, dict) and room.get("name"):
             room_forms.add(str(room["name"]))
-    if any(_norm_subject(r) == normalized for r in room_forms):
+    return any(_norm_subject(r) == normalized for r in room_forms)
+
+
+def _claim_subject_is_referrable(subject, forms, sc, player_input):
+    """Can anyone point at what this claim is about?
+
+    Two independent channels, either of which qualifies (see the block
+    comment at the call site for the live case that made this necessary):
+
+      * THE WORLD KNOWS IT -- `_claim_subject_in_world`, above.
+      * THE PLAYER SAID IT -- the subject's words appear in what the player
+        typed. This is the channel that keeps "I shatter the vault door" a
+        real claim about a door no scene contains yet, which is exactly
+        what player authority exists to do.
+
+    Normalized to letters and digits on both sides, so `vault_door` matches
+    "the vault door" and casing and punctuation cannot decide it. Fails
+    open: anything this cannot evaluate is referrable, because refusing a
+    claim is the direction that costs the player their authority.
+
+    THE SECOND CHANNEL IS WIDE ON PURPOSE and cannot be narrowed here: it
+    passes for every noun the player's own sentence contains, which is the
+    price of never silently dropping an asserted effect. What it must NOT do
+    is decide, further downstream, that the subject is a physical object --
+    that judgment belongs to the repair, bounded by the first channel alone
+    (`director_reconcile._verify_no_referent`).
+    """
+    normalized = _norm_subject(subject)
+    if not normalized:
+        return False
+    if _claim_subject_in_world(subject, forms, sc):
         return True
     return normalized in _norm_subject(player_input)
 
