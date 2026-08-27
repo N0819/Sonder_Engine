@@ -2881,7 +2881,9 @@ def character_step(ctx, cid, nonce):
     if _sim_clock is None:
         _sim_clock = wget(
             chat.id, "simulation_clock",
-            {"elapsed_seconds": 0.0, "display": "now"},
+            # No clock row means no time of day to tell them; "now" was a
+            # placeholder that reads as an answer -- see `scene.simulation_clock`.
+            {"elapsed_seconds": 0.0, "display": ""},
         )
         shared["simulation_clock"] = _sim_clock
     mind_models = mind_models_for_payload(

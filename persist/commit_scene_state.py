@@ -29,9 +29,38 @@ from persist.commit_room_registry import (_apply_room_registry,
                                   dedup_minted_rooms, prune_dangling_exits)
 from persist.commit_attire import apply_attire_diff
 from world.mechanics import (UNCLAIMED_BEAT_SECONDS, beat_end_elapsed,
-                             clock_elapsed, time_diff_display)
+                             clock_elapsed, normalize_time_of_day)
 
 # ---- Scene commit with entity-aware merge ----
+
+def _establish_time_of_day(est):
+    """The opening's standing time of day, from the two places the establish
+    stage puts it. ONE value, because the scene's label and the clock's label
+    are the same statement and must not be able to disagree.
+
+    THE CLOCK'S OWN LABEL WINS. Both keys are filled in 80 of 80 corpus
+    openings, and where they disagree it is `time` that drifts off the
+    question: it is the scene's label, so a model writes the SITUATION into
+    it -- "Immediate aftermath of a containment breach", "Intake interview
+    commencement", "now" -- while `simulation_clock.display` beside it holds
+    "08:42:15 AM" and "09:42". 17 of the 80 split that way, every one of them
+    with the readable answer on the clock. `display` is the field whose name
+    says it is written to be READ AS A TIME (`llm/schemas.py`'s
+    `GreetingExtraction.time` documents it as exactly that, and the greeting
+    path already seeds it at launch), so it leads and `time` follows.
+
+    Reading it here is also what retires the orphan: the schema has solicited
+    that whole dict since long before this split, every opening filled it,
+    and NOTHING anywhere read it.
+    """
+    est = est or {}
+    clock = est.get("simulation_clock")
+    if isinstance(clock, dict):
+        label = normalize_time_of_day(clock.get("display"))
+        if label:
+            return label
+    return normalize_time_of_day(est.get("time"))
+
 
 def _anchor_current_room(sc, entity_id):
     """The anchor entity's current exterior room, tolerating positions
@@ -351,9 +380,13 @@ def prepare_scene_commit(ctx):
     # domain writes the new clock, a later commit domain cannot recover which
     # coarse time boundary THIS beat crossed. Keep the exact pre-turn value in
     # the prepared bundle instead of opening a second clock authority.
+    # EMPTY display, not "now". This default is the exact thing chats 95 and
+    # 96 read on every call to every role for 20 and 15 beats: a chat with no
+    # clock row got the word "now", which reads as an answer and is not one.
+    # A story that has not said what time it is says nothing.
     prev_clock = copy.deepcopy(wget(
-        cid, "simulation_clock", {"elapsed_seconds": 0.0, "display": "now"}
-    ) or {"elapsed_seconds": 0.0, "display": "now"})
+        cid, "simulation_clock", {"elapsed_seconds": 0.0, "display": ""}
+    ) or {"elapsed_seconds": 0.0, "display": ""})
     # THE BEAT'S END CLOCK, COMPUTED ONCE, HERE, BEFORE ANYTHING READS IT.
     # Four things downstream in this one function need it and used to get it
     # from three different places: the clock block below wrote it, the
@@ -717,10 +750,28 @@ def prepare_scene_commit(ctx):
 
     apply_attire_diff(sc, diff, ctx, res)
 
+    # Present on every committed scene, so that "the story has not said" is a
+    # value and not a missing key -- `scene.time` used to be absent on some
+    # rows, present-and-empty on others, and present-and-holding-a-duration on
+    # most, which is three different silences.
+    sc.setdefault("time_of_day", "")
+
     est = ctx.director_establish
+    _opening_time_of_day = ""
     if est:
         sc["location"] = est.get("location", sc.get("location"))
-        sc["time"] = est.get("time", sc.get("time"))
+        # THE OPENING IS WHERE A STORY'S TIME OF DAY COMES FROM, and one value
+        # feeds both homes it has (the scene label and the clock's label), so
+        # they cannot disagree.
+        # The greeting path seeds the clock's label from the greeting's own
+        # extraction BEFORE turn 0 runs (`story/greetings.py`), so an opening
+        # that names no time inherits the one the greeting already read out
+        # of its own passage rather than starting the story blank.
+        _opening_time_of_day = (_establish_time_of_day(est)
+                                or normalize_time_of_day(
+                                    prev_clock.get("display")))
+        if _opening_time_of_day:
+            sc["time_of_day"] = _opening_time_of_day
         sc["description"] = est.get("scene_description", sc.get("description"))
         # An omitted sky means NO SKY, never a default one. The prompt tells
         # the Director to leave weather out where it is meaningless -- deep
@@ -793,21 +844,48 @@ def prepare_scene_commit(ctx):
                 "state_diff.time carried no clock position this engine "
                 "could read (%s); %s" % (", ".join(refused), _tail))
         clock["elapsed_seconds"] = claimed
-        display = time_diff_display(td)
-        if display:
-            clock["display"] = display
-            sc["time"] = display
-        elif "display_advance" in td:
-            # Present but empty CLEARS the scene's time label, as it
-            # always has -- canonical rows carry "" constantly. The
-            # canonical key wins BY PRESENCE inside `time_diff_display`
-            # too, so an explicit clear is not overridden by the
-            # synonym sitting beside it.
-            sc["time"] = td["display_advance"]
+        # THE BEAT'S PASSAGE PHRASE IS NOT WRITTEN ANYWHERE, and its absence
+        # here is the whole repair. `display_advance` ("moments later") used
+        # to land on BOTH `simulation_clock.display` and `scene.time` from
+        # this spot -- a per-beat statement about how far the beat moved,
+        # written over a standing statement about where the world stands.
+        # Non-empty, it overwrote the time of day; PRESENT AND EMPTY, it
+        # erased it, which is a beat that owns no phrase deleting a fact it
+        # never owned. Measured on the author's 81-chat corpus 2026-08-25: 63
+        # openings named a readable time of day, 6 live scenes still held
+        # one. The phrase reaches no reader in the tree and is not relocated
+        # -- it stays the beat's own words on this resolve's persisted
+        # variant, which is where a record belongs.
+
     # A time block that is a bare STRING is a scene label and nothing else:
-    # it makes no clock claim, so it never reaches the reader above.
-    if isinstance(diff.get("time"), str):
-        sc["time"] = diff["time"]
+    # it makes no clock claim, so it never reaches the reader above. EMPTY IS
+    # NOT A CLEAR: a standing world property is not deleted by a beat that
+    # said nothing about it, which is the erasure branch above in its other
+    # spelling.
+    _declared_time_of_day = normalize_time_of_day(diff.get("time"))
+    if _declared_time_of_day:
+        sc["time_of_day"] = _declared_time_of_day
+
+    # `simulation_clock.display` IS THE TIME OF DAY'S LABEL -- its one
+    # documented purpose (`llm/schemas.py`'s `GreetingExtraction.time`, which
+    # seeds it at launch), and until now its only per-beat writer was the
+    # passage-phrase branch above, so after beat 0 it could hold a duration
+    # phrase or the `wget` default and nothing else. Chats 95/96 read "now"
+    # on every call to every role for 20 and 15 beats: nothing per-beat ever
+    # fired, and the opening's own clock was never committed at all.
+    _time_of_day_label = _declared_time_of_day or _opening_time_of_day
+    if _time_of_day_label:
+        if clock is None:
+            clock = copy.deepcopy(prev_clock)
+        clock["display"] = _time_of_day_label
+    elif clock is not None:
+        # ONE STATEMENT, TWO HOMES, AND THEY MAY NOT DRIFT. The two used to
+        # be able to disagree by construction -- an empty passage phrase
+        # cleared the scene's label and deliberately left the clock's
+        # standing -- and five corpus chats hold `scene.time` empty beside a
+        # `display` of "moments later". A beat that writes a clock at all
+        # restates the scene's own answer on it.
+        clock["display"] = sc.get("time_of_day") or ""
 
     # Weather. The Director's own change wins outright; otherwise the sky
     # drifts on the simulation clock, deterministically and idempotently, so a

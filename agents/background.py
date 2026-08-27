@@ -435,7 +435,12 @@ def _place_block(ctx, room_id):
         "room_name": room.get("name") or room_id or "",
         "room_desc": (room.get("desc") or "")[:400],
         "location": sc.get("location") or "",
-        "time": sc.get("time") or "",
+        # The STANDING time of day, which is what anyone standing in a room
+        # trivially has. This field used to carry the beat's passage phrase
+        # ("moments later") on almost every turn -- not something a person in
+        # a room knows, and the only path in the tree that handed the raw
+        # scene time to a fictional mind at all.
+        "time_of_day": sc.get("time_of_day") or "",
     }
     try:
         from agents.perception import _ambient_location_for

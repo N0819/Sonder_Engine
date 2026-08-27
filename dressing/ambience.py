@@ -292,7 +292,7 @@ def acoustic_fingerprint(scene, room_id, style=None):
         # hearth lit or gone cold is the sound of the place changing, and
         # without this the key could not tell those two rooms apart.
         "anchors": sorted(_keywords(" ".join(_anchor_words(room)), 6)),
-        "time": time_bucket(scene.get("time")),
+        "time": time_bucket(scene.get("time_of_day")),
         # The words, not the dict -- same reason as backdrops, with the
         # audible/visible split doing the work: an enclosed room's key moves
         # for rain it can hear and not for a sky it cannot see.
@@ -579,7 +579,7 @@ def room_soundscape(scene, room_id):
     anchors = _anchor_words(room)
     if anchors:
         out["anchors"] = anchors
-    bucket = time_bucket(scene.get("time"))
+    bucket = time_bucket(scene.get("time_of_day"))
     if bucket:
         out["time"] = bucket
     # Only what this room can hear of the sky. The reach is deliberately wider
