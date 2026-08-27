@@ -2305,12 +2305,17 @@ def fiction_model(chat_id):
 # fiction_model, which the engine derives for itself: this is the author's
 # standing instruction, and nothing infers or overwrites it.
 #
-# It reaches the Director and the mapping agent only. Character agents are
-# deliberately excluded -- a character's manner comes from their own authored
-# voice and psychology, and piping a house style into their heads would make
-# every mind in the world sound like the same narrator. Perception is excluded
-# for the same reason it is excluded from everything else: it is a filter, not
-# an author.
+# The free-text fields reach the Director and the mapping agent only.
+# Character agents are deliberately excluded -- a character's manner comes from
+# their own authored voice and psychology, and piping a house style into their
+# heads would make every mind in the world sound like the same narrator.
+# Perception is excluded for the same reason it is excluded from everything
+# else: it is a filter, not an author.
+#
+# The two CLOSED-VOCABULARY fields below are not house style in that sense and
+# do not follow that routing: each is read by exactly the stage it gates
+# (`weather_severity` by the world, `narration_tense` by the narrator), through
+# its own named accessor rather than by handing anyone the whole guide.
 STYLE_GUIDE_FIELDS = ("genre", "tone", "director_notes", "mapping_notes", "avoid")
 STYLE_GUIDE_LIMIT = 2000
 
@@ -2330,6 +2335,30 @@ STYLE_GUIDE_LIMIT = 2000
 #                 be ruined by a sky that decided to.
 WEATHER_SEVERITIES = ("calm", "seasonal", "harsh", "catastrophic")
 DEFAULT_WEATHER_SEVERITY = "seasonal"
+
+# Which tense the NARRATOR writes the page in. Same shape of field as
+# `weather_severity` one entry up and for the same reason: a closed vocabulary,
+# because it GATES what a stage does rather than describing it.
+#
+#   present   the beat as it happens ("You push through the door").
+#   past      the beat as a record of what happened ("You pushed through the
+#             door").
+#
+# UNSET IS A THIRD STATE AND IT IS THE DEFAULT. There is no
+# DEFAULT_NARRATION_TENSE, deliberately: unset means the author has no opinion
+# and the narrator is told nothing at all, which is exactly the behaviour every
+# story had before this field existed. That behaviour is not "present" -- it is
+# UNCHOSEN, and measured across 504 scorable stored drafts in 67 chats it lands
+# past about as often as it lands present on turn 0 (16 past / 13 present of 29
+# openings) and then self-reinforces for the rest of the story. Naming a tense
+# is what makes either one reliable; naming a default here would silently
+# change the voice of every story that never asked.
+#
+# It governs NARRATION ONLY. Characters speak and declare in the present, the
+# Director's `observable`/`consequences` are present-tense state labels every
+# deterministic guard downstream is calibrated on, and memory keeps its own
+# deliberate past-tense register. None of those read this field.
+NARRATION_TENSES = ("present", "past")
 
 # Explicit "work it out yourself" values for genre. Pinning a genre is the new
 # capability, but self-determination is the DEFAULT and stays first-class: the
@@ -2360,6 +2389,15 @@ def normalize_style_guide(raw):
     if severity and severity != DEFAULT_WEATHER_SEVERITY:
         out["weather_severity"] = (severity if severity in WEATHER_SEVERITIES
                                    else DEFAULT_WEATHER_SEVERITY)
+    # The second closed vocabulary, normalized the same way -- but with no
+    # default to fall back to, so an unreadable value DROPS to unset rather
+    # than becoming an opinion the author did not express. Every "no opinion"
+    # spelling the genre field already accepts (`auto`, `self-determine`,
+    # `unspecified`, ...) lands here as unset too, because none of them is in
+    # NARRATION_TENSES.
+    tense = str(raw.get("narration_tense") or "").strip().casefold()
+    if tense in NARRATION_TENSES:
+        out["narration_tense"] = tense
     for key in STYLE_GUIDE_FIELDS:
         value = raw.get(key)
         if value is None:
@@ -2378,6 +2416,21 @@ def style_guide(chat_id):
     """The authored style guide, or {} when none is set. Read per turn so an
     edit applies to the next beat without a restart."""
     return normalize_style_guide(wget(chat_id, "style_guide", None) or {})
+
+
+def narration_tense(chat_id):
+    """The tense the narrator was told to write in, or "" when the author has
+    expressed no opinion. Read per turn through `style_guide`, so an edit
+    applies to the next beat without a restart -- this is a dial that is meant
+    to be turned mid-story, and a story that switches tense at beat 40 is a
+    legitimate thing to ask for.
+
+    "" is not a synonym for `present`. It means the payload carries no tense at
+    all, which is what every stored story has been running on. See
+    NARRATION_TENSES.
+    """
+    value = (style_guide(chat_id) or {}).get("narration_tense")
+    return value if value in NARRATION_TENSES else ""
 
 
 def weather_severity(chat_id):

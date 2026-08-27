@@ -63,6 +63,7 @@ from .common import (
     _check_narrator_fidelity,
     _check_player_person,
     _check_narration_person_match,
+    _check_narration_tense_match,
     _check_pronoun_fidelity,
     _self_second_person,
     self_reference_forms,

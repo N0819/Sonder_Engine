@@ -807,6 +807,16 @@
       "pattern": "\\b(you|you're|you've|you'll|you'd|your|yours|yourself)\\b",
       "flags": 34
     },
+    "_PAST_TENSE_RE": {
+      "$type": "regex",
+      "pattern": "(?:\\b(?:was|were|wasn't|weren't|had|hadn't|did|didn't|said|went|came|took|saw|knew|felt|gave|made|stood|sat|held|kept|became|seemed|thought|found|told|asked|began|ran|left|looked|turned|moved|pulled|pushed|stepped|watched|reached|waited|nodded|shook|lifted|dropped|walked|spoke|heard|caught|brought)\\b|(?:\\b(?:he|she|it|they|you|we|i)|\\b(?:the|a|an|his|her|its|their|your|my|our)\\s+(?:\\w+\\s+){0,2}\\w+)\\s+(?:\\w+ly\\s+)?\\w{3,}ed\\b)",
+      "flags": 34
+    },
+    "_PRESENT_TENSE_RE": {
+      "$type": "regex",
+      "pattern": "(?:\\b(?:is|are|am|isn't|aren't|has|hasn't|does|doesn't|says|goes|comes|takes|sees|knows|feels|gives|makes|stands|sits|holds|keeps|becomes|seems|thinks|finds|tells|asks|begins|runs|leaves|looks|turns|moves|pulls|pushes|steps|watches|reaches|waits|nods|shakes|lifts|drops|walks|speaks|hears|catches|brings)\\b|(?:\\b(?:he|she|it|they|you|we|i)|\\b(?:the|a|an|his|her|its|their|your|my|our)\\s+(?:\\w+\\s+){0,2}\\w+)\\s+(?:\\w+ly\\s+)?\\w{3,}s\\b)",
+      "flags": 34
+    },
     "_THIRD_SUBJECT_PRONOUNS": {
       "$type": "frozenset",
       "items": [
@@ -1803,14 +1813,14 @@
       {
         "$type": "tuple",
         "items": [
-          "\\btake[sn]?\\s+the\\s+(?:\\w+\\s+){1,2}in\\b(?!\\s+(?:his|her|their|both|one|two)\\s+hands?)",
+          "\\b(?:take[sn]?|took)\\s+the\\s+(?:\\w+\\s+){1,2}in\\b(?!\\s+(?:his|her|their|both|one|two)\\s+hands?)",
           "'take the room in' (filtering)"
         ]
       },
       {
         "$type": "tuple",
         "items": [
-          "\\btak(?:e|es|ing)\\s+in\\s+the\\s+\\w+\\b",
+          "\\b(?:tak(?:e|es|ing)|took)\\s+in\\s+the\\s+\\w+\\b",
           "'take in the room' (filtering)"
         ]
       },

@@ -14,6 +14,7 @@ from story.scene import (
     apply_awareness_diff,
     awareness_map,
     awareness_of,
+    narration_tense,
     persona_of,
     get_scene,
 )
@@ -1241,6 +1242,10 @@ def _generate_narration(payload, view, prev, p_lines, correction_notes=None,
         cast_pronouns=call_payload.get("cast_pronouns"),
         player_name=call_payload.get("player_name"),
         narration_person=call_payload.get("narration_person"),
+        # Absent on every story that set no tense, so the check declines to
+        # score it -- the same key that governs the instruction governs the
+        # verification, and neither exists without the other.
+        narration_tense=call_payload.get("narration_tense"),
         event_order=facts.get("event_order"),
         position_facts=facts.get("position_facts"),
         room_names=facts.get("room_names"),
@@ -1370,6 +1375,17 @@ def narrator(ctx, nonce):
     narration_person = _resolve_narration_person(
         chat["id"], ctx.input or "", player_name, player_pronouns,
         pending=pending_person_writes)
+    # PERSON IS DETECTED, TENSE IS AUTHORED, and these two lines are where that
+    # difference is visible. Person is inferred from how the player wrote this
+    # turn and written back to the chat at commit; tense is read straight off
+    # the author's style guide, per turn, so turning the dial applies to the
+    # next beat with no restart and no re-detection. Nothing writes this one
+    # back -- there is nothing to remember that the author did not already say.
+    #
+    # The opening turn takes this same path (`narrator` renders turn 0 too,
+    # with `est` choosing only WHICH view it reads), so the dial reaches the
+    # one beat that had nothing to inherit a tense from.
+    story_tense = narration_tense(chat["id"])
 
     cast_pronouns = _cast_pronouns(ctx.cast)
 
@@ -1531,6 +1547,11 @@ def narrator(ctx, nonce):
     payload = {
         # -- Who is writing, and in whose voice.
         "narration_person": narration_person,
+        # ABSENT WHEN UNSET, the pattern `authored_body_parts` argues for a few
+        # lines up: an unset story is one whose author expressed no opinion,
+        # and shipping `""` would make the model read a key and discard it --
+        # or worse, read the empty key as an invitation to choose.
+        **({"narration_tense": story_tense} if story_tense else {}),
         "player_name": player_name,
         "player_pronouns": player_pronouns,
         "cast_pronouns": cast_pronouns,
@@ -1670,6 +1691,7 @@ def narrator_extra(ctx, nonce):
 
     chat = ctx.chat
     est = ctx.turn["idx"] == 0          # see narrator() above
+    story_tense = narration_tense(chat["id"])   # chat-level -- see render_one
     outcome_views = (ctx.get("perception_outcome", {}) or {}).get("views") or {}
     establish_views = (ctx.get("perception_establish", {}) or {}).get("views") or {}
     di = ctx.get("director_interpret") or {}
@@ -1733,6 +1755,12 @@ def narrator_extra(ctx, nonce):
         # view alone. That gap is this stage's, not the design's.
         payload = {
             "narration_person": narration_person,
+            # One story, one tense. Person is per-seat because each human
+            # writes their own way; tense is the AUTHOR's dial for the whole
+            # page, so every seat reads the same chat-level value -- two
+            # players reading the same story in different tenses is not a
+            # preference, it is a defect.
+            **({"narration_tense": story_tense} if story_tense else {}),
             "player_name": extra.get("name") or "Player",
             "player_pronouns": extra.get("pronouns") or {},
             "cast_pronouns": _cast_pronouns(ctx.cast),
