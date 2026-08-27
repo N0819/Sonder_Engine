@@ -43,7 +43,9 @@ import hashlib
 import re
 
 from core.db import q, wget, wset
-from world.charter_identity import generated_name, normalize_naming_profile
+from world.charter_identity import (
+    generated_name_parts, identity_reservation, name_is_reserved,
+    normalize_naming_profile)
 
 NAMING_PROFILE_KEY = "naming_profile"
 
@@ -239,12 +241,63 @@ def story_naming_lanes(chat_id):
     return [], "none"
 
 
+def registered_identity_names(chat_id):
+    """Every name a REGISTERED mind in this story answers to: the player's
+    persona and each attached character.
+
+    THE SAME TWO WELLS `persist.commit_background._refuse_name_collision`
+    trusts, read here so both minting paths ask one question. That guard has
+    always refused to promote a presence onto a registered name -- "Names are
+    how this engine tells minds apart" -- and it was wired to the promotion
+    path alone, which is why a Charter generation could mint 42 bodies out of
+    a pool holding the cast's own family names (chat 95, measured
+    2026-08-27). A refusal that answers one of two minting paths is not a
+    refusal.
+
+    Order is deterministic (persona first, then attachment order) and the
+    spellings are returned as authored; casefolding belongs to the caller
+    that compares.
+    """
+    names = []
+    chat_row = q("SELECT * FROM chats WHERE id=?", (chat_id,), one=True)
+    if chat_row:
+        from story.character_schema import persona_name
+        from story.scene import persona_of
+        player = str(persona_name(persona_of(dict(chat_row))) or "").strip()
+        if player:
+            names.append(player)
+    for row in q(
+            "SELECT ch.name AS name FROM chat_chars cc "
+            "JOIN characters ch ON ch.id=cc.char_id "
+            "WHERE cc.chat_id=? ORDER BY cc.char_id", (chat_id,)):
+        name = str(row["name"] or "").strip()
+        if name and name not in names:
+            names.append(name)
+    return names
+
+
+def story_identity_reservation(chat_id, profile=None, extra=()):
+    """The story's reserved identity forms, ready for the mint.
+
+    ``profile`` is the law (or laws) the mint is about to draw from -- used
+    only for its title vocabulary, so a registered name carrying a rank is
+    still recognised as the person underneath it. ``extra`` carries names a
+    caller knows about that no table does (a turn's extra players).
+    """
+    names = list(registered_identity_names(chat_id))
+    names.extend(str(name or "").strip() for name in extra or ())
+    if profile is None:
+        profile = _charter_naming_lanes(chat_id) + [
+            authored_naming_profile(chat_id)]
+    return identity_reservation([n for n in names if n], profile)
+
+
 def _lane_number(seed):
     raw = hashlib.blake2b(str(seed).encode("utf-8"), digest_size=8).digest()
     return int.from_bytes(raw, "big")
 
 
-def minted_presence_name(chat_id, uid, used=(), lanes=None):
+def minted_presence_name(chat_id, uid, used=(), lanes=None, reservation=None):
     """One deterministic name for this presence, or ``""``.
 
     Deterministic in ``(chat_id, uid)``: rerolling a turn or replaying a
@@ -255,6 +308,13 @@ def minted_presence_name(chat_id, uid, used=(), lanes=None):
     is the casefolded no-fly list (cast, persona, every tracked presence's
     spellings); when every candidate is taken, or the story has no law, the
     answer is ``""`` and the presence stays honestly unnamed.
+
+    ``reservation`` is the registered cast's identity FORMS, which is a
+    stronger bar than ``used``: under a law that addresses people by family
+    alone, a candidate no one has spelled out yet still arrives as an
+    existing mind's address. Defaulted rather than required, because a mint
+    that is safe only when the caller remembers is the wiring this fix
+    exists to remove.
     """
     if lanes is None:
         lanes, _source = story_naming_lanes(chat_id)
@@ -262,13 +322,19 @@ def minted_presence_name(chat_id, uid, used=(), lanes=None):
     lanes = [p for p in lanes if naming_law_exists(p)]
     if not lanes:
         return ""
+    if reservation is None:
+        reservation = story_identity_reservation(chat_id, lanes)
     taken = {str(u or "").strip().casefold() for u in used}
     taken.discard("")
     scope = "chat:%s" % chat_id
     for attempt in range(_MINT_ATTEMPTS):
         lane = lanes[_lane_number(
             "%s|%s|%s" % (scope, uid, attempt)) % len(lanes)]
-        candidate = generated_name(scope, str(uid), lane, attempt)
-        if candidate and candidate.casefold() not in taken:
-            return candidate
+        candidate, given, family = generated_name_parts(
+            scope, str(uid), lane, attempt)
+        if not candidate or candidate.casefold() in taken:
+            continue
+        if name_is_reserved(candidate, lane, reservation, given, family):
+            continue
+        return candidate
     return ""

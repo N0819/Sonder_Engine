@@ -52,6 +52,24 @@ deterministic in (chat, presence uid). Never re-mint over a stored name and
 never rename a role-descriptor presence — a name changes only when the PERSON
 changes, and a replacement is a new record, not a rename.
 
+**A mint refuses a registered mind's address, on every minting path.** There
+are TWO: the presence mint above and `world/charter_identity`'s body
+allocator, which names a whole institution at once. `_refuse_name_collision`
+stated the rule and was wired to promotion alone, so a Charter generated from
+the lorebook that also supplied the cast put the cast's own name elements in
+its pools (chat 95: 42 bodies, `{rank} {family}`, two landed on registered
+surnames). The shared answer is `story.naming.registered_identity_names` (the
+persona and `characters.name`, the two wells the promotion guard trusts) →
+`charter_identity.identity_reservation` → `name_is_reserved`. A whole name is
+always refused; a single ELEMENT is refused only where `address_components`
+says the story's own law calls people by that element alone — under
+`{given} {family}` two people may share a family the way two people do. The
+subtraction lands twice: `strip_reserved_pools` removes the element from the
+law a charter PERSISTS (`normalize_charter`, reached from `save_registry` and
+generation), and the mint refuses a candidate that reaches one anyway. Pass
+the reservation from every caller that has a story in reach; the pure seams
+default to none because a fixture, a tool and an archive have no cast.
+
 Charter social/economic/institutional changes route through
 `world/charter_social.py`, `world/charter_commitment.py`,
 `world/charter_economy.py`, `world/charter_decide.py` and the one carried state

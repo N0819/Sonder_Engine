@@ -1150,41 +1150,35 @@ def _mint_missing_presence_names(cid, presences, scene, reserved=()):
     ]
     if not unnamed:
         return {}
-    from story.naming import minted_presence_name, story_naming_lanes
+    from story.naming import (
+        minted_presence_name, story_identity_reservation, story_naming_lanes)
 
     lanes, _source = story_naming_lanes(cid)
     if not lanes:
         return {}
-    # The no-fly list: everyone registered (cast, persona, extra players)
-    # plus every spelling any tracked presence answers to. Two people may
-    # share a name in the fiction; the GENERATOR never introduces that
-    # collision itself. Registered names are re-read from the same wells
-    # `_refuse_name_collision` trusts -- `characters.name` and the persona --
-    # rather than relying on the caller's roster alone, whose names come from
-    # sheets and can be thinner than the identity ledger.
+    # The no-fly list, in two halves. `used` is every spelling already in
+    # play that this ledger knows about -- the caller's roster and each
+    # tracked presence's own spellings. `reservation` is who is REGISTERED,
+    # read by `story_identity_reservation` from the same two wells
+    # `_refuse_name_collision` trusts (`characters.name` and the persona) and
+    # by the same function the Charter body mint reads, so the two minting
+    # paths ask one question. It is the stronger half: under a law that
+    # addresses people by one element ("{rank} {family}"), a name nobody has
+    # written out yet still arrives as a registered mind's address. Two
+    # people may share a name in the fiction; the GENERATOR never introduces
+    # that collision itself.
     used = {str(n or "").strip().casefold() for n in reserved}
-    chat_row = q("SELECT * FROM chats WHERE id=?", (cid,), one=True)
-    if chat_row:
-        try:
-            from story.scene import persona_of
-            used.add(str(persona_name(persona_of(dict(chat_row)))
-                         or "").strip().casefold())
-        except Exception:
-            pass
-    for row in q(
-            "SELECT ch.name AS name FROM chat_chars cc "
-            "JOIN characters ch ON ch.id=cc.char_id WHERE cc.chat_id=?",
-            (cid,)):
-        used.add(str(row["name"] or "").strip().casefold())
     for key, record in presences.items():
         for n in _presence_names(key, record if isinstance(record, dict)
                                  else None):
             used.add(str(n).casefold())
     used.discard("")
+    reservation = story_identity_reservation(cid, lanes, extra=reserved)
     minted = {}
     for key in sorted(unnamed):
         record = presences[key]
-        name = minted_presence_name(cid, key, used, lanes=lanes)
+        name = minted_presence_name(cid, key, used, lanes=lanes,
+                                    reservation=reservation)
         if not name:
             continue
         former = presence_display_name(key, record)
