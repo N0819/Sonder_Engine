@@ -97,7 +97,7 @@
 | `story/importers.py` | 3124 | Native and AI-assisted character, persona, and lorebook import/generation. | `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.memory`, `story.character_schema`, `story.scene` |
 | `story/journey_history.py` | 335 |  | — |
 | `story/lore_structure.py` | 248 |  | — |
-| `story/naming.py` | 340 |  | `core.db`, `world.charter_identity` |
+| `story/naming.py` | 353 |  | `core.db`, `world.charter_identity` |
 | `story/provenance_text.py` | 132 |  | — |
 | `story/scene.py` | 2548 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `core.db`, `story`, `story.attire`, `story.character_schema`, `world.spatial` |
 | `web/__init__.py` | 6 |  | — |
@@ -107,7 +107,7 @@
 | `web/story_view.py` | 1023 |  | `core.db`, `world.charter_runtime`, `world.living_world` |
 | `world/__init__.py` | 6 |  | — |
 | `world/background_claims.py` | 598 |  | `core.db` |
-| `world/charter.py` | 369 |  | `world.charter_author`, `world.charter_commitment`, `world.charter_decide`, `world.charter_drift`, `world.charter_economy`, `world.charter_feel`, `world.charter_figure`, `world.charter_identity`, `world.charter_intervene`, `world.charter_log`, `world.charter_mind`, `world.charter_model`, `world.charter_move`, `world.charter_needs`, `world.charter_news`, `world.charter_plan`, `world.charter_politics`, `world.charter_practice`, `world.charter_promote`, `world.charter_roster`, `world.charter_run`, `world.charter_social`, `world.charter_space`, `world.charter_talk`, `world.charter_temper` |
+| `world/charter.py` | 377 |  | `world.charter_author`, `world.charter_commitment`, `world.charter_decide`, `world.charter_drift`, `world.charter_economy`, `world.charter_feel`, `world.charter_figure`, `world.charter_identity`, `world.charter_intervene`, `world.charter_log`, `world.charter_mind`, `world.charter_model`, `world.charter_move`, `world.charter_needs`, `world.charter_news`, `world.charter_plan`, `world.charter_politics`, `world.charter_practice`, `world.charter_promote`, `world.charter_roster`, `world.charter_run`, `world.charter_social`, `world.charter_space`, `world.charter_talk`, `world.charter_temper` |
 | `world/charter_author.py` | 261 |  | `world.charter_figure`, `world.charter_mind`, `world.charter_model`, `world.charter_politics`, `world.charter_practice` |
 | `world/charter_commitment.py` | 217 |  | `world.charter_model` |
 | `world/charter_decide.py` | 220 |  | `world.charter_model`, `world.charter_news` |
@@ -117,7 +117,7 @@
 | `world/charter_figure.py` | 140 |  | — |
 | `world/charter_generate.py` | 692 |  | `world.charter_identity`, `world.charter_model`, `world.charter_needs`, `world.charter_roster` |
 | `world/charter_history.py` | 834 |  | — |
-| `world/charter_identity.py` | 484 |  | — |
+| `world/charter_identity.py` | 695 |  | — |
 | `world/charter_intervene.py` | 112 |  | `world.charter_model` |
 | `world/charter_log.py` | 374 |  | `world.charter_commitment`, `world.charter_decide`, `world.charter_economy`, `world.charter_feel`, `world.charter_mind`, `world.charter_model`, `world.charter_needs`, `world.charter_news`, `world.charter_politics`, `world.charter_social`, `world.charter_temper` |
 | `world/charter_mind.py` | 262 |  | — |
@@ -1155,7 +1155,7 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `minted_presence_name()` | 300 | 41 lines |
+| `minted_presence_name()` | 300 | 54 lines |
 | `_person_name_evidence()` | 154 | 37 lines |
 | `registered_identity_names()` | 244 | 33 lines |
 | `harvested_naming_profile()` | 193 | 28 lines |
@@ -1361,14 +1361,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `materialize_body_names()` | 344 | 63 lines |
-| `name_is_reserved()` | 263 | 56 lines |
-| `identity_aliases()` | 442 | 38 lines |
-| `normalize_naming_profile()` | 47 | 28 lines |
-| `_stored_name_components()` | 131 | 24 lines |
-| `_title_terms()` | 185 | 23 lines |
-| `address_components()` | 157 | 22 lines |
-| `generated_name_parts()` | 103 | 21 lines |
+| `materialize_body_names()` | 499 | 119 lines |
+| `name_is_reserved()` | 384 | 56 lines |
+| `identity_aliases()` | 653 | 38 lines |
+| `derived_name_parts()` | 133 | 32 lines |
+| `normalize_naming_profile()` | 50 | 28 lines |
+| `extension_profile()` | 194 | 28 lines |
+| `_stored_name_components()` | 252 | 24 lines |
+| `_title_terms()` | 306 | 23 lines |
 
 ### `world/charter_intervene.py`
 
