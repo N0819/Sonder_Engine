@@ -79,6 +79,7 @@ Each built-in or extension Widget registers one manifest containing at least:
 stable type identifier
 schema version
 localized name and description keys
+semantic icon key and manifest-backed provenance entry
 category and search keywords
 context class and accepted selections
 default and minimum dimensions
@@ -132,7 +133,8 @@ credentials, transcript content, or model output into the layout envelope.
 Every placed Widget uses the shared workbench material and a consistent chrome
 contract:
 
-- explicit title;
+- explicit title and the shared collection icon where the presentation role
+  calls for a visible identity mark;
 - context or state summary when useful;
 - title/tab drag surface where direct manipulation is supported;
 - Widget action menu;
@@ -146,6 +148,12 @@ Float, Replace, Duplicate when allowed, and Remove from Panel.
 
 Removing a Widget changes only the Panel arrangement. It never deletes the
 underlying record, story system, Settings value, or extension.
+
+Built-in identity and action icons follow the
+[Icon Source and Usage](11_ICON_SOURCE_AND_USAGE.md) contract. The manifest
+stores semantic keys rather than anonymous inline paths, so the Catalog,
+placed Widget, responsive controls, and accessibility layer consume one
+reviewed mapping.
 
 ## Presentation state
 
@@ -178,4 +186,3 @@ A Widget instance may be:
 
 Unavailable or unsupported Widgets retain a recoverable placeholder and their
 geometry. They do not silently disappear and collapse the Panel.
-

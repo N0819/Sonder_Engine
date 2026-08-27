@@ -18,6 +18,8 @@ Adoption means:
 - the Widget Catalog replaces the Widget Shelf as discovery and recovery
   authority;
 - all eligible front-facing surfaces register through one Widget contract;
+- built-in Widget identity and control chrome use the accepted manifest-backed
+  Minimal UI SVG collection and semantic mapping;
 - strict active-story context replaces any story-specific Panel set or pinned
   Widget concept;
 - current server and runtime ownership remain unchanged.
@@ -32,8 +34,8 @@ product owner adopts this package:
 - `docs/01_SCOPE_AND_GOVERNANCE.md` — authority and definition of finished;
 - `docs/05_INFORMATION_ARCHITECTURE.md` — primary navigation, Panels, defaults,
   and Widget Catalog;
-- `docs/13_COMPONENT_CONTRACTS.md` — Panel tabs, Widget chrome, Catalog drawer,
-  browser, slots, stacks, and placement;
+- `docs/13_COMPONENT_CONTRACTS.md` — Panel tabs, Widget chrome, icon mapping,
+  Catalog drawer, browser, slots, stacks, and placement;
 - `docs/14_SCENE_WORKSPACE.md` — convert Scene from destination doctrine to the
   shipped story-stage Panel;
 - `docs/15_LIBRARY.md` — convert Library from destination to default Panel and
@@ -67,6 +69,8 @@ and Settings cells and a small Widget Shelf. Adoption requires a new or revised
 canonical artifact showing at minimum:
 
 - several Panel tabs plus New Panel;
+- real collection SVG identity/action icons with the accepted icon-versus-label
+  treatment;
 - editable shipped default Panel state;
 - the trailing Widgets launcher;
 - compact catalog drawer;
@@ -93,6 +97,8 @@ approved, source investigation must identify:
 - every Widget's real runtime owner and teardown behavior;
 - draft ownership that must outlive Widget unmount;
 - extension UI v2 registration and teardown changes;
+- manifest-backed semantic icon selection, sanitization, sprite assembly, and
+  provenance verification;
 - migration from fixed destination routes to Panel identity;
 - release-fingerprint propagation for all UI asset changes.
 
@@ -134,6 +140,8 @@ Adoption review must include:
 - desktop, tablet, phone, landscape, short-height, 200% zoom, long-label,
   reduced-motion, solid-surface, and high-contrast review;
 - no hidden duplicate controls or parallel server truth;
+- every built-in product-chrome icon resolves through the approved local
+  manifest and semantic mapping, with no generated substitutes;
 - current runtime, security, authentication, and extension contract evidence.
 
 ## Deprecation targets
@@ -149,4 +157,3 @@ Once adopted and implemented, retire rather than preserve:
 - Widget story pinning;
 - drag-only placement;
 - hidden duplicate source controls used to maintain old navigation.
-

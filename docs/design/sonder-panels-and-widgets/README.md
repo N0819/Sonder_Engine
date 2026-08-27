@@ -63,6 +63,7 @@ new Panels, and restore a shipped Panel's default arrangement.
 - [08 Decision Register](08_DECISION_REGISTER.md) — accepted outcomes, affected Design Bible decisions, and deliberately open choices.
 - [09 Adoption and Change Control](09_ADOPTION_AND_CHANGE_CONTROL.md) — authority impact and the documentation/artifact changes required for adoption.
 - [10 Widget Design Workbook](10_WIDGET_DESIGN_WORKBOOK.md) — complete first-pass, source-backed visual and interaction specifications for every fixed Widget, eligible Settings subwidget, and supported extension shape.
+- [11 Icon Source and Usage](11_ICON_SOURCE_AND_USAGE.md) — accepted Minimal UI SVG source, icon-versus-label rules, provenance, normalization, accessibility, and mockup verification contract.
 
 ## Authority relationship
 
