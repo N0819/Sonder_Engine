@@ -100,20 +100,32 @@ def _component(pool, parts, seed, lane):
     return _syllable_name(parts, f"{seed}|{lane}")
 
 
-def generated_name(charter_key, body_key, profile, attempt=0):
-    """One deterministic candidate, or ``""`` when the profile has no law."""
+def generated_name_parts(charter_key, body_key, profile, attempt=0):
+    """``(name, given, family)`` for one deterministic candidate.
+
+    The components are returned rather than re-derived from the rendered
+    string because only the generator knows which pool each half came from:
+    a law that writes ``{family} {given}`` puts the family FIRST, and any
+    reader that guesses from word order gets that culture backwards.
+    """
     profile = normalize_naming_profile(profile)
     if not (profile["given"] or profile["given_parts"]["starts"]):
-        return ""
+        return "", "", ""
     seed = "%s|%s|%s|%s" % (
         profile.get("seed") or charter_key, charter_key, body_key, attempt)
     given = _component(profile["given"], profile["given_parts"], seed, 0)
     family = _component(profile["family"], profile["family_parts"], seed, 1)
     if not given:
-        return ""
+        return "", "", ""
     values = {"given": given, "family": family, "name": "",
               "title": "", "rank": ""}
-    return " ".join(profile["name_format"].format(**values).split()).strip()
+    name = " ".join(profile["name_format"].format(**values).split()).strip()
+    return name, given, family
+
+
+def generated_name(charter_key, body_key, profile, attempt=0):
+    """One deterministic candidate, or ``""`` when the profile has no law."""
+    return generated_name_parts(charter_key, body_key, profile, attempt)[0]
 
 
 def _stored_name_components(body, profile):
@@ -142,12 +154,172 @@ def _stored_name_components(body, profile):
     return given or name, family or name
 
 
-def materialize_body_names(charter_key, raw_bodies, profile):
+def address_components(profile):
+    """Which single name component this law addresses a person BY, alone.
+
+    A name element is identity only where the law lets it stand for the whole
+    person. Under ``{given} {family}`` the pair is the address and neither
+    half is, so two people may share a family the way two people do; under
+    ``{rank} {family}`` or ``Dr. {family}`` the family alone IS how everyone
+    is called, so sharing one is sharing an address.
+
+    A format that renders ``{name}`` carries the whole identity already and
+    exposes nothing on its own.
+    """
+    profile = normalize_naming_profile(profile)
+    out = set()
+    for fmt in (profile["name_format"], profile["formal_format"]):
+        fields = set(re.findall(r"\{([^{}]+)\}", fmt))
+        if "name" in fields:
+            continue
+        alone = fields & {"given", "family"}
+        if len(alone) == 1:
+            out |= alone
+    return frozenset(out)
+
+
+def _tokens(text):
+    return tuple(word for word in str(text or "").casefold().split() if word)
+
+
+def _title_terms(profile):
+    """Token tuples these laws use as titles: every authored rank/post title,
+    plus the literal words a formal format itself carries (``Dr.``). Used only
+    to see PAST a title into the identity underneath it, so a registered
+    ``Lieutenant Commander Geordi La Forge`` is recognised as being called
+    ``La Forge``. Accepts one law or several -- a story's laws are separate
+    lanes, but a title is a title in all of them."""
+    profiles = ([profile] if isinstance(profile, dict) or profile is None
+                else list(profile))
+    terms = set()
+    for raw in profiles:
+        law = normalize_naming_profile(raw)
+        for table in ("ranks", "posts"):
+            for value in law["titles"][table].values():
+                tokens = _tokens(value)
+                if tokens:
+                    terms.add(tokens)
+        literal = re.sub(r"\{[^{}]*\}", " ", law["formal_format"])
+        for word in literal.split():
+            tokens = _tokens(word)
+            if tokens:
+                terms.add(tokens)
+    return terms
+
+
+def _untitled(tokens, terms):
+    """Drop leading title runs until what is left is the person's own name."""
+    changed = True
+    while changed and tokens:
+        changed = False
+        for term in terms:
+            if len(tokens) > len(term) and tokens[:len(term)] == term:
+                tokens = tokens[len(term):]
+                changed = True
+                break
+    return tokens
+
+
+def identity_reservation(names, profile=None):
+    """The identity forms already spoken for in this story, as the mint reads
+    them: whole names, and the token runs each name is built from.
+
+    ``names`` are the names REGISTERED minds answer to -- the player's persona
+    and every attached character. This structure is deliberately profile-light
+    (only the title vocabulary is used, and only to look past a title): the
+    same reservation serves every lane of the story's law, including lanes
+    that write names in a different order.
+    """
+    terms = _title_terms(profile)
+    whole, runs = set(), set()
+    for name in names or ():
+        text = " ".join(str(name or "").split())
+        if not text:
+            continue
+        whole.add(text.casefold())
+        tokens = _untitled(_tokens(text), terms)
+        if tokens:
+            runs.add(tokens)
+    return {"whole": frozenset(whole), "runs": frozenset(runs)}
+
+
+def _reserves_component(reservation, component):
+    """Does a registered mind's name start or end with this element?
+
+    Anchored at either end, because which end a family name sits on is the
+    culture's business and both orders are in play. The middle is excluded:
+    a token buried inside a longer name is not what anyone is called.
+    """
+    part = _tokens(component)
+    if not part:
+        return False
+    for run in (reservation or {}).get("runs") or ():
+        if len(run) >= len(part) and (run[:len(part)] == part
+                                      or run[-len(part):] == part):
+            return True
+    return False
+
+
+def name_is_reserved(name, profile, reservation, given="", family=""):
+    """Would minting this name take an identity a registered mind already has?
+
+    Two subtractions, never an expansion: the whole name is refused always,
+    and a component is refused when `address_components` says the law calls
+    people by that component alone. Measured case (chat 95, 42 generated
+    bodies against a five-name cast): a family pool harvested from the same
+    lore as the cast, under ``{rank} {family}``, minted `B'Elanna Crusher`
+    beside registered `Beverly Crusher` and `Taurik Picard` beside
+    `Jean-Luc Picard` -- one story holding a captain and an ensign whom
+    everybody addresses by the same word.
+    """
+    reservation = reservation or {}
+    text = " ".join(str(name or "").split())
+    if not text:
+        return False
+    if text.casefold() in (reservation.get("whole") or frozenset()):
+        return True
+    fields = address_components(profile)
+    for field, value in (("given", given), ("family", family)):
+        if field in fields and _reserves_component(reservation, value):
+            return True
+    return False
+
+
+def strip_reserved_pools(profile, reservation):
+    """The same law with every reserved element removed from the pools it
+    draws addresses from.
+
+    The refusal at the mint answers one candidate; this answers the POOL, so
+    a law persisted with a registered mind's element in it stops offering
+    that element to every later reader (`story/naming.py` reads a stored
+    Charter law as one of its lanes). Pools only -- syllable parts are not
+    elements anyone is called by, and the mint's refusal covers what they
+    assemble.
+    """
+    profile = normalize_naming_profile(profile)
+    fields = address_components(profile)
+    if not fields or not (reservation or {}).get("runs"):
+        return profile
+    for field in ("given", "family"):
+        if field not in fields:
+            continue
+        profile[field] = [value for value in profile[field]
+                          if not _reserves_component(reservation, value)]
+    return profile
+
+
+def materialize_body_names(charter_key, raw_bodies, profile, reservation=None):
     """Copy ``raw_bodies`` and give every unnamed body one stable name.
 
     Collision resolution is deterministic on the first materialisation.
     Once the normalised registry is persisted, generated names are ordinary
     stored names and never enter this allocator again.
+
+    ``reservation`` (from `identity_reservation`) is the registered cast's
+    identity forms. A body that ALREADY carries a name keeps it untouched --
+    a featured resident is placed here under the registered character's own
+    name on purpose -- so the refusal only ever applies to what this
+    allocator itself mints.
     """
     raw_bodies = raw_bodies if isinstance(raw_bodies, dict) else {}
     out = {str(key): dict(value) if isinstance(value, dict) else {}
@@ -160,22 +332,39 @@ def materialize_body_names(charter_key, raw_bodies, profile):
         body = out[body_key]
         if str(body.get("name") or "").strip():
             continue
-        chosen = ""
+        chosen = chosen_given = chosen_family = ""
         for attempt in range(max(32, len(out) * 2)):
-            candidate = generated_name(charter_key, body_key, profile, attempt)
+            candidate, given, family = generated_name_parts(
+                charter_key, body_key, profile, attempt)
             if not candidate:
                 break
-            if candidate.casefold() not in used:
-                chosen = candidate
-                break
+            if candidate.casefold() in used:
+                continue
+            if name_is_reserved(candidate, profile, reservation, given, family):
+                continue
+            chosen, chosen_given, chosen_family = candidate, given, family
+            break
         # A very small authored pool may genuinely be exhausted.  A stable
         # disambiguator is better than silently merging two people, and it is
         # only reached after every authored combination/part attempt failed.
         if not chosen:
-            base = generated_name(charter_key, body_key, profile, 0)
-            chosen = f"{base} {body_key}".strip() if base else body_key
+            base, given, family = generated_name_parts(
+                charter_key, body_key, profile, 0)
+            candidate = f"{base} {body_key}".strip() if base else body_key
+            # Never past the reservation, even here: a body left unnamed is
+            # caught loudly by the generator's own unnamed check, while a
+            # disambiguated collision is a second person under a registered
+            # mind's address and is caught by nothing.
+            if base and name_is_reserved(
+                    candidate, profile, reservation, given, family):
+                continue
+            chosen, chosen_given, chosen_family = candidate, given, family
         body["name"] = chosen
         given, family = _stored_name_components(body, profile)
+        if chosen_given:
+            given = chosen_given
+        if chosen_family:
+            family = chosen_family
         if given:
             body.setdefault("given_name", given)
         if family:

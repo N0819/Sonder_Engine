@@ -2933,12 +2933,22 @@ serve, registered here:
   J2 brief's "ensign at conn" acquires a personal name only if the story
   (or a future explicit naming surface: promotion, a UI action, the
   Director introducing them) supplies one.
-- **Charter bodies do not fall back to the story's law.** A Charter without
-  its own `naming` profile still materializes body-key names
-  (`materialize_body_names`'s historical fallback); threading the
-  story-level law into that pure seam is unbuilt. Mostly moot while §J1
-  holds (every shipped charter is empty), and the right moment to close it
-  is when charters gain bodies.
+- **Charter bodies still fall back to a body key when the Charter has no
+  law of its own.** Closed on 2026-08-27, in part. The AUTHORED story-level
+  law now reaches the Charter mint — `_plan_lived_location` passes it as
+  `close_plan`'s `naming_law`, so an author's explicit profile outranks a
+  Charter's derived one exactly as `story/naming.py` says it should, and the
+  two are no longer separate authorities. What is still unbuilt is the third
+  lane: a Charter with no law, in a story with no authored law, does not
+  fall through to the HARVEST and keeps `materialize_body_names`' body-key
+  fallback (which `_plan_lived_location`'s unnamed check then refuses
+  loudly). Deliberate for now — the harvest's pools are built from the cast,
+  and handing a 42-body population names recombined from the cast's own
+  elements is the contamination §1.90's guard exists to prevent, so that
+  lane needs its own argument before it is opened. (The "mostly moot while
+  every shipped charter is empty" note this entry used to carry was
+  withdrawn with §J1: read at `item['state']` rather than the registry
+  wrapper, every shipped charter is populated — 40, 37, 42, 8 and 6 bodies.)
 - **The authored law has an API and no UI.** GET/PUT
   `/api/chats/{cid}/naming_profile` (web/app.py) is the configurable
   surface; nothing in `static/` renders it yet.
@@ -2954,6 +2964,41 @@ serve, registered here:
   harvested-vocabulary names of exactly that flavour. The authored profile
   exists to outrank the harvest wherever an author cares.
 
+
+### 1.90 A minted person never takes a registered mind's address
+
+Landed 2026-08-27. `_refuse_name_collision` was wired to the promotion path
+and the engine mints people on two paths; the Charter body allocator
+(`world/charter_identity.materialize_body_names`) took the other one.
+`story.naming.registered_identity_names` →
+`charter_identity.identity_reservation` → `name_is_reserved` is now the
+single answer both consult, subtracting at the persisted law
+(`strip_reserved_pools`) and again at the candidate. What it does NOT close,
+registered here:
+
+- **A name element is refused only where the law addresses people by it
+  alone.** `address_components` reads the story's own `name_format` /
+  `formal_format`; under `{given} {family}` two people may share a family,
+  which is correct and is also why a story whose prose calls people by
+  surname while its LAW writes full names gets no protection from the
+  element rule. The whole-name refusal still holds there. The honest fix is
+  an authored law that says how people are addressed, not a heuristic over
+  prose.
+- **Only the head and the tail of a registered name are its address.** A
+  token buried mid-name is not matched, so a three-part name whose middle
+  element is what everyone actually uses is not protected. No measured case;
+  registered because the rule is a choice.
+- **Nothing renames what is already named.** A story that already holds a
+  generated body under a registered surname keeps it: the mint is a write
+  and this is a subtraction at the mint, not a migration. Chat 95's two
+  measured bodies stay as they are unless the author changes them.
+- **The refusal is silent.** A candidate refused is simply not drawn; a
+  generation whose pool is exhausted BY the refusal surfaces as
+  `_plan_lived_location`'s unnamed-body error, which names the bodies but
+  not the reason. A pool small enough for that to happen is rare (the
+  measured laws carried 12 and 27 family elements) and the loud failure is
+  correct; a note saying "the reservation took the last one" would be
+  better.
 
 ## 2. Roadmap
 

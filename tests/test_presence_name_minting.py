@@ -421,3 +421,54 @@ class TestOnlyAPersonIsNamed:
         minted = _mint_missing_presence_names(chat_id, ledger, scene)
         assert minted == {}
         assert ledger[key]["name"] == "night porter"
+
+
+class TestTheAuthoredLawIsReachableAndSurvivesARewind:
+    """Two wirings the generator landed with and no test held: the route an
+    author writes the law through, and its provenance entry. Both were still
+    deletable when this file was next read -- every test above reaches the
+    law by writing the world key directly, which is exactly the shape of
+    coverage that proves a mechanism and leaves its wiring free."""
+
+    def test_the_law_has_a_route_that_reads_and_writes_it(self, temp_db):
+        from web import app as app_module
+
+        chat_id = _make_chat(temp_db)
+        written = app_module.naming_profile_put(chat_id, PROFILE)
+        assert written["given"] == PROFILE["given"]
+        assert temp_db.wget(chat_id, "naming_profile", {})["given"] \
+            == PROFILE["given"]
+
+        read = app_module.naming_profile_get(chat_id)
+        assert read["authored"]["given"] == PROFILE["given"]
+        assert read["source"] == "authored"
+        assert read["effective"] == [read["authored"]]
+
+        # Clearing drops the story back to its derived sources.
+        assert app_module.naming_profile_put(chat_id, {})["given"] == []
+        assert app_module.naming_profile_get(chat_id)["source"] == "none"
+
+        routes = {(route.path, method)
+                  for route in app_module.app.routes
+                  for method in (getattr(route, "methods", None) or ())}
+        assert ("/api/chats/{cid}/naming_profile", "GET") in routes
+        assert ("/api/chats/{cid}/naming_profile", "PUT") in routes
+
+    def test_the_authored_law_is_not_rolled_back_by_a_rewind(self, temp_db):
+        """The law is a dial the author turned, not a fact the story put
+        there, so a reroll re-runs the beat without undoing it. Names ALREADY
+        minted from it live in the presence ledger and do roll back -- and
+        re-mint identically, the mint being deterministic in the uid."""
+        from persist.checkpoints import (PRESERVED_SETTING_KEYS,
+                                         ensure_checkpoint, restore_checkpoint)
+
+        chat_id = _make_chat(temp_db)
+        temp_db.wset(chat_id, "scene", _scene())
+        ensure_checkpoint(chat_id, 1)
+
+        temp_db.wset(chat_id, "naming_profile", PROFILE)
+        restore_checkpoint(chat_id, 1)
+
+        assert temp_db.wget(chat_id, "naming_profile", {})["given"] \
+            == PROFILE["given"]
+        assert "naming_profile" in PRESERVED_SETTING_KEYS
