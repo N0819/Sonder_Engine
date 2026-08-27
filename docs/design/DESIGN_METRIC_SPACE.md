@@ -6,9 +6,14 @@ turned out to be mostly reuse and the reuse is not obvious.
 
 The ask arrived as starships — several vehicles at real distances, navigation,
 weapons fire that can miss and hit something else, ships with sections rather
-than points, crew who read instruments. **It is not a starship feature.** Every
-mechanism below is answered equally by a boulder rolling down a hill, and the
-boulder is the better test case precisely because there is no console in it:
+than points, crew who read instruments. **That is a goal in its own right**, and
+the sections below are written to serve it.
+
+It is not ONLY that, and the difference decides whether the mechanism is built
+generally or console-shaped. Every mechanism here is answered equally by a
+boulder rolling down a hill, and the boulder earns its place in this document as
+the TEST rather than the replacement — it is how you check that a decision made
+for a bridge did not quietly require one:
 
     a boulder comes loose             a change of motion, adjudicated once
     gravity keeps acting on it        a STANDING force, nobody declares it
@@ -18,8 +23,10 @@ boulder is the better test case precisely because there is no console in it:
     it arrives in four seconds        time-to-contact, which is the drama
 
 A starship bridge is the same six lines with an instrument between the third and
-the fourth. If a decision here only makes sense with a console in it, it is
-wrong — that is the class-not-instance rule applied to physics.
+the fourth. Both are wanted. The rule the pairing enforces: if a decision here
+only makes sense WITH a console in it, it has been written for the instance and
+not the class — and the starship gets a better engine out of the check than it
+would have got on its own.
 
 ---
 
