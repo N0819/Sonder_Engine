@@ -3112,6 +3112,68 @@ ALSO VISIBLE IN THAT LEDGER: `"lieutenant_commander Lieutenant Commander Data"`
 KEY beside the unprefixed form. 1.84d's rank-in-the-name defect is now minting
 duplicate identities in the ledger that decides who you know.
 
+### 1.96 One body, two simulations, and a door that only opens one way
+
+The architecture the engine's owner names: **background life is the on-screen
+half of the Charter**, and a body that walks off screen should carry what it
+experienced back into ledgers the Charter can read. One continuous body, two
+regimes — cheap statistical simulation while nobody is looking, beat-level
+reaction while they are — with translation at the boundary.
+
+**Half of it is built.** Charter to background is wired: `agents/background.py`
+reads `background_presence_records` (:323), `presence_view` (:1131) and
+`with_charter_presences` (:398), so a Charter body can appear in a scene and be
+voiced with its own institutional context.
+
+**The return path does not exist.** Grepping `persist/` and `agents/` for any
+write to `state["minds"]` or any call to `hear_claim` returns nothing. Whatever
+a Charter body sees, is told, or does on screen reaches no Charter ledger.
+
+AND THE DOOR WAS BUILT FOR THIS TRAFFIC. `world/charter_mind.hear_claim`:
+
+    THE ONLY UPTAKE DOOR. `hear` routes through it for body-to-body talk; an
+    authored telling -- a voiced presence, the player, a major character
+    speaking to a background body -- lands through the same door with the same
+    rules: thinned by retention, scaled by the listener's regard for the
+    teller, refused below the floor, and never overwriting a stronger holding.
+
+It names the player and a major character speaking to a background body as its
+own cases. Nothing in a played turn calls it.
+
+WHAT THE MISSING HALF COSTS:
+
+  * A Charter body appears, is voiced, is told something by the player, and
+    walks away unchanged. Its head still holds only the presim's 692 hours.
+  * Nothing accrues, so nothing distinguishes this presence from any other next
+    time -- which is a mechanism behind the measured name churn (1.84a): four
+    background names across fourteen beats, because there is no accumulating
+    thing for a name to belong to.
+  * The Charter's own upkeeps, watches and `stood`/`travelled` cannot reflect a
+    shift a body actually spent on screen, so on-screen time is invisible to
+    the institution that owns the body.
+
+WHAT A TRANSLATION HAS TO PRESERVE, and this is the whole difficulty:
+
+  1. **A CLAIM IS A BELIEF, NOT A FACT.** `hear_claim` already thins by
+     retention, scales by regard for the teller, and refuses below a floor. An
+     on-screen telling must arrive under those same rules, or the return path
+     becomes a way to write certainties into heads that body-to-body talk could
+     never produce.
+  2. **STATELESSNESS IS THE PROMOTION BOUNDARY.** CLAUDE.md: a background
+     presence has "no persistent memory or psychology (that requires promotion
+     to a real character)". Claims in a Charter mind are NOT that -- the presim
+     already writes them for 42 bodies without any of them being characters --
+     but the line between "this body's institutional beliefs updated" and "this
+     body now has an autobiography" is exactly where the boundary sits, and a
+     translation that crosses it has promoted somebody by accident.
+  3. **THE FIREWALL RUNS BOTH WAYS.** A body must not carry off screen anything
+     it had no channel to on screen, and must not bring on screen anything its
+     Charter head holds at a strength the scene has not earned.
+
+Not designed here. The observation is the owner's; the measurement is that one
+direction is wired, the other is absent, and the door the other direction needs
+already documents this exact traffic as its own use case.
+
 ### 1.85 A memory's age off a per-beat estimate, not a per-beat record
 
 **Found:** 2026-08-26, landing `memories.encoded_at_seconds`.
