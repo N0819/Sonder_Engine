@@ -36,6 +36,15 @@ either name the engine uses for it; a diff that asserts only a duration is an
 advance, not silence; and a diff that NAMES a time the reader cannot act on
 must SAY so rather than hold the clock quietly — keyed on whether the reader
 acted, not on whether the stored number happened to change.
+
+One rule was added on top of these (docs/UNBUILT.md 1.84a, chat 95 second
+pass beat 2): THE ENGINE OWNS THE CLOCK'S POSITION, AND A BEAT CONTRIBUTES A
+SPAN. An absolute is read in the frame its own `start_seconds` declares; a
+block anchored where the clock stands (or declaring no anchor) behaves
+exactly as it always did, and a block anchored anywhere else advances the
+clock by its span alone and is reported. Nothing in a model's payload
+measures where the story clock stands, so an absolute computed from another
+anchor is a guess wearing the authority of a measurement.
 """
 
 from __future__ import annotations
@@ -71,6 +80,59 @@ class TestTheOwnerOfTheVocabulary:
             "mode": "action", "explicit": False,
             "display_advance": "moments later", "elapsed_seconds": 435.0,
             "display": "moments later"}) == (455.0, None, [])
+
+    def test_a_forward_absolute_anchored_off_the_clock_is_a_span(self):
+        """Chat 95 second pass beat 2, verbatim: four people talking on a
+        bridge declared start 20520 / duration 45 / end 20565 against a
+        clock standing at 20.0 -- the model was doing its arithmetic in a
+        time of day the engine never held. The old contract adopted the
+        forward absolute and the conversation moved the clock five and a
+        half hours; the declared start is the block's own anchor, the
+        anchor is not where the clock stood, so only the span crosses."""
+        from world.mechanics import read_time_diff
+
+        assert read_time_diff(20.0, {
+            "start_seconds": 20520, "duration_seconds": 45,
+            "end_seconds": 20565, "mode": "action", "explicit": False,
+            "display_advance": ""}) == (65.0, (20565.0, 20.0), [])
+
+    def test_a_skip_lands_whole_from_a_displaced_frame(self):
+        """A time skip is a duration, and a span survives the frame
+        translation that a position does not: a night's sleep declared
+        from a wrong anchor still costs the story its 28800 seconds."""
+        from world.mechanics import read_time_diff
+
+        assert read_time_diff(20.0, {
+            "start_seconds": 20520, "duration_seconds": 28800,
+            "end_seconds": 49320}) == (28820.0, (49320.0, 20.0), [])
+
+    def test_a_displaced_pair_without_a_duration_uses_its_own_span(self):
+        from world.mechanics import read_time_diff
+
+        assert read_time_diff(20.0, {
+            "start_seconds": 20520, "end_seconds": 20565}) == (
+            65.0, (20565.0, 20.0), [])
+
+    def test_a_block_backwards_in_its_own_frame_claims_nothing_forward(self):
+        """end < start is incoherent whatever the frame; with no duration
+        there is no span to cross, so the clock holds and the caller is
+        told a position was asserted and not adopted."""
+        from world.mechanics import read_time_diff
+
+        assert read_time_diff(20.0, {
+            "start_seconds": 500, "end_seconds": 100}) == (
+            20.0, (100.0, 20.0), [])
+
+    def test_an_anchor_that_is_the_clock_changes_nothing(self):
+        """The definitional case: a beat begins where the clock stands, so
+        a block anchored there has its end adopted verbatim -- every
+        canonical corpus row, byte-identical to every release since the
+        reader existed."""
+        from world.mechanics import read_time_diff
+
+        assert read_time_diff(20520.0, {
+            "start_seconds": 20520, "duration_seconds": 45,
+            "end_seconds": 20565}) == (20565.0, None, [])
 
     def test_a_bare_duration_is_an_advance_not_silence(self):
         from world.mechanics import read_time_diff
@@ -242,12 +304,34 @@ class TestASleepEndsOnTheClockItWasMeasuredBy:
                               {"elapsed_seconds": 30000}) == 30000.0
 
     def test_the_canonical_shape_is_unchanged(self):
+        """REWRITTEN with the clock-authority decision (docs/UNBUILT.md
+        1.84a). This test used to pin the same triple against a clock at
+        0.0 and demand 1060 -- a model-declared absolute outranking the
+        engine clock by a thousand seconds, which is exactly the contract
+        that let chat 95's bridge conversation move the clock five and a
+        half hours. The routing property it meant to pin -- a sleep ends on
+        the clock the commit will keep -- is pinned here with a WORLD WHOSE
+        CLOCK AND TRIPLE AGREE, which is what every canonical corpus row
+        looks like."""
+        from agents.director import _sleep_elapsed
+
+        assert _sleep_elapsed({"started_at_seconds": 100.0},
+                              {"elapsed_seconds": 1000.0},
+                              {"start_seconds": 1000, "duration_seconds": 60,
+                               "end_seconds": 1060}) == 960.0
+
+    def test_an_absolute_anchored_off_the_clock_cannot_end_a_sleep(self):
+        """The other half of the rewrite above: the SAME triple against a
+        clock at 0.0 now contributes only its 60-second span, so the sleep
+        measures 0 + 60 - 100 -- negative, which the floor reads as
+        unknown rather than as a 960-second sleep vouched for by a number
+        the engine never held."""
         from agents.director import _sleep_elapsed
 
         assert _sleep_elapsed({"started_at_seconds": 100.0},
                               {"elapsed_seconds": 0.0},
                               {"start_seconds": 1000, "duration_seconds": 60,
-                               "end_seconds": 1060}) == 960.0
+                               "end_seconds": 1060}) is None
 
     def test_no_time_diff_falls_to_the_engine_clock(self):
         """Passes before AND after: a compat pin, not new behaviour."""
@@ -433,6 +517,25 @@ class TestTheCommitKeepsTheTimeItWasGiven:
             clock={"elapsed_seconds": 5400.0, "display": "now"})
         assert clock["elapsed_seconds"] == 5430.0
         assert any("backwards" in w for w in ctx.warnings)
+        assert not any("no clock position" in w for w in ctx.warnings)
+
+    def test_a_displaced_forward_claim_commits_its_span_and_says_so(
+            self, temp_db):
+        """Chat 95 second pass beat 2 through the whole commit: the stored
+        clock ends 45 seconds on from 20.0, not five and a half hours, and
+        the warning names the position that was not adopted without calling
+        it backwards -- it ran forward, from an anchor the engine never
+        held."""
+        chat_id = _make_chat(temp_db)
+        ctx, clock = _run_turn(
+            temp_db, chat_id,
+            {"time": {"start_seconds": 20520, "duration_seconds": 45,
+                      "end_seconds": 20565, "mode": "action",
+                      "explicit": False, "display_advance": ""}},
+            clock={"elapsed_seconds": 20.0, "display": "now"})
+        assert clock["elapsed_seconds"] == 65.0
+        assert any("anchored away" in w for w in ctx.warnings)
+        assert not any("backwards" in w for w in ctx.warnings)
         assert not any("no clock position" in w for w in ctx.warnings)
 
 
