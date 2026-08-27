@@ -559,9 +559,10 @@ split is the recoverable direction.
   (`story/importers._promotion_evidence`); drafting now refuses when two
   records share the name, but record-scoped evidence (the presence's own
   `dialogue_turns`/`recent`) would remove the scan's ambiguity entirely.
-- **An id-shaped display name is refused as an identity** (unpromotable,
-  `presence_is_unnamed`) but nothing yet MINTS a real name for such a
-  record — that is the J2 name generator's input.
+- ~~An id-shaped display name is refused as an identity but nothing yet
+  MINTS a real name for such a record~~ — landed 2026-08-26: the story-law
+  name generator (`story/naming.py` + `_mint_missing_presence_names`) now
+  names exactly those records, permanently. Its own residuals are §1.89.
 
 ### 1.18 The fallback is doing all the work
 
@@ -2911,6 +2912,47 @@ already renders overlay dicts by description and has since before this work;
 those rows are historical prose, not live behaviour. A stored view is a
 record of what an older engine composed, and reading one as evidence about
 the current one is the mistake this paragraph exists to stop.
+
+### 1.89 A minted name serves only the unnamed
+
+Landed 2026-08-26 with the story-law name generator (`story/naming.py`;
+the write is `persist/commit_background._mint_missing_presence_names`,
+closing §1.17's last residual): a tracked person with no real name — none,
+or an id-shaped string standing where one should — draws ONE permanent name
+from the story's own law (authored `naming_profile` world key > Charter
+`naming` laws as separate lanes > pools harvested from the cast and the
+lorebook's entries about people), deterministic in (chat, presence uid) so a
+replayed commit re-lands the same name and a replacement (new uid) draws a
+new one. A story yielding no law mints nothing. What the generator does NOT
+serve, registered here:
+
+- **A role-descriptor name is kept, never upgraded.** A presence the story
+  calls "the barkeep" or "station engineer" has a name in the ledger's eyes,
+  so it never enters the mint. Deliberate — renaming it would be the engine
+  reaching for the field, the act permanence forbids — but it means the
+  J2 brief's "ensign at conn" acquires a personal name only if the story
+  (or a future explicit naming surface: promotion, a UI action, the
+  Director introducing them) supplies one.
+- **Charter bodies do not fall back to the story's law.** A Charter without
+  its own `naming` profile still materializes body-key names
+  (`materialize_body_names`'s historical fallback); threading the
+  story-level law into that pure seam is unbuilt. Mostly moot while §J1
+  holds (every shipped charter is empty), and the right moment to close it
+  is when charters gain bodies.
+- **The authored law has an API and no UI.** GET/PUT
+  `/api/chats/{cid}/naming_profile` (web/app.py) is the configurable
+  surface; nothing in `static/` renders it yet.
+- **Scenario prose is not harvested.** The harvest reads structured
+  evidence only (cast rows, lore `character` entries, Charter laws);
+  deterministically extracting names from freeform scenario text was
+  declined, not forgotten — a capitalization heuristic over prose is the
+  kind of guess this repo keeps finding in the fallback-became-the-mechanism
+  shape (§1.18).
+- **Harvest quality is the lorebook's quality.** An epithet-titled
+  `character` entry ("Sacred Rind") contributes epithet tokens; measured on
+  the corpus copy, chat 67's three id-named records minted
+  harvested-vocabulary names of exactly that flavour. The authored profile
+  exists to outrank the harvest wherever an author cares.
 
 
 ## 2. Roadmap

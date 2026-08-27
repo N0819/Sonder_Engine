@@ -2095,5 +2095,6 @@
   "Tense": "時制",
   "This presence has no real name yet; promotion writes the name into a permanent character identity.": "このプレゼンスにはまだ本当の名前がありません。昇格は名前を恒久的なキャラクター識別として書き込みます。",
   "Unset — the narrator is told nothing, and keeps the story's own tense": "未設定 — ナレーターには何も伝えず、物語自身の時制を保ちます",
-  "Which tense the narration is written in. It changes the narrator only — characters still speak in the present, and your own input is read as what you attempt rather than as part of the record, so writing “I push the door” and reading back “you pushed the door” is the intended shape. Leave it unset and nothing is asked for.": "ナレーションを書く時制です。変わるのはナレーターだけで、キャラクターは現在形で話し続け、あなたの入力は記録の一部ではなく試みとして読まれます。「ドアを押す」と書いて「あなたはドアを押し開けた」と返るのが意図された形です。未設定のままなら何も求められません。"
+  "Which tense the narration is written in. It changes the narrator only — characters still speak in the present, and your own input is read as what you attempt rather than as part of the record, so writing “I push the door” and reading back “you pushed the door” is the intended shape. Leave it unset and nothing is asked for.": "ナレーションを書く時制です。変わるのはナレーターだけで、キャラクターは現在形で話し続け、あなたの入力は記録の一部ではなく試みとして読まれます。「ドアを押す」と書いて「あなたはドアを押し開けた」と返るのが意図された形です。未設定のままなら何も求められません。",
+  "naming profile must be an object": "命名プロファイルはオブジェクトである必要があります"
 }

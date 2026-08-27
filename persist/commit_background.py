@@ -1111,6 +1111,96 @@ def prepare_background_claims(ctx):
         return {"canon_embeddings": {}}
 
 
+def _mint_missing_presence_names(cid, presences, scene, reserved=()):
+    """Give every tracked PERSON the story keeps but has not named one
+    permanent name from the story's own naming law (`story/naming.py`).
+
+    THE MINT IS A WRITE, NOT A RENDERING: the name is minted here, in the
+    one writer that persists the ledger, stored on the record, and read
+    thereafter by every payload that speaks it. Nothing re-mints while
+    ``record["name"]`` holds a real name, and the candidate is deterministic
+    in (chat, presence uid), so a rolled-back commit replayed lands the same
+    name for the same person. A REPLACEMENT is therefore not a rename: a new
+    body resolves to a new record (new uid), draws a new name, and the old
+    record keeps its own -- which is the continuity a prompt-level "please
+    reuse the name" cannot guarantee (measured precedent for the class this
+    forbids: chat 10 held `station engineer` and `station_engineer` as two
+    records for one person, a role re-acquiring an identity every time the
+    engine reached for the field).
+
+    Scope is exactly `presence_is_unnamed` -- no name at all, or an
+    id-shaped string standing where a name should (chat 67 tracked three raw
+    hex ids as "names") -- gated on the speech verdict's "person" bar: a
+    name is a person's to carry, and a device or an undecided presence stays
+    unnamed until the story (or `blurb_mint`'s frozen `nature`) settles what
+    it is. A presence the story named by ROLE ("the barkeep") keeps that
+    name: renaming it would be the engine reaching for the field again,
+    the exact act permanence forbids.
+
+    A story with no naming law mints nothing -- no default table exists
+    anywhere in the generator -- and the unnamed presence stays listed,
+    tracked and awaiting a name (docs/UNBUILT.md 1.18 keeps the residuals).
+    """
+    unnamed = [
+        key for key, record in (presences or {}).items()
+        if isinstance(record, dict)
+        and presence_is_unnamed(key, record)
+        and _presence_speech_verdict(
+            scene, presence_display_name(key, record), record) == "person"
+    ]
+    if not unnamed:
+        return {}
+    from story.naming import minted_presence_name, story_naming_lanes
+
+    lanes, _source = story_naming_lanes(cid)
+    if not lanes:
+        return {}
+    # The no-fly list: everyone registered (cast, persona, extra players)
+    # plus every spelling any tracked presence answers to. Two people may
+    # share a name in the fiction; the GENERATOR never introduces that
+    # collision itself. Registered names are re-read from the same wells
+    # `_refuse_name_collision` trusts -- `characters.name` and the persona --
+    # rather than relying on the caller's roster alone, whose names come from
+    # sheets and can be thinner than the identity ledger.
+    used = {str(n or "").strip().casefold() for n in reserved}
+    chat_row = q("SELECT * FROM chats WHERE id=?", (cid,), one=True)
+    if chat_row:
+        try:
+            from story.scene import persona_of
+            used.add(str(persona_name(persona_of(dict(chat_row)))
+                         or "").strip().casefold())
+        except Exception:
+            pass
+    for row in q(
+            "SELECT ch.name AS name FROM chat_chars cc "
+            "JOIN characters ch ON ch.id=cc.char_id WHERE cc.chat_id=?",
+            (cid,)):
+        used.add(str(row["name"] or "").strip().casefold())
+    for key, record in presences.items():
+        for n in _presence_names(key, record if isinstance(record, dict)
+                                 else None):
+            used.add(str(n).casefold())
+    used.discard("")
+    minted = {}
+    for key in sorted(unnamed):
+        record = presences[key]
+        name = minted_presence_name(cid, key, used, lanes=lanes)
+        if not name:
+            continue
+        former = presence_display_name(key, record)
+        if former and former.casefold() != name.casefold():
+            # An id-shaped string was never a name, but a debt or a prose
+            # tail may still reference it; keeping it in `aka` keeps every
+            # pre-mint spelling resolving through presence_record_for.
+            aka = record.setdefault("aka", [])
+            if former not in aka:
+                aka.append(former)
+        record["name"] = name
+        used.add(name.casefold())
+        minted[key] = name
+    return minted
+
+
 def track_background_presences(ctx, nonce, *, prepared=None):
     """Deterministic, LLM-free tracking of named entities the director
     keeps writing into resolved_event/dialogue_log who are NOT a
@@ -1544,8 +1634,15 @@ def track_background_presences(ctx, nonce, *, prepared=None):
                 turns.append(turn_idx)
                 record["last_turn"] = turn_idx
 
+    # A tracked person the story has not named draws one permanent name from
+    # the story's own naming law -- written here, in the ledger's one writer,
+    # so the mint survives the model's next paraphrase (J2a: the mint is a
+    # write, not a rendering).
+    named = _mint_missing_presence_names(cid, presences, live_scene,
+                                         reserved=roster)
     wset(cid, "background_presences", presences)
     return {"tracked": len(presences),
+            "named": named,
             "charter_conduct": charter_conduct}
 
 BACKGROUND_RECENT_TAIL = 4
