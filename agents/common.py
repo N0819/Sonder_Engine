@@ -6592,6 +6592,28 @@ def _dedupe_view_sentences(text):
 # _resolve_narration_person guards against a lone token flipping the whole
 # campaign's established person.
 
+def _narrative_outside_quotes(text):
+    """`text` with quoted dialogue removed, in the ACTIVE story pack's quote
+    marks. Everything a speaker says is somebody else's grammar: a "you" inside
+    a spoken line addresses a character rather than the reader, and a spoken
+    verb is in whatever tense that character is speaking in. Both of the
+    whole-draft detectors below score the narrating voice only, so both start
+    here.
+
+    Whatever quote mark is left opened dialogue that never closed, so the rest
+    of the line is dialogue too. Folded in here rather than guarded at the call
+    sites, because a guard that must be remembered will be forgotten and this
+    one was: the paired pattern needs a closing mark, so an unterminated quote
+    let every "I" and "my" inside the speech vote on how the NARRATION should
+    read. Rare and decisive -- 11 of 2163 live player turns change verdict, and
+    one of them latched a whole story into first person.
+    """
+    narrative = _ling("_NARRATION_DOUBLED_QUOTE_RE").sub('"', str(text or ""))
+    narrative = _ling("_NARRATION_QUOTE_RE").sub(" ", narrative)
+    narrative = _ling("_NARRATION_SQUOTE_RE").sub(" ", narrative)
+    return _ling("_NARRATION_DANGLING_QUOTE_RE").sub(" ", narrative)
+
+
 def _narration_person_counts(raw_input, player_name=None, player_pronouns=None):
     """Weighted first/second/third-person evidence from the player's own
     phrasing this turn, after stripping quoted dialogue (a "you" inside a
@@ -6607,17 +6629,7 @@ def _narration_person_counts(raw_input, player_name=None, player_pronouns=None):
       dict values (obj == poss == "her") no longer masquerade as the player
       being narrated in third person.
     """
-    narrative = _ling("_NARRATION_DOUBLED_QUOTE_RE").sub('"', str(raw_input or ""))
-    narrative = _ling("_NARRATION_QUOTE_RE").sub(" ", narrative)
-    narrative = _ling("_NARRATION_SQUOTE_RE").sub(" ", narrative)
-    # Whatever quote mark is left opened dialogue that never closed, so the
-    # rest of the line is dialogue too. Folded here rather than guarded at the
-    # call sites, because a guard that must be remembered will be forgotten and
-    # this one was: the paired pattern needs a closing mark, so an unterminated
-    # quote let every "I" and "my" inside the speech vote on how the NARRATION
-    # should read. Rare and decisive -- 11 of 2163 live player turns change
-    # verdict, and one of them latched a whole story into first person.
-    narrative = _ling("_NARRATION_DANGLING_QUOTE_RE").sub(" ", narrative)
+    narrative = _narrative_outside_quotes(raw_input)
     counts = {
         "first": len(_ling("_FIRST_PERSON_RE").findall(narrative)),
         "second": len(_ling("_SECOND_PERSON_RE").findall(narrative)),
@@ -6902,6 +6914,108 @@ def _check_narration_person_match(prose, narration_person, player_name=None):
         f"Narrator prose reads as {dominant} person but narration_person is "
         f"'{person}' ({counts['first']} first / {counts['second']} second / "
         f"{counts['third']} third-person markers outside quoted dialogue)."
+    ]
+
+
+#: How much verb evidence a draft must carry before its tense is scored at
+#: all, and how far the asked-for tense must trail before the draft is
+#: reported. Person is scored on a flat lead of 2 because its markers are
+#: pronouns -- near-unambiguous, and a handful per paragraph. Tense markers are
+#: verbs, they are noisier one by one, and a page written in one tense
+#: legitimately carries some of the other: a past-tense narrative states
+#: standing truths in the present ("the corridor runs east"), and a
+#: present-tense one reaches back to what already happened. So the bar is a
+#: RATIO over a floor, not a flat lead.
+#:
+#: Both numbers were chosen by measurement, not taste, on the author's stored
+#: corpus (2,803 active narrator drafts, read from a read-only copy 2026-08-26).
+#: Against 60 of them hand-labelled from their own opening sentences (random
+#: sample, seed 11; 3 past, 57 present), floor 4 / ratio 2.0 scores 57 and
+#: gets 57 right, declining the other 3 -- raising the floor to 8 only
+#: declines more. Over the whole corpus it decides 2,575 of 2,803 (91.9%), and
+#: 40 of those (1.55%) disagree with their own chat's dominant tense, which is
+#: the measured rate of real mid-story drift (2-4%) rather than a noise floor.
+#: On the one story that narrates in the past throughout, it reads past on 41
+#: of 41 drafts.
+_TENSE_MIN_EVIDENCE = 4
+_TENSE_DRIFT_RATIO = 2.0
+
+
+def _narration_tense_counts(text):
+    """Past/present verb evidence from the narrating voice, outside quoted
+    dialogue.
+
+    The markers live in the pack (`_PAST_TENSE_RE`/`_PRESENT_TENSE_RE`) and
+    each has two arms, deliberately SYMMETRIC -- a marker set that is richer on
+    one side does not detect tense, it detects that side.
+
+    The first arm is a closed list of auxiliaries, copulas and high-frequency
+    irregulars whose form alone fixes the tense. On its own it is far too thin
+    for this prose: measured over the 2,803 stored narrator drafts, the median
+    draft is 124 narrative words and yields about 3 such markers, and 90% of
+    drafts carry fewer than 8. The second arm is the inflection, anchored to a
+    subject so that morphology is not read out of thin air -- a pronoun or a
+    short determiner phrase followed by an `-ed` (past) or `-s` (present) word.
+    A BARE `-ed` scan was rejected: an English past participle is also an
+    adjective ("the closed door", "his folded hands"), and counting those
+    scores every present-tense page as past.
+
+    The anchored arms are not clean either -- "the open double doors" reads as
+    a determiner phrase plus an `-s` verb -- which is why the verdict is a
+    ratio rather than a majority, and why this returns COUNTS and decides
+    nothing.
+
+    Quoted speech is stripped first (`_narrative_outside_quotes`). That is the
+    load-bearing part rather than a refinement: dialogue is present tense in a
+    past-tense narrative by ordinary convention -- chat 6 ran 41 of 41 stored
+    drafts in first-person past with present-tense speech throughout -- so a
+    detector that read the quotes would report every correct past-tense draft
+    as drift.
+    """
+    narrative = _narrative_outside_quotes(text)
+    return {
+        "past": len(_ling("_PAST_TENSE_RE").findall(narrative)),
+        "present": len(_ling("_PRESENT_TENSE_RE").findall(narrative)),
+    }
+
+
+def _check_narration_tense_match(prose, narration_tense):
+    """Did the narrator actually WRITE in the tense it was told to.
+
+    The same shape as `_check_narration_person_match` above, and the same
+    verdict about what to do with the answer: it is a WARNING and it is
+    deliberately NOT in `_ENFORCEABLE_PREFIXES`. A rewrite costs a whole
+    narrator call, and tense -- like person -- is a whole-draft property that a
+    correction note cannot patch locally.
+
+    It differs from the person check in what it may read. Person has a value on
+    every turn because it is DETECTED; tense is AUTHORED, so `""` is the
+    ordinary case and means the author expressed no opinion. Nothing is scored
+    then: an unset story gets no payload field, no instruction and no warning,
+    which is what makes this whole feature invisible to a story that did not
+    ask for it.
+    """
+    # The vocabulary is `story.scene.NARRATION_TENSES`; it is spelled out here
+    # rather than imported for the same reason the person check spells out its
+    # three values -- this module is imported by every role module and owes
+    # `story.scene` nothing. Anything else, including the empty string every
+    # unset story sends, falls through to silence.
+    tense = str(narration_tense or "").strip().lower()
+    if tense not in ("present", "past"):
+        return []
+    text = str(prose or "")
+    if not text.strip():
+        return []
+    counts = _narration_tense_counts(text)
+    other = "present" if tense == "past" else "past"
+    if counts["past"] + counts["present"] < _TENSE_MIN_EVIDENCE:
+        return []
+    if counts[other] < counts[tense] * _TENSE_DRIFT_RATIO:
+        return []
+    return [
+        f"Narrator prose reads as {other} tense but narration_tense is "
+        f"'{tense}' ({counts['past']} past / {counts['present']} present-tense "
+        "verb markers outside quoted dialogue)."
     ]
 
 
@@ -7555,7 +7669,7 @@ def _check_narrator_fidelity(out, view, recent_prose=None, exclude_quotes=None,
                              narration_person=None, player_aliases=None,
                              event_order=None, position_facts=None,
                              room_names=None, portal_states=None,
-                             attire_facts=None):
+                             attire_facts=None, narration_tense=None):
     warnings = []
     view_text = str(view or "")
     prose = out.get("prose") or ""
@@ -7736,6 +7850,10 @@ def _check_narrator_fidelity(out, view, recent_prose=None, exclude_quotes=None,
         prose, player_name, narration_person, player_aliases))
     warnings.extend(_check_narration_person_match(
         prose, narration_person, player_name))
+    # `narration_tense` is None on every story that has not set one, and the
+    # check returns [] for it -- so this line adds nothing to the warning
+    # stream of the 81 stories that predate the dial.
+    warnings.extend(_check_narration_tense_match(prose, narration_tense))
 
     # F1-F4 world/ordering fidelity (all deterministic; each has its own
     # enforceable prefix in agents/narration.py so a violation buys exactly

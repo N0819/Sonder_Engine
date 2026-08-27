@@ -545,18 +545,44 @@ def insert_world_tables(chat_id, b, delete_first=False):
             fl.get("parent_location_id"), fl.get("kind", "location"),
             fl["name"], fl.get("payload", "{}")))
 
-# World keys that are the READER's settings, not the fiction's state. They
-# live in `world` because it is the chat-scoped KV store, but they answer to
-# the person at the keyboard rather than to anything that happened in the
-# story -- see _preserved_settings.
-PRESERVED_SETTING_KEYS = (
-    "dialogue_config",     # NPC autonomy, prose pacing, line budgets
-    "background_config",   # background life / scene-manager dials
-    "style_guide",         # genre, tone, register
+# WHERE A WORLD KEY'S VALUE CAME FROM, which is the only question that decides
+# whether a restore may carry it across.
+#
+#   SET_BY_HAND    a dial the person at the keyboard turned. Nothing in the
+#                  fiction depends on it, so a rewind must not undo it.
+#   DETECTED       a value the ENGINE inferred from play. Story state wearing
+#                  a settings-shaped key, and it rolls back with the story
+#                  that produced it.
+#   MACHINE_MINTED neither: bookkeeping the engine minted for itself, which no
+#                  beat can be said to have caused. Preserved, but on a
+#                  correctness argument rather than a preference one.
+#
+# The distinction was written as prose on `narration_person` below and asked
+# for there as a flag; `narration_tense` is what made it load-bearing. The two
+# sit in the SAME narrator payload with opposite provenance -- tense is
+# authored in the style guide, person is detected from the player's phrasing
+# every turn -- so "is this a reader setting" stopped being answerable by
+# looking at where a value is READ. It has to be recorded where the value is
+# SET, which is here.
+#
+# These live in `world` because it is the chat-scoped KV store, not because
+# they are the fiction's state -- see _preserved_settings.
+SET_BY_HAND = "set_by_hand"
+DETECTED = "detected"
+MACHINE_MINTED = "machine_minted"
+
+SETTING_PROVENANCE = {
+    "dialogue_config": SET_BY_HAND,     # NPC autonomy, prose pacing, line budgets
+    "background_config": SET_BY_HAND,   # background life / scene-manager dials
+    # genre, tone, register -- and `narration_tense`, the one authored dial
+    # the narrator reads. It rides this key rather than taking a key of its
+    # own, so it survived a reroll from the day it existed, with no second
+    # entry here to keep in sync.
+    "style_guide": SET_BY_HAND,
     # Author-controlled story language. It changes prompt interpretation,
     # deterministic recognition and compositor rendering, so a reroll must
     # not silently return the story to the language selected beforehand.
-    "story_language",
+    "story_language": SET_BY_HAND,
     # `narration_person` WAS on this list and does not belong on it. Every
     # other key here is a dial the reader can reach; that one is DETECTED from
     # how the player writes, and has no endpoint and no control in `static/`.
@@ -567,18 +593,23 @@ PRESERVED_SETTING_KEYS = (
     # holding "first", and the story stayed stuck in the wrong person. It is
     # story state and now rolls back with the story. If it ever gains a UI dial
     # it belongs back here, with a flag separating set-by-hand from detected.
-    "paradox_policy",
+    # -- and here it is, as the flag rather than as a paragraph. It stays
+    # OUT of the restore either way; what is new is that it says why in a
+    # form a reader can test, beside the authored dial it is most likely
+    # to be confused with.
+    "narration_person": DETECTED,
+    "paradox_policy": SET_BY_HAND,
     # The fixed points themselves, not just the policy for handling them. They
     # are declared and deleted through the UI -- an author's standing
     # constraint on the fiction ("this must exist"), in the same family as the
     # style guide. Rewinding past the turn one was declared on should not
     # quietly retract it; the paradoxes those points DETECT are story state and
     # roll back with everything else.
-    "fixed_points",
+    "fixed_points": SET_BY_HAND,
     # The player's own secret history, edited through the persona lock in the
     # Cast tab. Authoring, not a turn fact -- without this, editing your
     # persona's secrets and then rerolling silently discarded the edit.
-    "persona_private_history",
+    "persona_private_history": SET_BY_HAND,
     # "background_presences" is deliberately NOT here. It is diegetic
     # bookkeeping written by every commit (conduct tails, write-once identity
     # blurbs, pending_reply debts, promotion counters) -- preserving it let a
@@ -594,11 +625,11 @@ PRESERVED_SETTING_KEYS = (
     # themselves are diegetic and live in the scene blob, so they correctly
     # roll back with everything else: rewind to before you were starving and
     # you are not starving.
-    "survival_enabled",
+    "survival_enabled": SET_BY_HAND,
     # Display sibling of the toggle above -- whether the margin tracker shows
     # anyone but the player (world/survival.py). The pair was split when
     # `survival_enabled` joined this list; the same argument covers both.
-    "survival_track_npcs",
+    "survival_track_npcs": SET_BY_HAND,
     # What the world does on its own -- routine residue, scheduled
     # consequences, place obligations, the antagonist ladder
     # (world/living_world.py). Same family as `background_config` one entry
@@ -608,7 +639,7 @@ PRESERVED_SETTING_KEYS = (
     # changes what the fiction does, which makes it look ambiguous -- but so
     # does every ceiling here, and the precedent is settled: the position of
     # the dial is authoring, its effects are the story's.
-    "living_world",
+    "living_world": SET_BY_HAND,
     # The dial a story's whole premise can rest on (`Design.md` hard mode):
     # how much of the world the player may author. Its route refuses rather
     # than normalizes an unreadable value because "the player silently
@@ -619,7 +650,7 @@ PRESERVED_SETTING_KEYS = (
     # dial, kept for the same reason `fixed_points` outlives a rewind past
     # its declaration: rolling it back would erase the only thing that can
     # explain why an earlier beat granted what the current mode refuses.
-    "player_authority",
+    "player_authority": SET_BY_HAND,
     # NOT a preference -- the one entry here preserved on a correctness
     # argument instead. The secret nonce that keys every viewer-scoped
     # anonymous `body:` id (web/story_view.py), minted lazily on first
@@ -631,8 +662,15 @@ PRESERVED_SETTING_KEYS = (
     # story. (An archive import minting a fresh one is the OTHER case and
     # stays: a different chat is a different projection -- see
     # chat_archive.UNEXPORTED_WORLD_KEYS.)
-    "presence_id_namespace",
-)
+    "presence_id_namespace": MACHINE_MINTED,
+}
+
+# The keys a restore carries across, DERIVED so the two can never disagree.
+# The test is not "is it a preference" -- `presence_id_namespace` is not -- but
+# "did the story put this value here". Only DETECTED did, so only DETECTED
+# rolls back with it.
+PRESERVED_SETTING_KEYS = tuple(
+    key for key, source in SETTING_PROVENANCE.items() if source is not DETECTED)
 
 
 def _preserved_settings(chat_id):
