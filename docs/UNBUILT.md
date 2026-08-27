@@ -3159,13 +3159,26 @@ WHAT A TRANSLATION HAS TO PRESERVE, and this is the whole difficulty:
      on-screen telling must arrive under those same rules, or the return path
      becomes a way to write certainties into heads that body-to-body talk could
      never produce.
-  2. **STATELESSNESS IS THE PROMOTION BOUNDARY.** CLAUDE.md: a background
-     presence has "no persistent memory or psychology (that requires promotion
-     to a real character)". Claims in a Charter mind are NOT that -- the presim
-     already writes them for 42 bodies without any of them being characters --
-     but the line between "this body's institutional beliefs updated" and "this
-     body now has an autobiography" is exactly where the boundary sits, and a
-     translation that crosses it has promoted somebody by accident.
+  2. **THE CHARTER IS ALREADY THE CHEAP PERSISTENT MIND — that is its job.**
+     An earlier revision of this entry warned that writing beliefs into a
+     Charter body risked promoting somebody by accident. That was wrong, and
+     wrong in the direction that would make this built too timidly.
+
+     The Charter EXISTS to give bodies persistent belief and psychology
+     cheaply. `state.minds` already holds ~14 claims per head across 42 heads,
+     each with a decaying `strength`, an `as_of_hours`, and a `heard_from` --
+     that is an inner life, persisted, and none of those bodies is a character.
+     So an on-screen encounter updating a body's beliefs is the system working
+     as designed, not a boundary being crossed.
+
+     THE PROMOTION LINE IS COST AND CADENCE, NOT INNER STATE. A registered
+     character gets a per-beat agent call carrying memory, appraisal,
+     relationships and psychology. A Charter body gets beliefs that persist and
+     decay with no model call at all. What promotion buys is the CALL, not the
+     having of a mind. A translation should therefore write freely into the
+     cheap mind and must not start spending a character's budget on a body that
+     has not been promoted -- the thing to watch is per-beat cost, not richness.
+
   3. **THE FIREWALL RUNS BOTH WAYS.** A body must not carry off screen anything
      it had no channel to on screen, and must not bring on screen anything its
      Charter head holds at a strength the scene has not earned.
