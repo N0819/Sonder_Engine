@@ -37,7 +37,20 @@ and says which is which.
 Charter identity changes route through `world/charter_identity.py`,
 `world/charter_model.py` and `world/charter_runtime.py`. The Charter/body dict
 key is permanent identity. A generated personal name is materialized once;
-profile edits affect only unnamed future bodies. Rank/post titles are aliases,
+profile edits affect only unnamed future bodies. **A pool sizes the law's
+phonology, never the population**: the allocator spreads each
+`spread_components` element breadth-first (family, because recurrence inside
+one generated population implies kinship nobody authored, plus any component
+`address_components` says the law calls people by alone) — authored pool
+values first, then the extension lane (`extension_profile`: the profile's own
+syllable parts, else parts derived from the pool's own words by
+`derived_name_parts`), with reuse only once the whole reachable space is
+spent. Spreading is preference; `name_is_reserved` stays the only refusal
+beside `components_repeat` (a name may not double its own component). No
+pool means no derivation — the no-implicit-default doctrine is unchanged, and
+both minting paths (`materialize_body_names` and
+`story/naming.minted_presence_name`) share the extension.
+Rank/post titles are aliases,
 and transcript color derives from the permanent identity so title changes and
 promotion do not repaint the person. Name learning must still prove an exact
 delivered line and physical co-location; index the roster once per beat rather
