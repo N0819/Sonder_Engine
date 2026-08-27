@@ -375,4 +375,64 @@ def promotion_handoff(body_key, charter, events=()):
         charter.get("judgments"), body_key, subjects=subjects, cap=24)
     payload["commitments"] = commitment_view(
         charter.get("commitments"), body_key, cap=24)
+    payload["acquaintances"] = acquainted(body_key, charter)
     return payload
+
+
+#: How many people a promotion may carry as RELATIONSHIP EDGES. Larger than
+#: the prose-memory cap above it because an edge is a row in a graph the
+#: character pipeline consults every beat, not a sentence competing for room
+#: in a memory list -- and because the alternative to a thin edge is a
+#: stranger, which is worse.
+ACQUAINTANCE_EDGE_CAP = 40
+
+
+def acquainted(body_key, charter):
+    """Who this body actually knows, in the shape a relationship graph takes.
+
+    THE GAP THIS CLOSES. `remembered` already renders acquaintance as prose
+    memory rows, and prose is not an edge: `mind.get_relationships` is the
+    only structure the character pipeline consults for trust, warmth, fear,
+    respect and suspicion, and the sole writer into it at promotion was gated
+    on `social_judgments` -- which measured ZERO holders across all four
+    charters of a real story, so the branch never ran. A person who stood
+    beside the same colleagues for 720 hours arrived a stranger to every one
+    of them.
+
+    Only channelled inputs. The claim is this body's OWN belief about the
+    other; the regard is this body's OWN regard; the familiarity is its own
+    co-presence count. No other head is read and the institution's register
+    is not consulted -- an edge here says "I know them and this is how I hold
+    them", never anything about how they hold me.
+    """
+    key = str(body_key)
+    charter = charter if isinstance(charter, dict) else {}
+    held = (charter.get("minds") or {}).get(key) or {}
+    regard = (charter.get("politics") or {}).get("regard") or {}
+    beside = (charter.get("served_beside") or {}).get(key) or {}
+    bodies = charter.get("bodies") or {}
+    out = []
+    for other, claim in held.items():
+        other = str(other)
+        if other == key or not isinstance(claim, dict):
+            continue
+        if claim.get("kind") == "news" or other not in bodies:
+            continue
+        shared = int(beside.get(other) or 0)
+        # Familiarity is time served in the same room, and it saturates: the
+        # difference between never and often is most of the signal, and the
+        # difference between often and constantly is nearly none.
+        familiarity = round(min(1.0, shared / 200.0), 4)
+        out.append({
+            "body": other,
+            "name": str((bodies.get(other) or {}).get("name") or other),
+            "firsthand": claim.get("heard_from") is None,
+            "heard_from": str(claim.get("heard_from") or ""),
+            "strength": round(float(claim.get("strength") or 0.0), 4),
+            "regard": round(float(regard_value(regard, key, other)), 4),
+            "shared_windows": shared,
+            "familiarity": familiarity,
+        })
+    out.sort(key=lambda row: (-row["familiarity"], -row["strength"],
+                              row["body"]))
+    return out[:ACQUAINTANCE_EDGE_CAP]

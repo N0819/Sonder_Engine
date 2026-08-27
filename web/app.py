@@ -3701,10 +3701,19 @@ def confirm_promotion(cid: int, body: dict = Body(...)):
     memory_seeds = [str(m) for m in (body.get("memory_seeds") or []) if str(m).strip()]
     frame_id = body.get("frame_id")
     frame_id = int(frame_id) if frame_id is not None else None
+    # The turn the promotion happens on, so inherited memory is stamped rather
+    # than null. `mind/memory_read` filters `turn_idx IS NOT NULL` for the
+    # autobiography and the recent-memory buffer, so a seed written without
+    # this is reachable by embedding search alone -- a character with a past
+    # it can neither narrate nor be reminded of. The auto-promotion path in
+    # `commit_background` already passes it; this route did not.
+    _latest = q("SELECT MAX(idx) idx FROM turns WHERE chat_id=?",
+                (cid,), one=True)
+    promoted_turn = int(_latest["idx"]) if _latest and _latest["idx"] is not None else 0
     with _era(cid, frame_id):
         char_id = promote_background_character(
             cid, name, sheet=sheet, memory_seeds=memory_seeds,
-            frame_id=frame_id)
+            frame_id=frame_id, promoted_turn=promoted_turn)
     # The confirm route takes whatever sheet the host approved, which may not
     # be the draft `draft_promoted_character` warned about.
     return {"ok": True, "char_id": char_id,

@@ -238,3 +238,56 @@ class TestTheReadersVocabulary:
         for field in ("hedonic", "stress", "body_state", "interoception",
                       "stress_profile", "stood", "memories"):
             assert field in payload
+
+
+class TestAcquaintanceIsAnEdge:
+    """`remembered` renders acquaintance as prose, and prose is not an edge.
+    `mind.get_relationships` is the only structure the character pipeline
+    consults for trust, warmth, fear, respect and suspicion, and the sole
+    writer into it at promotion was gated on `social_judgments` -- which
+    measured ZERO holders across all four charters of a real story, so the
+    branch never ran. A person who stood beside the same colleagues for 720
+    hours arrived a stranger to every one of them.
+    """
+
+    def test_a_body_hands_over_the_people_it_knows(self):
+        charter = _guard_charter()
+        charter["served_beside"] = {"guard": {"hana": 100}}
+
+        handoff = promotion_handoff("guard", charter)
+
+        edges = {row["body"]: row for row in handoff["acquaintances"]}
+        assert "hana" in edges, "stood beside them and knows them"
+        assert edges["hana"]["firsthand"] is True
+        assert 0.0 < edges["hana"]["familiarity"] <= 1.0
+
+    def test_familiarity_follows_time_served_beside_them(self):
+        near, far = _guard_charter(), _guard_charter()
+        near["served_beside"] = {"guard": {"hana": 200}}
+        far["served_beside"] = {"guard": {"hana": 2}}
+
+        a = promotion_handoff("guard", near)["acquaintances"][0]
+        b = promotion_handoff("guard", far)["acquaintances"][0]
+
+        assert a["familiarity"] > b["familiarity"]
+
+    def test_news_is_not_a_person(self):
+        """`minds` holds claims about EVENTS beside claims about people, and
+        an edge to a well that failed is not a relationship."""
+        handoff = promotion_handoff("guard", _guard_charter())
+
+        assert all(not row["body"].startswith("news:")
+                   for row in handoff["acquaintances"])
+
+    def test_the_edge_says_nothing_about_how_they_hold_back(self):
+        """The firewall on this seam: an edge is built from this body's own
+        claim, its own regard and its own co-presence. Nothing is read out of
+        the other head, so the other's regard cannot change what crosses."""
+        mutual = _guard_charter()
+        mutual["served_beside"] = {"guard": {"hana": 50}}
+        mutual["politics"] = dict(mutual["politics"],
+                                  regard={"hana": {"guard": 0.1}})
+
+        edge = promotion_handoff("guard", mutual)["acquaintances"][0]
+
+        assert edge["regard"] == 1.0, "hana's low opinion is hana's, not the guard's"

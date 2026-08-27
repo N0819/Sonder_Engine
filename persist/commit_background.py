@@ -2268,6 +2268,45 @@ def promote_background_character(cid, name, sheet=None, memory_seeds=None,
                     frame_id=frame_id)
         save_relationships(cid, char_id, graph, frame_id=frame_id)
 
+    # ACQUAINTANCE IS AN EDGE, NOT A SENTENCE. The block above is gated on
+    # `social_judgments`, which measured ZERO holders across all four charters
+    # of a real story -- so the only writer into the relationship graph never
+    # ran, and a person who stood beside the same colleagues for 720 hours
+    # arrived a stranger to every one of them in the one structure the
+    # character pipeline actually consults. This runs on plain acquaintance,
+    # which every body has. A judgment, where one exists, is written after and
+    # wins: an opinion earned by evidence outranks the baseline familiarity
+    # gives.
+    if handoff.get("acquaintances"):
+        from mind.memory import get_relationships, save_relationships
+
+        graph = get_relationships(cid, char_id, frame_id=frame_id)
+        social_names = (charter_bundle or {}).get("social_names") or {}
+        judged = {str(social_names.get(str(stance.get("subject") or ""))
+                      or stance.get("subject") or "")
+                  for stance in (handoff.get("social_judgments") or ())
+                  if isinstance(stance, dict)}
+        for row in handoff.get("acquaintances") or ():
+            if not isinstance(row, dict):
+                continue
+            body = str(row.get("body") or "")
+            target = str(social_names.get(body) or row.get("name") or body)
+            if not target or target in judged:
+                continue
+            familiarity = float(row.get("familiarity") or 0.0)
+            # Regard is centred on 1.0 in Charter's own scale; either side of
+            # it is thinking better or worse of somebody. Warmth carries that;
+            # trust follows familiarity, discounted when the acquaintance is
+            # secondhand, because knowing OF a person is not knowing them.
+            standing = float(row.get("regard") or 1.0) - 1.0
+            firsthand = bool(row.get("firsthand"))
+            graph.update(
+                target,
+                trust=round(familiarity * (1.0 if firsthand else 0.4), 4),
+                emotional_valence=round(standing, 4),
+                last_interaction_turn=int(promoted_turn or 0))
+        save_relationships(cid, char_id, graph, frame_id=frame_id)
+
     chat_row = dict(q("SELECT * FROM chats WHERE id=?", (cid,), one=True))
     if frame_id is None:
         sc = wget(cid, "scene", None)
