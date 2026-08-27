@@ -3051,6 +3051,48 @@ Two things are separable here:
      `story/journey_history` seeds prestory MEMORIES before turn 0, so a
      pre-play seeding lane is not a new idea.
 
+  1a. **THE PRESIM ALREADY BUILT IT, AND NOTHING READS IT.** Not a proposal --
+     a measurement. `charter.state.minds` after a 720-hour prehistory of one
+     institution: **42 heads carrying about 14 claims each**, while the story's
+     `known` ledger for the same chat holds ONE name.
+
+     One head, verbatim:
+
+         ["captain:0002", {"body": "captain:0002",
+                           "competence": {"command": 5, "leadership": 5},
+                           "believed_available": true,
+                           "strength": 0.7189166666666664,
+                           "as_of_hours": 692.0,
+                           "heard_from": null}]
+
+     That is acquaintance AND reputation, with everything a belief needs:
+     `strength` is a confidence that decays, `as_of_hours` is when it was
+     learned (hour 692 of 720), and `heard_from` is who told them -- so a claim
+     can be second-hand and its teller is recorded. Bodies carry claims about
+     the FEATURED resident too (`captain:featured:...`), which is a registered
+     character: the crew already know their captain in the Charter's model and
+     cannot in the story.
+
+     `world/charter_mind.hear_claim` is "THE ONLY UPTAKE DOOR" and routes
+     body-to-body talk and authored tellings alike -- thinned by retention,
+     scaled by the listener's regard for the teller, refused below a floor,
+     never overwriting a stronger holding. `charter_run.py:549`: "witnessing,
+     sighting and talk all put claims into heads."
+
+     HONEST QUALIFICATION: these claims are COMPETENCE-shaped -- who is good at
+     what, and are they available -- not free-text rumour. What exists is
+     professional reputation rather than gossip. But the fields a rumour needs
+     are the ones already present, and the uptake door is already shared, so
+     the question is what a claim may CARRY rather than whether the machinery
+     exists.
+
+     So the gap is not that acquaintance must be derived. It is DERIVED,
+     persisted, and stops at the Charter boundary. Whatever connects it has to
+     answer one firewall question and only one: a claim is a BELIEF, held at a
+     strength, possibly second-hand and possibly WRONG. It must arrive in a
+     mind as a belief and never as a fact -- which is the same distinction
+     `canon_provenance` already draws for an unadjudicated assertion.
+
   2. **A SILHOUETTE STILL SHOWS A PERSON.** Even with no acquaintance at all,
      the degraded label discards what a silhouette genuinely delivers, and the
      engine already holds all of it: `stations.at` (`captains_chair`,
