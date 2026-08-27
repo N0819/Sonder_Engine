@@ -43,6 +43,15 @@ promotion do not repaint the person. Name learning must still prove an exact
 delivered line and physical co-location; index the roster once per beat rather
 than scanning a large institution once per quote.
 
+The STORY-level naming law routes through `story/naming.py` (authored
+`naming_profile` world key > Charter `naming` lanes > cast/lorebook harvest;
+no fixed default table — a story yielding no law mints nothing). The one
+consumer that writes is `persist/commit_background._mint_missing_presence_names`:
+it names exactly the records `presence_is_unnamed` marks, once, permanently,
+deterministic in (chat, presence uid). Never re-mint over a stored name and
+never rename a role-descriptor presence — a name changes only when the PERSON
+changes, and a replacement is a new record, not a rename.
+
 Charter social/economic/institutional changes route through
 `world/charter_social.py`, `world/charter_commitment.py`,
 `world/charter_economy.py`, `world/charter_decide.py` and the one carried state
