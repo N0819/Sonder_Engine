@@ -6175,6 +6175,24 @@ def _strip_player_echo(prose, lines, protect_quotes=None):
 # sit (Fable review, DW t12: "I can't hold her eyes. ''"). Collapse the orphan
 # and heal the punctuation/space it leaves. Only a genuinely EMPTY pair is
 # touched, so real quoted dialogue is never harmed.
+#
+# EMPTY MEANS ZERO CHARACTERS BETWEEN THE MARKS. `_EMPTY_QUOTE_RE` also carried
+# `"\s*"` and `'\s*'`, which read any two quote marks separated only by
+# whitespace as an empty pair -- and `\s` is a newline, so the alternative
+# spanned a paragraph break. One speaker's close-quote and the next speaker's
+# open-quote are exactly that shape once `narration._substitute_dialogue_tokens`
+# has wrapped each delivered line in its own quotes, and `_strip_player_echo`
+# above calls this unconditionally, so no player line and no strip were needed
+# to trigger it: the two marks went, and two speakers were welded into a single
+# quoted string attributed to one voice while the reply was narrated again as if
+# unspoken (15-beat trace, model output `{{L2}}</p><p>{{L3}}` correct, the
+# dialogue_log record correct, only the rendered page wrong).
+#
+# Nothing in the engine can leave a whitespace-separated pair for this to
+# collapse. Both removal paths in `_strip_player_echo` -- the literal
+# `_QUOTE_PAIRS` form and the `_QUOTE_SPAN_RE` span -- delete the whole
+# delimited span INCLUDING its marks, and so does `_cap_repeated_quotes`. A
+# pair with anything at all between the marks is dialogue, not debris.
 
 
 def _collapse_empty_quote_debris(prose):
