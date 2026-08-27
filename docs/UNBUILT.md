@@ -2781,6 +2781,51 @@ Sibling of 1.84's `last_asserted_at_seconds` note: the stamp itself is two
 lines in `persist/commit_entities`, and it belongs in the commit that
 argues the credibility test.
 
+### 1.84b A ship with three captains: a rotation applied to a post that cannot rotate
+
+`world/charter_generate._ensure_shift_crews` tops EVERY post to a three-body
+rotation. Measured on a generated starship, read from `item["state"]`:
+
+    captain                3   Tasha Ishikawa, Jack Picard, Rene Soong
+    first_officer          3   William Crusher, Keiko O'Brien, Rene Crusher
+    conn_officer           6
+    chief_engineer         3   Miles Guinan, Beverly La Forge, Geordi Barclay
+    chief_medical_officer  3   Reginald Pulaski, Deanna Crusher, Katherine Crusher
+
+Three conn officers across three shifts is what a rotation IS and is correct.
+Three captains is not a rotation, it is three captains — and with a registered
+captain also in the story, four people answered to "Captain".
+
+**A POST'S TITLE IS AN ADDRESS.** This is `address_components`' own rule applied
+to rank instead of to a name: a component is identity where the law lets it
+stand for the whole person, and everyone on that deck calls the captain
+"Captain". Two bodies holding one such post is the same defect as two bodies
+sharing a name — one word resolving to two minds.
+
+The signal to tell a rotating post from a singular one is ALREADY IN THE DATA
+and needs no new field: `captain` carries `reports_to: ""`. A post nobody
+reports to is the root of the tree, and a chain of command with three tops is
+not a chain. Department heads are the softer case — a chief engineer plausibly
+has shift deputies — but a deputy is a deputy, and the title says which.
+
+### 1.84c A top rank changes hands only by retirement or death
+
+The succession half, and the same rule as 1.84a's name permanence one layer up:
+an identity is stable, and the ONE legitimate change is a change of PERSON.
+
+A singular post has one holder. That holder changes when they retire, die, or
+are relieved — never because a generator topped the post up, never because a
+rotation filled a seat it thought was empty, and never as a silent re-mint. The
+succession is an EVENT the story can point at, with an outgoing holder and an
+incoming one, exactly as a background presence's replacement is a new presence
+taking a vacated post rather than a rename.
+
+Both of these are separable from whether an author places their cast in the
+institution at all. `featured_residents` is opt-in BY DESIGN — a story whose
+characters answer to nobody should not have them folded into a Charter — and
+that option is not what is wrong here. An uncrewed ship with no cast at all
+still gets three captains.
+
 ### 1.85 A memory's age off a per-beat estimate, not a per-beat record
 
 **Found:** 2026-08-26, landing `memories.encoded_at_seconds`.
