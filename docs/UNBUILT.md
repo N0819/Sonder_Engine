@@ -2990,6 +2990,61 @@ does exactly that. Registered rather than fixed because the resolution is a
 judgment about which of three contradictory fields to believe, and that is the
 same class of choice as 1.84a — not a patch.
 
+### 1.95 A crew who have served together for years begin as strangers
+
+The `known` ledger for a five-character bridge scene, read live after eleven
+beats:
+
+    {"Sabine Oyelaran": ["Lieutenant Commander Data",
+                         "lieutenant_commander Lieutenant Commander Data"],
+     "Worf":            [the same two],
+     "Beverly Crusher": [the same two],
+     "Geordi La Forge": [the same two],
+     "Jean-Luc Picard": [the same two]}
+
+Every mind in the story knows ONE other, and it is the same one. Nobody knows
+the captain. The captain knows nobody. These are five officers who serve on one
+watch.
+
+RECOGNITION IS NOT THE BUG — it works. `_proximity_labels` checks
+`_recognizes()` BEFORE sight level, so a known body gets its name even as a
+silhouette. There is simply nothing in the ledger to win with, because the
+engine has no notion of PRIOR ACQUAINTANCE at story start: `known` begins empty
+and fills only from introductions that happen on the page.
+
+WHAT IT COSTS, and this is what makes it worth fixing rather than tolerating.
+In a dim room every colleague renders as "a shape" or "an indistinct figure";
+in a lit one they render as an appearance epithet, "the lean middle-aged man".
+Neither is a person, and a reader watching a crew address each other as
+silhouettes for eleven beats is watching the firewall applied to a fact nobody
+in the fiction is missing.
+
+Two things are separable here:
+
+  1. **PRIOR ACQUAINTANCE HAS NO SEEDING SURFACE.** A cast attached to one story
+     may be strangers (the point of a first meeting) or colleagues of twenty
+     years, and the engine cannot currently be told which. Note the shape
+     already exists elsewhere: `story/journey_history` seeds prestory MEMORIES
+     before turn 0, so a pre-play seeding lane is not a new idea.
+  2. **A SILHOUETTE STILL SHOWS A PERSON.** Even with no acquaintance at all,
+     the degraded label discards what a silhouette genuinely delivers, and the
+     engine already holds all of it: `stations.at` (`captains_chair`,
+     `ops_station`), `poses` (`seated`, `standing`, with `detail`), and `build`
+     -- which the body-fields work made unlocated and whole-body precisely
+     because no garment can cover it. "The tall one at tactical" and "someone
+     seated at the command chair" are available today and subtract nothing;
+     "a shape" is a person deleted.
+
+`agents.perception._AMBIGUITY_CUES` lists "a shape" as a phrase the engine
+DETECTS as hedging, which means nothing emits it from a template -- the narrator
+writes it freely when handed an unresolved body. So half of (2) is a labelling
+fix and half is what the narrator is given to work with.
+
+ALSO VISIBLE IN THAT LEDGER: `"lieutenant_commander Lieutenant Commander Data"`
+-- a rank prepended to a name that already carries one, stored as a RECOGNITION
+KEY beside the unprefixed form. 1.84d's rank-in-the-name defect is now minting
+duplicate identities in the ledger that decides who you know.
+
 ### 1.85 A memory's age off a per-beat estimate, not a per-beat record
 
 **Found:** 2026-08-26, landing `memories.encoded_at_seconds`.
