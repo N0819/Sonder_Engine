@@ -218,7 +218,7 @@ def test_sparse_recent_life_is_rejected_instead_of_becoming_canon():
         ground_recent_history(thin_batch, packet)
 
 
-def test_featured_resident_history_seeds_null_turn_then_retires_charter_mind(
+def test_featured_resident_history_seeds_turn_zero_then_retires_charter_mind(
         temp_db, monkeypatch):
     import json
 
@@ -296,7 +296,14 @@ def test_featured_resident_history_seeds_null_turn_then_retires_charter_mind(
         "SELECT state FROM chat_chars WHERE chat_id=? AND char_id=?",
         (cid, char_id), one=True)
 
-    assert written and written[0]["turn_idx"] is None
+    # TURN ZERO, NOT NULL. `mind/memory_read` filters `turn_idx IS NOT NULL`
+    # for the two readers that constitute a self -- the autobiographical
+    # summary and the recent-memory buffer that grounds a beat -- so a null
+    # here left the inherited life reachable by embedding search alone: a
+    # character with a past it could neither narrate nor be reminded of.
+    # Nothing was protecting the null; rollback deletes by `turn_id`, which
+    # these rows carry as None, so they survive a branch either way.
+    assert written and written[0]["turn_idx"] == 0
     assert written[0]["content"] == "I worked as miller in mill."
     assert len(written) == 14  # career + recent overview + 12 episodes
     assert written[1]["kind"] == "semantic"

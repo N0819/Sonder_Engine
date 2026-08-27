@@ -758,7 +758,16 @@ def integrate_featured_resident(cid, char_id, binding, sheet, *, frame_id=None,
         }
         rows.append({
             "chat_id": cid, "char_id": char_id, "turn_id": None,
-            "turn_idx": None, "frame_id": frame_id,
+            # BEFORE THE STORY, NOT OUTSIDE IT. `mind/memory_read` filters
+            # `turn_idx IS NOT NULL` for the two readers that constitute a
+            # self -- the autobiographical summary and the recent-memory
+            # buffer that grounds a beat -- so a null here made an inherited
+            # life reachable by embedding search alone. The character had a
+            # past it could not narrate and could not be reminded of, which
+            # reads in play as a person born this turn. Turn 0 is the opening,
+            # so a pre-story row sits at the earliest point the story has and
+            # survives every rollback into it.
+            "turn_idx": 0, "frame_id": frame_id,
             **stored_memory,
             "event_key": "prestory:charter:%s:%s:%s" % (
                 binding["charter"], binding["body"], source_id),
@@ -769,7 +778,16 @@ def integrate_featured_resident(cid, char_id, binding, sheet, *, frame_id=None,
             overview.encode("utf-8")).hexdigest()[:18]
         rows.insert(0, {
             "chat_id": cid, "char_id": char_id, "turn_id": None,
-            "turn_idx": None, "frame_id": frame_id,
+            # BEFORE THE STORY, NOT OUTSIDE IT. `mind/memory_read` filters
+            # `turn_idx IS NOT NULL` for the two readers that constitute a
+            # self -- the autobiographical summary and the recent-memory
+            # buffer that grounds a beat -- so a null here made an inherited
+            # life reachable by embedding search alone. The character had a
+            # past it could not narrate and could not be reminded of, which
+            # reads in play as a person born this turn. Turn 0 is the opening,
+            # so a pre-story row sits at the earliest point the story has and
+            # survives every rollback into it.
+            "turn_idx": 0, "frame_id": frame_id,
             "kind": "semantic", "provenance": "remembered",
             "salience": 0.5, "content": overview,
             "location": str(binding.get("place") or ""),
@@ -781,7 +799,16 @@ def integrate_featured_resident(cid, char_id, binding, sheet, *, frame_id=None,
     if career_summary:
         rows.insert(0, {
             "chat_id": cid, "char_id": char_id, "turn_id": None,
-            "turn_idx": None, "frame_id": frame_id,
+            # BEFORE THE STORY, NOT OUTSIDE IT. `mind/memory_read` filters
+            # `turn_idx IS NOT NULL` for the two readers that constitute a
+            # self -- the autobiographical summary and the recent-memory
+            # buffer that grounds a beat -- so a null here made an inherited
+            # life reachable by embedding search alone. The character had a
+            # past it could not narrate and could not be reminded of, which
+            # reads in play as a person born this turn. Turn 0 is the opening,
+            # so a pre-story row sits at the earliest point the story has and
+            # survives every rollback into it.
+            "turn_idx": 0, "frame_id": frame_id,
             "kind": "semantic", "provenance": "remembered",
             "salience": 0.45, "content": career_summary,
             "location": str(binding.get("place") or ""),
