@@ -24,7 +24,7 @@
 | `agents/loops.py` | 1147 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `core.db`, `story.character_schema`, `story.scene`, `world.spatial` |
 | `agents/mapping.py` | 337 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `core.db`, `llm.prompts`, `mind.memory`, `story.character_schema`, `story.scene` |
 | `agents/narration.py` | 1852 | Player-facing narration agent. | `agents`, `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `story.character_schema`, `story.scene`, `world.spatial`, `world.weather` |
-| `agents/perception.py` | 4395 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `mind`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
+| `agents/perception.py` | 4476 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `mind`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
 | `agents/runtime.py` | 1335 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `core.db`, `core.pipeline_context`, `llm.providers`, `persist.checkpoints`, `persist.commit`, `story.character_schema`, `story.scene` |
 | `agents/storage.py` | 123 | Step and active-variant persistence helpers. | `core.db` |
 | `core/__init__.py` | 6 |  | — |
@@ -384,14 +384,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_composer_outcome()` | 3976 | 420 lines |
-| `perception_outcome()` | 2177 | 272 lines |
-| `_composer_standing_percepts()` | 3217 | 176 lines |
-| `perception_act()` | 1756 | 174 lines |
-| `_composer_act()` | 3603 | 169 lines |
+| `_composer_outcome()` | 4057 | 420 lines |
+| `perception_outcome()` | 2258 | 272 lines |
+| `_composer_standing_percepts()` | 3298 | 176 lines |
+| `perception_act()` | 1837 | 174 lines |
+| `_composer_act()` | 3684 | 169 lines |
 | `_outcome_event_stream()` | 657 | 152 lines |
+| `_source_channels()` | 923 | 131 lines |
 | `_previous_open_group_continuity()` | 172 | 117 lines |
-| `_strip_self_narration()` | 1052 | 107 lines |
 
 ### `agents/runtime.py`
 
