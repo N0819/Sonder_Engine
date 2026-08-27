@@ -357,7 +357,14 @@ def review_minted_memories(chat_id, char_id, char_name, minted, *,
     """
     # The facade, not the sibling: `tools/project_check.py` enforces it,
     # and deferred so `mind.memory` can finish importing this module.
-    from mind.memory import _RECALL_LIMIT, search_memories
+    from mind.memory import MemoryClock, _RECALL_LIMIT, search_memories
+
+    # The same reading position the character's own payload is built from, so
+    # the two lanes of its past cannot disagree about how long ago anything
+    # was. `frame_id` is passed rather than read off the contextvar: this runs
+    # out of band on a fresh thread, and a worker's contextvars are its own.
+    clock = MemoryClock(chat_id, char_id, current_turn_idx,
+                        viewer_frame_id=frame_id, deciding_turn=False)
 
     # `core.db.q` returns sqlite3.Row. Search results are dicts. This boundary
     # accepts both; calling `.get` on the former made every real background
@@ -393,8 +400,7 @@ def review_minted_memories(chat_id, char_id, char_name, minted, *,
         seen.add(ref)
         rows.append({
             "memory_ref": ref,
-            "when": "about %s beats ago" % max(
-                0, (current_turn_idx or 0) - int(mem.get("turn_idx") or 0)),
+            "when": clock.of_memory(mem),
             "epistemic_origin": str(mem.get("provenance") or ""),
             "gist": mem.get("gist") or "",
             "details": mem.get("content") or "",

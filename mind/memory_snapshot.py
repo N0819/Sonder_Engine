@@ -202,6 +202,14 @@ def dump_chat_memories(chat_id, *, inline_vectors=True):
          "encoding_arousal": r["encoding_arousal"],
          "archived": bool(r["archived"]), "event_key": r["event_key"],
          "importance": r["importance"], "disputed": r["disputed"] or "",
+         # WHEN this memory was formed, in seconds of fiction time. Carried
+         # for the same reason `importance` and `disputed` are: it is not
+         # re-derivable from anything else on the row. A memory's age is
+         # exactly what a stored reading makes local -- drop it on a rollback,
+         # a branch or an import and the bank falls back to whatever the
+         # current clock divided by the current turn count happens to say,
+         # which is the moving denominator this column exists to escape.
+         "encoded_at_seconds": r["encoded_at_seconds"],
          # How often this memory came back to the character, and when it last
          # did. The engine never reads either column; `tools/remember_lines.py`
          # and `tools/salience_replay.py` read them as their whole answer, so a
@@ -280,6 +288,10 @@ def prepare_chat_memory_restore(chat_id, mems):
             # it was, and neither is re-derivable from the row's own text.
             "importance": m.get("importance"),
             "disputed": m.get("disputed") or "",
+            # Verbatim, like frame_id above: a restore puts the bank back as
+            # it was, and re-stamping these rows with whatever the clock reads
+            # during the restore would date every memory to the rollback.
+            "encoded_at_seconds": m.get("encoded_at_seconds"),
         }
         # Restored after the insert, beside `archived`: `prepare_memory`
         # describes a memory as it was FORMED, and neither of these is part of
@@ -467,6 +479,12 @@ def import_character_memories(chat_id, char_id, memories,
             # the same class as the B5 defect in
             # tests/test_fable_audit_memory_consolidation.py.
             "frame_id": None,
+            # Dropped with turn_id/turn_idx above, and for the same reason: a
+            # clock reading is a position in ONE story's fiction time, so
+            # carrying it into a different story would date these memories
+            # against a clock they were never read from. Stated rather than
+            # omitted so the drop is a decision.
+            "encoded_at_seconds": None,
         })
     if not prepared:
         return 0

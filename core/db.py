@@ -114,7 +114,7 @@ def parse_scoped_world_key(key):
 #: runs from the root. `or` rather than a default argument, so an empty
 #: `ENGINE_DB=` falls through to the anchored path instead of naming the cwd.
 DB = os.environ.get("ENGINE_DB") or os.path.join(INSTALL_ROOT, "engine.db")
-SCHEMA_VERSION = 33
+SCHEMA_VERSION = 34
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta(key TEXT PRIMARY KEY, value TEXT);
@@ -599,7 +599,24 @@ CREATE TABLE IF NOT EXISTS memories(
     -- id: checkpoint restore is delete-and-reinsert, so every row id changes,
     -- and an id-keyed edge would be shredded by the first rollback. Stored
     -- here it rides the existing dump/restore round-trip verbatim.
-    disputed TEXT NOT NULL DEFAULT ''
+    disputed TEXT NOT NULL DEFAULT '',
+    -- The simulation-clock reading, in seconds of fiction time, at the moment
+    -- this row was written. STORED rather than derived, and that is the whole
+    -- point of the column: an age computed as
+    -- `(now_turn - turn_idx) * (now_elapsed / now_turn)` reads off a MOVING
+    -- denominator, so re-running one turn with a different declared duration
+    -- silently re-ages every memory in the bank -- including rows from beats
+    -- that never changed -- and a branched chat reads the same memory at two
+    -- different ages. A stored reading is LOCAL: it rolls back with its own
+    -- row, because the write path deletes and re-mints a re-run turn's rows
+    -- and the clock itself is a frame-scoped `world` key that is not on the
+    -- checkpoint preserved-list.
+    --
+    -- NULL means "no reading", not "zero": rows with no place in play order
+    -- (prestory seeds, imported banks, a character's history carried in from
+    -- another story) have no clock to have been read, and every reader falls
+    -- back to qualitative phrasing for them.
+    encoded_at_seconds REAL
 );
 CREATE INDEX IF NOT EXISTS idx_memories_chat_char ON memories(chat_id, char_id);
 
@@ -1623,6 +1640,34 @@ MIGRATIONS = [
         # applied; after it, an untagged entry means Director-only on purpose.
         "UPDATE lore_entries SET knowledge_tag='common' "
         "WHERE category='knowledge' AND (knowledge_tag IS NULL OR knowledge_tag='')",
+    ],
+    # v33 -> v34
+    [
+        # When a memory was formed, in seconds of fiction time. Minds were
+        # measuring their own past in BEATS -- turn indices, engine
+        # vocabulary -- because it was the only working unit the payload
+        # offered them (94 stamped recalls across 54 character calls in one
+        # instrumented run, and characters reasoning in it: "the same
+        # declaration about the door lock ten beats ago"). A beat is a frame
+        # of construction, not a duration anybody in the fiction can feel.
+        "ALTER TABLE memories ADD COLUMN encoded_at_seconds REAL",
+        # Backfill at the rate the live clock already charges a beat that
+        # claimed no duration (world/mechanics.UNCLAIMED_BEAT_SECONDS, 10.0),
+        # so existing rows come out consistent with new ones by construction
+        # rather than by a number invented for the migration. Written as a
+        # literal because a migration is a historical record: it must keep
+        # producing this result even if the live constant is retuned later.
+        #
+        # It is an ESTIMATE, and the one place in this change that is. The
+        # replacement is a stored per-turn clock history; when one exists,
+        # `mind/memory_time.turn_clock_reading` is the seam that reads it and
+        # nothing downstream changes.
+        #
+        # Rows with a NULL turn_idx stay NULL: they belong to no beat, so
+        # there is no beat to charge, and their readers keep the qualitative
+        # phrasing they already had.
+        "UPDATE memories SET encoded_at_seconds = turn_idx * 10.0 "
+        "WHERE turn_idx IS NOT NULL AND encoded_at_seconds IS NULL",
     ],
 ]
 

@@ -2716,6 +2716,44 @@ behind it; the second is a payload-assembly change and should not be made
 before somebody measures what the three copies actually cost.
 
 
+### 1.85 A memory's age off a per-beat estimate, not a per-beat record
+
+**Found:** 2026-08-26, landing `memories.encoded_at_seconds`.
+
+Every memory now carries the simulation-clock reading it was written at, and
+`mind/memory_time.py` names the interval off that reading alone -- so a single
+delivered memory is exact and needs nothing here. A SUMMARY WINDOW is the gap:
+it names a range of turn indices and carries no reading of its own, so the ends
+have to be resolved to fiction time by some other route.
+
+Today `window_clock_readings` resolves them by reading the stored stamps back
+off the memories that window actually consolidated. Those are real recorded
+values, not an estimate, and they are right whenever the window minted this
+character anything at all. Two cases they cannot answer: a window whose rows
+have since been archived away, and a window that minted this character nothing
+(the character was gated out, or simply silent, for the whole stretch). Both
+fall back to the qualitative phrase, which is honest and slightly poorer.
+
+The same gap has a second face: the v34 migration backfills existing rows at
+`turn_idx * world.mechanics.UNCLAIMED_BEAT_SECONDS`. That constant is the rate
+the live clock already charges a beat that claimed no duration, so backfilled
+rows come out consistent with new ones by construction rather than by an
+invented number -- but a story whose beats mostly DID declare durations has a
+bank dated by a flat 10s/beat that its own clock never followed.
+
+**What closes both:** one row per committed turn holding the reading that turn
+ended at -- a per-turn clock history, written where `persist/commit_scene_state`
+already stores `simulation_clock`, rolled back with the turn like any other
+committed row. `window_clock_readings` is the named seam: its BODY changes and
+nothing downstream does, because every caller already takes
+`(opened_at, closed_at)` or a qualitative refusal. The backfill becomes
+re-derivable for any chat whose history survives.
+
+Not urgent: the fallback is a phrase rather than a wrong number, which is the
+posture this whole change insists on. Worth doing when something wants to date
+a window whose memories are gone -- long-bank archival is the likely trigger.
+
+
 ### 1.80 Residuals from the change tier
 
 Landed with `Design.md` § A view leads with what changed: a player view is now
