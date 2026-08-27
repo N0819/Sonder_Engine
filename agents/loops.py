@@ -1018,10 +1018,34 @@ def interaction_loop(ctx, nonce):
         # The debt promotion stays: whoever owes an answer still has the
         # floor. What changes is that their silence cannot close a beat whose
         # own addressee is still waiting to be called.
-        _addressed_unheard = [
-            cid for cid in addressed
-            if cid not in already_spoke and cid in initial_reactors
-        ]
+        # AN EMPTY DECLARATION IS NOT AN ANSWER.
+        #
+        # The first version of this guard held a beat open only while an
+        # ADDRESSED character was uncalled, and made things worse. Measured
+        # across two runs of the same scenario: before it, a silent first
+        # speaker was followed by three more calls and two of them answered
+        # (4 calls, `budget exhausted`); after it, the addressee was correctly
+        # ordered first, emitted `sequence: []`, and that null closed the beat
+        # on the spot -- one call and nothing said, three beats running.
+        #
+        # The error was treating an empty declaration as silence. A character
+        # who says nothing AND does nothing has not declined to answer; the
+        # call produced no content at all, and `no_content_streak` cannot tell
+        # those apart. Silence is an answer when a character acts without
+        # speaking, or speaks and says nothing of substance -- not when the
+        # result is empty.
+        #
+        # So the beat stays open while ANYONE in it is still uncalled and the
+        # only thing that has happened is a null. The addressee still goes
+        # first, and a genuine silence -- an emitted action with no speech --
+        # still ends the exchange exactly as before.
+        _uncalled = [cid for cid in initial_reactors if cid not in already_spoke]
+        _addressed_unheard = [cid for cid in addressed if cid in _uncalled]
+        _nothing_happened = not any(
+            (rd.get("result") or {}).get("sequence")
+            or (rd.get("result") or {}).get("actions")
+            for rd in rounds
+        )
         if (
             config.get(
                 "silence_ends_exchange",
@@ -1029,6 +1053,7 @@ def interaction_loop(ctx, nonce):
             )
             and no_content_streak >= 1
             and not _addressed_unheard
+            and not (_nothing_happened and _uncalled)
         ):
             stop_reason = "natural silence"
             break
