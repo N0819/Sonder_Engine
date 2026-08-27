@@ -437,6 +437,13 @@ def normalize_charter(stored, reservation=None):
             str(key): {str(p): int(n) for p, n in held.items()}
             for key, held in (stored.get("stood") or {}).items()
             if isinstance(held, dict)},
+        # Who each body stood its watches BESIDE, counted the same way. The
+        # companion to `stood`: that one says what a body did with its life,
+        # this one says who it did it with, and neither grows with time.
+        "served_beside": {
+            str(key): {str(other): int(n) for other, n in held.items()}
+            for key, held in (stored.get("served_beside") or {}).items()
+            if isinstance(held, dict)},
         "travelled": {str(k): int(v)
                       for k, v in (stored.get("travelled") or {}).items()},
     }
