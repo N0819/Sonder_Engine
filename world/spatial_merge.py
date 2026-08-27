@@ -24,6 +24,7 @@ from world.spatial_containment import (
     containment_broken_by_scale_change,
     derive_containment_from_contacts,
     derive_contained_positions,
+    derive_inventory_placements,
     materialize_enclosure_interiors,
     materialize_named_stations,
     replace_engine_minted_interiors,
@@ -1402,6 +1403,19 @@ def merge_scene_with_diff(
     # with it instead of cancelling it (`stamp_sight_direction`).
     stamp_sight_direction(merged)
     normalize_scene_subjects(merged)
+    # A THING THAT WAS MOVED IS SOMEWHERE. The hand that mints objects owns
+    # `entities` and cannot write `positions` at all, so what it knows about
+    # where a thing ended up is written into `inventory_ops` -- a ledger that
+    # had no reader anywhere in persist/ or world/ until this call. Derived
+    # here, AFTER subject canonicalisation so the endpoints resolve against one
+    # spelling per being, and BEFORE containment hygiene so a carrier relation
+    # this derives satisfies the same cycle/known-container rules a declared
+    # one does and reaches `derive_contained_positions` below like any other.
+    # Yields to any position or containment this beat's diff declared by name.
+    derive_inventory_placements(
+        merged, diff.get("inventory_ops"),
+        declared=(set(incoming_positions or {})
+                  | set(diff.get("containment") or {})))
     normalize_scene_containment(merged)
     # ...and a body that has taken another one inside HAS an inside, whether or
     # not any model remembered to author it. The floor mints one room from the

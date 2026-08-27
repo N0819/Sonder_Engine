@@ -730,6 +730,238 @@ def _positions_write(positions: dict, subject: str, room: str) -> None:
     positions[subject] = room
 
 
+# ---------------------------------------------------------------------------
+# PLACEMENT DERIVED FROM THE TRANSFER LEDGER.
+#
+# An entity's room is `scene["positions"][id]` and nothing else -- there is no
+# `room` field on the entity record and no room column on its durable
+# projection. So a thing is somewhere only if some hand wrote a position for
+# it, and the hand that MINTS things cannot: `entities` belongs to the objects
+# specialist, `positions` to the spatial specialist, the two run in parallel on
+# disjoint scopes, and a `positions` key emitted by the objects specialist is
+# dropped by validation before assembly ever sees it -- silently, with no
+# `outside_scope` note.
+#
+# Measured over every active Director variant on disk: the single-hand
+# `director_establish` places 96.5% of what it mints (278/288); the monolithic
+# `director_resolve` placed 35.7% (752/2108); the orchestrated fan-out places
+# 5.8% (85/1465), and 78 of those 85 are bodies that also carry an entity
+# record. Genuine non-body objects placed by the fan-out across the whole live
+# corpus: about seven. The split is structural, not a model failure.
+#
+# The evidence to place them was written anyway, by the right hand, on the
+# right beat, into a channel with no reader. Two instrumented runs, 67 objects
+# calls, zero `positions` keys emitted -- and placements like
+#     {"op": "place", "object_id": "<a thing>", "from_id": "<a body>",
+#      "to_id": "<a room>", "relation": "on"}
+# sitting in `inventory_ops`, which nothing in persist/ or world/ consumed.
+#
+# This is the same move `derive_scene_stations` makes and states outright: the
+# ledger the models DO maintain seeds the one they do not. It is a projection,
+# never a decider -- it refuses everything it cannot resolve against the scene
+# the merge already holds, so an unresolvable destination leaves the thing
+# exactly as unplaced as it is today.
+
+
+def resolve_placement_target(scene: dict, to_id):
+    """What a transfer's destination refers to, resolved against the scene.
+
+    Returns one of:
+      ("room", room_id)   -- a place; the subject stands in it.
+      ("carrier", holder) -- a BODY; the subject is carried, and where it then
+                             is follows from where the holder is.
+      ("anchor", key)     -- something else the scene already places; the
+                             subject is in that thing's room, at it.
+      (None, None)        -- nothing the scene can vouch for. REFUSED.
+
+    The refusal is the point. A destination is variously a room id, a body's
+    display name, a bare noun the fiction invented for a surface, or null, and
+    writing an unresolvable token into `positions` is precisely the category
+    error `repair_entity_positions` exists to clean up afterwards. Better to
+    leave a thing unplaced than to place it nowhere-shaped.
+
+    Body-ness is derived, never read off a label: `_is_body_entity` asks
+    whether the thing wears something or has a size relative to its own
+    baseline, because `kind` is free text a model writes (577 kinds outside
+    the known set across the corpus, `character`, `succubus` and `furniture`
+    among the most common).
+    """
+    text = str(to_id or "").strip()
+    if not text:
+        return (None, None)
+
+    rooms = (scene or {}).get("rooms") or {}
+    if isinstance(rooms, dict) and rooms:
+        if text in rooms:
+            return ("room", text)
+        folded = text.casefold()
+        for rid, room in rooms.items():
+            if str(rid).strip().casefold() == folded:
+                return ("room", rid)
+            if isinstance(room, dict) and \
+                    str(room.get("name") or "").strip().casefold() == folded:
+                return ("room", rid)
+        slug = normalize_room_id(text)
+        if slug and slug in rooms:
+            return ("room", slug)
+
+    eid, entity = _unique_entity_keyed(scene, text)
+    if eid:
+        if _is_body_entity(scene, eid, entity):
+            return ("carrier", eid)
+        # A thing, not a body: the engine's vocabulary for being AT a thing
+        # rather than inside it is a station, and the room is the thing's own.
+        # A thing that is itself nowhere anchors nothing.
+        return ("anchor", eid) if room_of(scene, eid) is not None \
+            else (None, None)
+
+    # A subject the scene places but keeps no entity record for -- a registered
+    # cast member is the common case. Body evidence decides which of the two
+    # remaining readings applies.
+    if room_of(scene, text) is not None:
+        if _is_body_entity(scene, text, None):
+            return ("carrier", text)
+        return ("anchor", text)
+    return (None, None)
+
+
+def _placement_subject_key(scene: dict, eid: str, entity) -> str:
+    """The spelling the scene's ledgers already use for this entity, else its
+    id.
+
+    One being, one key. `positions` is keyed by whatever the writer reached
+    for -- id, display name, alias -- and minting a second spelling here would
+    put the same thing in two rooms at once, which is the exact defect
+    `_dedup_duplicate_position_keys` exists to undo one layer up.
+    """
+    labels = [eid]
+    if isinstance(entity, dict):
+        labels.append(entity.get("name"))
+        labels.extend(entity.get("aliases") or [])
+    ledgers = [(scene or {}).get("positions"), (scene or {}).get("contained")]
+    for label in labels:
+        text = str(label or "").strip()
+        if not text:
+            continue
+        for ledger in ledgers:
+            if not isinstance(ledger, dict):
+                continue
+            for key in ledger:
+                if str(key).strip().casefold() == text.casefold():
+                    return key
+    return eid
+
+
+def derive_inventory_placements(scene: dict, inventory_ops,
+                                *, declared=()) -> list:
+    """Place what a transfer op moved, from the ledger the objects hand fills.
+
+    THREE RULES, ALL SUBTRACTIVE:
+
+    1. A destination that does not resolve against the scene writes nothing.
+       `resolve_placement_target` is the whole of that judgment.
+    2. A destination that resolves to a BODY writes a CARRIER RELATION, never
+       a position. Reading "handed to someone" as "in that room" is the one
+       real information expansion available here -- it would make a pocketed
+       thing nameable by everyone standing nearby. The relation instead lets
+       `derive_contained_positions` put it where the holder is while
+       `hiding_holders_of` keeps it out of sight if the holder pocketed it.
+       The op's own `relation` word becomes the containment mode verbatim and
+       is normalized by `_clean_containment`, so the ledger keeps ONE default
+       rather than growing a second, competing one; every mode outside
+       `_OPEN_CONTAINMENT_MODES` conceals, which is the safe direction for a
+       word the engine cannot vouch for.
+    3. A null or blank endpoint is SILENCE, never an erasure -- the standing
+       `_merge_entity` doctrine. Nothing is unplaced by this pass.
+
+    The `op` verb is deliberately not read at all. Where a thing ENDED UP is
+    the only question here, and a verb vocabulary would reject the words the
+    fiction actually reaches for (465 barrier words and 577 entity kinds
+    outside their known sets, measured, are what that costs).
+
+    `declared` is the set of subject spellings a hand placed by name in this
+    beat's own diff. An explicit write always outranks a derivation, which is
+    also what keeps this from re-opening the ownership race the fan-out exists
+    to prevent: the spatial specialist still owns `positions` and the contact
+    specialist still owns `containment`; this speaks only where they did not.
+
+    Returns [(subject, kind, destination)] for the caller's report; mutates.
+    """
+    if not isinstance(inventory_ops, list) or not inventory_ops:
+        return []
+    entities = (scene or {}).get("entities")
+    if not isinstance(entities, dict) or not entities:
+        return []
+    positions = scene.get("positions")
+    if not isinstance(positions, dict):
+        positions = scene["positions"] = {}
+    spoken_for = {str(name).strip().casefold()
+                  for name in (declared or []) if str(name).strip()}
+
+    placed = []
+    for op in inventory_ops:
+        if not isinstance(op, dict):
+            continue
+        eid, entity = _unique_entity_keyed(scene, op.get("object_id"))
+        if not eid or not isinstance(entity, dict):
+            continue          # not a thing this scene knows: place nothing
+        if entity.get("ubiquitous"):
+            continue          # a bodiless voice is nowhere by definition
+        labels = {str(eid).strip().casefold(),
+                  str(entity.get("name") or "").strip().casefold()}
+        labels |= {str(a).strip().casefold()
+                   for a in (entity.get("aliases") or [])}
+        if labels & spoken_for:
+            continue          # a hand placed it by name; the derivation yields
+        kind, destination = resolve_placement_target(scene, op.get("to_id"))
+        if not kind:
+            continue
+        subject = _placement_subject_key(scene, eid, entity)
+        folded_subject = subject.strip().casefold()
+        if kind == "carrier":
+            if str(destination).strip().casefold() == folded_subject:
+                continue
+            record = _clean_containment(
+                {"in": destination, "mode": op.get("relation")}, subject)
+            if record is None:
+                continue
+            # An interior is a PLACE, with rooms minted for it and bodies
+            # moved into it. A transfer op is evidence of carriage and never
+            # of that, so the one mode that would trigger it is not derivable
+            # here; the thing is inside something, and that is all this says.
+            if record["mode"] == "interior":
+                record["mode"] = "container"
+            contained = scene.setdefault("contained", {})
+            if not isinstance(contained, dict):
+                continue
+            for key in [k for k in contained
+                        if str(k).strip().casefold() == folded_subject]:
+                contained.pop(key, None)
+            contained[subject] = record
+        else:
+            room = destination if kind == "room" \
+                else room_of(scene, destination)
+            if not room:
+                continue
+            # Set down: a thing that has reached a place is no longer being
+            # carried, and leaving the record would drag it back to its old
+            # holder's room on the next derivation.
+            contained = scene.get("contained")
+            if isinstance(contained, dict):
+                for key in [k for k in contained
+                            if str(k).strip().casefold() == folded_subject]:
+                    contained.pop(key, None)
+            _positions_write(positions, subject, room)
+            # DELIBERATELY NO STATION. Being set down ON a thing is a within-
+            # room fact, and `normalize_scene_stations` blanks any `at` that is
+            # not one of the room's own declared anchors -- so a station
+            # written here would be erased later in this same merge and read,
+            # from every caller, as a field nothing honours. The room is what
+            # this ledger can prove; `derive_scene_stations` owns the rest.
+        placed.append((subject, kind, destination))
+    return placed
+
+
 def _declared_interior_region(scene: dict, occupant: str, holder: str) -> str:
     """The region of `holder` a standing interior CONTACT says `occupant` is
     in, or "". One definition, read by two callers.
