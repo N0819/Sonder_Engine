@@ -27,7 +27,21 @@ from world.mechanics import stable_event_key
 CHARTERS_KEY = "charters"
 REGISTRY_VERSION = 1
 DEFAULT_WINDOW_HOURS = 4.0
+#: How much simulated time one IN-PLAY catch-up may burn. A story returning to
+#: a charter after a long absence advances it inside a turn's wall clock, so
+#: this is a latency bound and stays where it was.
 MAX_CATCHUP_HOURS = 720.0
+
+#: How much history an author may ask a PRE-STORY run to live through. This
+#: shared the number above until it was measured, and the sharing was silent
+#: truncation: `min(MAX_CATCHUP_HOURS, horizon_hours)` handed a request for a
+#: year back a month with no warning. The two are not the same question -- a
+#: presim happens once, before anybody is waiting on a turn, and it costs
+#: ~1.8 ms per simulated hour on a 40-body charter, so a full year is about
+#: 16 seconds of arithmetic and 8 KB of familiarity. Two years is the ceiling
+#: rather than the intent; the default horizon is unchanged.
+MAX_PRESIM_HOURS = 17520.0
+
 DEFAULT_PRESIM_TAIL_HOURS = 96.0
 GENERATION_LORE_LIMIT = 48
 CAST_HISTORY_REQUEST_CAP = 16
@@ -462,9 +476,17 @@ def presim_registry(registry, *, horizon_hours=MAX_CATCHUP_HOURS,
     stock movement cheaply. The recent tail enables practices at authored
     places so Scene Life has fresh episodes to draw on. Returned events are
     objective history; no memories are fabricated from the history brief.
+
+    BOUND BODIES ARE SIMULATED HERE, and only here. `charter_run.step` normally
+    withholds cognition and motion from a body a registered character has taken
+    over -- correct during play, and exactly backwards before the story opens,
+    when no registered character exists yet and the featured cast's past is the
+    thing this function is for. Left applied, it made the major characters the
+    emptiest bodies in their own institution: 25 watches stood, no memory of
+    any of them, nobody known.
     """
     registry = normalize_registry(copy.deepcopy(registry))
-    horizon = max(0.0, min(MAX_CATCHUP_HOURS, float(horizon_hours or 0.0)))
+    horizon = max(0.0, min(MAX_PRESIM_HOURS, float(horizon_hours or 0.0)))
     tail = max(0.0, min(horizon, float(active_tail_hours or 0.0)))
     coarse = horizon - tail
     produced = []
@@ -474,7 +496,7 @@ def presim_registry(registry, *, horizon_hours=MAX_CATCHUP_HOURS,
             state["active_places"] = []
             state, events = run(
                 state, coarse, window=max(8.0, item["window_hours"]),
-                seed=int(seed) + index * 100_000)
+                seed=int(seed) + index * 100_000, simulate_bound=True)
             produced.extend({"charter": key, **copy.deepcopy(event)}
                             for event in events)
         if tail:
@@ -482,7 +504,7 @@ def presim_registry(registry, *, horizon_hours=MAX_CATCHUP_HOURS,
                                                if str(x)})
             state, events = run(
                 state, tail, window=min(4.0, item["window_hours"]),
-                seed=int(seed) + index * 100_000 + 50_000)
+                seed=int(seed) + index * 100_000 + 50_000, simulate_bound=True)
             produced.extend({"charter": key, **copy.deepcopy(event)}
                             for event in events)
         item["state"] = state
@@ -813,8 +835,11 @@ def _plan_lived_location(cid, request, chat):
                   (owning_book,), one=True)
         if not owner or int(owner["chat_id"] or -1) != int(cid):
             raise ValueError("owning lorebook must belong to this story")
+    # The ceiling is the presim's; the DEFAULT is still a month. An author who
+    # says nothing gets what they always got, and an author who asks for a year
+    # gets a year instead of a silently truncated month.
     horizon = max(0.0, min(
-        MAX_CATCHUP_HOURS,
+        MAX_PRESIM_HOURS,
         float(request.get("horizon_hours", MAX_CATCHUP_HOURS))))
     constraints = {
         key: copy.deepcopy(request.get(key))

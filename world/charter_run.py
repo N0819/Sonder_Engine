@@ -54,24 +54,55 @@ def _event(kind, at_hours, place, **payload):
             "place": str(place or ""), **payload}
 
 
-def _remember_experience(store, holder, row):
-    """Append one participant-owned experience, updating repeated habits."""
+#: How many autobiographical rows one body may carry. This was 16, chosen when
+#: the only writer was beat-scale gossip in a 96-hour tail and the cost of a
+#: row had not been measured. It has been: a row is ~324 bytes of JSON and
+#: carries NO embedding, where a registered character's memory row costs ~718
+#: bytes of text plus ~20.5 KB of vector -- Charter memory is about 65x cheaper
+#: per row than the tier it feeds. At this cap a body holding a full life costs
+#: well under a megabyte, against presim arithmetic that runs at ~1.8 ms per
+#: simulated hour. The old number was not protecting anything that needed
+#: protecting; it was throwing away the depth the promoted character is for.
+EXPERIENCE_CAP = 4000
+
+#: How many bodies may share a place before co-presence stops depositing
+#: familiarity. A room of this many is people you served beside; a hall of
+#: five hundred is a crowd, and pairing it is quadratic for no depth.
+CO_PRESENCE_WIDTH = 64
+
+
+def _remember_experience(store, holder, row, fold=True):
+    """Append one participant-owned experience, updating repeated habits.
+
+    ``fold`` off is the fast path for rows whose id is already unique -- a
+    social act or a witnessed happening is a distinct occasion, so scanning
+    the holder's whole life for a match finds nothing and costs the length of
+    that life on every write. Only genuinely recurring rows (a habit, a post
+    stood again, an acquaintance met again) need the scan.
+
+    Rows are mutated by copy rather than in place: the caller's charter is
+    shared into this store by reference, and `step` promises not to mutate
+    what it was handed.
+    """
     holder = str(holder or "")
     if not holder:
         return
-    rows = [dict(value) for value in (store.get(holder) or ())
-            if isinstance(value, dict)]
-    event_id = str(row.get("id") or "")
-    for existing in rows:
-        if event_id and str(existing.get("id") or "") == event_id:
-            existing["last_at_hours"] = row.get("at_hours")
-            existing["repetitions"] = int(existing.get("repetitions") or 1) + 1
-            store[holder] = rows[-16:]
-            return
+    rows = list(store.get(holder) or ())
+    if fold:
+        event_id = str(row.get("id") or "")
+        for position, existing in enumerate(rows):
+            if not isinstance(existing, dict):
+                continue
+            if event_id and str(existing.get("id") or "") == event_id:
+                rows[position] = dict(
+                    existing, last_at_hours=row.get("at_hours"),
+                    repetitions=int(existing.get("repetitions") or 1) + 1)
+                store[holder] = rows[-EXPERIENCE_CAP:]
+                return
     rows.append(dict(row))
     rows.sort(key=lambda value: (
         float(value.get("at_hours") or 0.0), str(value.get("id") or "")))
-    store[holder] = rows[-16:]
+    store[holder] = rows[-EXPERIENCE_CAP:]
 
 
 def _record_social_experiences(experiences, acts, bodies, at_hours):
@@ -89,10 +120,12 @@ def _record_social_experiences(experiences, acts, bodies, at_hours):
             "act": str(act.get("act") or "interacted"),
             "line": str(act.get("line") or "")[:500],
         }
-        _remember_experience(experiences, actor, dict(base, role="actor"))
+        # Unique id per act: nothing to fold, so do not pay the scan.
+        _remember_experience(experiences, actor, dict(base, role="actor"),
+                             fold=False)
         if other in bodies:
             _remember_experience(
-                experiences, other, dict(base, role="recipient"))
+                experiences, other, dict(base, role="recipient"), fold=False)
 
 
 def _run_private_habits(experiences, habit_runs, bodies, watch, at_hours):
@@ -126,13 +159,106 @@ def _run_private_habits(experiences, habit_runs, bodies, watch, at_hours):
             })
 
 
-def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None):
+def _record_coarse_experiences(experiences, bodies, watch, previous_watch,
+                               posts, events, known_before, minds, at_hours):
+    """The past a body keeps at COARSE resolution, where nobody is watching.
+
+    THE GAP THIS CLOSES. `active_places` is documented three hundred lines
+    below as "uniform existence, variable resolution -- everybody keeps needs,
+    feeling, belief and A PAST; only the places a scene is actually in get
+    social simulation." The past was the one item on that list that was not
+    true. Measured before this existed: the coarse phase produced ZERO
+    experience rows over 240 simulated hours, so a 720-hour presim was 624
+    hours of silence and a 96-hour tail, and two of four charters in a real
+    story ended a simulated month with no memory of it whatsoever.
+
+    APPEND-ONLY, AND ONLY ON CHANGE. The module's cost rule is that storage
+    grows with incident rather than with time, and it holds here: standing the
+    same post for a year writes one row, not one per window; an acquaintance
+    is written when it is FORMED, because the belief store already tracks
+    whether it exists; a happening is written by the bodies who were standing
+    where it happened. A quiet year is a handful of rows and a hard one is
+    hundreds, which is the shape a life actually has.
+
+    Nothing here reaches past a body's own position. Who was in the room, what
+    post they took, and what occurred where they stood is what that body
+    perceived; the institution's register is not consulted and no row is
+    copied to anybody who was elsewhere.
+    """
+    at_hours = round(float(at_hours), 6)
+    place_of = {key: str((body or {}).get("place") or "")
+                for key, body in (bodies or {}).items()}
+
+    # A POST TAKEN. Written when the watch bill CHANGES, because the bill is
+    # re-planned every window and a row per window is the diary of nothing
+    # that the module docstring warns about. The standing of it is counted
+    # rather than narrated -- see `stood` and `served_beside` in `step`.
+    for post_key, body_key in sorted((watch or {}).items()):
+        if body_key not in (bodies or {}):
+            continue
+        if str((previous_watch or {}).get(post_key) or "") == str(body_key):
+            continue
+        post = (posts or {}).get(post_key) or {}
+        _remember_experience(experiences, body_key, {
+            "id": f"service:{body_key}:{post_key}:{at_hours:0.4f}",
+            "kind": "service", "role": "self", "at_hours": at_hours,
+            "place": str(post.get("place") or place_of.get(body_key) or ""),
+            "post": str(post_key),
+            "serves": [str(x) for x in (post.get("serves") or ())][:4],
+        }, fold=False)
+
+    # AN ACQUAINTANCE FORMED. The belief store is the record of who a body has
+    # come to know, so the first appearance of a name in it is the meeting --
+    # no second bookkeeping store, and no row when they merely meet again.
+    for body_key, held in sorted((minds or {}).items()):
+        if body_key not in (bodies or {}):
+            continue
+        seen = known_before.get(body_key) or frozenset()
+        for other in sorted(set(held or ()) - set(seen)):
+            if other == body_key:
+                continue
+            _remember_experience(experiences, body_key, {
+                "id": f"met:{body_key}:{other}",
+                "kind": "acquaintance", "role": "self", "at_hours": at_hours,
+                "place": place_of.get(body_key, ""),
+                "other": str(other),
+                "firsthand": (held.get(other) or {}).get("heard_from") is None,
+            }, fold=False)
+
+    # A HAPPENING STOOD THROUGH. Presence is the whole test, exactly as it is
+    # for `charter_news.witness` -- a body standing where something crossed a
+    # floor lived through it, and a body elsewhere did not.
+    for index, event in enumerate(events or ()):
+        where = str((event or {}).get("place") or "")
+        if not where:
+            continue
+        kind = str(event.get("kind") or "")
+        for body_key in sorted(bodies or {}):
+            if place_of.get(body_key) != where:
+                continue
+            _remember_experience(experiences, body_key, {
+                "id": f"stood_through:{body_key}:{kind}:{at_hours:0.4f}:{index}",
+                "kind": "stood_through", "role": "witness",
+                "at_hours": at_hours, "place": where,
+                "event_kind": kind,
+                "about": str(event.get("upkeep") or event.get("post")
+                             or event.get("body") or ""),
+            }, fold=False)
+
+
+def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
+         simulate_bound=False):
     """Advance one planning window. Returns ``(charter, events)``.
 
     The charter is returned rather than mutated, so a caller may explore a
     window without committing to it -- which is what a rerun-from-stage or a
     checkpoint restore needs, and what a tick that mutated in place could not
     offer.
+
+    ``simulate_bound`` suspends the promotion exclusion below. It is for the
+    PRE-STORY catch-up only, and it exists because the exclusion was being
+    applied at a time when the thing it defers to does not yet exist. See the
+    note on `external`.
     """
     charter = normalize_charter(charter)
     hours = max(0.0, float(hours))
@@ -149,7 +275,18 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None):
     # Promotion delegates cognition and motion to the registered character.
     # Charter keeps only an institutional projection: it may put their name
     # on a watch bill, but may not walk, tire, feel, or speak for them.
-    external = set((charter.get("bindings") or {}).keys())
+    #
+    # DURING PLAY. Before the story opens there IS no registered character to
+    # delegate to, and manufacturing that character's past is the entire point
+    # of the pre-story run -- so applying the exclusion there subtracts
+    # cognition and hands it to nobody. Measured on the site_17 presim: after
+    # 720 simulated hours the one featured resident had stood 25 watches and
+    # was the SINGLE body absent from both `minds` and `needs`, holding zero
+    # experiences, while the 39 unbound bodies around it averaged 4.4
+    # experiences and knew 5.8 people each. The major character was the
+    # emptiest body in its own institution.
+    external = set() if simulate_bound \
+        else set((charter.get("bindings") or {}).keys())
     if reach is None and scene:
         # Recomputed here when a caller steps directly, and hoisted out by
         # `run` when it does not. Measured on the 500-hand fixture: 500 bodies
@@ -401,6 +538,11 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None):
     # Charter-held copy before decay/talk, and expose the institutional
     # projection to the remaining bodies as a FIGURE instead.  They may see
     # and talk about the person; Charter may never recreate a mind for them.
+    # Who each body knew before this window, so an acquaintance can be
+    # written when it is FORMED rather than re-written every window it holds.
+    known_before = {str(key): frozenset(held or ())
+                    for key, held in (charter.get("minds") or {}).items()
+                    if isinstance(held, dict)}
     minds = decay_minds(charter.get("minds") or {}, hours)
     if external:
         minds = {holder: claims for holder, claims in minds.items()
@@ -528,8 +670,14 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None):
     politics = dict(politics, regard=regard)
     told += len(acts)
 
+    # COPY-ON-WRITE, per holder. The lists are shared in by reference and
+    # `_remember_experience` replaces the one it touches, so a window costs the
+    # holders it actually writes to rather than every row in the institution.
+    # Deep-copying the whole store each window was O(all rows) unconditionally
+    # -- at the depth this store is now allowed to reach that alone would have
+    # cost a simulated year more than the simulation of it.
     experiences = {
-        str(holder): [dict(row) for row in rows if isinstance(row, dict)]
+        str(holder): rows
         for holder, rows in (charter.get("experiences") or {}).items()
         if isinstance(rows, list)}
     _record_social_experiences(experiences, acts, bodies, at + hours)
@@ -539,6 +687,9 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None):
         if isinstance(runs, dict)}
     _run_private_habits(
         experiences, habit_runs, bodies, plan["watch"], at + hours)
+    _record_coarse_experiences(
+        experiences, bodies, plan["watch"], charter.get("watch"),
+        charter["posts"], events, known_before, minds, at + hours)
 
     heard_blame = {k: set(v) for k, v in
                    (charter.get("heard_blame") or {}).items()}
@@ -565,6 +716,43 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None):
     feel = advance_feel(owned_feel, owned_bodies, needs_after,
                         movable_watch, charter["posts"], upkeeps, events,
                         hours)
+
+    # WHO THEY STOOD IT WITH, counted the same way and for the same reason.
+    # A stable institution is QUIET -- measured on the 40-body site_17 charter,
+    # a healthy simulated year emitted zero events and the watch bill stopped
+    # changing after about three months, so anything written only on change
+    # goes silent while the crew is still living. What a year of that actually
+    # deposits is not incident, it is FAMILIARITY: the hand you were beside
+    # three hundred times is the one you know, and a count says that in one row
+    # where three hundred rows would say it worse. Keyed bodies x bodies, so it
+    # grows with the shape of the institution rather than with time.
+    served_beside = {k: dict(v) for k, v
+                     in (charter.get("served_beside") or {}).items()
+                     if isinstance(v, dict)}
+    _company = {}
+    for body_key, body in bodies.items():
+        if not body.get("available"):
+            continue
+        where = str(body.get("place") or "")
+        if where:
+            _company.setdefault(where, []).append(body_key)
+    for company in _company.values():
+        # WHERE THE BODIES ACTUALLY ARE, on watch or off it. Keying this to
+        # post places instead reached 9 of 40 bodies on the site_17 charter,
+        # because most posts stand alone in a room and everybody off the bill
+        # -- which is most of an institution, most of the time -- was never
+        # counted as being anywhere with anyone.
+        #
+        # A crowd is not acquaintance, and it is quadratic. Past this width a
+        # place is a concourse rather than a room shared, so it deposits
+        # nothing rather than deposits everything.
+        if len(company) > CO_PRESENCE_WIDTH:
+            continue
+        for one in company:
+            held = served_beside.setdefault(one, {})
+            for other in company:
+                if one != other:
+                    held[other] = held.get(other, 0) + 1
 
     # The service record: a window actually stood is a window remembered.
     # Keyed bodies x posts, so it grows with the shape of the institution
@@ -603,6 +791,7 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None):
                                     for k, v in heard_blame.items()}
     after_charter["feel"] = feel
     after_charter["stood"] = stood
+    after_charter["served_beside"] = served_beside
     after_charter["told"] = told
     after_charter["witnessed"] = witnessed
     after_charter["news_keys"] = sorted(news_keys)
@@ -620,7 +809,7 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None):
     return after_charter, events
 
 
-def run(charter, hours, window=4.0, seed=0, trace=False):
+def run(charter, hours, window=4.0, seed=0, trace=False, simulate_bound=False):
     """Advance many windows. Returns ``(charter, events)``, or
     ``(charter, events, trace)`` when ``trace`` is set.
 
@@ -666,7 +855,8 @@ def run(charter, hours, window=4.0, seed=0, trace=False):
         # identical draws, while the whole run stays a pure function of the
         # caller's seed.
         charter, produced = step(charter, hours=span, seed=int(seed) + index,
-                                 reach=reach, paths=paths)
+                                 reach=reach, paths=paths,
+                                 simulate_bound=simulate_bound)
         events.extend(produced)
         if trace:
             notes.append(window_note(charter, produced,

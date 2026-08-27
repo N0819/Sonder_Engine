@@ -170,3 +170,149 @@ class TestReplay:
         step(charter, hours=4.0)
 
         assert charter == before
+
+
+class TestTheFeaturedCastGetsAPast:
+    """A body a registered character will take over is excluded from cognition
+    and motion -- correct during play, and exactly wrong before the story
+    opens, when there is no registered character to delegate to and
+    manufacturing that character's past is the entire point of the run.
+
+    Measured on the site_17 presim before this was fixed: after 720 simulated
+    hours the one featured resident had stood 25 watches and was the SINGLE
+    body absent from both `minds` and `needs`, holding zero experiences, while
+    the 39 unbound bodies around it averaged 4.4 experiences and knew 5.8
+    people each. The major character was the emptiest body in its institution.
+    """
+
+    @staticmethod
+    def _bound(spec, who):
+        charter = _ready(spec)
+        for body in charter["bodies"].values():
+            body["place"] = "galley"
+            body["berth"] = "galley"
+        charter["needs"] = seed_needs(charter["bodies"])
+        charter["bindings"] = {who: {"char_id": 1, "entity_id": "e1",
+                                     "name": who.title(), "promoted_turn": 0}}
+        return charter
+
+    def test_a_bound_body_is_hollowed_out_by_default(self):
+        """The play-time behaviour, pinned so the fix cannot silently widen:
+        Charter keeps the bound body on the watch bill and nothing else."""
+        state, _ = run(self._bound(SHIP, "vega"), hours=240.0, window=8.0,
+                       seed=3)
+
+        assert state["minds"].get("vega") in (None, {})
+        assert state["needs"].get("vega") in (None, {})
+        assert state["minds"]["chief"], "an unbound peer still forms beliefs"
+
+    def test_the_presim_gives_a_bound_body_the_same_life_as_its_peers(self):
+        """`simulate_bound` is the pre-story dial. The featured body must come
+        out indistinguishable from the crew it served beside -- otherwise the
+        one person the player actually meets is the one with no past."""
+        state, _ = run(self._bound(SHIP, "vega"), hours=240.0, window=8.0,
+                       seed=3, simulate_bound=True)
+
+        peers = [key for key in state["bodies"] if key != "vega"]
+        assert state["minds"]["vega"], "the featured body knows nobody"
+        assert state["needs"]["vega"], "the featured body has no needs"
+        assert len(state["minds"]["vega"]) >= min(
+            len(state["minds"].get(key) or {}) for key in peers)
+
+    def test_the_exclusion_deletes_state_rather_than_skipping_it(self):
+        """Why the default is destructive and not merely inert: `owned_needs`
+        filters the bound body out and the FILTERED result becomes the new
+        store, so one window erases what generation seeded. A presim that ran
+        with the exclusion on cannot be repaired after the fact."""
+        charter = self._bound(SHIP, "vega")
+        assert charter["needs"]["vega"], "seeded before the run"
+
+        state, _ = run(charter, hours=8.0, window=8.0, seed=3)
+
+        assert not state["needs"].get("vega"), "one window, and it is gone"
+
+
+class TestTheQuietYearsAreRememberedToo:
+    """`active_places` is documented as "uniform existence, variable
+    resolution -- everybody keeps needs, feeling, belief and A PAST". The past
+    was the one item on that list that was not true: measured before this,
+    the coarse phase produced ZERO experience rows over 240 simulated hours,
+    so a 720-hour presim was 624 hours of silence and a 96-hour tail.
+    """
+
+    #: A crew that does not starve. SHIP's needs drain faster than anything
+    #: aboard replenishes them, so over a long run every hand goes unavailable
+    #: and ends up alone at a different post -- true of that fixture and
+    #: nothing to do with what these tests are about, which is what a LIVING
+    #: institution deposits while nothing is going wrong.
+    KEPT = {"rest": {"floor": 0.05, "drift_per_hour": 0.0005,
+                     "service_per_hour": 0.20},
+            "sustenance": {"floor": 0.05, "drift_per_hour": 0.0005,
+                           "service_per_hour": 0.20}}
+
+    @classmethod
+    def _quiet(cls, hours, **kw):
+        charter = _ready(SHIP)
+        for body in charter["bodies"].values():
+            body["place"] = "galley"
+            body["berth"] = "galley"
+        charter["needs"] = seed_needs(charter["bodies"], cls.KEPT)
+        charter["active_places"] = []
+        return run(charter, hours=hours, window=8.0, seed=5, **kw)[0]
+
+    def test_the_coarse_phase_writes_a_past_at_all(self):
+        state = self._quiet(240.0)
+
+        rows = [row for held in state["experiences"].values() for row in held]
+        assert rows, "the long phase of every presim recorded nothing"
+        assert {row["kind"] for row in rows} <= {
+            "service", "acquaintance", "stood_through"}
+
+    def test_a_body_remembers_taking_a_post_but_not_holding_it(self):
+        """The module's cost rule -- storage grows with incident, not with
+        time -- has to survive the new writers. A watch bill that settles and
+        stays settled is one row per body, not one per window."""
+        short = self._quiet(240.0)["experiences"]
+        long = self._quiet(2400.0)["experiences"]
+
+        def service(store):
+            return sum(1 for held in store.values() for row in held
+                       if row["kind"] == "service")
+
+        assert service(short), "taking a post is worth remembering"
+        assert service(long) < service(short) * 4, (
+            "ten times the hours must not be ten times the rows")
+
+    def test_familiarity_is_counted_rather_than_narrated(self):
+        """What a quiet year actually deposits is not incident, it is who you
+        were beside. Measured on the 40-body site_17 charter: a healthy
+        simulated year emitted zero events and the watch bill stopped changing
+        after about three months, so anything written only on change goes
+        silent while the crew is still living."""
+        short = self._quiet(240.0)["served_beside"]
+        long = self._quiet(2400.0)["served_beside"]
+
+        assert short, "nobody was beside anybody"
+        assert set(short) == set(long), "the same crew, either way"
+        assert max(sum(v.values()) for v in long.values()) > \
+            max(sum(v.values()) for v in short.values()), (
+                "familiarity has to deepen with time even when nothing happens")
+
+    def test_a_bound_body_accumulates_the_quiet_past_too(self):
+        """The two fixes have to compose: simulating the featured cast is
+        worth nothing if the phase they are simulated through writes nothing.
+        """
+        charter = _ready(SHIP)
+        for body in charter["bodies"].values():
+            body["place"] = "galley"
+            body["berth"] = "galley"
+        charter["needs"] = seed_needs(charter["bodies"], self.KEPT)
+        charter["active_places"] = []
+        charter["bindings"] = {"vega": {"char_id": 1, "entity_id": "e1",
+                                        "name": "Vega", "promoted_turn": 0}}
+
+        state = run(charter, hours=240.0, window=8.0, seed=5,
+                    simulate_bound=True)[0]
+
+        assert state["experiences"].get("vega"), "the featured body again"
+        assert state["served_beside"].get("vega")

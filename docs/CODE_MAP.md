@@ -121,7 +121,7 @@
 | `world/charter_intervene.py` | 112 |  | `world.charter_model` |
 | `world/charter_log.py` | 374 |  | `world.charter_commitment`, `world.charter_decide`, `world.charter_economy`, `world.charter_feel`, `world.charter_mind`, `world.charter_model`, `world.charter_needs`, `world.charter_news`, `world.charter_politics`, `world.charter_social`, `world.charter_temper` |
 | `world/charter_mind.py` | 262 |  | — |
-| `world/charter_model.py` | 464 |  | `world.charter_figure` |
+| `world/charter_model.py` | 471 |  | `world.charter_figure` |
 | `world/charter_move.py` | 210 |  | `world.charter_space` |
 | `world/charter_needs.py` | 297 |  | `world.charter_model` |
 | `world/charter_news.py` | 316 |  | `world.charter_mind`, `world.charter_talk` |
@@ -131,8 +131,8 @@
 | `world/charter_practice.py` | 567 |  | `world.charter_figure`, `world.charter_mind`, `world.charter_politics`, `world.charter_talk` |
 | `world/charter_promote.py` | 328 |  | `world.charter_commitment`, `world.charter_feel`, `world.charter_politics`, `world.charter_social` |
 | `world/charter_roster.py` | 134 |  | `world.charter_model` |
-| `world/charter_run.py` | 678 |  | `world.charter_commitment`, `world.charter_decide`, `world.charter_drift`, `world.charter_economy`, `world.charter_feel`, `world.charter_figure`, `world.charter_intervene`, `world.charter_log`, `world.charter_mind`, `world.charter_model`, `world.charter_move`, `world.charter_needs`, `world.charter_news`, `world.charter_plan`, `world.charter_politics`, `world.charter_practice`, `world.charter_roster`, `world.charter_social`, `world.charter_space`, `world.charter_talk` |
-| `world/charter_runtime.py` | 2073 |  | `core`, `core.logging_utils`, `world.charter`, `world.charter_news`, `world.mechanics` |
+| `world/charter_run.py` | 868 |  | `world.charter_commitment`, `world.charter_decide`, `world.charter_drift`, `world.charter_economy`, `world.charter_feel`, `world.charter_figure`, `world.charter_intervene`, `world.charter_log`, `world.charter_mind`, `world.charter_model`, `world.charter_move`, `world.charter_needs`, `world.charter_news`, `world.charter_plan`, `world.charter_politics`, `world.charter_practice`, `world.charter_roster`, `world.charter_social`, `world.charter_space`, `world.charter_talk` |
+| `world/charter_runtime.py` | 2098 |  | `core`, `core.logging_utils`, `world.charter`, `world.charter_news`, `world.mechanics` |
 | `world/charter_social.py` | 226 |  | `world.charter_politics` |
 | `world/charter_space.py` | 101 |  | `world.spatial` |
 | `world/charter_talk.py` | 344 |  | `world.charter_mind`, `world.charter_politics`, `world.charter_roster` |
@@ -1405,13 +1405,13 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `normalize_charter()` | 238 | 205 lines |
+| `normalize_charter()` | 238 | 212 lines |
 | `normalize_body()` | 168 | 68 lines |
 | `normalize_upkeep()` | 108 | 31 lines |
 | `normalize_post()` | 141 | 25 lines |
 | `_tags()` | 69 | 15 lines |
 | `_string_list()` | 91 | 15 lines |
-| `priority_rank()` | 457 | 8 lines |
+| `priority_rank()` | 464 | 8 lines |
 | `number()` | 45 | 6 lines |
 
 ### `world/charter_move.py`
@@ -1522,25 +1522,26 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `step()` | 129 | 492 lines |
-| `run()` | 623 | 56 lines |
-| `_run_private_habits()` | 98 | 29 lines |
-| `_record_social_experiences()` | 77 | 19 lines |
-| `_remember_experience()` | 57 | 18 lines |
+| `step()` | 249 | 561 lines |
+| `_record_coarse_experiences()` | 162 | 85 lines |
+| `run()` | 812 | 57 lines |
+| `_remember_experience()` | 74 | 32 lines |
+| `_run_private_habits()` | 131 | 29 lines |
+| `_record_social_experiences()` | 108 | 21 lines |
 | `_event()` | 52 | 3 lines |
 
 ### `world/charter_runtime.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_prepare_cast_histories()` | 237 | 141 lines |
-| `_generate_lived_location()` | 890 | 113 lines |
-| `_plan_lived_location()` | 782 | 106 lines |
-| `generation_lore()` | 494 | 101 lines |
-| `cross_charter_gossip()` | 1271 | 92 lines |
-| `charter_diagnostics()` | 1505 | 77 lines |
-| `registry_warnings()` | 1041 | 72 lines |
-| `_remap_generated_town()` | 620 | 71 lines |
+| `_prepare_cast_histories()` | 251 | 141 lines |
+| `_generate_lived_location()` | 915 | 113 lines |
+| `_plan_lived_location()` | 804 | 109 lines |
+| `generation_lore()` | 516 | 101 lines |
+| `cross_charter_gossip()` | 1296 | 92 lines |
+| `charter_diagnostics()` | 1530 | 77 lines |
+| `registry_warnings()` | 1066 | 72 lines |
+| `_remap_generated_town()` | 642 | 71 lines |
 
 ### `world/charter_social.py`
 
