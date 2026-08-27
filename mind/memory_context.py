@@ -19,9 +19,15 @@ from mind.memory_summaries import (
     backfill_missing_memory_event_keys, get_memory_summary,
     search_memory_summaries,
 )
+from mind.memory_time import MemoryClock
 
-def _with_reading(mem, current_turn_idx=None):
+def _with_reading(mem, clock):
     """Project one stored row as an explicitly PAST character memory.
+
+    ``clock`` is this mind's `mind.memory_time.MemoryClock` -- the one place
+    that decides what a delivered "when" says. It is a required positional
+    argument rather than an optional one because a caller that forgot it would
+    otherwise get a payload with no "when" at all and nothing would say so.
 
     Present observations use ``current:<perceiver>:<n>`` ids. Memories cite
     their durable ``event_key`` and say ``remembered_past`` in the data itself,
@@ -108,12 +114,7 @@ def _with_reading(mem, current_turn_idx=None):
            if v not in ("", [], {}) or k in {
                "memory_ref", "temporal_status", "memory_form",
                "epistemic_origin", "confidence", "felt_importance"}}
-    ti = mem.get("turn_idx")
-    if ti is None:
-        out["when"] = "before this story's recorded turns"
-    elif current_turn_idx is not None:
-        age = max(1, int(current_turn_idx) - int(ti))
-        out["when"] = "about 1 beat ago" if age == 1 else f"about {age} beats ago"
+    out["when"] = clock.of_memory(mem)
     dispute = mem.get("disputed")
     if not dispute:
         return out
@@ -123,27 +124,15 @@ def _with_reading(mem, current_turn_idx=None):
     return out
 
 
-def _beats_ago_span(current_turn_idx, start_turn_idx, end_turn_idx):
-    """When an earlier window happened, in the character's own units.
-
-    RELATIVE, never the absolute turn index, and that is a firewall rule rather
-    than a style choice: `turn_idx` is GLOBAL play order shared by every frame,
-    so an absolute number tells a character where a flash-forward or flashback
-    sits in the story's construction -- something no mind in the fiction has any
-    way to know. Every other dated thing in the payload says "about N beats ago"
-    for the same reason (see `_unbidden_entry`).
-    """
-    if current_turn_idx is None:
-        return ""
-    oldest = int(current_turn_idx) - int(start_turn_idx or 0)
-    newest = int(current_turn_idx) - int(end_turn_idx or 0)
-    if newest <= 0:
-        # Defensive only: every read seam must withhold a window that closed at
-        # or after the deciding turn. Never relabel future knowledge "just now".
-        return ""
-    if oldest == newest:
-        return f"about {oldest} beats ago"
-    return f"between about {newest} and {oldest} beats ago"
+# THE WINDOW READER IS `MemoryClock.of_window` AND THERE IS NO WRAPPER HERE.
+#
+# `_beats_ago_span` stood in this spot and said "between about 4 and 9 beats
+# ago" -- its own naming rule, beside the single-memory one twenty lines above,
+# which said "about N beats ago" in its own separate arithmetic. Two copies of
+# one rule is the drift this change exists to close (the same defect fixed once
+# already in `_co_present_company`), so both now go through
+# `mind.memory_time.MemoryClock` and neither has a local phrasing to forget.
+# A one-line pass-through would have been a third place to read.
 
 
 def _summary_id(scope, end_turn_idx):
@@ -152,7 +141,7 @@ def _summary_id(scope, end_turn_idx):
 
 
 def _origin_on_drift(chat_id, char_id, current_turn_idx, active_state, *,
-                     earlier_ids=()):
+                     clock, earlier_ids=()):
     """Surface the character's ORIGIN summary window when a drift signal fires.
 
     An origin is not a similarity match: a character's foundational era is
@@ -245,8 +234,7 @@ def _origin_on_drift(chat_id, char_id, current_turn_idx, active_state, *,
         "temporal_status": "remembered_past",
         "memory_form": "summary",
         "epistemic_origin": summary_context_label(r["scope"]),
-        "when": _beats_ago_span(current_turn_idx, r["start_turn_idx"],
-                                r["end_turn_idx"]),
+        "when": clock.of_window(r["start_turn_idx"], r["end_turn_idx"]),
     }}
 
 
@@ -256,6 +244,14 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
                                    ponder_query="", ponder_why="",
                                    resurfaced_subject=""):
     active_state = active_state or {}
+    # WHERE THIS MIND IS READING FROM: who, on which turn, at which reading of
+    # this frame's simulation clock. Bound once and handed to every stamping
+    # site below, so a payload cannot contain two answers to "how long ago".
+    # The frame comes from the ambient contextvar, the same source
+    # `recent_memory_buffer` and `search_memories` read their own frame rule
+    # from a few lines down -- and the pool this whole call runs on copies the
+    # parent context precisely so that read is the deciding turn's frame.
+    clock = MemoryClock(chat_id, char_id, current_turn_idx)
     # Legacy banks predate event_key. Repair only the active mind's missing
     # handles before any row is projected, so every delivered citation is
     # stable across checkpoint restore and portable archive import.
@@ -296,8 +292,8 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
                 "summary_id": _summary_id(
                     scope, scoped_summary.get("end_turn_idx")),
                 "temporal_status": "remembered_past",
-                "when": _beats_ago_span(
-                    current_turn_idx, scoped_summary.get("start_turn_idx"),
+                "when": clock.of_window(
+                    scoped_summary.get("start_turn_idx"),
                     scoped_summary.get("end_turn_idx")),
                 "epistemic_origin": label,
                 "memory_form": "summary",
@@ -446,7 +442,7 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
          "memory_form": "summary",
          "epistemic_origin": summary_context_label(
              w.get("scope") or SUMMARY_SCOPE_FIRSTHAND),
-         "when": _beats_ago_span(current_turn_idx, w.get("start_turn_idx"),
+         "when": clock.of_window(w.get("start_turn_idx"),
                                  w.get("end_turn_idx"))}
         for w in sorted(earlier, key=lambda w: (w.get("end_turn_idx") or 0))
     ]} if earlier else {}
@@ -466,16 +462,15 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
     # These are exactly the moments a person reaches for who they were before
     # the current stretch swallowed them.
     origin_payload = _origin_on_drift(
-        chat_id, char_id, current_turn_idx, active_state,
+        chat_id, char_id, current_turn_idx, active_state, clock=clock,
         earlier_ids={w.get("end_turn_idx") for w in earlier})
     if str(summary.get("summary") or "").strip():
         summary_citations["autobiographical_summary"] = {
             "summary_id": _summary_id(
                 SUMMARY_SCOPE_FIRSTHAND, summary.get("end_turn_idx")),
             "temporal_status": "remembered_past",
-            "when": _beats_ago_span(
-                current_turn_idx, summary.get("start_turn_idx"),
-                summary.get("end_turn_idx")),
+            "when": clock.of_window(summary.get("start_turn_idx"),
+                                    summary.get("end_turn_idx")),
             "epistemic_origin": summary_context_label(
                 SUMMARY_SCOPE_FIRSTHAND),
             "memory_form": "summary",
@@ -489,7 +484,7 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
                    for m in (*recent, *recalled)}
     ponder_refs = [str(m.get("event_key") or "") for m in pondered
                    if str(m.get("event_key") or "")]
-    recent_projected = [_with_reading(m, current_turn_idx) for m in recent]
+    recent_projected = [_with_reading(m, clock) for m in recent]
     # A recent-life stream must be one chronological row per experienced beat,
     # not a turn-sized blob of episode + durable quote + self duplicate +
     # conclusion.  Keep the epistemic side records available, but in their own
@@ -504,8 +499,7 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
     recent_conclusions = [
         m for m in recent_projected
         if m.get("epistemic_origin") == "what_i_concluded"]
-    recalled_projected = [
-        _with_reading(m, current_turn_idx) for m in recalled]
+    recalled_projected = [_with_reading(m, clock) for m in recalled]
     for item in (*recent_projected, *recalled_projected):
         if str(item.get("memory_ref") or "") in ponder_refs:
             item["retrieval_origin"] = [
@@ -532,7 +526,7 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
         ref = str(mem.get("event_key") or "")
         if ref in normal_refs:
             continue
-        item = _with_reading(mem, current_turn_idx)
+        item = _with_reading(mem, clock)
         item["retrieval_origin"] = ["deliberate_ponder"]
         ponder_additional.append(item)
     ponder_payload = ({"deliberate_recall": {
@@ -579,7 +573,7 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
                 "subject": resurfaced_subject,
                 "temporal_status": "remembered_past",
                 "retrieval_origin": "unbidden_subject",
-                "episodes": [_with_reading(m, current_turn_idx)
+                "episodes": [_with_reading(m, clock)
                              for m in back[:max(4, int(recall_limit))]],
             }}
     score_rows = {}

@@ -39,7 +39,10 @@ from mind.memory_judge import review_recall
 def _rows(n=4):
     return [
         {"memory_ref": "event:%02d" % i,
-         "when": "about %d beats ago" % (i * 10),
+         # Fiction time, like every real caller since the clock reading
+         # landed on the row -- a fixture teaching the old beat vocabulary
+         # outlives the code that produced it.
+         "when": "about %d minutes ago" % (i * 10),
          "epistemic_origin": "what_i_experienced",
          "gist": "gist %d" % i,
          "details": "The %dth thing that happened." % i}

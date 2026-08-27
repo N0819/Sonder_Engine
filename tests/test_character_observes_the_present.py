@@ -137,6 +137,11 @@ def test_memory_rows_and_present_observations_use_disjoint_namespaces(temp_db):
         chat_id, char_id, None, "episode", "witnessed", 0.9,
         "Yesterday the brass door opened onto the ward.", turn_idx=2,
         gist="the brass door opened")
+    # The row own stored clock reading, and where the clock stands now: a
+    # delivered memory is dated in fiction time, never in turn indices.
+    temp_db.qi("UPDATE memories SET encoded_at_seconds=? WHERE id=?",
+               (60.0, mid))
+    temp_db.wset(chat_id, "simulation_clock", {"elapsed_seconds": 240.0})
     ctx = memory.build_character_memory_context(
         chat_id, char_id, current_turn_idx=5,
         current_view="The brass door is shut now.", active_state={})
@@ -147,7 +152,7 @@ def test_memory_rows_and_present_observations_use_disjoint_namespaces(temp_db):
     projected = next(row for row in rows
                      if "brass door" in row.get("details", ""))
     assert projected["memory_ref"].startswith("event:")
-    assert projected["when"] == "about 3 beats ago"
+    assert projected["when"] == "about 3 minutes ago"
     assert projected["epistemic_origin"] == "what_i_experienced"
     assert "id" not in projected and "event_key" not in projected
 

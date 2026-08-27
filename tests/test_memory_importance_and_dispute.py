@@ -236,7 +236,8 @@ def test_the_character_sees_the_reading_beside_the_memory(temp_db):
     entry = memory._with_reading({
         "id": 1, "gist": "Dr Moon handed me the vial",
         "disputed": {"reading": "the face was a mask", "count": 1},
-    })
+    }, memory.MemoryClock(None, None, None, now_seconds=0.0,
+                          viewer_frame_id=None))
     assert entry["gist"] == "Dr Moon handed me the vial"
     assert entry["i_now_read_this_differently"] == "the face was a mask"
     assert "disputed" not in entry
@@ -245,7 +246,9 @@ def test_the_character_sees_the_reading_beside_the_memory(temp_db):
 def test_an_undisputed_memory_is_projected_without_mutating_storage():
     mem = {"id": 1, "event_key": "event:stable", "gist": "g",
            "disputed": None}
-    projected = memory._with_reading(mem, current_turn_idx=4)
+    projected = memory._with_reading(
+        mem, memory.MemoryClock(None, None, 4, now_seconds=0.0,
+                                viewer_frame_id=None))
     assert projected is not mem
     assert mem == {"id": 1, "event_key": "event:stable", "gist": "g",
                    "disputed": None}

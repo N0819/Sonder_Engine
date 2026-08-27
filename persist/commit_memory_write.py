@@ -220,7 +220,8 @@ def schedule_memory_tension_pass(ctx):
                     # exactly, and carrying ids across the thread hop would
                     # be a second spelling of it free to drift.
                     minted = q(
-                        "SELECT event_key, gist, content, provenance, turn_idx "
+                        "SELECT event_key, gist, content, provenance, "
+                        "turn_idx, frame_id, encoded_at_seconds "
                         "FROM memories WHERE chat_id=? AND char_id=? AND "
                         "turn_idx=?", (cid, member["id"], turn_idx))
                     found += review_minted_memories(

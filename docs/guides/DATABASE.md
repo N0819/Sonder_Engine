@@ -57,7 +57,21 @@ Housekeeping tables not described below: `schema_meta` (the migration version), 
   layer could not be searched: there was nothing to search between. The v23
   migration is a table REBUILD, because SQLite cannot drop a UNIQUE declared
   inline on CREATE TABLE; existing rows copy across unchanged and become each
-  character's first window.
+  character's first window. Since **v34**, `memories.encoded_at_seconds` is the
+  simulation clock's reading, in seconds of fiction time, at the moment the row
+  was written — the unit every delivered "how long ago" is named in
+  (`mind/memory_time.py`). STORED rather than derived: an age computed as
+  `(now_turn - turn_idx) * (now_elapsed / now_turn)` reads off a moving
+  denominator, so re-running one turn with a different declared duration
+  silently re-ages the whole bank and a branch reads the same memory at two
+  ages. A stored reading is local and rolls back with its own row. NULL means
+  "no reading" and never zero, because zero is a real opening-of-the-story
+  value; rows with a NULL `turn_idx` (prestory seeds, imported banks) stay NULL
+  and keep qualitative phrasing. The v34 backfill charges existing rows
+  `turn_idx * world.mechanics.UNCLAIMED_BEAT_SECONDS` — the rate the live clock
+  already charges a beat that claimed no duration — and is the one estimate in
+  the column; `mind/memory_time.window_clock_readings` is the named seam a
+  stored per-turn clock history would replace it at.
 - `world`: JSON key/value state for the chat, including the current scene and pipeline caches. The chat-global `story_language` key is an author setting naming an installed, story-capable language pack; absent means `en`. It is exported and branched with the world and preserved across checkpoint restore, because rerolling a beat must not undo the reader's language selection. Inside the frame-scoped `scene` blob, `positions` is which room each person is in, `stations` their within-room position, and `following` the voluntary durable follower → target travel relations. Following is intention rather than containment: it may persist while separated and never derives a position by itself; Director movement carries it only across ordinary passable travel. `scales` records each body's size relative to its own baseline (absent = normal; not pruned by position, since a size is not a co-location), `contained` says who is being carried by what (a contained body's position is derived from its carrier's, transitively), and `contacts` is a flat list of who is in physical contact with whom and by which body parts — a relation stored once rather than on either body, pruned at every merge by `spatial.normalize_scene_contacts` (contact between two people not in the same room cannot survive, so movement ends a hold deterministically). Each contact has independent `relation: surface|interior` topology and `motion: settled|moving` kinematics; old rows derive both from `manner` and `detail`, and an interior relation must be explicitly removed before the same endpoints become surface contact. Interior records may also carry `target_interior`, the enclosing passage/chamber/material, separately from `target_part`, the exact boundary or endpoint currently touched. An `op:cross` is validated against a standing `crossed_target_part`; it persists only the downstream `target_interior` and current `target_part`, not the crossed boundary. `attire` is the live per-story clothing state: a card's `initial_outfit` may seed a missing entry at scene creation or first attachment/promotion, but must never reset an entry already changed by story events. Each attire region contains ordered `garments` and optional authored `beneath`; torso additionally permits `beneath_zones:{chest,midriff}`. A garment's optional `covered_zones:{torso:[...]}` is an override listing the zones it still covers while worn; absence means full coverage. An empty torso list means the garment remains worn at the torso but covers neither torso zone. `wearing`, derived `state`, region garment state and zone coverage must be reconciled only through `attire.rederive_entry`/the commit path.
 - `scene.poses`: frame-scoped complete body-arrangement snapshots keyed by
   subject. `posture` is the body's own pose, `support` its anchor/entity/body,
