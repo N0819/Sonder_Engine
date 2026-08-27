@@ -304,6 +304,19 @@ regex(common, "_NARRATION_DOUBLED_QUOTE_RE", "「{2,}|『{2,}")
 regex(common, "_NARRATION_DANGLING_QUOTE_RE", "「[^」]*$|『[^』]*$")
 regex(common, "_FIRST_PERSON_RE", "私|わたし|僕|ぼく|俺|おれ|自分|我々|わたしたち|僕たち|俺たち")
 regex(common, "_SECOND_PERSON_RE", "あなた|君|きみ|お前|貴方|あんた")
+# Narration tense (agents/common.py `_check_narration_tense_match`).
+# Japanese fixes tense at the CLAUSE END rather than in a separate
+# auxiliary, so the cues are endings: the た-family is past, plain
+# u-row/です/ます is present. Deliberately not scored on だ alone, which is
+# the present copula whose past is だった -- the shared character is the
+# one place a naive ending scan inverts. Unmeasured against a Japanese
+# corpus; the check it feeds is warning-only for exactly this reason.
+regex(common, "_PAST_TENSE_RE",
+      "(?:った|いた|えた|した|きた|んだ|めた|ちた|べた|げた|ねた|"
+      "だった|でした|ました|かった|なかった)(?=[。、」』\\s]|$)")
+regex(common, "_PRESENT_TENSE_RE",
+      "(?:ます|ません|です|である|[るうくすつぬぶむぐ]|だ)"
+      "(?=[。、」』\\s]|$)")
 add(common, "_THIRD_SUBJECT_PRONOUNS", "彼", "彼女", "彼ら")
 ling[common]["_PRONOUN_GROUPS"].update({
     "彼": {"$type": "tuple", "items": ["彼", "彼の", "彼自身"]},

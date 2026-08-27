@@ -105,6 +105,20 @@ $("#b-style").onclick = async () => {
   ].map(([v, label]) => el("option",
     { value: v, ...(v === (g.weather_severity || "seasonal") ? { selected: "" } : {}) },
     label)));
+  // The tense the narrator writes in. Closed, like Weather above, and for the
+  // same reason -- but with a third state Weather does not have: unset means
+  // the author has no opinion, the narrator is told nothing, and the story
+  // keeps whatever tense it fell into. That is what every story did before
+  // this control existed, so it stays the default rather than becoming
+  // "present" behind the author's back. Turning it mid-story is supported;
+  // it is read fresh on the next beat.
+  const tense = el("select", { style: "flex:1" }, [
+    ["", "Unset — the narrator is told nothing, and keeps the story's own tense"],
+    ["present", "Present — the beat as it happens (“you push through the door”)"],
+    ["past", "Past — the record of what happened (“you pushed through the door”)"],
+  ].map(([v, label]) => el("option",
+    { value: v, ...(v === (g.narration_tense || "") ? { selected: "" } : {}) },
+    label)));
   const selfBtn = el("button", {
     onclick: () => { genre.value = ""; toast("Genre left to the engine.", "ok"); },
   }, "Self-determine");
@@ -172,6 +186,14 @@ $("#b-style").onclick = async () => {
     el("div", { class: "row", style: "margin-top:6px" },
       el("span", { class: "small", style: "width:70px" }, "Tone"), tone),
     el("div", { class: "row", style: "margin-top:6px" },
+      el("span", { class: "small", style: "width:70px" }, "Tense"), tense),
+    el("div", { class: "small dim", style: "margin-top:4px" },
+      "Which tense the narration is written in. It changes the narrator only — "
+      + "characters still speak in the present, and your own input is read as "
+      + "what you attempt rather than as part of the record, so writing "
+      + "“I push the door” and reading back “you pushed the door” is the "
+      + "intended shape. Leave it unset and nothing is asked for."),
+    el("div", { class: "row", style: "margin-top:6px" },
       el("span", { class: "small", style: "width:70px" }, "Weather"), severity),
     el("div", { class: "small dim", style: "margin-top:4px" },
       "How far the sky may go, and how much of the world it may touch. Beyond "
@@ -218,6 +240,11 @@ $("#b-style").onclick = async () => {
             genre: genre.value, tone: tone.value,
             director_notes: dirNotes.value, mapping_notes: mapNotes.value,
             avoid: avoid.value, weather_severity: severity.value,
+            // "" normalizes away to an absent key, which is how the author
+            // clears the dial. A PUT replaces the whole guide, so a field
+            // omitted here is a field silently deleted -- the reason this
+            // control had to ship with the setting rather than after it.
+            narration_tense: tense.value,
           },
         });
         if (authority.value !== authorityState.mode) {
