@@ -90,9 +90,12 @@ def _monotonic_elapsed(prev_clock, time_diff, *, floor=False):
     ONE helper on purpose: `prepare_memory_commit` reads the same diff to
     stamp affect/strain/belief windows, and reading the raw field there let
     a backwards beat window this beat's psychology on a clock the scene
-    commit had already refused. Returns ``(elapsed_seconds, backwards)``
-    where ``backwards`` is None or ``(claimed, was)`` for the caller's
-    warning.
+    commit had already refused. Returns ``(elapsed_seconds, displaced)``
+    where ``displaced`` is None or ``(claimed, was)`` for the caller's
+    warning -- a position the engine did not adopt, whether it ran
+    backwards or arrived anchored away from the clock (the engine owns the
+    clock's position; a beat contributes a span -- see
+    `world.mechanics.read_time_diff`).
 
     The SHAPE of the diff is not this helper's to know -- it belongs to
     `world.mechanics.read_time_diff`, the one reader of the
@@ -116,9 +119,9 @@ def _monotonic_elapsed(prev_clock, time_diff, *, floor=False):
     its own -- a caller that does re-opens exactly the disagreement this
     helper exists to have closed.
     """
-    elapsed, backwards, _refused, _floored = beat_end_elapsed(
+    elapsed, displaced, _refused, _floored = beat_end_elapsed(
         clock_elapsed(prev_clock), time_diff, floor=floor)
-    return elapsed, backwards
+    return elapsed, displaced
 
 # ---- Address forms and the name roster ----
 #
