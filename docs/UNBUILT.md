@@ -2808,23 +2808,25 @@ reports to is the root of the tree, and a chain of command with three tops is
 not a chain. Department heads are the softer case — a chief engineer plausibly
 has shift deputies — but a deputy is a deputy, and the title says which.
 
-### 1.84c A top rank changes hands only by retirement or death
+### 1.84c Succession — OWNER'S DESIGN, not to be specified here
 
-The succession half, and the same rule as 1.84a's name permanence one layer up:
-an identity is stable, and the ONE legitimate change is a change of PERSON.
+The constraint, stated by the engine's owner: **a top rank is replaced only by
+retirement or death.** That is the whole of what is settled.
 
-A singular post has one holder. That holder changes when they retire, die, or
-are relieved — never because a generator topped the post up, never because a
-rotation filled a seat it thought was empty, and never as a silent re-mint. The
-succession is an EVENT the story can point at, with an outgoing holder and an
-incoming one, exactly as a background presence's replacement is a new presence
-taking a vacated post rather than a rename.
+Everything else about succession is theirs to design and is deliberately NOT
+written down here — an earlier revision of this entry specified the rule, the
+event shape and the failure modes, which was overreach. The nuance is the
+subject: what relief-of-command is against death, whether an acting holder is a
+holder, what happens to a post whose holder is present but incapable, how a
+chain re-forms under it, and whether any of that is the same event as the
+background-presence replacement in 1.84a's naming note. None of those follow
+from the constraint, and guessing at them produces a design that looks finished
+and is not.
 
-Both of these are separable from whether an author places their cast in the
-institution at all. `featured_residents` is opt-in BY DESIGN — a story whose
-characters answer to nobody should not have them folded into a Charter — and
-that option is not what is wrong here. An uncrewed ship with no cast at all
-still gets three captains.
+RECORDED SO IT IS NOT LOST, AND SO NOBODY BUILDS IT BY ACCIDENT: the uniqueness
+half (1.84b) can land on its own — a singular post holding one body is
+enforceable from `reports_to` alone and needs no theory of how holders change.
+Do that; leave this.
 
 ### 1.85 A memory's age off a per-beat estimate, not a per-beat record
 
