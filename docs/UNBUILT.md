@@ -965,18 +965,6 @@ investigation found and did not close.
   most `UNCLAIMED_BEAT_SECONDS` per silent beat, and the only decision they
   gate is `_NATURAL_SLEEP_SECONDS = 28800`, which a ten-second lag cannot
   flip. Closing it needs those views given a resolved-beat flag.
-- **Interior passage is undirected.** Interior stations connect by `membrane`
-  in both directions, because the barrier vocabulary has no directed-passage
-  value: `one_way_window`'s asymmetry is SIGHT only, and `neighbor_map`
-  (`world/spatial_barriers.py`) is undirected by documented design across four
-  walks. "Passable inward, and outward only on the container's own action"
-  therefore needs its own vocabulary work in the `one_way_window` mould. Until
-  then, going back out against the body around you is what it already is: a
-  contested act for the reaction/dice machinery, not graph structure.
-  Untouched by the crossing landing above and deliberately not consumed by
-  it: `_onward_room` only ever walks strictly DEEPER, so it needs no
-  outbound-passability fact and closing this one would change none of its
-  answers.
 - **A room cannot carry a hazard.** A place-form interior is exactly where "a
   place that acts on the bodies in it over time" becomes expressible -- and
   there is no room field for it, no sweep that ticks one, and no capability

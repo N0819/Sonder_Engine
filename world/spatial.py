@@ -64,8 +64,10 @@ from world.spatial_barriers import (
     _BARRIER_OPEN_FORM, _BARRIER_OPEN_QUALIFIERS, _BARRIER_SEAL_QUALIFIERS,
     _BARRIER_SEALED_FORM, _OPENING_WORDS, _PASSABLE_BARRIERS,
     _ROUTE_MEMORY_BARRIERS, _SCENT_BARRIER_LEVELS,
-    _SIGHT_BARRIERS, _VALID_BARRIERS, neighbor_map, normalize_barrier,
-    normalize_scene_barriers, route_memory_barrier, unresolved_barrier_words,
+    _SIGHT_BARRIERS, _VALID_BARRIERS, edge_crossable_from, edge_passable,
+    effective_adjacent, neighbor_map, normalize_barrier,
+    normalize_scene_barriers, passage_direction, route_memory_barrier,
+    unresolved_barrier_words,
 )
 
 
