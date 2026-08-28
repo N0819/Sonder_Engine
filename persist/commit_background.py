@@ -500,7 +500,8 @@ def _merge_presence_record(target, other):
     own blurb (blurbs are frozen -- the anchor against self-feeding drift)
     and its own sketch entries; histories union; the recent-conduct tail
     interleaves by turn and keeps the cap."""
-    for field in ("dialogue_turns", "mention_turns", "addressed_turns"):
+    for field in ("dialogue_turns", "mention_turns", "addressed_turns",
+                  "engaged_turns"):
         merged = set(target.get(field) or []) | set(other.get(field) or [])
         if merged:
             target[field] = sorted(merged)
@@ -871,6 +872,93 @@ def with_charter_presences(cid, presences, scene=None, *, places=None,
     return merged
 
 
+def emerge_from_charter_crowd(cid, scene, charter_key, place, *, who="",
+                              present=(), frame_id=None, turn_idx=None):
+    """One body steps out of a derived charter crowd: its presence record
+    becomes durable. Returns ``(display_name, reason)``.
+
+    DESIGN_BACKGROUND_PRESENTATION §B3: mechanically, emergence IS the
+    existing overlay -- `with_charter_presences` resolves the picked body
+    into the presence ledger identity-carefully, and the derived crowd
+    excludes it from membership on the next read because the presence record
+    is the record. No ``emerged`` list is stored, and the crowd's band does
+    not move (a band is coarse precisely so nothing does arithmetic on it).
+
+    Charter never stopped simulating this body, so nothing else changes: the
+    same person, with the same ties, marks and diary, is simply presented
+    individually from here -- and IS there next visit, which is the point
+    (the §3a "an emergence may not be re-met" rule is superseded for
+    charter-backed crowds; see DESIGN_CROWDS.md's amendment).
+    """
+    from world.charter_runtime import charter_emergence_pick
+
+    display, reason = charter_emergence_pick(
+        cid, charter_key, place, who=who, present=present, frame_id=frame_id,
+        turn_idx=turn_idx)
+    if not display:
+        return "", reason
+    presences = wget(cid, "background_presences", {}) or {}
+    merged = with_charter_presences(
+        cid, presences, scene, names=[display], frame_id=frame_id,
+        turn_idx=turn_idx)
+    if merged == presences:
+        return "", ("no presence record could be derived for %r" % display)
+    wset(cid, "background_presences", merged)
+    return display, ""
+
+
+def absorb_into_charter_crowd(cid, who, *, spoken=(), frame_id=None):
+    """A charter body loses its individual presentation, and NOTHING else.
+    Returns ``(handled, reason)``; ``(False, "")`` means "not a charter
+    person -- not this seam's op".
+
+    There is no state transition here to get wrong, because the body never
+    had a separate simulation to lose: Charter simulates every unbound body
+    every window whether or not anyone is looking (§1.99d's whole argument).
+    Crowd membership is a lens, so absorption is only the presence record --
+    the one thing that presented the body individually -- being removed.
+
+    The one-way rule survives with its original test: "does anything durable
+    now name them". A record carrying dialogue, addressed or mention turns
+    is a record the story still points at (a line spoken, an address aimed,
+    a transcript that referred to them), and deleting it would delete a
+    person; the refusal is the same shape as `crowds.absorb`'s. Only a
+    record whose turn lists are all empty -- a pure emergence overlay nobody
+    engaged -- may go back to ground.
+    """
+    from world.charter_runtime import _body_refs, registry_for
+
+    name = " ".join(str(who or "").split())
+    if not name:
+        return False, ""
+    registry = registry_for(cid, frame_id)
+    refs = [{"charter": ck, "body": bk}
+            for ck, bk in _body_refs(registry, name=name)]
+    if not refs:
+        return False, ""
+    if name.casefold() in {str(n or "").casefold() for n in (spoken or ())}:
+        return True, ("%s has spoken; the story has a record of them and "
+                      "they cannot go back into the crowd" % name)
+    presences = wget(cid, "background_presences", {}) or {}
+    keys = [key for key, rec in presences.items()
+            if isinstance(rec, dict)
+            and any(r in (rec.get("charter_refs") or []) for r in refs)]
+    if not keys:
+        # Never individually presented: the overlay record was simply never
+        # persisted, which is what absorption of a never-engaged body IS.
+        return True, ""
+    for key in keys:
+        rec = presences[key]
+        if any(rec.get(field) for field in
+               ("dialogue_turns", "addressed_turns", "mention_turns")):
+            return True, ("%s has a durable record and cannot be deleted "
+                          "back into the mass" % name)
+    for key in keys:
+        presences.pop(key, None)
+    wset(cid, "background_presences", presences)
+    return True, ""
+
+
 def overt_declaration(ctx):
     """The player's declared beat with concealed content removed, as
     ``(elements, raw_text)``.
@@ -940,6 +1028,20 @@ def _background_name_mentioned(name, text):
     return any(
         re.search(rf"\b{re.escape(w)}\b", text_cf) for w in significant
     )
+
+
+def _background_name_named_exactly(name, text):
+    """The full tracked name at a word boundary -- the PRECISE grade of an
+    address, as opposed to `_background_name_mentioned`'s significant-word
+    fallback. The two grades exist because the fallback is deliberately
+    fuzzy ("Crusher" carries a scene once "Dr. Crusher" is established), and
+    fuzzy must never FORCE: measured on the Part C bench, six tracked
+    "Regular N" records against the input "Regular 2, what do I owe you?"
+    all matched on the shared word "regular", and an addressee guarantee
+    keyed to that match widened one address into six voice calls."""
+    return bool(re.search(rf"\b{re.escape(str(name).casefold())}\b",
+                          str(text).casefold()))
+
 
 def _character_address_of(dr_output, presence_name, roster, scene=None,
                           station_room=None):
@@ -1276,6 +1378,18 @@ def track_background_presences(ctx, nonce, *, prepared=None):
     except Exception:
         _ubiquitous, is_ubiquitous_entity = frozenset(), (lambda e: False)
 
+    # Speakers whose line this beat AIMED at an authored mind -- the fact the
+    # §C1.3 "acting" trigger needs next beat, written as `engaged_turns`
+    # below. Recorded here because the target is on the entry and the entry
+    # does not survive into the record: `dialogue_turns` proves a presence
+    # spoke, to anyone, and cannot say the exchange had an authored mind in
+    # it.
+    engaged_speakers = set()
+
+    def _aimed_at_authored(entry):
+        target = str((entry or {}).get("intended_target") or "").strip()
+        return bool(target) and name_in_roster(target, roster)
+
     for d in (res.get("dialogue_log") or []):
         raw_speaker = str(d.get("speaker") or "").strip()
         speaker = entity_id_to_name.get(raw_speaker, raw_speaker)
@@ -1284,6 +1398,8 @@ def track_background_presences(ctx, nonce, *, prepared=None):
         if speaker and not name_in_roster(speaker, roster):
             candidates.add(speaker)
             dialogue_speakers.add(speaker.casefold())
+            if _aimed_at_authored(d):
+                engaged_speakers.add(speaker.casefold())
             if raw_speaker in entity_id_to_name:
                 candidate_ids.setdefault(speaker, set()).add(raw_speaker)
 
@@ -1440,6 +1556,8 @@ def track_background_presences(ctx, nonce, *, prepared=None):
         if br_name and not name_in_roster(br_name, roster):
             candidates.add(br_name)
             dialogue_speakers.add(br_name.casefold())
+            if _aimed_at_authored(_r.get("dialogue_log_entry")):
+                engaged_speakers.add(br_name.casefold())
             if br_raw in entity_id_to_name:
                 candidate_ids.setdefault(br_name, set()).add(br_raw)
 
@@ -1499,6 +1617,14 @@ def track_background_presences(ctx, nonce, *, prepared=None):
             if name.casefold() in dialogue_speakers:
                 if turn_idx not in record["dialogue_turns"]:
                     record["dialogue_turns"].append(turn_idx)
+            if name.casefold() in engaged_speakers:
+                # The §C1.3 "acting" fact: this beat's line was aimed at an
+                # authored mind, so next beat's demand gate re-offers this
+                # presence without any tenure list -- the exchange itself is
+                # what persists.
+                _engaged = record.setdefault("engaged_turns", [])
+                if turn_idx not in _engaged:
+                    _engaged.append(turn_idx)
             sk = sketches.get(name)
             if sk:
                 # Director restated this presence's own description/position
@@ -1576,6 +1702,16 @@ def track_background_presences(ctx, nonce, *, prepared=None):
         _sel = str((ctx.get("background_react") or {}).get("name") or "").strip().casefold()
         if _sel:
             selected_names = {_sel}
+    # A chorused addressee's moment was answered TOGETHER (§C3): the crowd
+    # entry names them so their reply debts discharge here exactly as a
+    # picked presence's would -- but they are deliberately NOT in `selected`,
+    # because selection is what persists a record and the chorus's whole
+    # point is that these bodies stay ground.
+    for _r in _background_fired_reactions_any(
+            ctx.get("background_react") or {}):
+        if _r.get("chorus"):
+            selected_names |= {str(n).casefold()
+                               for n in (_r.get("addressed") or [])}
     # DELIBERATE interaction, counted separately from everything else. The
     # other two counters record what a presence DID -- `dialogue_turns` that
     # they spoke (to anyone, including ambient chatter with the player nowhere
@@ -1786,58 +1922,69 @@ def _presence_in_addressed_refs(name, refs):
     )
 
 
-def _at_post_within_earshot(sc, station_room, player_room):
-    """Is a presence standing where they work, close enough to answer?
+def emerged_this_beat(ctx, dr_output, sc):
+    """Display names stepping out of a crowd on THIS beat's ops (§C1.4).
 
-    AT POST USED TO MEAN `station_room == player_room`, and that one `==` is
-    the whole of what the owner called a hole in the architecture: "they
-    should be able to respond from adjacent rooms".
-
-    Perception already models this properly -- `hear_level` is barrier- and
-    material-aware, an open doorway carries a voice and a shut one does not,
-    and `agents/background._beat_for_presence` runs exactly that check before
-    handing a presence a single word of the beat. So the engine granted the
-    clerk in the back office the hearing and withheld the agency: he could
-    hear the bell and could never be chosen to answer it.
-
-    The models kept trying to route around it, which is how it was found.
-    Chat 72 turn 45: the Director walked a night clerk INTO the lobby so he
-    could speak. Turn 47: the spatial specialist put another at the doorway
-    "near" the guests, and that teleported the player into the back office.
-    Both are a mind reaching for a thing the engine had no representation of.
-
-    AUDIBILITY IS THE TEST, NOT ADJACENCY, and the bar is a line heard in
-    FULL. That bar is the engine's own, already set: `_character_address_of`
-    requires `full` to count a line as addressed to somebody, and
-    `_beat_for_presence` was fixed to match it after a half-heard line let a
-    presence quote back verbatim what it had only caught a fragment of --
-    two paths reading the same level differently IS the bug there.
-    Consistency matters more here than physics, and it lands the right way
-    round anyway: at-post is the WEAKEST claim any presence has on a beat
-    (the standing invitation of working where you stand), so a muffled
-    thump through a shut door must not summon a body. Where the beat
-    genuinely warrants one, the stronger signals -- named in the prose,
-    addressed by the player, owed a reply -- fire regardless of the room.
-
-    Same room still qualifies trivially, and an unknown station qualifies
-    for nothing: not knowing where somebody stands is a reason to deliver
-    nothing, which is the rule the perception side already follows.
+    Emergence is a demand signal by definition -- someone wanted this person
+    -- and it must count on the beat the Director declared it, not one beat
+    late: the op itself is only APPLIED at commit (`commit_crowds`), after
+    the background stage has already run, so the pre-commit gate reads the
+    provisional ops the same way it already reads the provisional
+    `dialogue_log`. A charter emerge is resolved read-only through the same
+    pick commit will run (`charter_emergence_pick` is deterministic over
+    persisted state, so the two reads agree unless this very beat's diff
+    moves somebody -- in which case commit's answer stands and the voice
+    simply went to the runner-up); an authored-crowd emerge names its person
+    in ``who`` outright.
     """
-    player_room = str(player_room or "")
-    if not station_room or not player_room:
-        return False
-    if str(station_room) == player_room:
-        return True
-    try:
-        return hear_level(
-            spatial_rel(sc, str(station_room), player_room), "normal"
-        ) == "full"
-    except Exception:
-        # Fail CLOSED. Everywhere else in this engine an unreadable fact
-        # grants the block; here granting means putting words in a mouth
-        # that may have no channel to the beat, so silence is the safe
-        # direction and the presence simply waits for a clearer signal.
-        return False
+    raw_ops = ((dr_output.get("state_diff") or {}).get("crowd_ops")
+               or dr_output.get("crowd_ops") or [])
+    if not isinstance(raw_ops, list):
+        return set()
+    from world import crowds as crowds_model
+
+    names = set()
+    derived_index = None
+    for raw in raw_ops:
+        op = raw.dict() if hasattr(raw, "dict") else (raw or {})
+        if not isinstance(op, dict):
+            continue
+        if str(op.get("op") or "").strip().casefold() != crowds_model.OP_EMERGE:
+            continue
+        uid = str(op.get("crowd_id") or "").strip()
+        who = " ".join(str(op.get("who") or "").split())
+        if not crowds_model.is_charter_crowd_uid(uid):
+            if who:
+                names.add(who)
+            continue
+        if derived_index is None:
+            # Same derivation commit_crowds performs, for the same reason:
+            # with nothing stored, agreeing means being the same reader.
+            from agents.common import charter_crowds_for_room, chatter_inputs
+            inputs = chatter_inputs(ctx.chat.id, sc, turn_idx=ctx.turn.idx)
+            derived_index = {
+                str(crowd.get("uid")): crowd
+                for room in (sc.get("rooms") or {})
+                for crowd in charter_crowds_for_room(
+                    ctx.chat.id, sc, room, inputs)}
+        crowd = derived_index.get(uid)
+        if crowd is None:
+            continue
+        place = str(crowd.get("room_uid") or "")
+        present = sorted(
+            name for name, where in (sc.get("positions") or {}).items()
+            if str(where or "") == place)
+        try:
+            from world.charter_runtime import charter_emergence_pick
+            display, _reason = charter_emergence_pick(
+                ctx.chat.id, crowd.get("charter_key"), place, who=who,
+                present=present, frame_id=ctx.turn.frame_id,
+                turn_idx=ctx.turn.idx)
+        except Exception:
+            display = ""
+        if display:
+            names.add(display)
+    return names
 
 
 def pick_background_reactor(ctx, dr_output):
@@ -1851,31 +1998,52 @@ def pick_background_reactor(ctx, dr_output):
 
 
 def pick_background_reactors(ctx, dr_output, cap=1):
-    """Deterministic gate for the background_react stage: pick up to `cap`
-    named, unregistered background presences to give an independent
-    reaction this beat, when this beat has salience for them but the
-    director's own resolved_event/dialogue_log authorship (see prompts.py's
-    DIALOGUE LOG background-entity license) gave them nothing anyway. Each
-    returned presence qualifies INDEPENDENTLY (addressed / character-addressed
-    / owed / mentioned / has history) -- the list is never padded to `cap`.
+    """Deterministic DEMAND gate for the background_react stage: pick the
+    presences an authored mind's own conduct calls on this beat, up to a
+    ceiling. Names-only compatibility wrapper over `pick_voice_demand`,
+    which is the same gate with the metadata the chorus rule needs.
 
-    This mirrors infer_vehicle_zones' role in spatial_frames.py: a prompt
-    clause exists and is sometimes followed, but live play showed it fails
-    reliably enough under sustained narrative pressure (a background
-    presence given direct orders, addressed by name, present at a caught
-    theft and an alarm, still rendered as "motionless" for 25+ turns) that
-    a deterministic backstop is needed rather than further prompt tuning
-    alone -- the same lesson this codebase has already learned for zone
-    tagging and speech concealment.
+    DESIGN_BACKGROUND_PRESENTATION §C1: a presence qualifies when it was
+    ADDRESSED by an authored mind (the player's overt declaration, a flow
+    address, a character's aimed line -- or a Director hand-off, `routed`,
+    which is the Director itself demanding the voice), when it is OWED a
+    reply, when it ACTED toward an authored mind last beat, or when it
+    EMERGED from a crowd this beat. The list is never padded to `cap`, and
+    [] stays the common case.
 
-    Returns [] when no candidate qualifies (the common case -- most turns
-    have no salient, un-voiced background presence at all). cap defaults to 1,
-    reproducing the historical single-winner behavior exactly -- with one
-    exception: a presence the director's flow.addressed_to named (a direct
-    player address, see _flow_addressed_refs) is FORCED into the picks,
-    bypassing `cap` if necessary, so a directly-addressed background NPC
-    always gets to answer with its own line instead of being displaced by a
-    merely-standing presence or a foreground character's interception.
+    Co-presence, salience and recency are NOT triggers, and three signals
+    this gate used to honour are gone with them: `mentioned` (named in the
+    Director's own resolved_event -- the prose already showed them, and
+    prose salience is a model's judgment, not a demand), bare
+    `dialogue_turns` history (tenure -- an open exchange re-qualifies
+    through addressed/owed instead, §C3), and `at_post` (the standing
+    invitation of working where you stand -- co-presence in its politest
+    clothes; its live evidence, the chat-72 night clerk, was ALWAYS carried
+    by the stronger signals, `routed` and the player's own words, and the
+    quiet-visit barkeep it re-offered is now the crowd/chatter tier's job,
+    which renders the room alive for zero calls, §C2). The old
+    at-post audibility bar survives where it always also lived:
+    `_character_address_of` still requires a line heard in FULL.
+
+    This gate remains the deterministic floor under a prompt clause
+    (mirroring infer_vehicle_zones in spatial_frames.py): a presence given
+    direct orders was still rendered "motionless" for 25+ turns before it
+    existed. Demand-driven does not soften that floor -- every one of the
+    measured failures it was built for (direct orders, a direct address, a
+    routed line) is an ADDRESS, the trigger that now forces the pick.
+    """
+    return pick_voice_demand(ctx, dr_output, cap=cap)["picks"]
+
+
+def pick_voice_demand(ctx, dr_output, cap=1):
+    """The demand gate with its working, for the chorus rule's reader.
+
+    Returns ``{"picks": [names], "meta": {name: {"addressed", "refs",
+    "room"}}}``: `background_react` needs to know which picks are addressees
+    and which charter bodies they are, because addressees alone exceeding
+    the path's ceiling means the address was to a crowd and is answered as
+    one through the derived crowd (§C3) -- a decision this gate cannot take
+    alone, since the crowd object lives on the perception seam.
     """
     chat = ctx.chat
     cid = chat.id
@@ -1911,7 +2079,6 @@ def pick_background_reactors(ctx, dr_output, cap=1):
     # re-excluded the presence its own routing had just handed over.
     voiced_this_beat -= {n.casefold() for n in forced_routed}
 
-    resolved_event = str(dr_output.get("resolved_event") or "")
     # NOT `ctx.input`, which is the raw text the player typed. See
     # `overt_declaration`: a whispered name used to qualify its own presence.
     player_input = overt_declaration_text(ctx)
@@ -1925,7 +2092,8 @@ def pick_background_reactors(ctx, dr_output, cap=1):
 
     addressed_refs = _flow_addressed_refs(ctx)
 
-    # Where the player is standing, for the at-post test below.
+    # Where the player is standing, scoping which charter bodies overlay
+    # into the candidate ledger at all.
     _pname = _player_name_or_none(ctx)
     player_room = room_of(sc, _pname) if _pname else ""
     charter_places = {str(player_room)} if player_room else set()
@@ -1970,6 +2138,30 @@ def pick_background_reactors(ctx, dr_output, cap=1):
         if presence_record_for(ranked, name, sc)[1] is None:
             ranked[name] = {}
 
+    # The two non-address triggers' shared inputs, computed once. `emerged`
+    # reads this beat's provisional crowd ops; `acting`'s charter half reads
+    # the last landed window through the registry. Both are deterministic
+    # over persisted state plus this beat's own step outputs.
+    emerged_names = emerged_this_beat(ctx, dr_output, sc)
+    if emerged_names:
+        # An emerging charter body may have no record yet (the op is applied
+        # at commit, after this gate); derive one so the pick can voice the
+        # person the Director just asked the crowd for.
+        presences = with_charter_presences(
+            cid, presences, sc, names=sorted(emerged_names),
+            frame_id=getattr(getattr(ctx, "turn", None), "frame_id", None))
+        ranked = dict(presences)
+        for name in forced_routed:
+            if presence_record_for(ranked, name, sc)[1] is None:
+                ranked[name] = {}
+    try:
+        from world.charter_runtime import bodies_acting_toward_authored
+        acting_charter = bodies_acting_toward_authored(
+            cid, roster, frame_id=getattr(
+                getattr(ctx, "turn", None), "frame_id", None))
+    except Exception:
+        acting_charter = set()
+
     candidates = []
     forced = 0
     for _rkey, record in ranked.items():
@@ -1979,50 +2171,50 @@ def pick_background_reactors(ctx, dr_output, cap=1):
         cf = name.casefold()
         if cf in roster or cf in voiced_this_beat:
             continue
-        # The director's own flow plan named this presence as the player's
-        # addressee -- the strongest possible salience signal, and one the
-        # raw-text checks below can miss entirely (an address by role or
-        # epithet never mentions the tracked name).
+        # THE ADDRESSED CLASS (§C1.1) -- four spellings of one trigger, an
+        # authored mind (or the Director, for `routed`) turning toward this
+        # person on purpose. The director's own flow plan naming this
+        # presence as the player's addressee is one the raw-text check can
+        # miss entirely (an address by role or epithet never mentions the
+        # tracked name); `routed` is the Director writing a line for this
+        # presence that the engine removed so this stage could do the job
+        # properly -- the hand-off exists precisely so removing a line
+        # cannot become silence.
         flow_addressed = _presence_in_addressed_refs(name, addressed_refs)
-        # The Director wrote a line for this presence and the engine removed
-        # it so this stage could do the job properly. Salience is not in
-        # question -- the Director already judged them worth speaking for --
-        # so this qualifies and forces exactly like a flow address. Without
-        # it the salience tests below could reject a presence whose line was
-        # just deleted, turning clunky dialogue into silence.
         routed = name in forced_routed
-        addressed = _background_name_mentioned(name, player_input)
+        # Two grades of a raw-text address. PRECISE (the full name, a flow
+        # ref, a routed line, an aimed character line) is what the §C3
+        # guarantee covers and what forces the pick; LOOSE (the significant-
+        # word fallback) qualifies and ranks below it, because fuzzy must
+        # never widen -- see `_background_name_named_exactly` for the
+        # measured six-for-one failure that split them.
+        addressed_exact = _background_name_named_exactly(name, player_input)
+        addressed = addressed_exact or _background_name_mentioned(
+            name, player_input)
+        # Where they ARE, for anything about what reaches them.
+        here = presence_room(sc, name, record)
         # A registered character (or the player) who spoke directly TO this
         # presence this beat -- read-only here; the owed-reply debt is written
         # at commit (track_background_presences), never in this pre-commit gate.
-        station_room = (record.get("sketch") or {}).get("station_room")
-        # Where they ARE, for anything about what reaches them.
-        here = presence_room(sc, name, record)
         char_addr = _character_address_of(dr_output, name, roster, sc, here)
+        # OWED (§C1.2): an unexpired reply debt from a beat the gate spent
+        # elsewhere. This is what keeps an open exchange re-triggering with
+        # no tenure list anywhere.
         owed = _valid_pending_reply(record, turn_idx)
-        mentioned = _background_name_mentioned(name, resolved_event)
-        dialogue_turns = record.get("dialogue_turns") or []
-        # AT THEIR POST. The rule that separates a FIXTURE from an emergence:
-        # a fixture may be re-met, an emergence may not. A presence whose
-        # station room is the room the player is standing in is at their post
-        # -- the barkeep behind the bar, the vendor at the stall -- and a
-        # tavern whose barkeep is only offered when the Director happens to
-        # mention him is a tavern with nobody behind the bar on every quiet
-        # visit. Measured: 8 of 52 live presences carry a station_room, and
-        # nothing re-offered any of them on return.
-        #
-        # Ranked LAST of the qualifying signals on purpose. Standing where you
-        # work is the weakest possible claim on a beat -- far weaker than being
-        # addressed -- and `cap` still bounds how many are picked, so a busy
-        # room does not become a chorus.
-        # AT their post, not merely POSTED there: a presence the scene has
-        # since placed somewhere else is not standing behind the bar, and
-        # this signal is the claim that they are. A presence the scene places
-        # nowhere still falls back to its station, exactly as before.
-        at_post = (bool(station_room) and str(here) == str(station_room)
-                   and _at_post_within_earshot(sc, here, player_room))
-        if not (flow_addressed or routed or addressed or char_addr or owed
-                or mentioned or dialogue_turns or at_post):
+        # ACTING (§C1.3): this presence turned toward an authored mind last
+        # beat -- a fired reaction aimed at one (`engaged_turns`, written at
+        # commit), or a charter act whose `other` is a bound body or an
+        # authored figure (last landed window; the same one-window lag every
+        # window_acts reader tolerates).
+        acting = ((turn_idx - 1) in (record.get("engaged_turns") or ())
+                  or name in acting_charter)
+        # EMERGED (§C1.4): stepping out of a crowd this beat is a demand by
+        # definition -- someone wanted this person.
+        emerged = name in emerged_names
+        addressed_precise = bool(flow_addressed or routed or addressed_exact
+                                 or char_addr)
+        addressed_any = bool(addressed_precise or addressed)
+        if not (addressed_any or owed or acting or emerged):
             continue
         # Only a person may hold a background speaking turn. The ledger says
         # nothing about what a name DENOTES, so a device with an accrued
@@ -2038,34 +2230,71 @@ def pick_background_reactors(ctx, dr_output, cap=1):
             continue
         if verdict == "undecided" and not (routed or flow_addressed):
             continue
-        if flow_addressed or routed:
+        if addressed_precise:
+            # AN ADDRESSEE IS NEVER SILENTLY DROPPED (§C3): a named
+            # counterpart failing to answer is the one visible failure mode,
+            # so every PRECISE spelling of an address widens the slots --
+            # the rule the flow-addressed and routed picks already had,
+            # extended to the whole class. Overflow past the path's own
+            # ceiling is the caller's chorus decision, not a drop.
             forced += 1
-        priority = (bool(flow_addressed or routed), bool(addressed),
-                    bool(char_addr),
-                    bool(owed), bool(mentioned), len(dialogue_turns),
-                    record.get("last_turn") or -1)
-        candidates.append((priority, name))
+        # Overflow order (§C3): addressed > owed > acting > emerged, then
+        # the B3 entanglement digest (patched in below, once, for charter
+        # bodies only), then stably. Precise addresses outrank loose ones,
+        # or a cap of one could hand the beat to a shared-word cousin of
+        # the person actually named.
+        priority = [2 if addressed_precise else (1 if addressed_any else 0),
+                    bool(owed), bool(acting),
+                    bool(emerged), 0.0, record.get("last_turn") or -1]
+        candidates.append(
+            {"priority": priority, "name": name, "record": record,
+             "room": str(here or ""),
+             "addressed": bool(addressed_precise),
+             "refs": [r for r in (record.get("charter_refs") or [])
+                      if isinstance(r, dict)]})
 
     if not candidates:
-        return []
-    candidates.sort(reverse=True)
-    # Every flow-addressed presence sorts first (top priority bit) and must
-    # answer THIS beat: widen the cap to fit them all, then fill any slots
-    # left up to `cap` with the normally-ranked candidates.
+        return {"picks": [], "meta": {}}
+    if any(c["refs"] for c in candidates):
+        # The B3 tie-break, computed against the authored minds standing in
+        # the candidate's own room; one registry fetch for every candidate.
+        try:
+            from world.charter_runtime import (charter_entanglement_of,
+                                               registry_for)
+            registry = registry_for(
+                cid, getattr(getattr(ctx, "turn", None), "frame_id", None))
+            positions = (sc.get("positions") or {})
+            for c in candidates:
+                if not c["refs"]:
+                    continue
+                present = sorted(
+                    n for n, where in positions.items()
+                    if str(where or "") == c["room"]
+                    and str(n).casefold() in roster)
+                c["priority"][4] = round(charter_entanglement_of(
+                    cid, c["refs"], present, registry=registry), 6)
+        except Exception:
+            pass
+    candidates.sort(key=lambda c: (c["priority"], c["name"]), reverse=True)
+    # Every addressee sorts first (top priority bit) and must answer THIS
+    # beat: widen the cap to fit them all, then fill any slots left up to
+    # `cap` with the remaining demand set.
     #
     # The stage downstream voices a presence BY NAME, so two records sharing
     # a display name collapse to one pick here: dispatching the same name
     # twice would voice one body with two turns.
     slots = max(forced, max(0, int(cap)))
-    picks, seen = [], set()
-    for _, name in candidates:
+    picks, meta, seen = [], {}, set()
+    for c in candidates:
         if len(picks) >= slots:
             break
-        if name.casefold() in seen:
+        if c["name"].casefold() in seen:
             continue
-        seen.add(name.casefold())
-        picks.append(name)
-    return picks
+        seen.add(c["name"].casefold())
+        picks.append(c["name"])
+        meta[c["name"]] = {"addressed": c["addressed"], "refs": c["refs"],
+                           "room": c["room"]}
+    return {"picks": picks, "meta": meta}
 
 def promotable_background_presences(chat_id):
     sc = wget(chat_id, "scene", {}) or {}

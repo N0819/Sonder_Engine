@@ -29,6 +29,7 @@ representation to keep in step.
 
 from __future__ import annotations
 
+from .charter_chatter import normalize_window_acts
 from .charter_figure import normalize_figures
 from .charter_mark import normalize_marks
 
@@ -518,6 +519,17 @@ def normalize_charter(stored, reservation=None):
         # must not leave a mark behind -- and this is the filter that counts,
         # because `normalize_charter` runs at the head of every `step`.
         "marks": normalize_marks(stored.get("marks"), bodies=bodies),
+        # The last landed window's acts, room-stamped, for the ambient
+        # chatter the perception layer renders
+        # (DESIGN_BACKGROUND_PRESENTATION §A). Carried here because
+        # `normalize_charter` rebuilds the state from this literal at every
+        # persistence boundary AND at the head of every `step` — the
+        # transient `acts` list dies at both, so a field only the runner
+        # held would leave every saved, restored or merely re-stepped
+        # charter silent. Institution-level on purpose: talk in a room is
+        # the room's record, not any one person's store.
+        "window_acts": normalize_window_acts(
+            stored.get("window_acts"), bodies),
         "travelled": {str(k): int(v)
                       for k, v in (stored.get("travelled") or {}).items()},
     }

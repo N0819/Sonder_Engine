@@ -127,16 +127,17 @@ from persist.commit_background import (BACKGROUND_PROMOTION_DIALOGUE_THRESHOLD,
     _mint_presence_uid, is_presence_uid, presence_display_name,
     presence_name_items, presence_is_unnamed,
     _fold_duplicate_presences, with_charter_presences,
+    emerge_from_charter_crowd, absorb_into_charter_crowd,
     overt_declaration, overt_declaration_text,
-    _background_name_mentioned,
+    _background_name_mentioned, _background_name_named_exactly,
     _character_address_of, _valid_pending_reply, _background_fired_reactions,
     _INERT_ENTITY_KINDS, _is_inert_presence_candidate,
     prepare_background_claims, commit_charter_observations,
     _mint_missing_presence_names, track_background_presences,
     BACKGROUND_RECENT_TAIL, _persist_blurbs, _append_manager_conduct,
     _background_fired_reactions_any, _flow_addressed_refs,
-    _presence_in_addressed_refs, _at_post_within_earshot,
-    pick_background_reactor, pick_background_reactors,
+    _presence_in_addressed_refs, emerged_this_beat,
+    pick_background_reactor, pick_background_reactors, pick_voice_demand,
     promotable_background_presences, _refuse_name_collision,
     promote_background_character, AUTO_PROMOTE_DIALOGUE_THRESHOLD,
     _promote_after_addressed, _auto_promote_enabled,
@@ -324,6 +325,72 @@ def commit_crowds(ctx, prepared_scene):
                  if isinstance(crowd, dict) and crowd.get("heading")
                  and str(crowd.get("heading")) != str(crowd.get("room_uid")))
 
+    # THE DERIVED SPECIES (DESIGN_BACKGROUND_PRESENTATION Part B). A charter
+    # crowd is a read-time projection, so its ops cannot ride `apply_ops`:
+    # `emerge` needs the registry and the presence ledger, and every other op
+    # is refused there by uid (a second writer on where charter bodies stand
+    # is the scar the whole bridge is designed around). Emerges are resolved
+    # HERE against the same rows perception showed -- `charter_crowds_for_room`
+    # re-derives them, and with nothing stored the only way two readers agree
+    # is to be the same reader. An `absorb` naming a charter body resolves
+    # against the presence ledger, unless the name stands in an authored
+    # crowd's `emerged` list, which keeps the stored ledger's own absorb
+    # first in line. Whatever this loop does not consume falls through to
+    # `apply_ops`, whose charter-uid branch fails closed on anything
+    # mis-routed.
+    offered = len(ops)
+    frame_id = getattr(ctx.turn, "frame_id", None)
+    turn_idx = int(getattr(ctx.turn, "idx", 0) or 0)
+    emerged_from_charter = []
+    derived_index = None
+    kept = []
+    authored_emerged = {str(n).casefold()
+                       for crowd in before if isinstance(crowd, dict)
+                       for n in (crowd.get("emerged") or [])}
+    for op in ops:
+        word = str((op or {}).get("op") or "set").strip().casefold()
+        uid = str((op or {}).get("crowd_id") or "").strip()
+        if word == crowds_model.OP_EMERGE \
+                and crowds_model.is_charter_crowd_uid(uid):
+            if derived_index is None:
+                from agents.common import (charter_crowds_for_room,
+                                           chatter_inputs)
+                inputs = chatter_inputs(cid, scene, turn_idx=turn_idx)
+                derived_index = {
+                    str(crowd.get("uid")): crowd
+                    for room in (scene.get("rooms") or {})
+                    for crowd in charter_crowds_for_room(
+                        cid, scene, room, inputs)}
+            crowd = derived_index.get(uid)
+            if crowd is None:
+                ctx.add_warning("crowd op rejected: no charter crowd %r "
+                                "stands in a scene room" % uid)
+                continue
+            place = str(crowd.get("room_uid") or "")
+            present = sorted(
+                name for name, where in (scene.get("positions") or {}).items()
+                if str(where or "") == place)
+            name, reason = emerge_from_charter_crowd(
+                cid, scene, crowd.get("charter_key"), place,
+                who=(op or {}).get("who"), present=present,
+                frame_id=frame_id, turn_idx=turn_idx)
+            if name:
+                emerged_from_charter.append(name)
+            else:
+                ctx.add_warning("crowd op rejected: %s" % reason)
+            continue
+        if word == crowds_model.OP_ABSORB:
+            name = " ".join(str((op or {}).get("who") or "").split())
+            if name and name.casefold() not in authored_emerged:
+                handled, reason = absorb_into_charter_crowd(
+                    cid, name, spoken=spoken, frame_id=frame_id)
+                if handled:
+                    if reason:
+                        ctx.add_warning("crowd op rejected: %s" % reason)
+                    continue
+        kept.append(op)
+    ops = kept
+
     standing, moves = crowds_model.advance_crowds(
         before, passable_neighbors(scene))
     standing, rejected = crowds_model.apply_ops(
@@ -334,9 +401,10 @@ def commit_crowds(ctx, prepared_scene):
         ctx.add_warning("crowd op rejected: %s" % reason)
     if standing != before:
         wset(cid, crowds_model.CROWDS_WORLD_KEY, standing)
-    return {"offered": len(ops), "standing": len(standing),
+    return {"offered": offered, "standing": len(standing),
             "headed": headed,
-            "moved": len(moves), "rejected": len(rejected)}
+            "moved": len(moves), "rejected": len(rejected),
+            "charter_emerged": len(emerged_from_charter)}
 
 
 def commit_all(ctx, nonce):

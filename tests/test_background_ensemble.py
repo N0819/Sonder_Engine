@@ -41,7 +41,11 @@ def _setup(temp_db, presences, *, max_reactors=2, player_input="", turn_idx=5):
 
 
 def _hist(name, **extra):
-    rec = {"first_turn": 1, "last_turn": 4, "dialogue_turns": [1], "mention_turns": []}
+    # `engaged_turns: [4]` against the fixture's turn idx 5: mid-exchange
+    # with an authored mind, the §C1.3 demand trigger -- since Part C bare
+    # dialogue history no longer qualifies a presence for a beat.
+    rec = {"first_turn": 1, "last_turn": 4, "dialogue_turns": [1, 4],
+           "mention_turns": [], "engaged_turns": [4]}
     rec.update(extra)
     return rec
 

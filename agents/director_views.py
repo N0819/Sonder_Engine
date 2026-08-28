@@ -298,7 +298,7 @@ def _report_observer_epithets(ctx, out, sc, p_name):
         ctx.add_warning(note)
 
 
-def _crowds_view(chat_id, scene):
+def _crowds_view(chat_id, scene, turn_idx=None):
     """Crowds the party could act on, by room, with the id ops require.
 
     Not room-scoped to one observer the way perception is: the Director owns
@@ -337,6 +337,34 @@ def _crowds_view(chat_id, scene):
             # captured payload as the model.
             "talk": crowds_model.talk_view(crowd, cap=4),
         })
+    # The derived charter crowds, same bound, same shape -- WITH their uids,
+    # for the same reason the authored ones carry theirs: `emerge` requires a
+    # crowd_id the Director has seen. `derived` marks the difference in law:
+    # move/split/disperse/set on one of these would make crowd ops a second
+    # writer on where charter bodies stand, so `apply_ops` refuses them and
+    # emerge resolves at the commit seam instead. `who` may be left empty on
+    # a derived crowd -- the engine picks by entanglement.
+    from agents.common import charter_crowds_for_room, chatter_inputs
+
+    # ``turn_idx`` ages the presentation-lapse subtraction (§C3) exactly as
+    # the perception read does, so the Director is offered the same derived
+    # rows the observer was shown -- two readers, one derivation.
+    inputs = chatter_inputs(chat_id, scene, turn_idx=turn_idx)
+    for room in sorted(rooms):
+        size = (rooms.get(room) or {}).get("size")
+        for crowd in charter_crowds_for_room(chat_id, scene, room, inputs):
+            out.append({
+                "crowd_id": crowd.get("uid"),
+                "room": room,
+                "band": crowd.get("band"),
+                "composition": crowd.get("composition"),
+                "mood": crowd.get("mood"),
+                "heading": None,
+                "density": crowds_model.density(crowd.get("band"), size),
+                "emerged": [],
+                "talk": [],
+                "derived": True,
+            })
     return out
 
 

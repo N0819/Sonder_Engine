@@ -258,6 +258,72 @@ def new_crowd(chat_id, room_uid, *, band, composition, since_turn,
     }
 
 
+# --- the charter bridge ------------------------------------------------------
+#
+# A CHARTER CROWD IS A READ-TIME PROJECTION, NEVER PERSISTED. The stored
+# object above is Director-authored people who exist ONLY as a band; charter
+# bodies are the opposite -- fully simulated people who need a cheaper
+# presentation. Storing a band, a composition and a membership for them would
+# drift the moment `charter_move.errands` walks a body elsewhere: the exact
+# `wearing`/`state`/`regions` scar this module's own note is written after.
+# The derivation itself lives in `world/charter_crowd.py`, which reads the
+# registry slices; this module owns only the vocabulary the two species
+# share and the op law `apply_ops` enforces.
+
+#: The uid prefix that makes a derived crowd recognisable by construction.
+#: `apply_ops` refuses to touch one -- see the branch below.
+CHARTER_CROWD_PREFIX = "crowd:charter:"
+
+
+def charter_crowd_uid(chat_id, charter_key, place):
+    """The derived crowd's stable id: from what the crowd IS -- the charter
+    whose people these are and the room they stand in -- in `crowd_uid`'s
+    spirit, never a display name. Stable across beats without storage,
+    because the material is identity rather than membership: the same
+    institution's people in the same room are the same crowd however many of
+    them this window holds."""
+    material = "|".join([
+        str(int(chat_id)), str(charter_key or ""), str(place or ""),
+    ])
+    digest = hashlib.sha256(material.encode("utf-8")).hexdigest()[:16]
+    return "%s%s" % (CHARTER_CROWD_PREFIX, digest)
+
+
+def is_charter_crowd_uid(uid):
+    """Whether this uid names a derived charter crowd."""
+    return str(uid or "").startswith(CHARTER_CROWD_PREFIX)
+
+
+#: Where a headcount becomes each band word. THE one place an integer meets
+#: the band vocabulary, and it points the safe direction: integer -> word is
+#: a projection; word -> integer (the arithmetic the module refuses) still
+#: never happens. Thresholds are VOCABULARY, not tuning -- chosen once so the
+#: words keep their plain meanings, the way `BANDS` itself was: "a handful"
+#: stops where you would start reaching for "a dozen or so", "a few dozen"
+#: runs out where "dozens" stops being the honest word.
+_COUNT_BANDS = ((8, "a handful"), (20, "a dozen or so"), (60, "a few dozen"))
+
+
+def count_band(count):
+    """The band a verifiable headcount projects to. Never the reverse."""
+    try:
+        count = max(0, int(count))
+    except (TypeError, ValueError):
+        count = 0
+    for below, band in _COUNT_BANDS:
+        if count < below:
+            return band
+    return BANDS[-1]
+
+
+#: Below this many unpresented bodies a place holds no derived crowd: two
+#: unvoiced people are two figures the existing overlay path can carry, not
+#: "a crowd". A taste constant, and a PREDICTION awaiting a measurement --
+#: DESIGN_CROWDS §7's falsifier ("bands read as vague rather than
+#: atmospheric") is what would move it, read from play.
+CHARTER_CROWD_FLOOR = 3
+
+
 #: The ops a Director may write. `emerge` and `absorb` land LAST by design:
 #: they are the pair that touches what the story will still be able to say
 #: about a person after the scene ends, and the cheap half had to earn them.
@@ -337,6 +403,26 @@ def apply_ops(crowds, ops, *, chat_id, turn, known_rooms, roster=(), spoken=()):
         if heading and heading not in rooms:
             rejected.append("dropped heading %r: no such room" % heading)
             heading = ""
+
+        # A DERIVED CHARTER CROWD ACCEPTS NO OP HERE. `move`, `split`,
+        # `disperse` and `set` on one would make crowd ops a second writer on
+        # where charter bodies stand -- the scar again -- and `emerge`
+        # resolves at the commit seam, which can reach the registry and the
+        # presence ledger; this pure fold cannot. The commit seam routes
+        # emerges out before calling this, so an emerge landing here is a
+        # caller that forgot, and it fails CLOSED rather than minting or
+        # mutating anything under a uid this ledger never held.
+        if is_charter_crowd_uid(uid):
+            if op == OP_EMERGE:
+                rejected.append(
+                    "emerge on derived crowd %r must resolve at the commit "
+                    "seam; nothing here can reach the registry" % uid)
+            else:
+                rejected.append(
+                    "crowd %r is derived from the charter registry; %r would "
+                    "make crowd ops a second writer on where its people "
+                    "stand -- only emerge applies" % (uid, op))
+            continue
 
         target = by_uid.get(uid) if uid else None
         if uid and target is None:

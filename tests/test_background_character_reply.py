@@ -210,10 +210,13 @@ def test_selected_but_silent_presence_gets_no_debt(temp_db):
     assert "pending_reply" not in _rec(temp_db.wget(chat_id, "background_presences", {}), "Doran")
 
 
-def test_story_character_addresses_npc_reply_lands_next_turn(temp_db, monkeypatch):
-    """Narrative walk: a registered character (Sara) calls out to a background
-    NPC (Doran) on turn 5, but the player addresses someone else, so the single
-    slot goes elsewhere -- and Doran answers on turn 6 via the owed reply."""
+def test_story_character_addresses_npc_both_addressees_answer_this_beat(
+        temp_db, monkeypatch):
+    """Narrative walk, post-Part-C: Sara calls out to Doran while the player
+    addresses Reya. Two precise addresses on one beat used to fight over the
+    single slot -- Doran waited a turn on the owed-reply debt -- and §C3's
+    guarantee ends the wait: an addressee is never dropped, so BOTH answer
+    now, and no debt is written because no reply is owed."""
     import agents.background as background
 
     chat_id, ctx5 = _setup(temp_db, cast_names=["Sara"], turn_idx=5,
@@ -222,6 +225,49 @@ def test_story_character_addresses_npc_reply_lands_next_turn(temp_db, monkeypatc
     ctx5.director_resolve = {
         "resolved_event": "Sara wheels toward the bar as the brawl spills over.",
         "dialogue_log": [_line("Sara", "Doran", exact_quote='"Doran, bar that door!"')]}
+
+    captured = {}
+
+    def canned(role, name, system, payload, **kw):
+        captured[payload["entity"]["name"]] = payload
+        who = payload["entity"]["name"]
+        return {"reacts": True, "dialogue_log_entry": {
+            "speaker": "x", "exact_quote": f'"{who} answers."', "volume": "normal",
+            "intended_target": None, "tone": "", "visibility": "overt",
+            "conceal_from": []}, "action": ""}
+
+    monkeypatch.setattr(background, "_agent_json", canned)
+
+    ctx5["background_react"] = background.background_react(ctx5, nonce=5)
+    assert set(ctx5["background_react"]["selected"]) == {"Reya", "Doran"}
+    # Doran's payload carries Sara's line as a FRESH address, not a debt.
+    assert captured["Doran"]["beat"]["addressed_by"]["speaker"] == "Sara"
+    assert captured["Doran"]["beat"]["addressed_by"]["beats_ago"] == 0
+    track_background_presences(ctx5, nonce=5)
+    # The moment was answered, so no reply debt survives the beat.
+    assert "pending_reply" not in _rec(
+        temp_db.wget(chat_id, "background_presences", {}), "Doran")
+
+
+def test_an_unanswered_address_still_becomes_a_debt_the_gate_honours(
+        temp_db, monkeypatch):
+    """The owed-reply lane is still load-bearing for the beats where the
+    stage could NOT answer (a failed call, a manager that spent the beat):
+    the debt is written at commit and the demand gate's owed trigger fires
+    it next turn -- the "if not during the turn, next turn" case."""
+    import agents.background as background
+
+    chat_id, ctx5 = _setup(temp_db, cast_names=["Sara"], turn_idx=5,
+                           presences={"Reya": _bare("Reya"), "Doran": _bare("Doran")})
+    ctx5.director_resolve = {
+        "resolved_event": "Sara wheels toward the bar.",
+        "dialogue_log": [_line("Sara", "Doran", exact_quote='"Doran, bar that door!"')]}
+    # The stage produced nothing for Doran this beat (canned empty result).
+    ctx5["background_react"] = {"fired": False, "name": None, "selected": [],
+                                "reactions": [], "dialogue_log_entry": None}
+    track_background_presences(ctx5, nonce=5)
+    assert _rec(temp_db.wget(chat_id, "background_presences", {}),
+                "Doran")["pending_reply"]["from"] == "Sara"
 
     captured = {}
 
@@ -235,13 +281,6 @@ def test_story_character_addresses_npc_reply_lands_next_turn(temp_db, monkeypatc
 
     monkeypatch.setattr(background, "_agent_json", canned)
 
-    # Turn 5: player-addressed Reya wins the single slot; Doran is owed.
-    ctx5["background_react"] = background.background_react(ctx5, nonce=5)
-    assert ctx5["background_react"]["name"] == "Reya"
-    track_background_presences(ctx5, nonce=5)
-    assert _rec(temp_db.wget(chat_id, "background_presences", {}), "Doran")["pending_reply"]["from"] == "Sara"
-
-    # Turn 6: same chat, no new address; Doran answers on the owed reply.
     turn6 = temp_db.qi("INSERT INTO turns(chat_id,idx,player_input,created) VALUES(?,?,?,?)",
                        (chat_id, 6, "", time.time()))
     ctx6 = PipelineContext(

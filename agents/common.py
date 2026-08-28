@@ -1486,7 +1486,7 @@ def observer_body_regions(sc, observer, body_labels=None, extra_parts=None):
 CROWDS_KEY = crowds_model.CROWDS_WORLD_KEY
 
 
-def crowds_for_room(cid, sc, room_id):
+def crowds_for_room(cid, sc, room_id, inputs=None):
     """What crowds an observer in this room registers, already described.
 
     A crowd is a thing in a room, so it is delivered per observer and scoped to
@@ -1500,6 +1500,17 @@ def crowds_for_room(cid, sc, room_id):
     Density is computed here rather than read, because it is a function of the
     band and the ROOM and the crowd may have walked into a different one since
     it was minted.
+
+    TWO SPECIES SHARE THIS VIEW SHAPE (DESIGN_BACKGROUND_PRESENTATION §B1):
+    the authored ledger rows above, and derived charter crowds
+    (`charter_crowds_for_room`), appended below under the same fields so the
+    composer and every payload read both identically. A derived row differs
+    where the derivation says it must: no drift (charter bodies move
+    individually on their own errands), no `emerged` list (an emerged body's
+    presence record IS the record and membership excludes it at the next
+    read), no `talk` (the charter's talk is the chatter seam's, delivered
+    beside this view, never twice). ``inputs`` is `chatter_inputs`' shared
+    fetch, exactly as `chatter_for_room` takes it.
     """
     if not room_id:
         return []
@@ -1541,7 +1552,245 @@ def crowds_for_room(cid, sc, room_id):
             # only through an explicit telling op.
             "talk": crowds_model.talk_view(crowd),
         })
+    for crowd in charter_crowds_for_room(cid, sc, room_id, inputs):
+        out.append({
+            "uid": crowd.get("uid"),
+            "what": crowds_model.describe(crowd, size),
+            # Density, terrain and drift are the same physics for both
+            # species: a press of simulated people is exactly as much a
+            # membrane as a press of authored ones. Drift is None by
+            # construction (a derived crowd has no heading), spelled through
+            # the same function so there is one answer to what drift is.
+            "density": crowds_model.density(crowd.get("band"), size),
+            "heading": None,
+            "terrain": crowds_model.terrain(crowd.get("band"), size),
+            "drift": crowds_model.drift(crowd, size),
+            "emerged": [],
+            "talk": [],
+            # Recognisable twice over -- the uid prefix is the enforcement
+            # (`crowds.apply_ops` refuses these), the flag is the courtesy.
+            "derived": True,
+        })
     return out
+
+
+def chatter_inputs(cid, sc, turn_idx=None):
+    """Everything ambient chatter reads, fetched once per perception stage —
+    and, since Part B, everything the derived charter crowd reads too
+    (`charter_crowds_for_room` shares this fetch under its own memo), so a
+    stage pays the registry deepcopy once however many seams consume it.
+
+    `charter_runtime.registry_for` normalizes the whole registry (measured
+    21.8ms with its deepcopy on one 40-body charter), so a per-perceiver
+    fetch would multiply that by the cast; the stage fetches once, every
+    `chatter_for_room` call reuses the slices, and a per-room memo makes the
+    co-located cast free. Presence records are read here too, and carry two
+    different claims that must not collapse into one (Part C's §C3 split):
+    `known_bodies` is RECOGNITION — a charter body somebody has met is
+    somebody chatter attribution may name (§A2c), and a name once learned is
+    never unlearned — while `presented_bodies` is PRESENTATION — the bodies
+    a record still presents individually this beat, which lapses after
+    `charter_crowd.PRESENTED_IDLE_BEATS` idle beats so the body returns to
+    the derived crowd's ground. ``turn_idx`` is what ages the second set; a
+    caller without one gets the conservative no-lapse read.
+    """
+    from world.charter_crowd import presented
+    from world.charter_runtime import CHARTERS_KEY, normalize_registry
+
+    # Through `wget`, NOT `registry_for(cid)`: the registry key is
+    # frame-scoped and `registry_for`'s default pins the PRESENT era
+    # explicitly, while every sibling read on this seam (`crowds`,
+    # `background_presences`) follows the pipeline's ambient active frame —
+    # a flashback's observer must hear the flashback's charters.
+    try:
+        registry = normalize_registry(wget(cid, CHARTERS_KEY, {}) or {})
+    except Exception:
+        registry = {"items": {}}
+    known_refs = {}
+    presented_refs = {}
+    for rec in (wget(cid, "background_presences", {}) or {}).values():
+        if not isinstance(rec, dict):
+            continue
+        live = turn_idx is None or presented(rec, turn_idx)
+        for ref in rec.get("charter_refs") or []:
+            if isinstance(ref, dict):
+                known_refs.setdefault(
+                    str(ref.get("charter") or ""), set()).add(
+                    str(ref.get("body") or ""))
+                if live:
+                    presented_refs.setdefault(
+                        str(ref.get("charter") or ""), set()).add(
+                        str(ref.get("body") or ""))
+    charters = []
+    for key, item in sorted((registry.get("items") or {}).items()):
+        state = (item or {}).get("state") or {}
+        charters.append({
+            "key": str(key),
+            "bodies": state.get("bodies") or {},
+            "watch": state.get("watch") or {},
+            "posts": state.get("posts") or {},
+            "naming": state.get("naming"),
+            "figures": state.get("figures") or {},
+            "window_acts": state.get("window_acts") or [],
+            "clock_hours": float(state.get("clock_hours") or 0.0),
+            "known_bodies": frozenset(known_refs.get(str(key), ())),
+            "presented_bodies": frozenset(presented_refs.get(str(key), ())),
+            # The two slices the derived crowd adds to chatter's read
+            # (`charter_crowds_for_room` shares this fetch): who is bound to
+            # a registered character, and what everyone is carrying.
+            "bindings": frozenset(
+                str(k) for k in (state.get("bindings") or {})),
+            "feel": state.get("feel") or {},
+        })
+    return {"charters": charters, "memo": {}}
+
+
+def charter_crowds_for_room(cid, sc, room_id, inputs=None):
+    """The derived charter crowds standing in one room: stored-shape rows,
+    computed from the registry and NEVER persisted.
+
+    DESIGN_BACKGROUND_PRESENTATION Part B: the registry bodies whose place
+    is this room, minus everyone individually presented (bound bodies,
+    bodies with a live presence record), projected through
+    `world.charter_crowd.crowd_for`. Derived at every read, so it cannot
+    drift from where `charter_move.errands` actually walked people -- the
+    second-source-of-truth scar `world/crowds.py` is written after.
+
+    Shares `chatter_inputs`' once-per-stage registry fetch and adds a
+    per-room memo, exactly as `chatter_for_room` does; `persist/commit.py`
+    calls this too, to resolve an `emerge` against the same rows perception
+    showed, because with nothing stored the only way two readers agree is
+    to be the same reader.
+    """
+    from world import charter_crowd
+
+    if not room_id:
+        return []
+    inputs = inputs if isinstance(inputs, dict) else chatter_inputs(cid, sc)
+    memo = inputs.setdefault("crowd_memo", {})
+    room = str(room_id)
+    if room in memo:
+        return [dict(row) for row in memo[room]]
+    rows = []
+    for charter in inputs.get("charters") or []:
+        crowd = charter_crowd.crowd_for(cid, charter, room)
+        if crowd is not None:
+            rows.append(crowd)
+    rows = rows[:charter_crowd.CO_LOCATED_CAP]
+    memo[room] = rows
+    return [dict(row) for row in rows]
+
+
+def chatter_for_room(cid, sc, room_id, inputs=None):
+    """What an observer in this room hears of the crowd's talk: a hum band
+    as ground, and at most one overheard fragment as figure.
+
+    DESIGN_BACKGROUND_PRESENTATION Part A, delivered exactly where the crowd
+    view is (`crowds_for_room`) and for the same reason: every caller passes
+    the observer's own room, so admission is decided at the seam that
+    already decides what a bystander takes in, and
+    `composer.observations_from_render` then makes character receipt
+    legitimate with no second representation. The fragment is the TRIPLE —
+    speaker/act/other/subject labels — never the substrate's template line;
+    the engine holds no sentence content, so none can cross.
+
+    Deterministic and seeded from persisted state only (chat, room, each
+    charter's own clock), so a replay renders the identical murmur.
+    """
+    from world import charter_chatter
+
+    if not room_id:
+        return []
+    inputs = inputs if isinstance(inputs, dict) else chatter_inputs(cid, sc)
+    memo = inputs.setdefault("memo", {})
+    room = str(room_id)
+    if room in memo:
+        return [dict(e) for e in memo[room]]
+
+    size = effective_room_size(sc or {}, room)
+    crowds = crowds_model.crowds_in_room(wget(cid, CROWDS_KEY, []) or [],
+                                         room)
+    # BOTH species feed the band floor and the density inversion (§A2a's
+    # "graded against the crowd band already present", §A2d's table): a
+    # derived charter crowd IS a crowd standing in the room, and in a
+    # charter-only story the authored ledger is empty — reading it alone
+    # left a derived throng with no hum floor and a derived crush still
+    # admitting ordinary fragments, so degradation did not invert for the
+    # exact species the design is about. One memoized read on the fetch
+    # this function already shares with `charter_crowds_for_room`.
+    standing = crowds + charter_crowds_for_room(cid, sc, room, inputs)
+    band_rank = max((crowds_model.band_rank(c.get("band"))
+                     for c in standing), default=0)
+    severity = {crowds_model.LOOSE: 0, crowds_model.PACKED: 1,
+                crowds_model.CRUSH: 2}
+    density = crowds_model.LOOSE
+    for crowd in standing:
+        packed = crowds_model.density(crowd.get("band"), size)
+        if severity[packed] > severity[density]:
+            density = packed
+
+    # The beat's entanglement set: whoever the scene itself places in this
+    # room, plus anyone stepped out of a crowd here. The one fragment worth
+    # hearing is the crowd talking about *you*.
+    notable = {str(name) for name, where in
+               ((sc or {}).get("positions") or {}).items()
+               if str(where or "") == room}
+    for crowd in crowds:
+        notable.update(str(n) for n in (crowd.get("emerged") or []))
+
+    rows = []
+    for charter in inputs.get("charters") or []:
+        bodies = charter["bodies"]
+        figures = charter["figures"]
+
+        def _name(key, charter=charter, bodies=bodies, figures=figures):
+            key = str(key or "")
+            if key in figures:
+                return key
+            body = bodies.get(key)
+            return str((body or {}).get("name") or "") if body else ""
+
+        for act in charter_chatter.acts_in_room(charter["window_acts"],
+                                                room):
+            rows.append({**act, "charter": charter,
+                         "other_name": _name(act.get("other")),
+                         "subject_name": _name(act.get("subject"))})
+
+    hum = charter_chatter.hum_rank(len(rows), band_rank, density)
+    seed_material = "chatter|%s|%s|%s" % (
+        cid, room, "|".join("%s@%0.4f" % (c["key"], c["clock_hours"])
+                            for c in inputs.get("charters") or []))
+    out = []
+    phrase = charter_chatter.hum_phrase(hum)
+    if phrase:
+        out.append({"kind": "hum", "uid": "hum:%s" % room, "what": phrase,
+                    "band": charter_chatter.HUM_BANDS[hum]})
+
+    picked = charter_chatter.overheard_fragment(
+        rows, notable=notable, density=density, seed_material=seed_material)
+    if picked is not None:
+        charter = picked["charter"]
+        speaker, _ = charter_chatter.participant_label(
+            picked.get("actor"), place=room, bodies=charter["bodies"],
+            watch=charter["watch"], posts=charter["posts"],
+            naming=charter["naming"], figures=charter["figures"],
+            known_bodies=charter["known_bodies"])
+        other, _ = charter_chatter.participant_label(
+            picked.get("other"), place=room, bodies=charter["bodies"],
+            watch=charter["watch"], posts=charter["posts"],
+            naming=charter["naming"], figures=charter["figures"],
+            known_bodies=charter["known_bodies"])
+        subject = charter_chatter.subject_label(
+            picked.get("subject"), bodies=charter["bodies"],
+            figures=charter["figures"], naming=charter["naming"])
+        fragment = {"speaker_label": speaker, "act": picked.get("act"),
+                    "other_label": other, "subject_label": subject}
+        out.append({"kind": "fragment",
+                    "uid": charter_chatter.fragment_key(picked),
+                    "what": charter_chatter.fragment_phrase(fragment),
+                    **fragment})
+    memo[room] = out
+    return [dict(e) for e in out]
 
 
 def couriers_for_room(cid, sc, room_id):

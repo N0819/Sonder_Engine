@@ -184,10 +184,12 @@ def test_gate_reads_split_ledger_as_one_person(temp_db):
     temp_db.wset(chat_id, "scene", _guard_scene())
     temp_db.wset(chat_id, "background_presences", {
         "Guard 1": {"first_turn": 0, "last_turn": 5,
-                    "dialogue_turns": [2], "mention_turns": [],
+                    "dialogue_turns": [2, 5], "mention_turns": [],
+                    "engaged_turns": [5],
                     "sketch": {"role_hint": "A Site Security Guard."}},
         "ab1299cb69244904": {"first_turn": 0, "last_turn": 5,
-                             "dialogue_turns": [3], "mention_turns": [],
+                             "dialogue_turns": [3, 5], "mention_turns": [],
+                             "engaged_turns": [5],
                              "sketch": {"station_room": "obs_room"}},
     })
 
@@ -301,14 +303,16 @@ def test_inert_kind_presence_is_never_picked(temp_db):
 
 def test_ordinary_unregistered_person_still_gets_a_turn(temp_db):
     """Background life must keep working: the gate returning [] on most
-    turns is correct, and a person-kind presence with history (or none but a
-    scene record saying person) still qualifies exactly as before. This is
-    the barkeep/night-clerk class the stage exists for."""
+    turns is correct, and a person-kind presence the beat DEMANDS -- here,
+    one mid-exchange with an authored mind (§C1.3's engaged_turns) --
+    still qualifies. This is the barkeep/night-clerk class the stage exists
+    for; since Part C the claim on the beat is the exchange, not history."""
     chat_id = _make_chat(temp_db)
     temp_db.wset(chat_id, "scene", _guard_scene())
     temp_db.wset(chat_id, "background_presences", {
         "Guard 1": {"first_turn": 0, "last_turn": 5,
-                    "dialogue_turns": [2], "mention_turns": []},
+                    "dialogue_turns": [2, 5], "mention_turns": [],
+                    "engaged_turns": [5]},
     })
 
     ctx = _ctx(temp_db, chat_id, 6, {})
@@ -332,7 +336,8 @@ def test_presence_with_no_scene_entity_keeps_benefit_of_the_doubt(temp_db):
     })
     temp_db.wset(chat_id, "background_presences", {
         "Sleepy Hotel Clerk": {"first_turn": 3, "last_turn": 5,
-                               "dialogue_turns": [4]},
+                               "dialogue_turns": [4, 5],
+                               "engaged_turns": [5]},
     })
 
     ctx = _ctx(temp_db, chat_id, 6, {})
@@ -385,8 +390,9 @@ def test_reaction_speaker_is_resolved_to_the_dispatched_presence(temp_db, monkey
     chat_id = _make_chat(temp_db)
     temp_db.wset(chat_id, "scene", _guard_scene())
     temp_db.wset(chat_id, "background_presences", {
-        "Guard 1": {"first_turn": 0, "last_turn": 5, "dialogue_turns": [2],
-                    "mention_turns": []},
+        "Guard 1": {"first_turn": 0, "last_turn": 5,
+                    "dialogue_turns": [2, 5], "mention_turns": [],
+                    "engaged_turns": [5]},
     })
 
     ctx = _ctx(temp_db, chat_id, 6, {

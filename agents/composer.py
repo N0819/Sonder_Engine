@@ -1572,6 +1572,60 @@ def room_content_percepts(*groups):
     return out
 
 
+def chatter_percepts(entries):
+    """The room's talk: a hum band as ground, at most one fragment as figure.
+
+    Both arrive from `common.chatter_for_room`, which — like the three
+    `room_content_percepts` seams — has ALREADY decided what a bystander in
+    that room takes in: the hum is a band over the last window's charter
+    acts, and the fragment is the who-asked-whom-about-whom triple with its
+    labels already licensed by recognition. Nothing here re-decides
+    admission; this is only the delivery.
+
+    `hearing`, because that is the channel a murmur rides — prose has one
+    channel, so anything rendered verbatim IS foreground, which is why the
+    fragment count upstream is zero or one (the walla rule,
+    DESIGN_BACKGROUND_PRESENTATION §A1). The structured triple rides `data`
+    beside the composed clause so the projection stays auditable: the
+    engine holds no sentence the crowd said, so none can be restated.
+
+    Dedupe: the hum keys on its band, so an unchanged murmur is standing
+    furniture and only a change in loudness re-renders; the fragment keys on
+    the act's identity, so the same act never surfaces twice while its
+    window stands.
+    """
+    out = []
+    for entry in entries or []:
+        if not isinstance(entry, dict):
+            continue
+        desc = " ".join(str(entry.get("what") or "").split())
+        if not desc:
+            continue
+        if desc[-1:] not in ".!?":
+            desc += "."
+        if entry.get("kind") == "fragment":
+            data = {"desc": desc}
+            for field in ("speaker_label", "act", "other_label",
+                          "subject_label"):
+                data[field] = str(entry.get(field) or "")
+            key = str(entry.get("uid") or "")
+            out.append(Percept(
+                kind="ambient", channel="hearing", data=data,
+                salience=0.45,
+                dedupe_key=standing_key("chatter", (key,), (key,)),
+            ))
+        else:
+            band = str(entry.get("band") or "")
+            out.append(Percept(
+                kind="ambient", channel="hearing",
+                data={"desc": desc, "hum": band},
+                salience=0.3,
+                dedupe_key=standing_key("hum", (entry.get("uid"),),
+                                        (band,)),
+            ))
+    return out
+
+
 def micro_round_percept(text):
     """One interaction-loop micro-round delivery, as a percept.
 

@@ -71,11 +71,33 @@ def test_no_candidates_when_no_background_presences_tracked(temp_db):
     assert pick_background_reactor(ctx, {"resolved_event": "Nothing happens.", "dialogue_log": []}) is None
 
 
-def test_picks_presence_with_prior_dialogue_history(temp_db):
+def test_prior_dialogue_history_alone_no_longer_qualifies(temp_db):
+    """DESIGN_BACKGROUND_PRESENTATION §C1: tenure is not a trigger. Reya
+    spoke on turn 1 and has been mentioned since, but nobody's conduct this
+    beat calls on her -- the alarm is the Director's own prose, and prose
+    salience voiced extras on recency for as long as this gate existed. An
+    open exchange re-qualifies through addressed/owed/acting instead (the
+    companion test below pins the acting half)."""
     ctx = _make_ctx(temp_db, background_presences={
         "Reya": {"first_turn": 1, "last_turn": 4, "dialogue_turns": [1], "mention_turns": [2, 3, 4]},
     })
     dr_output = {"resolved_event": "The alarm blares through the corridor.", "dialogue_log": []}
+    assert pick_background_reactor(ctx, dr_output) is None
+
+
+def test_a_presence_that_engaged_an_authored_mind_last_beat_qualifies(temp_db):
+    """§C1.3: `engaged_turns` records the beats a fired line was AIMED at an
+    authored mind (written at commit); the beat after one is a live exchange
+    and re-offers the presence with no tenure list anywhere. The turn fixture
+    is idx 5, so an engagement on 4 is 'last beat' and one on 2 is not."""
+    ctx = _make_ctx(temp_db, background_presences={
+        "Reya": {"first_turn": 1, "last_turn": 4, "dialogue_turns": [1, 4],
+                 "mention_turns": [], "engaged_turns": [4]},
+        "Docking Control Operator": {"first_turn": 1, "last_turn": 2,
+                                     "dialogue_turns": [2],
+                                     "mention_turns": [], "engaged_turns": [2]},
+    })
+    dr_output = {"resolved_event": "The corridor hums.", "dialogue_log": []}
     assert pick_background_reactor(ctx, dr_output) == "Reya"
 
 
@@ -150,8 +172,11 @@ def test_background_react_stage_skips_llm_call_when_no_candidate(temp_db, monkey
 def test_background_react_stage_returns_fired_entry_when_gate_passes(temp_db, monkeypatch):
     import agents.background as background
 
+    # Engaged an authored mind last beat (turn fixture is idx 5) -- the §C1.3
+    # trigger; history alone stopped qualifying with Part C.
     ctx = _make_ctx(temp_db, background_presences={
-        "Reya": {"first_turn": 1, "last_turn": 4, "dialogue_turns": [1], "mention_turns": []},
+        "Reya": {"first_turn": 1, "last_turn": 4, "dialogue_turns": [1, 4],
+                 "mention_turns": [], "engaged_turns": [4]},
     })
     ctx.director_resolve = {"resolved_event": "The alarm blares.", "dialogue_log": []}
 
@@ -179,7 +204,7 @@ def test_payload_carries_role_hint_from_sketch(temp_db, monkeypatch):
 
     ctx = _make_ctx(temp_db, background_presences={
         "Doran": {"first_turn": 0, "last_turn": 4, "dialogue_turns": [1, 2],
-                  "mention_turns": [],
+                  "mention_turns": [], "engaged_turns": [4],
                   "sketch": {"role_hint": "grizzled one-eyed barkeep",
                              "station_room": "taproom"}},
     })
@@ -205,7 +230,8 @@ def test_payload_role_hint_empty_when_no_sketch(temp_db, monkeypatch):
     import agents.background as background
 
     ctx = _make_ctx(temp_db, background_presences={
-        "Reya": {"first_turn": 1, "last_turn": 4, "dialogue_turns": [1], "mention_turns": []},
+        "Reya": {"first_turn": 1, "last_turn": 4, "dialogue_turns": [1, 4],
+                 "mention_turns": [], "engaged_turns": [4]},
     })
     ctx.director_resolve = {"resolved_event": "The alarm blares.", "dialogue_log": []}
 
@@ -230,7 +256,8 @@ def test_payload_carries_only_the_presence_own_bounded_interaction_tail(
     ctx = _make_ctx(temp_db, background_presences={
         "Captain Ysra Vale": {
             "first_turn": 1, "last_turn": 4, "dialogue_turns": [1, 2],
-            "mention_turns": [], "sketch": {"station_room": "gate"},
+            "mention_turns": [], "engaged_turns": [4],
+            "sketch": {"station_room": "gate"},
             "recent": [
                 {"turn": 1, "text": "oldest and outside the bound"},
                 {"turn": 2, "text": 'heard Rowan say "I am Rowan Hale."'},
@@ -369,21 +396,18 @@ def test_a_routed_name_that_is_registered_cast_is_not_minted(temp_db):
 # --- at their post, one open doorway away ---------------------------------
 #
 # The architectural hole, named by the owner: "they should be able to respond
-# from adjacent rooms."
+# from adjacent rooms." The at-post signal answered it -- and Part C then
+# removed at-post as a QUALIFIER (§C1: co-presence is not a trigger), keeping
+# the ability where it always really lived: an address, a routed line or an
+# owed reply reaches a body in an adjacent room exactly as before
+# (`_character_address_of` still holds the heard-in-FULL bar).
 #
-# Perception already models this correctly. `hear_level` is barrier- and
-# distance-aware, an open doorway carries a voice, and `_beat_for_presence`
-# runs exactly that check before handing a presence anything -- a body in the
-# back office hears the lobby and is told so. What did not exist was any way
-# for that body to be CHOSEN to answer: the salience gate's at-post signal
-# compared rooms with `==`, so a clerk stationed one open doorway from a
-# ringing bell was structurally mute. The engine granted him the perception
-# and withheld the agency.
-#
-# Live evidence that the models kept trying to work around it, chat 72: the
+# Live evidence, chat 72, that shaped both generations of the rule: the
 # Director walked a night clerk INTO the lobby so he could speak (turn 45),
 # and the spatial specialist put another at the doorway "near" the guests
-# (turn 47) -- which teleported the player into the back office.
+# (turn 47) -- which teleported the player into the back office. Both beats
+# carried a routed line or the player's own words -- addresses, which still
+# force the pick today.
 
 HOTEL = {
     "location": "Hotel", "time": "night",
@@ -412,36 +436,43 @@ def _hotel_ctx(temp_db, station, player_input="I ring the bell."):
     return ctx
 
 
-def test_a_presence_at_their_post_next_door_can_be_picked(temp_db):
-    """One open doorway. He can hear the bell, so he can answer it."""
+def test_standing_at_your_post_no_longer_qualifies_by_itself(temp_db):
+    """DESIGN_BACKGROUND_PRESENTATION §C1: co-presence stopped being a
+    trigger, and at-post was co-presence in its politest clothes -- the
+    standing invitation of working where you stand. A quiet bell with no
+    address, no routed line and no owed reply summons nobody; the room's
+    aliveness is the chatter/crowd tiers' job now (§C2), and the chat-72
+    clerk this hotel fixture was built from was ALWAYS carried by the
+    stronger signals (the Director routed his line, the player spoke)."""
     from persist.commit import pick_background_reactors
 
     ctx = _hotel_ctx(temp_db, "office")
     dr = {"resolved_event": "The bell rings out across the empty lobby.",
           "dialogue_log": []}
 
-    assert pick_background_reactors(ctx, dr, cap=1) == ["Night Clerk"]
+    assert pick_background_reactors(ctx, dr, cap=1) == []
 
 
-def test_a_shut_door_still_means_nobody_comes(temp_db):
-    """The floor this must not break. The bar is a line heard in FULL, which
-    is the bar `_character_address_of` already sets -- a closed door yields
-    `fragment`, and at-post is the weakest claim any presence has on a beat.
-    A muffled thump through a shut door must not summon a body; where the
-    beat warrants one, the stronger signals fire regardless of room."""
+def test_an_addressed_clerk_next_door_still_answers(temp_db):
+    """The owner's mandate that produced at-post -- "they should be able to
+    respond from adjacent rooms" -- survives Part C through the trigger that
+    always did the real work: an address. The player speaking to the clerk
+    by name qualifies him from the back office exactly as it did from the
+    lobby; what died is the unprompted offer, not the ability."""
     from persist.commit import pick_background_reactors
 
-    ctx = _hotel_ctx(temp_db, "vault")
+    ctx = _hotel_ctx(temp_db, "office",
+                     player_input="Night Clerk? Anyone at the desk?")
     dr = {"resolved_event": "The bell rings out across the empty lobby.",
           "dialogue_log": []}
 
-    assert pick_background_reactors(ctx, dr, cap=1) == []
+    assert pick_background_reactors(ctx, dr, cap=1) == ["Night Clerk"]
 
 
 def test_a_presence_with_no_station_is_still_not_picked_on_post(temp_db):
     """Not knowing where somebody stands is a reason to deliver nothing --
-    the rule `_beat_for_presence` already follows. An unplaced presence has
-    no post to be at."""
+    the rule `_beat_for_presence` already follows. An unplaced, unaddressed
+    presence has no claim on the beat at all under §C1."""
     from persist.commit import pick_background_reactors
 
     ctx = _make_ctx(temp_db, background_presences={
@@ -598,7 +629,10 @@ def test_scene_life_voices_nearby_charter_person_in_an_isolated_call(
         temp_db, monkeypatch):
     import agents.background as background
 
-    ctx = _make_ctx(temp_db, background_presences={})
+    # The player addresses Mara outright -- the §C1 demand trigger; a
+    # resolved_event mention alone stopped qualifying with Part C.
+    ctx = _make_ctx(temp_db, background_presences={},
+                    player_input="Mara, is the fire holding?")
     state = normalize_charter({
         "key": "inn", "upkeeps": {}, "posts": {},
         "bodies": {"mara_ledger": {

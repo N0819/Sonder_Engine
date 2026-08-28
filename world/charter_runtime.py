@@ -2254,6 +2254,151 @@ def background_presence_records(cid, *, places=None, names=None,
     return out
 
 
+def bodies_acting_toward_authored(cid, authored, frame_id=None):
+    """Display names of unbound charter bodies whose last landed window held
+    an act aimed at an authored mind's aperture.
+
+    The Part C "acting" trigger's substrate half (DESIGN_BACKGROUND_
+    PRESENTATION §C1.3): an act's ``other`` is a body key or a figure key,
+    and it points at an authored mind exactly when it is a BOUND body (the
+    body a registered character rides) or a scene figure whose key is an
+    authored name (`presence_view` injects figures under exactly those
+    keys, so a landed act toward one is recorded under it). "Last beat" is
+    the last landed window, the same one-window lag every reader of
+    ``window_acts`` already tolerates (§0's staleness note).
+
+    Ambiguous display names are withheld, the same refusal as
+    `background_presence_records`: a trigger that cannot say WHICH body it
+    means must not voice either.
+    """
+    registry = registry_for(cid, frame_id)
+    authored_cf = {str(a or "").strip().casefold() for a in (authored or ())
+                   if str(a or "").strip()}
+    acting = []
+    counts = {}
+    for charter_key, item in sorted(registry["items"].items()):
+        state = item["state"]
+        bindings = set(state.get("bindings") or {})
+        figure_keys = {str(k) for k in (state.get("figures") or {})
+                       if str(k).casefold() in authored_cf}
+        wanted = bindings | figure_keys
+        actors = {str((row or {}).get("actor") or "")
+                  for row in (state.get("window_acts") or [])
+                  if str((row or {}).get("other") or "") in wanted}
+        from world.charter_identity import display_name
+        roles = {}
+        for post, body_key in (state.get("watch") or {}).items():
+            roles.setdefault(str(body_key), []).append(str(post))
+        for body_key, body in sorted(state["bodies"].items()):
+            display = display_name(
+                body, roles.get(body_key) or (), state.get("naming"))
+            counts[display.casefold()] = counts.get(display.casefold(), 0) + 1
+            if body_key in actors and body_key not in bindings:
+                acting.append(display)
+    return {d for d in acting if counts.get(d.casefold(), 0) == 1}
+
+
+def charter_entanglement_of(cid, refs, present, frame_id=None,
+                            registry=None):
+    """The B3 entanglement digest for one presented body: summed over its
+    charter refs, against the authored minds present.
+
+    Part C's overflow tie-break (§C3): among candidates whose triggers tie,
+    the one with a tie, a debt or a grievance toward whoever is standing
+    there speaks first -- the same score, from the same reader
+    (`charter_practice.entanglement`), that picks who steps out of a derived
+    crowd, so the two "who has a reason" questions cannot drift apart. A
+    record with no charter refs scores 0.0 and falls through to the stable
+    tie-break.
+    """
+    held = [r for r in (refs or ()) if isinstance(r, dict)]
+    if not held:
+        return 0.0
+    from world.charter import entanglement
+
+    if registry is None:
+        registry = registry_for(cid, frame_id)
+    total = 0.0
+    for ref in held:
+        item = (registry.get("items") or {}).get(
+            str(ref.get("charter") or ""))
+        if not item:
+            continue
+        total += entanglement(
+            item["state"], str(ref.get("body") or ""), present)
+    return total
+
+
+def charter_emergence_pick(cid, charter_key, place, *, who="", present=(),
+                           frame_id=None, turn_idx=None):
+    """Who steps out of the derived charter crowd, as ``(display, reason)``.
+
+    DESIGN_BACKGROUND_PRESENTATION §B3. The op may name somebody -- a display
+    name or body key, resolved without guessing -- or name nobody and let the
+    engine pick: candidates are ranked by `charter_practice.entanglement`
+    with whoever is present, so the person who steps out of the crowd is the
+    one with a reason to. Ties break on the body key, so a replay picks the
+    same person.
+
+    Candidates come through `background_presence_records`, which is the
+    subtraction that matters: bound bodies are excluded there (a cast member
+    coming out of the extras is a canon write nobody authored -- naming one
+    in ``who`` therefore resolves to nobody and is refused), an ambiguous
+    display name is withheld until the fiction distinguishes them, and a
+    body already carrying a live presence record is not IN the crowd and is
+    excluded here. Failing to pick returns a reason, never a guess.
+    """
+    from core.db import wget
+
+    registry = registry_for(cid, frame_id)
+    charter_key = str(charter_key or "")
+    if charter_key not in (registry.get("items") or {}):
+        return "", "no charter %r holds anyone here" % charter_key
+    records = background_presence_records(
+        cid, places={str(place or "")}, frame_id=frame_id)
+    presented = set()
+    for rec in (wget(cid, "background_presences", {}) or {}).values():
+        if not isinstance(rec, dict):
+            continue
+        # A record past `PRESENTED_IDLE_BEATS` no longer presents its body
+        # (§C3): the body is back in the crowd and may step out of it again
+        # -- into the SAME record, because `with_charter_presences` resolves
+        # by charter ref, so nothing is duplicated by the round trip.
+        from world.charter_crowd import presented as _still_presented
+        if turn_idx is not None and not _still_presented(rec, turn_idx):
+            continue
+        for ref in rec.get("charter_refs") or ():
+            if isinstance(ref, dict) \
+                    and str(ref.get("charter") or "") == charter_key:
+                presented.add(str(ref.get("body") or ""))
+    candidates = {}
+    for display, rec in records.items():
+        for ref in rec.get("charter_refs") or ():
+            if str(ref.get("charter") or "") != charter_key:
+                continue
+            body_key = str(ref.get("body") or "")
+            if body_key and body_key not in presented:
+                candidates[body_key] = display
+    if not candidates:
+        return "", ("nobody in the %s crowd at %r can step out; whoever is "
+                    "there is bound, already met, or not yet tellable apart"
+                    % (charter_key, str(place or "")))
+    wanted = " ".join(str(who or "").split()).casefold()
+    if wanted:
+        for body_key, display in sorted(candidates.items()):
+            if wanted in {body_key.casefold(), display.casefold()}:
+                return display, ""
+        return "", ("%r names nobody in that crowd; leave who empty and the "
+                    "engine picks" % str(who))
+    from world.charter import entanglement
+
+    state = registry["items"][charter_key]["state"]
+    ranked = sorted(
+        candidates,
+        key=lambda key: (-entanglement(state, key, present), key))
+    return candidates[ranked[0]], ""
+
+
 def charter_speaker_records(cid, frame_id=None, *, include_bound=False):
     """All stable Charter speaker identities for render-time colour lookup.
 

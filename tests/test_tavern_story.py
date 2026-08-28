@@ -107,12 +107,16 @@ def test_tavern_six_turn_story(temp_db, monkeypatch):
     assert doran["sketch"]["station_room"] == "taproom"
     assert "Doran" not in s.promotable_names()
 
-    # --- Turn 1: the location-implied presence becomes salient (mentioned in
-    # the resolved event) and the deterministic backstop voices him. That line
-    # is bookkept as a real dialogue turn (Step 1).
+    # --- Turn 1: the Director routes the barkeep's response to the stage --
+    # the hand-off, which is the Director itself demanding the voice. (Before
+    # Part C a bare resolved_event mention was enough; prose salience stopped
+    # qualifying, and a served customer's beat reaches the barkeep through
+    # routing or an address.) That line is bookkept as a real dialogue turn
+    # (Step 1).
     ctx1 = s.turn(1, "I take a stool at the bar and ask for whatever's on tap.", {
         "resolved_event": "Doran sizes up the newcomer and reaches for a tankard.",
         "dialogue_log": [],
+        "routed_to_background": ["Doran"],
     }, monkeypatch)
     assert ctx1["background_react"]["fired"] is True
     assert ctx1["background_react"]["name"] == "Doran"
@@ -136,8 +140,10 @@ def test_tavern_six_turn_story(temp_db, monkeypatch):
 
     # --- Turn 3: PROMPT pop-in. The player waves over a serving girl; the
     # Director introduces AND voices Mira (structured entity + dialogue line),
-    # so the gate does NOT spend a redundant backstop on her -- it stays with
-    # the standing presence (Doran). Mira is tracked with a harvested sketch.
+    # so the gate does NOT spend a redundant backstop on her -- and nobody
+    # else was called on, so the beat spends NO backstop at all (before
+    # Part C the merely-standing Doran was voiced here on his history).
+    # Mira is tracked with a harvested sketch.
     ctx3 = s.turn(3, "I wave over a serving girl and ask what's good tonight.", {
         "resolved_event": "A serving girl threads over at your wave.",
         "state_diff": {
@@ -150,7 +156,8 @@ def test_tavern_six_turn_story(temp_db, monkeypatch):
                           "volume": "normal", "intended_target": None,
                           "tone": "brisk", "visibility": "overt", "conceal_from": []}],
     }, monkeypatch)
-    assert ctx3["background_react"]["name"] == "Doran"      # Mira not double-voiced
+    assert ctx3["background_react"]["fired"] is False       # Mira not double-voiced,
+    assert ctx3["background_react"]["name"] is None         # and nobody padded in
     mira = s.presences()["Mira"]
     assert mira["first_turn"] == 3
     assert mira["dialogue_turns"] == [3]                    # from the Director's own line
@@ -171,14 +178,14 @@ def test_tavern_six_turn_story(temp_db, monkeypatch):
     assert {"Doran", "Mira"} <= s.promotable_names()
 
     # --- Turn 5: continuity payoff. Doran, addressed again, reacts a third
-    # backstop time; his dialogue history spans the whole scene -- exactly the
-    # accrual that pre-Step-1 was invisible because backstop lines never
-    # reached the bookkeeping.
+    # backstop time; his dialogue history spans the story's demands on him --
+    # exactly the accrual that pre-Step-1 was invisible because backstop
+    # lines never reached the bookkeeping.
     s.turn(5, "Doran -- you've seen the hooded man before, haven't you. Has he paid for a room?", {
         "resolved_event": "Doran's jaw tightens at the question.",
         "dialogue_log": [],
     }, monkeypatch)
-    assert s.presences()["Doran"]["dialogue_turns"] == [1, 2, 3, 5]
+    assert s.presences()["Doran"]["dialogue_turns"] == [1, 2, 5]
 
     # --- Nothing was silently promoted below the boundary: neither NPC has a
     # character sheet or a chat_chars row. They remained cheap the whole story.

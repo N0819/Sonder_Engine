@@ -231,8 +231,11 @@ def test_the_whole_chain_closes_for_the_clerk_who_never_came(temp_db):
     assert "Night Clerk" in _names(tracked), "arrived and was never recorded"
     assert _rec(tracked, "Night Clerk")["sketch"]["station_room"] == "office"
 
-    # BEAT 2 -- the player rings again. He is one open doorway away, nobody
-    # has named him, and nothing else would qualify him.
+    # BEAT 2 -- the player rings again AND asks for somebody ("clerk" is the
+    # demand: since Part C standing at a post no longer qualifies by itself,
+    # and the chat-72 player did in fact ask in as many words -- "someone
+    # should be staffing it"). He is one open doorway away and must be
+    # pickable from where he stands.
     beat = {
         "resolved_event": "The bell rings out across the lobby.",
         "dialogue_log": [{"speaker": "The Stranger",
@@ -240,10 +243,11 @@ def test_the_whole_chain_closes_for_the_clerk_who_never_came(temp_db):
                           "volume": "normal"}],
     }
     ctx2 = _ctx(temp_db, beat, scene=scene)
+    ctx2.input = "I ring again. Clerk? Somebody should be staffing this desk."
     temp_db.wset(ctx2.chat.id, "background_presences", tracked)
 
     assert pick_background_reactors(ctx2, beat, cap=1) == ["Night Clerk"], (
-        "at his post one open doorway away and still not offered the beat")
+        "asked for from one open doorway away and still not offered the beat")
 
     # And what he is handed is what he can hear, not the omniscient frame.
     heard = _beat_for_presence(beat, scene, "office", "Night Clerk",

@@ -401,8 +401,12 @@ def test_result_reports_mode_and_sub_agents():
 def _blurbed_presences(placements):
     out = {}
     for i, (name, room) in enumerate(placements.items()):
+        # `engaged_turns: [4]` against the fixture's turn idx 5: each presence
+        # acted toward an authored mind last beat, the §C1.3 demand trigger --
+        # since Part C the manager voices only the demand set, so a fixture
+        # with no trigger would hand these tests an empty roster.
         out[name] = {"first_turn": 0, "last_turn": 4, "dialogue_turns": [],
-                     "mention_turns": [],
+                     "mention_turns": [], "engaged_turns": [4],
                      "blurb": {"manner": "m", "trait": "t", "tell": "",
                                "look": ""},
                      "sketch": {"station_room": room}}

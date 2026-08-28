@@ -1,6 +1,67 @@
 # Background presentation: ambient chatter, the crowds bridge, and demand-driven voice
 
-**Status: design only. Nothing below is built.** Written 2026-08-27 on the
+**Status: Parts A and B built 2026-08-27 on the `background-presentation`
+branch.** Part A (ambient chatter) — `world/charter_chatter.py`,
+`window_acts` on the charter state, `agents.common.chatter_for_room`,
+`composer.chatter_percepts`, `tests/test_charter_chatter.py`. One correction
+the code forced: `after_charter["acts"]` does NOT survive to read time —
+`normalize_charter` rebuilds the state from a fixed key set at every step
+head and every save, so §A2a's "a list the registry already holds" required
+a new normalized field (the deposit is `charter_run.step`'s tail). Two
+amendments from review of the merged branch: §A2a's "the acts *and* the
+band together" is read against BOTH crowd species -- Part B's derived
+charter crowds feed the hum's band floor and the fragment-suppressing
+density alongside the authored ledger, since in a charter-only story the
+authored ledger is empty and degradation would otherwise never invert;
+and §A2c's "a body with a live presence record the observer has met" is
+built as the story-level presence ledger (no per-observer met-tracking
+exists for charter bodies anywhere in the engine, and Director prose
+already names presences story-wide) -- the accepted approximation, with
+its firewall consequence registered in `UNBUILT.md` §1.99e. Part B
+(the crowds bridge) — `world/charter_crowd.py`, the derived rows in
+`agents/common.crowds_for_room` / `agents/director_views._crowds_view`, the
+`apply_ops` refusal by uid prefix, the commit-seam
+`emerge_from_charter_crowd`/`absorb_into_charter_crowd`,
+`tests/test_charter_crowds.py`; nothing persisted, and DESIGN_CROWDS §3a
+carries the amendment §B3 calls for. Two corrections the code forced on B:
+the naming profile has NO collective noun (`normalize_naming_profile`,
+checked against source), so the composition fallback is `describe`'s own
+"people" rather than §B1's proposed profile field; and the emerge selector
+reads the `_between` digest plus `grievance_against` (via a new public
+`charter_practice.entanglement`) rather than every store §B3 lists — marks
+and raw ties ride only insofar as they surface through those two readers.
+**Part C built 2026-08-28**, same branch — `pick_voice_demand` /
+`pick_background_reactors` (`persist/commit_background.py`),
+`_demanded_presences` + `_chorus_for_overflow` (`agents/background.py`),
+`engaged_turns` on the presence record, `emerged_this_beat` reading the
+provisional ops, `charter_crowd.PRESENTED_IDLE_BEATS` with the presented/
+known split in `chatter_inputs`, `tests/test_voice_demand.py`. Four
+corrections the code forced on C: (1) §C1's non-triggers lived in the
+per-presence GATE, not only in `managed_presences` — since §1.99d every
+background person is a charter body and `managed_presences` excludes
+charter-linked records, so the gate's own `mentioned` / `dialogue_turns` /
+`at_post` signals were the dominant path and are the ones removed. (2) An
+address has two grades: the significant-word fallback
+(`_background_name_mentioned`) matches every record sharing a word, so
+only a PRECISE address (full name, flow ref, aimed line, routed) forces
+past the ceiling and outranks the loose grade — measured, six tracked
+"Regular N" all forced by the word "regular", and the old gate answered
+"Regular 2, what do I owe you?" with Regular 5. (3) The chorus exists only
+for addressees sharing one derived charter crowd; tracked individuals or
+mixed institutions past the ceiling widen instead — never dropped — since
+there is no crowd object to answer through, and chorused members stay out
+of `selected` (selection persists a record; the chorus's point is that
+they stay ground), their debts discharged via the entry's `addressed`
+list. (4) §C3's "returns to ground" is implemented as a PRESENTATION
+lapse, not a deletion: `known_bodies` (recognition, naming) never lapses,
+`presented_bodies` (crowd-membership subtraction, re-emergence
+eligibility) lapses after K. K was measured as the note instructs — from
+every live chat's presence ledger rather than pipeline traces, which
+carry the same turn lists with less indirection: 25/28 = 89.3% of
+resumptions after ≥1 idle beat came within 4, so K = 4 (n = 28; re-take
+as the corpus grows). §C4's live-model latency protocol is deliberately
+NOT run here; it is registered verbatim in `UNBUILT.md` §1.99e as the
+untaken measurement. Originally written 2026-08-27 on the
 `social-physics` branch, refining the owner's three-tier design in
 `docs/UNBUILT.md` §1.99e (which depends on §1.99d's person/institution split).
 The three parts are one substrate and two presentation layers: Charter is

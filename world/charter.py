@@ -189,6 +189,7 @@ from .charter_practice import (
     REFUSED_UNABLE,
     close_stale,
     enact,
+    entanglement,
     grievance_against,
     normalize_practices,
     offers,
@@ -246,6 +247,22 @@ from .charter_decide import (
 from .charter_intervene import (
     INTERVENTION_OPS, apply_due, intervention_warnings,
     normalize_interventions)
+from .charter_chatter import (
+    FRAGMENT_ODDS,
+    HUM_BANDS,
+    STEADY_HUM_ACTS,
+    WINDOW_ACTS_CAP,
+    acts_in_room,
+    fragment_key,
+    fragment_phrase,
+    hum_phrase,
+    hum_rank,
+    normalize_window_acts,
+    overheard_fragment,
+    participant_label,
+    subject_label,
+    window_acts,
+)
 from .charter_trigger import (
     CHANGE_FAMILIES,
     DEFAULT_TRIGGERS,
@@ -271,6 +288,10 @@ from .charter_trigger import (
 )
 
 __all__ = [
+    "FRAGMENT_ODDS", "HUM_BANDS", "STEADY_HUM_ACTS", "WINDOW_ACTS_CAP",
+    "acts_in_room", "fragment_key", "fragment_phrase", "hum_phrase",
+    "hum_rank", "normalize_window_acts", "overheard_fragment",
+    "participant_label", "subject_label", "window_acts",
     "CHANGE_FAMILIES", "DEFAULT_TRIGGERS", "MATCHABLE", "PENDING_CHANGE_CAP",
     "REFERENTS", "TRIGGER_CAP", "TRIGGER_DEPTH", "TRIGGER_EMITTABLE",
     "TRIGGER_MEMORY_CAP", "TRIGGER_OPS", "TRIGGER_THEN_CAP",
@@ -346,6 +367,7 @@ __all__ = [
     "opportunities",
     "normalize_practices",
     "enact",
+    "entanglement",
     "close_stale",
     "PRACTICE_CAP",
     "IDLE_CLOSE_HOURS",

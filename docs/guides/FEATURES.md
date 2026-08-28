@@ -268,9 +268,16 @@ legitimately perceive, learn, remember or infer.
 - **Extras are never furniture** — An extra who is addressed or owed a reply is
   forced a line or a small action rather than standing motionless for twenty
   turns.
-- **Scene life** — Optionally one call voices every extra in the room at once,
+- **Scene life** — Optionally one call voices the room's extras at once,
   in two flavours: one that only sees what everyone present heard, and a richer
   one that includes lines aimed at a single listener.
+- **Extras speak when the story turns to them** — An extra gets a voice when
+  someone addresses them, owes or is owed a reply, was in the exchange last
+  beat, or just stepped out of a crowd — not for merely standing nearby or
+  being mentioned. The room still feels inhabited without the calls: crowds,
+  murmur and overheard fragments carry the background for free, and a named
+  counterpart is never left unanswered — address a whole crowd and it answers
+  as one.
 - **Their inventions are claims** — A detail an extra invents is recorded as
   hearsay for the Director to confirm, contradict or let expire.
 - **Promotion into a real character** — An extra can become a full character

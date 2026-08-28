@@ -117,6 +117,19 @@ The rule that keeps them apart: **a fixture may be re-met; an emergence may
 not.** If the story needs someone to be there again, they were a fixture and
 should have been minted as one.
 
+> **Amendment (2026-08-27, the crowds bridge —
+> `DESIGN_BACKGROUND_PRESENTATION.md` §B3, `world/charter_crowd.py`):** for a
+> **charter-backed crowd** the fixture/emergence distinction COLLAPSES, and
+> "an emergence may not be re-met" is superseded for that species. A derived
+> crowd's members are fully simulated registry bodies; the one who steps out
+> persists in Charter with their ties, marks and diary whether or not anyone
+> is looking, so the person who emerged last visit IS there next visit, and
+> re-meeting them is correct rather than a claim nothing recorded. A fixture
+> is simply a charter body with a post here. The table above still governs
+> AUTHORED crowds, whose people exist only as a band — an authored emergence
+> still promises no continuity, because there is no body behind it for the
+> continuity to live in.
+
 ## 4. Emergence
 
 When the player addresses the crowd, or the Director needs someone from it, a

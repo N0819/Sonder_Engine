@@ -69,9 +69,10 @@ class TestTheHandOff:
         The routed name must be subtracted from that set or the hand-off dies
         exactly where it starts."""
         from persist import commit
-        src = commit.__dict__["pick_background_reactors"].__doc__ or ""
         import inspect
-        body = inspect.getsource(commit.pick_background_reactors)
+        # The gate's working body is `pick_voice_demand` since Part C;
+        # `pick_background_reactors` is its names-only wrapper.
+        body = inspect.getsource(commit.pick_voice_demand)
         assert "routed_to_background" in body
         assert "voiced_this_beat -=" in body, (
             "the routed names must be removed from voiced_this_beat")
@@ -82,8 +83,12 @@ class TestTheHandOff:
         for a slot -- otherwise `max_reactors: 1` silently drops it."""
         import inspect
         from persist import commit
-        body = inspect.getsource(commit.pick_background_reactors)
+        body = inspect.getsource(commit.pick_voice_demand)
+        # Routing forces through the PRECISE address class (§C3): the
+        # Director choosing to speak for someone is an address by the
+        # Director itself.
         assert "flow_addressed or routed" in body
+        assert "if addressed_precise:" in body
 
     def test_the_field_survives_the_schema_dump(self, temp_db):
         """Unknown keys are dropped by the model dump. Undeclared, the hand-off
