@@ -129,11 +129,21 @@ def resolve_character_history_route(sheet, *, requested="auto", opening="",
 
     normalized = normalize_character_data(sheet)
     choice = normalize_history_choice(requested)
+    # WAS THE ROAD SHARED. A sub-option on every route that produces a past,
+    # because a resident may have known the player before the story as easily
+    # as a companion walked in with them. Carried on the route so the
+    # generator can be told who else was there; absent, nothing changes.
+    # Named `with_player` rather than `shared`: the auto path below already
+    # binds `shared` to the words a public history and the opening have in
+    # common, and the collision silently put a word list on the route.
+    with_player = bool(isinstance(requested, dict)
+                       and requested.get("with_player"))
     if choice != "auto":
         route = _manual_route(choice)
         route.update({
             "mode": choice, "author_locked": True, "confidence": 1.0,
             "reasons": [{"source": "author", "claim": choice}],
+            "with_player": with_player,
         })
         return route
 
@@ -172,6 +182,7 @@ def resolve_character_history_route(sheet, *, requested="auto", opening="",
         "mode": "auto", "author_locked": False,
         "confidence": confidence, "reasons": reasons,
         "character": character_name(normalized),
+        "with_player": with_player,
     })
     return copy.deepcopy(route)
 

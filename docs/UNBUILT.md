@@ -4327,6 +4327,44 @@ started a thread nobody scripted. That is a mind doing its own things and is
 the system working; the owner said so explicitly. The gap is only that he does
 it as a stranger.
 
+### 1.99g Memories the player owns, and the one thing that must be true first
+
+OWNER'S DESIGN 2026-08-28, deliberately DEFERRED: memories recorded for the
+player that the narrator may raise unprompted. Explicitly not to be built now.
+The instruction that matters is the second half -- develop what IS built so
+that adding this later is not a serious recode.
+
+WHY IT IS NOT FREE TODAY. `personas` is `(id, name, sheet, source,
+resource_uid)` and `memories` keys on `char_id`. A persona owns no memory bank
+and nothing anywhere writes one, which is why 1.99f's companion could be given
+sixteen events of shared road with nowhere to put the player's half.
+
+THE ONE THING THAT DECIDES WHETHER IT IS A RECODE: identity. Everything built
+around the player from here addresses them by the persona's `resource_uid` --
+the id that already survives archive, branch and clone -- and never by display
+name. Get that right and a player memory bank is a NEW WRITER against an
+existing key: `memories` gains rows under an identity the ledgers already
+carry, and the retrieval, summary and narrator paths work unchanged because
+they were never told the identity was special. Get it wrong and adding it means
+retrofitting identity through every relationship edge, every charter ref and
+every presence record, which is the recode.
+
+Concretely, the rules for anything landed before this exists:
+  * a relationship edge naming the player stores the persona uid, and the
+    display name only as a rendering;
+  * a charter body standing in for the player carries the uid in its refs the
+    way `featured_resident_bindings` already carries `entity_id`;
+  * no code may branch on "the player has no memories" -- it may only find the
+    bank ABSENT and skip, so the same path fills when the bank exists;
+  * nothing may key player history on the persona's row `id`, which is local
+    to an install and remapped on import.
+
+WHAT THE DEFERRAL COSTS, stated so the decision stays honest: until it exists
+the player's own recall is the transcript, and a character asking "do you
+remember what you told me last winter" cannot be adjudicated by the engine --
+only answered by the human. That is tolerable and may even be right; it is
+recorded here so that if it stops being tolerable, the reason is visible.
+
 ## 2. Roadmap
 
 Features the architecture intends and has not built. Ordered by value per unit
