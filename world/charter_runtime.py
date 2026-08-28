@@ -19,7 +19,8 @@ import uuid
 
 from core import jobs
 from core.logging_utils import logger
-from world.charter import normalize_charter, run
+from world.charter import (normalize_charter, run, trigger_view,
+                          trigger_warnings)
 from world.charter_news import WITNESSABLE
 from world.mechanics import stable_event_key
 
@@ -1086,6 +1087,13 @@ def registry_warnings(registry, scene=None, *, cid=None, frame_id=None):
             warnings.append(f"{key}: no posts; no upkeep can be serviced")
         if not state["bodies"]:
             warnings.append(f"{key}: no bodies; every post will be unfilled")
+        # A CONSEQUENCE RULE THAT DOES NOTHING FAILS SILENTLY, which is the
+        # empty-psychology-field failure `CLAUDE.md` records: no error, no
+        # warning at runtime, and a world that behaves wrongly fifty beats
+        # later for a reason that looks like a model problem. Validation
+        # belongs in the authoring surface on the day the field lands.
+        for notice in trigger_warnings(state.get("triggers")):
+            warnings.append(f"{key}: {notice}")
         roles = {}
         for post, assigned in (state.get("watch") or {}).items():
             roles.setdefault(str(assigned), []).append(str(post))
@@ -1590,6 +1598,15 @@ def charter_diagnostics(cid, frame_id=None, *, charter_key="", body_key=""):
             "history": copy.deepcopy(state.get("history") or {}),
             "refused_interventions": copy.deepcopy(
                 state.get("refused_interventions") or []),
+            # WHAT THE CONSEQUENCE LAYER IS CARRYING. `statuses` needs at
+            # least one honest reader on the day it lands; `triggers` needs
+            # one for the same reason, and this is it. Author-only: rule ids
+            # and counts, never the change rows themselves, because a
+            # diagnostic that grows with the window is how a payload becomes
+            # a transcript.
+            "triggers": trigger_view(
+                state.get("triggers"), state.get("pending_changes"),
+                state.get("trigger_last")),
             "featured_resident_histories": {
                 char_id: copy.deepcopy(history)
                 for char_id, history in resident_histories.items()
@@ -2096,7 +2113,13 @@ def bind_promoted_character(cid, bundle, *, char_id, name, entity_id="",
     state["bodies"][body_key]["name"] = str(name)
     if place:
         state["bodies"][body_key]["place"] = str(place)
-    for store in ("minds", "needs", "feel", "heard_blame"):
+    # `marks` is here for the same reason the other four are: a Charter-window
+    # scoring bias is cognition, and cognition belongs to the registered
+    # character from this point. It is deliberately NOT in
+    # `charter_promote.promotion_handoff` either -- the character tier has no
+    # reader for a temporary institutional status, and a field nothing reads is
+    # the dead weight this design exists to avoid.
+    for store in ("minds", "needs", "feel", "heard_blame", "marks"):
         (state.get(store) or {}).pop(body_key, None)
     for store in ("experiences", "habit_runs"):
         (state.get(store) or {}).pop(body_key, None)

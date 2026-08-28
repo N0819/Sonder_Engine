@@ -18,6 +18,7 @@ import copy
 
 from world.charter import (
     normalize_charter, out_of_band, run, seed_needs, seed_roster, step)
+from world.charter_news import witness
 
 from charter_fixtures import ABBEY, SHIP
 
@@ -160,6 +161,69 @@ class TestReplay:
 
         assert a_events == b_events
         assert a_state["upkeeps"] == b_state["upkeeps"]
+        # THE CONSEQUENCE FRAME REPLAYS TOO. `pending_changes` is the input to
+        # the next window's `charter_trigger` pass, so a restore that landed a
+        # different frame would fire different rules on a state that is
+        # otherwise byte-identical -- the divergence would appear a window
+        # later and nowhere near its cause.
+        assert a_state["pending_changes"] == b_state["pending_changes"]
+        assert a_state["trigger_last"] == b_state["trigger_last"]
+
+    def test_two_runs_of_the_same_seed_produce_the_same_marks(self):
+        """`heard` is a dict of SETS and `politics.blame` a dict, and both
+        feed the mark onsets. Either one left unsorted at that boundary lands
+        a different past on a checkpoint restore, which is a different process
+        -- so this is run under two `PYTHONHASHSEED` values in the same way
+        `tools/charter_audit_feel.py` already runs the watch."""
+        charter = normalize_charter({
+            "key": "yard",
+            "upkeeps": {"granary": {"place": "yard", "level": 0.9,
+                                    "floor": 0.2, "drift_per_hour": 0.001,
+                                    "service_per_hour": 0.03}},
+            "posts": {"keeper": {"place": "yard", "serves": ["granary"]}},
+            "bodies": {key: {"place": "yard"} for key in
+                       ("ilse", "raul", "mira", "tomas")},
+        })
+        charter["roster"] = seed_roster(charter["bodies"])
+        charter["needs"] = seed_needs(charter["bodies"])
+        charter["active_places"] = ["yard"]
+        charter["politics"] = {"blame": {"raul": 2}}
+        # AND SOMEBODY SAW THE GRANARY FAIL. Since 2026-08-27 an accusation
+        # follows the accuser's own claim rather than the institution's
+        # register (`charter_practice.grievance_against`), so a fixture
+        # carrying only a blame count mints no `accused` mark at all -- which
+        # would make this a replay test over one kind instead of two, and the
+        # assertion below says why that proves nothing.
+        witness(charter["minds"], charter["bodies"],
+                [{"kind": "upkeep_out_of_band", "place": "yard",
+                  "upkeep": "granary", "at_hours": 0.0}], 0.0)
+
+        a_state, a_events = run(copy.deepcopy(charter), hours=24.0,
+                                window=4.0, seed=5)
+        b_state, b_events = run(copy.deepcopy(charter), hours=24.0,
+                                window=4.0, seed=5)
+
+        assert a_events == b_events
+        assert a_state["marks"] == b_state["marks"]
+        assert {kind for entry in a_state["marks"].values()
+                for kind in entry} >= {"posted", "accused"}, (
+            "a fixture that mints no mark from a SET proves nothing")
+
+    def test_blame_is_attributed_over_every_event_the_window_returns(self):
+        """`attribute_blame` was HOISTED up `step` so the `disgraced` onset
+        could read its delta, and that is safe only while every `events`
+        append finishes above the new call site. A future writer appending an
+        event below it would silently lose the blame it should have attached
+        -- so the counter is recomputed here over the full returned list."""
+        from world.charter import attribute_blame, normalize_politics
+
+        charter = _ready(SHIP)
+        before = normalize_politics(charter.get("politics"))
+        after, events = step(charter, hours=4.0, seed=7)
+        recomputed = attribute_blame(
+            before, events, after["watch"], charter["posts"])
+
+        assert after["politics"]["blame"] == recomputed["blame"]
 
     def test_the_returned_charter_is_a_copy_not_a_mutation(self):
         """A caller must be able to explore a window without committing to it
@@ -282,6 +346,43 @@ class TestTheQuietYearsAreRememberedToo:
         assert service(short), "taking a post is worth remembering"
         assert service(long) < service(short) * 4, (
             "ten times the hours must not be ten times the rows")
+
+    def test_marks_grow_with_incident_not_with_time(self):
+        """The module's cost rule against the newest writer
+        (`RESEARCH.md` §1.7.6 item 4), in the register of
+        `test_a_body_remembers_taking_a_post_but_not_holding_it`. A socially
+        temporary fact is bounded by bodies x kinds and pruned at expiry, so
+        240 hours and 2,400 hours of the same quiet crew leave the same
+        store -- which here is nothing at all, because the bill was handed out
+        in the first day and nothing has been new since."""
+        early = self._quiet(24.0)["marks"]
+        short = self._quiet(240.0)["marks"]
+        long = self._quiet(2400.0)["marks"]
+
+        def rows(store):
+            return sum(len(held) for held in store.values())
+
+        assert rows(early) == len(self._quiet(24.0)["bodies"]), (
+            "the institution handed its whole bill out and wrote none of it "
+            "down")
+        assert rows(long) <= rows(short) == 0, (
+            "a mark nothing renewed outlived its own lifetime")
+
+    def test_being_handed_a_post_is_the_one_mark_a_healthy_year_produces(self):
+        """The argument for `posted` existing at all, and the answer to
+        §1.7.6 item 2's complaint that every event this simulation emits is an
+        institutional failure. Measured: 300 windows of the quiet crew, one
+        mark kind ever held -- `posted` -- peaking at all six bodies in the
+        first day and empty for the remaining 2,376 hours. The other three
+        need somebody to go down, somebody to speak, or something to fail."""
+        charter = self._quiet(0.0)
+        held = set()
+        for index in range(300):
+            charter, _ = step(charter, hours=8.0, seed=5 + index)
+            for entry in charter["marks"].values():
+                held.update(entry)
+
+        assert held == {"posted"}
 
     def test_familiarity_is_counted_rather_than_narrated(self):
         """What a quiet year actually deposits is not incident, it is who you

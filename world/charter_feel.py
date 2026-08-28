@@ -37,12 +37,23 @@ WHAT MAY ENTER AN APPRAISAL, and it is the firewall doing the choosing:
     transient on purpose: a collapse is a shock in the window it happens,
     and a laid-up neighbour is thereafter a fact of life, not a fresh threat
     every four hours.
+  * **A mark this body was PRESENT FOR** (``charter_mark.BODY_MARKS``): it
+    was handed a duty, somebody tended it in the room, somebody said the
+    accusation to its face. FRESH ONLY — the marks set or refreshed this
+    window, never the ones it is still holding. A 168-hour mark appraised
+    every window would rebuild exactly the standing-strain floor the comment
+    in ``advance_feel`` records, which is the one measured way this module
+    has been broken.
 
 What deliberately does not enter: blame. The institution's blame ledger is a
 register fact with no channel to the blamed — a body blamed for a post it was
-never at does not feel the blame until somebody tells it, and nothing here
-models that telling yet. Stated rather than hidden, because the mood
-experiment's caveat lives exactly there.
+never at does not feel the blame until somebody tells it. THE TELLING NOW
+EXISTS: an accusation is co-present speech, ``charter_practice`` records the
+accuser in ``heard_blame`` precisely because that is the channel, and the
+``accused`` mark is that telling arriving here. The ledger itself still does
+not, and neither does ``charter_mark``'s ``disgraced``, which is the same
+register fact wearing a recency date — a body that was never told is a body
+that feels nothing, and that gap is the design rather than a hole in it.
 
 TIME, COARSE-GRAINED ON PURPOSE. The character tier's psych unit is one
 minute (``elapsed_psych_units``); at that resolution every transient would
@@ -64,6 +75,7 @@ from __future__ import annotations
 
 from mind.psychology_runtime import resolve_hedonic, resolve_stress
 
+from .charter_mark import BODY_MARKS
 from .charter_needs import body_state
 from .charter_temper import (
     interoception_of,
@@ -97,6 +109,29 @@ PEER_DOWN_IMPACT = -0.6
 #: is not a bench.
 RESTORED_PLEASURE = 0.3
 OWN_RESTORED_PLEASURE = 0.5
+
+#: What being told to your face that you are blamed proposes, against your
+#: goals. Negative and nearly certain — the person saying it is standing in
+#: front of you, which is the whole reason `accused` is a body mark and the
+#: register's own `disgraced` is not. Sized between `WITNESS_IMPACT` and
+#: `OWN_CHARGE_IMPACT`: worse than watching a condition fail beside you,
+#: not as bad as the thing you were responsible for going down.
+ACCUSED_IMPACT = -0.6
+ACCUSED_CERTAINTY = 0.95
+
+#: Somebody attended you where you stood. Above `RESTORED_PLEASURE`'s 0.3
+#: because a person choosing to help you is more than a level coming back
+#: into band, and below `OWN_RESTORED_PLEASURE` because it did not cost you
+#: anything.
+AIDED_PLEASURE = 0.4
+
+#: The institution handed you a duty you had never stood. The smallest of the
+#: three, and the only one that fires in a HEALTHY institution — which makes
+#: it the one that could leave a quiet charter carrying feel entries where it
+#: used to carry none. `_negligible` drains it: measured on `big_town(40)`
+#: over a simulated year, `feel` ends empty and every body marked `posted`
+#: had drained inside a handful of windows.
+POSTED_PLEASURE = 0.2
 
 #: How a need's gap below its floor scales into a pain proposal. Floors sit
 #: around 0.1-0.3, so a freshly-crossed need proposes little and a body at
@@ -155,13 +190,21 @@ def _served_by_body(watch, posts):
 
 
 def appraise_window(body_key, place, upkeeps, events, held_needs=None,
-                    own_upkeeps=None):
+                    own_upkeeps=None, marks=()):
     """One body's deterministic appraisal of one window.
 
     Returns ``(appraisal, goal_impacts)`` in the shapes
     ``resolve_hedonic``/``resolve_stress`` read. Everything in it arrived
     through a channel: the body's own needs, the state of the place the body
-    actually stood, and the transient events that happened there.
+    actually stood, the transient events that happened there, and the marks
+    it was itself present for.
+
+    ``marks`` is the FRESH ``charter_mark`` kinds this body took THIS window,
+    and it is keyword-defaulted so the facade export and
+    ``tools/charter_audit_feel.py``'s direct calls keep working unchanged. A
+    kind outside ``BODY_MARKS`` is ignored here rather than trusted from the
+    caller: ``disgraced`` is a register fact with no channel to the blamed,
+    and the scope split has to hold at the reader as well as the writer.
     """
     place = str(place or "")
     own_upkeeps = own_upkeeps or set()
@@ -205,6 +248,22 @@ def appraise_window(body_key, place, upkeeps, events, held_needs=None,
                     "into band" if mine else \
                     "a failing condition here came back into band"
 
+    # WHAT HAPPENED TO THIS BODY, as opposed to around it. Competing on the
+    # same `max` the relief branch uses, so `pain_why or pleasure_why` below
+    # still lets a body under its floor be in pain rather than pleased.
+    for kind in sorted(set(marks or ())):
+        if kind not in BODY_MARKS:
+            continue
+        if kind == "accused":
+            impacts.append({"impact": ACCUSED_IMPACT,
+                            "certainty": ACCUSED_CERTAINTY})
+        elif kind == "aided" and AIDED_PLEASURE > pleasure:
+            pleasure = AIDED_PLEASURE
+            pleasure_why = "somebody attended you here"
+        elif kind == "posted" and POSTED_PLEASURE > pleasure:
+            pleasure = POSTED_PLEASURE
+            pleasure_why = "you were handed a duty you had not stood"
+
     pain = 0.0
     pain_why = ""
     for name, need in (held_needs or {}).items():
@@ -228,13 +287,21 @@ def appraise_window(body_key, place, upkeeps, events, held_needs=None,
 
 
 def advance_feel(feel, bodies, needs, watch, posts, upkeeps, events, hours,
-                 temper_of=temperament_of):
+                 temper_of=temperament_of, *, fresh_marks=()):
     """One window of feeling, for every body with a reason to. Returns the
     new ``{body: {"hedonic", "stress"}}`` dict.
 
     ``temper_of`` is injectable so a measurement can run a flat-temperament
     arm against a varied one on otherwise identical windows; callers use the
     default.
+
+    ``fresh_marks`` is ``charter_mark.advance_marks``' second return value —
+    the ``(body, kind, by)`` rows set or refreshed THIS window. Not the
+    store: a mark held for a week is a fact about the body, and appraising a
+    standing fact every window is exactly what the comment below records
+    costing 240 bodies a permanent strain floor. ``by`` is dropped here
+    deliberately; who tended you does not change what being tended feels
+    like, and not passing it is one less thing an appraisal can leak.
     """
     feel = normalize_feel(feel)
     hours = max(0.0, float(hours))
@@ -244,6 +311,11 @@ def advance_feel(feel, bodies, needs, watch, posts, upkeeps, events, hours,
     # Who has anything to feel about. Everyone else is skipped entirely,
     # which is what keeps a quiet institution's feel dict empty and its
     # cost at nothing.
+    marked = {}
+    for row in fresh_marks or ():
+        body_key, kind = str(row[0]), str(row[1])
+        if kind in BODY_MARKS:
+            marked.setdefault(body_key, set()).add(kind)
     stimulated = set(feel)
     failing_places = {str(u.get("place") or "")
                       for u in (upkeeps or {}).values()
@@ -254,7 +326,7 @@ def advance_feel(feel, bodies, needs, watch, posts, upkeeps, events, hours,
                     or e.get("kind") == "body_unable"}
     stirred = (failing_places | event_places) - {""}
     for key, body in (bodies or {}).items():
-        if str(body.get("place") or "") in stirred:
+        if key in marked or str(body.get("place") or "") in stirred:
             stimulated.add(key)
         else:
             held = (needs or {}).get(key) or {}
@@ -270,8 +342,9 @@ def advance_feel(feel, bodies, needs, watch, posts, upkeeps, events, hours,
         held = (needs or {}).get(key) or {}
         appraisal, impacts = appraise_window(
             key, body.get("place"), upkeeps, events, held_needs=held,
-            own_upkeeps=served.get(key))
-        if not appraisal and not impacts:
+            own_upkeeps=served.get(key), marks=marked.get(key, ()))
+        if not impacts and not float(
+                (appraisal.get("somatic_impact") or {}).get("pain") or 0.0):
             # A window with nothing wrong in it is APPRAISED AS SUCH.
             # `resolve_stress` defaults controllability and coping to 0.5 --
             # "unknown", correct for the character tier, where it is only
@@ -281,7 +354,20 @@ def advance_feel(feel, bodies, needs, watch, posts, upkeeps, events, hours,
             # strain 0.09 / load 0.16 after 480 QUIET hours, an anxiety
             # ledger for a famine long since over. The background tier
             # computed that nothing here is threatened; it says so.
-            appraisal = {"controllability": 1.0, "coping_potential": 1.0}
+            #
+            # THE TEST IS "NOTHING ADVERSE", NOT "NOTHING AT ALL", and it was
+            # the second until the `posted` mark arrived. A window whose only
+            # content is GOOD -- a duty handed over, somebody tending you, a
+            # condition back into band -- has an appraisal, so it used to
+            # skip this branch and take the 0.5 unknown, and a body was
+            # strained by being pleased. Measured on the one-body office
+            # fixture: `posted` at hour 4 left the director carrying strain
+            # 0.0952 at hour 48, spending rest 6% faster through
+            # `STRAIN_REST_TOLL` and unavailable at the end of a run it used
+            # to finish fit. The same was already true of the relief path and
+            # nobody had a positive-only window to find it with.
+            appraisal = dict(appraisal, controllability=1.0,
+                             coping_potential=1.0)
         previous = feel.get(key) or {}
         temperament = temper_of(body)
         hedonic = resolve_hedonic(

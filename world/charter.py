@@ -23,6 +23,13 @@ one, because this repo has now paid for that split three times
   * ``charter_temper`` — per-body dispositions, in the card's own vocabulary.
   * ``charter_feel``   — felt state per body, produced by calling
     ``mind/psychology_runtime``'s own resolvers rather than a second model.
+  * ``charter_mark``   — socially temporary facts about a body, each with a
+    lifetime and a scope: what it holds now that it did not before, and which
+    of those it may be told about.
+  * ``charter_trigger`` — rules that fire off an objective CHANGE and produce
+    an objective consequence: a situation, a mark, an event. It reads a change
+    and never a state, and who LEARNS of the consequence stays
+    ``charter_news``'s separate question.
   * ``charter_figure`` — the player and major characters as claim SUBJECTS:
     seen, told about, decaying, wrong — never rostered and never minded here.
   * ``charter_author`` — the §12a author-switch: authored conduct landing
@@ -89,6 +96,17 @@ from .charter_feel import (
 )
 from .charter_log import (
     chronicle, life_of, scene_ledger, summarize, window_note)
+from .charter_mark import (
+    BODY_MARKS,
+    BY_MARKS,
+    DISGRACE_RELUCTANCE,
+    MARKS,
+    MARK_HOURS,
+    advance_marks,
+    held_marks,
+    mark_view,
+    normalize_marks,
+)
 from .charter_move import (
     ERRAND_RATE, errands, furthest_travelled, homecomings, relocate, walk)
 from .charter_temper import (
@@ -159,6 +177,7 @@ from .charter_plan import criticality, plan_watch, tended_upkeeps
 from .charter_practice import (
     ASKED_RETENTION,
     FAMILIAR_SATURATION,
+    GRIEVANCE_KINDS,
     HISTORY_WEIGHT,
     IDLE_CLOSE_HOURS,
     PAIR_TAIL,
@@ -166,9 +185,11 @@ from .charter_practice import (
     REFUSED_ABSENT,
     REFUSED_NO_SITUATION,
     REFUSED_OUTSIDE_LICENCE,
+    PLACE_FAILURE_KINDS,
     REFUSED_UNABLE,
     close_stale,
     enact,
+    grievance_against,
     normalize_practices,
     offers,
     opportunities,
@@ -225,8 +246,39 @@ from .charter_decide import (
 from .charter_intervene import (
     INTERVENTION_OPS, apply_due, intervention_warnings,
     normalize_interventions)
+from .charter_trigger import (
+    CHANGE_FAMILIES,
+    DEFAULT_TRIGGERS,
+    MATCHABLE,
+    PENDING_CHANGE_CAP,
+    REFERENTS,
+    TRIGGER_CAP,
+    TRIGGER_DEPTH,
+    TRIGGER_EMITTABLE,
+    TRIGGER_MEMORY_CAP,
+    TRIGGER_OPS,
+    TRIGGER_THEN_CAP,
+    TRIGGER_YIELD_CAP,
+    change_key,
+    changes_from,
+    fire_triggers,
+    normalize_pending_changes,
+    normalize_triggers,
+    perceivable_change,
+    prune_trigger_last,
+    trigger_view,
+    trigger_warnings,
+)
 
 __all__ = [
+    "CHANGE_FAMILIES", "DEFAULT_TRIGGERS", "MATCHABLE", "PENDING_CHANGE_CAP",
+    "REFERENTS", "TRIGGER_CAP", "TRIGGER_DEPTH", "TRIGGER_EMITTABLE",
+    "TRIGGER_MEMORY_CAP", "TRIGGER_OPS", "TRIGGER_THEN_CAP",
+    "TRIGGER_YIELD_CAP", "change_key", "changes_from", "fire_triggers",
+    "normalize_pending_changes", "normalize_triggers", "perceivable_change",
+    "prune_trigger_last", "trigger_view", "trigger_warnings",
+    "BODY_MARKS", "BY_MARKS", "DISGRACE_RELUCTANCE", "MARKS", "MARK_HOURS",
+    "advance_marks", "held_marks", "mark_view", "normalize_marks",
     "CLOSE_FAMILIARITY", "FAMILIAR_FLOOR", "TIE_CAP", "TIE_DWELL_HOURS",
     "TIE_FORM", "TIE_HOLD", "TIE_LABELS", "TIE_SATURATION", "TIE_WEIGHTS",
     "derive_tie", "familiarity", "normalize_ties", "tie_of", "tie_strength",
@@ -301,6 +353,9 @@ __all__ = [
     "HISTORY_WEIGHT",
     "PAIR_TAIL",
     "FAMILIAR_SATURATION",
+    "GRIEVANCE_KINDS",
+    "PLACE_FAILURE_KINDS",
+    "grievance_against",
     "NEGLIGIBLE",
     "RECOVERY_MARGIN",
     "SPREAD",

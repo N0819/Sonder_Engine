@@ -30,6 +30,7 @@ representation to keep in step.
 from __future__ import annotations
 
 from .charter_figure import normalize_figures
+from .charter_mark import normalize_marks
 
 #: A level is a fraction of nominal: 1.0 is perfectly kept, 0.0 is gone.
 LEVEL_MAX = 1.0
@@ -292,12 +293,18 @@ def normalize_charter(stored, reservation=None):
     from .charter_social import (normalize_judgments, normalize_social_norms,
                                  normalize_ties)
     from .charter_intervene import normalize_interventions
+    from .charter_trigger import (normalize_pending_changes,
+                                  normalize_triggers, prune_trigger_last)
 
     # HOISTED OUT OF THE LITERAL because `ties` is validated against them.
     # No behaviour change to either -- the literal below references these
     # locals -- but a validator cannot read a sibling entry of the dict it is
     # being built inside, and the alternative is normalizing judgments twice.
     judgments = normalize_judgments(stored.get("judgments"))
+    # HOISTED for the same reason `judgments` is: `trigger_last` is pruned
+    # against the longest refractory in the rule set, so the validator has to
+    # read a sibling entry of the dict it is being built inside.
+    triggers = normalize_triggers(stored.get("triggers"))
     served_beside = {
         str(key): {str(other): int(n) for other, n in held.items()}
         for key, held in (stored.get("served_beside") or {}).items()
@@ -329,6 +336,20 @@ def normalize_charter(stored, reservation=None):
             str(kind): dict(entries)
             for kind, entries in (stored.get("reported") or {}).items()
             if isinstance(entries, dict)},
+        # The change frame one window deposits for the next to fire on. It
+        # rides the charter for the reason `reported` above does and it is the
+        # sharper case of the same rule: a caller that checkpoints and restores
+        # without it drops every consequence that was in flight at the moment
+        # of the save, silently and with no error anywhere. Capped here, which
+        # is the enforcement point that counts.
+        "pending_changes": normalize_pending_changes(
+            stored.get("pending_changes")),
+        # When each rule last fired for each pair. Pruned to the rule set's
+        # longest refractory and hard-capped, because without the prune this
+        # is rules x ordered pairs -- 32 x 10^6 on `charter_worlds.big_town`.
+        "trigger_last": prune_trigger_last(
+            stored.get("trigger_last"), triggers,
+            stored.get("clock_hours") or 0.0),
         # The room graph the bodies stand in, in `world.spatial`'s own shape,
         # or absent for an institution small enough to be one place. Carried
         # rather than passed so a charter is a single restorable object.
@@ -351,6 +372,12 @@ def normalize_charter(stored, reservation=None):
         # Local, evidence-citing stances.  These do not replace `politics`:
         # regard remains the narrow credibility weight used by telling.
         "social_norms": normalize_social_norms(stored.get("social_norms")),
+        # Authored consequence rules, merged over `charter_trigger`'s defaults
+        # (`RESEARCH.md` §1.7.6 item 5). Merged HERE rather than at the firing
+        # site for the reason `experiences` records below: `normalize_charter`
+        # runs at the head of every `step`, so a rule set closed onto bounds
+        # anywhere else is re-opened at the next window boundary.
+        "triggers": triggers,
         "judgments": judgments,
         # The discrete tie beside the numeric axes (`RESEARCH.md` §1.7.6 item
         # 3). NORMALIZATION IS A VALIDATOR HERE, not a coercion: a label the
@@ -482,6 +509,15 @@ def normalize_charter(stored, reservation=None):
         # companion to `stood`: that one says what a body did with its life,
         # this one says who it did it with, and neither grows with time.
         "served_beside": served_beside,
+        # Socially temporary facts -- newly raised, lately helped, accused to
+        # your face, in disgrace. Bounded by bodies x `charter_mark.MARKS`
+        # and pruned at expiry, so it carries the same bound `stood` and
+        # `served_beside` do: it grows with the shape of the institution and
+        # never with the hours. Filtered to live bodies for the same reason
+        # `experiences` and `habit_runs` are -- a body that leaves the charter
+        # must not leave a mark behind -- and this is the filter that counts,
+        # because `normalize_charter` runs at the head of every `step`.
+        "marks": normalize_marks(stored.get("marks"), bodies=bodies),
         "travelled": {str(k): int(v)
                       for k, v in (stored.get("travelled") or {}).items()},
     }

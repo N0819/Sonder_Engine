@@ -21,7 +21,8 @@ from __future__ import annotations
 import time
 
 from world.charter import (
-    normalize_charter, out_of_band, regard_pair, run, seed_roster)
+    PENDING_CHANGE_CAP, normalize_charter, out_of_band, regard_pair, run,
+    seed_roster)
 
 from charter_worlds import big_ship, big_town
 
@@ -52,6 +53,12 @@ class TestItHoldsAtScale:
 
         assert events == []
         assert not out_of_band(after["upkeeps"]["market_stocked"])
+        # AND THE CONSEQUENCE FRAME IS BOUNDED AT SCALE. `pending_changes`
+        # (`RESEARCH.md` §1.7.6 item 5) is the one new per-window persisted
+        # field, and a thousand townsfolk is where an unbounded one would
+        # show. Measured 2026-08-27 on a famine week of `twin_towns(240)`:
+        # the busiest window produced 184 raw changes against a cap of 32.
+        assert len(after["pending_changes"]) <= PENDING_CHANGE_CAP
 
     def test_a_simulated_month_costs_seconds_not_minutes(self):
         """Not a benchmark — a regression guard on the cost model.
@@ -72,7 +79,68 @@ class TestItHoldsAtScale:
         # load.  The regression this guards was order-of-magnitude graph-walk
         # work (minutes), so 45s keeps that tripwire without making scheduler
         # noise a product failure.
+        #
+        # THIS ASSERTION IS FAILING AND IS LEFT FAILING ON PURPOSE. Measured
+        # 2026-08-27 on `.venv`, three trees strictly interleaved in one
+        # sitting: `main` at 48cdd94 43.0/42.3s, this branch's committed
+        # baseline 96916f6 89.5/88.6s, the working tree 90.0s (the same tree
+        # reads 64.7s here on a quiet box -- the RATIOS are the measurement,
+        # not the seconds). So `main`
+        # PASSES and the branch does not -- the earlier register entry
+        # (`docs/UNBUILT.md` §1.99c) blamed 48cdd94 and was measuring 100
+        # commits from the wrong side of the branch point. Raising the number
+        # would erase the only evidence of a 2x regression that is real,
+        # reproducible and NOT in the §1.7.6 consequence layer (the same
+        # fixture with the trigger pass inert reads within 1% of live). The
+        # audit is opt-in -- `tools/` is outside `testpaths` -- so nothing in
+        # CI is red because of it. See §1.99c for the bisect.
         assert elapsed < 45.0, f"a month of 500 hands took {elapsed:.1f}s"
+
+    def test_a_simulated_year_of_a_town_still_costs_seconds_not_minutes(self):
+        """The same guard for the per-window writers rather than the graph
+        walk, and the arm the `charter_mark` layer (`RESEARCH.md` §1.7.6 item
+        4) was measured against.
+
+        Measured on `.venv`, this workstation, `big_town(40)` at 8,760 hours,
+        window 4.0, seed 3, with the mark WRITER swapped for a no-op and the
+        arms strictly INTERLEAVED in one process: 23.64/23.67s live against
+        22.71/23.16s inert. The store adds one dict pass over the bodies per
+        window and nothing quadratic, which is the property this guards -- a
+        writer that paired a crowd here would show up as an order of
+        magnitude, not as three per cent.
+
+        THAT MEASUREMENT LEFT THE READER LIVE IN BOTH ARMS, and the reader was
+        the quadratic half: `held_marks` normalized the whole store to answer
+        for one body, so `charter_run.step`'s per-body reluctance loop cost
+        bodies x marked-bodies every window. It was invisible at 40 bodies and
+        was +17% at 500 (`world/charter_mark.py`, `_normalize_row`). Bounds set
+        from measurement rather than from generosity, because a bound with 4x
+        headroom cannot catch the class it is written for: this exact run reads
+        14.1--15.8s on `.venv` under ordinary load, so 40s is about 2.5x the
+        slowest reading and still an order of magnitude below the failure this
+        guards.
+        """
+        town = _ready(big_town(40))
+
+        started = time.perf_counter()
+        after, _events = run(town, hours=8_760.0, window=4.0, seed=3)
+        elapsed = time.perf_counter() - started
+
+        # A simulated year of a healthy institution ends holding nothing:
+        # every mark it minted has outlived its own lifetime.
+        assert after["marks"] == {}
+        # AND THE CONSEQUENCE LAYER (`RESEARCH.md` §1.7.6 item 5) IS FREE ON
+        # IT. Measured 2026-08-27 on the same fixture at 4,380 hours with
+        # `fire_triggers`/`changes_from` swapped for no-ops and three pairs of
+        # arms strictly INTERLEAVED in one process: 10.71/10.27/10.23s live
+        # against 10.15/10.53/10.17s inert -- +5.5%, -2.4%, +0.6%, mean +1.2%,
+        # so the pass is not visible above run-to-run noise. Micro-profiled it
+        # is 18 microseconds per window (`normalize_triggers` 15 of them),
+        # which is 0.2% of the window. It stays free because the pass reads a
+        # CHANGE and never a state: with an empty frame it returns on one
+        # falsy test, and this fixture deposits an empty frame all year.
+        assert after["fired"] == []
+        assert elapsed < 40.0, f"a year of 40 townsfolk took {elapsed:.1f}s"
 
 
 class TestGossipKeepsTheInstitutionAwareOfItself:

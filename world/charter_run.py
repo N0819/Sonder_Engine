@@ -54,6 +54,9 @@ from .charter_politics import (
 from .charter_roster import decay_roster, observe
 from .charter_space import charter_places, reach_map, refresh_reach
 from .charter_feel import STRAIN_REST_TOLL, advance_feel, strain_of
+from .charter_mark import (BY_MARKS, DISGRACE_RELUCTANCE, advance_marks,
+                           held_marks)
+from .charter_trigger import changes_from, fire_triggers
 from .charter_log import window_note
 from .charter_figure import sight_figures
 from .charter_mind import cap_minds, decay_minds
@@ -451,15 +454,36 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
             pair = regard_pair(pair_key)
             if pair is not None:
                 regard_of.setdefault(pair[1], []).append(weight)
+    # THE INSTITUTION'S OWN MEMORY OF A FRESH FAILURE, on the same axis and
+    # for the same reason. `politics.blame` is MONOTONE on purpose -- the
+    # counter says it happened, forever -- so a charter that read the counter
+    # here would spend a body more grudgingly a decade after the fact. The
+    # mark says it happened RECENTLY, and only the mark reaches the bill.
+    #
+    # Read from the store as it stood at the END OF LAST WINDOW, which is the
+    # same one-window lag judgments carry: nobody re-rosters in the instant a
+    # thing fails. Kept inline rather than folded into
+    # `charter_politics.spend_reluctance`, whose docstring is specifically
+    # about standing, following the `mood_weight` precedent below.
+    marks_before = charter.get("marks") or {}
     reluctance = {}
     for key in charter["bodies"]:
         held = needs.get(key) or {}
         weight = spend_reluctance(politics, key) + pressure(held)
+        if "disgraced" in held_marks(marks_before, key, at):
+            weight += DISGRACE_RELUCTANCE
         if mood_weight:
             # Felt state joins the SAME axis as standing and exhaustion: a
             # body the institution is reluctant to spend, for whatever reason,
             # is spent later. It can never become unpostable that way, which
             # is what keeps an unhappy crew from becoming an unusable one.
+            #
+            # AND IT DOUBLE-COUNTS BLAME WITH THE DISGRACE TERM ABOVE.
+            # `charter_needs.mood` takes `blamed` as an input, so an arm that
+            # turns this dial up pays for a fresh failure twice. Harmless at
+            # the shipped default of 0.0 and stated here rather than
+            # discovered: an experiment raising `mood_weight` has to decide
+            # which of the two it means.
             weight += mood_weight * mood(
                 held, blamed=int(blame.get(key, 0)),
                 regard_of_others=regard_of.get(key, ()))
@@ -831,6 +855,30 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
         practices.update(opportunities(
             in_focus, minds, needs_after, events, practices, at + hours,
             seed=seed, kinds=COARSE_PRACTICES))
+    # AND THE LAST WINDOW'S CHANGES FIRE (`RESEARCH.md` §1.7.6 item 5). An
+    # act changed state here and nothing fired off the change, so the social
+    # layer only ever moved when the planner or an author prodded it.
+    #
+    # BETWEEN `opportunities` AND `enact`, AND THIS IS A TRAP RATHER THAN A
+    # PREFERENCE. A practice opened after `enact` carries
+    # `last_effect_at = at + hours` and is swept by the next window's
+    # `close_stale` at every shipped window size -- `IDLE_CLOSE_HOURS` is 2.0
+    # against presim windows of 4.0 and 8.0 -- so it could never be acted in,
+    # and it would fail silently with no error and no failing test. Opening
+    # here puts a triggered situation on exactly the same footing as a
+    # circumstance-opened one.
+    #
+    # The frame is the PREVIOUS window's, deposited at the tail of this
+    # function. One window of lag, uniformly, for every change kind, and the
+    # same lag judgments already carry.
+    trigger_events, trigger_opened, trigger_onsets, trigger_last, \
+        trigger_fired, trigger_depths = fire_triggers(
+            charter.get("pending_changes"), in_focus, at + hours,
+            seed=seed, rules=charter.get("triggers"),
+            last_fired=charter.get("trigger_last"))
+    for key, entry in trigger_opened.items():
+        practices.setdefault(key, entry)
+    events.extend(trigger_events)
     regard = dict(politics.get("regard") or {})
     # AND THEY DECIDE FROM WHAT HAS PASSED BETWEEN THEM. The INCOMING
     # `charter["experiences"]`, not the copy-on-write local built further
@@ -865,8 +913,16 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
     social_events = _social_events(acts, bodies, at + hours)
     if social_events:
         events.extend(social_events)
+    # THE SAME APERTURE CARRIES BOTH. A trigger-minted event is an ordinary
+    # happening at a place -- `TRIGGER_EMITTABLE` admits only kinds whose
+    # truth condition is "this visibly happened between these people here" --
+    # so it is witnessed by presence exactly as an act is. Reusing this call
+    # rather than adding a fourth keeps the aperture count at three, which is
+    # the number the firewall reasoning in this function is written against.
+    to_witness = trigger_events + social_events
+    if to_witness:
         minds, act_witnessed = witness(
-            minds, owned_bodies, social_events, at + hours)
+            minds, owned_bodies, to_witness, at + hours)
         witnessed += act_witnessed
         if act_witnessed:
             news_keys = news_keys_in(minds)
@@ -900,6 +956,112 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
     # more in a window than decay had capped for.
     minds = cap_minds(minds)
 
+    # BLAME IS ATTRIBUTED HERE, hoisted up the function from the tail, because
+    # a fresh disgrace is a DELTA on the blame counter and the marks below have
+    # to see it. Blame attaches to the watch the charter BELIEVED it had
+    # arranged, so a body can be held responsible for a post it was never at.
+    # That is the intended failure, not a bug in the attribution: the roster
+    # said they were on it, the thing failed, and the institution now knows who
+    # to be angry with. Correcting that is somebody else's job and may never
+    # happen.
+    #
+    # THIS CALL MUST STAY BELOW THE LAST `events` APPEND, which today is the
+    # `_social_events` extend above. `attribute_blame` reads `upkeep_out_of_band`
+    # events and the watch and nothing else, so it is safe today -- but a
+    # future writer appending an event under this line would silently lose the
+    # blame it should have attributed, which is the exact class of quiet loss
+    # this package keeps paying for. `TestReplay` recomputes the counter over
+    # the full returned event list to catch it.
+    blame_before = dict(politics.get("blame") or {})
+    politics = attribute_blame(politics, events, plan["watch"],
+                               charter["posts"])
+    disgraced = sorted(
+        key for key, count in politics["blame"].items()
+        if int(count) > int(blame_before.get(key, 0)) and key not in external)
+
+    # The service record: a window actually stood is a window remembered.
+    # Keyed bodies x posts, so it grows with the shape of the institution
+    # rather than with time.
+    #
+    # HOISTED ABOVE THE APPRAISAL so the `posted` onsets it collects are in
+    # `fresh_marks` before `advance_feel` runs. Nothing between here and where
+    # this block used to sit reads the local: `_record_coarse_experiences` is
+    # handed `charter.get("stood")`, which is the BEFORE snapshot and must stay
+    # one.
+    stood = {k: dict(v) for k, v in (charter.get("stood") or {}).items()}
+    posted = []
+    for post_key, body_key in sorted(plan["watch"].items()):
+        body = bodies.get(body_key)
+        actually_there = (body_key not in external or (
+            body is not None and str(body.get("place") or "")
+            == str((charter["posts"].get(post_key) or {}).get("place") or "")))
+        if body is not None and body.get("available") and actually_there:
+            held = stood.setdefault(body_key, {})
+            # THE FIRST TIME AT THIS POST, not every window of standing it.
+            # The bill is re-planned every window and churns constantly on a
+            # short-handed institution, so a mark minted on every assignment
+            # would be held by whoever is on duty -- which is a roster, not a
+            # status. Measured on `big_town(40)` over a simulated year: 12
+            # posts against 40 bodies, so the on-duty reading would have
+            # marked 30% of the town at every window boundary, against 13
+            # bodies ever newly raised across the whole year and 0.31% of
+            # (body, window) pairs holding the mark as written.
+            if not held.get(post_key) and body_key not in external:
+                posted.append(body_key)
+            held[post_key] = held.get(post_key, 0) + 1
+
+    # SOCIALLY TEMPORARY FACTS (`RESEARCH.md` §1.7.6 item 4). Four onsets that
+    # already existed in this function and were written down nowhere: the
+    # institution handing somebody a duty, somebody being tended where they
+    # stood, an accusation said to a face, and a failure landing on the books.
+    #
+    # SORTED AT THIS BOUNDARY, all four. `heard` is a dict of SETS and
+    # `politics.blame` a dict; an unsorted onset would let a checkpoint restore
+    # land a different past, which is the byte-identical replay `TestReplay`
+    # pins. `advance_marks` sorts again defensively and says why.
+    #
+    # AND FILTERED BY `external`, the same exclusion needs, feel and minds
+    # carry: a promoted body's interior has exactly one owner, and Charter
+    # scoring a person it no longer owns is the thing the promotion purge
+    # exists to prevent.
+    aided = sorted((str(act["other"]), str(act["actor"])) for act in acts
+                   if act.get("act") == "tend"
+                   and str(act.get("other") or "") in bodies
+                   and str(act.get("other")) not in external)
+    accused = sorted((subject, sorted(tellers)[0])
+                     for subject, tellers in heard.items()
+                     if tellers and subject not in external)
+    # AND A TRIGGER MAY SET ONE. `set_mark` writes into THIS store rather
+    # than into a second one of its own, which is the whole reason design 5
+    # ships no `statuses` key: two stores of socially temporary facts can only
+    # ever disagree, and this one already has a lifetime per kind, an expiry
+    # prune, a body-scope allowlist and three readers. The onsets are merged
+    # into the same four lists so a triggered mark and a lived one are the
+    # same row, and `advance_marks` sorts the result for the same replay
+    # reason it sorts the others.
+    #
+    # `external` filters here too: a rule may not mark a body Charter no
+    # longer owns.
+    if trigger_onsets:
+        for kind, rows in sorted(trigger_onsets.items()):
+            target = {"posted": posted, "aided": aided,
+                      "accused": accused, "disgraced": disgraced}[kind]
+            for body_key, by in rows:
+                if body_key not in bodies or body_key in external:
+                    continue
+                # THE SHAPE THE LIST ALREADY USES, which is not a nicety:
+                # `posted`/`disgraced` hold bare keys and `aided`/`accused`
+                # hold `(body, by)` pairs, and `sorted` over a list carrying
+                # both raises `TypeError: '<' not supported between str and
+                # tuple`. `charter_mark.BY_MARKS` is the same split and is the
+                # authority for which is which.
+                target.append((body_key, by) if kind in BY_MARKS
+                              else body_key)
+    marks, fresh_marks = advance_marks(
+        charter.get("marks"), at + hours, posted=sorted(posted),
+        aided=sorted(aided), accused=sorted(accused),
+        disgraced=sorted(disgraced))
+
     # THEN THEY FEEL IT. After the window's events exist, because what a body
     # appraises is what happened where it stood; after needs, because
     # deprivation is this window's pain rather than last window's. The felt
@@ -913,7 +1075,7 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
                       if key not in external}
     feel = advance_feel(owned_feel, owned_bodies, needs_after,
                         movable_watch, charter["posts"], upkeeps, events,
-                        hours)
+                        hours, fresh_marks=fresh_marks)
 
     # WHO THEY STOOD IT WITH, counted the same way and for the same reason.
     # A stable institution is QUIET -- measured on the 40-body site_17 charter,
@@ -983,19 +1145,6 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
                 if one != other:
                     held[other] = held.get(other, 0) + 1
 
-    # The service record: a window actually stood is a window remembered.
-    # Keyed bodies x posts, so it grows with the shape of the institution
-    # rather than with time.
-    stood = {k: dict(v) for k, v in (charter.get("stood") or {}).items()}
-    for post_key, body_key in plan["watch"].items():
-        body = bodies.get(body_key)
-        actually_there = (body_key not in external or (
-            body is not None and str(body.get("place") or "")
-            == str((charter["posts"].get(post_key) or {}).get("place") or "")))
-        if body is not None and body.get("available") and actually_there:
-            held = stood.setdefault(body_key, {})
-            held[post_key] = held.get(post_key, 0) + 1
-
     # AFTER THE APPRAISAL, deliberately. A memory that records only what
     # happened is a log line; what makes it a memory is how it landed on the
     # body it happened to. `feel` is this window's appraisal of this window's
@@ -1030,6 +1179,7 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
                                     for k, v in heard_blame.items()}
     after_charter["feel"] = feel
     after_charter["stood"] = stood
+    after_charter["marks"] = marks
     after_charter["served_beside"] = served_beside
     after_charter["told"] = told
     after_charter["witnessed"] = witnessed
@@ -1042,13 +1192,27 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
         "post_unfilled": now_unfilled,
         "post_believed_filled": now_absent,
     }
-    # Blame attaches to the watch the charter BELIEVED it had arranged, so a
-    # body can be held responsible for a post it was never at. That is the
-    # intended failure, not a bug in the attribution: the roster said they
-    # were on it, the thing failed, and the institution now knows who to be
-    # angry with. Correcting that is somebody else's job and may never happen.
-    after_charter["politics"] = attribute_blame(
-        politics, events, plan["watch"], charter["posts"])
+    after_charter["politics"] = politics
+
+    # AND WHAT CHANGED, DEPOSITED FOR THE NEXT WINDOW (`RESEARCH.md` §1.7.6
+    # item 5). Three sources and nothing else: what the world emitted, what
+    # bodies did, and whose name the blame counter moved against -- `disgraced`
+    # is that delta and is already computed above, so the frame costs one pass
+    # over lists this function has already built.
+    #
+    # DEPOSITED RATHER THAN FIRED IN PLACE. Firing here would put the
+    # consequence after `enact`, where `close_stale` sweeps it before anybody
+    # can act in it; firing before the changes exist is impossible. One window
+    # of lag is what makes both true at once, and it makes the pass's input a
+    # persisted, capped, restorable field instead of a mid-function local that
+    # a checkpoint restore would lose.
+    after_charter["pending_changes"] = changes_from(
+        events=events, acts=acts, blamed=disgraced, bodies=bodies,
+        at_hours=at + hours, depths=trigger_depths)
+    after_charter["trigger_last"] = trigger_last
+    # Diagnostic, dropped by `normalize_charter` exactly as `told`/`witnessed`/
+    # `checked` are.
+    after_charter["fired"] = list(trigger_fired)
 
     # THE DISCRETE TIE, LAST, so it reads post-blame regard -- `attribute_blame`
     # is the one writer in this window that can move a directed opinion after

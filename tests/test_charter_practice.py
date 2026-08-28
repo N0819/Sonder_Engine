@@ -236,6 +236,21 @@ class TestVolitionReadsHistory:
         return next(r["utility"] for r in rows
                     if r["act"] == act and r["other"] == other)
 
+    @staticmethod
+    def _grievance(holder, against, at=1.0):
+        """One claim in the holder's OWN head naming somebody answerable.
+
+        The accuser's channel. Since 2026-08-27 `_afford_accuse` gates on this
+        rather than on `politics.blame` -- the institution's private register,
+        which no body in a room can perceive -- so a fixture that plants only
+        a blame count produces no `accuse` offer at all.
+        """
+        return {f"news:harm_done:{against}@{at}": {
+            "kind": "news", "body": f"news:harm_done:{against}@{at}",
+            "event_kind": "harm_done", "about": against, "actor": against,
+            "toward": holder, "place": "p1", "happened_at": float(at),
+            "strength": 1.0, "as_of_hours": float(at), "heard_from": None}}
+
     def test_a_body_is_slower_to_accuse_somebody_it_has_a_life_with(self):
         """Prom Week's worked example is Simon refusing to carry Cassandra's
         gossip about Naomi: the friendship outweighs the influence, and the
@@ -247,7 +262,12 @@ class TestVolitionReadsHistory:
         bodies = {"a": _body("a", "p1"), "mate": _body("mate", "p1"),
                   "stranger": _body("stranger", "p1")}
         minds = {"a": {"mate": _claim("mate", 1.0),
-                       "stranger": _claim("stranger", 1.0)}}
+                       "stranger": _claim("stranger", 1.0),
+                       **self._grievance("a", "mate"),
+                       **self._grievance("a", "stranger")}}
+        # The BOOKS are identical and are not what makes either accusable --
+        # the pair of grievances above is. Passed anyway, so this test would
+        # fail the day anything reads the register here again.
         blame = {"mate": 2, "stranger": 2}
         regard = {}
         practices = dict((self._quarrel("a", "mate"),
@@ -361,6 +381,59 @@ class TestVolitionReadsHistory:
                                 "recognized_by": ["b"]}})
 
         assert bare["a"] == loud["a"]
+
+    def test_the_books_alone_are_not_a_reason_to_round_on_anybody(self):
+        """`politics.blame` is the institution's PRIVATE register.
+
+        `charter_news.WITNESSABLE`'s allowlist comment states the rule: "a
+        conclusion the institution reached in its own books, and a body in the
+        room has no way to perceive it. Getting this list wrong is a firewall
+        leak." Until 2026-08-27 `_afford_accuse` gated on that counter and
+        sized its utility on the counter's MAGNITUDE, and
+        `charter_runtime.presence_view` deep-copies exactly those utility rows
+        into `action_instances` for a scene-manager model -- so a body's
+        conduct, and a monotone reading of a register it cannot see, went to a
+        model. The read was unreachable until the same day gave `quarrel` two
+        live openers, which is what turned a residual into a defect.
+
+        Three arms: a body with the books against it and nothing perceived
+        offers no accusation at all; a grievance of its own offers one; and
+        moving the counter from 1 to 40 moves no number anywhere.
+        """
+        bodies = {"a": _body("a", "p1"), "b": _body("b", "p1")}
+        practices = dict([self._quarrel("a", "b")])
+
+        books_only = offers(bodies, {}, {}, practices, {}, {"b": 3}, 24.0)
+        with_reason = offers(bodies, {"a": self._grievance("a", "b")}, {},
+                             practices, {}, {}, 24.0)
+        louder_books = offers(bodies, {"a": self._grievance("a", "b")}, {},
+                              practices, {}, {"b": 40}, 24.0)
+
+        assert not [r for r in books_only.get("a", ())
+                    if r["act"] == "accuse"]
+        assert [r["act"] for r in with_reason["a"]] == ["accuse"]
+        assert with_reason["a"] == louder_books["a"]
+
+    def test_a_grievance_lapses_where_the_register_never_does(self):
+        """The counter is MONOTONE -- `charter_mark`'s docstring: "the
+        institution's ledger and it does not forget" -- so a body deciding
+        from it would round on somebody a decade after the fact. A claim is
+        deleted by `charter_news.decay_news` once it fades below
+        `charter_mind.PERSONAL_FLOOR`, so the reason to accuse expires with
+        the memory of the thing. Driven through the decayer rather than by
+        deleting the row, because the property belongs to the store."""
+        from world.charter import decay_news
+
+        bodies = {"a": _body("a", "p1"), "b": _body("b", "p1")}
+        practices = dict([self._quarrel("a", "b")])
+        minds = {"a": self._grievance("a", "b")}
+
+        assert offers(bodies, minds, {}, practices, {}, {}, 24.0)["a"]
+
+        decay_news(minds, 1_000.0, set(minds["a"]))
+
+        assert not offers(bodies, minds, {}, practices, {}, {},
+                          1_024.0).get("a")
 
     def test_recognising_a_promise_is_not_being_party_to_one(self):
         """`charter_commitment`'s docstring: each record "names who inside

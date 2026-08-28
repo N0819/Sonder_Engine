@@ -3235,11 +3235,12 @@ the stores withheld — 86 `(actor, act, other)` triples moved and the mean
 `served_beside` count of the body a question was taken to rose 63.8 → 71.3.
 What that leaves open:
 
-- **Designs 4–5 of §1.7.6 are unbuilt.** *Status as temporary traits*;
-  *trigger rules*. Design 2 landed 2026-08-27 and has its own entry at
-  §1.98, including what it did NOT close: `harm_done` still has no producer
-  at all, and a HEALTHY institution's judgment network is still empty on
-  purpose. Design 3 landed the same day at §1.99.
+- **All five of §1.7.6 landed 2026-08-27** and each has its own entry —
+  §1.97 (this one), §1.98, §1.99, §1.99a, §1.99b — including what they did
+  NOT close: `harm_done` still has no producer at all, and a HEALTHY
+  institution's judgment network is still empty on purpose, which is the half
+  of design 2's stated gap that remains open and which leaves designs 1 and 3
+  wired and inert in a well-run institution.
 - **The `affect` axis is still thin in HEALTH, and half of that is now
   answered.** `charter_run._record_social_experiences` stamps no
   `valence`/`arousal` — only `_record_coarse_experiences`' `felt()` does — so
@@ -3270,14 +3271,64 @@ What that leaves open:
   it is the nearest thing to a live leak in the module: being on the floor is
   visible from across a room, and *which* need put you there is interior.
   The affordance would still work off the visible fact alone.
-- **`_afford_accuse` reads `state["blame"][other]` — the institution's
-  private register — to decide whether to speak, and since design 2 so does
-  `opportunities`, to open the quarrel at all.** `heard_blame` is the
-  channel by which blame reaches the person blamed; there is no equivalent
-  channel by which an ordinary body learns whom the books hold responsible.
-  Pre-existing and load-bearing (removing the read disables the affordance),
-  registered because design 1 makes accusation more legible and therefore
-  more noticeable.
+- **~~`_afford_accuse` reads `state["blame"][other]`~~ — CLOSED 2026-08-27,
+  and it had to be, because the same day made it reachable.** The register
+  read was dead code when this bullet was written: `quarrel` had no opener
+  but `_afford_accuse`'s own effect, and zero `accuse` acts were measured on
+  screen and off, in health and in famine. Design 2's `opportunities` opener
+  and design 5's shipped default rule then gave it two live openers, one
+  onscreen and one everywhere — so the institution's private register was
+  selecting who an ordinary body rounded on, and `0.55 + 0.1 × blame_count`
+  was handing a monotone reading of the counter's MAGNITUDE to a scene-manager
+  model through `charter_runtime.presence_view`'s `action_instances`. A leak
+  nobody can reach is a residual; a leak on the default path is a defect.
+  `charter_practice.grievance_against` is the channel that was missing: the
+  actor's OWN claims, in two shapes — one that names `other` as the party at
+  fault (`GRIEVANCE_KINDS`), and one that this place has failed while `other`
+  is standing in it (`PLACE_FAILURE_KINDS`). Both `_afford_accuse` and the
+  `opportunities` opener gate on it and neither reads `blame` any more, and
+  the utility is sized on the actor's own count. `politics.blame` still
+  decides which of its own situations the INSTITUTION has cause to open (the
+  opener's outer loop, and design 5's `blame_landed` rule), which is
+  bookkeeping rather than conduct — nothing opens between two people who have
+  no reason of their own.
+  **Measured before and after on the same tree** (the "before" arm is the same
+  working tree with these three edits reverted, so nothing else differs), on
+  `twin_towns(40)` driven into famine for a simulated quarter, window 4.0,
+  seed 7:
+
+  | | register gate | channel gate |
+  | --- | --- | --- |
+  | accusations, on screen | 64 | 58 |
+  | bodies ever told they were blamed | 2 | 7 |
+  | largest judgment axis anywhere | 0.2062 | 0.3553 |
+  | axes at or above `TIE_FORM` (0.30) | 0 of 600 | 2 of 520 |
+  | signed ties formed | 0 | **2** |
+  | accusations, off screen | 2 | 2 |
+
+  The accusation now follows perception rather than the books, so a body the
+  register never blamed can be rounded on by somebody who watched the road
+  fail beside them, and the blamed body rounds back on its accusers: 7 people
+  are told rather than the 2 the books name, and the institution being WRONG
+  about who is answerable is visible as that divergence instead of being
+  laundered into an accuser's mouth. It also LAPSES — a claim is deleted once
+  it fades below `charter_mind.PERSONAL_FLOOR`, where the register is monotone
+  and would still be a reason a decade later. And it is the first thing in
+  this branch to push an axis past `TIE_FORM` from ordinary simulation: the
+  two signed ties in the right-hand column are the only ones any arm of
+  §1.7.6 has produced without a hand-planted store.
+- **The accuser still has no channel to WHO WAS POSTED where.** The place
+  shape above requires the pair to be standing in the failed place, which is
+  where a still-posted body is; a body that has walked away is unaccusable
+  even though the institution blames it, because nothing a bystander can
+  perceive links a person to an upkeep they are no longer at. Measured on
+  `twin_towns(240)` driven into famine for a simulated month off screen: the
+  blamed pair had moved to `low_0` by the window the consequence rule fired,
+  and 0 bodies were told — **in BOTH arms**, so this costs nothing today, and
+  §1.99b's "0 → 2 told" for that fixture does not reproduce on the finished
+  tree under either gate. The honest fix is a perceivable post↔body link —
+  `post_filled_again` is already WITNESSABLE and names the body — and it needs
+  `posts` inside `_state_of`, which is a widening this change did not license.
 - **The memo assumes the four stores do not move under a `state` dict.**
   True today — `enact` writes `minds`, `needs` and `regard` only. An
   affordance that minted an experience row inside its own effect would
@@ -3379,8 +3430,15 @@ week, 14.7 % after a month, 26.4 % after a year against a 27.9 % ceiling of
 pairs that ever shared a place — which is what set `FAMILIAR_FLOOR = 24`
 shared windows. Window 4 h, seed 7, driven into famine: 40 judgment holders,
 149 stances, 16 `close` and 11 `looks_up_to` labels across the quarter, 11 of
-them requited. Coarse cost with the tie pass swapped for a no-op: healthy
-simulated year 17.59 s → 17.69 s, famine quarter 15.31 s → 15.52 s.
+them requited. Coarse cost, the tie pass swapped for a no-op and the two arms
+strictly INTERLEAVED on `.venv` so drift cannot land on one of them: healthy
+simulated year 17.40/16.87 s with the pass against 17.49/16.82 s without —
+inside the run-to-run spread, and one of the tie arms came out faster, which is
+what noise looks like. Famine quarter 24.47/25.69 s against 24.05/23.38 s,
+about 3 %, and that is the whole of the pass's cost: it is paid only where 40
+bodies actually hold stances. The holder gate is why — a body holding neither
+a judgment nor a tie is skipped before its co-presence is walked, so a healthy
+institution pays O(bodies) per window and not O(pairs).
 
 What that leaves open:
 
@@ -3702,6 +3760,331 @@ registered here:
   measured laws carried 12 and 27 family elements) and the loud failure is
   correct; a note saying "the reservation took the last one" would be
   better.
+
+### 1.99c The Charter scale audit's 45-second guard is broken, and the branch broke it
+
+Found 2026-08-27 while measuring design 5; **re-measured 2026-08-27 after a
+review found the baseline was 100 commits from the wrong side of the branch
+point.** `tools/charter_audit_scale.py::test_a_simulated_month_costs_seconds_not_minutes`
+asserts a simulated month of `big_ship(500)` costs under 45 s, and its own
+comment records the measurement that set the bound: "below 30 s in isolation
+and 30.4–33.2 s after several minutes of sustained test load".
+
+The first version of this entry called 48cdd94 "committed HEAD, before any of
+the §1.7.6 designs" and concluded the guard "was already failing by 2x at
+HEAD". 48cdd94 is `main`'s tip, not this branch's baseline —
+`git rev-list --count 48cdd94..96916f6` is 100 — and it PASSES. Measured on
+`.venv`, this workstation, three trees strictly interleaved in one sitting,
+three cycles, `big_ship(500)` at 720 h:
+
+| tree | seconds |
+| --- | --- |
+| `main` at 48cdd94 | 43.04 / 42.31 / 41.81 |
+| this branch's committed baseline, 96916f6 | 89.49 / 88.64 / 88.62 |
+| the working tree, all five designs plus the review fixes | 90.02 / 91.03 / 91.96 |
+
+Absolute seconds move a lot with what else is on the box — the same working
+tree read 64.7 s under `pytest` on a quiet one — so the interleaved ratios are
+the load-bearing part of the table and not the raw numbers. So the guard was
+passing before this branch and is failing on it, by a little over 2x, and **the failure is almost entirely already committed**: the
+uncommitted work adds 1.6 % on top of 96916f6, not the 21 % a review measured
+before `charter_mark.held_marks` stopped normalizing the whole store (§1.97,
+`_normalize_row`).
+
+**And the cause is not the §1.7.6 work.** Bisected in one sitting on the same
+fixture at 240 h, one rep per tree, the box otherwise quiet:
+
+| tree | seconds | step |
+| --- | --- | --- |
+| 48cdd94 (`main`) | 8.70 | — |
+| be82486 *A memory is how it landed, not that it happened* | 11.77 | +35 % over 96 commits |
+| 3ac5d2c *All systems nominal is a report, not what happened to these people* | 15.60 | **+33 % over two commits** |
+| b5bc630 | 15.78 | +1 % |
+| 96916f6 (designs 1–2 and the tie layer) | 16.17 | +2.5 % |
+| working tree (designs 3–5 finished, plus the review fixes) | 16.61 | +2.7 % |
+
+3ac5d2c is the commit that made the offscreen branch stop being empty —
+`COARSE_PRACTICES`, `_record_coarse_experiences`, the `ENCOUNTER_ODDS` draw —
+and a third of the cost of a 500-hand month arrived with it. That is a
+deliberate feature and its docstring argues for it; what nobody did was
+re-measure the guard the same day. All five §1.7.6 designs together are about
+5 % of the run.
+
+**The assertion is deliberately left failing.** Raising it would erase the
+evidence, and the audit is opt-in — `tools/` is outside `testpaths`, so it is
+not collected by `pytest` and nothing in CI is red because of it. What needs
+doing is a decision about 3ac5d2c's writers at 500 bodies, not a new constant.
+
+### 1.99a Status as a temporary trait, and the accusation nobody offscreen makes
+
+Landed 2026-08-27. Design 4 of
+[`docs/guides/RESEARCH.md`](guides/RESEARCH.md) §1.7.6. Charter had permanent
+traits (`charter_temper`), needs, felt state and a service tally, and nothing
+socially TEMPORARY — no newly raised, no lately helped, no accused to your
+face, no in disgrace. `world/charter_mark.py` is four marks with four
+lifetimes over one new charter key, `marks`, normalized in
+`charter_model.normalize_charter` and filtered to live bodies there exactly as
+`experiences` and `habit_runs` are. One row per (body, kind): a re-trigger
+overwrites `since` rather than appending, and every row is pruned at expiry —
+so the store is bounded by bodies × 4 and a simulated year of a healthy
+institution ends holding NOTHING.
+
+THE FIREWALL SPLIT IS THE DESIGN'S SPINE and it is an allowlist,
+`BODY_MARKS`, for the same reason `charter_news.WITNESSABLE` is one.
+`posted`, `aided` and `accused` each have an origin the marked body was
+present for — it was handed the duty, somebody tended it in the room,
+somebody said it to its face — and they reach `charter_feel.appraise_window`
+and `scene_ledger`'s presence slice. `disgraced` is the register's own:
+`attribute_blame` follows the watch the charter BELIEVED it had arranged, so a
+body can be disgraced for a post it was never at, and it reaches exactly the
+planner's reluctance axis and `charter_log.life_of`, which is author
+diagnostics no mind receives. Measured from both ends by
+`test_being_told_to_your_face_is_felt_and_the_ledger_alone_is_not`: identical
+register blame leaves the blamed body at strain 0.163 / load 0.067 with
+somebody saying it aloud and at strain 0.0 / load 0.0 without.
+
+Measured on `.venv`, this workstation. `big_town(40)`, healthy simulated year,
+window 4.0, seed 3: 13 of 40 bodies ever `posted`, 0.31 % of (body, window)
+pairs holding it, and the store EMPTY at the end of the year. Cost, the
+mark writer swapped for a no-op and the two arms strictly INTERLEAVED in one
+process so drift cannot land on one of them: 23.64/23.67 s live against
+22.71/23.16 s inert, +2.2 % to +4.1 % depending on which pair, against the
+5 % gate this package uses. The layer is one dict pass over the bodies per
+window and nothing quadratic. The same fixture with needs
+seeded: 804 `aid_given` acts over the year, 6 bodies ever `aided`, 12.39 %
+mean held. `twin_towns(240)` driven into famine for a simulated month: 48 of
+240 ever `posted`, 2 ever `disgraced`, 0 `accused`. `twin_towns(40)` famine
+quarter, before → after: 2013 → 1567 events and 658 → 524 `body_unable`,
+because being tended now proposes pleasure and a positive-only window no
+longer manufactures strain (see below).
+
+`DISGRACE_RELUCTANCE = 0.6` was set against `pressure`, not against a
+sweep — the planner's first sort component is
+`criticality + standing + pressure + disgrace`, so the number is the
+exhaustion at which the institution stops preferring a clean hand. Measured on
+a two-body works fixture: at 0.3 the disgraced hand is back on the bill once
+the clean one reaches need level 0.6; at 0.9 the institution never reaches for
+it at all and works the clean hand down to 0.2. Below 1.0 on purpose, because
+`criticality` contributes whole numbers to the same component and a disgrace
+must never outweigh being the last body qualified for another post.
+
+What that leaves open:
+
+- ~~**`accused` has no OFFSCREEN producer, and the measurement says so.**~~
+  **CLOSED 2026-08-27 by design 5** (§1.99b). It was true as written:
+  `quarrel` is not in `COARSE_PRACTICES`, so an institution nobody was looking
+  at produced zero accusations in health and in famine (`twin_towns(240)`,
+  famine month: 0). `charter_trigger`'s one shipped default rule,
+  `blame_opens_a_quarrel`, opens the situation from the blame LANDING rather
+  than from the ledger, and the trigger pass runs in both branches of `step` —
+  so the same fixture now reaches `heard_blame` and mints `accused` off
+  screen. The entry is kept struck through rather than deleted because the
+  reasoning ("an accusation IS a scene") was the argument for leaving it, and
+  it was wrong for the offscreen case specifically: a blame that lands where
+  nobody is looking still lands on a person.
+- **A mark minted by `charter_author.authored` is never APPRAISED.** The
+  author path folds the onset into the store correctly and the presence slice
+  and the planner both read it, but `advance_feel` runs only inside `step` and
+  sees only that window's `fresh` list — and an authored mark stamped at
+  `clock_hours` is indistinguishable from one the previous window minted at
+  the same hour, so it cannot be recovered as fresh later. The clean fix is
+  for `authored` to appraise the body it acted on, which is a larger change to
+  a module that deliberately advances no time; the alternative, a per-row
+  "appraised" flag, is the state growth this design exists to avoid. So a
+  figure's accusation is currently seen and scored and not felt.
+- **`posted` peaks at the institution's first window and that is honest, not
+  a bug.** 32.5 % of `big_town(40)` holds it at hour 4, because the whole bill
+  is handed out at once and everybody genuinely is newly raised. Any longer
+  lifetime, or a churnier bill, pushes the standing fraction toward everybody
+  — and a mark most of the institution holds is not a mark. The held fraction
+  is the number to re-measure if `MARK_HOURS["posted"]` is ever raised; do not
+  infer it from the lifetime.
+- **`mood_weight` double-counts blame with the disgrace term.**
+  `charter_needs.mood` already takes `blamed` as an input and joins the same
+  reluctance axis, so an arm that raises `mood_weight` above its shipped 0.0
+  pays for a fresh failure twice. Stated at the call site; nothing changes at
+  the default.
+- **`marks` is deliberately absent from `promotion_handoff`.** The character
+  tier has no reader for a Charter-window scoring bias, so carrying one would
+  be dead weight. `charter_runtime.bind_promoted_character` purges the store
+  along with minds/needs/feel/heard_blame, and that purge is guarded by
+  exactly one test.
+
+### 1.99b Trigger rules, and the blame that finally reaches somebody
+
+Landed 2026-08-27. Design 5 of
+[`docs/guides/RESEARCH.md`](guides/RESEARCH.md) §1.7.6, the last of the five,
+and the one whose whole risk was that a cascade does not stop. Charter had no
+way for a state change to have a consequence: an act changed state and nothing
+fired off the change, so the social layer only moved when the planner or an
+author prodded it. `world/charter_trigger.py` is authored rules that read one
+objective CHANGE and produce one objective consequence — open a practice, set
+a `charter_mark`, emit a witnessable event.
+
+THE PASS READS A CHANGE AND NEVER A STATE, which is what makes it free rather
+than merely cheap. A window deposits a capped `pending_changes` frame and the
+next one fires on it; with an empty frame `fire_triggers` returns on one falsy
+test. Three new charter keys, all normalized in
+`charter_model.normalize_charter` because that runs at the head of every
+`step`: `triggers` (merged over `DEFAULT_TRIGGERS` by id), `pending_changes`
+(`PENDING_CHANGE_CAP = 32`, round-robin across the three families) and
+`trigger_last` (pruned to the longest refractory, `TRIGGER_MEMORY_CAP = 256`).
+
+THE FIREWALL IS HELD BY THE SIGNATURE, not by a docstring. `fire_triggers` is
+handed change rows and a body index and nothing else; the module imports none
+of `charter_mind`, `charter_social`, `charter_feel`, `charter_needs`,
+`charter_talk`, `charter_observe`, `charter_politics` or `charter_model`, and
+`test_the_pass_is_not_given_a_head_to_read` pins both ends. `TRIGGER_EMITTABLE`
+is a TIGHTER allowlist than `charter_news.WITNESSABLE` — only `aid_given` and
+`harm_done`, whose truth condition is exactly "this visibly happened between
+these people here" — because minting an `institution_order_executed` or a
+`report_confirmed` from a rule would put a false institutional fact into every
+head in the room at full first-hand strength with a stable news key two
+witnesses would agree on. There is no `set_judgment` op: a rule that wants to
+move an opinion emits an event, `witness` decides who was present, and the
+axis moves next window with an evidence id its holder can cite.
+
+THE `on` SIDE WAS OPEN AND IS NOW ALLOWLISTED TOO (`perceivable_change`,
+2026-08-27). Which kinds a rule may MINT was closed from the day this shipped;
+which changes it may mint them FROM was not, so the same hole stayed reachable
+from the other end. Both of these normalized clean and fired on `.venv`:
+`{"on": "blame_landed", "then": [{"op": "emit", "kind": "harm_done", …}]}`
+put a first-hand claim into every head in the room off a move of the
+institution's private counter, and `DEFAULT_SIGNALS["harm_done"]` then moved
+trust −0.13 / fear +0.10 / suspicion +0.08 in each of them, citing evidence no
+witness could have seen; `{"on": "event:post_unfilled", "then": [{"op":
+"set_mark", "mark": "accused", …}]}` left a body feeling it at
+`charter_feel`'s −0.6 and showing it in the presence slice with nothing said
+aloud, no accuser and `heard_blame` still empty. An `act:` change passes
+unconditionally (an act happens in front of whoever is standing there) and an
+`event:` change passes only where `charter_news.WITNESSABLE` says a body could
+have seen it — read from that module rather than copied, so a kind admitted
+there tomorrow is admitted here the same day. `open_practice` is deliberately
+NOT held to this: opening a situation puts nothing in anybody's head, and
+every affordance inside one applies its own channel gate at act time.
+`disgraced` is likewise unaffected, because it is the register's own mark
+wherever it comes from.
+
+WHAT IT ACTUALLY BOUGHT, measured on `.venv`, this workstation. The one
+shipped default rule, `blame_opens_a_quarrel`, closes the residual §1.99a
+registered: a blame landing OFF SCREEN reached nobody, because `quarrel` is
+not in `COARSE_PRACTICES` and the offscreen branch passes no ledger. On the
+four-body yard fixture the whole chain now runs in two windows — blame lands
+at hour 20 and marks the keeper `disgraced`; the trigger fires at hour 24,
+opens the quarrel, somebody accuses her in the same window, `heard_blame`
+becomes non-empty and she carries `accused` with the accuser named in `by`.
+`twin_towns(240)` driven into famine for a simulated month went from 0 bodies
+ever told they were blamed to 2; `twin_towns(40)` over a famine quarter, 0 to
+1. A healthy simulated year of `big_town(40)` still fires NOTHING, which is
+the point.
+
+**Those two fixture numbers do not reproduce on the finished tree**, and the
+honest reading is that they were measured mid-branch. Re-measured 2026-08-27
+with all five designs in and the accusation channel of §1.97 landed:
+`twin_towns(240)` famine month off screen tells 0 bodies whether the gate is
+the register or the channel — the blamed pair have moved off the failed place
+by the window the rule fires — and `twin_towns(40)` famine quarter off screen
+tells 2 in both arms. What the rule demonstrably still does is the yard
+fixture's two-window chain below, which is a placement proof rather than a
+population measurement.
+
+COST. `big_town(40)` at 4,380 hours, window 4.0, seed 3, with
+`fire_triggers`/`changes_from` swapped for no-ops and three pairs of arms
+strictly INTERLEAVED in one process (the §1.99 lesson about arms measured
+minutes apart): 10.71/10.27/10.23 s live against 10.15/10.53/10.17 s inert —
++5.5 %, −2.4 %, +0.6 %, mean +1.2 %, so the pass is not visible above
+run-to-run noise. Micro-profiled it is 18 µs per window, of which
+`normalize_triggers` is 15, which is 0.2 % of the window. Determinism: two
+runs of seed 11 over 400 hours agree byte-for-byte on `fired`, `marks`,
+`practices`, `trigger_last` and `heard_blame`, and a JSON round trip through
+`normalize_charter` is a fixed point on all three new keys.
+
+THE CONSTANTS, and what set them:
+
+- `TRIGGER_DEPTH = 2`. Measured with one deliberately self-feeding authored
+  rule (`on: event:harm_done → emit harm_done`, one authored `harm_done`
+  seeded) over 2,000 simulated hours of SHIP: the rule produces exactly 1, 2,
+  3 and 4 consequences at depth 1, 2, 3 and 4, and the quiet control emits
+  zero at every one — so this bound is the only thing stopping it, which is
+  what a bound should be.
+- `TRIGGER_YIELD_CAP = 8`. Per-window consequence count with the shipped
+  defaults: 0 in total over a simulated year of `big_town(40)` (2,190
+  windows); 3 in total, maximum 2, over a famine month of `twin_towns(240)`;
+  2 in total, maximum 1, over a famine quarter of `twin_towns(40)`. p99 is 0
+  on all three. It never binds in play and always binds on a rulebase that
+  has gone wrong.
+- `PENDING_CHANGE_CAP = 32`. The busiest window measured produced 184 raw
+  changes (famine week, `twin_towns(240)`), mean 38.7; `twin_towns(40)` over a
+  famine quarter averages 5.0.
+
+FOUR DEVIATIONS from the plan this was built to, each because the code or a
+measurement said so:
+
+1. **No `statuses` key was built, and `set_mark` writes into `marks`
+   instead.** The plan predicted design 4 might slip and left `statuses` with
+   no behavioural reader. Design 4 landed first, and `charter_mark` already
+   holds socially temporary facts with a lifetime per kind, an expiry prune, a
+   body-scope allowlist and three readers. A second store of the same idea can
+   only ever disagree with the first — the argument §1.99's tie layer makes
+   about labels and numbers. So `set_mark`'s vocabulary is `charter_mark.MARKS`
+   and nothing else: a row whose kind has no lifetime could never expire, so
+   it would be a permanent trait wearing the word "temporary".
+2. **The plan's second default rule, `aid_leaves_a_body_in_credit`, was not
+   built.** Design 4 mints `aided` directly in `charter_run` from
+   `act == "tend"`, in both branches. A trigger re-minting it a window later
+   would be a second writer of the same fact that can only disagree with the
+   first. All four marks have direct producers, so `set_mark` ships with no
+   default rule at all and is an author surface — which is honest, because
+   unlike the plan's `statuses` a mark written there is read immediately.
+3. **The plan's step 4 was already done.** It asked for `attribute_blame` to
+   be hoisted out of the `after_charter` assembly so the blame delta could be
+   computed where the event list is final, and warned that the reorder was a
+   replay risk. Design 4 had already hoisted it and already computes the delta
+   as `disgraced`. No reorder was made and `TestReplay` never moved.
+4. **`fire_triggers` takes no `offscreen` parameter.** The plan passed
+   `offscreen = not active` and gave it no job. The whole argument for the
+   shipped default is that the offscreen branch is where `quarrel` has no
+   opener, so gating on it would defeat the rule; an unread parameter is a
+   smell this package does not need a second instance of.
+
+What that leaves open:
+
+- **`emit` ships with no default rule and `harm_done` still has no producer
+  anywhere.** That is design 2's residual (§1.98) and is unchanged: a trigger
+  produces consequences and `harm_done` is primary conduct, so minting one
+  from a rule would be the engine inventing an assault nobody committed.
+  `TRIGGER_EMITTABLE` carries it so an author CAN, which is the right split.
+- **Depth is carried on minted EVENTS and not through an opened practice.** An
+  `open_practice` consequence mints no change row, so it cannot cascade in
+  principle; but a triggered `quarrel` can produce an `accuse` act, that act
+  re-enters the frame as `act:accuse` at depth 0, and a rule firing on
+  `act:accuse` would restart the count. Bounded in practice by the refractory,
+  the yield cap and `_afford_accuse`'s own regard gate (roughly two
+  accusations per pair), and stated here rather than hidden. The clean fix is
+  for `enact` to return which practice each act was taken in, which is a
+  change to a returned shape with several callers.
+- **~~`_afford_accuse` reads the institution's private blame register~~ —
+  CLOSED 2026-08-27.** Making that path live everywhere is what turned it from
+  a residual into a defect, and §1.97 records the fix: an accusation now
+  requires the accuser's own claim (`charter_practice.grievance_against`) and
+  reads no register. The shipped rule still fires on `blame_landed`, which is
+  the institution deciding to open one of its own situations — bookkeeping,
+  not conduct — and the pair it opens between produces nothing unless one of
+  them has a reason of their own.
+- **`changes_from` mints a full row and formats a key for every act and event,
+  then keeps 32.** Profiled on `big_town(1000)` over 18 windows: 6,417
+  `_change` calls, 0.104 s cumulative under cProfile. Left alone deliberately —
+  `_cap_changes` sorts by `(at_hours, key)` in BOTH branches, so the keys are
+  needed for every row before the cap can pick, and capping earlier would
+  change which rows survive, which is a determinism change with no measured
+  benefit. The persisted field is correctly bounded either way; this is per-act
+  work whose result is discarded on the busiest windows and nothing more.
+- **A rule cannot fire on the AUTHOR path.** `charter_author.authored`
+  advances no time and deposits no frame, so an authored act's consequences
+  wait for the next `step`. Consistent with §1.99a's finding that an authored
+  mark is never appraised, and open for the same reason: `authored`
+  deliberately does not advance the world.
+
 
 ## 2. Roadmap
 
