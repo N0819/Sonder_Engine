@@ -25,10 +25,16 @@ every threshold in `charter_social` was set from one of these numbers:
     year was 0.142 against a form threshold of 0.30 and this layer could
     only ever have delivered `familiar`.
 
-Cost, measured on `.venv` with the tie pass swapped for a no-op: a simulated
-healthy year costs 17.59s without it and 17.69s with it; a famine quarter
-15.31s and 15.52s. The holder gate is why — a body holding neither a judgment
-nor a tie is skipped before its co-presence is walked.
+Cost, measured on `.venv` with the tie pass swapped for a no-op and the two
+arms strictly INTERLEAVED so machine drift cannot land on one of them: a
+simulated healthy year costs 17.49s and 16.82s without the pass against
+17.40s and 16.87s with it — inside the run-to-run spread, and one tie arm came
+out FASTER, which is what noise looks like. A famine quarter costs 24.05s and
+23.38s against 24.47s and 25.69s, about 3%, and that is the whole of the
+pass's cost: it is paid only where 40 bodies actually hold stances. The holder
+gate is why — a body holding neither a judgment nor a tie is skipped before
+its co-presence is walked, so a healthy institution pays O(bodies) per window
+and not O(pairs).
 """
 
 from __future__ import annotations
@@ -248,6 +254,26 @@ class TestTheNumbersAreTheAuthority:
         assert ties == {}
         assert familiarity(strangers["served_beside"], "ada", "bo") \
             < CLOSE_FAMILIARITY
+
+    def test_a_planted_bond_between_strangers_does_not_survive_a_save(self):
+        """The other half of `CLOSE_FAMILIARITY`, and the half that makes it
+        structural: `normalize_ties` re-checks the formation gate, so a
+        `close` hand-planted on a pair who never shared a room is gone on the
+        next load even though the axes read 0.9 warmth. It can only ever
+        delete a row this package could not have written -- `served_beside`
+        only rises, so a legitimately formed `close` cannot fall back through
+        the gate -- which is why the re-check is safe to run on every
+        persistence boundary rather than only where rows are written."""
+        planted = _crew(
+            judgments={"ada": {"bo": _stance(warmth=0.9)}}, shared=1,
+            ties={"ada": {"bo": {"tie": "close", "since_hours": 0.0}}})
+
+        assert planted["ties"] == {}
+        # And the same axes with the room-time behind them keep it.
+        earned = _crew(
+            judgments={"ada": {"bo": _stance(warmth=0.9)}}, shared=100,
+            ties={"ada": {"bo": {"tie": "close", "since_hours": 0.0}}})
+        assert earned["ties"]["ada"]["bo"]["tie"] == "close"
 
     def test_ties_are_capped_per_holder_however_long_the_run(self):
         """The same cap and the same argument as `JUDGMENT_CAP`: a head that

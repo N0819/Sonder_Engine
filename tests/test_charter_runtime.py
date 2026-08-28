@@ -320,18 +320,30 @@ def test_the_presence_aperture_excludes_the_register(temp_db):
     assert whole and own
     assert "roster" not in own[0]["presence"]
     assert "minds" not in own[0]["presence"]
-    # THIS ALLOWLIST IS ASSERTED UNCHANGED, and that is the check rather than
-    # a formality. The discrete tie (`RESEARCH.md` §1.7.6 item 3) rides INSIDE
+    # THIS ALLOWLIST IS ASSERTED, and that is the check rather than a
+    # formality. The discrete tie (`RESEARCH.md` §1.7.6 item 3) rides INSIDE
     # `knows_here`, beside the `regard` number it summarizes, so it widened no
     # key here -- a new field that had needed this set to grow would have been
     # a field placed outside the per-other slice it belongs in.
+    #
+    # `marks` (§1.7.6 item 4) DID widen it, and had to: a temporary status is
+    # a fact about this body rather than about this body's view of another, so
+    # there is no per-other slice for it to ride in. What keeps it honest is
+    # scope: `charter_mark.mark_view` filters by `BODY_MARKS`, so the
+    # institution's own `disgraced` -- attributed off the watch the charter
+    # BELIEVED it had arranged, and reaching the blamed through no channel --
+    # cannot appear on this surface however the caller asks.
     assert set(own[0]["presence"]) <= {
         "competence", "able", "condition", "strain", "standing_post",
         "temperament",
             "watches_stood", "can_bring_up", "knows_here", "strangers_here",
             "blamed", "knows_it_is_blamed", "social_judgments",
-            "commitments", "institutional",
+            "commitments", "institutional", "marks",
         }
+    for presence in (row["presence"] for row in own):
+        for row in presence.get("marks") or ():
+            assert row["mark"] != "disgraced"
+            assert set(row) <= {"mark", "by", "hours_ago"}
     # And nothing in the slice says how anybody holds THIS body back.
     for presence in (row["presence"] for row in own):
         for entry in (presence.get("knows_here") or {}).values():

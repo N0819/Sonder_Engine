@@ -198,21 +198,43 @@ class TestAnActBetweenTwoPeopleIsHeardByTheRoom:
         # follows is what the PEOPLE do with that, which until now was
         # nothing: `quarrel` had no opener but its own affordance.
         charter["politics"] = {"blame": {"raul": 2}}
+        # AND SOMEBODY SAW THE THING FAIL. The register is the institution's
+        # own book and no body in the yard can perceive it, so since
+        # 2026-08-27 it opens nothing on its own: `_afford_accuse` and the
+        # opener both require the actor's OWN claim
+        # (`charter_practice.grievance_against`). This is the claim a body
+        # standing in the yard would have been handed by `witness`.
+        witness(charter["minds"], charter["bodies"],
+                [{"kind": "upkeep_out_of_band", "place": "yard",
+                  "upkeep": "granary", "at_hours": 0.0}], 0.0)
         return charter
 
     def test_a_blame_that_has_landed_opens_a_quarrel(self):
         """`opportunities`' docstring has always named "a blame that has
         landed" as one of the three circumstances that open a situation, and
         it opened none. Measured: zero `accuse` acts in a simulated quarter of
-        `twin_towns(40)` on screen and off, in health and in famine."""
+        `twin_towns(40)` on screen and off, in health and in famine.
+
+        AND THE REGISTER ALONE STILL OPENS NOTHING. The books say which of its
+        own situations the institution has cause to open; they may not pair
+        two people who have no reason of their own, because a quarrel is not
+        inert -- it takes one of four `PRACTICE_CAP` slots and offers
+        `reconcile` inside a quarrel that was never had.
+        """
         bodies = {key: {"key": key, "place": "yard", "available": True}
                   for key in ("ilse", "raul")}
+        saw = {"ilse": {}}
+        witness(saw, bodies, [{"kind": "upkeep_out_of_band", "place": "yard",
+                               "upkeep": "granary", "at_hours": 0.0}], 0.0)
 
-        without = opportunities(bodies, {}, {}, (), {}, 8.0)
-        withal = opportunities(bodies, {}, {}, (), {}, 8.0,
+        without = opportunities(bodies, saw, {}, (), {}, 8.0)
+        ledger_only = opportunities(bodies, {}, {}, (), {}, 8.0,
+                                    blame={"raul": 2})
+        withal = opportunities(bodies, saw, {}, (), {}, 8.0,
                                blame={"raul": 2})
 
         assert not [k for k in without if k.startswith("quarrel:")]
+        assert not [k for k in ledger_only if k.startswith("quarrel:")]
         assert [k for k in withal if k.startswith("quarrel:")] == [
             "quarrel:ilse:raul:raul"]
 

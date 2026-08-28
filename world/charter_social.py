@@ -113,13 +113,28 @@ FAMILIAR_FLOOR = 24
 #: `DEFAULT_SIGNALS`' per-event magnitudes (0.02-0.18) this says "about five
 #: ordinary acts in one direction, or two grave ones".
 #:
-#: IT IS A PREDICTION AND NOT YET A MEASUREMENT, and should be re-set the day
-#: the distribution is worth reading: before `RESEARCH.md` §1.7.6 item 2 landed
-#: there was no distribution at all -- a stressed simulated year of
+#: MEASURED 2026-08-27, and the distribution is thin enough to be the headline
+#: fact about this layer rather than a footnote. Before `RESEARCH.md` §1.7.6
+#: item 2 there was no distribution at all -- a stressed simulated year of
 #: `twin_towns(40)` produced 8 events, 4 judgment holders and a largest axis
-#: anywhere in the institution of 0.142. With item 2's producers in, the same
-#: fixture driven into famine for a quarter reaches 40 holders and 149 stances
-#: with 18 axes pinned at 1.000, so the threshold now has something to bite on.
+#: anywhere in the institution of 0.142. On the finished tree, the same
+#: fixture driven into famine for a simulated QUARTER on screen (window 4.0,
+#: seed 7) holds 34 judgment holders and 104 stances, and the 520 axes across
+#: them read: median 0.0, p90 0.074, maximum 0.3553, with exactly TWO at or
+#: above this threshold. So 0.30 sits around the 99.6th percentile of the
+#: axes an institution in famine actually produces, and the two signed ties it
+#: forms are the only ones any arm of §1.7.6 has produced without a
+#: hand-planted store. Both arrived with the accusation channel (§1.97): the
+#: same fixture with the old register gate produced a largest axis of 0.2062
+#: and ZERO ties.
+#:
+#: NOT LOWERED ON THAT EVIDENCE. A threshold at the 99.6th percentile of a
+#: FAMINE is a threshold that says a signed label is rare, which is what the
+#: word is for; the number to move first is the one feeding it, and that is
+#: §1.98's remaining half -- a healthy institution emits no ordinary evidence
+#: at all, so its axes are still zero and the healthy-year tie test is written
+#: to fail the day that lands. Re-measure this then, against a distribution
+#: that has health in it.
 TIE_FORM = 0.30
 
 #: How much of the forming quantity a label needs to KEEP existing, as a
@@ -129,12 +144,19 @@ TIE_FORM = 0.30
 #: legible half of this design less legible than the numbers it summarizes.
 TIE_HOLD = 0.6
 
-#: Familiarity a pair must already have before `close` may form. FORMATION
-#: ONLY -- `normalize_ties` never applies it, for the same reason forming is
-#: harder than holding everywhere else here. You cannot be close to somebody
-#: you have barely been near, however well the axes read; a stranger who does
-#: you one enormous favour is somebody you trust, which is what the axes will
-#: say on their own.
+#: Familiarity a pair must already have before `close` may form. You cannot be
+#: close to somebody you have barely been near, however well the axes read; a
+#: stranger who does you one enormous favour is somebody you TRUST, which is
+#: what the axes will say on their own.
+#:
+#: A FORMATION GATE THAT `normalize_ties` RE-CHECKS ANYWAY, which is not the
+#: "forming is harder than holding" exception it looks like. `served_beside`
+#: only ever rises, so a `close` that passed this gate when it formed can
+#: never fall back through it -- the re-check is therefore incapable of
+#: deleting a row this package produced, and the only rows it can delete are
+#: rows that could never have formed: a hand-edited registry, an archive
+#: carrying another shape's store. `derive_tie` skips it on the HOLD path for
+#: the same reason, where it would be arithmetic that cannot change an answer.
 CLOSE_FAMILIARITY = 0.25
 
 #: How long a freshly adopted label is left alone before another may replace

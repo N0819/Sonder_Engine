@@ -29,6 +29,7 @@ The statistics worth watching, and why each one earned its place:
 from __future__ import annotations
 
 from .charter_feel import normalize_feel, overloaded_bodies
+from .charter_mark import mark_view
 from .charter_mind import acquaintance, contested, divergence
 from .charter_needs import mood, pressure
 from .charter_news import known_news
@@ -177,6 +178,14 @@ def life_of(body_key, charter, events, trace=(), hours_per_day=24.0):
         "contested": len(views) > 1,
         "register": (charter.get("roster") or {}).get(key),
         "blamed": int((politics.get("blame") or {}).get(key, 0)),
+        # EVERY mark, `disgraced` included, and this is the one surface where
+        # that is right. `disgraced` is a register fact the body has no channel
+        # to -- but this function is reached only through
+        # `charter_runtime.charter_diagnostics`, nothing reads it, no mind
+        # receives it, and a run behaves identically whether it is collected or
+        # not (see the docstring). An institution explaining itself to its
+        # author is exactly where a disgrace should be legible.
+        "marks": dict((charter.get("marks") or {}).get(key) or {}),
         "pressure": pressure(needs),
         # Windows actually stood, per post -- the shape of this body's
         # working life, and the evidence a promotion deliberates a project
@@ -238,6 +247,7 @@ def scene_ledger(charter, place, events=(), hours_per_day=24.0):
     Three things somebody could plausibly raise beats forty they could not.
     """
     place = str(place)
+    at_hours = float(charter.get("clock_hours") or 0.0)
     bodies = charter.get("bodies") or {}
     minds = charter.get("minds") or {}
     politics = charter.get("politics") or {}
@@ -253,6 +263,7 @@ def scene_ledger(charter, place, events=(), hours_per_day=24.0):
     commitments = charter.get("commitments") or {}
     decisions = charter.get("decisions") or {}
     ties = charter.get("ties") or {}
+    marks = charter.get("marks") or {}
     served_beside = charter.get("served_beside") or {}
     economy = normalize_economy(charter.get("economy"))
 
@@ -355,6 +366,15 @@ def scene_ledger(charter, place, events=(), hours_per_day=24.0):
                 company - set(minds.get(key) or {}) - {key}),
             "blamed": int(blame.get(key, 0)),
             "knows_it_is_blamed": sorted(heard_blame.get(key, ())),
+            # WHAT THIS BODY TEMPORARILY IS (`RESEARCH.md` §1.7.6 item 4), and
+            # a label is what a narrator can state plainly -- CiF's own reason
+            # for keeping discrete facts beside numeric ones. BODY SCOPE ONLY:
+            # `mark_view` filters by `charter_mark.BODY_MARKS`, so the
+            # register's `disgraced` cannot appear here by construction rather
+            # than because this call site remembered to drop it. Sparse, like
+            # `can_bring_up`: a body with nothing temporarily true of it gets
+            # an empty list.
+            "marks": mark_view(marks, key, at_hours),
             # Independent, evidence-citing stances toward current company;
             # and only commitments this body is party to or has learned.
             "social_judgments": judgment_view(
@@ -384,7 +404,7 @@ def scene_ledger(charter, place, events=(), hours_per_day=24.0):
 
     return {
         "place": place,
-        "at_hours": float(charter.get("clock_hours") or 0.0),
+        "at_hours": at_hours,
         # What the place OBJECTIVELY is. For the Director to stage from, and
         # deliberately outside every presence's slice: a body knows the mill
         # is cold because it is standing in it, not because it read a level.

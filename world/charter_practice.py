@@ -70,6 +70,14 @@ surface here, and three invariants hold it:
     `PAIR_TAIL` pass per holder per window, memoised in the throwaway state
     dict. A per-call scan of a body's whole life would be quadratic against
     an `EXPERIENCE_CAP` of 4,000.
+  * **A body accuses from what IT perceived, never from the institution's
+    books.** `grievance_against` is the only gate on `_afford_accuse` and on
+    the `opportunities` quarrel opener, and no affordance reads
+    `state["blame"]` any more. See `GRIEVANCE_KINDS` for why: the register
+    read was dead code until `quarrel` got two live openers on 2026-08-27,
+    and on that day it became the default path for who an ordinary body
+    rounds on — with the utility sized on the counter's magnitude and handed
+    to a scene-manager model through `charter_runtime.presence_view`.
   * **The memo assumes the four stores do not move under it.** True today:
     `enact` writes `minds`, `needs` and `regard` only, and `charter_run`
     writes experiences and tallies after `enact` returns. An affordance that
@@ -148,6 +156,51 @@ FAMILIAR_SATURATION = 250.0
 #: would make competence read as warmth.
 AFFECT_AXES = (("trust", 1.0), ("warmth", 1.0),
                ("fear", -1.0), ("suspicion", -1.0))
+
+#: Which field of a claim names the party it holds ANSWERABLE, per kind.
+#:
+#: THE ACCUSER'S CHANNEL, and it exists because there was none. `_afford_accuse`
+#: decided entirely from `state["blame"][other]` -- the institution's private
+#: register -- with no test that the actor had heard of the failure at all,
+#: and sized its utility on the counter's magnitude, so a body's conduct (and
+#: the utility number `charter_runtime.presence_view` hands a scene-manager
+#: model) was produced by a fact that had reached it through no channel. That
+#: read was DEAD CODE until 2026-08-27 -- `quarrel` had no opener but
+#: `_afford_accuse`'s own effect, measured at zero `accuse` acts on screen and
+#: off, in health and in famine -- and the same day's work gave it two live
+#: openers. A leak nobody could reach is a residual; a leak on the default
+#: path is a defect.
+#:
+#: Keyed by kind because WHICH field names the answerable party is a property
+#: of the kind and not of any story: on `harm_done` and the commitment
+#: failures the claim's `actor` did the thing, and on an `accusation` the
+#: actor is the person SPEAKING and the answerable party is who they spoke
+#: about. Every one of these is the actor's own claim in its own head,
+#: firsthand or heard; hearsay counts, because inference is the product.
+GRIEVANCE_KINDS = {
+    "harm_done": "actor",
+    "accusation": "toward",
+    "report_refuted": "actor",
+    "commitment_defaulted": "actor",
+    "commitment_repudiated": "actor",
+    "commitment_disputed": "actor",
+    "institution_order_failed": "actor",
+}
+
+#: Claims that name a PLACE as having failed rather than a person.
+#:
+#: The seed, and without it the vocabulary above has no producer: the only
+#: event a stressed institution actually emits is `upkeep_out_of_band`
+#: (measured on a famine quarter of `twin_towns(40)`, on screen: 4
+#: `upkeep_out_of_band` and nothing else that names anybody). What a body
+#: standing in a failed place holds is its own claim that THIS PLACE has
+#: failed, and the answerable party it can round on is whoever is standing in
+#: it with them -- which is the shape of an ordinary accusation and is not the
+#: register's answer. Where the two differ, the institution blaming a body
+#: that was nowhere near (`charter_politics.attribute_blame`'s own docstring)
+#: is now VISIBLE as the divergence it always was, rather than being laundered
+#: into the accuser's mouth.
+PLACE_FAILURE_KINDS = frozenset({"upkeep_out_of_band", "stock_empty"})
 
 
 def _roll(*parts):
@@ -327,6 +380,60 @@ def _between(state, actor, other):
             "debt": float(open_between[0]), "owed": float(open_between[1])}
 
 
+def _grievances(state, holder):
+    """One pass over a holder's OWN claims, indexed by who they implicate.
+
+    ``{"named": {body: count}, "places": {place: count}}``. Memoised in the
+    throwaway `state` dict for the same reason `_pair_rows` is: a head is
+    visited once per window rather than once per offer, four practices deep.
+
+    THE HOLDER'S OWN, END TO END. `minds[holder]` is what this head was told
+    or saw; no other head's claims, no register, no event log. A claim that
+    has faded below `charter_mind.PERSONAL_FLOOR` is already gone from the
+    store (`charter_news.decay_news` deletes rather than floors), so a
+    grievance lapses on its own -- which is the difference between this and
+    `politics.blame`, a MONOTONE counter that would still be a reason to round
+    on somebody a decade later.
+    """
+    held = state["grievances"].get(holder)
+    if held is not None:
+        return held
+    held = {"named": {}, "places": {}}
+    for claim in (state["minds"].get(holder) or {}).values():
+        if not isinstance(claim, dict) or claim.get("kind") != "news":
+            continue
+        kind = str(claim.get("event_kind") or "")
+        field = GRIEVANCE_KINDS.get(kind)
+        if field:
+            named = str(claim.get(field) or "")
+            if named and named != holder:
+                held["named"][named] = held["named"].get(named, 0) + 1
+        elif kind in PLACE_FAILURE_KINDS:
+            place = str(claim.get("place") or "")
+            if place:
+                held["places"][place] = held["places"].get(place, 0) + 1
+    state["grievances"][holder] = held
+    return held
+
+
+def grievance_against(state, actor, other):
+    """How many of the ACTOR'S OWN claims give it a reason to round on
+    ``other``, here. Zero means it has no channel and may not accuse.
+
+    Two shapes, both the actor's: a claim that names ``other`` as the party at
+    fault, and a claim that this place has failed while ``other`` stands in it
+    with them. Co-presence is the whole of the second test, exactly as it is
+    for `charter_news.witness` -- a body elsewhere saw nothing and is owed
+    nothing.
+    """
+    index = _grievances(state, actor)
+    count = int(index["named"].get(other, 0))
+    place = _whereabouts(actor, state)
+    if place and place == _whereabouts(other, state):
+        count += int(index["places"].get(place, 0))
+    return count
+
+
 def _afford_greet(actor, other, practice, state):
     if (state["minds"].get(actor) or {}).get(other):
         return None
@@ -497,16 +604,35 @@ def _afford_tend(actor, other, practice, state):
 def _afford_accuse(actor, other, practice, state):
     """Say aloud that you hold somebody responsible.
 
-    Blame already exists as an institutional fact; until now it reached
-    nobody. This is its channel: the accused LEARNS they are blamed, which is
-    the gap Fable's report left open. A figure can only be accused if the
-    institution's ledger blames it, and `attribute_blame` follows the watch a
-    figure never stands -- the gate, not a special case, is what keeps
-    accusation pointed at the rostered.
+    THE ACCUSER DECIDES FROM ITS OWN HEAD. Until 2026-08-27 this gated on
+    `state["blame"][other]` and sized its utility on that counter, so who an
+    ordinary body rounded on -- and how hard -- was produced by the
+    institution's PRIVATE register, a fact that reached the accuser through no
+    channel and that `charter_news.WITNESSABLE`'s own allowlist comment names
+    as the leak class ("`post_unfilled` is a conclusion the institution
+    reached in its own books, and a body in the room has no way to perceive
+    it"). See `GRIEVANCE_KINDS`: the gate is now the actor's own claims, and
+    the register is not read here at all.
+
+    The accused still LEARNS they are blamed -- that was the gap Fable's
+    report left open, and `heard_blame` still closes it. What changed is that
+    the accusation now follows somebody's perception rather than the books, so
+    the institution blaming a body that was nowhere near the place shows up as
+    a divergence between who is disgraced and who gets rounded on instead of
+    being laundered into an accuser's mouth.
     """
     if not _within_speech(actor, other, state):
         return None
-    if int(state["blame"].get(other, 0)) <= 0:
+    # POINTED AT THE ROSTERED, which the register gate used to do as a side
+    # effect (a figure is never in `politics.blame`) and which now has to be
+    # said. A figure has no `heard_blame` entry, no mark and no place in
+    # `normalize_marks`' body filter, so an accusation aimed at one is a
+    # half-written record; the author switch is where a body rounds on the
+    # player. Subtraction, and it keeps the old scope exactly.
+    if other not in state["bodies"]:
+        return None
+    grievance = grievance_against(state, actor, other)
+    if grievance <= 0:
         return None
     pair = regard_key(actor, other)
     if regard_value(state["regard"], actor, other) < 0.45:
@@ -537,7 +663,12 @@ def _afford_accuse(actor, other, practice, state):
     # `quarrel` had no opener until the same day: the affordance was dead code
     # from the moment the history term was added to it.
     history = _between(state, actor, other)
-    return 0.55 + min(0.3, 0.1 * int(state["blame"].get(other, 0))) \
+    # SIZED ON THE ACTOR'S OWN COUNT, not the register's. The swing is the
+    # same 0.3 it was, so nothing about the affordance's rank against `ask`
+    # or `tend` moved; what moved is that the number now says "how much I
+    # have against you" rather than "how many times the books have blamed
+    # you", which was a monotone read of a counter this body cannot see.
+    return 0.55 + min(0.3, 0.1 * grievance) \
         - HISTORY_WEIGHT * history["familiar"] \
         * max(0.0, history["affect"]), effect
 
@@ -602,6 +733,15 @@ def _state_of(bodies, minds, needs, regard, blame, at_hours, figures=None,
     that a caller which forgets them gets the old behaviour rather than a
     wrong answer. Nothing here is persisted: the dict is created per call,
     mutated by effects, and dropped.
+
+    `blame` IS CARRIED AND NO AFFORDANCE READS IT, as of 2026-08-27. It is the
+    institution's private register -- the leak class
+    `charter_news.WITNESSABLE`'s allowlist comment names -- and the one
+    affordance that read it (`_afford_accuse`) now decides from the actor's own
+    claims instead. It stays in the signature because it is positional in
+    `offers`/`enact` and dropping it would move every call site; it stays in
+    the dict so this note has somewhere to live. Reading it again from an
+    affordance is a firewall decision and needs its own argument.
     """
     return {
         "bodies": bodies, "figures": figures or {}, "minds": minds,
@@ -610,6 +750,7 @@ def _state_of(bodies, minds, needs, regard, blame, at_hours, figures=None,
         "experiences": experiences or {}, "judgments": judgments or {},
         "served_beside": served_beside or {},
         "between": _open_between(commitments), "pairs": {},
+        "grievances": {},
     }
 
 
@@ -721,7 +862,8 @@ def opportunities(bodies, minds, needs, events, practices, at_hours, seed=0,
 
     ``blame`` is the institution's own ledger, keyword-only and defaulting to
     none so every existing caller keeps its behaviour. It opens `quarrel` and
-    nothing else; what any body then SAYS about it still goes through
+    nothing else, and only between a pair where the ACTOR holds its own reason
+    (`grievance_against`); what any body then SAYS about it still goes through
     `_afford_accuse`'s own gates.
     """
     opened = {}
@@ -732,6 +874,20 @@ def opportunities(bodies, minds, needs, events, practices, at_hours, seed=0,
 
     rooms = co_present(bodies)
     figures = figures or {}
+    # Built lazily and ONCE for the whole call, so the grievance index over a
+    # head is walked once per window rather than once per room -- the same
+    # memo `_pair_rows` carries and for the same reason. `needs`/`regard`/
+    # `blame` are deliberately empty: `grievance_against` reads `minds` and
+    # `bodies` and nothing else, and handing it stores it does not use is how
+    # a reader later assumes it does.
+    reasons = {"state": None}
+
+    def _has_reason(actor, subject):
+        if reasons["state"] is None:
+            reasons["state"] = _state_of(bodies, minds, {}, {}, {}, at_hours,
+                                         figures=figures)
+        return grievance_against(reasons["state"], actor, subject) > 0
+
     for place, present in sorted(rooms.items()):
         able_here = [k for k in present if bodies[k].get("available")]
         for index, actor in enumerate(able_here):
@@ -784,17 +940,27 @@ def opportunities(bodies, minds, needs, events, practices, at_hours, seed=0,
         # attributed blame to somebody.
         #
         # Opening it is not accusing: `_afford_accuse` still requires speech
-        # range, a live blame count and regard at or above 0.45, and each
+        # range, its own grievance and regard at or above 0.45, and each
         # accusation costs 0.1 of that regard, so a pair is self-limiting at
         # roughly two. Capped at the two most able bodies to hand, the same
         # bound `tending` uses, because forty people do not all round on the
         # same person at once and pairing a room is quadratic.
+        #
+        # AND THE ACTOR MUST HOLD ITS OWN REASON. The register says which of
+        # its own situations the institution has cause to open; it may not
+        # pair two people who have none. Without this test a quarrel opened
+        # off the books alone, and a quarrel is not inert: it occupies one of
+        # four `PRACTICE_CAP` slots, and `_afford_reconcile` would offer
+        # "made peace with" inside a quarrel that had never been had -- which
+        # is conduct caused by a fact neither body could perceive.
         if blame and _permits("quarrel"):
             for subject in sorted(present):
                 if int((blame or {}).get(subject, 0) or 0) <= 0:
                     continue
                 for actor in able_here[:2]:
                     if actor == subject:
+                        continue
+                    if not _has_reason(actor, subject):
                         continue
                     key, entry = _open("quarrel", place,
                                        {"a": actor, "b": subject},

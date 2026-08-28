@@ -389,17 +389,52 @@ carry Cassandra's gossip because his friendship with Naomi outweighs her
 influence — legible, cited, and false in this engine, where the same character
 would decide from need levels and a scalar regard.
 
-**Taken, as design; ordered by depth bought.** None of these are built.
+**Taken, as design; ordered by depth bought.** All five landed 2026-08-27.
 
-1. **Volition reads history.** Widen `_state_of` to carry the pair's shared
-   record and let affordances weight on it. This is the change that turns
-   "acted because the state permitted it" into "acted because of what
-   happened", and everything else here is smaller.
-2. **Ordinary evidence, not only failure.** The five-axis network exists and
-   measures EMPTY across four charters of a real story, because judgments form
-   only from witnessed events and every event the sim can emit is an
-   institutional failure. CiF's networks move on ordinary exchanges. Same
-   finding as `charter_run`'s amended docstring, with a name.
+1. **Volition reads history.** *(BUILT 2026-08-27.)* `_state_of` now carries
+   four keyword-only holder-owned stores — `experiences`, `served_beside`,
+   `judgments`, `commitments` — and `_between(state, actor, other)` derives a
+   per-pair digest (`familiar`, `affect`, `debt`, `owed`) that all six
+   affordances weight utility on, capped by one constant, `HISTORY_WEIGHT`
+   (0.15). Availability is untouched: only preference moved, so a body may do
+   nothing today it could not do before. EVERY FIELD IS THE DECIDING BODY'S
+   OWN — its own diary rows, its own co-presence tally, its own five-axis
+   stance, and a commitment only where it is a party — which is what
+   `test_a_body_never_reads_the_other_heads_record` pins byte-identically.
+   Nothing is persisted: the digest is derived per window and discarded.
+   Measured on `big_ship(crew=40)`, 480 simulated hours onscreen, against the
+   byte-identical run with the four stores withheld: 86 distinct
+   `(actor, act, other)` triples moved, and the mean `served_beside` count of
+   the body a question was taken to rose 63.8 → 71.3. The population did not
+   act MORE; it acted toward the people it had a life with. See
+   `docs/UNBUILT.md` §1.97 for the `stale` term that was measured and dropped.
+2. **Ordinary evidence, not only failure.** *(BUILT 2026-08-27, and the gap it
+   names is only half closed.)* The five-axis network measured EMPTY across
+   four charters of a real story and across a healthy simulated YEAR of
+   `twin_towns(40)`, because judgments formed only from witnessed events and
+   every event kind the sim emitted was an institutional failure. Three
+   producers that had shipped as three-quarters of a feature now exist:
+   `charter_news.check_reports` mints `report_confirmed`/`report_refuted` in
+   the head of a body standing where a second-hand rumour named, privately and
+   with no event; `charter_run._social_events` generalises the aid block so
+   `tend`/`accuse`/`reconcile` emit `aid_given`/`accusation`/`apology`; and
+   `news_claim` carries `toward`, which is why the existing `aid_given` had a
+   `subject` no witness ever received. Measured on a famine quarter of
+   `twin_towns(40)` off screen: 6 judgment holders / 29 stances before, 40 /
+   149 after.
+   **WHAT REMAINS OPEN, in the present tense, is the property rather than the
+   wiring.** All four producers are still downstream of a failure — `aid_given`
+   needs a body under its floor, `accusation`/`apology` need the blame register
+   to have moved, `check_reports` needs a rumour about an upkeep that fell out
+   of band — so a HEALTHY simulated year still emits 0 events and forms 0
+   judgment holders, exactly as before. `harm_done` still has no producer
+   anywhere. Three of the five designs are therefore wired and inert in a
+   well-run institution: design 1's `affect` term is fed by
+   `encounter`/`acquaintance` rows alone, and design 3 forms zero signed ties
+   and pins that with a test written to fail the day this lands. The two honest
+   routes — an ordinary-exchange signal of the `post_filled_again` shape, or
+   moving familiarity into judgments — are in `docs/UNBUILT.md` §1.98 with the
+   argument against the second.
 3. **Discrete relationships beside the numeric axes.** *(BUILT 2026-08-27.)*
    CiF keeps both on purpose: numbers drive scoring, labels drive legibility,
    and a label is what a narrator can state plainly and a reader can hold.
@@ -415,13 +450,50 @@ would decide from need levels and a scalar regard.
    stressed simulated year of `twin_towns(40)` was 0.142 against a form
    threshold of 0.30. See `docs/UNBUILT.md` §1.99 for what a HEALTHY
    institution still produces, which is `familiar` and nothing else.
-4. **Status as temporary traits.** Charter has needs and felt state and
-   nothing socially temporary — newly raised, in disgrace, owed a favour.
-   These are what make a beat read as motivated rather than merely caused.
-5. **Trigger rules.** *"Trigger Rules can be fired at any point and have
-   cascading effects in the Social State."* Charter has none: an act changes
-   state and nothing fires off the change, which is why the social layer needs
-   prodding to stay in motion.
+4. **Status as temporary traits.** *(BUILT 2026-08-27.)* Charter had needs,
+   permanent dispositions and a service tally and nothing socially temporary
+   — newly raised, in disgrace, owed a favour. These are what make a beat
+   read as motivated rather than merely caused. `world/charter_mark.py` is
+   four marks over one new charter key: `posted`, `aided`, `accused`,
+   `disgraced`, each with a lifetime and each pruned at expiry, so the store
+   is bounded by bodies × 4 and a healthy simulated year ends holding
+   nothing. THE SCOPE SPLIT IS THE POINT and it is an allowlist: the three a
+   body was PRESENT for reach its own appraisal and its own presence slice,
+   while `disgraced` — attributed off the watch the charter merely BELIEVED
+   it had arranged — reaches the institution's planner and the author's
+   diagnostic and no mind at all. CiF's status is symmetric and public;
+   this one is not, because two people do not share a head. See
+   `docs/UNBUILT.md` §1.99a for what it left open. (`accused` had no offscreen
+   producer when this landed; design 5 gave it one.)
+5. **Trigger rules.** *(BUILT 2026-08-27.)* *"Trigger Rules can be fired at
+   any point and have cascading effects in the Social State."* Charter had
+   none: an act changed state and nothing fired off the change, so the social
+   layer only moved when the planner or an author prodded it.
+   `world/charter_trigger.py` is authored rules that read one objective
+   CHANGE and produce one objective consequence — open a situation, set a
+   mark, emit a witnessable event. THE PASS READS A CHANGE AND NEVER A STATE:
+   a window deposits a capped `pending_changes` frame and the next one fires
+   on it, so a quiet window costs one falsy test and a healthy simulated year
+   of `big_town(40)` fires nothing at all. Four independent bounds terminate
+   the cascade — a depth carried on each change, fire-once identity, a
+   per-pair refractory, a per-window yield cap — and each is a test rather
+   than a comment. It ships ONE default rule, because the other four designs
+   already gave every state change in the package a direct producer and a
+   second writer of the same fact can only disagree with the first:
+   `blame_opens_a_quarrel` closes the last measured dead edge, where a blame
+   landing OFF SCREEN reached nobody (`quarrel` is not in `COARSE_PRACTICES`,
+   so a famine month of `twin_towns(240)` recorded 48 bodies ever `posted`, 2
+   ever `disgraced` and ZERO ever `accused`). `TRIGGER_EMITTABLE` is a
+   TIGHTER allowlist than `charter_news.WITNESSABLE` on purpose: a rule may
+   mint only kinds whose truth condition is "this visibly happened between
+   these people here", never an institutional conclusion two witnesses would
+   agree on. `perceivable_change` is the SAME allowlist applied to the `on`
+   side, which shipped open: a rule could mint an event or set a body-scoped
+   mark from `blame_landed` or from a register-only event kind, putting a fact
+   nobody perceived into every head in the room at first-hand strength. There
+   is no `set_judgment` op and there may never be — a rule that wants to move
+   an opinion emits an event and the opinion forms next window from evidence
+   its holder can cite.
 
 **Refused, with the reason.** CiF's rulebase is hand-authored at scale — *"over
 5,000"* social considerations, *"over 40"* exchanges, 20+ templated dialogue

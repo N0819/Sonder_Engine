@@ -18,6 +18,8 @@ explicit test rather than an intention.
 
 from __future__ import annotations
 
+import time
+
 from mind.memory import MEMORY_KINDS, MEMORY_PROVENANCE
 
 from world.charter import (
@@ -318,3 +320,36 @@ class TestAcquaintanceIsAnEdge:
             "the guard read a bond out of hana's head"
         assert edge["tie_since_hours"] == 0.0
         assert "mutual" not in edge and "held_by" not in edge
+
+
+def test_a_promoted_body_carries_no_charter_marks(temp_db):
+    """A promoted body's cognition belongs to the registered character, and a
+    temporary institutional status is cognition -- it scores what Charter
+    would do with a person Charter no longer owns. Beside the minds/needs/feel
+    purge and for the same reason.
+
+    Marks are also deliberately absent from `promotion_handoff`: the character
+    tier has no reader for a Charter-window scoring bias, and a field nothing
+    reads is the dead weight this design exists to avoid.
+    """
+    from world.charter_runtime import (
+        bind_promoted_character, registry_for, save_registry)
+
+    cid = temp_db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+                     ("Charter marks", "", time.time()))
+    charter = _guard_charter()
+    charter["marks"] = {
+        "guard": {"posted": {"since": 4.0},
+                  "accused": {"since": 8.0, "by": "hana"}},
+        "hana": {"posted": {"since": 4.0}}}
+    save_registry(cid, {"gatehouse": charter})
+
+    bound = bind_promoted_character(
+        cid, {"charter": "gatehouse", "body": "guard"}, char_id=1,
+        name="The Guard")
+
+    after = registry_for(cid)["items"]["gatehouse"]["state"]
+    assert bound is True
+    assert "guard" not in (after.get("marks") or {})
+    assert "hana" in after["marks"], "the institution keeps its other people"
+    assert "marks" not in promotion_handoff("hana", charter)

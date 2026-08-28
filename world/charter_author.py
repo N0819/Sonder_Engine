@@ -42,6 +42,7 @@ becomes a ``world_events`` row; nothing here writes storage.
 from __future__ import annotations
 
 from .charter_figure import figure_claim
+from .charter_mark import advance_marks
 from .charter_mind import hear_claim
 from .charter_model import normalize_charter
 from .charter_politics import normalize_politics, regard_map, regard_value
@@ -124,6 +125,11 @@ def authored(charter, actor, act, other, claim=None, retention=None):
     practices = normalize_practices(charter.get("practices"))
     heard_blame = {k: set(v) for k, v in
                    (charter.get("heard_blame") or {}).items()}
+    # Snapshotted BEFORE `_figure_act`, which writes into `heard_blame`
+    # directly rather than through `state`. The `accused` onset below is the
+    # delta on the merged set for exactly that reason: a figure's accusation
+    # and a body's arrive by two different doors and both are the same fact.
+    heard_before = {k: set(v) for k, v in heard_blame.items()}
 
     state = _state_of(bodies, minds, needs, regard, blame, at,
                       figures=figures,
@@ -151,6 +157,41 @@ def authored(charter, actor, act, other, claim=None, retention=None):
         practices.pop(key, None)
     for subject, tellers in state["heard_blame"].items():
         heard_blame.setdefault(subject, set()).update(tellers)
+
+    # THE SAME MARKS THE ENACT PATH MINTS (`RESEARCH.md` §1.7.6 item 4), from
+    # the same two origins, because an authored act and a chosen one leave the
+    # same record -- that is this module's whole contract. Without it the
+    # accusation a FIGURE makes would set `heard_blame` and no mark, and the
+    # next `step` would see no delta because the store had already absorbed
+    # the telling: measured, a figure accusing a body is today the ONLY
+    # reachable accusation outside a charter whose register already blames
+    # somebody, so the author path is where most of them come from.
+    #
+    # `at` rather than `at + hours`: no time passes in an authored act, so the
+    # onset hour is the clock the store will be pruned against next window.
+    #
+    # AND FILTERED BY `bindings`, exactly as `charter_run.step` filters its
+    # four onset lists (`charter_run.py` §"AND FILTERED BY `external`") and as
+    # `charter_runtime.bind_promoted_character` pops the store at binding: a
+    # promoted body's interior has exactly one owner, and a Charter mark is a
+    # scoring bias, which is cognition. Without this the author path was the
+    # one writer of the store that did not check -- verified by execution on
+    # the yard fixture: with `bindings = {"raul": ...}`,
+    # `authored(charter, "ilse", "accuse", "raul")` returned
+    # `marks = {"raul": {"accused": ...}}`, which then rode `normalize_charter`
+    # (it filters to live `bodies`, not to unbound ones) onto
+    # `charter_log.scene_ledger`'s presence slice, surviving the promotion
+    # purge that had already run.
+    external = set((charter.get("bindings") or {}).keys())
+    aided = [(other, actor)] if record.get("act") == "tend" \
+        and other in bodies and other not in external else []
+    accused = sorted(
+        (subject, sorted(tellers - heard_before.get(subject, set()))[0])
+        for subject, tellers in heard_blame.items()
+        if tellers - heard_before.get(subject, set())
+        and subject not in external)
+    charter["marks"] = advance_marks(
+        charter.get("marks"), at, aided=aided, accused=accused)[0]
 
     charter["practices"] = practices
     charter["minds"] = minds
