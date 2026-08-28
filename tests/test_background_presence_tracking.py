@@ -695,3 +695,49 @@ class TestEveryBackgroundPersonIsACharterBody:
 
         assert refs["Dock Hand"] == {"charter": "crew", "body": "tech:0001"}
         assert "ambient" not in registry_for(cid)["items"]
+
+
+class TestTheOverlayIsAnApertureNotALedgerEntry:
+    """`with_charter_presences` says it itself: "merely noticing a Charter
+    worker must not write a second identity store; ordinary presence tracking
+    persists the record only after the person actually participates in a
+    beat." Its caller persisted the merged copy wholesale.
+
+    Harmless while a story had fourteen charter bodies. Measured on a
+    generated market town of three hundred: 284 permanent records for people
+    the story had never used, every one re-derivable from the registry on
+    demand.
+    """
+
+    def test_a_body_merely_standing_there_earns_no_record(self, temp_db):
+        from persist.commit_background import with_charter_presences
+        from world.charter_runtime import save_registry
+        cid = _make_chat(temp_db)
+        save_registry(cid, {"crew": {
+            "key": "crew", "posts": {}, "upkeeps": {},
+            "naming": {"given": ["Mira"], "family": ["Reed"]},
+            "bodies": {"hand:0001": {"name": "Mira Reed", "place": "quay",
+                                     "competence": {}, "available": True}}}})
+
+        overlaid = with_charter_presences(cid, {}, {"rooms": {"quay": {}}})
+
+        # The aperture exists for the beat ...
+        assert overlaid, "the overlay still derives the body"
+        # ... and the ledger on disk is untouched by it.
+        assert not (temp_db.wget(cid, "background_presences", {}) or {})
+
+    def test_a_body_that_participates_keeps_its_record(self, temp_db):
+        """The other half: earning a place has to still work, or the ledger
+        stops tracking the people it exists for."""
+        from persist.commit_background import promotable_background_presences
+        cid = _make_chat(temp_db)
+        temp_db.wset(cid, "background_presences", {
+            "p_1": {"name": "Mira Reed", "first_turn": 1, "last_turn": 2,
+                    "charter_refs": [{"charter": "crew", "body": "hand:0001"}],
+                    "dialogue_turns": [2], "mention_turns": [],
+                    "addressed_turns": []}})
+
+        held = temp_db.wget(cid, "background_presences", {}) or {}
+
+        assert "p_1" in held, "a presence that spoke is durable"
+        assert held["p_1"]["dialogue_turns"] == [2]
