@@ -1734,6 +1734,9 @@ def configure(path: str):
 
     close_connection()
     DB = path
+    # A new database invalidates every cached read of the old one, even if
+    # the path is reused (tests reconfigure onto fresh files freely).
+    bump_world_epoch()
 
 def conn():
     c = getattr(_local, "conn", None)
@@ -1810,6 +1813,13 @@ def transaction():
     finally:
         _local.tx_depth = depth
         if outermost:
+            # Re-invalidate world-row read tokens for rows written inside
+            # this transaction, now that the writes are visible (or rolled
+            # back -- a spurious bump only costs one re-fetch). See wset.
+            for gen_key in getattr(_local, "pending_world_bumps", None) or ():
+                _world_write_gen[gen_key] = \
+                    _world_write_gen.get(gen_key, 0) + 1
+            _local.pending_world_bumps = None
             _write_lock.release()
 
 def data_version():
@@ -2225,6 +2235,45 @@ def wget(chat_id, key, d=None):
     r = q("SELECT value FROM world WHERE chat_id=? AND key=?", (chat_id, storage_key), one=True)
     return json.loads(r["value"]) if r else d
 
+# ---- world-row read tokens -------------------------------------------------
+# Process-local change counters that let a reader cache a parsed world row
+# and know, for the price of two dict lookups, whether the stored row can
+# have changed since. Motivating measurement (2026-08-28, generated market
+# town, 307 bodies): the `charters` row is 41.4MB, one fetch+parse+normalize
+# costs ~0.95s on the joined shape (~2.3s on the split shape), and a single
+# turn read it 21 times with zero intervening writes -- 13.5-20s of a 352s
+# turn spent re-deriving one unchanged object.
+#
+# `wset` is the write chokepoint for world rows, so it bumps the per-row
+# counter. Writes that do NOT go through `wset` -- configure() swapping
+# databases, checkpoint restore's whole-chat DELETE, story reset, an
+# extension deleting a row -- bump the coarse epoch instead, which
+# invalidates every cached row at once. Both directions of the race are
+# safe: a spurious bump only costs the next reader a re-fetch. What this
+# scheme cannot see is another PROCESS writing the same database file
+# (e.g. tools/scene_lint.py against a live server); the engine already
+# assumes single-process ownership of its file everywhere else.
+_world_epoch = 0
+_world_write_gen = {}
+
+def bump_world_epoch():
+    """Invalidate every world-row read token (see block comment above)."""
+    global _world_epoch
+    _world_epoch += 1
+    _world_write_gen.clear()
+
+def world_read_token(chat_id, key):
+    """``(storage_key, token)`` for caching a parsed world row.
+
+    Frame-scoped like `wget`: the ambient active_frame_id decides which
+    storage row `key` names, so the caller must ask under the same frame
+    it reads under. The token compares equal to a later call's token only
+    if no tracked write has landed on that row in between.
+    """
+    storage_key = _scoped_world_key(key)
+    return storage_key, (
+        _world_epoch, _world_write_gen.get((int(chat_id), storage_key), 0))
+
 def wset(chat_id, key, val):
     storage_key = _scoped_world_key(key)
     qi(
@@ -2232,6 +2281,22 @@ def wset(chat_id, key, val):
         "ON CONFLICT(chat_id,key) DO UPDATE SET value=excluded.value",
         (chat_id, storage_key, json.dumps(val)),
     )
+    # After the write, not before: a reader between the bump and the write
+    # would otherwise cache the OLD row under the NEW token. Bumping after
+    # means the worst interleaving caches new data under an old token --
+    # which only costs that reader's successor a re-fetch.
+    gen_key = (int(chat_id), storage_key)
+    _world_write_gen[gen_key] = _world_write_gen.get(gen_key, 0) + 1
+    if int(getattr(_local, "tx_depth", 0)) > 0:
+        # Inside a transaction the row is invisible to other connections
+        # until the outermost commit, so a reader on another thread inside
+        # that window would cache the OLD row under the NEW token and keep
+        # serving it after the commit. transaction() re-bumps these keys on
+        # the way out -- commit or rollback, both directions are safe.
+        pending = getattr(_local, "pending_world_bumps", None)
+        if pending is None:
+            pending = _local.pending_world_bumps = set()
+        pending.add(gen_key)
 
 def wget_for_frame(chat_id, key, frame_id, d=None):
     """wget scoped to an EXPLICIT frame_id rather than the ambient

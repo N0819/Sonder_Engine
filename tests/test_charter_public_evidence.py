@@ -222,3 +222,91 @@ def test_runtime_lands_all_witnesses_with_one_registry_write(temp_db,
     recalled = view[0]["presence"]["can_bring_up"][0]
     assert recalled["public_evidence"]["speech_acts"][0]["kind"] == "request"
     assert len(writes) == 1
+
+
+def test_a_beat_nobody_receives_costs_no_private_parse_and_no_fetch(
+        temp_db, monkeypatch):
+    """The no-acquisition beat rides the shared cached registry.
+
+    Measured 2026-08-28 (chat 95, generated market town, 307 bodies,
+    41.4MB stored registry): `ingest_public_evidence` paid a ~1.1s private
+    `registry_for_update` parse inside the locked commit for a beat that
+    landed in nobody's mind, then saved nothing. The appraisal
+    (`plan_public_evidence`) now gates on the shared cache: warm, such a
+    beat performs zero charters fetches, zero private parses, and zero
+    writes -- and the stored row stays byte-identical by construction.
+    """
+    import core.db as core_db
+    from world import charter_runtime
+
+    cid = temp_db.qi(
+        "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+        ("Charter evidence", "", time.time()))
+    charter_runtime.save_registry(cid, {"town": _charter()})
+    charter_runtime.registry_for(cid)   # warm the shared cache
+
+    fetches, private, writes = [], [], []
+    real_wget = core_db.wget
+
+    def counting_wget(chat_id, key, d=None):
+        if key == charter_runtime.CHARTERS_KEY:
+            fetches.append(key)
+        return real_wget(chat_id, key, d)
+
+    real_update = charter_runtime.registry_for_update
+    monkeypatch.setattr(core_db, "wget", counting_wget)
+    monkeypatch.setattr(
+        charter_runtime, "registry_for_update",
+        lambda *a, **k: private.append(a) or real_update(*a, **k))
+    monkeypatch.setattr(
+        charter_runtime, "save_registry",
+        lambda *a, **k: writes.append(a))
+
+    result = charter_runtime.ingest_public_evidence(
+        cid, [_speech(visibility="concealed",
+                      conceal_from=["Ysra", "Oren"])],
+        _scene(), turn_id=12)
+
+    assert result == {"sources": 1, "opportunities": 2, "acquired": 0}
+    assert fetches == []
+    assert private == []
+    assert writes == []
+
+
+def test_a_beat_that_lands_still_pays_the_private_parse_once(
+        temp_db, monkeypatch):
+    """The gate must never make the WRITE path read the shared object:
+    when a claim lands, the mutation runs on exactly one private parse and
+    one save, and the cached registry the appraisal read stays untouched."""
+    from world import charter_runtime
+
+    cid = temp_db.qi(
+        "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+        ("Charter evidence", "", time.time()))
+    charter_runtime.save_registry(cid, {"town": _charter()})
+    shared = charter_runtime.registry_for(cid)
+    before_minds = dict(shared["items"]["town"]["state"].get("minds") or {})
+
+    private, writes = [], []
+    real_update = charter_runtime.registry_for_update
+    real_save = charter_runtime.save_registry
+    monkeypatch.setattr(
+        charter_runtime, "registry_for_update",
+        lambda *a, **k: private.append(a) or real_update(*a, **k))
+    monkeypatch.setattr(
+        charter_runtime, "save_registry",
+        lambda *a, **k: writes.append(a) or real_save(*a, **k))
+
+    result = charter_runtime.ingest_public_evidence(
+        cid, [_speech()], _scene(), turn_id=12)
+
+    assert result == {"sources": 1, "opportunities": 2, "acquired": 1}
+    assert len(private) == 1
+    assert len(writes) == 1
+    # The appraisal read the shared object and mutated nothing in it.
+    assert dict(shared["items"]["town"]["state"].get("minds") or {}) \
+        == before_minds
+    held = charter_runtime.registry_for(cid)["items"]["town"]["state"][
+        "minds"]["reeve"]
+    assert sum(1 for claim in held.values()
+               if claim.get("kind") == "news") == 1

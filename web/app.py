@@ -4451,6 +4451,11 @@ def world_put(cid: int, body: dict = Body(...)):
                 old_scenes.get(key) if isinstance(old_scenes.get(key), dict)
                 else {},
                 new_scene if isinstance(new_scene, dict) else {})
+    # The DELETE FROM world above bypassed wset, so a key the new body does
+    # not carry kept its per-row read token while losing its row; after the
+    # commit, invalidate every cached world-row read at once.
+    from core.db import bump_world_epoch
+    bump_world_epoch()
     return {"ok": True}
 
 @app.get("/api/chats/{cid}/attire")

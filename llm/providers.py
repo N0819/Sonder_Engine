@@ -3095,6 +3095,114 @@ def _note_embedding_fallback(exc, texts):
     )
 
 
+# ---- Remembering an unreachable endpoint ----
+#
+# The retry ladder below is sized for a provider that ANSWERS -- a 429, a 502,
+# a dropped stream. Against an endpoint that never completes a TCP connect it
+# degenerates into four 30s connect timeouts plus jittered backoff, ~126s, and
+# it was being paid IN FULL twice per turn: measured live 2026-08-28 (chat 95,
+# turn idx 905, wall 313.1s), one ladder inside interaction_loop's
+# memory-context build and one inside commit's prepare_memories_batch --
+# 252.4s, 81% of the turn, all spent re-proving a fact the same process had
+# finished proving seventy seconds earlier. `_EMBED_FALLBACK_SAID` rate-limits
+# the log line, not the proof.
+#
+# So the proof is kept. When a FULL ladder ends in a connect-level failure --
+# the request never reached a server, as opposed to a status a server chose to
+# send -- the configured (provider, model) key is remembered unreachable, and
+# later pipeline calls degrade immediately: byte-for-byte the batch the ladder
+# would have returned two minutes later, because `cheap_embed` depends only on
+# the text. Recovery is watched for OFF the turn path -- one background probe
+# attempt per `_EMBED_DEAD_RETRY_EVERY`, nobody waiting on it. The
+# `retry=None` measurement callers bypass the memory (a probe that answers
+# from memory cannot tell the host their endpoint came back), and a
+# successful request from ANY caller clears it.
+#
+# Process-local and reset on restart, like the pacer above and for the same
+# reason: deadness observed last session is not evidence about this one.
+_EMBED_DEAD_LOCK = threading.Lock()
+_EMBED_DEAD = {"key": None, "reason": "", "probe_at": 0.0, "probing": False}
+# How long remembered deadness stands before the next background probe. The
+# inline ladder this replaces measured ~126s per call; the probe is one
+# connect attempt (<=30s against a dead host) that nobody waits on. It also
+# bounds how long a RECOVERED endpoint keeps being answered by the hash:
+# rows written in that window carry the crc32 stamp the rebuild lane already
+# hunts for, exactly like rows written during the outage itself.
+_EMBED_DEAD_RETRY_EVERY = 300.0
+
+
+def _is_connect_dead(exc) -> bool:
+    """True when the request never reached a server at all.
+
+    `requests` puts refused connections, DNS failures and connect timeouts
+    under ConnectionError (ConnectTimeout subclasses it). ReadTimeout does
+    NOT -- a host that accepted the connection and then stalled is alive,
+    and an HTTP status of any kind is a server answering.
+    """
+    return isinstance(exc, _req_exc.ConnectionError)
+
+
+def _embed_dead_remember(exc):
+    """Keep what an exhausted ladder just proved about the endpoint."""
+    if not _is_connect_dead(exc):
+        return
+    key = embedding_model_key()
+    if key == "cheap:crc32:256":
+        return  # No provider configured; there is no endpoint to be dead.
+    with _EMBED_DEAD_LOCK:
+        _EMBED_DEAD.update(
+            key=key, reason=str(exc)[:300], probing=False,
+            probe_at=time.monotonic() + _EMBED_DEAD_RETRY_EVERY)
+
+
+def _embed_dead_forget():
+    with _EMBED_DEAD_LOCK:
+        _EMBED_DEAD.update(key=None, reason="", probe_at=0.0, probing=False)
+
+
+def _embed_dead_probe(key):
+    """One attempt, off anyone's wall clock, to see whether it came back."""
+    ok = False
+    try:
+        _embed_request(["embeddings recovery probe"])
+        ok = True
+    except Exception:
+        pass
+    with _EMBED_DEAD_LOCK:
+        _EMBED_DEAD["probing"] = False
+        # Cleared only for the key that was probed: a host who reconfigured
+        # the role mid-cooldown already cleared it by changing the key.
+        if ok and _EMBED_DEAD["key"] == key:
+            _EMBED_DEAD.update(key=None, reason="", probe_at=0.0)
+
+
+def _embed_dead_reason():
+    """The remembered failure if the CURRENT key is known unreachable.
+
+    Returns None when nothing is remembered or the host has since pointed
+    the role somewhere else. When the memory is due for a re-check, starts
+    the background probe -- and keeps answering from memory meanwhile, so
+    the probe's connect timeout lands on no caller's wall clock.
+    """
+    with _EMBED_DEAD_LOCK:
+        remembered = _EMBED_DEAD["key"]
+    if remembered is None:
+        return None
+    # Outside the lock: resolving the role reads settings.
+    key = embedding_model_key()
+    with _EMBED_DEAD_LOCK:
+        if _EMBED_DEAD["key"] != key:
+            return None
+        reason = _EMBED_DEAD["reason"]
+        now = time.monotonic()
+        if now >= _EMBED_DEAD["probe_at"] and not _EMBED_DEAD["probing"]:
+            _EMBED_DEAD["probing"] = True
+            _EMBED_DEAD["probe_at"] = now + _EMBED_DEAD_RETRY_EVERY
+            threading.Thread(target=_embed_dead_probe, args=(key,),
+                             name="embed-dead-probe", daemon=True).start()
+    return reason
+
+
 # ---- Coalescing concurrent embedding requests ----
 #
 # The ceiling that keeps refusing us counts REQUESTS, not tokens: the measured
@@ -3258,14 +3366,31 @@ def _coalesced_embed(texts, config) -> EmbeddingBatch:
         else _embed_with_retry(texts, config)
 
 
-def _embed_with_retry(texts, config) -> EmbeddingBatch:
-    """Pace, ask, retry, and degrade. Never raises."""
+def _embed_with_retry(texts, config, *, consult_memory=True) -> EmbeddingBatch:
+    """Pace, ask, retry, and degrade. Never raises.
+
+    `consult_memory=False` for the `retry=None` measurement callers: they
+    exist to observe the endpoint as it is NOW, and their single attempt is
+    cheap. Everyone else accepts the remembered verdict -- the batch is
+    identical to the one the exhausted ladder would return, minus the wait.
+    """
+    if consult_memory:
+        dead = _embed_dead_reason()
+        if dead is not None:
+            reason = "endpoint remembered unreachable: " + dead
+            _note_embedding_fallback(reason, texts)
+            return EmbeddingBatch(
+                vectors=[cheap_embed(text) for text in texts],
+                model_key="cheap:crc32:256", dimensions=256,
+                fallback=True, error=reason)
     attempt = 0
     while True:
         try:
             _embed_pace_wait()
             got = _embed_request(texts)
             _embed_pace_relax()
+            if _EMBED_DEAD["key"] is not None:
+                _embed_dead_forget()
             return got
         except Exception as exc:
             if _is_rate_limit(exc):
@@ -3274,6 +3399,10 @@ def _embed_with_retry(texts, config) -> EmbeddingBatch:
                 time.sleep(config.delay_for(attempt))
                 attempt += 1
                 continue
+            # Only a ladder that had retries to spend has PROVED anything
+            # worth remembering; a single declined attempt has not.
+            if config.max_retries > 0:
+                _embed_dead_remember(exc)
             _note_embedding_fallback(exc, texts)
             vectors = [cheap_embed(text) for text in texts]
             return EmbeddingBatch(vectors=vectors, model_key="cheap:crc32:256",
@@ -3300,8 +3429,10 @@ def embed_texts_meta(texts, *, retry: Optional[RetryConfig] = DEFAULT_RETRY) -> 
     if retry is None:
         # A MEASUREMENT, not traffic. The bank probe runs while a chat is
         # opening; queueing it behind somebody else's turn would make it
-        # report on a moment that has passed.
-        return _embed_with_retry(texts, config)
+        # report on a moment that has passed -- and answering it from the
+        # dead-endpoint memory would make it report on one that may have
+        # passed too, so it alone asks the wire every time.
+        return _embed_with_retry(texts, config, consult_memory=False)
     return _coalesced_embed(texts, config)
 
 def embed_texts(texts):

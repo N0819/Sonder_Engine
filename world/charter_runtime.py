@@ -16,6 +16,7 @@ import copy
 import hashlib
 import json
 import re
+import threading
 import uuid
 
 from core import jobs
@@ -206,10 +207,14 @@ def ensure_ambient_bodies(cid, wanted, frame_id=None):
     introduced. What they come to know arrives through the same channels as
     everybody else's.
     """
+    # The common turn mints nobody, so the alias lookup runs on the shared
+    # cached registry; only the first actually-fresh name pays for a private
+    # copy to mutate (`registry_for_update` -- the shared object is
+    # read-only). Both shapes hold the same bodies, so a lookup answered by
+    # the cache is answered identically by the private copy.
     registry = registry_for(cid, frame_id)
-    items = registry.setdefault("items", {})
     known = {}
-    for charter_key, item in items.items():
+    for charter_key, item in (registry.get("items") or {}).items():
         for body_key, body in ((item.get("state") or {}).get("bodies")
                                or {}).items():
             for alias in (str(body.get("name") or ""), str(body_key)):
@@ -217,6 +222,7 @@ def ensure_ambient_bodies(cid, wanted, frame_id=None):
                     known.setdefault(alias.casefold(),
                                      {"charter": charter_key, "body": body_key})
     fresh = {}
+    private = None
     for row in wanted or ():
         name = " ".join(str((row or {}).get("name") or "").split())
         if not name:
@@ -225,11 +231,14 @@ def ensure_ambient_bodies(cid, wanted, frame_id=None):
         if hit:
             fresh[name] = dict(hit)
             continue
+        if private is None:
+            private = registry_for_update(cid, frame_id)
         body_key = _ambient_body_key(name)
         place = str((row or {}).get("place") or "")
-        item = items.setdefault(AMBIENT_CHARTER, {"state": {
-            "key": AMBIENT_CHARTER, "posts": {}, "upkeeps": {},
-            "priority": [], "bodies": {}}})
+        item = private.setdefault("items", {}).setdefault(
+            AMBIENT_CHARTER, {"state": {
+                "key": AMBIENT_CHARTER, "posts": {}, "upkeeps": {},
+                "priority": [], "bodies": {}}})
         state = item.setdefault("state", {})
         state.setdefault("bodies", {})[body_key] = {
             "key": body_key, "name": name, "place": place,
@@ -238,7 +247,13 @@ def ensure_ambient_bodies(cid, wanted, frame_id=None):
         known[name.casefold()] = {"charter": AMBIENT_CHARTER, "body": body_key}
         fresh[name] = {"charter": AMBIENT_CHARTER, "body": body_key}
     if fresh:
-        save_registry(cid, registry, frame_id)
+        # The pre-cache code saved whenever any wanted name RESOLVED, mint
+        # or not, and that save re-applies the identity-reservation
+        # subtraction; keep that exact write so nothing about the stored
+        # blob's history changes shape.
+        if private is None:
+            private = registry_for_update(cid, frame_id)
+        save_registry(cid, private, frame_id)
     return fresh
 
 
@@ -499,7 +514,83 @@ def _resumable_plan(cid, digest):
     return copy.deepcopy(artifact), job
 
 
+# ---- shared registry cache -------------------------------------------------
+# One parsed+normalized registry per (chat, storage row), shared by every
+# reader until a write lands. Motivating measurement (2026-08-28, generated
+# market town, 307 bodies, chat 95): the stored blob is 41.4MB, one
+# fetch+parse+normalize costs ~0.95s joined / ~2.3s split, and one live turn
+# read it 21 times (registry_for x15, chatter_inputs x6) with zero
+# intervening writes -- 22.2s of a 63.4s turn re-deriving one unchanged
+# object. Copying instead of sharing does not work: copy.deepcopy of the
+# normalized registry measured 2.5s, MORE than a fresh parse.
+#
+# THE RETURNED OBJECT IS SHARED AND READ-ONLY. A caller that intends to
+# mutate uses `registry_for_update`, which pays the private parse the old
+# `registry_for` always paid -- otherwise a mutation abandoned without
+# `save_registry` (previously discarded with the private copy) would leak
+# into every later reader's view. Validation is `core.db.world_read_token`:
+# `wset` is the world-row write chokepoint and bumps the token; database
+# swaps, checkpoint restores and raw world DELETEs bump the coarse epoch
+# inside it. Two entries, not one, so a second chat polled mid-turn (the
+# charters editor, a second story) cannot thrash the hot chat's entry.
+_REGISTRY_CACHE = {}
+_REGISTRY_CACHE_CAP = 2
+_REGISTRY_CACHE_LOCK = threading.Lock()
+
+
+def cached_registry(cid):
+    """The AMBIENT frame's normalized registry: shared, read-only.
+
+    Reads under whatever frame the pipeline has active, exactly as a bare
+    `wget` does -- `chatter_inputs` needs that (a flashback's observer must
+    hear the flashback's charters), while `registry_for` pins its frame
+    around this. Mutating the result is a bug; see the cache comment.
+    """
+    from core.db import wget, world_read_token
+
+    storage_key, token = world_read_token(cid, CHARTERS_KEY)
+    cache_key = (int(cid), storage_key)
+    with _REGISTRY_CACHE_LOCK:
+        entry = _REGISTRY_CACHE.get(cache_key)
+        if entry is not None and entry[0] == token:
+            return entry[1]
+    # Parse outside the lock: a second thread racing here recomputes the
+    # same value, which costs seconds once and corrupts nothing. The token
+    # was read BEFORE the fetch, so a write landing during the fetch leaves
+    # this entry already-stale rather than wrongly-fresh.
+    registry = normalize_registry(wget(cid, CHARTERS_KEY, {}) or {})
+    with _REGISTRY_CACHE_LOCK:
+        if cache_key not in _REGISTRY_CACHE \
+                and len(_REGISTRY_CACHE) >= _REGISTRY_CACHE_CAP:
+            _REGISTRY_CACHE.pop(next(iter(_REGISTRY_CACHE)))
+        _REGISTRY_CACHE[cache_key] = (token, registry)
+    return registry
+
+
 def registry_for(cid, frame_id=None):
+    """One frame's normalized registry: SHARED and READ-ONLY.
+
+    Every reader this turn gets the same object (see the cache comment
+    above). A caller that mutates what it got must use
+    `registry_for_update` instead.
+    """
+    from core.db import active_frame_id
+
+    token = active_frame_id.set(frame_id)
+    try:
+        return cached_registry(cid)
+    finally:
+        active_frame_id.reset(token)
+
+
+def registry_for_update(cid, frame_id=None):
+    """A PRIVATE normalized registry for a caller that will mutate it.
+
+    The pre-cache `registry_for`, byte for byte: a fresh parse whose
+    mutations stay invisible until `save_registry` lands them -- and are
+    discarded with the object when the caller abandons them, which several
+    writers (carrier ingest, caravan trade, public evidence) rely on.
+    """
     from core.db import wget_for_frame
     return normalize_registry(
         wget_for_frame(cid, CHARTERS_KEY, frame_id, {}) or {})
@@ -1300,7 +1391,7 @@ def _generate_lived_location(cid, request, chat, frame_id, digest, artifact):
     _save_job(cid, {**(lived_location_job(cid) or {}),
                     "owner": _GEN_OWNER, "stage": "planting",
                     "artifact": None})
-    existing = registry_for(cid, frame_id)
+    existing = registry_for_update(cid, frame_id)
     town = _remap_generated_town(cid, town, existing)
     structure, rooms = plant_structure(
         cid, town["structure"], town["rooms"],
@@ -1823,7 +1914,7 @@ def schedule_charter_ticks(ctx, epoch=None):
         epoch["charter_skip"] = "ceiling"
         return None
     cid, frame_id, base_turn = ctx.chat.id, ctx.turn.frame_id, ctx.turn.idx
-    registry = registry_for(cid, frame_id)
+    registry = registry_for_update(cid, frame_id)
     if not registry["items"]:
         epoch["charter_skip"] = "no_charters"
         return None
@@ -2042,7 +2133,7 @@ def save_carrier_state(cid, entry, carrier_state, frame_id=None):
     body_key = str(ref.get("body") or "")
     if not charter_key or not body_key:
         return False
-    registry = registry_for(cid, frame_id)
+    registry = registry_for_update(cid, frame_id)
     item = registry["items"].get(charter_key)
     if item is None or body_key not in item["state"]["bodies"] \
             or body_key in (item["state"].get("bindings") or {}):
@@ -2098,7 +2189,7 @@ def load_caravan_freight(cid, request, origin, *, frame_id=None):
                 "from_holder": source}, []
     from world.charter_economy import normalize_economy, trade
 
-    registry = registry_for(cid, frame_id)
+    registry = registry_for_update(cid, frame_id)
     def amount(value):
         try:
             return max(0.0, float(value))
@@ -2142,7 +2233,7 @@ def exchange_caravan_freight(cid, freight, room, *, frame_id=None):
     """Exchange one wagon with authored markets at its physical stop."""
     from world.charter_economy import caravan_exchange
 
-    registry = registry_for(cid, frame_id)
+    registry = registry_for_update(cid, frame_id)
     changed = False
     events = []
     carried = copy.deepcopy(freight) if isinstance(freight, dict) else {}
@@ -2175,12 +2266,30 @@ def ingest_public_evidence(cid, evidence_rows, scene, *, turn_id,
     witness count.  The expensive/semantic work was already shared at resolve;
     this side is deterministic perception plus sparse claim insertion.
     """
-    from world.charter_observe import apply_public_evidence
+    from world.charter_observe import (apply_public_evidence,
+                                       plan_public_evidence)
 
     rows = [row for row in (evidence_rows or ()) if isinstance(row, dict)]
     if not rows:
         return {"sources": 0, "opportunities": 0, "acquired": 0}
-    registry = registry_for(cid, frame_id)
+    # Appraise on the SHARED cached registry first: most beats reach no
+    # Charter mind, and this runs inside the locked commit every turn a
+    # beat resolved. Before the split, the no-acquisition case still paid
+    # the private 41.4MB parse `registry_for_update` exists for (measured
+    # 2026-08-28, chat 95, 307 bodies: ~1.1s of the commit stretch spent
+    # parsing, then nothing saved). The appraisal only GATES -- when
+    # something lands, the write below is computed entirely from the
+    # private parse, so a wrong gate can cost a skipped save or a spare
+    # parse, never a wrong stored byte.
+    opportunities = acquired = 0
+    for item in registry_for(cid, frame_id)["items"].values():
+        plan = plan_public_evidence(item["state"], rows, scene or {}, turn_id)
+        opportunities += int(plan["opportunities"])
+        acquired += int(plan["acquired"])
+    if not acquired:
+        return {"sources": len(rows), "opportunities": opportunities,
+                "acquired": acquired}
+    registry = registry_for_update(cid, frame_id)
     opportunities = acquired = 0
     for item in registry["items"].values():
         state, metrics = apply_public_evidence(
@@ -2513,7 +2622,7 @@ def apply_presence_conduct(cid, name, conduct, *, record=None, frame_id=None,
     if (act, other) not in permitted:
         return {"actor": str(name), "act": act, "other": other,
                 "refused": "not_offered_to_scene_life"}
-    registry = registry_for(cid, frame_id)
+    registry = registry_for_update(cid, frame_id)
     refs = (record or {}).get("charter_refs") or ()
     matches = _body_refs(registry, name=name, refs=refs)
     if len(matches) != 1:
@@ -2599,7 +2708,7 @@ def bind_promoted_character(cid, bundle, *, char_id, name, entity_id="",
     if not isinstance(bundle, dict):
         return False
     charter_key, body_key = bundle.get("charter"), bundle.get("body")
-    registry = registry_for(cid, frame_id)
+    registry = registry_for_update(cid, frame_id)
     item = registry["items"].get(str(charter_key))
     if item is None or str(body_key) not in item["state"]["bodies"]:
         return False

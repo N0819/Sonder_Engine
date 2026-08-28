@@ -559,12 +559,24 @@ _PROSE_DUTY_SHIPPED = {
 
 
 def _gate_facts(ctx, sc, *, physical, speech, material_effects=False,
-                resolved_stage=False):
+                resolved_stage=False, crowds_rows=None):
     """The scene facts every channel gate reads, computed once per stage,
     at that stage's own time. Standing scene state (ledgers, settings) plus
     the two structured beat facts the caller supplies; no prose anywhere.
     A fact whose read fails degrades to True -- fail open, never gate a
-    channel out on an error."""
+    channel out on an error.
+
+    ``crowds_rows`` is the stage's already-computed `_crowds_view` result,
+    when the caller built one for its payload: deriving charter crowds walks
+    the whole registry, and on a 307-body town the gate's private recompute
+    was 2 of the turn's 4 `_crowds_view` calls (3.05s total, measured
+    2026-08-28, chat 95) -- two reads for one bool. Both director stages now
+    hand their payload's rows in, so the gate and the payload cannot disagree
+    about which crowds stand in reach. The fallback recompute passes the
+    turn's own idx: the gate's old no-idx read froze the presented-bodies
+    lapse (§C3), subtracting long-lapsed bodies from the derived crowds and
+    so gating the channel OUT on beats where the payload's aged read had
+    crowds to offer."""
     chat_id = ctx.chat["id"]
     entities = sc.get("entities") or {}
     destructible = any(
@@ -581,10 +593,13 @@ def _gate_facts(ctx, sc, *, physical, speech, material_effects=False,
         reports = bool(_carried_reports_view(ctx))
     except Exception:
         reports = True
-    try:
-        crowds = bool(_crowds_view(chat_id, sc))
-    except Exception:
-        crowds = True
+    if crowds_rows is not None:
+        crowds = bool(crowds_rows)
+    else:
+        try:
+            crowds = bool(_crowds_view(chat_id, sc, ctx.turn["idx"]))
+        except Exception:
+            crowds = True
     try:
         couriers = bool(_couriers_view(chat_id, sc))
     except Exception:

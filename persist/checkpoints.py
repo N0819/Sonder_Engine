@@ -857,6 +857,12 @@ def _restore_checkpoint_body(chat_id, r):
         start_rebuild_if_needed(chat_id)
     except Exception:
         pass    # a maintenance task must never fail a restore
+    # The DELETE FROM world above bypassed wset, so a world row the snapshot
+    # did not carry kept its per-row read token while losing its row. After
+    # the commit (an exception above never reaches here on the rollback
+    # path), invalidate every cached world-row read at once.
+    from core.db import bump_world_epoch
+    bump_world_epoch()
 def _lore_cache_fingerprint(entry):
     keys = re.sub(r"\s+", " ", str(entry.get("keys") or "").strip().casefold())
     content = re.sub(r"\s+", " ", str(entry.get("content") or "").strip().casefold())

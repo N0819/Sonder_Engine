@@ -1595,15 +1595,16 @@ def chatter_inputs(cid, sc, turn_idx=None):
     caller without one gets the conservative no-lapse read.
     """
     from world.charter_crowd import presented
-    from world.charter_runtime import CHARTERS_KEY, normalize_registry
+    from world.charter_runtime import cached_registry
 
-    # Through `wget`, NOT `registry_for(cid)`: the registry key is
-    # frame-scoped and `registry_for`'s default pins the PRESENT era
+    # Through `cached_registry`, NOT `registry_for(cid)`: the registry key
+    # is frame-scoped and `registry_for`'s default pins the PRESENT era
     # explicitly, while every sibling read on this seam (`crowds`,
     # `background_presences`) follows the pipeline's ambient active frame —
-    # a flashback's observer must hear the flashback's charters.
+    # a flashback's observer must hear the flashback's charters. The cached
+    # object is shared and read-only; this function only slices it.
     try:
-        registry = normalize_registry(wget(cid, CHARTERS_KEY, {}) or {})
+        registry = cached_registry(cid)
     except Exception:
         registry = {"items": {}}
     known_refs = {}
