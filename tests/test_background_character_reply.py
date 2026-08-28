@@ -197,9 +197,16 @@ def test_stale_pending_reply_ignored_and_swept(temp_db):
     assert "pending_reply" not in _rec(temp_db.wget(chat_id, "background_presences", {}), "Doran")
 
 
-def test_selected_but_silent_presence_gets_no_debt(temp_db):
-    # Doran was addressed AND picked, but chose silence -- that silence was the
-    # answer; no debt is owed, and any prior debt is discharged.
+def test_selected_but_silent_presence_keeps_the_debt(temp_db):
+    """Discharge is keyed on FIRED conduct, not on selection. This test used
+    to pin the opposite ("silence was the answer") and that rule ate the one
+    debt that mattered: chat 95 turns 3031/3032/3041, the addressed
+    cord-seller was selected, was shown `addressed_by: null` (the relay
+    defect), declined in 31 tokens -- and selection-keyed discharge erased
+    the debt his decline should have left standing, so he was never asked
+    again. A declined call now leaves the debt in place; expiry (turn + 2)
+    still sweeps it, so a presence that truly will not answer costs at most
+    the grace window."""
     chat_id, ctx = _setup(temp_db, cast_names=["Sara"], turn_idx=5,
                           presences={"Doran": _bare("Doran")})
     ctx.director_resolve = {"resolved_event": "Sara barks an order.",
@@ -207,7 +214,8 @@ def test_selected_but_silent_presence_gets_no_debt(temp_db):
     ctx["background_react"] = {"fired": False, "name": "Doran",
                                "dialogue_log_entry": None, "action": ""}
     track_background_presences(ctx, nonce=0)
-    assert "pending_reply" not in _rec(temp_db.wget(chat_id, "background_presences", {}), "Doran")
+    rec = _rec(temp_db.wget(chat_id, "background_presences", {}), "Doran")
+    assert rec.get("pending_reply"), "the unanswered address stays owed"
 
 
 def test_story_character_addresses_npc_both_addressees_answer_this_beat(

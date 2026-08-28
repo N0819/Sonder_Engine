@@ -588,7 +588,18 @@ def director_interpret(ctx, nonce):
                  "same_room_as_player": (
                      (room_of(sc, _pn)
                       or ((_pr.get("sketch") or {}).get("station_room") or ""))
-                     == p_room)}
+                     == p_room),
+                 # Descriptions the player has already addressed this body
+                 # by, each one a binding the engine made canon on the beat
+                 # it was used (persist/commit_background.descriptor_bindings
+                 # -- the fix for a player who, in a crowd of strangers, can
+                 # only address by what they see). Shown so a repeated "the
+                 # man with the braided cords" resolves to the SAME name
+                 # instead of a fresh guess; absent for the common
+                 # never-described body, keeping the row shape unchanged.
+                 **({"described_as":
+                     (_pr.get("sketch") or {}).get("descriptors")}
+                    if (_pr.get("sketch") or {}).get("descriptors") else {})}
                 for _pn, _pr in presence_name_items(_addressable_ledger))
             if _bp["room"]
         ],
