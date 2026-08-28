@@ -111,3 +111,47 @@ def test_all_authored_title_forms_remain_aliases_of_the_personal_name():
 def test_no_profile_preserves_the_genre_agnostic_key_fallback():
     state = normalize_charter({"key": "aliens", "bodies": {"x9": {}}})
     assert state["bodies"]["x9"]["name"] == "x9"
+
+
+def test_a_name_format_that_names_no_field_is_not_a_format():
+    """`_safe_format` checked only that every field it FOUND was one this
+    profile knows, and `set() <= anything` is true -- so a law writing
+    "given family" instead of "{given} {family}" passed, `str.format` had
+    nothing to substitute, and every body came out literally called
+    `given family`.
+
+    Found in play, and it mutes a population rather than erroring: a generated
+    market town of 300 bodies had all 300 named "given family" plus a body
+    key. The narrator will not speak a name like that, so it rendered everyone
+    anonymously; nothing could resolve an address to them; and the player
+    stopped a woman in the square, asked her a direct question, and got `no
+    eligible respondent` from a room holding 120 people -- with a pool of real
+    names sitting unused in the same law.
+    """
+    from world.charter_identity import normalize_naming_profile
+
+    profile = normalize_naming_profile({
+        "seed": "1",
+        "given": ["Edric", "Mira", "Torin"],
+        "family": ["Hollow", "Reed", "Stone"],
+        "name_format": "given family",
+        "formal_format": "given family",
+    })
+
+    assert "{given}" in profile["name_format"]
+    assert "{family}" in profile["name_format"]
+    minted = profile["name_format"].format(
+        given="Mira", family="Reed", title="", rank="")
+    assert minted.strip() == "Mira Reed", "a format has to substitute"
+
+
+def test_a_format_naming_a_field_this_profile_knows_is_kept():
+    """The guard subtracts; it must not start refusing good laws."""
+    from world.charter_identity import normalize_naming_profile
+
+    profile = normalize_naming_profile({
+        "given": ["Mira"], "family": ["Reed"],
+        "name_format": "{family} {given}",
+    })
+
+    assert profile["name_format"] == "{family} {given}"

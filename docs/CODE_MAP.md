@@ -95,7 +95,7 @@
 | `story/greetings.py` | 995 |  | `agents.runtime`, `agents.storage`, `core`, `llm.llm_quality`, `llm.prompts`, `mind.memory`, `mind.theory_of_mind`, `story.character_schema`, `story.importers` |
 | `story/history_routing.py` | 186 |  | — |
 | `story/importers.py` | 3124 | Native and AI-assisted character, persona, and lorebook import/generation. | `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.memory`, `story.character_schema`, `story.scene` |
-| `story/journey_history.py` | 335 |  | — |
+| `story/journey_history.py` | 353 |  | — |
 | `story/lore_structure.py` | 248 |  | — |
 | `story/naming.py` | 353 |  | `core.db`, `world.charter_identity` |
 | `story/provenance_text.py` | 132 |  | — |
@@ -119,7 +119,7 @@
 | `world/charter_figure.py` | 140 |  | — |
 | `world/charter_generate.py` | 692 |  | `world.charter_identity`, `world.charter_model`, `world.charter_needs`, `world.charter_roster` |
 | `world/charter_history.py` | 871 |  | — |
-| `world/charter_identity.py` | 695 |  | — |
+| `world/charter_identity.py` | 716 |  | — |
 | `world/charter_intervene.py` | 112 |  | `world.charter_model` |
 | `world/charter_log.py` | 448 |  | `world.charter_commitment`, `world.charter_decide`, `world.charter_economy`, `world.charter_feel`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_needs`, `world.charter_news`, `world.charter_politics`, `world.charter_social`, `world.charter_temper` |
 | `world/charter_mark.py` | 302 |  | — |
@@ -1136,8 +1136,8 @@
 
 | Function | Start | Size |
 |---|---:|---:|
+| `compile_journey_history()` | 254 | 94 lines |
 | `ground_journey_history()` | 160 | 92 lines |
-| `compile_journey_history()` | 254 | 76 lines |
 | `_source_rows()` | 111 | 28 lines |
 | `_model_value()` | 141 | 17 lines |
 | `journey_event_count()` | 86 | 12 lines |
@@ -1391,14 +1391,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `materialize_body_names()` | 499 | 119 lines |
-| `name_is_reserved()` | 384 | 56 lines |
-| `identity_aliases()` | 653 | 38 lines |
-| `derived_name_parts()` | 133 | 32 lines |
-| `normalize_naming_profile()` | 50 | 28 lines |
-| `extension_profile()` | 194 | 28 lines |
-| `_stored_name_components()` | 252 | 24 lines |
-| `_title_terms()` | 306 | 23 lines |
+| `materialize_body_names()` | 520 | 119 lines |
+| `name_is_reserved()` | 405 | 56 lines |
+| `identity_aliases()` | 674 | 38 lines |
+| `derived_name_parts()` | 154 | 32 lines |
+| `normalize_naming_profile()` | 71 | 28 lines |
+| `extension_profile()` | 215 | 28 lines |
+| `_safe_format()` | 44 | 25 lines |
+| `_stored_name_components()` | 273 | 24 lines |
 
 ### `world/charter_intervene.py`
 
