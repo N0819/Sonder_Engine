@@ -710,7 +710,7 @@ class TestTheOverlayIsAnApertureNotALedgerEntry:
     """
 
     def test_a_body_merely_standing_there_earns_no_record(self, temp_db):
-        from persist.commit_background import with_charter_presences
+        from persist.commit import with_charter_presences
         from world.charter_runtime import save_registry
         cid = _make_chat(temp_db)
         save_registry(cid, {"crew": {
@@ -729,7 +729,6 @@ class TestTheOverlayIsAnApertureNotALedgerEntry:
     def test_a_body_that_participates_keeps_its_record(self, temp_db):
         """The other half: earning a place has to still work, or the ledger
         stops tracking the people it exists for."""
-        from persist.commit_background import promotable_background_presences
         cid = _make_chat(temp_db)
         temp_db.wset(cid, "background_presences", {
             "p_1": {"name": "Mira Reed", "first_turn": 1, "last_turn": 2,
