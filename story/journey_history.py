@@ -51,6 +51,15 @@ character remembering -- I, we, my -- never as a narrator describing them, and
 never as a plot synopsis. A memory that never speaks in the first person is
 discarded.
 
+When a `companion` is supplied, that person TRAVELLED WITH this character for
+part of the road and is present in the story that follows. Name them in the
+events they shared, in the character's own voice and with the same concreteness
+as anyone else -- what passed between the two of them, what was said, what is
+owed or unresolved between them. Do not make every event a shared one: the
+character had a life before the companion joined it, and events from before
+that are the character's alone. A companion who appears in no event is the
+same failure as a journey with no events.
+
 Never open with an ordinal or a connective: no "Later", no "Early on", no
 "Then", no "Most recently", no date followed by a colon. When and place are
 separate fields and the recollection must stand on its own; situate time
@@ -251,6 +260,31 @@ def ground_journey_history(value, sources, *, generated=False,
     }
 
 
+def companion_of(cid, route):
+    """The player, when the route says the road was shared. Else ``None``.
+
+    Addressed by the persona's `resource_uid`, never by its row id and never
+    by display name alone. The uid is what survives archive, branch and clone,
+    and it is the key a player memory bank would later be written under -- see
+    `docs/UNBUILT.md` 1.99g, which defers that bank and names this discipline
+    as the one thing that decides whether adding it is a new writer or a
+    retrofit through every ledger.
+    """
+    if not (route or {}).get("with_player"):
+        return None
+    from core.db import q
+    from story.character_schema import persona_name
+    row = q("SELECT p.name, p.sheet, p.resource_uid FROM personas p "
+            "JOIN chats c ON c.persona_id = p.id WHERE c.id=?", (cid,),
+            one=True)
+    if not row:
+        return None
+    name = persona_name(dict(row)) or str(row["name"] or "").strip()
+    if not name:
+        return None
+    return {"name": name, "resource_uid": str(row["resource_uid"] or "")}
+
+
 def compile_journey_history(cid, char_id, sheet, route, *, lore=(), opening="",
                             arrival_brief="", frame_id=None, model_call=None):
     """Generate/compile, persist its ledger, and seed ordered memories."""
@@ -263,6 +297,7 @@ def compile_journey_history(cid, char_id, sheet, route, *, lore=(), opening="",
     generated = str((route or {}).get("authority") or "") == "generated"
     count = journey_event_count((route or {}).get("event_count"))
     sources = _source_rows(sheet, lore)
+    companion = companion_of(cid, route)
     payload = {
         "mode": "generated" if generated else "cited",
         "character": character_name(sheet),
@@ -272,6 +307,17 @@ def compile_journey_history(cid, char_id, sheet, route, *, lore=(), opening="",
         # generator does not make and cannot reach.
         "arrival_location": _text(arrival_brief, 1200),
         "author_guidance": _text((route or {}).get("guidance"), 2000),
+        # WHO ELSE WAS WALKING. The generator is handed a sheet, some lore and
+        # an arrival brief, and nothing that says the road was shared -- so it
+        # wrote one person's past, correctly, and the shared half did not
+        # exist. Measured on a market-town playtest: a character briefed as the
+        # player's travelling companion arrived with sixteen events, ZERO of
+        # them naming the player, and one relationship edge to "person of
+        # unremarkable appearance" formed on turn 4, during play.
+        #
+        # `with_player` is the author saying they were there. Absent, this key
+        # is absent and the generator behaves exactly as it did.
+        **({"companion": companion} if companion else {}),
         "sources": sources,
         "target_events": count,
         "maximum_events": count,
@@ -336,12 +382,43 @@ def compile_journey_history(cid, char_id, sheet, route, *, lore=(), opening="",
     if rows:
         add_memories_batch(rows)
 
+    # AND THEY DO NOT MEET AS STRANGERS. Without this the character walked in
+    # holding a road's worth of shared memory and no edge to the person they
+    # walked it with -- measured on a market-town playtest, the companion's
+    # only relationship was to "person of unremarkable appearance", formed on
+    # turn 4, during play. The edge is seeded from the journey the two of them
+    # actually have: how much of it they shared, and nothing else.
+    #
+    # SEEDED, NOT ASSUMED WARM. Travelling together is familiarity and a
+    # working trust; whether they LIKE each other is what the events say and
+    # what play decides, so warmth stays at zero and the axes play moves are
+    # left for play to move.
+    if companion and rows:
+        from mind.memory import get_relationships, save_relationships
+        shared_events = sum(
+            1 for event in grounded["events"]
+            if any(companion["name"].casefold() in str(person or "").casefold()
+                   for person in (event.get("people") or ())))
+        if shared_events:
+            graph = get_relationships(cid, char_id, frame_id=frame_id)
+            depth = min(1.0, shared_events / max(1, len(grounded["events"])))
+            graph.update(
+                companion["name"],
+                trust=round(0.25 + 0.35 * depth, 4),
+                familiarity=round(0.35 + 0.45 * depth, 4),
+                last_interaction_turn=0)
+            save_relationships(cid, char_id, graph, frame_id=frame_id)
+
     record = wget_for_frame(cid, "character_journey_histories", frame_id, {}) or {}
     record[str(char_id)] = {
         "route": copy.deepcopy(route), "summary": grounded["summary"],
         "events": grounded["events"], "grounding": grounded["grounding"],
         "memory_event_keys": [row["event_key"] for row in rows],
         "source_ids": [row["source_id"] for row in sources],
+        # The uid, not the display name: `docs/UNBUILT.md` 1.99g's discipline,
+        # so a player memory bank later is a new writer against a key the
+        # ledgers already carry rather than a retrofit through all of them.
+        **({"companion_uid": companion["resource_uid"]} if companion else {}),
     }
     wset_for_frame(cid, "character_journey_histories", record, frame_id)
     return record[str(char_id)]
@@ -349,5 +426,6 @@ def compile_journey_history(cid, char_id, sheet, route, *, lore=(), opening="",
 
 __all__ = [
     "JOURNEY_EVENT_DEFAULT", "JOURNEY_EVENT_MAX", "JOURNEY_EVENT_MIN",
+    "companion_of",
     "compile_journey_history", "ground_journey_history", "journey_event_count",
 ]
