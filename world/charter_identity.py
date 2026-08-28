@@ -42,9 +42,30 @@ def _parts(value):
 
 
 def _safe_format(value, fallback):
+    """A name format, or the fallback. A format with NO fields is neither.
+
+    The guard checked only that every field it found was one this profile
+    knows, and `set() <= anything` is true -- so a law writing "given family"
+    instead of "{given} {family}" passed, `str.format` had nothing to
+    substitute, and every body in the world came out called `given family`.
+
+    Found in play, and it mutes a population rather than erroring: a market
+    town generated with 300 bodies had all 300 named "given family" plus a
+    body key. The narrator will not speak a name like that, so it rendered
+    everyone anonymously; nothing could resolve an address to them; and the
+    player stopped a woman in the square, asked her a direct question, and got
+    `no eligible respondent` from a room holding 120 people. A name pool of
+    real names sat unused in the same law.
+
+    So a format must NAME AT LEAST ONE FIELD to be a format. Absent fields are
+    the failure the unknown-field check was already refusing, arriving the
+    other way round.
+    """
     text = str(value or fallback).strip() or fallback
     fields = set(re.findall(r"\{([^{}]+)\}", text))
-    return text if fields <= _FORMAT_FIELDS else fallback
+    if not fields or not fields <= _FORMAT_FIELDS:
+        return fallback
+    return text
 
 
 def normalize_naming_profile(value):
