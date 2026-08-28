@@ -1564,6 +1564,9 @@ def track_background_presences(ctx, nonce, *, prepared=None):
     live_scene = wget(cid, "scene", {}) or {}
     presences = _fold_duplicate_presences(
         wget(cid, "background_presences", {}), live_scene)
+    # Who was already in the ledger before the overlay. A record that was
+    # durable last beat stays durable.
+    _before = set(presences)
     _selected_for_charter = {
         str(n).strip() for n in (br.get("selected") or ()) if str(n).strip()
     }
@@ -1815,6 +1818,34 @@ def track_background_presences(ctx, nonce, *, prepared=None):
     except Exception as exc:  # a ledger without bodies is still a ledger
         ctx.add_warning(f"charter body mint skipped: {exc}")
 
+    # THE OVERLAY IS AN APERTURE, NOT A LEDGER ENTRY. `with_charter_presences`
+    # says so itself -- "merely noticing a Charter worker must not write a
+    # second identity store; ordinary presence tracking persists the record
+    # only after the person actually participates in a beat" -- and this, its
+    # caller, persisted the merged copy wholesale. Harmless while a story had
+    # fourteen charter bodies; measured on a generated market town of three
+    # hundred it wrote 284 permanent records for people the story had never
+    # used, every one of them re-derivable from the registry on demand.
+    #
+    # A record EARNS its place by participating: it spoke, it was addressed,
+    # it was mentioned, it is owed a reply, or it was already in the ledger
+    # before this beat. Everything else stays an aperture and is re-derived
+    # next turn from the charter it came from.
+    _earned = {}
+    for key, record in presences.items():
+        if not isinstance(record, dict):
+            continue
+        # Already durable, harvested from the Director's own structured
+        # fields this beat (`touched`), or not charter-derived at all.
+        if (key in _before or key in touched
+                or not record.get("charter_refs")):
+            _earned[key] = record
+            continue
+        if any(record.get(field) for field in
+               ("dialogue_turns", "addressed_turns", "mention_turns",
+                "pending_reply")):
+            _earned[key] = record
+    presences = _earned
     wset(cid, "background_presences", presences)
     return {"tracked": len(presences),
             "named": named,

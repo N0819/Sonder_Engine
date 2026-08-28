@@ -4286,6 +4286,47 @@ demand-driven voicing caps the cost directly and `max_managed`'s default
 is nearly irrelevant; if it instead grows with input, the ceiling is
 load-bearing and should be set from the curve.
 
+### 1.99f A companion arrives having never met the player
+
+OWNER'S CATCH, from the market-town playtest 2026-08-28, marked for later
+rather than fixed.
+
+A character attached as the player's TRAVELLING COMPANION -- briefed as
+somebody who has been on the road with them long enough to have opinions about
+it -- arrives knowing nobody. Measured on chat 95 after seven beats:
+
+  * the companion's only relationship edge is to `"person of unremarkable
+    appearance"`, at trust 0.06 and familiarity 0.09, with
+    `last_interaction_turn: 4`. That is the PLAYER, met as a stranger, during
+    play.
+  * ZERO of the companion's memories mention the player by name.
+
+`story/journey_history.compile_journey_history` generated sixteen events of
+road and a summary, and the route brief explicitly said "events the player was
+present for should read as shared". The generator has no reason to put the
+player in them: it is handed the character's sheet, the lore and an arrival
+brief, and nothing that says who else was walking. So it wrote one person's
+past, correctly, and the shared half does not exist.
+
+The visible symptom is narration: for three beats the narrator called the
+companion "the wiry man" and "the wiry figure" while `speakers` knew him as
+`('major', 'Jonas Reed')` -- rendering a stranger because, in every ledger the
+narrator can read, he was one.
+
+WHAT IS MISSING is mutual history at attachment: the player named in the
+companion's journey events where the brief says they were present, a
+relationship edge seeded in both directions rather than formed on contact, and
+-- the open question -- what the PLAYER remembers, given a persona has no
+memory bank of its own. The last is the part that needs deciding before any of
+it is built.
+
+Do NOT confuse this with the companion acting on his own agenda. He declared
+an intention on beat 1, went to the wharf against the player's direction, and
+by beat 4 had independently found the river running two hand-widths high and
+started a thread nobody scripted. That is a mind doing its own things and is
+the system working; the owner said so explicitly. The gap is only that he does
+it as a stranger.
+
 ## 2. Roadmap
 
 Features the architecture intends and has not built. Ordered by value per unit
