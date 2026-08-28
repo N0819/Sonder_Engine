@@ -412,8 +412,62 @@ def get_scene(chat_id, chat=None):
     # `vitals` is deliberately NOT defaulted: its absence is what tells the
     # engine survival tracking is off for this story (survival.py).
     if created:
+        _seed_scene_from_plan(chat_id, sc)
         _seed_scene_initial_attire(chat_id, sc, chat)
     return sc
+
+
+def _seed_scene_from_plan(chat_id, sc):
+    """A story that had a location generated for it opens INSIDE it.
+
+    THE ONE MISSING LINK, and everything else was already built. A generated
+    location plants its rooms in `room_registry` with their adjacency, their
+    barriers and their frontier axes, and the spatial system knows what to do
+    with them: `structure.materialize_planned_fringe` brings the planned
+    neighbours of an occupied room into the live scene,
+    `structure.prepare_frontier_expansion` mints a frontier axis into a real
+    room as it is approached, and `structure.planned_context` hands mapping a
+    planned room's purpose and access to flesh out when it is entered. Free
+    generation belongs at the frontier, and that is where it already happens.
+
+    Every one of those keys off the player standing in a PLANNED room --
+    `prepare_frontier_expansion` reads `scene["positions"]` and skips any room
+    that is not in the plan. A scene is born with `"rooms": {}`, so at the
+    opening beat nothing is occupied, nothing is planned, and the Director
+    defines the space from the scenario prose instead.
+
+    Measured on a generated river market town: 20 rooms planted and 300
+    charter bodies standing in them, against a live scene of two rooms the
+    Director minted -- `town_square` and `south_of_town_square`. The player
+    stood in the invented square for six beats while the town, its seven
+    institutions and its three months of history sat next door in
+    `market_square`. Every background person addressed answered with silence,
+    because none of them was ever in the room; the narrator wrote around the
+    absence ("the grain man gave his number") rather than reporting one.
+
+    So the planned graph IS the scene's opening layout. `skeleton_rooms`
+    already returns it in ordinary spatial scene shape, which is the whole of
+    what this does -- no cap, no subset, no second vocabulary. The Director
+    then places the player through the same `scene.rooms` channel it always
+    reads, and from the first commit the fringe, the frontier and the mapping
+    stage all work because the occupied room is one the plan knows.
+    """
+    try:
+        from core.db import wget_for_frame
+        from world.structure import (STRUCTURES_KEY, normalize_structures,
+                                     skeleton_rooms)
+
+        planted = normalize_structures(
+            wget_for_frame(chat_id, STRUCTURES_KEY, None, {}) or {})["items"]
+        rooms = sc.setdefault("rooms", {})
+        for key in sorted(planted):
+            for uid, room in (skeleton_rooms(chat_id, key).get("rooms")
+                              or {}).items():
+                rooms.setdefault(str(uid), room)
+    except Exception:
+        # A story with no generated location is the ordinary case, and a
+        # scene that cannot read a plan is still a scene.
+        pass
 
 def visible_body_text(body, name, scene):
     """One body's standing description, minus whatever its clothing covers.
