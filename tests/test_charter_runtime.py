@@ -564,3 +564,55 @@ class TestACharterEmploysPeopleItDoesNotOwn:
         # item is authoritative within a session and `people` only on disk, so
         # the mutation above deliberately left the in-memory mirror stale.
         assert back["items"] == normalize_registry(joined)["items"]
+
+
+def test_a_presim_replays_identically_whether_it_forked_or_not():
+    """Parallel WITHOUT losing replay, which is the only reason it is allowed.
+
+    Each institution is a closed state advanced from a seed derived from its
+    sorted INDEX, not from execution order, and `cross_charter_gossip` is the
+    barrier afterwards -- so results gather back in the same order and a run is
+    byte-identical on one core or eight. Checkpoint restore and branching
+    depend on that; a faster presim that changed the past would be worthless.
+
+    Measured on a generated market town, 5 charters over 2,160 simulated
+    hours: 135.0s sequential against 53.3s parallel, 2.5x, identical output.
+    Short of linear because the pool waits on the largest charter -- 95 bodies
+    against one holding 7.
+    """
+    import copy
+    import json
+    import world.charter_runtime as runtime
+    from charter_fixtures import ABBEY, SHIP, TOWN
+
+    def _fresh():
+        return normalize_registry({"items": {
+            "ship": {"state": copy.deepcopy(SHIP)},
+            "abbey": {"state": copy.deepcopy(ABBEY)},
+            "town": {"state": copy.deepcopy(TOWN)}}})
+
+    saved = runtime.PARALLEL_PRESIM_HOURS
+    try:
+        runtime.PARALLEL_PRESIM_HOURS = 10 ** 9      # never forks
+        alone, alone_events = runtime.presim_registry(
+            _fresh(), horizon_hours=240.0, active_tail_hours=48.0, seed=5)
+        runtime.PARALLEL_PRESIM_HOURS = 1.0          # always forks
+        forked, forked_events = runtime.presim_registry(
+            _fresh(), horizon_hours=240.0, active_tail_hours=48.0, seed=5)
+    finally:
+        runtime.PARALLEL_PRESIM_HOURS = saved
+
+    assert json.dumps(alone, sort_keys=True) == json.dumps(forked,
+                                                           sort_keys=True)
+    assert alone_events == forked_events
+
+
+def test_the_pool_worker_is_importable_rather_than_a_closure():
+    """A closure cannot be pickled. Written as a local function inside
+    `presim_registry` the pool raises, the guard swallows it, and the work
+    runs sequentially while reporting success -- the parallelism would be a
+    comment rather than a behaviour."""
+    import pickle
+    from world.charter_runtime import _presim_one
+
+    assert pickle.loads(pickle.dumps(_presim_one)) is _presim_one

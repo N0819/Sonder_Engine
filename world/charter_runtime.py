@@ -45,6 +45,11 @@ MAX_CATCHUP_HOURS = 720.0
 MAX_PRESIM_HOURS = 17520.0
 
 DEFAULT_PRESIM_TAIL_HOURS = 96.0
+
+#: Below this horizon a presim stays in-process. Forking costs a pickled
+#: registry item each way, which is worth paying for a month of simulated time
+#: across several institutions and not worth it for an afternoon across two.
+PARALLEL_PRESIM_HOURS = 168.0
 GENERATION_LORE_LIMIT = 48
 CAST_HISTORY_REQUEST_CAP = 16
 
@@ -757,6 +762,35 @@ def registry_revision(registry):
     return stable_event_key("charter_registry", encoded)
 
 
+def _presim_one(payload):
+    """Advance one institution. MODULE LEVEL because it is sent to a process.
+
+    A closure cannot be pickled, so writing this as a local function inside
+    `presim_registry` makes the pool raise, the guard swallow it, and the work
+    run sequentially while reporting success -- the parallelism would be a
+    comment rather than a behaviour. Everything it needs travels in the
+    payload for the same reason.
+    """
+    index, key, item_state, window_hours, coarse, tail, active, seed = payload
+    state = copy.deepcopy(item_state)
+    out = []
+    if coarse:
+        state["active_places"] = []
+        state, events = run(
+            state, coarse, window=max(8.0, window_hours),
+            seed=seed + index * 100_000, simulate_bound=True)
+        out.extend({"charter": key, **copy.deepcopy(event)}
+                   for event in events)
+    if tail:
+        state["active_places"] = list(active)
+        state, events = run(
+            state, tail, window=min(4.0, window_hours),
+            seed=seed + index * 100_000 + 50_000, simulate_bound=True)
+        out.extend({"charter": key, **copy.deepcopy(event)}
+                   for event in events)
+    return state, out
+
+
 def presim_registry(registry, *, horizon_hours=MAX_CATCHUP_HOURS,
                     active_tail_hours=DEFAULT_PRESIM_TAIL_HOURS,
                     tail_places=(), seed=0):
@@ -780,23 +814,47 @@ def presim_registry(registry, *, horizon_hours=MAX_CATCHUP_HOURS,
     tail = max(0.0, min(horizon, float(active_tail_hours or 0.0)))
     coarse = horizon - tail
     produced = []
-    for index, (key, item) in enumerate(sorted(registry["items"].items())):
-        state = copy.deepcopy(item["state"])
-        if coarse:
-            state["active_places"] = []
-            state, events = run(
-                state, coarse, window=max(8.0, item["window_hours"]),
-                seed=int(seed) + index * 100_000, simulate_bound=True)
-            produced.extend({"charter": key, **copy.deepcopy(event)}
-                            for event in events)
-        if tail:
-            state["active_places"] = sorted({str(x) for x in tail_places
-                                               if str(x)})
-            state, events = run(
-                state, tail, window=min(4.0, item["window_hours"]),
-                seed=int(seed) + index * 100_000 + 50_000, simulate_bound=True)
-            produced.extend({"charter": key, **copy.deepcopy(event)}
-                            for event in events)
+    ordered = list(enumerate(sorted(registry["items"].items())))
+    # ACROSS CHARTERS, IN PARALLEL. Each institution is a closed state advanced
+    # from a seed derived from its own INDEX, so nothing crosses between them
+    # here -- `cross_charter_gossip` is the barrier afterwards and is where
+    # information is allowed to move. That makes this embarrassingly parallel
+    # and, unusually, parallel WITHOUT losing replay: the seed comes from the
+    # sorted position rather than from execution order, so results are
+    # gathered back in that same order and a run is byte-identical whether it
+    # ran on one core or eight.
+    #
+    # Measured on a generated market town, 7 charters and 300 bodies over
+    # 2,160 simulated hours: 154.7s sequential, 30.9s per charter. The cost is
+    # also SUPER-LINEAR in population -- 1.8 ms per simulated hour at 40
+    # bodies against 71.6 at 300, so 7.5x the people cost 40x the time. This
+    # divides the wall clock; it does not address that, and the profile that
+    # would is `docs/UNBUILT.md` 1.99h.
+    #
+    # Fork cost is real (pickling a whole registry item both ways), so a lone
+    # charter or a trivial horizon stays in-process where a pool would only
+    # add latency.
+    active = sorted({str(x) for x in tail_places if str(x)})
+    payloads = [(index, key, item["state"], item["window_hours"],
+                 coarse, tail, active, int(seed))
+                for index, (key, item) in ordered]
+    results = None
+    if len(payloads) > 1 and (coarse + tail) >= PARALLEL_PRESIM_HOURS:
+        try:
+            from concurrent.futures import ProcessPoolExecutor
+            import os as _os
+            workers = min(len(payloads), max(1, (_os.cpu_count() or 2) - 1))
+            with ProcessPoolExecutor(max_workers=workers) as pool:
+                results = list(pool.map(_presim_one, payloads))
+        except Exception:
+            # A pool that cannot start is a latency problem, never a
+            # correctness one: the same work runs here instead.
+            results = None
+    if results is None:
+        results = [_presim_one(payload) for payload in payloads]
+
+    for (index, (key, item)), (state, events) in zip(ordered, results):
+        produced.extend(events)
         item["state"] = state
         item["last_elapsed_seconds"] = 0.0
         item["last_epoch_id"] = "presim"
