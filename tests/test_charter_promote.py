@@ -81,9 +81,18 @@ class TestSelectionNotTranscription:
         short, events_a = run(charter, hours=48.0, window=4.0)
         long, events_b = run(charter, hours=336.0, window=4.0)
 
+        # THE KINDS STILL HELD TO IT. `charter_run`'s docstring was amended on
+        # 2026-08-27: events grow with incident and not with time, and
+        # autobiographical rows are deliberately held to a weaker bound. An
+        # encounter is drawn from ordinary shared time and a `social` row from
+        # an ordinary exchange, so both are time-bearing ON PURPOSE -- that is
+        # the whole of what made a simulated year worth more than a month.
+        # Everything else here still converts a quiet stretch to nothing.
+        TIME_BEARING = {"acquaintance", "encounter", "social"}
+
         def timed(memories):
             return [m for m in memories
-                    if m.get("experience_kind") != "acquaintance"]
+                    if m.get("experience_kind") not in TIME_BEARING]
 
         a = timed(remembered(short, key, events=events_a))
         b = timed(remembered(long, key, events=events_b))
@@ -129,7 +138,18 @@ class TestSelectionNotTranscription:
                 "strength": 0.9, "as_of_hours": float(index),
                 "heard_from": None}
 
-        assert len(remembered(charter, "guard")) <= REMEMBERED_CAP
+        # NO CEILING as of 2026-08-27 (owner's call): promotion fires once and
+        # the character keeps the result for the whole story, so the number was
+        # protecting nothing downstream. What still bounds the inheritance is
+        # what the body actually lived -- thirty planted news claims produce
+        # thirty memories and not one more, and a quiet life still promotes
+        # with two or three.
+        assert REMEMBERED_CAP is None
+        minted = remembered(charter, "guard")
+        assert len(minted) >= 30, "every planted claim crosses"
+        assert len(minted) == len({m["event_key"] for m in minted})
+        assert len(remembered(_guard_charter(), "guard")) < 10, (
+            "a quiet life is still a quiet life")
 
 
 class TestWhatMayNotCross:

@@ -329,8 +329,12 @@ class TestTheQuietYearsAreRememberedToo:
 
         rows = [row for held in state["experiences"].values() for row in held]
         assert rows, "the long phase of every presim recorded nothing"
+        # `social` and `encounter` joined the coarse phase when the per-kind
+        # dial was opened to every practice; the assertion is that the phase
+        # writes SOMETHING and writes nothing the promotion side cannot read.
         assert {row["kind"] for row in rows} <= {
-            "service", "acquaintance", "stood_through"}
+            "service", "acquaintance", "stood_through", "encounter",
+            "social", "private_habit", "shared_prestory"}
 
     def test_a_body_remembers_taking_a_post_but_not_holding_it(self):
         """The module's cost rule -- storage grows with incident, not with
@@ -498,11 +502,16 @@ class TestTheSocialWorldTurnsOffscreen:
         minds = {"a": {"b": {"strength": 0.9}}, "b": {"a": {"strength": 0.9}}}
 
         everything = opportunities(bodies, minds, {}, (), {}, 8.0)
-        coarse = opportunities(bodies, minds, {}, (), {}, 8.0,
-                               kinds=COARSE_PRACTICES)
+        narrowed = opportunities(bodies, minds, {}, (), {}, 8.0,
+                                 kinds={"greeting"})
 
         kinds = lambda opened: {row["kind"] for row in opened.values()}
-        assert "converse" in kinds(everything), "a scene still gets gossip"
-        assert "greeting" in kinds(coarse), "strangers still meet offscreen"
-        assert "converse" not in kinds(coarse), (
-            "the kind that saturates is the kind that stays on screen")
+        assert {"converse", "greeting"} <= kinds(everything)
+        assert kinds(narrowed) == {"greeting"}, "the filter has to bite"
+        # THE MECHANISM, NOT TODAY'S POLICY. `COARSE_PRACTICES` is None as of
+        # 2026-08-27 -- the owner's call, on a measurement: excluding
+        # `converse` offscreen rested on a 9x figure that does not reproduce
+        # (twin_towns(40), a simulated month offscreen: 0.67s throttled
+        # against 1.29s for every kind, and 1,276 rows against 3,932). The
+        # seam a future throttle would use is what this pins.
+        assert COARSE_PRACTICES is None or "converse" not in COARSE_PRACTICES
