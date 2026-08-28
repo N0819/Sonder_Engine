@@ -132,11 +132,16 @@ def _social_events(acts, bodies, at_hours):
 CO_PRESENCE_WIDTH = 64
 
 #: One window in this many, per pair sharing a place, becomes a specific
-#: occasion rather than another tick of the tally. Tuned so a pair together
-#: through a simulated year keeps a handful of them: often enough that the
-#: system is always in motion, rare enough that storage stays sub-linear in
-#: time, which is the bound this module has always been held to.
-ENCOUNTER_ODDS = 96
+#: occasion rather than another tick of the tally.
+#:
+#: Owner's call 2026-08-27, raised from 96 against a measured cost rather than
+#: a feared one: a body keeps roughly 560 rows per simulated year instead of
+#: 70, reaches EXPERIENCE_CAP after about seven simulated years rather than
+#: fifty, and costs ~180 KB against ~23 KB. A charter row is ~324 bytes and
+#: carries no embedding, so the whole of that is noise beside the tier it
+#: feeds. The rate was set conservatively the first time against a cost nobody
+#: had measured, which is the failure this package keeps repeating.
+ENCOUNTER_ODDS = 12
 
 
 def _remember_experience(store, holder, row, fold=True):

@@ -4086,6 +4086,67 @@ What that leaves open:
   deliberately does not advance the world.
 
 
+### 1.99d A person is owned by an institution, and a timeskip carries nobody
+
+TWO OWNER DESIGNS RECORDED 2026-08-27, the second depending on the first.
+
+**A Charter owns people, and it should only employ them.** One charter's state
+holds roughly fifteen PERSON-scoped stores -- `bodies`, `minds`, `needs`,
+`feel`, `experiences`, `served_beside`, `stood`, `judgments`, `ties`, `marks`,
+`commitments`, `habit_runs`, `travelled`, `heard_blame`, `politics.regard` --
+beside thirteen INSTITUTION-scoped ones (`posts`, `upkeeps`, `priority`,
+`watch`, `roster`, `decisions`, `economy`, `structure`, `scene`,
+`social_norms`, `clock_hours`, `naming`, `active_places`). A person is
+therefore addressed as `(charter_key, body_key)` and stored inside an
+institution's blob.
+
+Two absurdities follow, and the owner named both: a hermit the Director
+invented needs an institution to exist in, and a person moving town, joining a
+crew or transferring ship must be re-keyed across two blobs dragging fifteen
+stores with them. A person holding posts in two institutions cannot be
+expressed at all.
+
+The shape: hoist the person half to the REGISTRY level so charters reference
+bodies rather than containing them, leaving posts, upkeeps and the watch bill
+in the charter and making membership the link. A hermit is then a person with
+no membership; a transfer is a membership change with identity, memory and
+relationships untouched. `registry["items"]` and `_body_refs`'s
+`(charter, body)` resolution are half of the addressing already.
+`cross_charter_gossip` exists because information already has to cross
+institutional boundaries; people should be able to as well.
+
+Cost, stated honestly: the largest single change on this register. Every one
+of the fifteen stores moves, `normalize_charter` splits, and it crosses the
+persistence boundary -- archive, checkpoint, branch/clone ID remapping. A
+cheaper intermediate exists (a `member_of` field plus an atomic transfer
+operation moving the fifteen stores between charters) and is explicitly NOT
+the plan: it is a migration that gets paid for twice, the second time when
+transfers turn out to be ordinary rather than exceptional.
+
+**It is load-bearing for the background consolidation.** The owner's decision
+that every background NPC becomes a Charter body -- measured cause: 84 ad-hoc
+stateless presences against 14 charter-backed in the corpus, so 86% of
+background people reach none of this work -- makes rootless people the COMMON
+case rather than the exception. Doing the split afterwards would replace an
+86%-stateless problem with an 86%-awkwardly-housed one. Order: split first.
+
+**Timeskips should hand a major character to Charter.** Ask the registered
+character what they intend over the declared period, seed it as Charter state,
+run the institution forward with `simulate_bound=True`, and hand the
+accumulated life back. Both halves already exist and were built for the
+adjacent case: `charter_run.step`'s `simulate_bound` suspends the promotion
+exclusion precisely because a body nobody is taking turns for should be
+simulated rather than frozen, and `charter_promote.promotion_handoff` already
+converts accumulated body state into character memories, affect and
+relationships. A timeskip is a temporary demotion and re-promotion with an
+intent query in front of it.
+
+What is NOT yet decided: whether the intent query is one call or one per
+character; how a character's existing projects and intentions seed Charter's
+own wants rather than being restated; and what happens when the institution's
+simulation contradicts the stated intent, which is the interesting case and
+probably the point.
+
 ## 2. Roadmap
 
 Features the architecture intends and has not built. Ordered by value per unit

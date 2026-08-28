@@ -842,7 +842,17 @@ def _offer_for(actor, act, other, participations, state):
 #: resolution dial is per-KIND as well as per-place: offscreen you do not get
 #: gossip, and you do get the handful of things that change who people are to
 #: one another.
-COARSE_PRACTICES = frozenset({"tending", "greeting"})
+#:
+#: NOW EVERY KIND, owner's call 2026-08-27. The exclusion of `converse` rested
+#: on a 9x figure (a simulated month, 3.6s to 32.7s) that does NOT reproduce on
+#: this code: measured today on twin_towns(40) offscreen for a simulated month,
+#: greeting+tending is 0.67s and every kind is 1.29s -- 1.9x, and it triples
+#: the autobiographical rows deposited, 1,276 to 3,932. Saturation was the
+#: other half of the argument and `_afford_ask` already answered it: asking
+#: fires on the ASKER'S OWN gap, which decay reopens continuously, so the loop
+#: no longer goes silent once a population has met itself. None means no
+#: restriction; the constant survives as the seam a future throttle would use.
+COARSE_PRACTICES = None
 
 
 def opportunities(bodies, minds, needs, events, practices, at_hours, seed=0,

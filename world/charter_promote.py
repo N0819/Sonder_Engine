@@ -53,20 +53,22 @@ from .charter_politics import regard_value
 from .charter_commitment import commitment_view
 from .charter_social import familiarity, judgment_view, tie_of
 
-#: Memories a promotion mints, total. A budget, not a target: a quiet life
-#: promotes with two or three rows, and that is a correct answer.
+#: Memories a promotion mints, total. NO CEILING, owner's call 2026-08-27.
 #:
-#: THIS IS A ONE-TIME CAP AND WAS PRICED AS A PER-BEAT ONE. Promotion happens
-#: once and the character keeps what it inherits for the rest of the story, so
-#: this number is not protecting any turn's payload or any turn's wall clock --
-#: it is deciding how much of a life a person arrives with. At 12 it was also
-#: the neck of the whole depth pipeline: `charter_history.resident_history_packet`
-#: builds its evidence from these rows, so the model pass that turns a simulated
-#: past into subjective memory could never see more than twelve things however
-#: deep the substrate underneath got. Selection is salience-ranked (`out.sort`
-#: below) and then truncated, so raising this keeps the same best rows and adds
-#: the ones that were being discarded.
-REMEMBERED_CAP = 120
+#: This was 12, then 120, and both were the same mistake at different sizes: a
+#: number deciding how much of a life a person arrives with, priced as though
+#: it were a per-beat payload. Promotion fires ONCE and the character keeps the
+#: result for the whole story, so nothing downstream is being protected — and
+#: at 120 it was already about to bind, since a simulated year produced 93.8
+#: and the presim ceiling now allows two. The inheritance is bounded where it
+#: should be, by what the body actually lived: `EXPERIENCE_CAP` upstream, and
+#: before that by a simulation that only writes when something happened.
+#:
+#: None means no truncation. Selection is still salience-ranked below, so the
+#: ordering that used to decide what survived now only decides what comes
+#: first. A quiet life still promotes with two or three rows, which was always
+#: the honest answer for a quiet life.
+REMEMBERED_CAP = None
 
 #: Acquaintances that cross as relationship memories. The same cap family as
 #: `charter_log.scene_ledger`'s `knows_here`, for the same reason: a roll
@@ -363,6 +365,8 @@ def remembered(charter, body_key, events=(), cap=REMEMBERED_CAP):
         })
 
     out.sort(key=lambda m: (-float(m["salience"]), m["event_key"]))
+    if cap is None:
+        return out
     return out[:max(0, int(cap))]
 
 
