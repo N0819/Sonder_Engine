@@ -100,7 +100,7 @@ class TestSelectionNotTranscription:
             {m["event_key"] for m in b} == {m["event_key"] for m in a}, \
             "time alone grew the past"
 
-    def test_acquaintance_is_bounded_by_the_population(self):
+    def test_acquaintance_grows_with_who_is_met_and_not_with_time(self):
         """Meeting somebody for the first time IS an incident, so it may add a
         row -- but only once per person, and the belief store cannot be the
         judge of that on its own because it DECAYS. Left appending on every
@@ -110,6 +110,17 @@ class TestSelectionNotTranscription:
         docstring forbids. Folding on the stable per-pair id is what keeps it
         keyed to the shape of the institution, and the volume rides on
         `repetitions` instead of on new rows.
+
+        TWO MONTHS, WATCHED AT BOTH ENDS, rather than the two years this once
+        simulated. The horizon was never the evidence: the same trajectory
+        observed twice says outright what one long run could only imply, and
+        a second month that adds no row IS "grows with incident and not with
+        time". Measured 2026-08-28 on the pre-fold behaviour, which fails
+        three of these four assertions: rows 38 -> 70 where the fold holds
+        18 -> 18, and `repetitions` stays 1 forever because nothing ever
+        folds. The old spelling cost 584.8s of a 643s suite -- a serial floor
+        no worker count could go under -- and bought a weaker claim, since
+        `len(met) < population` does not trip until two months anyway.
         """
         charter = normalize_charter(twin_towns(40))
         charter["roster"] = seed_roster(charter["bodies"])
@@ -117,13 +128,26 @@ class TestSelectionNotTranscription:
         key = sorted(charter["bodies"])[0]
         population = len(charter["bodies"])
 
-        two_years, _ = run(charter, hours=17_520.0, window=4.0)
+        def met(state):
+            return [row for row in state["experiences"].get(key) or []
+                    if row["kind"] == "acquaintance"]
 
-        met = [row for row in two_years["experiences"].get(key) or []
-               if row["kind"] == "acquaintance"]
-        assert met, "two years alone in a town of forty"
-        assert len(met) < population, "one row per person known, at most"
-        assert max(int(row.get("repetitions") or 1) for row in met) > 1, (
+        def deepest(rows):
+            return max((int(row.get("repetitions") or 1) for row in rows),
+                       default=0)
+
+        month, _ = run(charter, hours=720.0, window=4.0)
+        early = met(month)
+        second, _ = run(month, hours=720.0, window=4.0)
+        late = met(second)
+
+        assert early, "a month alone in a town of forty"
+        assert len(late) < population, (
+            f"one row per person known, at most: {len(late)} of {population}")
+        assert len(late) <= len(early) + 2, (
+            f"a second month of the same forty people added "
+            f"{len(late) - len(early)} rows")
+        assert deepest(late) > deepest(early), (
             "re-meeting has to deepen the row rather than mint another")
 
     def test_the_cap_is_a_budget(self):

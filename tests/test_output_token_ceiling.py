@@ -14,6 +14,7 @@ request-shaping — no network.
 from __future__ import annotations
 
 import ast
+import sys
 from pathlib import Path
 
 import pytest
@@ -21,6 +22,31 @@ import pytest
 from llm import providers
 
 REPO = Path(__file__).resolve().parent.parent
+
+
+def _engine_python_files():
+    """Every .py file this project wrote -- enumerated, never walked from REPO.
+
+    `REPO.rglob("*.py")` reads 55,184 files on a working checkout and only
+    2,333 of them are ours: the per-worktree checkouts under the hidden agent
+    directory hold a complete copy of this engine EACH (50,898 files, sixty-odd
+    copies), and the virtualenv another 1,953. Measured 2026-08-28, that was
+    220.7s of a 643s suite -- the second-largest cost in it -- to answer a
+    question about the engine's own call sites.
+
+    It was also WRONG, which is the part worth keeping in mind: an offender
+    living in a stale worktree, or in a dependency that happens to pass an
+    integer `max_tokens`, failed this test for the checkout it was never
+    about. `tools/project_check.py` learned the same lesson at its
+    `check_undefined_names` and wrote the enumeration down; this borrows it,
+    and `test_repo_hygiene_source_roots.py` is the canary that keeps
+    ENGINE_SOURCE_ROOTS honest when a new source directory appears.
+    """
+    sys.path.insert(0, str(REPO / "tools"))
+    import project_check
+
+    return [path for path in project_check.repository_python_paths()
+            if "__pycache__" not in path.parts]
 
 
 @pytest.fixture
@@ -108,8 +134,8 @@ def test_no_call_site_requests_an_unreachable_budget():
     """The clamp is the floor, but a call site asking for 200k is still a bug
     worth catching at source — it misreports intent to anyone reading it."""
     offenders = []
-    for path in REPO.rglob("*.py"):
-        if "__pycache__" in path.parts or path.parts[-2:-1] == ("tests",):
+    for path in _engine_python_files():
+        if path.parts[-2:-1] == ("tests",):
             continue
         try:
             tree = ast.parse(path.read_text(encoding="utf-8"))
