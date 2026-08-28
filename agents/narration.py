@@ -1629,29 +1629,29 @@ def narrator(ctx, nonce):
             payload, view, prev, p_lines, correction_notes=correction,
             fidelity_facts=_fidelity_facts, language=ctx.language)
 
-    # Craft screen: while the accepted draft carries banned AI tells, spend a
-    # rewrite naming them (bounded to 2). Keep a rewrite ONLY if it preserves
-    # dialogue fidelity AND strictly reduces the tell count -- prose quality
-    # never costs a dropped line, and we never accept a lateral swap that just
-    # trades one tell for another.
-    best_tells = _craft_tells(out.get("prose", ""))
-    _retry_cap = 0 if os.environ.get("NARRATOR_CRAFT_RETRY") == "0" else 2
-    craft_attempts = 0
-    while best_tells and craft_attempts < _retry_cap:
-        craft_attempts += 1
-        craft_note = prompt_fragment(
-            "narrator_craft_correction", ctx.language).format(
-                problems="; ".join(best_tells))
-        r_out, r_warnings, r_fid = _generate_narration(
-            payload, view, prev, p_lines, correction_notes=craft_note,
-            fidelity_facts=_fidelity_facts, language=ctx.language)
-        r_enforceable = [w for w in r_fid if w.startswith(_ling("_ENFORCEABLE_PREFIXES"))]
-        r_tells = _craft_tells(r_out.get("prose", ""))
-        if not r_enforceable and len(r_tells) < len(best_tells):
-            out, warnings, fidelity_warnings = r_out, r_warnings, r_fid
-            best_tells = r_tells
-        else:
-            break
+    # THE CRAFT REWRITE IS GONE, and prose rules live where prose rules belong.
+    #
+    # It bought a second full narrator call to enforce a list the NARRATOR
+    # PROMPT ALREADY CARRIES -- "eyes flick", "middle distance", "hangs in the
+    # air" and the rest are all in its 37,616 characters, so the loop was
+    # duplicate enforcement of an instruction the model had already been given.
+    #
+    # And it enforced by matching a STRING rather than the usage the string
+    # usually indicates, which is this repo's oldest recurring defect. Measured
+    # on a live market-town turn: the pattern `\bregisters?\b`, listed as
+    # "sensor-ledger diction", fired on the ordinary English verb in "stepped
+    # aside for her without seeming to REGISTER he'd done it". One false
+    # positive cost 21.2s -- the largest single model cost in a 352s turn --
+    # and the rewrite it forced came back 40% shorter (1029 chars to 613) and
+    # was accepted automatically, because the acceptance test asked only for
+    # fewer tells and intact dialogue and had nothing to say about a rewrite
+    # gutting the description. The engine paid for a second call to make the
+    # prose worse.
+    #
+    # The detection stays as a NON-BLOCKING warning, exactly as content-reuse
+    # is handled above: drift stays visible for review without costing a call.
+    for _tell in _craft_tells(out.get("prose", "")):
+        warnings.append(f"craft: {_tell}")
 
     ctx.warnings.extend(warnings)
     if fidelity_warnings:
