@@ -4147,6 +4147,54 @@ own wants rather than being restated; and what happens when the institution's
 simulation contradicts the stated intent, which is the interesting case and
 probably the point.
 
+### 1.99e The three tiers, and the chatter already being thrown away
+
+OWNER DESIGNS 2026-08-27, following 1.99d's split. The intended shape is one
+substrate and two presentation layers:
+
+  * **Charter is every unregistered person, always.** Measured cause: 84 ad-hoc
+    stateless background presences against 14 charter-backed across the corpus,
+    so 86% of background people reach none of the memory, familiarity, ties,
+    marks or history-reading volition built for them. `with_charter_presences`
+    already OVERLAYS charter bodies onto the presence ledger and is careful
+    about identity; what is missing is that a person the Director invents
+    mid-scene becomes a name in a dict rather than a body. Minting into Charter
+    instead also dissolves the display-name collision problem (Charter keys by
+    body id), and the "translate what a presence experienced offscreen back
+    into Charter ledgers" problem, which stops existing.
+  * **Background life voices whoever is actually being interacted with**,
+    rather than the N most salient. The owner's correction: make the handoff
+    DYNAMIC -- the player addresses a charter body, or a charter body acts
+    toward the player, and that body gets voiced for the beat. Demand-driven
+    rather than budget-driven, which also makes `max_managed` far less
+    load-bearing than picking a fixed N would. The measurement it still wants
+    is what a manager call costs at 4 / 8 / 16 presences; nobody has taken it,
+    and the current 6-default / 8-cap is unmeasured.
+  * **Crowds carry the rest.** `world/crowds.py` is already the right object --
+    one row whatever it contains, band rather than integer, density derived
+    from band and room, keyed by uid never display name, with `emerge` and
+    `absorb` as the individual/collective bridge. It has ZERO references to
+    charter today. Charter knows who is where and, since this week, who has a
+    tie, a grievance, a mark or a shared history with whoever is present --
+    which is exactly the selector for who steps out of the crowd. Constraint:
+    the crowd must be a PROJECTION of Charter's population, never a second
+    source of truth about it.
+
+**AMBIENT CHATTER IS ALREADY COMPUTED AND DISCARDED.** `charter_practice.enact`
+returns `acts` every window, each carrying a deterministic `line` naming actor,
+act, other and subject -- measured on twin_towns(40) offscreen, EIGHTEEN acts in
+a single window, with no model call anywhere in their production. `charter_run`
+writes them to `after_charter["acts"]` and nothing surfaces them. A populous
+place could hand the narrator its own background murmur for the cost of a list
+slice and a `charter_identity.display_name` pass. The lines are keyed by body
+(`low_009 asked low_017 about low_031`), so the naming pass is the only work.
+
+Not decided: whether ambient lines reach the narrator as prose texture or as
+structured observations through the perception layer. The firewall answer is
+probably the second -- what a body says aloud in a room is witnessable, and
+routing it through `charter_news.witness` rather than around it keeps the one
+rule about who may learn what.
+
 ## 2. Roadmap
 
 Features the architecture intends and has not built. Ordered by value per unit
