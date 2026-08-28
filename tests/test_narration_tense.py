@@ -331,3 +331,47 @@ class TestCraftTells:
         the widened pattern must not have swallowed the guard that says so."""
         assert not _craft_tells("He takes the cup in his hands.")
         assert not _craft_tells("He took the cup in his hands.")
+
+
+class TestProseRulesLiveInThePrompt:
+    """The craft rewrite bought a second full narrator call to enforce a list
+    the narrator prompt already carries -- "eyes flick", "middle distance",
+    "hangs in the air" are all in its ~37,600 characters. Duplicate
+    enforcement, and enforcement by matching a STRING rather than the usage
+    the string indicates.
+
+    Measured on a live market-town turn: `\\bregisters?\\b`, listed as
+    "sensor-ledger diction", fired on the ordinary English verb in "stepped
+    aside for her without seeming to register he'd done it". That one false
+    positive cost 21.2s -- the largest single model cost in a 352s turn -- and
+    the rewrite it forced came back 40% shorter (1029 chars to 613) and was
+    accepted automatically, because the acceptance test asked only for fewer
+    tells and intact dialogue.
+    """
+
+    def test_the_rules_are_in_the_prompt(self):
+        from llm.prompts import get_prompt
+
+        prompt = get_prompt("narrator")
+
+        for rule in ("eyes flick", "middle distance", "hangs in the air"):
+            assert rule in prompt.casefold(), rule
+
+    def test_no_craft_rewrite_survives_in_the_narrator(self):
+        """A second narrator call is the thing being removed, so the loop that
+        spent it must not come back quietly."""
+        import inspect
+        from agents import narration
+
+        source = inspect.getsource(narration)
+
+        assert "craft_attempts" not in source
+        assert "narrator_craft_correction" not in source
+
+    def test_a_tell_is_still_reported(self):
+        """Demoted, not deleted: drift stays visible the way content-reuse
+        already does, without costing a model call."""
+        from agents.narration import _craft_tells
+
+        assert _craft_tells("Her eyes flick to the door.")
+        assert not _craft_tells("She looked at the door.")
