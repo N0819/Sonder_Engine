@@ -434,6 +434,48 @@ def grievance_against(state, actor, other):
     return count
 
 
+def entanglement(charter, actor, others):
+    """How much reason this body has to step toward these people: the
+    `_between` digest -- the exact surface every affordance weights utility
+    on -- summed over them, plus the actor's own grievances.
+
+    THE EMERGE SELECTOR'S SCORE (DESIGN_BACKGROUND_PRESENTATION §B3): when
+    the Director asks the derived charter crowd for someone and names nobody,
+    the person who steps out is the one with a tie, a debt, a grievance or
+    ``served_beside`` history with a present body -- a reason to. Read from
+    the ACTOR'S OWN side of every store, exactly as `_between` promises;
+    ``others`` are keys as the actor's stores hold them (body keys, figure
+    keys), and an unknown key simply scores nothing. ``|affect|``, not
+    ``affect``: a body that hates someone present has as much reason to step
+    forward as one that loves them -- the axis measures charge, and the sign
+    is the scene's to play out.
+
+    ``charter`` is the JOINED charter state; the throwaway working dict is
+    built by the same `_state_of` the affordances use, so this can never
+    weight on a surface an affordance could not.
+    """
+    working = _state_of(
+        charter.get("bodies") or {}, charter.get("minds") or {},
+        charter.get("needs") or {}, {}, {},
+        float(charter.get("clock_hours") or 0.0),
+        figures=charter.get("figures") or {},
+        experiences=charter.get("experiences") or {},
+        served_beside=charter.get("served_beside") or {},
+        judgments=charter.get("judgments") or {},
+        commitments=charter.get("commitments") or {})
+    actor = str(actor or "")
+    total = 0.0
+    for other in others or ():
+        other = str(other or "")
+        if not other or other == actor:
+            continue
+        held = _between(working, actor, other)
+        total += (held["familiar"] + abs(held["affect"])
+                  + held["debt"] + held["owed"])
+        total += float(grievance_against(working, actor, other))
+    return total
+
+
 def _afford_greet(actor, other, practice, state):
     if (state["minds"].get(actor) or {}).get(other):
         return None
@@ -511,11 +553,17 @@ def _afford_ask(actor, other, practice, state):
         return None
 
     def effect():
+        # A dict rather than a bare line: the skeleton names its subject
+        # only inside prose, and ambient chatter (charter_chatter) needs the
+        # triple structurally — parsing the template back out of the string
+        # would be a second spelling of this function that drifts.
         if other in (state.get("figures") or {}):
-            return f"{actor} asked {other} about {subject}"
+            return {"line": f"{actor} asked {other} about {subject}",
+                    "subject": subject}
         if hear(state["minds"], actor, other, subject, ASKED_RETENTION,
                 regard_value(state["regard"], actor, other)):
-            return f"{actor} asked {other} about {subject}"
+            return {"line": f"{actor} asked {other} about {subject}",
+                    "subject": subject}
         return ""
 
     # WHO YOU ASK, not what you ask about: the subject is already the
@@ -555,10 +603,12 @@ def _afford_tell(actor, other, practice, state):
             # engine, and what it makes of the telling is the scene's
             # business. The telling itself is conduct, and it is exactly
             # the act a player experiences from a background NPC.
-            return f"{actor} told {other} about {subject}"
+            return {"line": f"{actor} told {other} about {subject}",
+                    "subject": subject}
         if hear(state["minds"], other, actor, subject, RETOLD_RETENTION,
                 regard_value(state["regard"], other, actor)):
-            return f"{actor} told {other} about {subject}"
+            return {"line": f"{actor} told {other} about {subject}",
+                    "subject": subject}
         return ""
 
     # Telling is the affordance that saturates, so what history adds here is
@@ -1046,9 +1096,10 @@ def enact(bodies, minds, needs, practices, regard, blame, at_hours, seed=0,
     body does nothing this beat: dropped with a notice, never applied and
     never silent.
 
-    Each act is a record ``{actor, act, other, line}`` rather than a bare
-    line, so an author can replay conduct and a ledger can say who did what
-    to whom without parsing prose.
+    Each act is a record ``{actor, act, other, line}`` — plus ``subject``
+    where the act has a topic (ask/tell) — rather than a bare line, so an
+    author can replay conduct and a ledger can say who did what to whom
+    without parsing prose.
 
     The four history stores are the pair's shared record, read only from the
     deciding body's own side (see the module docstring). They are read and
@@ -1107,14 +1158,33 @@ def enact(bodies, minds, needs, practices, regard, blame, at_hours, seed=0,
             if chosen is None:
                 continue
 
-        line = chosen[3]()
+        line, subject = landed_effect(chosen[3]())
         if line:
-            acts.append({"actor": actor, "act": chosen[1],
-                         "other": chosen[2], "line": line})
+            row = {"actor": actor, "act": chosen[1],
+                   "other": chosen[2], "line": line}
+            if subject:
+                row["subject"] = subject
+            acts.append(row)
             chosen[4]["last_effect_at"] = float(at_hours)
 
     return acts, state["spawned"], state["closed"], state["heard_blame"], \
         refused
+
+
+def landed_effect(result):
+    """``(line, subject)`` from whatever an effect returned.
+
+    An effect returns a bare line, or ``{"line", "subject"}`` where the act
+    has a topic (ask/tell). The subject travels as a FIELD because the line
+    is a skeleton nothing may parse: ambient chatter renders
+    who-asked-whom-about-whom from the triple (`charter_chatter`), and the
+    triple has to exist somewhere other than inside prose. One reader for
+    both act paths — `enact` here and `charter_author._body_act` — or the
+    two spellings drift.
+    """
+    if isinstance(result, dict):
+        return str(result.get("line") or ""), str(result.get("subject") or "")
+    return str(result or ""), ""
 
 
 def close_stale(practices, at_hours):

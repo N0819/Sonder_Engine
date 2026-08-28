@@ -57,6 +57,7 @@ from .charter_feel import STRAIN_REST_TOLL, advance_feel, strain_of
 from .charter_mark import (BY_MARKS, DISGRACE_RELUCTANCE, advance_marks,
                            held_marks)
 from .charter_trigger import changes_from, fire_triggers
+from . import charter_chatter
 from .charter_log import window_note
 from .charter_figure import sight_figures
 from .charter_mind import cap_minds, decay_minds
@@ -1175,6 +1176,16 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
     after_charter["decisions"] = decisions
     after_charter["practices"] = practices
     after_charter["acts"] = list(acts)
+    # THE ONE DURABLE COPY OF THIS WINDOW'S TALK. `acts` above dies at the
+    # next `normalize_charter` (every step head, every save), so the ambient
+    # chatter the perception layer renders reads THIS field instead: the same
+    # acts, room-stamped by the actor's place (the presence test `witness`
+    # applies) and stripped of the template `line` — what a bystander takes
+    # in is who-spoke-to-whom-about-whom, never a sentence. Overwritten
+    # whole every window: chatter is the LAST landed window's, by design
+    # (DESIGN_BACKGROUND_PRESENTATION §0's staleness argument).
+    after_charter["window_acts"] = charter_chatter.window_acts(
+        acts, bodies, at + hours, event_kinds=_ACT_EVENTS)
     after_charter["experiences"] = experiences
     after_charter["habit_runs"] = habit_runs
     # Authored conduct the state refused, with reasons. Diagnostics for the

@@ -54,6 +54,7 @@ from .charter_practice import (
     REFUSED_UNABLE,
     _by_body,
     _offer_for,
+    landed_effect,
     _open,
     _state_of,
     _whereabouts,
@@ -215,14 +216,17 @@ def _body_act(actor, act, other, bodies, state, practices, minds, needs, at):
         actor, act, other, _by_body(practices).get(actor, ()), state)
     if offer is None:
         return _refusal(actor, act, other, reason)
-    line = offer[1]()
+    line, subject = landed_effect(offer[1]())
     if not line:
         # The builder licensed the act but the effect found nothing to do —
         # a telling the listener already held stronger. Still conduct; the
         # record says what was attempted rather than pretending silence.
         line = f"{actor} {act} {other}".strip()
     practice["last_effect_at"] = at
-    return {"actor": actor, "act": act, "other": other, "line": line}
+    record = {"actor": actor, "act": act, "other": other, "line": line}
+    if subject:
+        record["subject"] = subject
+    return record
 
 
 def _figure_act(actor, act, other, figures, bodies, state, practices, minds,

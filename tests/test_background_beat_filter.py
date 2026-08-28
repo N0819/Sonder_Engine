@@ -235,7 +235,12 @@ def test_background_react_payload_is_filtered(temp_db, monkeypatch):
     temp_db.wset(ctx.chat.id, "scene", {"rooms": {}, "positions": {}})
     temp_db.wset(ctx.chat.id, "background_presences", {"Doc": {"sketch": {}}})
 
-    monkeypatch.setattr(background, "pick_background_reactors", lambda *a, **k: ["Doc"])
+    # The stage reads `pick_voice_demand` (the gate with chorus metadata);
+    # patching the names-only wrapper would be an inert patch.
+    monkeypatch.setattr(
+        background, "pick_voice_demand",
+        lambda *a, **k: {"picks": ["Doc"], "meta": {
+            "Doc": {"addressed": False, "refs": [], "room": ""}}})
 
     captured = {}
 

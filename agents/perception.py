@@ -602,6 +602,8 @@ from .common import (
     _room_notes_for_view,
     crowds_for_room,
     artifacts_for_room,
+    chatter_for_room,
+    chatter_inputs,
     couriers_for_room,
     _scrub_unknown_identities,
     _mask_quoted_spans,
@@ -1755,13 +1757,17 @@ def perception_establish(ctx, nonce):
         if r:
             sources.append({"name": character_name(sh), "room": r})
 
+    # One registry read for the whole stage; each perceiver's room reuses it
+    # through the memo inside (see `chatter_inputs`).
+    chatter = chatter_inputs(ctx.chat.id, sc, turn_idx=ctx.turn.idx)
     perceivers = [{
         "id": "player", "name": p_name, "room": p_room,
         "pronouns": (pers.get("identity") or {}).get("pronouns") or {},
         "room_name": (p_rdata or {}).get("name") or p_room or "an unspecified area",
         "room_notes": _room_notes_for_view(p_rdata, p_room, ctx, sc),
         "ambient_location": _ambient_location_for(sc, p_room),
-        "crowds": crowds_for_room(ctx.chat.id, sc, p_room),
+        "crowds": crowds_for_room(ctx.chat.id, sc, p_room, chatter),
+        "chatter": chatter_for_room(ctx.chat.id, sc, p_room, chatter),
         "couriers": couriers_for_room(ctx.chat.id, sc, p_room),
         "notices": artifacts_for_room(ctx.chat.id, sc, p_room),
         "visible_rooms": _visible_rooms_for(sc, p_name, p_room),
@@ -1788,7 +1794,8 @@ def perception_establish(ctx, nonce):
             "room_name": (rdata or {}).get("name") or r or "an unspecified area",
             "room_notes": _room_notes_for_view(rdata, r, ctx, sc),
             "ambient_location": _ambient_location_for(sc, r),
-            "crowds": crowds_for_room(ctx.chat.id, sc, r),
+            "crowds": crowds_for_room(ctx.chat.id, sc, r, chatter),
+            "chatter": chatter_for_room(ctx.chat.id, sc, r, chatter),
             "couriers": couriers_for_room(ctx.chat.id, sc, r),
             "notices": artifacts_for_room(ctx.chat.id, sc, r),
             "visible_rooms": _visible_rooms_for(sc, character_name(sh), r),
@@ -1939,6 +1946,8 @@ def perception_act(ctx, nonce):
     # that reason.
     perceivers = []
     present_ids = {b["id"] for b in _present_cast_bodies(sc, ctx.cast)}
+    # One registry read for the whole stage (see `chatter_inputs`).
+    chatter = chatter_inputs(ctx.chat.id, sc, turn_idx=ctx.turn.idx)
 
     for c in ctx.cast:
         if c["id"] not in present_ids:
@@ -1968,7 +1977,8 @@ def perception_act(ctx, nonce):
             "room_name": (rdata or {}).get("name") or r or "an unspecified area",
             "room_notes": _room_notes_for_view(rdata, r, ctx, sc),
             "ambient_location": _ambient_location_for(sc, r),
-            "crowds": crowds_for_room(ctx.chat.id, sc, r),
+            "crowds": crowds_for_room(ctx.chat.id, sc, r, chatter),
+            "chatter": chatter_for_room(ctx.chat.id, sc, r, chatter),
             "couriers": couriers_for_room(ctx.chat.id, sc, r),
             "notices": artifacts_for_room(ctx.chat.id, sc, r),
             "visible_rooms": _visible_rooms_for(sc, character_name(sh), r),
@@ -2435,13 +2445,16 @@ def perception_outcome(ctx, nonce):
     # `manifest` (surface demeanor + tells) and gate delivery per observer.
     cast_by_name = {character_name_from_text(c["sheet"]): c["id"] for c in ctx.cast}
 
+    # One registry read for the whole stage (see `chatter_inputs`).
+    chatter = chatter_inputs(ctx.chat.id, sc, turn_idx=ctx.turn.idx)
     perceivers = [{
         "id": "player", "name": p_name, "room": p_room,
         "pronouns": (pers.get("identity") or {}).get("pronouns") or {},
         "room_name": (p_rdata or {}).get("name") or p_room or "an unspecified area",
         "room_notes": _room_notes_for_view(p_rdata, p_room, ctx, sc),
         "ambient_location": _ambient_location_for(sc, p_room),
-        "crowds": crowds_for_room(ctx.chat.id, sc, p_room),
+        "crowds": crowds_for_room(ctx.chat.id, sc, p_room, chatter),
+        "chatter": chatter_for_room(ctx.chat.id, sc, p_room, chatter),
         "couriers": couriers_for_room(ctx.chat.id, sc, p_room),
         "notices": artifacts_for_room(ctx.chat.id, sc, p_room),
         "visible_rooms": _visible_rooms_for(sc, p_name, p_room),
@@ -2466,7 +2479,8 @@ def perception_outcome(ctx, nonce):
             "room_name": (e_rdata or {}).get("name") or e_room or "an unspecified area",
             "room_notes": _room_notes_for_view(e_rdata, e_room, ctx, sc),
             "ambient_location": _ambient_location_for(sc, e_room),
-            "crowds": crowds_for_room(ctx.chat.id, sc, e_room),
+            "crowds": crowds_for_room(ctx.chat.id, sc, e_room, chatter),
+            "chatter": chatter_for_room(ctx.chat.id, sc, e_room, chatter),
             "couriers": couriers_for_room(ctx.chat.id, sc, e_room),
             "notices": artifacts_for_room(ctx.chat.id, sc, e_room),
             "visible_rooms": _visible_rooms_for(sc, e_name, e_room),
@@ -2495,7 +2509,8 @@ def perception_outcome(ctx, nonce):
             "room_name": (rdata or {}).get("name") or r or "an unspecified area",
             "room_notes": _room_notes_for_view(rdata, r, ctx, sc),
             "ambient_location": _ambient_location_for(sc, r),
-            "crowds": crowds_for_room(ctx.chat.id, sc, r),
+            "crowds": crowds_for_room(ctx.chat.id, sc, r, chatter),
+            "chatter": chatter_for_room(ctx.chat.id, sc, r, chatter),
             "couriers": couriers_for_room(ctx.chat.id, sc, r),
             "notices": artifacts_for_room(ctx.chat.id, sc, r),
             "visible_rooms": _visible_rooms_for(sc, character_name(sh), r),
@@ -3332,6 +3347,11 @@ def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
     # decisions were being made for.
     percepts.extend(composer.room_content_percepts(
         p.get("crowds"), p.get("couriers"), p.get("notices")))
+    # The room's talk, as ground plus at most one figure — same admission
+    # story as the three seams above: `common.chatter_for_room` already
+    # decided what a bystander hears, and this is only the delivery
+    # (DESIGN_BACKGROUND_PRESENTATION Part A).
+    percepts.extend(composer.chatter_percepts(p.get("chatter")))
     senses = p.get("sense_card")
     percepts.extend(composer.presence_percepts(
         sc, name, others, display_map, senses))

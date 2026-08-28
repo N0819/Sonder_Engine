@@ -4180,20 +4180,111 @@ substrate and two presentation layers:
     the crowd must be a PROJECTION of Charter's population, never a second
     source of truth about it.
 
-**AMBIENT CHATTER IS ALREADY COMPUTED AND DISCARDED.** `charter_practice.enact`
-returns `acts` every window, each carrying a deterministic `line` naming actor,
-act, other and subject -- measured on twin_towns(40) offscreen, EIGHTEEN acts in
-a single window, with no model call anywhere in their production. `charter_run`
-writes them to `after_charter["acts"]` and nothing surfaces them. A populous
-place could hand the narrator its own background murmur for the cost of a list
-slice and a `charter_identity.display_name` pass. The lines are keyed by body
-(`low_009 asked low_017 about low_031`), so the naming pass is the only work.
+**AMBIENT CHATTER: BUILT 2026-08-27** (`background-presentation` branch), per
+`docs/design/DESIGN_BACKGROUND_PRESENTATION.md` Part A. The undecided question
+below was settled the way the note argues: structured observations through the
+perception layer -- `charter_run.step` deposits the last window's acts
+room-stamped as `window_acts` (the transient `acts` died at every
+`normalize_charter`, so the durable field is new), and
+`agents.common.chatter_for_room` derives a HUM band plus at most ONE overheard
+fragment per observer-room-beat, delivered as `hearing` percepts so
+`observations_from_render` makes character receipt legitimate.
+`charter_news.WITNESSABLE` deliberately did NOT grow a speech kind: at the
+measured 19 acts/window against ~5 co-present bodies that door deposits ~100
+claims per window into heads whose caps and decay would churn on noise; the
+witness rule and the perception route are the same presence rule at two tiers.
+The hum's band floor and the
+fragment-suppressing density read BOTH crowd species -- authored ledger
+rows and Part B's derived charter crowds (found in review: reading the
+authored ledger alone left a charter-only story's derived throng with no
+hum floor and its derived crush still admitting ordinary fragments;
+pinned in `tests/test_charter_chatter.py`).
+Residuals, from the note's own open questions: the fragment's seeded rate
+(`FRAGMENT_ODDS = 4`) is a prediction awaiting play; the hum thresholds are
+vocabulary set once from the §0 measurement (room median 4 / p90 6 acts);
+per-observer "has met" recognition is approximated by the story-level
+presence ledger -- a FIREWALL residual, not only a naming nicety: once any
+beat has presented a charter body individually, every later observer in a
+room it talks in receives its display name in the fragment, met or not --
+an additive per-observer grant in a system whose guards subtract, and one
+the composer's unearned-name tripwire cannot catch because charter display
+names are not roster identities. It matches the existing floor (Director
+prose already names presences story-wide, and no per-observer met-ledger
+exists for charter bodies); if tightened later, the `known` recognition
+map -- the engine's one per-observer name-learning ledger -- is the
+vocabulary to route it through.
 
-Not decided: whether ambient lines reach the narrator as prose texture or as
-structured observations through the perception layer. The firewall answer is
-probably the second -- what a body says aloud in a room is witnessable, and
-routing it through `charter_news.witness` rather than around it keeps the one
-rule about who may learn what.
+**THE CROWDS BRIDGE: BUILT 2026-08-27** (`background-presentation` branch),
+per the same note's Part B. A charter crowd is a read-time projection —
+`world/charter_crowd.py` derives it inside `crowds_for_room` from the
+registry bodies at the observer's room minus everyone individually presented
+(bindings, live presence records), and NOTHING is persisted: uid minted from
+`(chat, charter, place)`, band from `crowds.count_band` (the one place an
+integer meets the band vocabulary), composition from the watch bill's role
+nouns, mood from banded `strain_of`. `apply_ops` refuses `move`/`split`/
+`disperse`/`set` on a derived uid; `emerge` resolves at the commit seam
+(`persist/commit.py` → `emerge_from_charter_crowd`) by persisting the
+`with_charter_presences` overlay record — the record IS the emergence, no
+`emerged` list — with an entanglement-ranked engine pick when `who` is
+empty; `absorb` deletes only a record nothing durable names. `MAX_CROWDS`
+still governs the authored ledger alone. Residuals: `CHARTER_CROWD_FLOOR`
+(3) and the mood bands are predictions awaiting play (DESIGN_CROWDS §7's
+falsifier is the measurement); institution-level crowd motion — the
+`heading`/`drift` half, a mass surging through Charter's own
+conduct/intervention seams — is named in the note (§B4, open question 5)
+and deliberately not designed; and `DESIGN_CROWDS.md` §3a's "an emergence
+may not be re-met" is SUPERSEDED for charter-backed crowds (amendment in
+that note): a fixture is simply a charter body with a post here, and
+re-meeting an emerged body is correct, because Charter never stopped
+simulating them.
+
+**DEMAND-DRIVEN VOICE: BUILT 2026-08-28** (`background-presentation`
+branch), per the same note's Part C. The voice tier voices only whom an
+authored mind's own conduct calls on this beat: `pick_voice_demand`
+(`persist/commit_background.py`, wrapped by `pick_background_reactors`)
+qualifies on exactly four triggers -- addressed (overt declaration, flow
+ref, aimed character line, or a Director-routed hand-off), owed an
+unexpired reply, acted toward an authored mind last beat (`engaged_turns`
+on the record, written at commit; the charter half reads `window_acts`
+whose `other` is a bound body or authored figure), or emerged from a crowd
+this beat (the provisional `emerge` op, resolved read-only through the same
+pick commit runs) -- ordered addressed > owed > acting > emerged, tied by
+the B3 entanglement digest, then stably. `mentioned` (prose salience),
+bare `dialogue_turns` (tenure) and `at_post` (co-presence) stopped
+qualifying; `scene_life`'s roster is the same demand set
+(`_demanded_presences`) and `max_managed` is a ceiling, not a selector. An
+addressee is never dropped: precise addresses widen the slots, and
+addressees past the ceiling that share one derived charter crowd answer AS
+that crowd -- one deterministic, model-free chorus entry, nothing
+persisted, reply debts discharged through the entry's `addressed` list.
+No tenure: K = `charter_crowd.PRESENTED_IDLE_BEATS` (4) idle beats lapse a
+record's individual PRESENTATION (crowd membership counts the body again;
+recognition -- `known_bodies`, naming -- never lapses; nothing is
+deleted), measured per the note's instruction from every live chat's
+presence ledger (2026-08-27 engine.db: 25/28 = 89.3% of resumptions after
+real inattention came within 4 idle beats; n = 28, re-take as the corpus
+grows). Measured before/after on twin_towns(40) plus six at-post regulars
+(30 quiet + 10 mention + 10 addressed beats): per-presence voice calls
+50 -> 10 per 50 beats (quiet and mention beats now spend zero), manager
+cast entries 300 -> 60, and the old gate answered "Regular 2, what do I
+owe you?" with Regular 5 (recency outranked the addressee) where the
+demand gate answers with Regular 2 -- the precise/loose address split that
+measurement forced is in `_background_name_named_exactly`. Gate cost 75ms
+vs 42ms per beat (two more registry reads), against the ~22.5s calls it
+gates. `tests/test_voice_demand.py`. Residuals: the chorus degradation
+exists only for charter-crowd-shaped addressees -- tracked individuals or
+mixed institutions past the ceiling widen instead (no crowd object to
+answer through); and the §C4 manager-call latency measurement remains
+UNTAKEN (this workflow runs no live models). Its protocol, verbatim so an
+evening can settle it: one seeded scene, `max_managed` forced to 4 / 8 /
+16 with the demand filter off, 10 calls each against the live
+`agent_models` (read live -- they change), report median wall-clock and
+OUTPUT tokens, which the note argues is the dominant unmeasured term (the
+~22.5s character call is the same family). Prediction to falsify:
+wall-clock grows with cast mostly through output, in which case
+demand-driven voicing caps the cost directly and `max_managed`'s default
+is nearly irrelevant; if it instead grows with input, the ceiling is
+load-bearing and should be set from the curve.
 
 ## 2. Roadmap
 

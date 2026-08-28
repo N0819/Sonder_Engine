@@ -215,57 +215,60 @@ class TestACrowdIsVisibleWithoutCostingASlot:
 # --- fixtures: the rule that separates them from emergences ------------------
 
 class TestAFixtureMayBeReMet:
-    """docs/design/DESIGN_CROWDS.md §3a: "a fixture may be re-met; an emergence may not."
+    """docs/design/DESIGN_CROWDS.md §3a's fixture, after Part C.
 
-    `station_room` already existed and was used only to gate what a presence
-    PERCEIVES. Nothing re-offered one when the player walked back into their
-    room, so a tavern whose barkeep is only voiced when the Director happens to
-    mention him is a tavern with nobody behind the bar on every quiet visit.
-    Measured: 8 of 52 live presences carry a station_room and nothing re-met
-    any of them.
-
-    Being at your post is the WEAKEST qualifying signal — far weaker than being
-    addressed — and `cap` still bounds the picks, so a busy room does not
-    become a chorus.
+    The at-post signal that used to re-offer a barkeep on every quiet visit
+    ("a fixture may be re-met") was co-presence as a qualifier, and
+    DESIGN_BACKGROUND_PRESENTATION §C1 removed exactly that class: the
+    demand gate voices only whom an authored mind's conduct calls on --
+    addressed, owed, acting, emerged. The fixture is still re-met, through
+    the tiers built for it: a charter body with a post here stands in the
+    derived crowd (§B3's amendment -- a fixture IS a charter body with a
+    post), the room hums through the chatter seam, and the moment the
+    player turns to the barkeep, the address forces the pick from any room
+    within the heard-in-FULL bar `_character_address_of` still holds.
     """
 
-    def test_the_at_post_signal_exists_and_is_scoped_by_earshot(self):
-        """It was scoped by `station_room == player_room` until an owner
-        named the consequence: "they should be able to respond from adjacent
-        rooms". Perception already modelled it -- `hear_level` is barrier-
-        and material-aware and `_beat_for_presence` runs exactly that check
-        -- so the engine was granting a clerk in the back office the hearing
-        and withholding the agency. The test is audibility now, at the
-        heard-in-full bar `_character_address_of` already sets, which keeps
-        a shut door silent."""
+    def test_co_presence_is_no_longer_a_qualifying_signal(self):
+        """§C1's subtraction, pinned at the source so a re-added at-post (or
+        any renamed spelling of "standing where you work qualifies") fails
+        loudly rather than quietly re-widening the budget."""
         import inspect
 
         from persist import commit
-        body = inspect.getsource(commit.pick_background_reactors)
-        assert "at_post" in body
-        assert "_at_post_within_earshot" in body
-        earshot = inspect.getsource(commit._at_post_within_earshot)
-        assert "hear_level" in earshot
-        assert '== "full"' in earshot
+        body = inspect.getsource(commit.pick_voice_demand)
+        assert "at_post" not in body
+        assert "_at_post_within_earshot" not in body
+        assert not hasattr(commit, "_at_post_within_earshot")
 
-    def test_it_qualifies_a_presence_that_nothing_else_would(self):
-        """The whole point: no address, no mention, no owed reply, no history
-        — just standing where they work."""
+    def test_the_demand_gate_qualifies_on_exactly_four_triggers(self):
+        """addressed / owed / acting / emerged, nothing else -- mentioned
+        (prose salience) and dialogue_turns (tenure) are gone with at-post."""
         import inspect
 
         from persist import commit
-        body = inspect.getsource(commit.pick_background_reactors)
-        gate = body[body.index("if not (flow_addressed"):]
-        assert "or at_post)" in gate.split("continue")[0]
+        body = inspect.getsource(commit.pick_voice_demand)
+        gate = body[body.index("if not (addressed_any"):].split("continue")[0]
+        assert "or owed or acting or emerged)" in gate
+        assert "mentioned" not in gate
+        assert "dialogue_turns" not in gate
+        assert "at_post" not in body
 
-    def test_standing_at_your_post_ranks_below_being_addressed(self):
-        """A fixture must not outrank someone the player just spoke to."""
+    def test_an_addressee_sorts_first_in_the_overflow_order(self):
+        """§C3: addressed > owed > acting > emerged. A crowd member with a
+        grievance (entanglement tie-break) must not outrank someone the
+        player just spoke to."""
         import inspect
 
         from persist import commit
-        body = inspect.getsource(commit.pick_background_reactors)
-        priority = body[body.index("priority = ("):body.index("candidates.append")]
-        assert "at_post" not in priority.split("bool(addressed)")[0]
+        body = inspect.getsource(commit.pick_voice_demand)
+        priority = body[body.index("priority = ["):body.index("candidates.append")]
+        # The address term is graded (2 precise / 1 loose / 0), not a bool:
+        # fuzzy shared-word matches must rank below the person actually named.
+        order = ["addressed_precise", "bool(owed)", "bool(acting)",
+                 "bool(emerged)"]
+        positions = [priority.index(term) for term in order]
+        assert positions == sorted(positions)
 
 
 class TestDensityIsTerrain:

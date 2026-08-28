@@ -56,6 +56,7 @@ from world.spatial import hear_level, spatial_rel_between
 from persist.commit import (
     name_in_roster,
     pick_background_reactors,
+    pick_voice_demand,
     _background_name_mentioned,
     _character_address_of,
     _fold_duplicate_presences,
@@ -375,13 +376,19 @@ def background_react(ctx, nonce):
         manager = out
     cap = int(cfg.get("max_reactors", 1) or 1)
     cap = max(1, min(3, cap))  # hard ceiling; beyond this a crowd is a chorus
-    names = pick_background_reactors(ctx, dr, cap=cap)
+    demand = pick_voice_demand(ctx, dr, cap=cap)
+    names = demand["picks"]
     # A presence the manager already voiced has been spoken for; asking again
     # would give them two lines in one beat and cost a call to do it.
     _voiced = {str(r.get("name") or "").casefold()
                for r in ((manager or {}).get("reactions") or [])}
     names = [n for n in names if str(n).casefold() not in _voiced]
-    if not names:
+    # Addressees exceeding the ceiling means the address was to a crowd, and
+    # the legible degradation is to answer as one (§C3) -- through the
+    # derived crowd from Part B, never by silently dropping an addressee.
+    chorus, names = _chorus_for_overflow(ctx, names, demand.get("meta") or {},
+                                         cap)
+    if not names and chorus is None:
         return _merge_stage_results(manager, _result([], []))
 
     roster = {n.casefold() for n in _registered_name_roster(ctx.chat, ctx.cast)}
@@ -422,10 +429,20 @@ def background_react(ctx, nonce):
                            rec, nonce)
         if entry:
             reactions.append(entry)
+    agent_calls = ["background_react"] * len(reactions)
+    if chorus is not None:
+        # Deterministic, model-free: the beat SAYS the address was to a
+        # crowd and the crowd answers as one. No agent call is spent, and
+        # the chorused members stay OUT of `selected` -- selection is what
+        # persists a presence record at commit, and the whole point of the
+        # chorus is that these bodies remain ground. Their reply debts
+        # still discharge (track_background_presences reads the entry's
+        # `addressed` list): the moment was theirs, answered together.
+        reactions.append(chorus)
     return _merge_stage_results(
         manager,
         _result(names, reactions, mode="background_react",
-                agent_calls=["background_react"] * len(reactions)))
+                agent_calls=agent_calls))
 
 
 # ---------------------------------------------------------------------------
@@ -501,13 +518,20 @@ def _player_room(ctx, sc):
 
 
 def managed_presences(ctx, cap):
-    """The manager's roster: every tracked presence standing inside the
-    player's ambient scope, most recently active first, capped.
+    """The manager's POPULACE: every tracked presence standing inside the
+    player's ambient scope, most recently active first, capped (``cap=None``
+    returns it whole).
 
-    Deliberately NOT pick_background_reactors: that gate is salience-based
-    (§2.1 -- every condition mirrors the player), which is exactly what makes
-    extras feel reactive rather than alive. The manager is handed the room's
-    populace and decides for itself who, if anyone, acts.
+    This is eligibility, no longer selection. The docstring here used to
+    reject salience gating outright -- "the manager is handed the room's
+    populace and decides for itself" -- because the gate's alternative made
+    extras feel reactive rather than alive. DESIGN_BACKGROUND_PRESENTATION
+    §C2 resolves that tension by moving the *alive* half down a tier: the
+    chatter hum, the overheard fragment and the derived crowd now carry "the
+    room is doing things unprompted" for zero model calls, and the voice
+    call becomes what it should have been -- how a person holds up their end
+    of an exchange. So `scene_life` filters this populace to the DEMAND set
+    (`_demanded_presences`) before spending a call on it.
     """
     cid = ctx.chat.id
     sc = wget(cid, "scene", {}) or {}
@@ -568,7 +592,141 @@ def managed_presences(ctx, cap):
     # now, and letting the tuple sort fall through to the record dicts
     # would raise rather than order them.
     out.sort(key=lambda t: (t[0], t[1]), reverse=True)
+    if cap is None:
+        return out, p_room
     return out[:max(1, int(cap or 1))], p_room
+
+
+def _chorus_for_overflow(ctx, names, meta, ceiling):
+    """Collapse an addressed crowd into one chorus entry, or do nothing.
+
+    §C3's degradation law: if addressees ALONE exceed the path's ceiling,
+    the address was to a crowd, and the legible answer is one response from
+    the crowd object rather than `ceiling+N` people voiced badly -- or, the
+    only forbidden outcome, an addressee silently dropped. The chorus
+    presence is Part B's derived charter crowd (`story/scene.py`'s
+    `background_config` named the intent years earlier: "past that, a crowd
+    is better represented as one chorus presence"), so this only fires when
+    the overflowing addressees actually share one -- charter bodies of one
+    institution standing in one room, still crowd members precisely because
+    nothing persisted has presented them individually. Addressees that are
+    not crowd-shaped (tracked individuals, mixed institutions, below the
+    crowd floor) stay individually voiced past the ceiling instead: never
+    dropped, per the one hard guarantee.
+
+    Returns ``(chorus_entry_or_None, remaining_names)``. The entry is
+    deterministic and model-free -- an action-only reaction in the stage's
+    own shape, attributed to the crowd's composition, never to a name.
+    """
+    addressed = [n for n in names if (meta.get(n) or {}).get("addressed")]
+    if len(addressed) <= max(1, int(ceiling or 1)):
+        return None, names
+    groups = {}
+    for name in addressed:
+        row = meta.get(name) or {}
+        for ref in row.get("refs") or []:
+            key = (str(ref.get("charter") or ""), str(row.get("room") or ""))
+            groups.setdefault(key, []).append(name)
+            break
+    if not groups:
+        return None, names
+    (charter_key, room), members = max(
+        groups.items(), key=lambda kv: (len(kv[1]), kv[0]))
+    if len(members) < 2 or not room:
+        return None, names
+    from agents.common import charter_crowds_for_room, chatter_inputs
+
+    sc = wget(ctx.chat.id, "scene", {}) or {}
+    inputs = chatter_inputs(ctx.chat.id, sc, turn_idx=ctx.turn.idx)
+    crowd = next(
+        (c for c in charter_crowds_for_room(ctx.chat.id, sc, room, inputs)
+         if str(c.get("charter_key") or "") == charter_key), None)
+    if crowd is None:
+        return None, names
+    composition = str(crowd.get("composition") or "people")
+    chorus = {
+        "name": composition,
+        "chorus": True,
+        "crowd_uid": str(crowd.get("uid") or ""),
+        "room": room,
+        "addressed": members,
+        # The act's outward surface, composed from structure the way the
+        # hum and the fragment are -- what a bystander takes in is a mass
+        # answering, not any one voice. The narrator renders it; no line is
+        # invented because no line exists.
+        "action": ("the %s answer together, as one crowd -- no single "
+                   "voice separating from the rest" % composition),
+        "dialogue_log_entry": None,
+    }
+    remaining = [n for n in names if n not in set(members)]
+    return chorus, remaining
+
+
+def _demanded_presences(ctx, dr, managed, ceiling):
+    """Filter the managed populace to the DEMAND set, ordered for overflow.
+
+    DESIGN_BACKGROUND_PRESENTATION §C1/§C3: a presence is handed to the
+    voice call only when an authored mind's own conduct calls on it this
+    beat -- addressed (overt declaration, flow address, or a character's
+    aimed line), owed an unexpired reply, acted toward an authored mind
+    last beat (`engaged_turns`, written at commit), or emerged from a crowd
+    this beat. Co-presence, salience and recency stop being triggers; the
+    populace stays alive through the chatter and crowd tiers instead (§C2).
+
+    ``ceiling`` is `max_managed` doing its post-§C3 job: a CEILING on
+    overflow, never a selector -- the demand set is usually 0-2, so the
+    constant stops being load-bearing. Overflow order is addressed > owed >
+    acting > emerged, then recency, then name, and an addressee is never
+    dropped: addressees beyond the ceiling widen it here, because a managed
+    (non-charter) presence has no derived crowd to answer through -- the
+    chorus degradation is the per-presence path's, where the charter bodies
+    live (`_chorus_for_overflow`).
+    """
+    if not managed:
+        return managed
+    from persist.commit import (_background_name_mentioned,
+                                _background_name_named_exactly,
+                                _character_address_of, _flow_addressed_refs,
+                                _presence_in_addressed_refs,
+                                _valid_pending_reply, emerged_this_beat,
+                                overt_declaration_text)
+
+    sc = wget(ctx.chat.id, "scene", {}) or {}
+    roster = {n.casefold() for n in _registered_name_roster(ctx.chat, ctx.cast)}
+    roster |= {(e.get("name") or "").casefold()
+               for e in (ctx.extra_players or [])}
+    player_input = overt_declaration_text(ctx)
+    addressed_refs = _flow_addressed_refs(ctx)
+    emerged = emerged_this_beat(ctx, dr, sc)
+    turn_idx = ctx.turn.idx
+
+    ranked = []
+    addressees = 0
+    for tup in managed:
+        last_turn, name, rec, room = tup
+        # The same precise/loose split the demand gate makes: only a precise
+        # address (flow ref, full name, aimed line) counts toward the
+        # widening, because the significant-word fallback matches every
+        # record sharing a word (see `_background_name_named_exactly`).
+        precise = bool(
+            _presence_in_addressed_refs(name, addressed_refs)
+            or _background_name_named_exactly(name, player_input)
+            or _character_address_of(dr, name, roster, sc, room))
+        addressed_any = precise or _background_name_mentioned(
+            name, player_input)
+        owed = bool(_valid_pending_reply(rec, turn_idx))
+        acting = (turn_idx - 1) in (rec.get("engaged_turns") or ())
+        emerged_hit = name in emerged
+        if not (addressed_any or owed or acting or emerged_hit):
+            continue
+        if precise:
+            addressees += 1
+        ranked.append(((2 if precise else (1 if addressed_any else 0),
+                        owed, acting, emerged_hit,
+                        last_turn or -1, name), tup))
+    ranked.sort(key=lambda row: row[0], reverse=True)
+    slots = max(addressees, max(1, int(ceiling or 1)))
+    return [tup for _key, tup in ranked[:slots]]
 
 
 def _audience_map(sc, entry, managed, level):
@@ -638,10 +796,17 @@ def _manager_events(ctx, dr, sc, managed, level):
 
 
 def scene_life(ctx, nonce, level, cfg):
-    """One batched call voicing a whole location's background populace."""
+    """One batched call voicing whoever the beat DEMANDS of the populace.
+
+    `max_managed` is a ceiling, not a selector (§C3): the roster handed to
+    the model is the demand set -- usually 0-2, empty on most beats, which
+    means most beats spend no call here at all -- and the ceiling only
+    matters on overflow.
+    """
     dr = ctx.get("director_resolve") or ctx.get("director_establish") or {}
     cap = int(cfg.get("max_managed", 6) or 6)
-    managed, p_room = managed_presences(ctx, cap)
+    managed, p_room = managed_presences(ctx, None)
+    managed = _demanded_presences(ctx, dr, managed, cap)
     if not managed:
         return _result([], [])
 

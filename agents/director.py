@@ -763,7 +763,7 @@ def director_interpret(ctx, nonce):
             "movement": out.get("movement"),
             "movers": {p_name: {"exits": _egocentric_exits(sc, p_name)}},
             "proposal": None,
-            "crowds": _crowds_view(chat["id"], sc),
+            "crowds": _crowds_view(chat["id"], sc, ctx.turn["idx"]),
             "couriers": _couriers_view(chat["id"], sc),
             "carried_reports": _carried_reports_view(ctx),
             "unratified_claims": _unratified_background_claims(
@@ -2843,7 +2843,7 @@ def director_resolve(ctx, nonce, _corrections=None):
         # reachable and every other op refused. Found by reading the captured
         # payload as the model, which is the only way to find it -- the schema
         # check cannot see a field that exists and is never delivered.
-        "crowds": _crowds_view(chat["id"], sc),
+        "crowds": _crowds_view(chat["id"], sc, turn["idx"]),
         # The couriers on the road, WITH their uids -- same defect class as
         # the crowd uid: `question` and `silence` require a courier_id the
         # Director could otherwise never have seen, and `send` needs to know
