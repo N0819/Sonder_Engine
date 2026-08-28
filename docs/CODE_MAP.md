@@ -71,7 +71,7 @@
 | `persist/checkpoints.py` | 1344 | Whole-chat snapshots and checkpoint restore orchestration. | `core.db`, `mind.memory` |
 | `persist/commit.py` | 644 | Atomic commit orchestrator, per-turn lock, thin tail domains, and the facade re-exporting every commit_* name. | `core.db`, `core.frames`, `llm.prompts`, `llm.providers`, `mind`, `mind.memory`, `mind.theory_of_mind`, `persist.commit_attire`, `persist.commit_background`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_entities`, `persist.commit_ledgers`, `persist.commit_mapping`, `persist.commit_mechanics`, `persist.commit_memory`, `persist.commit_memory_write`, `persist.commit_place_graph`, `persist.commit_room_registry`, `persist.commit_scene_state`, `story`, `story.character_schema`, `story.scene`, `world.comfort`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.spatial_frames`, `world.survival`, `world.weather` |
 | `persist/commit_attire.py` | 1332 | The mutable clothing ledger: attire notes, shed/worn garment entities, the validated attire diff. | `persist.commit_common`, `story`, `story.attire` |
-| `persist/commit_background.py` | 2599 | Background presences: tracking, identity folding, the reactor gate, promotion to cast. | `core.db`, `mind.memory`, `persist.commit_common`, `story.character_schema`, `story.scene`, `world.spatial` |
+| `persist/commit_background.py` | 2644 | Background presences: tracking, identity folding, the reactor gate, promotion to cast. | `core.db`, `mind.memory`, `persist.commit_common`, `story.character_schema`, `story.scene`, `world.spatial` |
 | `persist/commit_common.py` | 477 | Leaf helpers shared across commit domains: scalar utilities, name/address roster, entity-id canonicalisation. | `core.db`, `mind.memory`, `story.character_schema`, `world.mechanics`, `world.spatial` |
 | `persist/commit_destruction.py` | 411 | Single- and multi-book destruction cascades, retirement, and latency-gated news. | `core.db`, `mind.memory`, `persist.commit_common`, `world.mechanics`, `world.spatial`, `world.spatial_frames` |
 | `persist/commit_entities.py` | 560 | world_entities projection of the scene commit, awareness gate, disguise supersession. | `core.db`, `persist.commit_common`, `story.character_schema`, `story.scene`, `world.spatial` |
@@ -133,7 +133,7 @@
 | `world/charter_promote.py` | 470 |  | `world.charter_commitment`, `world.charter_feel`, `world.charter_politics`, `world.charter_social` |
 | `world/charter_roster.py` | 134 |  | `world.charter_model` |
 | `world/charter_run.py` | 1309 |  | `world.charter_commitment`, `world.charter_decide`, `world.charter_drift`, `world.charter_economy`, `world.charter_feel`, `world.charter_figure`, `world.charter_intervene`, `world.charter_log`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_move`, `world.charter_needs`, `world.charter_news`, `world.charter_plan`, `world.charter_politics`, `world.charter_practice`, `world.charter_roster`, `world.charter_social`, `world.charter_space`, `world.charter_talk`, `world.charter_trigger` |
-| `world/charter_runtime.py` | 2354 |  | `core`, `core.logging_utils`, `world.charter`, `world.charter_news`, `world.mechanics` |
+| `world/charter_runtime.py` | 2429 |  | `core`, `core.logging_utils`, `world.charter`, `world.charter_news`, `world.mechanics` |
 | `world/charter_social.py` | 743 |  | `world.charter_politics` |
 | `world/charter_space.py` | 101 |  | `world.spatial` |
 | `world/charter_talk.py` | 344 |  | `world.charter_mind`, `world.charter_politics`, `world.charter_roster` |
@@ -858,11 +858,11 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `track_background_presences()` | 1198 | 443 lines |
-| `promote_background_character()` | 2121 | 346 lines |
-| `pick_background_reactors()` | 1808 | 216 lines |
+| `track_background_presences()` | 1198 | 488 lines |
+| `promote_background_character()` | 2166 | 346 lines |
+| `pick_background_reactors()` | 1853 | 216 lines |
 | `_fold_duplicate_presences()` | 683 | 143 lines |
-| `auto_promote_background_characters()` | 2506 | 94 lines |
+| `auto_promote_background_characters()` | 2551 | 94 lines |
 | `_mint_missing_presence_names()` | 1114 | 82 lines |
 | `_presence_speech_verdict()` | 429 | 67 lines |
 | `_presence_lookup()` | 556 | 62 lines |
@@ -1550,14 +1550,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_prepare_cast_histories()` | 466 | 141 lines |
-| `_generate_lived_location()` | 1130 | 113 lines |
-| `_plan_lived_location()` | 1019 | 109 lines |
-| `generation_lore()` | 731 | 101 lines |
-| `cross_charter_gossip()` | 1531 | 92 lines |
-| `charter_diagnostics()` | 1765 | 86 lines |
-| `registry_warnings()` | 1281 | 79 lines |
-| `_remap_generated_town()` | 857 | 71 lines |
+| `_prepare_cast_histories()` | 541 | 141 lines |
+| `_generate_lived_location()` | 1205 | 113 lines |
+| `_plan_lived_location()` | 1094 | 109 lines |
+| `generation_lore()` | 806 | 101 lines |
+| `cross_charter_gossip()` | 1606 | 92 lines |
+| `charter_diagnostics()` | 1840 | 86 lines |
+| `registry_warnings()` | 1356 | 79 lines |
+| `_remap_generated_town()` | 932 | 71 lines |
 
 ### `world/charter_social.py`
 

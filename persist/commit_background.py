@@ -1634,6 +1634,51 @@ def track_background_presences(ctx, nonce, *, prepared=None):
     # write, not a rendering).
     named = _mint_missing_presence_names(cid, presences, live_scene,
                                          reserved=roster)
+
+    # EVERY BACKGROUND PERSON IS A CHARTER BODY, from here on. Measured across
+    # the corpus before this: 84 tracked presences with no charter body against
+    # 14 with one, so 86% of the people a story populates itself with reached
+    # none of the memory, familiarity, ties or history-reading volition built
+    # for exactly them -- they were a name in a dict, keyed by DISPLAY NAME,
+    # which two people in one story may share. A body gives them one identity
+    # space, a past that accumulates, and the single promotion path every other
+    # body already uses. Failure is not fatal: a story with no registry keeps
+    # the ledger it had.
+    try:
+        from world.charter_runtime import ensure_ambient_bodies
+        _wanted = []
+        for key, record in presences.items():
+            if record.get("charter_refs"):
+                continue
+            _name = presence_display_name(key, record)
+            if not _name:
+                continue
+            # A BODY IS A PERSON. `_presence_speech_verdict` already answers
+            # this for the adjacent question -- may this presence hold a
+            # speaking turn -- and the answer is the same one: a ceiling-
+            # mounted suppression fixture is not somebody who can stand a
+            # watch, form an acquaintance or be promoted. Minting one a body
+            # made an unpromotable device promotable, because a charter body
+            # IS a person and nothing downstream asks twice.
+            if _presence_speech_verdict(live_scene, _name, record) != "person":
+                continue
+            _wanted.append({
+                "name": _name,
+                "place": str(presence_room(live_scene, _name, record) or ""),
+            })
+        for _name, _ref in (ensure_ambient_bodies(
+                cid, _wanted, frame_id=ctx.turn.frame_id) or {}).items():
+            for key, record in presences.items():
+                if presence_display_name(key, record) != _name:
+                    continue
+                refs = [r for r in (record.get("charter_refs") or [])
+                        if isinstance(r, dict)]
+                if _ref not in refs:
+                    refs.append(_ref)
+                record["charter_refs"] = refs
+    except Exception as exc:  # a ledger without bodies is still a ledger
+        ctx.add_warning(f"charter body mint skipped: {exc}")
+
     wset(cid, "background_presences", presences)
     return {"tracked": len(presences),
             "named": named,
