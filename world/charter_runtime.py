@@ -15,6 +15,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import re
 import uuid
 
 from core import jobs
@@ -160,6 +161,80 @@ def _stored_shape(registry):
         items[str(key)] = dict(item, state=institution)
     return {"version": registry.get("version", REGISTRY_VERSION),
             "items": items, "people": people}
+
+
+#: The charter a person belongs to when they belong to no institution.
+#: Not a fake institution of one -- an institution of NONE: no posts, no
+#: upkeeps, no watch bill, nothing to stand. It exists because a person still
+#: has to be somewhere for the simulation to advance their needs, their
+#: feeling and their acquaintance, and `charter_run.step` advances a charter's
+#: MEMBERS. A hermit joins it and stands nothing; that is the whole of what
+#: having no institution means here.
+AMBIENT_CHARTER = "ambient"
+
+
+def _ambient_body_key(name):
+    """A stable key for a person the story named but no generator minted."""
+    slug = re.sub(r"[^a-z0-9]+", "_",
+                  " ".join(str(name or "").split()).casefold()).strip("_")
+    digest = hashlib.sha256(str(name or "").encode("utf-8")).hexdigest()[:6]
+    return "%s:%s" % (slug[:32] or "person", digest)
+
+
+def ensure_ambient_bodies(cid, wanted, frame_id=None):
+    """Give every named background person a body. Returns ``{name: ref}``.
+
+    WHY THIS EXISTS. Measured across the corpus: 84 tracked background
+    presences carried no charter body against 14 that did, so 86% of the
+    people a story actually populates itself with reached none of the memory,
+    familiarity, ties, marks or history-reading volition Charter was built to
+    give them. They were a name in a dict, invented fresh each time, keyed by
+    DISPLAY NAME -- which two people in one story may share.
+
+    A presence minted here is an ordinary person from that moment: it
+    accumulates a past, forms acquaintance, can be transferred to a real
+    institution when the story gives it one, and promotes through the single
+    path every other body promotes through. Nothing about it is a second tier.
+
+    Bodies only, and no cognition is invented: a fresh person knows nobody and
+    remembers nothing, which is true of somebody the story has only just
+    introduced. What they come to know arrives through the same channels as
+    everybody else's.
+    """
+    registry = registry_for(cid, frame_id)
+    items = registry.setdefault("items", {})
+    known = {}
+    for charter_key, item in items.items():
+        for body_key, body in ((item.get("state") or {}).get("bodies")
+                               or {}).items():
+            for alias in (str(body.get("name") or ""), str(body_key)):
+                if alias:
+                    known.setdefault(alias.casefold(),
+                                     {"charter": charter_key, "body": body_key})
+    fresh = {}
+    for row in wanted or ():
+        name = " ".join(str((row or {}).get("name") or "").split())
+        if not name:
+            continue
+        hit = known.get(name.casefold())
+        if hit:
+            fresh[name] = dict(hit)
+            continue
+        body_key = _ambient_body_key(name)
+        place = str((row or {}).get("place") or "")
+        item = items.setdefault(AMBIENT_CHARTER, {"state": {
+            "key": AMBIENT_CHARTER, "posts": {}, "upkeeps": {},
+            "priority": [], "bodies": {}}})
+        state = item.setdefault("state", {})
+        state.setdefault("bodies", {})[body_key] = {
+            "key": body_key, "name": name, "place": place,
+            "berth": place, "competence": {}, "available": True,
+        }
+        known[name.casefold()] = {"charter": AMBIENT_CHARTER, "body": body_key}
+        fresh[name] = {"charter": AMBIENT_CHARTER, "body": body_key}
+    if fresh:
+        save_registry(cid, registry, frame_id)
+    return fresh
 
 
 def transfer_person(registry, body_key, to_charter, *, place=None):

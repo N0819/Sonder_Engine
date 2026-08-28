@@ -626,3 +626,72 @@ class TestPromotionMintsAMindAndAThingCannotHoldOne:
         })
         rows = {r["name"]: r for r in promotable_background_presences(chat_id)}
         assert rows["Reality Anchor"]["promotable"] is True
+
+
+class TestEveryBackgroundPersonIsACharterBody:
+    """Measured across the corpus before this: 84 tracked presences with no
+    charter body against 14 with one. So 86% of the people a story populates
+    itself with reached none of the memory, familiarity, ties, marks or
+    history-reading volition Charter was built to give them -- they were a
+    name in a dict, invented fresh each time, and keyed by DISPLAY NAME, which
+    two people in one story may share.
+    """
+
+    def test_a_named_person_is_given_a_body(self, temp_db):
+        from world.charter_runtime import (AMBIENT_CHARTER,
+                                           ensure_ambient_bodies, registry_for)
+        cid = _make_chat(temp_db)
+
+        refs = ensure_ambient_bodies(
+            cid, [{"name": "Dock Hand", "place": "quay"}])
+
+        assert refs["Dock Hand"]["charter"] == AMBIENT_CHARTER
+        state = registry_for(cid)["items"][AMBIENT_CHARTER]["state"]
+        body = state["bodies"][refs["Dock Hand"]["body"]]
+        assert body["name"] == "Dock Hand" and body["place"] == "quay"
+
+    def test_an_institution_of_none_stands_nothing(self, temp_db):
+        """The ambient charter is not a fake institution of one. It has no
+        posts and no upkeeps -- it exists so a person with no institution is
+        still somewhere the simulation advances them, which is what
+        `charter_run.step` does for a charter's MEMBERS."""
+        from world.charter_runtime import (AMBIENT_CHARTER,
+                                           ensure_ambient_bodies, registry_for)
+        cid = _make_chat(temp_db)
+
+        ensure_ambient_bodies(cid, [{"name": "Dock Hand", "place": "quay"}])
+
+        state = registry_for(cid)["items"][AMBIENT_CHARTER]["state"]
+        assert not state["posts"] and not state["upkeeps"]
+
+    def test_the_same_person_is_not_minted_twice(self, temp_db):
+        from world.charter_runtime import ensure_ambient_bodies, registry_for
+        cid = _make_chat(temp_db)
+
+        first = ensure_ambient_bodies(cid, [{"name": "Dock Hand",
+                                             "place": "quay"}])
+        again = ensure_ambient_bodies(cid, [{"name": "Dock Hand",
+                                             "place": "hold"}])
+
+        assert first == again
+        bodies = registry_for(cid)["items"]["ambient"]["state"]["bodies"]
+        assert len(bodies) == 1
+
+    def test_a_person_a_real_institution_already_employs_is_left_there(
+            self, temp_db):
+        """The mint is a floor, not a claimant: somebody a generated charter
+        already employs keeps that employer, or the consolidation would tear
+        people out of the institutions they belong to."""
+        from world.charter_runtime import (ensure_ambient_bodies,
+                                           registry_for, save_registry)
+        cid = _make_chat(temp_db)
+        save_registry(cid, {"crew": {
+            "key": "crew", "posts": {}, "upkeeps": {},
+            "bodies": {"tech:0001": {"name": "Dock Hand", "place": "quay",
+                                     "competence": {}, "available": True}}}})
+
+        refs = ensure_ambient_bodies(cid, [{"name": "Dock Hand",
+                                            "place": "quay"}])
+
+        assert refs["Dock Hand"] == {"charter": "crew", "body": "tech:0001"}
+        assert "ambient" not in registry_for(cid)["items"]
