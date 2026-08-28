@@ -414,6 +414,7 @@ def background_react(ctx, nonce):
     # reason about than micro-perceiving between them (which would rebuild
     # interaction_loop for minds that lack the state that loop exists to guard).
     reactions = []
+    _meta = demand.get("meta") or {}
     for name in names:
         # The gate hands back NAMES; the ledger keys on minted uids. The
         # resolver seam connects them (aka spellings included), and a name
@@ -426,7 +427,9 @@ def background_react(ctx, nonce):
             ctx, sc, presence_room(sc, name, rec),
             _presence_recognizes(ctx, name))
         entry = _react_one(ctx, dr, name, present_others, roster, sc,
-                           rec, nonce)
+                           rec, nonce,
+                           player_addressed=bool(
+                               (_meta.get(name) or {}).get("player_addressed")))
         if entry:
             reactions.append(entry)
     agent_calls = ["background_react"] * len(reactions)
@@ -1258,8 +1261,14 @@ def _present_others(ctx, sc, here, recognized=None):
     return present_others
 
 
-def _react_one(ctx, dr, name, present_others, roster, sc, rec, nonce):
-    """One presence's single reactive beat, or None if it stays silent."""
+def _react_one(ctx, dr, name, present_others, roster, sc, rec, nonce,
+               player_addressed=False):
+    """One presence's single reactive beat, or None if it stays silent.
+
+    `player_addressed` is the demand gate's OWN verdict that the player's
+    precise address picked this presence (pick_voice_demand meta) -- the
+    third source of `addressed_by` below, and for a description address the
+    only one that can ever fire."""
     # Cheap individuation: replay the sketch harvested (deterministically, in
     # commit.track_background_presences) from the director's own entity
     # description/position when this presence was introduced.
@@ -1289,6 +1298,37 @@ def _react_one(ctx, dr, name, present_others, roster, sc, rec, nonce):
         if pr:
             addressed_by = {"speaker": pr.get("from"), "exact_quote": pr.get("quote", ""),
                             "tone": pr.get("tone", ""), "beats_ago": 1}
+    if addressed_by is None and player_addressed:
+        # THE GATE'S VERDICT REACHES THE MIND IT PICKED. Both sources above
+        # need a name in the record -- a dialogue_log `intended_target`
+        # (measured null on all 189 reads, chat 95 turn 3041) or a debt only
+        # that same field could write -- so a presence force-picked because
+        # the PLAYER addressed it was handed `addressed_by: null` plus a
+        # question aimed at a description nothing bound to it, and correctly
+        # declined: the cord-seller, gripped by the sleeve and asked twice,
+        # answered `reacts: false` in 31 tokens on every one of the four
+        # calls he got. The player's declaration is a channel this presence
+        # already has (same overt/hearing filter as the payload field
+        # below); what was missing is only the engine's own finding that it
+        # was aimed HERE.
+        quote = _filtered_player_declaration(ctx, sc, name, here)
+        if quote:
+            addressed_by = {"speaker": persona_name(persona_of(ctx.chat)),
+                            "exact_quote": quote, "tone": "", "beats_ago": 0}
+    if addressed_by and addressed_by.get("speaker"):
+        # The player's NAME travels only where recognition earned it; an
+        # unacquainted presence gets the same appearance label every other
+        # seam mints for a stranger (_unknown_actor_label). The quote itself
+        # is already channel-filtered.
+        pers = persona_of(ctx.chat)
+        p_name = persona_name(pers)
+        if (p_name
+                and str(addressed_by.get("speaker") or "").casefold()
+                == p_name.casefold()
+                and p_name not in _presence_recognizes(ctx, name)):
+            addressed_by = dict(addressed_by)
+            addressed_by["speaker"] = _unknown_actor_label(
+                p_name, persona_appearance(pers))
 
     institutional_context = []
     if here:

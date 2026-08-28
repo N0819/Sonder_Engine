@@ -1068,7 +1068,14 @@ def _character_address_of(dr_output, presence_name, roster, scene=None,
         if not speaker or speaker.casefold() not in roster:
             continue
         target = str(d.get("intended_target") or "").strip()
-        if not target or not _background_name_mentioned(presence_name, target):
+        # PRECISE match: `intended_target` is a structured field naming ONE
+        # addressee, not prose. The significant-word fallback here read
+        # "Trader Tate" as an address of every one of a market's 44
+        # "Trader *" bodies through the shared cohort word (chat 95 turn
+        # 3043: one sleeve-grab became a 44-strong forced chorus). The
+        # conceal_from check below deliberately KEEPS the loose matcher --
+        # concealment fails closed, and wide denial leaks nothing.
+        if not target or not _presence_addressed_match(presence_name, target):
             continue
         if str(d.get("visibility") or "").casefold() == "concealed":
             continue
@@ -1695,25 +1702,33 @@ def track_background_presences(ctx, nonce, *, prepared=None):
                 record["mention_turns"].append(turn_idx)
 
     # Owed-reply bookkeeping: a registered character (or the player) addressed
-    # this presence this beat, but the single-winner gate spent the beat on
-    # someone else -- persist a one-beat-grace debt so they can answer next
-    # turn (the "if not during the turn, next turn" case). Discharged when the
-    # presence is picked (answered, or its silence WAS the answer) and swept
-    # when stale, so a reply never surfaces turns later.
-    selected_names = {str(n).casefold() for n in ((ctx.get("background_react") or {}).get("selected") or [])}
-    if not selected_names:  # legacy single-entry shape
-        _sel = str((ctx.get("background_react") or {}).get("name") or "").strip().casefold()
-        if _sel:
-            selected_names = {_sel}
+    # this presence this beat and it has not ANSWERED -- persist a one-beat-
+    # grace debt so they can answer next turn (the "if not during the turn,
+    # next turn" case), swept when stale so a reply never surfaces turns
+    # later.
+    #
+    # DISCHARGED ON FIRED CONDUCT, NOT ON SELECTION. Selection only proves
+    # the gate spent a call, and the call can come back `reacts: false`:
+    # measured, chat 95 turns 3031/3032/3041, the addressed cord-seller was
+    # selected three times, shown `addressed_by: null` each time (the relay
+    # defect fixed in agents/background._react_one), declined in 31 tokens
+    # each time -- and selection-keyed discharge then erased the very debt
+    # that would have re-asked him. A debt is paid by a line or a visible
+    # act; a declined call leaves it standing until its own expiry.
+    answered_names = {
+        str(_r.get("name") or "").strip().casefold()
+        for _r in _background_fired_reactions_any(
+            ctx.get("background_react") or {})
+        if str(_r.get("name") or "").strip()}
     # A chorused addressee's moment was answered TOGETHER (§C3): the crowd
     # entry names them so their reply debts discharge here exactly as a
-    # picked presence's would -- but they are deliberately NOT in `selected`,
-    # because selection is what persists a record and the chorus's whole
-    # point is that these bodies stay ground.
+    # fired presence's would -- they are deliberately NOT individual
+    # reactions, because the chorus's whole point is that these bodies stay
+    # ground.
     for _r in _background_fired_reactions_any(
             ctx.get("background_react") or {}):
         if _r.get("chorus"):
-            selected_names |= {str(n).casefold()
+            answered_names |= {str(n).casefold()
                                for n in (_r.get("addressed") or [])}
     # DELIBERATE interaction, counted separately from everything else. The
     # other two counters record what a presence DID -- `dialogue_turns` that
@@ -1727,7 +1742,24 @@ def track_background_presences(ctx, nonce, *, prepared=None):
     # them in their own input, and a registered character aiming a line at
     # them. The signal for the first already existed and was used only as a
     # same-beat liveness bit; nothing accumulated it.
-    addressed_refs = _flow_addressed_refs(ctx)
+    _bindings = descriptor_bindings(ctx)
+    addressed_refs = [_bindings.get(r, r) for r in _addressed_ref_strings(ctx)]
+    # A description address is a BINDING (descriptor_bindings): persist the
+    # player's own phrase on the bound body, so the fact the bind minted
+    # exists -- the next "the man with the braided cords" resolves by
+    # retrieval instead of a second seeded pick over a cohort that may have
+    # shifted underneath it.
+    for _ref, _bound in _bindings.items():
+        for _key, _record in presences.items():
+            if presence_display_name(_key, _record) != _bound:
+                continue
+            _sk = _record.setdefault("sketch", {})
+            _stored = _sk.setdefault("descriptors", [])
+            _norm = _normalized_descriptor(_ref)
+            if _norm and not any(_normalized_descriptor(s) == _norm
+                                 for s in _stored):
+                _stored.append(" ".join(str(_ref).split()))
+            break
     # NOT `ctx.turn.player_input`, which is the raw text the player typed.
     # See `overt_declaration`: the pre-commit gate was routed through it and
     # this writer -- one function over, on the same beat, from the same
@@ -1736,6 +1768,8 @@ def track_background_presences(ctx, nonce, *, prepared=None):
     # outlives the beat and is the counter that earns a passer-by a sheet.
     player_input = overt_declaration_text(ctx)
     sc = wget(cid, "scene", {}) or {}
+    _p_name = _player_name_or_none(ctx)
+    _p_room = str(room_of(sc, _p_name) or "") if _p_name else ""
     for key, record in presences.items():
         name = presence_display_name(key, record)
         if not name:
@@ -1749,8 +1783,8 @@ def track_background_presences(ctx, nonce, *, prepared=None):
         if isinstance(pr, dict) and turn_idx > (pr.get("expires_turn")
                                                 if pr.get("expires_turn") is not None else -1):
             record.pop("pending_reply", None)
-        if name.casefold() in selected_names:
-            record.pop("pending_reply", None)  # the moment was theirs; discharged
+        if name.casefold() in answered_names:
+            record.pop("pending_reply", None)  # answered, by word or by act
         else:
             entry = _character_address_of(
                 res, name, roster, sc, (record.get("sketch") or {}).get("station_room"))
@@ -1761,6 +1795,36 @@ def track_background_presences(ctx, nonce, *, prepared=None):
                     "tone": entry.get("tone", ""), "turn": turn_idx,
                     "expires_turn": turn_idx + 2,
                 }
+            else:
+                # The PLAYER's precise address (a flow ref -- description
+                # bindings included -- or the exact tracked name in the overt
+                # declaration) writes the same debt a character's aimed line
+                # does. It could not before: the only writer above needs a
+                # dialogue_log `intended_target`, which no prompt instructs
+                # and which measured null on every one of 189 reads (chat 95
+                # turn 3041), so a player address that went unanswered simply
+                # evaporated. PRECISE only -- a loose significant-word
+                # mention must not accrue a stranger a two-beat debt that
+                # spends gate slots -- and only when the words reach them in
+                # FULL, same audibility bar as _character_address_of.
+                _player_precise = any(
+                    _presence_in_addressed_refs(n, addressed_refs)
+                    or _background_name_named_exactly(n, player_input)
+                    for n in _presence_names(key, record))
+                if _player_precise and player_input and _p_name:
+                    _here = presence_room(sc, name, record)
+                    _hearable = True
+                    if _here and _p_room:
+                        _hearable = hear_level(
+                            spatial_rel(sc, _p_room, _here),
+                            "normal") == "full"
+                    if _hearable:
+                        addressed = True
+                        record["pending_reply"] = {
+                            "from": _p_name, "quote": player_input,
+                            "tone": "", "turn": turn_idx,
+                            "expires_turn": turn_idx + 2,
+                        }
         if addressed:
             turns = record.setdefault("addressed_turns", [])
             if turn_idx not in turns:
@@ -1925,7 +1989,7 @@ def _background_fired_reactions_any(br):
                 and (r.get("dialogue_log_entry") or r.get("action"))]
     return _background_fired_reactions(br)
 
-def _flow_addressed_refs(ctx):
+def _raw_flow_addressed_refs(ctx):
     """Raw flow.addressed_to entries as the director emitted them, preserved
     as flow.addressed_to_refs in schemas.py before int coercion. The string
     entries are the only way the director can mark an UNREGISTERED background
@@ -1945,12 +2009,241 @@ def _flow_addressed_refs(ctx):
     return refs
 
 
+def _unresolved_address_fallback(ctx):
+    """Addressee names for an address the interpret model MARKED but could
+    not spell -- the deterministic floor under the ADDRESSEE PRIORITY prompt
+    clause, in the same spirit as the gate itself (a prompt instruction
+    alone left a presence "motionless" for 25+ turns).
+
+    Measured, chat 95 turn 3042 (grok-4.3), with the description-address
+    clause already in the prompt: the model wrote flow.addressed_to=[0] --
+    no character id 0 exists -- while its own sequence carried
+    targets=["Trader Tate"] on the sleeve-grip and its notes said in words
+    "Trader Tate is the only present named character being addressed". The
+    structured reading existed; only the channel entry was garbage.
+
+    Fires ONLY when every part of the marked address is unusable: no name
+    string, and no int that resolves to a registered cast member (a real
+    cast addressee means the address was resolved and there is nothing to
+    repair). An EMPTY addressed_to stays empty -- the prompt licenses that
+    for a genuinely ambiguous address, and this floor must not turn every
+    beat into one with an addressee. Names come from the same place every
+    other harvest here trusts: the interpret sequence's own structured
+    fields, never free prose -- speech-element targets first, then the
+    targets of overt actions declared beside speech (taking someone by the
+    sleeve while asking them a question aims the question). No speech in
+    the overt declaration, no address: words are what an address is made
+    of."""
+    interp = ctx.get("director_interpret") or {}
+    flow = interp.get("flow") if isinstance(interp, dict) else None
+    if not isinstance(flow, dict):
+        return []
+    raw = list(flow.get("addressed_to_refs") or [])
+    if not raw:
+        raw = list(flow.get("addressed_to") or [])
+    entries = [r for r in raw if isinstance(r, (int, str))]
+    if not entries:
+        return []
+    if any(isinstance(r, str) and r.strip() and not r.strip().isdigit()
+           for r in entries):
+        return []  # a usable string exists; the binder handles it directly
+    cast_ids = set()
+    for row in (ctx.cast or []):
+        try:
+            cast_ids.add(int(row["id"]))
+        except Exception:
+            continue
+    ints = set()
+    for r in entries:
+        try:
+            ints.add(int(str(r).strip()))
+        except Exception:
+            continue
+    if ints & cast_ids:
+        return []  # resolved to a registered character; loops.py's job
+    elements = [e for e in (interp.get("sequence") or [])
+                if isinstance(e, dict) and e.get("visibility") != "concealed"]
+    if not any(e.get("type") == "speech" for e in elements):
+        return []
+    names, seen = [], set()
+    def _take(pool):
+        for n in pool or []:
+            text = str(n or "").strip()
+            if text and text.casefold() not in seen:
+                seen.add(text.casefold())
+                names.append(text)
+    for e in elements:
+        if e.get("type") == "speech":
+            _take(e.get("targets"))
+    if not names:
+        for e in elements:
+            if e.get("type") == "action":
+                _take(e.get("targets"))
+    return names
+
+
+def _addressed_ref_strings(ctx):
+    """The address channel's usable strings: the director's own refs when it
+    spelled any, else the structured-fallback names for an address it marked
+    but could not spell."""
+    refs = _raw_flow_addressed_refs(ctx)
+    return refs if refs else _unresolved_address_fallback(ctx)
+
+
+def _normalized_descriptor(text):
+    """One canonical spelling for a visible-description address, so the same
+    phrase binds to the same body at the gate, at commit, and on a later
+    beat: casefolded, whitespace-collapsed, leading article dropped."""
+    words = str(text or "").casefold().split()
+    if words and words[0] in ("the", "a", "an", "that", "this"):
+        words = words[1:]
+    return " ".join(words)
+
+
+def descriptor_bindings(ctx):
+    """{addressed_to string: bound presence display name} for every flow
+    ref that names NOBODY -- no registered character, no extra player, no
+    tracked or charter-derived presence.
+
+    A player in a crowd of strangers addresses by what they can SEE -- "the
+    man with the braided cords", "the woman behind the stall" -- because
+    nobody has told them a name. Measured (chat 95, turns 3031-3041): the
+    address died at interpret on every one of those beats while 44
+    addressable bodies stood in the player's room, and it HAD to -- a
+    charter body record carries name/competence/place/post/rank and a
+    presence row name/room/co-presence, so no store anywhere records who
+    sells cords, and a description is unresolvable by any reader from any
+    store in principle.
+
+    Resolution therefore cannot be retrieval; it is a BINDING that mints
+    the fact -- the reverse of director_views' appearance-label mechanism.
+    The Director owns what exists, so the described addressee is bound to
+    one co-present body and the binding is canon from that beat on
+    (track_background_presences persists the phrase into the bound body's
+    sketch, turning the NEXT use of it into retrieval). Deterministic given
+    the model's string: an exact or mentioned name is kept as itself, a
+    stored earlier binding wins, else a seeded pick over the sorted
+    co-present cohort -- never bare random. Firewall-clean: the player
+    still never receives the name (narration renders unrecognised people
+    through appearance labels); the binding publishes only what any
+    onlooker in the room already sees.
+    """
+    refs = _addressed_ref_strings(ctx)
+    if not refs:
+        return {}
+    chat = ctx.chat
+    cid = chat.id
+    roster = {n.casefold() for n in _registered_name_roster(chat, ctx.cast)}
+    roster |= {str((e.get("name") or "")).casefold()
+               for e in (ctx.extra_players or [])}
+    sc = wget(cid, "scene", {}) or {}
+    presences = _fold_duplicate_presences(
+        wget(cid, "background_presences", {}) or {}, sc)
+    _pname = _player_name_or_none(ctx)
+    p_room = str(room_of(sc, _pname) or "") if _pname else ""
+    if p_room:
+        # Same aperture as the demand gate: the player's room plus ambient
+        # scope, so any name the Director could have been shown is known
+        # here and cannot be mistaken for a description of somebody else.
+        _places = {p_room}
+        try:
+            from world.spatial import ambient_scope
+            _nearby, _ = ambient_scope(sc, p_room)
+            _places.update(str(r) for r in (_nearby or ()) if r)
+        except Exception:
+            pass
+        presences = with_charter_presences(
+            cid, presences, sc, places=_places,
+            frame_id=getattr(getattr(ctx, "turn", None), "frame_id", None))
+    known = presence_name_items(presences)
+    bindings = {}
+    for ref in refs:
+        cf = ref.casefold()
+        if cf in roster or any(_presence_addressed_match(r, ref)
+                               for r in roster):
+            continue  # a cast/extra-player name is loops.py's, never bound
+        matched = sorted({name.casefold(): name for name, _rec in known
+                          if _presence_addressed_match(name, ref)}.values())
+        if len(matched) == 1:
+            # The ref names exactly one person; canonicalize a partial to
+            # the display name so downstream matching is pure equality.
+            if matched[0].casefold() != cf:
+                bindings[ref] = matched[0]
+            continue
+        # Zero matches is a description; two or more is a partial that
+        # singles nobody out ("the trader", in a square of traders). A
+        # reference names a person only if it names ONE person -- both
+        # cases resolve the same way, by binding.
+        if not p_room:
+            continue  # a description is of somebody SEEN; no vantage, no bind
+        descriptor = _normalized_descriptor(ref)
+        if not descriptor:
+            continue
+        # The described addressee is somebody the player can see: a
+        # person-shaped body standing in the player's own room.
+        cohort = sorted(
+            (name, rec) for name, rec in known
+            if name.casefold() not in roster
+            and str(presence_room(sc, name, rec) or "") == p_room
+            and _presence_speech_verdict(sc, name, rec) == "person")
+        if not cohort:
+            continue
+        bound = ""
+        for name, rec in cohort:
+            stored = ((rec.get("sketch") or {}).get("descriptors") or [])
+            if any(_normalized_descriptor(s) == descriptor for s in stored):
+                bound = name  # the fact already exists; retrieval
+                break
+        if not bound:
+            digest = hashlib.sha256(
+                ("%s:%s" % (cid, descriptor)).encode("utf-8")).hexdigest()
+            bound = cohort[int(digest, 16) % len(cohort)][0]
+        bindings[ref] = bound
+    return bindings
+
+
+def _flow_addressed_refs(ctx):
+    """flow.addressed_to strings with every description address resolved to
+    the body it binds to (descriptor_bindings above), so every consumer of
+    the addressed class -- the demand gate, owed-reply bookkeeping, auto
+    promotion, the scene manager -- hears an address-by-description exactly
+    as it hears an address-by-name."""
+    bindings = descriptor_bindings(ctx)
+    return [bindings.get(ref, ref) for ref in _addressed_ref_strings(ctx)]
+
+
+def _presence_addressed_match(name, ref):
+    """PRECISE two-way match between one tracked name and one structured
+    flow.addressed_to ref: equality, the whole name inside the ref
+    ("Captain Trader Tate" names Trader Tate), or the whole title-stripped
+    ref inside the name ("Tate" names Trader Tate). Deliberately NOT
+    `_background_name_mentioned`: that fallback exists for PROSE, where
+    "Crusher" carries a scene, and applied to this structured channel a
+    single shared word matched everybody who shares it -- six "Regular N"
+    records against "Regular 2" on the Part C bench, and every one of a
+    market town's 44 "Trader *" bodies against any single trader ref, each
+    match a FORCED pick."""
+    name_cf = str(name or "").strip().casefold()
+    ref_cf = str(ref or "").strip().casefold()
+    if not name_cf or not ref_cf:
+        return False
+    if name_cf == ref_cf:
+        return True
+    if re.search(rf"\b{re.escape(name_cf)}\b", ref_cf):
+        return True
+    stripped = _normalized_descriptor(strip_name_titles(ref))
+    return bool(stripped
+                and re.search(rf"\b{re.escape(stripped)}\b", name_cf))
+
+
 def _presence_in_addressed_refs(name, refs):
-    return any(
-        name.casefold() == ref.casefold()
-        or _background_name_mentioned(name, ref)
-        for ref in refs
-    )
+    """Is this presence named by the (already bound) addressed refs? Safe to
+    keep partial-name containment here because `_flow_addressed_refs` has
+    already canonicalized every ref: a unique partial became the display
+    name, and an ambiguous or descriptive ref was bound to exactly one
+    body (descriptor_bindings), so nothing reaching this test can fan out
+    across a cohort."""
+    return any(_presence_addressed_match(name, ref) for ref in refs)
 
 
 def emerged_this_beat(ctx, dr_output, sc):
@@ -2281,6 +2574,13 @@ def pick_voice_demand(ctx, dr_output, cap=1):
             {"priority": priority, "name": name, "record": record,
              "room": str(here or ""),
              "addressed": bool(addressed_precise),
+             # The PLAYER's own precise address specifically (a flow ref --
+             # description bindings included -- or their exact name in the
+             # declaration), so the stage downstream can hand the presence
+             # the address it actually received. Deliberately excludes the
+             # loose significant-word mention: fuzzy must never put words
+             # in the player's mouth about who they turned toward.
+             "player_addressed": bool(flow_addressed or addressed_exact),
              "refs": [r for r in (record.get("charter_refs") or [])
                       if isinstance(r, dict)]})
 
@@ -2324,6 +2624,7 @@ def pick_voice_demand(ctx, dr_output, cap=1):
         seen.add(c["name"].casefold())
         picks.append(c["name"])
         meta[c["name"]] = {"addressed": c["addressed"], "refs": c["refs"],
+                           "player_addressed": bool(c.get("player_addressed")),
                            "room": c["room"]}
     return {"picks": picks, "meta": meta}
 
