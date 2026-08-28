@@ -130,7 +130,12 @@ def test_the_registry_refuses_a_second_event_ledger():
         "recent_events": [{"kind": "legacy_duplicate"}],
     })
 
-    assert set(normalized) == {"version", "items"}
+    # The guarantee is that no SECOND event ledger survives -- incidents have
+    # one durable home, scheduled_events -> world_events. `people` joined the
+    # registry on 2026-08-27 when a person stopped being owned by the
+    # institution that employs them, and is not an event ledger.
+    assert "recent_events" not in normalized
+    assert set(normalized) == {"version", "items", "people"}
 
 
 def test_different_charters_trade_only_news_through_colocated_bodies():
@@ -436,3 +441,126 @@ def test_an_unfilled_post_is_visible_at_its_own_room(temp_db):
     assert residue_facts(cid, "control_room") == [
         "The fail_post duty remains unfilled (no qualified body in reach)."
     ]
+
+
+class TestACharterEmploysPeopleItDoesNotOwn:
+    """A person used to live inside the blob of the institution that employed
+    them, addressed as `(charter_key, body_key)`. Two things followed that are
+    plainly wrong: a hermit the Director invented needed an institution to
+    exist in, and anybody moving town, joining a crew or transferring ship had
+    to be re-keyed across two blobs dragging thirteen person-scoped stores
+    behind them -- `bodies`, `minds`, `needs`, `feel`, `experiences`,
+    `served_beside`, `stood`, `judgments`, `ties`, `marks`, `habit_runs`,
+    `travelled`, `heard_blame`. Anything that missed one lost that part of the
+    person silently. See `docs/UNBUILT.md` 1.99d.
+    """
+
+    @staticmethod
+    def _two_houses():
+        import copy as _copy
+        from charter_fixtures import ABBEY, SHIP
+        return normalize_registry({"items": {
+            "ship": {"state": _copy.deepcopy(SHIP)},
+            "abbey": {"state": _copy.deepcopy(ABBEY)}}})
+
+    def test_the_stored_shape_holds_a_person_once(self):
+        """On disk a person is stored at registry level and an institution
+        records only who it employs. The working shape stays joined, so the
+        two hundred readers in this package did not have to move."""
+        from world.charter_runtime import _stored_shape
+
+        joined = self._two_houses()
+        stored = _stored_shape(joined)
+
+        assert set(stored) == {"version", "items", "people"}
+        assert "bodies" not in stored["items"]["ship"]["state"]
+        assert stored["items"]["ship"]["state"]["members"]
+        assert normalize_registry(stored) == joined, "round trip"
+
+    def test_a_person_may_be_employed_nowhere(self):
+        """The hermit. Not an institution of one -- a person with no
+        membership, which is what having no institution actually means."""
+        from world.charter_runtime import _stored_shape
+
+        stored = _stored_shape(self._two_houses())
+        stored["people"]["hermit"] = {"bodies": {
+            "key": "hermit", "name": "Hermit", "place": "hill",
+            "available": True, "competence": {}}}
+
+        back = normalize_registry(stored)
+
+        assert "hermit" in back["people"]
+        assert all("hermit" not in (item["state"].get("members") or ())
+                   for item in back["items"].values())
+
+    def test_a_transfer_carries_the_whole_person(self):
+        """Joining another crew is a membership change. What they remember,
+        who they served beside and how they hold people are the same objects
+        before and after, because they were never the institution's."""
+        from world.charter_runtime import transfer_person
+
+        registry = self._two_houses()
+        ship = registry["items"]["ship"]["state"]
+        ship["experiences"]["vega"] = [
+            {"id": "e1", "kind": "encounter", "at_hours": 4.0,
+             "other": "chief"}]
+        ship["served_beside"]["vega"] = {"chief": 312}
+        remembered = [dict(row) for row in ship["experiences"]["vega"]]
+
+        transfer_person(registry, "vega", "abbey", place="choir")
+
+        ship = registry["items"]["ship"]["state"]
+        abbey = registry["items"]["abbey"]["state"]
+        assert "vega" not in ship["bodies"] and "vega" not in ship["members"]
+        assert "vega" in abbey["bodies"] and "vega" in abbey["members"]
+        assert abbey["experiences"]["vega"] == remembered
+        assert abbey["served_beside"]["vega"] == {"chief": 312}, (
+            "three hundred watches beside a former shipmate are still theirs")
+        assert abbey["bodies"]["vega"]["place"] == "choir"
+
+    def test_leaving_every_institution_is_not_ceasing_to_exist(self):
+        from world.charter_runtime import transfer_person
+
+        registry = self._two_houses()
+
+        transfer_person(registry, "vega", None)
+
+        assert "vega" in registry["people"]
+        assert all("vega" not in (item["state"].get("bodies") or {})
+                   for item in registry["items"].values())
+
+    def test_two_institutions_may_mint_the_same_body_key(self):
+        """WHY A PERSON ID IS QUALIFIED. Body keys are minted per institution,
+        so two independently generated charters in one story both produce
+        `tech:0001`. A flat person store keyed by body alone has the second
+        silently overwrite the first -- measured the moment it was tried: a
+        second generated location came back with every person store empty and
+        its clock at zero, and the presim that produced it was discarded by
+        the revision guard rather than failing loudly.
+        """
+        from world.charter_runtime import _stored_shape
+
+        def _house(key, place):
+            return normalize_charter({
+                "key": key,
+                "posts": {"tech": {"place": place, "serves": []}},
+                "bodies": {"tech:0001": {"place": place, "competence": {}}},
+            })
+
+        joined = normalize_registry({"items": {
+            "crew": {"state": _house("crew", "engine_room")},
+            "crew_2": {"state": _house("crew_2", "aft_bay")}}})
+        joined["items"]["crew"]["state"]["stood"]["tech:0001"] = {"tech": 9}
+
+        stored = _stored_shape(joined)
+
+        assert len(stored["people"]) == 2, "two people, not one overwritten"
+        assert set(stored["people"]) == {"crew/tech:0001", "crew_2/tech:0001"}
+        back = normalize_registry(stored)
+        assert back["items"]["crew"]["state"]["stood"]["tech:0001"] == {"tech": 9}
+        assert not back["items"]["crew_2"]["state"]["stood"], (
+            "the other crew's identically-keyed body is a different person")
+        # Compared through a re-normalize, not against `joined` directly: the
+        # item is authoritative within a session and `people` only on disk, so
+        # the mutation above deliberately left the in-memory mirror stale.
+        assert back["items"] == normalize_registry(joined)["items"]

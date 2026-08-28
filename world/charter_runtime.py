@@ -60,6 +60,183 @@ def _window_hours(value):
     return max(0.25, min(24.0, value))
 
 
+#: The stores that belong to a PERSON rather than to an institution, each one
+#: keyed directly by body. A charter used to hold these, which meant a person
+#: was OWNED by the institution that employed them -- addressed as
+#: ``(charter_key, body_key)`` and stored inside its blob. Two things follow
+#: that are plainly wrong and the owner named both: a hermit the Director
+#: invented needs an institution to exist in, and somebody moving town, joining
+#: a crew or transferring ship has to be re-keyed across two blobs dragging
+#: thirteen stores behind them. Holding posts in two institutions could not be
+#: expressed at all.
+#:
+#: So a charter now EMPLOYS people it does not own. These live at registry
+#: level keyed by body; the institution keeps `posts`, `upkeeps`, `watch`,
+#: `roster`, `decisions`, `economy` and its own clock, plus `members` -- the
+#: link. A hermit is a person with no membership. A transfer is a membership
+#: change with identity, memory and relationships untouched.
+#:
+#: NOT in here, with reasons. `commitments` is keyed by promise id and names
+#: two parties, so it is relational rather than person-scoped and moving it
+#: means deciding which institution owns a cross-charter promise. `politics`
+#: nests `regard` (pairwise, person) inside `blame`/`standing` (institution).
+#: Both are registered at `docs/UNBUILT.md` §1.99d rather than half-moved.
+PERSON_STORES = (
+    "bodies", "minds", "needs", "feel", "experiences", "served_beside",
+    "stood", "judgments", "ties", "marks", "habit_runs", "travelled",
+    "heard_blame",
+)
+
+
+def person_id(charter_key, body_key):
+    """The registry-wide address of one person.
+
+    QUALIFIED, BECAUSE A BODY KEY IS NOT UNIQUE. Body keys are minted per
+    institution -- two independently generated charters in the same story both
+    produce `tech:0001`, and a flat person store keyed by body alone silently
+    has the second overwrite the first. Measured the moment this was tried: a
+    second generated location came back with every person store empty and its
+    clock at zero, because both crews claimed the same keys.
+
+    The institution is in the ADDRESS, not in the person. A transfer re-keys
+    the address and moves the same objects, which is why what somebody
+    remembers survives it.
+    """
+    return "%s/%s" % (str(charter_key), str(body_key))
+
+
+def _body_of(pid):
+    """The intra-charter body key inside a person id."""
+    return str(pid).split("/", 1)[-1]
+
+
+def _split_person_state(state, charter_key=""):
+    """Take a whole charter state apart: (institution, {person_id: person})."""
+    institution = {k: v for k, v in state.items() if k not in PERSON_STORES}
+    bodies = state.get("bodies") or {}
+    people = {}
+    for key in bodies:
+        person = {"bodies": copy.deepcopy(bodies[key])}
+        for store in PERSON_STORES:
+            if store == "bodies":
+                continue
+            held = state.get(store)
+            if isinstance(held, dict) and key in held:
+                person[store] = copy.deepcopy(held[key])
+        people[person_id(charter_key, key)] = person
+    return institution, people
+
+
+def _join_person_state(institution, people, members):
+    """Put one back together in the shape `charter_run.step` already takes.
+
+    THE WHOLE POINT OF DOING IT THIS WAY. `step` and every function under it
+    receive exactly what they received before -- dicts keyed by body -- so the
+    two hundred reader sites across this package did not have to move. Only
+    the OWNERSHIP moved, which is the thing that was wrong.
+    """
+    state = copy.deepcopy(institution)
+    for store in PERSON_STORES:
+        state[store] = {}
+    for pid in members:
+        person = people.get(str(pid))
+        if not isinstance(person, dict):
+            continue
+        body_key = _body_of(pid)
+        for store, held in person.items():
+            if store in PERSON_STORES:
+                state[store][body_key] = copy.deepcopy(held)
+    return state
+
+
+def _stored_shape(registry):
+    """The on-disk registry: people once, institutions naming their members."""
+    people = dict(registry.get("people") or {})
+    items = {}
+    for key, item in (registry.get("items") or {}).items():
+        institution, held = _split_person_state(item.get("state") or {}, key)
+        people.update(held)
+        institution["members"] = sorted(held)
+        items[str(key)] = dict(item, state=institution)
+    return {"version": registry.get("version", REGISTRY_VERSION),
+            "items": items, "people": people}
+
+
+def transfer_person(registry, body_key, to_charter, *, place=None):
+    """Move one person between institutions. Identity is not touched.
+
+    THE OPERATION THE OLD SHAPE COULD NOT EXPRESS. A person used to live
+    inside the blob of the institution that employed them, so joining a crew,
+    moving town or transferring ship meant re-keying them across two blobs
+    with thirteen stores behind them -- and anything that missed a store lost
+    that part of the person silently. Here it is a membership change: what
+    they remember, who they know, what they are owed and how they feel are the
+    same objects before and after, because they were never the institution's.
+
+    ``to_charter`` of None makes them a hermit: employed nowhere, still a
+    person. Returns the registry.
+    """
+    body_key = str(body_key)
+    items = registry.setdefault("items", {})
+    person = None
+    # Lift them out of wherever they are now.
+    for from_key, item in items.items():
+        state = item.get("state") or {}
+        if body_key not in (state.get("bodies") or {}):
+            continue
+        _institution, held = _split_person_state(state, from_key)
+        person = held.get(person_id(from_key, body_key))
+        registry.setdefault("people", {}).pop(
+            person_id(from_key, body_key), None)
+        for store in PERSON_STORES:
+            if isinstance(state.get(store), dict):
+                state[store].pop(body_key, None)
+        state["members"] = sorted(state.get("bodies") or {})
+    if person is None:
+        person = (registry.get("people") or {}).get(body_key)
+    if person is None:
+        raise ValueError(f"no such person: {body_key}")
+    person = copy.deepcopy(person)
+    if place is not None:
+        person.setdefault("bodies", {})["place"] = str(place)
+    if to_charter is None:
+        # A hermit is addressed by body alone: no institution is in the name,
+        # because none is in their life.
+        registry.setdefault("people", {})[body_key] = person
+        return registry
+    registry.setdefault("people", {})[person_id(to_charter, body_key)] = person
+    item = items.setdefault(str(to_charter), {"state": {}})
+    state = item.setdefault("state", {})
+    for store, held in person.items():
+        if store in PERSON_STORES:
+            state.setdefault(store, {})[body_key] = copy.deepcopy(held)
+    state["members"] = sorted(state.get("bodies") or {})
+    return registry
+
+
+def charter_view(registry, charter_key):
+    """One institution and the people it employs, ready to simulate."""
+    item = (registry.get("items") or {}).get(str(charter_key)) or {}
+    return _join_person_state(
+        item.get("state") or {}, registry.get("people") or {},
+        (item.get("state") or {}).get("members") or ())
+
+
+def absorb_view(registry, charter_key, after):
+    """Scatter a simulated window back: people to the registry, the rest here.
+
+    A body the window MOVED to another institution is not lost -- the person
+    keeps their whole self at registry level and only `members` changes.
+    """
+    item = (registry.setdefault("items", {}).setdefault(
+        str(charter_key), {"state": {}}))
+    institution, people = _split_person_state(after, charter_key)
+    registry.setdefault("people", {}).update(people)
+    institution["members"] = sorted(people)
+    item["state"] = institution
+    return registry
+
+
 def normalize_registry(stored, reservation=None):
     """Normalize author definitions and runtime markers into one JSON shape.
 
@@ -79,9 +256,22 @@ def normalize_registry(stored, reservation=None):
             and isinstance(value, dict)
         }
     items = {}
+    # MIGRATION HAPPENS HERE, and only here. A registry saved before people
+    # were hoisted holds them inside each item's state; one saved after holds
+    # them at registry level with `members` naming who works where. Joining
+    # first makes both shapes converge on the same whole state, so
+    # `normalize_charter` still sees what it has always seen and the lift is
+    # idempotent -- read an old blob, get a new one, read it again, get the
+    # same one.
+    incoming_people = stored.get("people")
+    incoming_people = incoming_people if isinstance(incoming_people, dict) else {}
+    people = {}
     for key, raw in raw_items.items():
         raw = raw if isinstance(raw, dict) else {}
         state = raw.get("state") if isinstance(raw.get("state"), dict) else raw
+        if incoming_people and not (state.get("bodies") or {}):
+            state = _join_person_state(
+                state, incoming_people, state.get("members") or ())
         state = normalize_charter(state, reservation)
         state["key"] = str(state.get("key") or key)
         last = raw.get("last_elapsed_seconds")
@@ -89,6 +279,16 @@ def normalize_registry(stored, reservation=None):
             last = None if last is None else max(0.0, float(last))
         except (TypeError, ValueError):
             last = None
+        # WORKING SHAPE IS JOINED, STORED SHAPE IS SPLIT. Every reader in this
+        # package -- and there are around two hundred -- takes a charter state
+        # holding its own people, and rewriting them all to gather first would
+        # be a large change for no behavioural gain. So the join is what a
+        # caller gets and `save_registry` does the split, which makes the ITEM
+        # authoritative within a session and `people` authoritative on disk.
+        # The round trip is what carries identity, not the in-memory shape.
+        _institution, held = _split_person_state(state, key)
+        people.update(held)
+        state["members"] = sorted(held)
         items[str(key)] = {
             "state": state,
             "window_hours": _window_hours(raw.get("window_hours")),
@@ -98,7 +298,11 @@ def normalize_registry(stored, reservation=None):
     # Older development snapshots may contain ``recent_events``. Deliberately
     # discard it: incidents have one durable home, scheduled_events ->
     # world_events. The Charter registry stores current simulation state only.
-    return {"version": REGISTRY_VERSION, "items": items}
+    # Unemployed people survive normalization. Nothing in `items` refers to
+    # them, which is exactly what having no institution means.
+    for key, person in incoming_people.items():
+        people.setdefault(str(key), copy.deepcopy(person))
+    return {"version": REGISTRY_VERSION, "items": items, "people": people}
 
 
 # ---------------------------------------------------------------- job store
@@ -227,7 +431,17 @@ def save_registry(cid, stored, frame_id=None):
     from story.naming import story_identity_reservation
     normalized = normalize_registry(
         stored, story_identity_reservation(cid, _stored_naming_laws(stored)))
-    wset_for_frame(cid, CHARTERS_KEY, normalized, frame_id)
+    # THE SPLIT LANDS HERE, at the one write chokepoint. On disk a person is
+    # stored once at registry level and an institution stores only who it
+    # employs, so a body carries its identity, memory and relationships across
+    # a transfer instead of being re-keyed with thirteen stores behind it.
+    # Rebuilt from the ITEMS rather than from the incoming `people`, because
+    # the joined item state is what the session has been mutating.
+    stored_shape = _stored_shape(normalized)
+    wset_for_frame(cid, CHARTERS_KEY, stored_shape, frame_id)
+    # The caller gets the JOINED shape it handed in, not the stored one, so a
+    # save round-trips against `registry_for` and no caller has to know which
+    # side of the chokepoint it is on.
     return normalized
 
 
