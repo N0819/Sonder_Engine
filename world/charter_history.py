@@ -655,9 +655,11 @@ def ground_recent_history(value, packet):
 
 def _record_shared_recent_history(cid, binding, episodes, *, frame_id=None):
     """Give every named participant a bounded reciprocal event record."""
-    from world.charter_runtime import registry_for, save_registry
+    from world.charter_runtime import registry_for_update, save_registry
 
-    registry = registry_for(cid, frame_id)
+    # registry_for_update, not registry_for: this function mutates
+    # `experiences` in place and the shared cached registry is read-only.
+    registry = registry_for_update(cid, frame_id)
     item = (registry.get("items") or {}).get(str(binding.get("charter") or ""))
     if not item:
         return 0

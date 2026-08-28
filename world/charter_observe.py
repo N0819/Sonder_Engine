@@ -145,16 +145,28 @@ def evidence_claim(evidence, turn_id, at_hours, place):
     }
 
 
-def apply_public_evidence(charter, evidence_rows, scene, turn_id):
-    """Land each row only in the Charter bodies that received it.
+def plan_public_evidence(charter, evidence_rows, scene, turn_id):
+    """READ-ONLY appraisal: what `apply_public_evidence` WOULD land.
 
-    Returns ``(charter, metrics)``.  The input is normalized state owned by the
-    caller; this function mutates that copy for the same reason Charter's other
-    pure reducers do, then returns it explicitly.
+    Mutates nothing, so it may run against the shared cached registry
+    (`charter_runtime.cached_registry`) -- which is the point: the commit
+    stage asks every turn whether a beat reached any Charter mind, and the
+    answer is usually no (measured 2026-08-28, chat 95, 307 bodies: the
+    turn's evidence pass acquired nothing, yet paid a private 41.4MB
+    registry parse, ~1.1s inside the locked commit, before discovering
+    that). The mutating pass consumes exactly this plan, so the two cannot
+    drift.
+
+    Returns ``{"opportunities", "acquired", "receiving", "inserts",
+    "recipients"}`` where ``receiving`` is the first-reception order of
+    body keys (the mutating pass creates mind rows in that order -- a body
+    that receives but acquires nothing still gets its empty mind row, and
+    stored-byte identity depends on the creation order) and ``inserts`` is
+    ``[(body_key, subject, claim)]`` in application order.
     """
     bodies = charter.get("bodies") or {}
     bindings = charter.get("bindings") or {}
-    minds = charter.setdefault("minds", {})
+    minds = charter.get("minds") or {}
     naming = charter.get("naming") or {}
     role_map = {}
     for post, assigned in (charter.get("watch") or {}).items():
@@ -168,6 +180,13 @@ def apply_public_evidence(charter, evidence_rows, scene, turn_id):
     # times.  Targeted concealment remains per identity and bypasses the cache.
     sensory_cache = {}
     recipients = {}
+    receiving = []
+    inserts = []
+    # Subjects this plan already inserts per body: stands in for the live
+    # `held` dict the mutating pass grows as it goes, so the duplicate-claim
+    # skip sees planned insertions exactly as it would see landed ones.
+    planned = {}
+    clock = float(charter.get("clock_hours") or 0.0)
     for evidence in list(evidence_rows or ())[:PUBLIC_EVIDENCE_CAP]:
         if not isinstance(evidence, dict):
             continue
@@ -191,23 +210,48 @@ def apply_public_evidence(charter, evidence_rows, scene, turn_id):
                 continue
             recipients.setdefault(
                 str(evidence.get("source_id") or ""), set()).add(str(body_key))
-            held = minds.setdefault(str(body_key), {})
-            claim = evidence_claim(
-                evidence, turn_id, float(charter.get("clock_hours") or 0.0),
-                body.get("place") or "")
-            if claim is None or claim["body"] in held:
+            held = minds.get(str(body_key)) or {}
+            new = planned.get(str(body_key))
+            if new is None:
+                new = planned[str(body_key)] = set()
+                receiving.append(str(body_key))
+            claim = evidence_claim(evidence, turn_id, clock,
+                                   body.get("place") or "")
+            if claim is None or claim["body"] in held or claim["body"] in new:
                 continue
-            held[claim["body"]] = claim
+            inserts.append((str(body_key), claim["body"], claim))
+            new.add(claim["body"])
             # The same reception also refreshes the body's coarse view of the
             # figure.  This is not a second mind for the player/character: it
             # is what this Charter person believes they saw at this place.
             actor = str(evidence.get("actor") or "")
             if actor:
-                held[actor] = figure_claim({
+                inserts.append((str(body_key), actor, figure_claim({
                     "key": actor, "place": str(body.get("place") or ""),
                     "surface": {"label": actor},
-                }, float(charter.get("clock_hours") or 0.0))
+                }, clock)))
+                new.add(actor)
             acquired += 1
+    return {"opportunities": opportunities, "acquired": acquired,
+            "receiving": receiving, "inserts": inserts,
+            "recipients": recipients}
+
+
+def apply_public_evidence(charter, evidence_rows, scene, turn_id):
+    """Land each row only in the Charter bodies that received it.
+
+    Returns ``(charter, metrics)``.  The input is normalized state owned by the
+    caller; this function mutates that copy for the same reason Charter's other
+    pure reducers do, then returns it explicitly.
+    """
+    plan = plan_public_evidence(charter, evidence_rows, scene, turn_id)
+    opportunities, acquired = plan["opportunities"], plan["acquired"]
+    recipients = plan["recipients"]
+    minds = charter.setdefault("minds", {})
+    for body_key in plan["receiving"]:
+        minds.setdefault(body_key, {})
+    for body_key, subject, claim in plan["inserts"]:
+        minds[body_key][subject] = claim
 
     charter["minds"] = cap_minds(minds)
     charter["news_keys"] = sorted({
@@ -251,4 +295,5 @@ def apply_public_evidence(charter, evidence_rows, scene, turn_id):
 __all__ = [
     "PUBLIC_EVIDENCE_CAP", "apply_public_evidence", "body_receives_evidence",
     "evidence_claim", "evidence_key", "evidence_phrase",
+    "plan_public_evidence",
 ]

@@ -584,6 +584,11 @@ class DocumentStore:
                         (self.chat_id, self._key(path)), one=True)
             qi("DELETE FROM world WHERE chat_id=? AND key=?",
                (self.chat_id, self._key(path)))
+            # A raw DELETE bypasses wset's per-row read-token bump; extension
+            # keys are namespaced away from engine rows, but the token
+            # contract is "any world write is tracked", so keep it whole.
+            from core.db import bump_world_epoch
+            bump_world_epoch()
         return bool(existed)
 
     @staticmethod

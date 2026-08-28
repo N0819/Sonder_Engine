@@ -70,6 +70,7 @@ def _wire(monkeypatch, script, *, no_sleep=True):
     if no_sleep:
         monkeypatch.setattr(providers.time, "sleep", lambda _s: None)
     providers._EMBED_FALLBACK_SAID.clear()
+    providers._embed_dead_forget()
     return session
 
 
@@ -592,3 +593,223 @@ def test_the_coalescing_arithmetic_reaches_somebody(monkeypatch, caplog):
         providers._serve_embed_group([providers._EmbedWaiter(["solo"])], {})
     assert not [r for r in caplog.records
                 if "embed_coalesced" in r.getMessage()]
+
+
+# ---- Remembering an unreachable endpoint ----
+#
+# Measured live 2026-08-28 (chat 95, turn idx 905, wall 313.1s): against an
+# endpoint that never completed a TCP connect, the retry ladder ran IN FULL
+# twice in one turn -- 126.0s inside interaction_loop's memory-context build,
+# 126.4s inside commit's prepare_memories_batch, four 30.1s connect timeouts
+# plus jittered backoff each -- 252.4s, 81% of the turn, spent re-proving a
+# fact the same process finished proving seventy seconds earlier. The memory
+# these tests pin keeps the verdict; nothing about the verdict changes.
+
+
+def _dead(monkeypatch, script):
+    """Wire a session and hand back both it and a connect-level exception."""
+    import requests.exceptions as req_exc
+    return _wire(monkeypatch, script), req_exc
+
+
+def test_an_unreachable_endpoint_is_proved_once_not_once_per_call(monkeypatch):
+    """The 252.4s turn: two full ladders for one fact. Now one ladder.
+
+    The second call must make ZERO requests and still return exactly the
+    batch the exhausted ladder would have: the crc32 hash under its own
+    stamp, with the remembered reason in `error`.
+    """
+    import requests.exceptions as req_exc
+    session = _wire(monkeypatch,
+                    [req_exc.ConnectionError("connect timed out")] * 8)
+    first = providers.embed_texts_meta(["a memory"])
+    assert session.calls == 1 + providers.DEFAULT_RETRY.max_retries
+    assert first.fallback
+
+    second = providers.embed_texts_meta(["a memory"])
+    assert session.calls == 1 + providers.DEFAULT_RETRY.max_retries, \
+        "the second call re-paid the ladder the first call already ran"
+    assert second.fallback
+    assert second.model_key == "cheap:crc32:256"
+    assert "remembered unreachable" in (second.error or "")
+    # Byte-for-byte the verdict the ladder produces: cheap_embed(text).
+    import numpy as np
+    assert np.array_equal(second.vectors[0],
+                          providers.cheap_embed("a memory"))
+    assert (second.dimensions, second.model_key) == (
+        first.dimensions, first.model_key)
+
+
+def test_a_status_from_a_live_server_is_never_remembered(monkeypatch):
+    """A 503 is a server ANSWERING. Only a connect-level failure -- no server
+    reached at all -- may be remembered, or one upstream bad minute would
+    silence a healthy endpoint for the whole cooldown."""
+    session = _wire(monkeypatch, [_Resp(503, text="upstream down")] * 16)
+    providers.embed_texts_meta(["a"])
+    providers.embed_texts_meta(["b"])
+    assert session.calls == 2 * (1 + providers.DEFAULT_RETRY.max_retries)
+    assert providers._EMBED_DEAD["key"] is None
+
+
+def test_a_single_declined_attempt_proves_nothing(monkeypatch):
+    """`retry=None` makes one attempt; one connect failure is a hiccup, not a
+    verdict, and must not put the whole pipeline on the hash for 300s."""
+    import requests.exceptions as req_exc
+    _wire(monkeypatch, [req_exc.ConnectionError("blip")] * 2)
+    got = providers.embed_texts_meta(["status"], retry=None)
+    assert got.fallback
+    assert providers._EMBED_DEAD["key"] is None
+
+
+def test_the_measurement_caller_still_asks_the_wire(monkeypatch):
+    """The bank probe exists to observe the endpoint as it is NOW. Answered
+    from memory it could never report a recovery -- so it bypasses the
+    memory, and its success clears it for everyone."""
+    session = _wire(monkeypatch, [_Resp(200, _vectors(1))])
+    providers._EMBED_DEAD.update(
+        key="openrouter:3:perplexity/pplx-embed-v1-4b",
+        reason="connect timed out", probe_at=float("inf"), probing=False)
+    got = providers.embed_texts_meta(["status"], retry=None)
+    assert session.calls == 1
+    assert not got.fallback
+    assert providers._EMBED_DEAD["key"] is None, \
+        "a successful request must clear the remembered deadness"
+
+
+def test_recovery_is_probed_off_everyones_wall_clock(monkeypatch):
+    """When the memory comes due, the caller is still answered immediately
+    and the re-check happens on a background thread -- the probe's connect
+    timeout lands on nobody's turn. A probe that succeeds clears the memory;
+    one that fails leaves it standing for the next window."""
+    session = _wire(monkeypatch, [_Resp(200, _vectors(1))])
+    key = "openrouter:3:perplexity/pplx-embed-v1-4b"
+    providers._EMBED_DEAD.update(key=key, reason="connect timed out",
+                                 probe_at=0.0, probing=False)
+
+    started = []
+
+    class _InlineThread:
+        def __init__(self, target=None, args=(), **kw):
+            started.append((target, args))
+
+        def start(self):
+            pass
+
+    monkeypatch.setattr(providers.threading, "Thread", _InlineThread)
+    got = providers.embed_texts_meta(["a memory"])
+    assert got.fallback, "the caller waits for no probe"
+    assert session.calls == 0
+    assert len(started) == 1 and started[0][1] == (key,)
+    assert providers._EMBED_DEAD["probing"] is True
+    assert providers._EMBED_DEAD["probe_at"] > 0.0, \
+        "the next window must be booked before the probe reports"
+
+    # Run the probe the thread would have run: the 200 clears the memory.
+    target, args = started[0]
+    target(*args)
+    assert session.calls == 1
+    assert providers._EMBED_DEAD["key"] is None
+    assert providers._EMBED_DEAD["probing"] is False
+
+
+def test_a_failed_probe_keeps_the_memory_standing(monkeypatch):
+    import requests.exceptions as req_exc
+    session = _wire(monkeypatch, [req_exc.ConnectionError("still dead")] * 2)
+    key = "openrouter:3:perplexity/pplx-embed-v1-4b"
+    providers._EMBED_DEAD.update(key=key, reason="connect timed out",
+                                 probe_at=float("inf"), probing=True)
+    providers._embed_dead_probe(key)
+    assert session.calls == 1
+    assert providers._EMBED_DEAD["key"] == key
+    assert providers._EMBED_DEAD["probing"] is False
+
+
+def test_a_reconfigured_role_is_not_answered_from_the_old_keys_memory(
+        monkeypatch):
+    """Deadness is a fact about ONE (provider, model) key. The host who
+    points the role at a new endpoint must reach it on the next call."""
+    session = _wire(monkeypatch, [_Resp(200, _vectors(1))])
+    providers._EMBED_DEAD.update(
+        key="openrouter:9:some-old-endpoint", reason="connect timed out",
+        probe_at=float("inf"), probing=False)
+    got = providers.embed_texts_meta(["a memory"])
+    assert session.calls == 1
+    assert not got.fallback
+
+
+# ---- The verdict must reach the TURN PATH, not just the providers layer ----
+#
+# The residual audit (finding 2, 2026-08-28) first attributed ~245s of a
+# 313.1s turn to un-probed deterministic work in two windows --
+# interaction_loop 13.9-151.2s and the commit stretch 180.3-313.1s. Both
+# windows were the connect ladder above: 126.0s inside interaction_loop's
+# memory-context build, 126.4s inside commit's prepare_memories_batch.
+# Re-measured on the live 300-body market town with the memory in place
+# (chat 95, turns idx 920-922): pre-fix 324.4s wall with interaction_loop at
+# 141.5s and commit at 136.8s; fixed, the warm turn ran 66.7s with those
+# windows at 10.4s and 9.1s -- model-call time plus single-digit
+# deterministic seconds, no hidden deterministic residual.
+#
+# That collapse only holds while the turn-path callers ACCEPT the remembered
+# verdict, which they do by calling `embed_texts_meta` with the default
+# retry. The tests here pin the callers, not the memory itself: a turn-path
+# call site that grows `retry=None` silently re-opens consult_memory=False
+# (a caller's own RetryConfig does NOT -- only the None spelling routes to
+# the measurement path) and puts the ladder back on the turn's wall clock,
+# and every providers-layer test above stays green while it happens.
+
+
+def test_the_commit_window_accepts_the_remembered_verdict(monkeypatch):
+    """`prepare_memories_batch` -- the 126.4s of the commit stretch -- must
+    make ZERO requests once the endpoint is remembered unreachable, and
+    still hand back the batch commit expects: two fallback-stamped vectors
+    per memory, refusable and rebuildable exactly like an outage write."""
+    from mind.memory import prepare_memories_batch
+
+    session = _wire(monkeypatch, [])
+    providers._EMBED_DEAD.update(
+        key=providers.embedding_model_key(), reason="connect timed out",
+        probe_at=float("inf"), probing=False)
+    try:
+        got = prepare_memories_batch([
+            dict(chat_id=1, char_id="c1", turn_id=7, turn_idx=5,
+                 kind="episodic", provenance="witnessed", salience=0.6,
+                 content="The stall keeper undercut the grain price."),
+            dict(chat_id=1, char_id="c2", turn_id=7, turn_idx=5,
+                 kind="episodic", provenance="witnessed", salience=0.4,
+                 content="Rain drove the buyers under the awnings."),
+        ])
+    finally:
+        providers._embed_dead_forget()
+    assert session.calls == 0, \
+        "the commit window paid the connect ladder the process already ran"
+    embedded = got["embedded"]
+    assert embedded.fallback
+    assert embedded.model_key == "cheap:crc32:256"
+    assert len(embedded.vectors) == 2 * len(got["prepared"])
+
+
+def test_no_turn_path_caller_opts_out_of_the_dead_endpoint_memory():
+    """`retry=None` means consult_memory=False: a single live observation of
+    the endpoint, sanctioned for exactly two measurement probes (the bank
+    status probe and the lore rebuild probe) because answering THEM from
+    memory could never report a recovery. Any other `embed_texts_meta`
+    caller in pipeline code that spells `retry=None` has quietly put the
+    ~126s connect ladder back inside a turn; this scan is the tripwire."""
+    import pathlib
+    import re
+
+    root = pathlib.Path(providers.__file__).resolve().parents[1]
+    sanctioned = {"mind/memory_vectors.py", "mind/memory_lore_entries.py"}
+    offenders = {}
+    for pkg in ("mind", "agents", "persist", "world", "story", "core"):
+        for path in sorted((root / pkg).glob("*.py")):
+            text = path.read_text(encoding="utf-8")
+            hits = re.findall(
+                r"embed_texts_meta\([^)]*retry\s*=\s*None", text)
+            if hits:
+                offenders[f"{pkg}/{path.name}"] = len(hits)
+    assert set(offenders) <= sanctioned, (
+        "turn-path module(s) bypass the dead-endpoint memory with "
+        "retry=None: %r -- each such call pays the full connect ladder on "
+        "the caller's wall clock when the endpoint is down" % (offenders,))
