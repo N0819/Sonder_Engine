@@ -658,3 +658,94 @@ def test_caravan_freight_is_loaded_from_and_sold_into_real_stock(temp_db):
     assert after["stocks"]["granary"]["grain"] == 6
     assert after["stocks"]["inn"]["grain"] == 4
     assert not freight.get("stock", {}).get("grain")
+
+
+def test_a_story_with_a_generated_location_opens_inside_it(temp_db):
+    """THE ONE MISSING LINK, and everything else was already built.
+
+    `materialize_planned_fringe`, `prepare_frontier_expansion` and
+    `planned_context` all key off the player standing in a PLANNED room --
+    `prepare_frontier_expansion` reads `scene["positions"]` and skips any room
+    not in the plan. A scene is born with `"rooms": {}`, so at the opening beat
+    nothing is occupied, nothing is planned, and the Director defines the space
+    from the scenario prose instead.
+
+    Measured on a generated river market town: 20 rooms planted and 300 charter
+    bodies standing in them, against a live scene of two rooms the Director
+    minted. The player stood in the invented square for six beats while the
+    town sat next door in `market_square`, and every background person
+    addressed answered with silence -- none of them was ever in the room.
+    """
+    import json as _json
+    import time as _time
+    from story.scene import get_scene
+
+    cid = temp_db.qi(
+        "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+        ("market", "Market day in a river town.", _time.time()))
+    temp_db.wset(cid, "structures", {"items": {"river_market": {
+        "key": "river_market", "max_planned": 200, "grammar": []}}})
+    for uid, purpose in (("market_square", "open trading ground"),
+                         ("wharf", "river landing")):
+        temp_db.qi(
+            "INSERT INTO room_registry(chat_id,room_uid,name,payload) "
+            "VALUES(?,?,?,?)",
+            (cid, uid, uid, _json.dumps({"planned": {
+                "structure": "river_market", "purpose": purpose,
+                "adjacent": [{"to": "wharf" if uid == "market_square"
+                              else "market_square", "barrier": "open_door"}]}})))
+
+    scene = get_scene(cid)
+
+    assert set(scene["rooms"]) >= {"market_square", "wharf"}, (
+        "the planned graph is the opening layout")
+
+
+def test_a_story_with_no_plan_still_opens(temp_db):
+    """The ordinary case: no generated location, and a scene is still a scene.
+    The seeding must never be a precondition for opening a story."""
+    import time as _time
+    from story.scene import get_scene
+
+    cid = temp_db.qi(
+        "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+        ("plain", "A room somewhere.", _time.time()))
+
+    scene = get_scene(cid)
+
+    assert scene["rooms"] == {}
+    assert scene["positions"] == {}
+
+
+def test_fleshing_out_a_planned_room_cannot_drop_its_layout():
+    """The Director may write a planned room's prose; it may not silently
+    unmake the plan's geometry.
+
+    `spatial_merge` upserts adjacency on `to` -- an edge the model does not
+    re-mention survives, and removal goes through `remove_adjacent` rather
+    than silence. The measurement that forced that doctrine is in its own
+    comment: 18 of 98 edge-sides stripped bare on a maze arm, including the
+    shrine's only approach, after which every declared run through them
+    failed. Here it is what lets a generated town be described without being
+    redrawn.
+    """
+    from world.spatial import merge_scene_with_diff
+
+    scene = {"rooms": {"market_square": {
+                 "name": "market_square", "desc": "",
+                 "adjacent": [{"to": "wharf", "barrier": "open_door"},
+                              {"to": "back_lane", "barrier": "open_door"}]}},
+             "entities": {}, "positions": {}, "overlays": {}, "attire": {}}
+    # The Director fleshes the room out and re-mentions ONE of its two edges.
+    diff = {"rooms": {"market_square": {
+        "name": "The Market Square",
+        "desc": "Packed earth under stretched canvas, loud with trade.",
+        "adjacent": [{"to": "wharf", "barrier": "open_door"}]}}}
+
+    merged = merge_scene_with_diff(scene, diff)
+
+    room = merged["rooms"]["market_square"]
+    assert room["desc"].startswith("Packed earth"), "prose lands"
+    assert room["name"] == "The Market Square", "a name may be authored"
+    assert {edge["to"] for edge in room["adjacent"]} == {"wharf", "back_lane"}, (
+        "the unmentioned planned edge survives being described")

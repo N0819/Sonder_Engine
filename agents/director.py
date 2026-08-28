@@ -477,6 +477,18 @@ def director_interpret(ctx, nonce):
         })
 
     raw_shadow = wget(chat["id"], "shadow_profile", "") or ""
+    # The live view: the durable ledger PLUS every charter body derived as
+    # present. `with_charter_presences` returns a copy and writes nothing, so
+    # noticing somebody standing there still mints no identity for them.
+    _addressable_ledger = wget(chat["id"], "background_presences", {}) or {}
+    try:
+        from persist.commit import with_charter_presences
+        _addressable_ledger = with_charter_presences(
+            chat["id"], _addressable_ledger, sc,
+            places=[p_room] if p_room else None,
+            frame_id=ctx.turn.frame_id)
+    except Exception as exc:  # a story with no charter keeps its own ledger
+        ctx.add_warning(f"charter presences not addressable: {exc}")
     raw_intents = wget(chat["id"], "standing_intentions", []) or []
     fm = fiction_model(chat["id"])
     clock = simulation_clock(chat["id"])
@@ -552,6 +564,22 @@ def director_interpret(ctx, nonce):
         # Only figures with a resolvable room are listed -- addressing someone
         # who is nowhere is meaningless -- but co-presence is FLAGGED rather
         # than filtered, because calling through an open doorway is ordinary.
+        # DERIVED, NOT READ FROM THE DURABLE LEDGER. Addressability is a live
+        # question -- who is standing here that a line could be aimed at --
+        # and the persisted ledger answers a different one: who has EARNED a
+        # record by participating. Reading the store for this was survivable
+        # only while the overlay was persisted wholesale; once it stopped
+        # being (284 permanent records for a 300-body town), the Director's
+        # view of the room went with it.
+        #
+        # Measured: a player took a vendor by the arm and asked him a
+        # question, in a square holding 239 named charter bodies, and the
+        # Director's addressable list was two people in OTHER rooms. With
+        # nobody to aim at, it recorded no `intended_target`; with no
+        # intended_target, `_character_address_of` matched nobody; with no
+        # addressee, no reactor was picked and `character_bg` was never
+        # called at all. The turn ended `no eligible respondent` and the
+        # narrator wrote around the silence.
         "addressable_presences": [
             _bp for _bp in (
                 {"name": _pn,
@@ -561,8 +589,7 @@ def director_interpret(ctx, nonce):
                      (room_of(sc, _pn)
                       or ((_pr.get("sketch") or {}).get("station_room") or ""))
                      == p_room)}
-                for _pn, _pr in presence_name_items(
-                    wget(chat["id"], "background_presences", {}) or {}))
+                for _pn, _pr in presence_name_items(_addressable_ledger))
             if _bp["room"]
         ],
         "world_books": world_books,
@@ -721,10 +748,16 @@ def director_interpret(ctx, nonce):
     # the interpret spelling of the same channel) BEFORE the deterministic
     # validators below, so the merged result crosses the exact floor a
     # model-authored copy crosses.
+    # One crowds read per stage: deriving charter crowds walks the whole
+    # registry, and the gate's private no-idx recompute was 2 of the turn's
+    # 4 `_crowds_view` calls (3.05s total on the 307-body town, measured
+    # 2026-08-28, chat 95). The payload below reuses these same rows.
+    _icrowds = _crowds_view(chat["id"], sc, ctx.turn["idx"])
     _idispatch = _dispatch_specialists(ctx, sc, _gate_facts(
         ctx, sc,
         physical=_beat_has_physical_activity(out, {}, []),
         speech=bool(player_speech_lines(out)),
+        crowds_rows=_icrowds,
     ))
     _iparts = scene_extra_parts(ctx.cast, pers, p_name)
     try:
@@ -763,7 +796,7 @@ def director_interpret(ctx, nonce):
             "movement": out.get("movement"),
             "movers": {p_name: {"exits": _egocentric_exits(sc, p_name)}},
             "proposal": None,
-            "crowds": _crowds_view(chat["id"], sc, ctx.turn["idx"]),
+            "crowds": _icrowds,
             "couriers": _couriers_view(chat["id"], sc),
             "carried_reports": _carried_reports_view(ctx),
             "unratified_claims": _unratified_background_claims(
@@ -2696,6 +2729,11 @@ def director_resolve(ctx, nonce, _corrections=None):
     # Authored structured extra body parts, card-read: {} for ordinary casts.
     _resolve_parts = scene_extra_parts(ctx.cast, pers, p_name)
 
+    # One crowds read per stage, shared by the payload and `_gate_facts`
+    # below -- same dedup as interpret's, same measurement (3.05s over the
+    # turn's 4 calls, 307-body town, 2026-08-28).
+    _rcrowds = _crowds_view(chat["id"], sc, turn["idx"])
+
     payload = {
         # Authored house style, for the prose and any world detail this stage
         # mints. director_interpret deliberately does NOT get it: that stage
@@ -2843,7 +2881,7 @@ def director_resolve(ctx, nonce, _corrections=None):
         # reachable and every other op refused. Found by reading the captured
         # payload as the model, which is the only way to find it -- the schema
         # check cannot see a field that exists and is never delivered.
-        "crowds": _crowds_view(chat["id"], sc, turn["idx"]),
+        "crowds": _rcrowds,
         # The couriers on the road, WITH their uids -- same defect class as
         # the crowd uid: `question` and `silence` require a courier_id the
         # Director could otherwise never have seen, and `send` needs to know
@@ -2911,6 +2949,7 @@ def director_resolve(ctx, nonce, _corrections=None):
         speech=bool(char_speech) or bool(player_speech_lines(interp)),
         material_effects=bool(character_material_effects),
         resolved_stage=True,
+        crowds_rows=_rcrowds,
     )
     _orch_dispatch = _dispatch_specialists(ctx, sc, _orch_facts)
     # The prose author's OWN scope (same mechanism as the specialists'
