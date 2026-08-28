@@ -293,7 +293,16 @@ def compile_journey_history(cid, char_id, sheet, route, *, lore=(), opening="",
                                    grounded["summary"])
         rows.append({
             "chat_id": cid, "char_id": char_id, "turn_id": None,
-            "turn_idx": None, "frame_id": frame_id,
+            # BEFORE THE STORY, NOT OUTSIDE IT. `mind/memory_read` filters
+            # `turn_idx IS NOT NULL` for the two readers that constitute a
+            # self -- the autobiographical summary and the recent-memory
+            # buffer that grounds a beat -- so a null here left a compiled
+            # journey reachable by embedding search alone. Found in play: a
+            # companion arrived carrying sixteen events of road behind her,
+            # none of which she could narrate or be reminded of, and with the
+            # embedding provider down they were unreachable outright. Same
+            # defect and same fix as `charter_history`'s three write sites.
+            "turn_idx": 0, "frame_id": frame_id,
             "kind": "semantic", "provenance": "remembered",
             "salience": .45, "content": grounded["summary"],
             "event_key": summary_key,
@@ -306,7 +315,16 @@ def compile_journey_history(cid, char_id, sheet, route, *, lore=(), opening="",
         # sequence, so retrieval loses nothing by dropping the weld.
         rows.append({
             "chat_id": cid, "char_id": char_id, "turn_id": None,
-            "turn_idx": None, "frame_id": frame_id,
+            # BEFORE THE STORY, NOT OUTSIDE IT. `mind/memory_read` filters
+            # `turn_idx IS NOT NULL` for the two readers that constitute a
+            # self -- the autobiographical summary and the recent-memory
+            # buffer that grounds a beat -- so a null here left a compiled
+            # journey reachable by embedding search alone. Found in play: a
+            # companion arrived carrying sixteen events of road behind her,
+            # none of which she could narrate or be reminded of, and with the
+            # embedding provider down they were unreachable outright. Same
+            # defect and same fix as `charter_history`'s three write sites.
+            "turn_idx": 0, "frame_id": frame_id,
             "kind": "episodic", "provenance": "remembered",
             "salience": event["salience"], "content": event["memory"],
             "location": event["place"], "entities": event["people"],
