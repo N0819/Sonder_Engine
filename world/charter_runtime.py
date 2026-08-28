@@ -345,7 +345,7 @@ def normalize_registry(stored, reservation=None):
     # same one.
     incoming_people = stored.get("people")
     incoming_people = incoming_people if isinstance(incoming_people, dict) else {}
-    people = {}
+    employed = set()
     for key, raw in raw_items.items():
         raw = raw if isinstance(raw, dict) else {}
         state = raw.get("state") if isinstance(raw.get("state"), dict) else raw
@@ -366,9 +366,15 @@ def normalize_registry(stored, reservation=None):
         # caller gets and `save_registry` does the split, which makes the ITEM
         # authoritative within a session and `people` authoritative on disk.
         # The round trip is what carries identity, not the in-memory shape.
-        _institution, held = _split_person_state(state, key)
-        people.update(held)
-        state["members"] = sorted(held)
+        # MEMBERS, NOT A MIRROR. Splitting every person out here to build a
+        # `people` copy cost a deep copy of thirteen stores per body on EVERY
+        # READ -- measured at 6.5s for a 307-body town, paid by each of the
+        # half-dozen per-room readers a turn makes, which took a turn from
+        # ~200s to never reaching its first model call. The joined item IS the
+        # working shape and already holds these people; only `save_registry`
+        # needs the split, and `_stored_shape` does it there.
+        state["members"] = sorted(state.get("bodies") or {})
+        employed.update(person_id(key, body) for body in state["members"])
         items[str(key)] = {
             "state": state,
             "window_hours": _window_hours(raw.get("window_hours")),
@@ -378,10 +384,11 @@ def normalize_registry(stored, reservation=None):
     # Older development snapshots may contain ``recent_events``. Deliberately
     # discard it: incidents have one durable home, scheduled_events ->
     # world_events. The Charter registry stores current simulation state only.
-    # Unemployed people survive normalization. Nothing in `items` refers to
-    # them, which is exactly what having no institution means.
-    for key, person in incoming_people.items():
-        people.setdefault(str(key), copy.deepcopy(person))
+    # Unemployed people survive normalization untouched -- nothing in `items`
+    # refers to them, which is exactly what having no institution means, and
+    # they are the only reason a read carries `people` at all.
+    people = {str(key): person for key, person in incoming_people.items()
+              if str(key) not in employed}
     return {"version": REGISTRY_VERSION, "items": items, "people": people}
 
 
