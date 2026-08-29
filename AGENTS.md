@@ -57,8 +57,9 @@ delivered line and physical co-location; index the roster once per beat rather
 than scanning a large institution once per quote.
 
 The STORY-level naming law routes through `story/naming.py` (authored
-`naming_profile` world key > Charter `naming` lanes > cast/lorebook harvest;
-no fixed default table — a story yielding no law mints nothing). The one
+`naming_profile` world key > `phonology` lore entries, one lane per entry >
+Charter `naming` lanes > cast/lorebook harvest; no fixed default table — a
+story yielding no law mints nothing). The one
 consumer that writes is `persist/commit_background._mint_missing_presence_names`:
 it names exactly the records `presence_is_unnamed` marks, once, permanently,
 deterministic in (chat, presence uid). Never re-mint over a stored name and
@@ -82,6 +83,31 @@ law a charter PERSISTS (`normalize_charter`, reached from `save_registry` and
 generation), and the mint refuses a candidate that reaches one anyway. Pass
 the reservation from every caller that has a story in reach; the pure seams
 default to none because a fixture, a tool and an archive have no cast.
+
+**MATERIAL NAMES NOBODY — the partition, and it is not a filter.** A
+generated naming law is written by a model that read the story's lore AND
+knows the setting from its own weights, so no reservation can reach every
+name it might supply: two elements in the measured case (`Soong`, `Pulaski`)
+appear in no lore entry anywhere. So the law's *name lists* are refused
+wholesale rather than cleaned — a pool is a list of people — and its
+*fragments* are checked one at a time, because a fragment is not innocent
+either. Measured 2026-08-28 across three generations of one institution: two
+of the three supplied family openings that were, entry for entry, the
+openings of the cast's own surnames, and one body reached play wearing a
+registered person's surname exactly, assembled from a three-letter opening
+and a two-letter ending that each passed every guard the engine had.
+`charter_identity.fragment_is_name_element` is the predicate — anchored both
+ways, the head and the tail of a name and never its middle, floor
+`NAME_ELEMENT_FLOOR` (one letter is the alphabet). **Every refusal here is
+paired with the material that replaces it** (`_fill_empty_material`): the
+law's own other field first (a start is a start), then the setting's words
+for PLACES AND INSTITUTIONS (`vocabulary_name_parts` — a place is not a
+person), and only a law left with nothing assemblable at all falls back to
+its subtracted pools, exactly as it did before the refusal existed. A guard
+that turns a naming defect into `generated lived location did not provide a
+usable naming law` is not an improvement. `refuse_harvested_material` is the
+one entry point and it answers the GENERATOR only — an authored list is a
+deliberate artifact and is the author's.
 
 Charter social/economic/institutional changes route through
 `world/charter_social.py`, `world/charter_commitment.py`,

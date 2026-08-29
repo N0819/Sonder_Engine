@@ -1465,10 +1465,13 @@ def _record_phonology(book_id, town):
     in the open, that a person can change.
 
     Fragments only, and that is the whole point: an entry in this category is
-    the one source the mint may read (`story.naming.phonology_parts`), and a
-    fragment names nobody however well a model knows a canon. The pools the
-    planner used to supply are refused before they reach a body
-    (`charter_identity.refuse_harvested_pools`).
+    a lane the mint reads (`story.naming.phonology_lanes`, ranked above the
+    stored Charter law and below an author's explicit `naming_profile`), and
+    it holds material rather than people. The pools the planner used to
+    supply never reach a body, and neither do the fragments that turn out to
+    be pieces of one (`charter_identity.refuse_harvested_material`, and the
+    lane re-checks its own entries on every read because an entry can be
+    edited by hand).
 
     Never fatal. A story whose lore write fails still generates; it simply has
     no authored phonology to read next time.
@@ -1495,7 +1498,9 @@ def _record_phonology(book_id, town):
         try:
             add_lore(book_id, f"phonology, names, {key}",
                      "The fragments names here are built from. Edit freely: "
-                     "the mint reads this list and nothing else.\n\n"
+                     "the mint reads this list, and a fragment that is a "
+                     "piece of somebody's name is dropped when it does."
+                     "\n\n"
                      + "\n".join(lines),
                      category="phonology",
                      title=f"Naming fragments — {name}",

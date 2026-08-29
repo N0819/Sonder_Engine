@@ -544,8 +544,177 @@ def name_is_reserved(name, profile, reservation, given="", family=""):
     return False
 
 
-def refuse_harvested_pools(profile):
-    """A generated law keeps its fragments and loses its name lists.
+#: WHERE A LETTER STOPS BEING A LETTER AND STARTS BEING A PIECE OF SOMEBODY.
+#: Owner-named per the standing rule about caps, and it is the shortest floor
+#: this test can have: the relation below is anchored containment between a
+#: fragment and a name the story gives to somebody, so a ONE-letter fragment
+#: matches every name that happens to begin with it and refusing it would take
+#: the alphabet away from the law. Two letters that open or close somebody's
+#: name are a piece of that name.
+#:
+#: Deliberately lower than `NAME_RUN_FLOOR`. That floor asks whether an
+#: ASSEMBLED name is recognisable as somebody, where four characters is where
+#: recognisability starts. This one asks whether a fragment IS somebody's, and
+#: a two-letter opening of a name is theirs whether or not anyone would
+#: recognise the result -- it is the difference between "does this look like
+#: them" and "was this cut out of them".
+NAME_ELEMENT_FLOOR = 2
+
+
+def _letters(text):
+    """One casefolded run of letters, punctuation and spacing dropped -- so an
+    apostrophe or a hyphen inside a name does not hide it from comparison."""
+    return "".join(ch for ch in str(text or "").casefold() if ch.isalpha())
+
+
+def reserved_name_elements(reservation):
+    """Every TOKEN of every reserved name, letters only.
+
+    A fragment is a piece of a word, so the comparison has to be against
+    words: the reservation's runs are token sequences and it is the individual
+    tokens a fragment could have been cut from. Titled spellings are excluded
+    -- `identity_reservation` already strips titles into `runs`, and a rank is
+    how a story addresses somebody rather than part of who they are, so a law
+    may build names out of ordinary words that happen to appear in one.
+    """
+    out = set()
+    for run in (reservation or {}).get("runs") or ():
+        spelled = " ".join(run) if isinstance(run, (tuple, list)) else str(run)
+        for token in spelled.split():
+            folded = _letters(token)
+            if len(folded) >= NAME_ELEMENT_FLOOR:
+                out.add(folded)
+    return frozenset(out)
+
+
+def fragment_is_name_element(fragment, elements):
+    """Is this fragment a piece of a name the story gives to somebody?
+
+    ANCHORED, and in both directions: the fragment opens or closes one of the
+    reserved tokens, or a reserved token opens or closes the fragment. The
+    middle is excluded for the reason `_reserves_component` already excludes
+    it -- what a person is called by is the head and the tail of their name,
+    and a run buried inside a longer word is ordinary phonology.
+
+    This is the predicate the whole partition rests on. A pool is a list of
+    names and is refused wholesale; a fragment set is MATERIAL, and material
+    that was cut out of somebody is not material. The distinction is not
+    about how well any model knows any setting: it is about whether the
+    engine can say, deterministically, that this piece belongs to a person
+    the story already has.
+    """
+    folded = _letters(fragment)
+    if len(folded) < NAME_ELEMENT_FLOOR:
+        return False
+    for other in elements or ():
+        if len(other) < NAME_ELEMENT_FLOOR:
+            continue
+        if (folded.startswith(other) or folded.endswith(other)
+                or other.startswith(folded) or other.endswith(folded)):
+            return True
+    return False
+
+
+def refuse_reserved_fragments(profile, reservation):
+    """The same law with every fragment that is an element of a reserved name
+    removed. Pools are untouched here -- `refuse_harvested_material` owns
+    that decision, and `strip_reserved_pools` owns it for a stored law."""
+    profile = normalize_naming_profile(profile)
+    elements = reserved_name_elements(reservation)
+    if not elements:
+        return profile
+    for field in ("given_parts", "family_parts"):
+        for bucket in ("starts", "middles", "ends"):
+            profile[field][bucket] = [
+                value for value in profile[field][bucket]
+                if not fragment_is_name_element(value, elements)]
+    return profile
+
+
+def vocabulary_name_parts(words, reservation=None):
+    """Syllable material learned from words that name PLACES AND THINGS.
+
+    The setting's rooms, institutions and structures belong to its sound
+    system and belong to nobody: a place is not a person, so cutting one up
+    cannot issue anybody's name. This is the material of last resort, reached
+    only where refusal left a field with nothing -- a law that still has its
+    own openings keeps them, because a law's own phonology is closer to it
+    than its architecture is.
+
+    Reserved elements are refused here too, because an author may perfectly
+    well name a room after a person, and one syllable of provenance does not
+    stop being provenance for having a building in front of it.
+
+    `derived_name_parts`' own two-opening floor is not applied: it guards an
+    EXTENSION of a law that already works, where one opening recombines into
+    nothing new. Here the alternative is an empty field, and one opening is
+    a law where none is a failure.
+    """
+    parts = derived_name_parts(_strings(words))
+    elements = reserved_name_elements(reservation)
+    if elements:
+        for bucket in ("starts", "middles", "ends"):
+            parts[bucket] = [value for value in parts[bucket]
+                             if not fragment_is_name_element(value, elements)]
+    if not (parts["starts"] and parts["ends"]):
+        return {"starts": [], "middles": [], "ends": []}
+    return parts
+
+
+def naming_material_exists(profile):
+    """Does this law carry syllable material a mint can actually assemble?
+
+    Narrower than `story.naming.naming_law_exists`, which also accepts a
+    pool. This asks the question the partition cares about: is there material
+    that names nobody, so the pool never has to be reached for.
+    """
+    profile = normalize_naming_profile(profile)
+    parts = profile["given_parts"]
+    return bool(parts["starts"] and parts["ends"])
+
+
+def _fill_empty_material(profile, vocabulary=(), reservation=None):
+    """REFUSAL MAY EMPTY A FIELD; IT MAY NOT LEAVE ONE EMPTY.
+
+    A guard that turns a naming defect into a generation failure is not an
+    improvement, and the refusal above is capable of taking a law's entire
+    family opening list -- measured, one generation of an institution whose
+    lore carried a large named cast supplied nine family openings and every
+    one of them was the opening of a cast surname.
+
+    Two replacements, both from material the story already has:
+
+      1. **The law's own other field.** A start is a start: a field that
+         lost its openings borrows the openings the same law still holds
+         elsewhere, which stays inside one law's phonology and invents
+         nothing. Both directions, in a fixed order, so the result is
+         deterministic.
+      2. **The setting's non-personal vocabulary** (`vocabulary_name_parts`).
+
+    Nothing else. No default table exists anywhere in this engine and none is
+    added here: a law with neither of these has no material, and the caller
+    is left to say so.
+    """
+    for field, other in (("given_parts", "family_parts"),
+                         ("family_parts", "given_parts")):
+        for bucket in ("starts", "ends"):
+            if not profile[field][bucket] and profile[other][bucket]:
+                profile[field][bucket] = list(profile[other][bucket])
+    derived = None
+    for field in ("given_parts", "family_parts"):
+        for bucket in ("starts", "ends"):
+            if profile[field][bucket]:
+                continue
+            if derived is None:
+                derived = vocabulary_name_parts(vocabulary, reservation)
+            if derived[bucket]:
+                profile[field][bucket] = list(derived[bucket])
+    return profile
+
+
+def refuse_harvested_material(profile, reservation=None, vocabulary=()):
+    """A generated law loses its name lists AND the pieces of people in its
+    fragments, and is handed material to replace them.
 
     A POOL is a list of whole name elements. Where a law was written by a
     model reading a story's lore, those elements are the names of people the
@@ -559,35 +728,52 @@ def refuse_harvested_pools(profile):
     setting -- so no reservation, however complete, can reach them. The pool
     has to stop existing rather than be cleaned.
 
-    PARTS SURVIVE, and are the point: a fragment names nobody however well a
-    model knows a canon, so `given_parts`/`family_parts` are material and a
-    pool is not.
+    THE FRAGMENTS ARE NOT INNOCENT EITHER, and that was this function's
+    standing premise until it was measured. It read: "a fragment names nobody
+    however well a model knows a canon". Across three consecutive generations
+    of one institution, two of the three supplied `family_parts.starts` that
+    were, entry for entry, the openings of the cast's own surnames; the third
+    supplied ordinary fragments touching nobody. So it is variance in what a
+    model volunteers, not a constant -- which is exactly why the guard cannot
+    be the model. Nothing reconstructed a whole name, the novelty floor held,
+    and the material was still the cast, cut up: one body came out wearing a
+    registered person's surname exactly, assembled from a three-letter opening
+    and a two-letter ending that each passed every test the engine had.
+
+    So the same rule runs at the fragment: material that was cut out of
+    somebody is not material (`fragment_is_name_element`). And because that
+    refusal is capable of taking a whole field, it is paired with the material
+    that replaces it (`_fill_empty_material`) rather than left to surface as
+    "generated lived location did not provide a usable naming law".
+
+    ``vocabulary`` is the setting's words for PLACES AND INSTITUTIONS -- read
+    only when refusal left a field empty, and only after the law's own
+    surviving openings have been offered.
+
+    THE POOL REMAINS THE LAST RESORT, unchanged from before this refusal
+    existed: a law left with no assemblable material at all keeps its pools,
+    subtracted, exactly as it did when there was no other answer. A story
+    that generated before this change and would now fail is a worse outcome
+    than the defect, and this branch is the promise that there is no such
+    story. It is unreachable for any law carrying material of its own or
+    generated beside a setting whose place words split -- both measured
+    generations reach it never.
 
     NOT APPLIED TO AN AUTHORED LAW. `story/naming.py` ranks a story's own
     naming law above a generated one, and an author who writes a list gets
     exactly that list (52d2ef5) -- their list is a deliberate artifact, not a
     roster harvested behind their back. This answers the generator only.
     """
-    profile = normalize_naming_profile(profile)
-    has_parts = any(profile.get(field, {}).get(bucket)
-                    for field in ("given_parts", "family_parts")
-                    for bucket in ("starts", "middles", "ends"))
-    if not has_parts:
-        # A BRIDGE, AND IT IS MEANT TO BE REMOVED. Refusing the pool
-        # unconditionally leaves a law with no material at all -- measured
-        # here as "generated lived location did not provide a usable naming
-        # law", which turns a naming defect into a hard generation failure
-        # for every story that has authored no phonology. Nothing authors one
-        # yet; that is the next step, and when it lands this branch goes and
-        # the refusal becomes unconditional.
-        #
-        # Until then the pool survives ONLY where there is nothing better,
-        # and it survives with the reservation still subtracted from it, so
-        # this is the weaker guarantee rather than none.
-        return profile
-    profile["given"] = []
-    profile["family"] = []
-    return profile
+    pooled = normalize_naming_profile(profile)
+    refused = refuse_reserved_fragments(pooled, reservation)
+    refused["given"] = []
+    refused["family"] = []
+    _fill_empty_material(refused, vocabulary, reservation)
+    if naming_material_exists(refused):
+        return refused
+    refused["given"] = list(pooled["given"])
+    refused["family"] = list(pooled["family"])
+    return refused
 
 
 def strip_reserved_pools(profile, reservation):
