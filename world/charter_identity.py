@@ -460,6 +460,52 @@ def name_is_reserved(name, profile, reservation, given="", family=""):
     return False
 
 
+def refuse_harvested_pools(profile):
+    """A generated law keeps its fragments and loses its name lists.
+
+    A POOL is a list of whole name elements. Where a law was written by a
+    model reading a story's lore, those elements are the names of people the
+    story contains -- which is what a pool is FOR, and exactly what it must
+    not be. Measured 2026-08-28 on a generated institution: the planner
+    emitted `given` and `family` pools built out of a lorebook's cast and the
+    `{given} {family}` cross product handed twenty strangers names like
+    "Jean-Luc Crusher", reconstituting one canon character's full name
+    verbatim. Two of the elements it supplied (`Soong`, `Pulaski`) appear in
+    no lore entry at all -- the model wrote them from its own knowledge of the
+    setting -- so no reservation, however complete, can reach them. The pool
+    has to stop existing rather than be cleaned.
+
+    PARTS SURVIVE, and are the point: a fragment names nobody however well a
+    model knows a canon, so `given_parts`/`family_parts` are material and a
+    pool is not.
+
+    NOT APPLIED TO AN AUTHORED LAW. `story/naming.py` ranks a story's own
+    naming law above a generated one, and an author who writes a list gets
+    exactly that list (52d2ef5) -- their list is a deliberate artifact, not a
+    roster harvested behind their back. This answers the generator only.
+    """
+    profile = normalize_naming_profile(profile)
+    has_parts = any(profile.get(field, {}).get(bucket)
+                    for field in ("given_parts", "family_parts")
+                    for bucket in ("starts", "middles", "ends"))
+    if not has_parts:
+        # A BRIDGE, AND IT IS MEANT TO BE REMOVED. Refusing the pool
+        # unconditionally leaves a law with no material at all -- measured
+        # here as "generated lived location did not provide a usable naming
+        # law", which turns a naming defect into a hard generation failure
+        # for every story that has authored no phonology. Nothing authors one
+        # yet; that is the next step, and when it lands this branch goes and
+        # the refusal becomes unconditional.
+        #
+        # Until then the pool survives ONLY where there is nothing better,
+        # and it survives with the reservation still subtracted from it, so
+        # this is the weaker guarantee rather than none.
+        return profile
+    profile["given"] = []
+    profile["family"] = []
+    return profile
+
+
 def strip_reserved_pools(profile, reservation):
     """The same law with every reserved element removed from the pools it
     draws addresses from.
