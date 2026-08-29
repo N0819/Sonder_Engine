@@ -92,6 +92,7 @@ from .common import (
     extra_parts_lines,
     cap_mind_model_updates,
     character_room,
+    fuse_speech_run,
     norm_sequence,
     player_speech_lines,
 )
@@ -3703,6 +3704,12 @@ def character_step(ctx, cid, nonce):
     out["mind_model_updates"] = cap_mind_model_updates(
         out.get("mind_model_updates") or [], absorption=absorption)
     norm_sequence(out, warn=lambda _w: ctx.add_warning(
+        "character %s: %s" % (character_name(sh), _w)))
+    # AFTER norm_sequence and BEFORE the ids are stamped: the fuse reads the
+    # normalized delivery fields, and a fused run must not leave a hole in the
+    # event-id numbering. See `fuse_speech_run` for why one mouth's
+    # consecutive lines with no conduct between them are one utterance.
+    fuse_speech_run(out, warn=lambda _w: ctx.add_warning(
         "character %s: %s" % (character_name(sh), _w)))
     out["sequence"] = assign_event_ids(
         out.get("sequence"), f"turn:{ctx.turn.id}:character:{cid}")

@@ -1693,6 +1693,36 @@ def micro_round_percept(text):
     )
 
 
+def micro_round_percepts(deliveries):
+    """ONE PERCEPT PER DELIVERED LINE. `delivered_views[observer]` is a LIST.
+
+    `micro_round_percept` above takes one line, and the outcome composer
+    handed it the whole list. `str(["a", "b"])` does not fail -- it renders
+    the Python repr -- so the bracket, the quotes and the comma went into the
+    composed view verbatim, and from there into the observations projected
+    off that view and into the episode minted from it. Measured over chat 98:
+    68 of the 142 stored character views carry a `['...']` span, on 24 of the
+    38 turns; the composer's own dialogue tripwire caught four of them and
+    said so ("engine defect, view delivered as composed") while the view
+    shipped anyway.
+
+    The class is a shape mismatch at a seam, not a rendering bug, so it is
+    fixed by naming the shape: a delivery is one line, a round delivers
+    several, and the caller passes what it has. A bare string still works --
+    it is one delivery.
+    """
+    if deliveries is None:
+        return []
+    if isinstance(deliveries, str):
+        deliveries = [deliveries]
+    out = []
+    for line in deliveries:
+        percept = micro_round_percept(line)
+        if percept is not None:
+            out.append(percept)
+    return out
+
+
 def residue_percepts(level, *, targeted=False, loud_event=False, pain=False):
     """A non-awake mind gets the residue and nothing else."""
     return [Percept(
