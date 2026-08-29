@@ -1,5 +1,201 @@
 # Changelog
 
+## alpha 9.9 — The world has people in it, and they are nobody's spare parts
+
+153 commits, most of them found by playing rather than by
+reading. Two long live runs — a forty-turn Enterprise-D shift and the town
+generations before it — produced the defects that shaped this release, and the
+pattern they share is that the engine knew something and no one downstream was
+told: a person standing in the room who never reached the view, a handover
+resolved and filed nowhere, a mind that could not remember what it had said one
+sentence ago.
+
+### A generic name is never made out of a named person
+
+The mint read name lists. Where a law was written by a model reading a story's
+lore, those lists ARE the story's cast, so a twenty-body institution issued
+"Jean-Luc Crusher" and eighteen more like it. Filtering cannot fix this: two of
+the elements the planner supplied appear in no lore entry anywhere — it wrote
+them from its own knowledge of the setting — so no reservation, however
+complete, can reach them.
+
+So the mint no longer reads names at all. It reads a **phonology**: syllable
+fragments that name nobody, written back into the story's own lorebook as an
+entry an author can open and edit. The pools are refused before they reach a
+body, the fragments are refused where they are a piece of somebody
+(measured: the old law could mint a registered character's surname exactly,
+from a three-letter opening plus "er"), and what replaces refused material
+comes from the law's own other field and from the setting's PLACE names —
+because a place is not a person.
+
+Canon characters still appear. `lore_cast_residents` reads a lorebook, works
+out who is not already in the active roster, and hands them over as real
+background residents under their own names, with the post the lore gives them.
+What is forbidden is cutting them up for parts.
+
+### The Charter is the cheap persistent mind, and it was already one
+
+The presim builds acquaintance, reputation and shared service and nothing read
+it, so a crew who had served together for years began as strangers. Background
+people are now Charter bodies rather than a second population with its own
+rules; acquaintance is DERIVED from the simulation instead of seeded by hand;
+and a body may now go somewhere for its own sake — a lounge, a commons, a place
+whose purpose is being in it — where before `charter_places` was every place
+with a post or an upkeep, and off-duty circulation had nowhere to send anyone.
+
+### Presence is composed in the view, not inferred from who spoke
+
+A player walked into a room holding five simulated people and could not see,
+address, or be answered by any of them: four turns of speaking to a table, and
+silence every time. The roster a view is composed from was the cast plus the
+players — a presence reached a view only if it had already spoken. Meanwhile
+the crowd projection subtracts everyone "presented individually", and nothing
+ever presented one, so the subtraction deleted people instead of relocating
+them. A captain and a lieutenant commander had been standing unseen on a bridge
+since turn 0.
+
+### A mind is present at its own conduct
+
+Nothing commits mid-turn, so the within-turn views are the only ledger a
+character has for the beat it is in — and the actor was excluded from its own.
+A character granted a second round had no record of the first, which reads as a
+person who does not listen. Its own speech now comes back verbatim (a mind
+knows its own words, not a muffled rendering) and its own deed by the same
+intent-free surface everyone else gets.
+
+Beside it: one mouth's consecutive lines with nothing between them are ONE
+utterance. A round emitting three speech elements became three quoted lines set
+back to back on the page; the speech budget's own sheet already forbade it and
+nothing enforced it.
+
+### A mind's record of itself now covers the beat it is standing in
+
+A character granted a second speaking round restated what it had already said
+— an order reissued, a fact reworded, a question re-asked — and it read as a
+person who does not listen. The obvious explanation was that they did not know
+what had happened yet in an unresolved beat. Measured, that is false: the prior
+lines were in the view handed to them, verbatim, and their own stored results
+cite the observation that carried them.
+
+What was true is narrower and worse. The conduct arrived only as VIEW TEXT — a
+perception of the room — while every structured record a mind keeps OF ITSELF
+is projected from committed turns. So the beat's own rounds sat in the mind's
+picture of the room and in none of its records of itself, including the one the
+engine's own anti-repetition rule points at. The ledger now extends into the
+running beat, and a deterministic floor drops a later round that re-delivers a
+line the same mouth already gave, with short interjections and completions of a
+cut-off line exempt.
+
+The cross-turn version of the symptom was never this defect at all: an order
+addressed by rank-plus-name was matched against a bare canonical name by exact
+equality, so the reply debt never registered and the asker re-issued into the
+silence. An address now resolves through every key the body answers to.
+
+### The author owns the tense, and the clock owns the time
+
+Narration tense was nobody's decision and is now the author's, read per turn so
+the dial applies to the next beat with no restart. Memories are dated in
+fiction time rather than in beats, and a passage phrase ("moments later")
+stopped being handed to minds as a time of day.
+
+### Bodies have insides, and the inside is rooms
+
+A body that has taken another one inside HAS an inside, whether or not anyone
+authored it: the floor mints a room from the record itself. Metric space,
+extended bodies and instruments landed with it, along with a crossing that
+takes real time on the clock.
+
+---
+
+## Fixes
+
+### The run that found most of these
+
+- **A transfer is evidence that a thing exists.** A handover of an object the
+  scene had never minted was resolved perfectly and filed nowhere — 26 beats
+  across 7 chats. Four turns after handing a padd away, the prose had it back,
+  because nothing had ever contradicted her holding it. A transfer now mints
+  the record, and never mints over a body.
+- **A quarter of a run had no player view at all.** `perception_outcome`'s
+  player view was NULL on six of 38 turns and the narrator wrote four hundred
+  words of the room anyway. That was in no defect register; it was found by
+  reading the pipeline data after the fact.
+- **An object contact was narrated as a person.** A combadge resting on a
+  uniform reached the page as a body pressed continuously against the player,
+  with three absent people's scents attached to it. The identity floor was
+  person-shaped and had no answer for a thing, at three separate sites; the
+  third — the one that actually feeds the narrator — was still wrong after the
+  first two were fixed.
+- **Clothing is not a surface that touches.** A garment is the layer BETWEEN
+  two surfaces, never one of them.
+- **Tenure is not a tense.** A card saying "serving aboard" or "has served as
+  Chief Engineer of" was refused as insufficiently explicit while "officer of"
+  passed, so two of four attached characters generated ZERO pre-story memories.
+  The router was reading the verb's inflection, not the claim.
+- **One person, one body.** A caller pinning a cast member's post and rank AND
+  requesting their history got two bodies for one person — two captains with
+  the same name in one institution.
+- **A demand reaches a person through a channel or it does not reach them.**
+  The voice gate spent 29 of a run's 51 calls on a body two decks from the
+  player, which qualified on stale evidence for 14 consecutive beats and
+  produced not one line.
+
+### Correctness, found by review
+
+- A body that changed room was graded from the room it left.
+- A doorway declared from one side is a doorway from both.
+- An object that exists is somewhere; a minted entity had no position, ever.
+- A re-description is not a new fact, in four ledgers that kept both.
+- A goal the world has invalidated must be closable by the world.
+- A silhouette receives no face; a diagnostic is not a fact about the room.
+- A presence is tracked on an id, and its name is an attribute of it.
+- The phonology entry a caller who passes lore as text never got — the artifact
+  that makes the one model naming judgement reviewable was silently never
+  written for exactly the callers most likely to want it.
+
+### Performance and testing
+
+- Parallel is the default for every caller, not only for `make`.
+- Twenty-one reads of a forty-one megabyte registry, for one turn.
+- The suite's wall clock was two tests, and neither needed what it spent.
+- A charter presim forks across institutions and replays identically.
+
+---
+
+## Thresholds introduced in this release
+
+Named here rather than buried, because a cap that is not stated is a cap
+nobody can argue with.
+
+- **Beat-reissue similarity, 0.7.** Calibrated over all 40 recorded turns of
+  the run that found the defect: every true within-beat reissue scored
+  0.75–1.00, the closest distinct pair scored 0.33, and nothing was measured
+  between. It catches all seven recorded instances and touches nothing else,
+  including a healthy beat where one speaker asks a question and then gives a
+  different officer an order.
+- **Beat-reissue minimum, 6 tokens.** Under it, a short line that is a prefix
+  of a longer one reads as a reissue when it is a completion.
+- **Name-element floor, 2 characters.** Two letters that open or close
+  somebody's name are a piece of that name. Set at 2 rather than 3 because a
+  measured law carried canon name-heads at exactly that width. Unmeasured
+  cost: on a very large lorebook, every two-letter opening of every character
+  entry becomes unavailable as naming material.
+
+## Known residuals
+
+- A contact's identity key excludes `manner`, so two wordings of one claim are
+  one claim. Where a floor refuses one wording it refuses the claim — which is
+  correct for the measured case (a placement verb defeated by a synonym) and
+  can lose a genuine second contact between the same two parts. It fails
+  toward subtraction, which is the safe direction, and is left documented
+  rather than changed in a hurry.
+- Sub-threshold paraphrase reissues rely on the ledger and the prompt rule
+  rather than the floor. Literal guards fail when models rewrite.
+- A line addressed to a GROUP still raises no voice demand: a line naming a
+  person is answered, the same line aimed at a table is not. The prerequisite
+  is a representation for "has joined this group", which charter figures do
+  not have.
+
 ## alpha 9.8.2 — A campaign can build a world and watch it run
 
 Charter and the Living World were reachable only by orchestrating browser
