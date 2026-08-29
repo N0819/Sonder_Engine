@@ -289,3 +289,50 @@ def test_the_report_is_optional_and_absence_changes_nothing():
     b = merge_scene_with_diff(scene(), {"inventory_ops": [op()]},
                               inventory_report=without)
     assert a == b
+
+
+# --- the three the adversarial pass found ---------------------------------
+
+
+def test_a_clause_that_does_not_claim_the_thing_survives():
+    """The carriage vocabulary answers about the clause that NAMES the thing.
+    Asked over the whole detail, an unrelated clause condemns a true one:
+    "watching the padd, braced against the console" makes no possession claim
+    about the padd, and was retired because "against" sits in the second
+    clause. Real shape, from chat 98's turn-3 scene."""
+    detail = "watching %s, braced against the console" % THING
+    merged = merge_scene_with_diff(
+        scene(detail=detail), {"inventory_ops": [op()]})
+    assert merged["poses"][GIVER]["detail"] == detail
+
+
+def test_a_clause_that_does_claim_the_thing_is_still_retired():
+    """The guard still fires where the claim and the thing share a clause."""
+    merged = merge_scene_with_diff(
+        scene(detail="holding %s against chest, watching the door" % THING),
+        {"inventory_ops": [op()]})
+    assert merged["poses"][GIVER]["detail"] == ""
+
+
+def test_a_transfer_with_one_endpoint_retires_nothing():
+    """An op whose two ends are one body moves nothing, so there is no prose
+    for it to contradict -- and retiring on one erases the holder's own true
+    carriage clause."""
+    detail = "holding %s against chest" % THING
+    merged = merge_scene_with_diff(scene(detail=detail), {"inventory_ops": [
+        {"op": "transfer", "object_id": THING, "from_id": GIVER,
+         "to_id": GIVER, "relation": "held", "details": {}}]})
+    assert merged["poses"][GIVER]["detail"] == detail
+
+
+def test_the_endpoints_resolve_by_subject_not_by_spelling():
+    """`positions`, `poses` and a transfer's endpoints are each keyed by
+    whatever their writer reached for. Bare equality answers "different body"
+    for two spellings of one, which retires nothing and reports nothing."""
+    sc = scene(detail="holding %s against chest" % THING)
+    sc.setdefault("entities", {})[GIVER] = {
+        "name": GIVER, "aliases": ["the giver"]}
+    merged = merge_scene_with_diff(sc, {"inventory_ops": [
+        {"op": "transfer", "object_id": THING, "from_id": "the giver",
+         "to_id": TAKER, "relation": "held", "details": {}}]})
+    assert merged["poses"][GIVER]["detail"] == ""

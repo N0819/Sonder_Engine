@@ -946,28 +946,51 @@ def invalidate_transferred_pose_details(scene: dict, inventory_ops) -> list:
         labels = _carriage_labels(scene, op.get("object_id"))
         if not labels:
             continue
-        departed = str(op.get("from_id") or "").strip().casefold()
-        arrived = str(op.get("to_id") or "").strip().casefold()
+        departed = str(op.get("from_id") or "").strip()
+        arrived = str(op.get("to_id") or "").strip()
+        # A HANDOVER WITH ONE END. An op whose two endpoints are the same body
+        # moves nothing, so there is no prose for it to contradict -- and
+        # retiring on one would erase the holder's own true carriage clause.
+        if departed and arrived and same_subject(scene, departed, arrived):
+            continue
         for subject, raw in list(poses.items()):
             pose = _clean_pose(raw)
             if pose is None or not pose.get("detail"):
                 continue
-            folded = str(subject).strip().casefold()
-            if not folded:
+            if not str(subject).strip():
                 continue
-            if folded == arrived:
+            # `same_subject`, not casefold equality: `positions`, `poses` and
+            # a transfer's endpoints are each keyed by whatever their writer
+            # reached for -- a uid here and a display name there -- and this
+            # module's own loops sixty lines down already ask the question
+            # this way. Bare equality silently answers "different body" for
+            # two spellings of one, which retires nothing and reports nothing.
+            if arrived and same_subject(scene, subject, arrived):
                 continue          # they have it; the prose is true of them
-            if folded != departed and not arrived:
+            if not (departed and same_subject(scene, subject, departed)) \
+                    and not arrived:
                 # Neither endpoint names this body and the op does not say
                 # where the thing went. Nothing here contradicts anything.
                 continue
             detail = str(pose["detail"])
             low = detail.casefold()
-            if not (set(re.findall(r"[\w'-]+", low))
-                    & _CONTACT_BOUND_POSE_WORDS):
-                continue
-            if not any(re.search(r"\b%s\b" % re.escape(label.casefold()), low)
-                       for label in labels):
+            # THE CLAUSE THAT NAMES THE THING IS THE CLAUSE THAT CLAIMS IT.
+            # Asking the carriage vocabulary over the WHOLE detail lets an
+            # unrelated clause condemn a true one: "watching the padd, braced
+            # against the console" carries no possession claim about the padd
+            # at all, and was retired because "against" appears in the second
+            # clause. A detail is retired only where a carriage word and the
+            # thing's own name sit in one clause together.
+            claimed = False
+            for clause in re.split(r"[,;:.]| -- |—", low):
+                if not (set(re.findall(r"[\w'-]+", clause))
+                        & _CONTACT_BOUND_POSE_WORDS):
+                    continue
+                if any(re.search(r"\b%s\b" % re.escape(label.casefold()),
+                                 clause) for label in labels):
+                    claimed = True
+                    break
+            if not claimed:
                 continue
             pose["detail"] = ""
             poses[subject] = pose

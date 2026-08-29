@@ -4673,8 +4673,14 @@ requires an authored mind within FULL hearing of where the presence stands
 writer stopped disagreeing. Exempt: the Director's judgment for THIS beat
 (`routed`, a flow address, an emerge), because a hand-off that becomes
 silence is the failure the gate exists to end; and an aimed character line,
-which passed a stricter version of the same test. Fail-OPEN where either
-room is unknown. Measured by replaying the gate against all 40 recorded
+which passed a stricter version of the same test. Fail-OPEN for an
+UNPLACED presence and only that one -- a room the scene does not
+contain fails CLOSED, because `spatial_rel` reads an unknown room id as
+separated and `hear_level` grades that `none`. (Corrected 2026-08-29:
+this paragraph, the `demand_reaches` docstring and `Design.md` all said
+"unknown rooms fail open", and the measurement says otherwise --
+`demand_reaches` with a room name absent from the scene returns False,
+with `here=""` it returns True.) Measured by replaying the gate against all 40 recorded
 turns of chat 98 (checkpoint world state per turn, the recorded
 `director_interpret`/`director_resolve` of that turn; the replay reproduces
 the recorded `selected` list on every turn before the change): 29 of the
