@@ -691,7 +691,8 @@ def _demanded_presences(ctx, dr, managed, ceiling):
                                 _background_name_named_exactly,
                                 _character_address_of, _flow_addressed_refs,
                                 _presence_in_addressed_refs,
-                                _valid_pending_reply, emerged_this_beat,
+                                _valid_pending_reply, authored_mind_rooms,
+                                demand_reaches, emerged_this_beat,
                                 overt_declaration_text)
 
     sc = wget(ctx.chat.id, "scene", {}) or {}
@@ -702,6 +703,7 @@ def _demanded_presences(ctx, dr, managed, ceiling):
     addressed_refs = _flow_addressed_refs(ctx)
     emerged = emerged_this_beat(ctx, dr, sc)
     turn_idx = ctx.turn.idx
+    authored_rooms = authored_mind_rooms(sc, roster)
 
     ranked = []
     addressees = 0
@@ -711,10 +713,12 @@ def _demanded_presences(ctx, dr, managed, ceiling):
         # address (flow ref, full name, aimed line) counts toward the
         # widening, because the significant-word fallback matches every
         # record sharing a word (see `_background_name_named_exactly`).
+        flow_hit = _presence_in_addressed_refs(name, addressed_refs)
+        aimed = bool(_character_address_of(dr, name, roster, sc, room))
         precise = bool(
-            _presence_in_addressed_refs(name, addressed_refs)
+            flow_hit
             or _background_name_named_exactly(name, player_input)
-            or _character_address_of(dr, name, roster, sc, room))
+            or aimed)
         addressed_any = precise or _background_name_mentioned(
             name, player_input)
         owed = bool(_valid_pending_reply(rec, turn_idx))
@@ -722,6 +726,18 @@ def _demanded_presences(ctx, dr, managed, ceiling):
         emerged_hit = name in emerged
         if not (addressed_any or owed or acting or emerged_hit):
             continue
+        # The demand gate's channel test, in the same words (`demand_reaches`):
+        # a trigger says a demand was RAISED, not that it arrived. The
+        # Director's own judgment for this beat (a flow address, an emerge)
+        # and an aimed line that already passed the same hearing bar are
+        # exempt; the player's raw words and the two carried debts must
+        # reach where the presence stands. `managed_presences` scopes this
+        # populace to the player's AMBIENT scope, which is a different
+        # question with a different answer -- on a vessel it resolved to
+        # every room aboard (chat 98).
+        if not (flow_hit or emerged_hit or aimed):
+            if not demand_reaches(sc, room, authored_rooms):
+                continue
         if precise:
             addressees += 1
         ranked.append(((2 if precise else (1 if addressed_any else 0),
