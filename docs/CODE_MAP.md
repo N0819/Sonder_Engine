@@ -119,7 +119,7 @@
 | `world/charter_figure.py` | 140 |  | — |
 | `world/charter_generate.py` | 788 |  | `world.charter_identity`, `world.charter_model`, `world.charter_needs`, `world.charter_roster` |
 | `world/charter_history.py` | 873 |  | — |
-| `world/charter_identity.py` | 775 |  | — |
+| `world/charter_identity.py` | 859 |  | — |
 | `world/charter_intervene.py` | 112 |  | `world.charter_model` |
 | `world/charter_log.py` | 448 |  | `world.charter_commitment`, `world.charter_decide`, `world.charter_economy`, `world.charter_feel`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_needs`, `world.charter_news`, `world.charter_politics`, `world.charter_social`, `world.charter_temper` |
 | `world/charter_mark.py` | 302 |  | — |
@@ -1392,14 +1392,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `materialize_body_names()` | 579 | 119 lines |
-| `name_is_reserved()` | 405 | 56 lines |
-| `refuse_harvested_pools()` | 463 | 44 lines |
-| `identity_aliases()` | 733 | 38 lines |
-| `strip_reserved_pools()` | 509 | 34 lines |
+| `materialize_body_names()` | 663 | 119 lines |
+| `name_is_reserved()` | 480 | 65 lines |
+| `refuse_harvested_pools()` | 547 | 44 lines |
+| `identity_aliases()` | 817 | 38 lines |
+| `reconstructs_a_reserved_name()` | 443 | 35 lines |
+| `strip_reserved_pools()` | 593 | 34 lines |
 | `derived_name_parts()` | 154 | 32 lines |
 | `normalize_naming_profile()` | 71 | 28 lines |
-| `extension_profile()` | 215 | 28 lines |
 
 ### `world/charter_intervene.py`
 
