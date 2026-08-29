@@ -7,7 +7,9 @@ from world.spatial_contacts import (
     _CONTACT_STATE_VERBS,
     _MOMENTARY_SET,
     _SENSATION_FORMS,
+    _endpoint_is_worn_clothing,
     _is_anatomical_part,
+    _part_is_clothing,
     _part_is_plural,
     contact_is_momentary,
     contact_motion,
@@ -168,12 +170,31 @@ def contact_sensation(contact: dict, *, you: str, scene: dict = None,
     actor_is_observer = _is_observer(actor)
     if actor_is_observer:
         mine, theirs = contact.get("actor_part"), contact.get("target_part")
-        other = target
+        me, other = actor, target
     elif _is_observer(target):
         mine, theirs = contact.get("target_part"), contact.get("actor_part")
-        other = actor
+        me, other = target, actor
     else:
         return ""
+
+    # CLOTHING IS NOT A SURFACE THAT TOUCHES AND NOT A PLACE ON A BODY.
+    # `_clean_contact` refuses such a record at write time; this is the render
+    # floor for records written before that refusal existed, and it sits
+    # beside the malformed-part floor below for the same reason.
+    #
+    # It matters most HERE, of every renderer, because of what comes next:
+    # `label_for` is an identity floor built for a PERSON, so a party it
+    # cannot place becomes "someone". Handed a garment, it minted a body.
+    # Measured live, chat 98 turn 22 -- a record whose target was a worn
+    # garment and whose actor_part named another one composed straight into
+    # the player's view as "Your uniform registers someone against it: steady
+    # pressure, weight and shared warmth, continuous while the contact holds."
+    # The narrator invented nothing; it was handed a person.
+    if scene is not None and (_endpoint_is_worn_clothing(scene, other)
+                              or _part_is_clothing(scene, me, mine)
+                              or _part_is_clothing(scene, other, theirs)):
+        return ""
+
     if callable(label_for):
         other = str(label_for(other) or other)
 
