@@ -472,12 +472,25 @@ def strip_reserved_pools(profile, reservation):
     assemble.
     """
     profile = normalize_naming_profile(profile)
-    fields = address_components(profile)
-    if not fields or not (reservation or {}).get("runs"):
+    if not (reservation or {}).get("runs"):
         return profile
+    # NOT GATED ON `address_components`, which was the defect. That helper
+    # answers "which fields is somebody ADDRESSED by", and it returns empty
+    # under the commonest format of all -- `{given} {family}` -- so this
+    # whole function was a no-op for most laws and only ever fired where a
+    # law happened to also carry a title format (measured 2026-08-28, chat
+    # 95).
+    #
+    # They are different questions. Two people SHARING a family name is
+    # ordinary, because sharing arises. A pool that CONTAINS a named
+    # individual's family name is the engine issuing that individual's name
+    # to strangers, which is not sharing. So the predicate here is the plain
+    # one: no pool element may be a component of a name the story has
+    # already given to somebody.
+    #
+    # Pools only -- syllable parts are not elements anyone is called by, and
+    # the mint's own refusal covers what they assemble.
     for field in ("given", "family"):
-        if field not in fields:
-            continue
         profile[field] = [value for value in profile[field]
                           if not _reserves_component(reservation, value)]
     return profile

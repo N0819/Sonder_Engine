@@ -97,7 +97,7 @@
 | `story/importers.py` | 3124 | Native and AI-assisted character, persona, and lorebook import/generation. | `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.memory`, `story.character_schema`, `story.scene` |
 | `story/journey_history.py` | 431 |  | — |
 | `story/lore_structure.py` | 248 |  | — |
-| `story/naming.py` | 353 |  | `core.db`, `world.charter_identity` |
+| `story/naming.py` | 372 |  | `core.db`, `world.charter_identity` |
 | `story/provenance_text.py` | 132 |  | — |
 | `story/scene.py` | 2602 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `core.db`, `story`, `story.attire`, `story.character_schema`, `world.spatial` |
 | `web/__init__.py` | 6 |  | — |
@@ -119,7 +119,7 @@
 | `world/charter_figure.py` | 140 |  | — |
 | `world/charter_generate.py` | 692 |  | `world.charter_identity`, `world.charter_model`, `world.charter_needs`, `world.charter_roster` |
 | `world/charter_history.py` | 873 |  | — |
-| `world/charter_identity.py` | 716 |  | — |
+| `world/charter_identity.py` | 729 |  | — |
 | `world/charter_intervene.py` | 112 |  | `world.charter_model` |
 | `world/charter_log.py` | 448 |  | `world.charter_commitment`, `world.charter_decide`, `world.charter_economy`, `world.charter_feel`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_needs`, `world.charter_news`, `world.charter_politics`, `world.charter_social`, `world.charter_temper` |
 | `world/charter_mark.py` | 302 |  | — |
@@ -1160,14 +1160,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `minted_presence_name()` | 300 | 54 lines |
+| `minted_presence_name()` | 319 | 54 lines |
+| `registered_identity_names()` | 244 | 52 lines |
 | `_person_name_evidence()` | 154 | 37 lines |
-| `registered_identity_names()` | 244 | 33 lines |
 | `harvested_naming_profile()` | 193 | 28 lines |
 | `_name_tokens()` | 126 | 26 lines |
 | `_charter_naming_lanes()` | 101 | 23 lines |
 | `story_naming_lanes()` | 223 | 19 lines |
-| `story_identity_reservation()` | 279 | 14 lines |
+| `story_identity_reservation()` | 298 | 14 lines |
 
 ### `story/provenance_text.py`
 
@@ -1392,14 +1392,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `materialize_body_names()` | 520 | 119 lines |
+| `materialize_body_names()` | 533 | 119 lines |
 | `name_is_reserved()` | 405 | 56 lines |
-| `identity_aliases()` | 674 | 38 lines |
+| `identity_aliases()` | 687 | 38 lines |
+| `strip_reserved_pools()` | 463 | 34 lines |
 | `derived_name_parts()` | 154 | 32 lines |
 | `normalize_naming_profile()` | 71 | 28 lines |
 | `extension_profile()` | 215 | 28 lines |
 | `_safe_format()` | 44 | 25 lines |
-| `_stored_name_components()` | 273 | 24 lines |
 
 ### `world/charter_intervene.py`
 

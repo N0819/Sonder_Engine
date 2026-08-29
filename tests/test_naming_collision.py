@@ -264,12 +264,28 @@ class TestThePersistedLawStopsOfferingTheAddress:
         town = close_plan(_plan(ELEMENT_LAW))
         assert RESERVED_ELEMENT in town["charters"]["works"]["naming"]["family"]
 
-    def test_a_paired_law_still_refuses_the_registered_name_itself(
-            self, temp_db):
-        """Under a paired format nothing is subtracted from the pools -- the
-        law calls nobody by one element -- so the mint's own refusal is the
-        only thing standing between the allocator and a second person under
-        a registered mind's whole name."""
+    def test_a_paired_law_subtracts_the_element_too(self, temp_db):
+        """REVERSED 2026-08-28, deliberately, and this docstring is the record.
+
+        It used to read: "Under a paired format nothing is subtracted from the
+        pools -- the law calls nobody by one element -- so the mint's own
+        refusal is the only thing standing between the allocator and a second
+        person under a registered mind's whole name." That was the measured
+        defect, not a design: `strip_reserved_pools` gated itself on
+        `address_components`, which is EMPTY under `{given} {family}`, so the
+        subtraction was a no-op for the commonest law shape in the engine and
+        fired only where a law also carried a title format.
+
+        The two questions are different. Two people sharing a family name is
+        ordinary, because sharing ARISES. A pool that contains a named
+        individual's family name is the engine ISSUING that individual's name
+        to strangers. Measured on a generated Star Trek institution: the
+        harvest built {given} x {family} pools from a lorebook's canon cast
+        and the free cross-product handed twenty strangers names like
+        "Jean-Luc Crusher" and "Ro Vulcan", and reconstituted one canon
+        character's full name verbatim. In an original setting the same thing
+        happens and nobody can see it.
+        """
         chat_id = _chat(temp_db, cast=[REGISTERED])
         save_registry(chat_id, {"works": {
             "key": "works", "naming": PAIRED_LAW,
@@ -277,7 +293,9 @@ class TestThePersistedLawStopsOfferingTheAddress:
             "bodies": {"post:%04d" % i: {"place": "hall"} for i in range(6)},
         }})
         state = registry_for(chat_id)["items"]["works"]["state"]
-        assert state["naming"]["family"] == PAIRED_LAW["family"]
+
+        assert RESERVED_ELEMENT not in state["naming"]["family"]
+        assert RESERVED_ELEMENT.casefold() not in _families(state["bodies"])
         assert REGISTERED.casefold() not in {
             str(body.get("name") or "").casefold()
             for body in state["bodies"].values()}
