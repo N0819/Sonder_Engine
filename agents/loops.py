@@ -742,6 +742,17 @@ def interaction_loop(ctx, nonce):
     if scene is None:
         scene = get_scene(ctx.chat.id, ctx.chat)
         shared["scene"] = scene
+
+    # What each mouth has ALREADY declared this beat, for `character_step`'s
+    # within-beat self-ledger and reissue floor. Loop-owned and RESET here,
+    # never read from `ctx.character_results`: the single-step reroll path
+    # hydrates every stored step -- including the one being rerolled -- into
+    # ctx before executing, so `character_results` can hold the DISCARDED
+    # roll's output, and judging the fresh roll against a roll the player
+    # threw away would drop lines nobody canonically said. A re-executed
+    # loop starts from nothing said, which is the truth of a reroll.
+    ctx._extra["beat_declared"] = {}
+
     base_views = dict(
         (ctx.perception_act or {}).get("views")
         or {}
@@ -914,6 +925,17 @@ def interaction_loop(ctx, nonce):
             speaker_id, "")
         result = character_step(ctx, speaker_id, nonce + call_index)
         _apply_interruptions(speaker_id, result)
+        # This round joins the mouth's own within-beat record BEFORE anything
+        # else reads it: a later round of the same speaker is handed it as
+        # `recent_self_lines`/`recent_self_moves` entries and screened
+        # against it (see `character._this_beat_self_record` and
+        # `character.strip_beat_reissues`). Merged the same way
+        # `character_results` is, but in a channel only this loop writes and
+        # only after resetting it -- see the reset above for why the shared
+        # results map cannot serve.
+        _declared = ctx._extra.setdefault("beat_declared", {})
+        _declared[speaker_id] = _merge_character_results(
+            _declared.get(speaker_id), result)
         # Merge rather than overwrite: a character can speak in more than one
         # micro-round, and commit/perception_outcome read
         # ctx.character_results[id] as that character's SINGLE result. A blind

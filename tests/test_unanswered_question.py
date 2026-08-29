@@ -163,6 +163,58 @@ class TestTheLiveFailure:
             chat_id, "The Doctor", ids["The Doctor"], 147, None) == {}
 
 
+class TestTheAskersRegisterStillNamesYou:
+    """Chat 98 t32->t33 (2026-08-29): an order's `interaction.addresses`
+    carried the addressee's RANK followed by his name, the sheet's canonical
+    name is the bare name, and exact equality read the pair as nobody. So
+    the order never became a debt, its addressee was never promoted to
+    answer, and the asker re-issued the same order verbatim one turn later.
+    An address resolves through every key the body answers to, tail-matched
+    at a word boundary -- a title or honorific prefixes while the name
+    survives as the tail."""
+
+    def test_a_rank_prefixed_address_is_still_a_debt(self, temp_db):
+        chat_id, ids = _seed(temp_db, [
+            (145, "", {"41": _asked(
+                "Tamamo", "Hinami, will you carry the lantern ahead of us?",
+                ["Lady Hinami"])}),
+        ])
+        owed = _unanswered_question_note(
+            chat_id, "Hinami", ids["Hinami"], 146, None)["awaiting_your_answer"]
+        assert owed["from"] == "Tamamo"
+        assert "lantern" in owed["asked"]
+
+    def test_a_bare_title_names_nobody(self, temp_db):
+        """A title with no name is ambiguous, and ambiguity resolves to
+        nobody rather than to whoever happens to match first."""
+        chat_id, ids = _seed(temp_db, [
+            (145, "", {"41": _asked(
+                "Tamamo", "Will you carry the lantern?", ["Lady"])}),
+        ])
+        assert _unanswered_question_note(
+            chat_id, "Hinami", ids["Hinami"], 146, None) == {}
+
+    def test_the_players_address_resolves_the_same_way(self, temp_db):
+        """`flow.addressed_to` occasionally holds names rather than ids, in
+        the same register the asker speaks -- the one resolver serves both."""
+        chat_id, ids = _seed(temp_db, [
+            (145, "Hinami, what did you see?", {}),
+        ])
+        # Rewrite the stored director_interpret to address by styled name.
+        row = temp_db.q(
+            "SELECT v.id AS vid, v.content AS content FROM turns t "
+            "JOIN steps s ON s.turn_id=t.id AND s.key='director_interpret' "
+            "JOIN variants v ON v.step_id=s.id WHERE t.chat_id=? AND t.idx=145",
+            (chat_id,), one=True)
+        content = json.loads(row["content"])
+        content["flow"] = {"addressed_to": ["Lady Hinami"]}
+        temp_db.qi("UPDATE variants SET content=? WHERE id=?",
+                   (json.dumps(content), row["vid"]))
+        owed = _unanswered_question_note(
+            chat_id, "Hinami", ids["Hinami"], 146, None)["awaiting_your_answer"]
+        assert owed["from"] == "the player"
+
+
 class TestThePlayerAskingCountsToo:
     """The larger half, and the one the character-result path could never see:
     the player has no character result, so `expects_response` does not exist
