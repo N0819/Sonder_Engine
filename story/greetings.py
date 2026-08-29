@@ -719,7 +719,13 @@ def start_story(char_id: int, persona_id: int, greeting_index: int = 0,
     db.qi("UPDATE chats SET persona_id=? WHERE id=?", (persona_id, cid))
     db.qi("INSERT INTO chat_chars(chat_id,char_id,status) VALUES(?,?, 'active')", (cid, char_id))
     if already_known:
-        db.wset(cid, "known", {c_name: [p_name], p_name: [c_name]})
+        # Through the one writer, not by hand: recognition established when a
+        # cast membership is created belongs to `seed_mutual_recognition`, so
+        # the three creating paths cannot drift into three semantics again.
+        # The answer stays this path's own -- a greeting card is written TO
+        # the player, which is the stated reason the default here is yes.
+        from persist.commit import seed_mutual_recognition
+        seed_mutual_recognition(cid, c_name, [p_name])
     db.wset(cid, "fiction_model", {"genre": {"primary": "as written in the card"},
                                    "ontology": {}, "causal_regimes": [],
                                    "scale_rules": {}, "abstraction_rules": {}})

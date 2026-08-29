@@ -631,6 +631,7 @@ from .common import (
     cast_room,
     character_room,
     character_scene_keys,
+    _present_cast_bodies,
     split_sentences,
     _merge_character_results,
 )
@@ -1821,25 +1822,6 @@ def perception_establish(ctx, nonce):
     return _composer_establish(
         ctx, sc, perceivers, known, p_name, p_appearance,
         entity_states, sensory_events)
-
-def _present_cast_bodies(scene, cast):
-    """Every cast member the SCENE places somewhere -- [{id, name, room}].
-
-    Presence is a fact about the world, not a judgement about the beat, and
-    two loops in `perception_act` need the same answer: who is standing here
-    (for `_co_present_company`) and who therefore perceives what happens
-    (for the perceiver list). They were separate reads with separate tests
-    and only one of them was about presence.
-    """
-    out = []
-    for c in cast or []:
-        sh, _, _ = sheet_state(c)
-        name = character_name(sh)
-        room = character_room(scene, sh)
-        if name and room:
-            out.append({"id": c["id"], "name": name, "room": room})
-    return out
-
 
 def perception_act(ctx, nonce):
     chat = ctx.chat

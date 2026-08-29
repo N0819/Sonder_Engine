@@ -86,6 +86,7 @@ from story.importers import (
 )
 from persist.commit import (promotable_background_presences,
                     promote_background_character,
+                    seed_mutual_recognition,
                     sync_room_registry_with_scene,
                     # The gate itself, not a second reading of the same
                     # setting. `"" != "0"` is True, so an unset setting read
@@ -3634,6 +3635,9 @@ def chat_add_char(cid: int, body: dict = Body(...)):
         pend = wget(cid, "pending", [])
         pend.append({"type": "arrival", "who": name, "returning": bool(ex)})
         wset(cid, "pending", pend)
+    char_name = q("SELECT name FROM characters WHERE id=?", (ch,),
+                  one=True)["name"]
+    warnings = []
     if body.get("already_known"):
         # The recognition map ("known") otherwise only grows from
         # validated_introductions as an in-story introduction beat fires
@@ -3642,18 +3646,35 @@ def chat_add_char(cid: int, body: dict = Body(...)):
         # person" until that happens to occur. Let attaching a character
         # seed mutual recognition directly, same effect as an
         # introduction having already happened off-screen.
-        char_name = q("SELECT name FROM characters WHERE id=?", (ch,), one=True)["name"]
+        #
+        # THE PLAYER'S EDGE ONLY, because that is the whole of what the flag
+        # answers -- the authoring surface that sets it is a per-character
+        # box reading "already knows you". Whether two arrivals know EACH
+        # OTHER is a separate question nothing in this request asked, and
+        # seeding an edge no author called for would assert a channel the
+        # firewall exists to make real. `seed_mutual_recognition` takes a
+        # roster precisely so a surface that does ask can say so.
         chat_row = dict(q("SELECT * FROM chats WHERE id=?", (cid,), one=True))
-        player_name = persona_name(persona_of(chat_row))
-        known = wget(cid, "known", {})
-        known.setdefault(char_name, [])
-        if player_name not in known[char_name]:
-            known[char_name].append(player_name)
-        known.setdefault(player_name, [])
-        if char_name not in known[player_name]:
-            known[player_name].append(char_name)
-        wset(cid, "known", known)
-    return {"ok": True}
+        seed_mutual_recognition(
+            cid, char_name, [persona_name(persona_of(chat_row))])
+    elif "already_known" not in body:
+        # AN ATTRIBUTE NOBODY OWNS CANNOT BE DEFENDED. An omitted key is not
+        # an authored "no": it leaves the arriving member a mutual stranger
+        # to everyone, which perception then honours exactly. Measured on
+        # chat 95, whose cast reached the story with no recognition answer at
+        # all -- nine turns in which the player's own commanding officer was
+        # composed as "a figure, backlit, indistinct, the face unreadable",
+        # and no warning anywhere among the 133 the engine did raise.
+        # Nothing is seeded, because widening a channel on a caller's
+        # silence is the worse of the two failures; it is only said aloud.
+        warnings.append(
+            f"{char_name} was attached with no recognition answer: pass "
+            "already_known to say whether this person and the player already "
+            "know each other. Nothing was seeded, so they begin as mutual "
+            "strangers and will be narrated as unfamiliar until an in-story "
+            "introduction fires.")
+        _pipeline_logger.warning("chat %s: %s", cid, warnings[-1])
+    return {"ok": True, "warnings": warnings}
 
 # ---- Background-presence promotion ----
 

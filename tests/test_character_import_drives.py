@@ -229,6 +229,13 @@ def test_a_live_beat_reports_the_empty_drive_the_import_check_would_have(
     temp_db.qi(
         "INSERT INTO chat_chars(chat_id,char_id,status,state) VALUES(?,?,?,?)",
         (chat_id, char_id, "active", "{}"))
+    # The scene has to place her somewhere: `character_step`'s presence gate
+    # refuses a mind the world puts nowhere before it reads a sheet at all,
+    # and this test is about the sheet.
+    temp_db.wset(chat_id, "scene", {
+        "location": "a room", "rooms": {"room1": {"name": "Room"}},
+        "positions": {"Mara": "room1"}, "entities": {}, "attire": {},
+        "overlays": {}})
     cast = temp_db.q(
         "SELECT ch.*,cc.state AS cstate,cc.status FROM chat_chars cc "
         "JOIN characters ch ON ch.id=cc.char_id WHERE cc.chat_id=?",

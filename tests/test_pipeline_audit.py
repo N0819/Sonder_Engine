@@ -146,6 +146,10 @@ class TestContestedAutonomyZeroPlan:
         chat_id = _make_chat(temp_db)
         ids, cast_rows = _make_cast(temp_db, chat_id, ["Alice", "Bob"])
         temp_db.wset(chat_id, "dialogue_config", {"autonomy": 0})
+        # The planner narrows reactors to who the scene places somewhere, so
+        # a plan test has to place them -- as the sibling test below does.
+        temp_db.wset(chat_id, "scene",
+                     _basic_scene({"Alice": "kitchen", "Bob": "kitchen"}))
         interp = {"flow": {
             "needs_mapping": False,
             "reactors": list(ids.values()),
@@ -160,6 +164,8 @@ class TestContestedAutonomyZeroPlan:
         chat_id = _make_chat(temp_db)
         ids, cast_rows = _make_cast(temp_db, chat_id, ["Alice", "Bob"])
         temp_db.wset(chat_id, "dialogue_config", {"autonomy": 0})
+        temp_db.wset(chat_id, "scene",
+                     _basic_scene({"Alice": "kitchen", "Bob": "kitchen"}))
         interp = {"flow": {
             "needs_mapping": False,
             "reactors": list(ids.values()),
@@ -175,6 +181,7 @@ class TestContestedAutonomyZeroPlan:
         chat_id = _make_chat(temp_db)
         ids, cast_rows = _make_cast(temp_db, chat_id, ["Alice"])
         temp_db.wset(chat_id, "dialogue_config", {"autonomy": 50})
+        temp_db.wset(chat_id, "scene", _basic_scene({"Alice": "kitchen"}))
         interp = {"flow": {
             "needs_mapping": False,
             "reactors": list(ids.values()),

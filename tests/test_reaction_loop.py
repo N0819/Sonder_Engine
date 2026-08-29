@@ -9,6 +9,7 @@ import json
 import time
 
 from agents.loops import reaction_loop
+from core.db import wset
 from story.character_schema import default_character_data
 from core.pipeline_context import ChatData, PipelineContext, TurnData
 
@@ -22,6 +23,16 @@ def _cast_row(char_id, name):
 
 def _make_ctx(chat_id, reactor_ids):
     cast = [_cast_row(rid, f"Character {rid}") for rid in reactor_ids]
+    # A reactor the scene places nowhere is dropped before any character
+    # call, so a reactor list this test expects to be honoured has to stand
+    # somewhere -- which is true of every reactor with a perception view.
+    wset(chat_id, "scene", {
+        "location": "test", "time": "now", "description": "",
+        "rooms": {"room_a": {"name": "Room A", "adjacent": []}},
+        "entities": {},
+        "positions": {f"Character {rid}": "room_a" for rid in reactor_ids},
+        "overlays": {}, "attire": {},
+    })
     return PipelineContext(
         chat=ChatData(
             id=chat_id, name="Test", persona_id=None, lorebook_id=None,

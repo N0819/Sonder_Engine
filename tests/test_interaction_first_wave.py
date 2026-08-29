@@ -97,6 +97,11 @@ def _install(monkeypatch, calls_log, *, wave=2, physical=(), asks_player=(),
                         lambda refs, cast: [int(r) for r in refs
                                             if isinstance(r, int) or str(r).isdigit()])
     monkeypatch.setattr(loops, "_drop_non_awake", lambda ctx, ids: ids)
+    # Same reason as the line above, for the sibling gate: this stand-in's
+    # `get_scene` returns {}, so every reactor would read as a body the scene
+    # places nowhere. Presence narrowing has its own suite
+    # (tests/test_reactors_are_narrowed_to_presence.py).
+    monkeypatch.setattr(loops, "_drop_absent", lambda ctx, ids: ids)
     monkeypatch.setattr(loops, "_merge_character_results", lambda prev, new: new)
     monkeypatch.setattr(loops, "_requires_director_resolution",
                         lambda r: r["cid"] in physical)

@@ -340,6 +340,25 @@ Measured before: a witness was missing from `reactors` in 757 of 975
 multi-witness beats (77.6%), and 1,639 of 4,292 character-presences (38.2%) got
 no act view at all.
 
+**The complementary narrowing landed 2026-08-28.** The perception fix widened
+perception to match presence and left the reactor list ungated, so the two
+disagreed inside a single beat: a mind the scene places NOWHERE gets no view
+and was still asked to declare conduct. Chat 95, turns 4/5/8/14 —
+`flow.reactors` named two cast members `scene.positions` had no entry for at
+any point, in beats whose own `perception_act.views` listed observers `['75']`
+/ `['74','75']`; 6 `character_major` calls at 13-22s each, every one
+deliberating from an empty perception base. All four readers of the list now
+intersect it with `_present_cast_bodies` (moved to `agents/common.py` for the
+purpose): `runtime.build_plan`, `loops._drop_absent` in both loops, and the
+`character.character_step` choke point, which says so the way the awareness
+gate beside it does. SOMEWHERE, not "the player's room" — a mind answering
+over a comm channel from another room passes. Pinned by
+`tests/test_reactors_are_narrowed_to_presence.py`. The drop is silent in
+`build_plan` alone, because that planner also runs from `resume_key_for_turn`
+under a web handler with no step to note against — so an autonomy-0,
+uncontested beat, which plans per-character steps and enters no loop, drops
+without a note.
+
 What stays open is the half the Director legitimately owns. `flow.reactors` is
 a pacing judgement — who speaks this beat — and its quality is still unmeasured:
 nothing checks that the people it picks are the people a reader would expect to
@@ -347,6 +366,11 @@ answer, and the prompt sharpening in alpha 6.9 moved the perception number
 without anyone establishing what the pacing number should be. A beat where the
 addressed party is left out is now a pacing defect only, which is the right
 shape for it, and it is the one worth measuring next.
+
+Separately open: whether a cast member the scene places nowhere is a PACING
+defect at all, or a COMMIT defect — the narrowing drops them from the beat;
+having commit place every active cast member is the other half and is not in
+this cluster.
 
 ### 1.11i The engine spoke for a silent player — FIXED, alpha 6.9.2
 
@@ -1040,6 +1064,33 @@ investigation found and did not close.
   genuine hover with no contact survives unaged. A near-contact tier — or a
   `manner` that means "not quite" — would cover it. *(Moved from §3.9,
   2026-08-19.)*
+- **A contact ledger whose only clock ticks on beats that MENTION contact
+  cannot retire what the story stopped mentioning.** Ageing lives inside
+  `spatial.apply_contact_ops` behind two gates: `_contact_ops_are_evidence`,
+  and the early `if not isinstance(ops, list) or not ops: return scene` above
+  it. Measured, chat 95 turns 10-15 (all 30 `director_contact` calls of the
+  story read): every one of those beats emitted `contact_ops: []`, so
+  `unasserted` never left 0 and one record stood six consecutive beats,
+  delivered to the narrator each time as a live touch percept. The asymmetry
+  is the tell — in replay, three beats in which two OTHER bodies touch retire
+  the record and twenty beats of its own participants' silence do not: a
+  contact is retired by strangers and never by its participants. Neither
+  participant can end one by their own conduct, either. A character MAY emit
+  `contact_ops:[{op:'remove',...}]` and is never obliged to (Picard was handed
+  `contact:0` on five consecutive beats and never used it), and the player has
+  no path at all — `director_contact._validated_player_contact_assertions`
+  coerces every player op to add/cross, so a declared step ends a contact only
+  by leaving the room. The fix is to move the clock to the per-beat call site
+  (`world/spatial_merge.py` already calls `apply_contact_ops` on every merge),
+  and it cannot land on a guess: `_CONTACT_STALE_BEATS = 2` was measured
+  against evidence beats, which are rare, and against real beats it is almost
+  certainly too short. That number, and whether a participant's own declared
+  movement should retire that pair's whole-body contacts, are owner decisions
+  and are why this is still here. The OTHER half of the same record is fixed
+  (2026-08-28): a placement verb between two bodies is refused at the ledger
+  floor (`CONTACT_PLACEMENT_MANNERS`), which cleared that record and the class
+  it came from — but a genuine hold nobody mentions again still stands
+  forever.
 - **An orphaned relational value is dropped rather than folded.** When
   `thumb_touch: "feather_light_at_ear_base"` is retired by a standing thumb
   contact, its qualifier is discarded instead of merged into that contact's
@@ -2802,6 +2853,16 @@ stand for the whole person, and everyone on that deck calls the captain
 "Captain". Two bodies holding one such post is the same defect as two bodies
 sharing a name — one word resolving to two minds.
 
+**Half of it is now SEEN, none of it is yet PREVENTED (2026-08-28).**
+`charter_runtime.registry_warnings` names a root post held by more than one
+body — the `reports_to` signal below, read for cardinality — so a generated
+charter says so on the day it is authored instead of fifty beats later. It is a
+warning and stays one: co-equal roots are legitimate, and validation here never
+rewrites a Charter. What is unchanged is the generator: `_ensure_shift_crews`
+still tops every post to three, so the charter that emits the warning is still
+the charter that gets minted. Fixing that is this entry's own work and needs
+1.84c's constraint nowhere near it.
+
 The signal to tell a rotating post from a singular one is ALREADY IN THE DATA
 and needs no new field: `captain` carries `reports_to: ""`. A post nobody
 reports to is the root of the tree, and a chain of command with three tops is
@@ -2865,6 +2926,97 @@ Not built, and not obviously small — every reader keyed on `identity.name`
 would need to know which part is address and which is identity, which is the
 same distinction `address_components` already draws for a naming law.
 
+### 1.84e An institution with no members below its posts — OWNER'S CHOICE OF THREE SHAPES
+
+1.84b's complement, and the half a fix to 1.84b would not touch. It is not only
+that a singular post got three holders; it is that the institution has NO
+MEMBERS BELOW ITS POSTS AT ALL. Capping the root post at one body would leave
+chat 95 with 22 command-tier officers and still no rank-and-file.
+
+Measured, chat 95's generated `starfleet_crew`, from a brief asking for a
+thousand people on three shifts: **24 bodies across 7 posts in 5 rooms**,
+`home_post` non-empty for all 24, and rank a strict function of post — 7 posts,
+7 distinct (post, rank) pairs: 3 captain, 3 commander, 11 lieutenant_commander,
+7 lieutenant. The charter's own `naming.titles.ranks` defines six rungs;
+`ensign` and `lieutenant_junior_grade` are carried by zero bodies and are
+**unreachable by construction**, because the only way a body acquires a rank is
+to be minted into a post and no post carries those titles.
+
+AN INSTITUTION MODELLED ONLY AS ITS COMMAND POSTS HAS NO RANK-AND-FILE, AND A
+HIERARCHY WITH NO BASE IS NOT A HIERARCHY. Where the only way to become a
+member is to be minted into a post, membership size is bounded by post count
+times the rotation floor and every member is by construction whatever the top
+of the ladder is. An institution whose whole staff is its own org chart has
+been described, not populated.
+
+WHERE IT ORIGINATES, and it is not the data model. `charter_model.normalize_
+body` already tolerates `home_post: ""` and already carries `rank` as free
+presentation metadata independent of post — rank is decoupled from post in the
+SCHEMA and welded to it in GENERATION. `charter_generate._PLAN_SYSTEM`'s output
+schema line is `populations:[{post,count,competence,berth,rank}]`: a population
+is DEFINED as a group attached to a post, so the plan has no way to describe a
+member who holds none. Reinforced twice downstream — the prompt asks for "at
+least three people for each post", and `_ensure_shift_crews(crew_size=3)`
+guarantees it deterministically. Every body-minting site in `close_plan` keys
+the body to a post (`f"{post}:{index:04d}"`, `home_post=post`), and a
+population naming no post is given a synthesized one (`f"role_{pi+1}"`).
+
+`scale` did not save it. The payload carries the brief's scale and the prompt
+tells the model to "fill out the support infrastructure needed for that scale"
+— that clause is about ROOMS. Nothing ties membership size to scale, so "at
+least three per post" became the ceiling.
+
+The prose consequence is downstream and blameless. `charter_crowd.members_of`
+returns 10 bodies for the bridge, `count_band(10)` is "a dozen or so", and
+`composition_of` tallies `title_for` per member: **"a dozen or so captains and
+commanders pulling transit watch"** reached the Director and the narrator in
+the PAYLOAD on all 16 turns. Blanking rank at the mint would not help either —
+`charter_identity.title_for` falls back to `titles.posts[role]`, so a rankless
+body standing the top post still reads as that office. No fix exists downstream
+of generation; every renderer is individually correct and faithfully reports
+what the membership IS.
+
+**LANDED 2026-08-28: the detector only.** `registry_warnings` now names an
+institution whose every body holds a post while its bodies outnumber its posts
+and rank follows the post, and names any rank the naming law defines that no
+body carries. Warnings, never rewrites — a small institution legitimately is
+all offices, which is why the tell requires REPLICATION (more bodies than
+posts) and not merely "everyone is posted". Chat 95's charter emits all three
+of the membership warnings today.
+
+**THE SUBSTANTIVE FIX IS THE OWNER'S, because three shapes are available and
+they are not interchangeable:**
+
+  (a) **POSTS GAIN A HEADCOUNT.** `normalize_post` grows a seats field, the
+      plan asks for it, `_ensure_shift_crews` tops to it. Fixes 1.84b directly
+      and cheaply. Does NOT produce a rank-and-file: it makes more top-post
+      holders legal, not more junior members exist.
+  (b) **UNPOSTED MEMBERS EXIST.** A population may name no post and mint bodies
+      with empty `home_post` and an authored rank. `normalize_body` already
+      tolerates it and `charter_plan` already staffs by competence, so the data
+      model needs nothing — only the plan prompt and the generation vocabulary
+      change. The only one of the three that answers "where is the base", and
+      the cheapest per body.
+  (c) **RANK DECOUPLES FROM POST**, becoming its own distribution over the
+      membership rather than a population attribute. Largest change, and the
+      one that makes promotion, seniority and 1.84c's succession expressible.
+
+They compose. What the measurement settles is only that (a) alone is not it.
+
+BLAST RADIUS OF ANY OF THEM, because membership size is an input to more than
+prose: `charter_plan` staffing and its scarcity ordering, `charter_crowd.count_
+band` (a crowd band IS a headcount), `charter_feel` strain means,
+`charter_economy` consumption, `charter_history` prehistory volume, and presim
+wall clock (~1.8 ms per simulated hour, `EXPERIENCE_CAP` 4000 rows per body). A
+thousand-body institution is a different performance regime, not a bigger
+number — which is an argument for (b)'s cheap ground over (a)'s headcounts, not
+a decision.
+
+Related and NOT to be built on top of by accident: 1.84b (the singular post),
+1.84c (succession, owner's design). `docs/design/DESIGN_TOWN_GENERATION.md` §5
+records the same missing primitive from the other side — deep facilities
+needing "local sub-populations who live where they work".
+
 ### 1.90 An opening may leave the whole cast nowhere, and nothing objects
 
 `director_establish` writes `positions`. On one generation of a five-character
@@ -2924,23 +3076,75 @@ debt owed by ANOTHER — the gate trusts the asking character's own
 `interaction.addresses` list, and a line addressed by name to somebody else can
 still land in it.
 
-### 1.92 A registered character can be voiced by the background path
+### 1.92 A registered character can be voiced by the background path — FIXED
 
 When a cast member is placed into a Charter post (`featured_residents`), they
 become a Charter BODY — and `pick_background_reactors` selects Charter bodies.
-So a character with a full agent, memory and psychology becomes eligible for the
+So a character with a full agent, memory and psychology became eligible for the
 stateless background reactor.
 
 Measured: one beat had the captain give two orders as himself, and then a
 background presence named `captain <his own name>` say "Acknowledged,
 Lieutenant" — rendered to the player as "a voice she couldn't place". Every
-subsequent beat carried a cast member as its background presence.
+subsequent beat carried a cast member as its background presence. Re-measured
+in chat 95 (2026-08-28): `background_react` selected
+`"lieutenant_commander Data Data"` on turns 2/5/7/11 and
+`"captain Jean-Luc Picard"` on turn 15, and `members_of(state,
+"main_bridge")` counted both of those bodies as anonymous crowd ground — 10
+members where 8 is right.
 
-Introduced by opting a story into `featured_residents`, which is otherwise
-correct and is what makes a chain of command reach people who can be spoken to.
-The fix is narrow: registered cast are excluded from background selection. The
-background path exists for presences that have no agent; a body that has one is
-not a candidate, whatever table it also appears in.
+**Fixed at the derivation, not at the gate.** The eligibility predicate at
+`world/charter_runtime.background_presence_records` and its twin at
+`world/charter_crowd.members_of` both asked "has a binding been recorded"
+(`body_key in state["bindings"]`), and a binding is written only by
+`bind_promoted_character`, reached only down the `character_histories` route.
+Chat 95 was generated by calling `generate_lived_location` with
+`featured_residents=` directly — which the public API accepts, and which
+RETURNS bindings for the caller to apply rather than applying them — so
+`state["bindings"] == {}` for all four cast and the exclusion was a no-op for
+every one of them. Both sites now ask
+`world.charter_model.body_of_an_authored_mind`, which reads BOUND **or**
+RESERVED (`resident_seed_id`, minted with the body): a seat reserved for an
+authored person is that person's seat from the moment it is minted, whether or
+not the wiring that names the person has run. The record never reaches
+`with_charter_presences`, `_addressable_ledger`, `charter_emergence_pick` or
+the gate at all. Pinned by
+`tests/test_authored_seat_is_not_anonymous.py`.
+
+RESIDUALS, none of them the identity question:
+
+- **Scope, for the owner.** The predicate excludes every featured seat, not
+  only one attached to THIS story. A generated town can carry a featured
+  resident who is authored but unattached; that body is now out of the
+  background and crowd paths too. Safest, and it removes a body someone may
+  have wanted the background path to voice.
+- **The gate's roster backstop still cannot match.** `pick_voice_demand`
+  excludes registered minds by casefolded display-name equality against
+  `_registered_name_roster`, and the charter's `formal_format` guarantees the
+  derived display never equals the registered name (`lieutenant_commander
+  Data Data` vs `data`). Left as a same-name backstop; deliberately NOT
+  hardened by fuzzy matching, which the module already documents as forbidden
+  for forcing decisions (`_background_name_named_exactly`, the six-for-one
+  failure). The record simply must not reach it.
+- **`display_name` formatting** (`world/charter_identity.py`) applies
+  `formal_format "{rank} {given} {family}"` with the RAW rank token
+  (`lieutenant_commander`) while the humanised form sits in `body["title"]`
+  and in `naming.titles.posts`; and `_stored_name_components` on a mononym
+  fills both the given and family slot — "Data Data", "Worf Worf". Owned by
+  the name-generation pass. Note it does not cover the above: humanising the
+  token still leaves "Lieutenant Commander Data Data" ≠ "Data".
+- **`generate_lived_location` still returns `featured_residents` bindings
+  that nothing applies** unless the caller goes through
+  `_complete_cast_histories`. The reservation predicate makes the reservation
+  self-sufficient, which is why it was the minimal fix; applying the bindings
+  at the API seam is still the tidier answer.
+- **Twelve other sites spell `body_key in bindings`** and mean "an authored
+  person's body" (`world/charter_run.py:438`, `charter_author.py:186`,
+  `charter_observe.py:168`, `charter_model.py:423`,
+  `charter_runtime.py:1728/1796/2103/2139/2368/2455/2594`,
+  `agents/common.py:1643`). Some of them mean "already promoted", which is a
+  genuinely different question from "reserved". Flagged, not swept — each
+  needs its own read.
 
 ### 1.93 A contact with an object is narrated as a contact with a person
 
@@ -3111,6 +3315,52 @@ ALSO VISIBLE IN THAT LEDGER: `"lieutenant_commander Lieutenant Commander Data"`
 -- a rank prepended to a name that already carries one, stored as a RECOGNITION
 KEY beside the unprefixed form. 1.84d's rank-in-the-name defect is now minting
 duplicate identities in the ledger that decides who you know.
+
+**THE OTHER CASE — a cast attached with no Charter — now has ONE writer and a
+notice, and still has no authoring surface (2026-08-28).** Three paths create a
+cast membership from nothing, and they held three different recognition
+semantics with opposite defaults, none of them named anywhere: the greeting
+launch seeded the player's edge with `already_known` defaulting TRUE, the
+attach route seeded it with the same flag defaulting FALSY, and background
+promotion seeded unconditionally and mutually across the whole active cast.
+(Archive import and branch/clone copy the `world` table wholesale and so carry
+`known` across faithfully; they never create a stranger.)
+
+AN ATTRIBUTE NOBODY OWNS CANNOT BE DEFENDED — where several paths create the
+same record and only some establish a derived invariant, the invariant is a
+coincidence of which door was used. Recognition is a CHANNEL, and a membership
+created without deciding its edges asserts, silently, that no channel exists.
+All three now write through `commit_common.seed_mutual_recognition`, each
+stating its own answer at the call, and an attach that states none says so —
+returned in the route's response and logged — while seeding nothing, because
+widening a channel on a caller's silence is the worse of the two failures.
+Measured case: chat 95's cast reached the story with no recognition answer at
+all, `known` stayed empty for nine turns, the player's own commanding officer
+was composed as "a figure, backlit, indistinct, the face unreadable", and the
+damage outlived the repair — turn 11 fed the character stage "I saw an
+indistinct figure return to the science station console" as remembered_past
+after `known` had filled. Recognition seeded late does not rewrite the memories
+written before it.
+
+WHAT REMAINS OPEN, and both are the owner's:
+
+  * **CAST-TO-CAST RECOGNITION HAS NO AUTHORING SURFACE.** Recognition is a
+    relation over the whole cast, and every attach flag in the engine is a
+    relation to the PLAYER: the story-builder's per-character box reads
+    "already knows you". Two characters both ticked yield `{"Bram2":
+    ["Ada2"], "Ada2": ["Bram2","Cleo2"], "Cleo2": ["Ada2"]}` — reproduced
+    2026-08-28 through the route — and no amount of ticking can reach the
+    missing edge. `seed_mutual_recognition` takes the roster, so a surface
+    that asks the question can close them in one call; nothing asks it.
+    Promotion is the only writer that closes cast-to-cast edges and it got
+    there by arguing from the fiction (she was in the scene the whole time),
+    not from any rule stated for attachment.
+  * **WHAT THE DEFAULT SHOULD BE.** Deliberately not chosen here. A strangers-
+    meeting attach is a real and valuable opening and the firewall is why;
+    "the caller omitted a key" is not an authored answer to that question, and
+    the engine could not previously tell the two apart. It can now, and warns
+    rather than picks. Whether an attach should be REFUSED without an answer,
+    and how loud a per-attach notice is in a UI, are the owner's to say.
 
 ### 1.96a The stateless rule was written for one population and applied to two
 
@@ -4364,6 +4614,74 @@ the player's own recall is the transcript, and a character asking "do you
 remember what you told me last winter" cannot be adjudicated by the engine --
 only answered by the human. That is tolerable and may even be right; it is
 recorded here so that if it stops being tolerable, the reason is visible.
+
+### 1.70 Narrator repetition: what the change-key fix reached, and what it did not
+
+Landed 2026-08-28, from a 16-turn story (chat 95) whose every stage was read
+against the others. Three reported symptoms — an ambient closer the prose kept
+ending on, a re-declared smell, and two quotes welded into one span — were one
+mechanism with three feeder sites, all upstream of the narrator: a percept the
+engine calls `changed` becomes a numbered entry in `current_events`, and the
+sheet defines that list as obligation ("every entry in it happened and must
+reach the page"). The narrator writing a sentence about it is obedience.
+
+**Fixed at the origin.** A standing percept's change key now hashes the STATE
+it describes rather than the sentence composed from it
+(`composer.room_content_percepts`, with the state published by
+`common.crowds_for_room`), and no longer hashes a fact about the observer's
+recognition of the owner (`composer.scent_percepts` drops `label`). Both bump
+the key TAG, so a ledger written before the change reads as first sight rather
+than as a claim that something moved. `observations_from_render` no longer
+welds one mouth's consecutive lines into one numbered entry, and the atom cap
+that now pays for that prices the pair it is about to weld — wallpaper, then
+one mouth, then the obligation boundary, then two mouths last.
+
+**Not fixed: the `act_player` obligation marker asserts something false.**
+`{n}. {actor} did this (NOT yet on the page — the player described attempting
+it; you must render it happening)` is attached to an entry whose material is
+verbatim one payload key away, in `current_narration`. The comment at
+`narration.py:1141` records why the marker was added and is honest: it was
+measured when the player's input was buried at the tail of `past_narration`,
+and it took acts on the page from 5-in-12 to 7-of-9. `current_narration` has
+since been split into its own key placed immediately before `current_events`,
+so the two now say opposite things one line apart, and the model resolves the
+contradiction by writing the beat again — chat 95 turn 8, three `onset`
+surfaces, three paragraphs of replay with one of the player's own clauses
+surviving verbatim. The fix is to state the entry as the ADJUDICATED OUTCOME
+of what the player attempted (which is what earns it a number) instead of as a
+claim about the page. It is not landed because the marker's power is a
+MEASURED number and the only instrument that measures it is
+`tools/narrator_package_bench.py`, which spends real model calls; and this
+repo has been burned before by a marker that lost its force when reworded on
+reasoning alone. Whoever runs the bench should move
+`language_packs/en/cards/linguistics.json` `_EVENT_LINES.act_player` and the
+three assertions in `tests/test_narrator_world_fidelity.py` (~1030, ~1106,
+~1193) together, keeping the absence assertions at ~1237/1250.
+
+**Three calls left to the owner.**
+  * *Whether an ambient percept may enter the beat half at all.*
+    `leads_the_beat` refusing `kind == "ambient"` outright is smaller and more
+    certain than getting every state key right, and it would also cover
+    couriers and notices, which publish no state to key on. It costs the
+    ability to announce a crowd change as it happens.
+  * *The derived crowd's composition is deliberately not in its state key.*
+    `charter_crowd.composition_of` is a top-two-of-tally recomputed at every
+    read over a membership that walks its errands, so it reorders without the
+    crowd changing (chat 95: five spellings of one unchanged fact in sixteen
+    turns; a sorted set of the nouns still flips four times). The band carries
+    a real change instead. What this gives up: a crowd whose composition
+    genuinely turns over while its band holds now re-renders only when
+    something else about it moves.
+  * *Whether `_overused_phrases` should read the PAYLOAD as well as recent
+    prose.* Today it is computed from the narrator's own last four prose
+    blocks, so an engine-supplied tic can be banned only after the narrator
+    has written it twice, and the ban then argues against a payload that keeps
+    re-supplying the material — measured: "held its pitch" was on the ban list
+    at turns 7, 8 and 9 and the closer kept coming, and
+    `already_established_phrases` fired on 1 of 19 narrator calls in the whole
+    story. Pointing the ban list at engine-authored labels the narrator is
+    REQUIRED to be able to use is the shape of guard this repo has measured
+    failing, which is why it was not pursued.
 
 ## 2. Roadmap
 
@@ -5836,6 +6154,15 @@ diff** in `_already_established_phrases`, which is still exact six-word shingles
 **Adjacent mechanism that is not this.** `_overused_phrases` (exact 3-gram
 cross-block tic ban, wired into the narrator) now catches literal recurrence. It
 does not catch the reworded variant, which is the whole point of this item.
+
+**And a ceiling on any phrase-matching fix, measured 2026-08-28 (§1.70).** One
+live instance of this symptom was not the narrator's invention at all: the
+payload was handing it a false `changed` verdict on an unchanged crowd, and
+`current_events` is obligation, so the ban list was arguing against material
+the engine kept re-supplying — "held its pitch" was banned at turns 7, 8 and 9
+and the closer arrived anyway. A ledger of ambient lemmas would have caught
+the surface and left the cause. Fix the verdict first, and measure what is
+left over before building the fuzzy matcher.
 
 **Fix.** Extend recent-cue dedupe to ambient set-dressing: a small per-chat ledger
 of recently-used ambient sensation lemmas (hum/thrum, klaxon, flicker,

@@ -7,7 +7,7 @@ See docs/experiments/AUDIT_COMMIT.md for the split record.
 """
 
 import json, re
-from core.db import q, wget
+from core.db import q, wget, wset
 from story.character_schema import (_UNSPACED_SCRIPT, character_name_from_text,
                               fold_identity_key, persona_name)
 from world.mechanics import beat_end_elapsed, clock_elapsed, stable_event_key
@@ -367,6 +367,56 @@ def _registered_name_roster(chat, cast):
         if name and name not in roster:
             roster.append(name)
     return roster
+
+def recognition_roster(cid, chat, *, exclude_char_id=None):
+    """The names a newly attached member could be given recognition OF: the
+    player plus every active cast member, in the exact spelling perception's
+    recognition check compares against. `exclude_char_id` drops the arriving
+    member's own row, since nobody is seeded against themselves.
+    """
+    clause = "" if exclude_char_id is None else " AND ch.id!=?"
+    params = (cid,) if exclude_char_id is None else (cid, exclude_char_id)
+    cast_rows = q(
+        "SELECT COALESCE(cc.sheet,ch.sheet) AS sheet "
+        "FROM chat_chars cc JOIN characters ch ON ch.id=cc.char_id "
+        f"WHERE cc.chat_id=? AND cc.status='active'{clause}", params)
+    return _known_name_roster(chat, cast_rows)
+
+
+def seed_mutual_recognition(cid, name, others):
+    """THE ONLY WRITER that establishes recognition when a cast membership is
+    created. Closes `name` against each of `others` in both directions, and is
+    idempotent, so re-attaching cannot double an edge.
+
+    RECOGNITION IS A CHANNEL and every edge written here asserts one, which is
+    why this takes the roster instead of deciding it: the caller states whom
+    this person legitimately already knows, and a caller with no answer must
+    not call. Perception subtracts against `known`, so a membership with no
+    entry renders as "the unfamiliar person" -- a real and valuable opening
+    when it was authored, and chat 95's nine turns of the player failing to
+    recognise their own commanding officer when it was not.
+
+    RECOGNITION IS A RELATION OVER A ROSTER, not a relation to the player.
+    Both seeding sites that predate this were shaped `{player: [char], char:
+    [player]}` because the attach unit was one character meeting one persona,
+    so no caller could express that two arrivals already know each other;
+    `promote_background_character` reached past that shape by arguing from the
+    fiction (she was in the scene the whole time) rather than from any rule.
+    """
+    if not name:
+        return
+    known = wget(cid, "known", {})
+    known.setdefault(name, [])
+    for other in others:
+        if not other or other == name:
+            continue
+        if other not in known[name]:
+            known[name].append(other)
+        known.setdefault(other, [])
+        if name not in known[other]:
+            known[other].append(name)
+    wset(cid, "known", known)
+
 
 def _resolve_roster_name(value, roster):
     """mapping_commit's prompt allows 'who'/'learns' to be 'a name or brief

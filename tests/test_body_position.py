@@ -1350,3 +1350,85 @@ def test_every_contact_report_is_a_sentence():
     from world import spatial
     source = inspect.getsource(spatial.apply_contact_ops)
     assert "report.append((" not in source
+
+
+class TestPlacementIsNotContact:
+    """Where a body has come to be relative to another is a position.
+
+    The manner vocabulary is a two-way partition -- durable state or momentary
+    act -- with an open tail that falls through to DURABLE STANDING CONTACT,
+    so a verb of placement was promoted to a permanent assertion that two
+    surfaces touch. Measured (chat 95, turn 10): one locomotion event reached
+    the contact specialist as its own numbered event, and it wrote
+    `{actor: 'Jean-Luc Picard', actor_part: 'body', target: 'Sabine
+    Oyelaran', target_part: 'left shoulder', manner: 'stand'}`. That record
+    (contact:4b8c47991808b366eb33) stood turns 10-15 with `unasserted` at 0,
+    was delivered to the narrator every beat as a live touch percept ("his
+    weight held against her left shoulder", six times), and is still in the
+    committed scene. The same beat's `positions` entry already carried the
+    fact -- "moves from ready room doorway to left shoulder of Sabine
+    Oyelaran at science station" -- so nothing is lost by refusing it here.
+    """
+
+    def _arrival(self, **over):
+        op = {"op": "add", "actor": "Bramwell", "actor_part": "body",
+              "target": "Hinami", "target_part": "left shoulder",
+              "manner": "stand", "relation": "surface", "motion": "settled"}
+        op.update(over)
+        return op
+
+    def test_a_placement_verb_is_not_admitted_as_a_standing_contact(self):
+        scene = _scene(attire={"Bramwell": {}, "Hinami": {}})
+        apply_contact_ops(scene, [self._arrival()])
+
+        assert scene["contacts"] == []
+
+    def test_the_refusal_names_the_channel_that_owns_placement(self):
+        """A record dropped in silence teaches the Director nothing -- and
+        this one was re-derivable from the beat's own position entry."""
+        report = []
+        scene = _scene(attire={"Bramwell": {}, "Hinami": {}})
+        apply_contact_ops(scene, [self._arrival()], report=report)
+
+        assert any("position" in note for note in report)
+
+    def test_a_saved_placement_contact_heals_on_normalization(self):
+        """The live scene still carries the record; a fix that only catches
+        new ops leaves the six-beat one standing forever."""
+        scene = _scene(attire={"Bramwell": {}, "Hinami": {}},
+                       contacts=[self._arrival(op=None)])
+
+        assert normalize_scene_contacts(scene)["contacts"] == []
+
+    def test_every_placement_verb_a_body_arrives_with_is_refused(self):
+        """The whole class, not the one word that was measured: each of these
+        answers "where is this body now" rather than "what is it touching",
+        and each fell through the open tail to a durable hold."""
+        for verb in ("stand", "sit", "kneel", "crouch", "lie", "wait",
+                     "face", "approach", "hover", "loom"):
+            scene = _scene(attire={"Bramwell": {}, "Hinami": {}})
+            apply_contact_ops(scene, [self._arrival(manner=verb)])
+
+            assert scene["contacts"] == [], verb
+
+    def test_a_body_placed_against_a_thing_is_still_a_contact(self):
+        """Deliberately asymmetric. Between two bodies a placement verb says
+        where one of them stands; against a surface it says the surface is
+        BEARING the body, which is the reading `comfort._POSTURE_MANNERS`
+        already depends on ("lying on the bed" is how a live Director writes
+        it). Only the relation between two bodies is refused."""
+        scene = _scene(
+            attire={"Hinami": {}},
+            entities={"bunk": {"name": "Bunk", "kind": "furniture",
+                               "description": "a narrow bunk"}},
+            positions={"Hinami": "bedroom", "bunk": "bedroom"})
+        apply_contact_ops(scene, [{"op": "add", "actor": "Hinami",
+                                   "target": "Bunk", "manner": "lie"}])
+
+        assert len(scene["contacts"]) == 1
+
+    def test_an_ordinary_hold_between_two_bodies_still_passes(self):
+        scene = _scene(attire={"Bramwell": {}, "Hinami": {}})
+        apply_contact_ops(scene, [dict(_hold(), op="add")])
+
+        assert len(scene["contacts"]) == 1

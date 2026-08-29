@@ -15,8 +15,9 @@ from story.character_schema import (character_name, character_initial_outfit,
                               normalize_character_data, persona_name)
 from story.scene import seed_initial_attire
 from world.spatial import room_of, spatial_rel, hear_level, _is_body_entity
-from persist.commit_common import (_known_name_roster, _player_name_or_none,
-                           _registered_name_roster, _room_of)
+from persist.commit_common import (_player_name_or_none,
+                                   _registered_name_roster, _room_of,
+                                   recognition_roster, seed_mutual_recognition)
 
 
 # ---- Background-presence tracking (promotion candidates) ----
@@ -2493,7 +2494,19 @@ def pick_voice_demand(ctx, dr_output, cap=1):
         if not name:
             continue
         cf = name.casefold()
-        if cf in roster or cf in voiced_this_beat:
+        # `name_in_roster`, not bare equality. Measured chat 95 turn 17
+        # (2026-08-28): a stored presence record spelled
+        # `captain Jean-Luc Picard` failed `cf in roster` -- the roster holds
+        # the bare `jean-luc picard` -- so the registered captain was selected
+        # as a background presence, produced a stateless line through
+        # `character_bg` while his OWN `character_major` call ran in the same
+        # beat, and that line became the final sentence of the narrated prose.
+        # No notice was raised. The right test was already in this module one
+        # screen above, and its docstring was written for this exact failure;
+        # the gate simply did not call it. Title-stripped both directions is
+        # what closes it: a presence record carries whatever spelling the prose
+        # used, and a roster carries the bare name.
+        if name_in_roster(name, roster) or cf in voiced_this_beat:
             continue
         # THE ADDRESSED CLASS (§C1.1) -- four spellings of one trigger, an
         # authored mind (or the Director, for `routed`) turning toward this
@@ -2948,23 +2961,11 @@ def promote_background_character(cid, name, sheet=None, memory_seeds=None,
     # already-registered cast member -- she's been part of the scene the
     # whole time, so treating her as a stranger to everyone else present
     # would be as wrong as it was to treat her as a stranger to the player.
-    cast_rows = q(
-        "SELECT COALESCE(cc.sheet,ch.sheet) AS sheet "
-        "FROM chat_chars cc JOIN characters ch ON ch.id=cc.char_id "
-        "WHERE cc.chat_id=? AND cc.status='active' AND ch.id!=?",
-        (cid, char_id),
-    )
-    roster = _known_name_roster(chat_row, cast_rows)
-    known = wget(cid, "known", {})
-    her_name = character_name(sheet)
-    known.setdefault(her_name, [])
-    for other in roster:
-        if other not in known[her_name]:
-            known[her_name].append(other)
-        known.setdefault(other, [])
-        if her_name not in known[other]:
-            known[other].append(her_name)
-    wset(cid, "known", known)
+    # An authored answer with a stated reason, which is why this one is
+    # unconditional where the other two attach paths take the caller's.
+    seed_mutual_recognition(
+        cid, character_name(sheet),
+        recognition_roster(cid, chat_row, exclude_char_id=char_id))
 
     memory_rows = [
             {

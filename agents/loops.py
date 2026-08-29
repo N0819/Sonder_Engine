@@ -39,6 +39,7 @@ from .common import (
     _muffle_middle,
     _next_speaker_candidates,
     _observable_predicate,
+    _present_cast_bodies,
     _requires_director_resolution,
     communication_surface,
     observable_action_text,
@@ -293,6 +294,53 @@ def _drop_non_awake(ctx, reactor_ids):
             if awareness_of(amap, id_to_name.get(rid, "")) not in NON_AWAKE_GATED]
 
 
+def _drop_absent(ctx, reactor_ids):
+    """Remove from a reactor list every mind the SCENE places nowhere.
+
+    `flow.reactors` is the Director's PACING judgement -- who should speak
+    this beat -- and the engine narrowed it by exactly two tests, valid cast
+    id and awareness. Presence was never one of them, though the engine
+    already owns the predicate and `perception_act` already gates its
+    perceiver list on it ("Presence is the scene's answer, not the
+    Director's"). So the two lists disagreed inside a single beat and a mind
+    with no view was asked to declare conduct anyway.
+
+    SOMEWHERE, not "the player's room". A character reacting over a comm
+    channel from another room has a position and passes; only a body the
+    scene places nowhere at all is dropped. The narrowing subtracts, so it
+    widens no payload and touches nothing the firewall guards.
+
+    Measured, chat 95 (2026-08-28): `scene.positions` held no entry for two
+    of four registered cast for the whole run, while `flow.reactors` named
+    them on turns 4, 5, 8 and 14 -- 6 `character_major` calls at 13-22s
+    each, every one deliberating from an empty perception base, in beats
+    whose own `perception_act.views` listed observers ['75'] / ['74','75'].
+
+    SAY SO, for the reason the awareness gate says so: a silently dropped
+    reactor generates no pressure and reads as a quiet character, which is
+    exactly how this stayed invisible for sixteen turns. Noted once per mind
+    per turn -- both loops read `flow.reactors` off `ctx.director_interpret`
+    independently (see `_drop_non_awake`), so both gate, and a contested
+    beat runs both.
+    """
+    if not reactor_ids:
+        return reactor_ids
+    scene = get_scene(ctx.chat.id, ctx.chat)
+    present = {b["id"] for b in _present_cast_bodies(scene, ctx.cast)}
+    kept = [rid for rid in reactor_ids if rid in present]
+    if len(kept) != len(reactor_ids):
+        told = ctx._extra.setdefault("absent_reactors_noted", set())
+        names = {c["id"]: character_name_from_text(c["sheet"]) for c in ctx.cast}
+        for rid in reactor_ids:
+            if rid in present or rid in told:
+                continue
+            told.add(rid)
+            ctx.add_warning(
+                f"character {names.get(rid) or rid}: the scene places them "
+                "nowhere, so no decision was taken this beat")
+    return kept
+
+
 def _defer_to_focus(queue_ids, tom_focus, already_spoke,
                     focus_deferred, calls, max_calls):
     """Re-queue this beat's focus character ahead of an early exit, or None to
@@ -514,10 +562,8 @@ def interaction_loop(ctx, nonce):
 
     interp = _dict(ctx.director_interpret)
     flow = _dict(interp.get("flow"))
-    initial_reactors = _drop_non_awake(ctx, normalize_character_refs(
-        _list(flow.get("reactors")),
-        ctx.cast,
-    ))
+    initial_reactors = _drop_absent(ctx, _drop_non_awake(
+        ctx, normalize_character_refs(_list(flow.get("reactors")), ctx.cast)))
 
     # WHO THE BEAT LANDED ON GOES FIRST, and the beat says who that is in two
     # places: who was spoken to, and who was acted upon. Order is causality
@@ -1161,7 +1207,7 @@ def reaction_loop(ctx, nonce):
     reactor_ids = flow.get("reactors") or []
     valid_ids = {int(row["id"]) for row in ctx.cast}
     reactor_ids = [int(rid) for rid in reactor_ids if int(rid) in valid_ids]
-    reactor_ids = _drop_non_awake(ctx, reactor_ids)[:max_reactors]
+    reactor_ids = _drop_absent(ctx, _drop_non_awake(ctx, reactor_ids))[:max_reactors]
 
     if not reactor_ids:
         return {"rounds": [], "reaction_results": {}, "calls": 0, "stop_reason": "no reactors"}

@@ -1576,6 +1576,87 @@ def registry_warnings(registry, scene=None, *, cid=None, frame_id=None):
             if superior == post_key:
                 warnings.append(
                     f"{key}: post {post_key!r} cannot report to itself")
+
+        # THE SHAPE OF THE MEMBERSHIP, which nothing here used to read. Every
+        # check below is about who the institution is MADE OF, and each one
+        # was invisible on the day the charter was written.
+        #
+        # Measured, chat 95's generated `starfleet_crew`: 24 bodies across 7
+        # posts, `home_post` non-empty for all 24, rank a strict function of
+        # post (7 posts, 7 distinct (post, rank) pairs), the root post held by
+        # three bodies, and 2 of the naming law's 6 rungs carried by nobody and
+        # unreachable by construction. A brief that asked for a thousand people
+        # on three shifts produced that, and every rendering layer downstream
+        # was correct: the crowd composer tallied what the membership IS and
+        # handed the Director and the narrator "a dozen or so captains and
+        # commanders pulling transit watch" on all 16 turns.
+        #
+        # Warnings, never rewrites, and never refusals. An institution of
+        # nothing but post-holders is legal -- a two-person workshop is one --
+        # and co-equal roots are legitimate. What it may not do is arrive
+        # unremarked.
+        ranks_by_post = {}
+        carried_ranks = set()
+        unposted = 0
+        for body in state["bodies"].values():
+            rank = str(body.get("rank") or "")
+            if rank:
+                carried_ranks.add(rank)
+            home = str(body.get("home_post") or "")
+            if not home:
+                unposted += 1
+                continue
+            ranks_by_post.setdefault(home, set()).add(rank)
+        # AN INSTITUTION MODELLED ONLY AS ITS COMMAND POSTS HAS NO RANK-AND-
+        # FILE, and a hierarchy with no base is not a hierarchy. Where the only
+        # way to become a member is to be minted into a post, membership size
+        # is bounded by post count times whatever rotation floor generation
+        # applies, and every member is by construction whatever the top of the
+        # ladder is. The tell needs no new field: nobody stands outside a post,
+        # rank follows the post, and there are MORE BODIES THAN POSTS -- an org
+        # chart replicated into a population rather than a population organised
+        # by one. That last clause is what keeps a small institution, which is
+        # legitimately all offices, out of it.
+        if (state["posts"] and state["bodies"] and not unposted
+                and len(state["bodies"]) > len(state["posts"])
+                and carried_ranks
+                and all(len(ranks) == 1 for ranks in ranks_by_post.values())):
+            warnings.append(
+                f"{key}: all {len(state['bodies'])} bodies hold one of its "
+                f"{len(state['posts'])} posts and rank follows the post, so "
+                "this institution is its own command tier and has no "
+                "rank-and-file; describe members who hold no post")
+        # A rung nobody stands on is a rung the institution does not have.
+        # Two of chat 95's six were unreachable by construction.
+        defined_ranks = ((state.get("naming") or {}).get("titles")
+                         or {}).get("ranks")
+        if isinstance(defined_ranks, dict):
+            for rank in sorted(set(map(str, defined_ranks)) - carried_ranks):
+                warnings.append(
+                    f"{key}: rank {rank!r} is named by the naming law and "
+                    "carried by no body")
+        # A POST IS A DUTY, NOT A HEADCOUNT, and a coverage floor applied to a
+        # post that cannot rotate is the same defect as two bodies sharing a
+        # display name -- one word resolving to two minds (docs/UNBUILT.md
+        # 1.84b). Readable from `reports_to` alone, and only where a chain was
+        # actually authored: every post reporting to nothing means no hierarchy
+        # was declared, not that every post is a top.
+        superiors = {post_key: str(post.get("reports_to") or "")
+                     for post_key, post in state["posts"].items()}
+        roots = [post_key for post_key, superior in superiors.items()
+                 if not superior]
+        if len(roots) == 1 and any(
+                superior in state["posts"] for superior in superiors.values()):
+            held_by = sorted(
+                body_key for body_key, body in state["bodies"].items()
+                if str(body.get("home_post") or "") == roots[0])
+            if len(held_by) > 1:
+                warnings.append(
+                    f"{key}: post {roots[0]!r} is the root of the chain of "
+                    f"command and {len(held_by)} bodies hold it {held_by}; a "
+                    "post nobody reports to is an address, and an address "
+                    "resolving to more than one mind is the collision this "
+                    "already refuses for display names")
         if known_rooms:
             places = {
                 str(entry.get("place") or "")
@@ -2388,6 +2469,7 @@ def background_presence_records(cid, *, places=None, names=None,
     Records are derived apertures, not a second identity store.  Ambiguous
     display names are withheld until the fiction distinguishes them.
     """
+    from world.charter_model import body_of_an_authored_mind
     registry = registry_for(cid, frame_id)
     place_set = {str(p) for p in (places or ()) if str(p or "")}
     name_set = {str(n).strip().casefold() for n in (names or ())
@@ -2401,7 +2483,12 @@ def background_presence_records(cid, *, places=None, names=None,
         for post, body_key in (state.get("watch") or {}).items():
             roles.setdefault(str(body_key), []).append(str(post))
         for body_key, body in sorted(state["bodies"].items()):
-            if body_key in (state.get("bindings") or {}):
+            # An authored person is not an anonymous extra. Bound OR RESERVED
+            # -- chat 95 was generated through `generate_lived_location(
+            # featured_residents=...)`, which returns bindings for the caller
+            # to apply, so `bindings` was empty and four registered cast
+            # members' own bodies were derived here as background people.
+            if body_of_an_authored_mind(state, body_key, body):
                 continue
             display = display_name(
                 body, roles.get(body_key) or (), state.get("naming"))

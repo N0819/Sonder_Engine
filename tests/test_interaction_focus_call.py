@@ -75,6 +75,11 @@ def _install(monkeypatch, calls_log, asks_player_ids):
                         lambda refs, cast: [int(r) for r in refs if str(r).isdigit()
                                             or isinstance(r, int)])
     monkeypatch.setattr(loops, "_drop_non_awake", lambda ctx, ids: ids)
+    # Same reason as the line above, for the sibling gate: this stand-in's
+    # `get_scene` returns {}, so every reactor would read as a body the scene
+    # places nowhere. Presence narrowing has its own suite
+    # (tests/test_reactors_are_narrowed_to_presence.py).
+    monkeypatch.setattr(loops, "_drop_absent", lambda ctx, ids: ids)
     # This suite is about focus DEFERRAL, not about who opens an
     # untargeted beat. Pin the motivation shuffle so the assertions
     # below are about the thing they name.

@@ -349,15 +349,21 @@ class TestOneEntryIsOneDelivery:
             text = (entry.get("observed") or {}).get("text") or ""
             assert not ("Mara" in text and "Vorne" in text), text
 
-    def test_one_mouths_consecutive_lines_may_share_an_entry(self):
-        """The refusal is about WHOSE delivery, not about tidiness: welding
-        one speaker's consecutive lines is an honest description of one
-        delivery, and refusing it would uncap the atom count on a monologue."""
+    def test_one_mouths_consecutive_lines_are_two_deliveries_too(self):
+        """The refusal used to be about WHOSE delivery only, on the argument
+        that welding one speaker's consecutive lines describes one delivery
+        honestly. It describes the ATOM count honestly and the delivery count
+        falsely: the joined entry carries two complete attribution-plus-quote
+        spans under a sheet that says one numbered entry is one delivery, and
+        the model resolves that by writing one -- chat 95 turns 2, 6 and 11,
+        three welds on the page in sixteen turns, three of three from a
+        merged entry. The atom cap is what a monologue beat now spends
+        (`test_standing_change_keys.py` holds the cap's side of it)."""
         obs, _ = self._render([
             self._speech("Mara", "We hold the line here.", 0),
             self._speech("Mara", "No one crosses.", 1),
         ])
-        assert len(obs) <= 2
+        assert len(obs) == 2
 
     def test_every_delivered_quote_survives_whole_in_one_entry(self):
         """The invariant the retired sentence-chunker used to break. A

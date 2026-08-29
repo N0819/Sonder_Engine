@@ -84,6 +84,7 @@ from persist.commit_common import (_keys_str, _stable_event_key, _clamp,
     _normalize_character_output, _player_name_or_none, _monotonic_elapsed,
     _ADDRESS_ARTICLES, _form_in, _address_forms, _names_heard_in,
     _known_name_roster, _registered_name_roster, _resolve_roster_name,
+    recognition_roster, seed_mutual_recognition,
     _GENERIC_ID_TOKENS, _canonical_token_key, _entity_alias_map,
     _canonical_anchor, _room_of, _normalized_fact)
 from persist.commit_place_graph import (VISITED_ROOMS_CAP, ROUTE_CREDIT_WINDOW,
