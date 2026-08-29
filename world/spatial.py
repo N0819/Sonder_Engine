@@ -163,6 +163,7 @@ from world.spatial_geometry import (
     door_anchor_id, effective_anchors, effective_facing, effective_room_size,
     effective_station, egocentric_frame, entity_arc, entity_side,
     guessed_room_sizes, invalidate_contact_bound_poses,
+    invalidate_transferred_pose_details,
     poses_broken_by_scale_change,
     measured_proximity_rel, normalize_scene_poses,
     normalize_scene_stations, pose_facts, proximity_rel, room_layout,
