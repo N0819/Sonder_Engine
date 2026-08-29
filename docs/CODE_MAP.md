@@ -93,7 +93,7 @@
 | `story/couriers.py` | 1122 |  | `story.carriers`, `world` |
 | `story/dialogue_colors.py` | 268 |  | — |
 | `story/greetings.py` | 1001 |  | `agents.runtime`, `agents.storage`, `core`, `llm.llm_quality`, `llm.prompts`, `mind.memory`, `mind.theory_of_mind`, `story.character_schema`, `story.importers` |
-| `story/history_routing.py` | 197 |  | — |
+| `story/history_routing.py` | 215 |  | — |
 | `story/importers.py` | 3124 | Native and AI-assisted character, persona, and lorebook import/generation. | `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.memory`, `story.character_schema`, `story.scene` |
 | `story/journey_history.py` | 431 |  | — |
 | `story/lore_structure.py` | 248 |  | — |
@@ -1112,12 +1112,12 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `resolve_character_history_route()` | 124 | 64 lines |
-| `_manual_route()` | 81 | 41 lines |
-| `normalize_history_choice()` | 53 | 14 lines |
-| `_distinct_words()` | 73 | 6 lines |
-| `_matches()` | 69 | 2 lines |
-| `route_uses_charter()` | 190 | 2 lines |
+| `resolve_character_history_route()` | 142 | 64 lines |
+| `_manual_route()` | 99 | 41 lines |
+| `normalize_history_choice()` | 71 | 14 lines |
+| `_distinct_words()` | 91 | 6 lines |
+| `_matches()` | 87 | 2 lines |
+| `route_uses_charter()` | 208 | 2 lines |
 
 ### `story/importers.py`
 
