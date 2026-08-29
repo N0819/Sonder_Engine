@@ -4543,7 +4543,28 @@ nouns, mood from banded `strain_of`. `apply_ops` refuses `move`/`split`/
 `with_charter_presences` overlay record — the record IS the emergence, no
 `emerged` list — with an entanglement-ranked engine pick when `who` is
 empty; `absorb` deletes only a record nothing durable names. `MAX_CROWDS`
-still governs the authored ledger alone. Residuals: `CHARTER_CROWD_FLOOR`
+still governs the authored ledger alone.
+**B2's other clause landed 2026-08-28**, having been stated in the note and
+built nowhere: "a charter body is ground exactly when nothing this beat
+presents it individually" is a SUBTRACTION, and the presentation it
+subtracts for did not exist — perception's co-present body roster was the
+cast and the players, so a body with a live presence record left the crowd
+and entered no view, and "below the floor of the smallest band, members
+present as individual ambient figures" had no implementation.
+`agents.common.presence_figures_for_room` is the complement of
+`crowds_for_room` (ledger people standing here whom `presence_room` places
+in the room and `presence_has_an_identity` calls people, plus charter
+bodies no derived crowd carries — including when `CO_LOCATED_CAP` drops
+that crowd from the view, and excluding a body whose record has LAPSED back
+to the ground); `perception._presence_bodies` places them on the stage's
+scene copy, because `room_of` fails closed for a body the scene puts
+nowhere and every spatial guard begins there. Bound by the room and nothing
+else: ledger rows already standing here plus at most
+`CHARTER_CROWD_FLOOR - 1` per co-located institution. Measured on chat 98
+(bench.db, 2026-08-28): a lounge holding five crew composed as `[]` crowd
+and no bodies at all, and two bodies had stood unseen on the bridge since
+turn 0. `tests/test_presence_standing_in_the_room.py`. Residuals:
+`CHARTER_CROWD_FLOOR`
 (3) and the mood bands are predictions awaiting play (DESIGN_CROWDS §7's
 falsifier is the measurement); institution-level crowd motion — the
 `heading`/`drift` half, a mass surging through Charter's own
@@ -4590,7 +4611,31 @@ vs 42ms per beat (two more registry reads), against the ~22.5s calls it
 gates. `tests/test_voice_demand.py`. Residuals: the chorus degradation
 exists only for charter-crowd-shaped addressees -- tracked individuals or
 mixed institutions past the ceiling widen instead (no crowd object to
-answer through); and the §C4 manager-call latency measurement remains
+answer through);
+**AN ADDRESS TO A CROWD THAT NAMES NOBODY QUALIFIES ON NOTHING, and it is
+the loop the player actually hits.** Every one of the four triggers needs
+a name or a ref: `flow.addressed_to` accepts a name string for an
+unregistered presence, and the Director IS shown who is addressable
+(`director_interpret`'s `addressable_presences`, derived per the player's
+room), but a player who has only been shown a band cannot name anybody and
+the Director is under no deterministic obligation to pick. Measured live,
+chat 98 (bench.db) turns 11-13: five crew derived at the player's lounge,
+`addressable_presences` therefore holding all five with
+`same_room_as_player`, a crowd row with its uid in `_crowds_view`, the
+player speaking to them across a table on three consecutive beats -- and
+`addressed_to: []`, `intended_target: null`, `crowd_ops: []`,
+`routed_to_background: []`, `background_react` `{"fired": false,
+"agent_calls": []}` every time. Nothing in the engine failed a check; there
+was no check. `emerge` is the design's loop-breaker (B3) and it is
+model-gated end to end, so the deterministic floor that turns "someone was
+spoken to" into "someone answers" stops at the crowd's edge. Whether the
+answer is a demand trigger for an overt line in a room whose only other
+occupants are one crowd (with the obvious over-firing hazard: a player
+muttering in a plaza must not summon the plaza), a Director obligation, or
+a chorus reached without an addressee list, is undesigned. Do not read the
+2026-08-28 figures work as having closed this: it fixed who is COMPOSED,
+not who may be AIMED at;
+and the §C4 manager-call latency measurement remains
 UNTAKEN (this workflow runs no live models). Its protocol, verbatim so an
 evening can settle it: one seeded scene, `max_managed` forced to 4 / 8 /
 16 with the demand filter off, 10 calls each against the live
