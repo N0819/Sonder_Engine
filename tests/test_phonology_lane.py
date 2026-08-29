@@ -185,3 +185,128 @@ def test_lore_supplied_as_text_still_writes_the_entry_to_the_story_book(
     parts = phonology_parts(chat_id)
     assert parts["given_parts"]["starts"] == ["Ka", "Mi"]
     assert parts["family_parts"]["ends"] == ["mor"]
+
+
+# ---------------------------------------------------------------------------
+# the lane, wired
+# ---------------------------------------------------------------------------
+#
+# Everything above tested that the artifact is WRITTEN. Nothing read it: the
+# entry `_record_phonology` produced was reachable only from its own two
+# helpers, `story_naming_lanes` did not list it, and `_record_phonology`'s own
+# docstring asserted that a phonology entry "is the one source the mint may
+# read" -- a sentence that was false on the day it was written. The mint drew
+# from the Charter lane and the harvest, which is what the partition exists to
+# stop it doing.
+
+
+def _cast(chat_id, *names):
+    import json
+
+    from story.character_schema import default_character_data
+    for index, name in enumerate(names):
+        char_id = db.qi(
+            "INSERT INTO characters(name,sheet,source,created,resource_uid) "
+            "VALUES(?,?,?,?,?)",
+            (name, json.dumps(default_character_data(name)), "{}",
+             time.time(), "char_%d_%d" % (chat_id, index)))
+        db.qi("INSERT INTO chat_chars(chat_id,char_id,status,state) "
+              "VALUES(?,?,?,?)", (chat_id, char_id, "active", "{}"))
+
+
+def test_the_lane_is_what_the_mint_reads(temp_db):
+    from story.naming import story_naming_lanes
+
+    chat_id = _chat_with(temp_db, "phonology", FRAGMENTS)
+    lanes, source = story_naming_lanes(chat_id)
+
+    assert source == "phonology"
+    assert lanes and lanes[0]["given_parts"]["starts"] == ["ka", "mi", "tor"]
+
+
+def test_an_authored_law_still_outranks_it(temp_db):
+    """An author who writes a list gets that list. The phonology entry is
+    material a person may edit; the `naming_profile` is a person saying what
+    the names ARE, and it stays the top authority."""
+    from story.naming import set_authored_naming_profile, story_naming_lanes
+
+    chat_id = _chat_with(temp_db, "phonology", FRAGMENTS)
+    set_authored_naming_profile(chat_id, {"given": ["Wren", "Talis"],
+                                          "family": ["Ardent"]})
+    lanes, source = story_naming_lanes(chat_id)
+
+    assert source == "authored"
+    assert lanes[0]["given"] == ["Wren", "Talis"]
+
+
+def test_it_outranks_the_stored_charter_law(temp_db):
+    """The two normally hold the same fragments -- the generator writes the
+    entry FROM the law. When they disagree it is because somebody edited the
+    entry, which is the only reason the artifact exists."""
+    from story.naming import story_naming_lanes
+    from world.charter_runtime import save_registry
+
+    chat_id = _chat_with(temp_db, "phonology", FRAGMENTS)
+    save_registry(chat_id, {"works": {
+        "key": "works",
+        "naming": {"given_parts": {"starts": ["zho"], "middles": [],
+                                   "ends": ["quen"]},
+                   "family_parts": {"starts": ["dral"], "middles": [],
+                                    "ends": ["ix"]}},
+        "posts": {}, "bodies": {}}})
+
+    lanes, source = story_naming_lanes(chat_id)
+    assert source == "phonology"
+    assert lanes[0]["given_parts"]["starts"] == ["ka", "mi", "tor"]
+
+
+def test_two_entries_are_two_lanes_and_not_one_blend(temp_db):
+    """Pools are never blended across laws and fragments are no different:
+    two settings' sound systems stitched together belong to neither."""
+    from mind.memory import add_lore
+    from story.naming import phonology_lanes
+
+    chat_id = _chat_with(temp_db, "phonology", FRAGMENTS)
+    book = db.q("SELECT lorebook_id FROM chats WHERE id=?",
+                (chat_id,), one=True)["lorebook_id"]
+    add_lore(book, "naming",
+             "given_starts: zho, dral\ngiven_ends: quen, ix\n",
+             category="phonology", title="Naming")
+
+    lanes = phonology_lanes(chat_id)
+    assert len(lanes) == 2
+    assert lanes[0]["given_parts"]["starts"] == ["ka", "mi", "tor"]
+    assert lanes[1]["given_parts"]["starts"] == ["zho", "dral"]
+
+
+def test_a_fragment_cut_out_of_a_registered_mind_is_not_material(temp_db):
+    """The entry is written by the generator as well as by a person, so it
+    can arrive holding the pieces of the cast the generation was reading
+    about. Unlike a pool -- an author's deliberate list of names, which is
+    theirs -- a fragment set CLAIMS to name nobody, and the claim is checked
+    on every read."""
+    from story.naming import phonology_lanes
+
+    chat_id = _chat_with(temp_db, "phonology",
+                         "given_starts: ka, Hallo, mi\n"
+                         "given_ends: ren, way\n"
+                         "family_starts: bel\nfamily_ends: mor\n")
+    _cast(chat_id, "Talis Halloway")
+
+    lanes = phonology_lanes(chat_id)
+    assert lanes[0]["given_parts"]["starts"] == ["ka", "mi"]
+    assert lanes[0]["given_parts"]["ends"] == ["ren"]
+
+
+def test_a_lane_whose_material_does_not_survive_stays_silent(temp_db):
+    """And the next authority speaks. A lane that cannot offer a given name
+    is not a law, so it does not silence the harvest below it."""
+    from story.naming import story_naming_lanes
+
+    chat_id = _chat_with(temp_db, "phonology",
+                         "given_starts: Hallo\ngiven_ends: way\n")
+    _cast(chat_id, "Talis Halloway", "Oren Ardent")
+
+    lanes, source = story_naming_lanes(chat_id)
+    assert source == "harvested"
+    assert lanes

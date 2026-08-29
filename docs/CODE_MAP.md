@@ -97,7 +97,7 @@
 | `story/importers.py` | 3124 | Native and AI-assisted character, persona, and lorebook import/generation. | `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.memory`, `story.character_schema`, `story.scene` |
 | `story/journey_history.py` | 431 |  | — |
 | `story/lore_structure.py` | 248 |  | — |
-| `story/naming.py` | 487 |  | `core.db`, `world.charter_identity` |
+| `story/naming.py` | 555 |  | `core.db`, `world.charter_identity` |
 | `story/provenance_text.py` | 132 |  | — |
 | `story/scene.py` | 2602 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `core.db`, `story`, `story.attire`, `story.character_schema`, `world.spatial` |
 | `web/__init__.py` | 6 |  | — |
@@ -117,9 +117,9 @@
 | `world/charter_economy.py` | 401 |  | `world.charter_model` |
 | `world/charter_feel.py` | 444 |  | `mind.psychology_runtime`, `world.charter_mark`, `world.charter_needs`, `world.charter_temper` |
 | `world/charter_figure.py` | 140 |  | — |
-| `world/charter_generate.py` | 788 |  | `world.charter_identity`, `world.charter_model`, `world.charter_needs`, `world.charter_roster` |
+| `world/charter_generate.py` | 810 |  | `world.charter_identity`, `world.charter_model`, `world.charter_needs`, `world.charter_roster` |
 | `world/charter_history.py` | 873 |  | — |
-| `world/charter_identity.py` | 859 |  | — |
+| `world/charter_identity.py` | 1045 |  | — |
 | `world/charter_intervene.py` | 112 |  | `world.charter_model` |
 | `world/charter_log.py` | 448 |  | `world.charter_commitment`, `world.charter_decide`, `world.charter_economy`, `world.charter_feel`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_needs`, `world.charter_news`, `world.charter_politics`, `world.charter_social`, `world.charter_temper` |
 | `world/charter_mark.py` | 302 |  | — |
@@ -135,7 +135,7 @@
 | `world/charter_promote.py` | 470 |  | `world.charter_commitment`, `world.charter_feel`, `world.charter_politics`, `world.charter_social` |
 | `world/charter_roster.py` | 134 |  | `world.charter_model` |
 | `world/charter_run.py` | 1320 |  | `world`, `world.charter_commitment`, `world.charter_decide`, `world.charter_drift`, `world.charter_economy`, `world.charter_feel`, `world.charter_figure`, `world.charter_intervene`, `world.charter_log`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_move`, `world.charter_needs`, `world.charter_news`, `world.charter_plan`, `world.charter_politics`, `world.charter_practice`, `world.charter_roster`, `world.charter_social`, `world.charter_space`, `world.charter_talk`, `world.charter_trigger` |
-| `world/charter_runtime.py` | 2981 |  | `core`, `core.logging_utils`, `world.charter`, `world.charter_news`, `world.mechanics` |
+| `world/charter_runtime.py` | 2986 |  | `core`, `core.logging_utils`, `world.charter`, `world.charter_news`, `world.mechanics` |
 | `world/charter_social.py` | 743 |  | `world.charter_politics` |
 | `world/charter_space.py` | 101 |  | `world.spatial` |
 | `world/charter_talk.py` | 344 |  | `world.charter_mind`, `world.charter_politics`, `world.charter_roster` |
@@ -1160,14 +1160,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `minted_presence_name()` | 356 | 54 lines |
-| `registered_identity_names()` | 281 | 52 lines |
-| `_person_name_evidence()` | 154 | 51 lines |
-| `phonology_parts()` | 453 | 29 lines |
-| `harvested_naming_profile()` | 230 | 28 lines |
-| `_name_tokens()` | 126 | 26 lines |
-| `_charter_naming_lanes()` | 101 | 23 lines |
-| `_name_head_of()` | 207 | 21 lines |
+| `minted_presence_name()` | 374 | 54 lines |
+| `registered_identity_names()` | 299 | 52 lines |
+| `_person_name_evidence()` | 161 | 51 lines |
+| `story_naming_lanes()` | 267 | 30 lines |
+| `phonology_lanes()` | 520 | 30 lines |
+| `harvested_naming_profile()` | 237 | 28 lines |
+| `_name_tokens()` | 133 | 26 lines |
+| `_charter_naming_lanes()` | 108 | 23 lines |
 
 ### `story/provenance_text.py`
 
@@ -1366,14 +1366,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `close_plan()` | 286 | 208 lines |
-| `ensure_required_rooms()` | 496 | 53 lines |
-| `resident_service_chronicle()` | 561 | 47 lines |
-| `ground_history_output()` | 610 | 46 lines |
-| `lore_cast_residents()` | 743 | 46 lines |
-| `_featured_assignments()` | 239 | 45 lines |
-| `_ensure_shift_crews()` | 191 | 41 lines |
-| `narrate_actual_history()` | 658 | 38 lines |
+| `close_plan()` | 291 | 225 lines |
+| `ensure_required_rooms()` | 518 | 53 lines |
+| `resident_service_chronicle()` | 583 | 47 lines |
+| `ground_history_output()` | 632 | 46 lines |
+| `lore_cast_residents()` | 765 | 46 lines |
+| `_featured_assignments()` | 244 | 45 lines |
+| `_ensure_shift_crews()` | 196 | 41 lines |
+| `narrate_actual_history()` | 680 | 38 lines |
 
 ### `world/charter_history.py`
 
@@ -1392,14 +1392,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `materialize_body_names()` | 663 | 119 lines |
+| `materialize_body_names()` | 849 | 119 lines |
 | `name_is_reserved()` | 480 | 65 lines |
-| `refuse_harvested_pools()` | 547 | 44 lines |
-| `identity_aliases()` | 817 | 38 lines |
+| `refuse_harvested_material()` | 715 | 62 lines |
+| `identity_aliases()` | 1003 | 38 lines |
+| `_fill_empty_material()` | 676 | 37 lines |
 | `reconstructs_a_reserved_name()` | 443 | 35 lines |
-| `strip_reserved_pools()` | 593 | 34 lines |
+| `strip_reserved_pools()` | 779 | 34 lines |
 | `derived_name_parts()` | 154 | 32 lines |
-| `normalize_naming_profile()` | 71 | 28 lines |
 
 ### `world/charter_intervene.py`
 
@@ -1580,12 +1580,12 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `_prepare_cast_histories()` | 644 | 172 lines |
-| `registry_warnings()` | 1658 | 160 lines |
+| `registry_warnings()` | 1663 | 160 lines |
 | `_plan_lived_location()` | 1302 | 150 lines |
-| `_generate_lived_location()` | 1507 | 113 lines |
+| `_generate_lived_location()` | 1512 | 113 lines |
 | `generation_lore()` | 997 | 101 lines |
-| `cross_charter_gossip()` | 1989 | 92 lines |
-| `charter_diagnostics()` | 2223 | 86 lines |
+| `cross_charter_gossip()` | 1994 | 92 lines |
+| `charter_diagnostics()` | 2228 | 86 lines |
 | `normalize_registry()` | 335 | 73 lines |
 
 ### `world/charter_social.py`
