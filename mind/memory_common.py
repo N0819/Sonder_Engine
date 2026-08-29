@@ -27,6 +27,15 @@ LORE_CATEGORIES = [
     "location", "layout", "event", "mechanic", "myth",
     "character", "faction", "species", "culture", "technology",
     "knowledge", "other",
+    # THE ONLY CATEGORY THE NAME MINT MAY READ. A phonology entry holds the
+    # MATERIAL a name is built from -- fragments, onsets, endings -- and
+    # never a person. Every other category may name individuals, and an
+    # individual's name is not pool material: harvested from a `character`
+    # entry and cross-producted, a lorebook's cast issued "Jean-Luc Crusher"
+    # to twenty strangers and reconstituted one canon character verbatim
+    # (measured 2026-08-28). Partitioning at the READ is what makes that
+    # impossible rather than merely filtered afterwards.
+    "phonology",
 ]
 
 LOREBOOK_TYPES = [
