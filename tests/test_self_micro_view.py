@@ -20,12 +20,30 @@ from agents.loops import self_micro_view
 
 
 def _speech(quote, **extra):
-    return dict({"type": "speech", "quote": quote}, **extra)
+    # `text` is the field a speech event actually carries -- see the observer
+    # branch of `deterministic_micro_perception`. Building the fixture with
+    # the field the engine uses is what makes these tests able to fail: the
+    # first version of both the helper and the code under test agreed on a
+    # `quote` key that no real event has, so six green tests covered a
+    # function that returned nothing for every line of dialogue in the game.
+    return dict({"type": "speech", "text": quote}, **extra)
 
 
 def test_a_mind_carries_its_own_words_verbatim():
     view = self_micro_view({"sequence": [_speech("State your parameters.")]})
     assert any("State your parameters." in line for line in view)
+
+
+def test_a_speech_event_is_read_by_the_field_it_actually_carries():
+    """Pins the shape, not just the behaviour. A self-view built from a key
+    speech events do not have is inert for every line in the game while its
+    tests stay green, which is exactly what happened."""
+    from agents.loops import deterministic_micro_perception  # noqa: F401
+
+    assert self_micro_view({"sequence": [
+        {"type": "speech", "text": "The real field."}]})
+    assert self_micro_view({"sequence": [
+        {"type": "speech", "quote": "Not a field speech events carry."}]}) == []
 
 
 def test_a_mind_carries_its_own_deed_by_the_observable_surface():
