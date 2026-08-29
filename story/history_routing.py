@@ -28,16 +28,34 @@ _TRAVEL_PATTERNS = (
     r"\b(?:arrives?|arriving|visits?|visiting|passing through)\b",
     r"\b(?:tardis|portal-hopper)\b",
 )
+# TENURE IS NOT A TENSE. The verbs below carry their past and progressive
+# forms because a card states the same posting in all three, and reading only
+# the present refuses the other two for a reason that has nothing to do with
+# the claim. Measured 2026-08-28: "Klingon serving in Starfleet aboard the
+# Enterprise-D as Chief of Security" and "has served as Chief Engineer of the
+# Enterprise-D since 2365" were both routed to authored_only for "local
+# residence is not explicit enough to simulate safely", beside two cards
+# saying "officer of the Enterprise-D" that routed to resident. The second of
+# those states tenure MORE strongly than either -- dated, continuous, and
+# still current -- and `serves?` cannot see it.
 _RESIDENCE_PATTERNS = (
-    r"\b(?:lives?|resides?|resident|based|stationed|posted)\s+(?:at|in|on|aboard)\b",
-    r"\b(?:works?|serves?|employed)\s+(?:as\s+[a-z0-9 _-]{1,60}\s+)?"
+    r"\b(?:lives?|lived|living|resides?|resided|residing|resident"
+    r"|based|stationed|posted)\s+(?:at|in|on|aboard)\b",
+    r"\b(?:works?|worked|working|serves?|served|serving|employed)"
+    r"\s+(?:as\s+[a-z0-9 _-]{1,60}\s+)?"
     r"(?:at|in|on|aboard|for)\b",
+    # `of` ONLY once a role has been named. "served as Chief Engineer OF the
+    # Enterprise-D" is a statement of post and the bare "served of" it would
+    # license otherwise is not English, so the role is what makes the
+    # preposition readable rather than a wider preposition list.
+    r"\b(?:works?|worked|working|serves?|served|serving|employed)"
+    r"\s+as\s+[a-z0-9 _-]{1,60}\s+of\b",
     r"\b(?:researcher|doctor|officer|captain|crew|staff|director|lead|keeper)\s+(?:at|of|on|aboard)\b",
     r"\bhas spent\s+(?:\w+\s+){0,4}(?:year|years|month|months)\s+(?:at|in|on|with)\b",
 )
 _MOVING_PATTERNS = (
     r"\b(?:captain|crew|officer|engineer|medic)\s+(?:of|aboard|on)\b",
-    r"\b(?:serves?|stationed|lives?)\s+aboard\b",
+    r"\b(?:serves?|served|serving|stationed|lives?|lived|living)\s+aboard\b",
     r"\b(?:ship|starship|caravan|train|fleet|unit)\b",
 )
 _COMMON = {

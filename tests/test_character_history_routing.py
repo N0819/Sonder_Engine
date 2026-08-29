@@ -38,6 +38,51 @@ def test_explicit_resident_and_moving_institution_are_the_only_charter_routes():
     assert not route_uses_charter(visitor)
 
 
+def test_tenure_is_read_in_every_tense_it_is_stated_in():
+    """A posting is a posting whether the card says serves, serving, or has
+    served.
+
+    Measured 2026-08-28 on four Enterprise-D cards presimmed together. Two
+    saying "officer of the Enterprise-D" routed to charter residents; two
+    saying "serving in Starfleet aboard the Enterprise-D" and "has served as
+    Chief Engineer of the Enterprise-D since 2365" were refused for "local
+    residence is not explicit enough to simulate safely" and generated ZERO
+    memories apiece. The second of those states tenure more strongly than
+    either of the two that passed -- dated, continuous and still current --
+    so what the router was reading was the verb's inflection, not the claim.
+    """
+    opening = "The bridge is quiet at the start of alpha shift."
+    brief = "the Enterprise-D, a Galaxy-class starship"
+    for history in (
+            "Serves as chief of security aboard the Enterprise-D.",
+            "Klingon serving in Starfleet aboard the Enterprise-D as Chief "
+            "of Security and tactical officer in 2368.",
+            "Has served as Chief Engineer of the Enterprise-D since 2365.",
+            "Lived aboard the Enterprise-D for six years.",
+    ):
+        route = resolve_character_history_route(
+            {"identity": {"name": "Crew"},
+             "knowledge": {"public_history": history}},
+            opening=opening, location_brief=brief)
+        assert route_uses_charter(route), history
+
+
+def test_a_role_alone_is_still_not_tenure_in_any_tense():
+    """The widening is about WHEN the service is stated, never whether it was.
+    A named profession with no place attached stays refused -- that is the
+    Doctor firewall, and reading three more tenses must not open it."""
+    opening = "A hospital gate opens."
+    brief = "a hospital"
+    for history in ("A gifted surgeon who worked hard and lived simply.",
+                    "A blacksmith of great renown.",
+                    "She served her people well."):
+        route = resolve_character_history_route(
+            {"identity": {"name": "Ilyan"},
+             "knowledge": {"public_history": history}},
+            opening=opening, location_brief=brief)
+        assert not route_uses_charter(route), history
+
+
 def test_uncertain_competence_does_not_become_tenure():
     sheet = {"identity": {"name": "Ilyan"}, "knowledge": {
         "public_history": "A gifted surgeon and linguist."}}
