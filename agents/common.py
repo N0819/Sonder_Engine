@@ -1759,7 +1759,11 @@ def presence_figures_for_room(cid, sc, room_id, inputs=None, *,
     keeps a 300-body institution from deriving 300 figures for a back
     office.
 
-    Rows are the co-present body shape: ``name``, ``room``, ``appearance``.
+    Rows are the co-present body shape: ``name``, ``room``, ``appearance``,
+    ``role`` -- the last being the institution's own public noun for the
+    body, kept beside the summary because a minted display name carries it
+    in front of the personal name and the identity strip would otherwise
+    subtract the whole description (`_unknown_actor_label`).
     ``inputs`` is `chatter_inputs`' shared per-stage fetch, memoized per room
     exactly as `charter_crowds_for_room` and `chatter_for_room` are.
     """
@@ -1834,6 +1838,7 @@ def presence_figures_for_room(cid, sc, room_id, inputs=None, *,
             "name": name, "room": room,
             "appearance": (str(((rec or {}).get("sketch") or {}).get(
                 "appearance") or "") or _noun_for(refs)),
+            "role": _noun_for(refs),
         })
 
     try:
@@ -1848,7 +1853,7 @@ def presence_figures_for_room(cid, sc, room_id, inputs=None, *,
             continue
         seen.add(str(name).casefold())
         rows.append({"name": str(name), "room": room,
-                     "appearance": _noun_for(refs)})
+                     "appearance": _noun_for(refs), "role": _noun_for(refs)})
     memo[room] = rows
     return [dict(row) for row in rows]
 
@@ -3935,7 +3940,8 @@ def _label_safe(text):
     return re.sub(r"\s+", " ", cleaned).strip()
 
 
-def _unknown_actor_label(actor_name, appearance_text=None, aliases=None):
+def _unknown_actor_label(actor_name, appearance_text=None, aliases=None, *,
+                         role=""):
     # Every unrecognized actor used to render as the exact same generic
     # "the unfamiliar person" -- two strangers in one scene (or the same
     # stranger across a perceiver's dialogue and action lines) were
@@ -3951,9 +3957,27 @@ def _unknown_actor_label(actor_name, appearance_text=None, aliases=None):
     # tokens are dropped before the descriptor is built -- otherwise the
     # label itself was a deterministic identity leak walking straight past
     # the knows_identity gate it exists to serve.
+    #
+    # A ROLE WORN IN THE NAME IS NOT IDENTITY. A body's institution supplies
+    # a public noun for what it is -- a rank, a duty, a trade -- and a minted
+    # display name routinely carries it in front of the personal name
+    # ("<rank> <given> <family>"). Set membership then treats that noun as an
+    # identity token and subtracts it from the body's own appearance summary,
+    # which for such a body IS the noun: everything is stripped, nothing
+    # survives, and a person standing in a lit room reaches the view as the
+    # generic fallback. Measured live, chat 98 turns 13-21: five crew, each
+    # rendered "the unfamiliar person" while the crowd they had been
+    # subtracted from called them ensigns aloud. The exemption is of the
+    # role's own tokens and nothing else, so a summary that is the body's
+    # PERSONAL name still strips to the fallback -- and it discloses nothing,
+    # because the same noun is what `charter_crowd` already renders to any
+    # observer for the band these bodies are members of. Nothing about "an
+    # ensign" narrows down which ensign.
     if appearance_text:
         articles = frozenset(compositor_value("articles"))
         name_tokens = _identity_token_set(actor_name, aliases)
+        if role:
+            name_tokens -= _identity_token_set(role)
         cleaned = re.sub(
             r"^(?:" + "|".join(map(re.escape, articles)) + r")\s+", "",
             appearance_text.strip(), flags=re.I,

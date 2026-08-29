@@ -35,6 +35,8 @@ from world.spatial import (
     substances_for,
     contact_action_clause,
     contact_actions_for_observer,
+    contact_endpoint_is_body,
+    contact_thing_label,
     visible_adjacent_rooms,
     visual_level_between,
 )
@@ -380,7 +382,18 @@ def _sensory_channels_manifest(scene, player_name, view, observations,
                                     info.get("aliases"))
         if _recognizes(other, recognized or ()):
             return other
-        return "someone"
+        # A CONTACT PARTY IS NOT NECESSARILY A BODY, and "someone" asserts one.
+        # THE THIRD SITE of one floor: perception fixed two and this one --
+        # the floor that actually feeds the narrator -- stayed person-shaped,
+        # which is how the measured case reached the page. Chat 98 turn 22: a
+        # combadge resting on the player's own uniform was rendered as a body
+        # pressed continuously against her, with three absent people's scents
+        # attached to it. The scene is asked to vouch, and answers only
+        # affirmatively in both directions, so silence yields the thing-word
+        # rather than a person.
+        return (contact_thing_label(scene, other)
+                or ("someone" if contact_endpoint_is_body(scene, other)
+                    else "something"))
 
     touch_standing = []
     for contact in (scene.get("contacts") or []):
