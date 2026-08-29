@@ -132,7 +132,59 @@ def rehydrate_loop_views(ctx, key, content):
                 continue
             local_views[observer_id] = _append_micro_view(
                 local_views.get(observer_id, ""), _list(additions))
+        # ...and the speaker's own conduct, from the same record, so a
+        # rehydrated view is the live one rather than an approximation of it.
+        try:
+            speaker_id = int(round_data.get("speaker_id"))
+        except (TypeError, ValueError):
+            speaker_id = None
+        if speaker_id is not None:
+            local_views[speaker_id] = _append_micro_view(
+                local_views.get(speaker_id, ""),
+                _list(round_data.get("self_view")))
     ctx._extra["interaction_views"] = local_views
+
+
+def self_micro_view(actor_result):
+    """What a body itself carries out of its own micro-round.
+
+    A MIND IS PRESENT AT ITS OWN CONDUCT. `deterministic_micro_perception`
+    builds one view per OBSERVER and skips `observer_id == actor_id`, which is
+    right for that function -- every gate it applies (recognition, spatial
+    relation, earshot, concealment, the observer's senses) answers "did this
+    reach someone else", and none of them is a question about the actor. The
+    consequence was that a character granted a second micro-round in the same
+    beat had no record of the first, because nothing had committed yet and the
+    only within-turn ledger deliberately excluded them from it. Measured
+    2026-08-28 (chat 98): asked for parameters, Data asked for them again in
+    the same beat -- "please state the decomposition parameters you propose",
+    then "What values do you propose for the deep spectral analysis?" -- and
+    in a later beat a captain restated his own granted permission as a second
+    quoted line. Both read as a character who does not listen; both were a
+    character who had not been told what they themselves had just said.
+
+    No gate applies and none is skipped: this is not a channel being opened,
+    it is the engine remembering that the actor was there. Speech is carried
+    verbatim -- a mind knows its own words, not a muffled rendering of them --
+    and an action is carried by the same intent-free `observable` surface the
+    observers get, because what a body knows it DID is the deed, while the
+    purpose behind it reaches the next step through its own psychology rather
+    than through a view. A mental beat (observable "") stays imperceptible,
+    exactly as it is to everybody else.
+    """
+    additions = []
+    for event in (actor_result or {}).get("sequence") or []:
+        kind = event.get("type")
+        if kind in ("speech", "communication"):
+            quote = str(event.get("quote") or "").strip()
+            if quote:
+                additions.append(compositor_text("loop_self_said", quote=quote))
+        elif kind == "action":
+            surface = observable_action_text(event)
+            if surface:
+                additions.append(
+                    compositor_text("loop_self_did", surface=surface))
+    return additions
 
 
 def deterministic_micro_perception(ctx, actor_id, actor_result, scene):
@@ -877,6 +929,13 @@ def interaction_loop(ctx, nonce):
             "delivered_views": {
                 str(key): value for key, value in delivered.items()
             },
+            # NOT folded into `delivered_views`: that key means "what reached
+            # somebody ELSE", and two readers depend on it meaning exactly
+            # that -- `character._lines_delivered_to` ("the prose THIS mind is
+            # recorded as having received") and `perception`'s outcome
+            # composition. A mind recorded as having RECEIVED its own question
+            # is a mind that can be prompted to answer it.
+            "self_view": self_micro_view(result),
         })
         return result, delivered, perceived_by
 
@@ -958,10 +1017,15 @@ def interaction_loop(ctx, nonce):
             no_content_streak += 1
 
         # Only now does the wave become visible to itself and to everyone else.
-        for _, _, delivered, _ in spoke:
+        for _speaker_id, _result, delivered, _ in spoke:
             for observer_id, additions in delivered.items():
                 local_views[observer_id] = _append_micro_view(
                     local_views.get(observer_id, ""), additions)
+            # A body is present at its own conduct. Merged in the same place
+            # and at the same moment as everyone else's, so a second round
+            # sees the first whoever spoke in it.
+            local_views[_speaker_id] = _append_micro_view(
+                local_views.get(_speaker_id, ""), self_micro_view(_result))
 
         # The exits are evaluated for the wave as a whole, after all of it has
         # spoken. Evaluating them mid-wave would reinstate exactly the

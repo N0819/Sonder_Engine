@@ -220,6 +220,8 @@
     "loop_faint_sound": "どこかでかすかな音がするが、内容までは聞き取れない。",
     "loop_faint_sound_placed": "{where}からかすかな音がするが、内容までは聞き取れない。",
     "loop_muffled": "{label}の方から、くぐもった断片が聞こえる。「……{fragment}……」",
+    "loop_self_said": "あなたはこう言った。「{quote}」",
+    "loop_self_did": "あなたは{surface}",
     "loop_speech": "「{body}」と{label}が言う。",
     "muffled": "くぐもった声がする。{fragment}",
     "muffled_indistinct": "……聞き取れない何か……",

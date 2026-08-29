@@ -308,6 +308,8 @@
     "loop_faint_sound": "You register a faint sound -- nothing you can make out.",
     "loop_faint_sound_placed": "You register a faint sound {where} -- nothing you can make out.",
     "loop_muffled": "You hear a muffled fragment from {label}: \"...{fragment}...\"",
+    "loop_self_said": "You said: \"{quote}\"",
+    "loop_self_did": "You did: {surface}",
     "loop_speech": "{label} says: \"{body}\"",
     "muffled": "A muffled voice: {fragment}",
     "muffled_indistinct": "...something indistinct...",
