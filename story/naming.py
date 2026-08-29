@@ -13,11 +13,17 @@ material, in authority order:
      author's explicit story-level law, in exactly the shape a Charter
      ``naming`` profile takes (`world/charter_identity.py` -- curated
      given/family pools, optional syllable parts, a name format).
-  2. **The story's Charter naming laws**, which the lived-location generator
+  2. **The story's authored phonology** (`phonology` lore entries): the
+     FRAGMENTS this story's names are built from. One entry is one lane,
+     never blended, and every fragment is checked against the story's
+     reserved names before it becomes material -- a pool is an author's
+     deliberate list and is theirs, while a fragment set is material, and
+     material cut out of somebody is not material.
+  3. **The story's Charter naming laws**, which the lived-location generator
      derives from lore at generation time. Each Charter is a separate LANE:
      pools are never blended across laws, because a given name from one
      culture stitched to a family name from another belongs to neither.
-  3. **Harvested evidence**: personal names the story already contains --
+  4. **Harvested evidence**: personal names the story already contains --
      the registered cast and the lorebook's entries about people -- split
      into given/family pools. Recombination stays inside the story's own
      vocabulary, so a minted name is made of parts the setting has already
@@ -45,7 +51,8 @@ import re
 from core.db import q, wget, wset
 from world.charter_identity import (
     components_repeat, extension_profile, generated_name_parts,
-    identity_reservation, name_is_reserved, normalize_naming_profile)
+    identity_reservation, name_is_reserved, normalize_naming_profile,
+    refuse_reserved_fragments)
 
 NAMING_PROFILE_KEY = "naming_profile"
 
@@ -261,14 +268,25 @@ def story_naming_lanes(chat_id):
     """``(lanes, source)`` -- the story's effective naming law.
 
     ``lanes`` is a list of normalized profiles (empty when the story yields
-    no law); ``source`` is ``"authored"``, ``"charters"``, ``"harvested"``
-    or ``"none"``. Authority order is authored > charters > harvested: an
-    author's explicit law silences the derived ones, and the harvest only
-    speaks when nobody with more standing has.
+    no law); ``source`` is ``"authored"``, ``"phonology"``, ``"charters"``,
+    ``"harvested"`` or ``"none"``. Authority order is authored > phonology >
+    charters > harvested: an author's explicit law silences the derived ones,
+    and the harvest only speaks when nobody with more standing has.
+
+    THE PHONOLOGY LANE OUTRANKS THE CHARTER LANE because it is the same
+    material in the form a person can edit. A generated law is written back
+    as a `phonology` lore entry (`world/charter_runtime._record_phonology`),
+    so the two normally hold the same fragments -- and when they disagree it
+    is because somebody opened the entry and changed it, which is the whole
+    reason the artifact exists. An author who does not want to edit fragments
+    writes a `naming_profile` instead and outranks both.
     """
     authored = authored_naming_profile(chat_id)
     if naming_law_exists(authored):
         return [authored], "authored"
+    lanes = phonology_lanes(chat_id)
+    if lanes:
+        return lanes, "phonology"
     lanes = _charter_naming_lanes(chat_id)
     if lanes:
         return lanes, "charters"
@@ -463,22 +481,72 @@ def phonology_parts(chat_id):
              "family_parts": {"starts": [], "middles": [], "ends": []}}
     seen = set()
     for row in phonology_entries(chat_id):
-        for line in str(row["content"] or "").splitlines():
-            if ":" not in line:
-                continue
-            field, _, rest = line.partition(":")
-            slot = _PHONOLOGY_FIELDS.get(field.strip().casefold()
-                                         .replace(" ", "_").replace("-", "_"))
-            if not slot:
-                continue
-            group, bucket = slot
-            for fragment in rest.split(","):
-                fragment = fragment.strip()
-                key = (group, bucket, fragment.casefold())
-                if fragment and key not in seen:
+        for group, buckets in _entry_parts(row).items():
+            for bucket, fragments in buckets.items():
+                for fragment in fragments:
+                    key = (group, bucket, fragment.casefold())
+                    if key in seen:
+                        continue
                     seen.add(key)
                     parts[group][bucket].append(fragment)
     return parts
+
+
+def _entry_parts(row):
+    """One entry's fragments. An entry's content is read as ``field: a, b, c``
+    lines, one per fragment class, so an author edits a plain list rather than
+    a schema."""
+    parts = {"given_parts": {"starts": [], "middles": [], "ends": []},
+             "family_parts": {"starts": [], "middles": [], "ends": []}}
+    seen = set()
+    for line in str(row["content"] or "").splitlines():
+        if ":" not in line:
+            continue
+        field, _, rest = line.partition(":")
+        slot = _PHONOLOGY_FIELDS.get(field.strip().casefold()
+                                     .replace(" ", "_").replace("-", "_"))
+        if not slot:
+            continue
+        group, bucket = slot
+        for fragment in rest.split(","):
+            fragment = fragment.strip()
+            key = (group, bucket, fragment.casefold())
+            if fragment and key not in seen:
+                seen.add(key)
+                parts[group][bucket].append(fragment)
+    return parts
+
+
+def phonology_lanes(chat_id, reservation=None):
+    """One lane per `phonology` entry, oldest first -- never blended.
+
+    Pools are never blended across laws, and fragments are no different: two
+    settings' sound systems stitched together belong to neither, and a story
+    holding an institution from each would otherwise mint names from a third
+    place that does not exist. One entry is one law.
+
+    EVERY FRAGMENT IS CHECKED before it becomes material
+    (`charter_identity.refuse_reserved_fragments`). The entry is written by
+    the generator as well as by an author, so it can arrive carrying the
+    pieces of people the generation was reading about; and unlike a pool --
+    which is an author's deliberate list of names and is theirs -- a fragment
+    set claims to name nobody. That claim is what is verified here.
+
+    A lane whose material does not survive the check simply does not speak,
+    and the next authority does.
+    """
+    rows = phonology_entries(chat_id)
+    if not rows:
+        return []
+    if reservation is None:
+        reservation = story_identity_reservation(chat_id)
+    lanes = []
+    for row in rows:
+        profile = normalize_naming_profile(_entry_parts(row))
+        profile = refuse_reserved_fragments(profile, reservation)
+        if naming_law_exists(profile):
+            lanes.append(profile)
+    return lanes
 
 
 def phonology_law_exists(chat_id):

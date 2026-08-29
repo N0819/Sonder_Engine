@@ -49,7 +49,12 @@ name_format,formal_format,titles:{posts:{},ranks:{}}}; supply SYLLABLE
 FRAGMENTS the setting's names are built from, never a list of names. A name the
 lore already gives to somebody is that person's name and is not material to
 build strangers out of; fragments name nobody, which is why fragments are what
-you may supply. Give enough of them that the population does not repeat. Every generated body must resolve to
+you may supply. A fragment must not be the opening or the ending of any
+individual's name -- not one the lore names, and not one you know of from this
+setting that the lore does not mention. Cutting a person's name into pieces
+does not turn it into material. Fragments are sound: draw them from how the
+setting's ordinary words and places sound, not from its people. Give enough of
+them that the population does not repeat. Every generated body must resolve to
 a stable scene-facing personal name before simulation. If the setting does not
 use ordinary names, supply lore-compatible callsigns, serial names, epithets or
 syllable parts; never expose a post/body machine id as the person's name.
@@ -304,7 +309,7 @@ def close_plan(plan, *, history=None, featured_residents=None,
     would be a second naming authority beside the story's.
     """
     from world.charter_identity import (normalize_naming_profile,
-                                    refuse_harvested_pools)
+                                    refuse_harvested_material)
 
     plan = plan if isinstance(plan, dict) else {}
     structure = _mapping(plan.get("structure"))
@@ -322,6 +327,18 @@ def close_plan(plan, *, history=None, featured_residents=None,
         }
     room_ids = set(rooms)
     default_place = next(iter(rooms), "")
+    # THE SETTING'S NAMES FOR PLACES, kept for the naming step. A place is
+    # not a person, so this vocabulary is material where a name list is not
+    # -- see `refuse_harvested_material`. Read only where refusing the pieces
+    # of people out of a law's fragments left a field with nothing.
+    #
+    # NAMES ONLY, never a room's `purpose`: a purpose is a sentence about
+    # what happens somewhere, and its ordinary connecting words would supply
+    # ordinary connecting syllables. A place NAME is a proper noun the
+    # setting chose, which is the closest thing to its phonology that names
+    # nobody.
+    place_words = [str(plan.get("name") or ""), str(structure.get("key") or "")]
+    place_words.extend(str(room.get("name") or "") for room in rooms.values())
     charters = {}
     resident_sources, resident_assignments = _featured_assignments(
         plan, featured_residents)
@@ -447,10 +464,15 @@ def close_plan(plan, *, history=None, featured_residents=None,
             # `story/naming.py`. An author's list is theirs.
             naming = normalize_naming_profile(naming_law)
         else:
-            # The planner's law, which was written by a model reading this
-            # story's lore. Its fragments are material; its name lists are
-            # the people the lore names. See `refuse_harvested_pools`.
-            naming = refuse_harvested_pools(raw.get("naming"))
+            # The planner's law, written by a model reading this story's lore
+            # -- and reading its own knowledge of the setting, which no
+            # reservation reaches. Its name lists are the people the lore
+            # names and its fragments are those people cut up; neither is
+            # material. See `refuse_harvested_material`, which also answers
+            # "and then what does the mint read".
+            naming = refuse_harvested_material(
+                raw.get("naming"), reservation,
+                place_words + [str(raw.get("name") or ""), ckey])
         bodies = materialize_body_names(ckey, bodies, naming, reservation)
         from world.charter_economy import ensure_supply_points
         economy = ensure_supply_points(
