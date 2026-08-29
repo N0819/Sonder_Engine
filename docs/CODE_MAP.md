@@ -135,7 +135,7 @@
 | `world/charter_promote.py` | 470 |  | `world.charter_commitment`, `world.charter_feel`, `world.charter_politics`, `world.charter_social` |
 | `world/charter_roster.py` | 134 |  | `world.charter_model` |
 | `world/charter_run.py` | 1320 |  | `world`, `world.charter_commitment`, `world.charter_decide`, `world.charter_drift`, `world.charter_economy`, `world.charter_feel`, `world.charter_figure`, `world.charter_intervene`, `world.charter_log`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_move`, `world.charter_needs`, `world.charter_news`, `world.charter_plan`, `world.charter_politics`, `world.charter_practice`, `world.charter_roster`, `world.charter_social`, `world.charter_space`, `world.charter_talk`, `world.charter_trigger` |
-| `world/charter_runtime.py` | 2926 |  | `core`, `core.logging_utils`, `world.charter`, `world.charter_news`, `world.mechanics` |
+| `world/charter_runtime.py` | 2972 |  | `core`, `core.logging_utils`, `world.charter`, `world.charter_news`, `world.mechanics` |
 | `world/charter_social.py` | 743 |  | `world.charter_politics` |
 | `world/charter_space.py` | 101 |  | `world.spatial` |
 | `world/charter_talk.py` | 344 |  | `world.charter_mind`, `world.charter_politics`, `world.charter_roster` |
@@ -1579,13 +1579,13 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `registry_warnings()` | 1603 | 160 lines |
-| `_prepare_cast_histories()` | 644 | 141 lines |
-| `_plan_lived_location()` | 1267 | 130 lines |
-| `_generate_lived_location()` | 1452 | 113 lines |
-| `generation_lore()` | 962 | 101 lines |
-| `cross_charter_gossip()` | 1934 | 92 lines |
-| `charter_diagnostics()` | 2168 | 86 lines |
+| `_prepare_cast_histories()` | 644 | 172 lines |
+| `registry_warnings()` | 1649 | 160 lines |
+| `_plan_lived_location()` | 1302 | 141 lines |
+| `_generate_lived_location()` | 1498 | 113 lines |
+| `generation_lore()` | 997 | 101 lines |
+| `cross_charter_gossip()` | 1980 | 92 lines |
+| `charter_diagnostics()` | 2214 | 86 lines |
 | `normalize_registry()` | 335 | 73 lines |
 
 ### `world/charter_social.py`

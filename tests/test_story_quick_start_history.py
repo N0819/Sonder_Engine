@@ -134,3 +134,65 @@ def test_quick_start_visitor_uses_journey_history_not_charter(
     assert journeys[0][2]["arrival_brief"] == "the port"
     route = temp_db.wget(cid, "character_history_routes", {})[str(char_id)]
     assert route["handoff"]["journey_events"] == 1
+
+
+def test_a_caller_that_seeds_its_own_cast_places_one_body_not_two(
+        temp_db, monkeypatch):
+    """The same person under two seed spellings is one featured resident.
+
+    Measured 2026-08-28: a setup script passed its cast as
+    ``featured_residents`` keyed ``cast:<id>`` and *also* asked for
+    ``character_histories`` for the same characters, and the institution was
+    generated holding two captains both called Jean-Luc Picard. Deduping the
+    row is only half of it -- the completion still asks for the placement by
+    seed, so the seed that survived has to become this character's seed.
+    """
+    cid = temp_db.qi(
+        "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+        ("Site 17", "The story opens inside Site 17.", time.time()))
+    char_id, _sheet = _attached_character(temp_db, cid)
+    request, prepared = charter_runtime._prepare_cast_histories(cid, {
+        "brief": "Site 17",
+        "featured_residents": [
+            {"seed_id": "cast:1", "name": "Mara Vale",
+             "public_history": "A surveyor at Site 17."},
+        ],
+        "character_histories": [{"char_id": char_id, "mode": "resident"}],
+    })
+
+    assert [row["seed_id"] for row in request["featured_residents"]] == [
+        "cast:1"]
+    assert "cast:1" in request["featured_resident_private"]
+
+    binding = {"charter": "research", "body": "mara", "name": "Mara Vale",
+               "place": "medical", "post": "surveyor"}
+    calls = []
+    monkeypatch.setattr(
+        "world.charter_history.integrate_featured_resident",
+        lambda cid, char_id, binding, sheet, **kwargs: calls.append(
+            (char_id, binding)) or {"memory_event_keys": []})
+
+    charter_runtime._complete_cast_histories(
+        cid, request, prepared,
+        {"ok": True, "featured_residents": {"cast:1": binding}})
+
+    assert calls == [(char_id, binding)]
+
+
+def test_a_differently_named_cast_seed_still_places_its_own_body(temp_db):
+    """Folding is by person. A different person keeps a seed of their own."""
+    cid = temp_db.qi(
+        "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+        ("Site 17", "The story opens inside Site 17.", time.time()))
+    char_id, _sheet = _attached_character(temp_db, cid)
+    request, _prepared = charter_runtime._prepare_cast_histories(cid, {
+        "brief": "Site 17",
+        "featured_residents": [
+            {"seed_id": "cast:1", "name": "Someone Else",
+             "public_history": "Also at Site 17."},
+        ],
+        "character_histories": [{"char_id": char_id, "mode": "resident"}],
+    })
+
+    assert [row["seed_id"] for row in request["featured_residents"]] == [
+        "cast:1", f"character:{char_id}"]
