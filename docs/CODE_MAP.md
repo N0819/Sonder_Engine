@@ -9,7 +9,7 @@
 | `agents/__init__.py` | 96 | Backward-compatible facade for the role-specific agent package. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `story.scene` |
 | `agents/background.py` | 1412 |  | `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `persist.commit`, `story.character_schema`, `story.scene`, `world.background_claims`, `world.spatial` |
 | `agents/character.py` | 3733 | Private character decision agent. | `agents.common`, `core.db`, `core.frames`, `llm.prompts`, `llm.schemas`, `mind`, `mind.affect`, `mind.memory`, `mind.memory_judge`, `mind.psychology_runtime`, `mind.theory_of_mind`, `story.character_schema`, `story.scene`, `world.gaps`, `world.place_purpose`, `world.spatial`, `world.survival` |
-| `agents/common.py` | 8551 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
+| `agents/common.py` | 8695 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
 | `agents/composer.py` | 3140 |  | `agents.common`, `story.provenance_text`, `story.scene`, `world.spatial` |
 | `agents/director.py` | 4125 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial`, `world.survival` |
 | `agents/director_contact.py` | 457 |  | `story.character_schema`, `world.spatial` |
@@ -24,7 +24,7 @@
 | `agents/loops.py` | 1309 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `core.db`, `story.character_schema`, `story.scene`, `world.spatial` |
 | `agents/mapping.py` | 337 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `core.db`, `llm.prompts`, `mind.memory`, `story.character_schema`, `story.scene` |
 | `agents/narration.py` | 1853 | Player-facing narration agent. | `agents`, `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `story.character_schema`, `story.scene`, `world.spatial`, `world.weather` |
-| `agents/perception.py` | 4479 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `mind`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
+| `agents/perception.py` | 4561 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `mind`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
 | `agents/runtime.py` | 1355 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `core.db`, `core.pipeline_context`, `llm.providers`, `persist.checkpoints`, `persist.commit`, `story.character_schema`, `story.scene` |
 | `agents/storage.py` | 123 | Step and active-variant persistence helpers. | `core.db` |
 | `core/__init__.py` | 6 |  | — |
@@ -111,7 +111,7 @@
 | `world/charter_author.py` | 318 |  | `world.charter_figure`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_politics`, `world.charter_practice` |
 | `world/charter_chatter.py` | 371 |  | `world.crowds` |
 | `world/charter_commitment.py` | 217 |  | `world.charter_model` |
-| `world/charter_crowd.py` | 255 |  | `world.crowds` |
+| `world/charter_crowd.py` | 276 |  | `world.crowds` |
 | `world/charter_decide.py` | 220 |  | `world.charter_model`, `world.charter_news` |
 | `world/charter_drift.py` | 106 |  | `world.charter_model` |
 | `world/charter_economy.py` | 401 |  | `world.charter_model` |
@@ -204,14 +204,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `norm_sequence()` | 3080 | 284 lines |
-| `_check_narrator_fidelity()` | 8097 | 208 lines |
-| `_scrub_invented_dialogue()` | 6737 | 151 lines |
+| `norm_sequence()` | 3224 | 284 lines |
+| `_check_narrator_fidelity()` | 8241 | 208 lines |
+| `_scrub_invented_dialogue()` | 6881 | 151 lines |
+| `presence_figures_for_room()` | 1712 | 142 lines |
 | `observer_body_regions()` | 1347 | 137 lines |
-| `_extract_authority_claims()` | 2466 | 120 lines |
-| `_unknown_actor_label()` | 3705 | 118 lines |
-| `cast_spelling_policy()` | 4264 | 118 lines |
-| `crowds_for_room()` | 1489 | 113 lines |
+| `_extract_authority_claims()` | 2610 | 120 lines |
+| `_unknown_actor_label()` | 3849 | 118 lines |
+| `cast_spelling_policy()` | 4408 | 118 lines |
 
 ### `agents/composer.py`
 
@@ -389,13 +389,13 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_composer_outcome()` | 4060 | 420 lines |
-| `perception_outcome()` | 2250 | 277 lines |
-| `_composer_standing_percepts()` | 3296 | 181 lines |
-| `perception_act()` | 1826 | 177 lines |
-| `_composer_act()` | 3687 | 169 lines |
-| `_outcome_event_stream()` | 660 | 152 lines |
-| `_source_channels()` | 926 | 131 lines |
+| `_composer_outcome()` | 4138 | 424 lines |
+| `perception_outcome()` | 2319 | 282 lines |
+| `perception_act()` | 1890 | 182 lines |
+| `_composer_standing_percepts()` | 3370 | 181 lines |
+| `_composer_act()` | 3765 | 169 lines |
+| `_outcome_event_stream()` | 661 | 152 lines |
+| `_source_channels()` | 927 | 131 lines |
 | `_previous_open_group_continuity()` | 172 | 117 lines |
 
 ### `agents/runtime.py`
@@ -1294,14 +1294,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `composition_of()` | 176 | 33 lines |
 | `members_of()` | 121 | 32 lines |
-| `crowd_for()` | 231 | 25 lines |
+| `member_noun()` | 184 | 26 lines |
+| `crowd_for()` | 252 | 25 lines |
 | `engaged_turn()` | 81 | 20 lines |
-| `mood_of()` | 211 | 18 lines |
+| `composition_of()` | 212 | 18 lines |
+| `mood_of()` | 232 | 18 lines |
 | `presented()` | 103 | 16 lines |
 | `_role_noun()` | 155 | 9 lines |
-| `_plural()` | 166 | 8 lines |
 
 ### `world/charter_decide.py`
 

@@ -173,33 +173,54 @@ def _plural(noun):
     return noun + "s"
 
 
-def composition_of(members, charter):
-    """<=120 chars of what the members ARE: the dominant role nouns.
+def _held_posts(charter):
+    """body key -> the watch posts it stands, from the bill."""
+    held = {}
+    for post, holder in (charter.get("watch") or {}).items():
+        held.setdefault(str(holder), []).append(str(post))
+    return held
 
-    Per member, the noun is `title_for` over the watch posts it stands, then
-    over its ``home_post`` (the duty it ordinarily belongs to), then the
-    cleaned post id itself. The top two nouns by count compose the phrase;
-    a membership carrying no readable duty at all -- the ambient charter's
-    common case, an institution of none -- is "people", `describe`'s own
-    default made explicit.
+
+def member_noun(charter, body_key, held=None):
+    """What ONE body IS, in a word or two, or "".
+
+    `title_for` over the watch posts it stands, then over its ``home_post``
+    (the duty it ordinarily belongs to), then the cleaned post id itself.
+
+    Public because the crowd is not the only presentation of a member.
+    `composition_of` tallies this over a membership to say what a band is
+    made of; `agents.common.presence_figures_for_room` asks it about a body
+    the crowd does NOT carry, which is the same question about one person.
+    One reader, because two would drift -- a room whose crowd reads
+    "engineers" while the one engineer standing out of it reads as an
+    unfamiliar person is a description of two different rooms.
     """
     from .charter_identity import title_for
 
-    bodies = charter.get("bodies") or {}
-    watch = charter.get("watch") or {}
-    naming = charter.get("naming")
-    held = {}
-    for post, holder in watch.items():
-        held.setdefault(str(holder), []).append(str(post))
+    held = _held_posts(charter) if held is None else held
+    body = (charter.get("bodies") or {}).get(str(body_key)) or {}
+    roles = sorted(held.get(str(body_key)) or ())
+    if not roles and body.get("home_post"):
+        roles = [str(body["home_post"])]
+    noun = str(title_for(body, roles, charter.get("naming"))
+               or "").strip().casefold()
+    if not noun and roles:
+        noun = _role_noun(roles[0])
+    return noun
+
+
+def composition_of(members, charter):
+    """<=120 chars of what the members ARE: the dominant role nouns.
+
+    Per member, the noun is `member_noun` (which see). The top two nouns by
+    count compose the phrase; a membership carrying no readable duty at all
+    -- the ambient charter's common case, an institution of none -- is
+    "people", `describe`'s own default made explicit.
+    """
+    held = _held_posts(charter)
     tally = {}
     for key in members:
-        body = bodies.get(key) or {}
-        roles = sorted(held.get(key) or ())
-        if not roles and body.get("home_post"):
-            roles = [str(body["home_post"])]
-        noun = str(title_for(body, roles, naming) or "").strip().casefold()
-        if not noun and roles:
-            noun = _role_noun(roles[0])
+        noun = member_noun(charter, key, held)
         if noun:
             tally[noun] = tally.get(noun, 0) + 1
     ranked = sorted(tally.items(), key=lambda kv: (-kv[1], kv[0]))[:2]
