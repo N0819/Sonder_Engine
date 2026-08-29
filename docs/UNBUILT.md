@@ -6650,6 +6650,19 @@ optional minimap — moved to [`docs/design/IDEAS.md`](design/IDEAS.md) on
 2026-08-19; a wish is not a defect, and one earns its way back here only by
 someone measuring a live story where its absence makes the engine wrong.
 
+- **An assembled name is not capitalised.** With the phonology lane running,
+  a generated body is named from fragments and the fragments are stored as an
+  author writes them -- lower case. Measured 2026-08-28 on a two-month
+  Enterprise presim, the first generation where the lane was the primary
+  source: 28 of 32 bodies came out as `dacuna soforen`, `keitata pioid`,
+  `jedisha baroier`. The names are otherwise GOOD -- no canon mashup survived,
+  which is what the lane was built for -- so this is presentation and not
+  provenance. The rule belongs at assembly rather than at display: a name is
+  capitalised the way the setting's own law capitalises, and a law whose
+  fragments arrive lower case still yields a name a story can print. Owner
+  noted it during that run and parked it deliberately; it does not block a
+  playtest.
+
 - **`providers.chat_complete_async` is dead.** Defined and called from nowhere
   but its own retry loop — `web/app.py` no longer imports it either, so the
   only three references in the tree are its own definition, its recursive call

@@ -752,6 +752,19 @@ def _prepare_cast_histories(cid, request, *, frame_id=None):
     featured = [copy.deepcopy(row) for row in clean.get(
         "featured_residents", []) if isinstance(row, dict)]
     featured_ids = {str(row.get("seed_id") or "") for row in featured}
+    # AND WHO THEY ARE, not only how the caller spelled the seed. Two seeds
+    # naming the same person place two bodies: measured 2026-08-28, a caller
+    # that passed its cast as `featured_residents` keyed `cast:<id>` while
+    # also requesting `character_histories` for them got `cast:74` from itself
+    # and `character:74` from this function, and the institution was generated
+    # holding two captains both called Jean-Luc Picard, two Datas and two
+    # Worfs. The seed_id guard below is right about its own question and blind
+    # to this one.
+    featured_by_name = {}
+    for row in featured:
+        folded = " ".join(str(row.get("name") or "").split()).casefold()
+        if folded and folded not in featured_by_name:
+            featured_by_name[folded] = str(row.get("seed_id") or "")
     private = copy.deepcopy(clean.get("featured_resident_private") or {})
     if not isinstance(private, dict):
         private = {}
@@ -771,10 +784,28 @@ def _prepare_cast_histories(cid, request, *, frame_id=None):
         prepared.append({"char_id": char_id, "sheet": sheet, "route": route})
         if route_uses_charter(route):
             seed = featured_resident_seed(char_id, sheet)
-            if seed["seed_id"] not in featured_ids:
+            folded = " ".join(str(seed.get("name") or "").split()).casefold()
+            seed_id = str(seed["seed_id"])
+            if seed_id in featured_ids:
+                pass
+            elif folded and featured_by_name.get(folded):
+                # The caller already supplied this person under a seed of its
+                # own spelling. Dropping the second row is only half the fix:
+                # everything downstream asks for this character's placement by
+                # seed, so the surviving seed becomes this character's seed and
+                # is carried on the route. Deleting the row without the remap
+                # is what made the 2026-08-28 setup raise "did not place
+                # featured character 74" -- one body, and nothing able to
+                # find it.
+                seed_id = featured_by_name[folded]
+            else:
                 featured.append(seed)
-                featured_ids.add(seed["seed_id"])
-            private[seed["seed_id"]] = {
+                featured_ids.add(seed_id)
+                if folded:
+                    featured_by_name[folded] = seed_id
+            route["seed_id"] = seed_id
+            routes[str(char_id)]["seed_id"] = seed_id
+            private[seed_id] = {
                 "habits": featured_resident_private_habits(sheet)}
     wset_for_frame(cid, "character_history_routes", routes, frame_id)
     if featured:
@@ -803,7 +834,11 @@ def _complete_cast_histories(cid, request, prepared, generated, *,
         char_id, sheet, route = (
             item["char_id"], item["sheet"], item["route"])
         if route_uses_charter(route):
-            binding = bindings.get(f"character:{char_id}")
+            # `_prepare_cast_histories` may have folded this character onto a
+            # seed the caller supplied for the same person, so ask the route
+            # which seed was actually placed rather than assuming its own.
+            binding = bindings.get(
+                str(route.get("seed_id") or f"character:{char_id}"))
             if not binding:
                 raise ValueError(
                     f"lived location did not place featured character {char_id}")
@@ -1318,8 +1353,19 @@ def _plan_lived_location(cid, request, chat):
             _lore_character_entries(cid), registered_identity_names(cid))
         taken = {str(row.get("seed_id")) for row in requested_residents
                  if isinstance(row, dict)}
-        requested_residents += [row for row in lore_people
-                                if row["seed_id"] not in taken]
+        # By NAME as well as by seed. The reader is told who is registered and
+        # excludes them, but a model asked to exclude somebody is not a
+        # guarantee that it did -- and the cost of the miss is a second body
+        # wearing a registered person's name.
+        taken_names = {" ".join(str(row.get("name") or "").split()).casefold()
+                       for row in requested_residents if isinstance(row, dict)}
+        taken_names.discard("")
+        for row in lore_people:
+            folded = " ".join(str(row.get("name") or "").split()).casefold()
+            if row["seed_id"] in taken or (folded and folded in taken_names):
+                continue
+            requested_residents.append(row)
+            taken_names.add(folded)
     except Exception:
         pass
     constraints = {
