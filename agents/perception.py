@@ -54,6 +54,8 @@ from world.spatial import (
     contact_sensation,
     contact_action_clause,
     contact_actions_for_observer,
+    contact_endpoint_is_body,
+    contact_thing_label,
     effective_adjacent,
     egocentric_frame,
     _entity_named,
@@ -3508,8 +3510,30 @@ def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
     # the canonical name (the tripwire downstream remains the backstop).
     # Before this, the clause named the partner canonically and the tripwire
     # fired on every contact beat with an unrecognized partner (chat 70).
+    # A THING IS NOT SOMEONE. The last tier is a PERSON-shaped floor -- a
+    # party the map cannot place is a body whose identity has not been
+    # earned -- and handed the other end of a contact with an object it minted
+    # a person out of it. Measured live, chat 98: the player was told "Your
+    # uniform registers someone against it" from a record whose other party
+    # was a worn badge (turn 22), and five more object contacts across the
+    # same run read "someone's surface", "someone's exterior", "someone's
+    # edge" for a bar, a table twice, a glass and a padd.
+    #
+    # Three tiers, narrowing, each answered by evidence rather than by
+    # silence:
+    #   1. the display map -- a body this observer may name;
+    #   2. the scene's own entity record for a thing, which is what lets a
+    #      touched object be named plainly rather than described around;
+    #   3. the identity floor, and WHICH floor depends on what the scene will
+    #      vouch for. "someone" is right only for a party the scene says is a
+    #      BODY; for a party it will not, the honest word is "something". The
+    #      last tier is the one that costs nothing to get right and invents a
+    #      person every time it is got wrong.
     _sensation_label = (lambda other:
-                        display_map.get(str(other)) or "someone")
+                        display_map.get(str(other))
+                        or contact_thing_label(sc, other)
+                        or ("someone" if contact_endpoint_is_body(sc, other)
+                            else "something"))
     observer_standing_contacts = _standing_contacts_for(sc, name)
     percepts.extend(composer.contact_percepts([
         (contact, contact_sensation(contact, you=name, scene=sc,

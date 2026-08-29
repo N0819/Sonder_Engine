@@ -1090,7 +1090,35 @@ investigation found and did not close.
   (2026-08-28): a placement verb between two bodies is refused at the ledger
   floor (`CONTACT_PLACEMENT_MANNERS`), which cleared that record and the class
   it came from — but a genuine hold nobody mentions again still stands
-  forever.
+  forever. That refusal was then defeated by a synonym (chat 98 turn 27: two
+  adds differing only in `manner`, 'stand' refused and 'settle' kept), which
+  is closed separately — within one beat, ops sharing a `_contact_key` are
+  one claim, and a refusal on any wording of it refuses the claim.
+- **A touched thing the scene never established is felt as "something", not
+  named.** The contact channel's identity floor now has three tiers -- the
+  observer's display map, the scene's own entity record for a thing, then a
+  floor that says "someone" only where the scene will vouch for a BODY and
+  "something" where it will not (2026-08-29, closing the half of D-L that was
+  a person invented out of an object). The middle tier is the one that names
+  a thing, and it needs an entity record. Measured across chat 98: five of
+  the six object contacts in the run -- a bar, a table twice, a glass, a padd
+  -- had no entity record at all, because nothing mints one for an object the
+  Director merely names in an op (the same gap the transfer defect sits in:
+  `derive_inventory_placements` places nothing for an object the scene does
+  not know, and the possession fact dies with the placement). Those five never
+  reached a view either: with no entity there is no position, and contact
+  hygiene prunes a contact whose two parties are not in one room -- so a
+  second defect was hiding the first, which is exactly why the floor may not
+  depend on it. Where an object IS established the player is now told a thing
+  rather than a person; where it is not, they are told a thing and not WHICH
+  thing. Whether an op naming an unknown object should mint an entity for it
+  is the owner's call, and it is the same question in both channels.
+- **`something's surface` is honest and reads badly.** The clause builder
+  composes the other party's label and their part as a possessive, which is
+  right for a body ("Data's shoulder") and stilted for the generic thing-word
+  the floor above falls back to. Dropping the possessive would need the
+  renderer to know its label came from the floor rather than from a name, and
+  `label_for` is deliberately opaque to it.
 - **An orphaned relational value is dropped rather than folded.** When
   `thumb_touch: "feather_light_at_ear_base"` is retired by a standing thumb
   contact, its qualifier is discarded instead of merged into that contact's

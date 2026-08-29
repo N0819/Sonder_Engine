@@ -538,6 +538,185 @@ def _endpoint_is_body(scene, name) -> bool:
     return bool(eid) and _is_body_entity(scene, eid, ent)
 
 
+# ---------------------------------------------------------------------------
+# CLOTHING IS NOT A SURFACE THAT TOUCHES, AND NOT A PLACE ON A BODY.
+#
+# A contact record says two surfaces are touching. What a body WEARS is
+# neither of them: it is the layer between them, and the wardrobe ledger
+# already owns it. Measured live (chat 98 turn 22): the contact channel
+# emitted `actor_part: "uniform", target: "combadge", relation: surface`,
+# every downstream floor passed it, and the composed view handed the player
+# "Your uniform registers someone against it: steady pressure, weight and
+# shared warmth, continuous while the contact holds." Two independent faults
+# produced that one sentence -- a garment standing in a PART slot, so the
+# perceiver was addressed through their clothes, and a garment standing in an
+# ENDPOINT slot, so the identity floor minted a person out of a worn thing.
+#
+# `_is_anatomical_part` could not catch either: it is a deny-list of words
+# that name acts, sounds and matter, so every garment noun in every wardrobe
+# ever authored passes it. No allow-list can replace it (anatomy is
+# open-ended and every story invents some), but the scene already holds the
+# affirmative evidence needed -- its own wardrobe ledger says, per body, what
+# is clothing on THAT body. That is the evidence used here, and only that:
+# no garment vocabulary, no word list, nothing a story has to spell the way
+# some other story spelled it.
+#
+# The two slots take the evidence differently, because they ask different
+# questions.
+#
+#   ENDPOINT -- worn garments only. While a garment is worn, the body under
+#   it is the surface a contact meets, so the garment may not be a party to
+#   one. Once SHED it is an ordinary thing lying in a room and may be touched
+#   like one, so a shed garment stays a legal endpoint.
+#
+#   PART -- worn and shed alike, and only that body's own. "Which place on
+#   this body" is a question no garment ever answers, in any state. Scoped to
+#   the one body because a wardrobe read scene-wide is a large bag of nouns:
+#   four people aboard wore a garment spelled `combadge` on the measured turn.
+
+
+def _garment_names_in_regions(entry) -> list:
+    out = []
+    regions = (entry or {}).get("regions")
+    if not isinstance(regions, dict):
+        return out
+    for region in regions.values():
+        for garment in ((region or {}).get("garments") or []):
+            if isinstance(garment, dict):
+                name = str(garment.get("name") or "").strip()
+                if name:
+                    out.append(name)
+    return out
+
+
+def _worn_garment_names(scene, subject=None) -> list:
+    """Every garment the wardrobe ledger records as WORN, scene-wide or on one
+    body. Both representations are read: `wearing` is the flat list and
+    `regions[*].garments[*].name` is the layered one, and a garment routinely
+    appears in exactly one of them."""
+    attire = (scene or {}).get("attire")
+    if not isinstance(attire, dict):
+        return []
+    if subject is not None:
+        entries = [_ci_get(attire, str(subject or "").strip())]
+    else:
+        entries = list(attire.values())
+    out = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        out.extend(str(n or "").strip()
+                   for n in (entry.get("wearing") or []) if str(n or "").strip())
+        out.extend(_garment_names_in_regions(entry))
+    return out
+
+
+def _shed_garment_names(scene, subject) -> list:
+    """Clothing this body has taken off, as the scene's own entity records
+    spell it. A shed garment is minted as an entity carrying `state.clothing`
+    and `state.worn_by`; that pair is the scene saying "this thing is that
+    body's clothing", which is exactly the question being asked."""
+    entities = (scene or {}).get("entities")
+    who = str(subject or "").strip()
+    if not isinstance(entities, dict) or not who:
+        return []
+    out = []
+    for eid, entity in entities.items():
+        if not isinstance(entity, dict):
+            continue
+        state = entity.get("state")
+        if not isinstance(state, dict) or not state.get("clothing"):
+            continue
+        if not same_subject(scene, str(state.get("worn_by") or ""), who):
+            continue
+        out.append(str(entity.get("name") or "").strip() or str(eid))
+        out.extend(str(a or "").strip()
+                   for a in (entity.get("aliases") or []) if str(a or "").strip())
+    return out
+
+
+def _resolve_garment(name, garments, allow_head_noun):
+    """`story.attire.resolve_garment`, which is the engine's one answer to
+    "which garment does this handle name" -- imported at call time because the
+    dependency runs story -> world and must not be turned back on itself."""
+    if not garments:
+        return ""
+    from story.attire import resolve_garment
+    try:
+        return resolve_garment(name, garments,
+                               allow_head_noun=allow_head_noun) or ""
+    except Exception:
+        return ""
+
+
+def _endpoint_is_worn_clothing(scene, name) -> str:
+    """The worn garment this contact endpoint names, or "".
+
+    Exact/phrase/containment tiers only: the head-noun tier resolves a bare
+    noun against a whole wardrobe, and scene-wide that is loose enough to read
+    an object as somebody's sleeve.
+    """
+    text = str(name or "").strip()
+    if not text or not isinstance(scene, dict):
+        return ""
+    return _resolve_garment(text, _worn_garment_names(scene), False)
+
+
+def _part_is_clothing(scene, subject, part) -> str:
+    """The garment this part slot names on THIS body, or "".
+
+    The head-noun tier is allowed here and only here: the candidate set is one
+    body's own wardrobe, where `resolve_garment`'s uniqueness guard is real --
+    it resolves a bare handle only when exactly one of that body's garments
+    carries the noun.
+    """
+    text = str(part or "").strip()
+    if not text or not isinstance(scene, dict):
+        return ""
+    garments = (_worn_garment_names(scene, subject)
+                + _shed_garment_names(scene, subject))
+    return _resolve_garment(text, garments, True)
+
+
+def contact_endpoint_is_body(scene, name) -> bool:
+    """Will the scene vouch for this contact endpoint being a BODY.
+
+    Affirmative only, exactly as `_endpoint_is_body` is: a body is the thing
+    that wears something or has a size against its own baseline, and no
+    evidence reads as no. The one caller is an identity floor deciding
+    between a person-word and a thing-word for a party it cannot name, and
+    that floor must not invent a person out of silence.
+    """
+    return _endpoint_is_body(scene, name)
+
+
+def contact_thing_label(scene, name) -> str:
+    """The plain name for a contact endpoint the scene positively records as a
+    THING rather than a body, or "" when it cannot say.
+
+    An identity floor exists because a PERSON the observer cannot place must
+    not be named to them; a party it cannot place becomes "someone". A thing
+    is not a person, and "someone" mints a body out of it -- so a caller
+    holding an identity floor asks this first, and falls back to its own
+    person-shaped answer only when the scene declines to vouch for a thing.
+
+    Affirmative in both directions, which is what makes it safe to hand back a
+    name: the endpoint must resolve to exactly one entity record, and that
+    record must fail `_is_body_entity`. Absent an entity record -- which is
+    the normal state of a registered mind -- this says nothing, and the
+    caller's person-shaped floor stands.
+    """
+    if not isinstance(scene, dict):
+        return ""
+    text = str(name or "").strip()
+    if not text or _endpoint_is_body(scene, text):
+        return ""
+    eid, entity = _unique_entity_keyed(scene, text)
+    if not eid or _is_body_entity(scene, eid, entity):
+        return ""
+    return str((entity or {}).get("name") or "").strip() or str(eid)
+
+
 def _placement_between_bodies(scene, actor, target, manner) -> bool:
     """A placement verb standing where a contact record should be.
 
@@ -645,6 +824,25 @@ def _clean_contact(raw, scene=None):
         # contact. Measured live: `juices -> balls, coat` stood two beats as a
         # contact between a fluid and a body.
         return None
+    if _endpoint_is_worn_clothing(scene, actor) \
+            or _endpoint_is_worn_clothing(scene, target):
+        # A WORN GARMENT IS NOT A PARTY TO A CONTACT (see the block above
+        # `_placement_between_bodies`). The body under it is the surface the
+        # other surface meets, and the wardrobe ledger owns the layer between
+        # them. Refused rather than rewritten: which body, and which place on
+        # it, is not something a record naming a sleeve can be made to say.
+        return None
+    actor_part = _contact_text(raw.get("actor_part"))
+    target_part = _contact_text(raw.get("target_part"))
+    # A PART SLOT NAMES A PLACE ON A BODY, and no garment is one. Cleared, not
+    # refused: the contact itself may be perfectly real and recorded one layer
+    # out, and an empty part is already the ledger's positive statement that
+    # the WHOLE body is what touches. What the clothing adds belongs in
+    # `detail` ("through the fabric"), which is the field built to carry it.
+    if _part_is_clothing(scene, actor, actor_part):
+        actor_part = ""
+    if _part_is_clothing(scene, target, target_part):
+        target_part = ""
     manner = _contact_text(raw.get("manner")).casefold() or "touch"
     if _placement_between_bodies(scene, actor, target, manner):
         # A placement verb is not an assertion that two surfaces touch; the
@@ -653,8 +851,7 @@ def _clean_contact(raw, scene=None):
         # the one caller that can report, exactly as the non-part refusal is.
         return None
     if _unnamed_touch_between_bodies(scene, actor, target, manner,
-                                     raw.get("actor_part"),
-                                     raw.get("target_part"),
+                                     actor_part, target_part,
                                      raw.get("relation")):
         # Two whole bodies and the default manner name nothing that is
         # touching anything. See `_unnamed_touch_between_bodies` for the
@@ -673,8 +870,6 @@ def _clean_contact(raw, scene=None):
         unasserted = max(0, int(raw.get("unasserted") or 0))
     except (TypeError, ValueError):
         unasserted = 0
-    actor_part = _contact_text(raw.get("actor_part"))
-    target_part = _contact_text(raw.get("target_part"))
     target_interior = _contact_text(raw.get("target_interior")) \
         if relation == "interior" else ""
 
@@ -1066,6 +1261,33 @@ def apply_contact_ops(scene: dict, ops, *, _age=True, report=None) -> dict:
         key: contact for key, contact in before_age.items() if key not in current
     }
 
+    # ONE CLAIM, HOWEVER MANY WORDINGS. `_contact_key` deliberately excludes
+    # `manner` -- a grip that becomes a caress is the same contact changing --
+    # so two adds naming the same two endpoints and the same two parts are one
+    # claim written twice. When a floor refuses one of those wordings it has
+    # refused the CLAIM, and admitting its twin lets whichever verb the batch
+    # happened to also carry decide whether the floor held at all.
+    #
+    # Measured live, chat 98 turn 27: two adds differing ONLY in `manner`
+    # ('stand' and 'settle'). The placement floor dropped 'stand' and reported
+    # it correctly; 'settle' passed every floor, committed, and composed into
+    # both parties' views as sustained shoulder-to-shoulder contact that no
+    # beat had established. The floor was defeated by a synonym rather than
+    # crossed by prose, which is the one shape of failure a guard cannot see
+    # from inside a single op.
+    refused_claims = set()
+    for raw in ops:
+        if not isinstance(raw, dict):
+            continue
+        if str(raw.get("op") or "add").strip().casefold() != "add":
+            continue
+        if _clean_contact(raw, scene) is not None:
+            continue
+        key = _contact_key(raw)
+        if key[0] and key[2]:
+            refused_claims.add(key)
+            refused_claims.add(_mirror_key(key))
+
     for raw in ops:
         if not isinstance(raw, dict):
             continue
@@ -1169,12 +1391,56 @@ def apply_contact_ops(scene: dict, ops, *, _age=True, report=None) -> dict:
         else:
             contact = _clean_contact(raw, scene)
             raw_actor = _contact_text(raw.get("actor"), 120)
+            if contact is not None and _contact_key(raw) in refused_claims:
+                # See `refused_claims`: this beat already stated this exact
+                # contact in a wording some floor refused. Re-spelling the
+                # verb does not make it a second claim.
+                if report is not None:
+                    report.append(
+                        "contact: dropped "
+                        f"{_contact_text(raw.get('manner')) or 'touch'!r} "
+                        f"between {contact['actor']} and {contact['target']} "
+                        "-- this beat already stated the same contact in a "
+                        "wording that was refused, and rewording the verb "
+                        "does not make it a different claim. Record it once, "
+                        "in the channel that owns it.")
+                contact = None
+            elif contact is not None and report is not None:
+                # The part slots may have been cleared as clothing (see
+                # `_clean_contact`). A rewrite collapsed in silence teaches
+                # the model nothing, exactly as a dropped op does not.
+                # Read off the RAW op, never the cleaned record: the
+                # envelopment fold may already have swapped the two sides, and
+                # the model is owed an explanation of what IT wrote.
+                for subject, slot in ((raw_actor, "actor_part"),
+                                      (_contact_text(raw.get("target"), 120),
+                                       "target_part")):
+                    garment = _part_is_clothing(scene, subject,
+                                                _contact_text(raw.get(slot)))
+                    if garment:
+                        report.append(
+                            f"contact: read {garment!r} as {subject}'s "
+                            "clothing rather than a place on their body and "
+                            "recorded the contact against the body itself -- "
+                            "a part slot names anatomy. What the clothing "
+                            "adds goes in detail.")
             if contact is None and report is not None and raw_actor \
                     and _contact_text(raw.get("target"), 120):
                 bad = [str(raw.get(slot)) for slot in
                        ("actor_part", "target_part")
                        if not _is_anatomical_part(raw.get(slot))]
-                if _placement_between_bodies(
+                worn = next((g for g in (
+                    _endpoint_is_worn_clothing(scene, raw_actor),
+                    _endpoint_is_worn_clothing(
+                        scene, _contact_text(raw.get("target"), 120))) if g), "")
+                if worn:
+                    report.append(
+                        f"contact: dropped a contact naming {worn!r} as a "
+                        "party -- a worn garment is the layer between two "
+                        "surfaces, not one of them. Name the body wearing it "
+                        "and the place on that body, and put the clothing in "
+                        "detail.")
+                elif _placement_between_bodies(
                         scene, raw_actor,
                         _contact_text(raw.get("target"), 120),
                         _contact_text(raw.get("manner")).casefold()):
