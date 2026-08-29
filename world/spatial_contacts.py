@@ -535,7 +535,31 @@ def _endpoint_is_body(scene, name) -> bool:
     if _is_body_entity(scene, name, None):
         return True
     eid, ent = _unique_entity_keyed(scene, name)
-    return bool(eid) and _is_body_entity(scene, eid, ent)
+    if bool(eid) and _is_body_entity(scene, eid, ent):
+        return True
+    # A SUBJECT THE SCENE STANDS SOMEWHERE, AND DOES NOT RECORD AS A THING.
+    # The two tiers above ask the wardrobe and the scale, and a registered
+    # mind routinely has neither -- Sable, in the measured test, wears nothing
+    # and has no entity record, and is plainly a person standing in a yard.
+    # `positions` is where the scene puts BODIES; an object that reaches it
+    # arrives with an entity record beside it (the run's own minted garment is
+    # in both), so a positioned subject the entity ledger does not describe is
+    # a body on the scene's own evidence.
+    #
+    # Affirmative in the same direction as everything above: silence is not a
+    # body. That is what keeps the measured object case answered -- chat 98
+    # turn 22 filed `target: "combadge"`, and at that checkpoint the combadge
+    # is in neither `positions` nor `entities`, so it stays a thing and the
+    # player is no longer told a person is pressed against her.
+    positions = scene.get("positions")
+    if isinstance(positions, dict):
+        folded = name.casefold()
+        for subject in positions:
+            if str(subject).strip().casefold() != folded:
+                continue
+            eid, _ent = _unique_entity_keyed(scene, name)
+            return not eid
+    return False
 
 
 # ---------------------------------------------------------------------------

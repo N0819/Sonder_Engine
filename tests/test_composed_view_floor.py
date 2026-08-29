@@ -292,3 +292,72 @@ def test_the_cap_does_not_weld_two_quoted_lines_into_one_delivery():
     assert not welded, (
         "the cap spent a delivery boundary while a cheaper one was "
         "available: %r" % welded)
+
+
+def _two_mouths(n, silent=0):
+    """`n` alternating deliveries from two mouths, plus `silent` poses.
+
+    The turn-29 fixture above has poses in it, and a pose is the cheap merge
+    the rank reaches for first -- so it exercises the cap only until the
+    silent atoms run out. Past that point the question becomes whether the
+    rank can still TELL two mouths apart, and it could not: the first merge
+    blanks a group's `kind` and `speaker`, and `both_speech`/`_same_mouth`
+    read the blanks as "not speech" from then on.
+    """
+    spans, order = [], 0
+    for _ in range(silent):
+        spans.append((composer.Percept(
+            kind="pose", channel="sight", source_label="Lieutenant Worf",
+            data={}, order_key=order, dedupe_key="pose:%d" % order),
+            "Worf stands at tactical."))
+        order += 1
+    for _ in range(n):
+        speaker = "Jean-Luc Picard" if order % 2 == 0 else "Data"
+        sentence = '%s says: "Line %d."' % (speaker, order)
+        spans.append((composer.Percept(
+            kind="speech", channel="hearing", source_label=speaker,
+            data={"quote": sentence}, order_key=order,
+            dedupe_key="speech:%d" % order), sentence))
+        order += 1
+    return _Rendered(spans)
+
+
+def _welds_two_mouths(out):
+    for entry in out:
+        text = str((entry.get("observed") or {}).get("text") or "")
+        if _quote_count(text) > 1:
+            speakers = {w for w in ("Jean-Luc Picard", "Data") if w in text}
+            if len(speakers) > 1:
+                return text
+    return None
+
+
+def test_two_mouths_do_not_weld_while_a_cheaper_merge_remains():
+    """The rank makes the two-mouth weld the LAST resort. It cannot make it
+    impossible -- nine alternating quotes against a cap of eight leave no
+    other pair to spend -- so the contract is that it is never spent while
+    something cheaper is on the table. Regression guard for the blanking:
+    the merge that folds across kinds erases `kind` and `speaker`, so a rank
+    reading those goes blind after the first merge and welds two mouths with
+    silent atoms still unspent.
+    """
+    cap = composer._MAX_OBSERVATION_ATOMS
+    for extra in (1, 2, 4, 8):
+        out = composer.observations_from_render(
+            "player", _two_mouths(cap, silent=extra))
+        assert len(out) <= cap
+        welded = _welds_two_mouths(out)
+        assert welded is None, (
+            "%d silent atoms were available and the cap welded two mouths "
+            "anyway: %r" % (extra, welded))
+
+
+def test_the_forced_weld_is_still_bounded_when_nothing_cheaper_exists():
+    """All-speech, alternating, over the cap: a weld is arithmetic. It must
+    still stop at the minimum the cap requires rather than cascading."""
+    cap = composer._MAX_OBSERVATION_ATOMS
+    out = composer.observations_from_render("player", _two_mouths(cap + 1))
+    assert len(out) == cap
+    multi = [e for e in out
+             if _quote_count(str((e.get("observed") or {}).get("text") or "")) > 1]
+    assert len(multi) == 1, "one merge was required; %d groups hold two quotes" % len(multi)
