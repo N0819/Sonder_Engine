@@ -49,7 +49,7 @@
 | `mind/affect.py` | 2406 |  | `mind.theory_of_mind` |
 | `mind/canon_provenance.py` | 379 |  | — |
 | `mind/memory.py` | 134 | Facade re-exporting every mind.memory_* name; holds no domain code of its own. | `core`, `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.memory_common`, `mind.memory_context`, `mind.memory_inference`, `mind.memory_lore_entries`, `mind.memory_lorebooks`, `mind.memory_read`, `mind.memory_relationships`, `mind.memory_retrieval`, `mind.memory_snapshot`, `mind.memory_summaries`, `mind.memory_time`, `mind.memory_vectors`, `mind.memory_write`, `mind.theory_of_mind` |
-| `mind/memory_common.py` | 229 | Leaf helpers shared by every memory domain: vocabularies, blob/vector codecs, FTS query, cosine. | `core.db` |
+| `mind/memory_common.py` | 238 | Leaf helpers shared by every memory domain: vocabularies, blob/vector codecs, FTS query, cosine. | `core.db` |
 | `mind/memory_context.py` | 635 | The character memory payload: where retrieval, summaries and active state become one context. | `core.db`, `llm.prompts`, `llm.providers`, `mind.memory_common`, `mind.memory_retrieval`, `mind.memory_summaries`, `mind.memory_time`, `mind.memory_write` |
 | `mind/memory_inference.py` | 154 | Belief confidence at mint and at abandonment, and reconciliation across a mind's inferences. | `core.db`, `mind.memory_write`, `mind.theory_of_mind` |
 | `mind/memory_judge.py` | 430 |  | `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers` |
@@ -97,7 +97,7 @@
 | `story/importers.py` | 3124 | Native and AI-assisted character, persona, and lorebook import/generation. | `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.memory`, `story.character_schema`, `story.scene` |
 | `story/journey_history.py` | 431 |  | — |
 | `story/lore_structure.py` | 248 |  | — |
-| `story/naming.py` | 409 |  | `core.db`, `world.charter_identity` |
+| `story/naming.py` | 487 |  | `core.db`, `world.charter_identity` |
 | `story/provenance_text.py` | 132 |  | — |
 | `story/scene.py` | 2602 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `core.db`, `story`, `story.attire`, `story.character_schema`, `world.spatial` |
 | `web/__init__.py` | 6 |  | — |
@@ -609,14 +609,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_kw_scores()` | 177 | 31 lines |
-| `_cos()` | 209 | 16 lines |
-| `_b64_to_blob()` | 146 | 14 lines |
+| `_kw_scores()` | 186 | 31 lines |
+| `_cos()` | 218 | 16 lines |
+| `_b64_to_blob()` | 155 | 14 lines |
 | `_ling()` | 13 | 10 lines |
-| `_blob_to_b64()` | 135 | 10 lines |
-| `_ids()` | 165 | 7 lines |
-| `_storage_json()` | 160 | 4 lines |
-| `summary_scope_for()` | 124 | 3 lines |
+| `_blob_to_b64()` | 144 | 10 lines |
+| `_ids()` | 174 | 7 lines |
+| `_storage_json()` | 169 | 4 lines |
+| `summary_scope_for()` | 133 | 3 lines |
 
 ### `mind/memory_context.py`
 
@@ -1163,11 +1163,11 @@
 | `minted_presence_name()` | 356 | 54 lines |
 | `registered_identity_names()` | 281 | 52 lines |
 | `_person_name_evidence()` | 154 | 51 lines |
+| `phonology_parts()` | 453 | 29 lines |
 | `harvested_naming_profile()` | 230 | 28 lines |
 | `_name_tokens()` | 126 | 26 lines |
 | `_charter_naming_lanes()` | 101 | 23 lines |
 | `_name_head_of()` | 207 | 21 lines |
-| `story_naming_lanes()` | 260 | 19 lines |
 
 ### `story/provenance_text.py`
 

@@ -407,3 +407,81 @@ def minted_presence_name(chat_id, uid, used=(), lanes=None, reservation=None):
                 continue
             return candidate
     return ""
+
+
+# --- the phonology lane -----------------------------------------------------
+#
+# THE ONE SOURCE THE MINT IS ALLOWED. Everything above this point subtracts:
+# it harvests whatever a law happens to carry and then removes the names it
+# recognises. That is necessary as a backstop and provably insufficient as a
+# mechanism -- measured 2026-08-28 on a generated Star Trek institution, two of
+# the four surnames still reachable after every subtraction (`Soong`,
+# `Pulaski`) appear in no lore entry anywhere. The planner supplied them from
+# its own knowledge of the setting while writing the law, and no reservation
+# can reach a name the story never wrote down.
+#
+# So the pool must stop containing people's names rather than be cleaned of
+# them. A `phonology` entry holds FRAGMENTS -- the material a name is built
+# from -- and by construction names nobody.
+
+_PHONOLOGY_FIELDS = {
+    "given_starts": ("given_parts", "starts"),
+    "given_middles": ("given_parts", "middles"),
+    "given_ends": ("given_parts", "ends"),
+    "family_starts": ("family_parts", "starts"),
+    "family_middles": ("family_parts", "middles"),
+    "family_ends": ("family_parts", "ends"),
+}
+
+
+def phonology_entries(chat_id):
+    """Every `phonology` lore entry this chat can see, oldest first."""
+    try:
+        from mind.memory import chat_lorebook_ids
+        book_ids = list(chat_lorebook_ids(chat_id) or [])
+    except Exception:
+        book_ids = []
+    if not book_ids:
+        return []
+    marks = ",".join("?" * len(book_ids))
+    return list(q(
+        "SELECT id, title, keys, content FROM lore_entries "
+        "WHERE lorebook_id IN (%s) AND category=? ORDER BY id" % marks,
+        (*book_ids, "phonology")))
+
+
+def phonology_parts(chat_id):
+    """The name material this story authored, as a naming profile's parts.
+
+    An entry's content is read as `field: a, b, c` lines, one per fragment
+    class, so an author edits a plain list rather than a schema. Unknown
+    fields are ignored rather than guessed at -- an entry that says nothing
+    this mint understands contributes nothing, which is the honest reading of
+    a fragment set written for some other purpose.
+    """
+    parts = {"given_parts": {"starts": [], "middles": [], "ends": []},
+             "family_parts": {"starts": [], "middles": [], "ends": []}}
+    seen = set()
+    for row in phonology_entries(chat_id):
+        for line in str(row["content"] or "").splitlines():
+            if ":" not in line:
+                continue
+            field, _, rest = line.partition(":")
+            slot = _PHONOLOGY_FIELDS.get(field.strip().casefold()
+                                         .replace(" ", "_").replace("-", "_"))
+            if not slot:
+                continue
+            group, bucket = slot
+            for fragment in rest.split(","):
+                fragment = fragment.strip()
+                key = (group, bucket, fragment.casefold())
+                if fragment and key not in seen:
+                    seen.add(key)
+                    parts[group][bucket].append(fragment)
+    return parts
+
+
+def phonology_law_exists(chat_id):
+    """True when this story authored any name material of its own."""
+    parts = phonology_parts(chat_id)
+    return any(bucket for group in parts.values() for bucket in group.values())
