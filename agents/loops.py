@@ -176,7 +176,13 @@ def self_micro_view(actor_result):
     for event in (actor_result or {}).get("sequence") or []:
         kind = event.get("type")
         if kind in ("speech", "communication"):
-            quote = str(event.get("quote") or "").strip()
+            # `text`, the same field the observer branch reads (:273). The
+            # first version of this read `quote`, which no speech event
+            # carries -- so it silently produced nothing for dialogue while
+            # working correctly for actions, i.e. it was inert for the exact
+            # case it was written for. Measured turn 23: a captain issued the
+            # same instruction twice in one beat with `self_view: []`.
+            quote = str(event.get("text") or "").strip()
             if quote:
                 additions.append(compositor_text("loop_self_said", quote=quote))
         elif kind == "action":
