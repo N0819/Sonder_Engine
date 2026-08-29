@@ -839,6 +839,14 @@ def apply_attire_diff(sc, diff, ctx, res=None, *, report=True):
         _attire_wardrobe,
         player_name=_player_name_or_none(ctx),
     )
+    # WHOSE clothing this beat's words are about at all — the write gate's
+    # subject, third reading off the same ladder.
+    _wardrobe_subjects = attire_model.wardrobe_change_subjects(
+        getattr(ctx.turn, "player_input", "") or "",
+        _beat_voices(ctx, res),
+        _attire_wardrobe,
+        player_name=_player_name_or_none(ctx),
+    )
     _shed = []
     _gained = set()
     for name, d in (diff.get("attire") or {}).items():
@@ -858,10 +866,11 @@ def apply_attire_diff(sc, diff, ctx, res=None, *, report=True):
                 ctx.tell_director(_read)
 
         # THE WRITE GATE. A change to what a body wears is licensed by the
-        # beat's own words naming the garment, and by nothing else. Scoped to
-        # the three channels that can UNDRESS somebody -- `add` only ever puts
-        # clothing on, so an ungated one cannot expose a body and gating it
-        # would refuse the first dressing of a body whose arrival is the beat.
+        # beat's own words being about THAT BODY'S clothing, and by nothing
+        # else. Scoped to the three channels that can UNDRESS somebody --
+        # `add` only ever puts clothing on, so an ungated one cannot expose a
+        # body and gating it would refuse the first dressing of a body whose
+        # arrival is the beat.
         #
         # Every other axis here already reads the prose (`_PROCESS`,
         # `_DECISIVE`, `removal_directed_at`); the write itself read nothing,
@@ -880,6 +889,43 @@ def apply_attire_diff(sc, diff, ctx, res=None, *, report=True):
             attire_model.normalize_regions(cur))
         _licence = ([getattr(ctx.turn, "player_input", "") or ""]
                     + list(_beat_voices(ctx, res)))
+        # PROSE NAMES THE OCCASION OF A WARDROBE CHANGE; THE LEDGER NAMES ITS
+        # INVENTORY. This gate asked the beat to spell each garment as the
+        # LEDGER spells it, which no beat does and no beat should have to:
+        # chat 98 t8, "She changed out of uniform" resolved to "She changes
+        # out of her duty uniform into civilian clothing", and a `remove`
+        # naming all five worn garments in the ledger's own spelling had four
+        # of them dropped for not being named. The omission guard below then
+        # put the same four back, and the body wore the outfit it had changed
+        # out of AND the one it changed into for the rest of the run, while
+        # the scene entity said the uniform was off and the prose said it was
+        # gone.
+        #
+        # So the subject is the BODY: when this beat's words are about her
+        # clothing, a handle that resolves against her wardrobe is licensed,
+        # and `resolve_garment` -- the ledger's own reader -- says which
+        # garment that is. Nothing about the refusal this gate exists for
+        # changes: the interrogation beats that rewrote a wardrobe twice
+        # carry no clothing word at all, so they name no subject either.
+        #
+        # Failure direction, weighed again with the second measurement in
+        # hand. A phantom change destroys ledger state and never re-derives;
+        # a refused one used to cost a beat -- but only when the Director
+        # sees the refusal and restates. It did not: it restated the change
+        # once and then rendered from a ledger it believed. Both directions
+        # break the ledger, and this one broke it on the beat a wardrobe most
+        # obviously changed. Subtraction is safe where a guard withholds
+        # INFORMATION; this one withholds objective state.
+        _body_licensed = name in _wardrobe_subjects
+
+        def _licensed(handles, _worn=_worn_now, _by_body=_body_licensed):
+            """Which of these ledger handles this beat licenses touching."""
+            handles = list(handles)
+            if _by_body:
+                return set(handles)
+            return set(attire_model.garments_named_in(
+                _licence, handles, _worn))
+
         for _channel in ("remove", "coverage", "placement"):
             _entries = d.get(_channel)
             if not _entries:
@@ -898,8 +944,7 @@ def apply_attire_diff(sc, diff, ctx, res=None, *, report=True):
             _live = [h for h in _handles if _names[id(h)]
                      and attire_model.resolve_garment(
                          _names[id(h)], _worn_now)]
-            _named = set(attire_model.garments_named_in(
-                _licence, [_names[id(h)] for h in _live], _worn_now))
+            _named = _licensed(_names[id(h)] for h in _live)
             _kept = [h for h in _handles
                      if h not in _live or _names[id(h)] in _named]
             if len(_kept) == len(_handles):
@@ -950,8 +995,7 @@ def apply_attire_diff(sc, diff, ctx, res=None, *, report=True):
                            - {""})
             _live = [_h for _h in _live
                      if attire_model.resolve_garment(_h, _worn_now)]
-            _named = set(attire_model.garments_named_in(
-                _licence, _live, _worn_now))
+            _named = _licensed(_live)
             _strip = sorted(set(_live) - _named)
             if _strip:
                 for _it in _items:
@@ -1010,8 +1054,7 @@ def apply_attire_diff(sc, diff, ctx, res=None, *, report=True):
                                 or _t)
             _omitted = [g for g in _worn_now if g not in _staying]
             if _omitted:
-                _named = set(attire_model.garments_named_in(
-                    _licence, _omitted, _worn_now))
+                _named = _licensed(_omitted)
                 # Held in their existing order, so a restatement cannot
                 # silently relayer the wardrobe either.
                 _held = [g for g in _omitted if g not in _named]
@@ -1065,6 +1108,17 @@ def apply_attire_diff(sc, diff, ctx, res=None, *, report=True):
                     handle, cur["wearing"])
                 if canonical in cur["wearing"]:
                     cur["wearing"].remove(canonical)
+                elif attire_model.resolve_garment(handle, previous_names):
+                    # SAID TWICE IS NOT SAID WRONGLY. The garment WAS on this
+                    # body when the beat opened, and this same diff has
+                    # already taken it off by omitting it from `replace` --
+                    # the two channels agree, and one beat that changes an
+                    # outfit naturally writes both ("out of these, into
+                    # those"). Reporting it as "nothing they are wearing
+                    # answers to it" teaches the emitter that a ledger it
+                    # read correctly is wrong, which is the diagnosis this
+                    # branch exists to prevent, pointed backwards.
+                    pass
                 elif report:
                     # A `remove` naming nothing this body wears is a no-op --
                     # the resolver already refused the handle, so nothing was
@@ -1081,6 +1135,29 @@ def apply_attire_diff(sc, diff, ctx, res=None, *, report=True):
                     # unresolved handle through would remove a coin-flip
                     # garment. Wrongly keeping a garment on is recoverable
                     # next beat; wrongly removing one is not.
+                    # AN OBJECT ID IS NOT A GARMENT HANDLE. A garment that
+                    # comes off becomes a thing in the room, and the thing has
+                    # a scene key -- so the wardrobe's own history is sitting
+                    # in `entities` under a name that looks like a garment and
+                    # is not one. Measured (chat 98, turn 19): `remove` named
+                    # the shed uniform's entity key. The refusal is right
+                    # either way; what was wrong was the diagnosis, which
+                    # invited the emitter to go looking for a spelling when
+                    # the trouble was that it had addressed the wrong ledger.
+                    if str(handle) in (sc.get("entities") or {}):
+                        ctx.tell_director(
+                            f"attire: `remove` named {handle!r} for {name}, "
+                            "which is a THING IN THE SCENE, not a garment on "
+                            "this body -- a garment that came off became that "
+                            "object, and an object id is never a wearable "
+                            "name. It is already off. `remove` names what a "
+                            "body is wearing, spelled as the wardrobe spells "
+                            f"it (worn: "
+                            f"{', '.join(cur['wearing']) or 'nothing'}).")
+                        ctx.add_warning(
+                            f"attire: dropped a removal naming the scene "
+                            f"entity {handle!r} for {name} (not a garment)")
+                        continue
                     ctx.tell_director(
                         f"attire: `remove` named {handle!r} for {name}, but "
                         "nothing they are currently wearing answers to it "

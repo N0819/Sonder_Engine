@@ -99,8 +99,33 @@ def relocate(bodies, watch, posts, scene, travelled=None):
     return bodies, travelled
 
 
+def _nearest(reach, key, places, seed):
+    """The closest of ``places`` this body can reach, or ``None``.
+
+    TIES ARE BROKEN BY THE BODY, NOT BY THE ROOM'S NAME. The first version
+    took ``min((rooms, place))``, so where two candidates were the same
+    distance the room id decided -- and on a hub-and-spoke graph, which is
+    what a hull or a settlement round a square actually is, EVERY distance
+    ties. Measured on chat 98's recorded charter with the run's hand-added
+    upkeep removed: every errand at seeds 3, 4 and 5 went to `arboretum`,
+    the alphabetically first workroom, and a population that all walks to
+    one room has not circulated. The roll is the same deterministic mixer
+    the selection above uses, folded with the place, so a replay under one
+    seed is identical and adjacent seeds decorrelate.
+    """
+    best = None
+    for place in places:
+        rooms = (reach or {}).get((key, str(place)))
+        if rooms is None:
+            continue
+        candidate = (int(rooms), _roll(f"{key}|{place}", seed), str(place))
+        if best is None or candidate < best:
+            best = candidate
+    return best[2] if best else None
+
+
 def errands(bodies, needs, upkeeps, watch, places, reach, seed=0,
-            rate=ERRAND_RATE, hours=4.0):
+            rate=ERRAND_RATE, hours=4.0, commons=()):
     """Who goes where this window, off the watch bill. ``{body: place}``.
 
     THE CIRCULATION THE RUMOUR CHANNEL WAS MISSING, and the measurement
@@ -115,11 +140,19 @@ def errands(bodies, needs, upkeeps, watch, places, reach, seed=0,
     An errand is the cheapest honest version of a life's traffic: a body
     visits the place its own needs are fed from — the condition its
     ``fed_by`` names, which is the supply chain saying WHERE the bread is —
-    or, lacking one, its nearest charter place, because an institution's
-    places are where its people's lives already happen. Seeded rotation,
-    off-duty and able bodies only, and it moves them through the same
-    machinery the watch bill uses: real positions, real distance, no state
-    but the position everything else already carries.
+    or, lacking one, the nearest place it may go FOR ITS OWN SAKE
+    (``commons``, from `charter_space.commons_places`), and only failing
+    that its nearest charter place. Seeded rotation, off-duty and able
+    bodies only, and it moves them through the same machinery the watch
+    bill uses: real positions, real distance, no state but the position
+    everything else already carries.
+
+    THE ORDER IS THE RULE, and it is what the commons is for: a body off the
+    watch is not going to work, so a room that answers to no post outranks
+    one that does whenever nothing is pulling the body anywhere. A charter
+    that names no commons keeps exactly the behaviour it had — the fallback
+    is still its charter places — which is what stops the widening from
+    becoming a requirement on every institution already written.
     """
     posted = set((watch or {}).values())
     out = {}
@@ -143,11 +176,8 @@ def errands(bodies, needs, upkeeps, watch, places, reach, seed=0,
                 target = place
                 break
         if target is None:
-            options = [(rooms, place) for (body_key, place), rooms
-                       in (reach or {}).items()
-                       if body_key == key and place in places]
-            if options:
-                target = min(options)[1]
+            target = _nearest(reach, key, commons or (), seed) \
+                or _nearest(reach, key, places or (), seed)
         if target is not None:
             out[key] = target
     return out

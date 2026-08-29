@@ -86,6 +86,7 @@ from story.importers import (
 )
 from persist.commit import (promotable_background_presences,
                     promote_background_character,
+                    recognition_roster,
                     seed_mutual_recognition,
                     sync_room_registry_with_scene,
                     # The gate itself, not a second reading of the same
@@ -3638,41 +3639,66 @@ def chat_add_char(cid: int, body: dict = Body(...)):
     char_name = q("SELECT name FROM characters WHERE id=?", (ch,),
                   one=True)["name"]
     warnings = []
-    if body.get("already_known"):
-        # The recognition map ("known") otherwise only grows from
-        # validated_introductions as an in-story introduction beat fires
-        # (commit.py commit_mapping), so an opening-scene companion the
-        # player is meant to already know renders as "the unfamiliar
-        # person" until that happens to occur. Let attaching a character
-        # seed mutual recognition directly, same effect as an
-        # introduction having already happened off-screen.
-        #
-        # THE PLAYER'S EDGE ONLY, because that is the whole of what the flag
-        # answers -- the authoring surface that sets it is a per-character
-        # box reading "already knows you". Whether two arrivals know EACH
-        # OTHER is a separate question nothing in this request asked, and
-        # seeding an edge no author called for would assert a channel the
-        # firewall exists to make real. `seed_mutual_recognition` takes a
-        # roster precisely so a surface that does ask can say so.
-        chat_row = dict(q("SELECT * FROM chats WHERE id=?", (cid,), one=True))
-        seed_mutual_recognition(
-            cid, char_name, [persona_name(persona_of(chat_row))])
-    elif "already_known" not in body:
-        # AN ATTRIBUTE NOBODY OWNS CANNOT BE DEFENDED. An omitted key is not
-        # an authored "no": it leaves the arriving member a mutual stranger
-        # to everyone, which perception then honours exactly. Measured on
-        # chat 95, whose cast reached the story with no recognition answer at
-        # all -- nine turns in which the player's own commanding officer was
-        # composed as "a figure, backlit, indistinct, the face unreadable",
-        # and no warning anywhere among the 133 the engine did raise.
-        # Nothing is seeded, because widening a channel on a caller's
-        # silence is the worse of the two failures; it is only said aloud.
+    # TWO QUESTIONS, ASKED AND ANSWERED SEPARATELY. The recognition map
+    # ("known") otherwise grows only from an in-story introduction beat
+    # (commit_mapping) or a name heard said aloud (commit_memory), so an
+    # opening-scene companion the player is meant to already know renders as
+    # "the unfamiliar person" until that happens to occur. Attaching may seed
+    # recognition directly, the same effect as an introduction having already
+    # happened off-screen.
+    #
+    #   `already_known`      -- does this person and the PLAYER know each other
+    #   `already_known_cast` -- do this person and the CAST ALREADY HERE
+    #
+    # Neither may stand in for the other, and neither is inferred from the
+    # other: a stranger to the player may arrive with the crew she serves in,
+    # and a lifelong friend of the player may never have met them.
+    # `seed_mutual_recognition` takes a roster precisely so both answers ride
+    # one idempotent, symmetric call.
+    #
+    # Measured on chat 98: `already_known` was the only question the engine
+    # could ask, so three senior officers who had served together for years
+    # reached the story as mutual strangers. Each of their composed views
+    # named a colleague by physique for all forty turns, and that text goes
+    # into the character prompt -- after which the objective record carried a
+    # name the ledger says its speaker could not have used.
+    chat_row = dict(q("SELECT * FROM chats WHERE id=?", (cid,), one=True))
+    player = (persona_name(persona_of(chat_row)) or "").strip()
+    colleagues = [name for name in recognition_roster(
+        cid, chat_row, exclude_char_id=ch) if name and name != player]
+    others = []
+    if body.get("already_known") and player:
+        others.append(player)
+    if body.get("already_known_cast"):
+        others.extend(colleagues)
+    if others:
+        seed_mutual_recognition(cid, char_name, others)
+    # AN ATTRIBUTE NOBODY OWNS CANNOT BE DEFENDED. An omitted key is not an
+    # authored "no": it leaves the arriving member a mutual stranger to
+    # everyone, which perception then honours exactly. Measured on chat 95,
+    # whose cast reached the story with no recognition answer at all -- nine
+    # turns in which the player's own commanding officer was composed as "a
+    # figure, backlit, indistinct, the face unreadable", and no warning
+    # anywhere among the 133 the engine did raise. Nothing is seeded, because
+    # widening a channel on a caller's silence is the worse of the two
+    # failures; it is only said aloud.
+    unanswered = []
+    if "already_known" not in body:
+        unanswered.append("already_known to say whether this person and the "
+                          "player already know each other")
+    # Only a question when there is somebody here to be a stranger to. The
+    # first arrival has nobody to know, so its author is not asked.
+    if colleagues and "already_known_cast" not in body:
+        unanswered.append(
+            "already_known_cast to say whether this person and the rest of "
+            "the cast (" + ", ".join(colleagues) + ") already know each other")
+    if unanswered:
         warnings.append(
             f"{char_name} was attached with no recognition answer: pass "
-            "already_known to say whether this person and the player already "
-            "know each other. Nothing was seeded, so they begin as mutual "
-            "strangers and will be narrated as unfamiliar until an in-story "
-            "introduction fires.")
+            + "; ".join(unanswered)
+            + ". Nothing was seeded, so they begin as mutual strangers and "
+            "will be narrated as unfamiliar until an in-story introduction "
+            "fires.")
         _pipeline_logger.warning("chat %s: %s", cid, warnings[-1])
     return {"ok": True, "warnings": warnings}
 

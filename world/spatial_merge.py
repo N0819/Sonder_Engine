@@ -37,6 +37,7 @@ from world.spatial_containment import (
 from world.spatial_geometry import (apply_pose_diff, derive_scene_stations,
                               poses_broken_by_scale_change,
                               invalidate_contact_bound_poses,
+                              invalidate_transferred_pose_details,
                               normalize_scene_poses, normalize_scene_stations)
 from world.spatial_identity import (_ci_get, _entity_named, room_of,
                               is_derived_room_name, normalize_scene_subjects)
@@ -1072,6 +1073,7 @@ def merge_scene_with_diff(
     sleeping=(),
     clock_seconds=None,
     crossing_report=None,
+    inventory_report=None,
 ) -> dict:
     """`clock_seconds` is where the STORY clock stands at the end of this
     beat, and it is what lets a passage carry its occupants onward (see
@@ -1080,7 +1082,10 @@ def merge_scene_with_diff(
     Director preview, a migration re-merge -- gets exactly the scene this
     function produced before crossings existed. `crossing_report` collects
     Director-facing notes about what a passage did, and what it could not do
-    for want of a fact only the Director can supply."""
+    for want of a fact only the Director can supply. `inventory_report` is its
+    sibling for the transfer ledger: what changing hands did to a body's
+    standing pose prose, and which handovers named a thing the scene keeps no
+    record of and so could not be written down anywhere."""
     diff = diff or {}
     # A scene is a nested mutable structure.  A shallow copy allowed
     # downstream normalization and deterministic backstops (zone stamping,
@@ -1416,7 +1421,27 @@ def merge_scene_with_diff(
     derive_inventory_placements(
         merged, diff.get("inventory_ops"),
         declared=(set(incoming_positions or {})
-                  | set(diff.get("containment") or {})))
+                  | set(diff.get("containment") or {})),
+        report=inventory_report)
+    # ...AND A BODY THAT HANDED A THING OVER IS NO LONGER HOLDING IT, in the
+    # one field that says so in prose. `poses[x]["detail"]` is re-derived by
+    # nothing, rendered verbatim into every view including the subject's own
+    # interoception, and was reconciled against no possession record at all --
+    # so a transfer could move a thing while the giver went on carrying it for
+    # the rest of the story (measured, chat 98: five beats and counting, in
+    # the narrator's prose and in the player's own view line). Runs after the
+    # placement derivation because it asks the same ledger the same question,
+    # and after `apply_pose_diff` because this beat's own pose prose is
+    # exactly as answerable to the transfer ledger as any earlier beat's.
+    for _subject, _thing in invalidate_transferred_pose_details(
+            merged, diff.get("inventory_ops")):
+        if inventory_report is not None:
+            _note = ("possession: %s is recorded handing over %r this beat, "
+                     "so the carriage clause was dropped from their pose "
+                     "detail. Their posture and support are untouched."
+                     % (_subject, _thing))
+            if _note not in inventory_report:
+                inventory_report.append(_note)
     # ...AND A THING THAT WAS NEVER MOVED IS SOMEWHERE TOO. The transfer
     # ledger answers only for a beat that wrote one; the larger class is a
     # thing minted with no transfer at all, which the same ownership split

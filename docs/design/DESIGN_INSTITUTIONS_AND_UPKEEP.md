@@ -468,7 +468,35 @@ structural reasons: nobody off the watch ever left their room (no
 circulation, no rumour; `charter_move.errands` is the fix, and the
 `(origin, place)` path cache persisting across a run is what makes it
 cost lookups), and the tell slot always went to the freshest co-presence
-claim (`charter_talk.tellable` now prefers the remarkable — a happening, a
+claim
+
+AND THE CIRCULATION HAD NOWHERE TO SEND ANYONE, which took a live run to
+see. `charter_space.charter_places` is every place with a post or an upkeep
+at it — where the institution's WORK is — and `errands` routed off-duty
+bodies only there, so a room whose purpose is BEING IN it (a lounge, a
+chapel, a park, a market square) was somewhere the population could never
+go however social it was. Measured on chat 98: 7 work places against 45
+rooms, and the run's author had to invent an upkeep nobody serves — a
+condition the institution now owes forever and will report as failing —
+purely to say that people sit somewhere. `commons` on the charter is the
+predicate that was missing, `charter_space.commons_places` reads it beside
+the market places `economy` already carried, and `frequented_places` is the
+union circulation walks. A berth is deliberately not in it: it is somebody's
+own place rather than a place people go, `homecomings` already routes there
+without needing reach, and the set of distinct berths grows with the
+population, so folding it in would multiply `reach_map`'s bodies x places
+walk by the population itself.
+
+The same run exposed a second thing in the same function: the nearest-place
+fallback took `min((rooms, place))`, so where two candidates were the same
+distance the ROOM ID decided — and on a hub-and-spoke graph, which is what a
+hull or a settlement round a square actually is, every distance ties. Every
+errand at seeds 3, 4 and 5 went to `arboretum`, the alphabetically first
+workroom. A population that all walks to one room has not circulated, so the
+tie is now broken by the same deterministic mixer the selection uses, folded
+with the place: replay under a seed is identical, adjacent seeds decorrelate,
+and a genuinely nearer room still wins.
+ (`charter_talk.tellable` now prefers the remarkable — a happening, a
 stranger — over the standing description of your own people). After: the
 mill failure reached 107 heads, 101 of them second-hand; a traveller
 present 16 hours became known to 96 of 240 heads, 74 second-hand, peaked

@@ -487,6 +487,12 @@ def prepare_scene_commit(ctx):
     # Director-facing rather than a warning: every note it carries names a
     # fact the world is missing, which only the Director can supply.
     _crossing_report = []
+    # What the transfer ledger did to the pose prose, and which handovers it
+    # could not write down for want of an entity record. Director-facing for
+    # the same reason as `_crossing_report`: every note names a fact only the
+    # Director can supply, or a correction it can only make if it knows the
+    # correction happened.
+    _inventory_report = []
     # WHO IS ASLEEP, from the ledger that actually answers that question.
     # `merge_scene_with_diff` used to read it off `contained[...]["mode"]`,
     # which is a containment vocabulary (carried/held/pocket/enclosed) and has
@@ -513,7 +519,8 @@ def prepare_scene_commit(ctx):
         prev_scene, diff, contact_report=_contact_report,
         substance_report=_substance_report.append,
         sleeping=_sleeping,
-        clock_seconds=_beat_end, crossing_report=_crossing_report)
+        clock_seconds=_beat_end, crossing_report=_crossing_report,
+        inventory_report=_inventory_report)
     # Tell the Director how its contact ops were read -- a re-description taken
     # as the same limb moving, a part refused as not being one, an envelopment
     # folded onto the enclosed side. Corrections it can only make if it knows
@@ -536,6 +543,8 @@ def prepare_scene_commit(ctx):
     for _note in _contact_report:
         ctx.tell_director(str(_note))
     for _note in _crossing_report:
+        ctx.tell_director(str(_note))
+    for _note in _inventory_report:
         ctx.tell_director(str(_note))
     for _note in _substance_report:
         ctx.add_warning(f"substance: {_note}")

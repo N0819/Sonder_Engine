@@ -31,13 +31,17 @@ Return one JSON object and no prose outside it. Do not invent an institution
 unless the lore or author brief implies one. Output: {name, structure:{key,
 max_planned, grammar:[{kind,names,purposes}]}, rooms:{id:{name,purpose,
 adjacent:[{to,barrier:"open_door"}],frontier:[]}}, charters:[{key,name,naming,
-priority,upkeeps:{id:{place,floor,level,fails_untended,one_body_restores_in,
+priority,commons,upkeeps:{id:{place,floor,level,fails_untended,one_body_restores_in,
 requires,depends_on}},posts:{id:{place,serves,requires,reports_to,authority}},
 populations:[{post,count,competence,berth,rank}],economy:{goods,stocks,targets,
 flows,markets},decisions:{policies}}]}. Use qualitative timescales only; never
 write drift_per_hour or service_per_hour. Planned rooms contain no prose.
 Match the naming STYLE of the setting; never copy a name the lore gives to an
 individual. Keep authority/actions genre neutral. IDs are stable machine keys; names retain canonical spelling.
+charter.commons is a list of rooms ids: the places this institution's people go
+FOR THEIR OWN SAKE -- rooms nobody is posted to and nobody keeps, whose purpose
+is being in them rather than working at them. Name them; posts and upkeeps say
+where the work is, and off-duty people cannot go anywhere you do not list here.
 Every population.post MUST name an entry in posts, every place and berth MUST
 be a rooms id, population competence MUST meet that post's numeric requires,
 and every upkeep id MUST occur in at least one post.serves. Charter posts are
@@ -498,6 +502,11 @@ def close_plan(plan, *, history=None, featured_residents=None,
             "upkeeps": upkeeps, "posts": posts, "bodies": bodies,
             "naming": naming,
             "priority": _strings(raw.get("priority")),
+            # Where its people go for their own sake, as distinct from where
+            # its work is. Filtered to real rooms here for the same reason
+            # `post.place` is: a place id the plan never minted is not a place.
+            "commons": [place for place in _strings(raw.get("commons"))
+                        if place in room_ids],
             "needs": seed_needs(bodies), "economy": economy,
             "decisions": raw.get("decisions") or {},
             "interventions": local_interventions,

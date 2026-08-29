@@ -38,6 +38,7 @@ from .common import (
     _books,
     lore_for,
     _room_notes_from_lore,
+    fuse_speech_run,
     norm_sequence,
     assign_event_ids,
     _stable_event_key,

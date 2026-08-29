@@ -1090,7 +1090,35 @@ investigation found and did not close.
   (2026-08-28): a placement verb between two bodies is refused at the ledger
   floor (`CONTACT_PLACEMENT_MANNERS`), which cleared that record and the class
   it came from — but a genuine hold nobody mentions again still stands
-  forever.
+  forever. That refusal was then defeated by a synonym (chat 98 turn 27: two
+  adds differing only in `manner`, 'stand' refused and 'settle' kept), which
+  is closed separately — within one beat, ops sharing a `_contact_key` are
+  one claim, and a refusal on any wording of it refuses the claim.
+- **A touched thing the scene never established is felt as "something", not
+  named.** The contact channel's identity floor now has three tiers -- the
+  observer's display map, the scene's own entity record for a thing, then a
+  floor that says "someone" only where the scene will vouch for a BODY and
+  "something" where it will not (2026-08-29, closing the half of D-L that was
+  a person invented out of an object). The middle tier is the one that names
+  a thing, and it needs an entity record. Measured across chat 98: five of
+  the six object contacts in the run -- a bar, a table twice, a glass, a padd
+  -- had no entity record at all, because nothing mints one for an object the
+  Director merely names in an op (the same gap the transfer defect sits in:
+  `derive_inventory_placements` places nothing for an object the scene does
+  not know, and the possession fact dies with the placement). Those five never
+  reached a view either: with no entity there is no position, and contact
+  hygiene prunes a contact whose two parties are not in one room -- so a
+  second defect was hiding the first, which is exactly why the floor may not
+  depend on it. Where an object IS established the player is now told a thing
+  rather than a person; where it is not, they are told a thing and not WHICH
+  thing. Whether an op naming an unknown object should mint an entity for it
+  is the owner's call, and it is the same question in both channels.
+- **`something's surface` is honest and reads badly.** The clause builder
+  composes the other party's label and their part as a possessive, which is
+  right for a body ("Data's shoulder") and stilted for the generic thing-word
+  the floor above falls back to. Dropping the possessive would need the
+  renderer to know its label came from the floor rather than from a name, and
+  `label_for` is deliberately opaque to it.
 - **An orphaned relational value is dropped rather than folded.** When
   `thumb_touch: "feather_light_at_ear_base"` is retired by a standing thumb
   contact, its qualifier is discarded instead of merged into that contact's
@@ -3342,19 +3370,29 @@ indistinct figure return to the science station console" as remembered_past
 after `known` had filled. Recognition seeded late does not rewrite the memories
 written before it.
 
-WHAT REMAINS OPEN, and both are the owner's:
+**CAST-TO-CAST RECOGNITION NOW HAS AN AUTHORING SURFACE (2026-08-29).**
+`already_known_cast` on the attach route closes the arriving member against
+every other active cast member, through the same `seed_mutual_recognition`
+call that carries the player answer, and the story-builder asks it once for
+the group ("these characters already know each other"). The two answers stay
+independent in both directions — a stranger to the player may arrive with the
+crew she serves in — and an unanswered cast question is reported the same way
+an unanswered player question is, but only when somebody is already here to be
+a stranger to: the first arrival has nobody to know.
 
-  * **CAST-TO-CAST RECOGNITION HAS NO AUTHORING SURFACE.** Recognition is a
-    relation over the whole cast, and every attach flag in the engine is a
-    relation to the PLAYER: the story-builder's per-character box reads
-    "already knows you". Two characters both ticked yield `{"Bram2":
-    ["Ada2"], "Ada2": ["Bram2","Cleo2"], "Cleo2": ["Ada2"]}` — reproduced
-    2026-08-28 through the route — and no amount of ticking can reach the
-    missing edge. `seed_mutual_recognition` takes the roster, so a surface
-    that asks the question can close them in one call; nothing asks it.
-    Promotion is the only writer that closes cast-to-cast edges and it got
-    there by arguing from the fiction (she was in the scene the whole time),
-    not from any rule stated for attachment.
+What it cost while it was missing, measured on chat 98's forty turns: `known`
+held Picard → [player, Data], Data → [player, Worf], Worf → [player, Data].
+Three senior officers of one watch, each missing a colleague. The asymmetry is
+NOT a one-directional write — it is the correct signature of the only in-play
+channel, hearing a name said aloud, and of the fact that the officer who did
+most of the naming learned nothing from his own mouth. His composed view called
+the man at tactical "the tall heavily built klingon male" on every one of those
+turns while his own dialogue said "Mr. Worf" five times: a name from outside the
+ledger, promoted into the objective record, because the engine had no way to be
+told what the story took for granted.
+
+WHAT REMAINS OPEN, and it is the owner's:
+
   * **WHAT THE DEFAULT SHOULD BE.** Deliberately not chosen here. A strangers-
     meeting attach is a real and valuable opening and the firewall is why;
     "the caller omitted a key" is not an authored answer to that question, and
@@ -3914,6 +3952,36 @@ Three things that work names for and does not close.
   branches -- and that is the remaining fork. A malformed adapter still falls
   through to the English reference renderer, which carries the tier, so the
   failure mode is wording rather than information.
+- **The delta can still starve a view without emptying it, and that half is
+  the owner's call.** A view the delta empties completely is now re-asked for
+  the background (`perception._composer_outcome`; `Design.md` § A view leads
+  with what changed), because "nothing new" and "nothing reached this mind"
+  are different states and `agents/narration.py` reads the second off a null
+  view. A view the delta reduces to ONE sentence is untouched, and on chat 98
+  that was the more common shape: turn 9's whole player view was "You are
+  seated on the bar."; turn 10's "You are standing on the deck."; turn 38's
+  "The lieutenant commander is close by. You see lieutenant commander." No
+  room, no roster, no light — the narrator supplied all three from prose
+  memory. **The question is whether PLACE and COMPANY are deltas at all.**
+  They are continuously true, they are the frame every other sentence in a
+  view is positioned inside, and `ACTIVE_STANDING_KINDS` already exempts
+  sensations from suppression on exactly that argument ("an unchanged contact
+  is still being felt now"). Against that: the tier's whole measured result
+  was won by suppressing what the observer was already told, 772 of 2,645
+  consecutive player-view pairs repeated a 60-character sentence verbatim
+  before it, and a room's authored notes are long. A middle exists — restore
+  the room's IDENTITY every beat and keep its notes and light on the delta —
+  and it is a behaviour change to every story's prose, so it is named here
+  rather than taken.
+- **Two consecutive recovered views are byte-identical, by construction.**
+  The recovery re-renders the same unchanged percepts, so a run of quiet
+  beats hands the narrator the same paragraph each time. Measured live on
+  chat 98 turns 39 and 40 (played on a copy, 2026-08-29): both views were
+  the room, its notes, the roster and the pose, character for character, and
+  both beats' prose still differed because `already_established_phrases`
+  fills from the view against recent narration and is doing exactly the job
+  it was built for. Recorded because the mechanism is not obvious from the
+  code: the composer is not deduplicating across beats here, the narrator is.
 
 One thing the replay surfaced that is NOT a residual, recorded so the next
 reader does not re-open it: the stored corpus shows a structured overlay
@@ -4528,7 +4596,12 @@ names are not roster identities. It matches the existing floor (Director
 prose already names presences story-wide, and no per-observer met-ledger
 exists for charter bodies); if tightened later, the `known` recognition
 map -- the engine's one per-observer name-learning ledger -- is the
-vocabulary to route it through.
+vocabulary to route it through. *Amended 2026-08-29: that ledger now
+CARRIES charter bodies in both directions -- an introduction resolves and
+places them (`commit_common.charter_recognition_projection`, read by both
+`commit_mapping` and `commit_memory`), so a presence can hold a row of its
+own and be held in somebody else's. The chatter fragment still does not
+consult it; what changed is that there is now something to consult.*
 
 **THE CROWDS BRIDGE: BUILT 2026-08-27** (`background-presentation` branch),
 per the same note's Part B. A charter crowd is a read-time projection —
@@ -4586,7 +4659,32 @@ on the record, written at commit; the charter half reads `window_acts`
 whose `other` is a bound body or authored figure), or emerged from a crowd
 this beat (the provisional `emerge` op, resolved read-only through the same
 pick commit runs) -- ordered addressed > owed > acting > emerged, tied by
-the B3 entanglement digest, then stably. `mentioned` (prose salience),
+the B3 entanglement digest, then stably.
+**CHANNEL FILTER ADDED 2026-08-29** (`fix-background-gate`). Co-presence is
+still not a TRIGGER; it is now a FILTER. A trigger says a demand was
+RAISED, not that it arrived, and two of the four are debts accrued on an
+EARLIER beat -- so `owed` and `acting` were discharging from anywhere in
+the world, and the player's raw-text address was read with no test that the
+words carried. `demand_reaches` (`persist/commit_background.py`, applied in
+both `pick_voice_demand` and `agents/background._demanded_presences`)
+requires an authored mind within FULL hearing of where the presence stands
+-- the same bar `_character_address_of` and the reply-debt writer in
+`track_background_presences` already used, so the gate and its own debt
+writer stopped disagreeing. Exempt: the Director's judgment for THIS beat
+(`routed`, a flow address, an emerge), because a hand-off that becomes
+silence is the failure the gate exists to end; and an aimed character line,
+which passed a stricter version of the same test. Fail-OPEN where either
+room is unknown. Measured by replaying the gate against all 40 recorded
+turns of chat 98 (checkpoint world state per turn, the recorded
+`director_interpret`/`director_resolve` of that turn; the replay reproduces
+the recorded `selected` list on every turn before the change): 29 of the
+run's 51 voice calls went to one body on the engineering deck that
+qualified on `acting` for 14 consecutive beats -- including turn 36, with
+the player two decks away addressing five presences at her own table -- and
+produced not one line. All 29 are gone; every pick that ever produced a
+line survives, including turn 23's, where the player was in a lift one open
+door from the engineering deck. `tests/test_voice_demand.py::
+TestADemandOnlyCountsWhereItCanArrive`. `mentioned` (prose salience),
 bare `dialogue_turns` (tenure) and `at_post` (co-presence) stopped
 qualifying; `scene_life`'s roster is the same demand set
 (`_demanded_presences`) and `max_managed` is a ceiling, not a selector. An
@@ -4726,6 +4824,74 @@ remember what you told me last winter" cannot be adjudicated by the engine --
 only answered by the human. That is tolerable and may even be right; it is
 recorded here so that if it stops being tolerable, the reason is visible.
 
+### 1.100 A card can author one garment twice, and the ledger cannot tell
+
+**Found 2026-08-29 while fixing the attire write gate (chat 98).** The gate's
+paraphrase defect is fixed; this is what was underneath it and is not.
+
+Every one of that run's four cards carries the same outfit written twice, in
+two spellings. Measured in the persona sheet and in the committed ledger:
+
+    "standard Starfleet duty uniform (teal science division shoulders)"
+    "Starfleet uniform jumpsuit, sciences blue shoulders"
+    "combadge"  /  "commbadge"
+    "Klingon baldric"  /  "Klingon warrior's baldric"
+
+The mechanism is the card's two representations. `character_schema.
+_normalize_initial_outfit` hands `normalize_regions` an authored `regions`
+block AND the flat `wearing` list beside it; the fold is deliberately additive
+("an author who wrote regions is not overruled by the flat list their card
+also carries") and dedupes with `resolve_garment`, which correctly refuses to
+call those two strings one garment. So both land, and the body wears one coat
+twice for the life of the story.
+
+What it costs, all downstream and all measured in that run: the duplicate
+destroys the uniqueness the licence's per-garment tier needs, so the one word
+the beat used named neither garment (that half is fixed); a `remove` of one
+spelling leaves the other on; and the shed-object mint runs twice for one
+garment, which is how an entity id reached a `remove` as a garment handle.
+
+**Not fixed, because every available fix is a guess.** The two strings share
+"Starfleet" and "shoulders" and nothing else; their `covers` sets differ; one
+attaches and one does not. No determinate reading of the ledger's own
+vocabulary says they are one garment, and a fuzzy same-garment matcher would
+be exactly the instance-shaped rule this repo forbids. The two candidates,
+both needing the owner:
+
+  * **Regions win.** When a card carries an authored `regions` block, treat
+    the flat `wearing` list as already represented rather than folding it in.
+    Determinate, and it fixes all four cards at once — but it silently drops a
+    garment an author put only in the flat list, and the fold's comment says
+    that additive direction was chosen on purpose.
+  * **Tell the author.** The merge is the only place the two lists still exist
+    separately, so a warning has to be raised there and carried out to
+    `character_card_warnings` — which today reads a card the merge has already
+    flattened. Costs nothing behaviourally and closes nothing on its own.
+
+### 1.101 The process clamp reads a generic word in a clothing sentence
+
+**Measured live 2026-08-29, chat 98 turns 40 and 41, twice in two turns.**
+
+`attire._process_sentence` requires a sentence to be about clothing before it
+reads process language as evidence about clothing — the fix for chat 70 t9,
+where a sentence about hands clamped a removal. The other half is still open:
+a sentence that IS about clothing and ALSO contains a generic process word
+about something else.
+
+    "...because alpha shift started in forty minutes she put the duty
+     uniform back on"
+
+`started` is `_PROCESS`; `uniform` is `_CLOTHING_CONTEXT`; the removal of the
+civilian clothes was held at `loosened` on a beat that completed it. The
+second case is the Director's own "She begins removing..." for a beat whose
+narration takes four garments off, which held all four.
+
+Failure direction is the safe one — a removal held one beat, restated the
+next — so this is a pacing defect, not a state fork. The shape of a fix is the
+same one `_CLOTHING_CONTEXT` already has: the process word and the clothing
+word have to be about the same thing, which sentence-level co-occurrence does
+not establish.
+
 ### 1.70 Narrator repetition: what the change-key fix reached, and what it did not
 
 Landed 2026-08-28, from a 16-turn story (chat 95) whose every stage was read
@@ -4745,7 +4911,26 @@ the key TAG, so a ledger written before the change reads as first sight rather
 than as a claim that something moved. `observations_from_render` no longer
 welds one mouth's consecutive lines into one numbered entry, and the atom cap
 that now pays for that prices the pair it is about to weld — wallpaper, then
-one mouth, then the obligation boundary, then two mouths last.
+two silent events, then a silent event into a spoken one, then one mouth's two
+deliveries, then the obligation boundary, then two mouths last.
+
+**The middle of that order was wrong until 2026-08-29.** A same-mouth speech
+weld was priced BELOW every other event pair, so the cap reached first for the
+one shape the merge loop above deliberately refuses to mint. Measured, chat 98
+turn 29: nine legitimate atoms against a cap of eight, the cap folded Picard's
+first two lines into a single entry, and the page carried both quotes back to
+back with no attribution or beat between them — the worst dialogue sample in
+that run. Folding a SILENT atom into a spoken one cannot produce that shape,
+because the entry still holds one quote; it costs the channel (the group
+degrades to `mixed`) and the attribution, both of which the loop already
+spends there.
+
+**Still open: the cap itself.** `composer._MAX_OBSERVATION_ATOMS` is 8 and is
+untouched — turn 29 delivered nine atoms a mind legitimately received, so SOME
+boundary was going to be spent whatever the ordering, and the reorder only
+chooses the cheapest one. Raising it trades narrator payload size against how
+often any boundary is spent at all, which is the owner's call rather than the
+workflow's.
 
 **Not fixed: the `act_player` obligation marker asserts something false.**
 `{n}. {actor} did this (NOT yet on the page — the player described attempting
@@ -4793,6 +4978,179 @@ three assertions in `tests/test_narrator_world_fidelity.py` (~1030, ~1106,
     story. Pointing the ban list at engine-authored labels the narrator is
     REQUIRED to be able to use is the shape of guard this repo has measured
     failing, which is why it was not pursued.
+
+### 1.100 Every charter already written names no commons
+
+`world/charter_space.commons_places` and the `commons` field it reads are new,
+and the field is EMPTY on every institution generated before it existed. So the
+class is closed -- a place a body may go for its own sake is now expressible,
+`frequented_places` is what `reach_map` walks and `errands` filters against, and
+`charter_runtime.registry_warnings` says out loud when an institution has none
+-- while every already-generated world still routes its whole off-duty
+population to somebody's workplace until an author names its rooms or the
+location is regenerated. That is the authored-blank shape `CLAUDE.md` records
+for psychology, which is why the warning landed with the field rather than
+after it, and it is a MIGRATION rather than a defect: nothing can derive the
+predicate from what a charter already stores. A room's `purpose` is free prose
+and `world/place_purpose.py` states the reason not to key on it -- names are
+short noun phrases where identifier recognition is honest, descriptions are
+where it lies.
+
+Two things the field is deliberately not.
+  * **Not berths.** A berth is somebody's own place rather than a place people
+    go, `charter_move.homecomings` already routes a body to its own without
+    consulting reach, and the set of distinct berths grows with the population
+    -- on `tests/charter_worlds.big_town(1000)` every body's berth defaults to
+    its authored place, so folding them in would take `reach_map` from 1000 x 6
+    pairs to 1000 x 109.
+  * **Not `active_places`.** That is where social detail is simulated at beat
+    resolution, a scope dial, not a statement about what a room is for.
+
+Measured on chat 98: 7 work places against 45 rooms, and the run's author had
+to invent an upkeep nobody serves (`wardroom_service`, `requires: {}` -- a
+condition the institution now owes forever and will report as failing) purely
+to say that people sit in a lounge.
+
+### 1.101 A handover the scene has no record of is refused out loud, and still refused
+
+**Found:** the Enterprise-D alpha-shift run (chat 98), turns 4 and 22.
+**Half fixed 2026-08-29.** What landed: the possession claim a body's pose
+prose was making no longer outlives the transfer, and the refusal is no longer
+silent. What is still open is one decision the owner has not made.
+
+The measured chain. The establishing beat minted no `entities` record for the
+object the whole opening was about; its entire existence in the engine was one
+line of pose prose, `poses["<a body>"]["detail"] = "holding <it> against
+chest"`. Four beats later the Director resolved a complete, well-formed
+transfer of it to another body. `derive_inventory_placements` placed nothing —
+correctly; you cannot position a thing the scene does not know — and said
+nothing, which was the defect. The pose detail was reconciled against no
+possession record at all, so it stood: five beats after she let go, the
+giver's own composed view still read "... — holding <it> against chest", in
+the interoception channel and in every other observer's sight line, and the
+narrator wrote it into the prose twice. Reading only the narrator misattributes
+this; the narrator was being told.
+
+Two of the three halves are closed:
+  * `invalidate_transferred_pose_details` (`world/spatial_geometry.py`) retires
+    a pose `detail`'s carriage clause when the transfer ledger says the thing
+    left that body. The `detail` alone — posture, support and the relation
+    fields are the body's own and no transfer touches them.
+  * `derive_inventory_placements` now takes a `report` and writes a
+    Director-facing sentence naming the thing it could not place, carried to
+    the next beat through `engine_notices` the way `crossing_report` is.
+
+**THE OPEN DECISION, and it is the owner's: should a transfer op MINT an entity
+for an object the scene has not established?** The argument against is the one
+this pass already makes everywhere else — it holds an id a model reached for
+and nothing else, no name, no kind, no size, and a stub keyed on that token
+would bind every later op to a record with nothing in it (a minted entity key
+has already reached an `attire` remove as a garment handle once). The argument
+for is the measurement: re-merging every stored (scene, diff) pair on disk —
+2758 of them — a transfer names an object with no entity record on **26
+beats**, across seven chats and seven different things. Every one of those
+handovers is a possession fact the engine resolved and then did not write down
+anywhere. The notice makes them audible and leaves the minting to a Director
+that may or may not act on it; nothing yet measures whether it does.
+
+Until that is settled, the giver has let go and nobody is recorded holding it.
+
+### 1.77a Speaking turns and the page: what the utterance fix reached, and what it did not
+
+Landed 2026-08-29 from the 40-turn bridge run (chat 98), every stage of the
+cited turns read against the others.
+
+**Fixed at the origin.** One mouth's consecutive spoken lines with no conduct
+between them are now ONE utterance, fused deterministically in the character
+stage (`common.fuse_speech_run`, called from `character.character_step` after
+`norm_sequence` and before the event ids are stamped). The speech budget's own
+contract already said this -- it defines a line as "one separate beat of talk,
+delivered between other conduct" and states that "multiple lines are not one
+speech split by punctuation" -- and nothing enforced it, so a three-element
+round became three `dialogue_log` entries, three `speech_percept`s, three
+"X says in a Y voice: ..." sentences in every view, and three quoted lines set
+back to back on the page. Measured over the run's 85 stored rounds: 79 speech
+elements become 51, 26 rounds fuse, and the speaker-beats carrying two or more
+quoted lines halve (24 -> 12). Turn 29's worst case, six quoted lines from one
+mouth in one beat, becomes two. The fuse SUBTRACTS -- no word is added or
+dropped -- and it refuses to cross any delivery difference (volume,
+visibility, conceal_from, targets, phase) or a line that claims an
+interruption, so a whispered aside inside a spoken turn keeps its boundary.
+A run that changed register loses its tone adverbial, because no single one is
+true of it.
+
+**Also fixed: a Python list repr in every character's composed view.**
+`perception_outcome` handed `delivered_views[observer]` -- a LIST of rendered
+lines -- to `composer.micro_round_percept`, which takes one line and calls
+`str()` on it. Measured: 68 of the 142 stored character views in chat 98
+carry a `['...']` span, on 24 of the 38 turns, and from there it reached the
+observations projected off the view and the episode minted from it. The
+composer's own dialogue tripwire caught four of them, said "engine defect,
+view delivered as composed", and the view shipped anyway.
+`composer.micro_round_percepts` now names the shape: a delivery is one line, a
+round delivers several.
+
+**Also fixed: the narrator was never told what the player was wearing.**
+`attire_exposure_facts` was computed for the deterministic screen only, and
+that screen asks one question -- is a COVERED region narrated bare. It has
+nothing to say about a garment asserted onto a body whose ledger does not
+carry it, which is the other half of the same disagreement (chat 98 t27, "her
+uniform sleeve" against a ledger reading combadge + civilian clothing). The
+narrator payload now carries `player_attire`, the ledger's own compact line
+for the player's own body, and the sheet says the ledger owns it. This widens
+nothing: a mind has a channel to its own clothing, which is the ground
+`attire_exposure_facts` already stood on. Every other body's dress still
+reaches the narrator only through the composed view, behind perception's gate.
+
+**Not fixed, and it is an OWNER'S FORK: a second round restates instead of
+advancing.** The register (`D-B`, reopened three times) hypothesised that the
+mind was not being told what it had already said. It is: `_speak` writes the
+accumulated `interaction_views[speaker_id]` before every call, and the
+speaker's own conduct is appended to it in the same place as everyone else's.
+CAUTION for the next reader -- the `self_view` key stored on a round record is
+that round's OWN emission, captured after the call for `rehydrate_loop_views`
+to replay; it is NOT the record handed to that round. Reading it as the input
+makes the ledger look correct-and-ignored in a way that happens to be true for
+a different reason.
+
+What remains is a genuine restatement across an exchange boundary: chat 98
+turn 29, Picard says "the sudden appearance after a clean survey eleven years
+prior", Data answers, and Picard says "the sudden activation after a clean
+survey eleven years prior". Both are separate rounds with another mouth
+between them, so the fuse correctly leaves them two deliveries, and they are
+paraphrases rather than repeats, so no literal guard reaches them. The
+cross-turn case (t32 -> t33, verbatim identical) IS detected --
+`repeat_correction` fired on t33 by name -- and the engine deliberately does
+not re-ask, on the owner's stated rule and against measured evidence that the
+retry only rephrases. So the remaining fork is the owner's:
+
+  * *Drop the round.* The register's own hypothesis: a round is granted and
+    the mind is asked what it says, never whether anything remains to be said.
+    But the grant at t29 is CORRECT by every other measure -- Data answered
+    the captain and expects a response -- so dropping it lands the answer in
+    silence. Any rule that drops it has to be able to tell "nothing left to
+    add" from "the exchange is still going", and nothing deterministic can.
+  * *Ask the second round a different question.* Tell a mind that has already
+    held the floor this beat that a further turn is for what the exchange has
+    newly raised, and that saying nothing is a complete answer. That is a
+    prompt change on a path where three separate negative constraints
+    (`recent_self_lines`, the refrain skeleton, `repeat_correction`) have
+    already been measured failing, for the reason `character.py` states at
+    length: a negative constraint helps a mind that has another move and does
+    nothing for one that does not.
+  * *Accept it.* The trade-off the no-re-ask rule already accepts, one scope
+    wider.
+
+Not guessed at here, because the choice is between two of the owner's own
+standing rulings.
+
+**Also corrected, for the register rather than the code.** `D-C` ("the
+narrator restates the player's own completed beat", turn 4) is not a narrator
+defect. The turn-4 player view OPENS with "Jean-Luc Picard accepts padd from
+you", because Picard's own round declared the act -- and he declared it
+because the turn-3 transfer never committed (`D-A`). Director, perception and
+narrator all carried it faithfully. Fixing it in the narrator would have
+buried the commit defect.
 
 ## 2. Roadmap
 
@@ -6058,9 +6416,15 @@ with the other deliberate keeps.)*
   (an introduction between two people who were both absent used to pass once
   the roster admitted offscreen characters, trading a missed edge for an
   invented one, which is worse because a wrong edge is indistinguishable from a
-  right one afterwards), then `is_recognized_in_frame`. What is untouched is
-  the judgement itself and the fact that **recognition never decays or
-  retracts**: there is no path that un-learns a face. *Plausible.*
+  right one afterwards), then a same-room test wherever the engine can place
+  both bodies, then `is_recognized_in_frame`. The roster it resolves against is
+  now the same one the hearing channel uses, Charter bodies included
+  (`commit_common.charter_recognition_projection`), and it reads address forms
+  rather than substrings — measured on chat 98, that gate had been dropping 9
+  of the 11 `ok` introductions the model authored across forty turns, including
+  every one that named a Charter body. What is untouched is the judgement
+  itself and the fact that **recognition never decays or retracts**: there is
+  no path that un-learns a face. *Plausible.*
 - **X24 — the legacy-archive raw-id fallback grafts interior state.**
   `persist/chat_archive.py` resolves an archive integer against whatever local row holds
   that id, then attaches the archive's `chat_chars.state` to it. Memories are

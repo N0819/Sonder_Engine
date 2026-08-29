@@ -852,8 +852,35 @@ def _placement_subject_key(scene: dict, eid: str, entity) -> str:
     return eid
 
 
+def _report_unrecorded_transfer(report, op) -> None:
+    """Say, in the Director's own terms, what the transfer ledger could not
+    place and what would let it.
+
+    One sentence per thing per beat, naming the endpoints the op gave so the
+    Director can see which of its own hands wrote what.
+    """
+    if report is None:
+        return
+    thing = str(op.get("object_id") or "").strip()
+    if not thing:
+        return
+    endpoints = []
+    if str(op.get("from_id") or "").strip():
+        endpoints.append("from %s" % str(op.get("from_id")).strip())
+    if str(op.get("to_id") or "").strip():
+        endpoints.append("to %s" % str(op.get("to_id")).strip())
+    where = (" " + " ".join(endpoints)) if endpoints else ""
+    note = ("possession: a transfer moved %r%s, but the scene keeps no entity "
+            "record for %r, so nothing was placed and the handover is not "
+            "written anywhere. Mint it in state_diff.entities on the next "
+            "beat if it is a thing the world should go on tracking."
+            % (thing, where, thing))
+    if note not in report:
+        report.append(note)
+
+
 def derive_inventory_placements(scene: dict, inventory_ops,
-                                *, declared=()) -> list:
+                                *, declared=(), report=None) -> list:
     """Place what a transfer op moved, from the ledger the objects hand fills.
 
     THREE RULES, ALL SUBTRACTIVE:
@@ -885,16 +912,28 @@ def derive_inventory_placements(scene: dict, inventory_ops,
     to prevent: the spatial specialist still owns `positions` and the contact
     specialist still owns `containment`; this speaks only where they did not.
 
+    `report` is a list the refusal in rule 4 appends a Director-facing
+    sentence to.
+
+    4. A THING THE SCENE KEEPS NO RECORD OF IS STILL NOT PLACED -- BUT THE
+       REFUSAL IS SAID OUT LOUD. Placing an object the scene has never
+       established is the one expansion this pass cannot make: it has an id a
+       model reached for and nothing else -- no name, no kind, no size -- and
+       a stub keyed on that token would bind every later op to a record with
+       nothing in it. So it still places nothing. What changed is that the
+       possession fact no longer dies in silence. Measured (chat 98): the
+       establishing beat minted no entity for the thing that the whole opening
+       was about, four beats later a fully-formed transfer moved it from one
+       body to another, and the merge dropped it without a word -- the only
+       trace it ever left was a line of pose prose that then outlived it by
+       five beats. The note goes to the Director rather than to warnings,
+       because it names a fact only the Director can supply, the way
+       `crossing_report` does.
+
     Returns [(subject, kind, destination)] for the caller's report; mutates.
     """
     if not isinstance(inventory_ops, list) or not inventory_ops:
         return []
-    entities = (scene or {}).get("entities")
-    if not isinstance(entities, dict) or not entities:
-        return []
-    positions = scene.get("positions")
-    if not isinstance(positions, dict):
-        positions = scene["positions"] = {}
     spoken_for = {str(name).strip().casefold()
                   for name in (declared or []) if str(name).strip()}
 
@@ -904,7 +943,9 @@ def derive_inventory_placements(scene: dict, inventory_ops,
             continue
         eid, entity = _unique_entity_keyed(scene, op.get("object_id"))
         if not eid or not isinstance(entity, dict):
-            continue          # not a thing this scene knows: place nothing
+            # Not a thing this scene knows: place nothing, and say so.
+            _report_unrecorded_transfer(report, op)
+            continue
         if entity.get("ubiquitous"):
             continue          # a bodiless voice is nowhere by definition
         labels = {str(eid).strip().casefold(),
@@ -951,6 +992,9 @@ def derive_inventory_placements(scene: dict, inventory_ops,
                 for key in [k for k in contained
                             if str(k).strip().casefold() == folded_subject]:
                     contained.pop(key, None)
+            positions = scene.get("positions")
+            if not isinstance(positions, dict):
+                positions = scene["positions"] = {}
             _positions_write(positions, subject, room)
             # DELIBERATELY NO STATION. Being set down ON a thing is a within-
             # room fact, and `normalize_scene_stations` blanks any `at` that is

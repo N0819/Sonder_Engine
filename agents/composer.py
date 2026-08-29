@@ -241,13 +241,20 @@ def _subject_prefix(dedupe_key):
 _LABEL_DANGLING = frozenset(_ENGLISH_COMPOSITOR["label_dangling"])
 
 
-def _descriptor_words(name, appearance, aliases=None):
+def _descriptor_words(name, appearance, aliases=None, role=""):
     """The full name-stripped content word list of an appearance summary --
-    the raw material a stranger label is cut from."""
+    the raw material a stranger label is cut from.
+
+    `role` is exempt from the strip for the reason `_unknown_actor_label`
+    gives at length: a rank or duty carried inside a minted display name is
+    a public noun, not an identity token, and subtracting it deletes the
+    description of a body the observer can plainly see."""
     text = _appearance_as_prose(appearance)
     if not text:
         return []
     name_tokens = _identity_token_set(name, aliases)
+    if role:
+        name_tokens = name_tokens - _identity_token_set(role)
     cleaned = re.sub(r"^(a|an|the)\s+", "", text.strip(), flags=re.I)
     cleaned = cleaned.replace(",", " ").replace(";", " ")
     words = [w for w in cleaned.split()
@@ -255,6 +262,30 @@ def _descriptor_words(name, appearance, aliases=None):
     while words and words[0].lower() in ("a", "an", "the"):
         words = words[1:]
     return words
+
+
+def _label_core(text):
+    """A referring expression with its leading article, its ordinal
+    distinguisher and its trailing punctuation off, casefolded -- what two
+    spellings of one noun have in common.
+
+    The ordinal comes off because `_ordinal_label` inserts it to tell two
+    bodies apart and adds no attribute doing so ("the second ensign" is an
+    ensign); leaving it on made this comparison answer differently for the
+    first of a group and the rest of it. The article list is language DATA
+    (the compositor card), so a pack whose language takes no article
+    compares the bare nouns."""
+    text = str(text or "").strip().rstrip(".;:,")
+    if not text:
+        return ""
+    articles = frozenset(str(a).casefold() for a in _compositor("articles"))
+    ordinals = frozenset(str(w).casefold() for w in _ORDINAL_WORDS.values())
+    parts = text.split()
+    while parts and parts[0].casefold() in articles:
+        parts = parts[1:]
+    if len(parts) > 1 and parts[0].casefold() in ordinals:
+        parts = parts[1:]
+    return " ".join(parts).casefold()
 
 
 def _label_from_words(words, cap):
@@ -335,19 +366,28 @@ def _ordinal_label(label, n):
 def assign_stranger_labels(bodies):
     """name -> distinguishing label, chosen jointly against the others present.
 
-    `bodies` is ``[(name, appearance, aliases)]`` for every co-present body
-    the observer does NOT recognize. Starts from `_unknown_actor_label`'s
+    `bodies` is ``[(name, appearance, aliases)]`` -- or
+    ``[(name, appearance, aliases, role)]`` -- for every co-present body the
+    observer does NOT recognize. Starts from `_unknown_actor_label`'s
     short form; when two strangers collide on it, the colliding parties'
     labels are widened word by word from their own appearance summaries until
     they differ ("the fox woman with six tails" instead of "a second fox
     woman"). Only when the appearances genuinely cannot distinguish them does
     the ordinal distinguisher survive as the last resort (`_ordinal_label`).
+
+    The optional fourth element is the body's public role noun, exempt from
+    the identity strip (`_unknown_actor_label`). Two bodies of one rank still
+    collide on it and are told apart by the ordinal, which is honest: an
+    observer who can see two ensigns and tell them apart no other way has
+    exactly that.
     """
+    rows = [tuple(body) + ("",) * (4 - len(tuple(body))) for body in bodies]
     labels = {}
-    for name, appearance, aliases in bodies:
-        labels[str(name)] = _unknown_actor_label(name, appearance, aliases)
-    words = {str(name): _descriptor_words(name, appearance, aliases)
-             for name, appearance, aliases in bodies}
+    for name, appearance, aliases, role in rows:
+        labels[str(name)] = _unknown_actor_label(
+            name, appearance, aliases, role=role)
+    words = {str(name): _descriptor_words(name, appearance, aliases, role)
+             for name, appearance, aliases, role in rows}
     for cap in (6, 8, 10, 14):
         collided = _collided_names(labels)
         if not collided:
@@ -442,7 +482,8 @@ def observer_display_map(scene, observer_name, co_present, known,
             visual_level_between(scene, observer_name, name), "sight", senses)
         if level == "full":
             strangers.append(
-                (name, body.get("appearance"), body.get("aliases") or []))
+                (name, body.get("appearance"), body.get("aliases") or [],
+                 str(body.get("role") or "")))
         elif level == "none":
             out[name] = _unfamiliar_person()
         else:
@@ -1693,6 +1734,36 @@ def micro_round_percept(text):
     )
 
 
+def micro_round_percepts(deliveries):
+    """ONE PERCEPT PER DELIVERED LINE. `delivered_views[observer]` is a LIST.
+
+    `micro_round_percept` above takes one line, and the outcome composer
+    handed it the whole list. `str(["a", "b"])` does not fail -- it renders
+    the Python repr -- so the bracket, the quotes and the comma went into the
+    composed view verbatim, and from there into the observations projected
+    off that view and into the episode minted from it. Measured over chat 98:
+    68 of the 142 stored character views carry a `['...']` span, on 24 of the
+    38 turns; the composer's own dialogue tripwire caught four of them and
+    said so ("engine defect, view delivered as composed") while the view
+    shipped anyway.
+
+    The class is a shape mismatch at a seam, not a rendering bug, so it is
+    fixed by naming the shape: a delivery is one line, a round delivers
+    several, and the caller passes what it has. A bare string still works --
+    it is one delivery.
+    """
+    if deliveries is None:
+        return []
+    if isinstance(deliveries, str):
+        deliveries = [deliveries]
+    out = []
+    for line in deliveries:
+        percept = micro_round_percept(line)
+        if percept is not None:
+            out.append(percept)
+    return out
+
+
 def residue_percepts(level, *, targeted=False, loud_event=False, pain=False):
     """A non-awake mind gets the residue and nothing else."""
     return [Percept(
@@ -2029,6 +2100,32 @@ def standing_verdicts(percepts, prev_standing=frozenset(),
 _FIRST_SIGHT_LEADS = frozenset(("presence", "sensation"))
 
 
+def _appearance_restates_label(percept):
+    """Does this appearance percept say only what the observer's own label
+    for the body already says.
+
+    The presence line has already reported who is here, under this
+    observer's label; an appearance summary identical to that label is the
+    same fact a second time, and for a one-word summary it is ungrammatical
+    besides. Measured, chat 98 turn 38: the player's ENTIRE view for the
+    beat was "The lieutenant commander is close by. You see lieutenant
+    commander." Compared on `_label_core`, which drops the article and the
+    ordinal distinguisher, so the two spellings of one noun cannot slip past
+    each other and the second of a pair is treated like the first.
+
+    A percept this answers True for was still DELIVERED -- the observer has
+    the description, it just cost no sentence -- so the caller records it in
+    the first-mention ledger rather than leaving the body undescribed and
+    re-describing it next beat.
+    """
+    if percept.kind != "appearance":
+        return False
+    desc = _appearance_as_prose((percept.data or {}).get("description"))
+    if not desc:
+        return False
+    return _label_core(percept.source_label) == _label_core(desc)
+
+
 def appearance_delta(percept):
     """The transition prose an appearance percept carries, or "".
 
@@ -2357,6 +2454,8 @@ def _render_standing(p):
             return _cap(_en("appearance_change",
                             label=p.source_label or "someone", change=change))
         desc = _appearance_as_prose(p.data.get("description"))
+        if _appearance_restates_label(p):
+            return ""
         return _en("appearance", description=desc) if desc else ""
     if p.kind == "pose":
         return _render_pose(p)
@@ -2571,10 +2670,14 @@ def _render_view_english(percepts, *, mode="character",
                     _PRESENCE_SLOT)
             continue
         sentence = _render_standing(p)
+        # A description the label already carried was delivered without
+        # costing a sentence (`_appearance_restates_label`); leaving it out
+        # of the ledger would re-offer it as a first mention every beat.
+        if p.kind == "appearance" and (
+                sentence or _appearance_restates_label(p)):
+            described.add(str(p.data.get("source_key") or ""))
         if not sentence:
             continue
-        if p.kind == "appearance":
-            described.add(str(p.data.get("source_key") or ""))
         if leads:
             beat_spans.append((as_beat(p), sentence))
         else:
@@ -2620,6 +2723,14 @@ def render_view(percepts, *, mode="character", prev_standing=frozenset(),
     information boundary. A language adapter receives only that list and the
     ordinary render-mode state, so changing languages cannot grant it scene,
     database, or identity knowledge that the observer never earned.
+
+    A QUIET BEAT STILL COMPOSES TO "" HERE, and that is the honest answer:
+    this function renders a DELTA, and an empty delta means "nothing new",
+    not "nothing reached this mind". The two are different states and only
+    the stage that holds the observer decides which one the narrator is
+    handed -- see `perception._composer_outcome`, which asks for the
+    background on a player view the delta emptied rather than storing the
+    None that `agents/narration.py` reads as a claim about the world.
     """
     selected = renderer if renderer is not None else _safe_renderer(language)
     if selected is not None:
@@ -3078,19 +3189,39 @@ def observations_from_render(pid, rendered):
     def _same_mouth(a, b):
         return bool(a["speaker"]) and a["speaker"] == b["speaker"]
 
+    # ONE MOUTH'S TWO QUOTED LINES ARE DEARER THAN A SILENT ATOM. The ranks
+    # below used to price a same-mouth speech weld (then rank 1) BELOW every
+    # other event pair, so the cap reached for it first -- and a group holding
+    # two complete attribution-plus-quote spans is exactly the antecedent the
+    # loop above refuses to mint, for the measured reason it states: the sheet
+    # tells the narrator each numbered entry is one delivery, the model obeys,
+    # and the two quotes come out welded. Measured, chat 98 turn 29: nine
+    # atoms against a cap of eight, the cap folded Picard's first two lines
+    # into one entry, and the page carried them back to back with no
+    # attribution or beat between them -- the worst dialogue sample in the run.
+    #
+    # Folding a SILENT atom into a spoken one cannot produce that shape: the
+    # group still holds one quote, so there is nothing to weld. It costs the
+    # channel (the entry degrades to `mixed`) and the attribution, which the
+    # loop below already spends on it. So the order is: wallpaper into
+    # wallpaper, then two silent events, then a silent event into a spoken
+    # one, then one mouth's two deliveries, then the obligation boundary, and
+    # last the two-mouth weld the fidelity check hunts.
     def _pair_cost(i):
         a, b = merged[i], merged[i + 1]
         both_speech = a["kind"] == "speech" and b["kind"] == "speech"
         if both_speech and not _same_mouth(a, b):
-            rank = 4
+            rank = 5
         elif a["standing"] != b["standing"]:
-            rank = 3
+            rank = 4
         elif both_speech:
-            rank = 1
+            rank = 3
         elif a["standing"]:
             rank = 0
-        else:
+        elif a["kind"] == "speech" or b["kind"] == "speech":
             rank = 2
+        else:
+            rank = 1
         return (rank, len(" ".join(a["parts"] + b["parts"])))
 
     while len(merged) > _MAX_OBSERVATION_ATOMS:
