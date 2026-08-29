@@ -3914,6 +3914,36 @@ Three things that work names for and does not close.
   branches -- and that is the remaining fork. A malformed adapter still falls
   through to the English reference renderer, which carries the tier, so the
   failure mode is wording rather than information.
+- **The delta can still starve a view without emptying it, and that half is
+  the owner's call.** A view the delta empties completely is now re-asked for
+  the background (`perception._composer_outcome`; `Design.md` § A view leads
+  with what changed), because "nothing new" and "nothing reached this mind"
+  are different states and `agents/narration.py` reads the second off a null
+  view. A view the delta reduces to ONE sentence is untouched, and on chat 98
+  that was the more common shape: turn 9's whole player view was "You are
+  seated on the bar."; turn 10's "You are standing on the deck."; turn 38's
+  "The lieutenant commander is close by. You see lieutenant commander." No
+  room, no roster, no light — the narrator supplied all three from prose
+  memory. **The question is whether PLACE and COMPANY are deltas at all.**
+  They are continuously true, they are the frame every other sentence in a
+  view is positioned inside, and `ACTIVE_STANDING_KINDS` already exempts
+  sensations from suppression on exactly that argument ("an unchanged contact
+  is still being felt now"). Against that: the tier's whole measured result
+  was won by suppressing what the observer was already told, 772 of 2,645
+  consecutive player-view pairs repeated a 60-character sentence verbatim
+  before it, and a room's authored notes are long. A middle exists — restore
+  the room's IDENTITY every beat and keep its notes and light on the delta —
+  and it is a behaviour change to every story's prose, so it is named here
+  rather than taken.
+- **Two consecutive recovered views are byte-identical, by construction.**
+  The recovery re-renders the same unchanged percepts, so a run of quiet
+  beats hands the narrator the same paragraph each time. Measured live on
+  chat 98 turns 39 and 40 (played on a copy, 2026-08-29): both views were
+  the room, its notes, the roster and the pose, character for character, and
+  both beats' prose still differed because `already_established_phrases`
+  fills from the view against recent narration and is doing exactly the job
+  it was built for. Recorded because the mechanism is not obvious from the
+  code: the composer is not deduplicating across beats here, the narrator is.
 
 One thing the replay surfaced that is NOT a residual, recorded so the next
 reader does not re-open it: the stored corpus shows a structured overlay
@@ -4745,7 +4775,26 @@ the key TAG, so a ledger written before the change reads as first sight rather
 than as a claim that something moved. `observations_from_render` no longer
 welds one mouth's consecutive lines into one numbered entry, and the atom cap
 that now pays for that prices the pair it is about to weld — wallpaper, then
-one mouth, then the obligation boundary, then two mouths last.
+two silent events, then a silent event into a spoken one, then one mouth's two
+deliveries, then the obligation boundary, then two mouths last.
+
+**The middle of that order was wrong until 2026-08-29.** A same-mouth speech
+weld was priced BELOW every other event pair, so the cap reached first for the
+one shape the merge loop above deliberately refuses to mint. Measured, chat 98
+turn 29: nine legitimate atoms against a cap of eight, the cap folded Picard's
+first two lines into a single entry, and the page carried both quotes back to
+back with no attribution or beat between them — the worst dialogue sample in
+that run. Folding a SILENT atom into a spoken one cannot produce that shape,
+because the entry still holds one quote; it costs the channel (the group
+degrades to `mixed`) and the attribution, both of which the loop already
+spends there.
+
+**Still open: the cap itself.** `composer._MAX_OBSERVATION_ATOMS` is 8 and is
+untouched — turn 29 delivered nine atoms a mind legitimately received, so SOME
+boundary was going to be spent whatever the ordering, and the reorder only
+chooses the cheapest one. Raising it trades narrator payload size against how
+often any boundary is spent at all, which is the owner's call rather than the
+workflow's.
 
 **Not fixed: the `act_player` obligation marker asserts something false.**
 `{n}. {actor} did this (NOT yet on the page — the player described attempting
