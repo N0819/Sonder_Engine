@@ -1413,6 +1413,12 @@ def _presence_bodies(ctx, sc, rooms, chatter):
             rows.append({
                 "name": name, "room": row["room"],
                 "appearance": row.get("appearance") or "",
+                # The public noun the body's own institution gives it, carried
+                # beside the summary rather than folded into it: a minted
+                # display name puts the same noun in front of the personal
+                # name, and without this the identity strip deletes the
+                # description whole (`common._unknown_actor_label`).
+                "role": row.get("role") or "",
                 "aliases": [],
                 # An unregistered body wears no disguise ledger: there is no
                 # card to conceal and no `known_to` list to consult, so both
@@ -2746,7 +2752,8 @@ def _joint_stranger_labels(bodies):
     epithet as well as the base one. It decides nothing about admission: it is
     only ever read to rewrite a body's own epithet into "you"."""
     return composer.assign_stranger_labels([
-        (b.get("name"), b.get("appearance"), b.get("aliases") or [])
+        (b.get("name"), b.get("appearance"), b.get("aliases") or [],
+         str(b.get("role") or ""))
         for b in bodies or [] if b.get("name")
     ])
 
@@ -3501,15 +3508,31 @@ def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
         if state_percept:
             percepts.append(state_percept)
     # The identity floor rides the sensation clause at its source: the OTHER
-    # party is named through this observer's own display map — "you" is
-    # impossible here (contact_sensation picks the non-observer party), a
-    # recognized partner gets their name, a stranger the descriptor, and a
-    # spelling the map cannot place falls to "someone" rather than leaking
-    # the canonical name (the tripwire downstream remains the backstop).
-    # Before this, the clause named the partner canonically and the tripwire
-    # fired on every contact beat with an unrecognized partner (chat 70).
-    _sensation_label = (lambda other:
-                        display_map.get(str(other)) or "someone")
+    # party is named through this observer's own display map — a recognized
+    # partner gets their name, a stranger the descriptor, and a spelling the
+    # map cannot place never leaks the canonical name (the tripwire
+    # downstream remains the backstop). Before this, the clause named the
+    # partner canonically and the tripwire fired on every contact beat with
+    # an unrecognized partner (chat 70).
+    #
+    # A CONTACT PARTY IS NOT NECESSARILY A BODY, and "someone" asserts one.
+    # The map holds co-present BODIES and nothing else, so every miss took
+    # the person-shaped default -- and a contact record may name a garment,
+    # a fixture, a device or a bare noun as readily as a person. Measured,
+    # chat 98 turn 22: the player's own combadge resting on her uniform was
+    # delivered as "your uniform registers someone against it", and the page
+    # made it a body pressed continuously against her with three absent
+    # people's scents attached. `_pose_referent` already ranks this exact
+    # order of certainty -- observer, a body already given, any other body
+    # (kept here, because a body you are TOUCHING reaches you by
+    # interoception whether or not you can see who), a scene entity by its
+    # own name, an id-shaped token dropped -- for poses, after the same
+    # defect put a desk in a room as an unidentified person (chat 84). One
+    # rule, asked at both sites; a referent it drops is a thing this
+    # observer cannot name, which is what "something" says.
+    _sensation_label = (
+        lambda other: composer._pose_referent(
+            sc, name, display_map, others, other, is_self=True) or "something")
     observer_standing_contacts = _standing_contacts_for(sc, name)
     percepts.extend(composer.contact_percepts([
         (contact, contact_sensation(contact, you=name, scene=sc,
@@ -4534,6 +4557,37 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
             prev_standing=prev_standing, prev_described=prev_described,
             full_render=is_player_view and full_player_render,
             language=ctx.language)
+        # "NOTHING NEW" AND "NOTHING REACHED THIS MIND" ARE DIFFERENT STATES,
+        # and storing both as None collapses them. A player view is a DELTA:
+        # `render_view` suppresses the standing state this observer was
+        # already given, which is right while anything survives it. When
+        # nothing does -- no event reached the mind and every standing
+        # percept hashes to a key it already holds -- the compression has
+        # produced no view at all, `_composer_finish_observer` stores None,
+        # and `agents/narration.py` falls through to the compositor's
+        # "nothing in particular reaches you" default. That string is a claim
+        # about the WORLD, and a false one: the observer is standing in a
+        # room, in the light, with company. Measured over chat 98's 38 played
+        # beats, `views.player` was null on six (turns 13, 15, 16, 20, 21,
+        # 36) and `observations.player` was `[]` on all six, so the narrator
+        # was handed no slice and originated the room -- which is the one
+        # thing the narrator may not do.
+        #
+        # Asking for the background is `full_render`'s existing meaning, and
+        # it re-renders the SAME percept list, so nothing is admitted that
+        # Layer A did not already admit. Nothing in it is marked as this
+        # beat's news either: `leads_the_beat` answers "unchanged" for every
+        # one of these percepts, so the recovered view lands whole in the
+        # background half and reads as context rather than as an event --
+        # and `observations_from_render` files it `standing`, which
+        # `_render_observed_events` skips, so it reaches the model as the
+        # frame it is and never as a numbered obligation.
+        if (is_player_view and not full_player_render and percepts
+                and not rendered.text.strip()):
+            rendered = composer.render_view(
+                percepts, mode="player", prev_standing=prev_standing,
+                prev_described=prev_described, full_render=True,
+                language=ctx.language)
         _composer_finish_observer(
             ctx, "perception_outcome", pid, name, rendered, known,
             ident_roster, clean_views, observations, ledger,
