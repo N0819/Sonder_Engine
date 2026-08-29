@@ -21,7 +21,7 @@
 | `agents/director_reconcile.py` | 592 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story`, `world.spatial` |
 | `agents/director_scopes.py` | 673 |  | `agents.director_views`, `core.db`, `world.survival` |
 | `agents/director_views.py` | 627 |  | `agents.common`, `story.character_schema`, `story.scene`, `world.background_claims` |
-| `agents/loops.py` | 1245 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `core.db`, `story.character_schema`, `story.scene`, `world.spatial` |
+| `agents/loops.py` | 1309 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `core.db`, `story.character_schema`, `story.scene`, `world.spatial` |
 | `agents/mapping.py` | 337 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `core.db`, `llm.prompts`, `mind.memory`, `story.character_schema`, `story.scene` |
 | `agents/narration.py` | 1853 | Player-facing narration agent. | `agents`, `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `story.character_schema`, `story.scene`, `world.spatial`, `world.weather` |
 | `agents/perception.py` | 4479 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `mind`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
@@ -353,14 +353,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `interaction_loop()` | 560 | 615 lines |
-| `deterministic_micro_perception()` | 138 | 144 lines |
-| `reaction_loop()` | 1176 | 70 lines |
-| `rehydrate_loop_views()` | 87 | 49 lines |
-| `_drop_absent()` | 297 | 45 lines |
-| `_isolated_wave()` | 517 | 41 lines |
-| `_defer_to_unrun_reactor()` | 374 | 37 lines |
-| `_standing_pressure()` | 413 | 37 lines |
+| `interaction_loop()` | 612 | 627 lines |
+| `deterministic_micro_perception()` | 190 | 144 lines |
+| `reaction_loop()` | 1240 | 70 lines |
+| `rehydrate_loop_views()` | 87 | 59 lines |
+| `_drop_absent()` | 349 | 45 lines |
+| `_isolated_wave()` | 569 | 41 lines |
+| `self_micro_view()` | 148 | 40 lines |
+| `_defer_to_unrun_reactor()` | 426 | 37 lines |
 
 ### `agents/mapping.py`
 

@@ -189,6 +189,8 @@ comp["templates"].update({
     "loop_speech": "{label}：「{body}」",
     "loop_faint_sound": "{where}からかすかな音がするが、内容までは聞き取れない。",
     "loop_muffled": "{label}の方から、くぐもった断片が聞こえる。「……{fragment}……」",
+    "loop_self_said": "あなたはこう言った。「{quote}」",
+    "loop_self_did": "あなたは{surface}",
     "arrived": "{label}が入ってくる。",
     "departed": "{label}が立ち去る。",
     "episode_muffled": "くぐもった声を聞いた：{fragment}",
