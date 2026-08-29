@@ -1527,6 +1527,18 @@ def crowds_for_room(cid, sc, room_id, inputs=None):
             "uid": crowd.get("uid"),
             "what": crowds_model.describe(crowd, size),
             "density": crowds_model.density(crowd.get("band"), size),
+            # WHAT A CHANGE IS MEASURED AGAINST, published beside the
+            # sentence composed from it. `composer.room_content_percepts`
+            # hashed `what` and nothing else, so every re-rendering of an
+            # unchanged crowd read as an event and reached the narrator as an
+            # obligation (chat 95: seven `changed` verdicts in sixteen turns
+            # on a crowd whose band never moved). An authored crowd's
+            # composition IS state -- it is a stored field, and it changes
+            # only when `crowds.apply_ops` writes it, which is an event.
+            "state": (crowds_model.normalize_band(crowd.get("band")),
+                      str(crowd.get("composition") or ""),
+                      crowds_model.density(crowd.get("band"), size),
+                      str(crowd.get("mood") or "")),
             "heading": crowd.get("heading") or None,
             # A crowd is terrain, so the observer is told what kind. `open`
             # is ground with people on it; `membrane` is the barrier word
@@ -1562,6 +1574,21 @@ def crowds_for_room(cid, sc, room_id, inputs=None):
             # construction (a derived crowd has no heading), spelled through
             # the same function so there is one answer to what drift is.
             "density": crowds_model.density(crowd.get("band"), size),
+            # The derived species' state carries no composition, and the
+            # reason is not the species: `charter_crowd.composition_of` is
+            # recomputed at every read as the top two of a tally over a
+            # membership that moves individually by design, so it reorders
+            # without the crowd changing. Measured, chat 95: five spellings
+            # of one unchanged fact over sixteen turns ("a dozen or so
+            # captains and commanders", "...commanders and lieutenant
+            # commanders", "...lieutenant commanders and commanders"), and a
+            # sorted set of the nouns still flips four times. The band is the
+            # coarse summary of that same membership and it is what carries a
+            # real change here -- `crowd_for` already says so ("the
+            # membership count dies here: it met the band vocabulary").
+            "state": (crowds_model.normalize_band(crowd.get("band")),
+                      crowds_model.density(crowd.get("band"), size),
+                      str(crowd.get("mood") or "")),
             "heading": None,
             "terrain": crowds_model.terrain(crowd.get("band"), size),
             "drift": crowds_model.drift(crowd, size),
@@ -4113,6 +4140,44 @@ def character_room(sc, sheet):
         if room:
             return room
     return None
+
+
+def _present_cast_bodies(scene, cast):
+    """Every cast member the SCENE places somewhere -- [{id, name, room}].
+
+    Presence is a fact about the world, not a judgement about the beat, and
+    four readers need the same answer. Two are in `perception_act`: who is
+    standing here (for `_co_present_company`) and who therefore perceives
+    what happens (the perceiver list). Two more NARROW the Director's pacing
+    list to it -- `runtime.build_plan` and `loops._drop_absent` -- because a
+    mind the scene places nowhere gets no view, and asking it to declare
+    conduct is asking a person to act from a place they are not standing in.
+    It lived in `perception.py` while only that stage read it; it is here now
+    for the same reason `_drop_non_awake`'s inputs are.
+
+    Measured, chat 95 (2026-08-28): `scene.positions` held no entry for two
+    of the four registered cast all run, while `flow.reactors` named them on
+    turns 4, 5, 8 and 14 -- 6 `character_major` calls at 13-22s each,
+    deliberating from an empty perception base, in beats whose own
+    `perception_act.views` listed observers `['75']` / `['74','75']`.
+
+    The SHEET, not `sheet_state`. Presence asks what keys this body answers
+    to and where the scene puts them; the mutable per-chat state -- mood,
+    goal, stance -- says nothing about it, and reading the row through
+    `sheet_state` made this refuse any cast row without a ``cstate`` column.
+    That is not a hypothetical: `_drop_non_awake` beside it already reads
+    ``c["sheet"]`` directly for exactly this reason, and four suites build
+    reactor rows of `{id, sheet}` alone.
+    """
+    out = []
+    for c in cast or []:
+        sh = json.loads(c["sheet"]) if isinstance(c["sheet"], str) else c["sheet"]
+        name = character_name(sh)
+        room = character_room(scene, sh)
+        if name and room:
+            out.append({"id": c["id"], "name": name, "room": room})
+    return out
+
 
 def cast_room(sc, name, cast):
     """Room of a named speaker/actor, mapping the bare name through the cast so

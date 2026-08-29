@@ -1528,8 +1528,20 @@ def scent_percepts(sources):
             data={"scent": scent, "level": level,
                   "attributed": bool(label)},
             salience=0.35,
+            # THE LABEL IS NOT HASHED. It says whose smell this is, which is
+            # a fact about this observer's recognition of the source and not
+            # about the smell: learning whose a fact is is not a change to
+            # the fact. Measured, chat 95 turn 9 -- a body the player had
+            # been smelling for nine beats was recognised, the label went
+            # from a stranger descriptor to a name, the authored scent string
+            # was byte-identical, and the moved key re-declared the smell as
+            # this beat's news. `level` stays: a smell that arrives muffled
+            # is delivered differently, which is a change in the percept
+            # rather than in the reader of it. New tag, so an old ledger's
+            # label-hashed key degrades to first sight instead of to
+            # `changed` (`standing_verdicts`).
             dedupe_key=standing_key(
-                "scent", (source.get("key"),), (scent, level, label)),
+                "scent_state", (source.get("key"),), (scent, level)),
         ))
     return out
 
@@ -1563,11 +1575,37 @@ def room_content_percepts(*groups):
             # thins from a crush to a press is a CHANGED percept and re-renders
             # in a delta view, while the same crowd unchanged stays furniture.
             key = str(entry.get("uid") or entry.get("artifact_id") or "")
+            # AND KEYED ON THE STATE, NEVER ON THE SENTENCE COMPOSED FROM IT.
+            # A stable subject paired with prose content is the one
+            # combination in this family that manufactures a false `changed`:
+            # every re-rendering of an unchanged fact reads as an event, and
+            # `leads_the_beat` promotes an event into the beat half, where
+            # `_render_observed_events` numbers it as an obligation the
+            # narrator must write a sentence about. Measured, chat 95: one
+            # crowd whose band never left "a dozen or so" for sixteen turns
+            # recorded `changed` seven times, because `describe` composes a
+            # top-two-of-tally over a membership that walks its errands --
+            # five spellings of one unchanged fact.
+            #
+            # A seam that publishes no state (a courier, a posted notice) has
+            # nothing else to be identified by and keeps the description as
+            # its content; the tag differs so an old ledger's prose-hashed
+            # key reads as a subject never held -- first sight, which
+            # `leads_the_beat` refuses for an ambient -- rather than as a
+            # claim that something moved (`standing_verdicts`' own
+            # degradation rule).
+            state = entry.get("state")
+            if isinstance(state, (list, tuple)) and any(
+                    str(v or "").strip() for v in state):
+                dedupe = standing_key("content_state", (key,),
+                                      tuple(str(v or "") for v in state))
+            else:
+                dedupe = standing_key("content", (key,), (desc,))
             out.append(Percept(
                 kind="ambient", channel="sight",
                 data={"desc": desc},
                 salience=0.35,
-                dedupe_key=standing_key("content", (key,), (desc,)),
+                dedupe_key=dedupe,
             ))
     return out
 
@@ -2974,9 +3012,25 @@ def observations_from_render(pid, rendered):
     # entry boundary, against a sheet that tells the narrator each numbered
     # entry is a separate delivery.
     #
-    # Same speaker, consecutive speech still merges: "The Doctor says X. The
-    # Doctor says Y." is one delivery honestly described, and refusing it
-    # would uncap the atom count on a monologue beat.
+    # SAME SPEAKER, CONSECUTIVE SPEECH NO LONGER MERGES HERE. It is an
+    # honest description of the atom count and a dishonest one of the
+    # DELIVERY count: the joined parts render as a single numbered entry
+    # containing two complete attribution-plus-quote spans, the sheet tells
+    # the narrator each numbered entry is one delivery, and the model obeys
+    # by writing one -- dropping the second attribution and welding the
+    # quotes. Measured, chat 95 turns 2, 6 and 11: three welds on the page in
+    # sixteen turns, three of three with a merged entry as their direct
+    # antecedent. A rule the model is asked to follow downstream ("never weld
+    # two entries' quotes into one quoted span") cannot fire against a weld
+    # made upstream of it -- there is only one entry left to compare.
+    #
+    # What that spends is the atom cap, which is why the cap below now picks
+    # its victim by what the weld COSTS rather than by size alone. Measured
+    # over the 4,108 stored observer-beats in the bench corpus: 668 carry a
+    # same-mouth weld and refusing it newly overflows the cap on 345, of
+    # which 333 hold no standing entry for the cap to spend instead. So on a
+    # genuinely crowded beat the cap re-forms exactly this group, and on
+    # every beat under the cap the boundary survives.
     #
     # OBLIGATION IS A BOUNDARY TOO. A standing atom folded into an event one
     # (or the reverse) makes wallpaper indistinguishable from what happened,
@@ -2992,10 +3046,10 @@ def observations_from_render(pid, rendered):
             return False
         if len(last["parts"]) >= 3:
             return False
-        speech = (last["kind"] == "speech", atom["kind"] == "speech")
-        if any(speech):
-            # Speech joins speech, and only the SAME mouth's.
-            return all(speech) and last["speaker"] == atom["speaker"]
+        if last["kind"] == "speech" or atom["kind"] == "speech":
+            # A spoken line is a delivery, and a delivery is a boundary this
+            # projection may not spend before the cap forces it to.
+            return False
         return True
 
     merged = []
@@ -3009,22 +3063,54 @@ def observations_from_render(pid, rendered):
             last["ambiguity"] = max(last["ambiguity"], atom["ambiguity"])
         else:
             merged.append({**atom, "parts": [atom["text"]]})
-    # THE CAP IS A LAST RESORT, AND IT NOW PICKS ITS VICTIM. It used to take
-    # the shortest group wherever it sat, so a forced merge could weld two
-    # speakers by accident after the loop above had deliberately refused to.
-    # Standing groups are spent first: re-describing the room in one entry
-    # instead of two costs a boundary nobody is scored on, while welding two
-    # deliveries costs the one the merge check hunts.
-    def _cap_cost(i):
-        return (0 if merged[i]["standing"] else 1,
-                len(" ".join(merged[i]["parts"])))
+    # THE CAP IS A LAST RESORT, AND IT PRICES THE PAIR IT IS ABOUT TO WELD.
+    # It used to take the shortest group wherever it sat and fold it into
+    # whichever neighbour happened to be there, so a forced merge could weld
+    # two speakers by accident after the loop above had deliberately refused
+    # to. Now the boundaries are ranked, cheapest spent first: wallpaper into
+    # wallpaper costs a boundary nobody is scored on; one mouth's consecutive
+    # lines cost an attribution; folding standing state into what happened
+    # costs the obligation boundary `_render_observed_events` files on; and
+    # welding two mouths costs the one the merged-speaker fidelity check
+    # hunts, so it goes last. With the same-mouth merge refused above this
+    # ordering is what keeps 333 crowded beats (of 4,108 measured) from
+    # trading a dropped attribution for a misattributed line.
+    def _same_mouth(a, b):
+        return bool(a["speaker"]) and a["speaker"] == b["speaker"]
+
+    def _pair_cost(i):
+        a, b = merged[i], merged[i + 1]
+        both_speech = a["kind"] == "speech" and b["kind"] == "speech"
+        if both_speech and not _same_mouth(a, b):
+            rank = 4
+        elif a["standing"] != b["standing"]:
+            rank = 3
+        elif both_speech:
+            rank = 1
+        elif a["standing"]:
+            rank = 0
+        else:
+            rank = 2
+        return (rank, len(" ".join(a["parts"] + b["parts"])))
 
     while len(merged) > _MAX_OBSERVATION_ATOMS:
-        idx = min(range(len(merged)), key=_cap_cost)
-        into = idx - 1 if idx else 1
-        target, source = sorted((into, idx))
+        target = min(range(len(merged) - 1), key=_pair_cost)
+        source = target + 1
         if merged[target]["channel"] != merged[source]["channel"]:
             merged[target]["channel"] = "mixed"
+        if (merged[target]["kind"] != merged[source]["kind"]
+                or not _same_mouth(merged[target], merged[source])):
+            # No longer one mouth's delivery, and it must not be read as one
+            # by a later pass of this same loop.
+            merged[target]["kind"] = ""
+            merged[target]["speaker"] = ""
+        # Obligation wins the merge. The target is the earlier group, so a
+        # standing entry sitting in front of an event used to make the whole
+        # welded group skippable -- the direction this file's own comment
+        # calls the unsafe one ("replay can never make something skippable
+        # that was not already").
+        merged[target]["standing"] = (
+            merged[target]["standing"] and merged[source]["standing"])
         merged[target]["parts"].extend(merged[source]["parts"])
         merged[target]["ambiguity"] = max(
             merged[target]["ambiguity"], merged[source]["ambiguity"])

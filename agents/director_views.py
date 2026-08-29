@@ -13,16 +13,27 @@ Import direction: nothing outside `agents/director*.py` may import an
 
 import copy
 import json
+import re
 
 from story.character_schema import (
+    _UNSPACED_SCRIPT,
     character_appearance,
     character_name,
     persona_appearance,
 )
 from story.scene import persona_of
+# One lexicon of forms of address, not two. `world.background_claims` already
+# owns what counts as one, because its matching side has to know that "Worf"
+# and "Lieutenant Worf" are one referent; the assertion side below has to agree
+# with it or a legitimately authored form reads as an invention in one module
+# and as a known variant in the other.
+from world.background_claims import is_title_only
 
 from .common import (
+    _NAME_TOKEN_RE,
     _dict,
+    _ling,
+    _name_token_floor,
     _sync_sequence_mirrors,
     _unknown_actor_label,
     authored_other_subject,
@@ -294,6 +305,160 @@ def _report_observer_epithets(ctx, out, sc, p_name):
             "account is omniscient -- name them canonically and let "
             "perception decide what each observer may call them, or a line "
             "addressed to them is addressed to no one the engine can match.")
+        ctx.tell_director(note)
+        ctx.add_warning(note)
+
+
+def _report_unowned_address_forms(ctx, out, p_name):
+    """Report a form of address the objective record attaches to a person that
+    no card carries.
+
+    A card's typed identity is exactly {uid, name, aliases, pronouns}. Every
+    other authored attribute of a person -- what they are addressed as besides
+    their name, how old they are, what kind of being they are, who they are to
+    someone else -- exists only as free prose, and prose is not comparable to
+    an assertion, so no stage can contradict one. That is why the defence a
+    personal attribute gets is a function of whether the engine OWNS it as a
+    typed field rather than of how much it matters: the two owned ones are both
+    defended (an unearned name trips the composer's identity floor, a pronoun
+    has `_check_pronoun_fidelity`) and everything else is uncontestable.
+
+    Measured, chat 95 turn 1 (2026-08-28). A character agent that had not
+    recognized the persona's body -- it called her "the compact woman standing
+    behind the command chair", and its payload carried her authored form of
+    address ZERO times -- declared the speech "Lieutenant Commander." The very
+    next call, this stage's prose author, promoted that mistake into the
+    omniscient third person: "Lieutenant Commander Sabine Oyelaran folds the
+    five subspace metric traces onto a single overlay at the science station."
+    Its own payload had carried the authored form twice, so this was never
+    information starvation. From the following call on the invented form was in
+    every specialist payload (51 of the 294 captured payloads, against 82
+    carrying the authored one), and it committed into events rows, into another
+    mind's autobiographical memory and into checkpoints -- after which it
+    re-enters every mind through memory and every payload through the
+    transcript. 133 warnings were raised across those 16 turns and not one
+    concerned it.
+
+    The seed of such an assertion is a mind being legitimately mistaken, which
+    is fiction working: deception, dramatic irony and a mind acting on a false
+    belief all need the mistake to be possible. So dialogue is not scanned. The
+    failure is only ever the omniscient account ADOPTING a mistaken form of
+    address as objective third-person fact -- the objective record is the one
+    representation every observer's wording is derived from, so an assertion
+    does not have to be true to become the shared past, it only has to survive
+    to commit.
+
+    Report-only, for the same reason `_report_observer_epithets` above is:
+    `resolved_event` and the words of `dialogue_log` are not this seam's to
+    edit. It is a report of an assertion the engine cannot source, not a claim
+    that the engine knows the right answer -- it has no field to hold one.
+
+    MEASURED BEFORE SHIPPING, because a false positive here would accuse an
+    author of inventing what they wrote. Replayed over every stored
+    `director_resolve` variant carrying prose in the development database
+    (2,737, across 75 chats): 72 forms of address stand attached to a
+    canonically named body, 67 of them are sourced to that person's card and
+    pass, 5 are reported, and all 5 are the chat 95 defect above. Nothing else
+    fires -- including the 52 in the one other chat whose fiction is thick with
+    them, every one authored.
+
+    Deliberately narrow, in three ways that each cost a real hit:
+      * only whitespace may stand between the form and the name -- reading
+        across a full stop turned "...admiration for her mother. The Doctor
+        leans one hip..." into an invented form on every beat that used it;
+      * a person whose own identity.name already carries a form of address is
+        skipped entirely. That is the storage half of the same gap
+        (docs/UNBUILT.md 1.84d, "a character has nowhere to carry a rank, so
+        the rank goes in the name") and when the name holds one, an
+        abbreviation written out in full in the prose is indistinguishable
+        from a second, invented form: 24 hits in one chat of the replay, all
+        one card;
+      * a name token two bodies share is dropped, as in
+        `_check_pronoun_fidelity` -- it no longer names one of them.
+
+    A form of address is recognized by POSITION -- it precedes the name -- out
+    of a lexicon that is English (`world.background_claims`'). So this is quiet
+    for a language that marks address with a suffix rather than a prefix, and
+    quiet where the lexicon does not reach. Same posture as the pronoun check
+    toward a paradigm it cannot be certain about: silence, not a guess.
+    """
+    # The person's own card, as authored text. Free prose is the only place a
+    # card can put this today, so prose IS a channel: what gets reported is a
+    # form with no channel at all, not every form the typed identity omits.
+    cards = {}
+    for row in (ctx.cast or []):
+        try:
+            sheet = json.loads(row["sheet"])
+        except Exception:
+            continue
+        name = character_name(sheet)
+        if name:
+            cards[name] = str(row["sheet"] or "")
+    pers = persona_of(ctx.chat)
+    if isinstance(pers, dict) and p_name:
+        cards[p_name] = json.dumps(pers, ensure_ascii=False)
+
+    ambiguous = _ling("_AMBIGUOUS_NAME_WORDS")
+    owner = {}
+    for name in cards:
+        tokens = _NAME_TOKEN_RE.findall(name)
+        if not tokens or is_title_only(tokens[0]):
+            continue
+        for token in tokens:
+            if len(token) < _name_token_floor(token):
+                continue
+            # The capital is what separates a name part from an ordinary word
+            # beside it -- in a script that HAS capitals. Same reasoning as
+            # `_check_pronoun_fidelity`.
+            if not _UNSPACED_SCRIPT.match(token[:1]) and not token[:1].isupper():
+                continue
+            if is_title_only(token) or token.lower() in ambiguous:
+                continue
+            if token in owner and owner[token] != name:
+                owner[token] = None
+            elif token not in owner:
+                owner[token] = name
+    owner = {t: n for t, n in owner.items() if n}
+    if not owner:
+        return
+
+    scan = _ling("_NARRATION_QUOTE_RE").sub(" ", str(out.get("resolved_event") or ""))
+    words = list(_NAME_TOKEN_RE.finditer(scan))
+    reported = set()
+    for i, match in enumerate(words):
+        name = owner.get(match.group(0))
+        if not name:
+            continue
+        run, j = [], i
+        while j >= 1 and is_title_only(words[j - 1].group(0)):
+            if scan[words[j - 1].end():words[j].start()].strip():
+                break
+            run.insert(0, words[j - 1].group(0))
+            j -= 1
+        if not run:
+            continue
+        form = " ".join(run)
+        key = (form.casefold(), name)
+        if key in reported:
+            continue
+        # Word-bounded rather than \b: the boundary has to hold against the
+        # punctuation and quoting a card's prose is full of, and the form is an
+        # alphabetic phrase by construction.
+        if re.search(rf"(?<![A-Za-z]){re.escape(form)}(?![A-Za-z])",
+                     cards.get(name) or "", re.IGNORECASE):
+            continue
+        reported.add(key)
+        note = (
+            f"objective record: resolved_event wrote {name} with the form "
+            f"of address {form!r}, and nothing authored on this person carries "
+            "it -- not identity.name, not aliases, not the card's own prose. A card's typed identity is only {uid, name, aliases, "
+            "pronouns}, so a form of address asserted here is a person-"
+            "attribute the engine owns no field for and therefore cannot "
+            "contradict, and the objective account is the one representation "
+            "every observer's wording is derived from: it becomes the shared "
+            "past whether or not it is true. A character being mistaken out "
+            "loud is fiction working and is not this -- in the omniscient "
+            "sentences, name them canonically or use a form the card carries.")
         ctx.tell_director(note)
         ctx.add_warning(note)
 

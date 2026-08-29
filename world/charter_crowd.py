@@ -124,7 +124,10 @@ def members_of(charter, place):
 
     The subtraction IS the presentation boundary (DESIGN_BACKGROUND_
     PRESENTATION §B2): a charter body is ground exactly when it is neither
-    bound to a registered character (``bindings``) nor presented as an
+    an authored mind's (`body_of_an_authored_mind` -- bound to a registered
+    character, or reserved for one by ``resident_seed_id``; chat 95 counted
+    Picard's and Data's own bodies as ground because only the first half was
+    asked, 10 members on ``main_bridge`` where 8 is right) nor presented as an
     individual right now (``presented_bodies`` -- ``background_presences``
     records still inside `PRESENTED_IDLE_BEATS`, by body key, which is how
     an emerged body leaves the crowd on the next read without any
@@ -133,10 +136,11 @@ def members_of(charter, place):
     ``known_bodies`` -- every record, however old -- which is the
     conservative pre-§C3 subtraction.
     """
+    from .charter_model import body_of_an_authored_mind
+
     room = str(place or "")
     if not room:
         return []
-    bindings = charter.get("bindings") or ()
     if "presented_bodies" in charter:
         known = charter.get("presented_bodies") or ()
     else:
@@ -144,7 +148,8 @@ def members_of(charter, place):
     return sorted(
         key for key, body in (charter.get("bodies") or {}).items()
         if str((body or {}).get("place") or "") == room
-        and key not in bindings and key not in known)
+        and not body_of_an_authored_mind(charter, key, body)
+        and key not in known)
 
 
 def _role_noun(post_key):

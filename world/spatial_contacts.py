@@ -8,7 +8,9 @@ import re
 from world.spatial_containment import (_WHOLE_BODY_PARTS,
                                  containment_conceals, enclosure_joins_rooms,
                                  hiding_holders_of, scale_changed_names)
-from world.spatial_identity import _ci_get, canonical_subject, same_subject
+from world.spatial_identity import (_ci_get, _unique_entity_keyed,
+                                    canonical_subject, same_subject)
+from world.spatial_transit import _is_body_entity
 
 
 # ---------------------------------------------------------------------------
@@ -83,6 +85,34 @@ CONTACT_MOMENTARY_MANNERS = (
     "gush", "gushing", "splash", "splashing", "drip", "dripping",
 )
 _MOMENTARY_SET = frozenset(CONTACT_MOMENTARY_MANNERS)
+
+# The third kind of word, and the one the partition above had no room for: a
+# verb of PLACEMENT, which says where a body has come to be relative to
+# another rather than that two surfaces are touching. The tail of this
+# vocabulary is open on purpose (the fiction is wider than any list) and it
+# falls through to SETTLED DURABLE CONTACT, so every one of these was silently
+# promoted to a permanent assertion that two bodies touch. Measured, chat 95
+# turn 10: one locomotion event -- a body crossing a room to stand beside
+# another -- reached the contact specialist as its own numbered event and was
+# written `Jean-Luc Picard/body -> Sabine Oyelaran/left shoulder, manner
+# "stand"`. It stood turns 10-15 with `unasserted` at 0, was delivered to the
+# narrator every beat as a live touch percept, and rendered ungrammatically
+# ("body stands left shoulder") because no placement verb has an entry in
+# _CONTACT_STATE_VERBS -- the ledger could not even say the thing it was
+# holding.
+#
+# Refused between two BODIES only (see `_placement_between_bodies`): the same
+# beat's `positions` entry already carries where the body went, and that is
+# the channel that owns it. Against a thing the identical word means the
+# opposite -- the surface is BEARING the body -- which is the reading
+# `comfort._POSTURE_MANNERS` depends on for "lying on the bed".
+CONTACT_PLACEMENT_MANNERS = frozenset({
+    "stand", "stands", "standing", "sit", "sits", "sitting", "seat",
+    "seated", "kneel", "kneels", "kneeling", "crouch", "crouches",
+    "crouching", "lie", "lies", "lying", "wait", "waits", "waiting",
+    "face", "faces", "facing", "approach", "approaches", "approaching",
+    "hover", "hovers", "hovering", "loom", "looms", "looming",
+})
 
 # How a standing contact READS, as (singular subject, plural subject). Durable
 # manners keep their own verb (correctly inflected -- the old renderer emitted
@@ -476,6 +506,125 @@ def _contained_inversion(scene, actor, target) -> bool:
                for holder in hiding_holders_of(scene, target))
 
 
+def _manner_is_placement(manner) -> bool:
+    """True for a manner that answers "where is this body now"."""
+    word = str(manner or "").strip().casefold()
+    if not word:
+        return False
+    head = re.split(r"[^\w]+", word, maxsplit=1)[0]
+    return (word in CONTACT_PLACEMENT_MANNERS
+            or head in CONTACT_PLACEMENT_MANNERS)
+
+
+def _endpoint_is_body(scene, name) -> bool:
+    """Is this contact endpoint a body, on the scene's own evidence.
+
+    Affirmative only: `_is_body_entity`'s split (a body is the thing that
+    WEARS something or has a scale) asked of the endpoint's own spelling
+    first, because a registered cast member is routinely a subject with no
+    entity record at all -- both endpoints of the measured case were in
+    `attire` and neither was in `entities`. No evidence reads as NOT a body,
+    which is the conservative direction for the one caller: it refuses a
+    record only where the scene positively says two bodies.
+    """
+    if not isinstance(scene, dict):
+        return False
+    name = str(name or "").strip()
+    if not name:
+        return False
+    if _is_body_entity(scene, name, None):
+        return True
+    eid, ent = _unique_entity_keyed(scene, name)
+    return bool(eid) and _is_body_entity(scene, eid, ent)
+
+
+def _placement_between_bodies(scene, actor, target, manner) -> bool:
+    """A placement verb standing where a contact record should be.
+
+    See CONTACT_PLACEMENT_MANNERS. Deliberately asymmetric: between two
+    bodies the word states where one of them has come to be, which is the
+    business of the channel that owns positions and poses and is already
+    answering the same beat; against a thing the same word states that the
+    thing is BEARING the body, which is a contact and is the reading
+    `comfort._POSTURE_MANNERS` was built on.
+    """
+    return (_manner_is_placement(manner)
+            and _endpoint_is_body(scene, actor)
+            and _endpoint_is_body(scene, target))
+
+
+def _either_encloses_the_other(scene, actor, target) -> bool:
+    """Is one of these two inside the other, however the record spells them."""
+    contained = (scene or {}).get("contained")
+    if not isinstance(contained, dict):
+        return False
+    for inner, outer in ((actor, target), (target, actor)):
+        rec = _ci_get(contained, inner)
+        holder = (rec or {}).get("in") if isinstance(rec, dict) else None
+        if holder and same_subject(scene, holder, outer):
+            return True
+    return False
+
+
+def _unnamed_touch_between_bodies(scene, actor, target, manner,
+                                  actor_part, target_part, relation=None) -> bool:
+    """The vaguest possible assertion: two whole bodies, touching, somehow.
+
+    An empty part is NOT unspecified -- `_WHOLE_BODY_PARTS` documents it as a
+    positive claim that the WHOLE body is what touches, and that is how an
+    embrace and every containment record are written. So this refuses only the
+    conjunction that carries no information at all: both sides whole-body AND
+    the generic default manner, between two BODIES.
+
+    Measured 2026-08-28 across a six-scenario contact experiment, 51 contact
+    `add` ops over five prompt variants: 5 of them (10%) were exactly this
+    shape, every one with manner "touch", and they appeared under three
+    different prompts including the unmodified sheet -- so no wording prevents
+    it and a floor is the only thing that can. Twice the beat that emitted one
+    ALSO emitted the correct specific release beside it: a handshake was added
+    as `hand/hand grip`, removed as `hand/hand grip`, and this whole-body touch
+    survived both, leaving two strangers recorded as touching after they had
+    shaken hands and let go.
+
+    Deliberately asymmetric, exactly as `_placement_between_bodies` is: against
+    a thing, a whole-body touch is how being borne, held or contained is
+    stated, and it stays. A named manner stays too -- `embrace`, `hold`, `lean`
+    all say what a bare `touch` does not.
+    """
+    # INTERIOR IS NEVER EMPTY. A body carried inside another is written
+    # exactly this way -- both sides whole-body, because the enclosed side has
+    # no part to name -- and it is the containment record the transit clock and
+    # the enclosure firewall both read. Measured: refusing it without this
+    # guard failed 8 tests across `test_room_transit_clock.py` and
+    # `test_subject_identity.py`, every one of them a carried or enclosed body.
+    # Only a SURFACE claim can be empty, because a surface claim is about
+    # which surfaces.
+    if _normalize_contact_relation(relation) == "interior":
+        return False
+    # AND THE SAME FACT WHEN THE OP DID NOT SPELL IT. A containment record may
+    # arrive with no relation at all -- `tests/test_subject_identity.py`'s
+    # live shape is `{"actor": <host alias>, "target": "Wren"}` with `contained`
+    # saying Wren is inside the host -- and it then defaults to `surface`.
+    # The enclosure is the fact; how the op happened to be spelled is not.
+    if _either_encloses_the_other(scene, actor, target):
+        return False
+    if not _manner_is_unnamed(manner):
+        return False
+    if not (_is_whole_body_part(actor_part) and _is_whole_body_part(target_part)):
+        return False
+    return _endpoint_is_body(scene, actor) and _endpoint_is_body(scene, target)
+
+
+def _is_whole_body_part(part) -> bool:
+    folded = str(part or "").strip().casefold()
+    return not folded or folded in _WHOLE_BODY_PARTS
+
+
+def _manner_is_unnamed(manner) -> bool:
+    """`touch` is what `_clean_contact` supplies when the model named none."""
+    return str(manner or "").strip().casefold() in ("", "touch")
+
+
 def _clean_contact(raw, scene=None):
     """A contact record, or None if it names nobody on one side."""
     if not isinstance(raw, dict):
@@ -497,6 +646,20 @@ def _clean_contact(raw, scene=None):
         # contact between a fluid and a body.
         return None
     manner = _contact_text(raw.get("manner")).casefold() or "touch"
+    if _placement_between_bodies(scene, actor, target, manner):
+        # A placement verb is not an assertion that two surfaces touch; the
+        # beat's own position record already carries where the body went.
+        # See CONTACT_PLACEMENT_MANNERS for the measured case. Reported by
+        # the one caller that can report, exactly as the non-part refusal is.
+        return None
+    if _unnamed_touch_between_bodies(scene, actor, target, manner,
+                                     raw.get("actor_part"),
+                                     raw.get("target_part"),
+                                     raw.get("relation")):
+        # Two whole bodies and the default manner name nothing that is
+        # touching anything. See `_unnamed_touch_between_bodies` for the
+        # measurement; reported by the same caller as the refusals above.
+        return None
     detail = re.sub(r"[_\s]+", " ",
                     _contact_text(raw.get("detail"), _MAX_CONTACT_DETAIL)).strip()
     relation = _normalize_contact_relation(raw.get("relation"))
@@ -1011,7 +1174,39 @@ def apply_contact_ops(scene: dict, ops, *, _age=True, report=None) -> dict:
                 bad = [str(raw.get(slot)) for slot in
                        ("actor_part", "target_part")
                        if not _is_anatomical_part(raw.get(slot))]
-                if bad:
+                if _placement_between_bodies(
+                        scene, raw_actor,
+                        _contact_text(raw.get("target"), 120),
+                        _contact_text(raw.get("manner")).casefold()):
+                    # Silence here is what let the same locomotion event be
+                    # re-derivable as a hold: name the channel that owns it,
+                    # so the Director writes the arrival where it belongs
+                    # instead of reaching for the nearest contact word.
+                    report.append(
+                        "contact: dropped "
+                        f"{_contact_text(raw.get('manner'))!r} between "
+                        f"{raw_actor} and "
+                        f"{_contact_text(raw.get('target'), 120)} -- a "
+                        "contact says two surfaces are touching. Where a "
+                        "body has come to be relative to another is a "
+                        "position, and another hand records it.")
+                elif _unnamed_touch_between_bodies(
+                        scene, raw_actor,
+                        _contact_text(raw.get("target"), 120),
+                        _contact_text(raw.get("manner")).casefold(),
+                        raw.get("actor_part"), raw.get("target_part"),
+                        raw.get("relation")):
+                    # Same discipline as the refusal above: say what was
+                    # missing, so the next beat supplies it rather than
+                    # re-emitting the same empty assertion.
+                    report.append(
+                        f"contact: dropped a whole-body 'touch' between "
+                        f"{raw_actor} and "
+                        f"{_contact_text(raw.get('target'), 120)} -- it names "
+                        "no part on either side and no manner, so it says "
+                        "only that they are near each other. Name what "
+                        "touches what, or record the position instead.")
+                elif bad:
                     # The refusal itself is silent (see _clean_contact); a
                     # rename collapsed in silence teaches the model nothing,
                     # and neither does a dropped op.

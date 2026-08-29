@@ -32,7 +32,7 @@ from story.scene import (
 
 from .background import background_react
 from .character import character_step
-from .common import _assert_plan_materialized, _dict
+from .common import _assert_plan_materialized, _dict, _present_cast_bodies
 from .director import director_establish, director_interpret, director_resolve
 from .loops import interaction_loop, reaction_loop, rehydrate_loop_views
 from .mapping import (mapping_quick, mapping_request_stages_a_room,
@@ -701,6 +701,26 @@ def build_plan(interp, cast_rows, chat_id=None, frame_id=None, *, extra_players=
                         for row in cast_rows}
         reactors = [cid for cid in reactors
                     if awareness_of(amap, _names_by_id.get(cid, "")) not in NON_AWAKE_GATED]
+
+    # Presence gate: `flow.reactors` is the Director's PACING judgement, and
+    # the scene -- not the Director -- owns who the world places somewhere. A
+    # mind the scene places nowhere gets no view at all (perception already
+    # gates its perceiver list on exactly this predicate), so planning a
+    # character step for it asks a person to act from a place they are not
+    # standing in. SOMEWHERE, not "the player's room": a mind answering over
+    # a comm channel from another room is present and survives this.
+    #
+    # Chat 95, turns 4/5/8/14: `flow.reactors` named two cast members
+    # `scene.positions` had no entry for, in beats whose own
+    # `perception_act.views` listed observers ['75'] / ['74','75'] -- 6
+    # `character_major` calls at 13-22s each on an empty perception base.
+    # Silent here on purpose: this planner also runs from `resume_key_for_
+    # turn` under a web handler with no step to note against. The loops and
+    # the `character_step` choke point say so.
+    if chat_id is not None and reactors:
+        _present = {b["id"] for b in _present_cast_bodies(
+            get_scene(chat_id), cast_rows)}
+        reactors = [cid for cid in reactors if cid in _present]
 
     autonomy = 0
     if chat_id is not None:

@@ -74,6 +74,7 @@ from mind.theory_of_mind import mind_models_for_payload, sheet_capacity
 from .common import (
     _agent_json,
     _books,
+    _present_cast_bodies,
     _self_second_person,
     character_scene_keys,
     self_name_forms,
@@ -2691,6 +2692,33 @@ def character_step(ctx, cid, nonce):
                 "manifest": {}, "mind_model_updates": [],
                 "name": character_name(sh), "char_id": cid,
                 "_awareness_gated": True}
+
+    # Presence gate (choke point), the same shape and for the same reason as
+    # the consciousness gate above it. `flow.reactors` is the Director's
+    # PACING judgement; the scene owns who the world places somewhere, and
+    # perception already gates its perceiver list on exactly this predicate.
+    # A mind the scene places nowhere therefore receives no view, so asking
+    # it to declare conduct asks a person to act from a place they are not
+    # standing in. SOMEWHERE, not "the player's room": a mind answering from
+    # another room has a position and passes. The planner and both loops
+    # already narrow to this; the guard is here so a rerun or resume that
+    # hydrates a stale plan cannot route around it.
+    #
+    # Chat 95, turns 4/5/8/14: `flow.reactors` named two cast members
+    # `scene.positions` had no entry for, in beats whose own
+    # `perception_act.views` listed observers ['75'] / ['74','75'] -- 6
+    # `character_major` calls at 13-22s each on an empty perception base.
+    if not any(b["id"] == cid for b in _present_cast_bodies(sc, ctx.cast)):
+        # SAY SO, for the reason the awareness gate does: a mind that ran no
+        # step generates no pressure and reads as a quiet one, and this went
+        # unnoticed for sixteen turns.
+        ctx.add_warning(
+            f"character {character_name(sh)}: the scene places them nowhere, "
+            "so no decision was taken this beat")
+        return {"sequence": [], "speech": None, "action": None, "actions": [],
+                "manifest": {}, "mind_model_updates": [],
+                "name": character_name(sh), "char_id": cid,
+                "_absent_gated": True}
 
     interaction_views = ctx.get("interaction_views", {}) or {}
     reaction_views = ctx.get("reaction_views", {}) or {}

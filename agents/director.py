@@ -158,6 +158,7 @@ from .director_views import (
     _audit_fact_adjudications,
     _unratified_background_claims,
     _report_observer_epithets,
+    _report_unowned_address_forms,
     _crowds_view,
     _couriers_view,
     _artifacts_view,
@@ -3982,6 +3983,16 @@ def director_resolve(ctx, nonce, _corrections=None):
     # (the composer's identity floor); this teaches the Director, and names
     # the structured cost the floor cannot reach.
     _report_observer_epithets(ctx, out, sc, p_name)
+
+    # Report-only, same seam, same reason. A form of address is the other
+    # person-attribute the objective account can mint out of nothing, and
+    # unlike an epithet it has no downstream floor at all: the engine owns no
+    # field to hold one, so nothing between here and commit can contradict it.
+    # Chat 95 turn 1, where a mistaken "Lieutenant Commander." spoken by a
+    # character who had not recognized the body became the omniscient
+    # "Lieutenant Commander Sabine Oyelaran ..." on the very next call, and
+    # then the shared past.
+    _report_unowned_address_forms(ctx, out, p_name)
 
     # One general prose-vs-diff reconciliation pass (subsumes the old
     # warn-only restraint backstop): deterministic placeholder floor,
