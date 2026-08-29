@@ -5321,8 +5321,15 @@ What remains in this register:
 
 ### 2.9 Predictive staging
 
-Pre-stage lore and plausible NPCs for likely-next locations. Pure latency win, no
-correctness implication, which is why it ranks below the integrity work.
+Build the Story Planner inside a cross-system Writers' Room agent set. It
+maintains a bounded prepared horizon, pre-staging lore and structure for
+likely-next locations without redirecting a player who chooses an unpredicted
+route, and delegates coherent populated-location construction to a narrow
+Charter Planner subagent. It is primarily a latency and continuity win, which
+is why it ranks below the integrity work. The combined Planner/Dramaturge
+authority, Charter Planner hierarchy, collaboration, sealed-plot and
+acceptance-test design is
+[`design/DESIGN_STORY_PLANNER_AND_DRAMATURGE.md`](design/DESIGN_STORY_PLANNER_AND_DRAMATURGE.md).
 
 ### 2.10 Session digest
 
@@ -6269,6 +6276,25 @@ the query. Not shipped because +3 on one bank is inside the noise of a single
 instrument and it has no conduct arm -- the same standard that let the
 `_RECALL_LIMIT` change through. Cheap to revisit: `search_memories` already
 accepts `aspects`, so this is a caller-side change with no plumbing.
+
+### 2.26 Writers' Room and Dramaturge
+
+Build the cross-system Writers' Room agent set described in
+[`design/DESIGN_STORY_PLANNER_AND_DRAMATURGE.md`](design/DESIGN_STORY_PLANNER_AND_DRAMATURGE.md):
+two principal conversational specializations, Story Planner and Dramaturge,
+sharing broad authorial sway over every story system through reviewable,
+atomic change sets. The Story Planner delegates coherent populated-location
+construction to its narrow Charter Planner subagent; the Dramaturge can author
+local mysteries through overarching plots, open or sealed, as state the
+simulation may genuinely disturb rather than a required sequence of scenes.
+
+The design depends on a stable Charter identity/generation/promotion/archive
+lifecycle and therefore follows the current Charter integration work. Its
+shared substrate is proposal storage, explicit/standing mandates, provenance
+for authored history and retcons, atomic cross-system application, sealed-plan
+presentation, and bounded inter-agent deliberation. Neither principal agent is
+confined to a subsystem; their names describe perspective and usual lead, not
+exclusive authority. At rest the whole set makes zero provider calls.
 
 ## 3. Information-pipeline leaks still open
 

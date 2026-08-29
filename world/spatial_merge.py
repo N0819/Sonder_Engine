@@ -25,6 +25,7 @@ from world.spatial_containment import (
     derive_containment_from_contacts,
     derive_contained_positions,
     derive_inventory_placements,
+    mint_transferred_objects,
     derive_minted_entity_placements,
     materialize_enclosure_interiors,
     materialize_named_stations,
@@ -1418,6 +1419,13 @@ def merge_scene_with_diff(
     # this derives satisfies the same cycle/known-container rules a declared
     # one does and reaches `derive_contained_positions` below like any other.
     # Yields to any position or containment this beat's diff declared by name.
+    # A THING THAT CHANGED HANDS EXISTS. Runs BEFORE the derivation below,
+    # which skips any op naming something the scene does not know -- correct
+    # for placement and fatal for the possession fact, because the hand that
+    # resolves a handover cannot write `entities` and the hand that mints
+    # entities was never asked. Minted from what the op vouches for and no
+    # more; a body is never minted over.
+    mint_transferred_objects(merged, diff.get("inventory_ops"))
     derive_inventory_placements(
         merged, diff.get("inventory_ops"),
         declared=(set(incoming_positions or {})
