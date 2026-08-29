@@ -273,6 +273,25 @@ def registered_identity_names(chat_id):
         name = str(row["name"] or "").strip()
         if name and name not in names:
             names.append(name)
+    # AND EVERY INDIVIDUAL THE STORY NAMES, not only the ones with a mind
+    # attached. A lore entry in the `character` category names a PERSON the
+    # world contains; whether anybody has registered them yet is a fact about
+    # this playthrough, not about whether the name is theirs.
+    #
+    # `_person_name_evidence` already gathers exactly this set -- it is what
+    # the HARVEST lane reads to build a pool from. That asymmetry was the
+    # defect: the same names were evidence for minting and invisible to the
+    # refusal. Measured 2026-08-28 on a generated Star Trek institution, the
+    # harvest built {given} x {family} pools out of the lorebook's canon cast
+    # and the free cross-product issued "Jean-Luc Crusher", "Ro Vulcan" and
+    # "Deanna Tellarite" to twenty strangers, and reconstituted a canon
+    # character's full name verbatim. In an ORIGINAL setting the same thing
+    # happens silently, because no reader knows the canon well enough to
+    # catch it.
+    for name in _person_name_evidence(chat_id):
+        name = str(name or "").strip()
+        if name and name not in names:
+            names.append(name)
     return names
 
 
