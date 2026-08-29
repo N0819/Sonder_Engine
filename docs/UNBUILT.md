@@ -3342,19 +3342,29 @@ indistinct figure return to the science station console" as remembered_past
 after `known` had filled. Recognition seeded late does not rewrite the memories
 written before it.
 
-WHAT REMAINS OPEN, and both are the owner's:
+**CAST-TO-CAST RECOGNITION NOW HAS AN AUTHORING SURFACE (2026-08-29).**
+`already_known_cast` on the attach route closes the arriving member against
+every other active cast member, through the same `seed_mutual_recognition`
+call that carries the player answer, and the story-builder asks it once for
+the group ("these characters already know each other"). The two answers stay
+independent in both directions — a stranger to the player may arrive with the
+crew she serves in — and an unanswered cast question is reported the same way
+an unanswered player question is, but only when somebody is already here to be
+a stranger to: the first arrival has nobody to know.
 
-  * **CAST-TO-CAST RECOGNITION HAS NO AUTHORING SURFACE.** Recognition is a
-    relation over the whole cast, and every attach flag in the engine is a
-    relation to the PLAYER: the story-builder's per-character box reads
-    "already knows you". Two characters both ticked yield `{"Bram2":
-    ["Ada2"], "Ada2": ["Bram2","Cleo2"], "Cleo2": ["Ada2"]}` — reproduced
-    2026-08-28 through the route — and no amount of ticking can reach the
-    missing edge. `seed_mutual_recognition` takes the roster, so a surface
-    that asks the question can close them in one call; nothing asks it.
-    Promotion is the only writer that closes cast-to-cast edges and it got
-    there by arguing from the fiction (she was in the scene the whole time),
-    not from any rule stated for attachment.
+What it cost while it was missing, measured on chat 98's forty turns: `known`
+held Picard → [player, Data], Data → [player, Worf], Worf → [player, Data].
+Three senior officers of one watch, each missing a colleague. The asymmetry is
+NOT a one-directional write — it is the correct signature of the only in-play
+channel, hearing a name said aloud, and of the fact that the officer who did
+most of the naming learned nothing from his own mouth. His composed view called
+the man at tactical "the tall heavily built klingon male" on every one of those
+turns while his own dialogue said "Mr. Worf" five times: a name from outside the
+ledger, promoted into the objective record, because the engine had no way to be
+told what the story took for granted.
+
+WHAT REMAINS OPEN, and it is the owner's:
+
   * **WHAT THE DEFAULT SHOULD BE.** Deliberately not chosen here. A strangers-
     meeting attach is a real and valuable opening and the firewall is why;
     "the caller omitted a key" is not an authored answer to that question, and
@@ -4528,7 +4538,12 @@ names are not roster identities. It matches the existing floor (Director
 prose already names presences story-wide, and no per-observer met-ledger
 exists for charter bodies); if tightened later, the `known` recognition
 map -- the engine's one per-observer name-learning ledger -- is the
-vocabulary to route it through.
+vocabulary to route it through. *Amended 2026-08-29: that ledger now
+CARRIES charter bodies in both directions -- an introduction resolves and
+places them (`commit_common.charter_recognition_projection`, read by both
+`commit_mapping` and `commit_memory`), so a presence can hold a row of its
+own and be held in somebody else's. The chatter fragment still does not
+consult it; what changed is that there is now something to consult.*
 
 **THE CROWDS BRIDGE: BUILT 2026-08-27** (`background-presentation` branch),
 per the same note's Part B. A charter crowd is a read-time projection —
@@ -6058,9 +6073,15 @@ with the other deliberate keeps.)*
   (an introduction between two people who were both absent used to pass once
   the roster admitted offscreen characters, trading a missed edge for an
   invented one, which is worse because a wrong edge is indistinguishable from a
-  right one afterwards), then `is_recognized_in_frame`. What is untouched is
-  the judgement itself and the fact that **recognition never decays or
-  retracts**: there is no path that un-learns a face. *Plausible.*
+  right one afterwards), then a same-room test wherever the engine can place
+  both bodies, then `is_recognized_in_frame`. The roster it resolves against is
+  now the same one the hearing channel uses, Charter bodies included
+  (`commit_common.charter_recognition_projection`), and it reads address forms
+  rather than substrings — measured on chat 98, that gate had been dropping 9
+  of the 11 `ok` introductions the model authored across forty turns, including
+  every one that named a Charter body. What is untouched is the judgement
+  itself and the fact that **recognition never decays or retracts**: there is
+  no path that un-learns a face. *Plausible.*
 - **X24 — the legacy-archive raw-id fallback grafts interior state.**
   `persist/chat_archive.py` resolves an archive integer against whatever local row holds
   that id, then attaches the archive's `chat_chars.state` to it. Memories are
