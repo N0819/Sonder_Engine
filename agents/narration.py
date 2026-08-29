@@ -82,6 +82,7 @@ from .common import (
     _already_established_phrases,
     _cap_repeated_quotes,
     attire_exposure_facts,
+    compact_attire,
     exposure_owner_refs,
     _overused_phrases,
     _check_narrator_fidelity,
@@ -1490,6 +1491,26 @@ def narrator(ctx, nonce):
             _obs_map.get("player") or [],
             [ev for ev in event_order
              if ev.get("kind") == "action" and ev.get("actor") == player_name])
+        # WHAT THE PLAYER IS WEARING, from the ledger that owns it. The
+        # narrator sheet already forbids extending "what anyone wears", and
+        # the prose dressed the player anyway -- because the payload carried
+        # no clothing at all. `_attire_facts` below is computed from the same
+        # scene and reaches the deterministic screen ONLY (its own comment
+        # says so), and the screen answers one question: is a COVERED region
+        # narrated bare. It has nothing to say about a garment asserted onto
+        # a body whose ledger does not carry it, which is the other half of
+        # the same disagreement -- measured chat 98 t27, "her uniform sleeve"
+        # against a ledger reading combadge + civilian clothing.
+        #
+        # This widens nothing: a mind has a channel to its own clothing, the
+        # same ground `attire_exposure_facts` is already built on, and the
+        # narrator writes the player-facing slice. Every OTHER body's dress
+        # keeps reaching it the only way it may -- through the composed view,
+        # behind perception's own gate -- and is deliberately not here.
+        _worn = compact_attire(
+            ((_scene_for_frame or {}).get("attire") or {}).get(player_name))
+        if _worn:
+            _world_fields["player_attire"] = _worn
         if pos_payload:
             _world_fields["co_present_positions"] = pos_payload
         if portal_states:

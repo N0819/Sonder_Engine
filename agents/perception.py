@@ -4525,9 +4525,9 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
                     order += 1
             company[pid] = _composer_company(others, display_map, percepts)
         for additions in micro_by_pid.get(pid) or []:
-            micro = composer.micro_round_percept(additions)
-            if micro is not None:
-                percepts.append(micro)
+            # `additions` is the round's LIST of delivered lines. See
+            # `composer.micro_round_percepts`.
+            percepts.extend(composer.micro_round_percepts(additions))
         rendered = composer.render_view(
             percepts,
             mode="player" if is_player_view else "character",

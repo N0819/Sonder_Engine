@@ -4794,6 +4794,103 @@ three assertions in `tests/test_narrator_world_fidelity.py` (~1030, ~1106,
     REQUIRED to be able to use is the shape of guard this repo has measured
     failing, which is why it was not pursued.
 
+### 1.70a Speaking turns and the page: what the utterance fix reached, and what it did not
+
+Landed 2026-08-29 from the 40-turn bridge run (chat 98), every stage of the
+cited turns read against the others.
+
+**Fixed at the origin.** One mouth's consecutive spoken lines with no conduct
+between them are now ONE utterance, fused deterministically in the character
+stage (`common.fuse_speech_run`, called from `character.character_step` after
+`norm_sequence` and before the event ids are stamped). The speech budget's own
+contract already said this -- it defines a line as "one separate beat of talk,
+delivered between other conduct" and states that "multiple lines are not one
+speech split by punctuation" -- and nothing enforced it, so a three-element
+round became three `dialogue_log` entries, three `speech_percept`s, three
+"X says in a Y voice: ..." sentences in every view, and three quoted lines set
+back to back on the page. Measured over the run's 85 stored rounds: 79 speech
+elements become 51, 26 rounds fuse, and the speaker-beats carrying two or more
+quoted lines halve (24 -> 12). Turn 29's worst case, six quoted lines from one
+mouth in one beat, becomes two. The fuse SUBTRACTS -- no word is added or
+dropped -- and it refuses to cross any delivery difference (volume,
+visibility, conceal_from, targets, phase) or a line that claims an
+interruption, so a whispered aside inside a spoken turn keeps its boundary.
+A run that changed register loses its tone adverbial, because no single one is
+true of it.
+
+**Also fixed: a Python list repr in every character's composed view.**
+`perception_outcome` handed `delivered_views[observer]` -- a LIST of rendered
+lines -- to `composer.micro_round_percept`, which takes one line and calls
+`str()` on it. Measured: 68 of the 142 stored character views in chat 98
+carry a `['...']` span, on 24 of the 38 turns, and from there it reached the
+observations projected off the view and the episode minted from it. The
+composer's own dialogue tripwire caught four of them, said "engine defect,
+view delivered as composed", and the view shipped anyway.
+`composer.micro_round_percepts` now names the shape: a delivery is one line, a
+round delivers several.
+
+**Also fixed: the narrator was never told what the player was wearing.**
+`attire_exposure_facts` was computed for the deterministic screen only, and
+that screen asks one question -- is a COVERED region narrated bare. It has
+nothing to say about a garment asserted onto a body whose ledger does not
+carry it, which is the other half of the same disagreement (chat 98 t27, "her
+uniform sleeve" against a ledger reading combadge + civilian clothing). The
+narrator payload now carries `player_attire`, the ledger's own compact line
+for the player's own body, and the sheet says the ledger owns it. This widens
+nothing: a mind has a channel to its own clothing, which is the ground
+`attire_exposure_facts` already stood on. Every other body's dress still
+reaches the narrator only through the composed view, behind perception's gate.
+
+**Not fixed, and it is an OWNER'S FORK: a second round restates instead of
+advancing.** The register (`D-B`, reopened three times) hypothesised that the
+mind was not being told what it had already said. It is: `_speak` writes the
+accumulated `interaction_views[speaker_id]` before every call, and the
+speaker's own conduct is appended to it in the same place as everyone else's.
+CAUTION for the next reader -- the `self_view` key stored on a round record is
+that round's OWN emission, captured after the call for `rehydrate_loop_views`
+to replay; it is NOT the record handed to that round. Reading it as the input
+makes the ledger look correct-and-ignored in a way that happens to be true for
+a different reason.
+
+What remains is a genuine restatement across an exchange boundary: chat 98
+turn 29, Picard says "the sudden appearance after a clean survey eleven years
+prior", Data answers, and Picard says "the sudden activation after a clean
+survey eleven years prior". Both are separate rounds with another mouth
+between them, so the fuse correctly leaves them two deliveries, and they are
+paraphrases rather than repeats, so no literal guard reaches them. The
+cross-turn case (t32 -> t33, verbatim identical) IS detected --
+`repeat_correction` fired on t33 by name -- and the engine deliberately does
+not re-ask, on the owner's stated rule and against measured evidence that the
+retry only rephrases. So the remaining fork is the owner's:
+
+  * *Drop the round.* The register's own hypothesis: a round is granted and
+    the mind is asked what it says, never whether anything remains to be said.
+    But the grant at t29 is CORRECT by every other measure -- Data answered
+    the captain and expects a response -- so dropping it lands the answer in
+    silence. Any rule that drops it has to be able to tell "nothing left to
+    add" from "the exchange is still going", and nothing deterministic can.
+  * *Ask the second round a different question.* Tell a mind that has already
+    held the floor this beat that a further turn is for what the exchange has
+    newly raised, and that saying nothing is a complete answer. That is a
+    prompt change on a path where three separate negative constraints
+    (`recent_self_lines`, the refrain skeleton, `repeat_correction`) have
+    already been measured failing, for the reason `character.py` states at
+    length: a negative constraint helps a mind that has another move and does
+    nothing for one that does not.
+  * *Accept it.* The trade-off the no-re-ask rule already accepts, one scope
+    wider.
+
+Not guessed at here, because the choice is between two of the owner's own
+standing rulings.
+
+**Also corrected, for the register rather than the code.** `D-C` ("the
+narrator restates the player's own completed beat", turn 4) is not a narrator
+defect. The turn-4 player view OPENS with "Jean-Luc Picard accepts padd from
+you", because Picard's own round declared the act -- and he declared it
+because the turn-3 transfer never committed (`D-A`). Director, perception and
+narrator all carried it faithfully. Fixing it in the narrator would have
+buried the commit defect.
+
 ## 2. Roadmap
 
 Features the architecture intends and has not built. Ordered by value per unit
