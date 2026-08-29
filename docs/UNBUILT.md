@@ -4866,6 +4866,50 @@ to invent an upkeep nobody serves (`wardroom_service`, `requires: {}` -- a
 condition the institution now owes forever and will report as failing) purely
 to say that people sit in a lounge.
 
+### 1.101 A handover the scene has no record of is refused out loud, and still refused
+
+**Found:** the Enterprise-D alpha-shift run (chat 98), turns 4 and 22.
+**Half fixed 2026-08-29.** What landed: the possession claim a body's pose
+prose was making no longer outlives the transfer, and the refusal is no longer
+silent. What is still open is one decision the owner has not made.
+
+The measured chain. The establishing beat minted no `entities` record for the
+object the whole opening was about; its entire existence in the engine was one
+line of pose prose, `poses["<a body>"]["detail"] = "holding <it> against
+chest"`. Four beats later the Director resolved a complete, well-formed
+transfer of it to another body. `derive_inventory_placements` placed nothing —
+correctly; you cannot position a thing the scene does not know — and said
+nothing, which was the defect. The pose detail was reconciled against no
+possession record at all, so it stood: five beats after she let go, the
+giver's own composed view still read "... — holding <it> against chest", in
+the interoception channel and in every other observer's sight line, and the
+narrator wrote it into the prose twice. Reading only the narrator misattributes
+this; the narrator was being told.
+
+Two of the three halves are closed:
+  * `invalidate_transferred_pose_details` (`world/spatial_geometry.py`) retires
+    a pose `detail`'s carriage clause when the transfer ledger says the thing
+    left that body. The `detail` alone — posture, support and the relation
+    fields are the body's own and no transfer touches them.
+  * `derive_inventory_placements` now takes a `report` and writes a
+    Director-facing sentence naming the thing it could not place, carried to
+    the next beat through `engine_notices` the way `crossing_report` is.
+
+**THE OPEN DECISION, and it is the owner's: should a transfer op MINT an entity
+for an object the scene has not established?** The argument against is the one
+this pass already makes everywhere else — it holds an id a model reached for
+and nothing else, no name, no kind, no size, and a stub keyed on that token
+would bind every later op to a record with nothing in it (a minted entity key
+has already reached an `attire` remove as a garment handle once). The argument
+for is the measurement: re-merging every stored (scene, diff) pair on disk —
+2758 of them — a transfer names an object with no entity record on **26
+beats**, across seven chats and seven different things. Every one of those
+handovers is a possession fact the engine resolved and then did not write down
+anywhere. The notice makes them audible and leaves the minting to a Director
+that may or may not act on it; nothing yet measures whether it does.
+
+Until that is settled, the giver has let go and nobody is recorded holding it.
+
 ## 2. Roadmap
 
 Features the architecture intends and has not built. Ordered by value per unit

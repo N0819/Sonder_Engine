@@ -21,7 +21,9 @@ from world.spatial_containment import (_NEVER_STATIONED_KINDS,
                                        containment_conceals,
                                        scale_changed_names)
 from world.spatial_contacts import _clean_contact, _contact_key
-from world.spatial_identity import _ci_get, _entity_named, room_of, same_subject
+from world.spatial_identity import (_ci_get, _entity_named,
+                                    _unique_entity_keyed, room_of,
+                                    same_subject)
 
 
 # How many beats a body stays visibly mid-crossing after stepping through a
@@ -857,6 +859,120 @@ _CONTACT_BOUND_POSE_WORDS = frozenset({
     "restrained", "supported", "supporting", "borne", "embraced",
     "grappled", "gripped", "lifted", "cradled",
 })
+
+
+def _carriage_labels(scene: dict, object_id) -> list:
+    """Every spelling this beat's transfer could be naming the thing by.
+
+    The op's own token, the same token with its underscores opened out (an id
+    is written `a_thing`; prose says "a thing"), and -- when the scene HAS a
+    record for it -- the entity's display name and aliases. One thing, every
+    name it goes by, because the prose that has to be checked was written by a
+    different hand than the id.
+    """
+    text = str(object_id or "").strip()
+    if not text:
+        return []
+    labels = {text, text.replace("_", " ")}
+    eid, entity = _unique_entity_keyed(scene, text)
+    if eid and isinstance(entity, dict):
+        labels.add(str(eid).replace("_", " "))
+        labels.add(str(entity.get("name") or ""))
+        labels.update(str(alias) for alias in (entity.get("aliases") or []))
+    return [label for label in
+            {str(label).strip() for label in labels} if label]
+
+
+def invalidate_transferred_pose_details(scene: dict, inventory_ops) -> list:
+    """Retire the possession claim in a pose `detail` for a thing that has
+    just changed hands.
+
+    THE CLASS. A pose `detail` is prose that qualifies an arrangement, and it
+    is the one scene field nothing ever re-derives: written once, rendered
+    verbatim into every view that can see the body -- the body's own
+    interoception included -- and standing until some later beat happens to
+    overwrite it. When that prose says a body is CARRYING something it is no
+    longer only an arrangement; it is a possession claim, and possession is
+    the transfer ledger's to state. Two ledgers, one fact, and nothing
+    reconciled them: a thing could be handed away in `inventory_ops` and go on
+    being held in `poses` for the rest of the story.
+
+    Measured (chat 98): the establishing beat minted no entity for the thing
+    at all and wrote its whole existence into one body's pose detail. Four
+    beats later a transfer op moved it to another body; the detail did not
+    move, and the giver's own composed view still read "... -- holding <it>
+    against chest" five beats after she let go, in the interoception channel
+    and in every other observer's sight line. The narrator was not
+    remembering. It was being told.
+
+    THE RULE, and it subtracts only: a transfer op says where a thing now is.
+    A body that the ledger says is not where the thing went does not get to go
+    on claiming carriage of it in prose. Cleared:
+      * the `detail` alone. Posture, support and the relation fields are the
+        body's OWN arrangement and no transfer touches them -- she is still
+        standing on the deck; she is simply not holding it.
+    Left alone:
+      * the body the op names as the destination. It has the thing; the prose
+        is true of them.
+      * a detail that does not NAME the thing, on a word boundary, under any
+        of the spellings it goes by.
+      * a detail that names it without carriage vocabulary. Watching a thing,
+        or standing beside one, is not a claim to be holding it, and
+        `_CONTACT_BOUND_POSE_WORDS` is already the engine's one vocabulary for
+        "this pose clause depends on something being held or touched" -- the
+        same list `invalidate_contact_bound_poses` asks its own question with.
+        A second, competing list is how two ledgers start disagreeing.
+
+    THIS BEAT'S OWN pose declarations are checked too, unlike the scale-change
+    retirement's `stated` exemption. That exemption exists because a pose
+    restated in the beat that changed the geometry already speaks for the new
+    geometry. Here the two halves come from DIFFERENT hands on disjoint scopes
+    -- `poses` from the spatial specialist, `inventory_ops` from the objects
+    specialist -- so neither is the later word, and between a channel built to
+    say where a thing is and prose that mentions it in passing, the channel
+    wins.
+
+    Returns [(subject, thing)] for the caller's report; mutates.
+    """
+    poses = (scene or {}).get("poses")
+    if not isinstance(poses, dict) or not poses:
+        return []
+    if not isinstance(inventory_ops, list) or not inventory_ops:
+        return []
+    retired = []
+    for op in inventory_ops:
+        if not isinstance(op, dict):
+            continue
+        labels = _carriage_labels(scene, op.get("object_id"))
+        if not labels:
+            continue
+        departed = str(op.get("from_id") or "").strip().casefold()
+        arrived = str(op.get("to_id") or "").strip().casefold()
+        for subject, raw in list(poses.items()):
+            pose = _clean_pose(raw)
+            if pose is None or not pose.get("detail"):
+                continue
+            folded = str(subject).strip().casefold()
+            if not folded:
+                continue
+            if folded == arrived:
+                continue          # they have it; the prose is true of them
+            if folded != departed and not arrived:
+                # Neither endpoint names this body and the op does not say
+                # where the thing went. Nothing here contradicts anything.
+                continue
+            detail = str(pose["detail"])
+            low = detail.casefold()
+            if not (set(re.findall(r"[\w'-]+", low))
+                    & _CONTACT_BOUND_POSE_WORDS):
+                continue
+            if not any(re.search(r"\b%s\b" % re.escape(label.casefold()), low)
+                       for label in labels):
+                continue
+            pose["detail"] = ""
+            poses[subject] = pose
+            retired.append((str(subject), str(op.get("object_id") or "")))
+    return retired
 
 
 def invalidate_contact_bound_poses(scene: dict, previous_contacts=None) -> dict:

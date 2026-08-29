@@ -82,7 +82,7 @@
 | `persist/commit_memory_write.py` | 325 | The durable memory write and its out-of-band consolidation twin. | `core.db`, `mind.memory`, `persist.commit_memory`, `story.character_schema`, `story.scene` |
 | `persist/commit_place_graph.py` | 321 | Per-mind durable place graph and per-beat spatial experience. | `world.spatial` |
 | `persist/commit_room_registry.py` | 463 | Room identity across frames: registry projection, mint dedup, renames, retirement, exit pruning. | `core.db`, `persist.commit_common`, `story.character_schema`, `world.spatial` |
-| `persist/commit_scene_state.py` | 1104 | The prepared post-turn scene: pre-lock build, scene commit domain, book anchoring, ground advance. | `core.db`, `mind.memory`, `persist.commit_attire`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_room_registry`, `story.character_schema`, `story.provenance_text`, `world.mechanics`, `world.spatial`, `world.spatial_frames`, `world.weather` |
+| `persist/commit_scene_state.py` | 1113 | The prepared post-turn scene: pre-lock build, scene commit domain, book anchoring, ground advance. | `core.db`, `mind.memory`, `persist.commit_attire`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_room_registry`, `story.character_schema`, `story.provenance_text`, `world.mechanics`, `world.spatial`, `world.spatial_frames`, `world.weather` |
 | `persist/pipeline_trace.py` | 413 | Privacy-conscious export, validation, and offline replay of persisted pipeline history. | `core.db` |
 | `story/__init__.py` | 6 |  | — |
 | `story/artifacts.py` | 566 |  | `llm.prompts` |
@@ -151,16 +151,16 @@
 | `world/paradox.py` | 648 |  | `core.db`, `core.frames`, `story.character_schema`, `world.spatial` |
 | `world/place_purpose.py` | 545 |  | `mind.theory_of_mind`, `world.comfort`, `world.spatial`, `world.survival` |
 | `world/routines.py` | 208 |  | — |
-| `world/spatial.py` | 222 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `llm.schemas`, `world.spatial_barriers`, `world.spatial_contact_migration`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_merge`, `world.spatial_orientation`, `world.spatial_prose`, `world.spatial_routing`, `world.spatial_senses`, `world.spatial_substance`, `world.spatial_transit` |
+| `world/spatial.py` | 223 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `llm.schemas`, `world.spatial_barriers`, `world.spatial_contact_migration`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_merge`, `world.spatial_orientation`, `world.spatial_prose`, `world.spatial_routing`, `world.spatial_senses`, `world.spatial_substance`, `world.spatial_transit` |
 | `world/spatial_barriers.py` | 666 |  | `world.spatial_orientation` |
 | `world/spatial_contact_migration.py` | 331 |  | `world.spatial_contacts`, `world.spatial_identity` |
 | `world/spatial_contacts.py` | 1507 |  | `world.spatial_containment`, `world.spatial_identity`, `world.spatial_transit` |
-| `world/spatial_containment.py` | 2610 |  | `world.spatial_barriers`, `world.spatial_identity`, `world.spatial_transit` |
+| `world/spatial_containment.py` | 2654 |  | `world.spatial_barriers`, `world.spatial_identity`, `world.spatial_transit` |
 | `world/spatial_frames.py` | 1087 |  | `core.db`, `core.frames`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial` |
-| `world/spatial_geometry.py` | 1197 |  | `world.spatial_barriers`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_identity`, `world.spatial_orientation` |
+| `world/spatial_geometry.py` | 1313 |  | `world.spatial_barriers`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_identity`, `world.spatial_orientation` |
 | `world/spatial_identity.py` | 498 |  | — |
 | `world/spatial_light.py` | 209 |  | `world.spatial_barriers`, `world.spatial_geometry`, `world.spatial_identity` |
-| `world/spatial_merge.py` | 1586 |  | `llm.schemas`, `world.spatial_barriers`, `world.spatial_contact_migration`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_orientation`, `world.spatial_routing`, `world.spatial_senses`, `world.spatial_substance`, `world.spatial_transit` |
+| `world/spatial_merge.py` | 1611 |  | `llm.schemas`, `world.spatial_barriers`, `world.spatial_contact_migration`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_orientation`, `world.spatial_routing`, `world.spatial_senses`, `world.spatial_substance`, `world.spatial_transit` |
 | `world/spatial_orientation.py` | 246 | Bearing math and reciprocal spatial-edge normalization. | — |
 | `world/spatial_prose.py` | 344 |  | `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light` |
 | `world/spatial_routing.py` | 1098 |  | `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_light`, `world.spatial_orientation` |
@@ -985,14 +985,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `prepare_scene_commit()` | 363 | 692 lines |
+| `prepare_scene_commit()` | 363 | 701 lines |
 | `sync_anchored_books()` | 81 | 66 lines |
 | `_guard_occupied_mover_removal()` | 148 | 60 lines |
 | `_dedupe_overlay_entries()` | 281 | 40 lines |
 | `_merge_overlays()` | 323 | 38 lines |
 | `_advance_ground()` | 210 | 31 lines |
 | `_establish_time_of_day()` | 36 | 27 lines |
-| `_record_subject_last_seen()` | 1081 | 24 lines |
+| `_record_subject_last_seen()` | 1090 | 24 lines |
 
 ### `persist/pipeline_trace.py`
 
@@ -1816,14 +1816,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `materialize_named_stations()` | 2021 | 135 lines |
-| `advance_room_transits()` | 2158 | 130 lines |
-| `replace_engine_minted_interiors()` | 1521 | 123 lines |
-| `derive_inventory_placements()` | 855 | 108 lines |
-| `release_declared_departures()` | 2302 | 97 lines |
-| `place_enclosed_bodies()` | 1646 | 95 lines |
+| `materialize_named_stations()` | 2065 | 135 lines |
+| `advance_room_transits()` | 2202 | 130 lines |
+| `derive_inventory_placements()` | 882 | 125 lines |
+| `replace_engine_minted_interiors()` | 1565 | 123 lines |
+| `release_declared_departures()` | 2346 | 97 lines |
+| `place_enclosed_bodies()` | 1690 | 95 lines |
 | `derive_containment_from_contacts()` | 344 | 90 lines |
-| `materialize_enclosure_interiors()` | 1393 | 81 lines |
+| `materialize_enclosure_interiors()` | 1437 | 81 lines |
 
 ### `world/spatial_frames.py`
 
@@ -1842,14 +1842,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `derive_scene_stations()` | 1094 | 104 lines |
-| `spatial_digest()` | 140 | 89 lines |
-| `egocentric_frame()` | 52 | 86 lines |
-| `invalidate_contact_bound_poses()` | 862 | 72 lines |
-| `normalize_scene_poses()` | 789 | 64 lines |
-| `effective_station()` | 348 | 55 lines |
-| `poses_broken_by_scale_change()` | 936 | 52 lines |
-| `effective_anchors()` | 296 | 50 lines |
+| `derive_scene_stations()` | 1210 | 104 lines |
+| `invalidate_transferred_pose_details()` | 886 | 90 lines |
+| `spatial_digest()` | 142 | 89 lines |
+| `egocentric_frame()` | 54 | 86 lines |
+| `invalidate_contact_bound_poses()` | 978 | 72 lines |
+| `normalize_scene_poses()` | 791 | 64 lines |
+| `effective_station()` | 350 | 55 lines |
+| `poses_broken_by_scale_change()` | 1052 | 52 lines |
 
 ### `world/spatial_identity.py`
 
@@ -1881,14 +1881,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `merge_scene_with_diff()` | 1066 | 521 lines |
-| `_expire_transient_entity_state()` | 400 | 116 lines |
-| `_shield_minted_edges()` | 804 | 95 lines |
-| `apply_following_ops()` | 987 | 77 lines |
-| `connect_orphan_new_rooms()` | 901 | 68 lines |
-| `_merge_room()` | 143 | 64 lines |
-| `_shield_standing_bearings()` | 679 | 61 lines |
-| `_shield_standing_passage()` | 742 | 60 lines |
+| `merge_scene_with_diff()` | 1067 | 545 lines |
+| `_expire_transient_entity_state()` | 401 | 116 lines |
+| `_shield_minted_edges()` | 805 | 95 lines |
+| `apply_following_ops()` | 988 | 77 lines |
+| `connect_orphan_new_rooms()` | 902 | 68 lines |
+| `_merge_room()` | 144 | 64 lines |
+| `_shield_standing_bearings()` | 680 | 61 lines |
+| `_shield_standing_passage()` | 743 | 60 lines |
 
 ### `world/spatial_orientation.py`
 
