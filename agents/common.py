@@ -1709,6 +1709,150 @@ def charter_crowds_for_room(cid, sc, room_id, inputs=None):
     return [dict(row) for row in rows]
 
 
+def presence_figures_for_room(cid, sc, room_id, inputs=None, *,
+                              turn_idx=None, frame_id=None):
+    """The unregistered bodies standing in this room that no crowd carries.
+
+    DESIGN_BACKGROUND_PRESENTATION B2 has two clauses and only one of them
+    was ever built. The clause that was: "a charter body is ground (in the
+    crowd) exactly when nothing this beat presents it individually" --
+    `charter_crowd.members_of` SUBTRACTS bound bodies and bodies with a live
+    presence record. The clause that was not: "below the floor of the
+    smallest band, members present as individual ambient figures through the
+    existing overlay path", and, implicitly, that the bodies the first
+    clause subtracts are presented SOMEWHERE. They were not. Perception
+    builds every observer's co-present body list out of the cast and the
+    players, so a body the crowd let go of entered no view at all.
+
+    Measured live 2026-08-28, chat 98 turns 10-13: five crew whose charter
+    `place` was the player's lounge read as "a handful lieutenant commanders
+    and ensigns" until each acquired a presence record, at which point
+    `crowds_for_room` returned `[]` and the room held nobody in any view --
+    while `background_presence_records` still returned all five. A
+    subtraction whose matching addition does not exist does not move a
+    person from one presentation to another; it deletes them.
+
+    Two species, one shape, exactly complementary to `crowds_for_room`:
+
+    * every durable `background_presences` record `presence_room` puts in
+      this room -- the same resolver the voice gate and the background stage
+      use, so a presence is not in one room for being seen and another for
+      being spoken to. `presence_has_an_identity` is the personhood floor,
+      borrowed rather than restated: it is already the predicate that
+      decides a tracked name is a person's to withhold, and a ceiling-
+      mounted suppression fixture with an accrued record is not somebody
+      standing there (chat 82 t1, where one rendered as "the unfamiliar
+      person" in the room's own description);
+    * every charter body derived at this place whose institution holds too
+      few here to be a crowd. At or above `CHARTER_CROWD_FLOOR` the crowd IS
+      the presentation and the body must not arrive twice -- including when
+      `charter_crowds_for_room`'s `CO_LOCATED_CAP` drops that crowd from the
+      view, because the cap decides how many crowds a room shows, never
+      whether an institution's people are ground.
+
+    The bound is the room and nothing else: at most
+    ``CHARTER_CROWD_FLOOR - 1`` bodies per co-located institution (two, with
+    today's floor of three), plus the ledger rows already standing here --
+    the same ledger `_composer_identity_space` and the Director's
+    `addressable_presences` read whole. Callers scope the ROOMS
+    (perception passes the rooms its perceivers stand in), which is what
+    keeps a 300-body institution from deriving 300 figures for a back
+    office.
+
+    Rows are the co-present body shape: ``name``, ``room``, ``appearance``.
+    ``inputs`` is `chatter_inputs`' shared per-stage fetch, memoized per room
+    exactly as `charter_crowds_for_room` and `chatter_for_room` are.
+    """
+    from persist.commit import (presence_has_an_identity, presence_name_items,
+                                presence_room)
+    from world import charter_crowd
+
+    if not room_id:
+        return []
+    inputs = (inputs if isinstance(inputs, dict)
+              else chatter_inputs(cid, sc, turn_idx=turn_idx))
+    memo = inputs.setdefault("figure_memo", {})
+    room = str(room_id)
+    if room in memo:
+        return [dict(row) for row in memo[room]]
+
+    # One ledger read per stage, not per room -- the same discipline
+    # `chatter_inputs` applies to the registry.
+    ledger = inputs.get("presence_ledger")
+    if ledger is None:
+        ledger = inputs["presence_ledger"] = (
+            wget(cid, "background_presences", {}) or {})
+
+    # Whom the derived crowds carry, by charter body key -- FIRST, because
+    # it decides both loops below. Recomputed from the same slices
+    # `charter_crowds_for_room` projects, so the two answers cannot disagree
+    # about who is ground. A record whose presentation has LAPSED (§C3's
+    # idle beats) puts its body back in the crowd, and that body must not
+    # then arrive here as well: the ledger row still exists, and its history
+    # is exactly what lapsing declines to delete.
+    by_key = {}
+    carried = set()
+    for charter in inputs.get("charters") or []:
+        key = str(charter.get("key") or "")
+        by_key[key] = charter
+        members = charter_crowd.members_of(charter, room)
+        if len(members) >= charter_crowd.CHARTER_CROWD_FLOOR:
+            carried.update((key, member) for member in members)
+
+    def _refs_of(record):
+        return {(str(r.get("charter") or ""), str(r.get("body") or ""))
+                for r in ((record or {}).get("charter_refs") or [])
+                if isinstance(r, dict)}
+
+    def _noun_for(refs):
+        """What the body IS, on the same terms the crowd's composition says
+        it -- a rank or a duty is worn, and an observer in the room reads it
+        off the same band these people are members of. Computed only for the
+        bodies actually emitted, so a plaza's crowd costs nothing here."""
+        for charter_key, body_key in sorted(refs):
+            noun = charter_crowd.member_noun(
+                by_key.get(charter_key) or {}, body_key)
+            if noun:
+                return noun
+        return ""
+
+    rows, seen, seen_refs = [], set(), set()
+    for name, rec in presence_name_items(ledger):
+        name = str(name or "").strip()
+        if not name or name.casefold() in seen:
+            continue
+        if presence_room(sc, name, rec) != room:
+            continue
+        if not presence_has_an_identity(sc, name, rec):
+            continue
+        refs = _refs_of(rec)
+        if refs & carried:
+            continue
+        seen.add(name.casefold())
+        seen_refs |= refs
+        rows.append({
+            "name": name, "room": room,
+            "appearance": (str(((rec or {}).get("sketch") or {}).get(
+                "appearance") or "") or _noun_for(refs)),
+        })
+
+    try:
+        from world.charter_runtime import background_presence_records
+        derived = background_presence_records(
+            cid, places={room}, frame_id=frame_id)
+    except Exception:
+        derived = {}
+    for name, record in sorted(derived.items()):
+        refs = _refs_of(record)
+        if str(name).casefold() in seen or (refs & seen_refs) or (refs & carried):
+            continue
+        seen.add(str(name).casefold())
+        rows.append({"name": str(name), "room": room,
+                     "appearance": _noun_for(refs)})
+    memo[room] = rows
+    return [dict(row) for row in rows]
+
+
 def chatter_for_room(cid, sc, room_id, inputs=None):
     """What an observer in this room hears of the crowd's talk: a hum band
     as ground, and at most one overheard fragment as figure.

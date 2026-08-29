@@ -605,6 +605,7 @@ from .common import (
     chatter_for_room,
     chatter_inputs,
     couriers_for_room,
+    presence_figures_for_room,
     _scrub_unknown_identities,
     _mask_quoted_spans,
     _unmask_quoted_spans,
@@ -1365,6 +1366,65 @@ def _behind_sources(scene, observer, sources):
             and entity_arc(scene, observer, s.get("name")) == "rear"]
 
 
+def _presence_bodies(ctx, sc, rooms, chatter):
+    """The unregistered bodies standing in the rooms this stage composes for,
+    in the co-present body shape, PLACED on the stage's own scene.
+
+    Presence is what a view is composed from, and this stage's roster was
+    the cast and the players -- so a body the simulation puts in the room
+    with you was in nobody's view unless it happened to speak this beat.
+    `common.presence_figures_for_room` decides WHO (the ledger's people
+    standing here, plus the charter bodies no derived crowd carries); this
+    decides only that they are bodies like any other, which is the whole
+    correction.
+
+    THE SCENE COPY, NEVER THE STORE. `get_scene` hands every caller a fresh
+    parse and nothing here is persisted: the position exists for the length
+    of this stage because `visual_level_between`, `entity_arc` and
+    `proximity_rel` all begin by asking the scene where a body is, and a
+    body the scene places nowhere is failed CLOSED by every one of them
+    (`spatial_identity.room_of`'s own note). Written only where `room_of`
+    has no answer already -- a presence the Director minted as a scene
+    entity is placed, and re-keying it under its display name would put one
+    being in the room twice. The registry stays the single source of truth
+    for where a charter body IS; `presence_room` is the resolver both this
+    and the voice gate read, so a person cannot be in one room for being
+    seen and another for being spoken to.
+
+    The firewall reading is that this ADDS nothing an observer did not have
+    a channel to. Every one of these bodies goes through the same
+    subtractions a cast body does -- unlit, contained, behind a barrier or
+    in the rear arc and it never becomes a percept -- and
+    `observer_display_map` hands back a descriptor, not a name, to anyone
+    who has not met them. What changes is that the guards get to run at all.
+    """
+    rows, seen = [], set()
+    for room in dict.fromkeys(r for r in rooms if r):
+        for row in presence_figures_for_room(
+                ctx.chat.id, sc, room, chatter,
+                turn_idx=ctx.turn.idx,
+                frame_id=getattr(ctx.turn, "frame_id", None)):
+            name = str(row.get("name") or "")
+            if not name or name.casefold() in seen:
+                continue
+            seen.add(name.casefold())
+            if not room_of(sc, name):
+                sc.setdefault("positions", {})[name] = row["room"]
+            rows.append({
+                "name": name, "room": row["room"],
+                "appearance": row.get("appearance") or "",
+                "aliases": [],
+                # An unregistered body wears no disguise ledger: there is no
+                # card to conceal and no `known_to` list to consult, so both
+                # halves are stated rather than left absent (an absent
+                # `disguise_conceals_identity` reads as "does not conceal",
+                # which is true here and must stay true by construction).
+                "disguise_known_to": [],
+                "disguise_conceals_identity": False,
+            })
+    return rows
+
+
 def _co_present_company(scene, observer_name, bodies, known):
     """proximity_to_sources / behind_sources entries for the bodies simply
     STANDING with an observer at the top of the beat.
@@ -1821,7 +1881,11 @@ def perception_establish(ctx, nonce):
 
     return _composer_establish(
         ctx, sc, perceivers, known, p_name, p_appearance,
-        entity_states, sensory_events)
+        entity_states, sensory_events,
+        # The room's other people, placed on `sc` before the composer reads
+        # it (see `_presence_bodies`). A scene that opens in a staffed place
+        # opens with the staff in it.
+        _presence_bodies(ctx, sc, [p["room"] for p in perceivers], chatter))
 
 def perception_act(ctx, nonce):
     chat = ctx.chat
@@ -1930,6 +1994,11 @@ def perception_act(ctx, nonce):
     present_ids = {b["id"] for b in _present_cast_bodies(sc, ctx.cast)}
     # One registry read for the whole stage (see `chatter_inputs`).
     chatter = chatter_inputs(ctx.chat.id, sc, turn_idx=ctx.turn.idx)
+    # And the room's other people. Before the perceiver loop, because
+    # `_presence_bodies` places them on `sc` and every relation built below
+    # asks the scene where a body is.
+    co_present.extend(_presence_bodies(
+        ctx, sc, [p_room, *(b["room"] for b in co_present)], chatter))
 
     for c in ctx.cast:
         if c["id"] not in present_ids:
@@ -2523,7 +2592,12 @@ def perception_outcome(ctx, nonce):
         ctx, sc, prev_scene, diff, interp, res, known, p_name,
         p_appearance, p_disguise, p_disguise_known, p_disguise_conceals,
         p_disguise_terms, perceivers, appearances, sources, enriched_dlog,
-        substance_events, amap)
+        substance_events, amap,
+        # The room's other people, placed on `sc` before the composer reads
+        # it (see `_presence_bodies`). A presence that spoke this beat is
+        # already a source; this is everyone who merely stood there, which
+        # was nobody.
+        _presence_bodies(ctx, sc, [p["room"] for p in perceivers], chatter))
 
 
 # ---------------------------------------------------------------------------
@@ -3591,7 +3665,7 @@ def _composer_finish_observer(ctx, stage, pid, name, rendered, known, roster,
 
 
 def _composer_establish(ctx, sc, perceivers, known, p_name, p_appearance,
-                        entity_states, sensory_events):
+                        entity_states, sensory_events, presence_bodies=()):
     chat_id = ctx.chat["id"]
     bodies = []
     p_visible, _, p_known_to, _ci = _subject_disguise_context(
@@ -3618,6 +3692,10 @@ def _composer_establish(ctx, sc, perceivers, known, p_name, p_appearance,
             "disguise_known_to": b_known_to,
             "disguise_conceals_identity": _ci,
         })
+    # LAST, so the registered cast keeps the label-assignment order it had:
+    # a room's other people are additional bodies, never a reordering of the
+    # ones already there.
+    bodies.extend(presence_bodies or ())
     bodies_by_name = {b["name"]: b for b in bodies if b.get("name")}
     joint_labels = _joint_stranger_labels(bodies)
     roster = _identity_roster(p_name, p_appearance, ctx.cast)
@@ -4061,7 +4139,7 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
                       p_appearance, p_disguise, p_disguise_known,
                       p_disguise_conceals, p_disguise_terms, perceivers,
                       appearances, sources, enriched_dlog, substance_events,
-                      amap):
+                      amap, presence_bodies=()):
     chat = ctx.chat
     chat_id = chat["id"]
     pers = persona_of(chat)
@@ -4124,6 +4202,10 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
             # the act view and this one.
             "disguise_conceals_identity": conceals,
         })
+    # LAST, for the reason `_composer_establish` gives: the registered cast
+    # keeps the stranger-label assignment order it had.
+    bodies.extend(
+        b for b in (presence_bodies or ()) if b["name"] not in appearances)
     bodies_by_name = {b["name"]: b for b in bodies if b.get("name")}
     joint_labels = _joint_stranger_labels(bodies)
 
