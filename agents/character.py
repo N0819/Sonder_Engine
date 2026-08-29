@@ -263,6 +263,56 @@ def _recent_self_moves(chat_id, char_id, current_turn_idx, n_turns=12, cap=12,
     return [by_turn[idx] for idx in sorted(by_turn)][-cap:]
 
 
+def _this_beat_self_record(prior_result, turn_idx):
+    """(lines, move) this mind has ALREADY declared THIS beat, from its own
+    earlier micro-rounds, in the shapes the committed ledgers use.
+
+    The engine's whole self-record -- `recent_self_lines`,
+    `recent_self_moves`, and every guard that reads them -- is projected from
+    COMMITTED turns (`t.idx < current`), so a mind granted a second
+    micro-round in the same beat was judged as if its first round had never
+    happened. Its own conduct did reach it, but only as text inside the
+    merged perception view, which is a picture of the room -- not the ledger
+    of its own moves that the AVOID SELF-REPETITION rule points at, and not
+    an input any repetition guard reads.
+
+    Measured, chat 98 turns 24/29/31/32 (2026-08-29): every round-3
+    restatement was made WITH the earlier lines present in the handed view
+    (reconstructed per round from the stored `delivered_views`/`self_view`;
+    the results even cite the micro observation) and with
+    `recent_self_lines` silent about them. The ledger ended one commit too
+    early; this extends it to the beat's own earlier rounds.
+
+    Entries are stamped `this_beat` so a reader can tell "this very beat"
+    from "recent turns". Lines feed the same verbatim screen the committed
+    lines do; the MOVE entry is payload-only -- `_first_repeated_move`'s 0.4
+    bar was calibrated on cross-turn summaries, and within one beat the
+    formulaic acknowledgment register collides (measured on the same run: a
+    correct follow-up order scored as a repeat of the question it followed).
+    """
+    if not isinstance(prior_result, dict):
+        return [], None
+    said = _speech_texts(prior_result)
+    lines = [{"turn": turn_idx, "said": text, "this_beat": True}
+             for text in said]
+    move = _selected_move_text(prior_result)
+    if not (said or move):
+        return lines, None
+    asked = [line[:200] for line in said if "?" in line]
+    interaction = prior_result.get("interaction")
+    entry = {
+        "turn": turn_idx,
+        "this_beat": True,
+        **({"move": move[:320]} if move else {}),
+        **({"said": [line[:320] for line in said[-2:]]} if said else {}),
+        **({"asked": asked[-2:]} if asked else {}),
+        "expected_answer": bool(
+            isinstance(interaction, dict)
+            and interaction.get("expects_response")),
+    }
+    return lines, entry
+
+
 # Repeated letters collapse so "Mmm" and "Mmmm" are one opener, which is
 # exactly the kind of near-miss a model uses to feel like it varied.
 _REFRAIN_RUN_RE = re.compile(r"(.)\1{2,}")
@@ -274,18 +324,74 @@ def _self_line_tokens(line):
         _REFRAIN_RUN_RE.sub(r"\1\1", str(line or "").lower()))
 
 
-def _addressed_names_include(chat_id, addressed, folded_name):
+def _address_names_body(form, keys):
+    """Does this spoken address form name the body these keys identify?
+
+    An address is written by the SPEAKING mind's model in whatever register
+    the fiction uses, and a formal register attaches rank or honorific --
+    measured, chat 98 turn 32: an officer's order carried
+    `interaction.addresses` holding the addressee's rank followed by his
+    name, while the sheet's canonical name is the bare name. The
+    exact-equality test read that as nobody, so the order he was plainly
+    owed never became a debt, he was never promoted to answer, and the
+    asker re-issued the same order verbatim on the next turn.
+
+    The class rule, in the engine's vocabulary: a reference resolves through
+    every key the body answers to (name, uid, aliases -- the
+    `character_scene_keys` contract), and a form whose TRAILING words are
+    exactly one of those keys names that body, because a title or honorific
+    PREFIXES while the name survives as the tail -- a rank before a surname,
+    "Mr." before a name, a court style before a house name, all alike.
+    Suffix only at a word boundary, and never across a hyphen or apostrophe,
+    so a name that merely ends in another's name does not collide. A bare
+    title with no name matches no key and resolves to nobody, which is the
+    true answer -- it is ambiguous.
+    """
+    text = str(form or "").strip().casefold()
+    if not text:
+        return False
+    for key in keys or []:
+        k = str(key or "").strip().casefold()
+        if not k:
+            continue
+        if re.search(r"(?:^|[\s.,;:!?\"“”…])"
+                     + re.escape(k) + r"$", text):
+            return True
+    return False
+
+
+def _body_address_keys(chat_id, char_id, char_name):
+    """Every casefold-comparable key this cast member answers to when
+    addressed: canonical name, uid and aliases from the active sheet, plus
+    the display name the caller already holds."""
+    keys = [str(char_name or "")]
+    row = q("SELECT COALESCE(cc.sheet, ch.sheet) AS sheet FROM chat_chars cc "
+            "JOIN characters ch ON ch.id=cc.char_id "
+            "WHERE cc.chat_id=? AND cc.char_id=?",
+            (chat_id, char_id), one=True) if char_id is not None else None
+    if row:
+        try:
+            keys.extend(character_scene_keys(json.loads(row["sheet"])))
+        except Exception:
+            pass
+    return [k for k in keys if str(k or "").strip()]
+
+
+def _addressed_names_include(chat_id, addressed, folded_name, keys=None):
     """Does this cast-id/name list from `flow.addressed_to` mean this body.
 
     The field holds ids on most beats and names on some; both forms are
-    resolved here so a caller never has to know which it got.
+    resolved here so a caller never has to know which it got. Name forms go
+    through `_address_names_body`, so a rank- or honorific-prefixed spelling
+    resolves the same way it does for `interaction.addresses`.
     """
     if not addressed:
         return False
-    if folded_name in addressed:
-        return True
+    match_keys = list(keys or []) or [folded_name]
     for ref in addressed:
         if not str(ref).isdigit():
+            if _address_names_body(ref, match_keys):
+                return True
             continue
         row = q("SELECT COALESCE(cc.sheet, ch.sheet) AS sheet FROM chat_chars cc "
                 "JOIN characters ch ON ch.id=cc.char_id "
@@ -420,6 +526,21 @@ def _unanswered_question_note(chat_id, char_name, char_id, current_turn_idx,
         return bool(line) and line in (heard.get(int(idx)) or "")
 
     folded = str(char_name).casefold()
+
+    # Every key this body answers to when addressed, resolved at most once
+    # and only on a beat that actually carries an address to test: an
+    # address arrives in the asker's register (a rank or honorific before
+    # the name), not the canonical spelling -- see _address_names_body.
+    # Lazy because this function's latency contract is ONE read on the empty
+    # path (test_character_latency_contract), and the roster row is only
+    # needed once a candidate address exists.
+    _keys_cache = []
+
+    def _self_keys():
+        if not _keys_cache:
+            _keys_cache.append(_body_address_keys(chat_id, char_id, char_name))
+        return _keys_cache[0]
+
     asked = None
     for row in rows:
         try:
@@ -449,7 +570,8 @@ def _unanswered_question_note(chat_id, char_name, char_id, current_turn_idx,
                           or (content.get("flow") or {}).get("addressed_to") or [])]
             # `addressed_to` is a cast-id list; resolve through the name the
             # caller already holds by asking the roster, not by matching ids.
-            if not _addressed_names_include(chat_id, addressed, folded):
+            if not _addressed_names_include(chat_id, addressed, folded,
+                                            keys=_self_keys()):
                 continue
             # Per LINE, not per declaration: a declaration may carry a
             # concealed element beside an overt one, and the whole string is
@@ -512,9 +634,14 @@ def _unanswered_question_note(chat_id, char_name, char_id, current_turn_idx,
             # punctuation would have missed every one of them.
             if not interaction.get("expects_response"):
                 continue
-            addresses = [str(a).casefold()
-                         for a in (interaction.get("addresses") or [])]
-            if folded not in addresses:
+            # By every key this body answers to, tail-matched -- not by
+            # equality with one canonical spelling. Measured, chat 98 t32:
+            # an `addresses` entry of rank-plus-name against a bare
+            # canonical name meant the order was owed by nobody, so nobody
+            # was promoted to answer it and the asker re-issued it verbatim
+            # next turn.
+            if not any(_address_names_body(a, _self_keys())
+                       for a in (interaction.get("addresses") or [])):
                 continue
             # The LAST line this mind received from them, which is not
             # necessarily their last line: an overt question followed by a
@@ -707,6 +834,112 @@ def _first_verbatim_repeat(new_texts, recent_texts):
             if len(shingles & prev_shingles) >= 2:
                 return original
     return None
+
+
+# Where a later micro-round's line stops being new conduct and starts being
+# the same delivery again, as content-token overlap (claim_similarity).
+# Calibrated on the full 40-turn chat 98 run (2026-08-29): every same-mouth
+# within-beat restatement measured 0.75-1.00 (t5 0.75, t24 1.00, t29 0.78,
+# t35 0.80; t31 tripped the shingle rule and t32 normalized equality before
+# similarity was consulted), while the closest DISTINCT same-register pair in
+# the whole run scored 0.33 -- nothing landed between. 0.7 sits under the
+# lowest measured reissue with margin and far above the highest measured
+# non-reissue. OWNER-FLAGGED: a threshold is a judgment; this one is named
+# here with its calibration so it can be moved on evidence, not guessed at.
+_BEAT_REISSUE_SIMILARITY = 0.7
+# The similarity branch only judges lines with at least this many word
+# tokens ON BOTH SIDES. claim_similarity's subset short-circuit scores a
+# short line contained in a longer one as 1.0, which is right for beliefs
+# and wrong for dialogue: "I will not go" followed later in the beat by "I
+# will not go with you, whatever he says" is escalation, not reissue. Six,
+# because every measured reissue the similarity branch exists for was six
+# tokens or longer on both sides, and the equality/shingle branches keep
+# their own three-token interjection floor. OWNER-FLAGGED, as above.
+_BEAT_REISSUE_MIN_TOKENS = 6
+
+
+def strip_beat_reissues(result, prior_result, warn=None):
+    """Drop speech elements that re-deliver a line this same mouth already
+    delivered THIS BEAT, and say so.
+
+    THE WITHIN-BEAT SIBLING OF `fuse_speech_run`, one seam over: the fuse
+    collapses one mouth's consecutive speech elements inside a round, and
+    this drops a later round's re-delivery of a line an earlier round already
+    put into the same instant. Cross-turn repetition stays record-only
+    (`_first_verbatim_repeat` -> repeat_correction; the beat stands -- the
+    owner's no-re-ask ruling), because a turn later there are real reasons to
+    repeat: non-compliance, deliberate emphasis, a request to say it again.
+    Within one beat none of that has had time to exist -- the first copy was
+    delivered in full to the same ears in the same instant -- so the second
+    copy is a mechanical artifact, and it is subtracted deterministically
+    rather than left to a model's cooperation.
+
+    Measured, chat 98 (2026-08-29): four beats where a mind's later round
+    restated its own earlier round -- twice verbatim (t32), twice as a
+    high-overlap paraphrase (t24 subset 1.00, t29 0.78) -- every one made
+    with the earlier lines demonstrably in the handed view.
+
+    What is deliberately KEPT: lines of three word-tokens or fewer (a
+    repeated interjection -- "Get out." -- is how people talk); any line
+    whose earlier copy was cut short by an interruption (finishing an
+    interrupted sentence is completion, not reissue); and everything below
+    the similarity bar. Known cost, accepted and warned: a full-fidelity
+    repeat REQUESTED within the beat ("say again?") is also dropped -- the
+    warning names the line so the case is visible if it ever occurs.
+    """
+    sequence = (result or {}).get("sequence")
+    if not isinstance(sequence, list) or not sequence:
+        return result
+    prior_texts = [
+        str(e.get("text") or "")
+        for e in ((prior_result or {}).get("sequence") or [])
+        if isinstance(e, dict) and e.get("type") == "speech"
+        and not e.get("cut_short")
+        and str(e.get("text") or "").strip()]
+    prior = [(t, _normalized_line(t), _word_shingles(t),
+              len(_self_line_tokens(t)))
+             for t in prior_texts
+             if len(_self_line_tokens(t)) > _INTERJECTION_WORDS]
+    if not prior:
+        return result
+    kept = []
+    for element in sequence:
+        if not (isinstance(element, dict)
+                and element.get("type") == "speech"):
+            kept.append(element)
+            continue
+        text = str(element.get("text") or "")
+        n_tokens = len(_self_line_tokens(text))
+        if n_tokens <= _INTERJECTION_WORDS:
+            kept.append(element)
+            continue
+        norm = _normalized_line(text)
+        shingles = _word_shingles(text)
+        matched = None
+        for original, prev_norm, prev_shingles, prev_tokens in prior:
+            if norm == prev_norm or len(shingles & prev_shingles) >= 2:
+                matched = original
+                break
+            if (n_tokens >= _BEAT_REISSUE_MIN_TOKENS
+                    and prev_tokens >= _BEAT_REISSUE_MIN_TOKENS
+                    and affect.claim_similarity(text, original)
+                    >= _BEAT_REISSUE_SIMILARITY):
+                matched = original
+                break
+        if matched is None:
+            kept.append(element)
+            continue
+        if warn:
+            warn("dropped a line that re-delivers this mouth's own earlier "
+                 f"round this beat: {text[:80]!r} (already delivered as "
+                 f"{matched[:80]!r})")
+    if len(kept) != len(sequence):
+        result["sequence"] = kept
+        if result.get("speech") and not any(
+                isinstance(e, dict) and e.get("type") == "speech"
+                for e in kept):
+            result["speech"] = None
+    return result
 
 
 def _selected_move_text(result):
@@ -2828,6 +3061,18 @@ def character_step(ctx, cid, nonce):
         chat.id, character_name(sh), ctx.turn.idx, frame_id=ctx.turn.frame_id)
     _self_moves = _recent_self_moves(
         chat.id, cid, ctx.turn.idx, frame_id=ctx.turn.frame_id)
+    # The beat's OWN earlier rounds join the ledger. Both committed
+    # projections stop at `t.idx < current`, so a second micro-round in the
+    # same beat was judged -- by the model and by every guard below -- as if
+    # the first had never happened. `beat_declared` is written only by the
+    # interaction loop, which resets it at loop start, so a reroll's
+    # hydrated leftovers can never masquerade as this beat's conduct (see
+    # `loops.interaction_loop`). The move entry is payload-only; see
+    # `_this_beat_self_record` for why the move guard keeps reading
+    # committed turns alone.
+    _beat_lines, _beat_move = _this_beat_self_record(
+        (ctx._extra.get("beat_declared") or {}).get(cid), ctx.turn.idx)
+    _self_lines = _self_lines + _beat_lines
     _refrain = _self_line_refrain(_self_lines)
     _decision_intentions = _annotate_fading(
         _merge_standing_intentions(
@@ -3117,7 +3362,12 @@ def character_step(ctx, cid, nonce):
         # One row per turn rather than one row per utterance. This is the
         # semantic continuity ledger: a chatty speaker cannot push the last
         # conversational job out of view merely by saying four short lines.
-        "recent_self_moves": _self_moves,
+        # The beat's own earlier move rides along (`this_beat: true`) so a
+        # second micro-round knows what job it already did -- payload only,
+        # never an input to `_first_repeated_move` (see
+        # `_this_beat_self_record`).
+        "recent_self_moves": (
+            _self_moves + ([_beat_move] if _beat_move else [])),
         # The SHAPE those lines keep reusing, computed rather than left to the
         # character to notice about itself -- see _self_line_refrain. Absent
         # when there is no template, so its presence is the whole signal.
@@ -3705,6 +3955,17 @@ def character_step(ctx, cid, nonce):
         out.get("mind_model_updates") or [], absorption=absorption)
     norm_sequence(out, warn=lambda _w: ctx.add_warning(
         "character %s: %s" % (character_name(sh), _w)))
+    # THE DETERMINISTIC FLOOR under the ledger extension above, in the same
+    # slot as the fuse and for the same reason: after norm_sequence (it reads
+    # normalized text) and before the ids are stamped (a dropped element must
+    # not leave a hole in the numbering). The ledger tells the mind what it
+    # already said this beat; this guarantees that whatever the model does
+    # with that, one mouth does not deliver the same line into the same beat
+    # twice. See `strip_beat_reissues`.
+    strip_beat_reissues(
+        out, (ctx._extra.get("beat_declared") or {}).get(cid),
+        warn=lambda _w: ctx.add_warning(
+            "character %s: %s" % (character_name(sh), _w)))
     # AFTER norm_sequence and BEFORE the ids are stamped: the fuse reads the
     # normalized delivery fields, and a fused run must not leave a hole in the
     # event-id numbering. See `fuse_speech_run` for why one mouth's
