@@ -97,7 +97,7 @@
 | `story/importers.py` | 3124 | Native and AI-assisted character, persona, and lorebook import/generation. | `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.memory`, `story.character_schema`, `story.scene` |
 | `story/journey_history.py` | 431 |  | — |
 | `story/lore_structure.py` | 248 |  | — |
-| `story/naming.py` | 372 |  | `core.db`, `world.charter_identity` |
+| `story/naming.py` | 409 |  | `core.db`, `world.charter_identity` |
 | `story/provenance_text.py` | 132 |  | — |
 | `story/scene.py` | 2602 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `core.db`, `story`, `story.attire`, `story.character_schema`, `world.spatial` |
 | `web/__init__.py` | 6 |  | — |
@@ -1160,14 +1160,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `minted_presence_name()` | 319 | 54 lines |
-| `registered_identity_names()` | 244 | 52 lines |
-| `_person_name_evidence()` | 154 | 37 lines |
-| `harvested_naming_profile()` | 193 | 28 lines |
+| `minted_presence_name()` | 356 | 54 lines |
+| `registered_identity_names()` | 281 | 52 lines |
+| `_person_name_evidence()` | 154 | 51 lines |
+| `harvested_naming_profile()` | 230 | 28 lines |
 | `_name_tokens()` | 126 | 26 lines |
 | `_charter_naming_lanes()` | 101 | 23 lines |
-| `story_naming_lanes()` | 223 | 19 lines |
-| `story_identity_reservation()` | 298 | 14 lines |
+| `_name_head_of()` | 207 | 21 lines |
+| `story_naming_lanes()` | 260 | 19 lines |
 
 ### `story/provenance_text.py`
 

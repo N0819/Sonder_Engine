@@ -177,17 +177,54 @@ def _person_name_evidence(chat_id):
             (*book_ids, "character"))
         for row in rows:
             title = clean_title(row["title"]) if row["title"] else ""
-            if not title:
-                keys = [k.strip() for k in str(row["keys"] or "").split(",")
-                        if k.strip()]
-                if keys:
-                    # Keys are lowercased snake identifiers; recover the
-                    # name shape they encode.
-                    title = " ".join(
-                        w.capitalize() for w in keys[0].split("_"))
-            if title:
-                names.append(title)
+            keys = [k.strip() for k in str(row["keys"] or "").split(",")
+                    if k.strip()]
+            if not title and keys:
+                # Keys are lowercased snake identifiers; recover the
+                # name shape they encode.
+                title = " ".join(w.capitalize() for w in keys[0].split("_"))
+            for candidate in ([title, _name_head_of(title)] if title else []):
+                if candidate and candidate not in names:
+                    names.append(candidate)
+            # EVERY KEY, not only the first and not only as a fallback. The
+            # keys of a `character` entry are the names that entry is FOUND
+            # by, which for a person is the set of things they are called --
+            # "Crusher", "Doctor Crusher", "Beverly Crusher" are one woman.
+            # Measured 2026-08-28 on chat 95: Riker, Crusher, Troi and Soong
+            # survived the pool subtraction reading titles alone, because
+            # they are named in the entry's keys and in its prose and never
+            # as a title of their own. A key that is not a personal name
+            # ("the ship", a year) costs one reserved string nobody would
+            # have been called anyway; a canon surname left in the pool costs
+            # a stranger wearing it.
+            for key in keys:
+                spelled = " ".join(w.capitalize() for w in key.split("_"))
+                if spelled and spelled not in names:
+                    names.append(spelled)
     return names
+
+
+def _name_head_of(title):
+    """The personal name inside a lore entry's title, when the title carries a
+    role beside it.
+
+    An author writes the entry so a reader can find it -- "Miles O'Brien,
+    transporter chief" -- and the appositive after the comma is a DESCRIPTION
+    of the person, not part of what they are called. Measured 2026-08-28 on
+    chat 95: four canon surnames (O'Brien, Ogawa, Barclay, Laren) survived the
+    pool subtraction for exactly this reason, because component matching saw
+    the whole string and the pool held the bare surname.
+
+    Both spellings are reserved, never one instead of the other. A title may
+    legitimately carry a comma inside the name itself -- a patronymic, "son
+    of" -- and choosing between them would guess wrong half the time; keeping
+    both costs two strings and guesses nothing.
+    """
+    text = str(title or "").strip()
+    for sep in (",", " -- ", " -- ", " (", " [", " \u2014 ", " \u2013 "):
+        if sep in text:
+            text = text.split(sep, 1)[0]
+    return text.strip(" -\u2013\u2014(),").strip()
 
 
 def harvested_naming_profile(chat_id):
