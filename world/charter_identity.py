@@ -402,6 +402,81 @@ def _reserves_component(reservation, component):
     return False
 
 
+#: THE NOVELTY FLOOR, AND IT IS NOT A DISTANCE. Owner ruling 2026-08-28:
+#: longest common substring 4, shared-prefix veto 4. Both are mid-band of what
+#: the record-linkage literature supports and both are named here rather than
+#: buried, per the standing rule about caps.
+#:
+#: Edit distance CANNOT detect a mashup, which is why this is a substring test.
+#: A distance measures closeness to the nearest SINGLE reserved name, and a
+#: mashup is recognisable precisely because it is close to TWO at once:
+#: `Crulaski` sits far enough from `Pulaski` to pass any published threshold
+#: while being unmistakably made of it. Measured on this engine's own
+#: extension lane, 78.5% of reachable surnames shared a run of four or more
+#: characters with a real person's surname, and the lane regenerated one canon
+#: surname verbatim.
+#:
+#: Four characters because that is where a fragment stops being phonology and
+#: starts being recognisable, and because the prefix is where recognisability
+#: lives -- a shared opening carries a name further than a shared tail.
+NAME_RUN_FLOOR = 4
+NAME_PREFIX_FLOOR = 4
+
+
+def _longest_shared_run(left, right):
+    """Length of the longest substring these two share. Small strings only."""
+    if not left or not right:
+        return 0
+    previous = [0] * (len(right) + 1)
+    best = 0
+    for i in range(1, len(left) + 1):
+        current = [0] * (len(right) + 1)
+        for j in range(1, len(right) + 1):
+            if left[i - 1] == right[j - 1]:
+                current[j] = previous[j - 1] + 1
+                if current[j] > best:
+                    best = current[j]
+        previous = current
+    return best
+
+
+def reconstructs_a_reserved_name(text, reservation):
+    """Is this candidate assembled out of somebody's name?
+
+    Asked of ONE component at a time, against the reserved token runs. A
+    candidate that merely shares a short cluster with a reserved name is
+    ordinary phonology and passes; one carrying four characters of somebody
+    else's name in order, or opening on their first four, does not.
+    """
+    folded = "".join(ch for ch in str(text or "").casefold() if ch.isalpha())
+    if len(folded) < NAME_RUN_FLOOR:
+        return False
+    for run in (reservation or {}).get("runs") or ():
+        spelled = " ".join(run) if isinstance(run, (tuple, list)) else str(run)
+        # Each TOKEN separately: a run is a name's token sequence, and it is
+        # the tokens that carry recognisability, not the space between them.
+        for token in spelled.split():
+            other = "".join(ch for ch in token.casefold() if ch.isalpha())
+            if len(other) < NAME_RUN_FLOOR:
+                continue
+            if folded == other:
+                # AN EXACT SHARE IS NOT A RECONSTRUCTION, and the guards above
+                # already decide it under their own rules. This repo permits
+                # sharing on purpose -- "a registered `Beverly Crusher` does
+                # not reserve every `Beverly` in the story; that would be an
+                # expansion, and shared given names are ordinary" -- and a
+                # near-miss is the opposite case: nobody shares `Crushen`
+                # with anybody, it was assembled out of somebody. Refusing
+                # exact matches here turned that documented permission off
+                # and failed five tests that exist to pin it.
+                continue
+            if _longest_shared_run(folded, other) >= NAME_RUN_FLOOR:
+                return True
+            if folded[:NAME_PREFIX_FLOOR] == other[:NAME_PREFIX_FLOOR]:
+                return True
+    return False
+
+
 def name_is_reserved(name, profile, reservation, given="", family=""):
     """Would minting this name take an identity a registered mind already has?
 
@@ -456,6 +531,15 @@ def name_is_reserved(name, profile, reservation, given="", family=""):
     fields = address_components(profile)
     for field, value in (("given", given), ("family", family)):
         if field in fields and _reserves_component(reservation, value):
+            return True
+    # AND THE NAME THAT WAS ASSEMBLED OUT OF SOMEBODY. Every test above
+    # refuses a name the mint RECOGNISES; this one refuses a name it built
+    # from recognisable pieces, which is the failure no reservation can reach.
+    # See `reconstructs_a_reserved_name`: 78.5% of the surnames this engine's
+    # extension lane could reach shared four or more characters in order with
+    # a real person's surname, and it regenerated one verbatim.
+    for value in (given, family):
+        if reconstructs_a_reserved_name(value, reservation):
             return True
     return False
 
