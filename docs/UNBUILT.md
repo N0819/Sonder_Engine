@@ -4726,6 +4726,74 @@ remember what you told me last winter" cannot be adjudicated by the engine --
 only answered by the human. That is tolerable and may even be right; it is
 recorded here so that if it stops being tolerable, the reason is visible.
 
+### 1.100 A card can author one garment twice, and the ledger cannot tell
+
+**Found 2026-08-29 while fixing the attire write gate (chat 98).** The gate's
+paraphrase defect is fixed; this is what was underneath it and is not.
+
+Every one of that run's four cards carries the same outfit written twice, in
+two spellings. Measured in the persona sheet and in the committed ledger:
+
+    "standard Starfleet duty uniform (teal science division shoulders)"
+    "Starfleet uniform jumpsuit, sciences blue shoulders"
+    "combadge"  /  "commbadge"
+    "Klingon baldric"  /  "Klingon warrior's baldric"
+
+The mechanism is the card's two representations. `character_schema.
+_normalize_initial_outfit` hands `normalize_regions` an authored `regions`
+block AND the flat `wearing` list beside it; the fold is deliberately additive
+("an author who wrote regions is not overruled by the flat list their card
+also carries") and dedupes with `resolve_garment`, which correctly refuses to
+call those two strings one garment. So both land, and the body wears one coat
+twice for the life of the story.
+
+What it costs, all downstream and all measured in that run: the duplicate
+destroys the uniqueness the licence's per-garment tier needs, so the one word
+the beat used named neither garment (that half is fixed); a `remove` of one
+spelling leaves the other on; and the shed-object mint runs twice for one
+garment, which is how an entity id reached a `remove` as a garment handle.
+
+**Not fixed, because every available fix is a guess.** The two strings share
+"Starfleet" and "shoulders" and nothing else; their `covers` sets differ; one
+attaches and one does not. No determinate reading of the ledger's own
+vocabulary says they are one garment, and a fuzzy same-garment matcher would
+be exactly the instance-shaped rule this repo forbids. The two candidates,
+both needing the owner:
+
+  * **Regions win.** When a card carries an authored `regions` block, treat
+    the flat `wearing` list as already represented rather than folding it in.
+    Determinate, and it fixes all four cards at once — but it silently drops a
+    garment an author put only in the flat list, and the fold's comment says
+    that additive direction was chosen on purpose.
+  * **Tell the author.** The merge is the only place the two lists still exist
+    separately, so a warning has to be raised there and carried out to
+    `character_card_warnings` — which today reads a card the merge has already
+    flattened. Costs nothing behaviourally and closes nothing on its own.
+
+### 1.101 The process clamp reads a generic word in a clothing sentence
+
+**Measured live 2026-08-29, chat 98 turns 40 and 41, twice in two turns.**
+
+`attire._process_sentence` requires a sentence to be about clothing before it
+reads process language as evidence about clothing — the fix for chat 70 t9,
+where a sentence about hands clamped a removal. The other half is still open:
+a sentence that IS about clothing and ALSO contains a generic process word
+about something else.
+
+    "...because alpha shift started in forty minutes she put the duty
+     uniform back on"
+
+`started` is `_PROCESS`; `uniform` is `_CLOTHING_CONTEXT`; the removal of the
+civilian clothes was held at `loosened` on a beat that completed it. The
+second case is the Director's own "She begins removing..." for a beat whose
+narration takes four garments off, which held all four.
+
+Failure direction is the safe one — a removal held one beat, restated the
+next — so this is a pacing defect, not a state fork. The shape of a fix is the
+same one `_CLOTHING_CONTEXT` already has: the process word and the clothing
+word have to be about the same thing, which sentence-level co-occurrence does
+not establish.
+
 ### 1.70 Narrator repetition: what the change-key fix reached, and what it did not
 
 Landed 2026-08-28, from a 16-turn story (chat 95) whose every stage was read
