@@ -2,6 +2,7 @@
 """Relative scale and enclosure: how big a body is, what encloses it, what that
 hides, and what a size change breaks."""
 
+import re
 from world.spatial_barriers import (_PASSABLE_BARRIERS, neighbor_map,
                                     normalize_barrier)
 from world.spatial_identity import _ci_get, _entity_named, room_of, same_subject
@@ -877,6 +878,70 @@ def _report_unrecorded_transfer(report, op) -> None:
             % (thing, where, thing))
     if note not in report:
         report.append(note)
+
+
+def mint_transferred_objects(scene: dict, inventory_ops) -> list:
+    """Give a transferred thing an entity record when the scene has none.
+
+    A TRANSFER IS EVIDENCE THAT A THING EXISTS. `derive_inventory_placements`
+    below reads the transfer ledger and skips any op whose `object_id` names
+    nothing the scene knows -- correct for PLACEMENT, since a thing with no
+    record has nowhere to be put, but it took the possession fact down with
+    it. The hand that mints objects owns `entities` and the hand that resolves
+    a handover owns `inventory_ops`, and neither can write the other's
+    channel, so a handover of something nobody thought to mint was resolved
+    correctly and filed nowhere. Measured: 26 beats across 7 chats, and in the
+    run that surfaced it the player handed a padd to a captain on turn 4, the
+    op was perfect, the scene never recorded it, and four turns later the
+    narrator had the padd back in her hands because nothing had ever
+    contradicted her holding it.
+
+    Minted from what the op itself vouches for and nothing more: a thing that
+    changed hands is an object and is PORTABLE, because it was just carried.
+    Everything else stays at its schema default, which `_merge_entity` reads
+    as silence rather than as an assertion, so a later declaration by the hand
+    that owns entities fills the record in without fighting this one.
+
+    Refuses to mint a PERSON. An endpoint the scene stands somewhere, dresses,
+    or already knows is not a thing this function may invent -- minting an
+    entity over a body is the corruption `_merge_entity`'s own docstring
+    records, where a registered character became "an object named The Doctor".
+    """
+    if not isinstance(scene, dict) or not isinstance(inventory_ops, list):
+        return []
+    entities = scene.get("entities")
+    if not isinstance(entities, dict):
+        entities = scene["entities"] = {}
+    positions = scene.get("positions") if isinstance(
+        scene.get("positions"), dict) else {}
+    attire = scene.get("attire") if isinstance(scene.get("attire"), dict) else {}
+    bodies = {str(k).strip().casefold() for k in positions}
+    bodies |= {str(k).strip().casefold() for k in attire}
+    minted = []
+    for op in inventory_ops:
+        if not isinstance(op, dict):
+            continue
+        name = str(op.get("object_id") or "").strip()
+        if not name or name.casefold() in bodies:
+            continue
+        eid, _ent = _unique_entity_keyed(scene, name)
+        if eid:
+            continue
+        # The op's own spelling, lightly normalised. `object_id` is already
+        # an identifier in every recorded case ("padd", "combadge"), so this
+        # is a fold rather than a rename, and the original spelling rides
+        # along as an alias wherever the two differ.
+        key = re.sub(r"[^a-z0-9]+", "_", name.casefold()).strip("_")
+        if not key or key in entities:
+            continue
+        entities[key] = {
+            "name": name,
+            "kind": "object",
+            "portable": True,
+            "aliases": [name] if name != key else [],
+        }
+        minted.append(key)
+    return minted
 
 
 def derive_inventory_placements(scene: dict, inventory_ops,

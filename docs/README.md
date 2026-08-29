@@ -131,6 +131,12 @@ they answer different questions about it:
   the three above as sources.
 - [`DESIGN_CROWDS.md`](design/DESIGN_CROWDS.md) — crowd blobs: one row with many
   people in it. Built 2026-08-10; §7a records what the building changed.
+- [`DESIGN_STORY_PLANNER_AND_DRAMATURGE.md`](design/DESIGN_STORY_PLANNER_AND_DRAMATURGE.md)
+  — design draft for one cross-system Writers' Room agent set: the Story
+  Planner and Dramaturge share broad authorial sway, while a narrow Charter
+  Planner subagent constructs coherent populated locations beneath the Story
+  Planner. None is built; the work is registered in `UNBUILT.md` §§2.9 and
+  2.26.
 
 Elsewhere:
 

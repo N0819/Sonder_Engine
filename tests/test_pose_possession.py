@@ -241,15 +241,33 @@ def test_this_beat_s_own_pose_prose_is_answerable_to_this_beat_s_ledger():
 # --- the refusal, said out loud ------------------------------------------
 
 
-def test_a_transfer_of_an_unrecorded_thing_tells_the_director_so():
-    """Placing it is still refused -- the pass has an id a model reached for
-    and nothing else. What is new is that the refusal is audible."""
+def test_a_transfer_of_an_unrecorded_thing_now_mints_it_and_records_it():
+    """This used to be refused audibly, which was the half of the answer
+    available before the transfer could mint. It mints now, so the handover
+    is RECORDED rather than merely reported: the taker holds the thing, and
+    the audible refusal has nothing left to refuse."""
     report = []
     merged = merge_scene_with_diff(
         scene(), {"inventory_ops": [op()]}, inventory_report=report)
-    assert merged.get("contained") in ({}, None)
-    note = next(n for n in report if "no entity record" in n)
-    assert THING in note and GIVER in note and TAKER in note
+    assert merged["entities"][THING]["kind"] == "object"
+    assert merged["contained"][THING]["in"] == TAKER
+    assert not any("no entity record" in note for note in report)
+
+
+def test_a_transfer_naming_a_BODY_is_still_refused_and_still_says_so():
+    """The refusal survives where it is still a refusal. A body is never
+    minted over -- `_merge_entity`'s own docstring records a registered
+    character turned into "an object named The Doctor" -- so an op whose
+    object is a person places nothing, mints nothing, and is audible."""
+    report = []
+    sc = scene()
+    sc["positions"]["a person"] = "room_a"
+    merged = merge_scene_with_diff(
+        sc, {"inventory_ops": [op(object_id="a person")]},
+        inventory_report=report)
+    assert "a person" not in merged.get("entities", {})
+    assert (merged.get("contained") or {}).get("a person") is None
+    assert any("a person" in note for note in report)
 
 
 def test_a_transfer_of_a_recorded_thing_reports_no_refusal():

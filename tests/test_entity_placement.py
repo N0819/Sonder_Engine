@@ -169,12 +169,19 @@ def test_the_derivation_writes_one_spelling_per_being():
     assert THING not in merged["positions"]
 
 
-def test_a_thing_the_scene_does_not_know_is_not_conjured_into_a_room():
-    """A transfer op naming an object with no entity record places nothing:
-    a bare key in `positions` is a body-shaped hole, not a thing."""
+def test_a_thing_the_scene_does_not_know_is_minted_before_it_is_placed():
+    """The hazard this used to answer by refusing is a bare key in
+    `positions` with no entity behind it -- a body-shaped hole, since a
+    positioned subject the entity ledger cannot describe is how the engine
+    tells a person from a thing. Refusing the placement closed the hole and
+    took the possession with it (26 beats across 7 chats resolved a handover
+    and filed it nowhere). The hole is now closed the other way: the transfer
+    mints the record, so the key is a THING and the placement is safe."""
     sd = {"inventory_ops": [op(object_id="never_minted", to_id="room_a")]}
     merged = merge_scene_with_diff(scene(), sd)
-    assert "never_minted" not in merged["positions"]
+    assert merged["positions"]["never_minted"] == "room_a"
+    assert merged["entities"]["never_minted"]["kind"] == "object"
+    assert merged["entities"]["never_minted"]["portable"] is True
 
 
 def test_a_bodiless_thing_is_never_given_a_room():
