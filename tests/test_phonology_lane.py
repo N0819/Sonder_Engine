@@ -127,3 +127,61 @@ def test_a_law_with_no_fragments_writes_nothing(temp_db):
         "naming": {"given": ["Jean-Luc"], "family": ["Picard"]}}}})
 
     assert phonology_entries(chat_id) == []
+
+
+def test_lore_supplied_as_text_still_writes_the_entry_to_the_story_book(
+        temp_db, monkeypatch):
+    """The artifact is written even when the caller never names a lorebook.
+
+    `owning_book` was `owning_lorebook_id or source_book`, and `source_book`
+    is only set by `generation_lore` -- which a caller that passes `lore` as
+    TEXT never reaches. So the whole lane went quiet for exactly the callers
+    most likely to use it, and `_record_phonology` is deliberately never
+    fatal, so nothing said so. Measured 2026-08-28: a generation whose law
+    carried a full set of fragments produced zero phonology entries, and the
+    one model judgement this lane exists to make reviewable could only be
+    read out of the raw stored law.
+    """
+    from world import charter_generate, charter_runtime
+
+    chat_id = db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+                    ("story", "", time.time()))
+    book = db.qi("INSERT INTO lorebooks(chat_id,name,summary) VALUES(?,?,?)",
+                 (chat_id, "book", ""))
+    db.qi("UPDATE chats SET lorebook_id=? WHERE id=?", (book, chat_id))
+
+    law = {"given_parts": {"starts": ["Ka", "Mi"], "middles": [],
+                           "ends": ["ren"]},
+           "family_parts": {"starts": ["Bel"], "middles": [], "ends": ["mor"]}}
+    plan = {
+        "name": "Waypoint",
+        "structure": {"key": "waypoint", "max_planned": 8, "grammar": []},
+        "rooms": {"hall": {"name": "Hall", "purpose": "work", "adjacent": []}},
+        "charters": [{
+            "key": "works", "naming": law, "priority": ["upkeep"],
+            "upkeeps": {"upkeep": {
+                "place": "hall", "floor": 0.25, "level": 1,
+                "fails_untended": "a_week",
+                "one_body_restores_in": "a_shift"}},
+            "posts": {"warden": {"place": "hall", "serves": ["upkeep"],
+                                 "requires": {"tending": 1}}},
+            "populations": [{"post": "warden", "count": 4,
+                             "competence": {"tending": 1}, "berth": "hall"}],
+        }],
+    }
+    monkeypatch.setattr(charter_generate, "propose_town",
+                        lambda lore, brief, constraints=None: plan)
+    chat = db.q("SELECT * FROM chats WHERE id=?", (chat_id,), one=True)
+
+    charter_runtime._plan_lived_location(
+        chat_id,
+        # `lore` as TEXT, and no lorebook named anywhere.
+        {"lore": "a waypoint on a long road", "generate_history": False,
+         "horizon_hours": 0.0},
+        chat)
+
+    entries = phonology_entries(chat_id)
+    assert entries, "the fragments the mint was given were never written down"
+    parts = phonology_parts(chat_id)
+    assert parts["given_parts"]["starts"] == ["Ka", "Mi"]
+    assert parts["family_parts"]["ends"] == ["mor"]

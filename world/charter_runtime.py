@@ -1323,7 +1323,16 @@ def _plan_lived_location(cid, request, chat):
         # Explicit lore is allowed for tools, but a claimed provenance book
         # still has to exist in this authoring scope.
         _unused, source_book = generation_lore(cid, source_book, limit=1)
-    owning_book = request.get("owning_lorebook_id") or source_book
+    # THE STORY'S OWN BOOK IS THE LAST FALLBACK, and without it the phonology
+    # artifact is silently never written. A caller that supplies `lore` as
+    # TEXT never reaches `generation_lore`, so `source_book` stays None, so
+    # `_record_phonology` returns at its own front door -- and it is
+    # deliberately never fatal, so nothing says so. Measured 2026-08-28: a
+    # generation whose law carried a full set of fragments produced zero
+    # phonology entries, and the one model judgement the lane exists to make
+    # reviewable could only be read out of the raw stored law.
+    owning_book = (request.get("owning_lorebook_id") or source_book
+                   or chat["lorebook_id"])
     if request.get("owning_lorebook_id") not in (None, ""):
         try:
             owning_book = int(request["owning_lorebook_id"])
