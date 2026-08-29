@@ -1091,23 +1091,14 @@ def _process_sentence(sentence, garment_phrases=()):
     2. no completion shape shares the sentence -- "she stops fumbling and
        just rips it off" ends the process it names, so the decisive reading
        wins inside one sentence;
-    3. the sentence is about clothing at all -- a garment this body is
-       actually wearing, or a generic clothing word. Without this, every
-       "begins to", "starts to" and "tries to" in a beat was evidence about
+    3. the sentence is about clothing at all -- `_clothing_sentence`, which
+       the write gate's subject reading shares. Without it, every "begins
+       to", "starts to" and "tries to" in a beat was evidence about
        somebody's clothes.
-
-    `garment_phrases` is the wardrobe's own spellings, matched whole exactly
-    as the attribution ladder's first tier matches them. Head nouns are NOT
-    used here: `_garment_keys` reads the last word, and the live wardrobe
-    holds "sheer obsidian silk robe that parts with every movement", whose
-    head noun is "movement".
     """
     if not _PROCESS.search(sentence) or _decisive_sentence(sentence):
         return False
-    if _CLOTHING_CONTEXT.search(sentence):
-        return True
-    folded = sentence.casefold()
-    return any(phrase and phrase in folded for phrase in garment_phrases)
+    return _clothing_sentence(sentence, garment_phrases)
 
 
 def _decisive_sentence(sentence):
@@ -1682,11 +1673,93 @@ def process_targets(player_text, other_texts, wardrobe, player_name=None):
         lambda sentence: _process_sentence(sentence, phrases))
 
 
+def _clothing_sentence(sentence, garment_phrases=()):
+    """Is this sentence about clothing at all?
+
+    `_process_sentence`'s third condition, on its own: the closed English
+    clothing vocabulary, plus the wardrobe's own spellings for the garments
+    English has no word for. Head nouns are deliberately NOT used, for
+    `_process_sentence`'s reason -- `_garment_keys` reads the last word, and a
+    live wardrobe holds names whose last word is not a garment ("sheer
+    obsidian silk robe that parts with every movement" -> "movement").
+    """
+    if _CLOTHING_CONTEXT.search(sentence):
+        return True
+    folded = sentence.casefold()
+    return any(phrase and phrase in folded for phrase in garment_phrases)
+
+
+def wardrobe_change_subjects(player_text, other_texts, wardrobe,
+                             player_name=None):
+    """WHOSE clothing this beat's words are about at all.
+
+    THE WRITE GATE'S SUBJECT. `garments_named_in` answers a different
+    question -- WHICH garment a beat names -- and the write gate used it as
+    though the two were the same. They are not, and the difference is what
+    put a body in two wardrobes for thirty turns (chat 98, turn 8): the
+    player wrote "She changed out of uniform", the Director resolved "She
+    changes out of her duty uniform into civilian clothing", the body
+    specialist emitted a `remove` of all five garments SPELLED EXACTLY AS THE
+    LEDGER HELD THEM, and four of the five were dropped for not being named.
+
+    PROSE NAMES THE OCCASION OF A WARDROBE CHANGE; THE LEDGER NAMES ITS
+    INVENTORY. That is the whole rule. Nobody writing fiction lists five
+    garment strings to say somebody got changed, and nobody has to: the
+    wardrobe is a ledger precisely so that the words do not have to carry it.
+    Requiring the beat to spell each garment as the ledger spells it makes any
+    paraphrase of undressing unapplyable, and it fails hardest exactly where a
+    wardrobe is most detailed -- five garments is five chances for the prose
+    to use a word the ledger does not.
+
+    Nor can the per-garment reading be repaired in place. Its last tier counts
+    a word only while ONE worn garment carries it, because it has to decide
+    WHICH garment the word means; in that run the ledger carried the same
+    coat under two authored spellings, so "uniform" -- the one word the beat
+    used -- was carried by two garments and named neither. A question about
+    the BODY has no such ambiguity to resolve.
+
+    So the gate asks this instead, and lets `resolve_garment` say which
+    garments the change touches, which is the ledger's own job. The refusal
+    the gate exists for is untouched: the interrogation beats that rewrote a
+    wardrobe twice (see `tests/test_attire_write_gate.py`) contain no
+    clothing word at all, so they name no subject here either.
+
+    Attribution is `_attributed_targets`, the ladder `decisive_targets` and
+    `process_targets` already share -- so "whose clothes is this sentence
+    about" has one implementation and cannot drift into three.
+
+    Heuristic, and allowed to be: it decides whether a change the stage that
+    owns objective causality already asserted may land, never who may know
+    what. See docs/UNBUILT.md §3.1 on why prose matching is not a boundary.
+    """
+    phrases = {phrase
+               for garments in (wardrobe if isinstance(wardrobe, dict)
+                                else {}).values()
+               for phrase, _noun in (_garment_keys(g) for g in garments or [])
+               if phrase}
+    return _attributed_targets(
+        player_text, other_texts, wardrobe, player_name,
+        lambda sentence: _clothing_sentence(sentence, phrases),
+        actor_is_not_target=False)
+
+
 def _attributed_targets(player_text, other_texts, wardrobe, player_name,
-                        sentence_hit):
-    """The shared attribution ladder behind decisive_targets and
-    process_targets — one implementation of "whose clothes is this sentence
-    about", so the two readings of a beat cannot drift."""
+                        sentence_hit, *, actor_is_not_target=True):
+    """The shared attribution ladder behind decisive_targets,
+    process_targets and wardrobe_change_subjects — one implementation of
+    "whose clothes is this sentence about", so the readings of a beat cannot
+    drift.
+
+    ``actor_is_not_target`` is the one place they legitimately differ, and
+    only at the single-name tier. "Corin strips her clothes off" tells the
+    SPEED readings that Corin is not the one losing the shift, so they
+    re-attribute away from the name the sentence carries. The LICENCE reading
+    asks a different question -- whose clothing this beat is about -- and a
+    body whose own prose says she changed out of her uniform is the answer to
+    it whichever way the possessive points. Third-person self-undressing is
+    the ordinary shape of NPC prose ("Sabine changed out of her uniform"), and
+    reading it as somebody else's is how the licence went missing for exactly
+    the bodies the Director was writing about."""
     wardrobe = wardrobe if isinstance(wardrobe, dict) else {}
     keys = {name: [_garment_keys(g) for g in (garments or [])]
             for name, garments in wardrobe.items()}
@@ -1757,7 +1830,8 @@ def _attributed_targets(player_text, other_texts, wardrobe, player_name,
                 # there is exactly one, and otherwise to nobody. Undressing the
                 # wrong person faster is a worse error than undressing the
                 # right one slowly.
-                if (_OTHERS_POSSESSIVE.search(sentence)
+                if (actor_is_not_target
+                        and _OTHERS_POSSESSIVE.search(sentence)
                         and not _REFLEXIVE.search(sentence)):
                     others = {name for name in wardrobe if name not in named
                               and (wardrobe.get(name) or [])}
