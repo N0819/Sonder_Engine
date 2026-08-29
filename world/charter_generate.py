@@ -701,3 +701,88 @@ __all__ = [
     "narrate_actual_history", "propose_history", "propose_town",
     "resident_service_chronicle",
 ]
+
+
+#: WHY A MODEL AND NOT A PARSER. Deciding whether a lore entry names an
+#: INDIVIDUAL, whether that individual is already one of the story's registered
+#: minds, and what post they hold is reading, not matching. Measured
+#: 2026-08-28: a real lorebook filed a watch rotation and a set of standing
+#: orders under the `character` category, and titled a person's entry "<name>,
+#: <role>" so that a parser splitting on the comma got the name and a parser
+#: not splitting got neither. Both mistakes are obvious to a reader and
+#: invisible to a rule.
+#:
+#: The output is PLACEMENT EVIDENCE ONLY, exactly as a card-derived seed is:
+#: who exists, where they work, what they are called. Nothing here writes a
+#: mind, a memory, or a private fact.
+_CAST_SYSTEM = """You read a story's lore and pick out the PEOPLE in it.
+
+Return {"residents":[{"entry_id":int,"name":str,"post":str,"rank":str}]}.
+
+Include an entry when it names ONE INDIVIDUAL PERSON who belongs to this
+location. Give their name exactly as the lore spells it, without any role or
+description attached to it: an entry titled "<name>, <role>" contributes the
+name, and the role belongs in `post`.
+
+EXCLUDE, and these are the common cases rather than an exhaustive list:
+  * anything that is not a person -- a group, a watch, a rotation, a body of
+    standing orders, a ship, a place, an event, a species, a culture;
+  * a person already in `registered`, under any spelling of their name. Those
+    are the story's own cast and are already present;
+  * a person the lore places somewhere else, or who is dead, or who the lore
+    says has left.
+
+`post` is the working position they hold, in the vocabulary the lore itself
+uses, and `rank` is their standing where the lore gives one; leave `rank`
+empty rather than inventing a hierarchy the setting does not have.
+
+Return an empty list rather than reaching. A lorebook about a place with no
+named inhabitants is an ordinary thing."""
+
+
+def lore_cast_residents(entries, registered, *, model_call=None):
+    """The lore's named people who are not already the story's cast.
+
+    `entries` are lore rows ({id,title,content}); `registered` are the names
+    the story already answers to. Returns placement seeds shaped like
+    `charter_history.featured_resident_seed`'s output, keyed `lore:<entry_id>`
+    so a second generation places the same person once.
+
+    Never fatal, and never a guess: a failed or unparseable call yields no
+    residents, and a location generates with the population it would have had.
+    """
+    entries = [e for e in (entries or []) if isinstance(e, dict)]
+    if not entries:
+        return []
+    payload = {
+        "registered": sorted({str(n).strip() for n in (registered or ())
+                              if str(n or "").strip()}),
+        "entries": [{"entry_id": e.get("id"),
+                     "title": str(e.get("title") or "")[:200],
+                     "content": str(e.get("content") or "")[:1200]}
+                    for e in entries],
+    }
+    call = model_call or (lambda system, body: _json_call(
+        system, body, max_tokens=4000, temperature=0.2))
+    try:
+        out = call(_CAST_SYSTEM, payload)
+    except Exception:
+        return []
+    known = {str(e.get("id")): e for e in entries}
+    seeds, seen = [], set()
+    for row in (out or {}).get("residents") or []:
+        if not isinstance(row, dict):
+            continue
+        entry = known.get(str(row.get("entry_id")))
+        name = " ".join(str(row.get("name") or "").split())
+        if not entry or not name or name.casefold() in seen:
+            continue
+        seen.add(name.casefold())
+        seeds.append({
+            "seed_id": "lore:%s" % entry.get("id"),
+            "name": name,
+            "post": str(row.get("post") or "").strip(),
+            "rank": str(row.get("rank") or "").strip(),
+            "public_history": str(entry.get("content") or "")[:4000],
+        })
+    return seeds

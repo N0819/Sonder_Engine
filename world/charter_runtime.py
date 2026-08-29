@@ -1158,6 +1158,23 @@ def _remap_generated_town(cid, town, existing_registry):
     return town
 
 
+def _lore_character_entries(cid):
+    """The lore rows that may name a person, for the cast reader to judge."""
+    try:
+        from mind.memory import chat_lorebook_ids
+        book_ids = list(chat_lorebook_ids(cid) or [])
+    except Exception:
+        return []
+    if not book_ids:
+        return []
+    from core.db import q
+    marks = ",".join("?" * len(book_ids))
+    return [dict(row) for row in q(
+        "SELECT id, title, content FROM lore_entries "
+        "WHERE lorebook_id IN (%s) AND category=? ORDER BY id" % marks,
+        (*book_ids, "character"))]
+
+
 def generate_lived_location(cid, request, *, frame_id=None):
     """Generate and add one lore-grounded, presimulated Charter location.
 
@@ -1287,11 +1304,31 @@ def _plan_lived_location(cid, request, chat):
     horizon = max(0.0, min(
         MAX_PRESIM_HOURS,
         float(request.get("horizon_hours", MAX_CATCHUP_HOURS))))
+    # THE LORE'S OWN PEOPLE, handed over by a reader rather than a rule. An
+    # individual the lore names is a person the world contains; if they are not
+    # one of the story's registered minds they belong here, at a post, as an
+    # ordinary promotable presence -- which is the other half of not letting
+    # their name become pool material. See `charter_generate.lore_cast_residents`
+    # for why a model does this reading and a parser cannot.
+    requested_residents = list(request.get("featured_residents") or [])
+    try:
+        from story.naming import registered_identity_names
+        from world.charter_generate import lore_cast_residents
+        lore_people = lore_cast_residents(
+            _lore_character_entries(cid), registered_identity_names(cid))
+        taken = {str(row.get("seed_id")) for row in requested_residents
+                 if isinstance(row, dict)}
+        requested_residents += [row for row in lore_people
+                                if row["seed_id"] not in taken]
+    except Exception:
+        pass
     constraints = {
-        key: copy.deepcopy(request.get(key))
-        for key in ("scale", "topology", "required_rooms",
-                    "featured_residents")
-        if request.get(key) not in (None, "", [])}
+        key: copy.deepcopy(value)
+        for key, value in (("scale", request.get("scale")),
+                           ("topology", request.get("topology")),
+                           ("required_rooms", request.get("required_rooms")),
+                           ("featured_residents", requested_residents))
+        if value not in (None, "", [])}
     plan = (propose_town(lore, brief, constraints=constraints)
             if constraints else propose_town(lore, brief))
     history = {}
@@ -1308,7 +1345,7 @@ def _plan_lived_location(cid, request, chat):
     laws = [naming_law] if naming_law else _plan_naming_laws(plan)
     town = close_plan(
         plan, history=history,
-        featured_residents=request.get("featured_residents"),
+        featured_residents=requested_residents,
         reservation=story_identity_reservation(cid, laws),
         naming_law=naming_law)
     unnamed = [
