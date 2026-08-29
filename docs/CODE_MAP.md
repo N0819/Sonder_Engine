@@ -71,7 +71,7 @@
 | `persist/checkpoints.py` | 1350 | Whole-chat snapshots and checkpoint restore orchestration. | `core.db`, `mind.memory` |
 | `persist/commit.py` | 716 | Atomic commit orchestrator, per-turn lock, thin tail domains, and the facade re-exporting every commit_* name. | `core.db`, `core.frames`, `llm.prompts`, `llm.providers`, `mind`, `mind.memory`, `mind.theory_of_mind`, `persist.commit_attire`, `persist.commit_background`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_entities`, `persist.commit_ledgers`, `persist.commit_mapping`, `persist.commit_mechanics`, `persist.commit_memory`, `persist.commit_memory_write`, `persist.commit_place_graph`, `persist.commit_room_registry`, `persist.commit_scene_state`, `story`, `story.character_schema`, `story.scene`, `world.comfort`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.spatial_frames`, `world.survival`, `world.weather` |
 | `persist/commit_attire.py` | 1409 | The mutable clothing ledger: attire notes, shed/worn garment entities, the validated attire diff. | `persist.commit_common`, `story`, `story.attire` |
-| `persist/commit_background.py` | 3291 | Background presences: tracking, identity folding, the reactor gate, promotion to cast. | `core.db`, `mind.memory`, `persist.commit_common`, `story.character_schema`, `story.scene`, `world.spatial` |
+| `persist/commit_background.py` | 3299 | Background presences: tracking, identity folding, the reactor gate, promotion to cast. | `core.db`, `mind.memory`, `persist.commit_common`, `story.character_schema`, `story.scene`, `world.spatial` |
 | `persist/commit_common.py` | 595 | Leaf helpers shared across commit domains: scalar utilities, name/address roster, entity-id canonicalisation. | `core.db`, `mind.memory`, `story.character_schema`, `world.mechanics`, `world.spatial` |
 | `persist/commit_destruction.py` | 411 | Single- and multi-book destruction cascades, retirement, and latency-gated news. | `core.db`, `mind.memory`, `persist.commit_common`, `world.mechanics`, `world.spatial`, `world.spatial_frames` |
 | `persist/commit_entities.py` | 560 | world_entities projection of the scene commit, awareness gate, disguise supersession. | `core.db`, `persist.commit_common`, `story.character_schema`, `story.scene`, `world.spatial` |
@@ -157,7 +157,7 @@
 | `world/spatial_contacts.py` | 1797 |  | `world.spatial_containment`, `world.spatial_identity`, `world.spatial_transit` |
 | `world/spatial_containment.py` | 2719 |  | `world.spatial_barriers`, `world.spatial_identity`, `world.spatial_transit` |
 | `world/spatial_frames.py` | 1087 |  | `core.db`, `core.frames`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial` |
-| `world/spatial_geometry.py` | 1313 |  | `world.spatial_barriers`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_identity`, `world.spatial_orientation` |
+| `world/spatial_geometry.py` | 1336 |  | `world.spatial_barriers`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_identity`, `world.spatial_orientation` |
 | `world/spatial_identity.py` | 498 |  | — |
 | `world/spatial_light.py` | 209 |  | `world.spatial_barriers`, `world.spatial_geometry`, `world.spatial_identity` |
 | `world/spatial_merge.py` | 1619 |  | `llm.schemas`, `world.spatial_barriers`, `world.spatial_contact_migration`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_orientation`, `world.spatial_routing`, `world.spatial_senses`, `world.spatial_substance`, `world.spatial_transit` |
@@ -860,14 +860,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `track_background_presences()` | 1370 | 610 lines |
-| `promote_background_character()` | 2825 | 334 lines |
-| `pick_voice_demand()` | 2425 | 303 lines |
+| `track_background_presences()` | 1378 | 610 lines |
+| `promote_background_character()` | 2833 | 334 lines |
+| `pick_voice_demand()` | 2433 | 303 lines |
 | `_fold_duplicate_presences()` | 685 | 143 lines |
-| `descriptor_bindings()` | 2166 | 100 lines |
-| `auto_promote_background_characters()` | 3198 | 94 lines |
-| `_mint_missing_presence_names()` | 1286 | 82 lines |
-| `_unresolved_address_fallback()` | 2075 | 71 lines |
+| `descriptor_bindings()` | 2174 | 100 lines |
+| `auto_promote_background_characters()` | 3206 | 94 lines |
+| `_mint_missing_presence_names()` | 1294 | 82 lines |
+| `_unresolved_address_fallback()` | 2083 | 71 lines |
 
 ### `persist/commit_common.py`
 
@@ -1842,14 +1842,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `derive_scene_stations()` | 1210 | 104 lines |
-| `invalidate_transferred_pose_details()` | 886 | 90 lines |
+| `invalidate_transferred_pose_details()` | 886 | 113 lines |
+| `derive_scene_stations()` | 1233 | 104 lines |
 | `spatial_digest()` | 142 | 89 lines |
 | `egocentric_frame()` | 54 | 86 lines |
-| `invalidate_contact_bound_poses()` | 978 | 72 lines |
+| `invalidate_contact_bound_poses()` | 1001 | 72 lines |
 | `normalize_scene_poses()` | 791 | 64 lines |
 | `effective_station()` | 350 | 55 lines |
-| `poses_broken_by_scale_change()` | 1052 | 52 lines |
+| `poses_broken_by_scale_change()` | 1075 | 52 lines |
 
 ### `world/spatial_identity.py`
 
