@@ -249,8 +249,10 @@ from .director_evidence import (
     _fold_derived_manifest_events,
 )
 from .director_scopes import (
+    CHANNEL_STAGES,
     SPECIALISTS,
     SPEECH_WRITTEN_CHANNELS,
+    channel_serves_stage,
     reads_dialogue,
     _DELEGATED_CHANNELS,
     _CATEGORY_CHANNELS,
@@ -2298,11 +2300,21 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
             continue
         spec = SPECIALISTS[name]
         state["ran"] = True
-        replaced, outside, filled = [], [], []
+        replaced, outside, filled, dropped = [], [], [], []
         for channel in spec["channels"]:
             container, key = _stage_container(out, stage, channel)
             authored = container.get(key)
             owned = _normalized_channel_value(channel, result.get(channel))
+            if owned and channel not in state["scope"] \
+                    and not channel_serves_stage(channel, stage):
+                # This stage has nowhere to put it, so keeping it would only
+                # move the discard downstream and out of sight (chat 98 turns
+                # 6/26/30: `public_evidence` at interpret, written into
+                # `state_assertions` and dropped by the StateDiff round trip
+                # forty lines later, under a notice claiming it was kept).
+                # `CHANNEL_STAGES` carries the reasoning.
+                dropped.append(channel)
+                continue
             if channel in state["scope"]:
                 if authored and authored != owned:
                     replaced.append(channel)
@@ -2341,6 +2353,17 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
         # specialists assembled nothing" while the merged diff carried
         # their encodings; this field is what lets the record say so.
         state["channels_filled"] = filled
+        if dropped:
+            state["dropped_channels"] = dropped
+            note = (
+                f"orchestration scope: the {name} specialist emitted "
+                + ", ".join(dropped) + f" at the {stage} stage, which does "
+                "not carry that channel at all; it was dropped. Not an "
+                "under-grant: the channel belongs to the other stage, and "
+                "granting it here would answer a question this stage has "
+                "not asked yet.")
+            ctx.tell_director(note)
+            ctx.add_warning(note)
         if outside:
             state["outside_scope"] = outside
             note = (

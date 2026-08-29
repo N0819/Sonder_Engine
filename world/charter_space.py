@@ -99,3 +99,47 @@ def charter_places(charter):
     places.update(str(u["place"]) for u in charter["upkeeps"].values()
                   if u["place"])
     return sorted(places)
+
+
+def commons_places(charter):
+    """Every place its people may go FOR ITS OWN SAKE, tended by nobody.
+
+    A post is a place a body is SENT to and an upkeep is a place work is DONE
+    at, so `charter_places` -- their union -- is the whole of where the
+    institution's WORK is, and nothing more. A room whose purpose is BEING IN
+    it is neither, so for as long as circulation routed off-duty bodies only
+    to charter places, a lounge, a chapel, a park, a market square was
+    somewhere the simulated population could never go however social it was.
+    Measured on chat 98: 7 work places against 45 rooms, and the run's author
+    had to invent an upkeep nobody serves just to make one room reachable --
+    which is a condition the institution now owes forever and will report as
+    failing, to say that people sit there.
+
+    Two sources, and the first needed no new field: a MARKET already carries a
+    place and is by definition somewhere a body goes to get something for
+    itself. The second is `commons`, authored, for the room that answers to
+    nothing at all.
+
+    A BERTH IS DELIBERATELY NOT HERE. It is somebody's own place rather than a
+    place people go, `charter_move.homecomings` already routes a body to its
+    own without needing reach, and the set of distinct berths grows with the
+    population -- so folding them in would multiply `reach_map`'s bodies x
+    places walk by the population itself on any world that berths people
+    individually.
+    """
+    places = {str(p) for p in (charter.get("commons") or ()) if str(p)}
+    markets = (charter.get("economy") or {}).get("markets") or {}
+    places.update(str(m.get("place") or "") for m in markets.values()
+                  if isinstance(m, dict))
+    places.discard("")
+    return sorted(places)
+
+
+def frequented_places(charter):
+    """Every place circulation may route a body to: the work and the commons.
+
+    The set `reach_map` is walked over and `charter_move.errands` filters
+    against. Keeping it distinct from `charter_places` is the point -- the
+    planner still fills posts, and only a post's own place can be one.
+    """
+    return sorted(set(charter_places(charter)) | set(commons_places(charter)))

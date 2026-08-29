@@ -4794,6 +4794,38 @@ three assertions in `tests/test_narrator_world_fidelity.py` (~1030, ~1106,
     REQUIRED to be able to use is the shape of guard this repo has measured
     failing, which is why it was not pursued.
 
+### 1.100 Every charter already written names no commons
+
+`world/charter_space.commons_places` and the `commons` field it reads are new,
+and the field is EMPTY on every institution generated before it existed. So the
+class is closed -- a place a body may go for its own sake is now expressible,
+`frequented_places` is what `reach_map` walks and `errands` filters against, and
+`charter_runtime.registry_warnings` says out loud when an institution has none
+-- while every already-generated world still routes its whole off-duty
+population to somebody's workplace until an author names its rooms or the
+location is regenerated. That is the authored-blank shape `CLAUDE.md` records
+for psychology, which is why the warning landed with the field rather than
+after it, and it is a MIGRATION rather than a defect: nothing can derive the
+predicate from what a charter already stores. A room's `purpose` is free prose
+and `world/place_purpose.py` states the reason not to key on it -- names are
+short noun phrases where identifier recognition is honest, descriptions are
+where it lies.
+
+Two things the field is deliberately not.
+  * **Not berths.** A berth is somebody's own place rather than a place people
+    go, `charter_move.homecomings` already routes a body to its own without
+    consulting reach, and the set of distinct berths grows with the population
+    -- on `tests/charter_worlds.big_town(1000)` every body's berth defaults to
+    its authored place, so folding them in would take `reach_map` from 1000 x 6
+    pairs to 1000 x 109.
+  * **Not `active_places`.** That is where social detail is simulated at beat
+    resolution, a scope dial, not a statement about what a room is for.
+
+Measured on chat 98: 7 work places against 45 rooms, and the run's author had
+to invent an upkeep nobody serves (`wardroom_service`, `requires: {}` -- a
+condition the institution now owes forever and will report as failing) purely
+to say that people sit in a lounge.
+
 ## 2. Roadmap
 
 Features the architecture intends and has not built. Ordered by value per unit

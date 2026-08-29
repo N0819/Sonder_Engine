@@ -2890,3 +2890,121 @@ def test_no_sheet_promises_a_dialogue_field_its_hand_may_not_receive():
         assert "WHEN YOUR PAYLOAD CARRIES IT" in sheet, (
             f"{name}'s sheet names dialogue_log without saying it may be "
             f"absent (this hand receives it: {reads_dialogue(name)})")
+
+
+# ---------------------------------------------------------------------------
+# A channel that belongs to ONE stage.
+#
+# Measured, chat 98 turns 6, 26 and 30: the social specialist emitted
+# `public_evidence` at `director_interpret`, whose granted scope was
+# ['cast_changes', 'introductions', 'world_facts'] on two of them and
+# ['introductions', 'world_facts'] on the third. Every notice said "Content
+# was kept (fail-open); the scope gate under-granted and should be widened if
+# this recurs", and every one of those three recorded steps carries
+# `state_assertions: {}` -- nothing was kept. Both halves of the notice were
+# wrong, and acting on the second half would have granted the channel at a
+# stage that has not adjudicated anything yet.
+# ---------------------------------------------------------------------------
+
+def test_a_stage_only_channel_is_not_a_state_diff_field():
+    """The structural fact underneath: at interpret a specialist's channels
+    merge into `state_assertions`, which is a `StateDiff` -- and
+    `public_evidence` is not one of its fields, so a value written there is
+    dropped by `validated_player_state_assertions` a few lines later. That is
+    why the fail-open kept nothing."""
+    from llm.schemas import DirectorResolve, StateDiff, _fields
+    from agents.director import CHANNEL_STAGES
+
+    assert "public_evidence" not in set(_fields(StateDiff))
+    assert "public_evidence" in set(_fields(DirectorResolve))
+    for channel, stages in CHANNEL_STAGES.items():
+        assert channel not in set(_fields(StateDiff)) or "interpret" in stages
+
+
+def test_every_stage_only_channel_names_a_real_channel():
+    """The table is level with the specialist registry, the way the three
+    channel registries already are."""
+    from agents.director import CHANNEL_STAGES, SPECIALISTS
+
+    owned = {channel for spec in SPECIALISTS.values()
+             for channel in spec["channels"]}
+    for channel, stages in CHANNEL_STAGES.items():
+        assert channel in owned, channel
+        assert stages and set(stages) <= {"interpret", "resolve"}, channel
+
+
+def test_interpret_drops_a_resolve_only_channel_and_says_so(temp_db,
+                                                            monkeypatch):
+    """Chat 98 turn 26's shape. The channel is not merely out of this beat's
+    scope -- interpret cannot carry it at all, so the guard SUBTRACTS and the
+    notice says the content was dropped, never that it was kept."""
+    calls = []
+    responses = {
+        "director_interpret": {
+            "kind": "speech",
+            "sequence": [{"type": "speech", "text": "Quiet night.",
+                          "volume": "normal", "visibility": "overt",
+                          "conceal_from": []}],
+            "speech": "Quiet night.", "action": None, "movement": None,
+            "flow": {"reactors": [], "authority_claims": [], "dice": [],
+                     "resolution_flags": {}, "fiction_frame": {}},
+        },
+        "director_social": {
+            "cast_changes": [], "introductions": [], "world_facts": [],
+            "public_evidence": [
+                {"source_id": "invented", "speech_act": "greeting"}],
+            "notes": [],
+        },
+    }
+    monkeypatch.setattr(director, "_agent_json",
+                        _fake_agent(calls, responses))
+
+    ctx = _make_ctx(temp_db, player_input="Quiet night.")
+    ctx.director_interpret = None
+    out = director.director_interpret(ctx, nonce=0)
+
+    social = out["orchestration"]["specialists"]["social"]
+    assert "public_evidence" not in social["scope"]
+    assert social.get("dropped_channels") == ["public_evidence"]
+    assert social.get("outside_scope") in (None, [])
+    assert "public_evidence" not in (out.get("state_assertions") or {})
+    notes = [str(note) for note in ctx.engine_feedback]
+    assert any("public_evidence" in note and "dropped" in note
+               for note in notes), notes
+    assert not any("should be widened" in note for note in notes), notes
+
+
+def test_resolve_still_fails_open_on_a_genuine_under_grant(temp_db,
+                                                           monkeypatch):
+    """The other half must not change. A channel the stage CAN carry, gated
+    out of this beat, is under-grant evidence: kept, and reported as the
+    thing to widen."""
+    calls = []
+    responses = {
+        "director_resolve": {
+            "resolved_event": "Mara says nothing more.",
+            "summary": "Quiet.",
+            "state_diff": {},
+        },
+        "director_social": {
+            "cast_changes": [{"name": "Mara", "change": "present"}],
+            "introductions": [], "world_facts": [], "notes": [],
+        },
+    }
+    monkeypatch.setattr(director, "_agent_json",
+                        _fake_agent(calls, responses))
+
+    ctx = _make_ctx(temp_db, interp=_speech_interp())
+    out = director.director_resolve(ctx, nonce=0)
+
+    social = out["orchestration"]["specialists"]["social"]
+    # A pure-dialogue beat: `cast_changes` gates on `physical_beat`, so the
+    # channel is legal at resolve and out of scope for THIS beat -- exactly
+    # the case the fail-open exists for.
+    assert "cast_changes" not in social["scope"]
+    assert social.get("dropped_channels") in (None, [])
+    assert social.get("outside_scope") == ["cast_changes"]
+    assert out["state_diff"]["cast_changes"] == [
+        {"name": "Mara", "change": "present"}]
+    notes = [str(note) for note in ctx.engine_feedback]
+    assert any("kept (fail-open)" in note for note in notes), notes

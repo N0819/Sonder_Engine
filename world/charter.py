@@ -205,7 +205,8 @@ from .charter_politics import (
     regard_value,
     spend_reluctance,
 )
-from .charter_space import REACH_LIMIT, charter_places, reach_map, travel_rooms
+from .charter_space import (REACH_LIMIT, charter_places, commons_places,
+                           frequented_places, reach_map, travel_rooms)
 from .charter_talk import (
     FORMAL_REPORT_RETENTION,
     PARTNERS_PER_WINDOW,
@@ -425,12 +426,14 @@ __all__ = [
     "charter_places",
     "chronicle",
     "co_present",
+    "commons_places",
     "contested",
     "converse",
     "criticality",
     "decay_minds",
     "decay_roster",
     "divergence",
+    "frequented_places",
     "hear",
     "normalize_minds",
     "normalize_politics",

@@ -1179,6 +1179,13 @@ def _remap_generated_town(cid, town, existing_registry):
             if isinstance(market, dict) and market.get("place") is not None:
                 market["place"] = room_map.get(
                     str(market["place"]), market["place"])
+        # A room id anywhere in a charter has to travel with the re-key, and a
+        # list of them is as much a place reference as a `place` field is. Left
+        # out, the commons would point at ids that no longer exist and the
+        # circulation it was authored for would silently be gone again.
+        if state.get("commons"):
+            state["commons"] = [room_map.get(str(place), str(place))
+                                for place in state["commons"]]
         for intervention in state.get("interventions") or ():
             if not isinstance(intervention, dict):
                 continue
@@ -1816,9 +1823,31 @@ def registry_warnings(registry, scene=None, *, cid=None, frame_id=None):
                 + list(state["bodies"].values())
                 if str(entry.get("place") or "")
             }
+            places.update(str(place) for place in state.get("commons") or ()
+                          if str(place))
             for place in sorted(places - known_rooms):
                 warnings.append(
                     f"{key}: place {place!r} is not a room in this frame")
+        # AN INSTITUTION THAT ONLY WORKS WHERE IT GOES. `posts` and `upkeeps`
+        # say where the work is; `commons` says where a body may go for its own
+        # sake, and with none named the whole off-duty population can only be
+        # routed to somebody's workplace. Measured on chat 98: 7 work places
+        # against 45 rooms, and the author had to invent an upkeep nobody
+        # serves to make one lounge reachable. Legal -- a two-room workshop
+        # genuinely has no commons -- so this is a warning and not a refusal,
+        # and it is here because an empty authored field otherwise fails in
+        # exactly the silent way `CLAUDE.md` records for psychology.
+        rate = state.get("errand_rate")
+        if (state["bodies"] and not state.get("commons")
+                and (rate is None or float(rate) > 0.0)
+                and known_rooms - {
+                    str(entry.get("place") or "")
+                    for entry in list(state["upkeeps"].values())
+                    + list(state["posts"].values())}):
+            warnings.append(
+                f"{key}: no commons; every room it does not work in is a room "
+                "circulation can never send an off-duty body to. Name the "
+                "places people go for their own sake")
     return warnings
 
 
