@@ -4586,7 +4586,32 @@ on the record, written at commit; the charter half reads `window_acts`
 whose `other` is a bound body or authored figure), or emerged from a crowd
 this beat (the provisional `emerge` op, resolved read-only through the same
 pick commit runs) -- ordered addressed > owed > acting > emerged, tied by
-the B3 entanglement digest, then stably. `mentioned` (prose salience),
+the B3 entanglement digest, then stably.
+**CHANNEL FILTER ADDED 2026-08-29** (`fix-background-gate`). Co-presence is
+still not a TRIGGER; it is now a FILTER. A trigger says a demand was
+RAISED, not that it arrived, and two of the four are debts accrued on an
+EARLIER beat -- so `owed` and `acting` were discharging from anywhere in
+the world, and the player's raw-text address was read with no test that the
+words carried. `demand_reaches` (`persist/commit_background.py`, applied in
+both `pick_voice_demand` and `agents/background._demanded_presences`)
+requires an authored mind within FULL hearing of where the presence stands
+-- the same bar `_character_address_of` and the reply-debt writer in
+`track_background_presences` already used, so the gate and its own debt
+writer stopped disagreeing. Exempt: the Director's judgment for THIS beat
+(`routed`, a flow address, an emerge), because a hand-off that becomes
+silence is the failure the gate exists to end; and an aimed character line,
+which passed a stricter version of the same test. Fail-OPEN where either
+room is unknown. Measured by replaying the gate against all 40 recorded
+turns of chat 98 (checkpoint world state per turn, the recorded
+`director_interpret`/`director_resolve` of that turn; the replay reproduces
+the recorded `selected` list on every turn before the change): 29 of the
+run's 51 voice calls went to one body on the engineering deck that
+qualified on `acting` for 14 consecutive beats -- including turn 36, with
+the player two decks away addressing five presences at her own table -- and
+produced not one line. All 29 are gone; every pick that ever produced a
+line survives, including turn 23's, where the player was in a lift one open
+door from the engineering deck. `tests/test_voice_demand.py::
+TestADemandOnlyCountsWhereItCanArrive`. `mentioned` (prose salience),
 bare `dialogue_turns` (tenure) and `at_post` (co-presence) stopped
 qualifying; `scene_life`'s roster is the same demand set
 (`_demanded_presences`) and `max_managed` is a ceiling, not a selector. An
