@@ -4011,6 +4011,72 @@ registered here:
   correct; a note saying "the reservation took the last one" would be
   better.
 
+### 1.90a A generic name is never made out of a named person — LANDED
+
+Landed 2026-08-28. The mint's material was a model's, and the guard was a
+filter. `refuse_harvested_pools` emptied a generated law's name POOLS and kept
+its FRAGMENTS on the premise that "a fragment names nobody however well a
+model knows a canon". Measured across three consecutive generations of one
+institution: two of the three supplied `family_parts.starts` that were, entry
+for entry, the openings of the cast's own surnames — one list 100% so,
+including an element belonging to a character registered in that chat — and
+the third supplied ordinary fragments touching nobody. Variance in what a
+model volunteers, which is why the guard cannot be the model. Reproduced with
+that law as a fixture, one body came out wearing a registered person's
+surname EXACTLY, assembled from a three-letter opening and a two-letter
+ending, past every guard the engine had.
+
+`charter_identity.fragment_is_name_element` runs the same rule at the
+fragment (anchored at the head and the tail, `NAME_ELEMENT_FLOOR` = 2), and
+`refuse_harvested_material` pairs it with `_fill_empty_material` so a refusal
+that empties a field is answered rather than left to surface as a generation
+failure. `story.naming.phonology_lanes` is now a real lane, ranked authored >
+phonology > charters > harvested. `tests/test_name_material_partition.py`,
+`tests/test_phonology_lane.py`. What it does NOT close, registered here:
+
+- **The exact-surname share at the mint is still reachable, by design as
+  currently pinned.** Under `{given} {family}` `address_components` is empty,
+  so `name_is_reserved` refuses a component only when it is somebody's WHOLE
+  untitled name, and `reconstructs_a_reserved_name` deliberately permits an
+  exact share ("a registered `Beverly Crusher` does not reserve every
+  `Beverly`"). A law whose material legitimately assembles a registered
+  surname therefore still can. The measured route to it was the fragments and
+  that route is closed; the general case is an owner ruling, because closing
+  it reverses `test_a_paired_law_keeps_the_element_and_refuses_the_whole_name`
+  and `test_generation_without_a_reservation_still_stores_its_law`, which pin
+  the sharing permission on purpose. **`strip_reserved_pools` already made the
+  opposite ruling for POOLS** ("a pool that CONTAINS a named individual's
+  family name is the engine ISSUING that individual's name to strangers"), so
+  the two halves of the engine currently disagree about the same string.
+- **The last-resort pool branch still exists.** `refuse_harvested_material`
+  falls back to the (subtracted) pools when refusal and both replacements
+  leave a law with no assemblable material. It is strictly no worse than the
+  behaviour before the refusal existed and both measured generations reach it
+  never, but it is a path on which a model-supplied name list still reaches a
+  body. Removing it needs a story measured to hit it.
+- **`NAME_ELEMENT_FLOOR` = 2 is a new number and wants the owner's eye.** One
+  letter is the alphabet and refusing it would take the alphabet away from
+  the law; two letters that open or close somebody's name are a piece of that
+  name. The cost is real and unmeasured on a large lorebook: every two-letter
+  opening of every `character` entry's name becomes unavailable as material,
+  and a story with a very large named cast could lose a noticeable share of
+  ordinary syllables that way.
+- **The vocabulary lane is thin where a setting's places are short words.**
+  `vocabulary_name_parts` reads the plan's structure, room names and room
+  purposes through `derived_name_parts`, and a single-syllable room name
+  ("Hall", "Bay") contributes nothing. A generation whose law is wholly
+  refused AND whose rooms are all single-syllable falls through to the pool
+  branch above.
+- **A refused fragment is silent.** Same shape as §1.90's last residual: the
+  law simply carries fewer openings and nothing records that the reservation
+  took them. A generation whose material narrows sharply is worth saying so
+  about.
+- **The measured repetition is the honest cost and is not hidden.** With the
+  gen-C law refused, three given openings and three family openings survive,
+  so 24 bodies draw from a 12 x 9 space and family names recur. That is the
+  capacity allocator's documented reuse-after-exhaustion, not a new defect;
+  a law that gives one clean opening in three cannot sound wider than it is.
+
 ### 1.99c The Charter scale audit's 45-second guard is broken, and the branch broke it
 
 Found 2026-08-27 while measuring design 5; **re-measured 2026-08-27 after a
