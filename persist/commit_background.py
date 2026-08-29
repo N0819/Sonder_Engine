@@ -1129,10 +1129,18 @@ def demand_reaches(scene, here, authored_rooms):
     about containment, so requiring both would silence a body speaking out
     of the thing it is inside.
 
-    Best-effort and fail-OPEN, exactly as `_character_address_of`'s
-    audibility check is: enforced only where both rooms are known. An
-    unplaced presence is not thereby silenced, and the check self-tightens
-    as position coverage grows.
+    Fail-open for an UNPLACED presence, and only that one. `here` empty --
+    a presence the scene stands nowhere -- returns True, so a body with no
+    position is never silenced by a check about position, and the guard
+    self-tightens as coverage grows.
+
+    A room the scene does not contain is a DIFFERENT case and fails CLOSED:
+    `spatial_rel` reads an unknown room id as separated, `hear_level` grades
+    that `none`, and the presence is filtered. That is the right direction --
+    a channel the scene cannot demonstrate is not a channel -- but it is the
+    opposite of what this paragraph said until 2026-08-29, and two authority
+    documents repeated the claim. Measured: `demand_reaches` with a room
+    name absent from the scene returns False; with `here=""` it returns True.
 
     Measured, chat 98 turn 36 (2026-08-25): a body whose place was the
     engineering deck held the only selection slot on 17 of 40 turns -- 14 of
