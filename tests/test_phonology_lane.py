@@ -80,3 +80,50 @@ def test_fields_it_does_not_understand_are_ignored_rather_than_guessed(temp_db):
 
     assert parts["given_parts"]["starts"] == ["va"]
     assert parts["family_parts"]["starts"] == []
+
+
+def test_a_generated_law_writes_its_fragments_back_as_an_entry(temp_db):
+    """The artifact that makes the one model judgement reviewable.
+
+    The planner decides once what a setting's names are built from; from then
+    on the mint is deterministic code reading a list an author can open and
+    edit. Opacity at a SAMPLER is the objection to model-made names, and it
+    does not apply to a judgement made once, in the open.
+    """
+    from world.charter_runtime import _record_phonology
+
+    chat_id = db.qi("INSERT INTO chats(name,created) VALUES(?,?)",
+                    ("story", time.time()))
+    book = db.qi("INSERT INTO lorebooks(chat_id,name,summary) VALUES(?,?,?)",
+                 (chat_id, "book", ""))
+    db.qi("UPDATE chats SET lorebook_id=? WHERE id=?", (book, chat_id))
+
+    _record_phonology(book, {"charters": {"works": {
+        "name": "The Works",
+        "naming": {"given_parts": {"starts": ["ka", "mi"], "middles": [],
+                                   "ends": ["ren"]},
+                   "family_parts": {"starts": ["bel"], "middles": [],
+                                    "ends": ["mor"]}}}}})
+
+    parts = phonology_parts(chat_id)
+    assert parts["given_parts"]["starts"] == ["ka", "mi"]
+    assert parts["given_parts"]["ends"] == ["ren"]
+    assert parts["family_parts"]["starts"] == ["bel"]
+    assert phonology_law_exists(chat_id)
+
+
+def test_a_law_with_no_fragments_writes_nothing(temp_db):
+    """A law carrying only pools has nothing a phonology entry could hold --
+    and pools are exactly what must not be written back as material."""
+    from world.charter_runtime import _record_phonology
+
+    chat_id = db.qi("INSERT INTO chats(name,created) VALUES(?,?)",
+                    ("story", time.time()))
+    book = db.qi("INSERT INTO lorebooks(chat_id,name,summary) VALUES(?,?,?)",
+                 (chat_id, "book", ""))
+    db.qi("UPDATE chats SET lorebook_id=? WHERE id=?", (book, chat_id))
+
+    _record_phonology(book, {"charters": {"works": {
+        "naming": {"given": ["Jean-Luc"], "family": ["Picard"]}}}})
+
+    assert phonology_entries(chat_id) == []

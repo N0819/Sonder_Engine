@@ -36,17 +36,20 @@ requires,depends_on}},posts:{id:{place,serves,requires,reports_to,authority}},
 populations:[{post,count,competence,berth,rank}],economy:{goods,stocks,targets,
 flows,markets},decisions:{policies}}]}. Use qualitative timescales only; never
 write drift_per_hour or service_per_hour. Planned rooms contain no prose.
-Preserve exact canonical lore names and naming style. Keep authority/actions
-genre neutral. IDs are stable machine keys; names retain canonical spelling.
+Match the naming STYLE of the setting; never copy a name the lore gives to an
+individual. Keep authority/actions genre neutral. IDs are stable machine keys; names retain canonical spelling.
 Every population.post MUST name an entry in posts, every place and berth MUST
 be a rooms id, population competence MUST meet that post's numeric requires,
 and every upkeep id MUST occur in at least one post.serves. Charter posts are
 continuous watches, so provide at least three people for each post unless the
 brief explicitly calls for a dangerously short-handed institution. Use competence and
 requires objects like {"medicine":2}, never vague levels or lists. Naming is
-{seed,given:[...],family:[...],name_format,formal_format,titles:{posts:{},
-ranks:{}}}; supply lore-compatible pools large enough for the population when
-the lore permits ordinary personal names. Every generated body must resolve to
+{seed,given_parts:{starts,middles,ends},family_parts:{starts,middles,ends},
+name_format,formal_format,titles:{posts:{},ranks:{}}}; supply SYLLABLE
+FRAGMENTS the setting's names are built from, never a list of names. A name the
+lore already gives to somebody is that person's name and is not material to
+build strangers out of; fragments name nobody, which is why fragments are what
+you may supply. Give enough of them that the population does not repeat. Every generated body must resolve to
 a stable scene-facing personal name before simulation. If the setting does not
 use ordinary names, supply lore-compatible callsigns, serial names, epithets or
 syllable parts; never expose a post/body machine id as the person's name.
@@ -300,7 +303,8 @@ def close_plan(plan, *, history=None, featured_residents=None,
     authored profile above a Charter's own; a mint that ignored that ranking
     would be a second naming authority beside the story's.
     """
-    from world.charter_identity import normalize_naming_profile
+    from world.charter_identity import (normalize_naming_profile,
+                                    refuse_harvested_pools)
 
     plan = plan if isinstance(plan, dict) else {}
     structure = _mapping(plan.get("structure"))
@@ -438,8 +442,15 @@ def close_plan(plan, *, history=None, featured_residents=None,
             posts[chosen]["serves"] = sorted(set(
                 _strings(posts[chosen].get("serves")) + [upkeep_key]))
         staffing_reserve_added = _ensure_shift_crews(bodies, posts)
-        naming = normalize_naming_profile(
-            naming_law if naming_law else raw.get("naming"))
+        if naming_law:
+            # The story's own authored law, ranked above a generated one by
+            # `story/naming.py`. An author's list is theirs.
+            naming = normalize_naming_profile(naming_law)
+        else:
+            # The planner's law, which was written by a model reading this
+            # story's lore. Its fragments are material; its name lists are
+            # the people the lore names. See `refuse_harvested_pools`.
+            naming = refuse_harvested_pools(raw.get("naming"))
         bodies = materialize_body_names(ckey, bodies, naming, reservation)
         from world.charter_economy import ensure_supply_points
         economy = ensure_supply_points(

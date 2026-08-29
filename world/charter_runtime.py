@@ -1352,10 +1352,64 @@ def _plan_lived_location(cid, request, chat):
         # punctuation and case exactly as the author supplied them.
         town["name"] = requested_name
         town["structure"]["name"] = requested_name
+    _record_phonology(owning_book, town)
     return {"town": town, "required_rooms_added": required_rooms_added,
             "lore_manifest": lore_manifest, "source_book": source_book,
             "owning_book": owning_book, "horizon": horizon,
             "wants_history": wants_history}
+
+
+_PHONOLOGY_BUCKETS = (("given_parts", "given"), ("family_parts", "family"))
+
+
+def _record_phonology(book_id, town):
+    """Write a generated law's name FRAGMENTS back as a phonology entry.
+
+    THE ARTIFACT THAT MAKES THE ONE MODEL JUDGEMENT REVIEWABLE. The planner
+    decides, once, what the setting's names are built out of; from then on the
+    mint is deterministic code reading a list an author can open and edit. The
+    objection to model-made names is opacity at the SAMPLER, where nobody can
+    audit a per-name decision -- it does not apply to a judgement made once,
+    in the open, that a person can change.
+
+    Fragments only, and that is the whole point: an entry in this category is
+    the one source the mint may read (`story.naming.phonology_parts`), and a
+    fragment names nobody however well a model knows a canon. The pools the
+    planner used to supply are refused before they reach a body
+    (`charter_identity.refuse_harvested_pools`).
+
+    Never fatal. A story whose lore write fails still generates; it simply has
+    no authored phonology to read next time.
+    """
+    if not book_id:
+        return
+    try:
+        from mind.memory import add_lore
+    except Exception:
+        return
+    for key, state in (town.get("charters") or {}).items():
+        law = (state or {}).get("naming") or {}
+        lines = []
+        for field, label in _PHONOLOGY_BUCKETS:
+            group = law.get(field) or {}
+            for bucket in ("starts", "middles", "ends"):
+                values = [str(v).strip() for v in (group.get(bucket) or [])
+                          if str(v).strip()]
+                if values:
+                    lines.append(f"{label}_{bucket}: " + ", ".join(values))
+        if not lines:
+            continue
+        name = str(state.get("name") or key)
+        try:
+            add_lore(book_id, f"phonology, names, {key}",
+                     "The fragments names here are built from. Edit freely: "
+                     "the mint reads this list and nothing else.\n\n"
+                     + "\n".join(lines),
+                     category="phonology",
+                     title=f"Naming fragments — {name}",
+                     importance=0.4)
+        except Exception:
+            continue
 
 
 def _generate_lived_location(cid, request, chat, frame_id, digest, artifact):
