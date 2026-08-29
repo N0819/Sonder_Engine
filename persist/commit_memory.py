@@ -28,7 +28,8 @@ from world.comfort import comfort_level
 from persist.commit_common import (_clamp, _known_name_roster, _monotonic_elapsed,
                            _address_index, _names_heard_in,
                            _normalize_character_output,
-                           _room_of, _stable_event_key)
+                           _room_of, _stable_event_key,
+                           charter_recognition_projection)
 from persist.commit_place_graph import (ROUTE_CREDIT_CAP, ROUTE_CREDIT_WINDOW,
                                 record_spatial_experience)
 from persist.commit_background import _background_fired_reactions
@@ -430,24 +431,15 @@ def prepare_memory_commit(ctx, *, scene=None):
     _charter_rooms = {}
     _charter_aliases = {}
     try:
-        from world.charter_runtime import charter_speaker_records
-        for _speaker in charter_speaker_records(
-                cid, frame_id=ctx.turn.frame_id):
-            _speaker_name = str(_speaker.get("name") or "").strip()
-            if not _speaker_name:
-                continue
-            if _speaker_name not in _name_roster:
-                _name_roster.append(_speaker_name)
-            _charter_rooms[_speaker_name] = str(
-                _speaker.get("place") or "")
-            _aliases = [
-                str(value).strip()
-                for value in (_speaker.get("aliases") or [_speaker_name])
-                if str(value or "").strip()
-            ]
-            _charter_aliases[_speaker_name] = list(dict.fromkeys(_aliases))
+        _charter = charter_recognition_projection(cid, ctx.turn.frame_id)
     except Exception as exc:
         ctx.add_warning(f"Charter recognition roster skipped: {exc}")
+    else:
+        for _speaker_name in _charter["names"]:
+            if _speaker_name not in _name_roster:
+                _name_roster.append(_speaker_name)
+        _charter_rooms = _charter["rooms"]
+        _charter_aliases = _charter["aliases"]
     _name_address_index = _address_index(_name_roster)
     _names_learned = {}
 

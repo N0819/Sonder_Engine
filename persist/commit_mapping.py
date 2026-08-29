@@ -16,9 +16,11 @@ from story.character_schema import character_name_from_text, new_uid, persona_na
 from story.provenance_text import split_engine_provenance
 from core.frames import is_recognized_in_frame
 from world.spatial import normalize_room_id
-from persist.commit_common import (_canonical_anchor, _entity_alias_map, _keys_str,
+from persist.commit_common import (_address_index, _canonical_anchor,
+                           _entity_alias_map, _keys_str,
                            _normalized_fact, _registered_name_roster,
-                           _resolve_roster_name)
+                           _resolve_roster_name, _room_of,
+                           charter_recognition_projection)
 # A stable, greppable stamp on the provenance column, the same shape
 # `world/background_claims.CANON_SOURCE_PREFIX` uses for a ratified claim. It
 # is also the denominator: `SELECT count(*) FROM lore_entries WHERE
@@ -454,19 +456,65 @@ def commit_mapping(ctx, nonce, *, prepared=None):
             f"discarded {len(_volunteered)} model-volunteered off-screen "
             "tick(s): ticks are drawn seeded, not authored")
     known = wget(cid, "known", {})
+    introductions = [vi for vi in (mout.get("validated_introductions") or [])
+                     if isinstance(vi, dict) and vi.get("ok")]
+    # Nothing to resolve, so nothing is built. The Charter projection below is
+    # O(bodies) and this runs on every beat; a thousand-body institution must
+    # not be walked for a turn that introduced nobody.
+    if not introductions:
+        wset(cid, "known", known)
+        return {"mout": mout, "applied": applied, "book_ids": book_ids,
+                "seed": seed}
     # WIDE for resolution: an introduction naming an offscreen person is still
     # a sentence about a real person, and dropping it silently is the defect.
     # The EDGE it would write is gated separately, below.
     roster = _registered_name_roster(chat, ctx.cast)
+    # A Charter body is a real, placed identity that `chat_chars` does not
+    # contain, so a cast-built roster answers "is this somebody" with no for a
+    # person standing in the room. `commit_memory` already reads this
+    # projection for a name learned by hearing; this is the same ledger.
+    charter_rooms, charter_aliases = {}, {}
+    try:
+        _charter = charter_recognition_projection(cid, turn.frame_id)
+    except Exception as exc:
+        ctx.add_warning(f"Charter recognition roster skipped: {exc}")
+    else:
+        for _name in _charter["names"]:
+            if _name not in roster:
+                roster.append(_name)
+        charter_rooms = {name: room for name, room in _charter["rooms"].items()
+                         if room}
+        charter_aliases = _charter["aliases"]
+    # One reading of "does this text name this person", shared with the
+    # channel that learns a name by hearing it said. See _resolve_roster_name.
+    address_index = _address_index(roster)
     name_to_id = {character_name_from_text(r["sheet"]): r["id"] for r in ctx.cast}
-    for vi in (mout.get("validated_introductions") or []):
-        if not isinstance(vi, dict) or not vi.get("ok"):
-            continue
-        who = _resolve_roster_name(vi.get("who"), roster)
+    from story.scene import persona_of as _persona_of
+    present = {character_name_from_text(r["sheet"]) for r in ctx.cast}
+    player = (persona_name(_persona_of(chat)) or "").strip()
+    if player:
+        present.add(player)
+    scene_now = wget(cid, "scene", {}) or {}
+
+    def _stands_in(name):
+        """The room this body is in, or None when the engine cannot say."""
+        if name in charter_rooms:
+            return charter_rooms[name]
+        return _room_of(scene_now, name)
+
+    for vi in introductions:
+        who = _resolve_roster_name(vi.get("who"), roster, address_index)
         learns = _resolve_roster_name(
             vi.get("corrected_learns") or vi.get("learns"), roster,
+            address_index,
         )
         if not (who and learns):
+            continue
+        if who == learns:
+            # Nobody is recognised against themselves. Reading address forms
+            # makes this reachable: chat 98 turn 11 emitted `{"who": "Sabine
+            # Oyelaran", "learns": "Sabine, Stellar Cartography"}` -- a person
+            # and the department she had just named, resolving to one body.
             continue
         # TWO REQUIREMENTS, KEPT SEPARATE. The roster above answers "is this a
         # person the story knows about", which is what resolving a name needs.
@@ -476,24 +524,39 @@ def commit_mapping(ctx, nonce, *, prepared=None):
         # people who were both absent -- trading a missed edge for an invented
         # one, which is worse, because a wrong edge is indistinguishable from a
         # right one afterwards and nothing downstream can catch it.
-        from story.scene import persona_of as _persona_of
-        present = {character_name_from_text(r["sheet"]) for r in ctx.cast}
-        player = (persona_name(_persona_of(chat)) or "").strip()
-        if player:
-            present.add(player)
+        #
+        # PRESENCE IS ANSWERED WHERE EACH KIND OF BODY RECORDS IT. A registered
+        # member is on stage by membership; a Charter body is on stage by the
+        # room its body stands in, which is the only presence answer that
+        # population has. Both answer the same question -- was this person here
+        # to be introduced.
+        #
         # BOTH parties. `learns` had a frame gate and `who` had none, and that
         # gate SKIPS rather than blocks for anyone outside `ctx.cast` -- which
         # is exactly the set the wider roster has just admitted. Hanging the
         # requirement off an id lookup would open it for them instead of
         # closing it, so this is a positive test against who was on stage.
-        if who not in present or learns not in present:
+        if who not in present and who not in charter_rooms:
+            continue
+        if learns not in present and learns not in charter_rooms:
+            continue
+        # And in the same room. An introduction between two bodies the engine
+        # can place in different rooms is an edge nobody witnessed; where it
+        # can place neither, membership above is the whole of the answer.
+        who_room, learns_room = _stands_in(who), _stands_in(learns)
+        if who_room and learns_room and who_room != learns_room:
             continue
         learns_id = name_to_id.get(learns)
         if learns_id is not None and not is_recognized_in_frame(learns_id, turn.frame_id):
             continue
         known.setdefault(who, [])
-        if learns not in known[who]:
-            known[who].append(learns)
+        # Every formal variant of the learned body, as the hearing channel
+        # writes them: a rank or a post is presentation that may change, and
+        # recognition must survive the change without treating the display
+        # string as identity.
+        for learned in charter_aliases.get(learns, [learns]):
+            if learned not in known[who]:
+                known[who].append(learned)
     wset(cid, "known", known)
     return {"mout": mout, "applied": applied, "book_ids": book_ids, "seed": seed}
 

@@ -324,6 +324,11 @@ function wizardState() {
     characterBriefsKnown: [false],
     existingCharacterIds: new Set(),
     alreadyKnownCharacterIds: new Set(),
+    // A separate question from "already knows you", and the engine has no way
+    // to infer either from the other: a stranger to the player may arrive
+    // with the crew she serves in. Unset means unanswered, and an unanswered
+    // question seeds nothing — the attach route says so in a warning.
+    castKnowsEachOther: false,
     lorebookId: null,
     livedLocation: null
   };
@@ -518,6 +523,22 @@ function renderWizardCharacters(b, state) {
         knownCb);
     }));
 
+  // The other recognition question, and the one nothing could ask before.
+  // "Already knows you" is per-character because the player is one body; this
+  // one is about the group, so it is asked once for the group.
+  const castKnownCb = el("input", {
+    type: "checkbox",
+    title: "They have met before the story starts — colleagues, family, a "
+      + "crew. Leave unchecked and they begin as strangers to each other, "
+      + "and each will be described to the others by appearance until "
+      + "somebody says a name aloud."
+  });
+  castKnownCb.checked = !!state.castKnowsEachOther;
+  castKnownCb.onchange = () => { state.castKnowsEachOther = castKnownCb.checked };
+  const castKnownLbl = el("label",
+    { class: "row small dim", style: "gap:6px;margin-top:10px" },
+    castKnownCb, "these characters already know each other");
+
   b.append(
     el("div", { class: "small dim" }, "Step 2 of 3 — who else is in this story?"),
     briefList,
@@ -530,6 +551,7 @@ function renderWizardCharacters(b, state) {
       ? el("div", { style: "margin-top:14px" },
           el("div", { class: "small dim" }, "Or include an existing character:"), existingBox)
       : null,
+    castKnownLbl,
     el("div", { class: "row", style: "margin-top:14px" },
       el("button", { onclick: () => renderWizardPersona(b, state) }, "← Back"),
       el("span", { class: "spacer" }),
@@ -635,7 +657,8 @@ async function runWizard(state) {
       for (const cid of characterIds) {
         await api("POST", `/api/chats/${chat.id}/characters`, {
           char_id: cid,
-          already_known: knownIds.has(cid)
+          already_known: knownIds.has(cid),
+          already_known_cast: state.castKnowsEachOther
         });
       }
       if (state.livedLocation) {
