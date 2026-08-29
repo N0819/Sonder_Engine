@@ -1093,6 +1093,68 @@ def _character_address_of(dr_output, presence_name, roster, scene=None,
     return found
 
 
+def authored_mind_rooms(scene, roster):
+    """Where the authored minds are standing, for the channel test below.
+
+    MEMBERSHIP against the roster, never an enumeration of it: the scene's
+    own `positions` is the source, so a registered mind who is not in the
+    scene contributes nothing and an entity that is not a mind is skipped.
+    """
+    rooms = set()
+    for who, where in ((scene or {}).get("positions") or {}).items():
+        if str(who or "").casefold() in roster and str(where or ""):
+            rooms.add(str(where))
+    return rooms
+
+
+def demand_reaches(scene, here, authored_rooms):
+    """Is there a CHANNEL between where this presence stands and where an
+    authored mind stands?
+
+    Co-presence is not a TRIGGER -- §C2 settled that, and it stays settled.
+    It is a FILTER. A demand from an authored mind reaches a person through
+    a channel or it does not reach them, and what a slot buys is a line
+    spoken INTO THIS BEAT: if no authored mind is there to receive it, the
+    call is spent on an exchange that cannot happen. The triggers that fail
+    this way are the CARRIED ones -- an owed reply and an act from a
+    previous beat are debts, and a debt was discharging from anywhere in the
+    world.
+
+    The bar is the one this module already applies twice to the same
+    question (`_character_address_of`, and the player-precise reply debt in
+    `track_background_presences`): the words must arrive in FULL, because a
+    fragment cannot be coherently replied to. Either direction counts -- the
+    demand travelling to them and their answer travelling back are one
+    channel seen from two ends, and `hear_level` is deliberately asymmetric
+    about containment, so requiring both would silence a body speaking out
+    of the thing it is inside.
+
+    Best-effort and fail-OPEN, exactly as `_character_address_of`'s
+    audibility check is: enforced only where both rooms are known. An
+    unplaced presence is not thereby silenced, and the check self-tightens
+    as position coverage grows.
+
+    Measured, chat 98 turn 36 (2026-08-25): a body whose place was the
+    engineering deck held the only selection slot on 17 of 40 turns -- 14 of
+    them consecutive, including beats where the player was two decks away
+    addressing five other presences standing at her own table. It qualified
+    on `acting` every time, and every one of the 32 voice calls spent on it
+    returned nothing, correctly, because it could not hear her. Across the
+    whole run, every pick that ever produced a line was in the player's own
+    room.
+    """
+    if not here or not authored_rooms:
+        return True
+    for room in authored_rooms:
+        if not room:
+            continue
+        if hear_level(spatial_rel(scene, room, here), "normal") == "full":
+            return True
+        if hear_level(spatial_rel(scene, here, room), "normal") == "full":
+            return True
+    return False
+
+
 def _valid_pending_reply(record, turn_idx):
     """The presence's owed reply if it has not yet expired, else None."""
     pr = record.get("pending_reply")
@@ -2487,6 +2549,11 @@ def pick_voice_demand(ctx, dr_output, cap=1):
     except Exception:
         acting_charter = set()
 
+    # Where the beat's authored minds are standing, for the channel test on
+    # each candidate below. Computed once: `positions` does not move inside
+    # this loop.
+    authored_rooms = authored_mind_rooms(sc, roster)
+
     candidates = []
     forced = 0
     for _rkey, record in ranked.items():
@@ -2553,6 +2620,24 @@ def pick_voice_demand(ctx, dr_output, cap=1):
         addressed_any = bool(addressed_precise or addressed)
         if not (addressed_any or owed or acting or emerged):
             continue
+        # THE CHANNEL TEST (`demand_reaches`). A trigger says a demand was
+        # RAISED; it does not say the demand arrived. Three of the spellings
+        # above are the Director's own judgment for THIS beat -- it routed a
+        # line here, it named this presence the player's addressee, it called
+        # them out of a crowd -- and the Director owns what exists, so a
+        # hand-off that becomes silence is precisely the failure this gate was
+        # built to end; those are exempt. `char_addr` is exempt because it has
+        # already passed this same bar, aimed more precisely, at its own
+        # speaker's room. What is left claims something reached this person
+        # without ever testing that it could: the player's raw words, and the
+        # two carried debts. Filtering them here also makes the gate and the
+        # debt WRITER agree -- `track_background_presences` has applied the
+        # hearing bar to the player's precise address all along, so the gate
+        # was spending slots on debts its own writer would have refused to
+        # accrue.
+        if not (routed or flow_addressed or emerged or char_addr):
+            if not demand_reaches(sc, here, authored_rooms):
+                continue
         # Only a person may hold a background speaking turn. The ledger says
         # nothing about what a name DENOTES, so a device with an accrued
         # record qualified exactly like a barkeep: chat 80's ceiling-mounted

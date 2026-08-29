@@ -1759,7 +1759,11 @@ def presence_figures_for_room(cid, sc, room_id, inputs=None, *,
     keeps a 300-body institution from deriving 300 figures for a back
     office.
 
-    Rows are the co-present body shape: ``name``, ``room``, ``appearance``.
+    Rows are the co-present body shape: ``name``, ``room``, ``appearance``,
+    ``role`` -- the last being the institution's own public noun for the
+    body, kept beside the summary because a minted display name carries it
+    in front of the personal name and the identity strip would otherwise
+    subtract the whole description (`_unknown_actor_label`).
     ``inputs`` is `chatter_inputs`' shared per-stage fetch, memoized per room
     exactly as `charter_crowds_for_room` and `chatter_for_room` are.
     """
@@ -1834,6 +1838,7 @@ def presence_figures_for_room(cid, sc, room_id, inputs=None, *,
             "name": name, "room": room,
             "appearance": (str(((rec or {}).get("sketch") or {}).get(
                 "appearance") or "") or _noun_for(refs)),
+            "role": _noun_for(refs),
         })
 
     try:
@@ -1848,7 +1853,7 @@ def presence_figures_for_room(cid, sc, room_id, inputs=None, *,
             continue
         seen.add(str(name).casefold())
         rows.append({"name": str(name), "room": room,
-                     "appearance": _noun_for(refs)})
+                     "appearance": _noun_for(refs), "role": _noun_for(refs)})
     memo[room] = rows
     return [dict(row) for row in rows]
 
@@ -3533,6 +3538,95 @@ def _sync_sequence_mirrors(out):
     out["actions"] = ac
     return out
 
+
+#: What two spoken elements must agree on before they can be ONE delivery.
+#: Every field here answers a question about DELIVERY -- who may hear it, how
+#: loudly, at whom it is aimed, and which phase of a staged act it belongs to
+#: -- so two elements that disagree on any of them are two deliveries however
+#: adjacent they sit, and stay two. Tone is deliberately absent: a voice
+#: shifts register inside one turn at talk, and a change of register is not a
+#: change of delivery.
+_DELIVERY_KEYS = ("volume", "visibility", "conceal_from", "targets",
+                  "phase", "phase_id", "depends_on", "participants")
+
+
+def _delivery_signature(element):
+    return tuple(
+        tuple(element.get(key) or ()) if key in (
+            "conceal_from", "targets", "depends_on", "participants")
+        else str(element.get(key) or "")
+        for key in _DELIVERY_KEYS
+    )
+
+
+def fuse_speech_run(out, warn=None):
+    """CONSECUTIVE LINES ONE MOUTH SPEAKS WITH NOTHING BETWEEN THEM ARE ONE
+    UTTERANCE.
+
+    The speech budget's own contract already says this. It defines a line as
+    "one separate beat of talk, delivered between other conduct" and states
+    outright that "multiple lines are not one speech split by punctuation:
+    they are separate utterances". A run of `{type: "speech"}` elements with
+    no conduct between them is exactly the thing that contract forbids -- one
+    turn at talk, split at its full stops -- and nothing enforced it, so the
+    engine carried the split all the way to the page.
+
+    IT IS THE PAGE THAT PAYS. Each element becomes its own `dialogue_log`
+    entry, its own `speech_percept`, its own "X says in a Y voice: ..."
+    sentence in every view, and the narrator sets what the view hands it: N
+    quoted lines from one mouth, back to back, with no narration or
+    attribution between them. Measured over the 38 stored beats of chat 98:
+    26 of the 51 rounds that spoke at all emitted two or three speech
+    elements, and one beat (turn 29) put SIX quoted lines from one mouth on
+    the page in two rounds of three. The same split also repeats the
+    attribution, which is where "his voice was measured / formal, precise /
+    formal, declarative" inside one beat comes from.
+
+    So the engine states the rule deterministically instead of asking. This
+    SUBTRACTS: it merges deliveries, invents no words, drops none, and can
+    only ever reduce the number of separate lines attributed to a mouth. Two
+    elements fuse only when they agree on every DELIVERY attribute
+    (`_DELIVERY_KEYS`) and the later one claims no interruption -- a whisper
+    inside a spoken turn, an aside concealed from one party, or a line that
+    cuts into somebody is a genuinely separate delivery and keeps its
+    boundary. The fused element keeps the first's tone when the run agrees on
+    one and drops it when the run does not, because no single adverbial is
+    true of a delivery that changed register.
+
+    A run separated by ANY other element -- an action, a mental beat, a
+    communication -- is untouched: conduct between two lines is precisely what
+    makes them two beats of talk, and that is the shape the budget is asking
+    for.
+    """
+    sequence = out.get("sequence")
+    if not isinstance(sequence, list) or len(sequence) < 2:
+        return out
+    fused, joined = [], 0
+    for element in sequence:
+        last = fused[-1] if fused else None
+        if (isinstance(element, dict)
+                and element.get("type") == "speech"
+                and isinstance(last, dict)
+                and last.get("type") == "speech"
+                and not str(element.get("interrupts") or "").strip()
+                and _delivery_signature(last) == _delivery_signature(element)):
+            head = str(last.get("text") or "").strip()
+            tail = str(element.get("text") or "").strip()
+            if tail:
+                last["text"] = (head + " " + tail).strip() if head else tail
+                if str(last.get("tone") or "") != str(element.get("tone") or ""):
+                    last["tone"] = ""
+                joined += 1
+            continue
+        fused.append(dict(element) if isinstance(element, dict) else element)
+    if joined and warn:
+        warn(f"fused {joined} spoken line{'s' if joined > 1 else ''} into the "
+             "utterance before it -- separate lines are separate beats of "
+             "talk, delivered between other conduct")
+    out["sequence"] = fused
+    return _sync_sequence_mirrors(out) if joined else out
+
+
 def assign_event_ids(sequence, prefix):
     result = []
     for index, raw in enumerate(sequence or []):
@@ -3846,7 +3940,8 @@ def _label_safe(text):
     return re.sub(r"\s+", " ", cleaned).strip()
 
 
-def _unknown_actor_label(actor_name, appearance_text=None, aliases=None):
+def _unknown_actor_label(actor_name, appearance_text=None, aliases=None, *,
+                         role=""):
     # Every unrecognized actor used to render as the exact same generic
     # "the unfamiliar person" -- two strangers in one scene (or the same
     # stranger across a perceiver's dialogue and action lines) were
@@ -3862,9 +3957,27 @@ def _unknown_actor_label(actor_name, appearance_text=None, aliases=None):
     # tokens are dropped before the descriptor is built -- otherwise the
     # label itself was a deterministic identity leak walking straight past
     # the knows_identity gate it exists to serve.
+    #
+    # A ROLE WORN IN THE NAME IS NOT IDENTITY. A body's institution supplies
+    # a public noun for what it is -- a rank, a duty, a trade -- and a minted
+    # display name routinely carries it in front of the personal name
+    # ("<rank> <given> <family>"). Set membership then treats that noun as an
+    # identity token and subtracts it from the body's own appearance summary,
+    # which for such a body IS the noun: everything is stripped, nothing
+    # survives, and a person standing in a lit room reaches the view as the
+    # generic fallback. Measured live, chat 98 turns 13-21: five crew, each
+    # rendered "the unfamiliar person" while the crowd they had been
+    # subtracted from called them ensigns aloud. The exemption is of the
+    # role's own tokens and nothing else, so a summary that is the body's
+    # PERSONAL name still strips to the fallback -- and it discloses nothing,
+    # because the same noun is what `charter_crowd` already renders to any
+    # observer for the band these bodies are members of. Nothing about "an
+    # ensign" narrows down which ensign.
     if appearance_text:
         articles = frozenset(compositor_value("articles"))
         name_tokens = _identity_token_set(actor_name, aliases)
+        if role:
+            name_tokens -= _identity_token_set(role)
         cleaned = re.sub(
             r"^(?:" + "|".join(map(re.escape, articles)) + r")\s+", "",
             appearance_text.strip(), flags=re.I,

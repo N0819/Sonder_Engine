@@ -52,7 +52,8 @@ from .charter_politics import (
     attribute_blame, normalize_politics, regard_map, regard_pair,
     spend_reluctance)
 from .charter_roster import decay_roster, observe
-from .charter_space import charter_places, reach_map, refresh_reach
+from .charter_space import (commons_places, frequented_places, reach_map,
+                           refresh_reach)
 from .charter_feel import STRAIN_REST_TOLL, advance_feel, strain_of
 from .charter_mark import (BY_MARKS, DISGRACE_RELUCTANCE, advance_marks,
                            held_marks)
@@ -442,7 +443,8 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
         # against 8 places is up to 4,000 graph walks, and doing it per window
         # made a simulated week 8.9s where the work itself is a fraction of
         # that. Bodies that do not move have the same reach every window.
-        reach = reach_map(scene, charter_places(charter), charter["bodies"])
+        reach = reach_map(scene, frequented_places(charter),
+                          charter["bodies"])
 
     politics = normalize_politics(charter.get("politics"))
     # PRESSURE RIDES THE SAME AXIS AS STANDING. A body whose needs are unmet
@@ -573,14 +575,16 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
     # and not one ever spread second-hand, because apart from the posted
     # half-dozen nobody ever left the room they were authored into. A body
     # off the watch visits the place its needs are fed from — or its
-    # nearest charter place — and everyone with nowhere to be walks home to
-    # its berth. Same mover, same distance bookkeeping, no new state.
+    # nearest place it may go for its own sake, and only failing that its
+    # nearest charter place — and everyone with nowhere to be walks home
+    # to its berth. Same mover, same distance bookkeeping, no new state.
     rate = charter.get("errand_rate")
     rate = ERRAND_RATE if rate is None else float(rate)
     if scene and rate > 0.0:
         visits = errands(bodies, needs, charter["upkeeps"], plan["watch"],
-                         charter_places(charter), reach, seed=seed,
-                         rate=rate, hours=hours)
+                         frequented_places(charter), reach, seed=seed,
+                         rate=rate, hours=hours,
+                         commons=commons_places(charter))
         moves = dict(homecomings(bodies, plan["watch"], visits), **visits)
         if external:
             moves = {body: place for body, place in moves.items()
@@ -1287,7 +1291,7 @@ def run(charter, hours, window=4.0, seed=0, trace=False, simulate_bound=False):
     # is once; the guard is here so it stays correct on the day something
     # does.
     scene = charter.get("scene")
-    places = charter_places(charter) if scene else ()
+    places = frequented_places(charter) if scene else ()
     # One path cache for the whole run: a fixed scene's walk between two
     # rooms never changes, so once a population circulates (`errands`) the
     # per-window cost of movement is dict lookups, not graph walks.

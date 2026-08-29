@@ -85,6 +85,78 @@ def test_an_attach_that_answers_yes_is_left_alone_and_seeds_both_ways(temp_db):
     assert not (result.get("warnings") or []), result
 
 
+def test_an_attach_can_answer_whether_the_arrivals_know_each_other(temp_db):
+    """TWO QUESTIONS, and until now only one of them could be asked.
+
+    `already_known` answers "does this person know the player". Whether two
+    arrivals know EACH OTHER is a different question with a different answer,
+    and no attach surface could state it -- so a cast who share a workplace,
+    a household or a command reached every story as mutual strangers.
+
+    Measured on chat 98: after forty turns `known` held Picard -> [player,
+    Data], Data -> [player, Worf], Worf -> [player, Data]. Three senior
+    officers who had served together for years, each missing a colleague,
+    because the only in-play channel is hearing a name said aloud and the man
+    who does most of the naming learns nothing from his own mouth. His own
+    composed view called the officer at tactical "the tall heavily built
+    klingon male" on all forty turns while his dialogue said "Mr. Worf" five
+    times -- a name from outside the ledger, in the objective record, because
+    the engine had no way to be told what the story took for granted.
+    """
+    cid = _chat_with_persona(temp_db, "Sarah Chen")
+    first = _character(temp_db, "Vrenak")
+    second = _character(temp_db, "Dr. Crusher")
+
+    app.chat_add_char(cid, {"char_id": first, "already_known": True})
+    result = app.chat_add_char(
+        cid, {"char_id": second, "already_known": True,
+              "already_known_cast": True})
+
+    known = temp_db.wget(cid, "known", {})
+    assert known["Dr. Crusher"] == ["Sarah Chen", "Vrenak"]
+    assert known["Vrenak"] == ["Sarah Chen", "Dr. Crusher"]
+    assert not (result.get("warnings") or []), result
+
+
+def test_the_cast_answer_and_the_player_answer_are_independent(temp_db):
+    """A stranger to the player who is not a stranger to the crew she arrives
+    with. Neither answer may stand in for the other."""
+    cid = _chat_with_persona(temp_db, "Sarah Chen")
+    first = _character(temp_db, "Vrenak")
+    second = _character(temp_db, "Dr. Crusher")
+
+    app.chat_add_char(cid, {"char_id": first, "already_known": False})
+    app.chat_add_char(
+        cid, {"char_id": second, "already_known": False,
+              "already_known_cast": True})
+
+    known = temp_db.wget(cid, "known", {})
+    assert known["Dr. Crusher"] == ["Vrenak"]
+    assert known["Vrenak"] == ["Dr. Crusher"]
+    assert "Sarah Chen" not in known
+
+
+def test_the_unasked_cast_question_is_reported_when_there_is_one_to_ask(
+        temp_db):
+    """Same rule as the player question: an omission is not an authored no,
+    so nothing is seeded and the omission is said aloud. It is only a question
+    when somebody is already here to be a stranger to -- the first arrival has
+    nobody to know, and is not nagged about it."""
+    cid = _chat_with_persona(temp_db, "Sarah Chen")
+    first = _character(temp_db, "Vrenak")
+    second = _character(temp_db, "Dr. Crusher")
+
+    alone = app.chat_add_char(cid, {"char_id": first, "already_known": True})
+    assert not (alone.get("warnings") or []), alone
+
+    result = app.chat_add_char(
+        cid, {"char_id": second, "already_known": True})
+
+    assert temp_db.wget(cid, "known", {}).get("Dr. Crusher") == ["Sarah Chen"]
+    assert any("Vrenak" in notice and "each other" in notice
+               for notice in result.get("warnings") or []), result
+
+
 def test_recognition_is_a_relation_over_a_roster_not_over_the_player(temp_db):
     """The seeder takes the names it is to close over, so a caller with a
     reason to recognise more than the player can say so in one call. Both of

@@ -259,6 +259,38 @@ def _schema_list_channels():
 
     return list_shaped_fields(StateDiff)
 
+#: Channels that exist at ONE Director stage and not the other. Distinct from
+#: `_CHANNEL_GATES` below, and the distinction decides what happens to content:
+#: a gate says "this BEAT has no work here", so an emission is under-grant
+#: evidence and is KEPT (fail-open); this table says "this STAGE has nowhere to
+#: put it at all", so an emission is dropped. Anything absent here serves both
+#: stages.
+#:
+#: Measured, chat 98 turns 6, 26 and 30: the social specialist emitted
+#: `public_evidence` at `director_interpret` on three of forty turns and the
+#: notice said "Content was kept (fail-open); the scope gate under-granted and
+#: should be widened if this recurs" every time. Both halves were false. It was
+#: not kept -- at interpret a specialist's channels merge into
+#: `state_assertions`, which is a `StateDiff`, and `public_evidence` is not a
+#: StateDiff field, so `validated_player_state_assertions` dropped it a few
+#: lines later and all three recorded steps carry `state_assertions: {}`. And
+#: widening was the wrong remedy: evidence describes a FINISHED beat, so
+#: granting the channel at a stage that has not adjudicated the attempt yet
+#: would turn an intention into a witnessed outcome, which is the very thing
+#: the gate's `resolved_stage` term exists to refuse. The guard SUBTRACTS and
+#: says so instead -- a fail-open that quietly discards is the one shape of
+#: guard that reports the opposite of what it did.
+CHANNEL_STAGES = {
+    "public_evidence": ("resolve",),
+}
+
+
+def channel_serves_stage(channel, stage):
+    """Can this stage carry this channel at all, before any beat gate?"""
+    return str(stage) in CHANNEL_STAGES.get(str(channel),
+                                            ("interpret", "resolve"))
+
+
 #: Per-CHANNEL work gates: does this beat have possible work in this
 #: channel? Every input is standing scene state or a structured declaration
 #: -- never prose. FAIL OPEN is the rule: a channel is gated out only when

@@ -410,3 +410,220 @@ class TestTheManagerIsDemandDriven:
         demanded = background._demanded_presences(
             ctx, ctx.director_resolve, managed, ceiling=6)
         assert [n for _t, n, _r, _rm in demanded] == ["Barkeep"]
+
+
+def _split_charter_scene(temp_db, ctx, body_place, *, window_acts=None):
+    """The measured shape of chat 98 turn 36: an authored mind in one room, a
+    charter body in another, the two joined only through a third -- so the
+    demand exists and the channel does not.
+
+    Both rooms open onto the connector, which is what makes the fixture worth
+    having: one hop through an open door is FULL hearing (a channel), and it
+    is the second hop that closes it. A filter that silenced neighbours would
+    pass a same-room-only test and fail this one.
+    """
+    scene = {
+        "location": "Low Town",
+        "rooms": {
+            "square": {"name": "Square", "size": "large",
+                       "adjacent": [{"to": "stair", "barrier": "open_door",
+                                     "distance": 3}]},
+            "stair": {"name": "Stair",
+                      "adjacent": [{"to": "square", "barrier": "open_door"},
+                                   {"to": "cellar", "barrier": "open_door"}]},
+            "cellar": {"name": "Cellar",
+                       "adjacent": [{"to": "stair", "barrier": "open_door"}]},
+        },
+        "positions": {"Aldous": "square"},
+        "entities": {}, "attire": {}, "overlays": {},
+    }
+    state = {
+        "key": "guild", "upkeeps": {}, "priority": [],
+        "posts": {"warden": {"place": body_place, "serves": [],
+                             "requires": {}}},
+        "bodies": {
+            "b1": {"name": "Marn", "place": "square", "available": True,
+                   "competence": {}},
+            "b2": {"name": "Etta", "place": body_place, "available": True,
+                   "competence": {}},
+        },
+        "watch": {},
+        "figures": {"Aldous": {"place": "square"}},
+    }
+    if window_acts is not None:
+        state["window_acts"] = window_acts
+    temp_db.wset(ctx.chat.id, "scene", scene)
+    temp_db.wset(ctx.chat.id, "charters",
+                 {"items": {"guild": {"state": state}}})
+    return scene
+
+
+def _three_room_scene(presences_room):
+    """Two rooms joined only through a third, with the authored mind in one."""
+    return {
+        "location": "Low Town",
+        "rooms": {
+            "square": {"name": "Square",
+                       "adjacent": [{"to": "stair", "barrier": "open_door"}]},
+            "stair": {"name": "Stair",
+                      "adjacent": [{"to": "square", "barrier": "open_door"},
+                                   {"to": "cellar", "barrier": "open_door"}]},
+            "cellar": {"name": "Cellar",
+                       "adjacent": [{"to": "stair", "barrier": "open_door"}]},
+        },
+        "positions": {"Aldous": "square", "Clerk": presences_room},
+        "entities": {"Clerk": {"name": "Clerk", "kind": "person"}},
+        "attire": {}, "overlays": {},
+    }
+
+
+class TestADemandOnlyCountsWhereItCanArrive:
+    """A demand from an authored mind reaches a person through a channel or
+    it does not reach them. Co-presence is not a TRIGGER (§C2) and is not
+    being made one here; it is a FILTER on the triggers that claim something
+    arrived -- the player's raw words, and the two CARRIED debts, which were
+    discharging from anywhere in the world.
+
+    Measured, chat 98 turn 36: a body on the engineering deck held the only
+    slot on 17 of 40 turns while the player stood two decks away addressing
+    five presences at her own table. It qualified on `acting`; all 32 voice
+    calls spent on it returned nothing, correctly, because it could not hear
+    her. Across the whole run, every pick that ever produced a line was in
+    the player's own room.
+    """
+
+    def test_a_carried_act_from_out_of_earshot_no_longer_qualifies(
+            self, temp_db):
+        from persist.commit import pick_background_reactors
+        ctx = _mk_ctx(temp_db, presences={}, cast_names=["Aldous"])
+        _split_charter_scene(temp_db, ctx, "cellar", window_acts=[
+            {"actor": "b2", "act": "ask", "other": "Aldous", "subject": "",
+             "place": "cellar", "at_hours": 1.0, "event": False}])
+        assert pick_background_reactors(ctx, dict(_QUIET), cap=2) == []
+
+    def test_the_same_act_one_open_door_away_still_qualifies(self, temp_db):
+        """The filter is a channel test, not a same-room test: an open door
+        carries a voice in full, and subtracting that would be the crude
+        radius the design already refused."""
+        from persist.commit import pick_background_reactors
+        ctx = _mk_ctx(temp_db, presences={}, cast_names=["Aldous"])
+        _split_charter_scene(temp_db, ctx, "stair", window_acts=[
+            {"actor": "b2", "act": "ask", "other": "Aldous", "subject": "",
+             "place": "stair", "at_hours": 1.0, "event": False}])
+        assert pick_background_reactors(ctx, dict(_QUIET), cap=2) == ["Etta"]
+
+    def test_an_owed_reply_from_out_of_earshot_no_longer_qualifies(
+            self, temp_db):
+        """The debt survives -- nothing is deleted; it simply cannot be
+        discharged on a beat where the party owed cannot hear the answer."""
+        from persist.commit import pick_background_reactors
+        ctx = _mk_ctx(temp_db, scene=_three_room_scene("cellar"),
+                      cast_names=["Aldous"], presences={
+            "Clerk": {"first_turn": 1, "last_turn": 4, "dialogue_turns": [],
+                      "mention_turns": [],
+                      "pending_reply": {"from": "Aldous", "quote": "Well?",
+                                        "turn": 4, "expires_turn": 6}},
+        })
+        assert pick_background_reactors(ctx, dict(_QUIET), cap=2) == []
+        assert temp_db.wget(ctx.chat.id, "background_presences", {})[
+            "Clerk"]["pending_reply"]["from"] == "Aldous"
+
+    def test_the_same_debt_in_the_authored_minds_room_still_qualifies(
+            self, temp_db):
+        from persist.commit import pick_background_reactors
+        ctx = _mk_ctx(temp_db, scene=_three_room_scene("square"),
+                      cast_names=["Aldous"], presences={
+            "Clerk": {"first_turn": 1, "last_turn": 4, "dialogue_turns": [],
+                      "mention_turns": [],
+                      "pending_reply": {"from": "Aldous", "quote": "Well?",
+                                        "turn": 4, "expires_turn": 6}},
+        })
+        assert pick_background_reactors(ctx, dict(_QUIET), cap=2) == ["Clerk"]
+
+    def test_the_players_own_words_do_not_carry_out_of_earshot(self, temp_db):
+        """Naming somebody who cannot hear you is a mention, not an address --
+        and the debt WRITER (`track_background_presences`) has applied this
+        same hearing bar to the player's precise address all along, so the
+        gate was spending slots on debts its own writer would refuse to
+        accrue."""
+        from persist.commit import pick_background_reactors
+        ctx = _mk_ctx(temp_db, scene=_three_room_scene("cellar"),
+                      cast_names=["Aldous"], player_input="Clerk, come here.",
+                      presences={
+            "Clerk": {"first_turn": 1, "last_turn": 4, "dialogue_turns": [],
+                      "mention_turns": []},
+        })
+        assert pick_background_reactors(ctx, dict(_QUIET), cap=2) == []
+
+    def test_a_directors_flow_address_is_exempt(self, temp_db):
+        """The Director's own judgment for THIS beat stays exempt: it owns
+        what exists, may have arranged a channel this gate cannot see, and a
+        hand-off that becomes silence is the failure the gate exists to
+        end."""
+        from persist.commit import pick_background_reactors
+        ctx = _mk_ctx(temp_db, scene=_three_room_scene("cellar"),
+                      cast_names=["Aldous"], presences={
+            "Clerk": {"first_turn": 1, "last_turn": 4, "dialogue_turns": [],
+                      "mention_turns": []},
+        })
+        ctx.director_interpret = {
+            "sequence": [], "flow": {"addressed_to_refs": ["Clerk"]}}
+        assert pick_background_reactors(ctx, dict(_QUIET), cap=2) == ["Clerk"]
+
+    def test_an_unplaced_presence_is_not_silenced(self, temp_db):
+        """Fail-OPEN where the rooms are unknown, the same best-effort rule
+        `_character_address_of`'s audibility check follows."""
+        from persist.commit import pick_background_reactors
+        ctx = _mk_ctx(temp_db, cast_names=["Aldous"], presences={
+            "Clerk": {"first_turn": 1, "last_turn": 4, "dialogue_turns": [],
+                      "mention_turns": [],
+                      "pending_reply": {"from": "Aldous", "quote": "Well?",
+                                        "turn": 4, "expires_turn": 6}},
+        })
+        assert pick_background_reactors(ctx, dict(_QUIET), cap=2) == ["Clerk"]
+
+    def test_the_managers_demand_set_applies_the_same_test(self, temp_db):
+        """The scene-manager path makes the same qualifying judgment in its
+        own copy of the code; the two must not drift apart. Its own scoping
+        does not answer this -- `managed_presences` scopes to the player's
+        AMBIENT scope, which is a different question with a different answer
+        (on a vessel it resolved to every room aboard)."""
+        import agents.background as background
+        scene = {
+            "location": "Inn", "time": "night", "player_room": "taproom",
+            "rooms": {
+                "taproom": {"name": "Taproom",
+                            "adjacent": [{"to": "hall",
+                                          "barrier": "open_door"}]},
+                "hall": {"name": "Hall",
+                         "adjacent": [{"to": "taproom",
+                                       "barrier": "open_door"},
+                                      {"to": "cellar",
+                                       "barrier": "open_door"}]},
+                "cellar": {"name": "Cellar",
+                           "adjacent": [{"to": "hall",
+                                         "barrier": "open_door"}]},
+            },
+            "positions": {"Aldous": "taproom", "Barkeep": "cellar",
+                          "Local": "taproom"},
+            "entities": {
+                "Barkeep": {"name": "Barkeep", "kind": "person"},
+                "Local": {"name": "Local", "kind": "person"}},
+            "attire": {}, "overlays": {},
+        }
+        ctx = _mk_ctx(temp_db, scene=scene, cast_names=["Aldous"], presences={
+            "Barkeep": {"first_turn": 1, "last_turn": 2,
+                        "dialogue_turns": [], "mention_turns": [],
+                        "pending_reply": {"from": "Aldous", "quote": "?",
+                                          "turn": 4, "expires_turn": 6}},
+            "Local": {"first_turn": 1, "last_turn": 4, "dialogue_turns": [4],
+                      "mention_turns": [4],
+                      "pending_reply": {"from": "Aldous", "quote": "?",
+                                        "turn": 4, "expires_turn": 6}},
+        })
+        ctx.director_resolve = dict(_QUIET)
+        managed, _room = background.managed_presences(ctx, None)
+        assert {n for _t, n, _r, _rm in managed} == {"Barkeep", "Local"}
+        demanded = background._demanded_presences(
+            ctx, ctx.director_resolve, managed, ceiling=6)
+        assert [n for _t, n, _r, _rm in demanded] == ["Local"]

@@ -405,6 +405,18 @@ def normalize_charter(stored, reservation=None):
         # Optional registry-side planned location graph. The live scene is
         # composed under it by charter_runtime and never replaces it.
         "structure": str(stored.get("structure") or ""),
+        # Places a body may go FOR ITS OWN SAKE: rooms that belong to no post
+        # and no upkeep and that people are in anyway. `posts` and `upkeeps`
+        # between them say where the WORK is, and until this existed that was
+        # the only set circulation could route to, so a room whose purpose is
+        # being in it was unreachable to the whole population. Author-facing
+        # and sparse; `charter_space.commons_places` reads it alongside the
+        # market places the economy already carried. Empty is legal and means
+        # the institution has none, which `charter_runtime.registry_warnings`
+        # says out loud rather than leaving to be discovered fifty beats on.
+        "commons": sorted({str(p).strip()
+                           for p in (stored.get("commons") or ())
+                           if str(p or "").strip()}),
         # One belief set per head, about the bodies that head has met. Held
         # beside the charter's own roster rather than replacing it: an
         # institution is an agent too, and its register is its belief, not a

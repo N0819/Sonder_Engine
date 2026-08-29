@@ -310,6 +310,47 @@ def _names_heard_in(quote, hearer_name, roster, scene, hearer_room,
     return learned
 
 
+def charter_recognition_projection(cid, frame_id=None):
+    """Every Charter body's display name, the formal variants that name that
+    same body, and the room it stands in.
+
+    THE POPULATION THE RECOGNITION LEDGER COULD NOT SEE. A Charter body is a
+    real, placed identity that is absent from `chat_chars` by construction, so
+    any roster built from the cast answers "is this somebody" with NO for a
+    person standing in the room. `commit_memory` grew a copy of this block so
+    that a name learned by HEARING could name one; `commit_mapping`, which
+    writes the same ledger from an authored introduction, kept the cast-only
+    answer. Two writers of one map, disagreeing about who exists.
+
+    Measured on chat 98 (40 turns): turn 16 emitted five `ok` introductions,
+    every one of them naming a Charter body -- including the reverse edge that
+    would have let one of them use the player's name -- and every one was
+    dropped unresolved. After forty turns no Charter body held a row in
+    `known` at all, so `_presence_recognizes` returned the empty set on every
+    beat and the player was "the unfamiliar person" to a man who had spoken to
+    her twice.
+
+    Carries no private institutional state: display name, formal aliases and
+    place are the whole projection. That is what makes it safe to resolve a
+    model-authored name against -- the roster answers existence, and every
+    caller still asks its own question about presence.
+    """
+    from world.charter_runtime import charter_speaker_records
+    names, rooms, aliases = [], {}, {}
+    for speaker in charter_speaker_records(cid, frame_id=frame_id):
+        name = str(speaker.get("name") or "").strip()
+        if not name:
+            continue
+        if name not in names:
+            names.append(name)
+        rooms[name] = str(speaker.get("place") or "")
+        variants = [str(value).strip()
+                    for value in (speaker.get("aliases") or [name])
+                    if str(value or "").strip()]
+        aliases[name] = list(dict.fromkeys(variants))
+    return {"names": names, "rooms": rooms, "aliases": aliases}
+
+
 def _known_name_roster(chat, cast):
     """Exact display names perception.py's recognition check requires:
     known[perceiver_name] must contain the OTHER actor's exact name string
@@ -418,15 +459,36 @@ def seed_mutual_recognition(cid, name, others):
     wset(cid, "known", known)
 
 
-def _resolve_roster_name(value, roster):
+def _resolve_roster_name(value, roster, address_index=None):
     """mapping_commit's prompt allows 'who'/'learns' to be 'a name or brief
     descriptor' -- free text like 'Dana Osei -- supply pilot, claims three
     days of unanswered radio contact' has been observed live, instead of the
     bare exact name perception.py's recognition check requires. Resolve to
-    the roster's canonical spelling (exact match, or the value containing a
-    roster name as a substring); if it doesn't resolve to anyone in the
+    the roster's canonical spelling; if it doesn't resolve to anyone in the
     roster, drop it rather than write a value that can never match and would
     permanently leave that perceiver unable to recognize anyone.
+
+    THREE READINGS, NARROWEST FIRST, and the middle one is the repair. Exact
+    equality, then the ADDRESS INDEX -- the same `_address_forms` machinery
+    that decides whether a name spoken aloud was heard -- then the raw
+    substring test that was once the only fallback.
+
+    The index is here because the engine held two answers to one question.
+    `_names_heard_in` knows a surname, an honorific and a titled variant all
+    name the same person; this function knew only `casefold` equality and
+    containment, so a value that WRAPS a roster name in a title resolved to
+    nobody. Measured on chat 98 turn 1: `{"who": "Data", "learns":
+    "Lieutenant Oyelaran"}` and two identical rows for the other two officers
+    present, all three `ok`, all three dropped, because "Sabine Oyelaran" is
+    not a substring of "Lieutenant Oyelaran". A person addressed by rank is
+    the ordinary case in any fiction with ranks, titles, honorifics or
+    professions, and it was the one reading this could not make.
+
+    The index refuses an AMBIGUOUS value -- a form two roster names share
+    identifies neither (`_address_forms` already drops those), and text that
+    names two different people is not one person's name. The substring pass
+    below returns the first roster hit and so cannot make that distinction,
+    which is the reason it runs last rather than first.
     """
     text = str(value or "").strip()
     if not text:
@@ -434,6 +496,12 @@ def _resolve_roster_name(value, roster):
     for name in roster:
         if text.casefold() == name.casefold():
             return name
+    if address_index:
+        hits = _indexed_names_in(text, address_index)
+        if len(hits) == 1:
+            return next(iter(hits))
+        if hits:
+            return None
     for name in roster:
         if name.casefold() in text.casefold():
             return name
