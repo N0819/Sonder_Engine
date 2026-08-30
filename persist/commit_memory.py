@@ -25,6 +25,7 @@ from mind.theory_of_mind import (apply_mind_model_updates, rekey_place_claims,
 from world.spatial import same_subject
 from world.survival import vitals_of
 from world.comfort import comfort_level
+from world.stimulation import stimulation_of
 from persist.commit_common import (_clamp, _known_name_roster, _monotonic_elapsed,
                            _address_index, _names_heard_in,
                            _normalize_character_output,
@@ -1289,6 +1290,14 @@ def prepare_memory_commit(ctx, *, scene=None):
                 # construction it never reaches the charge term, because a
                 # warm bench is a resolved state, not an unresolved drive.
                 _comfort, _comfort_src = comfort_level(sc, cname)
+                # World-side DRIVE ceiling, comfort's opposite number: what
+                # this body is physically receiving, from the contact ledger
+                # and the clothing between. Comfort may never reach `charge`;
+                # this decides how far `charge` may go. See
+                # `world/stimulation.py` -- no contact of any kind saturates a
+                # body, and the last stretch is climbed in beats.
+                _stimulation = stimulation_of(
+                    sc, cname, character_interoception(sh))
                 new_hedonic = psychology_runtime.resolve_hedonic(
                     prev_as.get("hedonic"), appraisal_out,
                     character_interoception(sh), body_state, elapsed_units,
@@ -1297,6 +1306,7 @@ def prepare_memory_commit(ctx, *, scene=None):
                     # up in the first place stays the runtime's.
                     released=bool(proposed_hedonic.get("released")),
                     ambient_comfort=_comfort, comfort_source=_comfort_src,
+                    stimulation=_stimulation,
                 )
                 proposed_stress = (
                     asv.get("stress") if isinstance(asv.get("stress"), dict) else {}

@@ -1232,17 +1232,20 @@ def test_a_comma_inside_a_location_is_not_split_into_two():
     assert got.knowledge_locations == ["Vault, Lower"]
 
 
-def test_an_empty_narration_says_which_keys_did_arrive():
-    """"prose is empty" is 18% of the corpus's repair calls and, unlike its two
-    larger siblings, the message never carried the shape that failed -- so
-    nothing distinguished a model that returned NOTHING from one that returned
-    a page of narration under a key this contract does not read. The first is
-    worth a repair call; the second is worth a one-line alias."""
+def test_narration_is_never_rejected_on_its_content():
+    """NARRATION BLOCKS ON JSON VALIDITY AND NOTHING ELSE. The semantic check
+    that stood here refused an empty `prose`, which sent the beat into repair
+    and fallback calls and, when those failed at the provider, killed the turn
+    outright -- chat 95 t18 (2026-08-29): a model that spent every response
+    token in its reasoning channel, then three dropped connections, then no
+    narrator step at all and a page that spun. Rendering what the model sent
+    and letting a reader reroll is strictly better than losing the beat, so
+    this stage now has no semantic errors to report at any shape."""
     from llm.schemas import semantic_output_errors
-    assert semantic_output_errors("narrator", {}) == ["prose is empty"]
+    assert semantic_output_errors("narrator", {}) == []
     assert semantic_output_errors("narrator", {"prose": "She turned."}) == []
-    said = semantic_output_errors("narrator", {"narration": "a page", "beat": 1})
-    assert said == ["prose is empty (keys present: beat, narration)"]
+    assert semantic_output_errors(
+        "narrator", {"narration": "a page", "beat": 1}) == []
 
 
 class TestAScalarWhereAnObjectWasDeclared:

@@ -1673,6 +1673,33 @@ def process_targets(player_text, other_texts, wardrobe, player_name=None):
         lambda sentence: _process_sentence(sentence, phrases))
 
 
+def process_targets_by_garment(player_text, other_texts, wardrobe,
+                               player_name=None):
+    """WHICH garments this beat's words leave still in progress.
+
+    `process_targets` with its scope kept. Returns ``{body: garments}``,
+    where ``garments`` is a set of garment names when the process sentences
+    named some, and ``None`` when they named a body and no garment of
+    hers -- "she begins undressing her", which must still hold everything.
+
+    THE CLAMP ASKS ABOUT AN ACT, AND AN ACT HAS AN OBJECT. Holding a whole
+    body because one sentence said a garment was being started on is right
+    only if a body can lose one garment at a time, and undressing is exactly
+    the process that does not work that way: the beat where the jacket lands
+    on the bed is the beat where the hem of the top is first lifted. Chat 92
+    t16 and t17 both resolved a removal and both kept the garment, each held
+    by process language about the NEXT one down -- see `_attributed_scoped`.
+    """
+    phrases = {phrase
+               for garments in (wardrobe if isinstance(wardrobe, dict)
+                                else {}).values()
+               for phrase, _noun in (_garment_keys(g) for g in garments or [])
+               if phrase}
+    return _attributed_scoped(
+        player_text, other_texts, wardrobe, player_name,
+        lambda sentence: _process_sentence(sentence, phrases))
+
+
 def _clothing_sentence(sentence, garment_phrases=()):
     """Is this sentence about clothing at all?
 
@@ -1745,6 +1772,18 @@ def wardrobe_change_subjects(player_text, other_texts, wardrobe,
 
 def _attributed_targets(player_text, other_texts, wardrobe, player_name,
                         sentence_hit, *, actor_is_not_target=True):
+    """Whose clothes this beat's words are about -- the body-level answer.
+
+    A thin reading of `_attributed_scoped`, which is the ladder itself. Kept
+    because two of the three readings only ever wanted the body.
+    """
+    return set(_attributed_scoped(player_text, other_texts, wardrobe,
+                                  player_name, sentence_hit,
+                                  actor_is_not_target=actor_is_not_target))
+
+
+def _attributed_scoped(player_text, other_texts, wardrobe, player_name,
+                       sentence_hit, *, actor_is_not_target=True):
     """The shared attribution ladder behind decisive_targets,
     process_targets and wardrobe_change_subjects — one implementation of
     "whose clothes is this sentence about", so the readings of a beat cannot
@@ -1759,16 +1798,46 @@ def _attributed_targets(player_text, other_texts, wardrobe, player_name,
     it whichever way the possessive points. Third-person self-undressing is
     the ordinary shape of NPC prose ("Sabine changed out of her uniform"), and
     reading it as somebody else's is how the licence went missing for exactly
-    the bodies the Director was writing about."""
+    the bodies the Director was writing about.
+
+    RETURNS ``{body: garments}``, where ``garments`` is the set of garment
+    names the matching sentences actually NAMED, or ``None`` when they named
+    the body without naming anything it wears. The distinction exists because
+    the top three tiers match against the wardrobe's own spellings and so
+    know which garment they found, while the bottom three identify a person
+    and nothing more.
+
+    It matters for the process reading and nowhere else, but it matters
+    there completely. Undressing is sequential: one garment finishes coming
+    off in the same breath the next is started on. Measured live (chat 92
+    t16/t17): the Director resolved `remove: ["lightweight travel jacket"]`
+    and the same sentence went on "...begins lifting the fabric slowly
+    upward" about the tank top underneath. Body-level attribution read that
+    as Hinami's undressing being in progress and clamped the JACKET to
+    `loosened` — then repeated the trick a beat later, holding the tank top
+    because the sash had been started on. Every beat of a sequential
+    undressing contains its own next step, so the clamp fired on every one
+    of them and nothing ever came off.
+    """
     wardrobe = wardrobe if isinstance(wardrobe, dict) else {}
-    keys = {name: [_garment_keys(g) for g in (garments or [])]
+    keys = {name: [(g,) + _garment_keys(g) for g in (garments or [])]
             for name, garments in wardrobe.items()}
     sources = [(str(player_text or ""), True)]
     for text in (other_texts if isinstance(other_texts, (list, tuple))
                  else [other_texts]):
         sources.append((str(text or ""), False))
 
-    hits = set()
+    hits = {}
+
+    def _mark(name, garments=None):
+        """Record a hit. ``None`` -- the whole body -- is absorbing."""
+        if name in hits and hits[name] is None:
+            return
+        if garments is None:
+            hits[name] = None
+        else:
+            hits.setdefault(name, set()).update(garments)
+
     for text, is_player in sources:
         for sentence in _SENTENCE.findall(text):
             if not sentence_hit(sentence):
@@ -1776,40 +1845,44 @@ def _attributed_targets(player_text, other_texts, wardrobe, player_name,
             folded = sentence.casefold()
             words = set(re.findall(r"[a-z0-9\-\u2019\']+", folded))
 
-            by_phrase = {name for name, entries in keys.items()
-                         if any(phrase and phrase in folded
-                                for phrase, _noun in entries)}
+            by_phrase = {name: {g for g, phrase, _noun in entries
+                                if phrase and phrase in folded}
+                         for name, entries in keys.items()}
+            by_phrase = {n: g for n, g in by_phrase.items() if g}
             if by_phrase:
-                hits |= by_phrase
+                for name, garments in by_phrase.items():
+                    _mark(name, garments)
                 continue
             # "<Name>'s tank top" is explicit attribution even when the
             # garment phrase is abbreviated past recognition and a second
             # cast name shares the sentence — the genitive says whose.
-            by_owner = set()
+            by_owner = {}
             for owner, entries in keys.items():
                 if not str(owner or "").strip():
                     continue
                 if not re.search(r"\b%s[’']s\b"
                                  % re.escape(str(owner).casefold()), folded):
                     continue
-                for phrase, noun in entries:
+                for garment, phrase, noun in entries:
                     tokens = [t for t in re.findall(r"[a-z0-9\-’\']+",
                                                     phrase or "") if t]
                     if (noun and noun in words) or any(
                             t in words for t in tokens):
-                        by_owner.add(owner)
-                        break
+                        by_owner.setdefault(owner, set()).add(garment)
             if by_owner:
-                hits |= by_owner
+                for name, garments in by_owner.items():
+                    _mark(name, garments)
                 continue
-            by_noun = {name for name, entries in keys.items()
-                       if any(noun and len(noun) > 3 and noun in words
-                              for _phrase, noun in entries)}
+            by_noun = {name: {g for g, _phrase, noun in entries
+                              if noun and len(noun) > 3 and noun in words}
+                       for name, entries in keys.items()}
+            by_noun = {n: g for n, g in by_noun.items() if g}
             if len(by_noun) == 1:
-                hits |= by_noun
+                for name, garments in by_noun.items():
+                    _mark(name, garments)
                 continue
             if is_player and player_name in wardrobe and _FIRST_PERSON.search(sentence):
-                hits.add(player_name)
+                _mark(player_name)
                 continue
             named = {name for name in wardrobe
                      if str(name or "").strip() and re.search(
@@ -1836,15 +1909,17 @@ def _attributed_targets(player_text, other_texts, wardrobe, player_name,
                     others = {name for name in wardrobe if name not in named
                               and (wardrobe.get(name) or [])}
                     if len(others) == 1:
-                        hits |= others
+                        for name in others:
+                            _mark(name)
                     continue
-                hits |= named
+                for name in named:
+                    _mark(name)
                 continue
             # Nobody identifiable, or several equally plausible. The player's
             # own words default to the player; ambiguous prose from anywhere
             # else undresses no one faster than the ordinary rung.
             if is_player and not named and not by_noun and player_name in wardrobe:
-                hits.add(player_name)
+                _mark(player_name)
     return hits
 
 
@@ -2004,18 +2079,44 @@ def _named_pattern(phrase):
 
     NUMBER-TOLERANT AT THE TAIL, because "one sandal" and "her jackets" name
     their garment exactly as well as the ledger's own spelling does.
+
+    SEPARATOR-BLIND INSIDE THE NAME, because English writes a compound
+    garment open, closed or hyphenated and the ledger holds exactly one of
+    the three: tank top / tanktop / tank-top, night gown / nightgown, T-shirt
+    / tshirt, waist coat / waistcoat. A gate spelling it one way refuses
+    prose spelling it another, and this gate fails CLOSED -- measured live
+    (chat 92 t17): the player wrote "your vision is briefly obscured by your
+    tanktop", the Director resolved "The tank top joins the jacket on the
+    bed", and the removal of the ledger's "fitted tank top" was dropped as
+    naming nothing, twice, on the beat that plainly named it. So the
+    separators between the name's characters are not part of its identity:
+    every one becomes optional, in both directions at once. It cannot widen
+    the gate to prose that does not carry the name -- the letters must still
+    appear in order with nothing but separators between them, and both edges
+    stay anchored.
     """
     words = phrase.split()
     if not words:
         return re.escape(phrase)
-    body = [re.escape(w) for w in words[:-1]]
-    tail = "(?:%s)" % "|".join(
-        re.escape(f) for f in sorted(_number_variants(words[-1]),
-                                     key=lambda f: (-len(f), f)))
-    core = r"\s+".join(body + [tail])
+    spellings = sorted(
+        (" ".join(words[:-1] + [tail]) for tail in _number_variants(words[-1])),
+        key=lambda f: (-len(f), f))
+    core = "(?:%s)" % "|".join(_separator_blind(s) for s in spellings)
     left = "" if _UNSEGMENTED.match(phrase[:1]) else r"\b"
     right = "" if _UNSEGMENTED.match(phrase[-1:]) else r"\b"
     return left + core + right
+
+
+#: What may sit between two characters of one garment's name without being
+#: part of it: whitespace, and the hyphen family a compound is written with.
+_NAME_SEPARATOR = r"[\s\u2010-\u2015\-]*"
+_NAME_SEPARATOR_CHARS = re.compile(r"[\s\u2010-\u2015\-]")
+
+
+def _separator_blind(spelling):
+    """One spelling as a pattern that ignores how its parts are joined."""
+    chars = [c for c in spelling if not _NAME_SEPARATOR_CHARS.match(c)]
+    return _NAME_SEPARATOR.join(re.escape(c) for c in chars)
 
 
 def garments_named_in(texts, handles, worn_names=()):
@@ -2325,6 +2426,24 @@ def removals_held(previous, reconciled, wanted):
     return held
 
 
+def _in_process_scope(process, garment_name):
+    """Does the clamp's process reading cover THIS garment?
+
+    `process` is True/False for the whole body, or a collection of the
+    garment names the beat's prose left in progress. A bare truthy value
+    that is not a collection keeps the old body-wide meaning, which is what
+    prose naming no garment still means.
+    """
+    if process is None or process is False:
+        return False
+    if process is True:
+        return True
+    if isinstance(process, (set, frozenset, list, tuple)):
+        key = str(garment_name or "").casefold()
+        return any(str(n or "").casefold() == key for n in process)
+    return bool(process)
+
+
 def advance(previous, proposed, decisive=False, process=False):
     """Reconcile a proposed set of regions against what was true before.
 
@@ -2347,7 +2466,13 @@ def advance(previous, proposed, decisive=False, process=False):
       in the prompt and held here for staged states;
     - `process` holds a removal one rung, so "begins on the sash" cannot
       reach bare in the same paragraph — the exact defect the clamp was
-      built against, now detected from the prose that defines it;
+      built against, now detected from the prose that defines it. It is
+      SCOPED TO THE GARMENTS THE PROSE NAMED: pass a collection of garment
+      names to hold only those, or True to hold everything on the body, for
+      prose that named no garment. Undressing is sequential, so a beat that
+      finishes one garment almost always starts the next, and a body-wide
+      reading let the next one hold the finished one back for ever (chat 92
+      t16/t17, `_attributed_scoped`);
     - `decisive` lifts everything, including a process reading in the same
       beat ("stops fumbling and tears it off").
 
@@ -2382,7 +2507,8 @@ def advance(previous, proposed, decisive=False, process=False):
                 if all(not covered_zones_for(before, r) for r in covers):
                     before_rung = max(before_rung, _rung("open"))
                 gap = _rung(state) - before_rung
-                if gap > 1 and (state != "removed" or process):
+                if gap > 1 and (state != "removed"
+                                or _in_process_scope(process, name)):
                     # Hold it at the next rung: an intermediate jump always
                     # (staged states are the contract), a removal only when
                     # this beat's own prose shows the act still in progress.

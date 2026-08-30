@@ -15,7 +15,7 @@ Turn 22, verbatim from the committed diff:
 That was ACCEPTED, stored as `contact:1c66c459972fe61b635f`, and composed
 into the player's own view as
 
-    "Your uniform registers someone against it: steady pressure, weight and
+    "You feel someone against your uniform: steady pressure, weight and
      shared warmth, continuous while the contact holds."
 
 -- a person invented out of a worn badge, in physical contact with the player,
@@ -224,7 +224,7 @@ def test_the_same_claim_stated_once_and_legally_still_stands():
     assert len(scene["contacts"]) == 1
     clause = contact_sensation(scene["contacts"][0], you="Sabine Oyelaran",
                                scene=scene, label_for=lambda other: str(other))
-    assert clause == ("your shoulder registers Data's shoulder against it: "
+    assert clause == ("You feel Data's shoulder against your shoulder: "
                       "steady pressure, weight and shared warmth, continuous "
                       "while the contact holds")
 
@@ -241,7 +241,7 @@ def test_the_order_of_the_two_wordings_does_not_decide_the_outcome():
 # contacts -- turn 9 hand->bar.surface, turn 16 hand->engineers_table.surface,
 # turn 17 right hand->glass.exterior, turn 38 hand->table.surface,
 # padd->table.surface and hand->padd.edge -- and replaying each one through
-# the clause builder produces "your hand registers someone's surface against
+# the clause builder produces "You feel someone's surface against your hand
 # it". FIVE of the six never reached a view in the run itself: none of those
 # objects was ever minted as a scene entity, so none had a position, so
 # contact hygiene pruned the record as cross-room before perception saw it.
@@ -279,7 +279,7 @@ def test_a_touched_thing_the_scene_will_not_vouch_for_is_not_a_person():
         scene["contacts"][0], you="Sabine Oyelaran", scene=scene,
         label_for=_identity_floor(scene, {}))
     assert "someone" not in clause
-    assert clause.startswith("your hand registers something's surface")
+    assert clause.startswith("You feel something's surface against your hand")
 
 
 def test_an_unplaceable_body_is_still_someone():
@@ -294,6 +294,6 @@ def test_an_unplaceable_body_is_still_someone():
     clause = contact_sensation(
         scene["contacts"][0], you="Sabine Oyelaran", scene=scene,
         label_for=_identity_floor(scene, {}))
-    assert clause == ("your wrist registers someone's hand against it: "
+    assert clause == ("You feel someone's hand against your wrist: "
                       "steady pressure, weight and shared warmth, continuous "
                       "while the contact holds")

@@ -1237,3 +1237,229 @@ class TestOneGarmentIsOneRecord:
         }, "positions": {}}
         commit._fold_duplicate_shed_garments(sc)
         assert len(sc["entities"]) == 2
+
+
+class TestAnUndressingIsSequential:
+    """The process clamp holds a garment whose removal the beat's prose
+    leaves unfinished. It used to hold the whole BODY, and a body is the
+    wrong unit: taking clothes off one layer at a time means the beat that
+    finishes one garment is the beat that starts the next, so every beat of
+    an ordinary undressing carries its own process language and the clamp
+    fired on all of them.
+
+    Measured live (chat 92, t16 and t17). t16 resolved
+    `remove: ["lightweight travel jacket"]` and the same sentence went on
+    "...begins lifting the fabric slowly upward" about the tank top beneath
+    it; the jacket was held at `loosened` while the narrator put it on the
+    bed. t17 repeated it exactly, holding the tank top because Mirelle had
+    begun on the sash. Two removals resolved, two garments still worn, and
+    the ledger diverging from the page in the direction design note 17's
+    inversion exists to prevent."""
+
+    WARDROBE = {
+        "Hinami": ["lightweight travel jacket", "fitted tank top",
+                   "utility sash with pouches"],
+        "Mirelle": ["plum silk wrap robe"],
+    }
+
+    def test_process_language_about_one_garment_scopes_to_that_garment(self):
+        prose = ("The jacket slides down her shoulders and falls onto the "
+                 "bed. Her left hand slides beneath the hem of Hinami's "
+                 "fitted tank top and begins lifting the fabric upward.")
+        scope = attire.process_targets_by_garment(
+            "", [prose], self.WARDROBE, player_name="Hinami")
+        assert scope == {"Hinami": {"fitted tank top"}}
+
+    def test_the_garment_the_prose_finished_still_comes_off(self):
+        previous = {"torso": {"garments": [
+            {"name": "lightweight travel jacket", "state": "worn"},
+            {"name": "fitted tank top", "state": "worn"}]}}
+        proposed = {"torso": {"garments": [
+            {"name": "lightweight travel jacket", "state": "removed"},
+            {"name": "fitted tank top", "state": "worn"}]}}
+        after = attire.advance(previous, proposed,
+                               process={"fitted tank top"})
+        states = {g["name"]: g["state"]
+                  for g in after["torso"]["garments"]}
+        assert states["lightweight travel jacket"] == "removed"
+
+    def test_the_garment_the_prose_started_on_is_still_held(self):
+        previous = {"torso": {"garments": [
+            {"name": "fitted tank top", "state": "worn"}]}}
+        proposed = {"torso": {"garments": [
+            {"name": "fitted tank top", "state": "removed"}]}}
+        after = attire.advance(previous, proposed,
+                               process={"fitted tank top"})
+        assert after["torso"]["garments"][0]["state"] == "loosened"
+
+    def test_prose_that_names_no_garment_still_holds_the_whole_body(self):
+        """The defence the clamp was built for. "begins undressing her"
+        names a body and nothing it wears, so there is no garment to scope
+        to and everything is held -- which is what `None` means."""
+        scope = attire.process_targets_by_garment(
+            "", ["Mirelle begins undressing her, slowly."],
+            self.WARDROBE, player_name="Hinami")
+        assert scope == {"Hinami": None}
+        previous = {"torso": {"garments": [
+            {"name": "lightweight travel jacket", "state": "worn"}]}}
+        proposed = {"torso": {"garments": [
+            {"name": "lightweight travel jacket", "state": "removed"}]}}
+        after = attire.advance(previous, proposed, process=True)
+        assert after["torso"]["garments"][0]["state"] == "loosened"
+
+    def test_the_body_reading_is_unchanged(self):
+        """`process_targets` still answers the question it always did, so
+        the scoped reading is an addition rather than a replacement."""
+        prose = ("Her hand slides beneath the hem of Hinami's fitted tank "
+                 "top and begins lifting the fabric upward.")
+        assert attire.process_targets(
+            "", [prose], self.WARDROBE, player_name="Hinami") == {"Hinami"}
+
+
+class TestACompoundNameIsOneNameHoweverItIsSpelled:
+    """English writes a compound garment open, closed or hyphenated -- tank
+    top / tanktop / tank-top, night gown / nightgown -- and the ledger holds
+    exactly one of the three. The licence gate spelled it the ledger's way
+    and refused prose spelling it any other, and this gate fails CLOSED: the
+    change is dropped, not merely slowed.
+
+    Measured live (chat 92 t17): the player wrote "your vision is briefly
+    obscured by your tanktop", the Director resolved "The tank top joins the
+    jacket on the bed", and the removal of the ledger's "fitted tank top"
+    was dropped as naming nothing -- twice, in the preview and again at
+    resolve, on the beat that plainly named it."""
+
+    WORN = ["fitted tank top", "lightweight travel jacket", "sturdy sandals"]
+
+    def test_prose_may_close_the_compound_the_ledger_left_open(self):
+        assert attire.garments_named_in(
+            ["your vision is briefly obscured by your tanktop"],
+            ["fitted tank top"], self.WORN) == ["fitted tank top"]
+
+    def test_prose_may_hyphenate_it(self):
+        assert attire.garments_named_in(
+            ["she pulls the tank-top over her head"],
+            ["fitted tank top"], self.WORN) == ["fitted tank top"]
+
+    def test_prose_may_open_the_compound_the_ledger_closed(self):
+        assert attire.garments_named_in(
+            ["she steps out of the night gown"],
+            ["silk nightgown"], ["silk nightgown"]) == ["silk nightgown"]
+
+    def test_it_does_not_license_a_beat_that_names_no_garment(self):
+        """The gate's whole reason for existing (chat 78): nine turns whose
+        words name no clothing, and a wardrobe rewritten twice anyway."""
+        assert attire.garments_named_in(
+            ["He asked her again where she had been on Tuesday."],
+            ["fitted tank top"], self.WORN) == []
+
+    def test_it_does_not_license_one_garment_by_naming_another(self):
+        assert attire.garments_named_in(
+            ["she kicks the sandals away"],
+            ["fitted tank top"], self.WORN) == []
+
+    def test_separators_are_not_a_way_into_a_longer_word(self):
+        """Both edges stay anchored, so a name is not licensed by a word
+        that merely contains it."""
+        assert attire.garments_named_in(
+            ["the tanktopper adjusts his hat"],
+            ["fitted tank top"], self.WORN) == []
+
+
+class TestOneGarmentIsOneRecordAcrossTwoHands:
+    """A garment coming off is written by two channels of one diff: the
+    attire channel removes it, and the objects specialist files an
+    `inventory_ops` move for the same act. `mint_transferred_objects` reads
+    the second and `_mint_shed_garments` reads the first, and both mint.
+
+    Measured live (chat 92 t16 and t17, replayed). t17's op was
+    `{"op": "move", "object_id": "fitted_tank_top_hinami",
+      "relation": "shed"}` -- the attire seam's own `<garment>_<owner>` key,
+    which the Director can read off every garment already shed -- so the
+    transfer mint took the key first and the attire seam's early-out treated
+    an existing id as proof its own work was done. The tank top ended the
+    beat NAMED "fitted_tank_top_hinami", with `state: null` and no room: not
+    clothing, not shed, nobody's, and not on the bed the story had just
+    dropped it on. t16's op used the bare `lightweight_travel_jacket` and
+    produced the other half of the same defect, a stateless duplicate beside
+    the correct record."""
+
+    @staticmethod
+    def _scene():
+        return {
+            "positions": {"Hinami": "bedroom"},
+            "attire": {"Hinami": {"wearing": ["fitted tank top"]}},
+            "entities": {},
+        }
+
+    def test_the_attire_seam_keeps_the_garment_it_is_taking_off(self):
+        from world import spatial
+        scene = self._scene()
+        minted = spatial.mint_transferred_objects(
+            scene,
+            [{"op": "move", "object_id": "fitted_tank_top_hinami",
+              "from_id": "Hinami", "to_id": None, "relation": "shed"}],
+            shedding=["fitted tank top"])
+        assert minted == []
+        assert scene["entities"] == {}
+
+    def test_the_bare_spelling_is_yielded_too(self):
+        from world import spatial
+        scene = self._scene()
+        assert spatial.mint_transferred_objects(
+            scene,
+            [{"op": "move", "object_id": "fitted_tank_top",
+              "from_id": "Hinami", "to_id": None}],
+            shedding=["fitted tank top"]) == []
+
+    def test_an_ordinary_handover_is_still_minted(self):
+        """The reservation is about clothing coming off, not about
+        transfers -- a thing changing hands still gets its record."""
+        from world import spatial
+        scene = self._scene()
+        assert spatial.mint_transferred_objects(
+            scene, [{"op": "move", "object_id": "padd",
+                     "from_id": "Hinami", "to_id": "Mirelle"}],
+            shedding=["fitted tank top"]) == ["padd"]
+
+    def test_a_minted_object_is_never_named_by_its_identifier(self):
+        """`object_id` is an id and `name` is what a reader sees. The
+        single-word ids that surfaced this seam ("padd") are the same string
+        either way, which is what hid it."""
+        from world import spatial
+        scene = {"positions": {}, "attire": {}, "entities": {}}
+        spatial.mint_transferred_objects(
+            scene, [{"op": "move", "object_id": "brass_pocket_watch",
+                     "from_id": "A", "to_id": "B"}])
+        record = scene["entities"]["brass_pocket_watch"]
+        assert record["name"] == "brass pocket watch"
+        assert "brass_pocket_watch" in record["aliases"]
+
+    def test_an_existing_id_is_stamped_rather_than_skipped(self):
+        from persist import commit
+        """The early-out read an existing key as proof this seam had already
+        run. It is only that while this seam is the sole writer of the key,
+        and it is not."""
+        scene = {
+            "positions": {"Hinami": "bedroom"},
+            "entities": {"fitted_tank_top_hinami": {
+                "name": "fitted_tank_top_hinami", "kind": "object"}},
+        }
+        commit._mint_shed_garments(scene, [("Hinami", "fitted tank top", "")])
+        record = scene["entities"]["fitted_tank_top_hinami"]
+        assert record["name"] == "fitted tank top"
+        assert record["state"]["clothing"] is True
+        assert record["state"]["shed"] is True
+        assert record["state"]["worn_by"] == "Hinami"
+        assert scene["positions"]["fitted_tank_top_hinami"] == "bedroom"
+
+    def test_a_name_somebody_actually_wrote_is_not_overwritten(self):
+        from persist import commit
+        scene = {
+            "positions": {"Hinami": "bedroom"},
+            "entities": {"fitted_tank_top_hinami": {
+                "name": "Hinami's favourite top", "kind": "object"}},
+        }
+        commit._mint_shed_garments(scene, [("Hinami", "fitted tank top", "")])
+        assert (scene["entities"]["fitted_tank_top_hinami"]["name"]
+                == "Hinami's favourite top")

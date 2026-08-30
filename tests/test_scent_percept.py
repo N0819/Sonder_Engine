@@ -132,3 +132,57 @@ def test_the_observations_projection_tags_the_smell_channel():
     rendered = render_view(scent_percepts([_source()]), mode="character")
     channels = {obs["channel"] for obs in observations_from_render("p", rendered)}
     assert channels == {"smell"}
+
+
+class TestOneSmellIsSaidOnce:
+    """The three scent ledgers are separate facts and are right to be:
+    `_substance_id` hashes the source and the source part, so arousal
+    reaching a nose from two sites on one body is two records, and collapsing
+    them in the ledger would lose which site. A nose does not smell the
+    ledger.
+
+    Measured live (chat 95 t59): Mirelle's view carried "Hinami smells of
+    arousal. Hinami smells of arousal." verbatim, from two substance records
+    on one body with identical scent, placement and grade -- in a beat where
+    Hinami was inside her throat."""
+
+    @staticmethod
+    def _sources(perception):
+        scene = {
+            "rooms": {"room": {}},
+            "positions": {"Mira": "room", "Corin": "room"},
+            "entities": {},
+            "substances": [
+                {"substance_id": "substance:aaa", "target": "Corin",
+                 "placement": "surface", "scent": "arousal"},
+                {"substance_id": "substance:bbb", "target": "Corin",
+                 "placement": "surface", "scent": "arousal"},
+            ],
+        }
+        return perception._scent_sources_for(
+            scene, "Mira", "room",
+            [{"name": "Corin", "room": "room"}],
+            {"Corin": "Corin"}, {}, body_scents={})
+
+    def test_two_records_of_one_smell_render_once(self):
+        from agents import perception
+        got = self._sources(perception)
+        assert len([s for s in got if s["scent"] == "arousal"]) == 1
+
+    def test_two_different_smells_both_land(self):
+        from agents import perception
+        scene = {
+            "rooms": {"room": {}},
+            "positions": {"Mira": "room", "Corin": "room"},
+            "entities": {},
+            "substances": [
+                {"substance_id": "substance:aaa", "target": "Corin",
+                 "placement": "surface", "scent": "arousal"},
+                {"substance_id": "substance:bbb", "target": "Corin",
+                 "placement": "surface", "scent": "woodsmoke"},
+            ],
+        }
+        got = perception._scent_sources_for(
+            scene, "Mira", "room", [{"name": "Corin", "room": "room"}],
+            {"Corin": "Corin"}, {}, body_scents={})
+        assert {s["scent"] for s in got} == {"arousal", "woodsmoke"}

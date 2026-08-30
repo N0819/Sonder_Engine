@@ -103,6 +103,7 @@ from .common import (
     _check_character_act_authority,
     _check_character_speech_authority,
     _check_player_act_authority,
+    _check_player_contact_authority,
     _check_player_interiority_authority,
     _check_presence_knowledge_channel,
     director_may_voice,
@@ -3169,7 +3170,30 @@ def director_resolve(ctx, nonce, _corrections=None):
     _felt = _check_player_interiority_authority(
         out.get("resolved_event") or "", _player_name,
         _player_declared_text, _all_names)
-    if _invented or _mute or _felt or _cacts or _quotes:
+    # THE SAME RULE, ASKED OF THE CHANNEL THAT ALSO EXPRESSES IT. `contact_ops`
+    # stores an actor, so it can give the player an act the prose never
+    # mentions -- chat 95 t40, where the prose was clean and the ops had the
+    # player performing.
+    #
+    # DETECTION ONLY, DELIBERATELY. The rule itself now lives where a rule
+    # about what to write belongs: the contact specialist's own prompt says
+    # the player's body acts only when the player said so, and that any part
+    # of a character may reach any part of them. This reading exists to
+    # MEASURE whether that clause works, and it enforces nothing -- no retry,
+    # no dropped op. Four guards in one day were themselves the defect (the
+    # attire process clamp, the licence gate, the narration rewrites, mirrored
+    # contact displacement), every one of them subtracting true state on a
+    # heuristic reading of free text; this one matches names against declared
+    # act text and false-positived twice on its first run over the same chat.
+    # A warning costs nothing and is visible in the step inspector. If the
+    # prompt proves insufficient, the measurement is here to prove it.
+    _standing_ids = [c.get("contact_id") for c in
+                     ((resolve_sc or {}).get("contacts") or [])
+                     if isinstance(c, dict)]
+    _pcontacts = _check_player_contact_authority(
+        (out.get("state_diff") or {}).get("contact_ops"),
+        _declared_player_actions, _player_name, _standing_ids, ctx.cast)
+    if _invented or _mute or _felt or _cacts or _quotes or _pcontacts:
         # ONE retry covering every violation. They are the same boundary from
         # several sides, they are detected at the same moment, and asking
         # separately would cost a call apiece to say the same thing.
@@ -3262,12 +3286,15 @@ def director_resolve(ctx, nonce, _corrections=None):
                 _retry_cacts, _retry_quotes)
         for _w in _invented + _mute + _felt + _cacts + _quotes:
             ctx.add_warning(_w)
+    for _i, _w in _pcontacts:
+        ctx.add_warning(_w)
     # Surfaced on the step itself, not only in ctx.warnings -- a content
     # violation that survives the retry must at least be visible in the
     # step/variant inspector rather than vanishing.
-    if _invented or _mute or _felt or _cacts or _quotes:
+    if _invented or _mute or _felt or _cacts or _quotes or _pcontacts:
         out["player_act_warnings"] = (
-            _invented + _mute + _felt + _cacts + _quotes)
+            _invented + _mute + _felt + _cacts + _quotes
+            + [_w for _i, _w in _pcontacts])
 
     # Warning-only re-normalization; strict validation already ran inside
     # _agent_json (see director_establish above).

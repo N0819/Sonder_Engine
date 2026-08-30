@@ -213,6 +213,33 @@ Frontend (`static/js/`) uses browser globals, not ES modules. `theme-init.js` lo
     recognised by — face, build, bearing, voice" holds for a mask, a
     uniform, an illusion and a glamour alike; "hides fox ears" holds for one
     character in one chat.
+  - **NO WORD LISTS IN PROMPTS. STATE THE CLASS, AND PREFER ITS COMPLEMENT.**
+    Scoped to prompt text deliberately: CODE legitimately needs closed
+    vocabularies, and several of this engine's best seams are one — the
+    charter's occupation and upkeep tables, `attire.REGIONS`, the comfort
+    lexicon, the contact `relation`/`motion` enums. A closed set the engine
+    OWNS and can enumerate is a schema; a list that tries to anticipate how
+    English will phrase something is the thing that fails. An
+    enumeration is a promise that the list can be finished, and in this
+    codebase it never can — English, and the models writing it, will always
+    have one more way to say the thing. Every enumeration here has been widened
+    at least once and was still short: the removal-completion vocabulary twice
+    (`_DECISIVE`, then `_DECISIVE_GAP_OFF`, and a live reroll still stranded a
+    jacket); the craft-tell list, which fired `\bregisters?\b` on the ordinary
+    English verb and cost the largest single call of a 352s turn; a positions
+    clause listing "dragged, carried, thrown, shoved" that silently excluded
+    every other way a body gets moved. `spatial_contacts.canonical_region`
+    refuses a body-part synonym table for the same reason, and says so.
+    The technique that works is to state the ONE case the rule excludes and
+    let everything else fall under it by construction — "where a body walks is
+    its own; where the world puts it is yours" covers a vehicle, a current, a
+    collapsing floor and a spell without naming any of them, where a verb list
+    covers exactly what it names. Where examples genuinely help a reader or a
+    model, mark them as illustrations and say they are not a list to match
+    against. The same caution applies to any GUARD that reads free prose --
+    four of the defects measured on 2026-08-29 were exactly that, each failing
+    in whichever direction its missing word pointed -- but a table the engine
+    defines and controls is not what this is about.
   - **Comments and commit messages are the exception, and should stay
     specific.** Citing chat 74 turn 2532, a measured 4-of-13, or the exact
     string that broke is how the next reader knows the rule was earned

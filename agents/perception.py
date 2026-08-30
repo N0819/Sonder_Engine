@@ -3356,7 +3356,31 @@ def _scent_sources_for(sc, observer, observer_room, others, display_map,
             "scent": scent, "level": level, "label": label,
             "attributed": bool(label) and sees(target),
         })
-    return sources
+    # ONE SMELL IS SAID ONCE. The three ledgers are separate facts and are
+    # right to be -- `_substance_id` hashes the source and the source part, so
+    # arousal reaching a nose from two sites on one body is two records, and
+    # collapsing them in the ledger would lose which site. But a nose does not
+    # smell the ledger: it smells arousal, and saying so twice tells the
+    # reader nothing the first sentence did not.
+    #
+    # Measured live (chat 95 t59): Mirelle's view carried "Hinami smells of
+    # arousal. Hinami smells of arousal." verbatim, from two substance records
+    # on one body with identical scent, placement and grade. Folded on what a
+    # percept would RENDER -- the smell, its grade and whose it is -- so two
+    # different smells, or one smell arriving at two grades, still both land.
+    # The surviving key is the first, which keeps the standing-verdict ledger
+    # stable across beats as long as that record stands.
+    folded, seen = [], set()
+    for source in sources:
+        signature = (str(source.get("scent") or "").casefold(),
+                     str(source.get("level") or ""),
+                     str(source.get("label") or "").casefold(),
+                     bool(source.get("attributed")))
+        if signature in seen:
+            continue
+        seen.add(signature)
+        folded.append(source)
+    return folded
 
 
 def _with_body_description(appearance, described):

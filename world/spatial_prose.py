@@ -1,6 +1,8 @@
 # spatial_prose.py
 """Reader-facing contact phrase renderers and the aggregate spatial_facts bundle."""
 
+import re
+
 from world.spatial_containment import containment_facts, size_facts
 from world.spatial_contacts import (
     _CONTACT_RESIDUE_VERB,
@@ -19,6 +21,38 @@ from world.spatial_geometry import (entity_arc, entity_side, pose_facts,
                               proximity_rel, spatial_digest)
 from world.spatial_identity import room_of, same_subject
 from world.spatial_light import effective_light
+
+
+def _interior_label(raw, owner) -> str:
+    """An enclosing passage, ready to sit inside somebody's possessive.
+
+    `target_interior` is whatever the fiction called the place, and a Director
+    that has minted a room for it writes the ROOM'S NAME -- which carries the
+    owner. Wrapping the standard possessive around that says it twice.
+
+    Measured live (chat 97 t58): `target_interior: "Mirelle's Mouth"` rendered
+    as "your Mirelle's Mouth" in her own view and "Mirelle Sulmirath's
+    Mirelle's Mouth" in his. Structural, not a word list: strip a leading
+    possessive that names the owner, by any part of their name, and lower the
+    remainder so it reads as the body part it is rather than as a room title.
+    """
+    label = str(raw or "").strip().replace("_", " ")
+    if not label:
+        return ""
+    tokens = [t for t in re.split(r"\s+", str(owner or "").strip()) if t]
+    # The whole name first, then any single part of it: a Director writes
+    # "Mirelle Sulmirath's Esophagus" as readily as "Mirelle's Mouth".
+    candidates = ([" ".join(tokens)] if len(tokens) > 1 else []) + sorted(
+        tokens, key=len, reverse=True)
+    for token in candidates:
+        for suffix in ("'s", "\u2019s"):
+            prefix = token + suffix
+            if label.casefold().startswith(prefix.casefold()):
+                label = label[len(prefix):].strip()
+                break
+    # A room title reads as a place; the same words in lower case read as the
+    # part of a body they name, which is what a possessive needs.
+    return label.lower() if label.istitle() else label
 
 
 def contact_phrase(contact: dict, *, you=None) -> str:
@@ -232,8 +266,7 @@ def contact_sensation(contact: dict, *, you: str, scene: dict = None,
         side, tail = "either", "continuous while the contact holds"
     mine = str(mine or "").strip().replace("_", " ")
     theirs = str(theirs or "").strip().replace("_", " ")
-    target_interior = str(
-        contact.get("target_interior") or "").strip().replace("_", " ")
+    raw_interior = contact.get("target_interior")
     if relation_kind == "interior":
         if motion_kind == "moving":
             quality = ("changing pressure, heat and friction along its length"
@@ -244,37 +277,36 @@ def contact_sensation(contact: dict, *, you: str, scene: dict = None,
                        if side == "entering" else
                        "pressure, fullness and movement")
         if side == "entering":
-            site = f"your {mine}" if mine else "your body"
-            plural = _part_is_plural(mine) if mine else False
-            verb = "register" if plural else "registers"
-            pronoun = "them" if plural else "it"
+            yours = f"your {mine}" if mine else "you"
+            # The passage belongs to the OTHER body here -- the observer is
+            # the one inside it.
+            target_interior = _interior_label(raw_interior, other)
             enclosure = (f"{other}'s {target_interior}"
                          if target_interior else other)
-            relation = f"{enclosure} enclosing {pronoun}"
+            relation = f"{enclosure} enclosing {yours}"
             if theirs:
                 relation += f", with contact at {other}'s {theirs}"
         else:
-            site = "your body"
             source = f"{other}'s {theirs}" if theirs else other
+            # ...and to the OBSERVER here, who is the one enclosing.
+            target_interior = _interior_label(raw_interior, you)
             enclosure = f"your {target_interior}" if target_interior else "you"
             relation = f"{source} within {enclosure}"
             if mine:
                 relation += f", with contact at your {mine}"
-            verb = "registers"
-        return f"{site} {verb} {relation}: {quality}, {tail}"
+        return f"You feel {relation}: {quality}, {tail}"
 
     sensation_kind = "moving" if motion_kind == "moving" else "settled"
     relation, quality = _SENSATION_FORMS[(sensation_kind, side)]
-    site = f"your {mine}" if mine else "your body"
     source = f"{other}'s {theirs}" if theirs else other
-    # Body parts are routinely plural, and the subject here is the PART, not
-    # the person: "your legs registers" and "against it" for two legs are the
-    # same agreement bug `contact_phrase` already carries `_part_is_plural`
-    # for. The trailing pronoun refers back to the perceiver's own part.
-    plural = _part_is_plural(mine) if mine else False
-    verb = "register" if plural else "registers"
-    relation = relation.replace(" it", " them") if plural else relation
-    return f"{site} {verb} {source} {relation}: {quality}, {tail}"
+    # THE PART GOES WHERE IT IS FELT, not in front of a verb. The old shape
+    # put the body part in the subject slot -- "your legs registers ... against
+    # it" -- which needed a plural agreement fix and a pronoun pointing back at
+    # a noun three words earlier, and still read as instrumentation. Naming the
+    # part inside the relation drops both problems: no agreement to get wrong,
+    # and nothing for the pronoun to lose track of.
+    relation = relation.replace(" it", f" your {mine}" if mine else " you")
+    return f"You feel {source} {relation}: {quality}, {tail}"
 
 
 def spatial_facts(scene: dict, observer: str, source_names) -> list:

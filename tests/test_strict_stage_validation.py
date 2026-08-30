@@ -100,16 +100,21 @@ def test_malformed_background_react_triggers_repair(monkeypatch):
     assert out["dialogue_log_entry"]["exact_quote"] == "Oi!"
     assert len(llm.calls) == 2
 
-def test_empty_narrator_prose_triggers_repair(monkeypatch):
+def test_empty_narrator_prose_costs_no_second_call(monkeypatch):
+    """The inverse of every other case in this file, deliberately. Narration
+    is the one stage where a content judgment may not cost a call: the repair
+    this used to trigger is what turned a model's empty answer into a dead
+    turn once the retries hit the provider (chat 95 t18). One call, taken as
+    it came."""
     llm = _script(monkeypatch, [
-        json.dumps({"prose": "", "new_specifics": []}),  # semantic failure
+        json.dumps({"prose": "", "new_specifics": []}),
         json.dumps({"prose": "The rain stops.", "new_specifics": []}),
     ])
 
     out = _agent_json("narrator", "narrator", "sys", {})
 
-    assert out["prose"] == "The rain stops."
-    assert len(llm.calls) == 2
+    assert out["prose"] == ""
+    assert len(llm.calls) == 1
 
 def test_director_interpret_semantic_check_uses_source_payload(monkeypatch):
     payload = {"player_raw_input": "I open the door"}
@@ -139,29 +144,37 @@ def test_unparseable_output_triggers_repair(monkeypatch):
     assert len(llm.calls) == 2
 
 def test_failed_repair_falls_back_to_next_candidate(monkeypatch):
+    """Driven through `mapping_stage` rather than `narrator`. The escalation
+    itself is unchanged; narrator is simply no longer a stage that can fail
+    a content check, so it can no longer stand in for one."""
+    payload = {"player_raw_input": "I open the door"}
     llm = _script(monkeypatch, [
-        json.dumps({"prose": ""}),                    # primary: invalid
-        json.dumps({"prose": ""}),                    # repair: still invalid
-        json.dumps({"prose": "Dust settles."}),       # candidate fallback
+        json.dumps({"sequence": [], "flow": {}}),       # primary: invalid
+        json.dumps({"sequence": [], "flow": {}}),       # repair: still invalid
+        json.dumps({"sequence": [{"type": "action",     # candidate fallback
+                                  "attempt": "open the door"}],
+                    "flow": {}}),
     ], candidates=2)
 
-    out = _agent_json("narrator", "narrator", "sys", {})
+    out = _agent_json("director", "director_interpret", "sys", payload)
 
-    assert out["prose"] == "Dust settles."
+    assert out["sequence"][0]["attempt"] == "open the door"
     assert len(llm.calls) == 3
     assert llm.calls[2]["candidate_offset"] == 1
 
 def test_exhausted_validation_raises_step_error(monkeypatch):
+    payload = {"player_raw_input": "I open the door"}
     _script(monkeypatch, [
-        json.dumps({"prose": ""}),
-        json.dumps({"prose": ""}),
+        json.dumps({"sequence": [], "flow": {}}),
+        json.dumps({"sequence": [], "flow": {}}),
     ], candidates=1)
 
     # This RuntimeError propagates out of the stage function, which is
     # exactly what makes the step fail as a normal rerunnable step
     # instead of committing a malformed dict.
-    with pytest.raises(RuntimeError, match="narrator failed JSON validation"):
-        _agent_json("narrator", "narrator", "sys", {})
+    with pytest.raises(RuntimeError,
+                       match="director_interpret failed JSON validation"):
+        _agent_json("director", "director_interpret", "sys", payload)
 
 # ---- source-level wiring guard ----
 
@@ -189,3 +202,31 @@ def test_stage_modules_stay_on_strict_path(filename, step_keys):
         assert re.search(
             rf'_agent_json\(\s*[^,]+,\s*"{key}"', src), (
             f"{filename} must route step '{key}' through _agent_json")
+
+
+def test_narration_filed_under_the_wrong_key_is_read_not_refused(monkeypatch):
+    """The alias `llm/schemas.py` asked for and never got. A model that puts
+    its page in `text` used to be refused for an empty `prose`; with nothing
+    left to refuse it, the page has to be READ or the beat renders blank."""
+    from agents import narration
+    _script(monkeypatch, [
+        json.dumps({"prose": "", "text": "The rain stops.",
+                    "new_specifics": []}),
+    ])
+    out, _warnings, _fidelity = narration._generate_narration(
+        {}, "", "", [], fidelity_facts={})
+    assert out["prose"] == "The rain stops."
+
+
+def test_prose_the_model_sent_reaches_the_page_unedited(monkeypatch):
+    """No deterministic rewrite of accepted narration. Every reading that
+    used to edit it -- player echo, raw-input echo, within-view dedupe, the
+    repeated-quote cap -- now only reports, so what the reader gets is what
+    the model wrote."""
+    from agents import narration
+    warnings = []
+    prose = ('She said "hello" and then she said "hello" and then she said '
+             '"hello" and then she said "hello" again.')
+    kept = narration._report_prose_guards(
+        prose, "", ['hello'], "I said hello", warnings)
+    assert kept == prose

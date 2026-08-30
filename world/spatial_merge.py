@@ -1425,7 +1425,16 @@ def merge_scene_with_diff(
     # resolves a handover cannot write `entities` and the hand that mints
     # entities was never asked. Minted from what the op vouches for and no
     # more; a body is never minted over.
-    mint_transferred_objects(merged, diff.get("inventory_ops"))
+    # ...EXCEPT A GARMENT THIS BEAT IS TAKING OFF, which the attire seam
+    # mints completely and this one could only stub. See
+    # `mint_transferred_objects`; the Director routinely writes both channels
+    # for one act of undressing, and whichever hand arrives first wins.
+    mint_transferred_objects(
+        merged, diff.get("inventory_ops"),
+        shedding=[str(g) for entry in (diff.get("attire") or {}).values()
+                  if isinstance(entry, dict)
+                  for g in (entry.get("remove") or [])
+                  if isinstance(g, str) and g.strip()])
     derive_inventory_placements(
         merged, diff.get("inventory_ops"),
         declared=(set(incoming_positions or {})

@@ -372,10 +372,10 @@ def test_live_two_contact_omission_fires_bounded_repair(temp_db, monkeypatch):
     interior = next(c for c in scene["contacts"]
                     if c["target_part"] == "cervix")
     assert contact_sensation(interior, you="Hinami", scene=scene).startswith(
-        "your body registers Elyra Voss's cock within your vaginal canal, "
+        "You feel Elyra Voss's cock within your vaginal canal, "
         "with contact at your cervix")
     assert contact_sensation(interior, you="Elyra Voss", scene=scene).startswith(
-        "your cock registers Hinami's vaginal canal enclosing it, with "
+        "You feel Hinami's vaginal canal enclosing your cock, with "
         "contact at Hinami's cervix")
 
 

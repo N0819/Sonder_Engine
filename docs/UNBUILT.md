@@ -4898,6 +4898,37 @@ same one `_CLOTHING_CONTEXT` already has: the process word and the clothing
 word have to be about the same thing, which sentence-level co-occurrence does
 not establish.
 
+**Narrowed, not closed, 2026-08-29.** The clamp is now scoped to the GARMENTS
+a process sentence names rather than to the body wearing them
+(`attire.process_targets_by_garment`, `attire._attributed_scoped`), so the
+second case above is smaller: "She begins removing her jacket" holds the
+jacket and lets the other three land. What survives is the first case
+verbatim — a sentence that names one garment and carries a process word about
+something else still holds THAT garment — and the wholly unattributed shape,
+"She begins removing her clothes", which names no garment and so still holds
+everything the body has on. The fix's shape is unchanged: the process word and
+the garment have to be about the same act, which co-occurrence in one sentence
+does not establish.
+
+### 1.102 A short whole garment name cannot license its own wardrobe
+
+**Found 2026-08-29** while fixing the licence gate's compound-name blindness
+(chat 92 t17). `attire.garments_named_in` floors every suffix window at two
+words or eight characters, so a fragment of a name cannot license a change to
+the whole garment. The floor applies at `i == 0` too, where the window is not
+a fragment — it is the name. A ledger garment called `t-shirt` (one word,
+seven characters) never clears it, and tier (c)'s word-set rescue cannot see
+`tshirt` in prose either, so that garment can be named by no beat at all and
+every change to it is refused.
+
+Not fixed with the compound-name pass because the two guards are separate and
+only one was measured: the floor's cost is a garment whose whole name is short
+AND spelled differently in prose, which no live chat has yet produced. The
+shape of a fix is to exempt the whole-name window from the floor — a name is
+never a fragment of itself — and then to decide whether tier (c)'s uniqueness
+test is enough protection for a three-letter name like `tie`, which is what
+the floor is currently standing in for.
+
 ### 1.70 Narrator repetition: what the change-key fix reached, and what it did not
 
 Landed 2026-08-28, from a 16-turn story (chat 95) whose every stage was read
