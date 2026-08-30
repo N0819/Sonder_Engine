@@ -21,6 +21,7 @@ from world.spatial_containment import (_NEVER_STATIONED_KINDS,
                                        containment_conceals,
                                        scale_changed_names)
 from world.spatial_contacts import _clean_contact, _contact_key
+from world.spatial_contacts import contact_endpoint_is_body
 from world.spatial_identity import (_ci_get, _entity_named,
                                     _unique_entity_keyed, room_of,
                                     same_subject)
@@ -881,6 +882,134 @@ def _carriage_labels(scene: dict, object_id) -> list:
         labels.update(str(alias) for alias in (entity.get("aliases") or []))
     return [label for label in
             {str(label).strip() for label in labels} if label]
+
+
+def invalidate_moved_body_pose_details(scene: dict, previous_positions) -> list:
+    """Retire a pose `detail` that claims to hold a BODY which has just moved.
+
+    THE SAME CLASS AS `invalidate_transferred_pose_details`, one ledger over.
+    That function reconciles a possession claim in pose prose against the
+    transfer ledger; this one reconciles it against `positions`. A `detail` is
+    the one scene field nothing re-derives -- written once, rendered verbatim
+    into every view including the body's own interoception, standing until
+    some later beat happens to overwrite it -- and when it says a body is
+    HOLDING somebody, that is a claim about where the somebody is. Where a
+    body is belongs to `positions`.
+
+    Measured live (chat 99): a pose detail written while a shrunken body lay
+    in a mouth read "tongue curled around the little fox, holding her at the
+    back of the mouth". She was swallowed on the next beat and again on the
+    one after -- mouth, throat, stomach -- and the detail followed her owner
+    unchanged, so the holder's own interoception went on reporting a body at
+    the back of her mouth that was two rooms further down. Nothing was
+    remembering wrongly; it was being told.
+
+    THE RULE, and it subtracts only. A body that changed room this beat is
+    somewhere else now. Another body's prose does not get to go on holding it
+    there. Cleared:
+      * the `detail` alone, exactly as the transfer twin clears it. Posture,
+        support and the relation fields are the holder's OWN arrangement and
+        no move of somebody else's touches them.
+    Left alone:
+      * the mover's own pose. Their prose is about themselves.
+      * a detail that does not NAME the mover, on a word boundary, under any
+        spelling the scene knows them by.
+      * a detail that names them WITHOUT carriage vocabulary.
+        `_CONTACT_BOUND_POSE_WORDS` is the engine's one list for "this clause
+        depends on something being held", shared with the transfer twin and
+        with `invalidate_contact_bound_poses`; watching somebody leave is not
+        a claim to be holding them, and a second competing list is how two
+        ledgers start disagreeing.
+
+    `previous_positions` is the room map as it stood BEFORE this beat's
+    merge. A body absent from it is newly placed rather than moved, and
+    nothing is retired for it.
+
+    Returns [(holder, mover)] for the caller's report; mutates.
+    """
+    poses = (scene or {}).get("poses")
+    positions = (scene or {}).get("positions")
+    if not isinstance(poses, dict) or not poses:
+        return []
+    if not isinstance(positions, dict) or not isinstance(previous_positions, dict):
+        return []
+    movers = []
+    for subject, room in positions.items():
+        was = previous_positions.get(subject)
+        if not was or not room or str(was) == str(room):
+            continue
+        if not _moved_subject_is_body(scene, subject):
+            continue        # a carried object is the transfer twin's business
+        movers.append(subject)
+    if not movers:
+        return []
+
+    dropped = []
+    for holder, pose in poses.items():
+        if not isinstance(pose, dict):
+            continue
+        detail = str(pose.get("detail") or "")
+        if not detail:
+            continue
+        words = set(re.findall(r"[a-z'\u2019-]+", detail.casefold()))
+        if not (words & _CONTACT_BOUND_POSE_WORDS):
+            continue
+        for mover in movers:
+            if same_subject(scene, holder, mover):
+                continue        # their own pose, about themselves
+            if not _detail_names_subject(scene, detail, mover):
+                continue
+            pose["detail"] = ""
+            dropped.append((holder, mover))
+            break
+    return dropped
+
+
+def _moved_subject_is_body(scene, subject) -> bool:
+    """Is this mover a body, for the purpose of retiring a carriage clause?
+
+    Not `contact_endpoint_is_body`, which answers a different question -- it
+    asks whether an endpoint is a body RATHER THAN an entity record, so a
+    registered character reads as a thing the moment the scene mints a row
+    for them, and live scenes mint one for everybody.
+
+    Here the distinction that matters is only which twin owns the fact: a
+    carried OBJECT moving is `invalidate_transferred_pose_details`' business,
+    and a body moving is this one's. So a subject counts as a body when the
+    wardrobe knows it, when its record says `person`, or when it has no
+    record at all -- and a portable thing never does.
+    """
+    entity = ((scene or {}).get("entities") or {}).get(subject)
+    if isinstance(entity, dict):
+        if entity.get("portable"):
+            return False
+        if str(entity.get("kind") or "").strip().casefold() == "person":
+            return True
+    if subject in ((scene or {}).get("attire") or {}):
+        return True
+    return entity is None
+
+
+def _detail_names_subject(scene, detail, subject) -> bool:
+    """Does this pose prose name that body, under any spelling the scene has?
+
+    Word-boundary matching on the canonical name, the display name and any
+    alias -- the same generosity `_carriage_labels` shows a transferred thing,
+    for the same reason: one body, every name it goes by.
+    """
+    low = str(detail or "").casefold()
+    spellings = {str(subject or "").strip()}
+    entity = ((scene or {}).get("entities") or {}).get(subject)
+    if isinstance(entity, dict):
+        spellings.add(str(entity.get("name") or ""))
+        for alias in (entity.get("aliases") or []):
+            spellings.add(str(alias or ""))
+    for spelling in spellings:
+        token = spelling.strip().casefold()
+        if len(token) > 2 and re.search(
+                r"(?<!\w)%s(?!\w)" % re.escape(token), low):
+            return True
+    return False
 
 
 def invalidate_transferred_pose_details(scene: dict, inventory_ops) -> list:

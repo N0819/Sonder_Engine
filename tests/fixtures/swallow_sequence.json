@@ -1,0 +1,5792 @@
+[
+ {
+  "turn": 57,
+  "input": "\"I-I'm at your mercy. D-do I taste good?\" You quiver a little feeling all the bumps of her tastebuds running over you.",
+  "scene": {
+   "rooms": {
+    "reception_room": {
+     "name": "Reception Room",
+     "desc": "The reception room smells of sandalwood and something warmer beneath it — amber, maybe, or honey left too long in the sun. Soft lamplight catches the rich fabrics draped across low furniture, and somewhere out of sight, a small fountain murmurs its quiet rhythm.",
+     "adjacent": [],
+     "notes": "Private reception space for Mirelle's practice",
+     "light": "soft lamplight",
+     "exposure": "enclosed",
+     "anchors": {
+      "cushioned_bench": {
+       "desc": "A low, cushioned bench draped in rich fabrics",
+       "dir": "s"
+      },
+      "comfortable_chair": {
+       "desc": "A comfortable chair positioned opposite the bench",
+       "dir": "n"
+      }
+     },
+     "size": "small"
+    },
+    "private_session_room": {
+     "name": "Private Session Room",
+     "desc": "A softly lit chamber with a wide, low bed draped in dark silk sheets, a small side table holding oils and towels, and a single cushioned chair near the door. The air carries a faint scent of warmed amber and clean linen.",
+     "adjacent": [
+      {
+       "to": "reception_room",
+       "barrier": "open_door",
+       "distance": 0,
+       "dir": "w",
+       "name": "session door"
+      }
+     ],
+     "notes": "generated because no candidate described this room",
+     "anchors": {
+      "e4abc867dc5848e4": {
+       "desc": "A wide, low bed draped in dark silk sheets",
+       "dir": "e"
+      },
+      "side_table": {
+       "desc": "A small side table holding oils and towels",
+       "dir": "n"
+      },
+      "cushioned_chair": {
+       "desc": "A single cushioned chair near the door",
+       "dir": "w"
+      }
+     },
+     "size": "small"
+    }
+   },
+   "positions": {
+    "Mirelle Sulmirath": "private_session_room",
+    "Hinami": "private_session_room",
+    "f9e067c426c14d05": "private_session_room",
+    "a4187571bda041ad": "private_session_room",
+    "32b9b97f47814b8b": "private_session_room",
+    "e6e75419bbae4754": "private_session_room",
+    "6dc13b66d35c4010": "private_session_room",
+    "2013ef5357954a52": "private_session_room",
+    "04ea06f7becf4fe7": "private_session_room",
+    "0b9fefde915e4d70": "private_session_room",
+    "e4abc867dc5848e4": "private_session_room",
+    "f16333a9c873489a": "private_session_room"
+   },
+   "poses": {
+    "Mirelle Sulmirath": {
+     "posture": "sitting",
+     "support": "e4abc867dc5848e4",
+     "relative_to": "Hinami",
+     "relation": "beside",
+     "constraint": "",
+     "detail": "one warm palm pressed flat on Hinami's bare stomach after lifting both hands from the fox ears"
+    },
+    "Hinami": {
+     "posture": "prone",
+     "support": "Mirelle Sulmirath's palm",
+     "relative_to": "Mirelle Sulmirath",
+     "relation": "pinned to palm",
+     "constraint": "",
+     "detail": "lying prone with entire front coated in saliva, six tails straightened and fluffed out"
+    }
+   },
+   "contacts": [
+    {
+     "actor": "Mirelle Sulmirath",
+     "actor_part": "hand",
+     "target": "Hinami",
+     "target_part": "back",
+     "target_interior": "",
+     "manner": "pin",
+     "relation": "surface",
+     "motion": "settled",
+     "detail": "force pinning back to palm",
+     "unasserted": 0,
+     "contact_id": "contact:1c450f9824c9f9b72a8d"
+    }
+   ],
+   "contact_actions": [
+    {
+     "action_id": "contact-action:4c2a442c676106a28779",
+     "actor": "Mirelle Sulmirath",
+     "contact_id": "contact:1c450f9824c9f9b72a8d",
+     "action": "stroke",
+     "intensity": "",
+     "rhythm": "",
+     "detail": "broad flat of tongue in one long unhurried stroke up tiny body from tail-base to shoulders"
+    }
+   ],
+   "attire": {
+    "Hinami": {
+     "wearing": [],
+     "state": [
+      "bare at the torso, arms, waist, groin, legs, feet"
+     ],
+     "regions": {
+      "torso": {
+       "garments": [],
+       "beneath": "Soft, tanned skin across the chest and stomach. Small, perky breasts with light brown nipples, slightly upturned. Her stomach is smooth and soft, not toned—a comfortable, lived-in softness. Faint tan lines trace the tank top's neckline and shoulder straps. A few faded scrape scars dot her ribs from travel.",
+       "beneath_zones": {
+        "chest": "Soft, tanned skin across the chest. Small, perky breasts with light brown nipples, slightly upturned. Faint tan lines trace the tank top's neckline and shoulder straps.",
+        "midriff": "Her stomach is smooth and soft, not toned—a comfortable, lived-in softness. A few faded scrape scars dot her ribs from travel."
+       },
+       "uncovered": true
+      },
+      "waist": {
+       "garments": [],
+       "beneath": "Skin at the waist is softer and paler than sun-exposed areas, the tan fading where the sash sits. A slight softness rounds her lower belly. Hip bones visible beneath warm skin, not sharp but defined.",
+       "uncovered": true
+      },
+      "groin": {
+       "garments": [],
+       "beneath": "A neat patch of copper-gold curls above her vulva, kept trimmed. Outer labia full and soft, slightly darker than her tanned skin. Inner folds pink and smooth, tucked within. The skin between her thighs is warm and sensitive, carrying a faint musk of travel and warm body.",
+       "uncovered": true
+      },
+      "feet": {
+       "garments": [],
+       "beneath": "Bare feet, tanned and calloused at heels and balls from years in sandals. Toes nimble, gripping the ground easily. Soles rough but not cracked, hardened by travel.",
+       "uncovered": true
+      },
+      "arms": {
+       "garments": [],
+       "beneath": "Slim, warm arms with gentle definition from years on the road. Inner arms smooth and paler; forearms tanned and slightly rough from sun and wind. Fingers nimble with light calluses at the tips from sketching. Fine, barely visible copper-gold hair along her forearms.",
+       "uncovered": true
+      },
+      "legs": {
+       "garments": [],
+       "beneath": "Soft, slightly thick thighs tapering to slim calves. Skin tanned and warm, with faded scrapes and old insect bites from outdoor travel. Barely visible copper-gold hair on her shins. Inner thighs paler and softer, with slight chafing redness at the very top from long walks.",
+       "uncovered": true
+      }
+     }
+    },
+    "Mirelle Sulmirath": {
+     "wearing": [],
+     "state": [
+      "bare at the torso, arms, hands, groin, legs, feet",
+      "loosened"
+     ],
+     "regions": {
+      "torso": {
+       "garments": [],
+       "beneath": "",
+       "beneath_zones": {
+        "chest": "Full, heavy breasts that settle softly once the chemise is drawn away; nipples a deeper bronze, soft and slightly raised from the cool air; skin smooth and meticulously maintained, carrying the same faint shimmer as the rest of her; fine stretch marks trace the outer curve where her breasts are fullest; her sternum and the gentle ridge of her collarbones show between her breasts",
+        "midriff": "A narrow, soft waist — not muscular but toned enough to show the gentle curve of her ribs above her hips; skin warm and smooth with the same bronze shimmer; her navel is small and shallow; the skin here radiates a gentle warmth from her supernatural metabolism"
+       },
+       "uncovered": true
+      },
+      "groin": {
+       "garments": [],
+       "beneath": "Smooth, bare bronze skin beneath the silk — meticulously maintained as befits her profession; warm to the touch from her supernatural metabolism; her vulva is soft and bare, the same warm bronze as the rest of her body but with soft pink lips and interior",
+       "uncovered": true
+      },
+      "arms": {
+       "garments": [],
+       "beneath": "Bronze skin, soft and warm with the same faint shimmer; her forearms are smooth, the undersides of her wrists showing faint blue veins beneath the bronze;",
+       "uncovered": true
+      },
+      "hands": {
+       "garments": [],
+       "beneath": "her hands are long-fingered and elegant with nails trimmed short and neat for massage work — a professional's hands, sensitive and deliberately cared for"
+      },
+      "legs": {
+       "garments": [],
+       "beneath": "Long, shapely legs with smooth bronze skin and the same faint shimmer; the upper thighs are soft and full where the robe's hem falls, tapering to toned calves;",
+       "uncovered": true
+      },
+      "feet": {
+       "garments": [],
+       "beneath": "her feet are bare with short neat nails"
+      }
+     }
+    }
+   },
+   "entities": {
+    "f9e067c426c14d05": {
+     "name": "lightweight travel jacket",
+     "kind": "object",
+     "description": "lightweight travel jacket, taken off",
+     "aliases": [
+      "lightweight travel jacket"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Hinami",
+      "shed": true
+     }
+    },
+    "a4187571bda041ad": {
+     "name": "fitted tank top",
+     "kind": "object",
+     "description": "fitted tank top, taken off",
+     "aliases": [
+      "fitted tank top"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Hinami",
+      "shed": true
+     }
+    },
+    "32b9b97f47814b8b": {
+     "name": "utility sash with pouches",
+     "kind": "object",
+     "description": "utility sash with pouches, taken off",
+     "aliases": [
+      "utility sash with pouches"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Hinami",
+      "shed": true
+     }
+    },
+    "e6e75419bbae4754": {
+     "name": "travel shorts",
+     "kind": "object",
+     "description": "travel shorts, taken off",
+     "aliases": [
+      "travel shorts"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Hinami",
+      "shed": true
+     }
+    },
+    "6dc13b66d35c4010": {
+     "name": "sturdy sandals",
+     "kind": "object",
+     "description": "sturdy sandals, taken off",
+     "aliases": [
+      "sturdy sandals"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Hinami",
+      "shed": true
+     }
+    },
+    "2013ef5357954a52": {
+     "name": "plum silk wrap robe",
+     "kind": "object",
+     "description": "plum silk wrap robe, taken off",
+     "aliases": [
+      "plum silk wrap robe"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Mirelle Sulmirath",
+      "shed": true
+     }
+    },
+    "04ea06f7becf4fe7": {
+     "name": "black silk chemise",
+     "kind": "object",
+     "description": "",
+     "aliases": [
+      "black silk chemise"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Mirelle Sulmirath",
+      "shed": true
+     },
+     "ubiquitous": false
+    },
+    "0b9fefde915e4d70": {
+     "name": "silk panties",
+     "kind": "object",
+     "description": "",
+     "aliases": [
+      "silk panties"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": null,
+      "shed": true,
+      "location": "floor",
+      "pooled_at": "Mirelle Sulmirath's feet"
+     },
+     "ubiquitous": false
+    },
+    "e4abc867dc5848e4": {
+     "name": "wide bed",
+     "kind": "furniture",
+     "description": "",
+     "aliases": [
+      "bed"
+     ],
+     "portable": false,
+     "container": true,
+     "interior_rooms": [
+      "bed_surface"
+     ],
+     "state": {
+      "enclosure": "membrane"
+     },
+     "ubiquitous": false,
+     "enclosure": "membrane"
+    },
+    "f16333a9c873489a": {
+     "name": "feather hair clip",
+     "kind": "object",
+     "description": "feather hair clip, taken off — slightly askew",
+     "aliases": [
+      "feather hair clip"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Hinami",
+      "shed": true,
+      "condition": "slightly askew"
+     }
+    },
+    "Hinami": {
+     "name": "Hinami",
+     "kind": "person",
+     "description": "",
+     "aliases": [],
+     "portable": false,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "aroused": true,
+      "blushing": true,
+      "breathing_heavily": true
+     },
+     "ubiquitous": false,
+     "scent": "arousal"
+    },
+    "Mirelle Sulmirath": {
+     "name": "Mirelle Sulmirath",
+     "kind": "person",
+     "description": "",
+     "aliases": [],
+     "portable": false,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "tail_coiled_tight": true,
+      "wings_straining": true,
+      "tail_coiled_loose": true,
+      "wings_folded": true
+     },
+     "ubiquitous": false
+    }
+   },
+   "substances": [
+    {
+     "source": "Hinami",
+     "source_part": "between the legs",
+     "substance": "arousal fluids",
+     "target": "Hinami",
+     "placement": "surface",
+     "target_interior": "",
+     "target_part": "",
+     "amount": "noticeable dampness",
+     "amount_band": "",
+     "detail": "scent of arousal becoming noticeable in the air",
+     "scent": "arousal",
+     "speech_impediment": "",
+     "substance_id": "substance:5802b889a334f3e7a41d"
+    },
+    {
+     "source": "Mirelle Sulmirath",
+     "source_part": "tongue",
+     "substance": "saliva",
+     "target": "Hinami",
+     "placement": "surface",
+     "target_interior": "",
+     "target_part": "inner_thigh",
+     "amount": "wet trail",
+     "amount_band": "",
+     "detail": "slow slick line along crease",
+     "scent": "arousal",
+     "speech_impediment": "",
+     "substance_id": "substance:b2d7a3282b079dde492a"
+    },
+    {
+     "source": "Mirelle Sulmirath",
+     "source_part": "mouth",
+     "substance": "warm air",
+     "target": "Hinami",
+     "placement": "surface",
+     "target_interior": "",
+     "target_part": "body",
+     "amount": "wash",
+     "amount_band": "",
+     "detail": "",
+     "scent": "",
+     "speech_impediment": "",
+     "substance_id": "substance:eccd0a2bbbd7f33cdfd3"
+    },
+    {
+     "source": "Mirelle Sulmirath",
+     "source_part": "tongue",
+     "substance": "saliva",
+     "target": "Hinami",
+     "placement": "surface",
+     "target_interior": "",
+     "target_part": "front",
+     "amount": "coated",
+     "amount_band": "",
+     "detail": "",
+     "scent": "arousal",
+     "speech_impediment": "",
+     "substance_id": "substance:13e6900a33ad92b1578b"
+    },
+    {
+     "source": "Mirelle Sulmirath",
+     "source_part": "tongue",
+     "substance": "saliva",
+     "target": "Hinami",
+     "placement": "surface",
+     "target_interior": "",
+     "target_part": "back",
+     "amount": "wet trail",
+     "amount_band": "",
+     "detail": "",
+     "scent": "arousal",
+     "speech_impediment": "",
+     "substance_id": "substance:89c3665b15dfdc79c34a"
+    }
+   ],
+   "contained": {},
+   "scales": {},
+   "stations": {
+    "Mirelle Sulmirath": {
+     "at": "e4abc867dc5848e4",
+     "near": [
+      "Hinami"
+     ]
+    },
+    "Hinami": {
+     "at": "e4abc867dc5848e4",
+     "near": [
+      "Mirelle Sulmirath"
+     ]
+    }
+   }
+  }
+ },
+ {
+  "turn": 58,
+  "input": "\"You don't h-have to play patient with me...\" You shiver a bit a little dizzy and overwhelmed by what is happening. \"Dig in~\"",
+  "scene": {
+   "rooms": {
+    "reception_room": {
+     "name": "Reception Room",
+     "desc": "The reception room smells of sandalwood and something warmer beneath it — amber, maybe, or honey left too long in the sun. Soft lamplight catches the rich fabrics draped across low furniture, and somewhere out of sight, a small fountain murmurs its quiet rhythm.",
+     "adjacent": [],
+     "notes": "Private reception space for Mirelle's practice",
+     "light": "soft lamplight",
+     "exposure": "enclosed",
+     "anchors": {
+      "cushioned_bench": {
+       "desc": "A low, cushioned bench draped in rich fabrics",
+       "dir": "s"
+      },
+      "comfortable_chair": {
+       "desc": "A comfortable chair positioned opposite the bench",
+       "dir": "n"
+      }
+     },
+     "size": "small"
+    },
+    "private_session_room": {
+     "name": "Private Session Room",
+     "desc": "A softly lit chamber with a wide, low bed draped in dark silk sheets, a small side table holding oils and towels, and a single cushioned chair near the door. The air carries a faint scent of warmed amber and clean linen.",
+     "adjacent": [
+      {
+       "to": "reception_room",
+       "barrier": "open_door",
+       "distance": 0,
+       "dir": "w",
+       "name": "session door"
+      }
+     ],
+     "notes": "generated because no candidate described this room",
+     "anchors": {
+      "1ffe2040daf54ae9": {
+       "desc": "A wide, low bed draped in dark silk sheets",
+       "dir": "e"
+      },
+      "side_table": {
+       "desc": "A small side table holding oils and towels",
+       "dir": "n"
+      },
+      "cushioned_chair": {
+       "desc": "A single cushioned chair near the door",
+       "dir": "w"
+      }
+     },
+     "size": "small"
+    },
+    "Mirelle Sulmirath_mouth": {
+     "name": "mouth",
+     "desc": "Warm, wet space where she plays with the client",
+     "light": "dim",
+     "parent_entity": "Mirelle Sulmirath",
+     "adjacent": [
+      {
+       "to": "Mirelle Sulmirath_throat",
+       "barrier": "membrane"
+      },
+      {
+       "to": "private_session_room",
+       "barrier": "membrane",
+       "distance": "near"
+      }
+     ],
+     "dock_exit": true
+    },
+    "Mirelle Sulmirath_throat": {
+     "name": "throat",
+     "desc": "Tight passage that squeezes vigorously, providing an intense muscular massage",
+     "light": "dark",
+     "parent_entity": "Mirelle Sulmirath",
+     "adjacent": [
+      {
+       "to": "Mirelle Sulmirath_mouth",
+       "barrier": "membrane"
+      },
+      {
+       "to": "Mirelle Sulmirath_stomach",
+       "barrier": "membrane"
+      }
+     ],
+     "transit_seconds": 5.0
+    },
+    "Mirelle Sulmirath_stomach": {
+     "name": "stomach",
+     "desc": "Scented with lavender and relaxing herbs, the walls constantly knead and squeeze it's occupant kneading weakened acid all over them that digests dead skin",
+     "light": "dark",
+     "parent_entity": "Mirelle Sulmirath",
+     "adjacent": [
+      {
+       "to": "Mirelle Sulmirath_throat",
+       "barrier": "membrane"
+      },
+      {
+       "to": "Mirelle Sulmirath_small_intestine",
+       "barrier": "membrane"
+      }
+     ]
+    },
+    "Mirelle Sulmirath_small_intestine": {
+     "name": "small_intestine",
+     "desc": "Incredibly tight space where the client is squeezed and massaged for hours, dragged ever deeper; a faint clean musk is present",
+     "light": "dark",
+     "parent_entity": "Mirelle Sulmirath",
+     "adjacent": [
+      {
+       "to": "Mirelle Sulmirath_stomach",
+       "barrier": "membrane"
+      },
+      {
+       "to": "Mirelle Sulmirath_large_intestine",
+       "barrier": "membrane"
+      }
+     ],
+     "transit_seconds": 7200.0
+    },
+    "Mirelle Sulmirath_large_intestine": {
+     "name": "large_intestine",
+     "desc": "Slightly less tight than the small intestine, kept clean and scented with oils",
+     "light": "dark",
+     "parent_entity": "Mirelle Sulmirath",
+     "adjacent": [
+      {
+       "to": "Mirelle Sulmirath_small_intestine",
+       "barrier": "membrane"
+      },
+      {
+       "to": "Mirelle Sulmirath_rectum",
+       "barrier": "membrane"
+      }
+     ],
+     "transit_seconds": 3600.0
+    },
+    "Mirelle Sulmirath_rectum": {
+     "name": "rectum",
+     "desc": "Clean space where the client is briefly held before powerful muscles push them out",
+     "light": "dark",
+     "parent_entity": "Mirelle Sulmirath",
+     "adjacent": [
+      {
+       "to": "Mirelle Sulmirath_large_intestine",
+       "barrier": "membrane"
+      }
+     ]
+    }
+   },
+   "positions": {
+    "Mirelle Sulmirath": "private_session_room",
+    "Hinami": "Mirelle Sulmirath_mouth",
+    "95feb3a8521549fd": "private_session_room",
+    "1160e5d39da74250": "private_session_room",
+    "79315c09b4b9481c": "private_session_room",
+    "3e466060a20d4407": "private_session_room",
+    "a8d944d5f0a1411c": "private_session_room",
+    "4423e9ee4cb74183": "private_session_room",
+    "5ccc264c6a7c4fa0": "private_session_room",
+    "c84074bf5f1741b5": "private_session_room",
+    "1ffe2040daf54ae9": "private_session_room",
+    "9303331879aa42f7": "private_session_room"
+   },
+   "poses": {
+    "Hinami": {
+     "posture": "prone",
+     "support": "",
+     "relative_to": "",
+     "relation": "",
+     "constraint": "",
+     "detail": "lying prone with entire front and back coated in saliva, six tails straightened and fluffed out, pressed warm and firm into the palate"
+    },
+    "Mirelle Sulmirath": {
+     "posture": "sitting",
+     "support": "1ffe2040daf54ae9",
+     "relative_to": "",
+     "relation": "",
+     "constraint": "",
+     "detail": ""
+    }
+   },
+   "contacts": [
+    {
+     "actor": "Hinami",
+     "actor_part": "body",
+     "target": "Mirelle Sulmirath",
+     "target_part": "tongue",
+     "target_interior": "mouth",
+     "manner": "curl",
+     "relation": "interior",
+     "motion": "settled",
+     "detail": "warm and firm into the palate",
+     "unasserted": 0,
+     "contact_id": "contact:9542111ec10e1d3b912d"
+    },
+    {
+     "actor": "Hinami",
+     "actor_part": "body",
+     "target": "Mirelle Sulmirath",
+     "target_part": "palate",
+     "target_interior": "mouth",
+     "manner": "roll",
+     "relation": "interior",
+     "motion": "moving",
+     "detail": "slowly across ridges in deep unhurried strokes at honest pressure",
+     "unasserted": 0,
+     "contact_id": "contact:562d52d29a2f1980528a"
+    }
+   ],
+   "contact_actions": [],
+   "attire": {
+    "Hinami": {
+     "wearing": [],
+     "state": [
+      "bare at the torso, arms, waist, groin, legs, feet"
+     ],
+     "regions": {
+      "torso": {
+       "garments": [],
+       "beneath": "Soft, tanned skin across the chest and stomach. Small, perky breasts with light brown nipples, slightly upturned. Her stomach is smooth and soft, not toned—a comfortable, lived-in softness. Faint tan lines trace the tank top's neckline and shoulder straps. A few faded scrape scars dot her ribs from travel.",
+       "beneath_zones": {
+        "chest": "Soft, tanned skin across the chest. Small, perky breasts with light brown nipples, slightly upturned. Faint tan lines trace the tank top's neckline and shoulder straps.",
+        "midriff": "Her stomach is smooth and soft, not toned—a comfortable, lived-in softness. A few faded scrape scars dot her ribs from travel."
+       },
+       "uncovered": true
+      },
+      "waist": {
+       "garments": [],
+       "beneath": "Skin at the waist is softer and paler than sun-exposed areas, the tan fading where the sash sits. A slight softness rounds her lower belly. Hip bones visible beneath warm skin, not sharp but defined.",
+       "uncovered": true
+      },
+      "groin": {
+       "garments": [],
+       "beneath": "A neat patch of copper-gold curls above her vulva, kept trimmed. Outer labia full and soft, slightly darker than her tanned skin. Inner folds pink and smooth, tucked within. The skin between her thighs is warm and sensitive, carrying a faint musk of travel and warm body.",
+       "uncovered": true
+      },
+      "feet": {
+       "garments": [],
+       "beneath": "Bare feet, tanned and calloused at heels and balls from years in sandals. Toes nimble, gripping the ground easily. Soles rough but not cracked, hardened by travel.",
+       "uncovered": true
+      },
+      "arms": {
+       "garments": [],
+       "beneath": "Slim, warm arms with gentle definition from years on the road. Inner arms smooth and paler; forearms tanned and slightly rough from sun and wind. Fingers nimble with light calluses at the tips from sketching. Fine, barely visible copper-gold hair along her forearms.",
+       "uncovered": true
+      },
+      "legs": {
+       "garments": [],
+       "beneath": "Soft, slightly thick thighs tapering to slim calves. Skin tanned and warm, with faded scrapes and old insect bites from outdoor travel. Barely visible copper-gold hair on her shins. Inner thighs paler and softer, with slight chafing redness at the very top from long walks.",
+       "uncovered": true
+      }
+     }
+    },
+    "Mirelle Sulmirath": {
+     "wearing": [],
+     "state": [
+      "bare at the torso, arms, hands, groin, legs, feet",
+      "loosened"
+     ],
+     "regions": {
+      "torso": {
+       "garments": [],
+       "beneath": "",
+       "beneath_zones": {
+        "chest": "Full, heavy breasts that settle softly once the chemise is drawn away; nipples a deeper bronze, soft and slightly raised from the cool air; skin smooth and meticulously maintained, carrying the same faint shimmer as the rest of her; fine stretch marks trace the outer curve where her breasts are fullest; her sternum and the gentle ridge of her collarbones show between her breasts",
+        "midriff": "A narrow, soft waist — not muscular but toned enough to show the gentle curve of her ribs above her hips; skin warm and smooth with the same bronze shimmer; her navel is small and shallow; the skin here radiates a gentle warmth from her supernatural metabolism"
+       },
+       "uncovered": true
+      },
+      "groin": {
+       "garments": [],
+       "beneath": "Smooth, bare bronze skin beneath the silk — meticulously maintained as befits her profession; warm to the touch from her supernatural metabolism; her vulva is soft and bare, the same warm bronze as the rest of her body but with soft pink lips and interior",
+       "uncovered": true
+      },
+      "arms": {
+       "garments": [],
+       "beneath": "Bronze skin, soft and warm with the same faint shimmer; her forearms are smooth, the undersides of her wrists showing faint blue veins beneath the bronze;",
+       "uncovered": true
+      },
+      "hands": {
+       "garments": [],
+       "beneath": "her hands are long-fingered and elegant with nails trimmed short and neat for massage work — a professional's hands, sensitive and deliberately cared for"
+      },
+      "legs": {
+       "garments": [],
+       "beneath": "Long, shapely legs with smooth bronze skin and the same faint shimmer; the upper thighs are soft and full where the robe's hem falls, tapering to toned calves;",
+       "uncovered": true
+      },
+      "feet": {
+       "garments": [],
+       "beneath": "her feet are bare with short neat nails"
+      }
+     }
+    }
+   },
+   "entities": {
+    "95feb3a8521549fd": {
+     "name": "lightweight travel jacket",
+     "kind": "object",
+     "description": "lightweight travel jacket, taken off",
+     "aliases": [
+      "lightweight travel jacket"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Hinami",
+      "shed": true
+     }
+    },
+    "1160e5d39da74250": {
+     "name": "fitted tank top",
+     "kind": "object",
+     "description": "fitted tank top, taken off",
+     "aliases": [
+      "fitted tank top"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Hinami",
+      "shed": true
+     }
+    },
+    "79315c09b4b9481c": {
+     "name": "utility sash with pouches",
+     "kind": "object",
+     "description": "utility sash with pouches, taken off",
+     "aliases": [
+      "utility sash with pouches"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Hinami",
+      "shed": true
+     }
+    },
+    "3e466060a20d4407": {
+     "name": "travel shorts",
+     "kind": "object",
+     "description": "travel shorts, taken off",
+     "aliases": [
+      "travel shorts"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Hinami",
+      "shed": true
+     }
+    },
+    "a8d944d5f0a1411c": {
+     "name": "sturdy sandals",
+     "kind": "object",
+     "description": "sturdy sandals, taken off",
+     "aliases": [
+      "sturdy sandals"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Hinami",
+      "shed": true
+     }
+    },
+    "4423e9ee4cb74183": {
+     "name": "plum silk wrap robe",
+     "kind": "object",
+     "description": "plum silk wrap robe, taken off",
+     "aliases": [
+      "plum silk wrap robe"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Mirelle Sulmirath",
+      "shed": true
+     }
+    },
+    "5ccc264c6a7c4fa0": {
+     "name": "black silk chemise",
+     "kind": "object",
+     "description": "",
+     "aliases": [
+      "black silk chemise"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Mirelle Sulmirath",
+      "shed": true
+     },
+     "ubiquitous": false
+    },
+    "c84074bf5f1741b5": {
+     "name": "silk panties",
+     "kind": "object",
+     "description": "",
+     "aliases": [
+      "silk panties"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": null,
+      "shed": true,
+      "location": "floor",
+      "pooled_at": "Mirelle Sulmirath's feet"
+     },
+     "ubiquitous": false
+    },
+    "1ffe2040daf54ae9": {
+     "name": "wide bed",
+     "kind": "furniture",
+     "description": "",
+     "aliases": [
+      "bed"
+     ],
+     "portable": false,
+     "container": true,
+     "interior_rooms": [
+      "bed_surface"
+     ],
+     "state": {
+      "enclosure": "membrane"
+     },
+     "ubiquitous": false,
+     "enclosure": "membrane"
+    },
+    "9303331879aa42f7": {
+     "name": "feather hair clip",
+     "kind": "object",
+     "description": "feather hair clip, taken off — slightly askew",
+     "aliases": [
+      "feather hair clip"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Hinami",
+      "shed": true,
+      "condition": "slightly askew"
+     }
+    },
+    "Hinami": {
+     "name": "Hinami",
+     "kind": "person",
+     "description": "",
+     "aliases": [],
+     "portable": false,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "aroused": true,
+      "blushing": true,
+      "breathing_heavily": true
+     },
+     "ubiquitous": false,
+     "scent": "arousal"
+    },
+    "Mirelle Sulmirath": {
+     "name": "Mirelle Sulmirath",
+     "kind": "person",
+     "description": "",
+     "aliases": [],
+     "portable": false,
+     "container": false,
+     "interior_rooms": [
+      "Mirelle Sulmirath_mouth",
+      "Mirelle Sulmirath_throat",
+      "Mirelle Sulmirath_stomach",
+      "Mirelle Sulmirath_small_intestine",
+      "Mirelle Sulmirath_large_intestine",
+      "Mirelle Sulmirath_rectum"
+     ],
+     "state": {
+      "tail_coiled_tight": true,
+      "wings_straining": true,
+      "tail_coiled_loose": true,
+      "wings_folded": true
+     },
+     "ubiquitous": false,
+     "interior_spec": [
+      {
+       "name": "mouth",
+       "desc": "Warm, wet space where she plays with the client",
+       "light": "dim",
+       "barrier": ""
+      },
+      {
+       "name": "throat",
+       "desc": "Tight passage that squeezes vigorously, providing an intense muscular massage",
+       "light": "dark",
+       "barrier": "membrane",
+       "transit_seconds": 5.0
+      },
+      {
+       "name": "stomach",
+       "desc": "Scented with lavender and relaxing herbs, the walls constantly knead and squeeze it's occupant kneading weakened acid all over them that digests dead skin",
+       "light": "dark",
+       "barrier": "membrane"
+      },
+      {
+       "name": "small_intestine",
+       "desc": "Incredibly tight space where the client is squeezed and massaged for hours, dragged ever deeper; a faint clean musk is present",
+       "light": "dark",
+       "barrier": "membrane",
+       "transit_seconds": 7200.0
+      },
+      {
+       "name": "large_intestine",
+       "desc": "Slightly less tight than the small intestine, kept clean and scented with oils",
+       "light": "dark",
+       "barrier": "membrane",
+       "transit_seconds": 3600.0
+      },
+      {
+       "name": "rectum",
+       "desc": "Clean space where the client is briefly held before powerful muscles push them out",
+       "light": "dark",
+       "barrier": "membrane"
+      }
+     ],
+     "enclosure": "membrane"
+    }
+   },
+   "substances": [
+    {
+     "source": "Hinami",
+     "source_part": "between the legs",
+     "substance": "arousal fluids",
+     "target": "Hinami",
+     "placement": "surface",
+     "target_interior": "",
+     "target_part": "",
+     "amount": "noticeable dampness",
+     "amount_band": "",
+     "detail": "scent of arousal becoming noticeable in the air",
+     "scent": "arousal",
+     "speech_impediment": "",
+     "substance_id": "substance:5802b889a334f3e7a41d"
+    },
+    {
+     "source": "Mirelle Sulmirath",
+     "source_part": "tongue",
+     "substance": "saliva",
+     "target": "Hinami",
+     "placement": "surface",
+     "target_interior": "",
+     "target_part": "inner_thigh",
+     "amount": "wet trail",
+     "amount_band": "",
+     "detail": "slow slick line along crease",
+     "scent": "arousal",
+     "speech_impediment": "",
+     "substance_id": "substance:b2d7a3282b079dde492a"
+    },
+    {
+     "source": "Mirelle Sulmirath",
+     "source_part": "mouth",
+     "substance": "warm air",
+     "target": "Hinami",
+     "placement": "surface",
+     "target_interior": "",
+     "target_part": "body",
+     "amount": "wash",
+     "amount_band": "",
+     "detail": "",
+     "scent": "",
+     "speech_impediment": "",
+     "substance_id": "substance:eccd0a2bbbd7f33cdfd3"
+    },
+    {
+     "source": "Mirelle Sulmirath",
+     "source_part": "tongue",
+     "substance": "saliva",
+     "target": "Hinami",
+     "placement": "surface",
+     "target_interior": "",
+     "target_part": "front",
+     "amount": "coated",
+     "amount_band": "",
+     "detail": "",
+     "scent": "arousal",
+     "speech_impediment": "",
+     "substance_id": "substance:13e6900a33ad92b1578b"
+    },
+    {
+     "source": "Mirelle Sulmirath",
+     "source_part": "tongue",
+     "substance": "saliva",
+     "target": "Hinami",
+     "placement": "surface",
+     "target_interior": "",
+     "target_part": "back",
+     "amount": "wet trail",
+     "amount_band": "",
+     "detail": "",
+     "scent": "arousal",
+     "speech_impediment": "",
+     "substance_id": "substance:89c3665b15dfdc79c34a"
+    },
+    {
+     "source": "Mirelle Sulmirath",
+     "source_part": "mouth",
+     "substance": "saliva",
+     "target": "Hinami",
+     "placement": "surface",
+     "target_interior": "",
+     "target_part": "",
+     "amount": "",
+     "amount_band": "",
+     "detail": "the rolling savoring coats the tiny fox's front and back in fresh warm saliva as the tongue works her",
+     "scent": "",
+     "speech_impediment": "",
+     "substance_id": "substance:6e7cbcb63be77f611faa"
+    }
+   ],
+   "contained": {},
+   "scales": {},
+   "stations": {
+    "Mirelle Sulmirath": {
+     "at": "1ffe2040daf54ae9",
+     "near": []
+    },
+    "Hinami": {
+     "at": null,
+     "near": []
+    }
+   }
+  }
+ },
+ {
+  "turn": 59,
+  "input": "You squirm inside her mouth \"A-ah it's really warm and tight in here.\" You look around pressing your palms against her tongue trying to get a moment of stabilit",
+  "scene": {
+   "rooms": {
+    "reception_room": {
+     "name": "Reception Room",
+     "desc": "The reception room smells of sandalwood and something warmer beneath it — amber, maybe, or honey left too long in the sun. Soft lamplight catches the rich fabrics draped across low furniture, and somewhere out of sight, a small fountain murmurs its quiet rhythm.",
+     "adjacent": [],
+     "notes": "Private reception space for Mirelle's practice",
+     "light": "soft lamplight",
+     "exposure": "enclosed",
+     "anchors": {
+      "cushioned_bench": {
+       "desc": "A low, cushioned bench draped in rich fabrics",
+       "dir": "s"
+      },
+      "comfortable_chair": {
+       "desc": "A comfortable chair positioned opposite the bench",
+       "dir": "n"
+      }
+     },
+     "size": "small"
+    },
+    "private_session_room": {
+     "name": "Private Session Room",
+     "desc": "A softly lit chamber with a wide, low bed draped in dark silk sheets, a small side table holding oils and towels, and a single cushioned chair near the door. The air carries a faint scent of warmed amber and clean linen.",
+     "adjacent": [
+      {
+       "to": "reception_room",
+       "barrier": "open_door",
+       "distance": 0,
+       "dir": "w",
+       "name": "session door"
+      }
+     ],
+     "notes": "generated because no candidate described this room",
+     "anchors": {
+      "1ffe2040daf54ae9": {
+       "desc": "A wide, low bed draped in dark silk sheets",
+       "dir": "e"
+      },
+      "side_table": {
+       "desc": "A small side table holding oils and towels",
+       "dir": "n"
+      },
+      "cushioned_chair": {
+       "desc": "A single cushioned chair near the door",
+       "dir": "w"
+      }
+     },
+     "size": "small"
+    },
+    "Mirelle Sulmirath_mouth": {
+     "name": "mouth",
+     "desc": "Warm, wet space where she plays with the client",
+     "light": "dim",
+     "parent_entity": "Mirelle Sulmirath",
+     "adjacent": [
+      {
+       "to": "Mirelle Sulmirath_throat",
+       "barrier": "membrane"
+      },
+      {
+       "to": "private_session_room",
+       "barrier": "membrane",
+       "distance": "near"
+      }
+     ],
+     "dock_exit": true
+    },
+    "Mirelle Sulmirath_throat": {
+     "name": "throat",
+     "desc": "Tight passage that squeezes vigorously, providing an intense muscular massage",
+     "light": "dark",
+     "parent_entity": "Mirelle Sulmirath",
+     "adjacent": [
+      {
+       "to": "Mirelle Sulmirath_mouth",
+       "barrier": "membrane"
+      },
+      {
+       "to": "Mirelle Sulmirath_stomach",
+       "barrier": "membrane"
+      }
+     ],
+     "transit_seconds": 5.0
+    },
+    "Mirelle Sulmirath_stomach": {
+     "name": "stomach",
+     "desc": "Scented with lavender and relaxing herbs, the walls constantly knead and squeeze it's occupant kneading weakened acid all over them that digests dead skin",
+     "light": "dark",
+     "parent_entity": "Mirelle Sulmirath",
+     "adjacent": [
+      {
+       "to": "Mirelle Sulmirath_throat",
+       "barrier": "membrane"
+      },
+      {
+       "to": "Mirelle Sulmirath_small_intestine",
+       "barrier": "membrane"
+      }
+     ]
+    },
+    "Mirelle Sulmirath_small_intestine": {
+     "name": "small_intestine",
+     "desc": "Incredibly tight space where the client is squeezed and massaged for hours, dragged ever deeper; a faint clean musk is present",
+     "light": "dark",
+     "parent_entity": "Mirelle Sulmirath",
+     "adjacent": [
+      {
+       "to": "Mirelle Sulmirath_stomach",
+       "barrier": "membrane"
+      },
+      {
+       "to": "Mirelle Sulmirath_large_intestine",
+       "barrier": "membrane"
+      }
+     ],
+     "transit_seconds": 7200.0
+    },
+    "Mirelle Sulmirath_large_intestine": {
+     "name": "large_intestine",
+     "desc": "Slightly less tight than the small intestine, kept clean and scented with oils",
+     "light": "dark",
+     "parent_entity": "Mirelle Sulmirath",
+     "adjacent": [
+      {
+       "to": "Mirelle Sulmirath_small_intestine",
+       "barrier": "membrane"
+      },
+      {
+       "to": "Mirelle Sulmirath_rectum",
+       "barrier": "membrane"
+      }
+     ],
+     "transit_seconds": 3600.0
+    },
+    "Mirelle Sulmirath_rectum": {
+     "name": "rectum",
+     "desc": "Clean space where the client is briefly held before powerful muscles push them out",
+     "light": "dark",
+     "parent_entity": "Mirelle Sulmirath",
+     "adjacent": [
+      {
+       "to": "Mirelle Sulmirath_large_intestine",
+       "barrier": "membrane"
+      }
+     ]
+    }
+   },
+   "positions": {
+    "Mirelle Sulmirath": "private_session_room",
+    "Hinami": "Mirelle Sulmirath_mouth",
+    "95feb3a8521549fd": "private_session_room",
+    "1160e5d39da74250": "private_session_room",
+    "79315c09b4b9481c": "private_session_room",
+    "3e466060a20d4407": "private_session_room",
+    "a8d944d5f0a1411c": "private_session_room",
+    "4423e9ee4cb74183": "private_session_room",
+    "5ccc264c6a7c4fa0": "private_session_room",
+    "c84074bf5f1741b5": "private_session_room",
+    "1ffe2040daf54ae9": "private_session_room",
+    "9303331879aa42f7": "private_session_room"
+   },
+   "poses": {
+    "Hinami": {
+     "posture": "prone",
+     "support": "",
+     "relative_to": "",
+     "relation": "",
+     "constraint": "",
+     "detail": "lying prone with entire front and back coated in saliva, six tails straightened and fluffed out, pressed warm and firm into the palate"
+    },
+    "Mirelle Sulmirath": {
+     "posture": "sitting",
+     "support": "1ffe2040daf54ae9",
+     "relative_to": "",
+     "relation": "",
+     "constraint": "",
+     "detail": ""
+    }
+   },
+   "contacts": [
+    {
+     "actor": "Hinami",
+     "actor_part": "body",
+     "target": "Mirelle Sulmirath",
+     "target_part": "tongue",
+     "target_interior": "mouth",
+     "manner": "curl",
+     "relation": "interior",
+     "motion": "settled",
+     "detail": "warm and firm into the palate",
+     "unasserted": 0,
+     "contact_id": "contact:9542111ec10e1d3b912d"
+    },
+    {
+     "actor": "Hinami",
+     "actor_part": "body",
+     "target": "Mirelle Sulmirath",
+     "target_part": "palate",
+     "target_interior": "mouth",
+     "manner": "roll",
+     "relation": "interior",
+     "motion": "moving",
+     "detail": "slowly across ridges in deep unhurried strokes at honest pressure",
+     "unasserted": 0,
+     "contact_id": "contact:562d52d29a2f1980528a"
+    }
+   ],
+   "contact_actions": [],
+   "attire": {
+    "Hinami": {
+     "wearing": [],
+     "state": [
+      "bare at the torso, arms, waist, groin, legs, feet"
+     ],
+     "regions": {
+      "torso": {
+       "garments": [],
+       "beneath": "Soft, tanned skin across the chest and stomach. Small, perky breasts with light brown nipples, slightly upturned. Her stomach is smooth and soft, not toned—a comfortable, lived-in softness. Faint tan lines trace the tank top's neckline and shoulder straps. A few faded scrape scars dot her ribs from travel.",
+       "beneath_zones": {
+        "chest": "Soft, tanned skin across the chest. Small, perky breasts with light brown nipples, slightly upturned. Faint tan lines trace the tank top's neckline and shoulder straps.",
+        "midriff": "Her stomach is smooth and soft, not toned—a comfortable, lived-in softness. A few faded scrape scars dot her ribs from travel."
+       },
+       "uncovered": true
+      },
+      "waist": {
+       "garments": [],
+       "beneath": "Skin at the waist is softer and paler than sun-exposed areas, the tan fading where the sash sits. A slight softness rounds her lower belly. Hip bones visible beneath warm skin, not sharp but defined.",
+       "uncovered": true
+      },
+      "groin": {
+       "garments": [],
+       "beneath": "A neat patch of copper-gold curls above her vulva, kept trimmed. Outer labia full and soft, slightly darker than her tanned skin. Inner folds pink and smooth, tucked within. The skin between her thighs is warm and sensitive, carrying a faint musk of travel and warm body.",
+       "uncovered": true
+      },
+      "feet": {
+       "garments": [],
+       "beneath": "Bare feet, tanned and calloused at heels and balls from years in sandals. Toes nimble, gripping the ground easily. Soles rough but not cracked, hardened by travel.",
+       "uncovered": true
+      },
+      "arms": {
+       "garments": [],
+       "beneath": "Slim, warm arms with gentle definition from years on the road. Inner arms smooth and paler; forearms tanned and slightly rough from sun and wind. Fingers nimble with light calluses at the tips from sketching. Fine, barely visible copper-gold hair along her forearms.",
+       "uncovered": true
+      },
+      "legs": {
+       "garments": [],
+       "beneath": "Soft, slightly thick thighs tapering to slim calves. Skin tanned and warm, with faded scrapes and old insect bites from outdoor travel. Barely visible copper-gold hair on her shins. Inner thighs paler and softer, with slight chafing redness at the very top from long walks.",
+       "uncovered": true
+      }
+     }
+    },
+    "Mirelle Sulmirath": {
+     "wearing": [],
+     "state": [
+      "bare at the torso, arms, hands, groin, legs, feet",
+      "loosened"
+     ],
+     "regions": {
+      "torso": {
+       "garments": [],
+       "beneath": "",
+       "beneath_zones": {
+        "chest": "Full, heavy breasts that settle softly once the chemise is drawn away; nipples a deeper bronze, soft and slightly raised from the cool air; skin smooth and meticulously maintained, carrying the same faint shimmer as the rest of her; fine stretch marks trace the outer curve where her breasts are fullest; her sternum and the gentle ridge of her collarbones show between her breasts",
+        "midriff": "A narrow, soft waist — not muscular but toned enough to show the gentle curve of her ribs above her hips; skin warm and smooth with the same bronze shimmer; her navel is small and shallow; the skin here radiates a gentle warmth from her supernatural metabolism"
+       },
+       "uncovered": true
+      },
+      "groin": {
+       "garments": [],
+       "beneath": "Smooth, bare bronze skin beneath the silk — meticulously maintained as befits her profession; warm to the touch from her supernatural metabolism; her vulva is soft and bare, the same warm bronze as the rest of her body but with soft pink lips and interior",
+       "uncovered": true
+      },
+      "arms": {
+       "garments": [],
+       "beneath": "Bronze skin, soft and warm with the same faint shimmer; her forearms are smooth, the undersides of her wrists showing faint blue veins beneath the bronze;",
+       "uncovered": true
+      },
+      "hands": {
+       "garments": [],
+       "beneath": "her hands are long-fingered and elegant with nails trimmed short and neat for massage work — a professional's hands, sensitive and deliberately cared for"
+      },
+      "legs": {
+       "garments": [],
+       "beneath": "Long, shapely legs with smooth bronze skin and the same faint shimmer; the upper thighs are soft and full where the robe's hem falls, tapering to toned calves;",
+       "uncovered": true
+      },
+      "feet": {
+       "garments": [],
+       "beneath": "her feet are bare with short neat nails"
+      }
+     }
+    }
+   },
+   "entities": {
+    "95feb3a8521549fd": {
+     "name": "lightweight travel jacket",
+     "kind": "object",
+     "description": "lightweight travel jacket, taken off",
+     "aliases": [
+      "lightweight travel jacket"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Hinami",
+      "shed": true
+     }
+    },
+    "1160e5d39da74250": {
+     "name": "fitted tank top",
+     "kind": "object",
+     "description": "fitted tank top, taken off",
+     "aliases": [
+      "fitted tank top"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Hinami",
+      "shed": true
+     }
+    },
+    "79315c09b4b9481c": {
+     "name": "utility sash with pouches",
+     "kind": "object",
+     "description": "utility sash with pouches, taken off",
+     "aliases": [
+      "utility sash with pouches"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Hinami",
+      "shed": true
+     }
+    },
+    "3e466060a20d4407": {
+     "name": "travel shorts",
+     "kind": "object",
+     "description": "travel shorts, taken off",
+     "aliases": [
+      "travel shorts"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Hinami",
+      "shed": true
+     }
+    },
+    "a8d944d5f0a1411c": {
+     "name": "sturdy sandals",
+     "kind": "object",
+     "description": "sturdy sandals, taken off",
+     "aliases": [
+      "sturdy sandals"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Hinami",
+      "shed": true
+     }
+    },
+    "4423e9ee4cb74183": {
+     "name": "plum silk wrap robe",
+     "kind": "object",
+     "description": "plum silk wrap robe, taken off",
+     "aliases": [
+      "plum silk wrap robe"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Mirelle Sulmirath",
+      "shed": true
+     }
+    },
+    "5ccc264c6a7c4fa0": {
+     "name": "black silk chemise",
+     "kind": "object",
+     "description": "",
+     "aliases": [
+      "black silk chemise"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Mirelle Sulmirath",
+      "shed": true
+     },
+     "ubiquitous": false
+    },
+    "c84074bf5f1741b5": {
+     "name": "silk panties",
+     "kind": "object",
+     "description": "",
+     "aliases": [
+      "silk panties"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": null,
+      "shed": true,
+      "location": "floor",
+      "pooled_at": "Mirelle Sulmirath's feet"
+     },
+     "ubiquitous": false
+    },
+    "1ffe2040daf54ae9": {
+     "name": "wide bed",
+     "kind": "furniture",
+     "description": "",
+     "aliases": [
+      "bed"
+     ],
+     "portable": false,
+     "container": true,
+     "interior_rooms": [
+      "bed_surface"
+     ],
+     "state": {
+      "enclosure": "membrane"
+     },
+     "ubiquitous": false,
+     "enclosure": "membrane"
+    },
+    "9303331879aa42f7": {
+     "name": "feather hair clip",
+     "kind": "object",
+     "description": "feather hair clip, taken off — slightly askew",
+     "aliases": [
+      "feather hair clip"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Hinami",
+      "shed": true,
+      "condition": "slightly askew"
+     }
+    },
+    "Hinami": {
+     "name": "Hinami",
+     "kind": "person",
+     "description": "",
+     "aliases": [],
+     "portable": false,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "aroused": true,
+      "blushing": true,
+      "breathing_heavily": true
+     },
+     "ubiquitous": false,
+     "scent": "arousal"
+    },
+    "Mirelle Sulmirath": {
+     "name": "Mirelle Sulmirath",
+     "kind": "person",
+     "description": "",
+     "aliases": [],
+     "portable": false,
+     "container": false,
+     "interior_rooms": [
+      "Mirelle Sulmirath_mouth",
+      "Mirelle Sulmirath_throat",
+      "Mirelle Sulmirath_stomach",
+      "Mirelle Sulmirath_small_intestine",
+      "Mirelle Sulmirath_large_intestine",
+      "Mirelle Sulmirath_rectum"
+     ],
+     "state": {
+      "tail_coiled_tight": true,
+      "wings_straining": true,
+      "tail_coiled_loose": true,
+      "wings_folded": true
+     },
+     "ubiquitous": false,
+     "interior_spec": [
+      {
+       "name": "mouth",
+       "desc": "Warm, wet space where she plays with the client",
+       "light": "dim",
+       "barrier": ""
+      },
+      {
+       "name": "throat",
+       "desc": "Tight passage that squeezes vigorously, providing an intense muscular massage",
+       "light": "dark",
+       "barrier": "membrane",
+       "transit_seconds": 5.0
+      },
+      {
+       "name": "stomach",
+       "desc": "Scented with lavender and relaxing herbs, the walls constantly knead and squeeze it's occupant kneading weakened acid all over them that digests dead skin",
+       "light": "dark",
+       "barrier": "membrane"
+      },
+      {
+       "name": "small_intestine",
+       "desc": "Incredibly tight space where the client is squeezed and massaged for hours, dragged ever deeper; a faint clean musk is present",
+       "light": "dark",
+       "barrier": "membrane",
+       "transit_seconds": 7200.0
+      },
+      {
+       "name": "large_intestine",
+       "desc": "Slightly less tight than the small intestine, kept clean and scented with oils",
+       "light": "dark",
+       "barrier": "membrane",
+       "transit_seconds": 3600.0
+      },
+      {
+       "name": "rectum",
+       "desc": "Clean space where the client is briefly held before powerful muscles push them out",
+       "light": "dark",
+       "barrier": "membrane"
+      }
+     ],
+     "enclosure": "membrane"
+    }
+   },
+   "substances": [
+    {
+     "source": "Hinami",
+     "source_part": "between the legs",
+     "substance": "arousal fluids",
+     "target": "Hinami",
+     "placement": "surface",
+     "target_interior": "",
+     "target_part": "",
+     "amount": "noticeable dampness",
+     "amount_band": "",
+     "detail": "scent of arousal becoming noticeable in the air",
+     "scent": "arousal",
+     "speech_impediment": "",
+     "substance_id": "substance:5802b889a334f3e7a41d"
+    },
+    {
+     "source": "Mirelle Sulmirath",
+     "source_part": "tongue",
+     "substance": "saliva",
+     "target": "Hinami",
+     "placement": "surface",
+     "target_interior": "",
+     "target_part": "inner_thigh",
+     "amount": "wet trail",
+     "amount_band": "",
+     "detail": "slow slick line along crease",
+     "scent": "arousal",
+     "speech_impediment": "",
+     "substance_id": "substance:b2d7a3282b079dde492a"
+    },
+    {
+     "source": "Mirelle Sulmirath",
+     "source_part": "mouth",
+     "substance": "warm air",
+     "target": "Hinami",
+     "placement": "surface",
+     "target_interior": "",
+     "target_part": "body",
+     "amount": "wash",
+     "amount_band": "",
+     "detail": "",
+     "scent": "",
+     "speech_impediment": "",
+     "substance_id": "substance:eccd0a2bbbd7f33cdfd3"
+    },
+    {
+     "source": "Mirelle Sulmirath",
+     "source_part": "tongue",
+     "substance": "saliva",
+     "target": "Hinami",
+     "placement": "surface",
+     "target_interior": "",
+     "target_part": "front",
+     "amount": "coated",
+     "amount_band": "",
+     "detail": "",
+     "scent": "arousal",
+     "speech_impediment": "",
+     "substance_id": "substance:13e6900a33ad92b1578b"
+    },
+    {
+     "source": "Mirelle Sulmirath",
+     "source_part": "tongue",
+     "substance": "saliva",
+     "target": "Hinami",
+     "placement": "surface",
+     "target_interior": "",
+     "target_part": "back",
+     "amount": "wet trail",
+     "amount_band": "",
+     "detail": "",
+     "scent": "arousal",
+     "speech_impediment": "",
+     "substance_id": "substance:89c3665b15dfdc79c34a"
+    },
+    {
+     "source": "Mirelle Sulmirath",
+     "source_part": "mouth",
+     "substance": "saliva",
+     "target": "Hinami",
+     "placement": "surface",
+     "target_interior": "",
+     "target_part": "",
+     "amount": "",
+     "amount_band": "",
+     "detail": "the rolling savoring coats the tiny fox's front and back in fresh warm saliva as the tongue works her",
+     "scent": "",
+     "speech_impediment": "",
+     "substance_id": "substance:6e7cbcb63be77f611faa"
+    }
+   ],
+   "contained": {},
+   "scales": {},
+   "stations": {
+    "Mirelle Sulmirath": {
+     "at": "1ffe2040daf54ae9",
+     "near": []
+    },
+    "Hinami": {
+     "at": null,
+     "near": []
+    }
+   }
+  }
+ },
+ {
+  "turn": 60,
+  "input": "You look down watching the darkness. \"A-ah I'm about to be swallowed.\"",
+  "scene": {
+   "rooms": {
+    "reception_room": {
+     "name": "Reception Room",
+     "desc": "The reception room smells of sandalwood and something warmer beneath it — amber, maybe, or honey left too long in the sun. Soft lamplight catches the rich fabrics draped across low furniture, and somewhere out of sight, a small fountain murmurs its quiet rhythm.",
+     "adjacent": [],
+     "notes": "Private reception space for Mirelle's practice",
+     "light": "soft lamplight",
+     "exposure": "enclosed",
+     "anchors": {
+      "cushioned_bench": {
+       "desc": "A low, cushioned bench draped in rich fabrics",
+       "dir": "s"
+      },
+      "comfortable_chair": {
+       "desc": "A comfortable chair positioned opposite the bench",
+       "dir": "n"
+      }
+     },
+     "size": "small"
+    },
+    "private_session_room": {
+     "name": "Private Session Room",
+     "desc": "A softly lit chamber with a wide, low bed draped in dark silk sheets, a small side table holding oils and towels, and a single cushioned chair near the door. The air carries a faint scent of warmed amber and clean linen.",
+     "adjacent": [
+      {
+       "to": "reception_room",
+       "barrier": "open_door",
+       "distance": 0,
+       "dir": "w",
+       "name": "session door"
+      }
+     ],
+     "notes": "generated because no candidate described this room",
+     "anchors": {
+      "1ffe2040daf54ae9": {
+       "desc": "A wide, low bed draped in dark silk sheets",
+       "dir": "e"
+      },
+      "side_table": {
+       "desc": "A small side table holding oils and towels",
+       "dir": "n"
+      },
+      "cushioned_chair": {
+       "desc": "A single cushioned chair near the door",
+       "dir": "w"
+      }
+     },
+     "size": "small"
+    },
+    "Mirelle Sulmirath_mouth": {
+     "name": "mouth",
+     "desc": "Warm, wet space where she plays with the client",
+     "light": "dim",
+     "parent_entity": "Mirelle Sulmirath",
+     "adjacent": [
+      {
+       "to": "Mirelle Sulmirath_throat",
+       "barrier": "membrane"
+      },
+      {
+       "to": "private_session_room",
+       "barrier": "membrane",
+       "distance": "near"
+      }
+     ],
+     "dock_exit": true
+    },
+    "Mirelle Sulmirath_throat": {
+     "name": "throat",
+     "desc": "Tight passage that squeezes vigorously, providing an intense muscular massage",
+     "light": "dark",
+     "parent_entity": "Mirelle Sulmirath",
+     "adjacent": [
+      {
+       "to": "Mirelle Sulmirath_mouth",
+       "barrier": "membrane"
+      },
+      {
+       "to": "Mirelle Sulmirath_stomach",
+       "barrier": "membrane"
+      }
+     ],
+     "transit_seconds": 5.0
+    },
+    "Mirelle Sulmirath_stomach": {
+     "name": "stomach",
+     "desc": "Scented with lavender and relaxing herbs, the walls constantly knead and squeeze it's occupant kneading weakened acid all over them that digests dead skin",
+     "light": "dark",
+     "parent_entity": "Mirelle Sulmirath",
+     "adjacent": [
+      {
+       "to": "Mirelle Sulmirath_throat",
+       "barrier": "membrane"
+      },
+      {
+       "to": "Mirelle Sulmirath_small_intestine",
+       "barrier": "membrane"
+      }
+     ]
+    },
+    "Mirelle Sulmirath_small_intestine": {
+     "name": "small_intestine",
+     "desc": "Incredibly tight space where the client is squeezed and massaged for hours, dragged ever deeper; a faint clean musk is present",
+     "light": "dark",
+     "parent_entity": "Mirelle Sulmirath",
+     "adjacent": [
+      {
+       "to": "Mirelle Sulmirath_stomach",
+       "barrier": "membrane"
+      },
+      {
+       "to": "Mirelle Sulmirath_large_intestine",
+       "barrier": "membrane"
+      }
+     ],
+     "transit_seconds": 7200.0
+    },
+    "Mirelle Sulmirath_large_intestine": {
+     "name": "large_intestine",
+     "desc": "Slightly less tight than the small intestine, kept clean and scented with oils",
+     "light": "dark",
+     "parent_entity": "Mirelle Sulmirath",
+     "adjacent": [
+      {
+       "to": "Mirelle Sulmirath_small_intestine",
+       "barrier": "membrane"
+      },
+      {
+       "to": "Mirelle Sulmirath_rectum",
+       "barrier": "membrane"
+      }
+     ],
+     "transit_seconds": 3600.0
+    },
+    "Mirelle Sulmirath_rectum": {
+     "name": "rectum",
+     "desc": "Clean space where the client is briefly held before powerful muscles push them out",
+     "light": "dark",
+     "parent_entity": "Mirelle Sulmirath",
+     "adjacent": [
+      {
+       "to": "Mirelle Sulmirath_large_intestine",
+       "barrier": "membrane"
+      }
+     ]
+    }
+   },
+   "positions": {
+    "Mirelle Sulmirath": "private_session_room",
+    "Hinami": "Mirelle Sulmirath_mouth",
+    "95feb3a8521549fd": "private_session_room",
+    "1160e5d39da74250": "private_session_room",
+    "79315c09b4b9481c": "private_session_room",
+    "3e466060a20d4407": "private_session_room",
+    "a8d944d5f0a1411c": "private_session_room",
+    "4423e9ee4cb74183": "private_session_room",
+    "5ccc264c6a7c4fa0": "private_session_room",
+    "c84074bf5f1741b5": "private_session_room",
+    "1ffe2040daf54ae9": "private_session_room",
+    "9303331879aa42f7": "private_session_room"
+   },
+   "poses": {
+    "Hinami": {
+     "posture": "prone",
+     "support": "",
+     "relative_to": "",
+     "relation": "",
+     "constraint": "",
+     "detail": "drawn to the rear of the mouth, pressed past the ridge of the palate against the soft muscular edge where the throat begins, held at the threshold of the swallow; saliva-slick, warmth deepening around her, feeling the first faint pull of th"
+    },
+    "Mirelle Sulmirath": {
+     "posture": "sitting",
+     "support": "1ffe2040daf54ae9",
+     "relative_to": "",
+     "relation": "",
+     "constraint": "",
+     "detail": "tongue curled around the little fox, holding her at the back of the mouth, savoring the moment"
+    }
+   },
+   "contacts": [
+    {
+     "actor": "Hinami",
+     "actor_part": "body",
+     "target": "Mirelle Sulmirath",
+     "target_part": "tongue",
+     "target_interior": "mouth",
+     "manner": "wrap",
+     "relation": "interior",
+     "motion": "settled",
+     "detail": "curled around the little fox, holding her in a long deliberate press at the rear",
+     "unasserted": 0,
+     "contact_id": "contact:9542111ec10e1d3b912d"
+    }
+   ],
+   "contact_actions": [],
+   "attire": {
+    "Hinami": {
+     "wearing": [],
+     "state": [
+      "bare at the torso, arms, waist, groin, legs, feet"
+     ],
+     "regions": {
+      "torso": {
+       "garments": [],
+       "beneath": "Soft, tanned skin across the chest and stomach. Small, perky breasts with light brown nipples, slightly upturned. Her stomach is smooth and soft, not toned—a comfortable, lived-in softness. Faint tan lines trace the tank top's neckline and shoulder straps. A few faded scrape scars dot her ribs from travel.",
+       "beneath_zones": {
+        "chest": "Soft, tanned skin across the chest. Small, perky breasts with light brown nipples, slightly upturned. Faint tan lines trace the tank top's neckline and shoulder straps.",
+        "midriff": "Her stomach is smooth and soft, not toned—a comfortable, lived-in softness. A few faded scrape scars dot her ribs from travel."
+       },
+       "uncovered": true
+      },
+      "waist": {
+       "garments": [],
+       "beneath": "Skin at the waist is softer and paler than sun-exposed areas, the tan fading where the sash sits. A slight softness rounds her lower belly. Hip bones visible beneath warm skin, not sharp but defined.",
+       "uncovered": true
+      },
+      "groin": {
+       "garments": [],
+       "beneath": "A neat patch of copper-gold curls above her vulva, kept trimmed. Outer labia full and soft, slightly darker than her tanned skin. Inner folds pink and smooth, tucked within. The skin between her thighs is warm and sensitive, carrying a faint musk of travel and warm body.",
+       "uncovered": true
+      },
+      "feet": {
+       "garments": [],
+       "beneath": "Bare feet, tanned and calloused at heels and balls from years in sandals. Toes nimble, gripping the ground easily. Soles rough but not cracked, hardened by travel.",
+       "uncovered": true
+      },
+      "arms": {
+       "garments": [],
+       "beneath": "Slim, warm arms with gentle definition from years on the road. Inner arms smooth and paler; forearms tanned and slightly rough from sun and wind. Fingers nimble with light calluses at the tips from sketching. Fine, barely visible copper-gold hair along her forearms.",
+       "uncovered": true
+      },
+      "legs": {
+       "garments": [],
+       "beneath": "Soft, slightly thick thighs tapering to slim calves. Skin tanned and warm, with faded scrapes and old insect bites from outdoor travel. Barely visible copper-gold hair on her shins. Inner thighs paler and softer, with slight chafing redness at the very top from long walks.",
+       "uncovered": true
+      }
+     }
+    },
+    "Mirelle Sulmirath": {
+     "wearing": [],
+     "state": [
+      "bare at the torso, arms, hands, groin, legs, feet",
+      "loosened"
+     ],
+     "regions": {
+      "torso": {
+       "garments": [],
+       "beneath": "",
+       "beneath_zones": {
+        "chest": "Full, heavy breasts that settle softly once the chemise is drawn away; nipples a deeper bronze, soft and slightly raised from the cool air; skin smooth and meticulously maintained, carrying the same faint shimmer as the rest of her; fine stretch marks trace the outer curve where her breasts are fullest; her sternum and the gentle ridge of her collarbones show between her breasts",
+        "midriff": "A narrow, soft waist — not muscular but toned enough to show the gentle curve of her ribs above her hips; skin warm and smooth with the same bronze shimmer; her navel is small and shallow; the skin here radiates a gentle warmth from her supernatural metabolism"
+       },
+       "uncovered": true
+      },
+      "groin": {
+       "garments": [],
+       "beneath": "Smooth, bare bronze skin beneath the silk — meticulously maintained as befits her profession; warm to the touch from her supernatural metabolism; her vulva is soft and bare, the same warm bronze as the rest of her body but with soft pink lips and interior",
+       "uncovered": true
+      },
+      "arms": {
+       "garments": [],
+       "beneath": "Bronze skin, soft and warm with the same faint shimmer; her forearms are smooth, the undersides of her wrists showing faint blue veins beneath the bronze;",
+       "uncovered": true
+      },
+      "hands": {
+       "garments": [],
+       "beneath": "her hands are long-fingered and elegant with nails trimmed short and neat for massage work — a professional's hands, sensitive and deliberately cared for"
+      },
+      "legs": {
+       "garments": [],
+       "beneath": "Long, shapely legs with smooth bronze skin and the same faint shimmer; the upper thighs are soft and full where the robe's hem falls, tapering to toned calves;",
+       "uncovered": true
+      },
+      "feet": {
+       "garments": [],
+       "beneath": "her feet are bare with short neat nails"
+      }
+     }
+    }
+   },
+   "entities": {
+    "95feb3a8521549fd": {
+     "name": "lightweight travel jacket",
+     "kind": "object",
+     "description": "lightweight travel jacket, taken off",
+     "aliases": [
+      "lightweight travel jacket"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Hinami",
+      "shed": true
+     }
+    },
+    "1160e5d39da74250": {
+     "name": "fitted tank top",
+     "kind": "object",
+     "description": "fitted tank top, taken off",
+     "aliases": [
+      "fitted tank top"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Hinami",
+      "shed": true
+     }
+    },
+    "79315c09b4b9481c": {
+     "name": "utility sash with pouches",
+     "kind": "object",
+     "description": "utility sash with pouches, taken off",
+     "aliases": [
+      "utility sash with pouches"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Hinami",
+      "shed": true
+     }
+    },
+    "3e466060a20d4407": {
+     "name": "travel shorts",
+     "kind": "object",
+     "description": "travel shorts, taken off",
+     "aliases": [
+      "travel shorts"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Hinami",
+      "shed": true
+     }
+    },
+    "a8d944d5f0a1411c": {
+     "name": "sturdy sandals",
+     "kind": "object",
+     "description": "sturdy sandals, taken off",
+     "aliases": [
+      "sturdy sandals"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Hinami",
+      "shed": true
+     }
+    },
+    "4423e9ee4cb74183": {
+     "name": "plum silk wrap robe",
+     "kind": "object",
+     "description": "plum silk wrap robe, taken off",
+     "aliases": [
+      "plum silk wrap robe"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Mirelle Sulmirath",
+      "shed": true
+     }
+    },
+    "5ccc264c6a7c4fa0": {
+     "name": "black silk chemise",
+     "kind": "object",
+     "description": "",
+     "aliases": [
+      "black silk chemise"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Mirelle Sulmirath",
+      "shed": true
+     },
+     "ubiquitous": false
+    },
+    "c84074bf5f1741b5": {
+     "name": "silk panties",
+     "kind": "object",
+     "description": "",
+     "aliases": [
+      "silk panties"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": null,
+      "shed": true,
+      "location": "floor",
+      "pooled_at": "Mirelle Sulmirath's feet"
+     },
+     "ubiquitous": false
+    },
+    "1ffe2040daf54ae9": {
+     "name": "wide bed",
+     "kind": "furniture",
+     "description": "",
+     "aliases": [
+      "bed"
+     ],
+     "portable": false,
+     "container": true,
+     "interior_rooms": [
+      "bed_surface"
+     ],
+     "state": {
+      "enclosure": "membrane"
+     },
+     "ubiquitous": false,
+     "enclosure": "membrane"
+    },
+    "9303331879aa42f7": {
+     "name": "feather hair clip",
+     "kind": "object",
+     "description": "feather hair clip, taken off — slightly askew",
+     "aliases": [
+      "feather hair clip"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Hinami",
+      "shed": true,
+      "condition": "slightly askew"
+     }
+    },
+    "Hinami": {
+     "name": "Hinami",
+     "kind": "person",
+     "description": "",
+     "aliases": [],
+     "portable": false,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "aroused": true,
+      "blushing": true,
+      "breathing_heavily": true
+     },
+     "ubiquitous": false,
+     "scent": "arousal"
+    },
+    "Mirelle Sulmirath": {
+     "name": "Mirelle Sulmirath",
+     "kind": "person",
+     "description": "",
+     "aliases": [],
+     "portable": false,
+     "container": false,
+     "interior_rooms": [
+      "Mirelle Sulmirath_mouth",
+      "Mirelle Sulmirath_throat",
+      "Mirelle Sulmirath_stomach",
+      "Mirelle Sulmirath_small_intestine",
+      "Mirelle Sulmirath_large_intestine",
+      "Mirelle Sulmirath_rectum"
+     ],
+     "state": {
+      "tail_coiled_tight": true,
+      "wings_straining": true,
+      "tail_coiled_loose": true,
+      "wings_folded": true
+     },
+     "ubiquitous": false,
+     "interior_spec": [
+      {
+       "name": "mouth",
+       "desc": "Warm, wet space where she plays with the client",
+       "light": "dim",
+       "barrier": ""
+      },
+      {
+       "name": "throat",
+       "desc": "Tight passage that squeezes vigorously, providing an intense muscular massage",
+       "light": "dark",
+       "barrier": "membrane",
+       "transit_seconds": 5.0
+      },
+      {
+       "name": "stomach",
+       "desc": "Scented with lavender and relaxing herbs, the walls constantly knead and squeeze it's occupant kneading weakened acid all over them that digests dead skin",
+       "light": "dark",
+       "barrier": "membrane"
+      },
+      {
+       "name": "small_intestine",
+       "desc": "Incredibly tight space where the client is squeezed and massaged for hours, dragged ever deeper; a faint clean musk is present",
+       "light": "dark",
+       "barrier": "membrane",
+       "transit_seconds": 7200.0
+      },
+      {
+       "name": "large_intestine",
+       "desc": "Slightly less tight than the small intestine, kept clean and scented with oils",
+       "light": "dark",
+       "barrier": "membrane",
+       "transit_seconds": 3600.0
+      },
+      {
+       "name": "rectum",
+       "desc": "Clean space where the client is briefly held before powerful muscles push them out",
+       "light": "dark",
+       "barrier": "membrane"
+      }
+     ],
+     "enclosure": "membrane"
+    }
+   },
+   "substances": [
+    {
+     "source": "Hinami",
+     "source_part": "between the legs",
+     "substance": "arousal fluids",
+     "target": "Hinami",
+     "placement": "surface",
+     "target_interior": "",
+     "target_part": "",
+     "amount": "noticeable dampness",
+     "amount_band": "",
+     "detail": "scent of arousal becoming noticeable in the air",
+     "scent": "arousal",
+     "speech_impediment": "",
+     "substance_id": "substance:5802b889a334f3e7a41d"
+    },
+    {
+     "source": "Mirelle Sulmirath",
+     "source_part": "tongue",
+     "substance": "saliva",
+     "target": "Hinami",
+     "placement": "surface",
+     "target_interior": "",
+     "target_part": "inner_thigh",
+     "amount": "wet trail",
+     "amount_band": "",
+     "detail": "slow slick line along crease",
+     "scent": "arousal",
+     "speech_impediment": "",
+     "substance_id": "substance:b2d7a3282b079dde492a"
+    },
+    {
+     "source": "Mirelle Sulmirath",
+     "source_part": "mouth",
+     "substance": "warm air",
+     "target": "Hinami",
+     "placement": "surface",
+     "target_interior": "",
+     "target_part": "body",
+     "amount": "wash",
+     "amount_band": "",
+     "detail": "",
+     "scent": "",
+     "speech_impediment": "",
+     "substance_id": "substance:eccd0a2bbbd7f33cdfd3"
+    },
+    {
+     "source": "Mirelle Sulmirath",
+     "source_part": "tongue",
+     "substance": "saliva",
+     "target": "Hinami",
+     "placement": "surface",
+     "target_interior": "",
+     "target_part": "front",
+     "amount": "coated",
+     "amount_band": "",
+     "detail": "",
+     "scent": "arousal",
+     "speech_impediment": "",
+     "substance_id": "substance:13e6900a33ad92b1578b"
+    },
+    {
+     "source": "Mirelle Sulmirath",
+     "source_part": "tongue",
+     "substance": "saliva",
+     "target": "Hinami",
+     "placement": "surface",
+     "target_interior": "",
+     "target_part": "back",
+     "amount": "wet trail",
+     "amount_band": "",
+     "detail": "",
+     "scent": "arousal",
+     "speech_impediment": "",
+     "substance_id": "substance:89c3665b15dfdc79c34a"
+    },
+    {
+     "source": "Mirelle Sulmirath",
+     "source_part": "mouth",
+     "substance": "saliva",
+     "target": "Hinami",
+     "placement": "surface",
+     "target_interior": "",
+     "target_part": "",
+     "amount": "",
+     "amount_band": "",
+     "detail": "the rolling savoring coats the tiny fox's front and back in fresh warm saliva as the tongue works her",
+     "scent": "",
+     "speech_impediment": "",
+     "substance_id": "substance:6e7cbcb63be77f611faa"
+    }
+   ],
+   "contained": {},
+   "scales": {},
+   "stations": {
+    "Mirelle Sulmirath": {
+     "at": "1ffe2040daf54ae9",
+     "near": []
+    },
+    "Hinami": {
+     "at": null,
+     "near": []
+    }
+   }
+  }
+ },
+ {
+  "turn": 61,
+  "input": "You squirm a bit to little effect before you relax again ultimately allowing yourself to be at her mercy. \"Enjoy,\" You let your self go limp hoping it makes it ",
+  "scene": {
+   "rooms": {
+    "reception_room": {
+     "name": "Reception Room",
+     "desc": "The reception room smells of sandalwood and something warmer beneath it — amber, maybe, or honey left too long in the sun. Soft lamplight catches the rich fabrics draped across low furniture, and somewhere out of sight, a small fountain murmurs its quiet rhythm.",
+     "adjacent": [],
+     "notes": "Private reception space for Mirelle's practice",
+     "light": "soft lamplight",
+     "exposure": "enclosed",
+     "anchors": {
+      "cushioned_bench": {
+       "desc": "A low, cushioned bench draped in rich fabrics",
+       "dir": "s"
+      },
+      "comfortable_chair": {
+       "desc": "A comfortable chair positioned opposite the bench",
+       "dir": "n"
+      }
+     },
+     "size": "small"
+    },
+    "private_session_room": {
+     "name": "Private Session Room",
+     "desc": "A softly lit chamber with a wide, low bed draped in dark silk sheets, a small side table holding oils and towels, and a single cushioned chair near the door. The air carries a faint scent of warmed amber and clean linen.",
+     "adjacent": [
+      {
+       "to": "reception_room",
+       "barrier": "open_door",
+       "distance": 0,
+       "dir": "w",
+       "name": "session door"
+      }
+     ],
+     "notes": "generated because no candidate described this room",
+     "anchors": {
+      "1ffe2040daf54ae9": {
+       "desc": "A wide, low bed draped in dark silk sheets",
+       "dir": "e"
+      },
+      "side_table": {
+       "desc": "A small side table holding oils and towels",
+       "dir": "n"
+      },
+      "cushioned_chair": {
+       "desc": "A single cushioned chair near the door",
+       "dir": "w"
+      }
+     },
+     "size": "small"
+    },
+    "Mirelle Sulmirath_mouth": {
+     "name": "mouth",
+     "desc": "Warm, wet space where she plays with the client",
+     "light": "dim",
+     "parent_entity": "Mirelle Sulmirath",
+     "adjacent": [
+      {
+       "to": "Mirelle Sulmirath_throat",
+       "barrier": "membrane"
+      },
+      {
+       "to": "private_session_room",
+       "barrier": "membrane",
+       "distance": "near"
+      }
+     ],
+     "dock_exit": true
+    },
+    "Mirelle Sulmirath_throat": {
+     "name": "throat",
+     "desc": "Tight passage that squeezes vigorously, providing an intense muscular massage",
+     "light": "dark",
+     "parent_entity": "Mirelle Sulmirath",
+     "adjacent": [
+      {
+       "to": "Mirelle Sulmirath_mouth",
+       "barrier": "membrane"
+      },
+      {
+       "to": "Mirelle Sulmirath_stomach",
+       "barrier": "membrane"
+      }
+     ],
+     "transit_seconds": 5.0
+    },
+    "Mirelle Sulmirath_stomach": {
+     "name": "stomach",
+     "desc": "Scented with lavender and relaxing herbs, the walls constantly knead and squeeze it's occupant kneading weakened acid all over them that digests dead skin",
+     "light": "dark",
+     "parent_entity": "Mirelle Sulmirath",
+     "adjacent": [
+      {
+       "to": "Mirelle Sulmirath_throat",
+       "barrier": "membrane"
+      },
+      {
+       "to": "Mirelle Sulmirath_small_intestine",
+       "barrier": "membrane"
+      }
+     ]
+    },
+    "Mirelle Sulmirath_small_intestine": {
+     "name": "small_intestine",
+     "desc": "Incredibly tight space where the client is squeezed and massaged for hours, dragged ever deeper; a faint clean musk is present",
+     "light": "dark",
+     "parent_entity": "Mirelle Sulmirath",
+     "adjacent": [
+      {
+       "to": "Mirelle Sulmirath_stomach",
+       "barrier": "membrane"
+      },
+      {
+       "to": "Mirelle Sulmirath_large_intestine",
+       "barrier": "membrane"
+      }
+     ],
+     "transit_seconds": 7200.0
+    },
+    "Mirelle Sulmirath_large_intestine": {
+     "name": "large_intestine",
+     "desc": "Slightly less tight than the small intestine, kept clean and scented with oils",
+     "light": "dark",
+     "parent_entity": "Mirelle Sulmirath",
+     "adjacent": [
+      {
+       "to": "Mirelle Sulmirath_small_intestine",
+       "barrier": "membrane"
+      },
+      {
+       "to": "Mirelle Sulmirath_rectum",
+       "barrier": "membrane"
+      }
+     ],
+     "transit_seconds": 3600.0
+    },
+    "Mirelle Sulmirath_rectum": {
+     "name": "rectum",
+     "desc": "Clean space where the client is briefly held before powerful muscles push them out",
+     "light": "dark",
+     "parent_entity": "Mirelle Sulmirath",
+     "adjacent": [
+      {
+       "to": "Mirelle Sulmirath_large_intestine",
+       "barrier": "membrane"
+      }
+     ]
+    }
+   },
+   "positions": {
+    "Mirelle Sulmirath": "private_session_room",
+    "Hinami": "Mirelle Sulmirath_mouth",
+    "95feb3a8521549fd": "private_session_room",
+    "1160e5d39da74250": "private_session_room",
+    "79315c09b4b9481c": "private_session_room",
+    "3e466060a20d4407": "private_session_room",
+    "a8d944d5f0a1411c": "private_session_room",
+    "4423e9ee4cb74183": "private_session_room",
+    "5ccc264c6a7c4fa0": "private_session_room",
+    "c84074bf5f1741b5": "private_session_room",
+    "1ffe2040daf54ae9": "private_session_room",
+    "9303331879aa42f7": "private_session_room"
+   },
+   "poses": {
+    "Mirelle Sulmirath": {
+     "posture": "sitting",
+     "support": "1ffe2040daf54ae9",
+     "relative_to": "",
+     "relation": "",
+     "constraint": "",
+     "detail": "tongue curled around the little fox, holding her at the back of the mouth, savoring the moment"
+    },
+    "Hinami": {
+     "posture": "prone",
+     "support": "",
+     "relative_to": "",
+     "relation": "",
+     "constraint": "",
+     "detail": "settles still, body loose and compliant on tongue; drawn to the rear of the mouth, pressed past the ridge of the palate against the soft muscular edge where the throat begins, held at the threshold of the swallow; saliva-slick, warmth deepe"
+    }
+   },
+   "contacts": [
+    {
+     "actor": "Hinami",
+     "actor_part": "body",
+     "target": "Mirelle Sulmirath",
+     "target_part": "tongue",
+     "target_interior": "mouth",
+     "manner": "wrap",
+     "relation": "interior",
+     "motion": "settled",
+     "detail": "curled around the little fox, holding her in a long deliberate press at the rear",
+     "unasserted": 1,
+     "contact_id": "contact:9542111ec10e1d3b912d"
+    },
+    {
+     "actor": "Hinami",
+     "actor_part": "feet",
+     "target": "Mirelle Sulmirath",
+     "target_part": "throat",
+     "target_interior": "mouth",
+     "manner": "grip",
+     "relation": "interior",
+     "motion": "moving",
+     "detail": "ring closes around feet as measured swallow begins",
+     "unasserted": 0,
+     "contact_id": "contact:7b5af80a6b04b018f219"
+    }
+   ],
+   "contact_actions": [
+    {
+     "action_id": "contact-action:42a8b61bfdc680df99f7",
+     "actor": "Mirelle Sulmirath",
+     "contact_id": "contact:9542111ec10e1d3b912d",
+     "action": "presses tongue back deliberately",
+     "intensity": "",
+     "rhythm": "",
+     "detail": "carrying toward throat's edge in long grip"
+    }
+   ],
+   "attire": {
+    "Hinami": {
+     "wearing": [],
+     "state": [
+      "bare at the torso, arms, waist, groin, legs, feet"
+     ],
+     "regions": {
+      "torso": {
+       "garments": [],
+       "beneath": "Soft, tanned skin across the chest and stomach. Small, perky breasts with light brown nipples, slightly upturned. Her stomach is smooth and soft, not toned—a comfortable, lived-in softness. Faint tan lines trace the tank top's neckline and shoulder straps. A few faded scrape scars dot her ribs from travel.",
+       "beneath_zones": {
+        "chest": "Soft, tanned skin across the chest. Small, perky breasts with light brown nipples, slightly upturned. Faint tan lines trace the tank top's neckline and shoulder straps.",
+        "midriff": "Her stomach is smooth and soft, not toned—a comfortable, lived-in softness. A few faded scrape scars dot her ribs from travel."
+       },
+       "uncovered": true
+      },
+      "waist": {
+       "garments": [],
+       "beneath": "Skin at the waist is softer and paler than sun-exposed areas, the tan fading where the sash sits. A slight softness rounds her lower belly. Hip bones visible beneath warm skin, not sharp but defined.",
+       "uncovered": true
+      },
+      "groin": {
+       "garments": [],
+       "beneath": "A neat patch of copper-gold curls above her vulva, kept trimmed. Outer labia full and soft, slightly darker than her tanned skin. Inner folds pink and smooth, tucked within. The skin between her thighs is warm and sensitive, carrying a faint musk of travel and warm body.",
+       "uncovered": true
+      },
+      "feet": {
+       "garments": [],
+       "beneath": "Bare feet, tanned and calloused at heels and balls from years in sandals. Toes nimble, gripping the ground easily. Soles rough but not cracked, hardened by travel.",
+       "uncovered": true
+      },
+      "arms": {
+       "garments": [],
+       "beneath": "Slim, warm arms with gentle definition from years on the road. Inner arms smooth and paler; forearms tanned and slightly rough from sun and wind. Fingers nimble with light calluses at the tips from sketching. Fine, barely visible copper-gold hair along her forearms.",
+       "uncovered": true
+      },
+      "legs": {
+       "garments": [],
+       "beneath": "Soft, slightly thick thighs tapering to slim calves. Skin tanned and warm, with faded scrapes and old insect bites from outdoor travel. Barely visible copper-gold hair on her shins. Inner thighs paler and softer, with slight chafing redness at the very top from long walks.",
+       "uncovered": true
+      }
+     }
+    },
+    "Mirelle Sulmirath": {
+     "wearing": [],
+     "state": [
+      "bare at the torso, arms, hands, groin, legs, feet",
+      "loosened"
+     ],
+     "regions": {
+      "torso": {
+       "garments": [],
+       "beneath": "",
+       "beneath_zones": {
+        "chest": "Full, heavy breasts that settle softly once the chemise is drawn away; nipples a deeper bronze, soft and slightly raised from the cool air; skin smooth and meticulously maintained, carrying the same faint shimmer as the rest of her; fine stretch marks trace the outer curve where her breasts are fullest; her sternum and the gentle ridge of her collarbones show between her breasts",
+        "midriff": "A narrow, soft waist — not muscular but toned enough to show the gentle curve of her ribs above her hips; skin warm and smooth with the same bronze shimmer; her navel is small and shallow; the skin here radiates a gentle warmth from her supernatural metabolism"
+       },
+       "uncovered": true
+      },
+      "groin": {
+       "garments": [],
+       "beneath": "Smooth, bare bronze skin beneath the silk — meticulously maintained as befits her profession; warm to the touch from her supernatural metabolism; her vulva is soft and bare, the same warm bronze as the rest of her body but with soft pink lips and interior",
+       "uncovered": true
+      },
+      "arms": {
+       "garments": [],
+       "beneath": "Bronze skin, soft and warm with the same faint shimmer; her forearms are smooth, the undersides of her wrists showing faint blue veins beneath the bronze;",
+       "uncovered": true
+      },
+      "hands": {
+       "garments": [],
+       "beneath": "her hands are long-fingered and elegant with nails trimmed short and neat for massage work — a professional's hands, sensitive and deliberately cared for"
+      },
+      "legs": {
+       "garments": [],
+       "beneath": "Long, shapely legs with smooth bronze skin and the same faint shimmer; the upper thighs are soft and full where the robe's hem falls, tapering to toned calves;",
+       "uncovered": true
+      },
+      "feet": {
+       "garments": [],
+       "beneath": "her feet are bare with short neat nails"
+      }
+     }
+    }
+   },
+   "entities": {
+    "95feb3a8521549fd": {
+     "name": "lightweight travel jacket",
+     "kind": "object",
+     "description": "lightweight travel jacket, taken off",
+     "aliases": [
+      "lightweight travel jacket"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Hinami",
+      "shed": true
+     }
+    },
+    "1160e5d39da74250": {
+     "name": "fitted tank top",
+     "kind": "object",
+     "description": "fitted tank top, taken off",
+     "aliases": [
+      "fitted tank top"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Hinami",
+      "shed": true
+     }
+    },
+    "79315c09b4b9481c": {
+     "name": "utility sash with pouches",
+     "kind": "object",
+     "description": "utility sash with pouches, taken off",
+     "aliases": [
+      "utility sash with pouches"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Hinami",
+      "shed": true
+     }
+    },
+    "3e466060a20d4407": {
+     "name": "travel shorts",
+     "kind": "object",
+     "description": "travel shorts, taken off",
+     "aliases": [
+      "travel shorts"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Hinami",
+      "shed": true
+     }
+    },
+    "a8d944d5f0a1411c": {
+     "name": "sturdy sandals",
+     "kind": "object",
+     "description": "sturdy sandals, taken off",
+     "aliases": [
+      "sturdy sandals"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Hinami",
+      "shed": true
+     }
+    },
+    "4423e9ee4cb74183": {
+     "name": "plum silk wrap robe",
+     "kind": "object",
+     "description": "plum silk wrap robe, taken off",
+     "aliases": [
+      "plum silk wrap robe"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Mirelle Sulmirath",
+      "shed": true
+     }
+    },
+    "5ccc264c6a7c4fa0": {
+     "name": "black silk chemise",
+     "kind": "object",
+     "description": "",
+     "aliases": [
+      "black silk chemise"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Mirelle Sulmirath",
+      "shed": true
+     },
+     "ubiquitous": false
+    },
+    "c84074bf5f1741b5": {
+     "name": "silk panties",
+     "kind": "object",
+     "description": "",
+     "aliases": [
+      "silk panties"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": null,
+      "shed": true,
+      "location": "floor",
+      "pooled_at": "Mirelle Sulmirath's feet"
+     },
+     "ubiquitous": false
+    },
+    "1ffe2040daf54ae9": {
+     "name": "wide bed",
+     "kind": "furniture",
+     "description": "",
+     "aliases": [
+      "bed"
+     ],
+     "portable": false,
+     "container": true,
+     "interior_rooms": [
+      "bed_surface"
+     ],
+     "state": {
+      "enclosure": "membrane"
+     },
+     "ubiquitous": false,
+     "enclosure": "membrane"
+    },
+    "9303331879aa42f7": {
+     "name": "feather hair clip",
+     "kind": "object",
+     "description": "feather hair clip, taken off — slightly askew",
+     "aliases": [
+      "feather hair clip"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Hinami",
+      "shed": true,
+      "condition": "slightly askew"
+     }
+    },
+    "Hinami": {
+     "name": "Hinami",
+     "kind": "person",
+     "description": "",
+     "aliases": [],
+     "portable": false,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "aroused": true,
+      "blushing": true,
+      "breathing_heavily": true
+     },
+     "ubiquitous": false,
+     "scent": "arousal"
+    },
+    "Mirelle Sulmirath": {
+     "name": "Mirelle Sulmirath",
+     "kind": "person",
+     "description": "",
+     "aliases": [],
+     "portable": false,
+     "container": false,
+     "interior_rooms": [
+      "Mirelle Sulmirath_mouth",
+      "Mirelle Sulmirath_throat",
+      "Mirelle Sulmirath_stomach",
+      "Mirelle Sulmirath_small_intestine",
+      "Mirelle Sulmirath_large_intestine",
+      "Mirelle Sulmirath_rectum"
+     ],
+     "state": {
+      "tail_coiled_tight": true,
+      "wings_straining": true,
+      "tail_coiled_loose": true,
+      "wings_folded": true
+     },
+     "ubiquitous": false,
+     "interior_spec": [
+      {
+       "name": "mouth",
+       "desc": "Warm, wet space where she plays with the client",
+       "light": "dim",
+       "barrier": ""
+      },
+      {
+       "name": "throat",
+       "desc": "Tight passage that squeezes vigorously, providing an intense muscular massage",
+       "light": "dark",
+       "barrier": "membrane",
+       "transit_seconds": 5.0
+      },
+      {
+       "name": "stomach",
+       "desc": "Scented with lavender and relaxing herbs, the walls constantly knead and squeeze it's occupant kneading weakened acid all over them that digests dead skin",
+       "light": "dark",
+       "barrier": "membrane"
+      },
+      {
+       "name": "small_intestine",
+       "desc": "Incredibly tight space where the client is squeezed and massaged for hours, dragged ever deeper; a faint clean musk is present",
+       "light": "dark",
+       "barrier": "membrane",
+       "transit_seconds": 7200.0
+      },
+      {
+       "name": "large_intestine",
+       "desc": "Slightly less tight than the small intestine, kept clean and scented with oils",
+       "light": "dark",
+       "barrier": "membrane",
+       "transit_seconds": 3600.0
+      },
+      {
+       "name": "rectum",
+       "desc": "Clean space where the client is briefly held before powerful muscles push them out",
+       "light": "dark",
+       "barrier": "membrane"
+      }
+     ],
+     "enclosure": "membrane"
+    }
+   },
+   "substances": [
+    {
+     "source": "Hinami",
+     "source_part": "between the legs",
+     "substance": "arousal fluids",
+     "target": "Hinami",
+     "placement": "surface",
+     "target_interior": "",
+     "target_part": "",
+     "amount": "noticeable dampness",
+     "amount_band": "",
+     "detail": "scent of arousal becoming noticeable in the air",
+     "scent": "arousal",
+     "speech_impediment": "",
+     "substance_id": "substance:5802b889a334f3e7a41d"
+    },
+    {
+     "source": "Mirelle Sulmirath",
+     "source_part": "tongue",
+     "substance": "saliva",
+     "target": "Hinami",
+     "placement": "surface",
+     "target_interior": "",
+     "target_part": "inner_thigh",
+     "amount": "wet trail",
+     "amount_band": "",
+     "detail": "slow slick line along crease",
+     "scent": "arousal",
+     "speech_impediment": "",
+     "substance_id": "substance:b2d7a3282b079dde492a"
+    },
+    {
+     "source": "Mirelle Sulmirath",
+     "source_part": "mouth",
+     "substance": "warm air",
+     "target": "Hinami",
+     "placement": "surface",
+     "target_interior": "",
+     "target_part": "body",
+     "amount": "wash",
+     "amount_band": "",
+     "detail": "",
+     "scent": "",
+     "speech_impediment": "",
+     "substance_id": "substance:eccd0a2bbbd7f33cdfd3"
+    },
+    {
+     "source": "Mirelle Sulmirath",
+     "source_part": "tongue",
+     "substance": "saliva",
+     "target": "Hinami",
+     "placement": "surface",
+     "target_interior": "",
+     "target_part": "front",
+     "amount": "coated",
+     "amount_band": "",
+     "detail": "",
+     "scent": "arousal",
+     "speech_impediment": "",
+     "substance_id": "substance:13e6900a33ad92b1578b"
+    },
+    {
+     "source": "Mirelle Sulmirath",
+     "source_part": "tongue",
+     "substance": "saliva",
+     "target": "Hinami",
+     "placement": "surface",
+     "target_interior": "",
+     "target_part": "back",
+     "amount": "wet trail",
+     "amount_band": "",
+     "detail": "",
+     "scent": "arousal",
+     "speech_impediment": "",
+     "substance_id": "substance:89c3665b15dfdc79c34a"
+    },
+    {
+     "source": "Mirelle Sulmirath",
+     "source_part": "mouth",
+     "substance": "saliva",
+     "target": "Hinami",
+     "placement": "surface",
+     "target_interior": "",
+     "target_part": "",
+     "amount": "",
+     "amount_band": "",
+     "detail": "the rolling savoring coats the tiny fox's front and back in fresh warm saliva as the tongue works her",
+     "scent": "",
+     "speech_impediment": "",
+     "substance_id": "substance:6e7cbcb63be77f611faa"
+    }
+   ],
+   "contained": {},
+   "scales": {},
+   "stations": {
+    "Mirelle Sulmirath": {
+     "at": "1ffe2040daf54ae9",
+     "near": []
+    },
+    "Hinami": {
+     "at": null,
+     "near": []
+    }
+   }
+  }
+ },
+ {
+  "turn": 62,
+  "input": "\"Wah!\" You let out as you feel yourself sliding into her throat. You feel your heart pounding in both fear and excitement as you feel your legs pulled in by tig",
+  "scene": {
+   "rooms": {
+    "reception_room": {
+     "name": "Reception Room",
+     "desc": "The reception room smells of sandalwood and something warmer beneath it — amber, maybe, or honey left too long in the sun. Soft lamplight catches the rich fabrics draped across low furniture, and somewhere out of sight, a small fountain murmurs its quiet rhythm.",
+     "adjacent": [],
+     "notes": "Private reception space for Mirelle's practice",
+     "light": "soft lamplight",
+     "exposure": "enclosed",
+     "anchors": {
+      "cushioned_bench": {
+       "desc": "A low, cushioned bench draped in rich fabrics",
+       "dir": "s"
+      },
+      "comfortable_chair": {
+       "desc": "A comfortable chair positioned opposite the bench",
+       "dir": "n"
+      }
+     },
+     "size": "small"
+    },
+    "private_session_room": {
+     "name": "Private Session Room",
+     "desc": "A softly lit chamber with a wide, low bed draped in dark silk sheets, a small side table holding oils and towels, and a single cushioned chair near the door. The air carries a faint scent of warmed amber and clean linen.",
+     "adjacent": [
+      {
+       "to": "reception_room",
+       "barrier": "open_door",
+       "distance": 0,
+       "dir": "w",
+       "name": "session door"
+      }
+     ],
+     "notes": "generated because no candidate described this room",
+     "anchors": {
+      "bbf74eda2d1c4c08": {
+       "desc": "A wide, low bed draped in dark silk sheets",
+       "dir": "e"
+      },
+      "side_table": {
+       "desc": "A small side table holding oils and towels",
+       "dir": "n"
+      },
+      "cushioned_chair": {
+       "desc": "A single cushioned chair near the door",
+       "dir": "w"
+      }
+     },
+     "size": "small"
+    },
+    "Mirelle Sulmirath_mouth": {
+     "name": "mouth",
+     "desc": "Warm, wet space where she plays with the client",
+     "light": "dim",
+     "parent_entity": "Mirelle Sulmirath",
+     "adjacent": [
+      {
+       "to": "Mirelle Sulmirath_throat",
+       "barrier": "membrane"
+      },
+      {
+       "to": "private_session_room",
+       "barrier": "membrane",
+       "distance": "near"
+      }
+     ],
+     "dock_exit": true
+    },
+    "Mirelle Sulmirath_throat": {
+     "name": "throat",
+     "desc": "Tight passage that squeezes vigorously, providing an intense muscular massage",
+     "light": "dark",
+     "parent_entity": "Mirelle Sulmirath",
+     "adjacent": [
+      {
+       "to": "Mirelle Sulmirath_mouth",
+       "barrier": "membrane"
+      },
+      {
+       "to": "Mirelle Sulmirath_stomach",
+       "barrier": "membrane"
+      }
+     ],
+     "transit_seconds": 5.0
+    },
+    "Mirelle Sulmirath_stomach": {
+     "name": "stomach",
+     "desc": "Scented with lavender and relaxing herbs, the walls constantly knead and squeeze it's occupant kneading weakened acid all over them that digests dead skin",
+     "light": "dark",
+     "parent_entity": "Mirelle Sulmirath",
+     "adjacent": [
+      {
+       "to": "Mirelle Sulmirath_throat",
+       "barrier": "membrane"
+      },
+      {
+       "to": "Mirelle Sulmirath_small_intestine",
+       "barrier": "membrane"
+      }
+     ]
+    },
+    "Mirelle Sulmirath_small_intestine": {
+     "name": "small_intestine",
+     "desc": "Incredibly tight space where the client is squeezed and massaged for hours, dragged ever deeper; a faint clean musk is present",
+     "light": "dark",
+     "parent_entity": "Mirelle Sulmirath",
+     "adjacent": [
+      {
+       "to": "Mirelle Sulmirath_stomach",
+       "barrier": "membrane"
+      },
+      {
+       "to": "Mirelle Sulmirath_large_intestine",
+       "barrier": "membrane"
+      }
+     ],
+     "transit_seconds": 7200.0
+    },
+    "Mirelle Sulmirath_large_intestine": {
+     "name": "large_intestine",
+     "desc": "Slightly less tight than the small intestine, kept clean and scented with oils",
+     "light": "dark",
+     "parent_entity": "Mirelle Sulmirath",
+     "adjacent": [
+      {
+       "to": "Mirelle Sulmirath_small_intestine",
+       "barrier": "membrane"
+      },
+      {
+       "to": "Mirelle Sulmirath_rectum",
+       "barrier": "membrane"
+      }
+     ],
+     "transit_seconds": 3600.0
+    },
+    "Mirelle Sulmirath_rectum": {
+     "name": "rectum",
+     "desc": "Clean space where the client is briefly held before powerful muscles push them out",
+     "light": "dark",
+     "parent_entity": "Mirelle Sulmirath",
+     "adjacent": [
+      {
+       "to": "Mirelle Sulmirath_large_intestine",
+       "barrier": "membrane"
+      }
+     ]
+    }
+   },
+   "positions": {
+    "Mirelle Sulmirath": "private_session_room",
+    "Hinami": "Mirelle Sulmirath_mouth",
+    "cbc598aac65e4a3f": "private_session_room",
+    "cd82133c9e464d16": "private_session_room",
+    "3f2c0ab6f8574b7e": "private_session_room",
+    "67dc4d2465184126": "private_session_room",
+    "f02ee349ee324a70": "private_session_room",
+    "a2e7a9cb0898482e": "private_session_room",
+    "fd3f9295ce8e4b49": "private_session_room",
+    "5d3b0148e06f49d7": "private_session_room",
+    "bbf74eda2d1c4c08": "private_session_room",
+    "f9926e5fba894569": "private_session_room"
+   },
+   "poses": {
+    "Mirelle Sulmirath": {
+     "posture": "sitting",
+     "support": "bbf74eda2d1c4c08",
+     "relative_to": "",
+     "relation": "",
+     "constraint": "",
+     "detail": "tongue curled around the little fox, holding her at the back of the mouth, savoring the moment"
+    },
+    "Hinami": {
+     "posture": "prone",
+     "support": "",
+     "relative_to": "",
+     "relation": "",
+     "constraint": "",
+     "detail": "settles still, body loose and compliant on tongue; drawn to the rear of the mouth, pressed past the ridge of the palate against the soft muscular edge where the throat begins, held at the threshold of the swallow; saliva-slick, warmth deepe"
+    }
+   },
+   "contacts": [
+    {
+     "actor": "Hinami",
+     "actor_part": "body",
+     "target": "Mirelle Sulmirath",
+     "target_part": "tongue",
+     "target_interior": "mouth",
+     "manner": "wrap",
+     "relation": "interior",
+     "motion": "settled",
+     "detail": "curled around the little fox, holding her in a long deliberate press at the rear",
+     "unasserted": 1,
+     "contact_id": "contact:9542111ec10e1d3b912d"
+    },
+    {
+     "actor": "Hinami",
+     "actor_part": "feet",
+     "target": "Mirelle Sulmirath",
+     "target_part": "throat",
+     "target_interior": "mouth",
+     "manner": "grip",
+     "relation": "interior",
+     "motion": "moving",
+     "detail": "ring closes around feet as measured swallow begins",
+     "unasserted": 0,
+     "contact_id": "contact:7b5af80a6b04b018f219"
+    }
+   ],
+   "contact_actions": [
+    {
+     "action_id": "contact-action:42a8b61bfdc680df99f7",
+     "actor": "Mirelle Sulmirath",
+     "contact_id": "contact:9542111ec10e1d3b912d",
+     "action": "presses tongue back deliberately",
+     "intensity": "",
+     "rhythm": "",
+     "detail": "carrying toward throat's edge in long grip"
+    },
+    {
+     "action_id": "contact-action:7b457c35a3a76b4db66e",
+     "actor": "Mirelle Sulmirath",
+     "contact_id": "contact:7b5af80a6b04b018f219",
+     "action": "peristaltic wave",
+     "intensity": "slow deliberate",
+     "rhythm": "measured upward",
+     "detail": ""
+    }
+   ],
+   "attire": {
+    "Hinami": {
+     "wearing": [],
+     "state": [
+      "bare at the torso, arms, waist, groin, legs, feet"
+     ],
+     "regions": {
+      "torso": {
+       "garments": [],
+       "beneath": "Soft, tanned skin across the chest and stomach. Small, perky breasts with light brown nipples, slightly upturned. Her stomach is smooth and soft, not toned—a comfortable, lived-in softness. Faint tan lines trace the tank top's neckline and shoulder straps. A few faded scrape scars dot her ribs from travel.",
+       "beneath_zones": {
+        "chest": "Soft, tanned skin across the chest. Small, perky breasts with light brown nipples, slightly upturned. Faint tan lines trace the tank top's neckline and shoulder straps.",
+        "midriff": "Her stomach is smooth and soft, not toned—a comfortable, lived-in softness. A few faded scrape scars dot her ribs from travel."
+       },
+       "uncovered": true
+      },
+      "waist": {
+       "garments": [],
+       "beneath": "Skin at the waist is softer and paler than sun-exposed areas, the tan fading where the sash sits. A slight softness rounds her lower belly. Hip bones visible beneath warm skin, not sharp but defined.",
+       "uncovered": true
+      },
+      "groin": {
+       "garments": [],
+       "beneath": "A neat patch of copper-gold curls above her vulva, kept trimmed. Outer labia full and soft, slightly darker than her tanned skin. Inner folds pink and smooth, tucked within. The skin between her thighs is warm and sensitive, carrying a faint musk of travel and warm body.",
+       "uncovered": true
+      },
+      "feet": {
+       "garments": [],
+       "beneath": "Bare feet, tanned and calloused at heels and balls from years in sandals. Toes nimble, gripping the ground easily. Soles rough but not cracked, hardened by travel.",
+       "uncovered": true
+      },
+      "arms": {
+       "garments": [],
+       "beneath": "Slim, warm arms with gentle definition from years on the road. Inner arms smooth and paler; forearms tanned and slightly rough from sun and wind. Fingers nimble with light calluses at the tips from sketching. Fine, barely visible copper-gold hair along her forearms.",
+       "uncovered": true
+      },
+      "legs": {
+       "garments": [],
+       "beneath": "Soft, slightly thick thighs tapering to slim calves. Skin tanned and warm, with faded scrapes and old insect bites from outdoor travel. Barely visible copper-gold hair on her shins. Inner thighs paler and softer, with slight chafing redness at the very top from long walks.",
+       "uncovered": true
+      }
+     }
+    },
+    "Mirelle Sulmirath": {
+     "wearing": [],
+     "state": [
+      "bare at the torso, arms, hands, groin, legs, feet",
+      "loosened"
+     ],
+     "regions": {
+      "torso": {
+       "garments": [],
+       "beneath": "",
+       "beneath_zones": {
+        "chest": "Full, heavy breasts that settle softly once the chemise is drawn away; nipples a deeper bronze, soft and slightly raised from the cool air; skin smooth and meticulously maintained, carrying the same faint shimmer as the rest of her; fine stretch marks trace the outer curve where her breasts are fullest; her sternum and the gentle ridge of her collarbones show between her breasts",
+        "midriff": "A narrow, soft waist — not muscular but toned enough to show the gentle curve of her ribs above her hips; skin warm and smooth with the same bronze shimmer; her navel is small and shallow; the skin here radiates a gentle warmth from her supernatural metabolism"
+       },
+       "uncovered": true
+      },
+      "groin": {
+       "garments": [],
+       "beneath": "Smooth, bare bronze skin beneath the silk — meticulously maintained as befits her profession; warm to the touch from her supernatural metabolism; her vulva is soft and bare, the same warm bronze as the rest of her body but with soft pink lips and interior",
+       "uncovered": true
+      },
+      "arms": {
+       "garments": [],
+       "beneath": "Bronze skin, soft and warm with the same faint shimmer; her forearms are smooth, the undersides of her wrists showing faint blue veins beneath the bronze;",
+       "uncovered": true
+      },
+      "hands": {
+       "garments": [],
+       "beneath": "her hands are long-fingered and elegant with nails trimmed short and neat for massage work — a professional's hands, sensitive and deliberately cared for"
+      },
+      "legs": {
+       "garments": [],
+       "beneath": "Long, shapely legs with smooth bronze skin and the same faint shimmer; the upper thighs are soft and full where the robe's hem falls, tapering to toned calves;",
+       "uncovered": true
+      },
+      "feet": {
+       "garments": [],
+       "beneath": "her feet are bare with short neat nails"
+      }
+     }
+    }
+   },
+   "entities": {
+    "cbc598aac65e4a3f": {
+     "name": "lightweight travel jacket",
+     "kind": "object",
+     "description": "lightweight travel jacket, taken off",
+     "aliases": [
+      "lightweight travel jacket"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Hinami",
+      "shed": true
+     }
+    },
+    "cd82133c9e464d16": {
+     "name": "fitted tank top",
+     "kind": "object",
+     "description": "fitted tank top, taken off",
+     "aliases": [
+      "fitted tank top"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Hinami",
+      "shed": true
+     }
+    },
+    "3f2c0ab6f8574b7e": {
+     "name": "utility sash with pouches",
+     "kind": "object",
+     "description": "utility sash with pouches, taken off",
+     "aliases": [
+      "utility sash with pouches"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Hinami",
+      "shed": true
+     }
+    },
+    "67dc4d2465184126": {
+     "name": "travel shorts",
+     "kind": "object",
+     "description": "travel shorts, taken off",
+     "aliases": [
+      "travel shorts"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Hinami",
+      "shed": true
+     }
+    },
+    "f02ee349ee324a70": {
+     "name": "sturdy sandals",
+     "kind": "object",
+     "description": "sturdy sandals, taken off",
+     "aliases": [
+      "sturdy sandals"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Hinami",
+      "shed": true
+     }
+    },
+    "a2e7a9cb0898482e": {
+     "name": "plum silk wrap robe",
+     "kind": "object",
+     "description": "plum silk wrap robe, taken off",
+     "aliases": [
+      "plum silk wrap robe"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Mirelle Sulmirath",
+      "shed": true
+     }
+    },
+    "fd3f9295ce8e4b49": {
+     "name": "black silk chemise",
+     "kind": "object",
+     "description": "",
+     "aliases": [
+      "black silk chemise"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Mirelle Sulmirath",
+      "shed": true
+     },
+     "ubiquitous": false
+    },
+    "5d3b0148e06f49d7": {
+     "name": "silk panties",
+     "kind": "object",
+     "description": "",
+     "aliases": [
+      "silk panties"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": null,
+      "shed": true,
+      "location": "floor",
+      "pooled_at": "Mirelle Sulmirath's feet"
+     },
+     "ubiquitous": false
+    },
+    "bbf74eda2d1c4c08": {
+     "name": "wide bed",
+     "kind": "furniture",
+     "description": "",
+     "aliases": [
+      "bed"
+     ],
+     "portable": false,
+     "container": true,
+     "interior_rooms": [
+      "bed_surface"
+     ],
+     "state": {
+      "enclosure": "membrane"
+     },
+     "ubiquitous": false,
+     "enclosure": "membrane"
+    },
+    "f9926e5fba894569": {
+     "name": "feather hair clip",
+     "kind": "object",
+     "description": "feather hair clip, taken off — slightly askew",
+     "aliases": [
+      "feather hair clip"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Hinami",
+      "shed": true,
+      "condition": "slightly askew"
+     }
+    },
+    "Hinami": {
+     "name": "Hinami",
+     "kind": "person",
+     "description": "",
+     "aliases": [],
+     "portable": false,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "aroused": true,
+      "blushing": true,
+      "breathing_heavily": true
+     },
+     "ubiquitous": false,
+     "scent": "arousal"
+    },
+    "Mirelle Sulmirath": {
+     "name": "Mirelle Sulmirath",
+     "kind": "person",
+     "description": "",
+     "aliases": [],
+     "portable": false,
+     "container": false,
+     "interior_rooms": [
+      "Mirelle Sulmirath_mouth",
+      "Mirelle Sulmirath_throat",
+      "Mirelle Sulmirath_stomach",
+      "Mirelle Sulmirath_small_intestine",
+      "Mirelle Sulmirath_large_intestine",
+      "Mirelle Sulmirath_rectum"
+     ],
+     "state": {
+      "tail_coiled_tight": true,
+      "wings_straining": true,
+      "tail_coiled_loose": true,
+      "wings_folded": true
+     },
+     "ubiquitous": false,
+     "interior_spec": [
+      {
+       "name": "mouth",
+       "desc": "Warm, wet space where she plays with the client",
+       "light": "dim",
+       "barrier": ""
+      },
+      {
+       "name": "throat",
+       "desc": "Tight passage that squeezes vigorously, providing an intense muscular massage",
+       "light": "dark",
+       "barrier": "membrane",
+       "transit_seconds": 5.0
+      },
+      {
+       "name": "stomach",
+       "desc": "Scented with lavender and relaxing herbs, the walls constantly knead and squeeze it's occupant kneading weakened acid all over them that digests dead skin",
+       "light": "dark",
+       "barrier": "membrane"
+      },
+      {
+       "name": "small_intestine",
+       "desc": "Incredibly tight space where the client is squeezed and massaged for hours, dragged ever deeper; a faint clean musk is present",
+       "light": "dark",
+       "barrier": "membrane",
+       "transit_seconds": 7200.0
+      },
+      {
+       "name": "large_intestine",
+       "desc": "Slightly less tight than the small intestine, kept clean and scented with oils",
+       "light": "dark",
+       "barrier": "membrane",
+       "transit_seconds": 3600.0
+      },
+      {
+       "name": "rectum",
+       "desc": "Clean space where the client is briefly held before powerful muscles push them out",
+       "light": "dark",
+       "barrier": "membrane"
+      }
+     ],
+     "enclosure": "membrane"
+    }
+   },
+   "substances": [
+    {
+     "source": "Hinami",
+     "source_part": "between the legs",
+     "substance": "arousal fluids",
+     "target": "Hinami",
+     "placement": "surface",
+     "target_interior": "",
+     "target_part": "",
+     "amount": "noticeable dampness",
+     "amount_band": "",
+     "detail": "scent of arousal becoming noticeable in the air",
+     "scent": "arousal",
+     "speech_impediment": "",
+     "substance_id": "substance:5802b889a334f3e7a41d"
+    },
+    {
+     "source": "Mirelle Sulmirath",
+     "source_part": "tongue",
+     "substance": "saliva",
+     "target": "Hinami",
+     "placement": "surface",
+     "target_interior": "",
+     "target_part": "inner_thigh",
+     "amount": "wet trail",
+     "amount_band": "",
+     "detail": "slow slick line along crease",
+     "scent": "arousal",
+     "speech_impediment": "",
+     "substance_id": "substance:b2d7a3282b079dde492a"
+    },
+    {
+     "source": "Mirelle Sulmirath",
+     "source_part": "mouth",
+     "substance": "warm air",
+     "target": "Hinami",
+     "placement": "surface",
+     "target_interior": "",
+     "target_part": "body",
+     "amount": "wash",
+     "amount_band": "",
+     "detail": "",
+     "scent": "",
+     "speech_impediment": "",
+     "substance_id": "substance:eccd0a2bbbd7f33cdfd3"
+    },
+    {
+     "source": "Mirelle Sulmirath",
+     "source_part": "tongue",
+     "substance": "saliva",
+     "target": "Hinami",
+     "placement": "surface",
+     "target_interior": "",
+     "target_part": "front",
+     "amount": "coated",
+     "amount_band": "",
+     "detail": "",
+     "scent": "arousal",
+     "speech_impediment": "",
+     "substance_id": "substance:13e6900a33ad92b1578b"
+    },
+    {
+     "source": "Mirelle Sulmirath",
+     "source_part": "tongue",
+     "substance": "saliva",
+     "target": "Hinami",
+     "placement": "surface",
+     "target_interior": "",
+     "target_part": "back",
+     "amount": "wet trail",
+     "amount_band": "",
+     "detail": "",
+     "scent": "arousal",
+     "speech_impediment": "",
+     "substance_id": "substance:89c3665b15dfdc79c34a"
+    },
+    {
+     "source": "Mirelle Sulmirath",
+     "source_part": "mouth",
+     "substance": "saliva",
+     "target": "Hinami",
+     "placement": "surface",
+     "target_interior": "",
+     "target_part": "",
+     "amount": "",
+     "amount_band": "",
+     "detail": "the rolling savoring coats the tiny fox's front and back in fresh warm saliva as the tongue works her",
+     "scent": "",
+     "speech_impediment": "",
+     "substance_id": "substance:6e7cbcb63be77f611faa"
+    }
+   ],
+   "contained": {},
+   "scales": {},
+   "stations": {
+    "Mirelle Sulmirath": {
+     "at": "bbf74eda2d1c4c08",
+     "near": []
+    },
+    "Hinami": {
+     "at": null,
+     "near": []
+    }
+   }
+  }
+ },
+ {
+  "turn": 63,
+  "input": "You squirm fully enveloped by her throat catching your breath as tight muscles squeezes you from every angle.",
+  "scene": {
+   "rooms": {
+    "reception_room": {
+     "name": "Reception Room",
+     "desc": "The reception room smells of sandalwood and something warmer beneath it — amber, maybe, or honey left too long in the sun. Soft lamplight catches the rich fabrics draped across low furniture, and somewhere out of sight, a small fountain murmurs its quiet rhythm.",
+     "adjacent": [],
+     "notes": "Private reception space for Mirelle's practice",
+     "light": "soft lamplight",
+     "exposure": "enclosed",
+     "anchors": {
+      "cushioned_bench": {
+       "desc": "A low, cushioned bench draped in rich fabrics",
+       "dir": "s"
+      },
+      "comfortable_chair": {
+       "desc": "A comfortable chair positioned opposite the bench",
+       "dir": "n"
+      }
+     },
+     "size": "small"
+    },
+    "private_session_room": {
+     "name": "Private Session Room",
+     "desc": "A softly lit chamber with a wide, low bed draped in dark silk sheets, a small side table holding oils and towels, and a single cushioned chair near the door. The air carries a faint scent of warmed amber and clean linen.",
+     "adjacent": [
+      {
+       "to": "reception_room",
+       "barrier": "open_door",
+       "distance": 0,
+       "dir": "w",
+       "name": "session door"
+      }
+     ],
+     "notes": "generated because no candidate described this room",
+     "anchors": {
+      "bbf74eda2d1c4c08": {
+       "desc": "A wide, low bed draped in dark silk sheets",
+       "dir": "e"
+      },
+      "side_table": {
+       "desc": "A small side table holding oils and towels",
+       "dir": "n"
+      },
+      "cushioned_chair": {
+       "desc": "A single cushioned chair near the door",
+       "dir": "w"
+      }
+     },
+     "size": "small"
+    },
+    "Mirelle Sulmirath_mouth": {
+     "name": "mouth",
+     "desc": "Warm, wet space where she plays with the client",
+     "light": "dim",
+     "parent_entity": "Mirelle Sulmirath",
+     "adjacent": [
+      {
+       "to": "Mirelle Sulmirath_throat",
+       "barrier": "membrane"
+      },
+      {
+       "to": "private_session_room",
+       "barrier": "membrane",
+       "distance": "near"
+      }
+     ],
+     "dock_exit": true
+    },
+    "Mirelle Sulmirath_throat": {
+     "name": "throat",
+     "desc": "Tight passage that squeezes vigorously, providing an intense muscular massage",
+     "light": "dark",
+     "parent_entity": "Mirelle Sulmirath",
+     "adjacent": [
+      {
+       "to": "Mirelle Sulmirath_mouth",
+       "barrier": "membrane"
+      },
+      {
+       "to": "Mirelle Sulmirath_stomach",
+       "barrier": "membrane"
+      }
+     ],
+     "transit_seconds": 5.0
+    },
+    "Mirelle Sulmirath_stomach": {
+     "name": "stomach",
+     "desc": "Scented with lavender and relaxing herbs, the walls constantly knead and squeeze it's occupant kneading weakened acid all over them that digests dead skin",
+     "light": "dark",
+     "parent_entity": "Mirelle Sulmirath",
+     "adjacent": [
+      {
+       "to": "Mirelle Sulmirath_throat",
+       "barrier": "membrane"
+      },
+      {
+       "to": "Mirelle Sulmirath_small_intestine",
+       "barrier": "membrane"
+      }
+     ]
+    },
+    "Mirelle Sulmirath_small_intestine": {
+     "name": "small_intestine",
+     "desc": "Incredibly tight space where the client is squeezed and massaged for hours, dragged ever deeper; a faint clean musk is present",
+     "light": "dark",
+     "parent_entity": "Mirelle Sulmirath",
+     "adjacent": [
+      {
+       "to": "Mirelle Sulmirath_stomach",
+       "barrier": "membrane"
+      },
+      {
+       "to": "Mirelle Sulmirath_large_intestine",
+       "barrier": "membrane"
+      }
+     ],
+     "transit_seconds": 7200.0
+    },
+    "Mirelle Sulmirath_large_intestine": {
+     "name": "large_intestine",
+     "desc": "Slightly less tight than the small intestine, kept clean and scented with oils",
+     "light": "dark",
+     "parent_entity": "Mirelle Sulmirath",
+     "adjacent": [
+      {
+       "to": "Mirelle Sulmirath_small_intestine",
+       "barrier": "membrane"
+      },
+      {
+       "to": "Mirelle Sulmirath_rectum",
+       "barrier": "membrane"
+      }
+     ],
+     "transit_seconds": 3600.0
+    },
+    "Mirelle Sulmirath_rectum": {
+     "name": "rectum",
+     "desc": "Clean space where the client is briefly held before powerful muscles push them out",
+     "light": "dark",
+     "parent_entity": "Mirelle Sulmirath",
+     "adjacent": [
+      {
+       "to": "Mirelle Sulmirath_large_intestine",
+       "barrier": "membrane"
+      }
+     ]
+    }
+   },
+   "positions": {
+    "Mirelle Sulmirath": "private_session_room",
+    "Hinami": "Mirelle Sulmirath_throat",
+    "cbc598aac65e4a3f": "private_session_room",
+    "cd82133c9e464d16": "private_session_room",
+    "3f2c0ab6f8574b7e": "private_session_room",
+    "67dc4d2465184126": "private_session_room",
+    "f02ee349ee324a70": "private_session_room",
+    "a2e7a9cb0898482e": "private_session_room",
+    "fd3f9295ce8e4b49": "private_session_room",
+    "5d3b0148e06f49d7": "private_session_room",
+    "bbf74eda2d1c4c08": "private_session_room",
+    "f9926e5fba894569": "private_session_room"
+   },
+   "poses": {
+    "Mirelle Sulmirath": {
+     "posture": "sitting",
+     "support": "bbf74eda2d1c4c08",
+     "relative_to": "",
+     "relation": "",
+     "constraint": "",
+     "detail": "tongue curled around the little fox, holding her at the back of the mouth, savoring the moment"
+    },
+    "Hinami": {
+     "posture": "prone",
+     "support": "",
+     "relative_to": "",
+     "relation": "",
+     "constraint": "",
+     "detail": "settles still, body loose and compliant on tongue; drawn to the rear of the mouth, pressed past the ridge of the palate against the soft muscular edge where the throat begins, held at the threshold of the swallow; saliva-slick, warmth deepe"
+    }
+   },
+   "contacts": [
+    {
+     "actor": "Hinami",
+     "actor_part": "feet",
+     "target": "Mirelle Sulmirath",
+     "target_part": "throat",
+     "target_interior": "throat",
+     "manner": "grip",
+     "relation": "interior",
+     "motion": "moving",
+     "detail": "ring closes around feet as measured swallow begins",
+     "unasserted": 1,
+     "contact_id": "contact:7b5af80a6b04b018f219"
+    },
+    {
+     "actor": "Hinami",
+     "actor_part": "body",
+     "target": "Mirelle Sulmirath",
+     "target_part": "throat",
+     "target_interior": "throat",
+     "manner": "grip",
+     "relation": "interior",
+     "motion": "settled",
+     "detail": "fully enveloped",
+     "unasserted": 0,
+     "contact_id": "contact:e56c648cb37fb86e81ce"
+    }
+   ],
+   "contact_actions": [
+    {
+     "action_id": "contact-action:7b457c35a3a76b4db66e",
+     "actor": "Mirelle Sulmirath",
+     "contact_id": "contact:7b5af80a6b04b018f219",
+     "action": "peristaltic wave",
+     "intensity": "slow deliberate",
+     "rhythm": "measured upward",
+     "detail": ""
+    }
+   ],
+   "attire": {
+    "Hinami": {
+     "wearing": [],
+     "state": [
+      "bare at the torso, arms, waist, groin, legs, feet"
+     ],
+     "regions": {
+      "torso": {
+       "garments": [],
+       "beneath": "Soft, tanned skin across the chest and stomach. Small, perky breasts with light brown nipples, slightly upturned. Her stomach is smooth and soft, not toned—a comfortable, lived-in softness. Faint tan lines trace the tank top's neckline and shoulder straps. A few faded scrape scars dot her ribs from travel.",
+       "beneath_zones": {
+        "chest": "Soft, tanned skin across the chest. Small, perky breasts with light brown nipples, slightly upturned. Faint tan lines trace the tank top's neckline and shoulder straps.",
+        "midriff": "Her stomach is smooth and soft, not toned—a comfortable, lived-in softness. A few faded scrape scars dot her ribs from travel."
+       },
+       "uncovered": true
+      },
+      "waist": {
+       "garments": [],
+       "beneath": "Skin at the waist is softer and paler than sun-exposed areas, the tan fading where the sash sits. A slight softness rounds her lower belly. Hip bones visible beneath warm skin, not sharp but defined.",
+       "uncovered": true
+      },
+      "groin": {
+       "garments": [],
+       "beneath": "A neat patch of copper-gold curls above her vulva, kept trimmed. Outer labia full and soft, slightly darker than her tanned skin. Inner folds pink and smooth, tucked within. The skin between her thighs is warm and sensitive, carrying a faint musk of travel and warm body.",
+       "uncovered": true
+      },
+      "feet": {
+       "garments": [],
+       "beneath": "Bare feet, tanned and calloused at heels and balls from years in sandals. Toes nimble, gripping the ground easily. Soles rough but not cracked, hardened by travel.",
+       "uncovered": true
+      },
+      "arms": {
+       "garments": [],
+       "beneath": "Slim, warm arms with gentle definition from years on the road. Inner arms smooth and paler; forearms tanned and slightly rough from sun and wind. Fingers nimble with light calluses at the tips from sketching. Fine, barely visible copper-gold hair along her forearms.",
+       "uncovered": true
+      },
+      "legs": {
+       "garments": [],
+       "beneath": "Soft, slightly thick thighs tapering to slim calves. Skin tanned and warm, with faded scrapes and old insect bites from outdoor travel. Barely visible copper-gold hair on her shins. Inner thighs paler and softer, with slight chafing redness at the very top from long walks.",
+       "uncovered": true
+      }
+     }
+    },
+    "Mirelle Sulmirath": {
+     "wearing": [],
+     "state": [
+      "bare at the torso, arms, hands, groin, legs, feet",
+      "loosened"
+     ],
+     "regions": {
+      "torso": {
+       "garments": [],
+       "beneath": "",
+       "beneath_zones": {
+        "chest": "Full, heavy breasts that settle softly once the chemise is drawn away; nipples a deeper bronze, soft and slightly raised from the cool air; skin smooth and meticulously maintained, carrying the same faint shimmer as the rest of her; fine stretch marks trace the outer curve where her breasts are fullest; her sternum and the gentle ridge of her collarbones show between her breasts",
+        "midriff": "A narrow, soft waist — not muscular but toned enough to show the gentle curve of her ribs above her hips; skin warm and smooth with the same bronze shimmer; her navel is small and shallow; the skin here radiates a gentle warmth from her supernatural metabolism"
+       },
+       "uncovered": true
+      },
+      "groin": {
+       "garments": [],
+       "beneath": "Smooth, bare bronze skin beneath the silk — meticulously maintained as befits her profession; warm to the touch from her supernatural metabolism; her vulva is soft and bare, the same warm bronze as the rest of her body but with soft pink lips and interior",
+       "uncovered": true
+      },
+      "arms": {
+       "garments": [],
+       "beneath": "Bronze skin, soft and warm with the same faint shimmer; her forearms are smooth, the undersides of her wrists showing faint blue veins beneath the bronze;",
+       "uncovered": true
+      },
+      "hands": {
+       "garments": [],
+       "beneath": "her hands are long-fingered and elegant with nails trimmed short and neat for massage work — a professional's hands, sensitive and deliberately cared for"
+      },
+      "legs": {
+       "garments": [],
+       "beneath": "Long, shapely legs with smooth bronze skin and the same faint shimmer; the upper thighs are soft and full where the robe's hem falls, tapering to toned calves;",
+       "uncovered": true
+      },
+      "feet": {
+       "garments": [],
+       "beneath": "her feet are bare with short neat nails"
+      }
+     }
+    }
+   },
+   "entities": {
+    "cbc598aac65e4a3f": {
+     "name": "lightweight travel jacket",
+     "kind": "object",
+     "description": "lightweight travel jacket, taken off",
+     "aliases": [
+      "lightweight travel jacket"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Hinami",
+      "shed": true
+     }
+    },
+    "cd82133c9e464d16": {
+     "name": "fitted tank top",
+     "kind": "object",
+     "description": "fitted tank top, taken off",
+     "aliases": [
+      "fitted tank top"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Hinami",
+      "shed": true
+     }
+    },
+    "3f2c0ab6f8574b7e": {
+     "name": "utility sash with pouches",
+     "kind": "object",
+     "description": "utility sash with pouches, taken off",
+     "aliases": [
+      "utility sash with pouches"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Hinami",
+      "shed": true
+     }
+    },
+    "67dc4d2465184126": {
+     "name": "travel shorts",
+     "kind": "object",
+     "description": "travel shorts, taken off",
+     "aliases": [
+      "travel shorts"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Hinami",
+      "shed": true
+     }
+    },
+    "f02ee349ee324a70": {
+     "name": "sturdy sandals",
+     "kind": "object",
+     "description": "sturdy sandals, taken off",
+     "aliases": [
+      "sturdy sandals"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Hinami",
+      "shed": true
+     }
+    },
+    "a2e7a9cb0898482e": {
+     "name": "plum silk wrap robe",
+     "kind": "object",
+     "description": "plum silk wrap robe, taken off",
+     "aliases": [
+      "plum silk wrap robe"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Mirelle Sulmirath",
+      "shed": true
+     }
+    },
+    "fd3f9295ce8e4b49": {
+     "name": "black silk chemise",
+     "kind": "object",
+     "description": "",
+     "aliases": [
+      "black silk chemise"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Mirelle Sulmirath",
+      "shed": true
+     },
+     "ubiquitous": false
+    },
+    "5d3b0148e06f49d7": {
+     "name": "silk panties",
+     "kind": "object",
+     "description": "",
+     "aliases": [
+      "silk panties"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": null,
+      "shed": true,
+      "location": "floor",
+      "pooled_at": "Mirelle Sulmirath's feet"
+     },
+     "ubiquitous": false
+    },
+    "bbf74eda2d1c4c08": {
+     "name": "wide bed",
+     "kind": "furniture",
+     "description": "",
+     "aliases": [
+      "bed"
+     ],
+     "portable": false,
+     "container": true,
+     "interior_rooms": [
+      "bed_surface"
+     ],
+     "state": {
+      "enclosure": "membrane"
+     },
+     "ubiquitous": false,
+     "enclosure": "membrane"
+    },
+    "f9926e5fba894569": {
+     "name": "feather hair clip",
+     "kind": "object",
+     "description": "feather hair clip, taken off — slightly askew",
+     "aliases": [
+      "feather hair clip"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Hinami",
+      "shed": true,
+      "condition": "slightly askew"
+     }
+    },
+    "Hinami": {
+     "name": "Hinami",
+     "kind": "person",
+     "description": "",
+     "aliases": [],
+     "portable": false,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "aroused": true,
+      "blushing": true,
+      "breathing_heavily": true
+     },
+     "ubiquitous": false,
+     "scent": "arousal"
+    },
+    "Mirelle Sulmirath": {
+     "name": "Mirelle Sulmirath",
+     "kind": "person",
+     "description": "",
+     "aliases": [],
+     "portable": false,
+     "container": false,
+     "interior_rooms": [
+      "Mirelle Sulmirath_mouth",
+      "Mirelle Sulmirath_throat",
+      "Mirelle Sulmirath_stomach",
+      "Mirelle Sulmirath_small_intestine",
+      "Mirelle Sulmirath_large_intestine",
+      "Mirelle Sulmirath_rectum"
+     ],
+     "state": {
+      "tail_coiled_tight": true,
+      "wings_straining": true,
+      "tail_coiled_loose": true,
+      "wings_folded": true
+     },
+     "ubiquitous": false,
+     "interior_spec": [
+      {
+       "name": "mouth",
+       "desc": "Warm, wet space where she plays with the client",
+       "light": "dim",
+       "barrier": ""
+      },
+      {
+       "name": "throat",
+       "desc": "Tight passage that squeezes vigorously, providing an intense muscular massage",
+       "light": "dark",
+       "barrier": "membrane",
+       "transit_seconds": 5.0
+      },
+      {
+       "name": "stomach",
+       "desc": "Scented with lavender and relaxing herbs, the walls constantly knead and squeeze it's occupant kneading weakened acid all over them that digests dead skin",
+       "light": "dark",
+       "barrier": "membrane"
+      },
+      {
+       "name": "small_intestine",
+       "desc": "Incredibly tight space where the client is squeezed and massaged for hours, dragged ever deeper; a faint clean musk is present",
+       "light": "dark",
+       "barrier": "membrane",
+       "transit_seconds": 7200.0
+      },
+      {
+       "name": "large_intestine",
+       "desc": "Slightly less tight than the small intestine, kept clean and scented with oils",
+       "light": "dark",
+       "barrier": "membrane",
+       "transit_seconds": 3600.0
+      },
+      {
+       "name": "rectum",
+       "desc": "Clean space where the client is briefly held before powerful muscles push them out",
+       "light": "dark",
+       "barrier": "membrane"
+      }
+     ],
+     "enclosure": "membrane"
+    }
+   },
+   "substances": [
+    {
+     "source": "Hinami",
+     "source_part": "between the legs",
+     "substance": "arousal fluids",
+     "target": "Hinami",
+     "placement": "surface",
+     "target_interior": "",
+     "target_part": "",
+     "amount": "noticeable dampness",
+     "amount_band": "",
+     "detail": "scent of arousal becoming noticeable in the air",
+     "scent": "arousal",
+     "speech_impediment": "",
+     "substance_id": "substance:5802b889a334f3e7a41d"
+    },
+    {
+     "source": "Mirelle Sulmirath",
+     "source_part": "tongue",
+     "substance": "saliva",
+     "target": "Hinami",
+     "placement": "surface",
+     "target_interior": "",
+     "target_part": "inner_thigh",
+     "amount": "wet trail",
+     "amount_band": "",
+     "detail": "slow slick line along crease",
+     "scent": "arousal",
+     "speech_impediment": "",
+     "substance_id": "substance:b2d7a3282b079dde492a"
+    },
+    {
+     "source": "Mirelle Sulmirath",
+     "source_part": "mouth",
+     "substance": "warm air",
+     "target": "Hinami",
+     "placement": "surface",
+     "target_interior": "",
+     "target_part": "body",
+     "amount": "wash",
+     "amount_band": "",
+     "detail": "",
+     "scent": "",
+     "speech_impediment": "",
+     "substance_id": "substance:eccd0a2bbbd7f33cdfd3"
+    },
+    {
+     "source": "Mirelle Sulmirath",
+     "source_part": "tongue",
+     "substance": "saliva",
+     "target": "Hinami",
+     "placement": "surface",
+     "target_interior": "",
+     "target_part": "front",
+     "amount": "coated",
+     "amount_band": "",
+     "detail": "",
+     "scent": "arousal",
+     "speech_impediment": "",
+     "substance_id": "substance:13e6900a33ad92b1578b"
+    },
+    {
+     "source": "Mirelle Sulmirath",
+     "source_part": "tongue",
+     "substance": "saliva",
+     "target": "Hinami",
+     "placement": "surface",
+     "target_interior": "",
+     "target_part": "back",
+     "amount": "wet trail",
+     "amount_band": "",
+     "detail": "",
+     "scent": "arousal",
+     "speech_impediment": "",
+     "substance_id": "substance:89c3665b15dfdc79c34a"
+    },
+    {
+     "source": "Mirelle Sulmirath",
+     "source_part": "mouth",
+     "substance": "saliva",
+     "target": "Hinami",
+     "placement": "surface",
+     "target_interior": "",
+     "target_part": "",
+     "amount": "",
+     "amount_band": "",
+     "detail": "the rolling savoring coats the tiny fox's front and back in fresh warm saliva as the tongue works her",
+     "scent": "",
+     "speech_impediment": "",
+     "substance_id": "substance:6e7cbcb63be77f611faa"
+    }
+   ],
+   "contained": {},
+   "scales": {},
+   "stations": {
+    "Mirelle Sulmirath": {
+     "at": "bbf74eda2d1c4c08",
+     "near": []
+    },
+    "Hinami": {
+     "at": null,
+     "near": []
+    }
+   }
+  }
+ },
+ {
+  "turn": 64,
+  "input": "You continue squirm as you are dragged downwards feel your breath short. You let out a strange noise as you feel a hard squeeze your back causing parts of it to",
+  "scene": {
+   "rooms": {
+    "reception_room": {
+     "name": "Reception Room",
+     "desc": "The reception room smells of sandalwood and something warmer beneath it — amber, maybe, or honey left too long in the sun. Soft lamplight catches the rich fabrics draped across low furniture, and somewhere out of sight, a small fountain murmurs its quiet rhythm.",
+     "adjacent": [],
+     "notes": "Private reception space for Mirelle's practice",
+     "light": "soft lamplight",
+     "exposure": "enclosed",
+     "anchors": {
+      "cushioned_bench": {
+       "desc": "A low, cushioned bench draped in rich fabrics",
+       "dir": "s"
+      },
+      "comfortable_chair": {
+       "desc": "A comfortable chair positioned opposite the bench",
+       "dir": "n"
+      }
+     },
+     "size": "small"
+    },
+    "private_session_room": {
+     "name": "Private Session Room",
+     "desc": "A softly lit chamber with a wide, low bed draped in dark silk sheets, a small side table holding oils and towels, and a single cushioned chair near the door. The air carries a faint scent of warmed amber and clean linen.",
+     "adjacent": [
+      {
+       "to": "reception_room",
+       "barrier": "open_door",
+       "distance": 0,
+       "dir": "w",
+       "name": "session door"
+      }
+     ],
+     "notes": "generated because no candidate described this room",
+     "anchors": {
+      "bbf74eda2d1c4c08": {
+       "desc": "A wide, low bed draped in dark silk sheets",
+       "dir": "e"
+      },
+      "side_table": {
+       "desc": "A small side table holding oils and towels",
+       "dir": "n"
+      },
+      "cushioned_chair": {
+       "desc": "A single cushioned chair near the door",
+       "dir": "w"
+      }
+     },
+     "size": "small"
+    },
+    "Mirelle Sulmirath_mouth": {
+     "name": "mouth",
+     "desc": "Warm, wet space where she plays with the client",
+     "light": "dim",
+     "parent_entity": "Mirelle Sulmirath",
+     "adjacent": [
+      {
+       "to": "Mirelle Sulmirath_throat",
+       "barrier": "membrane"
+      },
+      {
+       "to": "private_session_room",
+       "barrier": "membrane",
+       "distance": "near"
+      }
+     ],
+     "dock_exit": true
+    },
+    "Mirelle Sulmirath_throat": {
+     "name": "throat",
+     "desc": "Tight passage that squeezes vigorously, providing an intense muscular massage",
+     "light": "dark",
+     "parent_entity": "Mirelle Sulmirath",
+     "adjacent": [
+      {
+       "to": "Mirelle Sulmirath_mouth",
+       "barrier": "membrane"
+      },
+      {
+       "to": "Mirelle Sulmirath_stomach",
+       "barrier": "membrane"
+      }
+     ],
+     "transit_seconds": 5.0
+    },
+    "Mirelle Sulmirath_stomach": {
+     "name": "stomach",
+     "desc": "Scented with lavender and relaxing herbs, the walls constantly knead and squeeze it's occupant kneading weakened acid all over them that digests dead skin",
+     "light": "dark",
+     "parent_entity": "Mirelle Sulmirath",
+     "adjacent": [
+      {
+       "to": "Mirelle Sulmirath_throat",
+       "barrier": "membrane"
+      },
+      {
+       "to": "Mirelle Sulmirath_small_intestine",
+       "barrier": "membrane"
+      }
+     ]
+    },
+    "Mirelle Sulmirath_small_intestine": {
+     "name": "small_intestine",
+     "desc": "Incredibly tight space where the client is squeezed and massaged for hours, dragged ever deeper; a faint clean musk is present",
+     "light": "dark",
+     "parent_entity": "Mirelle Sulmirath",
+     "adjacent": [
+      {
+       "to": "Mirelle Sulmirath_stomach",
+       "barrier": "membrane"
+      },
+      {
+       "to": "Mirelle Sulmirath_large_intestine",
+       "barrier": "membrane"
+      }
+     ],
+     "transit_seconds": 7200.0
+    },
+    "Mirelle Sulmirath_large_intestine": {
+     "name": "large_intestine",
+     "desc": "Slightly less tight than the small intestine, kept clean and scented with oils",
+     "light": "dark",
+     "parent_entity": "Mirelle Sulmirath",
+     "adjacent": [
+      {
+       "to": "Mirelle Sulmirath_small_intestine",
+       "barrier": "membrane"
+      },
+      {
+       "to": "Mirelle Sulmirath_rectum",
+       "barrier": "membrane"
+      }
+     ],
+     "transit_seconds": 3600.0
+    },
+    "Mirelle Sulmirath_rectum": {
+     "name": "rectum",
+     "desc": "Clean space where the client is briefly held before powerful muscles push them out",
+     "light": "dark",
+     "parent_entity": "Mirelle Sulmirath",
+     "adjacent": [
+      {
+       "to": "Mirelle Sulmirath_large_intestine",
+       "barrier": "membrane"
+      }
+     ]
+    }
+   },
+   "positions": {
+    "Mirelle Sulmirath": "private_session_room",
+    "Hinami": "Mirelle Sulmirath_stomach",
+    "cbc598aac65e4a3f": "private_session_room",
+    "cd82133c9e464d16": "private_session_room",
+    "3f2c0ab6f8574b7e": "private_session_room",
+    "67dc4d2465184126": "private_session_room",
+    "f02ee349ee324a70": "private_session_room",
+    "a2e7a9cb0898482e": "private_session_room",
+    "fd3f9295ce8e4b49": "private_session_room",
+    "5d3b0148e06f49d7": "private_session_room",
+    "bbf74eda2d1c4c08": "private_session_room",
+    "f9926e5fba894569": "private_session_room"
+   },
+   "poses": {
+    "Mirelle Sulmirath": {
+     "posture": "sitting",
+     "support": "bbf74eda2d1c4c08",
+     "relative_to": "",
+     "relation": "",
+     "constraint": "",
+     "detail": "tongue curled around the little fox, holding her at the back of the mouth, savoring the moment"
+    },
+    "Hinami": {
+     "posture": "prone",
+     "support": "",
+     "relative_to": "",
+     "relation": "",
+     "constraint": "",
+     "detail": "settles still, body loose and compliant on tongue; drawn to the rear of the mouth, pressed past the ridge of the palate against the soft muscular edge where the throat begins, held at the threshold of the swallow; saliva-slick, warmth deepe"
+    }
+   },
+   "contacts": [
+    {
+     "actor": "Hinami",
+     "actor_part": "feet",
+     "target": "Mirelle Sulmirath",
+     "target_part": "",
+     "target_interior": "stomach",
+     "manner": "grip",
+     "relation": "interior",
+     "motion": "moving",
+     "detail": "ring closes around feet as measured swallow begins",
+     "unasserted": 1,
+     "contact_id": "contact:7b5af80a6b04b018f219"
+    },
+    {
+     "actor": "Hinami",
+     "actor_part": "body",
+     "target": "Mirelle Sulmirath",
+     "target_part": "",
+     "target_interior": "stomach",
+     "manner": "grip",
+     "relation": "interior",
+     "motion": "settled",
+     "detail": "fully enveloped",
+     "unasserted": 0,
+     "contact_id": "contact:e56c648cb37fb86e81ce"
+    }
+   ],
+   "contact_actions": [
+    {
+     "action_id": "contact-action:7b457c35a3a76b4db66e",
+     "actor": "Mirelle Sulmirath",
+     "contact_id": "contact:7b5af80a6b04b018f219",
+     "action": "peristaltic wave",
+     "intensity": "slow deliberate",
+     "rhythm": "measured upward",
+     "detail": ""
+    },
+    {
+     "action_id": "contact-action:f07f189bfe9542e58874",
+     "actor": "Mirelle Sulmirath",
+     "contact_id": "contact:e56c648cb37fb86e81ce",
+     "action": "peristaltic wave",
+     "intensity": "slow deliberate",
+     "rhythm": "measured upward",
+     "detail": ""
+    },
+    {
+     "action_id": "contact-action:1b815e8ef85018581b42",
+     "actor": "Hinami",
+     "contact_id": "contact:e56c648cb37fb86e81ce",
+     "action": "wriggle and squirm",
+     "intensity": "continuous",
+     "rhythm": "irregular",
+     "detail": ""
+    }
+   ],
+   "attire": {
+    "Hinami": {
+     "wearing": [],
+     "state": [
+      "bare at the torso, arms, waist, groin, legs, feet"
+     ],
+     "regions": {
+      "torso": {
+       "garments": [],
+       "beneath": "Soft, tanned skin across the chest and stomach. Small, perky breasts with light brown nipples, slightly upturned. Her stomach is smooth and soft, not toned—a comfortable, lived-in softness. Faint tan lines trace the tank top's neckline and shoulder straps. A few faded scrape scars dot her ribs from travel.",
+       "beneath_zones": {
+        "chest": "Soft, tanned skin across the chest. Small, perky breasts with light brown nipples, slightly upturned. Faint tan lines trace the tank top's neckline and shoulder straps.",
+        "midriff": "Her stomach is smooth and soft, not toned—a comfortable, lived-in softness. A few faded scrape scars dot her ribs from travel."
+       },
+       "uncovered": true
+      },
+      "waist": {
+       "garments": [],
+       "beneath": "Skin at the waist is softer and paler than sun-exposed areas, the tan fading where the sash sits. A slight softness rounds her lower belly. Hip bones visible beneath warm skin, not sharp but defined.",
+       "uncovered": true
+      },
+      "groin": {
+       "garments": [],
+       "beneath": "A neat patch of copper-gold curls above her vulva, kept trimmed. Outer labia full and soft, slightly darker than her tanned skin. Inner folds pink and smooth, tucked within. The skin between her thighs is warm and sensitive, carrying a faint musk of travel and warm body.",
+       "uncovered": true
+      },
+      "feet": {
+       "garments": [],
+       "beneath": "Bare feet, tanned and calloused at heels and balls from years in sandals. Toes nimble, gripping the ground easily. Soles rough but not cracked, hardened by travel.",
+       "uncovered": true
+      },
+      "arms": {
+       "garments": [],
+       "beneath": "Slim, warm arms with gentle definition from years on the road. Inner arms smooth and paler; forearms tanned and slightly rough from sun and wind. Fingers nimble with light calluses at the tips from sketching. Fine, barely visible copper-gold hair along her forearms.",
+       "uncovered": true
+      },
+      "legs": {
+       "garments": [],
+       "beneath": "Soft, slightly thick thighs tapering to slim calves. Skin tanned and warm, with faded scrapes and old insect bites from outdoor travel. Barely visible copper-gold hair on her shins. Inner thighs paler and softer, with slight chafing redness at the very top from long walks.",
+       "uncovered": true
+      }
+     }
+    },
+    "Mirelle Sulmirath": {
+     "wearing": [],
+     "state": [
+      "bare at the torso, arms, hands, groin, legs, feet",
+      "loosened"
+     ],
+     "regions": {
+      "torso": {
+       "garments": [],
+       "beneath": "",
+       "beneath_zones": {
+        "chest": "Full, heavy breasts that settle softly once the chemise is drawn away; nipples a deeper bronze, soft and slightly raised from the cool air; skin smooth and meticulously maintained, carrying the same faint shimmer as the rest of her; fine stretch marks trace the outer curve where her breasts are fullest; her sternum and the gentle ridge of her collarbones show between her breasts",
+        "midriff": "A narrow, soft waist — not muscular but toned enough to show the gentle curve of her ribs above her hips; skin warm and smooth with the same bronze shimmer; her navel is small and shallow; the skin here radiates a gentle warmth from her supernatural metabolism"
+       },
+       "uncovered": true
+      },
+      "groin": {
+       "garments": [],
+       "beneath": "Smooth, bare bronze skin beneath the silk — meticulously maintained as befits her profession; warm to the touch from her supernatural metabolism; her vulva is soft and bare, the same warm bronze as the rest of her body but with soft pink lips and interior",
+       "uncovered": true
+      },
+      "arms": {
+       "garments": [],
+       "beneath": "Bronze skin, soft and warm with the same faint shimmer; her forearms are smooth, the undersides of her wrists showing faint blue veins beneath the bronze;",
+       "uncovered": true
+      },
+      "hands": {
+       "garments": [],
+       "beneath": "her hands are long-fingered and elegant with nails trimmed short and neat for massage work — a professional's hands, sensitive and deliberately cared for"
+      },
+      "legs": {
+       "garments": [],
+       "beneath": "Long, shapely legs with smooth bronze skin and the same faint shimmer; the upper thighs are soft and full where the robe's hem falls, tapering to toned calves;",
+       "uncovered": true
+      },
+      "feet": {
+       "garments": [],
+       "beneath": "her feet are bare with short neat nails"
+      }
+     }
+    }
+   },
+   "entities": {
+    "cbc598aac65e4a3f": {
+     "name": "lightweight travel jacket",
+     "kind": "object",
+     "description": "lightweight travel jacket, taken off",
+     "aliases": [
+      "lightweight travel jacket"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Hinami",
+      "shed": true
+     }
+    },
+    "cd82133c9e464d16": {
+     "name": "fitted tank top",
+     "kind": "object",
+     "description": "fitted tank top, taken off",
+     "aliases": [
+      "fitted tank top"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Hinami",
+      "shed": true
+     }
+    },
+    "3f2c0ab6f8574b7e": {
+     "name": "utility sash with pouches",
+     "kind": "object",
+     "description": "utility sash with pouches, taken off",
+     "aliases": [
+      "utility sash with pouches"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Hinami",
+      "shed": true
+     }
+    },
+    "67dc4d2465184126": {
+     "name": "travel shorts",
+     "kind": "object",
+     "description": "travel shorts, taken off",
+     "aliases": [
+      "travel shorts"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Hinami",
+      "shed": true
+     }
+    },
+    "f02ee349ee324a70": {
+     "name": "sturdy sandals",
+     "kind": "object",
+     "description": "sturdy sandals, taken off",
+     "aliases": [
+      "sturdy sandals"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Hinami",
+      "shed": true
+     }
+    },
+    "a2e7a9cb0898482e": {
+     "name": "plum silk wrap robe",
+     "kind": "object",
+     "description": "plum silk wrap robe, taken off",
+     "aliases": [
+      "plum silk wrap robe"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Mirelle Sulmirath",
+      "shed": true
+     }
+    },
+    "fd3f9295ce8e4b49": {
+     "name": "black silk chemise",
+     "kind": "object",
+     "description": "",
+     "aliases": [
+      "black silk chemise"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Mirelle Sulmirath",
+      "shed": true
+     },
+     "ubiquitous": false
+    },
+    "5d3b0148e06f49d7": {
+     "name": "silk panties",
+     "kind": "object",
+     "description": "",
+     "aliases": [
+      "silk panties"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": null,
+      "shed": true,
+      "location": "floor",
+      "pooled_at": "Mirelle Sulmirath's feet"
+     },
+     "ubiquitous": false
+    },
+    "bbf74eda2d1c4c08": {
+     "name": "wide bed",
+     "kind": "furniture",
+     "description": "",
+     "aliases": [
+      "bed"
+     ],
+     "portable": false,
+     "container": true,
+     "interior_rooms": [
+      "bed_surface"
+     ],
+     "state": {
+      "enclosure": "membrane"
+     },
+     "ubiquitous": false,
+     "enclosure": "membrane"
+    },
+    "f9926e5fba894569": {
+     "name": "feather hair clip",
+     "kind": "object",
+     "description": "feather hair clip, taken off — slightly askew",
+     "aliases": [
+      "feather hair clip"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Hinami",
+      "shed": true,
+      "condition": "slightly askew"
+     }
+    },
+    "Hinami": {
+     "name": "Hinami",
+     "kind": "person",
+     "description": "",
+     "aliases": [],
+     "portable": false,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "aroused": true,
+      "blushing": true,
+      "breathing_heavily": true
+     },
+     "ubiquitous": false,
+     "scent": "arousal"
+    },
+    "Mirelle Sulmirath": {
+     "name": "Mirelle Sulmirath",
+     "kind": "person",
+     "description": "",
+     "aliases": [],
+     "portable": false,
+     "container": false,
+     "interior_rooms": [
+      "Mirelle Sulmirath_mouth",
+      "Mirelle Sulmirath_throat",
+      "Mirelle Sulmirath_stomach",
+      "Mirelle Sulmirath_small_intestine",
+      "Mirelle Sulmirath_large_intestine",
+      "Mirelle Sulmirath_rectum"
+     ],
+     "state": {
+      "tail_coiled_tight": true,
+      "wings_straining": true,
+      "tail_coiled_loose": true,
+      "wings_folded": true
+     },
+     "ubiquitous": false,
+     "interior_spec": [
+      {
+       "name": "mouth",
+       "desc": "Warm, wet space where she plays with the client",
+       "light": "dim",
+       "barrier": ""
+      },
+      {
+       "name": "throat",
+       "desc": "Tight passage that squeezes vigorously, providing an intense muscular massage",
+       "light": "dark",
+       "barrier": "membrane",
+       "transit_seconds": 5.0
+      },
+      {
+       "name": "stomach",
+       "desc": "Scented with lavender and relaxing herbs, the walls constantly knead and squeeze it's occupant kneading weakened acid all over them that digests dead skin",
+       "light": "dark",
+       "barrier": "membrane"
+      },
+      {
+       "name": "small_intestine",
+       "desc": "Incredibly tight space where the client is squeezed and massaged for hours, dragged ever deeper; a faint clean musk is present",
+       "light": "dark",
+       "barrier": "membrane",
+       "transit_seconds": 7200.0
+      },
+      {
+       "name": "large_intestine",
+       "desc": "Slightly less tight than the small intestine, kept clean and scented with oils",
+       "light": "dark",
+       "barrier": "membrane",
+       "transit_seconds": 3600.0
+      },
+      {
+       "name": "rectum",
+       "desc": "Clean space where the client is briefly held before powerful muscles push them out",
+       "light": "dark",
+       "barrier": "membrane"
+      }
+     ],
+     "enclosure": "membrane"
+    }
+   },
+   "substances": [
+    {
+     "source": "Hinami",
+     "source_part": "between the legs",
+     "substance": "arousal fluids",
+     "target": "Hinami",
+     "placement": "surface",
+     "target_interior": "",
+     "target_part": "",
+     "amount": "noticeable dampness",
+     "amount_band": "",
+     "detail": "scent of arousal becoming noticeable in the air",
+     "scent": "arousal",
+     "speech_impediment": "",
+     "substance_id": "substance:5802b889a334f3e7a41d"
+    },
+    {
+     "source": "Mirelle Sulmirath",
+     "source_part": "tongue",
+     "substance": "saliva",
+     "target": "Hinami",
+     "placement": "surface",
+     "target_interior": "",
+     "target_part": "inner_thigh",
+     "amount": "wet trail",
+     "amount_band": "",
+     "detail": "slow slick line along crease",
+     "scent": "arousal",
+     "speech_impediment": "",
+     "substance_id": "substance:b2d7a3282b079dde492a"
+    },
+    {
+     "source": "Mirelle Sulmirath",
+     "source_part": "mouth",
+     "substance": "warm air",
+     "target": "Hinami",
+     "placement": "surface",
+     "target_interior": "",
+     "target_part": "body",
+     "amount": "wash",
+     "amount_band": "",
+     "detail": "",
+     "scent": "",
+     "speech_impediment": "",
+     "substance_id": "substance:eccd0a2bbbd7f33cdfd3"
+    },
+    {
+     "source": "Mirelle Sulmirath",
+     "source_part": "tongue",
+     "substance": "saliva",
+     "target": "Hinami",
+     "placement": "surface",
+     "target_interior": "",
+     "target_part": "front",
+     "amount": "coated",
+     "amount_band": "",
+     "detail": "",
+     "scent": "arousal",
+     "speech_impediment": "",
+     "substance_id": "substance:13e6900a33ad92b1578b"
+    },
+    {
+     "source": "Mirelle Sulmirath",
+     "source_part": "tongue",
+     "substance": "saliva",
+     "target": "Hinami",
+     "placement": "surface",
+     "target_interior": "",
+     "target_part": "back",
+     "amount": "wet trail",
+     "amount_band": "",
+     "detail": "",
+     "scent": "arousal",
+     "speech_impediment": "",
+     "substance_id": "substance:89c3665b15dfdc79c34a"
+    },
+    {
+     "source": "Mirelle Sulmirath",
+     "source_part": "mouth",
+     "substance": "saliva",
+     "target": "Hinami",
+     "placement": "surface",
+     "target_interior": "",
+     "target_part": "",
+     "amount": "",
+     "amount_band": "",
+     "detail": "the rolling savoring coats the tiny fox's front and back in fresh warm saliva as the tongue works her",
+     "scent": "",
+     "speech_impediment": "",
+     "substance_id": "substance:6e7cbcb63be77f611faa"
+    }
+   ],
+   "contained": {},
+   "scales": {},
+   "stations": {
+    "Mirelle Sulmirath": {
+     "at": "bbf74eda2d1c4c08",
+     "near": []
+    },
+    "Hinami": {
+     "at": null,
+     "near": []
+    }
+   }
+  }
+ },
+ {
+  "turn": 65,
+  "input": "You move your feet around in the new area trying to map it out.",
+  "scene": {
+   "rooms": {
+    "reception_room": {
+     "name": "Reception Room",
+     "desc": "The reception room smells of sandalwood and something warmer beneath it — amber, maybe, or honey left too long in the sun. Soft lamplight catches the rich fabrics draped across low furniture, and somewhere out of sight, a small fountain murmurs its quiet rhythm.",
+     "adjacent": [],
+     "notes": "Private reception space for Mirelle's practice",
+     "light": "soft lamplight",
+     "exposure": "enclosed",
+     "anchors": {
+      "cushioned_bench": {
+       "desc": "A low, cushioned bench draped in rich fabrics",
+       "dir": "s"
+      },
+      "comfortable_chair": {
+       "desc": "A comfortable chair positioned opposite the bench",
+       "dir": "n"
+      }
+     },
+     "size": "small"
+    },
+    "private_session_room": {
+     "name": "Private Session Room",
+     "desc": "A softly lit chamber with a wide, low bed draped in dark silk sheets, a small side table holding oils and towels, and a single cushioned chair near the door. The air carries a faint scent of warmed amber and clean linen.",
+     "adjacent": [
+      {
+       "to": "reception_room",
+       "barrier": "open_door",
+       "distance": 0,
+       "dir": "w",
+       "name": "session door"
+      }
+     ],
+     "notes": "generated because no candidate described this room",
+     "anchors": {
+      "bbf74eda2d1c4c08": {
+       "desc": "A wide, low bed draped in dark silk sheets",
+       "dir": "e"
+      },
+      "side_table": {
+       "desc": "A small side table holding oils and towels",
+       "dir": "n"
+      },
+      "cushioned_chair": {
+       "desc": "A single cushioned chair near the door",
+       "dir": "w"
+      }
+     },
+     "size": "small"
+    },
+    "Mirelle Sulmirath_mouth": {
+     "name": "mouth",
+     "desc": "Warm, wet space where she plays with the client",
+     "light": "dim",
+     "parent_entity": "Mirelle Sulmirath",
+     "adjacent": [
+      {
+       "to": "Mirelle Sulmirath_throat",
+       "barrier": "membrane"
+      },
+      {
+       "to": "private_session_room",
+       "barrier": "membrane",
+       "distance": "near"
+      }
+     ],
+     "dock_exit": true
+    },
+    "Mirelle Sulmirath_throat": {
+     "name": "throat",
+     "desc": "Tight passage that squeezes vigorously, providing an intense muscular massage",
+     "light": "dark",
+     "parent_entity": "Mirelle Sulmirath",
+     "adjacent": [
+      {
+       "to": "Mirelle Sulmirath_mouth",
+       "barrier": "membrane"
+      },
+      {
+       "to": "Mirelle Sulmirath_stomach",
+       "barrier": "membrane"
+      }
+     ],
+     "transit_seconds": 5.0
+    },
+    "Mirelle Sulmirath_stomach": {
+     "name": "stomach",
+     "desc": "Scented with lavender and relaxing herbs, the walls constantly knead and squeeze it's occupant kneading weakened acid all over them that digests dead skin",
+     "light": "dark",
+     "parent_entity": "Mirelle Sulmirath",
+     "adjacent": [
+      {
+       "to": "Mirelle Sulmirath_throat",
+       "barrier": "membrane"
+      },
+      {
+       "to": "Mirelle Sulmirath_small_intestine",
+       "barrier": "membrane"
+      }
+     ]
+    },
+    "Mirelle Sulmirath_small_intestine": {
+     "name": "small_intestine",
+     "desc": "Incredibly tight space where the client is squeezed and massaged for hours, dragged ever deeper; a faint clean musk is present",
+     "light": "dark",
+     "parent_entity": "Mirelle Sulmirath",
+     "adjacent": [
+      {
+       "to": "Mirelle Sulmirath_stomach",
+       "barrier": "membrane"
+      },
+      {
+       "to": "Mirelle Sulmirath_large_intestine",
+       "barrier": "membrane"
+      }
+     ],
+     "transit_seconds": 7200.0
+    },
+    "Mirelle Sulmirath_large_intestine": {
+     "name": "large_intestine",
+     "desc": "Slightly less tight than the small intestine, kept clean and scented with oils",
+     "light": "dark",
+     "parent_entity": "Mirelle Sulmirath",
+     "adjacent": [
+      {
+       "to": "Mirelle Sulmirath_small_intestine",
+       "barrier": "membrane"
+      },
+      {
+       "to": "Mirelle Sulmirath_rectum",
+       "barrier": "membrane"
+      }
+     ],
+     "transit_seconds": 3600.0
+    },
+    "Mirelle Sulmirath_rectum": {
+     "name": "rectum",
+     "desc": "Clean space where the client is briefly held before powerful muscles push them out",
+     "light": "dark",
+     "parent_entity": "Mirelle Sulmirath",
+     "adjacent": [
+      {
+       "to": "Mirelle Sulmirath_large_intestine",
+       "barrier": "membrane"
+      }
+     ]
+    }
+   },
+   "positions": {
+    "Mirelle Sulmirath": "private_session_room",
+    "Hinami": "Mirelle Sulmirath_stomach",
+    "cbc598aac65e4a3f": "private_session_room",
+    "cd82133c9e464d16": "private_session_room",
+    "3f2c0ab6f8574b7e": "private_session_room",
+    "67dc4d2465184126": "private_session_room",
+    "f02ee349ee324a70": "private_session_room",
+    "a2e7a9cb0898482e": "private_session_room",
+    "fd3f9295ce8e4b49": "private_session_room",
+    "5d3b0148e06f49d7": "private_session_room",
+    "bbf74eda2d1c4c08": "private_session_room",
+    "f9926e5fba894569": "private_session_room"
+   },
+   "poses": {
+    "Mirelle Sulmirath": {
+     "posture": "reclining",
+     "support": "bbf74eda2d1c4c08",
+     "relative_to": "",
+     "relation": "",
+     "constraint": "",
+     "detail": "sinks back into the silk sheets, one hand resting flat on bare stomach over the tiny warmth"
+    },
+    "Hinami": {
+     "posture": "prone",
+     "support": "",
+     "relative_to": "",
+     "relation": "",
+     "constraint": "",
+     "detail": "feet shifting and pressing against the lavender-scented walls, mapping the tight warm space by touch"
+    }
+   },
+   "contacts": [
+    {
+     "actor": "Hinami",
+     "actor_part": "feet",
+     "target": "Mirelle Sulmirath",
+     "target_part": "",
+     "target_interior": "stomach",
+     "manner": "grip",
+     "relation": "interior",
+     "motion": "moving",
+     "detail": "ring closes around feet as measured swallow begins",
+     "unasserted": 1,
+     "contact_id": "contact:b917aa578966e288d074"
+    },
+    {
+     "actor": "Hinami",
+     "actor_part": "body",
+     "target": "Mirelle Sulmirath",
+     "target_part": "",
+     "target_interior": "stomach",
+     "manner": "grip",
+     "relation": "interior",
+     "motion": "settled",
+     "detail": "fully enveloped",
+     "unasserted": 0,
+     "contact_id": "contact:61916b1d5dbbb04f8a2a"
+    }
+   ],
+   "contact_actions": [
+    {
+     "action_id": "contact-action:435e216cd6ce5067d876",
+     "actor": "Mirelle Sulmirath",
+     "contact_id": "contact:61916b1d5dbbb04f8a2a",
+     "action": "kneading",
+     "intensity": "slow rhythmic",
+     "rhythm": "",
+     "detail": "lavender-scented warmth pressing and releasing"
+    },
+    {
+     "action_id": "contact-action:f9ccb31e975f9678566d",
+     "actor": "Hinami",
+     "contact_id": "contact:61916b1d5dbbb04f8a2a",
+     "action": "press",
+     "intensity": "mapping",
+     "rhythm": "",
+     "detail": "feet shift and press against stomach walls"
+    }
+   ],
+   "attire": {
+    "Hinami": {
+     "wearing": [],
+     "state": [
+      "bare at the torso, arms, waist, groin, legs, feet"
+     ],
+     "regions": {
+      "torso": {
+       "garments": [],
+       "beneath": "Soft, tanned skin across the chest and stomach. Small, perky breasts with light brown nipples, slightly upturned. Her stomach is smooth and soft, not toned—a comfortable, lived-in softness. Faint tan lines trace the tank top's neckline and shoulder straps. A few faded scrape scars dot her ribs from travel.",
+       "beneath_zones": {
+        "chest": "Soft, tanned skin across the chest. Small, perky breasts with light brown nipples, slightly upturned. Faint tan lines trace the tank top's neckline and shoulder straps.",
+        "midriff": "Her stomach is smooth and soft, not toned—a comfortable, lived-in softness. A few faded scrape scars dot her ribs from travel."
+       },
+       "uncovered": true
+      },
+      "waist": {
+       "garments": [],
+       "beneath": "Skin at the waist is softer and paler than sun-exposed areas, the tan fading where the sash sits. A slight softness rounds her lower belly. Hip bones visible beneath warm skin, not sharp but defined.",
+       "uncovered": true
+      },
+      "groin": {
+       "garments": [],
+       "beneath": "A neat patch of copper-gold curls above her vulva, kept trimmed. Outer labia full and soft, slightly darker than her tanned skin. Inner folds pink and smooth, tucked within. The skin between her thighs is warm and sensitive, carrying a faint musk of travel and warm body.",
+       "uncovered": true
+      },
+      "feet": {
+       "garments": [],
+       "beneath": "Bare feet, tanned and calloused at heels and balls from years in sandals. Toes nimble, gripping the ground easily. Soles rough but not cracked, hardened by travel.",
+       "uncovered": true
+      },
+      "arms": {
+       "garments": [],
+       "beneath": "Slim, warm arms with gentle definition from years on the road. Inner arms smooth and paler; forearms tanned and slightly rough from sun and wind. Fingers nimble with light calluses at the tips from sketching. Fine, barely visible copper-gold hair along her forearms.",
+       "uncovered": true
+      },
+      "legs": {
+       "garments": [],
+       "beneath": "Soft, slightly thick thighs tapering to slim calves. Skin tanned and warm, with faded scrapes and old insect bites from outdoor travel. Barely visible copper-gold hair on her shins. Inner thighs paler and softer, with slight chafing redness at the very top from long walks.",
+       "uncovered": true
+      }
+     }
+    },
+    "Mirelle Sulmirath": {
+     "wearing": [],
+     "state": [
+      "bare at the torso, arms, hands, groin, legs, feet",
+      "loosened"
+     ],
+     "regions": {
+      "torso": {
+       "garments": [],
+       "beneath": "",
+       "beneath_zones": {
+        "chest": "Full, heavy breasts that settle softly once the chemise is drawn away; nipples a deeper bronze, soft and slightly raised from the cool air; skin smooth and meticulously maintained, carrying the same faint shimmer as the rest of her; fine stretch marks trace the outer curve where her breasts are fullest; her sternum and the gentle ridge of her collarbones show between her breasts",
+        "midriff": "A narrow, soft waist — not muscular but toned enough to show the gentle curve of her ribs above her hips; skin warm and smooth with the same bronze shimmer; her navel is small and shallow; the skin here radiates a gentle warmth from her supernatural metabolism"
+       },
+       "uncovered": true
+      },
+      "groin": {
+       "garments": [],
+       "beneath": "Smooth, bare bronze skin beneath the silk — meticulously maintained as befits her profession; warm to the touch from her supernatural metabolism; her vulva is soft and bare, the same warm bronze as the rest of her body but with soft pink lips and interior",
+       "uncovered": true
+      },
+      "arms": {
+       "garments": [],
+       "beneath": "Bronze skin, soft and warm with the same faint shimmer; her forearms are smooth, the undersides of her wrists showing faint blue veins beneath the bronze;",
+       "uncovered": true
+      },
+      "hands": {
+       "garments": [],
+       "beneath": "her hands are long-fingered and elegant with nails trimmed short and neat for massage work — a professional's hands, sensitive and deliberately cared for"
+      },
+      "legs": {
+       "garments": [],
+       "beneath": "Long, shapely legs with smooth bronze skin and the same faint shimmer; the upper thighs are soft and full where the robe's hem falls, tapering to toned calves;",
+       "uncovered": true
+      },
+      "feet": {
+       "garments": [],
+       "beneath": "her feet are bare with short neat nails"
+      }
+     }
+    }
+   },
+   "entities": {
+    "cbc598aac65e4a3f": {
+     "name": "lightweight travel jacket",
+     "kind": "object",
+     "description": "lightweight travel jacket, taken off",
+     "aliases": [
+      "lightweight travel jacket"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Hinami",
+      "shed": true
+     }
+    },
+    "cd82133c9e464d16": {
+     "name": "fitted tank top",
+     "kind": "object",
+     "description": "fitted tank top, taken off",
+     "aliases": [
+      "fitted tank top"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Hinami",
+      "shed": true
+     }
+    },
+    "3f2c0ab6f8574b7e": {
+     "name": "utility sash with pouches",
+     "kind": "object",
+     "description": "utility sash with pouches, taken off",
+     "aliases": [
+      "utility sash with pouches"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Hinami",
+      "shed": true
+     }
+    },
+    "67dc4d2465184126": {
+     "name": "travel shorts",
+     "kind": "object",
+     "description": "travel shorts, taken off",
+     "aliases": [
+      "travel shorts"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Hinami",
+      "shed": true
+     }
+    },
+    "f02ee349ee324a70": {
+     "name": "sturdy sandals",
+     "kind": "object",
+     "description": "sturdy sandals, taken off",
+     "aliases": [
+      "sturdy sandals"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Hinami",
+      "shed": true
+     }
+    },
+    "a2e7a9cb0898482e": {
+     "name": "plum silk wrap robe",
+     "kind": "object",
+     "description": "plum silk wrap robe, taken off",
+     "aliases": [
+      "plum silk wrap robe"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Mirelle Sulmirath",
+      "shed": true
+     }
+    },
+    "fd3f9295ce8e4b49": {
+     "name": "black silk chemise",
+     "kind": "object",
+     "description": "",
+     "aliases": [
+      "black silk chemise"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Mirelle Sulmirath",
+      "shed": true
+     },
+     "ubiquitous": false
+    },
+    "5d3b0148e06f49d7": {
+     "name": "silk panties",
+     "kind": "object",
+     "description": "",
+     "aliases": [
+      "silk panties"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": null,
+      "shed": true,
+      "location": "floor",
+      "pooled_at": "Mirelle Sulmirath's feet"
+     },
+     "ubiquitous": false
+    },
+    "bbf74eda2d1c4c08": {
+     "name": "wide bed",
+     "kind": "furniture",
+     "description": "",
+     "aliases": [
+      "bed"
+     ],
+     "portable": false,
+     "container": true,
+     "interior_rooms": [
+      "bed_surface"
+     ],
+     "state": {
+      "enclosure": "membrane"
+     },
+     "ubiquitous": false,
+     "enclosure": "membrane"
+    },
+    "f9926e5fba894569": {
+     "name": "feather hair clip",
+     "kind": "object",
+     "description": "feather hair clip, taken off — slightly askew",
+     "aliases": [
+      "feather hair clip"
+     ],
+     "portable": true,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "clothing": true,
+      "worn_by": "Hinami",
+      "shed": true,
+      "condition": "slightly askew"
+     }
+    },
+    "Hinami": {
+     "name": "Hinami",
+     "kind": "person",
+     "description": "",
+     "aliases": [],
+     "portable": false,
+     "container": false,
+     "interior_rooms": [],
+     "state": {
+      "aroused": true,
+      "blushing": true,
+      "breathing_heavily": true
+     },
+     "ubiquitous": false,
+     "scent": "arousal"
+    },
+    "Mirelle Sulmirath": {
+     "name": "Mirelle Sulmirath",
+     "kind": "person",
+     "description": "",
+     "aliases": [],
+     "portable": false,
+     "container": false,
+     "interior_rooms": [
+      "Mirelle Sulmirath_mouth",
+      "Mirelle Sulmirath_throat",
+      "Mirelle Sulmirath_stomach",
+      "Mirelle Sulmirath_small_intestine",
+      "Mirelle Sulmirath_large_intestine",
+      "Mirelle Sulmirath_rectum"
+     ],
+     "state": {
+      "tail_coiled_tight": true,
+      "wings_straining": true,
+      "tail_coiled_loose": true,
+      "wings_folded": true
+     },
+     "ubiquitous": false,
+     "interior_spec": [
+      {
+       "name": "mouth",
+       "desc": "Warm, wet space where she plays with the client",
+       "light": "dim",
+       "barrier": ""
+      },
+      {
+       "name": "throat",
+       "desc": "Tight passage that squeezes vigorously, providing an intense muscular massage",
+       "light": "dark",
+       "barrier": "membrane",
+       "transit_seconds": 5.0
+      },
+      {
+       "name": "stomach",
+       "desc": "Scented with lavender and relaxing herbs, the walls constantly knead and squeeze it's occupant kneading weakened acid all over them that digests dead skin",
+       "light": "dark",
+       "barrier": "membrane"
+      },
+      {
+       "name": "small_intestine",
+       "desc": "Incredibly tight space where the client is squeezed and massaged for hours, dragged ever deeper; a faint clean musk is present",
+       "light": "dark",
+       "barrier": "membrane",
+       "transit_seconds": 7200.0
+      },
+      {
+       "name": "large_intestine",
+       "desc": "Slightly less tight than the small intestine, kept clean and scented with oils",
+       "light": "dark",
+       "barrier": "membrane",
+       "transit_seconds": 3600.0
+      },
+      {
+       "name": "rectum",
+       "desc": "Clean space where the client is briefly held before powerful muscles push them out",
+       "light": "dark",
+       "barrier": "membrane"
+      }
+     ],
+     "enclosure": "membrane"
+    }
+   },
+   "substances": [
+    {
+     "source": "Hinami",
+     "source_part": "between the legs",
+     "substance": "arousal fluids",
+     "target": "Hinami",
+     "placement": "surface",
+     "target_interior": "",
+     "target_part": "",
+     "amount": "noticeable dampness",
+     "amount_band": "",
+     "detail": "scent of arousal becoming noticeable in the air",
+     "scent": "arousal",
+     "speech_impediment": "",
+     "substance_id": "substance:5802b889a334f3e7a41d"
+    },
+    {
+     "source": "Mirelle Sulmirath",
+     "source_part": "tongue",
+     "substance": "saliva",
+     "target": "Hinami",
+     "placement": "surface",
+     "target_interior": "",
+     "target_part": "inner_thigh",
+     "amount": "wet trail",
+     "amount_band": "",
+     "detail": "slow slick line along crease",
+     "scent": "arousal",
+     "speech_impediment": "",
+     "substance_id": "substance:b2d7a3282b079dde492a"
+    },
+    {
+     "source": "Mirelle Sulmirath",
+     "source_part": "mouth",
+     "substance": "warm air",
+     "target": "Hinami",
+     "placement": "surface",
+     "target_interior": "",
+     "target_part": "body",
+     "amount": "wash",
+     "amount_band": "",
+     "detail": "",
+     "scent": "",
+     "speech_impediment": "",
+     "substance_id": "substance:eccd0a2bbbd7f33cdfd3"
+    },
+    {
+     "source": "Mirelle Sulmirath",
+     "source_part": "tongue",
+     "substance": "saliva",
+     "target": "Hinami",
+     "placement": "surface",
+     "target_interior": "",
+     "target_part": "front",
+     "amount": "coated",
+     "amount_band": "",
+     "detail": "",
+     "scent": "arousal",
+     "speech_impediment": "",
+     "substance_id": "substance:13e6900a33ad92b1578b"
+    },
+    {
+     "source": "Mirelle Sulmirath",
+     "source_part": "tongue",
+     "substance": "saliva",
+     "target": "Hinami",
+     "placement": "surface",
+     "target_interior": "",
+     "target_part": "back",
+     "amount": "wet trail",
+     "amount_band": "",
+     "detail": "",
+     "scent": "arousal",
+     "speech_impediment": "",
+     "substance_id": "substance:89c3665b15dfdc79c34a"
+    },
+    {
+     "source": "Mirelle Sulmirath",
+     "source_part": "mouth",
+     "substance": "saliva",
+     "target": "Hinami",
+     "placement": "surface",
+     "target_interior": "",
+     "target_part": "",
+     "amount": "",
+     "amount_band": "",
+     "detail": "the rolling savoring coats the tiny fox's front and back in fresh warm saliva as the tongue works her",
+     "scent": "",
+     "speech_impediment": "",
+     "substance_id": "substance:6e7cbcb63be77f611faa"
+    }
+   ],
+   "contained": {},
+   "scales": {},
+   "stations": {
+    "Mirelle Sulmirath": {
+     "at": "bbf74eda2d1c4c08",
+     "near": []
+    },
+    "Hinami": {
+     "at": null,
+     "near": []
+    }
+   }
+  }
+ }
+]
