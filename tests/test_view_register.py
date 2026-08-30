@@ -28,6 +28,7 @@ import re
 import pytest
 
 from agents.composer import pose_percepts, render_view
+from language_runtime import raw_card
 
 
 def _scene(poses, **kw):
@@ -207,10 +208,7 @@ class TestAMagnitudeIsNotANoun:
 class TestTheRuleReachedTheNarrator:
     @pytest.mark.parametrize("lang", ["en", "ja"])
     def test_both_cards_say_the_view_is_composed(self, lang):
-        card = json.load(open(
-            f"language_packs/{lang}/cards/system_prompts.json",
-            encoding="utf-8"))
-        narrator = card["prompts"]["narrator"]
+        narrator = raw_card(lang)["prompts"]["narrator"]
         marker = ("IT IS COMPOSED, NOT QUOTED" if lang == "en"
                   else "引用ではなく合成されたもの")
         assert marker in narrator

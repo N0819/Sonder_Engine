@@ -1038,6 +1038,44 @@ def _same_referent(scene, a, b):
     return bool(na) and na == nb
 
 
+#: Words that may follow an OBJECT pronoun and never a possessive one. A
+#: possessive is followed by the thing possessed -- a noun, or an adjective
+#: on its way to one -- so a preposition or a conjunction after "her" settles
+#: that "her" is the object. This is a closed class the engine owns rather
+#: than an attempt to anticipate English (CLAUDE.md's carve-out), and the
+#: genuinely ambiguous members are left OUT on purpose: "her back", "her
+#: past" and "her present" are possessives as readily as adverbs, so none of
+#: those three is here.
+_OBJECT_PRONOUN_FOLLOWERS = frozenset((
+    "at", "to", "into", "onto", "in", "on", "out", "from", "by", "with",
+    "without", "for", "toward", "towards", "through", "across", "over",
+    "under", "against", "behind", "before", "after", "beside", "between",
+    "among", "up", "down", "off", "away", "along", "upon", "within",
+    "beneath", "below", "above", "inside", "outside",
+    "and", "or", "but", "so", "then", "while", "as", "when", "if",
+    "because", "though", "although", "until", "since",
+))
+
+
+def _reads_as_possessive(tail) -> bool:
+    """Is the pronoun just matched a possessive, judged by what follows it?
+
+    The two readings are spelled the same for a great many bodies -- `her` is
+    both -- so the fallback asked only whether ANY word followed, and a
+    prepositional phrase after an object pronoun is a word. Measured live
+    (chat 99): a stored pose detail reading `holding her at the back of the
+    mouth` reached its owner's own view as `holding your at the back of the
+    mouth`, which is not English and which named the wrong body besides.
+
+    A possessive is followed by what is possessed. A preposition or a
+    conjunction is neither, so it settles the reading the other way.
+    """
+    match = re.match(r"\s+([A-Za-z][\w'\u2019-]*)", str(tail or ""))
+    if not match:
+        return False        # end of fragment, or punctuation: object
+    return match.group(1).casefold() not in _OBJECT_PRONOUN_FOLLOWERS
+
+
 def _pose_owner_second_person(text, pronouns, other_forms=()):
     """Rewrite pronouns whose referent is known from a pose's ownership.
 
@@ -1097,8 +1135,7 @@ def _pose_owner_second_person(text, pronouns, other_forms=()):
             elif ((low == possessive.casefold()
                    and low != obj.casefold()) or
                   (low == possessive.casefold() == obj.casefold()
-                   and bool(re.match(
-                       r"\s+[A-Za-z]", prefix[match.end():])))):
+                   and _reads_as_possessive(prefix[match.end():]))):
                 replacement = "your"
             else:
                 replacement = "you"

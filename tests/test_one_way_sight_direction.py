@@ -112,11 +112,10 @@ def test_the_field_survives_a_room_redeclaration():
 def test_the_prompts_ask_for_the_field_in_both_packs():
     """The engine cannot infer a direction, so the prompt has to request it --
     in every language, or the pack that does not ask gets the live bug."""
-    import json
+    from language_runtime import raw_card
 
     for lang in ("en", "ja"):
-        prompts = json.load(open(
-            "language_packs/%s/cards/system_prompts.json" % lang))["prompts"]
+        prompts = raw_card(lang)["prompts"]
         for key in ("director_establish", "resolve_repair"):
             assert "sight_from" in str(prompts[key]), (lang, key)
 

@@ -38,6 +38,7 @@ from world.spatial_containment import (
 from world.spatial_geometry import (apply_pose_diff, derive_scene_stations,
                               poses_broken_by_scale_change,
                               invalidate_contact_bound_poses,
+                              invalidate_moved_body_pose_details,
                               invalidate_transferred_pose_details,
                               normalize_scene_poses, normalize_scene_stations)
 from world.spatial_identity import (_ci_get, _entity_named, room_of,
@@ -1111,6 +1112,10 @@ def merge_scene_with_diff(
         _prior_rooms, incoming_rooms)
     incoming_entities = diff.get("entities") or {}
     incoming_positions = diff.get("positions") or {}
+    # Where everyone stood BEFORE this beat's placements landed -- the
+    # comparison `invalidate_moved_body_pose_details` needs further down, and
+    # the same shape `previous_scales` takes for the scale retirements.
+    _positions_before = dict(merged.get("positions") or {})
     incoming_stations = diff.get("stations") or {}
     incoming_poses = diff.get("poses") or {}
 
@@ -1450,6 +1455,19 @@ def merge_scene_with_diff(
     # placement derivation because it asks the same ledger the same question,
     # and after `apply_pose_diff` because this beat's own pose prose is
     # exactly as answerable to the transfer ledger as any earlier beat's.
+    # ...AND A BODY THAT MOVED IS SOMEWHERE ELSE. The same claim against the
+    # other ledger: pose prose that says a body is HELD says where that body
+    # is, and where a body is belongs to `positions`. Snapshot taken before
+    # this beat's placements were merged, so the comparison is against where
+    # everyone actually was.
+    for _holder, _mover in invalidate_moved_body_pose_details(
+            merged, _positions_before):
+        if inventory_report is not None:
+            _note = ("position: %s moved this beat, so the clause holding "
+                     "them was dropped from %s's pose detail. Their posture "
+                     "and support are untouched." % (_mover, _holder))
+            if _note not in inventory_report:
+                inventory_report.append(_note)
     for _subject, _thing in invalidate_transferred_pose_details(
             merged, diff.get("inventory_ops")):
         if inventory_report is not None:
