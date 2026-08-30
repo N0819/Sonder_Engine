@@ -245,5 +245,30 @@ Frontend (`static/js/`) uses browser globals, not ES modules. `theme-init.js` lo
     string that broke is how the next reader knows the rule was earned
     rather than guessed. Evidence is particular; rules are general; do not
     let the particular leak from the first into the second.
+- **Before building a guard, ASK whether a broad prompt clause covers it --
+  and ask the USER, not only yourself.** A guard is code that has to be right
+  on every beat forever; a clause is one sentence read by every story. Both
+  of the deterministic triggers designed on 2026-08-30 looked obvious and
+  died on the data the moment they were replayed against the chat that
+  motivated them. Reading a room-valued pose `support` as a move fired three
+  times: two were transits DEEPER into a body, so it would have ejected a
+  swallowed body mid-passage. Requiring a contact's `target_interior` to name
+  a room carrying `parent_entity` fired on 20 of 22 beats, because
+  `target_interior` is a prose label ("vagina", "throat") in a different
+  namespace from room ids ("Mirelle Sulmirath_throat"). Each was replaced by
+  ONE clause stating the class, and the clauses held.
+  - **The complement, and it is not negotiable: where a leak would be an
+    ENGINE failure, the deterministic floor stays.** The firewall must not
+    depend on a model cooperating (see § Architecture). The test is whose
+    fault a failure would be. A model DECLINING to cooperate producing a leak
+    is code's job. A model not KNOWING something, producing a wrong scene, is
+    the sentence's job -- `composer.act_percept` refused every unseen act
+    correctly for four turns while a body stood exposed inside another,
+    because nothing had told it `parent_entity`; no guard was missing, a fact
+    was.
+  - **A clause is not free either.** The release clause added that day fixed
+    the beat it was written for and, on its first live reroll, also retired a
+    permanent station of a body's anatomy. Prefer the clause, then watch the
+    next few beats for what it licensed.
 - Run `make check` before considering a change complete; it will catch a stale `docs/CODE_MAP.md`, duplicate top-level symbols, and leftover patch-debris markers as hard failures.
 - Never commit `engine.db*`, `*.sqlite*`, `backdrops/`, `__pycache__/`, Python bytecode, or content-bearing `*.trace.json` diagnostics.
