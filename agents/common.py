@@ -5876,6 +5876,110 @@ def _check_player_act_authority(resolved_event, declared_actions, player_name,
     return warnings
 
 
+def _check_player_contact_authority(contact_ops, declared_actions, player_name,
+                                    standing_ids=(), cast=()):
+    """Contacts a resolve gives the PLAYER'S OWN BODY to perform.
+
+    THE SECOND DOOR ON THE SAME RULE. `_check_player_act_authority` holds the
+    boundary in `resolved_event`, and holds it well -- but prose is not the
+    only channel that can say the player did something. `state_diff.contact_ops`
+    stores an ACTOR, and an op naming the player there asserts that the player
+    moved a part of their body, whatever the prose says.
+
+    Measured live (chat 95 t40). The player wrote: `"H-how about the full
+    thing..." You lie back on the bed. "W-would you like to sit on my face?"`
+    -- one declared act, lying back, and an invitation phrased as a question.
+    The prose was clean and the guard passed it (`player_act_warnings: null`),
+    because the prose correctly has MIRELLE lower herself. The contact channel
+    then wrote `Hinami.tongue -> Mirelle.vulva, press, moving`, and it
+    committed. An invitation became the player performing, in the same beat.
+
+    THE PLAYER IS THE ACTOR OR THEY ARE NOT, and the ledger already stores
+    which. An op where the player is the TARGET is somebody else's conduct --
+    a body pressing against theirs, or forcing its way in -- and the engine
+    owns all of it; none of that is checked here. What the player does with
+    their own tongue, and how their own mouth moves, is theirs.
+
+    Elaboration stays legitimate, exactly as in the prose check, and the test
+    is REACH rather than vocabulary: a declared act that reaches this body
+    licenses the Director to render what that contact involves, however
+    differently worded. Measured against the same run -- t23 declared "slide
+    the shoulder straps of Mirelle's chemise" and got `hand -> upper arm`;
+    t35 declared "clamp thighs around Mirelle's head" and got `vulva ->
+    Mirelle`; t32 declared "run fingers through Mirelle's hair" with an EMPTY
+    `targets` list. All three reach Mirelle and all three are correct. t40
+    reaches the bed and nothing else.
+
+    Reach is read from both places the pipeline records it, because neither
+    is reliable alone: `targets` carries a display name in some beats and a
+    cast id in others (t23: `['72']`), and is empty in beats whose attempt
+    text names the body outright (t32).
+
+    Returns ``[(index, warning)]`` so the caller can both report and, if a
+    retry does not clear it, drop the op -- a body acting without its owner
+    is not a soft property.
+    """
+    if not player_name or not isinstance(contact_ops, list):
+        return []
+    ids = {str(i) for i in (standing_ids or [])}
+    reached, folded_player = set(), str(player_name).strip().casefold()
+    by_id = {}
+    for entry in (cast or []):
+        if not isinstance(entry, dict):
+            continue
+        sheet = entry.get("sheet")
+        name = (character_name_from_text(sheet) if isinstance(sheet, str)
+                else character_name(sheet or {}))
+        if entry.get("id") is not None and name:
+            by_id[str(entry["id"])] = name.strip().casefold()
+    for act in (declared_actions or []):
+        if not isinstance(act, dict):
+            continue
+        for target in (act.get("targets") or []):
+            token = str(target).strip()
+            reached.add(by_id.get(token, token.casefold()))
+        text = " ".join(str(act.get(k) or "") for k in
+                        ("attempt", "observable", "verb")).casefold()
+        for name in by_id.values():
+            # ANY PART OF THE NAME REACHES THE BODY. Declarations use the
+            # spelling a person would -- t32's "run fingers through Mirelle's
+            # hair" names her as surely as the full "Mirelle Sulmirath" does,
+            # and requiring the whole string read that beat as reaching nobody.
+            if name and (name in text or any(
+                    len(part) >= 4 and part in text for part in name.split())):
+                reached.add(name)
+    out = []
+    for index, op in enumerate(contact_ops):
+        if not isinstance(op, dict):
+            continue
+        if str(op.get("op") or "add").strip().casefold() not in ("add", "change"):
+            continue
+        if str(op.get("actor") or "").strip().casefold() != folded_player:
+            continue
+        target = str(op.get("target") or "").strip()
+        if not target or target.casefold() == folded_player:
+            continue
+        # BODIES ONLY. This is the rule about one person's conduct on another,
+        # and a bed is not a person: lying back on it, or a back arching
+        # against it, is posture the world resolves. Restricting the check to
+        # registered bodies is also what keeps it from firing on the furniture
+        # every reclining beat carries (chat 95 t30, t40).
+        if target.casefold() not in set(by_id.values()):
+            continue
+        if target.casefold() in reached:
+            continue
+        # A standing hold re-stated is not a new act; only a contact this beat
+        # INVENTS is one.
+        if str(op.get("contact_id") or "") in ids:
+            continue
+        out.append((index, (
+            "Player contact not declared this beat (player-act authority): "
+            "%s's %s -> %s's %s. The player declared nothing reaching %s."
+            % (player_name, op.get("actor_part") or "body", target,
+               op.get("target_part") or "body", target))))
+    return out
+
+
 def _cap_repeated_quotes(prose, view, exclude_bodies=()):
     """Cap each spoken line's occurrences in the prose at how many times it
     actually appears in the authoritative source (the view). (Fable A1 / backlog
@@ -8714,12 +8818,63 @@ def validated_player_state_assertions(sc, raw, player_name, report=None):
     # the Director furnish it; what matters here is that the place is on the
     # map and reachable, because an unreachable room is how an interior falls
     # out of the world.
+    # ...BUT A PLACE NAMED AFTER A PERSON IS A RELATION TO THEM, NOT A PLACE.
+    # The mint above asks whether the room exists and never whether the string
+    # is a place at all, so a posture, a station or a hold written into
+    # `positions` becomes a room and exiles the body into it. Measured live
+    # (chat 95 t55): `positions: {"Hinami": "prone on Mirelle Sulmirath's
+    # palm"}` minted a room of that name "with a way back to
+    # private_session_room", and from that beat Hinami stood alone in it while
+    # Mirelle stood in the session room. Contacts are pruned between bodies in
+    # different rooms, so EVERY contact between them was dropped for the next
+    # four turns -- including the interior contact of a swallow, which is what
+    # `place_enclosed_bodies` needs to put her inside at all. The interior
+    # rooms the Director correctly declared were never occupied, and both
+    # minds were told about two people in two different places.
+    #
+    # The test is structural and reads the scene rather than English: does the
+    # asserted room name a body the scene already knows. A real new place is
+    # named for itself; a place named for somebody is `contained`, `contacts`,
+    # `stations` or a pose, each of which has its own ledger and none of which
+    # is this one. Rooms the beat DECLARES are exempt by the check above --
+    # `mirelle_esophagus` arrives in `state_diff.rooms` with a `parent_entity`,
+    # which is how an interior is supposed to enter the world.
+    #
+    # The position is dropped with it, deliberately: leaving it pointed at a
+    # room that was refused is the corrupt-scene failure this whole block
+    # exists to prevent. The body stays where it was, and the report names the
+    # ledger that does hold the fact.
+    def _names_a_body(room, scene):
+        scene = scene if isinstance(scene, dict) else {}
+        low = str(room or "").casefold()
+        subjects = set(scene.get("positions") or {})
+        subjects |= set(scene.get("attire") or {})
+        for entity in (scene.get("entities") or {}).values():
+            if isinstance(entity, dict) and entity.get("name"):
+                subjects.add(str(entity["name"]))
+        for subject in subjects:
+            token = str(subject or "").strip().casefold()
+            if len(token) > 2 and token in low and token != low:
+                return str(subject)
+        return ""
+
     positions = clean.get("positions")
     if isinstance(positions, dict) and positions:
         rooms = dict((sc or {}).get("rooms") or {})
         minted = dict(clean.get("rooms") or {})
+        refused = []
         for who, room in positions.items():
             if not room or room in rooms or room in minted:
+                continue
+            named = _names_a_body(room, sc)
+            if named:
+                refused.append(who)
+                if report:
+                    report(f"asserted position put {who!r} in {room!r}, which "
+                           f"names {named!r} rather than a place -- a relation "
+                           "to a body is `contained`, `contacts`, `stations` "
+                           "or a pose, never a room. Left them where they "
+                           "were; state it in the ledger that holds it.")
                 continue
             origin = ((sc or {}).get("positions") or {}).get(who)
             minted[room] = {
@@ -8735,6 +8890,10 @@ def validated_player_state_assertions(sc, raw, player_name, report=None):
                 report(f"asserted position put {who!r} in {room!r}, which did "
                        "not exist; minted it with a way back to "
                        f"{origin!r}. Describe it if it matters.")
+        for who in refused:
+            positions.pop(who, None)
+        if not positions:
+            clean.pop("positions", None)
         if minted:
             clean["rooms"] = minted
     return clean

@@ -633,7 +633,7 @@ def _adopt_shed_record(entities, projected, owner, garment):
     return candidates[0] if candidates else None
 
 
-def _stamp_shed(entity, garment, owner, condition):
+def _stamp_shed(entity, garment, owner, condition, eid=None):
     """Make an adopted record say what a minted one would have said."""
     if not isinstance(entity, dict):
         return
@@ -643,7 +643,18 @@ def _stamp_shed(entity, garment, owner, condition):
     state.setdefault("worn_by", str(owner))
     if condition:
         state["condition"] = condition
-    if not str(entity.get("name") or "").strip():
+    # A NAME THAT IS ONLY ITS OWN ID IS NOT A NAME. A record minted from an
+    # `inventory_ops` entry has nothing to call the thing but the identifier
+    # the op used, so it prints "fitted_tank_top_hinami" at every reader --
+    # the narrator, the ledger panel, a character deciding whether to pick it
+    # up. The attire ledger is the authority on what a garment is called, and
+    # this seam is declaring the record to BE that garment, so the ledger's
+    # spelling replaces the placeholder. Anything a model actually named
+    # survives untouched: it does not slug back to its own id.
+    _existing = str(entity.get("name") or "").strip()
+    _placeholder = bool(eid) and re.sub(
+        r"[^a-z0-9]+", "_", _existing.casefold()).strip("_") == str(eid)
+    if not _existing or _placeholder:
         entity["name"] = str(garment)
     entity.setdefault("kind", "object")
     entity.setdefault("portable", True)
@@ -680,6 +691,34 @@ def _mint_shed_garments(sc, shed, diff=None):
         key = "%s_%s" % (key, re.sub(r"[^a-z0-9]+", "_",
                                      str(owner).casefold()).strip("_"))[:60]
         if key in entities:
+            # STAMP IT, DO NOT SKIP IT. This early-out read as idempotence --
+            # the key exists, so a previous pass of THIS seam wrote it, and
+            # it already says everything below. That held only while this
+            # seam was the sole writer of "<garment>_<owner>", and it is not
+            # one any more: `mint_transferred_objects` writes entity records
+            # straight off `inventory_ops`, and the Director spells a shed
+            # garment's `object_id` in exactly this convention because that
+            # is the id it can see on every garment already shed.
+            #
+            # Measured live (chat 92 t17, replayed): resolve emitted
+            # `{"op": "move", "object_id": "fitted_tank_top_hinami",
+            #   "relation": "shed"}`, the transfer mint created that key from
+            # the op alone, and this returned early. The tank top ended the
+            # beat as an entity whose NAME was "fitted_tank_top_hinami", with
+            # `state: null` -- not clothing, not shed, no owner -- and in no
+            # room at all, so the garment the story had just taken off was
+            # not on the bed, not takeable and not findable. The jacket, whose
+            # id nobody had guessed, was correct in the same scene.
+            #
+            # An id existing is not the same fact as the record being right.
+            _stamp_shed(entities[key], garment, owner, condition, key)
+            if projected is not None and key in projected:
+                _stamp_shed(projected[key], garment, owner, condition, key)
+            elif projected is not None:
+                projected[key] = entities[key]
+            where = positions.get(owner)
+            if where and not positions.get(key):
+                positions[key] = where
             continue
         # ADOPT BEFORE MINTING. The private "<garment>_<owner>" key above is
         # the only thing this seam ever checked, so a record the MODEL wrote
@@ -697,9 +736,9 @@ def _mint_shed_garments(sc, shed, diff=None):
         # owns collapsing them and already reports every collapse.
         adopted = _shed_record_candidates(entities, projected, owner, garment)
         for eid in adopted:
-            _stamp_shed(entities[eid], garment, owner, condition)
+            _stamp_shed(entities[eid], garment, owner, condition, eid)
             if projected is not None and eid in projected:
-                _stamp_shed(projected[eid], garment, owner, condition)
+                _stamp_shed(projected[eid], garment, owner, condition, eid)
         if adopted:
             where = positions.get(owner)
             if where and not positions.get(adopted[0]):
@@ -833,7 +872,16 @@ def apply_attire_diff(sc, diff, ctx, res=None, *, report=True):
         _attire_wardrobe,
         player_name=_player_name_or_none(ctx),
     )
-    _process_names = attire_model.process_targets(
+    # SCOPED TO THE GARMENTS THE PROSE NAMED, not to the body wearing them.
+    # A body-wide process reading cannot survive a sequential undressing,
+    # because the beat that finishes one garment is the beat that starts the
+    # next: chat 92 t16 resolved `remove: ["lightweight travel jacket"]` and
+    # the same resolved sentence went on "...begins lifting the fabric slowly
+    # upward" about the tank top beneath it, so the jacket was held at
+    # `loosened` while the narrator put it on the bed. t17 repeated it with
+    # the tank top, held by the sash. `None` -- prose that named a body and
+    # no garment of hers -- still holds everything.
+    _process_scope = attire_model.process_targets_by_garment(
         getattr(ctx.turn, "player_input", "") or "",
         _beat_voices(ctx, res),
         _attire_wardrobe,
@@ -1247,7 +1295,8 @@ def apply_attire_diff(sc, diff, ctx, res=None, *, report=True):
         _after = attire_model.apply_flat_change(
             _before, cur["wearing"], decisive=name in _decisive_names,
             conditions=_marks if isinstance(_marks, dict) else None,
-            process=name in _process_names,
+            process=(True if _process_scope.get(name, False) is None
+                     else _process_scope.get(name, False)),
             # Where this beat says the garment went, when that is not where
             # its name implies. The region tables cover the ordinary case and
             # nothing beyond it, and the space beyond it has no bottom --

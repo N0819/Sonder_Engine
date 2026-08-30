@@ -19,7 +19,8 @@ from core.pipeline_context import (
     current_warning_sink,
 )
 from llm.providers import (
-    Aborted, call_ledger_sink, cancel_event, generation_event_sink, token_sink,
+    Aborted, abort_live_requests, call_ledger_sink, cancel_event,
+    generation_event_sink, token_sink,
 )
 from story.scene import (
     NON_AWAKE_GATED,
@@ -158,10 +159,30 @@ class StaleStepError(RuntimeError):
     """
 
 def request_abort(chat_id, frame_id=None):
+    """Stop the run on this (chat, frame), and make the stop reach it.
+
+    Setting the flag is only half of an abort. Every stage polls it between
+    streamed chunks, which is enough while chunks keep arriving and is no help
+    at all when a connection has stopped sending: the read blocks, the poll
+    never runs, and the flag goes unseen until the 300-second read deadline.
+    A turn cancelled in its first second still held the pipeline for five
+    minutes, so killing the server was the faster way out.
+
+    So the sockets are closed too. `providers.abort_live_requests` shuts every
+    response registered against this event, and the blocked read raises where
+    it stood -- reaching the same `Aborted` the poll would have raised.
+    """
     with _ABORTS_LOCK:
         ev = ABORTS.get((chat_id, frame_id))
     if ev:
         ev.set()
+        try:
+            abort_live_requests(ev)
+        except Exception:
+            # An abort that cannot close a socket has still set the flag; the
+            # read deadline remains the floor. Never let this raise into the
+            # route that asked to stop.
+            pass
         return True
     return False
 

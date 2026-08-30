@@ -741,6 +741,13 @@ def default_character_data(name: str = "Unnamed") -> dict:
                 "pain_sensitivity": 0.5,
                 "fatigue_sensitivity": 0.5,
                 "pleasure_sensitivity": 0.5,
+                # Which regions of THIS body answer to direct contact, in
+                # `attire.REGIONS` vocabulary. Empty means the engine's
+                # default (`world/stimulation.DEFAULT_RESPONSIVE_REGIONS`);
+                # the field exists because a hardcoded anatomy list would be
+                # silently wrong for every non-human body, the same reason
+                # `spatial_contacts` refuses a body-part synonym table.
+                "responsive_regions": [],
             },
         },
         "psychology": {

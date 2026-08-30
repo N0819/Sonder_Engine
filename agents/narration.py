@@ -1227,14 +1227,19 @@ def _generate_narration(payload, view, prev, p_lines, correction_notes=None,
     # Warning-only re-normalization; strict schema+semantic validation
     # (with repair/fallback/raise) already ran inside _agent_json.
     out, warnings = validate_llm_output("narrator", out)
-    # `out.setdefault("prose", out.get("text", ""))` stood here and was doubly
-    # dead. `NarratorOutput.prose` is declared `str = ""` and `_dump` excludes
-    # only None, so the validated dict ALWAYS carries a `prose` key and the
-    # setdefault never assigned; and the strict path inside `_agent_json` has
-    # already rejected a `text`-only payload before this line runs, so the
-    # fallback could not have repaired one anyway. `NarratorOutput.text`, the
-    # field it reached for, has no reader either -- its deletion is Slice 8's,
-    # since `llm/schemas.py` is theirs.
+    # `text` IS `prose` WHEN `prose` IS EMPTY. The old note here recorded that
+    # a `setdefault` could never fire (the validated dict always carries a
+    # `prose` key) and that a `text`-only payload had already been rejected
+    # upstream anyway. The second half is no longer true -- narration blocks
+    # on JSON validity alone now -- so a model that files its page under
+    # `text` reaches this line, and reading it is the "one-line alias"
+    # `llm/schemas.py` asked for rather than a beat thrown away over a key
+    # name. An explicit emptiness test, because `setdefault` cannot see a
+    # present-but-blank field.
+    if not str(out.get("prose") or "").strip():
+        _aliased = str(out.get("text") or "").strip()
+        if _aliased:
+            out["prose"] = _aliased
     out.setdefault("new_specifics", [])
     if tokens:
         # BEFORE the fidelity check, which is what makes the check measure the
@@ -1654,14 +1659,16 @@ def narrator(ctx, nonce):
         payload, view, prev, p_lines, fidelity_facts=_fidelity_facts,
         language=ctx.language)
 
-    enforceable = [w for w in fidelity_warnings if w.startswith(_ling("_ENFORCEABLE_PREFIXES"))]
-    if enforceable:
-        correction = prompt_fragment(
-            "narrator_fidelity_correction", ctx.language).format(
-                problems=" | ".join(enforceable))
-        out, warnings, fidelity_warnings = _generate_narration(
-            payload, view, prev, p_lines, correction_notes=correction,
-            fidelity_facts=_fidelity_facts, language=ctx.language)
+    # THE FIDELITY CORRECTION PASS IS GONE, for the reason the craft rewrite
+    # below was removed and by the same rule: a second full narrator call to
+    # re-enforce something the prompt already says. It read its own warning
+    # list, decided the page was wrong, and rerolled -- which is what a reader
+    # sees as valid prose appearing and then being replaced. The warnings it
+    # was built on stay, non-blocking, on the step's own saved output.
+    #
+    # THE STANDING RULE FOR THIS STAGE, from here on: narration blocks on
+    # being parseable JSON and on nothing else. Every other reading of the
+    # prose DETECTS and REPORTS; none rejects, rerolls or rewrites.
 
     # THE CRAFT REWRITE IS GONE, and prose rules live where prose rules belong.
     #
@@ -1700,17 +1707,52 @@ def narrator(ctx, nonce):
 
     if pending_person_writes:
         out["narration_person_writes"] = pending_person_writes
-    # Within-view dedupe (W12): a duplicated beat -- the same sentence
-    # rendered twice in one turn's prose -- is dropped deterministically.
-    # Quoted dialogue and short sentences are exempt (see the helper).
-    out["prose"] = _cap_repeated_quotes(
-        _dedupe_view_sentences(_strip_raw_player_input_echo(
-            _strip_player_echo(
-                out.get("prose", ""), p_lines,
-                protect_quotes=_protected_view_quotes(view, p_lines),
-            ), ctx.input)),
-        view, exclude_bodies=p_lines)
+    # Reported, not removed -- see `_report_prose_guards`.
+    _echo_notes = []
+    out["prose"] = _report_prose_guards(
+        out.get("prose", ""), view, p_lines, ctx.input, _echo_notes)
+    if _echo_notes:
+        ctx.warnings.extend(_echo_notes)
+        out.setdefault("fidelity_warnings", []).extend(_echo_notes)
     return out
+
+
+def _report_prose_guards(prose, view, p_lines, raw_input, warnings):
+    """Say what the deterministic rewrites WOULD have changed, and change none.
+
+    Four readings used to edit accepted narration on its way to the page:
+    a player-echo strip, a raw-input echo strip, a within-view sentence
+    dedupe, and a repeated-quote cap. Each was a code-based judgment that the
+    model's prose was wrong, applied silently and unrecoverably -- the reader
+    never saw what was removed, and neither did the record.
+
+    They are detection now. Every rule they enforce is already in the
+    narrator prompt, so what survives here is the measurement of whether the
+    prompt worked, which is the same disposition the craft rewrite got and
+    for the same reason: a warning costs nothing and a rewrite costs a page.
+    """
+    text = str(prose or "")
+    checks = (
+        ("echoed the player's own line",
+         lambda: _strip_player_echo(
+             text, p_lines,
+             protect_quotes=_protected_view_quotes(view, p_lines))),
+        ("echoed the player's raw input",
+         lambda: _strip_raw_player_input_echo(text, raw_input)),
+        ("repeated a sentence within one view",
+         lambda: _dedupe_view_sentences(text)),
+        ("repeated a quotation past the cap",
+         lambda: _cap_repeated_quotes(text, view, exclude_bodies=p_lines)),
+    )
+    for label, run in checks:
+        try:
+            if str(run() or "") != text:
+                warnings.append("narration: %s (reported, not removed)" % label)
+        except Exception:
+            # Detection may never cost the beat it is only describing.
+            continue
+    return text
+
 
 def narrator_extra(ctx, nonce):
     """Renders one prose view per additional human player declaring in this
@@ -1823,28 +1865,16 @@ def narrator_extra(ctx, nonce):
         out, warnings, fidelity_warnings = _generate_narration(
             payload, view, prev, p_lines, language=ctx.language)
 
-        enforceable = [w for w in fidelity_warnings if w.startswith(_ling("_ENFORCEABLE_PREFIXES"))]
-        if enforceable:
-            correction = prompt_fragment(
-                "narrator_fidelity_correction", ctx.language).format(
-                    problems=" | ".join(enforceable))
-            out, warnings, fidelity_warnings = _generate_narration(
-                payload, view, prev, p_lines, correction_notes=correction,
-                language=ctx.language)
-
+        # No correction re-call -- see the note in narrator().
         if fidelity_warnings:
             out["fidelity_warnings"] = fidelity_warnings
 
         if pending_person_writes:
             out["narration_person_writes"] = pending_person_writes
-        # Within-view dedupe (W12) -- see the matching comment in narrator().
-        out["prose"] = _cap_repeated_quotes(
-            _dedupe_view_sentences(_strip_raw_player_input_echo(
-                _strip_player_echo(
-                    out.get("prose", ""), p_lines,
-                    protect_quotes=_protected_view_quotes(view, p_lines),
-                ), extra.get("input"))),
-            view, exclude_bodies=p_lines)
+        # Reported, not removed -- see `_report_prose_guards`.
+        out["prose"] = _report_prose_guards(
+            out.get("prose", ""), view, p_lines, extra.get("input"),
+            warnings)
         return pid_key, out, warnings, fidelity_warnings
 
     # Each extra player's narration only reads data already computed before

@@ -120,8 +120,8 @@ class TestWhatEachPartyFeels:
         touching = contact_sensation(SCENE["contacts"][0], you="Reya")
         touched = contact_sensation(SCENE["contacts"][0], you="Bram")
 
-        assert touching.startswith("your palm registers Bram's sternum")
-        assert touched.startswith("your sternum registers Reya's palm")
+        assert touching.startswith("You feel Bram's sternum against your palm")
+        assert touched.startswith("You feel Reya's palm against your sternum")
 
     def test_an_interior_contact_is_not_symmetric(self):
         """The enclosing party feels something within them; the entering party
@@ -130,7 +130,7 @@ class TestWhatEachPartyFeels:
         entering = contact_sensation(SCENE["contacts"][1], you="Reya")
         enclosing = contact_sensation(SCENE["contacts"][1], you="Bram")
 
-        assert "Bram's wound channel enclosing it" in entering
+        assert "Bram's wound channel enclosing your blade" in entering
         assert "within your wound channel" in enclosing
         assert "within your shoulder" not in enclosing
         assert "shoulder enclosing" not in entering
@@ -146,7 +146,7 @@ class TestWhatEachPartyFeels:
         entering = contact_sensation(contact, you="Reya")
         enclosing = contact_sensation(contact, you="Bram")
 
-        assert "Bram's wound channel enclosing it" in entering
+        assert "Bram's wound channel enclosing your blade" in entering
         assert "friction along its length" in entering
         assert "within your wound channel" in enclosing
         assert "fullness, stretch, shifting pressure and movement" in enclosing
@@ -157,29 +157,28 @@ class TestWhatEachPartyFeels:
         for contact in SCENE["contacts"]:
             assert contact_sensation(contact, you="Wren") == ""
 
-    def test_a_plural_part_takes_a_plural_verb_and_pronoun(self):
-        """The subject is the PART, not the person, and body parts are
-        routinely plural -- the same agreement `contact_phrase` already carries
-        `_part_is_plural` for. Live output before this read "your legs
-        registers ... against it"."""
+    def test_a_plural_part_needs_no_agreement_at_all(self):
+        """The part used to sit in the SUBJECT slot -- "your legs registers
+        ... against it" -- which needed plural agreement on the verb and a
+        pronoun pointing back three words. Naming the part where it is FELT
+        removes both problems rather than solving them."""
         plural = {"actor": "Reya", "actor_part": "fingers", "target": "Bram",
                   "target_part": "back", "manner": "digging"}
 
         assert contact_sensation(plural, you="Reya") == (
-            "your fingers register Bram's back against them: shifting "
+            "You feel Bram's back against your fingers: shifting "
             "pressure, movement and friction, continuous while the contact "
             "holds")
         assert contact_sensation(plural, you="Bram").startswith(
-            "your back registers Reya's fingers against it")
+            "You feel Reya's fingers against your back")
 
-    def test_pelvis_is_singular_despite_its_trailing_s(self):
-        """A recorded failure rendered ``your pelvis register ... against them``.
-        The final s belongs to the singular noun, not to plural morphology.
-        """
+    def test_a_part_whose_trailing_s_is_not_plural_is_unaffected(self):
+        """A recorded failure rendered ``your pelvis register ... against
+        them``. Nothing here inflects on number any more."""
         contact = {"actor": "Reya", "actor_part": "hand", "target": "Bram",
                    "target_part": "pelvis", "manner": "pressing"}
         assert contact_sensation(contact, you="Bram").startswith(
-            "your pelvis registers Reya's hand against it")
+            "You feel Reya's hand against your pelvis")
 
     def test_a_slot_holding_an_act_or_a_sound_renders_nothing(self):
         """The Director periodically fills a part slot with something that is
@@ -196,7 +195,7 @@ class TestWhatEachPartyFeels:
         whole = {"actor": "Reya", "target": "Bram", "manner": "lean"}
 
         assert contact_sensation(whole, you="Bram").startswith(
-            "your body registers Reya against it")
+            "You feel Reya against you")
 
     def test_identity_resolves_through_the_scene_not_string_equality(self):
         """One being carries a cast display name and a scene entity id at once.
@@ -212,7 +211,7 @@ class TestWhatEachPartyFeels:
         }
         felt = contact_sensation(scene["contacts"][0], you="Bram", scene=scene)
 
-        assert felt.startswith("your sternum registers")
+        assert felt.startswith("You feel Reya's palm against your sternum")
 
 
 class TestContactSemanticPersistence:
@@ -338,8 +337,8 @@ class TestTheStandingContactReachesTheView:
         the view from the ledger, so both contacts are in it."""
         view = _view("Bram")
 
-        assert "Your sternum registers Reya's palm against it" in view
-        assert "Your body registers Reya's blade within your wound channel" \
+        assert "You feel Reya's palm against your sternum" in view
+        assert "You feel Reya's blade within your wound channel" \
             in view
 
     def test_it_subtracts_nothing_beside_it(self):
@@ -350,7 +349,7 @@ class TestTheStandingContactReachesTheView:
                                     mode="character").text
 
         assert "Cell" in view
-        assert "sternum registers" in view
+        assert "against your sternum" in view
 
     def test_a_bystander_receives_no_sensation(self):
         """`contact_sensation` returns "" for anyone who is not a party, so a
@@ -377,8 +376,8 @@ class TestTheStandingContactReachesTheView:
         first = composer.render_view(percepts, mode="player")
         again = composer.render_view(
             percepts, mode="player", prev_standing=first.standing_keys)
-        assert "Your body registers Reya against it" in first.text
-        assert "Your body registers Reya against it" in again.text
+        assert "You feel Reya against you" in first.text
+        assert "You feel Reya against you" in again.text
 
     def test_one_contact_is_one_dedupe_key(self):
         """The stable key still prevents duplicate percepts and prevents an
@@ -406,7 +405,7 @@ class TestTheChannelItArrivesOn:
 
     def test_a_surface_contact_arrives_as_touch(self):
         surface = [a for a in self._atoms("Bram")
-                   if "sternum registers" in a["observed"]["text"]]
+                   if "against your sternum" in a["observed"]["text"]]
 
         assert surface and surface[0]["channel"] == "touch"
 
@@ -415,7 +414,7 @@ class TestTheChannelItArrivesOn:
         percept whose subject is the perceiver's own body was filed as somebody
         else's business. It is now a field on the percept the builder sets."""
         felt = [a for a in self._atoms("Bram")
-                if "registers" in a["observed"]["text"]]
+                if "You feel" in a["observed"]["text"]]
 
         assert felt
         assert all(a["directed_at_self"] for a in felt)
@@ -540,8 +539,8 @@ class TestACavityNamedByItsWallIsStillACavity:
         assert "Hinami's hand within your vaginal canal" in hers
         assert "your vaginal walls register" not in hers.casefold()
         # And the entering party feels the enclosure.
-        assert "your hand registers" in theirs
-        assert "enclosing it" in theirs
+        assert "against your hand" in theirs or "your hand" in theirs
+        assert "enclosing your hand" in theirs
 
     def test_the_other_wall_and_canal_spellings_fold_too(self):
         from world import spatial
@@ -639,12 +638,12 @@ def test_a_body_with_both_anatomies_registers_both_at_once():
     theirs = " | ".join(s for s in felt["Hinami"] if s)
 
     # She feels her cock enclosed AND her own canal filled -- both, not one.
-    assert "your cock registers Hinami's vaginal canal enclosing it" in hers
+    assert "Hinami's vaginal canal enclosing your cock" in hers
     assert "Hinami's hand within your vaginal canal" in hers
-    assert "your clit registers Hinami's thumb" in hers
+    assert "Hinami's thumb against your clit" in hers
     # And Hinami feels the mirror of each.
     assert "Elyra Voss's cock within your vaginal canal" in theirs
-    assert "your hand registers Elyra Voss's vaginal canal enclosing it" in theirs
+    assert "Elyra Voss's vaginal canal enclosing your hand" in theirs
     # Nobody is told a cavity entered a cavity.
     assert "vaginal walls register" not in hers.casefold()
 
@@ -705,7 +704,7 @@ def test_a_moving_subpart_inside_a_container_renders_its_own_part():
     }
 
     felt = contact_sensation(contact, you="Mara")
-    assert "your palm registers Rhea's tongue" in felt
+    assert "Rhea's tongue against your palm" in felt
     assert "Rhea's mouth" not in felt
 
 

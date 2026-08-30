@@ -5352,23 +5352,23 @@ def semantic_output_errors(
         if not isinstance(output.get("scene_patch"), dict):
             errors.append("scene_patch must be an object")
 
-    elif step_key == "narrator":
-        if not str(output.get("prose") or "").strip():
-            # SAY WHERE IT WENT. "prose is empty" is 3 of 17 validation
-            # failures across the live corpus -- 18% of every repair call --
-            # and unlike its two larger siblings the message does not carry
-            # the shape that failed, so nothing in the record distinguishes a
-            # model that returned nothing from one that returned a page of
-            # narration under a key this contract does not read. The first is
-            # worth a repair call; the second is worth a one-line alias, and
-            # for the whole life of the corpus there has been no way to tell
-            # which. Name the keys that DID arrive, and the next occurrence
-            # answers it.
-            present = sorted(str(k) for k in output) if isinstance(
-                output, dict) else []
-            errors.append(
-                "prose is empty" if not present
-                else "prose is empty (keys present: %s)" % ", ".join(present[:12]))
+    # NARRATION IS NOT VALIDATED HERE ANY MORE. A narrator answer blocks on
+    # being parseable JSON of the declared shape and on nothing else: no
+    # semantic check, no repair call, no reroll. The check that stood here --
+    # `prose is empty` -- is the one that cost chat 95 turn 18 (2026-08-29):
+    # the model spent all 1107 of its response tokens in the reasoning
+    # channel, the content channel came back empty, this marked the report
+    # invalid, and the repair and fallback calls that followed each hit
+    # `RemoteDisconnected` until `complete_validated_json` raised. The
+    # exception left the turn with no narrator step at all and the page
+    # spinning, which is a strictly worse outcome than rendering whatever the
+    # model did send and letting a reader reroll it.
+    #
+    # The question the old message existed to answer is answered instead
+    # where it can be acted on: `narration._generate_narration` now reads
+    # `text` as an alias for `prose`, which is the "one-line alias" this
+    # comment asked for, so narration filed under the wrong key arrives
+    # instead of being rejected.
 
     return errors
 

@@ -323,6 +323,10 @@ class TestPromoteBackgroundCharacter:
         assert sheet["embodiment"]["interoception"] == {
             "acuity": 0.5, "pain_sensitivity": 0.21,
             "fatigue_sensitivity": 0.5, "pleasure_sensitivity": 0.31,
+            # A promoted body takes the engine default here, not the
+            # charter's: which regions answer to contact is authored, and a
+            # coarse background mind never had an answer to carry over.
+            "responsive_regions": [],
         }
         assert sheet["psychology"]["stress_profile"][
             "baseline_reactivity"] == 0.41

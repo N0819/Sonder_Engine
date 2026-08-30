@@ -328,6 +328,6 @@ def test_other_participant_feels_exact_contact_in_perception_pass_one(
     # The contact record used to be read out of the payload; the sensation
     # it produces is now in the view itself, which is the thing that had to
     # be right all along.
-    assert "your cock registers hinami's vaginal canal enclosing it" in view.casefold()
+    assert "hinami's vaginal canal enclosing your cock" in view.casefold()
     assert "contact at hinami's cervix" in view.casefold()
     assert "hinami's groin" not in view.casefold()

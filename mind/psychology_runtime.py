@@ -24,6 +24,59 @@ _CHARGE_GAIN = 0.18
 _CHARGE_HALF_LIFE = 12.0
 _CHARGE_SATURATION = 0.85
 
+# THE DRIVE CEILING, by what the body is physically receiving. `world/
+# stimulation.py` derives the rung; these are what each one caps `charge` at.
+#
+# The gate on `somatic_impact.pleasure` is that its `why` is a non-empty
+# string, so any sentence licenses any magnitude, and a level clamped at 1.0
+# integrates here at a fixed gain regardless of what is actually happening to
+# the body. Measured live (chat 95, 2026-08-29): `pleasure 1.0, charge 1.0,
+# saturated: true` against a ledger holding four SETTLED contacts -- a hand
+# gripping a hip, weight pressing. At that cadence the integral's equilibrium
+# is 3.25 against a clamp of 1.0: welded to the ceiling by beat four, and no
+# path down.
+#
+# Every rung sits BELOW `_CHARGE_SATURATION`, deliberately. No contact of any
+# kind saturates a body; the last stretch is climbed, in beats, by continued
+# active stimulation. Being touched and being overwhelmed are different
+# states, and skin alone must not confuse them.
+_TIER_CEILINGS = {1: 0.30, 2: 0.55, 3: 0.75, 4: 0.75}
+
+# The climb past the top rung. `_CLIMB_STEP` is the per-beat gain at full
+# intensity and unbroken continuity -- one beat from 0.75 to saturation, which
+# is what genuinely intense stimulation should cost. It is scaled by BOTH:
+#
+#   intensity  -- the appraisal's own magnitude, floored by what the contact
+#                 record structurally vouches for. Safe to trust here where it
+#                 was not before: it can no longer GRANT reach, only speed
+#                 within a range the physical facts already earned, so an
+#                 over-eager 1.0 costs beats rather than truth.
+#   continuity -- the share of the recent window that was actively stimulated,
+#                 as an EMA over `_CONTINUITY_WINDOW` beats. This is what
+#                 makes teasing slow: it builds gently BECAUSE it keeps
+#                 stopping, and the ledger says so in `motion` without anyone
+#                 reading a word of prose.
+#
+# Measured against the table this was designed to: relentless and intense
+# saturates in one beat, firm and steady in two or three, gentle teasing
+# (0.3 x 0.5) in about seven, barely-there and intermittent in seventeen.
+_CLIMB_STEP = 0.10
+_CONTINUITY_WINDOW = 5.0
+
+# ...AND THE CEILING IS NOT THE ONLY THING IN THE WAY. `_CHARGE_GAIN` is a
+# flat 0.18 per psych unit at any intensity, so charge takes about six beats
+# to climb from nothing to `_CHARGE_SATURATION` no matter what is being done
+# -- raising the ceiling alone cannot make anything arrive faster than that.
+# Something genuinely intense has to move faster than something merely
+# present, so active stimulation raises the RATE as well, by the same
+# intensity x continuity product that governs the climb. At the top of both
+# (0.18 x 2.5 = 0.45/beat) saturation is two beats away; at firm-and-steady
+# about five; gentle teasing never gets there at all, because its ceiling
+# stops it first. The bonus applies only on the active rung -- a body being
+# held, however intensely the appraisal describes it, accumulates at the
+# ordinary rate.
+_ACTIVE_GAIN_BONUS = 1.5
+
 # Sustained-level habituation. A DIFFERENT quantity from `charge`: charge is
 # the drive, and only the character ends it. This is how ARRESTING the level
 # still is -- how much of the mind it is entitled to go on claiming.
@@ -95,7 +148,8 @@ def elapsed_psych_units(previous_seconds, current_seconds, fallback_turns=1):
 
 def resolve_hedonic(previous, appraisal, interoception, body_state,
                     elapsed_units, released=False,
-                    ambient_comfort=0.0, comfort_source=""):
+                    ambient_comfort=0.0, comfort_source="",
+                    stimulation=None):
     """Resolve transient pain/pleasure from this beat's grounded appraisal,
     plus the sustained charge those levels leave behind.
 
@@ -120,6 +174,14 @@ def resolve_hedonic(previous, appraisal, interoception, body_state,
     slow integral of that unresolved drive. It only ever discharges when the
     character declares the resolution (`released`), because that resolution is
     theirs to have; the runtime owns how it accumulates, not whether it ends.
+
+    `stimulation` is `world.stimulation.stimulation_of` for this body: the
+    rung the physical facts support, and whether this beat was actively
+    stimulated. It caps how far `charge` may ACCUMULATE and never pushes it
+    below where ordinary decay would already have taken it -- arousal fades
+    when a hand lifts, it does not switch off. Omitted entirely (charter
+    bodies, tests, any caller that has no scene), the ceilings do not apply
+    and this behaves exactly as it did before them.
     """
     previous = previous if isinstance(previous, dict) else {}
     appraisal = appraisal if isinstance(appraisal, dict) else {}
@@ -183,8 +245,13 @@ def resolve_hedonic(previous, appraisal, interoception, body_state,
         source = ""
 
     old_charge = _clamp(previous.get("charge"))
+    stim = stimulation if isinstance(stimulation, dict) else None
+    old_continuity = _clamp(previous.get("stim_continuity"))
+    old_climb = _clamp(previous.get("stim_climb"))
     if released:
         charge = 0.0
+        continuity = 0.0
+        climb = 0.0
     else:
         charge_decay = 0.5 ** (elapsed / _CHARGE_HALF_LIFE) if elapsed else 1.0
         # Pain drives less accumulation than pleasure at equal level: a body
@@ -193,8 +260,47 @@ def resolve_hedonic(previous, appraisal, interoception, body_state,
         # comfort is deliberately absent here -- see Rule 1 above: `drive`
         # reads the appraisal-proposed value ONLY.
         drive = max(proposed_pleasure, proposed_pain * 0.5)
+
+        # How much of the recent window was actively stimulated. An EMA over
+        # `_CONTINUITY_WINDOW`, so a single pause slows the climb instead of
+        # erasing it -- which is what drawing something out is. It starts at
+        # what THIS beat is rather than at zero: the penalty is for stopping,
+        # not for having only just started, and a body cannot be made to earn
+        # its way up to "not interrupted yet".
+        gain_scale = 1.0
         charge = _clamp(old_charge * charge_decay
                         + drive * _CHARGE_GAIN * min(max(elapsed, 1.0), 3.0))
+        if stim is None:
+            continuity, climb = old_continuity, old_climb
+        else:
+            active_now = 1.0 if stim.get("active") else 0.0
+            if "stim_continuity" in previous:
+                share = 1.0 / max(1.0, _CONTINUITY_WINDOW)
+                continuity = _clamp(
+                    old_continuity * (1.0 - share) + active_now * share)
+            else:
+                continuity = active_now
+            tier = int(_float(stim.get("tier"), 1) or 1)
+            # The climb decays on the charge half-life rather than resetting:
+            # stopping costs progress at the rate arousal itself fades, and
+            # nothing else has a claim to a different number.
+            climb = _clamp(old_climb * charge_decay)
+            if tier >= 4:
+                intensity = max(proposed_pleasure,
+                                _clamp(stim.get("intensity_floor")))
+                climb = _clamp(
+                    climb + _CLIMB_STEP * intensity * continuity
+                    * min(max(elapsed, 1.0), 3.0))
+                gain_scale = 1.0 + _ACTIVE_GAIN_BONUS * intensity * continuity
+            ceiling = _clamp(_TIER_CEILINGS.get(tier, 1.0) + climb)
+            charge = _clamp(old_charge * charge_decay
+                            + drive * _CHARGE_GAIN * gain_scale
+                            * min(max(elapsed, 1.0), 3.0))
+            # NEVER BELOW WHAT DECAY WOULD HAVE GIVEN. The ceiling governs
+            # accumulation; a body that was nearly overwhelmed when the
+            # contact broke comes down on its own half-life rather than
+            # reading as barely stirred the instant a hand lifts.
+            charge = min(charge, max(ceiling, old_charge * charge_decay))
     # How long this body has been held at a strong level with nothing new
     # happening to it. Reset by a peak -- a fresh escalation, a genuinely novel
     # beat, or the release -- and by the level itself falling away. Read by
@@ -225,6 +331,13 @@ def resolve_hedonic(previous, appraisal, interoception, body_state,
         "sustained_beats": round(sustained, 3),
         "stimulus": round(raw_stimulus, 4),
     }
+    if stim is not None or old_continuity or old_climb:
+        # Ride the already-persisted dict, the same way comfort habituation
+        # does: the drive ceiling needs no new state surface.
+        out["stim_continuity"] = round(continuity, 4)
+        out["stim_climb"] = round(climb, 4)
+        if stim is not None:
+            out["stim_tier"] = int(_float(stim.get("tier"), 1) or 1)
     if comfort > 0.0 and comfort_key:
         # Habituation state rides in this already-persisted dict; the keys
         # drop the beat the body leaves the source, which IS the reset.

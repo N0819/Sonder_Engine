@@ -1432,3 +1432,105 @@ class TestPlacementIsNotContact:
         apply_contact_ops(scene, [dict(_hold(), op="add")])
 
         assert len(scene["contacts"]) == 1
+
+
+class TestOneIncomingContactNamesOneMove:
+    """`_displaces` is a rule about the ACTIVE part: a limb is in one place at
+    a time. Tried against `_flip(standing)` it also catches a hold re-asserted
+    from the other body's side -- and through the flip it reasons about the
+    PASSIVE part, which is under no such rule.
+
+    Measured live (chat 95 t35, replayed from the stored diff). One incoming
+    contact, `Hinami's vulva -> Mirelle's (interior mouth)`, matched both
+    `Mirelle's mouth -> Hinami's vulva` and `Mirelle's tongue -> Hinami's
+    vulva` -- after the flip all three carry Hinami's vulva as the acting part
+    -- and retired them both. Every `contact_action` hanging off them went too:
+    the deep suction and the curling strokes vanished from the observer's view,
+    so the acts the character had chosen could not be narrated. The symptom was
+    prose; the origin was contact identity two stages upstream."""
+
+    @staticmethod
+    def _scene(contacts):
+        return {
+            "positions": {"Mira": "room", "Corin": "room"},
+            "entities": {},
+            "contacts": [dict(c) for c in contacts],
+        }
+
+    def _apply(self, standing, ops):
+        from world import spatial
+        scene = spatial.normalize_scene_contacts(self._scene(standing))
+        out = spatial.apply_contact_ops(scene, ops, report=[])
+        return [(c["actor"], c["actor_part"], c["target"], c["target_part"])
+                for c in out["contacts"]]
+
+    def test_an_interior_reassertion_retires_only_the_limb_it_names(self):
+        """`target_interior: "mouth"` says which limb of the other body the
+        relation is about, so it folds the standing MOUTH record -- one
+        relation, restated from the other side -- and leaves the tongue,
+        which is a different limb doing a different thing. Both went before,
+        because an empty `target_part` was read as naming neither."""
+        kept = self._apply(
+            [{"actor": "Corin", "actor_part": "mouth", "target": "Mira",
+              "target_part": "vulva", "manner": "seal",
+              "relation": "surface", "motion": "settled"},
+             {"actor": "Corin", "actor_part": "tongue", "target": "Mira",
+              "target_part": "vulva", "manner": "press",
+              "relation": "interior", "motion": "moving"}],
+            [{"op": "add", "actor": "Mira", "actor_part": "vulva",
+              "target": "Corin", "target_part": "", "target_interior": "mouth",
+              "manner": "press", "relation": "interior", "motion": "moving"}])
+        actors = {(a, p) for a, p, _t, _tp in kept}
+        assert ("Corin", "tongue") in actors
+        assert ("Corin", "mouth") not in actors
+        assert ("Mira", "vulva") in actors
+
+    def test_the_actions_hanging_off_them_survive_with_it(self):
+        """What the ledger loss actually costs, end to end: an intensified
+        act on a contact that was wrongly retired reaches no view at all."""
+        from world import spatial
+        scene = spatial.normalize_scene_contacts(self._scene([
+            {"actor": "Corin", "actor_part": "tongue", "target": "Mira",
+             "target_part": "vulva", "manner": "press",
+             "relation": "interior", "motion": "moving"}]))
+        scene = spatial.apply_contact_action_ops(scene, [
+            {"op": "add", "actor": "Corin", "action": "curling strokes",
+             "contact_ref": {"actor": "Corin", "actor_part": "tongue",
+                             "target": "Mira", "target_part": "vulva"}}])
+        assert len(scene["contact_actions"]) == 1
+        scene = spatial.apply_contact_ops(scene, [
+            {"op": "add", "actor": "Mira", "actor_part": "vulva",
+             "target": "Corin", "target_part": "", "target_interior": "mouth",
+             "manner": "press", "relation": "interior", "motion": "moving"}],
+            report=[])
+        scene = spatial.apply_contact_action_ops(scene, [
+            {"op": "change", "actor": "Corin", "action": "curling strokes",
+             "intensity": "harder and deeper",
+             "contact_ref": {"actor": "Corin", "actor_part": "tongue",
+                             "target": "Mira", "target_part": "vulva"}}])
+        assert [a["action"] for a in scene["contact_actions"]] == [
+            "curling strokes"]
+
+    def test_an_unambiguous_mirror_still_displaces(self):
+        """The case `_flip` exists for is untouched: exactly one standing
+        record matches, so the fiction HAS said which limb moved."""
+        kept = self._apply(
+            [{"actor": "Mira", "actor_part": "waist", "target": "Corin",
+              "target_part": "hand", "manner": "grip",
+              "relation": "surface", "motion": "settled"}],
+            [{"op": "add", "actor": "Corin", "actor_part": "hand",
+              "target": "Mira", "target_part": "hip", "manner": "grip",
+              "relation": "surface", "motion": "settled"}])
+        assert kept == [("Corin", "hand", "Mira", "hip")]
+
+    def test_an_unqualified_limb_moving_still_displaces_directly(self):
+        """The unflipped rule, unchanged: `thumb -> ear` re-asserted as
+        `thumb -> ear_base` is one thumb, not two."""
+        kept = self._apply(
+            [{"actor": "Mira", "actor_part": "thumb", "target": "Corin",
+              "target_part": "ear", "manner": "trace",
+              "relation": "surface", "motion": "moving"}],
+            [{"op": "add", "actor": "Mira", "actor_part": "thumb",
+              "target": "Corin", "target_part": "ear_base", "manner": "trace",
+              "relation": "surface", "motion": "moving"}])
+        assert kept == [("Mira", "thumb", "Corin", "ear_base")]

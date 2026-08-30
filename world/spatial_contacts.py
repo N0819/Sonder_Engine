@@ -327,6 +327,59 @@ def _displaces(standing: dict, incoming: dict) -> bool:
     return bool(now_kind) and was_instance == now_instance \
         and _same_appendage(was_kind, now_kind)
 
+
+def _mirrored_displacements(current, asserted, contact):
+    """Standing contacts this incoming one claims to have MOVED, mirrored.
+
+    `_displaces` is a rule about the ACTIVE part: a limb is in one place at a
+    time, so re-describing it elsewhere retires the old spot. Tried against
+    `_flip(standing)` it also catches a hold re-asserted from the other body's
+    side, which is what `_flip` exists for -- and through the flip the part it
+    is reasoning about is the PASSIVE one, which is under no such rule.
+
+    A DISPLACEMENT NAMES ONE MOVE. When a single incoming contact matches
+    several standing ones through the mirror, the fiction has not said which
+    limb moved, and retiring all of them answers a question nobody asked.
+
+    Measured live (chat 95 t35, replayed from the stored diff):
+    `Hinami's vulva -> Mirelle's (interior mouth)` matched BOTH
+    `Mirelle's mouth -> Hinami's vulva` and `Mirelle's tongue -> Hinami's
+    vulva`, because after the flip all three carry Hinami's vulva as the
+    acting part. One incoming contact retired two distinct limbs, and every
+    `contact_action` hanging off them -- the suction, the curling strokes --
+    went with them, so acts the character had chosen were absent from the
+    observer's view and could not be narrated. The symptom was prose; the
+    origin was contact identity.
+
+    So an ambiguous mirror displaces nothing. That is this module's own
+    failure direction, stated in `_displaces`: losing a distinction the
+    fiction drew is worse than carrying a stale hold the ageing clock retires
+    anyway.
+
+    A mirror also has to NAME the partner limb to claim it moved, and an
+    interior re-assertion names it in the other field. `Hinami's vulva inside
+    Mirelle's <unnamed>, target_interior mouth` says nothing about Mirelle's
+    parts through `target_part` -- but `target_interior` says exactly which
+    one: the mouth. So it may retire the standing record for that mouth, which
+    is the same relation restated from the other side, and it may not touch
+    the tongue, which is a different limb doing a different thing. Without
+    that reading the two were indistinguishable and both went.
+    """
+    named = str(contact.get("target_part") or "").strip()
+    interior = str(contact.get("target_interior") or "").strip()
+    if not named and not interior:
+        return []
+    hits = [key for key in current if key not in asserted
+            and _displaces(_flip(current[key]), contact)]
+    if not named:
+        # Only the limb the interior names, never every limb touching it.
+        want = _part_identity(interior)[0]
+        hits = [key for key in hits
+                if _same_appendage(_part_identity(
+                    current[key].get("actor_part"))[0], want)]
+    return hits if len(hits) == 1 else []
+
+
 # A momentary contact is over the moment the story moves on, so it retires on
 # the very next beat that says anything about contact at all -- one evidence
 # beat, against the two a standing hold gets.
@@ -966,6 +1019,19 @@ def _clean_contact(raw, scene=None):
         # saved before ageing existed, both of which read as 0.
         "unasserted": unasserted,
     }
+    # WHETHER THIS SITE AROUSES THIS BODY -- judged by the hand that named the
+    # parts, because nothing deterministic can judge it. A stomach lining, a
+    # mouth and what a body reproduces with are all `relation: interior`, and
+    # they are not the same kind of place; telling them apart by name is the
+    # body-part synonym table `canonical_region` refuses, and it would be
+    # wrong for every body that is not human anyway.
+    #
+    # Read by `world/stimulation.py` and by nothing else: it feeds the
+    # drive ceiling of the body it is ABOUT, is never rendered, and never
+    # reaches another mind, so it carries no information-firewall cost.
+    # Absent means "not stated", which the reader treats as no.
+    if raw.get("erogenous") is not None:
+        cleaned["erogenous"] = bool(raw.get("erogenous"))
     cleaned["contact_id"] = contact_id(cleaned)
     return cleaned
 
@@ -1576,9 +1642,10 @@ def apply_contact_ops(scene: dict, ops, *, _age=True, report=None) -> dict:
             # Not anything asserted THIS beat, though: two spots stated in one
             # breath are two spots, and the simultaneity they express is the
             # whole point of a ledger rather than a single "posture" field.
+            mirrored = _mirrored_displacements(current, asserted, contact)
             for standing in [k for k in current if k not in asserted]:
                 if _displaces(current[standing], contact) \
-                        or _displaces(_flip(current[standing]), contact):
+                        or standing in mirrored:
                     moved = current.pop(standing, None)
                     if moved is not None:
                         displaced.append((moved, contact))

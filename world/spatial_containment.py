@@ -880,7 +880,7 @@ def _report_unrecorded_transfer(report, op) -> None:
         report.append(note)
 
 
-def mint_transferred_objects(scene: dict, inventory_ops) -> list:
+def mint_transferred_objects(scene: dict, inventory_ops, shedding=()) -> list:
     """Give a transferred thing an entity record when the scene has none.
 
     A TRANSFER IS EVIDENCE THAT A THING EXISTS. `derive_inventory_placements`
@@ -906,6 +906,23 @@ def mint_transferred_objects(scene: dict, inventory_ops) -> list:
     or already knows is not a thing this function may invent -- minting an
     entity over a body is the corruption `_merge_entity`'s own docstring
     records, where a registered character became "an object named The Doctor".
+
+    AND YIELDS THE GARMENTS THIS BEAT IS TAKING OFF. `shedding` is the names
+    the beat's `attire` channel is removing, and clothing coming off a body
+    belongs to the attire seam: that seam alone knows it is clothing, whose
+    it was, what condition it is in and where the body is standing, and it
+    mints a complete record saying all four. This one, working from the op
+    alone, can vouch for none of it -- so when both hands mint, the story
+    gets two records for one garment and the poorer one wins on arrival.
+    Measured live (chat 92 t16, replayed): resolve wrote
+    `{"op": "move", "object_id": "lightweight_travel_jacket",
+      "relation": "shed"}` beside `attire.Hinami.remove` for the same jacket,
+    and the beat ended with a stateless, unplaced `lightweight_travel_jacket`
+    sitting next to the attire seam's correct `lightweight_travel_jacket_hinami`.
+    A garment is one thing; it gets one record, from the hand that knows what
+    it is. `<garment>` and `<garment>_<owner>` are both yielded, because the
+    second is the key the attire seam uses and therefore the id the Director
+    reads off every garment already shed.
     """
     if not isinstance(scene, dict) or not isinstance(inventory_ops, list):
         return []
@@ -917,6 +934,14 @@ def mint_transferred_objects(scene: dict, inventory_ops) -> list:
     attire = scene.get("attire") if isinstance(scene.get("attire"), dict) else {}
     bodies = {str(k).strip().casefold() for k in positions}
     bodies |= {str(k).strip().casefold() for k in attire}
+    body_slugs = {re.sub(r"[^a-z0-9]+", "_", b).strip("_") for b in bodies}
+    reserved = set()
+    for garment in (shedding or ()):
+        slug = re.sub(r"[^a-z0-9]+", "_", str(garment).casefold()).strip("_")
+        if not slug:
+            continue
+        reserved.add(slug)
+        reserved |= {"%s_%s" % (slug, b) for b in body_slugs if b}
     minted = []
     for op in inventory_ops:
         if not isinstance(op, dict):
@@ -932,13 +957,30 @@ def mint_transferred_objects(scene: dict, inventory_ops) -> list:
         # is a fold rather than a rename, and the original spelling rides
         # along as an alias wherever the two differ.
         key = re.sub(r"[^a-z0-9]+", "_", name.casefold()).strip("_")
-        if not key or key in entities:
+        if not key or key in entities or key in reserved:
             continue
+        # AN ID IS NOT A DISPLAY NAME. `object_id` is an identifier and
+        # `name` is what a reader sees, and this minted the second from the
+        # first verbatim. The single-word ids that surfaced the seam hid it
+        # -- "padd" and "combadge" are the same string either way -- and a
+        # compound one is not: chat 92 t17 resolved
+        # `object_id: "fitted_tank_top_hinami"` for a shed garment, and the
+        # tank top entered the scene NAMED "fitted_tank_top_hinami", which is
+        # what the narrator, the ledger panel and any character reaching for
+        # it would have been handed. Underscores are how an id joins words;
+        # nothing else about the string is guessed at, and the id itself
+        # stays as an alias so both spellings resolve. UNDERSCORES ONLY: an
+        # underscore is how an identifier joins words and appears in no
+        # display name, while a hyphen belongs to plenty of them ("t-shirt").
+        label = " ".join(name.split("_")).strip() or name
+        aliases = [name] if name != key else []
+        if key != label and key not in aliases:
+            aliases.append(key)
         entities[key] = {
-            "name": name,
+            "name": label,
             "kind": "object",
             "portable": True,
-            "aliases": [name] if name != key else [],
+            "aliases": aliases,
         }
         minted.append(key)
     return minted

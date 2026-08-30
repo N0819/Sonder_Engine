@@ -166,7 +166,26 @@ def _capture_reasoning(message):
     except Exception:
         pass
 
-REQUEST_TIMEOUT = (30, 300)
+# (connect, read). THE READ HALF IS INTER-CHUNK, NOT TOTAL: every request the
+# pipeline makes is streamed, so this clock resets on each chunk and does not
+# limit how long a legitimate generation may run. What it limits is how long a
+# provider may say NOTHING -- before the first byte, or between two of them.
+#
+# It was 300s, which is not a timeout so much as an afternoon. With
+# `RetryConfig.max_retries` at 3 (four attempts), a provider that accepted the
+# connection and then went silent cost 20 minutes per `chat_complete`, and
+# `complete_validated_json` makes several in a row -- its primary call, a
+# repair, a token-ceiling retry -- so a single dead connection could hold a
+# turn for the better part of an hour. Measured against a real rate limit for
+# contrast: a 429 answers at once, so that path is four attempts and about 4
+# seconds of jittered backoff, and was never the hang.
+#
+# 90s is chosen against time-to-first-byte, which is the only legitimate long
+# silence: the largest system prompt this engine ships is ~38k characters and
+# first tokens arrive in seconds. A stream silent for a minute and a half is
+# not slow, it is gone. Owner's number (2026-08-29); raise it per-call with
+# `request_timeout(...)` where a role genuinely needs longer.
+REQUEST_TIMEOUT = (30, 90)
 
 # Independent pipeline stages (mapping+perception_act, narrator+
 # narrator_extra, narrator_extra's own per-persona loop) now run
@@ -188,7 +207,8 @@ def _session():
     return s
 HTTPX_TIMEOUT = httpx.Timeout(
     connect=30.0,
-    read=300.0,
+    # The async path's twin of REQUEST_TIMEOUT's read half; see the note there.
+    read=90.0,
     write=60.0,
     pool=30.0,
 )
@@ -471,6 +491,88 @@ def _check_cancel():
     ev = cancel_event.get()
     if ev is not None and ev.is_set():
         raise Aborted("generation aborted by user")
+
+
+# LIVE RESPONSES, SO AN ABORT CAN REACH A BLOCKED READ.
+#
+# `_check_cancel` is polled between streamed chunks, which is the right place
+# and is enough for every case where chunks keep arriving. It is no help at
+# all for the one the user actually hits: a connection that has stopped
+# sending. `iter_lines` is then blocked inside a socket read, no chunk
+# arrives, the poll never runs, and the flag the abort sets is invisible until
+# `REQUEST_TIMEOUT`'s read deadline expires -- 300 seconds. A turn cancelled
+# in the first second still holds the pipeline for five minutes, which is why
+# killing the server is faster than waiting.
+#
+# So the abort closes the socket. A response registered here is closed by
+# `abort_live_requests` from whichever thread called it, and the blocked read
+# raises immediately, surfacing as the `Aborted` the poll would have raised.
+# Keyed by the cancel Event itself -- identity, one per pipeline run -- so a
+# concurrent chat's requests are untouched.
+_LIVE_REQUESTS = {}
+_LIVE_LOCK = threading.Lock()
+
+
+@contextmanager
+def _abortable(response):
+    """Register a streaming response for the life of the read."""
+    ev = cancel_event.get()
+    if ev is None:
+        yield response
+        return
+    with _LIVE_LOCK:
+        _LIVE_REQUESTS.setdefault(ev, set()).add(response)
+    # Set between registration and the first read: closing it now is what an
+    # abort that landed a moment ago would have done.
+    if ev.is_set():
+        with _LIVE_LOCK:
+            _LIVE_REQUESTS.get(ev, set()).discard(response)
+        _close_quietly(response)
+        raise Aborted("generation aborted by user")
+    try:
+        yield response
+    finally:
+        with _LIVE_LOCK:
+            live = _LIVE_REQUESTS.get(ev)
+            if live is not None:
+                live.discard(response)
+                if not live:
+                    _LIVE_REQUESTS.pop(ev, None)
+
+
+def _close_quietly(response):
+    for method in ("close", "aclose"):
+        closer = getattr(response, method, None)
+        if closer is None:
+            continue
+        try:
+            result = closer()
+        except Exception:
+            return
+        # An async close returns a coroutine this thread must not await; the
+        # httpx paths carry their own cancellation through the event loop.
+        if hasattr(result, "close"):
+            try:
+                result.close()
+            except Exception:
+                pass
+        return
+
+
+def abort_live_requests(ev) -> int:
+    """Close every in-flight response belonging to this cancel event.
+
+    Returns how many were closed, so a caller can report whether the abort had
+    anything to interrupt. Total: a close that raises must not stop the rest,
+    because the point of calling this is that something is already wrong.
+    """
+    if ev is None:
+        return 0
+    with _LIVE_LOCK:
+        live = list(_LIVE_REQUESTS.get(ev) or ())
+    for response in live:
+        _close_quietly(response)
+    return len(live)
 
 DEFAULT_BASES = {
     "openai": "https://api.openai.com/v1",
@@ -1778,7 +1880,8 @@ def _sse_openai(url, headers, body, sink, role=None, model=None):
     served = ""
     t0 = time.time()
     _check_cancel()
-    with _session().post(url, headers=headers, json=body, stream=True, timeout=_request_timeout()) as r:
+    with _session().post(url, headers=headers, json=body, stream=True,
+                         timeout=_request_timeout()) as r, _abortable(r):
         if r.status_code >= 400:
             raise LLMError(f"HTTP {r.status_code}: {r.text[:300]}", r.status_code, r.status_code in DEFAULT_RETRY.retryable_status)
         for raw in r.iter_lines():
@@ -1854,7 +1957,9 @@ def _sse_anthropic(base, headers, body, sink, role=None, model=None):
     served = ""
     t0 = time.time()
     _check_cancel()
-    with _session().post(base + "/v1/messages", headers=headers, json=body, stream=True, timeout=_request_timeout()) as r:
+    with _session().post(base + "/v1/messages", headers=headers, json=body,
+                         stream=True, timeout=_request_timeout()) as r, \
+            _abortable(r):
         if r.status_code >= 400:
             raise LLMError(f"HTTP {r.status_code}: {r.text[:300]}", r.status_code, r.status_code in DEFAULT_RETRY.retryable_status)
         for raw in r.iter_lines():
@@ -1978,6 +2083,16 @@ def chat_complete(
         except Aborted:
             raise
         except Exception as exc:
+            # AN ABORT IS NOT A TRANSPORT FAULT. Cancelling closes the socket
+            # under a blocked read, which surfaces here as an ordinary
+            # connection error -- retryable, by every rule this loop has. On
+            # any attempt but the last that costs nothing (the backoff's own
+            # `_check_cancel` fires before it sleeps), but on the LAST attempt
+            # `_should_retry` is False and the connection error is raised as
+            # the call's outcome, so the caller sees a network failure where
+            # the user pressed stop and may go on to spend a repair call on
+            # it. Asked first, the answer is always the true one.
+            _check_cancel()
             error = _classify_error(exc)
             last_error = error
 
