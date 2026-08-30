@@ -297,8 +297,13 @@ class TestSilenceIsSomethingThePlayerDid:
     def test_the_prompt_forbids_answering_an_older_line(self):
         from llm.prompts import DEFAULT_PROMPTS
         prompt = DEFAULT_PROMPTS["character"]
-        assert "decision.player_said_nothing" in prompt
-        assert "player_name" in prompt
+        # The PROJECTED names, not the engine ones. `_player_silence_note`
+        # above still returns `player_said_nothing`/`player_name` and is
+        # asserted on as such -- `agents.character.PAYLOAD_NAMES` renames
+        # them at the assembly line, so the prompt and the note legitimately
+        # spell the same field differently, and that seam is the point.
+        assert "decision.they_said_nothing" in prompt
+        assert "their_name" in prompt
 
     def test_the_prompt_frames_silence_as_an_act(self):
         """"No input" invites reaching backwards; "they chose not to speak"

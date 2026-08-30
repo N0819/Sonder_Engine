@@ -516,7 +516,7 @@
     [
       "何も言わないとき：",
       [
-        "decision.player_said_nothing"
+        "decision.they_said_nothing"
       ]
     ],
     [
@@ -528,7 +528,7 @@
     [
       "作者からの提案：",
       [
-        "decision.authorial_offers"
+        "decision.comes_to_you"
       ]
     ],
     [

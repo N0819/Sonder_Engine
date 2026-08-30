@@ -516,7 +516,7 @@
     [
       "WHEN THEY SAY NOTHING:",
       [
-        "decision.player_said_nothing"
+        "decision.they_said_nothing"
       ]
     ],
     [
@@ -528,7 +528,7 @@
     [
       "WHAT COMES TO YOU:",
       [
-        "decision.authorial_offers"
+        "decision.comes_to_you"
       ]
     ],
     [

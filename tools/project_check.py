@@ -2929,6 +2929,75 @@ def check_memory_identity_writers(errors: list[str]) -> None:
             "used to do is worse than no registry, because it is believed.")
 
 
+def check_character_payload_names(errors: list[str]) -> None:
+    """The projected payload names, the gate, and the prompt say one thing.
+
+    `agents.character.PAYLOAD_NAMES` renames a handful of keys AT THE ASSEMBLY
+    LINE, so the character reads `they_said_nothing` where every other hand in
+    the tree writes `player_said_nothing`. That is safe only while three things
+    agree, and nothing about the desync is loud:
+
+      * the paragraph gate (`character_block_keys`) reads the FINISHED payload,
+        so a condition still spelled with the engine name never fires again and
+        the paragraph explaining the field silently disappears;
+      * the prompt prose names paths in sentences, so a stale mention tells the
+        character to consult a key it does not have;
+      * a projected name that collides with a key the payload already carries
+        would overwrite it.
+
+    Measured precedent for why this is a check and not a convention: the memory
+    split left seven monkeypatches pointing at a facade that no longer defined
+    what they patched, and every one of them passed.
+    """
+    import ast
+
+    source = (ROOT / "agents" / "character.py").read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    table = None
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign) and any(
+                isinstance(t, ast.Name) and t.id == "PAYLOAD_NAMES"
+                for t in node.targets):
+            table = ast.literal_eval(node.value)
+    if table is None:
+        errors.append("agents/character.py no longer defines PAYLOAD_NAMES; "
+                      "the payload-name projection has no table")
+        return
+
+    seen = set(table.values())
+    if len(seen) != len(table):
+        errors.append("agents.character.PAYLOAD_NAMES maps two engine names "
+                      "onto one projected name, so one would overwrite the "
+                      "other in the payload")
+
+    for pack in sorted((ROOT / "language_packs").iterdir()):
+        card = pack / "cards" / "system_prompts.json"
+        if not card.is_file():
+            continue
+        index = json.loads(card.read_text(encoding="utf-8"))
+        conditions = {
+            str(field)
+            for _heading, fields in (index.get("character_block_keys") or [])
+            for field in (fields or [])
+        }
+        parts = pack / "cards" / "system_prompts"
+        prose = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in sorted(parts.rglob("*.txt"))) if parts.is_dir() else ""
+        for engine_name, seen_as in table.items():
+            stale = "decision.%s" % engine_name
+            if stale in conditions:
+                errors.append(
+                    "%s gates a paragraph on %r, but the character payload "
+                    "projects that key to %r -- the condition can never fire"
+                    % (pack.name, stale, "decision.%s" % seen_as))
+            if stale in prose:
+                errors.append(
+                    "%s prompt prose names %r, which the character payload "
+                    "projects to %r -- it would be told to read a key it does "
+                    "not have" % (pack.name, stale, "decision.%s" % seen_as))
+
+
 def main() -> int:
     errors: list[str] = []
     check_undefined_names(errors)
@@ -2961,6 +3030,7 @@ def main() -> int:
     check_facade_patch_targets(errors)
     check_package_edge_budget(errors)
     check_memory_identity_writers(errors)
+    check_character_payload_names(errors)
     check_generated_map(errors)
 
     if errors:
