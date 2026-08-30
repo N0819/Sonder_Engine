@@ -270,5 +270,22 @@ Frontend (`static/js/`) uses browser globals, not ES modules. `theme-init.js` lo
     the beat it was written for and, on its first live reroll, also retired a
     permanent station of a body's anatomy. Prefer the clause, then watch the
     next few beats for what it licensed.
+- **Ask whether highly related clauses reduce to ONE broader clause -- and
+  TEST the reduction instead of assuming it.** Prompts accrete: every live
+  defect wants a paragraph, and three paragraphs circling one distinction
+  teach it worse than one paragraph naming it, because a model reading three
+  learns three special cases where it could have learned a rule. So before
+  adding a clause, find the ones it is a sibling of and try to state their
+  parent. The saving is not length. It is that a class stated once reaches the
+  case nobody has hit yet, and three instances reach only themselves.
+  - **A reduction is real only if it still says everything the children
+    said.** Write down the case each original clause was written for, then
+    check the merged text states each one; where a case survives only by
+    implication, keep the child, because an implied case is a dropped case.
+    This is the same failure the guards had, one level up: the merged clause
+    looks complete, reads better, and is quietly narrower.
+  - **Then watch a few beats.** A reduction is a behaviour change to every
+    story, not an edit, and the cheapest proof it held is the defect it was
+    reduced from failing to come back.
 - Run `make check` before considering a change complete; it will catch a stale `docs/CODE_MAP.md`, duplicate top-level symbols, and leftover patch-debris markers as hard failures.
 - Never commit `engine.db*`, `*.sqlite*`, `backdrops/`, `__pycache__/`, Python bytecode, or content-bearing `*.trace.json` diagnostics.
