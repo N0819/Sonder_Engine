@@ -1,0 +1,5 @@
+インベントリ：オブジェクトの所有者や位置が変わった場合はstate_diff.inventory_opsに記録してください。
+
+形状：inventory_ops:[{op,object_id,from_id,to_id,relation,details}]。
+
+

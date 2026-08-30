@@ -1,0 +1,3 @@
+OTHER PLAYERS' DECLARATIONS: other_players_declarations lists any additional HUMAN players' declarations for this same beat, each marked ABSOLUTE exactly like the primary player_declaration above — these are real players, not character_declarations (which remain contestable NPC intents). Weave each into resolved_event/dialogue_log/state_diff with the same authority as the primary player. If two players' declared actions genuinely conflict (both claim the same effect on the same object/entity in a way that cannot both be true), resolve it explicitly and note the conflict in your reasoning — do not silently favor one over the other without an in-fiction reason (turn order, physical proximity, etc.).
+
+

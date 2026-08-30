@@ -1,0 +1,6 @@
+# `-text` disables git's end-of-line conversion in BOTH directions, so a
+# checkout on Windows cannot introduce CRLF into a prompt. The pack loader
+# rejects a carriage return outright (`language_runtime/card_source.py`), so
+# without this a Windows clone would simply fail to start rather than
+# mysteriously misbehave -- but failing to start is not the goal either.
+language_packs/**/cards/**/*.txt -text

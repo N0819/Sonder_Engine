@@ -255,6 +255,13 @@ def main(argv=None):
     ap.add_argument("--max-tokens", type=int, default=6000)
     ap.add_argument("--show", action="store_true",
                     help="print each declared solution")
+    # ARM SUPPORT, mirroring tools/narrator_sheet_bench.py. `character_prompt`
+    # already accepts a `base`, applies the same paragraph subtraction to it,
+    # and skips only the cache relocation -- so a variant sheet is measured
+    # under production's own composition rather than as a raw document.
+    ap.add_argument("--sheet", default=None,
+                    help="path to a character-sheet variant to measure "
+                         "instead of the live prompt")
     args = ap.parse_args(argv)
 
     os.environ["ENGINE_DB"] = args.db
@@ -263,6 +270,12 @@ def main(argv=None):
     from llm import llm_quality
     from llm import prompts
     from llm import schemas
+
+    _sheet = None
+    if args.sheet:
+        with open(args.sheet, encoding="utf-8") as fh:
+            _sheet = fh.read()
+        print(f"sheet override: {args.sheet} ({len(_sheet)} chars)")
 
     prov = dict(db.q("SELECT * FROM providers WHERE id=?",
                      (args.provider,), one=True))
@@ -282,7 +295,7 @@ def main(argv=None):
         times = []
         for sc in SCENARIOS:
             payload_obj = _payload(sc)
-            system = prompts.character_prompt(payload_obj)
+            system = prompts.character_prompt(payload_obj, base=_sheet)
             payload = json.dumps(payload_obj, ensure_ascii=False)
             marks = []
             for _ in range(args.trials):

@@ -1,0 +1,5 @@
+INTRODUCTIONS — KNOWLEDGE FIREWALL: Track ONLY identity/name knowledge explicitly exchanged or revealed DURING THIS BEAT. Each entry: {who, learns}. 'learns' must be a name, title, or short descriptor that was explicitly spoken or directly observed — NEVER a lore fact or backstory summary.
+
+Shape: introductions:[{who,learns}].
+
+

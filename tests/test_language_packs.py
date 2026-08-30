@@ -22,7 +22,7 @@ from persist.checkpoints import PRESERVED_SETTING_KEYS, ensure_checkpoint, resto
 from language_runtime import (
     LanguagePackError, apply_common_prompt_policy, current_language_id,
     installed_language_packs, language_pack, linguistic,
-    require_language_pack, story_language,
+    raw_card, require_language_pack, story_language,
 )
 from llm.prompts import (
     DEFAULT_PROMPTS, character_prompt, default_prompts_for, get_prompt,
@@ -548,9 +548,14 @@ def test_no_prompt_card_names_a_character_or_vehicle_from_one_story():
     for pack in installed_language_packs(refresh=True).values():
         if not pack.story:
             continue
-        body = json.dumps(
-            (ROOT / f"language_packs/{pack.id}/cards/system_prompts.json")
-            .read_text(encoding="utf-8"))
+        # `raw_card`, not the index file: since the split the prose lives
+        # in `cards/system_prompts/*.txt` and the JSON holds only references,
+        # so reading the file would search 14 KB of structure and find
+        # nothing -- a tripwire that passes because it stopped looking.
+        body = json.dumps(raw_card(pack.id), ensure_ascii=False)
+        assert len(body) > 200_000, (
+            f"{pack.id} card source is {len(body)} characters -- this grep is "
+            "reading structure, not prose, and would pass on anything")
         found = [name for name in _STORY_INSTANCE_NAMES if name in body]
         assert not found, (
             f"{pack.id} prompt card names {found} -- an instance from one "
@@ -590,8 +595,11 @@ def test_the_conditions_shape_a_prompt_shows_is_the_shape_declared():
     for pack in installed_language_packs(refresh=True).values():
         if not pack.story:
             continue
-        blob = (ROOT / f"language_packs/{pack.id}/cards/system_prompts.json"
-                ).read_text(encoding="utf-8")
+        blob = "\n".join(
+            body for _path, body in _raw_string_leaves(raw_card(pack.id)))
+        assert len(blob) > 200_000, (
+            f"{pack.id} card source is {len(blob)} characters -- this scan is "
+            "reading structure, not prose")
         assert not singular.search(blob), (
             f"{pack.id} shows conditions keyed to a bare object; the field "
             "is dict[str, list[dict]]")
@@ -692,6 +700,11 @@ _EMBEDDED_FRAGMENTS = {
     "transit_note": 3,
     "extra_parts_note": 6,
     "interior_note": 3,
+    # Every surface that hands back a card: both generators, the four
+    # fills, promotion and import reinterpretation. Person is not a
+    # house style -- a card is read by the character AND by everyone
+    # who is not them, and the two readings need different persons.
+    "card_person_note": 7,
 }
 
 
@@ -723,9 +736,7 @@ def test_every_embedding_of_a_fragment_is_a_reference_no_pack_keeps_a_copy():
     back in beside its own fragment.
     """
     packs = installed_language_packs(refresh=True)
-    english_raw = json.loads(
-        (ROOT / "language_packs/en/cards/system_prompts.json")
-        .read_text(encoding="utf-8"))
+    english_raw = raw_card("en")
     reference_paths = {
         name: {path for path, body in _raw_string_leaves(english_raw)
                if f"{{{{fragment:{name}}}}}" in body}
@@ -734,9 +745,10 @@ def test_every_embedding_of_a_fragment_is_a_reference_no_pack_keeps_a_copy():
     for pack in packs.values():
         if not pack.story:
             continue
-        raw = json.loads(
-            (ROOT / f"language_packs/{pack.id}/cards/system_prompts.json")
-            .read_text(encoding="utf-8"))
+        # The UNRESOLVED authored card. This is the one test that requires
+        # it: `pack.card(...)` has already substituted every fragment, so a
+        # reference and a drifting paste look identical there.
+        raw = raw_card(pack.id)
         leaves = dict(_raw_string_leaves(raw))
         for name, expected in _EMBEDDED_FRAGMENTS.items():
             marker = f"{{{{fragment:{name}}}}}"

@@ -598,13 +598,26 @@ def check_time_channel_vocabulary(errors: list[str]) -> None:
 
     walk(schemas.OUTPUT_EXAMPLES, "")
 
+    # The repo root is not on sys.path at module scope here; `tools/` is.
+    sys.path.insert(0, str(ROOT))
+    from language_runtime.card_source import read_card_source
+
     non_seconds = _time_non_seconds_keys()
-    for path in sorted((ROOT / "language_packs").glob("*/cards/"
-                                                      "system_prompts.json")):
+    scanned = 0
+    # `read_card_source`, deliberately, not `pack.card(...)`. This scans the
+    # AUTHORED text once per authored leaf, which is what the check has always
+    # done; the loaded card has already substituted four fragments into
+    # seventeen bodies, so reading that would rescan each of them seventeen
+    # times. Since the split the prose is not in the JSON at all -- it is in
+    # `cards/system_prompts/*.txt` -- so a glob over the index file would scan
+    # 14 KB of `{"$text": ...}` references and find nothing at all.
+    for pack_dir in sorted(
+            path for path in (ROOT / "language_packs").iterdir()
+            if (path / "cards" / "system_prompts.json").exists()):
         try:
-            card = json.loads(path.read_text(encoding="utf-8"))
+            card = read_card_source(pack_dir, "system_prompts")
         except Exception as exc:
-            errors.append(f"could not read {path}: {exc}")
+            errors.append(f"could not read {pack_dir.name} system_prompts: {exc}")
             continue
 
         def strings(node):
@@ -617,8 +630,9 @@ def check_time_channel_vocabulary(errors: list[str]) -> None:
                 for value in node:
                     yield from strings(value)
 
-        rel = path.relative_to(ROOT).as_posix()
+        rel = (pack_dir / "cards" / "system_prompts").relative_to(ROOT).as_posix()
         for text in strings(card):
+            scanned += 1
             for pattern in (_TIME_SHAPE_LINE, _TIME_PROSE_LINE):
                 for span in pattern.findall(text):
                     for token in _TIME_TOKEN.findall(span):
@@ -627,6 +641,160 @@ def check_time_channel_vocabulary(errors: list[str]) -> None:
                             continue
                         if token not in TIME_DIFF_KEYS:
                             report(f"{rel} prompt", token)
+
+    # A self-tripwire. This check once read a file whose prose had moved and
+    # would have passed on an empty scan -- a check that stops looking is
+    # worse than one that fails, because it is believed. Two packs carry 226
+    # authored string leaves each.
+    if scanned < 200:
+        errors.append(
+            f"time-channel scan saw {scanned} prompt strings; the card source "
+            "is not being read")
+
+
+def check_prompt_card_parts(errors: list[str]) -> None:
+    """A split prompt card's index and its part files must agree exactly.
+
+    Since the split, `cards/system_prompts.json` is an index of
+    `{"$text": "<path>"}` references and the prose lives one file per prompt
+    in `cards/system_prompts/`. Four ways that decays, each of which this
+    catches and none of which a green suite would otherwise notice:
+
+      * a `.txt` no reference claims -- a prompt written, committed, and
+        never sent to any model;
+      * a reference at a path that is not `canonical_part_path` for its own
+        leaf, which would make the layout advisory rather than derived;
+      * a part file not in canonical written form (exactly one trailing
+        newline beyond the leaf's text), which is how a CRLF checkout or a
+        trailing-whitespace-trimming editor first shows up. The READER
+        forgives a missing final newline so the common accident cannot
+        change a prompt; nothing forgives it on disk, or the convention that
+        makes the accident harmless erodes;
+      * a prose leaf RE-INLINED into the index. Nobody would move 62 KB back
+        by hand, but a tool that rewrites the card without going through
+        `write_card_source` would, and the card would keep working while
+        quietly becoming unreadable again.
+
+    Also en-vs-ja part-path parity, which the pack loader structurally cannot
+    see: `_leaf_paths` treats `prose_author_sheet` as ONE path, so a pack
+    shipping 27 segments instead of 28 passes its card-parity comparison.
+    """
+    sys.path.insert(0, str(ROOT))
+    from language_runtime.card_source import (
+        CardSourceError, canonical_part_path, card_parts_dir, decode_part,
+        encode_part, is_part_leaf, part_plan, read_card_source,
+    )
+
+    #: A prose leaf shorter than this may legitimately sit inline (a card that
+    #: has not been split at all is the normal case). Above it, a leaf at a
+    #: part-leaf path is prose that belongs in a file.
+    inline_limit = 200
+    declared: dict[str, set[str]] = {}
+    for pack_dir in sorted(
+            path for path in (ROOT / "language_packs").iterdir()
+            if path.is_dir()):
+        for card_name in sorted(
+                path.stem for path in (pack_dir / "cards").glob("*.json")
+                if path.is_file()):
+            parts_dir = card_parts_dir(pack_dir, card_name)
+            label = f"{pack_dir.name}/{card_name}"
+            index_path = pack_dir / "cards" / f"{card_name}.json"
+            try:
+                index = json.loads(index_path.read_text(encoding="utf-8"))
+            except Exception as exc:
+                errors.append(f"could not read {label} index: {exc}")
+                continue
+            if not parts_dir.is_dir():
+                # Unsplit card. Nothing to check but the anti-decay rule,
+                # which only applies once a card HAS been split.
+                continue
+            try:
+                card = read_card_source(pack_dir, card_name)
+            except CardSourceError as exc:
+                errors.append(f"{label}: {exc}")
+                continue
+
+            plan = part_plan(card)
+            expected = {rel for _leaf, rel, _text in plan}
+            declared[label] = expected
+            on_disk = {path.relative_to(parts_dir).as_posix()
+                       for path in parts_dir.rglob("*.txt") if path.is_file()}
+            for rel in sorted(on_disk - expected):
+                errors.append(
+                    f"{label}: {rel} is a part file no reference claims, so "
+                    "nothing ships it to a model. Reference it from the card "
+                    "index or delete it.")
+            for rel in sorted(expected - on_disk):
+                errors.append(f"{label}: {rel} is referenced but missing")
+
+            for leaf_path, rel, _text in plan:
+                node = index
+                for segment in leaf_path:
+                    try:
+                        node = node[segment]
+                    except (KeyError, IndexError, TypeError):
+                        node = None
+                        break
+                if node != {"$text": rel}:
+                    errors.append(
+                        f"{label}: the index entry for {rel} is {node!r}, not "
+                        f'{{"$text": "{rel}"}} -- part paths are derived from '
+                        "the leaf path by `canonical_part_path`, never chosen")
+
+            for rel in sorted(on_disk & expected):
+                data = (parts_dir / rel).read_bytes()
+                try:
+                    text = decode_part(data, f"{label} {rel}")
+                except CardSourceError as exc:
+                    errors.append(str(exc))
+                    continue
+                if encode_part(text) != data:
+                    errors.append(
+                        f"{label}: {rel} is not in canonical written form. A "
+                        "part file is its leaf's exact text plus exactly one "
+                        "trailing newline; anything else is an editor having "
+                        "changed a prompt on save.")
+
+            # The anti-decay rule.
+            def inline_prose(value, leaf_path=()):
+                if isinstance(value, Mapping):
+                    if "$text" in value:
+                        return
+                    for key, child in value.items():
+                        yield from inline_prose(child, leaf_path + (str(key),))
+                elif isinstance(value, list):
+                    for position, child in enumerate(value):
+                        yield from inline_prose(child, leaf_path + (position,))
+                elif isinstance(value, str) and is_part_leaf(leaf_path):
+                    if len(value) >= inline_limit:
+                        yield leaf_path, value
+
+            for leaf_path, value in inline_prose(index):
+                errors.append(
+                    f"{label}: {'.'.join(str(s) for s in leaf_path)} holds "
+                    f"{len(value)} characters of prose inline in the card "
+                    "index. Prose lives one leaf per file under "
+                    f"cards/{card_name}/; re-inlining it is how a 414 KB "
+                    "single-document card came back.")
+
+    for card_name in sorted({label.split("/", 1)[1] for label in declared}):
+        rows = {label.split("/", 1)[0]: paths
+                for label, paths in declared.items()
+                if label.split("/", 1)[1] == card_name}
+        if "en" not in rows:
+            continue
+        for language, paths in sorted(rows.items()):
+            if language == "en":
+                continue
+            missing = sorted(rows["en"] - paths)
+            extra = sorted(paths - rows["en"])
+            if missing or extra:
+                errors.append(
+                    f"{language}/{card_name} declares different part files "
+                    f"than en: missing {missing[:5]}, extra {extra[:5]}. The "
+                    "pack loader cannot see this -- `_leaf_paths` treats "
+                    "`prose_author_sheet` as a single path, so a pack short "
+                    "one segment passes its card-parity check.")
 
 
 def check_specialist_prompt_chunks(errors: list[str]) -> None:
@@ -2781,6 +2949,7 @@ def main() -> int:
     check_cross_file_duplicate_definitions(errors)
     check_prompt_schema_ops(errors)
     check_time_channel_vocabulary(errors)
+    check_prompt_card_parts(errors)
     check_specialist_prompt_chunks(errors)
     check_prose_author_chunks(errors)
     check_language_pack_surfaces(errors)

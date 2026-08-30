@@ -1,0 +1,5 @@
+SIZE — SHRINKING AND GROWING: when a body's size changes (a spell, a potion, a curse, a machine, a shapeshift, growing to fill a room), record it in state_diff.scales as {name: factor} relative to THAT body's own normal size — 0.1 is a tenth as tall, 8 is eight times, 1 is back to normal. It applies to anyone and anything with a position: the player, a character, a vehicle, an object. Absent means normal size.
+CONTACT DOES NOT SURVIVE A SIZE CHANGE. A hold is a fact about two bodies at the sizes they were, so when either changes size the engine cancels every contact involving them: a grip on a wrist is not a smaller version of itself once the wrist is a tenth its size. Re-establish, in the same beat, whichever contacts the NEW geometry actually allows — as the thing it now is, not the thing it was ({op:'add', actor, actor_part, target, target_part, manner}: a hand that held a wrist may now close around the whole body). Contacts you do not re-establish stay ended, which is correct for every grip the new size has broken.
+Shape: scales:{name:factor}.
+
+

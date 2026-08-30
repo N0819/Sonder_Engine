@@ -27,6 +27,12 @@ from types import MappingProxyType
 from typing import Any, Mapping
 
 from core.paths import INSTALL_ROOT
+from language_runtime.card_source import (
+    CardSourceError,
+    card_parts_dir,
+    expand_card_parts,
+    read_card_source,
+)
 
 
 DEFAULT_LANGUAGE = "en"
@@ -86,6 +92,37 @@ def _read_json(path: Path) -> dict:
     if not isinstance(value, dict):
         raise LanguagePackError(f"language-pack file must contain an object: {path}")
     return value
+
+
+def _read_card(directory: Path, name: str) -> dict:
+    """Assemble one card from its index and, if it has them, its part files.
+
+    A card is `cards/<name>.json` -- the structural index -- plus an optional
+    sibling directory `cards/<name>/` of `.txt` part files, one per prose
+    leaf, referenced from the index as `{"$text": "<relative path>"}`. The
+    split exists because `system_prompts` is 414 KB (en) / 525 KB (ja) of
+    62,000-character prompt strings with escaped newlines, which no human can
+    edit without a surgical raw-text replace. It moves WHERE the text lives
+    and nothing else; `language_runtime/card_source.py` states the format and
+    `tests/test_prompt_card_split.py` holds the assembled values byte-
+    identical to the pre-split reference.
+
+    A card with no references and no parts directory passes straight through,
+    so the three unsplit cards need no special case.
+
+    If a part file is missing, empty, orphaned, misnamed or not LF UTF-8, this
+    raises rather than returning a short prompt: the failure reaches
+    `installed_language_packs()`, is negative-cached, and stops the server
+    starting and the suite collecting. A truncated sheet that loads is a
+    silent behaviour change read by every story in that language; a pack that
+    refuses to load is a line in a log.
+    """
+    index = _read_json(directory / "cards" / f"{name}.json")
+    try:
+        return expand_card_parts(index, card_parts_dir(directory, name))
+    except CardSourceError as exc:
+        raise LanguagePackError(
+            f"language-pack card {directory.name}/{name}: {exc}") from exc
 
 
 def _freeze(value):
@@ -276,8 +313,7 @@ def _load_pack(directory: Path) -> LanguagePack:
         raise LanguagePackError(
             f"story language pack {language_id!r} is missing cards: "
             f"{', '.join(sorted(missing_story_cards))}")
-    cards = {name: _read_json(directory / "cards" / f"{name}.json")
-             for name in card_names}
+    cards = {name: _read_card(directory, name) for name in card_names}
     if "system_prompts" in cards:
         cards["system_prompts"] = _resolve_prompt_fragments(
             cards["system_prompts"], language_id)
@@ -418,6 +454,35 @@ def require_language_pack(language_id: Any, *, capability: str | None = None) ->
             f"language pack {key!r} requires unavailable deterministic "
             f"adapter {pack.adapter!r}")
     return pack
+
+
+def pack_directory(language_id: Any = DEFAULT_LANGUAGE) -> Path:
+    """The on-disk directory of one installed pack."""
+    key = normalize_language_id(language_id)
+    directory = _PACK_ROOT / key
+    if not directory.is_dir():
+        raise LanguagePackError(f"language pack {key!r} is not installed")
+    return directory
+
+
+def raw_card(language_id: Any = DEFAULT_LANGUAGE,
+             card_name: str = "system_prompts") -> dict:
+    """One pack's AUTHORED card: assembled from its parts, mutable, unresolved.
+
+    The documented way for a tool or a test to reach what a human wrote.
+    `LanguagePack.card(...)` is the wrong artifact for that: it is frozen, and
+    its `{{fragment:...}}` references have already been substituted, so a
+    single authored fragment appears in it seventeen times. Anything auditing
+    or grepping authored prompt text wants this; anything asking what a model
+    will actually receive wants `card(...)`.
+    """
+    if not _CARD_NAME.fullmatch(str(card_name)):
+        raise LanguagePackError(f"invalid card name: {card_name!r}")
+    try:
+        return read_card_source(pack_directory(language_id), str(card_name))
+    except CardSourceError as exc:
+        raise LanguagePackError(
+            f"language-pack card {language_id}/{card_name}: {exc}") from exc
 
 
 def language_pack(language_id: Any = DEFAULT_LANGUAGE) -> LanguagePack:
@@ -681,4 +746,5 @@ __all__ = [
     "normalize_language_id", "register_renderer",
     "renderer_for", "require_language_pack", "set_story_language",
     "set_ui_language", "story_language", "ui_language",
+    "pack_directory", "raw_card",
 ]

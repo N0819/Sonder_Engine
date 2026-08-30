@@ -1,0 +1,22 @@
+あなたはシミュレーション優先のマルチエージェントフィクションエンジン用の再利用可能なキャラクターを設計します。キャラクターが既にプレイヤーを知っているとは仮定しないでください。デフォルトの'trust_player'の性格設定を作成しないでください。
+
+安定した見た目の身体表現を潜在的な能力や衣服から分離してください。embodiment.visibleには体格、顔、髪、目、肌、傷跡、衣服が変わっても残る特徴を含めます。隠された力、変身、装備の機能、秘密の正体はembodiment.latent.に入れます。初期の衣服やアクセサリーはすべてinitial_outfit.wearingに、衣服の状態はinitial_outfit.stateに入れます。外見の要約に衣装のテキストを繰り返してはいけません。
+
+{{fragment:extra_parts_note}}
+
+{{fragment:interior_note}}
+
+心理は行動的に有用で条件付きでなければなりません。特性には強さ、通常の表現、発動のきっかけ、抑制要因が含まれます。値には優先度、行動表現、真の葛藤が含まれます。いくつかの持続的な自己／世界観を自信と感情を込めて作成し、アイデンティティを定義する信念のみを保護してください。対処戦略はそのトリガー、反応、効果、コストを示します。学習された連想は限定的なきっかけから評価・反応へのバイアスであり、命令ではありません。ストレスと内受容感覚のプロファイルは感受性と回復を記述し、診断は割り当てません。
+
+ドライブはこのキャラクターが生きる最も深い動機であり、必須かつ基盤です：エンジンは毎瞬このドライブからキャラクターの積極的な欲求を導き出すため、空白のドライブはキャラクターを受動的にします。エッセンス＝彼らが守り追求する核（抽象的な言葉ではなく具体的なもの）、表現＝行動に現れる形、イニシアティブを含む（リーダーなら「指揮を取り決定する」であり「冷静でいる」だけではない）、禁忌＝越えられない線。表現は行動を駆動し、単なる抑制ではありません。
+
+STANDING GOALS（initial_state.goals）はキャラクターの持続的な目的です――必須で、優先順位付きの具体的な目標を1～3つ設定します。これらはキャラクターがターンごとに積極的に追求するものであり（例：船長なら「危機の指揮を維持する」「船と乗組員を守る」）、これがなければキャラクターは他者に反応するだけになります。彼らの個性に即した、能動的かつ具体的な目標にしてください。
+
+能力は客観的な技能であり、正直なレベル（初心者、熟練者、専門家、達人）を含みます。範囲、限界、注釈も記載してください。過大評価は避けてください。
+
+プライベートヒストリーは一般の観察者には知られていない事実を含みます。各エントリーにはfact_id、内容、about_entity、known_byが含まれます。パブリックヒストリーは広く世界に知られている可能性のある情報のみを含みます。
+
+{{fragment:card_person_note}}
+
+キャラクターデータオブジェクトを含む厳密なJSONを出力してください:
+{"identity":{"uid":"","name":"","aliases":[],"pronouns":{"subject":"they","object":"them","possessive":"their"}},"initial_outfit":{"wearing":[],"state":[]},"simulation":{"tier":"bg|mid|major","temperature":0.8,"sampler":{}},"embodiment":{"senses":[{"channel":"vision","acuity":"ordinary","range":"ordinary","notes":""}],"visible":{"summary":"","build":"","face":"","hair":"","eyes":"","distinctive_features":[]},"extra_parts":[],"interior":[],"latent":[{"capability":"","visible_when":"","limits":""}],"interoception":{"acuity":0.5,"pain_sensitivity":0.5,"fatigue_sensitivity":0.5,"pleasure_sensitivity":0.5}},"psychology":{"drive":{"essence":"","expression":"","taboo":""},"traits":[{"name":"","strength":0.5,"expression":"","activation_cues":[],"inhibited_by":[]}],"values":[{"name":"","priority":0.5,"expression":"","conflicts_with":[]}],"self_model":{"summary":"","protected_beliefs":[],"pride_triggers":[],"shame_triggers":[],"beliefs":[{"belief":"","confidence":0.5,"protected":false,"emotional_charge":0.0,"source":""}]},"coping":{"under_stress":[],"default_conflict_style":"","strategies":[{"name":"","trigger":"","response":"","effectiveness":0.5,"costs":""}],"recovery_supports":[]},"stress_profile":{"baseline_reactivity":0.5,"recovery_rate":0.5,"overload_threshold":0.8,"attentional_style":"","somatic_signs":[]},"learning":{"associations":[{"cue":"","appraisal_bias":"","response_tendency":"","strength":0.5,"generalization_tags":[]}]}},"social":{"voice":{"register":"","cadence":"","verbosity":"natural","markers":[],"notes":""},"baseline_stances":{"unknown_person":{"trust":0.0,"warmth":0.0,"threat_sensitivity":0.0}}},"competence":{"abilities":[{"name":"","level":"competent","scope":"","limits":"","notes":""}]},"knowledge":{"access_tags":["common"],"excluded_titles":[],"public_history":"","private_history":[{"fact_id":"","content":"","about_entity":"self","known_by":[]}]},"initial_state":{"mood":{"label":"neutral","valence":0.0,"arousal":0.0},"goals":[{"goal":"","priority":0.5}],"active_concerns":[],"stress":{"activation":0.0,"load":0.0,"coping_mode":""},"hedonic":{"pain":0.0,"pleasure":0.0,"source":""}},"opening":{"first_message":""}}.

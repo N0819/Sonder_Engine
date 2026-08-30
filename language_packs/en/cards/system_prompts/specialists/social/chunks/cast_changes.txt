@@ -1,0 +1,5 @@
+CAST CHANGES: If a character leaves the scene entirely or a known off-scene character arrives, record state_diff.cast_changes.
+
+Shape: cast_changes:[{who,status,reason}], status:'active' (in the scene) or 'dormant' (out of it). Those two words are the whole vocabulary: a character marked dormant stops being present, addressable and thinking each beat, and one left active goes on doing all three wherever your prose says they went.
+
+

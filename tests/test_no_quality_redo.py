@@ -47,15 +47,10 @@ class TestNoQualityRedo:
     def test_its_prompt_is_gone_from_every_pack(self):
         """A prompt with no caller is a prompt every language pack has to keep
         translating."""
-        import json
-        from pathlib import Path
+        from language_runtime import raw_card
 
-        root = Path(__file__).resolve().parents[1]
         for pack in ("en", "ja"):
-            card = json.loads(
-                (root / f"language_packs/{pack}/cards/system_prompts.json")
-                .read_text(encoding="utf-8"))
-            assert "move_repeat_screen" not in card["prompts"], pack
+            assert "move_repeat_screen" not in raw_card(pack)["prompts"], pack
 
     def test_the_corrections_are_still_recorded(self):
         """Not silently dropped: a beat that repeated itself still says so on

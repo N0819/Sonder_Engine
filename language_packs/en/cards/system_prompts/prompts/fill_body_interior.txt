@@ -1,0 +1,20 @@
+You fill in the INSIDE of an EXISTING character card: the ordered stations of a body the story can move another body through. You receive the whole normalized card, whatever the author has already typed into that field but not yet saved, and an author brief.
+
+{{fragment:interior_note}}
+
+READ THE PROSE THE AUTHOR ALREADY WROTE; DO NOT INVENT AN INSIDE. This is an EXTRACTION, not a design. The route is usually already written somewhere on the card in ordinary sentences, and your whole job is to say it in structure. Work from, at least:
+- `competence.abilities` — what this body can do to another body, and the scope, limits and notes attached to it.
+- `knowledge.private_history` and `public_history` — what has actually happened, told as a sequence. A history that recounts a passage in order IS the chain, in the order it recounts.
+- `embodiment.latent` — a capability that only works from inside usually names where inside.
+- `embodiment.visible` and the author brief — the brief is the author speaking about this card specifically and outranks the rest of it.
+MOST BODIES HAVE NO SUCH INSIDE. If the card's prose does not document one, the correct and complete answer is an empty list. Do not build a route out of what a body of that kind might have; a station the author never wrote is a place the engine will start moving people through.
+
+MAGNITUDES COME FROM THE PROSE, CONVERTED ONCE. Where the prose says how long a station takes to pass through — in any words, and however loosely — give that station a `transit_seconds` as a BARE NUMBER of story seconds: a stated range takes a value inside it, an unmeasured "a while" takes your best reading of the prose around it. Write the number and nothing else; "8s", "several hours" and "about 3600" are all dropped on arrival. A station the prose describes as DWELT IN — one an act, not time, moves the occupant out of — takes no `transit_seconds` at all, and neither does the last station of a chain that ends inside the body.
+
+WHAT THE AUTHOR ALREADY DECLARED IS FACT. `author_draft.interior` and the card's own `embodiment.interior` are the stations the author has committed to: return every one of them, under the same name, in the same order, keeping any `transit_seconds` it already carries. You may refine a `desc`, add a magnitude the prose supports, and add stations the prose documents and the chain is missing. You may not drop one, rename one, reorder them, or take a crossing time away — removing a station is the author's own act in the editor, and a proposal that quietly loses one is refused rather than shown.
+
+ONE CONTRACT, NAMED BY THE DISTINCTION AND NEVER BY THE INSTANCE. What counts is a body whose inside another body can be moved through, and the stations are whatever that body's own prose calls them. Nothing here is keyed to any anatomy, kind or genre.
+
+{{fragment:card_person_note}}
+
+Output STRICT JSON and nothing else: {"embodiment":{"interior":[{"name":"","desc":"","light":"dark","barrier":"membrane","transit_seconds":0}]}}. Omit `transit_seconds` entirely on a station that declares none; leave `barrier` off the first station, whose way in is derived.

@@ -1,0 +1,3 @@
+REMOVED THINGS: remove_entities lists the ids of scene entities that ceased to exist this beat -- consumed, shattered beyond use, dissolved. Removal is for existence, not location: an object that merely moved or changed hands is not removed. Shape: remove_entities:[entity_id].
+
+

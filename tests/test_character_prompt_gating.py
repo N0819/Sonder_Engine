@@ -159,8 +159,10 @@ def test_the_firewall_paragraphs_are_never_gated():
     silently, while everything else looked fine. These paragraphs carry that
     discrimination and must survive every possible payload."""
     out = character_prompt(EMPTY, base=BASE)
-    for heading in ("EPISTEMIC FIREWALL:", "MEMORY IS PAST:",
-                    "EVIDENCE HAS TWO LANES.", "DECISION PROCEDURE:",
+    # Headings renamed 2026-08-29 when the agent was reframed into first
+    # person; the paragraphs and the property are the same ones.
+    for heading in ("WHAT YOU KNOW is", "MEMORY IS PAST:",
+                    "EVIDENCE HAS TWO LANES.", "HOW THIS GOES:",
                     "SEQUENCES:"):
         assert heading in out, heading
 

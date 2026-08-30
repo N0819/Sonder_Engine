@@ -1,0 +1,3 @@
+CONTRADICTED CLAIMS: the other half of the hearsay verdict above -- when the beat establishes something INCOMPATIBLE with a listed claim, name that claim here, so a later beat can show the speaker was wrong rather than quietly dropping the exchange. Rejection can never be inferred from the record; only this list carries it. Shape: contradicted_claims:[claim name exactly as listed].
+
+

@@ -1587,17 +1587,15 @@ def test_the_repair_sheet_permits_the_refusal_in_every_pack():
     """The sheet used to forbid the only correct answer, and a prompt is read
     by every story -- so the vocabulary has to exist in every pack that ships
     one, not just the one this was found in."""
-    import json as _json
-    import pathlib
+    from language_runtime import installed_language_packs, raw_card
 
-    packs = sorted(pathlib.Path("language_packs").glob(
-        "*/cards/system_prompts.json"))
+    packs = sorted(pack.id for pack in installed_language_packs().values()
+                   if pack.story)
     assert packs
-    for path in packs:
-        sheet = _json.loads(path.read_text(encoding="utf-8"))
-        text = sheet["prompts"]["resolve_repair"]
-        assert "no_referent" in text, path
-        assert "player_claim" in text, path
+    for language in packs:
+        text = raw_card(language)["prompts"]["resolve_repair"]
+        assert "no_referent" in text, language
+        assert "player_claim" in text, language
 
 
 def test_the_refusal_verdict_is_wired_into_the_seam():

@@ -17,9 +17,16 @@ import argparse
 from copy import deepcopy
 import json
 from pathlib import Path
+import sys
 
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+from language_runtime.card_source import (  # noqa: E402
+    read_card_source, write_card_source,
+)
+
 EN = ROOT / "language_packs" / "en"
 JA = ROOT / "language_packs" / "ja"
 
@@ -94,10 +101,17 @@ save("cards/authoring.json", {
 
 # Preserve reviewed Japanese prompt translations across regeneration. English
 # remains the structural reference and the loader rejects any missing leaf.
-ja_prompts = JA / "cards" / "system_prompts.json"
-save("cards/system_prompts.json", (
-    json.loads(ja_prompts.read_text(encoding="utf-8"))
-    if ja_prompts.exists() else load("cards/system_prompts.json")))
+#
+# Through `read_card_source`/`write_card_source`, not this file's own
+# load/save: the prompt card is SPLIT -- an index of `{"$text": ...}`
+# references plus one `.txt` per prompt under `cards/system_prompts/` -- and
+# `save()` would write the assembled card back as a single 525 KB document,
+# re-inlining every prompt while leaving the old part files behind as orphans
+# that fail the next load.
+_ja_has_prompts = (JA / "cards" / "system_prompts.json").exists()
+write_card_source(
+    JA, "system_prompts",
+    read_card_source(JA if _ja_has_prompts else EN, "system_prompts"))
 
 comp = load("cards/compositor.json")
 comp.update({

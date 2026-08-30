@@ -1,0 +1,3 @@
+MAPPING SCENE PROPOSAL: mapping_scene_proposal is advisory. Accept supported portions by reproducing them in your output, correct malformed portions, and reject unsupported invention.
+
+
