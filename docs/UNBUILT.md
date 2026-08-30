@@ -1667,6 +1667,48 @@ starting rather than defects in a story, and are now in
 [`guides/LANGUAGE_PACKS.md`](guides/LANGUAGE_PACKS.md).)*
 
 
+### 1.49 Three things the prompt-card split made visible and did not change
+
+The 2026-08-29 split moved every prompt leaf out of
+`cards/system_prompts.json` into per-prompt `.txt` files
+(`language_runtime/card_source.py`). Byte identity was the acceptance
+criterion and it holds, so all three of these SHIPPED UNCHANGED. They were
+invisible inside an escaped 414 KB JSON string and are obvious in a file, and
+each is a judgement about prompt text rather than a refactor's business.
+
+**The one glued join among 31 specialist joins.**
+`specialists/body/chunks/conditions.txt` ends `"…and end what has ended."`
+with no terminator of its own, and `vitals` follows it in `body`'s `order`.
+A specialist sheet is `core + "".join(chunks in order)` with no separator, so
+the shipped English sheet reads `…has ended.BODILY CONDITION (only when…` —
+one sentence running into the next section header with no break at all. Every
+other one of the 31 joins carries its own terminator. Whether the model reads
+past it is unmeasured; the fix is one newline and a ledger line in
+`tests/data/prompt_cards_presplit/EXPECTED_DIVERGENCE.json`.
+
+**Two prose-author segments joined by a single trailing space.**
+`prose_author_sheet/20_world_pressure.txt` ends `"…an unrelated invention. "`
+and segment 21 begins `"WORLD PRESSURE — OPENING:"`, so the assembled sheet
+runs them together on one line. Same shape as above, same one-character fix,
+and now protected in the other direction: that space is load-bearing enough
+that `.editorconfig` disables trailing-whitespace trimming for these files and
+`test_assembled_card_matches_the_pre_split_reference` fails if it disappears.
+(`prose_author_sheet/16.txt` is a single newline and nothing else — the same
+class, but there the whitespace is doing the job correctly.)
+
+**Nothing checks that a `character_block_keys` marker still prefixes a line of
+the `character` body.** The 22 markers are matched with
+`stripped.startswith(marker)` against lines of `prompts/character.txt`
+(`llm/prompts.character_prompt`), and the match is what SUBTRACTS a block a
+character has no business receiving. Editing a heading in the body — now an
+easy, inviting edit, which is the point of the split — silently disarms its
+subtraction: no error, no warning, no failing test, just a block that stops
+being removed. The two files are deliberately kept in one place (the markers
+stayed inline in the index) precisely because the coupling is silent, but
+that is mitigation, not a check. A `project_check` rule asserting every marker
+prefixes some line of the body is cheap and is not written.
+
+
 ### 1.50 Residuals from the speaking-device repair (chat 80)
 
 

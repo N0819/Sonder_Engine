@@ -32,7 +32,13 @@ language_packs/<language-id>/
     authoring.json
     compositor.json
     linguistics.json
-    system_prompts.json
+    system_prompts.json          <- the INDEX: structure + $text references
+    system_prompts/              <- the PROSE: one .txt per prompt leaf
+      <top-level note>.txt
+      prompts/<id>.txt
+      specialists/<name>/core.txt
+      specialists/<name>/chunks/<op>.txt
+      prose_author_sheet/<NN>[_<key>].txt
 ```
 
 Use a normalized lowercase BCP-47-like id (`ja`, `es`, `pt-br`). The directory
@@ -88,12 +94,111 @@ Role suffixes can add language-specific craft guidance: Japanese person and
 honorific consistency, Spanish gender/number agreement, Arabic direction and
 register, and so on.
 
-`cards/system_prompts.json` must contain every id in the English card. A pack
+`cards/system_prompts.json` is an index whose prose lives in per-prompt files
+beside it; see § 2a below before editing any prompt. The card must contain
+every id in the English card. A pack
 claiming linguistic completeness must translate every authored instruction;
 bilingual text is acceptable when it improves model reliability, but a
 byte-identical English body is not a translation. The output/schema contract
 must always be written and tested for the target language. Never translate
 literal schema examples inside a prompt.
+
+## 2a. The split prompt card
+
+`cards/system_prompts.json` is an INDEX, not the prompts. It holds the card's
+structure -- assembly order, gate names, flags, allow-lists -- and, wherever a
+prose leaf used to sit, a single reference:
+
+```json
+"prompts": { "narrator": { "$text": "prompts/narrator.txt" } }
+```
+
+The prose lives one leaf per file in the sibling directory `cards/
+system_prompts/`. `language_runtime/card_source.py` owns the format and
+`language_runtime._read_card` assembles the two at pack load, before fragment
+resolution and before freezing. 111 part files per pack.
+
+**Why.** The card reached 414 KB (English) and 525 KB (Japanese) as one JSON
+document whose values are 62,000-character prompt strings with escaped
+newlines. Editing one meant a surgical raw-text replace against an escaped
+blob -- slow, unreviewable as a diff, and the shape that turns a one-word fix
+into an accidental reflow of everything around it.
+
+**The path is derived, never chosen.** `canonical_part_path` maps a leaf path
+to exactly one file path, and the loader REJECTS a reference that spells it
+any other way. So the paths stay greppable (`grep -rn
+'prompts/character.txt'`) while drift stays impossible. The prose-author sheet
+is named index-first, key-second (`00_voices.txt` ... `27.txt`) because the
+index is the identity: `mapping_proposal` is the gate name at both 11 and 15,
+and 12 of the 28 segments have no name at all. Index-first also sorts the
+files into assembly order in any listing.
+
+**The file format, and the one convention in it.** A part file is the leaf's
+exact text plus a single trailing newline. Reading strips exactly one trailing
+newline if present, and nothing else.
+
+That convention exists because the dominant real-world corruption is an editor
+adding a final newline on save. Of the 226 English leaves, **163 end with no
+newline at all**, 48 end with `\n\n` and 15 with `\n` -- and the specialist
+and prose-author sheets are built by bare `"".join` with no separator, so
+every one of those terminators is a live joint in a shipped sheet. Under a
+no-convention scheme, `files.insertFinalNewline` would silently change 163 of
+226 prompts. Under this one, every file already ends with a newline, so the
+editor's "fix" is a no-op.
+
+**Never let an editor tidy these files.** Not one character. Two live
+examples of why: `prose_author_sheet/20_world_pressure.txt` ends in a
+SIGNIFICANT single space, and `prose_author_sheet/16.txt` is a single newline
+and nothing else -- a paragraph break between two segments. Both are erased
+by a `trimTrailingWhitespace` save. `.editorconfig` and `.gitattributes` at
+the repo root say so to the tools; `tests/test_prompt_card_split.py` catches
+it if they are ignored.
+
+**What fails, and how loudly.** Every fault below raises `LanguagePackError`
+at pack load, which is negative-cached and stops the server starting and the
+suite collecting. There is deliberately NO path on which a lost part yields a
+SHORT prompt -- a truncated sheet that loads is a silent behaviour change read
+by every story in that language:
+
+- a reference whose file is missing, empty, BOM'd or CR-bearing;
+- a reference at a non-canonical path, or one escaping the parts directory;
+- a `.txt` no reference claims. That is the new-prompt-written-but-never-
+  shipped case, and it is the only one that would otherwise be invisible.
+
+**Editing a prompt.** Open the `.txt`, change it, and add the leaf's dotted
+path to `tests/data/prompt_cards_presplit/EXPECTED_DIVERGENCE.json` with a
+one-line reason, in the same commit. That ledger is what keeps
+`test_assembled_card_matches_the_pre_split_reference` meaningful: the
+pre-split reference is immutable and drift from it is enumerated rather than
+re-baselined, so a deliberate edit costs one line and an accidental
+whitespace change costs a red test.
+
+**Reading authored text from code.** Use `language_runtime.raw_card(language,
+card)` -- assembled from its parts, mutable, and UNRESOLVED. Do not read the
+JSON file (since the split it holds no prose, so a grep over it passes by
+finding nothing), and do not use `pack.card(...)` for an audit of authored
+text: that one is frozen and has already substituted four fragments into
+seventeen bodies.
+
+**Two things that must not be done.**
+
+1. `prose_author_sheet[27][1]` is byte-identical to
+   `prose_author_output_shape`. They get two files and stay duplicated.
+   Deduping them behind a shared reference is a behaviour change wearing a
+   refactor's clothes: the two are read by different assemblies and either
+   may legitimately change without the other.
+2. The seven ids in `llm.prompts.ASSEMBLED_SHEET_IDS` are BUILT from
+   specialists and `prose_author_sheet` and must never get a part file of
+   their own. A stored body beside the parts is one sheet with two
+   spellings, free to drift -- and English `director_spatial` had already
+   drifted 1,518 characters short of its own assembly while the prompt
+   editor displayed the stored one as the sheet.
+
+`authoring.json`, `compositor.json` and `linguistics.json` are NOT split and
+should not be. `linguistics` is regexes and verb inventories -- machine data,
+where splitting makes a diff harder to read, not easier. A card with no
+references and no parts directory passes straight through the loader, so
+splitting one later needs no loader change.
 
 ## 3. Deterministic linguistics
 
@@ -227,7 +332,7 @@ presence:
 Run:
 
 ```bash
-pytest -q tests/test_language_packs.py
+pytest -q tests/test_language_packs.py tests/test_prompt_card_split.py
 make check
 ```
 

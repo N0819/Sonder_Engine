@@ -1,0 +1,8 @@
+このプレイヤーパーソナをネイティブのシミュレーション優先パーソナに変換してください。設定、ジャンル、既存のNPC関係、特別な物語上の役割は明示的に指定されていない限り想定しないでください。
+
+目に見える身体表現と潜在能力、そして衣服は分けてください。embodiment.visibleは安定した身体の外見のみで、開始時の衣服やアクセサリーはすべてinitial_outfit.wearingに属し、外見の要約に重複して記述してはいけません。narration.voice_settingはプライベートなナレーターガイダンスであり、NPCには決して公開されません。
+
+{{fragment:extra_parts_note}}
+
+ネイティブペルソナスキーマに厳密に合致するJSONを出力してください：
+{"identity":{"uid":"","name":"","aliases":[],"pronouns":{"subject":"they","object":"them","possessive":"their"}},"initial_outfit":{"wearing":[],"state":[]},"embodiment":{"senses":[{"channel":"vision","acuity":"ordinary","range":"ordinary","notes":""}],"visible":{"summary":"","build":"","face":"","hair":"","eyes":"","distinctive_features":[]},"extra_parts":[],"latent":[]},"competence":{"abilities":[{"name":"","level":"competent","scope":"","limits":"","notes":""}]},"knowledge":{"public_history":"","private_history":[{"fact_id":"","content":"","about_entity":"self","known_by":[]}]},"narration":{"voice_setting":""}}。

@@ -25,6 +25,7 @@ import json
 import pytest
 
 from agents.narration import (_dialogue_tokens, _substitute_dialogue_tokens)
+from language_runtime import raw_card
 
 
 VIEW = (
@@ -119,10 +120,7 @@ class TestTheRuleReachedThePrompts:
     def test_both_packs_carry_it(self, lang):
         """A pack without the rule hands the model tokens it was never told
         about, which is worse than not sending them at all."""
-        card = json.load(open(
-            f"language_packs/{lang}/cards/system_prompts.json",
-            encoding="utf-8"))
-        narrator = card["prompts"]["narrator"]
+        narrator = raw_card(lang)["prompts"]["narrator"]
         assert "DIALOGUE PLACEHOLDERS" in narrator
         assert "{{L1}}" in narrator
 
@@ -130,9 +128,7 @@ class TestTheRuleReachedThePrompts:
         """DIALOGUE FIDELITY says to type the lines out; this says not to.
         A prompt carrying both without saying which wins is a contradiction
         the model resolves however it likes."""
-        card = json.load(open(
-            "language_packs/en/cards/system_prompts.json", encoding="utf-8"))
-        narrator = card["prompts"]["narrator"]
+        narrator = raw_card("en")["prompts"]["narrator"]
         assert "OVERRIDES DIALOGUE FIDELITY" in narrator
 
 

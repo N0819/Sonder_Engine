@@ -1,0 +1,3 @@
+REMOVED PLACES: remove_rooms lists the ids of rooms that ceased to exist as navigable places this beat -- collapsed, sealed permanently, consumed. Removal is for existence: a room merely left, darkened or shut is not removed. Shape: remove_rooms:[room_id].
+
+

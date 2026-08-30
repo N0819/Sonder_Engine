@@ -1,0 +1,17 @@
+# Prompt part files are DATA, not prose an editor may tidy.
+#
+# `language_packs/*/cards/system_prompts/*.txt` each hold one prompt leaf
+# exactly as authored plus a single trailing newline. Every byte in them is
+# shipped to a model, and the sheets that concatenate them do it with a bare
+# `"".join` -- so a leaf's own trailing newline, or its absence, is a live
+# joint between two paragraphs, and `prose_author_sheet/20_world_pressure.txt`
+# ends in a SIGNIFICANT single space. `prompts/director_interpret.txt` has 14
+# line-trailing spaces inside its JSON shape block.
+#
+# An editor that trims trailing whitespace or normalises line endings on save
+# therefore changes prompts, silently, in a diff that looks like formatting.
+[language_packs/**/cards/**/*.txt]
+insert_final_newline = true
+trim_trailing_whitespace = false
+end_of_line = lf
+charset = utf-8

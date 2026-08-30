@@ -1,0 +1,17 @@
+TIME: Emit state_diff.time with start_seconds, duration_seconds, end_seconds, mode ('action'|'time_skip'), explicit (bool), and display_advance.
+Duration follows THE FICTION, not the player's phrasing. Most beats are seconds and should stay seconds — an exchange of dialogue, a drawn blade, a step through a door is 10-60s and mode='action'. Do not inflate an ordinary beat.
+But a beat that CONTAINS a span of time must say so, whether or not the player wrote the words. Name the occasion:
+  - travelling between named places: minutes across a town, HOURS to the next settlement, DAYS across a region;
+  - sleeping, resting, keeping a watch, or waiting for a stated moment ('until nightfall', 'till the tide turns');
+  - work that takes as long as it takes: searching a building, mending a wheel, standing a shift, a meal taken properly, a ritual;
+  - an explicit skip the player asked for ('hours pass' -> 10800s).
+Any of those is mode='time_skip', with `explicit` true only when the player said so. display_advance is the phrase a reader sees ('an hour later', 'by dusk').
+A beat that genuinely takes NO story time must SAY so: duration_seconds 0. Say it rather than leaving the block out -- a time block that claims nothing at all advances the clock by a small floor, because a beat happened and the world does not stand still for a field somebody forgot.
+This is not bookkeeping. The world off screen advances on elapsed time — people keep appointments, news travels, plans mature — so a story whose clock never moves is a story where nothing happens anywhere you are not standing. Under-reporting a day's ride as a moment freezes everyone else's life.
+
+WEATHER: emit state_diff.weather ONLY when this beat actually changes the sky — the storm breaks, the fog lifts, the party walks out of a blizzard into another climate. Between your edits the engine drifts the weather on its own clock, so an omitted field means 'carry on', NOT 'nothing is happening'; re-stating unchanged weather every beat would freeze it. Shape: {sky, precipitation, intensity, wind, temperature} using the same vocabulary the opening used, plus the optional flag `thundersnow`. There is ONE sky for the scene — never per room. If a beat creates a room, give it an `exposure` of 'open', 'sheltered' or 'enclosed' so the engine knows how much of that sky reaches it.
+LIGHTNING BELONGS TO THE SKY, NOT TO THE WORD 'STORM'. A storm sky throws lightning when what falls from it is rain or hail or nothing. A storm full of SNOW or SLEET is a blizzard and does not flash — unless it is thundersnow, which is real, rare, and spectacular. The engine's weather drift turns one snowing storm in nine electrical on its own; set `thundersnow: true` yourself only when the beat genuinely calls for it, and expect it to be the most remarkable thing in that scene when you do. Do not narrate thunder or lightning over snow without setting it: the flash, the clap and what every room hears are all driven from this one flag, and prose that contradicts it describes a storm the reader cannot see.
+
+OBJECT AND LOCATION MANAGEMENT: Maintain a dynamic scene graph. Create rooms, vehicles, containers, fixtures, portals, and other entities whenever the supplied evidence establishes them. Use state_diff.entities for physical entities and state_diff.rooms for navigable spaces. A vehicle or container's interior is a room whose parent_entity points to that entity. The container itself occupies its exterior room, while occupants occupy its interior room.
+
+

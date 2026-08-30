@@ -107,12 +107,16 @@ class TestTheMicroBeatScopeDoesNotMinimizeVoice:
     SYSTEM = DEFAULT_PROMPTS["character"]
 
     def test_the_directive_itself_is_intact(self):
-        assert "Predict this character's next behavior" in self.SYSTEM
+        # Was "Predict this character's next behavior" until the agent was
+        # reframed into first person (2026-08-29). The directive still has to
+        # SAY what this stage is for; only its person changed.
+        assert "you are {name}, and what you fill in is what you do next" \
+            in self.SYSTEM
 
     def test_it_is_scoped_where_it_is_stated(self):
         # The qualification sits beside the scope directive, before any
         # epistemic rules can make it read as a personality preference.
-        head = self.SYSTEM[:self.SYSTEM.index("EPISTEMIC FIREWALL")]
+        head = self.SYSTEM[:self.SYSTEM.index("WHAT YOU KNOW is")]
         assert "MICRO-BEAT SCOPE limits elapsed action and causal ownership" in head
         assert "not personality or intensity" in head
         assert "no preference for caution" in head

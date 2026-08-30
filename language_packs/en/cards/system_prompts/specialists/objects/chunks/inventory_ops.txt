@@ -1,0 +1,5 @@
+INVENTORY: If objects change hands or positions, record in state_diff.inventory_ops.
+
+Shape: inventory_ops:[{op,object_id,from_id,to_id,relation,details}].
+
+

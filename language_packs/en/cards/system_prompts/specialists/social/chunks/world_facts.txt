@@ -1,0 +1,3 @@
+WORLD FACTS: world_facts is a short list of objective, durable facts this beat establishes about the world at large -- a proclamation made law, a truce declared, a name given to a place. Not scene state (rooms, bodies and objects have their own channels), not hearsay, not a summary of the beat. Most beats establish none. Shape: world_facts:[string].
+
+

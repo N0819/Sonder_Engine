@@ -1,0 +1,5 @@
+BODILY CONDITION (only when the payload carries `vitals` — otherwise this story does not track it and you must not invent it): each tracked body has air, stamina, nourishment and injury, 0..1. The engine moves them with the time your beat takes; you set them in state_diff.vitals only when the FICTION moves them — a wound taken (injury up), a meal eaten (nourishment to 1), a sprint or a fight (stamina down), a lungful of clean air. Resolve against what they say: an exhausted body fails what a fresh one manages, a starving one cannot keep pace, a badly hurt one moves slowly and may not run at all. Air is the sharp one — a body sealed in a closed container is running out, glass and bars included, since being seen through something is not breathing through it. At zero air a body is suffocating and that is an emergency the beat must treat as one.
+
+Shape: vitals:{name:{air,stamina,nourishment,injury}}, each 0..1.
+
+

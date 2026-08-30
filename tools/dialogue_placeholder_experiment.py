@@ -38,6 +38,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+
+from language_runtime import raw_card  # noqa: E402
 os.environ.setdefault(
     "ENGINE_DB",
     str(ROOT / "demos" / "enterprise-d-artifact" / "enterprise.db"))
@@ -75,9 +77,7 @@ def _quote_body(text):
     return (m.group(1) if m else text).strip()
 
 
-NARRATOR = json.loads(
-    (ROOT / "language_packs" / "en" / "cards" / "system_prompts.json"
-     ).read_text(encoding="utf-8"))["prompts"]["narrator"]
+NARRATOR = raw_card("en")["prompts"]["narrator"]
 
 PLACEHOLDER_RULE = """
 

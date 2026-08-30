@@ -26,6 +26,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from core import db  # noqa: E402  (the project root has to be importable first)
+from language_runtime.card_source import (  # noqa: E402
+    read_card_source, write_card_source,
+)
 
 
 EN = ROOT / "language_packs" / "en"
@@ -708,9 +711,14 @@ def _mask_prompt_leaf(
 def translate_prompts(
     translator: Translator, prompt_ids: set[str] | None = None,
 ) -> int:
-    english = load(EN / "cards" / "system_prompts.json")
+    # The prompt card is split into per-prompt part files, so read and write
+    # it through `card_source`. `walk_strings`/`set_path` are untouched: the
+    # assembled card has exactly the paths it always had, which is also why
+    # this run's checkpoint keys ("prompt:" + "/".join(path)) stay valid
+    # across the split and an in-flight translation survives it.
+    english = read_card_source(EN, "system_prompts")
     output = (
-        load(JA / "cards" / "system_prompts.json")
+        read_card_source(JA, "system_prompts")
         if prompt_ids else deepcopy(english))
 
     # Translate the character-sheet gating prefixes first, then inject those
@@ -776,7 +784,7 @@ def translate_prompts(
                     f"{'/'.join(path)}: whole-leaf marker did not survive exactly")
             rebuilt = rebuilt.replace(marker, literal)
         set_path(output, path, rebuilt)
-    save(JA / "cards" / "system_prompts.json", output)
+    write_card_source(JA, "system_prompts", output)
     return translated_leaves
 
 

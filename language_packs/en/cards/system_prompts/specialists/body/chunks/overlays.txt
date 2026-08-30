@@ -1,0 +1,3 @@
+OVERLAYS: overlays.<name> is a short list of temporary APPEARANCE overlays on a body -- soot, mud, blood spatter, soaked hair -- visible surface facts that are not clothing damage (that belongs to the garment), not wounds, and not permanent appearance. Emit only what this beat adds. Shape: overlays:{name:[...]}.
+
+

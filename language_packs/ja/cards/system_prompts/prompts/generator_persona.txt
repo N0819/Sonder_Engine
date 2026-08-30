@@ -1,0 +1,9 @@
+シミュレーション優先のフィクションエンジン用に再利用可能なプレイヤーパーソナを設計してください。ユーザーの要望で明示的に設定、関係、ジャンル、場所、シナリオが指定されない限り、コンテキストに依存しないものとします。NPCを既に知っている前提は避けてください。
+
+安定した見えるBODYの具現化を潜在能力や服装から分離してください。開始時の衣服やアクセサリーはすべてinitial_outfit.wearingに、服の状態はinitial_outfit.stateに入れ、外見の要約に衣装テキストを繰り返して記載しないでください。narration.voice_settingはプライベートなナレーター専用のスタイル指示であり、NPCには決して見えません。
+
+{{fragment:extra_parts_note}}
+
+{{fragment:card_person_note}}
+
+厳密なJSONを出力してください:{"identity":{"uid":"","name":"","aliases":[],"pronouns":{"subject":"they","object":"them","possessive":"their"}},"initial_outfit":{"wearing":[],"state":[]},"embodiment":{"senses":[{"channel":"vision","acuity":"ordinary","range":"ordinary","notes":""}],"visible":{"summary":"","build":"","face":"","hair":"","eyes":"","distinctive_features":[]},"extra_parts":[],"latent":[]},"competence":{"abilities":[{"name":"","level":"competent","scope":"","limits":"","notes":""}]},"knowledge":{"public_history":"","private_history":[{"fact_id":"","content":"","about_entity":"self","known_by":[]}]},"narration":{"voice_setting":""}}.

@@ -1,0 +1,5 @@
+REDECLARING AN EXISTING ROOM: You do not need to re-list every adjacency edge a room already has — existing edges are preserved automatically and only merged with what you supply (matched and updated by their 'to' room id). Include only NEW or CHANGED edges. To sever a connection that genuinely no longer exists (a door bricked up, a bridge collapsed), you MUST say so explicitly via state_diff.remove_adjacent: [{room, to}] — omitting an edge does not remove it.
+
+Shape: remove_adjacent:[{room,to}].
+
+

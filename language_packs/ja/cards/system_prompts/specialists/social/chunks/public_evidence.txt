@@ -1,0 +1,3 @@
+チャーターの心のための公開証拠：payload.public_sourcesは、個々の背景人物の証拠になり得るプレイヤーおよび主要キャラクターの発話／行動をエンジンが作成した一覧です。書き換えずに意味のある各sourceを注釈してください。source_idを正確にコピーします。発話では、話者が公に何をしているかを、原文の連続した範囲で分類します。kindはgreeting|request|offer|promise|question|command|threat|accusation|disclosure|denial|agreement|refusal|warning|apology|thanks|praise|insult|challenge|bargain|otherのいずれか。content/about/conditionはそれぞれ、そのsourceのexact_quoteに含まれる連続した原文そのものに限ります。方向は常にactor基準です：requestはactorが要求し、offerはactorが提供します。交換はrequestとofferの別フレームに分けます。内的動機、誠実さ、真偽、評判、発話されていない義務を推測してはいけません。行動にはspeech frameは不要で、外向きの表面はエンジン自身が保持します。些細なsourceは省略してもよく、エンジンが事実上のフォールバックを補います。形：public_evidence:[{source_id,speech_acts:[{kind,content,about,condition}],salience:0..1}]。
+
+

@@ -14,8 +14,17 @@ language_packs/<id>/
   cards/authoring.json
   cards/compositor.json
   cards/linguistics.json
-  cards/system_prompts.json
+  cards/system_prompts.json     # the index: structure + {"$text": ...} refs
+  cards/system_prompts/         # the prose: one .txt per prompt leaf
 ```
+
+`cards/system_prompts.json` holds the card's SHAPE. The prompt text itself
+lives one leaf per file in the sibling directory beside it -- 111 files per
+pack -- and the two are assembled at pack load. Edit the `.txt`; never
+re-inline prose into the JSON. The format, the trailing-newline convention it
+depends on, and what happens when a part file goes missing are in
+[`docs/guides/LANGUAGE_PACKS.md`](../docs/guides/LANGUAGE_PACKS.md) § 2a and
+`language_runtime/card_source.py`.
 
 `manifest.json` declares the pack id, version, text direction, capabilities,
 trusted renderer adapter, coverage declaration, and required cards. The loader
@@ -23,10 +32,12 @@ validates the whole pack before it can be selected for a story. It compares
 every story pack's prompt ids and every UI pack's message ids against English,
 so an omitted surface fails installation instead of falling back silently.
 
-The built-in `en` pack is the compatibility reference. Its cards own all 42
-system-prompt families — 35 authored bodies plus the seven Director sheets
+The built-in `en` pack is the compatibility reference. Its cards own all 43
+system-prompt families — 36 authored bodies plus the seven Director sheets
 assembled from `specialists` and `prose_author_sheet`, which are never stored
-a second time — authoring defaults, compositor vocabulary/templates, 114
+a second time (this line read "42 — 35 authored" until 2026-08-29; the
+measured counts are `len(prompts.DEFAULT_PROMPTS)` and
+`len(prompts.ASSEMBLED_SHEET_IDS)`) — authoring defaults, compositor vocabulary/templates, 114
 deterministic linguistic structures, and the browser/API source-message
 catalog. The linguistic card includes quote and sentence rules, morphology,
 agreement, pronouns, action/authority cues, title handling, narration-person

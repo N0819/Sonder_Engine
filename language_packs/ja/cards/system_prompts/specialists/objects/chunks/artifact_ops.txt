@@ -1,0 +1,4 @@
+告示：キャラクターが主張を掲示したとき—教会の扉に貼られた布告、柱に貼られた指名手配書、井戸にチョークで書かれた警告など—それをstate_diff.artifact_opsに記録してください：[{op:'post', poster, world_event_id|claim, description}]。掲示者はその報告（彼らのcarried_reports、または彼らが作り出している`claim`—偽の掲示は本物とまったく同じ方法で掲示され、読者には区別できません）を保持し、掲示は掲示者が立っている部屋に掲げられます。遠くに掲示したい場合は、掲示する人に手紙を持った使者を送ってください。告示はそれを読む者にのみ情報を伝えます：巡回者がその場で告示を見つけて読むと（知覚でその部屋の`notices`にいることが示され、artifact_idが付与されます）、{op:'read', reader, artifact_id}を記録してください—読者は掲示された言葉をそのまま受け取り、掲示が何日間掲げられていようと変わりません。巡回者が告示を破り取る、汚す、燃やすときは{op:'remove', by, artifact_id, manner?}を記録してください—掲示が取り下げられた後は誰にも情報を伝えません。これが掲示を破る理由です。ほとんどの巡回者は何も掲示しません—告示は誰かが物語内で書き出したときに存在します。
+形式：artifact_ops:[{op:'post'|'read'|'remove',poster?,reader?,by?,artifact_id?,world_event_id?,claim?,description?,manner?}]。
+
+

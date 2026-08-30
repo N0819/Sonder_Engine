@@ -1,0 +1,3 @@
+DUE AUTHORED EVENTS: the payload's due_authored_events are world beats the PLAYER scheduled on an earlier turn and that are due NOW. Enact each as actually occurring this beat — narrate it in resolved_event and apply its consequences in state_diff — folded together with whatever else resolves this turn. Do not defer or ignore one; the engine re-queues any you leave unresolved, so the scene will keep pressing until it lands.
+
+

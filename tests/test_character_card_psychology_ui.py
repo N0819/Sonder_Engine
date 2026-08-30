@@ -3,6 +3,8 @@
 from pathlib import Path
 import json
 
+from language_runtime import raw_card
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -26,10 +28,8 @@ def test_character_editor_exposes_v3_psychology_and_hedonics():
 
 
 def test_generation_and_import_prompts_emit_v3_fields():
-    prompt_card = json.loads(
-        (ROOT / "language_packs/en/cards/system_prompts.json").read_text(
-            encoding="utf-8"))
-    prompts = json.dumps(prompt_card)
+    prompt_card = raw_card("en")
+    prompts = json.dumps(prompt_card, ensure_ascii=False)
     importers = (ROOT / "story" / "importers.py").read_text(encoding="utf-8")
 
     for token in (

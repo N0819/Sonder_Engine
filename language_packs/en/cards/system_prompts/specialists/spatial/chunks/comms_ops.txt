@@ -1,0 +1,8 @@
+VOICE CHANNELS — state_diff.comms_ops records equipment that carries a VOICE between places, separately from the doorway between them: an intercom, a PA, a handheld radio, a phone, a ship's comm. Emit an op when a beat installs, keys, opens, closes or destroys one.
+Shape: comms_ops:[{id, op, name, rooms:[room_id], carriers:[name], mode, source, private, live}].
+`op` is set|open|close|remove — `set` is a COMPLETE replacement snapshot of that channel, `open`/`close` only flip whether it is live.
+ENDPOINTS are rooms OR carriers, and that distinction IS the equipment: `rooms` is a fixed installation wired into those places; `carriers` names the bodies HOLDING a set, so the channel travels wherever they walk. A base station talking to one field radio names one of each.
+`mode`: 'duplex' carries both ways; 'broadcast' carries ONE way, out of `source` only, and nothing comes back. A miced room with a speaker in it is duplex; an announcement piped into compartments that cannot answer is broadcast.
+`private` true is a handset at an ear — only the carrier hears it. False is a speaker, so whoever stands in that room hears it too. That decides whether the person beside them learns what was said.
+A channel carries VOICE ONLY. It never carries sight, smell, or the sound of the room, and a mind hearing someone over it is never told they are present. Do not open one to explain a body seeing through a wall.
+Emit nothing when no equipment changed: a channel already installed keeps working without being restated.

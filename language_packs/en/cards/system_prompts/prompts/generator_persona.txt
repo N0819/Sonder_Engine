@@ -1,0 +1,9 @@
+Design a reusable player persona for a simulation-first fiction engine. The persona must be context-agnostic unless the user's brief explicitly supplies a setting, relationship, genre, location, or scenario. Do not assume the persona already knows any NPC.
+
+Separate stable visible BODY embodiment from latent capabilities and from clothing. Put every starting garment/accessory in initial_outfit.wearing and clothing condition in initial_outfit.state; never repeat outfit text in the appearance summary. narration.voice_setting is private narrator-only style guidance and is never available to NPCs.
+
+{{fragment:extra_parts_note}}
+
+{{fragment:card_person_note}}
+
+Output STRICT JSON:{"identity":{"uid":"","name":"","aliases":[],"pronouns":{"subject":"they","object":"them","possessive":"their"}},"initial_outfit":{"wearing":[],"state":[]},"embodiment":{"senses":[{"channel":"vision","acuity":"ordinary","range":"ordinary","notes":""}],"visible":{"summary":"","build":"","face":"","hair":"","eyes":"","distinctive_features":[]},"extra_parts":[],"latent":[]},"competence":{"abilities":[{"name":"","level":"competent","scope":"","limits":"","notes":""}]},"knowledge":{"public_history":"","private_history":[{"fact_id":"","content":"","about_entity":"self","known_by":[]}]},"narration":{"voice_setting":""}}.

@@ -192,11 +192,37 @@ def shipped_payload():
 
 def sheet_at(ref):
     """The narrator sheet as of a git ref, so `legacy` is a real prior state
-    rather than the new sheet wearing an old payload."""
-    blob = subprocess.check_output(
-        ["git", "show", f"{ref}:language_packs/en/cards/system_prompts.json"],
-        text=True)
-    return json.loads(blob)["prompts"]["narrator"]
+    rather than the new sheet wearing an old payload.
+
+    Handles both card shapes, because a bench whose whole point is comparing
+    against history must keep resolving on refs from before the prompt-card
+    split. Pre-split the narrator body IS the value at
+    `prompts.narrator`; post-split that value is a `{"$text": <path>}`
+    reference into `cards/system_prompts/` and the body is a second blob.
+    """
+    def show(path):
+        return subprocess.check_output(
+            ["git", "show", f"{ref}:{path}"], text=True)
+
+    value = json.loads(
+        show("language_packs/en/cards/system_prompts.json"))["prompts"]["narrator"]
+    if isinstance(value, dict):
+        sheet = show(f"language_packs/en/cards/system_prompts/{value['$text']}")
+        # The same one-trailing-newline convention the loader reads by.
+        if sheet.endswith("\n"):
+            sheet = sheet[:-1]
+    else:
+        sheet = value
+    # The narrator body carries no fragment reference in either pack today,
+    # so no resolver is needed here -- but a bench silently measuring an
+    # UNRESOLVED sheet would compare the model against a prompt no story ever
+    # sends, so say so rather than let it become possible.
+    if "{{fragment" in sheet:
+        raise SystemExit(
+            f"the narrator sheet at {ref} carries a {{{{fragment:...}}}} "
+            "reference, which only a language pack's card load resolves; this "
+            "bench would measure text no model is ever sent")
+    return sheet
 
 
 # --------------------------------------------------------------- scoring

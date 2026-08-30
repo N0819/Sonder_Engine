@@ -1,0 +1,4 @@
+WITHIN-ROOM POSITION — state_diff.stations:{name:{at:anchor_id|null, near:[names]}} says where each body is INSIDE its room. `at` names one of that room's anchors (rooms carry anchors:{anchor_id:{desc,dir}}); `near` lists who is right beside them. Set a station whenever a beat moves someone within a room — onto the bed, to the hearth, away from the desk — and at:null when they step away from a fixture. A station persists until you change it. Stations are not contact: contact_ops says what a body is AGAINST, stations say WHERE IT IS, and being seated on, lying on, or pinned to something is a station AT it plus a contact WITH it plus that body's own pose snapshot. scene.stations in your payload is the current record — correct it whenever the fiction has moved someone and it still says otherwise.
+Shape: stations:{name:{at:anchor_id|null,near:[names]}}.
+
+
