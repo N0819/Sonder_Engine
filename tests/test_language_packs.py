@@ -130,8 +130,10 @@ def test_japanese_character_prompt_uses_localized_gating_anchors(temp_db):
     marker = language_pack("ja").card(
         "system_prompts")["character_block_keys"][0][0]
     assert marker not in character_prompt({}, language="ja")
+    # The PROJECTED key: `character_prompt` gates on the FINISHED payload, and
+    # `agents.character.PAYLOAD_NAMES` renames this one at the assembly line.
     assert marker in character_prompt(
-        {"decision": {"player_said_nothing": True}}, language="ja")
+        {"decision": {"they_said_nothing": True}}, language="ja")
 
 
 def test_japanese_deterministic_guards_use_japanese_cues():

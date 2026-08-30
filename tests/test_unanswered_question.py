@@ -333,7 +333,7 @@ def test_the_prompt_says_what_both_fields_mean():
 
     text = get_prompt("character")
     assert "awaiting_your_answer" in text
-    assert "player_quiet_for_beats" in text
+    assert "quiet_for_beats" in text
     # Noticing is required; answering is not.
     assert "not obliged to answer" in text
 

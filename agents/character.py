@@ -106,6 +106,64 @@ from .common import (
 _MEMORY_CONTEXT_POOL = ThreadPoolExecutor(
     max_workers=4, thread_name_prefix="character-memory")
 
+#: The name the CHARACTER reads a payload key under, where the engine's own
+#: name for the thing would tell them about the machinery instead of about
+#: their situation. Left of the arrow is what every other hand in the codebase
+#: calls it; right of the arrow is what appears in the JSON this mind is
+#: handed.
+#:
+#: This is safe for exactly one reason: the character payload is TERMINAL. It
+#: is assembled here, handed to the model, and never read back, never stored,
+#: and carried into no archive -- so the projection stops at the assembly line
+#: and nothing upstream has to change its name. The Director goes on writing
+#: `authorial_offers` into the step content it persists, and a turn recorded
+#: before this existed still replays, because the read at the splice below is
+#: still against the Director's own spelling.
+#:
+#: ONE TABLE, not three renames scattered through the assembly, because the
+#: hazard here is desync and not typing: a projected key that the gate still
+#: names by its engine spelling silently drops the paragraph that explains it
+#: -- the same shape as the seven inert monkeypatches the memory split left
+#: behind. `tools/project_check.py` holds this table against the prompt and
+#: the gate so neither can drift from it.
+#: Measured against one captured `character_major` call (chat 101, turn 3481)
+#: rather than assumed: the three `decision` keys here are CONDITIONAL and were
+#: absent from that beat entirely, while `simulation_clock` sits at the top
+#: level of every payload ever assembled. A name the model never receives is
+#: not worth renaming, so presence was checked before this table was written.
+PAYLOAD_NAMES = {
+    # Only present when the player is here and silent, or an offer was routed.
+    "authorial_offers": "comes_to_you",
+    "player_said_nothing": "they_said_nothing",
+    "player_quiet_for_beats": "quiet_for_beats",
+    "player_name": "their_name",
+    # Every beat. `{"elapsed_seconds": 1062.0, "display": "", "time_scale":
+    # "scene"}` -- a person has a sense of how long they have been at this;
+    # they do not have a simulation with a clock in it.
+    "simulation_clock": "time_passing",
+}
+
+#: Where each projected key lives. The payload is not walked recursively on
+#: purpose: `entity_id` also appears inside mind models and observation ids,
+#: and a blanket rename would reach shapes that are not this character's own.
+_PROJECTED_AT = {"simulation_clock": "payload"}
+
+
+def project_payload_names(payload):
+    """Rewrite the keys this character reads into the names it reads them under.
+
+    In place and LAST, after every contributor has had its say, so a key
+    spliced in later cannot miss the projection.
+    """
+    decision = payload.get("decision")
+    for engine_name, seen_as in PAYLOAD_NAMES.items():
+        target = payload if _PROJECTED_AT.get(engine_name) == "payload" \
+            else decision
+        if isinstance(target, dict) and engine_name in target:
+            target[seen_as] = target.pop(engine_name)
+    return payload
+
+
 def _ling(name):
     return linguistic("agents.character", name)
 
@@ -3746,6 +3804,13 @@ def character_step(ctx, cid, nonce):
                if o.get("subject_id") == cid and o.get("proposition")]
     if _offers:
         payload["decision"]["authorial_offers"] = _offers
+
+    # LAST contributor to the payload, and therefore the right place for the
+    # projection: every key that is going to exist now exists. The gate below
+    # reads the FINISHED payload, so it must read the projected names -- which
+    # is why `character_block_keys` names them and `tools/project_check.py`
+    # holds the two together.
+    project_payload_names(payload)
 
     role = {"bg": "character_bg", "mid": "character_mid",
             "major": "character_major"}.get(character_tier(sh), "character_mid")

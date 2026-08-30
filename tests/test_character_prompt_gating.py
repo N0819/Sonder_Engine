@@ -47,8 +47,11 @@ FULL = {
                        "circling_here": True}],
         },
     },
-    "decision": {"player_said_nothing": True, "awaiting_your_answer": "?",
-                 "authorial_offers": ["p"]},
+    # A FINISHED payload, which is what the gate reads -- so these carry the
+    # names `agents.character.PAYLOAD_NAMES` projects them to, not the ones
+    # the rest of the tree writes.
+    "decision": {"they_said_nothing": True, "awaiting_your_answer": "?",
+                 "comes_to_you": ["p"]},
 }
 
 EMPTY = {"self": {}, "memory": {}, "perception": {}, "decision": {}}
