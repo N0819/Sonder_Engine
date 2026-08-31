@@ -164,9 +164,12 @@ def test_the_firewall_paragraphs_are_never_gated():
     out = character_prompt(EMPTY, base=BASE)
     # Headings renamed 2026-08-29 when the agent was reframed into first
     # person; the paragraphs and the property are the same ones.
+    # Renamed 2026-08-30 with their paragraphs: the evidence lanes became one
+    # id rule when the citation arrays were retired, and SEQUENCES was reframed
+    # from a form to return into the mechanism a body acts through.
     for heading in ("WHAT YOU KNOW is", "MEMORY IS PAST:",
-                    "EVIDENCE HAS TWO LANES.", "HOW THIS GOES:",
-                    "SEQUENCES:"):
+                    "EVIDENCE IS THE ID OF THE THING ITSELF.", "HOW THIS GOES:",
+                    "SEQUENCES ARE HOW YOU ACT."):
         assert heading in out, heading
 
 
