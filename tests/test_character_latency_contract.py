@@ -42,11 +42,17 @@ def test_compact_character_wire_is_experimental_and_complete():
     control_fields = set(control["properties"])
     compact_fields = set(compact["properties"])
 
-    assert llm_quality._CHARACTER_COMPACT_WIRE_FIELDS <= control_fields
-    assert not (llm_quality._CHARACTER_COMPACT_WIRE_FIELDS & compact_fields)
+    # The RETIRED deliberation fields are gone for every caller, compact or
+    # not: the reasoning block does that weighing, so nothing asks for it.
+    retired = llm_quality._CHARACTER_RETIRED_WIRE_FIELDS
+    assert not (retired & control_fields)
+    assert not (retired & compact_fields)
+    # The aliases are still what `compact` alone subtracts.
+    aliases = llm_quality._CHARACTER_COMPACT_WIRE_FIELDS - retired
+    assert aliases <= control_fields
+    assert not (aliases & compact_fields)
     for canonical in ("sequence", "present_evidence_used",
-                      "memory_evidence_used", "response_candidates",
-                      "appraisal", "active_state"):
+                      "memory_evidence_used", "appraisal", "active_state"):
         assert canonical in compact_fields
 
 
@@ -59,9 +65,12 @@ def test_runtime_prompt_moves_identity_behind_the_stable_prefix():
         prompt = character_prompt(payload, language=language)
         lines = prompt.splitlines()
         identity = next(i for i, line in enumerate(lines) if "{name}" in line)
+        # Anchored on keys that are still ASKED FOR. `response_candidates` was
+        # the other half of this pair until the deliberation fields were
+        # retired; llm.prompts uses the same pair to place the identity line.
         output = next(i for i, line in enumerate(lines)
                       if '"present_evidence_used"' in line
-                      and '"response_candidates"' in line)
+                      and '"sequence"' in line)
 
         assert identity > len(lines) // 2
         assert identity + 1 == output
@@ -76,9 +85,12 @@ def test_compact_prompt_removes_only_considered_response_scratch():
     control = character_prompt(payload)
     compact = character_prompt(payload, wire_variant="compact")
 
-    assert '"considered_responses":[],' in control
-    assert '"considered_responses":[],' not in compact
-    assert compact == control.replace('"considered_responses":[],', "", 1)
+    # Both deliberation fields are already absent from the runtime prompt, so
+    # the compact variant has nothing left to subtract from it. What it still
+    # guarantees is that it subtracts NOTHING ELSE.
+    assert '"considered_responses"' not in control
+    assert '"response_candidates"' not in control
+    assert compact == control
 
 
 def test_unanswered_question_snapshot_avoids_a_second_history_read(monkeypatch):
