@@ -51,8 +51,10 @@ def test_compact_character_wire_is_experimental_and_complete():
     aliases = llm_quality._CHARACTER_COMPACT_WIRE_FIELDS - retired
     assert aliases <= control_fields
     assert not (aliases & compact_fields)
-    for canonical in ("sequence", "present_evidence_used",
-                      "memory_evidence_used", "appraisal", "active_state"):
+    # The evidence-citation lanes joined the retired set: a character is
+    # isolated by construction (perception composes its payload), so they
+    # could never catch a breach and nothing read them.
+    for canonical in ("sequence", "appraisal", "active_state", "manifest"):
         assert canonical in compact_fields
 
 
@@ -69,7 +71,7 @@ def test_runtime_prompt_moves_identity_behind_the_stable_prefix():
         # the other half of this pair until the deliberation fields were
         # retired; llm.prompts uses the same pair to place the identity line.
         output = next(i for i, line in enumerate(lines)
-                      if '"present_evidence_used"' in line
+                      if '"appraisal"' in line
                       and '"sequence"' in line)
 
         assert identity > len(lines) // 2

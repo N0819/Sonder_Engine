@@ -1436,7 +1436,11 @@ def _ground_observation_citations(out, observations, memory_context,
         target = present if eid in current else past
         if ref not in target:
             target.append(ref)
-    if current:
+    # Only meaningful for a variant that CARRIED the citation lanes. They are
+    # no longer asked for (llm_quality._CHARACTER_RETIRED_WIRE_FIELDS), so
+    # without this guard the warning would fire on every turn and say nothing.
+    if current and (out.get("present_evidence_used") is not None
+                    or out.get("observations_used") is not None):
         if not present:
             warnings.append("no delivered present observation was cited")
     out["present_evidence_used"] = present

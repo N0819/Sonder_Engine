@@ -316,6 +316,13 @@ _CHARACTER_COMPACT_WIRE_FIELDS = frozenset({
 #: first. Both stay on the model with empty defaults so stored variants parse.
 _CHARACTER_RETIRED_WIRE_FIELDS = frozenset({
     "considered_responses", "response_candidates",
+    # The evidence-citation trail. A character cannot receive information it
+    # should not have -- perception composes its payload -- so these could
+    # never catch a breach, only a mis-cited id, and nothing read them.
+    # `_ground_observation_citations` keeps its OTHER job: per-item `evidence`
+    # on belief/association/mind-model updates is still grounded, and an
+    # update resting on nothing delivered is still dropped.
+    "observations_used", "present_evidence_used", "memory_evidence_used",
 })
 
 

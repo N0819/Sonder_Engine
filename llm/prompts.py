@@ -430,7 +430,7 @@ def _relocate_character_identity(text):
     # appends the identity line after the contract instead of before it.
     output_index = next(
         (index for index, line in enumerate(lines)
-         if '"present_evidence_used"' in line
+         if '"appraisal"' in line
          and '"sequence"' in line),
         len(lines),
     )

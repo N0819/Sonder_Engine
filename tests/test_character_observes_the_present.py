@@ -118,11 +118,14 @@ def test_the_prompt_says_which_one_to_cite():
     ids because they looked authoritative, so the rule is stated too."""
     from llm.prompts import DEFAULT_PROMPTS
     source = DEFAULT_PROMPTS["character"]
-    assert "EVIDENCE HAS TWO LANES" in source
-    assert "ids from perception.observations" in source
+    # Renamed and reduced 2026-08-30 when the top-level citation arrays were
+    # retired. The property under test is the same: the prompt states WHICH id
+    # to cite, and states why the two kinds must not be confused.
+    assert "EVIDENCE IS THE ID OF THE THING ITSELF" in source
+    assert 'id of the form "current:<perceiver>:<n>"' in source
     # The reason, not just the instruction: a rule without its why is the
     # first thing an editor drops.
-    assert "memory in the present lane" in source
+    assert "Never cite a memory where the present is meant" in source
 
 
 def test_legacy_present_citations_normalize_without_touching_real_ids():
