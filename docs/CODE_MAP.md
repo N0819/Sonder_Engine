@@ -8,7 +8,7 @@
 |---|---:|---|---|
 | `agents/__init__.py` | 97 | Backward-compatible facade for the role-specific agent package. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `story.scene` |
 | `agents/background.py` | 1428 |  | `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `persist.commit`, `story.character_schema`, `story.scene`, `world.background_claims`, `world.spatial` |
-| `agents/character.py` | 4092 | Private character decision agent. | `agents.common`, `core.db`, `core.frames`, `llm.prompts`, `llm.schemas`, `mind`, `mind.affect`, `mind.memory`, `mind.memory_judge`, `mind.psychology_runtime`, `mind.theory_of_mind`, `story.character_schema`, `story.scene`, `world.gaps`, `world.place_purpose`, `world.spatial`, `world.survival` |
+| `agents/character.py` | 4117 | Private character decision agent. | `agents.common`, `core.db`, `core.frames`, `llm.prompts`, `llm.schemas`, `mind`, `mind.affect`, `mind.memory`, `mind.memory_judge`, `mind.psychology_runtime`, `mind.theory_of_mind`, `story.character_schema`, `story.scene`, `world.gaps`, `world.place_purpose`, `world.spatial`, `world.survival` |
 | `agents/common.py` | 8967 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
 | `agents/composer.py` | 3308 |  | `agents.common`, `story.provenance_text`, `story.scene`, `world.spatial` |
 | `agents/director.py` | 4175 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial`, `world.survival` |
@@ -192,14 +192,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `character_step()` | 2966 | 1127 lines |
-| `_annotate_known_exits()` | 2317 | 458 lines |
-| `_ground_observation_citations()` | 1314 | 306 lines |
-| `_unanswered_question_note()` | 501 | 213 lines |
-| `_destination_from_goals()` | 1883 | 109 lines |
-| `sprint_offers()` | 2810 | 97 lines |
+| `character_step()` | 2989 | 1129 lines |
+| `_annotate_known_exits()` | 2340 | 458 lines |
+| `_ground_observation_citations()` | 1337 | 306 lines |
+| `_unanswered_question_note()` | 501 | 221 lines |
+| `_destination_from_goals()` | 1906 | 109 lines |
+| `sprint_offers()` | 2833 | 97 lines |
 | `_recent_self_moves()` | 232 | 86 lines |
-| `strip_beat_reissues()` | 915 | 82 lines |
+| `strip_beat_reissues()` | 938 | 82 lines |
 
 ### `agents/common.py`
 
