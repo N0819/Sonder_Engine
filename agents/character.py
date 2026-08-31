@@ -499,7 +499,7 @@ def _lines_delivered_to(char_id, rows):
 
 
 def _unanswered_question_note(chat_id, char_name, char_id, current_turn_idx,
-                              frame_id, n_turns=3, cache=None):
+                              frame_id, n_turns=3, cache=None, label=None):
     """`{"awaiting_your_answer": {...}}` when somebody asked THIS character
     something, they received it, and they have not spoken since.
 
@@ -705,8 +705,16 @@ def _unanswered_question_note(chat_id, char_name, char_id, current_turn_idx,
             reached = [line for line in said if _reached(line, row["idx"])]
             if not reached:
                 continue
-            asked = {"from": speaker, "asked": str(reached[-1])[:240],
+            # Same gate as the silence note beside it: being asked a
+            # question by a stranger does not tell you the stranger's name.
+            asked = {"from": label(speaker) if label else speaker,
+                     "asked": str(reached[-1])[:240],
                      "turns_ago": int(current_turn_idx) - int(row["idx"])}
+            # No default is built here, unlike the silence note beside it: this
+            # function takes a chat_id rather than the chat row `observer_label_fn`
+            # needs, and inventing a second lookup to reach it would put the
+            # identity floor in two places. The call site passes the label, and
+            # a test asserts that it does.
     result = {"awaiting_your_answer": asked} if asked else {}
     if isinstance(cache, dict):
         cache[cache_key] = dict(result)
@@ -747,7 +755,7 @@ def _player_quiet_beats(chat_id, current_turn_idx, frame_id, cap=8):
     return beats
 
 
-def _player_silence_note(sc, chat, sh, spoke, quiet_beats=0):
+def _player_silence_note(sc, chat, sh, spoke, quiet_beats=0, label=None):
     """`{"player_said_nothing": True}` when the player is here and did not speak.
 
     Absent otherwise -- when they spoke, and when they are not in the room,
@@ -781,7 +789,22 @@ def _player_silence_note(sc, chat, sh, spoke, quiet_beats=0):
     here = character_room(sc, sh)
     if not here or room_of(sc, player) != here:
         return {}
-    note = {"player_said_nothing": True, "player_name": player}
+    # THE NAME PASSES THE SAME GATE THE VIEW DID. `observer_label_fn` exists
+    # so a structured field cannot hand over an identity the prose beside it is
+    # withholding, and this field never went through it. Measured live (chat
+    # 104): a character whose every observation called the other body "the
+    # young woman", whose `known_pronouns` was EMPTY, was handed
+    # `their_name: "Hinami"` -- and its reasoning caught what the engine
+    # should never have offered: "Wait -- I don't actually know her name is
+    # Hinami. That's in the decision field but not in my perception." A leak
+    # the model declines is still a leak.
+    # DEFAULT-ON, not opt-in. An optional gate is a gate a future caller
+    # forgets, and this field is only reachable on the beats where a character
+    # has least reason to have learned a name. The caller may pass the label it
+    # already built for the contact ledger; absent that, one is built here.
+    if label is None:
+        label = observer_label_fn(chat, character_name(sh), [])
+    note = {"player_said_nothing": True, "player_name": label(player)}
     if quiet_beats > 1:
         note["player_quiet_for_beats"] = quiet_beats
     return note
@@ -3752,13 +3775,15 @@ def character_step(ctx, cid, nonce):
             **_player_silence_note(
                 sc, chat, sh, _p_spoke,
                 quiet_beats=(0 if _p_spoke else _player_quiet_beats(
-                    chat.id, ctx.turn.idx, ctx.turn.frame_id))),
+                    chat.id, ctx.turn.idx, ctx.turn.frame_id)),
+                label=_contact_label),
             # Somebody asked this character something and they have not spoken
             # since. The engine knew; nothing told them.
             **_unanswered_question_note(
                 chat.id, character_name(sh), cid,
                 ctx.turn.idx, ctx.turn.frame_id,
-                cache=shared.setdefault("unanswered_question_notes", {})),
+                cache=shared.setdefault("unanswered_question_notes", {}),
+                label=_contact_label),
         },
         "simulation_clock": _sim_clock,
         "variant_seed": nonce,
