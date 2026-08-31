@@ -424,10 +424,14 @@ def _relocate_character_identity(text):
     identity = lines.pop(identity_index)
     # Protocol keys stay English in every translated pack.  Detect the output
     # contract by its shape rather than by an authored-language heading.
+    # Anchored on two keys that are both still ASKED FOR. `response_candidates`
+    # was half of this pair until the deliberation fields were retired; with it
+    # gone the match failed silently and fell through to len(lines), which
+    # appends the identity line after the contract instead of before it.
     output_index = next(
         (index for index, line in enumerate(lines)
          if '"present_evidence_used"' in line
-         and '"response_candidates"' in line),
+         and '"sequence"' in line),
         len(lines),
     )
     lines.insert(output_index, identity)
@@ -435,8 +439,20 @@ def _relocate_character_identity(text):
 
 
 def _compact_character_wire_prompt(text):
-    """Remove only the experimental deliberation scratch output example."""
-    return text.replace('"considered_responses":[],', "", 1)
+    """Remove the deliberation scratch from the output example.
+
+    Both fields are deliberation the reasoning block now does. Nothing read
+    `considered_responses` at all; `response_candidates` was read only for its
+    selected entry, whose two used parts are derived from conduct and wants
+    instead (see agents.character._selected_move_text).
+    """
+    for fragment in (
+            '"considered_responses":[],',
+            '"response_candidates":[{"response":"","serves":[],'
+            '"expected_outcome":"","risk":0.0,"inhibition":0.0,'
+            '"norm_conflict":"","selected":false}],'):
+        text = text.replace(fragment, "", 1)
+    return text
 
 
 def character_prompt(payload, base=None, language=None, wire_variant=None):

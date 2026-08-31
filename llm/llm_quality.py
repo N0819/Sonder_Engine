@@ -304,10 +304,18 @@ _CHARACTER_COMPACT_WIRE_FIELDS = frozenset({
     # provider response; this list changes only what the experimental grammar
     # advertises.
     "observations_used", "speech", "action", "actions",
-    # Deliberation scratch.  Deliberately experimental: unlike the aliases
-    # above, this may help a model think even though no commit reader consumes
-    # it, so the normal runtime keeps it until the matched A/B says otherwise.
-    "considered_responses",
+    # Aliases end here.
+})
+
+#: Deliberation the REASONING BLOCK now does, retired from the ask on
+#: 2026-08-30. `considered_responses` never had a reader at all; the three
+#: readers of `response_candidates` took only its selected entry, whose
+#: `response` is now derived from `sequence[].attempt` (the same intent grain,
+#: present on 100.0% of results carrying a sequence) and whose `serves` comes
+#: from `active_state.wants[].serves`, which the same function already read
+#: first. Both stay on the model with empty defaults so stored variants parse.
+_CHARACTER_RETIRED_WIRE_FIELDS = frozenset({
+    "considered_responses", "response_candidates",
 })
 
 
@@ -317,17 +325,21 @@ def _character_wire_schema(schema, wire_variant=None):
     ``compact`` is used only by the comparison harness.  Runtime callers pass
     no variant and therefore retain the complete character surface.
     """
-    if wire_variant != "compact" or not isinstance(schema, dict):
+    if not isinstance(schema, dict):
         return schema
+    # The retired deliberation fields are dropped for EVERY caller; the
+    # compact variant additionally drops the legacy aliases.
+    drop = set(_CHARACTER_RETIRED_WIRE_FIELDS)
+    if wire_variant == "compact":
+        drop |= set(_CHARACTER_COMPACT_WIRE_FIELDS)
     out = dict(schema)
     properties = dict(out.get("properties") or {})
-    for field in _CHARACTER_COMPACT_WIRE_FIELDS:
+    for field in drop:
         properties.pop(field, None)
     out["properties"] = properties
     if isinstance(out.get("required"), list):
         out["required"] = [
-            field for field in out["required"]
-            if field not in _CHARACTER_COMPACT_WIRE_FIELDS
+            field for field in out["required"] if field not in drop
         ]
     return out
 

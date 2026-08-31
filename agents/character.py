@@ -271,11 +271,7 @@ def _recent_self_moves(chat_id, char_id, current_turn_idx, n_turns=12, cap=12,
         if not isinstance(result, dict):
             continue
 
-        candidates = [
-            item for item in (result.get("response_candidates") or [])
-            if isinstance(item, dict) and item.get("selected")
-        ]
-        move = str((candidates[0].get("response") if candidates else "") or "").strip()
+        move = _selected_move_text(result)
         # Derived, not read: the template stopped asking for active_state.goal
         # (commit overwrote it with the enacted want's text on 99.0% of
         # measured calls), so the ledger derives the same text from
@@ -1001,7 +997,17 @@ def strip_beat_reissues(result, prior_result, warn=None):
 
 
 def _selected_move_text(result):
-    """The semantic response selected in one character result."""
+    """The conversational job one character result actually undertook.
+
+    DERIVED, NOT READ, the way `active_state.goal` already is. This was
+    `response_candidates[selected].response` until the deliberation fields were
+    retired -- the reasoning block does that weighing now, so nothing is asked
+    for it. `attempt` is the same INTENT grain the ledger needs (what the
+    character is trying to do, not what an onlooker sees), measured present on
+    100.0% of results carrying a sequence; speech carries the job on a beat
+    that is only talk. The legacy field is still read first so variants stored
+    before the change keep their exact ledger text.
+    """
     if not isinstance(result, dict):
         return ""
     for item in result.get("response_candidates") or []:
@@ -1009,7 +1015,20 @@ def _selected_move_text(result):
             text = str(item.get("response") or "").strip()
             if text:
                 return text
-    return ""
+    attempts = []
+    speech = []
+    for event in result.get("sequence") or []:
+        if not isinstance(event, dict):
+            continue
+        if event.get("type") == "action":
+            text = str(event.get("attempt") or "").strip()
+            if text:
+                attempts.append(text)
+        elif event.get("type") == "speech":
+            text = str(event.get("text") or "").strip()
+            if text:
+                speech.append(text)
+    return " | ".join(attempts or speech).strip()
 
 
 # Where a re-ask separates from a genuinely new question. Calibrated on the
@@ -1107,6 +1126,9 @@ def _nonsteering_intention_refs(result, intentions, turn_idx):
             str(want.get("serves") or "").strip()
             for want in (active.get("wants") or []) if isinstance(want, dict)
         )
+    # `response_candidates` is no longer asked for; a want already carries
+    # `serves`, and the loop above reads it. Variants stored before the change
+    # still carry the field, so it is read when present rather than dropped.
     for candidate in result.get("response_candidates") or []:
         if not isinstance(candidate, dict) or not candidate.get("selected"):
             continue

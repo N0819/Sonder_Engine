@@ -1446,7 +1446,9 @@ class TestAnUnboundedListIsWhereASamplerLocks:
         from llm.prompts import get_prompt
 
         text = get_prompt("character")
-        assert "`serves` uses the SAME vocabulary as a want's" in text
+        # Reworded when the deliberation fields were retired: `serves` is now
+        # stated on the WANT, which is the field that still carries it.
+        assert "`serves` names the aims it advances, in that field's own" in text
         assert "do not list your traits" in text
 
 
