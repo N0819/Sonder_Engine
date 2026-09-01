@@ -52,13 +52,25 @@ def fanout_is_parallel():
     return value not in ("sequential", "serial", "one_at_a_time")
 
 
-def _resolve_beat_view(out, decls, char_actions, dice, p_name, interp):
-    """The finished beat as every resolve-side specialist reads it."""
-    ledger_notes = {
+def _normalized_ledger_notes(out):
+    """The Director's rulings, blank lines dropped.
+
+    Shared by BOTH beat views on purpose. `director_interpret` is a structural
+    mirror of `director_resolve` -- same fan-out, same six hands -- and the
+    ruling channel was added to the resolve half only, so the interpret half
+    ran its specialists with nothing to transcribe. A copy of this dict
+    comprehension in each view is how that happens again.
+    """
+    return {
         str(k): str(v).strip()
-        for k, v in (out.get("ledger_notes") or {}).items()
+        for k, v in ((out or {}).get("ledger_notes") or {}).items()
         if isinstance(v, str) and str(v).strip()
     }
+
+
+def _resolve_beat_view(out, decls, char_actions, dice, p_name, interp):
+    """The finished beat as every resolve-side specialist reads it."""
+    ledger_notes = _normalized_ledger_notes(out)
     declared = {}
     for name, acts in (char_actions or {}).items():
         attempts = [str(a.get("attempt") or "") for a in acts
@@ -211,6 +223,9 @@ def _interpret_beat_view(ctx, out, p_name):
         declared[p_name] = attempts
     return {
         "source": "player_declaration",
+        # Same key the resolve view uses, so `_note_for` routes an
+        # interpret-side ruling with no change of its own.
+        "ledger_notes": _normalized_ledger_notes(out),
         "declaration": {
             "sequence": sequence,
             "speech": out.get("speech"),
