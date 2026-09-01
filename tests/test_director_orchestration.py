@@ -277,8 +277,15 @@ def test_specialist_sheets_are_assembled_from_scope():
     assert "BODILY CONDITION" in everything and "OVERLAYS" in everything
     # Empty scope is the bare core -- and dispatch never sends it (an empty
     # scope is a specialist not dispatched at all).
-    assert specialist_prompt("body", []) == \
-        SPECIALIST_PROMPT_SPECS["body"]["core"]
+    # An empty scope contributes NO CHUNK -- which is the property this pins.
+    # It is no longer byte-equal to the core: specialist_prompt also appends
+    # the one shared rule every hand carries about the Director's ruling
+    # channel, and `nsfw_overlay` when that is on. Asserting equality made
+    # this test a hostage to any future shared clause AND to a host setting,
+    # neither of which is what "scope selects chunks" means.
+    bare = specialist_prompt("body", [])
+    for chunk_marker in ("CLOTHING TRACKING", "BODILY CONDITION", "OVERLAYS"):
+        assert chunk_marker not in bare, chunk_marker
     # Canonical order: the sheet is byte-stable for a given scope whatever
     # order the scope list arrives in (provider prefix caching).
     assert specialist_prompt("contact", ["scales", "contact_ops"]) == \

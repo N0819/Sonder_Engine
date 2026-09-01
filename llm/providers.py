@@ -263,12 +263,37 @@ def request_timeout(seconds):
         read_timeout_override.reset(token)
 
 
-def _request_timeout():
-    """(connect, read) for `requests`, honoring an active override."""
+# What a blocking read is allowed to wait. REQUEST_TIMEOUT's 90s is reasoned
+# entirely about time-to-first-byte -- "a stream silent for a minute and a
+# half is not slow, it is gone" -- which is true of a STREAM and false of a
+# blocking POST, where silence until the response completes is normal. Applied
+# there it cut healthy generations at 90s, and RetryConfig's three attempts
+# turned one cut into 3*90s plus jittered backoff: the ~245-253s failures this
+# engine kept attributing to nanogpt, then to openrouter, on grok, qwen,
+# deepseek, gemma and gemini alike. Same number every time, because it was
+# never a provider.
+#
+# Reasoning models are what made it visible: on a stream their thinking
+# arrives on its own delta key (see _sse_openai) and keeps the socket busy, so
+# the 90s never fires. Without a stream nothing arrives until the whole answer
+# is done, and a model that thinks for two minutes looks exactly like a dead
+# connection.
+BLOCKING_READ_TIMEOUT = 300.0
+
+
+def _request_timeout(streaming=True):
+    """(connect, read) for `requests`, honoring an active override.
+
+    `streaming=False` asks for the deadline a whole generation may take rather
+    than the one a silent stream may take. An explicit override still wins on
+    either transport -- a caller that knows it is doing long work has said so.
+    """
     override = read_timeout_override.get()
-    if override is None:
-        return REQUEST_TIMEOUT
-    return (REQUEST_TIMEOUT[0], override)
+    if override is not None:
+        return (REQUEST_TIMEOUT[0], override)
+    if not streaming:
+        return (REQUEST_TIMEOUT[0], BLOCKING_READ_TIMEOUT)
+    return REQUEST_TIMEOUT
 
 
 def _httpx_timeout():
@@ -576,7 +601,7 @@ def _post_abortable(url, **kw):
     socket raises where it stands. The body is materialised here so every
     existing caller keeps using `.json()`, `.text` and `.content` unchanged.
     """
-    kw.setdefault("timeout", _request_timeout())
+    kw.setdefault("timeout", _request_timeout(streaming=False))
     # No pipeline to abort -- background jobs, tooling, tests. Behave exactly
     # as the plain post did, including the response object the caller gets, so
     # this helper adds a capability and changes no existing contract.

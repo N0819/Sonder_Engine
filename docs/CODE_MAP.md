@@ -43,7 +43,7 @@
 | `llm/llm_quality.py` | 774 | Strict JSON parsing, schema validation, and model-assisted repair. | `core.pipeline_context`, `llm.prompts`, `llm.providers`, `llm.schemas` |
 | `llm/prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `llm.providers` |
 | `llm/prompts.py` | 516 | Default system prompts and prompt preset access. | `core.db` |
-| `llm/providers.py` | 3581 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `core.db`, `core.logging_utils` |
+| `llm/providers.py` | 3606 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `core.db`, `core.logging_utils` |
 | `llm/schemas.py` | 5612 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `mind/__init__.py` | 6 |  | — |
 | `mind/affect.py` | 2406 |  | `mind.theory_of_mind` |
@@ -558,14 +558,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_chat_complete_once()` | 2302 | 282 lines |
-| `async _chat_complete_async_once()` | 2705 | 115 lines |
-| `chat_complete()` | 2044 | 110 lines |
-| `async chat_complete_async()` | 2614 | 90 lines |
-| `_sse_openai()` | 1902 | 79 lines |
-| `async _sse_openai_async()` | 2821 | 63 lines |
-| `_sse_anthropic()` | 1982 | 61 lines |
-| `_embed_request()` | 3141 | 59 lines |
+| `_chat_complete_once()` | 2327 | 282 lines |
+| `async _chat_complete_async_once()` | 2730 | 115 lines |
+| `chat_complete()` | 2069 | 110 lines |
+| `async chat_complete_async()` | 2639 | 90 lines |
+| `_sse_openai()` | 1927 | 79 lines |
+| `async _sse_openai_async()` | 2846 | 63 lines |
+| `_sse_anthropic()` | 2007 | 61 lines |
+| `_embed_request()` | 3166 | 59 lines |
 
 ### `llm/schemas.py`
 
