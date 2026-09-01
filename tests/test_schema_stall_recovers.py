@@ -140,6 +140,24 @@ class TestARulingReachesTheHandThatOwnsIt:
             {}, {}, [], "P", {})
         assert view["ledger_notes"] == {"contact": "ended a kiss"}
 
+    def test_a_ruling_survives_case_and_a_plural(self):
+        """Measured: gemini keyed one note `pose`, and the channel is `poses`.
+
+        A correct ruling about the very ledger whose staleness motivated this
+        channel, dropped over one letter. Case and a trailing plural are the
+        only looseness allowed -- the channels are a closed set the engine
+        owns, so matching their own names loosely is schema-shaped. Guessing
+        that `transit` means `positions` would be the engine inventing
+        vocabulary for the Director and getting it wrong silently.
+        """
+        from agents.director import _note_for
+        assert _note_for({"pose": "she slumps"}, "spatial") == "she slumps"
+        assert _note_for({"Positions": "he moved"}, "spatial") == "he moved"
+        assert _note_for({"vitals": "she came"}, "body") == "she came"
+        assert _note_for({"contact": "ended"}, "contact") == "ended"
+        assert _note_for({"transit": "uncoupled"}, "spatial") is None, (
+            "an unknown word must reach nobody rather than the nearest guess")
+
     def test_a_note_keyed_by_a_channel_reaches_its_owner(self):
         from agents.director import SPECIALISTS
         notes = {"vitals": "she came"}

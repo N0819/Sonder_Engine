@@ -239,6 +239,50 @@ def _specialist_manifest_slice(name, view):
     ]
 
 
+
+def _note_key_forms(key):
+    """The spellings one ledger name can arrive under.
+
+    Case and a trailing plural only. NOT a synonym table: the channels are a
+    closed set the engine owns, so matching their own names loosely is
+    schema-shaped, while guessing that "transit" means `positions` would be
+    the engine inventing vocabulary on the Director's behalf and getting it
+    wrong quietly.
+    """
+    k = str(key or "").strip().lower()
+    forms = {k}
+    if k.endswith("s"):
+        forms.add(k[:-1])
+    else:
+        forms.add(k + "s")
+    return forms
+
+
+def _note_for(notes, name):
+    """This hand's ruling, however the Director spelled the ledger.
+
+    Measured across seven beats on gemini-3.6-flash: 8 of 11 notes were keyed
+    by CHANNEL (`positions`, `conditions`, `overlays`, `entities`) and 1 by
+    specialist name, so a lookup by hand alone would have dropped nearly three
+    quarters of the Director's rulings. Two more arrived as `pose` and
+    `transit`; `pose` is `poses` with a letter missing -- a correct ruling
+    about the very ledger whose staleness motivated this channel, lost to a
+    plural.
+    """
+    if not notes:
+        return None
+    lowered = {}
+    for key, value in notes.items():
+        if not isinstance(value, str) or not value.strip():
+            continue
+        for form in _note_key_forms(key):
+            lowered.setdefault(form, value.strip())
+    for candidate in (name,) + tuple(SPECIALISTS[name].get("channels") or ()):
+        for form in _note_key_forms(candidate):
+            if form in lowered:
+                return lowered[form]
+    return None
+
 def _specialist_payload(name, ctx, sc, view, extras):
     """One specialist's scoped payload -- its written entitlement, applied
     to whichever stage's beat view it was handed. Shared part: the beat
@@ -271,12 +315,7 @@ def _specialist_payload(name, ctx, sc, view, extras):
         # would have silently dropped a correct ruling, which is the failure
         # this whole channel exists to prevent.
         notes = view.get("ledger_notes") or {}
-        note = notes.get(name)
-        if note is None:
-            for channel in (SPECIALISTS[name].get("channels") or ()):
-                if notes.get(channel):
-                    note = notes[channel]
-                    break
+        note = _note_for(notes, name)
         if isinstance(note, str) and note.strip():
             payload["director_note"] = note.strip()
         # Dialogue only to the hands that own a channel a speech act can

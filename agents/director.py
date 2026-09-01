@@ -274,6 +274,7 @@ from .director_scopes import (
 )
 from .director_fanout import (
     fanout_is_parallel,
+    _note_for,
     _resolve_beat_view,
     _interpret_beat_view,
     _specialist_manifest_slice,
