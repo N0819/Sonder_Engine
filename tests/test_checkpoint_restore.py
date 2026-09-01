@@ -410,3 +410,78 @@ class TestASnapshotBuiltOutsideTheLockIsStillCurrent:
             latest_after["id"] if latest_after else None)
         # ...and the real one sees it.
         assert db.data_version() != before
+
+
+class TestASnapshotOutlivesItsReferents:
+    """Deleting a character must not make an old turn un-restorable.
+
+    `memories.char_id` and `memory_summaries.char_id` are each NOT NULL
+    REFERENCES characters(id) ON DELETE CASCADE, so removing a character from
+    the library already deleted those ROWS. A checkpoint keeps its own copy
+    inside a JSON blob, where no foreign key reaches it, and replaying it
+    raised `FOREIGN KEY constraint failed` and lost the whole restore.
+
+    Measured on the author's library 2026-08-31: 22 chats carried a checkpoint
+    naming a character that no longer existed -- chat 22 named ids 1 and 2, and
+    eight chats between 33 and 64 named id 37 -- so rerunning any of those
+    turns died on a bare IntegrityError with nothing naming the cause.
+    """
+
+    @staticmethod
+    def _stub_embeddings(monkeypatch):
+        from llm.providers import EmbeddingBatch
+        patch_provider_seam(
+            monkeypatch, 'embed_texts_meta',
+            lambda texts: EmbeddingBatch(
+                vectors=[[0.0] * 256 for _ in texts],
+                model_key="test", dimensions=256))
+
+    def test_memories_for_a_deleted_character_are_skipped(
+            self, temp_db, monkeypatch):
+        self._stub_embeddings(monkeypatch)
+        chat_id, character_id = _chat_and_character(temp_db)
+        gone = temp_db.qi(
+            "INSERT INTO characters(name,sheet,source,created,resource_uid) "
+            "VALUES(?,?,?,?,?)",
+            ("Ghost", json.dumps(default_character_data("Ghost")), "{}",
+             time.time(), "char_ghost"),
+        )
+        snapshot = [
+            {"char_id": character_id, "content": "Alice remembers the door",
+             "kind": "episodic", "turn_idx": 1},
+            {"char_id": gone, "content": "Ghost remembers the corridor",
+             "kind": "episodic", "turn_idx": 1},
+        ]
+        # The deletion the cascade already honoured for rows, but not for the
+        # copy inside the snapshot.
+        temp_db.qi("DELETE FROM characters WHERE id=?", (gone,))
+
+        restore_chat_memories(chat_id, snapshot)
+
+        kept = temp_db.q(
+            "SELECT char_id, content FROM memories WHERE chat_id=?", (chat_id,))
+        assert [r["content"] for r in kept] == ["Alice remembers the door"], (
+            "the surviving character's memory must still be restored")
+        assert all(r["char_id"] == character_id for r in kept), (
+            "no row may reference a character that no longer exists")
+
+    def test_the_orphan_alone_restores_to_an_empty_bank(
+            self, temp_db, monkeypatch):
+        """The whole restore must survive, not just the mixed case."""
+        self._stub_embeddings(monkeypatch)
+        chat_id, character_id = _chat_and_character(temp_db)
+        gone = temp_db.qi(
+            "INSERT INTO characters(name,sheet,source,created,resource_uid) "
+            "VALUES(?,?,?,?,?)",
+            ("Ghost", json.dumps(default_character_data("Ghost")), "{}",
+             time.time(), "char_ghost2"),
+        )
+        snapshot = [{"char_id": gone, "content": "only the ghost",
+                     "kind": "episodic", "turn_idx": 1}]
+        temp_db.qi("DELETE FROM characters WHERE id=?", (gone,))
+
+        restore_chat_memories(chat_id, snapshot)
+
+        assert temp_db.q(
+            "SELECT COUNT(*) AS n FROM memories WHERE chat_id=?",
+            (chat_id,), one=True)["n"] == 0

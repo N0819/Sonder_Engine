@@ -8,12 +8,13 @@ import json
 import re
 import time
 from core.db import q, qi, transaction
+from core.logging_utils import logger
 from llm.providers import embed_texts, embed_texts_meta, embedding_model_key
 from dataclasses import dataclass
 
 from mind.memory_common import (
     _b64_to_blob, _blob, _blob_to_b64, _storage_json, _summary_retrieval_text,
-    _vec,
+    _vec, surviving_character_ids,
 )
 from mind.memory_write import (
     _delete_memory_fts, _json_list, _upsert_memory, add_memories_batch,
@@ -262,8 +263,13 @@ def prepare_chat_memory_restore(chat_id, mems):
     # should not issue a query per memory.
     vector_store = get_memory_vectors(
         [m.get("vkey") for m in (mems or []) if isinstance(m, dict) and m.get("vkey")])
+    known = surviving_character_ids()
+    dropped = set()
     for m in mems or []:
         if not m.get("content"):
+            continue
+        if m.get("char_id") not in known:
+            dropped.add(m.get("char_id"))
             continue
         item = {
             "chat_id": chat_id, "char_id": m.get("char_id"), "turn_id": m.get("turn_id"),
@@ -325,6 +331,10 @@ def prepare_chat_memory_restore(chat_id, mems):
             entries.append({"mode": "legacy", "source": m,
                             "retrieval_history": history})
             legacy_items.append(item)
+    if dropped:
+        logger.info("memory restore: skipped memories for %d character(s) "
+                    "deleted since the snapshot was taken (%s)",
+                    len(dropped), sorted(str(d) for d in dropped)[:8])
     legacy_batch = prepare_memories_batch(legacy_items) if legacy_items else None
     return {"entries": entries, "legacy_batch": legacy_batch}
 
@@ -579,7 +589,13 @@ def prepare_memory_summary_restore(summaries):
     call per legacy item otherwise) with zero writes, so the apply
     phase never makes a provider call while holding the write lock."""
     prepared = []
+    known = surviving_character_ids()
     for item in summaries or []:
+        # Same orphan class as prepare_chat_memory_restore; see
+        # surviving_character_ids. Found by fixing memories first and watching
+        # the identical IntegrityError reappear one table along.
+        if item.get("char_id") not in known:
+            continue
         emb = _b64_to_blob(item.get("embedding"))
         model = item.get("embedding_model") or ""
         dim = item.get("embedding_dim")
