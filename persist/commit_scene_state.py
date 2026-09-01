@@ -253,6 +253,25 @@ def _advance_ground(cid, sc):
 #: carrying it, it names the place the overlay is about.
 _OVERLAY_HANDLE_FIELDS = ("name", "description", "desc")
 
+#: Fields that are NOT a handle, so every other string value is one.
+#:
+#: Inverted 2026-09-01. The include-list above tried to anticipate the field
+#: name a model would reach for, and live (chat 111 turn 54) the Director ended
+#: an overlay correctly -- `{"text": "tears escape eyes", "active": false}` --
+#: and the ending did nothing, because `text` was not on it. A record with no
+#: handle matches nothing, so the removal was silent and the mark stood. That
+#: is the enumeration failure CLAUDE.md names: a list that guesses at how
+#: English will phrase something is always one spelling short.
+#:
+#: Stating the complement makes the closed set one the ENGINE owns. `subject`
+#: names the BODY the overlay is about, not the overlay -- three distinct
+#: overlays in chat 78 share one subject, so folding on it would delete two
+#: authored appearance facts. `id`, on the one corpus entry carrying it, names
+#: the place the overlay is about. The rest are the ending's own control
+#: fields, which say whether the mark is there and never which mark it is.
+_OVERLAY_NON_HANDLE_FIELDS = frozenset(
+    ("subject", "id", "active", "present", "ended", "removed"))
+
 #: How many overlay entries one body's ledger keeps. Ageing them is a
 #: separate, unsolved problem (docs/UNBUILT.md 1.10): this cap is the only
 #: thing that bounds an overlay's life, and nothing here expires one.
@@ -298,6 +317,37 @@ def _is_overlay_ending(item) -> bool:
         if field in item:
             return item.get(field) is False
     return bool(item.get("ended") is True or item.get("removed") is True)
+
+
+def _overlay_ending_handles(item) -> set:
+    """What an ENDING names, read wider than `_overlay_handles` reads a record.
+
+    The two uses differ in who is speaking and what a miss costs. Dedupe folds
+    entries on its own initiative, so an entry it cannot understand must be
+    untouchable -- that floor is why `_overlay_handles` reads only the fields
+    it knows, and it stays. An ending is the Director SAYING which mark is
+    gone, so reading it narrowly does not fail safe: it fails silent, and the
+    mark the beat said was over goes on standing.
+
+    Live, chat 111 turn 54: `{"text": "tears escape eyes", "active": false}`
+    -- correct use of the off-switch, on the day it shipped, and `text` was
+    not among ("name", "description", "desc"), so the ending named nothing and
+    removed nothing. Guessing the field a model will reach for is the
+    enumeration this codebase keeps losing to; here the complement is
+    available, because the fields that identify something OTHER than this mark
+    are ones the engine defines.
+    """
+    if isinstance(item, str):
+        return _overlay_handles(item)
+    if not isinstance(item, dict):
+        return set()
+    return {text for text in
+            (str(value).strip().casefold()
+             for field, value in item.items()
+             if isinstance(value, str)
+             and str(field).strip().casefold()
+             not in _OVERLAY_NON_HANDLE_FIELDS)
+            if text}
 
 
 def _dedupe_overlay_entries(entries) -> list:
@@ -389,7 +439,7 @@ def _merge_overlays(sc, incoming) -> None:
         # Endings apply LAST, so a beat that both restates and ends a mark
         # ends it: the ending is the beat's final word about that handle.
         for ending in endings:
-            handles = _overlay_handles(ending)
+            handles = _overlay_ending_handles(ending)
             if not handles:
                 continue
             merged = [item for item in merged

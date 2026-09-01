@@ -255,3 +255,65 @@ class TestAnOverlayCanBeTakenOff:
         matched against anything, so it cannot delete what it does not name."""
         out = _merged(["soot at the jaw"], [{"active": False}])
         assert out == ["soot at the jaw"]
+
+
+class TestAnEndingIsReadWiderThanARecord:
+    """The include-list guessed at spellings, and came up one short.
+
+    Live, chat 111 turn 54: the Director ended an overlay correctly, using the
+    off-switch the day it shipped --
+
+        {"text": "tears escape eyes", "active": false}
+
+    -- and nothing happened. `text` was not among ("name", "description",
+    "desc"), so the entry had NO handle, and a handle-less entry matches
+    nothing by design. The removal was silent and the mark went on standing.
+
+    The set is now stated as its complement, which makes it one the engine
+    owns: `subject` names the body rather than the overlay, `id` names the
+    place, and the rest are the ending's own control fields. Everything else a
+    record says about itself identifies it.
+    """
+
+    def test_the_field_name_the_director_actually_reached_for(self):
+        from persist.commit import _overlay_ending_handles
+        assert _overlay_ending_handles(
+            {"text": "tears escape eyes", "active": False}) == {
+                "tears escape eyes"}
+        # ...and the narrow reading still does NOT see it, which is the floor
+        # dedupe depends on.
+        assert _overlay_handles({"text": "tears escape eyes"}) == set()
+
+    def test_a_spelling_nobody_has_written_yet_still_ends_its_mark(self):
+        """The point of the complement: it reaches the next word too."""
+        from persist.commit import _overlay_ending_handles
+        assert _overlay_ending_handles({"label": "soot at the jaw"}) == {
+            "soot at the jaw"}
+        assert _overlay_ending_handles({"summary": "soaked hair"}) == {
+            "soaked hair"}
+
+    def test_subject_never_identifies_the_mark_on_either_reading(self):
+        """Three overlays in chat 78 share one subject; folding on it would
+        delete two authored appearance facts."""
+        from persist.commit import _overlay_ending_handles
+        for read in (_overlay_handles, _overlay_ending_handles):
+            handles = read({"subject": "Hinami", "name": "soot"})
+            assert handles == {"soot"}, read.__name__
+
+    def test_the_control_fields_never_identify_the_mark(self):
+        from persist.commit import _overlay_ending_handles
+        assert _overlay_ending_handles(
+            {"name": "soot", "active": "false"}) == {"soot"}
+
+    def test_an_ending_spelled_any_way_removes_its_entry(self):
+        for field in ("text", "name", "description", "label"):
+            out = _merged(["tears escape eyes", "soot at the jaw"],
+                          [{field: "tears escape eyes", "active": False}])
+            assert out == ["soot at the jaw"], field
+
+    def test_a_record_with_nothing_but_control_fields_still_names_nothing(self):
+        """The floor survives: a shape that names nothing deletes nothing."""
+        from persist.commit import _overlay_ending_handles
+        assert _overlay_ending_handles({"active": False}) == set()
+        assert _merged(["soot at the jaw"], [{"active": False}]) == [
+            "soot at the jaw"]
