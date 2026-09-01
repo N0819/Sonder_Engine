@@ -377,11 +377,34 @@ class TestBothHalvesOfTheDirectorCarryTheRuling:
         """The measured lesson: a field asked for in prose and absent from the
         OUTPUT SHAPE does not exist as far as the model is concerned. On the
         resolve side that cost every ruling on a live replay."""
-        from llm.prompts import DEFAULT_PROMPTS, prose_author_prompt
-        interpret = DEFAULT_PROMPTS["director_interpret"]
+        from llm.prompts import (get_prompt_body, interpret_delegation_note,
+                                 prose_author_prompt)
+        # The ASSEMBLED text, not the body. director.py sends
+        # `get_prompt_body(...) + interpret_delegation_note(...)`, and the
+        # note gets the last word: it closed with an enumeration of what
+        # stays the author's that did not include ledger_notes, so the field
+        # was declared in the shape and excluded three lines later. Asserting
+        # on the body alone passed while the live Director emitted nothing.
+        interpret = get_prompt_body("director_interpret") + \
+            interpret_delegation_note()
         resolve = prose_author_prompt(None)
         for name, text in (("director_interpret", interpret),
                            ("prose_author_sheet", resolve)):
             assert "ledger_notes:{specialist:line}" in text, name
             # and the six names, which the model otherwise guesses at
             assert "body|social|contact|objects|spatial|offscreen" in text, name
+
+    def test_no_enumeration_of_the_authors_output_omits_the_ruling(self):
+        """Every list of "what your output contains" has to contain it.
+
+        Three separate places had to name this field before a model would
+        write one: the schema, the output shape, and the delegation note. The
+        note is the one that bit -- appended last, ending in a closed list of
+        the author's own fields, with ledger_notes absent. A field declared in
+        one enumeration and omitted from another is a field that does not
+        exist, and the model is right to leave it out.
+        """
+        from llm.prompts import interpret_delegation_note
+        note = interpret_delegation_note()
+        assert "stays yours" in note, "the enumeration moved; re-pin this"
+        assert "ledger_notes" in note
