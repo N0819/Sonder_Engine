@@ -264,7 +264,19 @@ def _specialist_payload(name, ctx, sc, view, extras):
         # Scoped like every other slice: a specialist sees its own note and
         # no one else's, so this carries authority without carrying another
         # hand's ledger. Absent when the beat settled nothing here.
-        note = (view.get("ledger_notes") or {}).get(name)
+        # Keyed by SPECIALIST or by any CHANNEL that specialist owns. Measured
+        # 2026-09-01: gemini-3.6-flash returned {"contact": ..., "vitals": ...}
+        # -- `contact` is a hand and `vitals` is one of `body`'s channels, and
+        # the Director was right both times. Insisting on the hand's name
+        # would have silently dropped a correct ruling, which is the failure
+        # this whole channel exists to prevent.
+        notes = view.get("ledger_notes") or {}
+        note = notes.get(name)
+        if note is None:
+            for channel in (SPECIALISTS[name].get("channels") or ()):
+                if notes.get(channel):
+                    note = notes[channel]
+                    break
         if isinstance(note, str) and note.strip():
             payload["director_note"] = note.strip()
         # Dialogue only to the hands that own a channel a speech act can
