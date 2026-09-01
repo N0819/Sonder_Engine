@@ -1,5 +1,99 @@
 # Changelog
 
+## alpha 9.10.2 — The latch was narrower than the answer
+
+Three audit workflows against two stated conventions: ask the model broad
+questions and make the latch wide enough to catch the answer, and feed each
+stage only what the present scene holds. Twenty-five defects, and nearly all of
+them were the first convention — **the model was right and the engine could not
+catch what it said.**
+
+### The comms channel was dead end to end
+
+The spatial hand owns `comms_ops` and was never shown `scene["comms"]`, while
+its own chunk makes `set` a complete replacement snapshot demanding an id. So
+every maintenance op ever written — **4 of 4 in the corpus** — named an id the
+establishing beat had not used. Chats 78 and 84 still carry two live PA channels
+each, and chat 78 turn 8's prose says *"She then releases the PA button"* while
+the close hit an unknown id and flipped nothing.
+
+Fixed on five surfaces: the payload, `director_establish`'s output shape, the
+`changes_asserted` vocabulary, the reconcile auditor, and the delegation list.
+Measured A/B on the real beat — with the ledger visible the Director emitted
+`comms_ops: []`, correctly recognising nothing needed doing; with it stripped,
+a third invented id.
+
+### A sentence spliced in half, in all twelve specialist cores
+
+`"Omit resolved_events entirely when you were given no numbered events."` had
+another block pasted into its middle, orphaning the word `events.` two
+paragraphs later. English was repaired by relocation alone, not one word
+changed. **Japanese could not be** — it had been translated *from* the spliced
+English, so the sentence's object was simply absent, and `ja/offscreen` had
+swallowed the heading entirely: that block opened mid-thought with nothing ever
+saying an event might not be yours.
+
+And the defect nobody looked for: `ja/body` had translated three of six
+`reroute_to` roster **values** and `ja/objects` all six. `reroute_to` is matched
+by identity (`target in SPECIALISTS`), so **on a Japanese session the objects
+hand could address nobody** — every forwarding address dropped, routing falling
+back to the category map, which is the re-ask that block exists to prevent.
+
+### Stale authority: the author told to write what it cannot write
+
+`prose_author_sheet/08.txt` is **ungated core** and instructed the prose author
+to write `state_diff.entities` and `state_diff.rooms` on every beat — against
+12.txt and 27.txt stating those exist in no field of its output and are
+discarded unread. `09_transit.txt` was literally `{{fragment:transit_note}}`,
+the same fragment `director_establish` and `mapping_stage` include: right for
+those two, wrong for the hand that cannot write those channels, and gated on
+`sc["contained"]` alone so not rare. Routed rather than deleted — what the
+author still judges stays with the author.
+
+### Latches widened, vocabularies published
+
+`drive_shift` was erased by any silent later round (`merged = dict(new)` and a
+sixteen-name tuple it was not on). Two channel lists in `director_evidence` had
+drifted from `StateDiff`. `travel_interrupted`, `thoughts_omitted` and
+`CourierOp.freight` were asked for in prose and absent from the shape. Five
+engine-owned vocabularies were graded on and never published — room `size`
+among them, six values read against three published.
+
+Two failed toward **concealment**, where blank would have been safe:
+`inventory_ops.relation` copied verbatim into a containment mode hides an object
+from the room, and a tell's `channel` offers six body regions where perception
+recognises two sense modalities, so four of them are sight-only and a listener
+in the dark loses the tell.
+
+### Three caps ended fiction in silence
+
+`_MAX_OVERLAY_ENTRIES`, `OBLIGATION_CAP` and `WORLD_PRESSURE_CAP` each drop the
+**oldest** entry by list position, with no record — and in the two ledgers age
+is exactly the must-discharge signal, so the cap preferentially deleted the
+entry the next beat was about to be forced to act on. The evictions are now
+legible. The values are unchanged and remain an open question.
+
+### From live play
+
+The charter bridge asks which bodies are near by handing a **room** id to a
+filter that matches on **place**, inside a bare `except` that hid its own
+failures. 37 simulated people in one chat were unreachable for fourteen turns,
+and the whole subsystem read as unexercised. It now says when it is certainly
+dead, and the swallow reports.
+
+### Six copies kept, deliberately
+
+The six specialist cores are 8-of-10 paragraphs byte-identical in English and a
+shared fragment would collapse them — but the Japanese renderings measure
+0.70–0.93 pairwise, so one fragment would impose one hand's Japanese on the
+other five. Pinned by test instead, and the guard was proven to bite by
+restoring the pre-fix files: six failures. The pre-existing agreement test
+passed at HEAD, correctly — both defects were uniform pastes, which is exactly
+why nothing saw them.
+
+**11,069 tests pass**, up from 11,010. `project_check` clean, `compileall`
+clean over sixteen roots, nothing reverted.
+
 ## alpha 9.10.1 — The switch, and the half of the ruling that never shipped
 
 A point release for three things 9.10 claimed or implied and did not deliver.
