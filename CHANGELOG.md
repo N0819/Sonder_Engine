@@ -35,11 +35,22 @@ and fans out to the same six hands, and the ruling channel had been built into
 the resolve half only. Half the Director's specialist work ran with the hands
 inferring the reading from the declaration — invisible for the same reason the
 channel exists, since an absent ruling is indistinguishable from "this settled
-nothing". Three pieces were missing and all three were needed: the schema
-field, the beat view carrying it, and the declaration in the output shape. The
-normalization is now one function shared by both views, because a copy in each
-is how they drifted, and the test is pinned as a mirror rather than as two
-separate facts.
+nothing". Four places had to name the field before a model would write one:
+the schema, the beat view, the output shape, and — the one that took two
+attempts to find — `interpret_delegation_note`, which is appended AFTER the
+prompt body and so gets the last word. It closed with an enumeration of what
+stays the author's (`…speech, movement, follow_op, location_query,
+other_players, flow, notes`) that did not include `ledger_notes`, so the field
+was declared in the shape and excluded three lines later. The model was right
+to omit it.
+
+The general lesson, since it cost two rounds: a prompt that enumerates what its
+output contains has to be updated at EVERY place it enumerates, and an
+enumeration nobody remembers exists is precisely what a closed list decays
+into. The normalization is now one function shared by both beat views, because
+a copy in each is how the halves drifted; the test builds the ASSEMBLED prompt
+rather than the body (asserting on the body is why this shipped once already);
+and it is pinned as a mirror rather than as two separate facts.
 
 Recorded because it did not work: rewriting the absence rule — the clause
 saying a missing note means "nothing changed", which contradicts eight other
