@@ -193,3 +193,65 @@ class TestMalformedLedgers:
         sc = {}
         _merge_overlays(sc, {"Ada": ["flush"]})
         assert sc["overlays"] == {"Ada": ["flush"]}
+
+
+class TestAnOverlayCanBeTakenOff:
+    """Overlays were the only body channel with no off-switch.
+
+    attire changes, conditions and transformations close with `active: false`,
+    vitals move both ways -- and an overlay could leave only by being pushed
+    out of the six-entry window by newer ones. Live, chat 111: the body
+    specialist wrote a climax as overlays on turn 34 ("violent shuddering and
+    intense spasms throughout body", "tears escape eyes"), and both were still
+    on the ledger at turn 52, because only three further overlays were written
+    in the eighteen beats between and the cap never reached them.
+
+    The ending is spelled the way a condition's is, and matched on the handle
+    set the dedupe already uses -- so it reaches its entry whether that entry
+    was written as a bare line or as a record, without the Director naming an
+    id it was never shown.
+    """
+
+    def test_a_record_ending_removes_the_bare_line_that_says_the_same_thing(self):
+        out = _merged(["soot at the jaw"],
+                      [{"name": "soot at the jaw", "active": False}])
+        assert out == []
+
+    def test_an_ending_removes_the_record_it_names(self):
+        standing = [{"name": "soot", "description": "soot at the jaw"}]
+        assert _merged(standing, [{"name": "soot", "active": False}]) == []
+
+    def test_it_takes_off_only_what_it_names(self):
+        out = _merged(["soot at the jaw", "soaked hair"],
+                      [{"name": "soot at the jaw", "active": False}])
+        assert out == ["soaked hair"]
+
+    def test_an_ending_is_not_itself_stored_as_an_overlay(self):
+        """The obvious bug: the ending lands as a new entry describing the
+        thing it was supposed to remove."""
+        out = _merged([], [{"name": "glitter", "active": False}])
+        assert out == []
+
+    def test_ending_and_adding_in_one_beat_both_happen(self):
+        out = _merged(["soot at the jaw"],
+                      [{"name": "soot at the jaw", "active": False},
+                       "blood at the temple"])
+        assert out == ["blood at the temple"]
+
+    def test_a_beat_that_restates_and_ends_the_same_mark_ends_it(self):
+        """Endings apply last: the ending is the beat's final word."""
+        out = _merged(["soot at the jaw"],
+                      ["soot at the jaw",
+                       {"name": "soot at the jaw", "active": False}])
+        assert out == []
+
+    def test_a_bare_line_can_never_be_an_ending(self):
+        """A line of prose is the fact itself and has nowhere to put 'not'."""
+        out = _merged(["soot at the jaw"], ["the soot is gone"])
+        assert "soot at the jaw" in out and "the soot is gone" in out
+
+    def test_an_ending_with_no_handle_removes_nothing(self):
+        """Same floor the dedupe keeps: a shape with no handle is never
+        matched against anything, so it cannot delete what it does not name."""
+        out = _merged(["soot at the jaw"], [{"active": False}])
+        assert out == ["soot at the jaw"]

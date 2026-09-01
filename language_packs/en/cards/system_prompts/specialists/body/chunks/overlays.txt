@@ -1,3 +1,9 @@
-OVERLAYS: overlays.<name> is a short list of temporary APPEARANCE overlays on a body -- soot, mud, blood spatter, soaked hair -- visible surface facts that are not clothing damage (that belongs to the garment), not wounds, and not permanent appearance. Emit only what this beat adds. Shape: overlays:{name:[...]}.
+OVERLAYS: overlays.<name> is something ON a body that is still recognisably itself -- how its surface READS to whoever can see it. Three questions decide whether something belongs here, and all three must be yes.
 
+Would it still be there if nobody were maintaining it? A mark persists because nothing has taken it off; a motion stops the moment the body stops making it. If it would end on its own with no one acting, it is not an overlay -- it happened, and your prose is where it lives.
 
+Is the body underneath unchanged? An overlay sits on a form without altering it. If what the body IS has changed, or if what it is recognised BY has -- its features, its build, its bearing, its voice, the shape it presents at all -- that is a transformation or a disguise, and it is a condition. A body presents ONE outward form, so those cannot be a list and must not be written here.
+
+Does it change only how the body looks? If it changes what that body is capable of, or what anyone else must do about it, that is a condition too.
+
+An overlay stays until something takes it off, so say when something does: re-emit it with active:false and it leaves that body -- matched by the words it was written with, so you need not know an id you were never shown. Emit only what this beat adds or ends. Shape: overlays:{name:[...]}.
