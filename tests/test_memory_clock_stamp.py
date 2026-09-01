@@ -441,9 +441,23 @@ def test_no_migration_statement_derives_a_reading_from_a_turn_index(temp_db):
                 f"turn_idx: {statement}")
 
 
-def test_the_migration_is_the_last_one_and_the_schema_declares_it(temp_db):
-    """The backfill has to belong to the version that adds the column."""
-    assert any("encoded_at_seconds" in s for s in db.MIGRATIONS[-1])
+#: The schema version whose migration adds `memories.encoded_at_seconds`.
+#: The migration that takes a database TO version N lives at MIGRATIONS[N-2].
+ENCODED_AT_SECONDS_VERSION = 34
+
+
+def test_the_migration_belongs_to_the_version_that_adds_the_column(temp_db):
+    """The backfill has to belong to the version that adds the column.
+
+    This asserted `MIGRATIONS[-1]` until 2026-09-01, which was the same thing
+    only while v34 happened to be newest: the next migration to land (v35, the
+    debug-capture tables) moved the column's own migration off the end and the
+    test failed for a reason that had nothing to do with the property it
+    names. Pinned to the version instead, so it keeps testing the claim in its
+    docstring rather than the shape of the list.
+    """
+    index = ENCODED_AT_SECONDS_VERSION - 2
+    assert any("encoded_at_seconds" in s for s in db.MIGRATIONS[index])
     assert len(db.MIGRATIONS) + 1 == db.SCHEMA_VERSION
     cols = {r["name"] for r in temp_db.q("PRAGMA table_info(memories)")}
     assert "encoded_at_seconds" in cols

@@ -1725,6 +1725,37 @@ def export_preset(name: str):
     return document
 
 
+@app.get("/api/turns/{turn_id}/debug")
+def turn_debug_export(turn_id: int, content: int = 1):
+    """One turn as a chronological debug artifact: what was sent, what came
+    back including reasoning, and what the deterministic layer decided.
+
+    `content=0` returns the hash-only skeleton, which is safe to paste into an
+    issue: it proves which sheet and which payload ran without carrying the
+    story. The bodies are present only if capture was ON when the turn ran --
+    the artifact reports that rather than looking complete.
+    """
+    from persist.pipeline_trace import PipelineTraceError, export_turn_debug
+    try:
+        return export_turn_debug(turn_id, include_content=bool(content))
+    except PipelineTraceError as exc:
+        raise HTTPException(404, str(exc)) from exc
+
+
+@app.get("/api/chats/{cid}/debug")
+def chat_debug_export(cid: int, content: int = 1, limit: int = 50):
+    """The same for a whole chat, oldest turn first.
+
+    `limit` is a real bound and the artifact says which one it applied, so a
+    partial export can never be mistaken for the whole chat.
+    """
+    from persist.pipeline_trace import export_chat_debug
+    if not q("SELECT id FROM chats WHERE id=?", (cid,), one=True):
+        raise HTTPException(404, "No such chat.")
+    return export_chat_debug(cid, include_content=bool(content),
+                             limit=max(1, min(int(limit), 500)))
+
+
 @app.post("/api/prompt_presets/import")
 def import_preset(body: dict = Body(...)):
     document = body.get("preset")

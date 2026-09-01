@@ -17,6 +17,8 @@ from language_runtime import current_language_id, story_language
 from core.pipeline_context import (
     ChatData, PipelineContext, TurnData, current_step_key,
     current_warning_sink,
+    current_decision_sink,
+    current_exchange_sink,
 )
 from llm.providers import (
     Aborted, _check_cancel, abort_live_requests, call_ledger_sink,
@@ -353,6 +355,8 @@ def compute_step(key, ctx, nonce):
     # StepTaggedWarnings documents), and a missing add_warning must mean "no
     # notes", never a failed step.
     sink = current_warning_sink.set(getattr(ctx, "add_warning", None))
+    dsink = current_decision_sink.set(getattr(ctx, "note_decision", None))
+    xsink = current_exchange_sink.set(getattr(ctx, "note_exchange", None))
     # The per-call ledger rides the same funnel again: providers._log_usage
     # reports every finished call here, the context stamps it with the step
     # key, and _with_engine_notes persists the step's slice on the saved
@@ -379,6 +383,8 @@ def compute_step(key, ctx, nonce):
     finally:
         call_ledger_sink.reset(ledger)
         current_warning_sink.reset(sink)
+        current_decision_sink.reset(dsink)
+        current_exchange_sink.reset(xsink)
         current_step_key.reset(token)
 
 
@@ -402,6 +408,28 @@ def _with_engine_notes(content, ctx, key, parallel_with=()):
              if hasattr(ctx, "llm_calls_for_step") else [])
     if calls:
         notes["llm_calls"] = calls
+    # What the deterministic layer decided while this step ran -- including
+    # the times it correctly DECLINED, which warnings never record because
+    # nothing needed repairing. See PipelineContext.decisions.
+    decisions = (ctx.decisions_for_step(key)
+                 if hasattr(ctx, "decisions_for_step") else [])
+    if decisions:
+        notes["decisions"] = decisions
+    # Content capture goes to its own table rather than into the notes: it is
+    # large, it is deduplicated across turns by hash, and the Director's six
+    # specialists have no step of their own to hang it on. No-op when debug
+    # capture is off, which is the default.
+    exchanges = (ctx.exchanges_for_step(key)
+                 if hasattr(ctx, "exchanges_for_step") else [])
+    if exchanges:
+        try:
+            from persist.llm_capture import record_exchange
+            for entry in exchanges:
+                record_exchange(turn_id=getattr(ctx, "turn_id", None), **{
+                    k: v for k, v in entry.items() if k != "step_key"},
+                    step_key=key)
+        except Exception:
+            pass
     if not notes:
         # Absent rather than empty: a step with nothing to report should not
         # grow a key, so an unchanged pipeline produces byte-identical content.
