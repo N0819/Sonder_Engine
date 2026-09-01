@@ -48,7 +48,8 @@ LANGUAGES = ("en", "ja")
 #: BOTH lost the same file. It moves when a prompt or fragment is added, and
 #: the move belongs in the same commit as the addition.
 #: 111 at the split (2026-08-29); 112 since `card_person_note` (2026-08-30).
-PART_COUNT = 112
+PART_COUNT = 113   # +1 (2026-09-01): director_note.txt, the specialists' one
+                   # statement about the Director's ruling channel
 
 
 def _pack_dir(language: str) -> Path:
