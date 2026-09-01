@@ -16,6 +16,7 @@ Mechanism under test:
   director enforces the flag with one bounded correction retry.
 """
 
+import contextlib
 import json
 import time
 
@@ -273,3 +274,91 @@ def test_must_tick_violation_that_survives_retry_warns(temp_db, monkeypatch):
     assert any("must-tick violated" in w.lower() or
                "must-tick" in w for w in ctx.warnings)
     assert out.get("world_pressure_warnings")
+
+
+# ---- the cap is a resolution, so its evictions must be recorded ----
+
+
+@contextlib.contextmanager
+def _under_commit_step(ctx):
+    """Run a block with the sinks `agents.runtime.compute_step` installs for
+    the commit step, so `note_step_decision` from inside a commit domain
+    reaches this ctx.
+
+    These tests drive a commit domain directly instead of through the runtime
+    funnel, which is the only place those contextvars are normally set.
+    Without this the decision channel is a no-op and the assertions below
+    would pass against an engine that recorded nothing.
+    """
+    from core.pipeline_context import current_decision_sink, current_step_key
+    token = current_step_key.set("commit")
+    sink = current_decision_sink.set(ctx.note_decision)
+    try:
+        yield
+    finally:
+        current_decision_sink.reset(sink)
+        current_step_key.reset(token)
+
+
+def test_pressure_dropped_by_cap_is_recorded_not_vanished(temp_db):
+    # Nine open processes against WORLD_PRESSURE_CAP=8: the oldest leaves by
+    # array slice, having neither resolved nor been shown ending. It is also
+    # the one with the longest held streak, so the entry the next payload
+    # would have flagged must_tick_this_beat is the first the cap deletes --
+    # the Enterprise Array failure reintroduced one cap-width later.
+    ctx = _make_ctx(temp_db, turn_idx=9)
+    temp_db.wset(ctx.chat.id, "world_pressures", [
+        {"id": "wp:1:%d" % i, "subject": "process %d" % i, "note": "",
+         "level": 1, "opened_turn": 1, "last_tick_turn": 1,
+         "held_streak": 3 if i == 0 else 0}
+        for i in range(commit.WORLD_PRESSURE_CAP)])
+    ctx.director_resolve = {"world_pressure": [
+        {"op": "open", "subject": "a fire in the hold"}]}
+
+    with _under_commit_step(ctx):
+        commit.commit_world_pressure(ctx, nonce=0)
+
+    survivors = temp_db.wget(ctx.chat.id, "world_pressures", [])
+    assert len(survivors) == commit.WORLD_PRESSURE_CAP
+    assert "wp:1:0" not in {entry["id"] for entry in survivors}
+
+    evictions = [d for d in ctx.decisions_for_step("commit")
+                 if d["verdict"] == "evicted_by_cap"]
+    assert len(evictions) == 1
+    only = evictions[0]
+    assert only["kind"] == "world_pressure_ledger"
+    assert only["subject"] == "process 0"
+    assert "cap %d" % commit.WORLD_PRESSURE_CAP in only["reason"]
+    # Silence bumped the streak to 4 on the way past; the point is that the
+    # log carries it, so a reader sees the cap ate a stalled pressure.
+    assert "held_streak=4" in only["reason"]
+    assert "WAS STALLED" in only["reason"]
+    assert "unresolved" in only["reason"]
+
+
+def test_pressure_ledger_under_cap_records_no_eviction(temp_db):
+    ctx = _make_ctx(temp_db, turn_idx=9)
+    _entry(temp_db, ctx.chat.id)
+    ctx.director_resolve = {"world_pressure": [
+        {"op": "hold", "id": "wp:1:0"}]}
+
+    with _under_commit_step(ctx):
+        commit.commit_world_pressure(ctx, nonce=0)
+
+    assert [d for d in ctx.decisions_for_step("commit")
+            if d["verdict"] == "evicted_by_cap"] == []
+
+
+def test_a_resolve_op_is_not_logged_as_a_cap_eviction(temp_db):
+    # The distinction the log exists for: a process the beat ENDED must not
+    # read like one the cap deleted.
+    ctx = _make_ctx(temp_db, turn_idx=9)
+    _entry(temp_db, ctx.chat.id)
+    ctx.director_resolve = {"world_pressure": [
+        {"op": "resolve", "id": "wp:1:0"}]}
+
+    with _under_commit_step(ctx):
+        result = commit.commit_world_pressure(ctx, nonce=0)
+
+    assert result["resolved"] == 1
+    assert ctx.decisions_for_step("commit") == []

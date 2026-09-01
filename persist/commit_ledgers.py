@@ -6,6 +6,7 @@ See docs/experiments/AUDIT_COMMIT.md for the split record.
 """
 
 from core.db import wget, wset
+from core.pipeline_context import note_step_decision
 from persist.commit_common import _normalized_fact
 
 # ---- Obligation ledger ----
@@ -19,6 +20,19 @@ from persist.commit_common import _normalized_fact
 # prompt's hard rule forbid re-deferring an obligation past its window.
 
 OBLIGATION_OVERDUE_AGE = 2   # beats after which an open obligation must discharge
+
+#: How many open obligations the ledger carries. Applied as `ledger[-CAP:]`,
+#: so what it drops is the OLDEST -- which is precisely what
+#: `pending_obligation_view` is likeliest to have flagged
+#: must_discharge_this_beat, because in this ledger AGE IS THE SIGNAL. A cap
+#: that deletes the oldest open debt has decided a standing fact is over by
+#: list position: a discharge nobody adjudicated and no beat narrated.
+#:
+#: The NUMBER is not defended here; it is the owner's call. What is defended
+#: is that every eviction it makes is written to the turn's decision log
+#: (`evicted_by_cap`, carrying the debtor, the debt, its age and whether it
+#: was overdue), so a reader can tell a cap eviction from a discharge or a
+#: refusal instead of finding the debt simply absent next beat.
 OBLIGATION_CAP = 12
 
 def pending_obligation_view(chat_id, turn_idx):
@@ -63,6 +77,17 @@ def _find_obligation(ledger, op):
         if entry_what and (what in entry_what or entry_what in what):
             return i
     return None
+
+def _beats_open(turn_idx, opened_turn):
+    """How many beats an entry has stood, tolerating a missing or malformed
+    `opened_turn` the same way `pending_obligation_view` does -- a ledger
+    entry restored from an old archive must not raise inside the commit
+    lock and roll the turn back."""
+    try:
+        return max(0, int(turn_idx) - int(opened_turn))
+    except (TypeError, ValueError):
+        return 0
+
 
 def commit_obligations(ctx, nonce):
     """Apply director_resolve's obligation ops to the pending_obligations
@@ -125,6 +150,23 @@ def commit_obligations(ctx, nonce):
             )
 
     if len(ledger) > OBLIGATION_CAP:
+        # The oldest debts leave here, and leaving here is not the same event
+        # as being discharged or refused -- nothing adjudicated them and no
+        # prose says they ended. Recorded per entry so the decision log can
+        # tell the two apart; see OBLIGATION_CAP.
+        for entry in ledger[:-OBLIGATION_CAP]:
+            age = _beats_open(turn.idx, entry.get("opened_turn"))
+            note_step_decision(
+                "obligation_ledger",
+                "%s owes %s" % (entry.get("who") or "someone",
+                                entry.get("what") or "?"),
+                "evicted_by_cap",
+                "ledger held %d open obligations against cap %d; this was the "
+                "oldest. id=%s kind=%s opened_turn=%s age=%d beats%s -- "
+                "neither discharged nor refused, and no longer tracked."
+                % (len(ledger), OBLIGATION_CAP, entry.get("id"),
+                   entry.get("kind"), entry.get("opened_turn"), age,
+                   " (WAS OVERDUE)" if age >= OBLIGATION_OVERDUE_AGE else ""))
         ledger = ledger[-OBLIGATION_CAP:]
     wset(cid, "pending_obligations", ledger)
     return {"opened": opened, "discharged": discharged,
@@ -138,6 +180,18 @@ def commit_obligations(ctx, nonce):
 # escalate or its stillness must be a repeated, visible choice, never a
 # default. 2 held beats -> the 3rd beat's payload demands a tick.
 WORLD_PRESSURE_STALL_AGE = 2
+
+#: How many open pressures the ledger carries. Same shape and same hazard as
+#: OBLIGATION_CAP: `ledger[-CAP:]` drops the oldest, and the oldest is the
+#: one whose held-streak has had longest to grow, so the entry the next
+#: payload would have flagged must_tick_this_beat is the first one deleted --
+#: the Enterprise Array failure (a probed artifact nothing ever answered)
+#: reintroduced by array slice, one cap-width later.
+#:
+#: The NUMBER is the owner's call. Every eviction is written to the turn's
+#: decision log (`evicted_by_cap`, with the subject, level and held streak),
+#: so an ongoing process that stops being tracked is distinguishable from one
+#: the Director resolved.
 WORLD_PRESSURE_CAP = 8
 
 
@@ -295,6 +349,24 @@ def commit_world_pressure(ctx, nonce):
             )
 
     if len(ledger) > WORLD_PRESSURE_CAP:
+        # An ongoing process leaving the ledger here did NOT resolve: no op
+        # ended it and no beat showed it ending. Recorded per entry so the
+        # decision log separates the two; see WORLD_PRESSURE_CAP.
+        for entry in ledger[:-WORLD_PRESSURE_CAP]:
+            try:
+                held = max(0, int(entry.get("held_streak") or 0))
+            except (TypeError, ValueError):
+                held = 0
+            note_step_decision(
+                "world_pressure_ledger", str(entry.get("subject") or "?"),
+                "evicted_by_cap",
+                "ledger held %d open pressures against cap %d; this was the "
+                "oldest. id=%s level=%s opened_turn=%s held_streak=%d%s -- "
+                "unresolved, and no longer tracked or flagged."
+                % (len(ledger), WORLD_PRESSURE_CAP, entry.get("id"),
+                   entry.get("level"), entry.get("opened_turn"), held,
+                   " (WAS STALLED)" if held >= WORLD_PRESSURE_STALL_AGE
+                   else ""))
         ledger = ledger[-WORLD_PRESSURE_CAP:]
     wset(cid, "world_pressures", ledger)
     return {"opened": opened, "ticked": ticked, "held": held,

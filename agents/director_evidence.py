@@ -296,15 +296,183 @@ def _strip_blank_diff_placeholders(sd):
 
     return signals
 
-def _diff_is_substantive(sd):
-    """True when the diff asserts any physical change at all (post-strip)."""
-    for key in ("rooms", "entities", "conditions", "attire", "overlays",
-                "positions", "poses", "remove_entities", "remove_rooms",
-                "remove_adjacent", "inventory_ops", "contact_ops",
-                "contact_action_ops", "substance_ops", "cast_changes"):
-        if sd.get(key):
+# ---------------------------------------------------------------------------
+# THE STATEDIFF CHANNEL TABLES
+#
+# The two readers that ask a question ABOUT a whole diff -- the tripwire's
+# "did this diff encode anything" (`_diff_is_substantive`, below) and the
+# subject containment check (`_omission_subject_encoded`) -- each restated a
+# SUBSET of StateDiff by hand, and each had drifted from it. Measured against
+# the 37-channel schema: the tripwire counted 16, so a beat encoded only in
+# `containment`, `stations`, `scales` or `vitals` read as encoding nothing at
+# all and bought the deep audit the tripwire exists to buy; and the
+# containment check, whose docstring promises ANY diff field, walked 13, so a
+# player-asserted effect landing in `overlays`, `stations`, `containment`,
+# `vitals` or `scales` was judged UNENCODED and bought the Director a repair
+# call for a beat it had already encoded correctly. Both drifts fail toward
+# spending a model call on a diff that was fine.
+#
+# So the SCHEMA is the enumeration and these tables record only what is not
+# ordinary. Every StateDiff channel must appear in exactly one of them, which
+# `tests/test_director_diff_channels.py` asserts channel by channel: when the
+# schema grows one, that test fails and the author classifies it. A hand-kept
+# list that has to track a schema is only ever as current as the guard that
+# fails when the schema moves.
+# ---------------------------------------------------------------------------
+
+
+def _state_diff_channels():
+    """Every declared StateDiff channel, on either Pydantic major."""
+    return frozenset(schemas._fields(schemas.StateDiff) or {})
+
+
+# Channels a diff can carry while having encoded no change of this beat's own.
+# The reason is the load-bearing part: each is bookkeeping ABOUT a change, a
+# change scheduled for some OTHER beat, or a channel present on nearly every
+# diff -- and a channel present on nearly every diff cannot separate a diff
+# that encoded the beat from one that did not, which is the only question the
+# tripwire asks.
+_NON_SUBSTANTIVE_CHANNELS = {
+    "phase_sources": "provenance for another channel's value, stripped by the "
+                     "causal floor before merge; the change is in the channel "
+                     "it points at",
+    "time": "every beat advances the clock, so its presence separates nothing",
+    "weather": "the sky drifts on its own clock (weather.advance_weather); "
+               "ambient dressing is no evidence the beat's own act landed",
+    "following_ops": "projected deterministically from the interpretation and "
+                     "the character decisions -- the resolve does not author "
+                     "it, so it cannot show that the resolve encoded anything",
+    "world_facts": "a lore sentence records what the world IS, not what this "
+                   "beat DID",
+    "introductions": "a name learned; whatever physical act carried it is in "
+                     "the counted channels",
+    "ratified_claims": "a verdict on an EARLIER beat's hearsay",
+    "contradicted_claims": "the same verdict, negated",
+    "claim_dispositions": "an adjudication of a player claim, present whenever "
+                          "the player claimed anything; what it licensed is "
+                          "encoded in the counted channels",
+    "consequences": "explicitly NOT this beat's outcome -- a fuse fired when "
+                    "the clock reaches it (the schema's own comment says so)",
+    "offscreen_plan_ops": "a plan adjudicated into future stages, for the "
+                          "reason consequences gives",
+}
+
+_SUBSTANTIVE_CHANNELS = frozenset(
+    _state_diff_channels() - set(_NON_SUBSTANTIVE_CHANNELS))
+
+
+# WHERE A SUBJECT'S IDENTITY CAN SIT, per channel. Identity keys only: a prose
+# field (`consequences.what`, an op's `detail` or `reason`, a world_fact
+# sentence) is deliberately not searched, because this check's answer decides
+# whether the Director is asked to repair, and a subject that merely appears
+# as a substring of prose would acquit the omission the check exists to find.
+
+# Dict channels, keyed BY the subject. The tuple is the identity keys inside
+# the value, which may be a dict or (conditions) a list of them.
+_SUBJECT_KEYED_CHANNELS = {
+    "positions": (),
+    "rooms": ("name",),
+    "entities": ("name", "aliases"),
+    "attire": (),
+    # `relative_to` stays out: it names the body a pose is MEASURED against,
+    # and the entry says nothing about that body's own state.
+    "poses": (),
+    "stations": (),
+    "scales": (),
+    # Containment is a two-body fact, like a contact, so the holder counts as
+    # much as the contained (contact_ops has always counted its target).
+    "containment": ("in",),
+    "vitals": (),
+    "overlays": (),
+    # The key IS the condition_id, which the entries repeat.
+    "conditions": ("subject_id", "condition_id"),
+}
+
+# Channels whose VALUE is the subject: a list of ids, or the one bare string.
+_SUBJECT_VALUE_CHANNELS = frozenset({
+    "remove_entities", "remove_rooms", "location",
+})
+
+# Op channels -- a list of records, or the single dict `destruction` arrives
+# as -- and the keys in a record that name a body, an object, a room, or a
+# thing the engine minted an id for.
+_SUBJECT_OP_CHANNELS = {
+    "remove_adjacent": ("room", "to"),
+    "inventory_ops": ("object_id", "from_id", "to_id"),
+    "contact_ops": ("actor", "target"),
+    "contact_action_ops": ("actor", "action"),
+    "substance_ops": ("source", "target", "substance"),
+    "following_ops": ("follower", "target"),
+    "cast_changes": ("who",),
+    "introductions": ("who", "learns"),
+    "comms_ops": ("id", "name", "rooms", "carriers"),
+    "crowd_ops": ("crowd_id", "who", "room"),
+    "telling_ops": ("speaker", "listener"),
+    "courier_ops": ("courier_id", "sender", "addressee", "listener", "by",
+                    "from_room", "to_room"),
+    "artifact_ops": ("artifact_id", "poster", "room", "reader", "by"),
+    "offscreen_plan_ops": ("plan_id", "actor"),
+    "consequences": ("where", "originator"),
+    "destruction": ("effect_id", "target_id", "affected_locations"),
+}
+
+# A manifest subject that names the CHANNEL rather than a body ("contacts",
+# "substance"): any record in that channel is the encoding. Carried over from
+# the hand-written version, which checked these same three inline.
+_CHANNEL_WORD_SUBJECTS = {
+    "contact_ops": ("contact", "contacts"),
+    "contact_action_ops": ("contactaction", "contactactions", "contacteffect"),
+    "substance_ops": ("substance", "substances", "material"),
+}
+
+# The rest: channels holding no world identity at all, and why not.
+_SUBJECTLESS_CHANNELS = {
+    "phase_sources": "keys are '<channel>.<subject>' provenance strings; the "
+                     "subject they name is already read in that channel",
+    "time": "a clock reading",
+    "weather": "one sky over the whole scene, keyed by nothing",
+    "world_facts": "prose, or {fact, source} around prose -- see the "
+                   "identity-only rule above",
+    "ratified_claims": "claim references, in the claims namespace rather than "
+                       "the world's",
+    "contradicted_claims": "the same claim references, rejected instead of "
+                           "ratified",
+    "claim_dispositions": "keyed by claim_id, and a verdict is not an "
+                          "encoding: believing one here would acquit exactly "
+                          "the omission this check exists to find",
+}
+
+
+def _channel_records(value):
+    """The records an op-shaped channel carries: a list of dicts, or the
+    single dict `destruction` arrives as."""
+    if isinstance(value, dict):
+        return [value]
+    if not isinstance(value, (list, tuple)):
+        return []
+    return [v for v in value if isinstance(v, dict)]
+
+
+def _hits_identity(record, keys, hits):
+    """Does any of `keys` on this record name the subject? A key's value may
+    be a string or a list of them (`entities.aliases`, `comms_ops.rooms`)."""
+    for key in keys:
+        value = record.get(key)
+        if isinstance(value, (list, tuple, set)):
+            if any(isinstance(v, str) and hits(v) for v in value):
+                return True
+        elif isinstance(value, str) and hits(value):
             return True
     return False
+
+
+def _diff_is_substantive(sd):
+    """True when the diff asserts any physical change at all (post-strip).
+
+    Every StateDiff channel counts except the ones `_NON_SUBSTANTIVE_CHANNELS`
+    names and says why -- derived, so a channel the schema grows counts by
+    default instead of silently reading as nothing encoded."""
+    return any(sd.get(key) for key in _SUBSTANTIVE_CHANNELS)
 
 def _beat_has_physical_activity(interp, char_actions, dice):
     """Deterministic gate input: did anyone attempt a physical act this
@@ -517,58 +685,36 @@ def _omission_subject_encoded(sd, subject, forms=None):
     subject (under any identity form)? Intentionally shallow -- it verifies
     the diff addressed the subject at all, not that the encoding is
     semantically right; the Director owns the semantics. Category-agnostic
-    fallback; _evidence_present is the category-aware form."""
-    hits = _make_subject_hit(subject, forms)
+    fallback; _evidence_present is the category-aware form.
 
-    for field in ("rooms", "entities", "attire", "positions", "poses"):
-        for key, value in (sd.get(field) or {}).items():
+    ANY means every StateDiff channel: the tables above say where an identity
+    can sit in each one, and name the seven that hold none. A channel this
+    does not walk is a channel in which a CORRECT encoding reads as an
+    omission, and the answer here is what decides whether the Director is
+    asked to repair a beat that was already right."""
+    hits = _make_subject_hit(subject, forms)
+    normalized = _norm_subject(subject)
+
+    for field, value_keys in _SUBJECT_KEYED_CHANNELS.items():
+        table = sd.get(field)
+        if not isinstance(table, dict):
+            continue
+        for key, value in table.items():
             if hits(key):
                 return True
-            if isinstance(value, dict) and hits(value.get("name")):
+            if value_keys and any(_hits_identity(record, value_keys, hits)
+                                  for record in _channel_records(value)):
                 return True
-    for cond_value in (sd.get("conditions") or {}).values():
-        cond_list = cond_value if isinstance(cond_value, list) else [cond_value]
-        for c in cond_list:
-            if isinstance(c, dict) and (hits(c.get("subject_id"))
-                                        or hits(c.get("condition_id"))):
+    for field in _SUBJECT_VALUE_CHANNELS:
+        value = sd.get(field)
+        for item in ([value] if isinstance(value, str) else (value or [])):
+            if hits(item):
                 return True
-    for item in (sd.get("remove_entities") or []) + (sd.get("remove_rooms") or []):
-        if hits(item):
+    for field, keys in _SUBJECT_OP_CHANNELS.items():
+        records = _channel_records(sd.get(field))
+        if any(_hits_identity(record, keys, hits) for record in records):
             return True
-    for edge in (sd.get("remove_adjacent") or []):
-        if isinstance(edge, dict) and (hits(edge.get("room"))
-                                       or hits(edge.get("to"))):
-            return True
-    for chg in (sd.get("cast_changes") or []):
-        if isinstance(chg, dict) and hits(chg.get("who")):
-            return True
-    for op in (sd.get("inventory_ops") or []):
-        if isinstance(op, dict) and (hits(op.get("object_id"))
-                                     or hits(op.get("from_id"))
-                                     or hits(op.get("to_id"))):
-            return True
-    for op in (sd.get("contact_ops") or []):
-        if not isinstance(op, dict):
-            continue
-        if hits(op.get("actor")) or hits(op.get("target")):
-            return True
-        if _norm_subject(subject) in ("contact", "contacts"):
-            return True
-    for op in (sd.get("contact_action_ops") or []):
-        if not isinstance(op, dict):
-            continue
-        if hits(op.get("actor")) or hits(op.get("action")):
-            return True
-        if _norm_subject(subject) in (
-                "contactaction", "contactactions", "contacteffect"):
-            return True
-    for op in (sd.get("substance_ops") or []):
-        if not isinstance(op, dict):
-            continue
-        if (hits(op.get("source")) or hits(op.get("target"))
-                or hits(op.get("substance"))):
-            return True
-        if _norm_subject(subject) in ("substance", "substances", "material"):
+        if records and normalized in _CHANNEL_WORD_SUBJECTS.get(field, ()):
             return True
     return False
 

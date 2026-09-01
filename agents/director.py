@@ -447,6 +447,71 @@ def director_establish(ctx, nonce):
     return out
 
 
+def _interpret_scene_entities(sc, contextual_rooms):
+    """The entities dict to serialize into the INTERPRET payload: the ones the
+    windowed rooms can actually be about.
+
+    `scene.rooms` has been trimmed to the occupied rooms and their neighbours
+    since `_contextual_rooms` was written, and `entities` was not, so the
+    payload carried full records -- name, description, aliases, state -- for
+    furniture in rooms it had deliberately declined to describe. Measured over
+    the 92 live chats whose scene has entities and resolvable centres: 11.5% of
+    the entity bytes are in rooms outside the window, median 0 (a one-room
+    story hides nothing), p90 799 bytes, max 4,389 on chat 12's eight-room
+    world -- ~1,100 tokens off the largest interpret call, on the same order as
+    the 618 `scene_compact_attire` took off resolve.
+
+    TWO CLASSES SURVIVE THE WINDOW, and both are the point of the rule rather
+    than exceptions to it:
+
+    * An entity with NO resolvable room at all. That is the same set
+      `director_floors.unplaced_entities` reports as a defect -- ubiquitous
+      voices, things mid-transit or linked, and the 128 live records (16% of
+      the corpus) that simply never got a position. A payload trim must not be
+      the thing that decides an unplaced entity does not exist.
+    * An entity a windowed room is the INSIDE of. Containment is not
+      adjacency: a room names its holder as `parent_entity` and the holder
+      names the room in `interior_rooms`, and neither link is an edge
+      `nearby_rooms` walks. Live, three chats of 92: chat 56's player stands
+      in `tardis_console_room` while the TARDIS entity itself sits in
+      `alley_room`, so a bare room-window drops the police box out from around
+      her; chat 10 does it to the freighter Long Odds AND the TARDIS at once,
+      chat 33 to the turbolift car its two occupants are riding in.
+
+    Payload only, like every trim in this file -- `sc` stays whole for
+    deterministic checks, and `positions` ships whole beside this, so an id
+    here whose record was dropped reads exactly like the room ids
+    `_contextual_rooms` already drops (tools/payload_scan.py lists that shape
+    as by-design).
+    """
+    entities = (sc or {}).get("entities") or {}
+    if not isinstance(entities, dict):
+        return entities
+    window = set(contextual_rooms or {})
+    holders = set()
+    for rid in window:
+        room = (contextual_rooms or {}).get(rid)
+        if isinstance(room, dict):
+            holder = str(room.get("parent_entity") or "").strip()
+            if holder:
+                holders.add(holder)
+    kept = {}
+    for eid, ent in entities.items():
+        if not isinstance(ent, dict):
+            kept[eid] = ent
+            continue
+        name = str(ent.get("name") or "").strip()
+        room = room_of(sc, str(eid))
+        if room is None and name:
+            room = room_of(sc, name)
+        if (room is None or room in window
+                or str(eid) in holders or (name and name in holders)
+                or any(rid in window
+                       for rid in (ent.get("interior_rooms") or []))):
+            kept[eid] = ent
+    return kept
+
+
 def director_interpret(ctx, nonce):
     from persist.commit import presence_name_items
     chat = ctx.chat
@@ -497,6 +562,10 @@ def director_interpret(ctx, nonce):
     raw_intents = wget(chat["id"], "standing_intentions", []) or []
     fm = fiction_model(chat["id"])
     clock = simulation_clock(chat["id"])
+    # Bound once: the room window decides what the entity table is scoped to,
+    # and two calls could not be made to disagree about which rooms this beat
+    # is about without a body's holder falling into the gap between them.
+    _interpret_rooms = _contextual_rooms(sc, ctx.cast, p_room)
 
     # Authored future events the player scheduled on a prior beat and that are
     # due NOW (P4). Delivered with a resolve-now contract; commit_authored_events
@@ -521,8 +590,12 @@ def director_interpret(ctx, nonce):
             # as `display` -- to the one hand that owns the `time` channel,
             # which is a payload teaching the model to write the defect back.
             "time_of_day": sc.get("time_of_day"),
-            "rooms": _contextual_rooms(sc, ctx.cast, p_room),
-            "entities": sc.get("entities"),
+            "rooms": _interpret_rooms,
+            # Scoped to those same rooms. Full records for the furniture of a
+            # room the payload declined to describe are bytes nothing in this
+            # beat can be about -- see `_interpret_scene_entities` for the two
+            # classes that survive the window anyway.
+            "entities": _interpret_scene_entities(sc, _interpret_rooms),
             "positions": sc.get("positions"),
             # Where in the room each body stands. Shown so the Director can
             # MAINTAIN the ledger -- it was being asked to write stations it
@@ -2400,6 +2473,13 @@ _PUBLIC_SPEECH_ACTS = frozenset({
     "threat", "accusation", "disclosure", "denial", "agreement",
     "refusal", "warning", "apology", "thanks", "praise", "insult",
     "challenge", "bargain", "other",
+    # The half of the commitment lifecycle that could never arrive. This set
+    # is a whitelist and everything outside it is coerced to "other" below,
+    # so these four -- which `charter_commitment.update_commitments` acts on
+    # by name, alongside `agreement` and `refusal` -- were unreachable: an
+    # undertaking could be opened, accepted and refused, and never disputed,
+    # released, repudiated or handed on. Four of the ledger's nine kinds.
+    "dispute", "release", "repudiation", "transfer",
 })
 
 
@@ -2828,6 +2908,29 @@ def director_resolve(ctx, nonce, _corrections=None):
             # is the one place where showing it a passage phrase under the
             # name `time` taught it to write one back.
             "time_of_day": sc.get("time_of_day"),
+            # THE STANDING SKY, for the one hand that owns it. `weather` is a
+            # prose-author channel -- it is not in `_DELEGATED_CHANNELS`, and
+            # the output shape names it as one of the five fields this hand's
+            # own state_diff carries -- and its sheet
+            # (prose_author_sheet/08.txt) asks for an edit ONLY when the beat
+            # changes the sky, while telling it the engine drifts the weather
+            # in between (`weather.advance_weather`, written back to
+            # `sc["weather"]` at commit_scene_state.py:1032). Both halves need
+            # the current value: "did THIS beat change it" is unanswerable
+            # against a sky nobody showed you, and so is "is the flash I am
+            # about to write thundersnow" -- a flag the drift sets on its own,
+            # one snowing storm in nine, which the same chunk forbids
+            # narrating lightning over snow without.
+            #
+            # Same class as `stations`, `contacts` and `overlays` above: a
+            # ledger the Director is asked to maintain and was never allowed
+            # to read. Cost, unlike those three, is BOUNDED rather than
+            # proportional -- the vocabulary is closed (world/weather.py) and
+            # the shape fixed, so it is 2 chars (`{}`) before any sky has been
+            # declared and 120-139 for every sky the engine can hold, measured
+            # over every `normalize_weather` output the vocabulary admits,
+            # against 4,187-8,463 for `attire` on the same scenes.
+            "weather": sc.get("weather") or {},
         },
         "simulation_clock": clock,
         # Who is currently under, and the condition_id each one must be
