@@ -1,5 +1,7 @@
 INVENTORY: If objects change hands or positions, record in state_diff.inventory_ops.
 
+`to_id` is where the thing ENDED UP. A ROOM sets it down there, and `relation` is not read at all. A BODY carries it, and `relation` says HOW — in the same closed vocabulary the carried-body ledger uses, because your word becomes that ledger's mode verbatim. It decides whether the thing can still be SEEN: 'held', 'carried', 'riding', 'mounted' and 'worn' are carried in view, and anyone in the room can name the thing; 'pocket', 'container' and 'inside' are shut away, and a thing shut away is not perceived by the room at all. Anything you write that is not one of the five in-view words is read as shut away — so a word reached for outside this list HIDES what you just handed over, and a blade put into a fist as 'held_by' or 'in_hand' disappears from the room instead. If none of the words fits what happened, omit `relation`: an absent relation is an ordinary carry, in view.
+
 Shape: inventory_ops:[{op,object_id,from_id,to_id,relation,details}].
 
 

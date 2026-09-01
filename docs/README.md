@@ -92,6 +92,10 @@ World and body:
 
 - [`DESIGN_PLACE_PURPOSE.md`](design/DESIGN_PLACE_PURPOSE.md) — what a place is
   FOR. Built (v1).
+- [`DESIGN_CHARTER_SPATIAL_PROMOTION.md`](design/DESIGN_CHARTER_SPATIAL_PROMOTION.md)
+  — what a promoted charter body knows about where it is. Unbuilt; states the
+  two gaps (disjoint place/room namespaces, and `stood` being a tally rather
+  than a graph) and the options.
 - [`DESIGN_RUNNING.md`](design/DESIGN_RUNNING.md) — multi-room movement, bounded
   by decision rather than sight. Built.
 - [`DESIGN_SURFACE_COMFORT.md`](design/DESIGN_SURFACE_COMFORT.md) — ambient

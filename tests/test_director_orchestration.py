@@ -1298,7 +1298,7 @@ PROSE_DUTY_HEADINGS = {
     "obligations": "OBLIGATION LEDGER",
     "other_players": "OTHER PLAYERS' DECLARATIONS",
     "comm": "MEDIUM — COMM CHANNELS",
-    "transit": "TRANSIT / MOVING ROOMS",
+    "transit": "MOVING ROOMS",
     "mapping_proposal": "MAPPING SCENE PROPOSAL",
     "hearsay": "- HEARSAY:",
     "road": "- THE ROAD:",

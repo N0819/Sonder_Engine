@@ -17,6 +17,7 @@ claim) left without a fact_adjudications verdict is flagged.
 W5: the resolve payload carries a social_standing hint per present person.
 """
 
+import contextlib
 import json
 import time
 
@@ -249,3 +250,95 @@ def test_resolve_payload_carries_social_standing(temp_db, monkeypatch):
     assert standing["Mara"].startswith("Visiting ethics observer")
     # The player appears too (persona_public_history, possibly empty).
     assert "The Stranger" in standing
+
+
+# ---- the cap is a resolution, so its evictions must be recorded ----
+
+
+@contextlib.contextmanager
+def _under_commit_step(ctx):
+    """Run a block with the sinks `agents.runtime.compute_step` installs for
+    the commit step, so `note_step_decision` from inside a commit domain
+    reaches this ctx.
+
+    These tests drive a commit domain directly instead of through the runtime
+    funnel, which is the only place those contextvars are normally set.
+    Without this the decision channel is a no-op and the assertions below
+    would pass against an engine that recorded nothing.
+    """
+    from core.pipeline_context import current_decision_sink, current_step_key
+    token = current_step_key.set("commit")
+    sink = current_decision_sink.set(ctx.note_decision)
+    try:
+        yield
+    finally:
+        current_decision_sink.reset(sink)
+        current_step_key.reset(token)
+
+
+def test_obligation_dropped_by_cap_is_recorded_not_vanished(temp_db):
+    # Thirteen open debts against OBLIGATION_CAP=12: the oldest leaves by
+    # array slice. Nothing discharged or refused it, and before this it left
+    # no trace anywhere -- while being exactly the entry
+    # pending_obligation_view is likeliest to have flagged
+    # must_discharge_this_beat, since age IS the flag there.
+    ctx = _make_ctx(temp_db, turn_idx=5)
+    temp_db.wset(ctx.chat.id, "pending_obligations", [
+        {"id": "obl:1:%d" % i, "who": "Mara",
+         "what": "answer question %d" % i, "kind": "demand", "opened_turn": 1}
+        for i in range(commit.OBLIGATION_CAP)])
+    ctx.director_resolve = {"obligations": [
+        {"op": "open", "who": "Kell", "what": "hand over the key",
+         "kind": "demand"}]}
+
+    with _under_commit_step(ctx):
+        commit.commit_obligations(ctx, nonce=0)
+
+    survivors = temp_db.wget(ctx.chat.id, "pending_obligations", [])
+    assert len(survivors) == commit.OBLIGATION_CAP
+    assert "obl:1:0" not in {entry["id"] for entry in survivors}
+
+    evictions = [d for d in ctx.decisions_for_step("commit")
+                 if d["verdict"] == "evicted_by_cap"]
+    assert len(evictions) == 1
+    only = evictions[0]
+    assert only["kind"] == "obligation_ledger"
+    assert "Mara" in only["subject"]
+    assert "answer question 0" in only["subject"]
+    # A reader must be able to tell this from a discharge: the reason names
+    # the cap, the debt's age, that it was overdue, and that nobody ended it.
+    assert "cap %d" % commit.OBLIGATION_CAP in only["reason"]
+    assert "age=4 beats" in only["reason"]
+    assert "WAS OVERDUE" in only["reason"]
+    assert "neither discharged nor refused" in only["reason"]
+
+
+def test_obligation_ledger_under_cap_records_no_eviction(temp_db):
+    ctx = _make_ctx(temp_db, turn_idx=5)
+    temp_db.wset(ctx.chat.id, "pending_obligations", [
+        {"id": "obl:1:0", "who": "Mara", "what": "answer", "kind": "demand",
+         "opened_turn": 1}])
+    ctx.director_resolve = {"obligations": []}
+
+    with _under_commit_step(ctx):
+        commit.commit_obligations(ctx, nonce=0)
+
+    assert [d for d in ctx.decisions_for_step("commit")
+            if d["verdict"] == "evicted_by_cap"] == []
+
+
+def test_a_discharge_is_not_logged_as_a_cap_eviction(temp_db):
+    # The distinction the log exists for: a debt the beat ENDED must not read
+    # like one the cap deleted.
+    ctx = _make_ctx(temp_db, turn_idx=5)
+    temp_db.wset(ctx.chat.id, "pending_obligations", [
+        {"id": "obl:1:0", "who": "Mara", "what": "answer", "kind": "demand",
+         "opened_turn": 1}])
+    ctx.director_resolve = {"obligations": [{"op": "discharge",
+                                             "id": "obl:1:0"}]}
+
+    with _under_commit_step(ctx):
+        result = commit.commit_obligations(ctx, nonce=0)
+
+    assert result["discharged"] == 1
+    assert ctx.decisions_for_step("commit") == []

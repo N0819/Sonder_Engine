@@ -9,6 +9,7 @@ See docs/experiments/AUDIT_COMMIT.md for the split record.
 
 import copy
 from core.db import q, qi, transaction, wget, wset
+from core.pipeline_context import note_step_decision
 from mind.memory import add_lorebook_link
 from story.character_schema import character_name_from_text, persona_name
 from story.provenance_text import strip_engine_provenance
@@ -275,6 +276,14 @@ _OVERLAY_NON_HANDLE_FIELDS = frozenset(
 #: How many overlay entries one body's ledger keeps. Ageing them is a
 #: separate, unsolved problem (docs/UNBUILT.md 1.10): this cap is the only
 #: thing that bounds an overlay's life, and nothing here expires one.
+#:
+#: Applied as `[-CAP:]`, so what it drops is the OLDEST mark -- and since
+#: nothing else expires one, that eviction is the engine deciding a standing
+#: appearance fact is over because a seventh arrived, not because any beat
+#: said so. The NUMBER is the owner's call; every eviction is written to the
+#: turn's decision log (`evicted_by_cap`), so a mark that stops being
+#: rendered is distinguishable from one the Director ended with
+#: `active: false` above.
 _MAX_OVERLAY_ENTRIES = 6
 
 
@@ -295,6 +304,26 @@ def _overlay_handles(item) -> set:
         folded = item.strip().casefold()
         return {folded} if folded else set()
     return set()
+
+
+def _overlay_label(item) -> str:
+    """A short human handle for one overlay entry, for diagnostics only.
+
+    Deliberately not `_overlay_handles`: that reads the three fields dedupe
+    is willing to fold on, and an entry it cannot understand must stay
+    unmatched there. A log line has the opposite duty -- an entry nobody
+    understood is exactly the one a reader needs to see -- so this falls back
+    to the raw repr rather than to nothing.
+    """
+    if isinstance(item, str):
+        return item.strip()[:120]
+    if isinstance(item, dict):
+        parts = [str(item.get(field) or "").strip()
+                 for field in ("name", "description", "desc", "text")]
+        joined = " / ".join(part for part in parts if part)
+        if joined:
+            return joined[:120]
+    return repr(item)[:120]
 
 
 def _is_overlay_ending(item) -> bool:
@@ -446,8 +475,20 @@ def _merge_overlays(sc, incoming) -> None:
                       if not (_overlay_handles(item) & handles)]
         overlays[key] = merged
     for key in list(overlays):
-        overlays[key] = _dedupe_overlay_entries(
-            overlays[key])[-_MAX_OVERLAY_ENTRIES:]
+        deduped = _dedupe_overlay_entries(overlays[key])
+        # Dropping the head of this list is not deduplication and not an
+        # ending: it is the oldest mark on a body ceasing to exist because a
+        # newer one arrived. Recorded per entry so a reader of the decision
+        # log can tell it from the `active: false` path above, which is the
+        # only other way an overlay leaves. See _MAX_OVERLAY_ENTRIES.
+        for item in deduped[:-_MAX_OVERLAY_ENTRIES]:
+            note_step_decision(
+                "overlay_ledger", "%s: %s" % (key, _overlay_label(item)),
+                "evicted_by_cap",
+                "body carried %d overlays against cap %d; this was the "
+                "oldest. No ending was written for it."
+                % (len(deduped), _MAX_OVERLAY_ENTRIES))
+        overlays[key] = deduped[-_MAX_OVERLAY_ENTRIES:]
 
 
 def prepare_scene_commit(ctx):

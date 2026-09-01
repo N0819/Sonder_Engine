@@ -308,6 +308,38 @@ The reviewer's proposed `raise` on an undeclared key was declined: entity
 `_ENTITY_DEFAULT_FIELDS` establishes the opposite doctrine — an unlisted key is
 copied, silence is never an erasure.
 
+### 1.10a A charter body promoted to a character knows nothing about where it is
+
+Two disjoint gaps, argued in
+[`docs/design/DESIGN_CHARTER_SPATIAL_PROMOTION.md`](design/DESIGN_CHARTER_SPATIAL_PROMOTION.md).
+
+A place graph's nodes are keyed by ROOM ID and its edges are written by
+walking (`world/place_purpose.py`: "a node needs a rid, hearsay carries none").
+A charter body carries `place` / `berth` / `home_post`, and its movement record
+`stood` is a TALLY at a post — `{"canteen_supply_duty": 34}` — not a path.
+
+CORRECTED after measuring, and the correction matters: this is NOT a namespace
+mismatch between charter places and scene rooms. An institution carries its OWN
+optional geography at `charter["scene"]` — `world/charter_run.py:420`, "A scene
+is optional. Without one the institution is a single place and everyone can
+stand any post" — and NONE of the four charter worlds in the corpus (chats 84,
+83, 93, 94) has one. Their places are labels on a flat institution;
+`world/charter_move.py:207` takes its no-scene branch, where every hop costs 1
+and always succeeds; and `travelled` is an odometer, not a route. So there are
+no edges to transfer because there is no graph to have edges in. The real
+question is configuration: should an institution be given a charter scene at
+all, and is that scene the chat's or its own?
+
+Same cause, separate defect: `agents/background.py:320-333` asks which charter
+bodies are near by passing the player's ROOM id to
+`charter_runtime.background_presence_records(cid, places=...)`, which filters by
+PLACE. The intersection is always empty, silently, inside a bare
+`except Exception`. This is why the charter system reads as unexercised — the
+scene has never contained a place its 37 bodies live in.
+
+Cheapest first step is a diagnostic, not a fix: a non-empty charter registry
+and a scene sharing zero ids is an unambiguous dead bridge and can be said so.
+
 ### 1.11 `ctx.warnings` reaches the pipeline drawer but not the story reader
 
 **Landed, alpha 6.9**, except for an aggregate reader. Every warning is tagged
