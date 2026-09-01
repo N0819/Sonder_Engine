@@ -27,7 +27,7 @@ from contextlib import contextmanager
 from typing import Optional, Callable, Any
 from dataclasses import dataclass
 
-from core.db import q, get_setting
+from core.db import q, get_setting, set_setting
 from core.logging_utils import logger as _logger
 from language_runtime import apply_common_prompt_policy
 
@@ -1834,9 +1834,66 @@ def _warn_unsent_on_anthropic(prov, role, json_schema):
 _NO_JSON_SCHEMA: set = set()
 _NO_JSON_SCHEMA_LOCK = threading.Lock()
 
+# A STALL IS EVIDENCE, NOT PROOF -- so it is counted rather than acted on.
+#
+# A 400 naming the grammar is a provider saying "I cannot compile this", and
+# one is enough. A dropped connection says only that the wire broke, which can
+# be an ordinary blip; acting on one would cost a capable model its grammar
+# for a bad minute. Acting on none costs a whole turn every time, because the
+# request is re-sent until the retry budget runs out.
+#
+# Two independent stalls on the same provider+model is the line. Measured
+# 2026-09-01: gemini-3.6-flash via openrouter stalled on the director_resolve
+# schema at 60.2s on every one of six attempts, while the identical body
+# without `response_format` answered in 12.5s -- a fault that reproduces six
+# times out of six is not a blip, and a fault that never reproduces never
+# reaches two.
+_SCHEMA_STALLS: dict = {}
+_SCHEMA_STALL_LIMIT = 2
+
+# The learned set, persisted so a restart does not re-pay the tuition. Kept as
+# a plain settings row rather than a table: it is a cache of provider
+# behaviour, it is always safe to lose, and anything that cannot be re-learned
+# in one call does not belong in it.
+_NO_JSON_SCHEMA_SETTING = "providers_no_json_schema"
+
+
+def _schema_blacklist_key(prov, model):
+    return "%s\u0000%s" % _json_object_key(prov, model)
+
+
+def _load_schema_blacklist():
+    """Rehydrate what earlier runs learned. Failure here is not an error."""
+    try:
+        import json as _json
+        stored = _json.loads(get_setting(_NO_JSON_SCHEMA_SETTING) or "[]")
+    except Exception:
+        return
+    if not isinstance(stored, list):
+        return
+    with _NO_JSON_SCHEMA_LOCK:
+        for entry in stored:
+            if isinstance(entry, str) and "\u0000" in entry:
+                _NO_JSON_SCHEMA.add(tuple(entry.split("\u0000", 1)))
+
+
+def _persist_schema_blacklist():
+    try:
+        import json as _json
+        with _NO_JSON_SCHEMA_LOCK:
+            rows = ["%s\u0000%s" % k for k in sorted(_NO_JSON_SCHEMA)]
+        set_setting(_NO_JSON_SCHEMA_SETTING, _json.dumps(rows))
+    except Exception:
+        # A cache that cannot be written is still a cache that works for this
+        # process. Never let bookkeeping fail a call.
+        pass
+
 
 def _json_schema_supported(prov, model) -> bool:
-    """False once this provider+model has 400'd on a json_schema request."""
+    """False once this provider+model is known not to answer a json_schema."""
+    if not _NO_JSON_SCHEMA and not getattr(_json_schema_supported, "_loaded", False):
+        _json_schema_supported._loaded = True
+        _load_schema_blacklist()
     with _NO_JSON_SCHEMA_LOCK:
         return _json_object_key(prov, model) not in _NO_JSON_SCHEMA
 
@@ -1850,8 +1907,28 @@ def _note_json_schema_rejected(prov, model):
         _NO_JSON_SCHEMA.add(key)
     _logger.info(
         "providers: %s rejects response_format=json_schema for %s; falling "
-        "back to json_object for the rest of this process",
+        "back to json_object from now on",
         _prov_field(prov, "name") or "provider", model)
+    _persist_schema_blacklist()
+
+
+def _note_json_schema_stalled(prov, model):
+    """Count a schema request that was accepted and then never answered."""
+    key = _json_object_key(prov, model)
+    with _NO_JSON_SCHEMA_LOCK:
+        if key in _NO_JSON_SCHEMA:
+            return
+        n = _SCHEMA_STALLS.get(key, 0) + 1
+        _SCHEMA_STALLS[key] = n
+        crossed = n >= _SCHEMA_STALL_LIMIT
+    if not crossed:
+        _logger.info(
+            "providers: %s stalled on a json_schema request for %s (%d of %d "
+            "before it is treated as unsupported)",
+            _prov_field(prov, "name") or "provider", model, n,
+            _SCHEMA_STALL_LIMIT)
+        return
+    _note_json_schema_rejected(prov, model)
 
 
 def _apply_json_mode(body, prov, model, json_mode, json_schema=None):
@@ -2453,9 +2530,48 @@ def _chat_complete_once(
                 role=role,
                 model=model,
             )
-        except LLMError as exc:
-            if exc.status_code != 400:
+        except (LLMError,) + _RETRYABLE_NETWORK as exc:
+            # A SCHEMA THAT IS NEVER ANSWERED IS A SCHEMA THAT WAS REJECTED.
+            #
+            # This ladder existed for a provider that says 400. Some do not:
+            # handed a `response_format` they cannot compile, they accept the
+            # request and then never answer it, and an intermediary drops the
+            # connection. That arrives as requests.ConnectionError, sails past
+            # an `except LLMError` gated on 400, and reaches the outer retry
+            # loop -- which re-sends the identical unusable body three more
+            # times. RetryConfig.max_retries is 3 (four attempts), so a 60s
+            # cut becomes 4*60s plus jittered backoff: the ~245-253s failures
+            # this engine spent a day attributing to nanogpt and then to
+            # openrouter.
+            #
+            # Measured 2026-09-01, gemini-3.6-flash via openrouter on the real
+            # director_resolve body: verbatim, it dies at 60.2s every time;
+            # with `response_format` removed and nothing else changed, first
+            # byte at 2.3s and done in 12.5s. Removing reasoning effort,
+            # provider routing, stream_options or lowering max_tokens each
+            # changed nothing -- the schema was the only variable that mattered.
+            #
+            # So a connection death on a schema-bearing request takes the same
+            # remedy as a 400. It is NOT recorded via
+            # `_note_json_schema_rejected`: a dropped connection can also be an
+            # ordinary blip, and one bad minute should not permanently cost a
+            # capable model its grammar. Recover this call; judge the model on
+            # what it says, not on what the wire did.
+            # Narrowed to a full json_schema, which is what was measured to
+            # stall. `json_object` is a one-word constraint no provider has to
+            # compile, so a connection death alongside it is far likelier to be
+            # an ordinary blip -- and that belongs to the outer retry loop,
+            # not to a capability downgrade here.
+            _rf = body.get("response_format")
+            schema_bearing = (isinstance(_rf, dict)
+                              and _rf.get("type") == "json_schema")
+            if isinstance(exc, LLMError):
+                if exc.status_code != 400:
+                    raise
+            elif not schema_bearing:
                 raise
+            else:
+                _note_json_schema_stalled(prov, model)
 
             # Stage 1: response_format alone. Dropping only the least portable
             # field keeps reasoning_effort and the extended samplers, which a

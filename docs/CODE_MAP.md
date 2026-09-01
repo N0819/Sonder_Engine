@@ -14,7 +14,7 @@
 | `agents/director.py` | 4175 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial`, `world.survival` |
 | `agents/director_contact.py` | 457 |  | `story.character_schema`, `world.spatial` |
 | `agents/director_evidence.py` | 1044 |  | `agents.common`, `agents.director_lingua`, `llm`, `world.spatial` |
-| `agents/director_fanout.py` | 673 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
+| `agents/director_fanout.py` | 685 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
 | `agents/director_floors.py` | 1355 |  | `agents.common`, `agents.director_lingua`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
 | `agents/director_lingua.py` | 29 |  | — |
 | `agents/director_movement.py` | 969 |  | `agents.director_lingua`, `story.character_schema`, `world.spatial` |
@@ -43,7 +43,7 @@
 | `llm/llm_quality.py` | 774 | Strict JSON parsing, schema validation, and model-assisted repair. | `core.pipeline_context`, `llm.prompts`, `llm.providers`, `llm.schemas` |
 | `llm/prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `llm.providers` |
 | `llm/prompts.py` | 516 | Default system prompts and prompt preset access. | `core.db` |
-| `llm/providers.py` | 3606 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `core.db`, `core.logging_utils` |
+| `llm/providers.py` | 3722 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `core.db`, `core.logging_utils` |
 | `llm/schemas.py` | 5612 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `mind/__init__.py` | 6 |  | — |
 | `mind/affect.py` | 2406 |  | `mind.theory_of_mind` |
@@ -270,14 +270,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_specialist_payload()` | 242 | 196 lines |
+| `_specialist_payload()` | 242 | 208 lines |
 | `_resolve_beat_view()` | 55 | 131 lines |
-| `_orchestration_scope_backstop()` | 543 | 131 lines |
+| `_orchestration_scope_backstop()` | 555 | 131 lines |
 | `_interpret_beat_view()` | 188 | 37 lines |
-| `_resolved_event_verdicts()` | 474 | 30 lines |
+| `_resolved_event_verdicts()` | 486 | 30 lines |
 | `fanout_is_parallel()` | 33 | 20 lines |
-| `_index_addressed_events()` | 506 | 18 lines |
-| `_stage_container()` | 440 | 16 lines |
+| `_index_addressed_events()` | 518 | 18 lines |
+| `_stage_container()` | 452 | 16 lines |
 
 ### `agents/director_floors.py`
 
@@ -558,14 +558,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_chat_complete_once()` | 2327 | 282 lines |
-| `async _chat_complete_async_once()` | 2730 | 115 lines |
-| `chat_complete()` | 2069 | 110 lines |
-| `async chat_complete_async()` | 2639 | 90 lines |
-| `_sse_openai()` | 1927 | 79 lines |
-| `async _sse_openai_async()` | 2846 | 63 lines |
-| `_sse_anthropic()` | 2007 | 61 lines |
-| `_embed_request()` | 3166 | 59 lines |
+| `_chat_complete_once()` | 2404 | 321 lines |
+| `async _chat_complete_async_once()` | 2846 | 115 lines |
+| `chat_complete()` | 2146 | 110 lines |
+| `async chat_complete_async()` | 2755 | 90 lines |
+| `_sse_openai()` | 2004 | 79 lines |
+| `async _sse_openai_async()` | 2962 | 63 lines |
+| `_sse_anthropic()` | 2084 | 61 lines |
+| `_embed_request()` | 3282 | 59 lines |
 
 ### `llm/schemas.py`
 
