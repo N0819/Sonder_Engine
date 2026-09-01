@@ -1401,6 +1401,19 @@ def bootstrap():
         # rather than something a first run starts spending money on.
         "image_model": image_model(),
         "backdrops_enabled": get_setting("backdrops_enabled") == "1",
+        # Debug capture (persist/llm_capture.py). Off unless switched on, and
+        # the reason is stricter than backdrops': with it off the per-call
+        # ledger's standing "never content" promise holds exactly as written,
+        # and turning it on is what lets story text and private character
+        # reasoning be stored. `bodies` is the second half of that choice --
+        # hash-only proves WHICH prompt ran without keeping the prompt.
+        "llm_capture_enabled": str(
+            get_setting("llm_capture_enabled") or "").strip().lower()
+        in ("1", "on", "true", "yes"),
+        "llm_capture_bodies": str(
+            get_setting("llm_capture_bodies") or "hash_only").strip().lower(),
+        "log_level": (str(get_setting("log_level") or "").strip().upper()
+                      or "INFO"),
         # Image-to-image continuity (backdrops._continuity_enabled). Explicitly
         # off until asked for: it changes how every picture after a room's
         # first one is made.
@@ -1547,6 +1560,41 @@ def put_exemplars(body: dict = Body(...)):
     set_setting("exemplars", json.dumps(clean, ensure_ascii=False))
     return {"exemplars": clean, "count": len(clean),
             "max_count": EXEMPLAR_MAX_COUNT, "max_chars": EXEMPLAR_MAX_CHARS}
+
+
+@app.put("/api/debug_capture")
+def put_debug_capture(body: dict = Body(...)):
+    """Debug capture and log level.
+
+    Absent keys mean unchanged, so a single toggle can send one field. The
+    level is applied immediately rather than at next start: an engine you must
+    restart to make talkative has already lost the turn you wanted to look at.
+    """
+    from core.logging_utils import configure_logging
+
+    if "enabled" in body:
+        set_setting("llm_capture_enabled",
+                    "1" if body.get("enabled") else "0")
+    if "bodies" in body:
+        mode = str(body.get("bodies") or "").strip().lower()
+        if mode not in ("hash_only", "full"):
+            raise HTTPException(400, "bodies must be 'hash_only' or 'full'.")
+        set_setting("llm_capture_bodies", mode)
+    if "log_level" in body:
+        level = str(body.get("log_level") or "").strip().upper()
+        if level not in ("DEBUG", "INFO", "WARNING", "ERROR"):
+            raise HTTPException(
+                400, "log_level must be DEBUG, INFO, WARNING or ERROR.")
+        set_setting("log_level", level)
+    configure_logging()
+    return {
+        "enabled": str(get_setting("llm_capture_enabled") or "").strip().lower()
+                   in ("1", "on", "true", "yes"),
+        "bodies": str(get_setting("llm_capture_bodies")
+                      or "hash_only").strip().lower(),
+        "log_level": (str(get_setting("log_level") or "").strip().upper()
+                      or "INFO"),
+    }
 
 
 @app.put("/api/backdrops")

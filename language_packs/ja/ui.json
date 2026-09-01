@@ -2111,5 +2111,19 @@
   "Exported the last ${d.turns_exported} of ${d.turns_total} turns.": "全${d.turns_total}ターンのうち直近の${d.turns_exported}ターンを書き出しました。",
   "Turn exported — no provider calls were captured (debug capture is off in Settings).": "ターンを書き出しました — プロバイダー呼び出しは記録されていません（デバッグ記録は設定でオフになっています）。",
   "turn-${tid}-debug.json": "turn-${tid}-debug.json",
-  "chat-${S.chatId}-debug.json": "chat-${S.chatId}-debug.json"
+  "chat-${S.chatId}-debug.json": "chat-${S.chatId}-debug.json",
+  "Debug capture": "デバッグ記録",
+  "Capture provider calls": "プロバイダー呼び出しを記録する",
+  "Debug capture saved.": "デバッグ記録の設定を保存しました。",
+  "Could not save debug capture.": "デバッグ記録の設定を保存できませんでした。",
+  "Hashes only — proves which prompt ran": "ハッシュのみ — どのプロンプトが実行されたかを証明します",
+  "Full text — the prompts and answers themselves": "全文 — プロンプトと応答そのもの",
+  "Records what was sent to each provider and what came back, including reasoning, so a turn can be exported and read in order from the pipeline drawer. Without it an export still lists the steps and what the engine decided, but every provider call is missing — including the Director's six specialists, which have no step of their own.": "各プロバイダーに送信された内容と、推論を含めて返ってきた内容を記録します。これにより、ターンをパイプラインの引き出しから書き出して順に読むことができます。無効の場合でも書き出しにはステップとエンジンが下した判断は含まれますが、プロバイダー呼び出しはすべて欠落します — 自身のステップを持たないディレクターの6人の専門家も含めてです。",
+  "Full text stores the story itself — turn it on to chase a defect, not by default. Either way each distinct prompt is stored once, so a long chat costs far less than it looks.": "全文は物語そのものを保存します — 常時ではなく、不具合を追うときに有効にしてください。いずれの場合も個々のプロンプトは一度だけ保存されるため、長いチャットでも見た目よりはるかに少ない容量で済みます。",
+  "bodies must be 'hash_only' or 'full'.": "bodies は 'hash_only' または 'full' でなければなりません。",
+  "log_level must be DEBUG, INFO, WARNING or ERROR.": "log_level は DEBUG、INFO、WARNING、ERROR のいずれかでなければなりません。",
+  "DEBUG": "DEBUG",
+  "INFO": "INFO",
+  "WARNING": "WARNING",
+  "ERROR": "ERROR"
 }

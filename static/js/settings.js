@@ -2456,6 +2456,54 @@ function renderFullApiSettings(b) {
           "Pinning one upstream without 'never fall back' still lets OpenRouter route elsewhere when that upstream is busy — tick both to guarantee it."));
     }
 
+    // Debug capture. In the API panel because it is about what the engine
+    // sends to providers and keeps of the answers -- not a story setting.
+    // Off by default, deliberately: with it off the per-call ledger records
+    // only roles, models, tokens and durations, and turning it on is what
+    // permits story text and private character reasoning to be stored.
+    {
+      const capBox = el("input", {
+        type: "checkbox", ...(S.boot.llm_capture_enabled ? { checked: "" } : {})
+      });
+      const bodiesSel = el("select", {},
+        el("option", { value: "hash_only" }, "Hashes only — proves which prompt ran"),
+        el("option", { value: "full" }, "Full text — the prompts and answers themselves"));
+      bodiesSel.value = S.boot.llm_capture_bodies || "hash_only";
+      const levelSel = el("select", {},
+        ...["DEBUG", "INFO", "WARNING", "ERROR"].map(
+          v => el("option", { value: v }, v)));
+      levelSel.value = S.boot.log_level || "INFO";
+      b.append(el("h4", {}, "Debug capture"),
+        el("div", { class: "small dim" },
+          "Records what was sent to each provider and what came back, including reasoning, so a turn can be exported and read in order from the pipeline drawer. Without it an export still lists the steps and what the engine decided, but every provider call is missing — including the Director's six specialists, which have no step of their own."),
+        el("div", { class: "row", style: "margin:6px 0" },
+          el("label", {}, capBox, " Capture provider calls"),
+          bodiesSel, levelSel,
+          el("button", {
+            onclick: async event => {
+              const btn = event.currentTarget;
+              btn.disabled = true;
+              try {
+                await api("PUT", "/api/debug_capture", {
+                  enabled: capBox.checked,
+                  bodies: bodiesSel.value,
+                  log_level: levelSel.value,
+                });
+                S.boot.llm_capture_enabled = capBox.checked;
+                S.boot.llm_capture_bodies = bodiesSel.value;
+                S.boot.log_level = levelSel.value;
+                toast("Debug capture saved.", "ok");
+              } catch (e) {
+                toast("Could not save debug capture.", "err");
+              } finally {
+                btn.disabled = false;
+              }
+            },
+          }, "Save")),
+        el("div", { class: "small dim" },
+          "Full text stores the story itself — turn it on to chase a defect, not by default. Either way each distinct prompt is stored once, so a long chat costs far less than it looks."));
+    }
+
     // Scene backdrops. Its own picker rather than a row in Agent models
     // because image generation is a different API surface entirely (a
     // separate endpoint, and on nano-gpt a separate catalogue) -- see
