@@ -179,7 +179,11 @@ def test_character_contract_supplies_mechanisms_not_a_default_temperament():
 
     assert "CURRENT EVIDENCE, NOT DEFAULT TEMPERAMENT:" in out
     assert "This is an information rule only" in out
-    assert "creates no preference for caution" in out
+    # Was "creates no preference for caution" until MICRO-BEAT SCOPE was
+    # renamed (2026-08-31). The property is the same one -- the scope rule
+    # must not read as a temperament -- stated by the clause that replaced
+    # the four disclaimers the old name needed.
+    assert "Nothing here prefers a small move to a large one" in out
     assert "Do not seed caution, compromise, escalation, violence, mercy" in out
     assert "Urgency changes stakes and available time" in out
     assert "Urgency changes stakes and available time; it does not supply values" in out
