@@ -278,6 +278,28 @@ def _overlay_handles(item) -> set:
     return set()
 
 
+def _is_overlay_ending(item) -> bool:
+    """Whether this entry says the mark is GONE rather than present.
+
+    Overlays were the only body channel with no off-switch: attire changes,
+    conditions and transformations close with `active: false`, vitals move
+    both ways, and an overlay could only leave by being pushed out of the
+    six-entry window by newer ones. Live (chat 111), a body's momentary
+    climax -- "violent shuddering", "tears escape eyes", written on turn 34 --
+    was still on the ledger at turn 52, because only three further overlays
+    were ever written and the cap never reached it.
+
+    Only a record can carry an ending: a bare line is the fact itself, and a
+    line of prose has nowhere to put "not". Anything else is present.
+    """
+    if not isinstance(item, dict):
+        return False
+    for field in ("active", "present"):
+        if field in item:
+            return item.get(field) is False
+    return bool(item.get("ended") is True or item.get("removed") is True)
+
+
 def _dedupe_overlay_entries(entries) -> list:
     """Collapse one body's overlay list to one entry per named thing.
 
@@ -351,10 +373,28 @@ def _merge_overlays(sc, incoming) -> None:
             return
         overlays = sc["overlays"] = {}
     for key, value in (incoming if isinstance(incoming, dict) else {}).items():
+        arriving = list(value if isinstance(value, list) else [value])
+        # An ENDING is a statement that the mark is gone, not a new entry.
+        # Spelled `active: false`, the same way a condition or a
+        # transformation is ended, so a specialist learns one rule and not
+        # two. Identity is the handle set the dedupe already uses, so an
+        # ending reaches the standing entry whether it was written as a bare
+        # line or as a record -- and reaches it without the Director having
+        # to know an id it was never shown.
+        endings = [item for item in arriving if _is_overlay_ending(item)]
+        arriving = [item for item in arriving if not _is_overlay_ending(item)]
         standing = overlays.get(key)
-        overlays[key] = (standing if isinstance(standing, list) else
-                         ([] if standing is None else [standing])) + \
-            list(value if isinstance(value, list) else [value])
+        merged = (standing if isinstance(standing, list) else
+                  ([] if standing is None else [standing])) + arriving
+        # Endings apply LAST, so a beat that both restates and ends a mark
+        # ends it: the ending is the beat's final word about that handle.
+        for ending in endings:
+            handles = _overlay_handles(ending)
+            if not handles:
+                continue
+            merged = [item for item in merged
+                      if not (_overlay_handles(item) & handles)]
+        overlays[key] = merged
     for key in list(overlays):
         overlays[key] = _dedupe_overlay_entries(
             overlays[key])[-_MAX_OVERLAY_ENTRIES:]

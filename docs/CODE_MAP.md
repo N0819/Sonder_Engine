@@ -82,7 +82,7 @@
 | `persist/commit_memory_write.py` | 325 | The durable memory write and its out-of-band consolidation twin. | `core.db`, `mind.memory`, `persist.commit_memory`, `story.character_schema`, `story.scene` |
 | `persist/commit_place_graph.py` | 321 | Per-mind durable place graph and per-beat spatial experience. | `world.spatial` |
 | `persist/commit_room_registry.py` | 463 | Room identity across frames: registry projection, mint dedup, renames, retirement, exit pruning. | `core.db`, `persist.commit_common`, `story.character_schema`, `world.spatial` |
-| `persist/commit_scene_state.py` | 1113 | The prepared post-turn scene: pre-lock build, scene commit domain, book anchoring, ground advance. | `core.db`, `mind.memory`, `persist.commit_attire`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_room_registry`, `story.character_schema`, `story.provenance_text`, `world.mechanics`, `world.spatial`, `world.spatial_frames`, `world.weather` |
+| `persist/commit_scene_state.py` | 1153 | The prepared post-turn scene: pre-lock build, scene commit domain, book anchoring, ground advance. | `core.db`, `mind.memory`, `persist.commit_attire`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_room_registry`, `story.character_schema`, `story.provenance_text`, `world.mechanics`, `world.spatial`, `world.spatial_frames`, `world.weather` |
 | `persist/llm_capture.py` | 229 |  | `core.db` |
 | `persist/pipeline_trace.py` | 574 | Privacy-conscious export, validation, and offline replay of persisted pipeline history. | `core.db` |
 | `story/__init__.py` | 6 |  | — |
@@ -992,14 +992,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `prepare_scene_commit()` | 363 | 701 lines |
+| `prepare_scene_commit()` | 403 | 701 lines |
 | `sync_anchored_books()` | 81 | 66 lines |
 | `_guard_occupied_mover_removal()` | 148 | 60 lines |
-| `_dedupe_overlay_entries()` | 281 | 40 lines |
-| `_merge_overlays()` | 323 | 38 lines |
+| `_merge_overlays()` | 345 | 56 lines |
+| `_dedupe_overlay_entries()` | 303 | 40 lines |
 | `_advance_ground()` | 210 | 31 lines |
 | `_establish_time_of_day()` | 36 | 27 lines |
-| `_record_subject_last_seen()` | 1090 | 24 lines |
+| `_record_subject_last_seen()` | 1130 | 24 lines |
 
 ### `persist/llm_capture.py`
 
