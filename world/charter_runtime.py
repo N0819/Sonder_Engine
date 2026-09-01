@@ -2642,6 +2642,38 @@ def _body_refs(registry, *, name=None, refs=None, include_bound=False):
     return found
 
 
+def charter_place_ids(cid, frame_id=None) -> set:
+    """Every place id the charter registry knows, for THIS frame.
+
+    Exists so a caller can tell "no bodies here" from "no body could ever be
+    here". `background_presence_records` filters by place and returns the same
+    empty result either way, and the difference is the whole of a defect
+    measured on chat 84: the scene's rooms and the registry's places shared no
+    id, so 37 bodies were unreachable for fourteen turns and the subsystem
+    read as unexercised.
+
+    Read-only, and tolerant of a malformed registry: this is used by a
+    diagnostic and must never be the reason a beat fails.
+    """
+    out = set()
+    try:
+        registry = registry_for(cid, frame_id)
+    except Exception:
+        return out
+    for item in (registry.get("items") or {}).values():
+        state = (item or {}).get("state") or {}
+        for place in (state.get("active_places") or ()):
+            if str(place or "").strip():
+                out.add(str(place))
+        for body in (state.get("bodies") or {}).values():
+            if isinstance(body, dict):
+                for field in ("place", "berth"):
+                    value = str(body.get(field) or "").strip()
+                    if value:
+                        out.add(value)
+    return out
+
+
 def background_presence_records(cid, *, places=None, names=None,
                                 frame_id=None):
     """Unpromoted Charter bodies as ordinary background-presence records.

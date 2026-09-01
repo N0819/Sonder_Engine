@@ -1543,6 +1543,41 @@ def _tell_acuity(sheet):
     return max(values) if values else 0.4
 
 
+#: THE SENSE A TELL ARRIVES BY -- the one question `manifest.tells[].channel`
+#: answers. It is not the body part the cue shows in: that is the cue's own
+#: text ("a hand that goes still on the glass"), and nothing in the engine has
+#: ever read `channel` for anything but the reachability branch below.
+#:
+#: The sheet used to offer `face|eyes|voice|hands|posture|breath` -- six BODY
+#: REGIONS against a two-way SENSE branch, four of them sight-only. The field's
+#: own published vocabulary therefore made the concealing answer the likely
+#: one: a swallow, a shifted weight, a hand drumming the table are all things
+#: a mind in the dark catches, and each was lost, because the natural word for
+#: the cue was a body part and every body part but two read as sight.
+TELL_CHANNELS = ("seen", "heard")
+
+#: The spellings that answer "heard". `voice` and `breath` are the two the
+#: sheet published before `heard` existed and are what every stored manifest
+#: carries, so they stay members rather than becoming unrecognised words on a
+#: rerun-from-stage or a replayed variant.
+_AUDIBLE_TELL_CHANNELS = frozenset({"heard", "voice", "breath"})
+
+
+def tell_is_audible(channel) -> bool:
+    """Does a tell on this channel reach an observer who cannot see.
+
+    SIGHT-ONLY REMAINS THE ANSWER FOR A WORD THE ENGINE CANNOT VOUCH FOR, and
+    that direction is not the defect above -- it is the firewall. Granting
+    hearing to an unrecognised channel would hand "a glance at the door" to a
+    blind observer, and nothing deciding who perceives what may depend on the
+    character model choosing a good word. The fix for the losses is upstream,
+    in what the sheet ASKS for: a field whose vocabulary is the sense has a
+    correct answer available to write, one whose vocabulary is six body parts
+    does not.
+    """
+    return str(channel or "").strip().casefold() in _AUDIBLE_TELL_CHANNELS
+
+
 def _delivered_manifest(ctx, scene, observer, sources, known, cast_by_name,
                         observer_sheet=None):
     """Per SOURCE this observer can read: {surface_demeanor, cues:[cue,...]} --
@@ -1550,11 +1585,11 @@ def _delivered_manifest(ctx, scene, observer, sources, known, cast_by_name,
     demeanor + physical tells) is authored by that character; the ENGINE decides
     which cues reach THIS observer here, before the LLM call, exactly like the
     dialogue-injection backstop. A tell is delivered iff (a) the observer can
-    receive its channel -- a visual tell needs sight (same-visual-channel, not
-    in the rear blind spot); a voice/breath tell needs to be audible (same
-    room) -- AND (b) affect.tell_gate: subtlety <= acuity + familiarity +
-    attention. MEANING and the character's own labels never cross; only the
-    observable cue text does."""
+    receive its channel -- sight reaches any tell (same-visual-channel, not in
+    the rear blind spot), and a tell `tell_is_audible` recognises also reaches
+    a listener who cannot see it happen -- AND (b) affect.tell_gate: subtlety
+    <= acuity + familiarity + attention. MEANING and the character's own labels
+    never cross; only the observable cue text does."""
     out = {}
     focus = _focus_target(scene, observer)
     behind = set(_behind_sources(scene, observer, sources))
@@ -1592,8 +1627,8 @@ def _delivered_manifest(ctx, scene, observer, sources, known, cast_by_name,
         attention = 0.4 if focus == sname else 0.15
         cues = []
         for t in tells:
-            chan = str(t.get("channel") or "").lower()
-            reachable = visible or (chan in ("voice", "breath") and audible)
+            reachable = visible or (audible
+                                    and tell_is_audible(t.get("channel")))
             if reachable and affect.tell_gate(t, acuity, familiarity, attention):
                 cues.append(t.get("cue"))
         entry = {}

@@ -3263,6 +3263,30 @@ def character_step(ctx, cid, nonce):
     _flow = _dict(_interp.get("flow"))
     _tom = _list(_flow.get("tom_triggers"))
 
+    # WHOLE, and deliberately -- the only gate on this graph is the frame
+    # recognition mask below, which asks whether this mind may know the person
+    # AT ALL, never whether they are standing here. Scoping it by presence was
+    # measured and refused on 2026-09-01, twice over:
+    #
+    #  * There is nothing to win. Across the 86 live graphs in the corpus the
+    #    whole graph is 422 bytes at the median and 1,070 at its largest (5
+    #    targets); presence-scoping would drop 68% of that, ~100 tokens on a
+    #    payload that also carries retrieved memory, world knowledge and the
+    #    rendered view. The trim that motivated the question, scene_compact_
+    #    attire, saved 618 tokens -- more than this entire structure costs.
+    #  * The cost is a mind that has forgotten the player. The absent target
+    #    is routinely the LOAD-BEARING one: in chat 59 The Doctor's strongest
+    #    tie is Hinami at familiarity 1.00, and she is a floor above him; the
+    #    graph is also where somebody being talked about, expected, or feared
+    #    lives, and none of those people are in the room by definition.
+    #    `known_pronouns` below reads `set(relationships) | set(mind_models)`
+    #    as its recognition set, so a presence filter here would silently
+    #    withdraw an absent person's pronouns too and put the character back
+    #    on guessing gender from a name (the W6 defect that block exists for).
+    #
+    # A stale entry is a real defect and a different one -- The Doctor still
+    # carries `bartender`/`Guinan` in Ten Forward 128 beats after leaving that
+    # arc -- but staleness is decided by the clock, not by the doorway.
     relationships = relationships_for_payload(chat.id, cid)
     _sim_clock = shared.get("simulation_clock")
     if _sim_clock is None:
@@ -3945,9 +3969,17 @@ def character_step(ctx, cid, nonce):
             "\n\nTELL VARIETY: self.recent_tells lists the physical cues you have "
             "already shown in recent beats. Do NOT reuse any of them -- or a "
             "near-identical variant -- as this beat's tell; find a DIFFERENT "
-            "channel or gesture. A body under the same pressure finds new ways to "
-            "betray it: vary the channel (face|eyes|voice|hands|posture|breath) "
-            "and the cue itself.")
+            "part of the body and a different gesture. A body under the same "
+            "pressure finds new ways to betray it: the eyes, the hands, the "
+            "breath, the set of the shoulders, the voice are not one cue.")
+        # `channel` is NOT the variety axis and this line used to say it was,
+        # naming the six body regions the sheet published before 2026-09-01.
+        # The field is the SENSE a cue arrives by (`seen|heard`,
+        # perception.TELL_CHANNELS) and has two values; asking a body to vary
+        # it would push every tell back onto the four sight-only words that
+        # lost a swallow or a caught breath on any mind that could hear but
+        # not see. Variety belongs to the cue and the part it shows in, which
+        # is what `cue` carries.
     if _tell_grounds:
         _cprompt += (
             "\n\nTELL PAYOFF: self.tell_grounds lists physical cues you have "

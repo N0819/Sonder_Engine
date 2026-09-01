@@ -955,52 +955,147 @@ def _concat_dedup(*value_lists):
             out.append(item)
     return out
 
+#: Every key a character's result can carry, classified by how TWO of that
+#: character's declarations in one beat combine -- a later micro-round over an
+#: earlier one (`loops._speak`), or the action result over the reaction result
+#: (`commit_memory`'s `own_result`).
+#:
+#: CLASSIFYING A KEY IS MANDATORY, because the merge starts from `new` alone:
+#: a key the earlier result carries and the later one omits is simply gone,
+#: and "omits" is the ORDINARY shape of "had nothing to add this round" --
+#: models emit sparse dicts and `_dump` uses exclude_none. Nothing warns,
+#: because a field's warnings live inside the branch the drop skips: the only
+#: reader of `drive_shift` is `elif own_result.get("drive_shift")` in
+#: commit_memory, so a dropped rupture proposal is silent by construction.
+#: `project_ops` and `drive_shift` were each lost this way before being named
+#: here. tests/test_character_result_merge.py checks these four tuples against
+#: CharacterOutput's own field list, so the next field added to the schema has
+#: to be classified rather than defaulting to latest-wins by omission.
+
+#: Concatenated in beat order and NOT deduped: two rounds may legitimately
+#: carry the same line or motion, and a character who repeats themselves said
+#: it twice.
+_MERGE_APPEND_FIELDS = ("sequence",)
+
+#: Unioned, order-preserving, exact duplicates dropped (a re-emitted identical
+#: update across rounds). Each entry is an independent piece of work, so no
+#: round's declared behavior or inference is lost.
+_MERGE_UNION_FIELDS = (
+    "mind_model_updates",
+    "relationship_updates",
+    "stance_updates",
+    "inference_updates",
+    "intent_ops",
+    # A project adopted in round 0 and not restated in round 1 was
+    # dropped here, which is the reaction-loop drop in miniature and
+    # inside a single loop. Projects are removed only by being satisfied
+    # or disputed -- never by a later round forgetting to mention one.
+    "project_ops",
+    "belief_updates",
+    "association_updates",
+    "present_evidence_used",
+    "memory_evidence_used",
+    "observations_used",
+    "remember_lines",
+    "memory_disputes",
+    "memory_effects",
+    "contact_ops",
+    "material_effects",
+)
+
+#: Preserved when the later declaration is SILENT about them; a later explicit
+#: value wins. These are single-slot decisions -- there is no list to
+#: accumulate into -- and saying nothing about one is not retracting it.
+_MERGE_PRESERVE_FIELDS = (
+    "active_state",
+    "ponder",
+    # No-op/null means preserve the prior micro-round's explicit decision;
+    # start/stop are both truthy dicts and the later explicit one wins.
+    "follow_op",
+    # PRESERVED rather than unioned because the slot holds exactly one:
+    # affect.validate_drive_shift takes a single proposal, and a break closes
+    # the window (commit_memory sets rupture=None), so a second proposal in
+    # the same beat could not apply even if it were kept. Preserving matters
+    # more here than anywhere else on this list: the window is engine-opened,
+    # three turns wide, and the shift is invited only inside it, so the one
+    # round that answers IS the rupture -- dropping it loses the scar, the
+    # former-drive entry and the memory of the break together, and loses them
+    # without a warning, since every drive_shift warning is emitted inside the
+    # branch the drop skips.
+    "drive_shift",
+    # Set only when true, by the character stage, when this round's move
+    # repeated an earlier one; it tells affect.apply_intent_ops not to credit
+    # a `progress` claim. STICKY, because the intent_ops it guards accumulate:
+    # latest-wins let a barren round's progress claim ride into commit under a
+    # later clean round's flag. Over-suppressing costs one progress tick;
+    # laundering credits a goal for a move already made.
+    "_barren_beat",
+)
+
+#: LATEST WINS, deliberately -- named rather than omitted so the guard can
+#: tell a decision from an oversight.
+_MERGE_LATEST_WINS_FIELDS = (
+    # The latest round's deliberation about the latest round's decision.
+    "appraisal",
+    "considered_responses",
+    "response_candidates",
+    "interaction",
+    "salience",
+    "manifest",
+    # Mirrors `_sync_sequence_mirrors` derives FROM `sequence`, which
+    # accumulates. They are stale after a merge, and that is safe only because
+    # every reader prefers the sequence and falls back to the mirror when
+    # there is none (`character._speech_texts`).
+    "speech",
+    "speech_volume",
+    "action",
+    "actions",
+    # The character stage folds the earlier round's probe into the later one
+    # itself, precisely because this merge keeps the latest ("the last round's
+    # probe must therefore tell the whole beat's story", character.py).
+    "unbidden_probe",
+    # Identity of the character both results belong to; equal by construction.
+    "name",
+    "char_id",
+)
+
+#: Result keys that are NOT CharacterOutput fields: written by the stage after
+#: validation (`norm_sequence` -> ponder, `_sync_sequence_mirrors` ->
+#: speech_volume, `character_step` -> name/char_id/unbidden_probe/
+#: _barren_beat) or legacy inputs commit still reads (stance_updates,
+#: inference_updates). Enumerated so the guard can insist an unrecognised name
+#: is either a schema field or a deliberate extra.
+_MERGE_NON_SCHEMA_KEYS = frozenset({
+    "stance_updates", "inference_updates", "ponder", "speech_volume",
+    "name", "char_id", "unbidden_probe", "_barren_beat",
+})
+
+
 def _merge_character_results(existing, new):
     """Combine a character's earlier-round result with a later one instead of
     overwriting. A character who speaks in more than one micro-round would
     otherwise lose its round-0 sequence/mind_model_updates/etc. at commit,
-    which reads ctx.character_results[id] as a single result. Latest scalar
-    state (active_state, interaction, salience) wins; the accumulating list
-    fields are unioned so no round's declared behavior or inference is lost."""
+    which reads ctx.character_results[id] as a single result.
+
+    Which key does what is declared in the four tables above -- append, union,
+    preserve-if-the-later-round-is-silent, latest-wins -- and every key a
+    result can carry sits in exactly one of them. Read the note above
+    `_MERGE_APPEND_FIELDS` before adding a field: an unclassified key is
+    latest-wins by accident, and drops without a warning."""
     if not isinstance(existing, dict):
         return new
     if not isinstance(new, dict):
         return existing
     merged = dict(new)
-    merged["sequence"] = _list(existing.get("sequence")) + _list(new.get("sequence"))
-    for field in (
-        "mind_model_updates",
-        "relationship_updates",
-        "stance_updates",
-        "inference_updates",
-        "intent_ops",
-        # A project adopted in round 0 and not restated in round 1 was
-        # dropped here, which is the reaction-loop drop in miniature and
-        # inside a single loop. Projects are removed only by being satisfied
-        # or disputed -- never by a later round forgetting to mention one.
-        "project_ops",
-        "belief_updates",
-        "association_updates",
-        "present_evidence_used",
-        "memory_evidence_used",
-        "observations_used",
-        "remember_lines",
-        "memory_disputes",
-        "memory_effects",
-        "contact_ops",
-        "material_effects",
-    ):
+    for field in _MERGE_APPEND_FIELDS:
+        merged[field] = _list(existing.get(field)) + _list(new.get(field))
+    for field in _MERGE_UNION_FIELDS:
         combined = _concat_dedup(existing.get(field), new.get(field))
         if combined or field in existing or field in new:
             merged[field] = combined
-    if not new.get("active_state") and existing.get("active_state"):
-        merged["active_state"] = existing.get("active_state")
-    if not new.get("ponder") and existing.get("ponder"):
-        merged["ponder"] = existing.get("ponder")
-    # No-op/null means preserve the prior micro-round's explicit decision;
-    # start/stop are both truthy dicts and the later explicit one wins.
-    if not new.get("follow_op") and existing.get("follow_op"):
-        merged["follow_op"] = existing.get("follow_op")
+    for field in _MERGE_PRESERVE_FIELDS:
+        if not new.get(field) and existing.get(field):
+            merged[field] = existing.get(field)
     return merged
 
 def _contextual_rooms(sc, cast, *extra_room_ids, hops=1):

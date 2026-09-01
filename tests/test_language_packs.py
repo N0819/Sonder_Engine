@@ -699,7 +699,12 @@ def test_no_english_compat_export_survives_without_a_reader():
 _EMBEDDED_FRAGMENTS = {
     "category_note": 5,
     "book_type_note": 3,
-    "transit_note": 3,
+    # 2, not 3, since 2026-09-01: the prose author's own transit block
+    # (prose_author_sheet/09_transit.txt) stopped being this fragment.
+    # It is right for `director_establish` and `mapping_stage`, which own
+    # `entities` and `rooms`, and wrong for the prose author, which owns
+    # neither and had been told to write both.
+    "transit_note": 2,
     "extra_parts_note": 6,
     "interior_note": 3,
     # Every surface that hands back a card: both generators, the four

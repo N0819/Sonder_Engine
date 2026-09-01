@@ -481,6 +481,38 @@ def _specialist_payload(name, ctx, sc, view, extras):
             "stations": sc.get("stations") or {},
             "poses": sc.get("poses") or {},
             "contained": sc.get("contained") or {},
+            # THE VOICE LEDGER, WITH THE IDS ITS OPS ADDRESS. The same
+            # omission the substances and contact-effect ledgers had above,
+            # and the same fix: this hand alone owns `comms_ops`
+            # (`director_scopes.SPECIALISTS["spatial"]["channels"]`), its own
+            # chunk documents `set` as "a COMPLETE replacement snapshot" of
+            # one channel and `open`/`close`/`remove` as edits addressed by
+            # `id` -- and no id had ever reached it. Every maintenance op was
+            # therefore written against a GUESSED key, and
+            # `spatial_senses.apply_comms_ops` (world/spatial_senses.py:249)
+            # fails silently in three different directions on a wrong one:
+            # `remove` pops nothing, `open`/`close` find no `existing` dict
+            # and flip nothing, and a re-`set` installs a SECOND channel
+            # beside the one it meant to replace. A smashed radio then keeps
+            # carrying voices through walls for the rest of the story,
+            # because perception reads `scene["comms"]` and nothing else.
+            #
+            # Rows rather than the stored table, because `comms_ops` is a
+            # LIST whose entries carry `id` -- the ledger comes back in the
+            # shape the op is written in, as `substances` and
+            # `contact_actions` do. Sorted so the payload is stable between
+            # beats that changed nothing.
+            #
+            # Widens what the OWNER can ADDRESS, not what any mind knows:
+            # this is the geography's own ledger on an objective-causality
+            # surface, no cognition payload changes, no other hand gains it.
+            "comms": [
+                {"id": str(channel_id), **channel}
+                for channel_id, channel in sorted(
+                    (sc.get("comms") or {}).items(),
+                    key=lambda kv: str(kv[0]))
+                if isinstance(channel, dict)
+            ],
             "movement": extras.get("movement"),
             "movers": extras.get("movers") or {},
         })
