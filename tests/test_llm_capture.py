@@ -268,3 +268,33 @@ class TestTheSettingsToggle:
         out = host_client.put(
             "/api/debug_capture", json={"enabled": True}).json()
         assert out["bodies"] == "full"
+
+
+def test_seq_agrees_with_the_order_the_calls_started(temp_db):
+    """`seq` is printed on every row of the exported timeline, and the
+    timeline is sorted by wall clock. If seq is assigned in COMPLETION order
+    the two disagree -- the reading order is right and the numbers beside it
+    are wrong, which is the sort of label that costs an hour. The Director's
+    six specialists run concurrently, so completion order is the default.
+    """
+    from core import db
+    from persist.pipeline_trace import export_turn_debug
+    _enable(db)
+    _chat, turn_id = _turn(db)
+
+    # Landing out of order on purpose: this is what a fan-out produces.
+    for role, started in (("director_spatial", 30.0), ("director", 10.0),
+                          ("director_body", 20.0)):
+        llm_capture.record_exchange(
+            turn_id=turn_id, step_key="director_resolve", role=role,
+            system="s", payload={}, response={}, started=started)
+
+    art = export_turn_debug(turn_id)
+    calls = [e for e in art["timeline"] if e["kind"] == "call"]
+    # read in start order...
+    assert [c["role"] for c in calls] == [
+        "director", "director_body", "director_spatial"]
+    # ...and numbered to match, rather than carrying the insert counter
+    assert [c["seq"] for c in calls] == [1, 2, 3]
+    # the stored counter is still there to join back on
+    assert sorted(c["capture_id"] for c in calls) == [1, 2, 3]

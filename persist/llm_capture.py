@@ -138,10 +138,12 @@ def record_exchange(*, turn_id: int | None, step_key: str, role: str,
                     ok: bool = True, error: str = "") -> None:
     """Record one provider exchange against a turn, in call order.
 
-    `seq` is assigned per turn at insert time, which is what makes a
-    chronological reading possible across the Director's fan-out: the six
-    specialists run concurrently and finish out of order, so wall-clock start
-    is the only ordering that reflects what actually happened.
+    `seq` is assigned per turn at insert time, so it is only the order calls
+    were STARTED in if the caller inserts them in that order --
+    `runtime._with_engine_notes` sorts by `started` before flushing, and that
+    is where the guarantee lives. It matters because the six specialists run
+    concurrently and finish out of order, so completion order is not the order
+    anything happened in.
 
     A diagnostic must never fail the call it is describing, so everything here
     is swallowed.

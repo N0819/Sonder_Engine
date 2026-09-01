@@ -424,7 +424,15 @@ def _with_engine_notes(content, ctx, key, parallel_with=()):
     if exchanges:
         try:
             from persist.llm_capture import record_exchange
-            for entry in exchanges:
+            # Insert in START order, because `seq` is assigned at insert and
+            # is what the artifact prints on each row. The Director's six
+            # specialists run concurrently and finish out of order, so the
+            # order they land in `ctx.exchanges` is completion order: the
+            # export sorted by wall clock and read correctly while the seq
+            # NUMBERS on the rows disagreed with it. A label that quietly
+            # disagrees with the ordering beside it is worse than no label.
+            for entry in sorted(exchanges,
+                                key=lambda e: float(e.get("started") or 0.0)):
                 record_exchange(turn_id=getattr(ctx, "turn_id", None), **{
                     k: v for k, v in entry.items() if k != "step_key"},
                     step_key=key)

@@ -25,7 +25,7 @@
 | `agents/mapping.py` | 337 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `core.db`, `llm.prompts`, `mind.memory`, `story.character_schema`, `story.scene` |
 | `agents/narration.py` | 1917 | Player-facing narration agent. | `agents`, `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `story.character_schema`, `story.scene`, `world.spatial`, `world.weather` |
 | `agents/perception.py` | 4651 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `mind`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
-| `agents/runtime.py` | 1414 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `core.db`, `core.pipeline_context`, `llm.providers`, `persist.checkpoints`, `persist.commit`, `story.character_schema`, `story.scene` |
+| `agents/runtime.py` | 1422 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `core.db`, `core.pipeline_context`, `llm.providers`, `persist.checkpoints`, `persist.commit`, `story.character_schema`, `story.scene` |
 | `agents/storage.py` | 123 | Step and active-variant persistence helpers. | `core.db` |
 | `core/__init__.py` | 6 |  | — |
 | `core/db.py` | 2363 | SQLite schema, migrations, connection management, transactions, and key/value world access. | `core.paths` |
@@ -83,8 +83,8 @@
 | `persist/commit_place_graph.py` | 321 | Per-mind durable place graph and per-beat spatial experience. | `world.spatial` |
 | `persist/commit_room_registry.py` | 463 | Room identity across frames: registry projection, mint dedup, renames, retirement, exit pruning. | `core.db`, `persist.commit_common`, `story.character_schema`, `world.spatial` |
 | `persist/commit_scene_state.py` | 1113 | The prepared post-turn scene: pre-lock build, scene commit domain, book anchoring, ground advance. | `core.db`, `mind.memory`, `persist.commit_attire`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_room_registry`, `story.character_schema`, `story.provenance_text`, `world.mechanics`, `world.spatial`, `world.spatial_frames`, `world.weather` |
-| `persist/llm_capture.py` | 227 |  | `core.db` |
-| `persist/pipeline_trace.py` | 562 | Privacy-conscious export, validation, and offline replay of persisted pipeline history. | `core.db` |
+| `persist/llm_capture.py` | 229 |  | `core.db` |
+| `persist/pipeline_trace.py` | 574 | Privacy-conscious export, validation, and offline replay of persisted pipeline history. | `core.db` |
 | `story/__init__.py` | 6 |  | — |
 | `story/artifacts.py` | 566 |  | `llm.prompts` |
 | `story/attire.py` | 3358 |  | — |
@@ -404,14 +404,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_run_pipeline()` | 1014 | 345 lines |
-| `build_plan()` | 733 | 109 lines |
-| `resume_key_for_turn()` | 640 | 92 lines |
+| `_run_pipeline()` | 1022 | 345 lines |
+| `build_plan()` | 741 | 109 lines |
+| `resume_key_for_turn()` | 648 | 92 lines |
 | `_load_extra_players()` | 51 | 74 lines |
-| `_stream_one()` | 443 | 68 lines |
-| `_stream_parallel()` | 512 | 60 lines |
-| `run_pipeline()` | 1360 | 55 lines |
-| `compute_step()` | 340 | 49 lines |
+| `_stream_one()` | 451 | 68 lines |
+| `_stream_parallel()` | 520 | 60 lines |
+| `_with_engine_notes()` | 391 | 55 lines |
+| `run_pipeline()` | 1368 | 55 lines |
 
 ### `agents/storage.py`
 
@@ -1005,12 +1005,12 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `record_exchange()` | 133 | 39 lines |
+| `record_exchange()` | 133 | 41 lines |
 | `put_blob()` | 76 | 25 lines |
 | `_payload_hashes()` | 110 | 21 lines |
-| `exchanges_for_turn()` | 174 | 20 lines |
-| `prune()` | 196 | 16 lines |
-| `vacuum_blobs()` | 214 | 14 lines |
+| `exchanges_for_turn()` | 176 | 20 lines |
+| `prune()` | 198 | 16 lines |
+| `vacuum_blobs()` | 216 | 14 lines |
 | `capture_enabled()` | 54 | 7 lines |
 | `capture_bodies()` | 63 | 7 lines |
 
@@ -1019,11 +1019,11 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `validate_pipeline_trace()` | 174 | 128 lines |
-| `export_turn_debug()` | 424 | 114 lines |
+| `export_turn_debug()` | 424 | 126 lines |
 | `export_pipeline_trace()` | 80 | 92 lines |
 | `replay_pipeline_trace()` | 304 | 68 lines |
 | `write_pipeline_trace()` | 389 | 25 lines |
-| `export_chat_debug()` | 540 | 23 lines |
+| `export_chat_debug()` | 552 | 23 lines |
 | `_canonical_json()` | 45 | 14 lines |
 | `load_pipeline_trace()` | 379 | 8 lines |
 
