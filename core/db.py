@@ -114,7 +114,7 @@ def parse_scoped_world_key(key):
 #: runs from the root. `or` rather than a default argument, so an empty
 #: `ENGINE_DB=` falls through to the anchored path instead of naming the cwd.
 DB = os.environ.get("ENGINE_DB") or os.path.join(INSTALL_ROOT, "engine.db")
-SCHEMA_VERSION = 34
+SCHEMA_VERSION = 35
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta(key TEXT PRIMARY KEY, value TEXT);
@@ -542,6 +542,41 @@ CREATE TABLE IF NOT EXISTS variants(
 );
 CREATE INDEX IF NOT EXISTS idx_variants_step ON variants(step_id);
 CREATE INDEX IF NOT EXISTS idx_variants_active ON variants(step_id, active);
+
+-- Content-addressed bodies for the debug capture. One row per DISTINCT blob:
+-- a 44KB Director sheet is stored once and referenced by every call that sent
+-- it, and a payload key that did not change between beats costs nothing the
+-- second time. `body` is NULL in hash_only mode, which is the default -- the
+-- hash still proves WHICH text was sent without the text leaving the machine.
+CREATE TABLE IF NOT EXISTS llm_blobs(
+    hash  TEXT PRIMARY KEY,
+    bytes INTEGER NOT NULL,
+    body  TEXT
+);
+
+-- One row per provider call, INCLUDING the sub-calls that have no step of
+-- their own -- the Director's six specialists are the reason this table
+-- exists rather than another column on `variants`. `seq` is the turn-local
+-- order the calls were STARTED in, which is what makes a chronological
+-- reading of a turn possible across a fan-out.
+CREATE TABLE IF NOT EXISTS llm_capture(
+    id            INTEGER PRIMARY KEY,
+    turn_id       INTEGER NOT NULL REFERENCES turns(id) ON DELETE CASCADE,
+    seq           INTEGER NOT NULL,
+    step_key      TEXT NOT NULL DEFAULT '',
+    role          TEXT NOT NULL DEFAULT '',
+    requested     TEXT NOT NULL DEFAULT '',
+    served        TEXT NOT NULL DEFAULT '',
+    started       REAL NOT NULL DEFAULT 0,
+    duration      REAL NOT NULL DEFAULT 0,
+    ok            INTEGER NOT NULL DEFAULT 1,
+    error         TEXT NOT NULL DEFAULT '',
+    system_hash   TEXT,
+    payload_hashes TEXT NOT NULL DEFAULT '{}',
+    response_hash TEXT,
+    reasoning_hash TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_llm_capture_turn ON llm_capture(turn_id, seq);
 
 CREATE TABLE IF NOT EXISTS memories(
     id INTEGER PRIMARY KEY,
@@ -1673,6 +1708,15 @@ MIGRATIONS = [
         # The replacement for the estimate is a stored per-turn clock history,
         # not a better rate: `mind/memory_time.turn_clock_reading` is the seam
         # that would read one, and nothing downstream changes when it lands.
+    ],
+    # v34 -> v35
+    [
+        # llm_blobs and llm_capture are created by SCHEMA, which runs on every
+        # path before this chain, so there is no DDL to repeat here. The bump
+        # exists so a database that predates the debug capture is
+        # distinguishable from one that simply has never captured anything --
+        # an empty llm_capture means "nothing recorded", and on a v34 file it
+        # would have meant "cannot record".
     ],
 ]
 

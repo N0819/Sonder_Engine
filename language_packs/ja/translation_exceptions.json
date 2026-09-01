@@ -173,5 +173,7 @@
   "character-${index + 1}": "browser-only character key kept identical for payload routing",
   "existing:${id}": "browser-only character key kept identical for payload routing",
   "generated:${index}": "browser-only character key kept identical for payload routing",
-  "generated:${i}": "browser-only character key kept identical for payload routing"
+  "generated:${i}": "browser-only character key kept identical for payload routing",
+  "turn-${tid}-debug.json": "download filename — the placeholder and the .json extension must survive verbatim",
+  "chat-${S.chatId}-debug.json": "download filename — the placeholder and the .json extension must survive verbatim"
 }

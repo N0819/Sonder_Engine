@@ -1636,6 +1636,65 @@ async function openPipeline(tid) {
         )
       : null,
     el("span", { class: "spacer" }),
+    // The debug export. The pipeline drawer is where someone already is when
+    // they want it, and until now the artifact had no route and no button:
+    // `persist/pipeline_trace.py` could build one and nothing could ask for
+    // it. Content rides along only if capture was on when the turn ran; the
+    // file says which, so a skeleton is never mistaken for the whole turn.
+    el(
+      "button",
+      {
+        title:
+          "Download this turn as a chronological debug file: what was sent, "
+          + "what came back including reasoning, and what the engine decided",
+        onclick: async event => {
+          const btn = event.currentTarget;
+          btn.disabled = true;
+          try {
+            const d = await api("GET", `/api/turns/${tid}/debug`);
+            downloadJSON(d, `turn-${tid}-debug.json`);
+            toast(
+              d.capture_was_on
+                ? "Turn exported."
+                : "Turn exported — no provider calls were captured "
+                  + "(debug capture is off in Settings).",
+              d.capture_was_on ? "ok" : "warn"
+            );
+          } catch (e) {
+            toast("Export failed.", "err");
+          } finally {
+            btn.disabled = false;
+          }
+        },
+      },
+      "Export turn"
+    ),
+    el(
+      "button",
+      {
+        title: "Download the recent turns of this whole chat as debug files",
+        onclick: async event => {
+          const btn = event.currentTarget;
+          btn.disabled = true;
+          try {
+            const d = await api("GET", `/api/chats/${S.chatId}/debug`);
+            downloadJSON(d, `chat-${S.chatId}-debug.json`);
+            toast(
+              d.turns_exported < d.turns_total
+                ? `Exported the last ${d.turns_exported} of `
+                  + `${d.turns_total} turns.`
+                : "Chat exported.",
+              "ok"
+            );
+          } catch (e) {
+            toast("Export failed.", "err");
+          } finally {
+            btn.disabled = false;
+          }
+        },
+      },
+      "Export chat"
+    ),
     p.editable && p.resumable
       ? el(
           "button",

@@ -403,6 +403,45 @@ def complete_validated_json(
     # invites raising the ceiling for "a model with a genuinely larger usable
     # output window"; that invitation did not work.
     user = json.dumps(payload, ensure_ascii=False)
+    _capture_t0 = time.time()
+
+    def _captured(report):
+        """Hand this exchange to the debug capture, then return the output.
+
+        Placed here rather than in `_accepted` because THIS is the scope that
+        holds all four halves at once: the system sheet, the payload actually
+        serialised for the wire, the accepted output, and the reasoning the
+        provider returned for it. It is also the single funnel every stage AND
+        every Director specialist sub-call passes through, which is what makes
+        a chronological reading of a whole turn possible -- the six
+        specialists have no step rows, so nothing else sees them.
+
+        No-op when debug capture is off, which is the default.
+        """
+        try:
+            from core.pipeline_context import note_step_exchange
+            from llm import providers
+            from llm.providers import last_reasoning
+            note_step_exchange({
+                "role": role,
+                # The model of record for this exchange. The `llm_calls`
+                # ledger already carries requested/served per call; this is
+                # only so an exported turn reads without a join.
+                "requested": str((providers.agent_models().get(role) or {})
+                                 .get("model") or ""),
+                "system": system,
+                "payload": payload,
+                "response": report.output,
+                "reasoning": last_reasoning.get() or "",
+                "started": _capture_t0,
+                "duration": time.time() - _capture_t0,
+                "ok": True,
+            })
+        except Exception:
+            # A diagnostic must never fail the call it is describing.
+            pass
+        return _accepted(report)
+
     provider_errored = False
     last_provider_error = None
     # Raised once, by the length-escalation below, and then inherited by every
@@ -469,7 +508,7 @@ def complete_validated_json(
         report.errors.insert(0, parse_error)
 
     if report.valid:
-        return _accepted(report)
+        return _captured(report)
 
     previous_raw = raw
     previous_parsed = parsed
@@ -565,7 +604,7 @@ def complete_validated_json(
                     report.errors.insert(0, parse_error)
 
                 if report.valid:
-                    return _accepted(report)
+                    return _captured(report)
 
                 ran_out_of_room = output_ran_out_of_room(raw)
                 previous_raw = raw
@@ -658,7 +697,7 @@ def complete_validated_json(
             report.errors.insert(0, parse_error)
 
         if report.valid:
-            return _accepted(report)
+            return _captured(report)
 
     candidate_count = role_candidate_count(role)
 

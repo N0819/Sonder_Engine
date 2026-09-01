@@ -59,6 +59,8 @@ import logging
 import re
 from dataclasses import dataclass, field
 
+from core.pipeline_context import note_step_decision
+
 from language_runtime import (
     LanguagePackError, current_language_id, language_pack, linguistic,
     renderer_for)
@@ -1928,18 +1930,33 @@ def act_percept(scene, event, observer_name, actor_name, rel, *,
     None. Gates: concealment, rear arc, sight (an action is visible or it is
     nothing -- a touch-only source contributes sensation percepts instead,
     never an event surface)."""
+    # Each refusal below is recorded with the reason it refused. They all
+    # return None, and from outside the four are indistinguishable from "the
+    # actor did nothing" -- which is how a body stood exposed inside another
+    # for four turns while this function behaved perfectly. No-op when debug
+    # capture is off; one ContextVar read on the hot path.
+    _who = "%s -> %s" % (actor_name, observer_name)
     if concealed_from_observer(event, observer_name, observer_id):
+        note_step_decision("act_percept", _who, "refused",
+                           "concealed from this observer")
         return None
     if surface is None:
         from .common import observable_action_text
         surface = observable_action_text(event)
     surface = str(surface or "").strip()
     if not surface:
+        note_step_decision("act_percept", _who, "refused",
+                           "no observable surface -- a mental beat")
         return None                       # a mental beat is imperceptible
     if entity_arc(scene, observer_name, actor_name) == "rear":
+        note_step_decision("act_percept", _who, "refused",
+                           "actor is in the observer's rear arc")
         return None
     if not can_see:
+        note_step_decision("act_percept", _who, "refused",
+                           "observer cannot see (sight gate)")
         return None
+    note_step_decision("act_percept", _who, "delivered", surface[:120])
     targets_self = any(
         same_subject(scene, target, observer_name)
         or str(target or "").strip().casefold() in {

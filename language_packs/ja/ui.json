@@ -2099,5 +2099,17 @@
   "🔊 Mute": "🔊 ミュート",
   "🔒 persona secrets": "🔒 ペルソナの秘密",
   "🔗 Generate invite": "🔗 招待を生成",
-  "🧩 ${lane.ext_id}${lane.description ? \" — \" + lane.description : \"\"}": "🧩 ${lane.ext_id}${lane.description ? \" — \" + lane.description : \"\"}"
+  "🧩 ${lane.ext_id}${lane.description ? \" — \" + lane.description : \"\"}": "🧩 ${lane.ext_id}${lane.description ? \" — \" + lane.description : \"\"}",
+  "Export turn": "ターンを書き出す",
+  "Export chat": "チャットを書き出す",
+  "Turn exported.": "ターンを書き出しました。",
+  "Chat exported.": "チャットを書き出しました。",
+  "Export failed.": "書き出しに失敗しました。",
+  "No such chat.": "そのチャットは存在しません。",
+  "Download this turn as a chronological debug file: what was sent, what came back including reasoning, and what the engine decided": "このターンを時系列のデバッグファイルとして保存します。送信された内容、推論を含む返答、そしてエンジンが下した判断が含まれます",
+  "Download the recent turns of this whole chat as debug files": "このチャット全体の最近のターンをデバッグファイルとして保存します",
+  "Exported the last ${d.turns_exported} of ${d.turns_total} turns.": "全${d.turns_total}ターンのうち直近の${d.turns_exported}ターンを書き出しました。",
+  "Turn exported — no provider calls were captured (debug capture is off in Settings).": "ターンを書き出しました — プロバイダー呼び出しは記録されていません（デバッグ記録は設定でオフになっています）。",
+  "turn-${tid}-debug.json": "turn-${tid}-debug.json",
+  "chat-${S.chatId}-debug.json": "chat-${S.chatId}-debug.json"
 }

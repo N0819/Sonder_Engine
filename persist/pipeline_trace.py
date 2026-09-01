@@ -411,3 +411,152 @@ def write_pipeline_trace(
         except FileNotFoundError:
             pass
         raise
+
+
+# ---------------------------------------------------------------------------
+# The turn debug artifact
+# ---------------------------------------------------------------------------
+
+TURN_DEBUG_FORMAT = "sonder.turn-debug"
+TURN_DEBUG_VERSION = 1
+
+
+def export_turn_debug(turn_id: int, *, include_content: bool = True) -> dict:
+    """One turn, in the order it actually happened.
+
+    `export_pipeline_trace` above answers "what did each stage decide", which
+    is the replayable record. This answers a different question -- "what
+    happened, in order" -- and needs three sources the trace does not join:
+
+      * `llm_capture`, for what was SENT and the reasoning that came back.
+        Nothing else holds either, and for the Director's six specialists
+        nothing else holds anything at all: they are sub-calls inside
+        `director_resolve` with no steps and therefore no variants.
+      * the steps' own variants, for what each stage ANSWERED.
+      * `_engine_notes`, for what the deterministic layer did -- the warnings
+        it raised and the decisions it made, including the times it correctly
+        DECLINED, which is the half that leaves no other trace.
+
+    Ordered by wall clock, because the Director fans out: the six specialists
+    run concurrently and finish out of order, so the order they were STARTED
+    in is the only one that describes the turn.
+    """
+    turn = q("SELECT id,chat_id,idx,player_input,created FROM turns WHERE id=?",
+             (turn_id,), one=True)
+    if not turn:
+        raise PipelineTraceError(f"turn {turn_id} not found")
+
+    events: list[dict] = []
+
+    from persist.llm_capture import exchanges_for_turn
+    for row in exchanges_for_turn(turn_id, include_bodies=include_content):
+        payload = row.get("payload") if include_content else None
+        if isinstance(payload, dict):
+            decoded = {}
+            for key, blob in payload.items():
+                if blob is None:
+                    decoded[key] = None
+                    continue
+                try:
+                    decoded[key] = json.loads(blob)
+                except Exception:
+                    decoded[key] = blob
+            payload = decoded
+        response = row.get("response")
+        if isinstance(response, str):
+            try:
+                response = json.loads(response)
+            except Exception:
+                pass
+        events.append({
+            "at": float(row.get("started") or 0.0),
+            "kind": "call",
+            "seq": int(row.get("seq") or 0),
+            "step": row.get("step_key") or "",
+            "role": row.get("role") or "",
+            "model": row.get("requested") or "",
+            "duration": float(row.get("duration") or 0.0),
+            "ok": bool(row.get("ok", 1)),
+            "error": row.get("error") or "",
+            "sent": {"system": row.get("system"),
+                     "system_sha256": row.get("system_hash"),
+                     "payload": payload,
+                     "payload_sha256": row.get("payload_hashes") or {}},
+            "received": {"output": response,
+                         "output_sha256": row.get("response_hash"),
+                         "reasoning": row.get("reasoning"),
+                         "reasoning_sha256": row.get("reasoning_hash")},
+        })
+
+    for step in q("SELECT id,key,label,ord FROM steps WHERE turn_id=? "
+                  "ORDER BY ord,id", (turn_id,)) or ():
+        variant = q("SELECT id,content,created FROM variants WHERE step_id=? "
+                    "AND active=1 ORDER BY id DESC LIMIT 1",
+                    (step["id"],), one=True)
+        if not variant:
+            continue
+        content = _decode_variant_content(variant["content"],
+                                          variant_id=int(variant["id"]))
+        notes = content.pop("_engine_notes", {}) if isinstance(content, dict) else {}
+        events.append({
+            "at": float(variant["created"] or 0.0),
+            "kind": "step",
+            "step": step["key"],
+            "label": step["label"],
+            "ord": int(step["ord"] or 0),
+            "output": content if include_content else None,
+            "output_sha256": _json_digest(content),
+            "warnings": (notes or {}).get("warnings") or [],
+            "decisions": (notes or {}).get("decisions") or [],
+            "llm_calls": (notes or {}).get("llm_calls") or [],
+        })
+
+    # Steps and calls share one clock. Ties keep calls ahead of the step that
+    # contains them, which is the order they happened in.
+    events.sort(key=lambda e: (e["at"], 0 if e["kind"] == "call" else 1,
+                               e.get("seq", 0)))
+
+    captured = sum(1 for e in events if e["kind"] == "call")
+    return {
+        "format": TURN_DEBUG_FORMAT,
+        "version": TURN_DEBUG_VERSION,
+        "turn": {
+            "turn_id": int(turn["id"]),
+            "chat_id": int(turn["chat_id"]),
+            "idx": int(turn["idx"]),
+            "player_input": (turn["player_input"] or "") if include_content
+                            else None,
+            "created": float(turn["created"] or 0.0),
+        },
+        "content_included": bool(include_content),
+        # Says so rather than looking complete: with capture off, every `call`
+        # event is absent and the artifact holds only what the steps recorded.
+        "calls_captured": captured,
+        "capture_was_on": captured > 0,
+        "timeline": events,
+    }
+
+
+def export_chat_debug(chat_id: int, *, include_content: bool = True,
+                      limit: int = 50) -> dict:
+    """The same, for a whole chat's most recent turns, oldest first.
+
+    `limit` is named rather than buried: a long chat's full debug export is
+    unbounded, and silently returning the last N would read as "this is the
+    whole chat". The artifact reports the bound it applied.
+    """
+    rows = q("SELECT id FROM turns WHERE chat_id=? ORDER BY idx DESC LIMIT ?",
+             (int(chat_id), int(limit))) or ()
+    turn_ids = [int(r["id"]) for r in rows][::-1]
+    total = q("SELECT COUNT(*) AS n FROM turns WHERE chat_id=?",
+              (int(chat_id),), one=True)
+    return {
+        "format": TURN_DEBUG_FORMAT,
+        "version": TURN_DEBUG_VERSION,
+        "chat_id": int(chat_id),
+        "turns_total": int((total or {"n": 0})["n"]),
+        "turns_exported": len(turn_ids),
+        "limit": int(limit),
+        "turns": [export_turn_debug(t, include_content=include_content)
+                  for t in turn_ids],
+    }

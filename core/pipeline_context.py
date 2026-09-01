@@ -14,6 +14,18 @@ from core.db import wget
 current_step_key: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
     "current_step_key", default=None)
 
+#: Most deterministic decisions one turn may record before the log stops
+#: growing. Named here rather than buried because it is a real ceiling on what
+#: a debug export can tell you: past it, the turn's decision log is TRUNCATED
+#: and the export says so rather than pretending it is complete.
+#:
+#: 2000 is chosen against the producer that sets the scale --
+#: `composer.act_percept` runs once per observer per act, so a beat with six
+#: present characters and a dozen acts is ~72 entries and an unusually crowded
+#: one is a few hundred. A turn that reaches 2000 has something wrong with it,
+#: and the truncation is itself the finding.
+DECISION_LOG_LIMIT = 2000
+
 # Where a warning raised BELOW the agent layer should land. `llm_quality`'s
 # repair ladder (truncation re-ask, temperature-0 repair, fallback candidates)
 # and the character stage's decision-review retry each issue a full extra
@@ -39,6 +51,47 @@ def note_step_warning(msg: str) -> None:
     if sink is not None:
         try:
             sink(str(msg))
+        except Exception:
+            # A diagnostic must never fail the call it is describing.
+            pass
+
+
+# Where a deterministic DECISION made below the agent layer should land. The
+# producers are the guards themselves -- composer, perception, the fan-out's
+# manifest check, the background gate -- none of which hold a PipelineContext,
+# and none of which should have to be handed one to say what they did.
+current_decision_sink: contextvars.ContextVar[Optional[Any]] = \
+    contextvars.ContextVar("current_decision_sink", default=None)
+
+# Where one provider EXCHANGE (what was sent, what came back, the reasoning)
+# should land. Separate from call_ledger_sink, which carries the same call's
+# metadata and is always on: this one is content, off by default, and exists
+# so the Director's six specialist sub-calls -- which have no step rows and so
+# no variants -- are readable at all.
+current_exchange_sink: contextvars.ContextVar[Optional[Any]] = \
+    contextvars.ContextVar("current_exchange_sink", default=None)
+
+
+def note_step_exchange(entry: dict) -> None:
+    """Record one provider exchange on the running step. No-op outside a step
+    and no-op when debug capture is off."""
+    sink = current_exchange_sink.get()
+    if sink is not None:
+        try:
+            sink(entry)
+        except Exception:
+            pass
+
+
+def note_step_decision(kind: str, subject: str, verdict: str,
+                       reason: str = "") -> None:
+    """Record one deterministic decision on the running step. No-op outside a
+    step, and no-op when debug capture is off -- which is the default, so the
+    hot paths that call this pay one ContextVar read and nothing else."""
+    sink = current_decision_sink.get()
+    if sink is not None:
+        try:
+            sink(kind, subject, verdict, reason)
         except Exception:
             # A diagnostic must never fail the call it is describing.
             pass
@@ -229,6 +282,34 @@ class PipelineContext:
     # counts and durations, never content.
     llm_calls: list = field(default_factory=list)
 
+    # What the DETERMINISTIC layer decided, one dict per decision
+    # ({step_key, kind, subject, verdict, reason}), tagged with the running
+    # step by the same contextvar warnings and llm_calls use.
+    #
+    # Distinct from `warnings`, and the distinction is the whole point: a
+    # warning means the engine had to REPAIR something, so it fires only on
+    # the failure path. This channel records the engine DECLINING as well --
+    # `composer.act_percept` refusing an act an observer could not see,
+    # `changes_asserted` finding a manifest entry the diff never encoded,
+    # `pick_background_reactors` returning [] so no call is made at all.
+    #
+    # A correct refusal and "nothing happened" are indistinguishable from
+    # outside, which is why they cost days to tell apart: act_percept refused
+    # every unseen act for four turns while a body stood exposed inside
+    # another, behaved perfectly, and left no trace of having run. The
+    # firewall works by SUBTRACTION, and subtraction is invisible by
+    # construction unless something writes it down.
+    #
+    # Bounded, because act_percept runs per observer per act and a crowded
+    # room would otherwise out-write the story: see DECISION_LOG_LIMIT.
+    decisions: list = field(default_factory=list)
+
+    # One dict per provider exchange, content included, tagged by running
+    # step. Held in memory for the turn and flushed to `llm_capture` by
+    # runtime at the step's own persist point, so capture never opens a write
+    # inside the turn's commit lock. Empty unless debug capture is on.
+    exchanges: list = field(default_factory=list)
+
     # What the deterministic layer DID with this beat's model output, in the
     # Director's own terms, carried to the NEXT beat through engine_notices.
     #
@@ -334,6 +415,40 @@ class PipelineContext:
     def llm_calls_for_step(self, key: str) -> list[dict]:
         """Every provider call made while `key` was the running step."""
         return [dict(entry) for entry in self.llm_calls
+                if entry.get("step_key") == key]
+
+    def note_decision(self, kind: str, subject: str, verdict: str,
+                      reason: str = ""):
+        """Record one deterministic decision against the running step.
+
+        Cheap enough to call on the hot path: it is a no-op once the turn's
+        ceiling is reached, and the ceiling is hit by exactly the callers that
+        would flood it. Tagged by contextvar for the same reason
+        `note_llm_call` is -- perception fans out across a thread pool.
+        """
+        if len(self.decisions) >= DECISION_LOG_LIMIT:
+            return
+        self.decisions.append({
+            "step_key": current_step_key.get(),
+            "kind": str(kind or "")[:64],
+            "subject": str(subject or "")[:200],
+            "verdict": str(verdict or "")[:64],
+            "reason": str(reason or "")[:400],
+        })
+
+    def decisions_for_step(self, key: str) -> list[dict]:
+        """Every deterministic decision made while `key` was the running step."""
+        return [dict(entry) for entry in self.decisions
+                if entry.get("step_key") == key]
+
+    def note_exchange(self, entry: dict):
+        """Record one provider exchange (sent, received, reasoning)."""
+        if isinstance(entry, dict):
+            self.exchanges.append(
+                {"step_key": current_step_key.get(), **entry})
+
+    def exchanges_for_step(self, key: str) -> list[dict]:
+        return [dict(entry) for entry in self.exchanges
                 if entry.get("step_key") == key]
 
     def tell_director(self, msg: str):
