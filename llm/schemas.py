@@ -1156,6 +1156,12 @@ class OtherPlayerInterpret(LenientModel):
 
 class DirectorInterpret(LenientModel):
     kind: str = "mixed"
+    # The ruling channel, mirroring DirectorResolve. `director_interpret` fans
+    # out to the same six specialists (director.py's `_run_specialists`), so a
+    # hand reading only the player's declaration was left to infer what the
+    # Director made of it -- the exact gap the channel was built to close,
+    # on half the Director's specialist work.
+    ledger_notes: dict[str, str] = Field(default_factory=dict)
     sequence: list[dict] = Field(default_factory=list)
     speech: Optional[str] = None
     speech_volume: SpeechVolume = SpeechVolume.normal

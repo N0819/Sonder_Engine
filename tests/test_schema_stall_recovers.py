@@ -226,3 +226,162 @@ class TestTheEngineLearnsWhatAProviderWillNotGive:
         monkeypatch.setattr(providers, "set_setting", boom, raising=False)
         providers._note_json_schema_rejected(_prov(), "m")   # must not raise
         assert not providers._json_schema_supported(_prov(), "m")
+
+
+class TestARejectionInAStreamFrameIsStillARejection:
+    """A provider that rejects a request does not always get an HTTP status.
+
+    Once the response body has begun, the rejection arrives as an
+    `{"error": {...}}` frame instead, and the status sits INSIDE it. All four
+    in-stream raise sites hardcoded 0 -- so the recovery ladder above, gated on
+    `status_code != 400`, could never fire on the streaming path. The blocking
+    path recovered and the streaming path died.
+
+    Measured 2026-09-01 on google/gemini-3.7-flash, which rejects
+    `response_format` and answers perfectly without it. Live, running the whole
+    engine on it:
+
+        RuntimeError: director_interpret: all providers failed (last provider
+        error: provider stream error: Request contains an invalid argument.)
+
+    The rule is about the transport and not the model: a rejection is the same
+    event whether a status line or a frame carried it, so whether recovery is
+    available must not depend on which one did. Reading the code the frame
+    already states is the entire fix -- matching on the message text would work
+    only until a provider reworded it.
+    """
+
+    @staticmethod
+    def _frame(code):
+        return {"error": {"message": "Request contains an invalid argument.",
+                          "code": code}}
+
+    def test_the_status_is_read_out_of_the_frame(self):
+        assert providers._stream_error_status(self._frame(400)["error"]) == 400
+        assert providers._stream_error_status(self._frame("400")["error"]) == 400
+
+    def test_a_frame_with_no_usable_status_still_reports_zero(self):
+        """An overload frame is not a rejection and must not claim to be one."""
+        assert providers._stream_error_status({"message": "overloaded"}) == 0
+        assert providers._stream_error_status(
+            {"code": "invalid_argument"}) == 0
+        assert providers._stream_error_status({"code": True}) == 0
+        assert providers._stream_error_status(None) == 0
+
+    def test_a_400_in_a_stream_frame_reaches_the_recovery(self, monkeypatch):
+        # `_NO_JSON_OBJECT` is process-wide and keyed by (provider, model),
+        # which every test in this file shares. Run after one that marks the
+        # key, `_apply_json_mode` sends no response_format at all, there is
+        # nothing to recover from, and this passes alone and fails in the
+        # suite. Clear the key rather than inventing a unique model: the
+        # sharing is the hazard worth pinning against.
+        key = providers._json_object_key(_prov(), "some/model")
+        for store, lock in ((providers._NO_JSON_OBJECT,
+                             providers._NO_JSON_OBJECT_LOCK),
+                            (providers._NO_JSON_SCHEMA,
+                             providers._NO_JSON_SCHEMA_LOCK)):
+            with lock:
+                store.discard(key)
+        seen = []
+
+        def fake_sse(url, headers, body, sink, role=None, model=None):
+            seen.append(dict(body))
+            if "response_format" in body:
+                raise providers.LLMError(
+                    "provider stream error: Request contains an invalid "
+                    "argument.", 400, True)
+            return '{"ok": true}'
+
+        monkeypatch.setattr(providers, "_sse_openai", fake_sse)
+        monkeypatch.setattr(providers, "resolve_role",
+                            lambda role: (_prov(), "some/model", {}))
+        monkeypatch.setattr(
+            providers, "token_sink",
+            providers.contextvars.ContextVar("t", default=lambda d: None))
+
+        # json_mode is the 5th positional: this request carries a
+        # response_format, which is what the provider is rejecting.
+        out = providers._chat_complete_once(
+            "director", "sys", "user", 0.5, True, 1000, None)
+
+        assert out == '{"ok": true}'
+        assert len(seen) == 2
+        assert "response_format" in seen[0]
+        assert "response_format" not in seen[1], (
+            "a rejection carried by a stream frame must reach the same "
+            "downgrade an HTTP 400 reaches")
+
+    def test_a_status_zero_stream_error_without_a_schema_still_raises(
+            self, monkeypatch):
+        """The widening must not swallow an ordinary overload."""
+        def fake_sse(url, headers, body, sink, role=None, model=None):
+            raise providers.LLMError("provider stream error: overloaded",
+                                     0, True)
+
+        monkeypatch.setattr(providers, "_sse_openai", fake_sse)
+        monkeypatch.setattr(providers, "resolve_role",
+                            lambda role: (_prov(), "some/model", {}))
+        monkeypatch.setattr(
+            providers, "token_sink",
+            providers.contextvars.ContextVar("t", default=lambda d: None))
+
+        with pytest.raises(providers.LLMError):
+            providers._chat_complete_once(
+                "director", "sys", "user", 0.5, True, 1000, None)
+
+
+class _Ctx:
+    """The two fields `_interpret_beat_view` reads. Deliberately not a real
+    PipelineContext: this pins the ruling channel, not scene assembly."""
+    cast = ()
+    input = ""
+
+
+class TestBothHalvesOfTheDirectorCarryTheRuling:
+    """`director_interpret` is a structural mirror of `director_resolve`.
+
+    Both fan out to the same six specialists through
+    `director._run_specialists`. The ruling channel was built into the resolve
+    half only, so for a release the interpret half ran its hands with nothing
+    to transcribe -- the exact gap `ledger_notes` exists to close, on half the
+    Director's specialist work, and it was invisible because an absent ruling
+    is indistinguishable from "this beat settled nothing".
+
+    Pinned as a MIRROR rather than as two separate facts: the failure mode is
+    drift between the halves, so the assertion has to be that they agree.
+    """
+
+    def test_both_schemas_carry_the_field(self):
+        from llm.schemas import DirectorInterpret, DirectorResolve
+        for model in (DirectorInterpret, DirectorResolve):
+            assert "ledger_notes" in model.model_fields, model.__name__
+
+    def test_both_beat_views_expose_it_under_the_key_routing_reads(self):
+        """`_note_for` reads `view["ledger_notes"]`; if a view omits the key
+        the routing silently finds nothing for every hand."""
+        from agents import director
+        notes = {"spatial": "the player's step is a transit"}
+        interpret = director._interpret_beat_view(
+            _Ctx(), {"ledger_notes": notes, "sequence": []}, "Player")
+        assert interpret.get("ledger_notes") == notes
+        assert director._note_for(interpret["ledger_notes"], "spatial")
+
+    def test_blank_rulings_are_dropped_on_both_sides_by_one_normalizer(self):
+        from agents import director
+        raw = {"spatial": "  ", "body": "", "social": " a real ruling "}
+        view = director._interpret_beat_view(
+            _Ctx(), {"ledger_notes": raw, "sequence": []}, "Player")
+        assert view["ledger_notes"] == {"social": "a real ruling"}
+
+    def test_both_prompts_declare_the_field_in_the_shape_they_hand_over(self):
+        """The measured lesson: a field asked for in prose and absent from the
+        OUTPUT SHAPE does not exist as far as the model is concerned. On the
+        resolve side that cost every ruling on a live replay."""
+        from llm.prompts import DEFAULT_PROMPTS, prose_author_prompt
+        interpret = DEFAULT_PROMPTS["director_interpret"]
+        resolve = prose_author_prompt(None)
+        for name, text in (("director_interpret", interpret),
+                           ("prose_author_sheet", resolve)):
+            assert "ledger_notes:{specialist:line}" in text, name
+            # and the six names, which the model otherwise guesses at
+            assert "body|social|contact|objects|spatial|offscreen" in text, name

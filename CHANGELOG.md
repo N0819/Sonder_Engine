@@ -1,5 +1,150 @@
 # Changelog
 
+## alpha 9.10 — Say what you decided, somewhere it can be read
+
+30 commits. The thread through most of them is the same: the engine knew
+something, decided something, or refused something, and left no way for anyone
+— a specialist, a reader, the next stage — to find out. The Director resolved a
+beat and its six hands had to infer the ruling from prose. A perception guard
+declined an act correctly and left no trace, so a correct refusal and "nothing
+happened" looked identical. A provider rejected a request mid-stream and the
+rejection arrived with its status thrown away. A turn could be read only by
+excavating the database.
+
+### The Director rules; the specialists keep the books
+
+The six specialists were invented to take bookkeeping off the Director, and
+they inherited a judgement they were never meant to make: with only the prose
+to read, each decided for itself what the beat had settled. `ledger_notes` is
+the Director saying so directly — one line per specialist whose channels the
+beat actually settled, written in that channel's terms.
+
+Measured across seven beats from seven stories, the ruling reached the right
+hand every time it was emitted, and the hand acted on it in 70% of cases. Two
+defects turned up in the wiring and are fixed: the field existed in the schema,
+the payload and the sheet's prose but **not in the output shape**, which is the
+field list the model is actually handed — so on a live replay grok-4.3 emitted
+zero of them, correctly, because as far as it could tell the field did not
+exist. And `{specialist:line}` used "specialist" as a placeholder while
+enumerating the six names nowhere, so the model guessed: 1 keyed by specialist,
+8 by channel, 2 unrecognised. With the names declared, 26 of 26 keyed correctly.
+
+And the gap that was found by reading the shipped feature rather than by
+testing it: `director_interpret` is a structural mirror of `director_resolve`
+and fans out to the same six hands, and the ruling channel had been built into
+the resolve half only. Half the Director's specialist work ran with the hands
+inferring the reading from the declaration — invisible for the same reason the
+channel exists, since an absent ruling is indistinguishable from "this settled
+nothing". Three pieces were missing and all three were needed: the schema
+field, the beat view carrying it, and the declaration in the output shape. The
+normalization is now one function shared by both views, because a copy in each
+is how they drifted, and the test is pinned as a mirror rather than as two
+separate facts.
+
+Recorded because it did not work: rewriting the absence rule — the clause
+saying a missing note means "nothing changed", which contradicts eight other
+statements in the same sheet — changed nothing. Two arms over the same seven
+beats on gemini-3.7-flash: 2.00 notes/beat as shipped against 1.71 for the
+rewrite, direction flipping between beats. The shipped wording stays. What the
+arms did agree on is the open defect: **both wrote about a fifth of their
+channels with no ruling at all** (4 of 22, 4 of 19), which is the failure the
+channel exists to prevent and is not a wording problem.
+
+### A turn you can read in order
+
+`GET /api/turns/{id}/debug` and an **Export turn** button in the pipeline
+drawer produce one turn as a chronological file: what was sent, what came back
+including the reasoning, and what the deterministic layer decided. **Export
+chat** does the same across recent turns.
+
+Most of it existed and had no way to ask for it — `persist/pipeline_trace.py`
+could already build a portable per-turn document and had no HTTP route. What
+was genuinely missing was the other half of an exchange, what a stage was
+*asked*, and the six Director specialists entirely: they are sub-calls with no
+steps, so no variants, so no record beyond a token count.
+
+It is affordable because it is content-addressed. One beat sends 104,065 chars
+of sheet across seven calls plus ~107KB of payload, and almost all of it is
+byte-identical on the next beat, so blobs are stored once under their SHA-256
+and payload keys are hashed individually. `hash_only` falls out for free and is
+the default once enabled: the hash proves which sheet ran without the sheet
+leaving the machine. **Off by default**, so the call ledger's standing
+"never content" promise holds unless you turn it on.
+
+Alongside it, the reported gap that started this: logging was pinned at INFO
+with no way to change it and **no file handler anywhere**, so raising the level
+would have produced more output in the same place that already disappears.
+`SONDER_LOG_LEVEL` / the `log_level` setting, and an optional rotating file.
+
+### Refusals leave a trace now
+
+Of seven deterministic screens, four recorded nothing at all: `act_percept`,
+`changes_asserted`, `pick_background_reactors`, `already_established_phrases`.
+This follows from the architecture — the firewall works by SUBTRACTION, and
+subtraction is invisible by construction. `act_percept` refused every unseen
+act for four turns while a body stood exposed inside another, behaved
+perfectly, and left nothing to show it had run; finding that took a database
+excavation.
+
+`ctx.note_decision` records the engine DECLINING, not only repairing, which is
+what warnings already cover. `act_percept` is instrumented at all four of its
+refusal points, each with the reason it refused. Capped at 2,000 entries a
+turn, with the truncation reported rather than silent.
+
+### Guards that were themselves the defect
+
+A run of prompt work with one rule behind it: state the class, and prefer its
+complement to a list.
+
+- A reaction rule told a character it "cannot react" to an onset it did not
+  perceive — guarding a channel that does not exist, since a character's
+  payload *is* its perception, and costing two real things: anticipation, and
+  moving before you know what you are moving from.
+- Three memory bans sat one clause away from the fields that made them
+  unnecessary. A memory section now says what memory is, how it is organised
+  and how to use it, and says it in 6 fewer prohibitions.
+- `GOAL VIABILITY` and `GOAL EXHAUSTION` became one sentence, with all ten
+  cases the children covered written down and checked against the merged text
+  first.
+- Eight sentences told the character to read fields it can never receive.
+- Two deterministic triggers designed that week were replayed against the chat
+  that motivated them and both died on the data — one would have ejected a
+  swallowed body mid-passage. Each became one clause instead.
+
+### Two 250-second failures with two different causes
+
+The first was ours: a 90-second read timeout reasoned entirely about
+time-to-first-byte, applied to a blocking POST where silence until completion
+is normal, times three retries. The second was real and needed measuring —
+gemini-3.6-flash cannot compile the `director_resolve` schema, so it accepts
+the request and never answers, an intermediary cuts the connection at 60.2s,
+and four attempts make ~248s. The same body without `response_format` answered
+in 12.5s. The recovery ladder was gated on HTTP 400 only; a stall is now
+treated the same way, and a provider that stalls twice is remembered.
+
+And the one this release closes: a rejection that arrives **inside a stream
+frame** carried its status as 0, so it could never reach that recovery. Running
+the whole engine on gemini-3.7-flash — which rejects `response_format` and
+answers fine without it — died on `provider stream error: Request contains an
+invalid argument.` The frame states its own code; all four raise sites now read
+it. A rejection is the same event whether a status line or a frame carried it.
+
+### A snapshot that outlived its referents
+
+22 chats held checkpoints naming characters that had since been deleted, and
+restoring one raised a bare `FOREIGN KEY constraint failed`. Fixing `memories`
+exposed the same defect in `memory_summaries` — a class, not an instance. All
+22 restore.
+
+### Smaller, from live play
+
+- A weather field is not an enclosure; emptying a room is not removing it;
+  releasing a body is moving it, and limbs are not interiors.
+- A pose that keeps restating what happened leaves the body still doing it.
+- An abort now reaches the blocked read instead of waiting for it, and stops
+  the next stage starting.
+- A helper standing between a decorator and its handler was stealing the route.
+
 ## alpha 9.9 — The world has people in it, and they are nobody's spare parts
 
 153 commits, most of them found by playing rather than by

@@ -1912,6 +1912,41 @@ def _note_json_schema_rejected(prov, model):
     _persist_schema_blacklist()
 
 
+def _stream_error_status(err) -> int:
+    """The HTTP status an in-stream error frame is reporting, or 0.
+
+    A provider that REJECTS a request does not always get to say so with an
+    HTTP status: once the response has begun, the rejection arrives as an
+    `{"error": {...}}` frame and the status lives inside it. Every raise site
+    below used to hardcode 0, which threw that away -- and 0 is not 400, so
+    `_chat_complete_once`'s json-mode recovery could never fire on the
+    streaming path. Measured 2026-09-01 on google/gemini-3.7-flash, which
+    rejects `response_format` and answers fine without it: the blocking path
+    recovered and the streaming path raised
+    `provider stream error: Request contains an invalid argument.` and killed
+    the turn.
+
+    The rule is about the transport, not the model: a rejection is the same
+    event whether it arrives as a status line or a frame, so recovery must not
+    depend on which one carried it. Reading the code the frame already states
+    is the whole fix -- no message matching, which would only work until a
+    provider rewords it.
+    """
+    if not isinstance(err, dict):
+        return 0
+    for key in ("code", "status", "status_code", "http_status"):
+        value = err.get(key)
+        if isinstance(value, bool):
+            continue
+        if isinstance(value, int) and 100 <= value <= 599:
+            return value
+        if isinstance(value, str) and value.strip().isdigit():
+            number = int(value.strip())
+            if 100 <= number <= 599:
+                return number
+    return 0
+
+
 def _note_json_schema_stalled(prov, model):
     """Count a schema request that was accepted and then never answered."""
     key = _json_object_key(prov, model)
@@ -2039,7 +2074,8 @@ def _sse_openai(url, headers, body, sink, role=None, model=None):
             if isinstance(j, dict) and j.get("error"):
                 err = j["error"]
                 msg = err.get("message") if isinstance(err, dict) else str(err)
-                raise LLMError(f"provider stream error: {msg}", 0, True)
+                raise LLMError(f"provider stream error: {msg}",
+                               _stream_error_status(err), True)
             if j.get("usage"):
                 usage = j["usage"]
             # The finish reason rides the LAST chunk of a stream, usually one
@@ -2112,7 +2148,8 @@ def _sse_anthropic(base, headers, body, sink, role=None, model=None):
             if j.get("type") == "error":
                 err = j.get("error") or {}
                 msg = err.get("message") if isinstance(err, dict) else str(err)
-                raise LLMError(f"provider stream error: {msg or 'overloaded'}", 0, True)
+                raise LLMError(f"provider stream error: {msg or 'overloaded'}",
+                               _stream_error_status(err), True)
             if j.get("type") == "message_start":
                 message = j.get("message") or {}
                 usage = _merge_usage(usage, message.get("usage"))
@@ -2994,7 +3031,8 @@ async def _sse_openai_async(url, headers, body, sink, client, role=None, model=N
             if isinstance(j, dict) and j.get("error"):
                 err = j["error"]
                 msg = err.get("message") if isinstance(err, dict) else str(err)
-                raise LLMError(f"provider stream error: {msg}", 0, True)
+                raise LLMError(f"provider stream error: {msg}",
+                               _stream_error_status(err), True)
             if j.get("usage"):
                 usage = j["usage"]
             _capture_choice_finish(j)
@@ -3051,7 +3089,8 @@ async def _sse_anthropic_async(base, headers, body, sink, client, role=None, mod
             if j.get("type") == "error":
                 err = j.get("error") or {}
                 msg = err.get("message") if isinstance(err, dict) else str(err)
-                raise LLMError(f"provider stream error: {msg or 'overloaded'}", 0, True)
+                raise LLMError(f"provider stream error: {msg or 'overloaded'}",
+                               _stream_error_status(err), True)
             if j.get("type") == "message_start":
                 message = j.get("message") or {}
                 usage = _merge_usage(usage, message.get("usage"))
