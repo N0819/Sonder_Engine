@@ -1306,11 +1306,15 @@ class RoomDef(LenientModel):
     # hanging off them with it. Same shape as `zone`/`light`/`exposure` above,
     # for the same reason.
     anchors: Optional[dict[str, dict]] = None
-    # How much floor there is to cross: small | medium | large. The only
-    # thing that makes two distinct anchors read as "across" rather than
-    # "near" (spatial.proximity_rel), so a great hall stops being as
-    # intimate as a wardrobe. Survived until now purely by the same accident
-    # `anchors` did.
+    # How much floor there is to cross: tiny | small | medium | large | huge
+    # | vast -- spatial_geometry.ROOM_SIZES, ordered, and the ONE statement of
+    # the set. The only thing that makes two distinct anchors read as "across"
+    # rather than "near" (spatial.proximity_rel), so a great hall stops being
+    # as intimate as a wardrobe. Survived until now purely by the same
+    # accident `anchors` did. This comment said "small | medium | large" until
+    # 2026-09-01, matching the three the two authoring prompts published and
+    # not the six `effective_room_size` reads; the other three were unreachable
+    # from every hand, and a word outside the six is discarded silently.
     size: Optional[str] = None
     # How long this place takes to CROSS, in story seconds. A room that
     # declares one carries its occupants onward on the simulation clock

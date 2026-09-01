@@ -1,3 +1,6 @@
-{{fragment:transit_note}}
+MOVING ROOMS: a thing that can be entered and can also travel -- a lift, a vehicle, a carried container -- takes its inside with it. Its occupants do not move relative to it while it moves; they arrive somewhere else without walking, and they do not cross the ground it crossed for them. Never walk one of them through the journey, and never leave one behind because the thing itself went somewhere.
+What you RULE, beat by beat, is that thing's condition and where it stands: shut or open, still waiting or under way, close to where it is going or arrived, and -- once it arrives -- the place it is now at. Say each of those plainly in resolved_event on the beat that changes it, and list the move under 'positions' and the change of condition under 'entities' in changes_asserted. The way in and out follows from that condition and is derived, never arranged: do not narrate a doorway between an inside and the world as something you opened or closed on its own, and do not let an occupant see or be seen through a shut one.
+A gate or portal joining two places is the same shape read from outside -- a thing that is open or shut, with what it joins following from that.
+NEVER LOSE A BODY WITH ITS CONTAINER. If the beat destroys, removes or carries off something whose inside holds anybody, your prose must say where each of them ends up -- put out into the world, still inside, or gone with it. A survivor your sentence does not place is a survivor nobody can encode.
 
 

@@ -1004,7 +1004,16 @@ def derive_inventory_placements(scene: dict, inventory_ops,
        is normalized by `_clean_containment`, so the ledger keeps ONE default
        rather than growing a second, competing one; every mode outside
        `_OPEN_CONTAINMENT_MODES` conceals, which is the safe direction for a
-       word the engine cannot vouch for.
+       word the engine cannot vouch for. THE HAND THAT WRITES `relation` NOW
+       KNOWS THAT. Until 2026-09-01 the vocabulary was published only in the
+       CONTACT specialist's `containment` chunk, which the objects specialist
+       never receives; its own `inventory_ops` chunk named the field once
+       inside a JSON shape and defined it nowhere. So the safe direction had
+       a perverse edge: "held_by" or "in_hand" -- the accurate English for a
+       thing in a fist -- handed the object over and made it invisible to the
+       room, where writing no relation at all would have left it in plain
+       sight. Nothing here changed; the chunk now carries the same split, and
+       says to omit the field rather than invent a word.
     3. A null or blank endpoint is SILENCE, never an erasure -- the standing
        `_merge_entity` doctrine. Nothing is unplaced by this pass.
 

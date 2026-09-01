@@ -320,8 +320,14 @@ def background_react(ctx, nonce):
     level = str(cfg.get("scene_life") or "off").strip().casefold()
     charter_near = False
     if level in ("ambient", "full"):
+        # Imported OUTSIDE the try: the handler below reports through
+        # note_step_warning, so binding it inside the block it guards would
+        # raise NameError from the except on the one path that matters.
+        from core.pipeline_context import (note_step_decision,
+                                           note_step_warning)
         try:
-            from world.charter_runtime import background_presence_records
+            from world.charter_runtime import (background_presence_records,
+                                               charter_place_ids)
             _sc = wget(ctx.chat.id, "scene", {}) or {}
             _pr = _player_room(ctx, _sc)
             _places = {_pr} if _pr else set()
@@ -331,8 +337,40 @@ def background_react(ctx, nonce):
                 _places.update(_ambient or ())
             charter_near = bool(background_presence_records(
                 ctx.chat.id, places=_places, frame_id=ctx.turn.frame_id))
-        except Exception:
+            # A DEAD BRIDGE IS SILENT, so say when it is certainly dead.
+            #
+            # This asks which charter bodies are near by handing the player's
+            # ROOM id to a filter that matches on charter PLACE. The two are
+            # independent vocabularies and nothing establishes a
+            # correspondence: measured on chat 84 -- the only chat where
+            # charters ran past one turn -- the four scene rooms and the nine
+            # charter places share ZERO ids, so 37 simulated bodies with
+            # minds, needs and practices had never been perceivable by anyone
+            # in fourteen turns of play. It read as an unexercised subsystem
+            # and was a namespace mismatch.
+            #
+            # Zero overlap with BOTH sides non-empty is unambiguous -- there
+            # is no story in which a populated institution and a populated
+            # scene legitimately share no ground -- so this cannot fire
+            # falsely. It is a decision rather than a warning because nothing
+            # is broken and nothing was repaired: the engine looked, and
+            # found that it could not possibly find anyone.
+            if not charter_near and _places:
+                _known = charter_place_ids(ctx.chat.id,
+                                           frame_id=ctx.turn.frame_id)
+                if _known and not (_known & set(_places)):
+                    note_step_decision(
+                        "charter_bridge", ctx.chat.id, "no_shared_ground",
+                        "%d charter places, %d rooms in scope, no id in "
+                        "common -- no body can ever surface here"
+                        % (len(_known), len(_places)))
+        except Exception as exc:
             charter_near = False
+            # Was a bare swallow. A miss and a raise were indistinguishable,
+            # which is how the mismatch above stayed invisible: the one place
+            # that could have reported it also hid its own failures.
+            note_step_warning("charter presence lookup failed: %s"
+                              % str(exc)[:160])
     if level in ("ambient", "full"):
         # Scene-manager path (docs/design/BACKGROUND_LIFE_DESIGN.md §3.10-§3.12). It
         # returns the SAME _result() shape as the per-presence path, so every
