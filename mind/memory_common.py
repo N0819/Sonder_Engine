@@ -236,3 +236,20 @@ def _summary_retrieval_text(summary, key_phrases, unresolved_threads):
     return "\n".join([summary or "", ", ".join(key_phrases or []),
                       "\n".join(unresolved_threads or [])])
 
+def surviving_character_ids():
+    """Character ids a restore may still reference.
+
+    A snapshot outlives its referents. `memories.char_id`,
+    `memory_summaries.char_id` and `chat_chars.char_id` are each NOT NULL
+    REFERENCES characters(id) ON DELETE CASCADE, so deleting a character
+    already removed those ROWS -- but a checkpoint keeps its own copy inside a
+    JSON blob, where no foreign key reaches it, and replaying it raises
+    IntegrityError and kills the whole restore.
+
+    Measured 2026-08-31: 22 chats carry a checkpoint naming a character that
+    no longer exists (chat 22 names ids 1 and 2; eight chats between 33 and 64
+    name id 37), and rerunning any of those turns failed with a bare FOREIGN
+    KEY constraint failed. Dropping the orphans is not a policy choice -- it
+    is the cascade the schema already ran, applied to the copy that missed it.
+    """
+    return {r["id"] for r in q("SELECT id FROM characters")}
