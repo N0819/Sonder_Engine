@@ -559,6 +559,38 @@ def _close_quietly(response):
         return
 
 
+
+def _post_abortable(url, **kw):
+    """A blocking POST an abort can actually interrupt.
+
+    `_abortable` reached only the two streaming readers, so every plain post
+    below was invisible to `abort_live_requests`: the thread parks in a socket
+    read, no chunk arrives, `_check_cancel` never runs, and the flag stays
+    unseen until the read deadline. That is the identical failure the comment
+    above describes and the streaming path fixed -- the non-streaming leg kept
+    it, which is why an abort lands instantly on some stages and hangs for
+    minutes on others.
+
+    `stream=True` only defers the BODY: headers and status arrive as before,
+    and the read that blocks now happens inside the guard, where closing the
+    socket raises where it stands. The body is materialised here so every
+    existing caller keeps using `.json()`, `.text` and `.content` unchanged.
+    """
+    kw.setdefault("timeout", _request_timeout())
+    # No pipeline to abort -- background jobs, tooling, tests. Behave exactly
+    # as the plain post did, including the response object the caller gets, so
+    # this helper adds a capability and changes no existing contract.
+    if cancel_event.get() is None:
+        return _session().post(url, **kw)
+    response = _session().post(url, stream=True, **kw)
+    with _abortable(response):
+        # Materialise inside the guard: this is the read that blocks, and
+        # closing the socket from the aborting thread raises it where it
+        # stands. `getattr` because a caller's stand-in response need not
+        # implement the streaming half of requests' surface.
+        getattr(response, "content", None)
+    return response
+
 def abort_live_requests(ev) -> int:
     """Close every in-flight response belonging to this cancel event.
 
@@ -2339,11 +2371,10 @@ def _chat_complete_once(
             )
 
         _t0 = time.time()
-        response = _session().post(
+        response = _post_abortable(
             base + "/v1/messages",
             headers=h,
             json=body,
-            timeout=_request_timeout(),
         )
 
         if response.status_code >= 400:
@@ -2456,11 +2487,10 @@ def _chat_complete_once(
         return out
 
     _t0 = time.time()
-    response = _session().post(
+    response = _post_abortable(
         url,
         headers=headers,
         json=body,
-        timeout=_request_timeout(),
     )
 
     if response.status_code == 400:
@@ -2475,11 +2505,10 @@ def _chat_complete_once(
                 stage_zero["response_format"] = {"type": "json_object"}
             else:
                 stage_zero.pop("response_format", None)
-            response = _session().post(
+            response = _post_abortable(
                 url,
                 headers=headers,
                 json=stage_zero,
-                timeout=_request_timeout(),
             )
             if response.status_code < 400:
                 _note_json_schema_rejected(prov, model)
@@ -2491,11 +2520,10 @@ def _chat_complete_once(
         if response.status_code == 400 and "response_format" in body:
             stage_one = dict(body)
             stage_one.pop("response_format", None)
-            response = _session().post(
+            response = _post_abortable(
                 url,
                 headers=headers,
                 json=stage_one,
-                timeout=_request_timeout(),
             )
             if response.status_code < 400:
                 _note_json_object_rejected(prov, model)
@@ -2505,11 +2533,10 @@ def _chat_complete_once(
             fallback_body = _strip_extended(dict(body))
             fallback_body.pop("response_format", None)
 
-            response = _session().post(
+            response = _post_abortable(
                 url,
                 headers=headers,
                 json=fallback_body,
-                timeout=_request_timeout(),
             )
 
     if response.status_code >= 400:
@@ -2545,8 +2572,7 @@ def _chat_complete_once(
     if json_mode and _is_placeholder_json(content):
         retry_body = dict(body)
         retry_body.pop("response_format", None)
-        alt = _session().post(url, headers=headers, json=retry_body,
-                              timeout=_request_timeout())
+        alt = _post_abortable(url, headers=headers, json=retry_body)
         if alt.status_code < 400:
             parsed = alt.json()
             _capture_reasoning(parsed["choices"][0].get("message"))
@@ -3117,7 +3143,8 @@ def _embed_request(texts) -> EmbeddingBatch:
     prov, model, _ = resolve_role("embeddings")
     base = prov["base_url"].rstrip("/")
     _t0 = time.time()
-    r = _session().post(base + "/embeddings", headers=_headers(prov), json={"model": model, "input": texts}, timeout=REQUEST_TIMEOUT)
+    r = _post_abortable(base + "/embeddings", headers=_headers(prov),
+                        json={"model": model, "input": texts})
     if r.status_code >= 400:
         # The BODY carries the reason; `raise_for_status` discards it and
         # leaves only "400 Client Error", which cannot tell a wrong key

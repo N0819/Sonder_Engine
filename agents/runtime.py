@@ -19,7 +19,8 @@ from core.pipeline_context import (
     current_warning_sink,
 )
 from llm.providers import (
-    Aborted, abort_live_requests, call_ledger_sink, cancel_event,
+    Aborted, _check_cancel, abort_live_requests, call_ledger_sink,
+    cancel_event,
     generation_event_sink, token_sink,
 )
 from story.scene import (
@@ -359,6 +360,15 @@ def compute_step(key, ctx, nonce):
     # context without the method must mean "no ledger", never a failed step.
     ledger = call_ledger_sink.set(getattr(ctx, "note_llm_call", None))
     try:
+        # NOTHING NEW STARTS AFTER AN ABORT. The flag was polled between
+        # streamed chunks and nowhere else, so a stage that had not begun
+        # reading yet ran to completion, and the stage after it started too:
+        # an abort in `director_interpret` still paid for perception, the
+        # character calls and the narrator. This is also the commit guard --
+        # `commit` is a step like any other, so a run stopped mid-turn can no
+        # longer write one.
+        _check_cancel()
+
         if key.startswith("character:"):
             return character_step(ctx, int(key.split(":", 1)[1]), nonce)
 
