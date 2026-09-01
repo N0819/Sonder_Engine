@@ -14,7 +14,7 @@
 | `agents/director.py` | 4175 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial`, `world.survival` |
 | `agents/director_contact.py` | 457 |  | `story.character_schema`, `world.spatial` |
 | `agents/director_evidence.py` | 1044 |  | `agents.common`, `agents.director_lingua`, `llm`, `world.spatial` |
-| `agents/director_fanout.py` | 660 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
+| `agents/director_fanout.py` | 673 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
 | `agents/director_floors.py` | 1355 |  | `agents.common`, `agents.director_lingua`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
 | `agents/director_lingua.py` | 29 |  | — |
 | `agents/director_movement.py` | 969 |  | `agents.director_lingua`, `story.character_schema`, `world.spatial` |
@@ -44,7 +44,7 @@
 | `llm/prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `llm.providers` |
 | `llm/prompts.py` | 510 | Default system prompts and prompt preset access. | `core.db` |
 | `llm/providers.py` | 3554 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `core.db`, `core.logging_utils` |
-| `llm/schemas.py` | 5598 | Pydantic output contracts and semantic validation for agent payloads. | — |
+| `llm/schemas.py` | 5612 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `mind/__init__.py` | 6 |  | — |
 | `mind/affect.py` | 2406 |  | `mind.theory_of_mind` |
 | `mind/canon_provenance.py` | 379 |  | — |
@@ -270,14 +270,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_specialist_payload()` | 236 | 189 lines |
-| `_orchestration_scope_backstop()` | 530 | 131 lines |
-| `_resolve_beat_view()` | 55 | 125 lines |
-| `_interpret_beat_view()` | 182 | 37 lines |
-| `_resolved_event_verdicts()` | 461 | 30 lines |
+| `_specialist_payload()` | 242 | 196 lines |
+| `_resolve_beat_view()` | 55 | 131 lines |
+| `_orchestration_scope_backstop()` | 543 | 131 lines |
+| `_interpret_beat_view()` | 188 | 37 lines |
+| `_resolved_event_verdicts()` | 474 | 30 lines |
 | `fanout_is_parallel()` | 33 | 20 lines |
-| `_index_addressed_events()` | 493 | 18 lines |
-| `_stage_container()` | 427 | 16 lines |
+| `_index_addressed_events()` | 506 | 18 lines |
+| `_stage_container()` | 440 | 16 lines |
 
 ### `agents/director_floors.py`
 
@@ -571,14 +571,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `preprocess_llm_output()` | 4299 | 344 lines |
+| `preprocess_llm_output()` | 4313 | 344 lines |
 | `_lenient_coerce()` | 745 | 159 lines |
-| `validate_llm_output_strict()` | 5469 | 130 lines |
-| `semantic_output_errors()` | 5262 | 112 lines |
-| `canonicalize_prose_markup()` | 4104 | 102 lines |
-| `_uncross_concealed_speech()` | 4228 | 69 lines |
+| `validate_llm_output_strict()` | 5483 | 130 lines |
+| `semantic_output_errors()` | 5276 | 112 lines |
+| `canonicalize_prose_markup()` | 4118 | 102 lines |
+| `_uncross_concealed_speech()` | 4242 | 69 lines |
 | `_coerce_list_valued_map()` | 128 | 57 lines |
-| `_coerce_conditions()` | 3645 | 55 lines |
+| `_coerce_conditions()` | 3659 | 55 lines |
 
 ### `mind/affect.py`
 

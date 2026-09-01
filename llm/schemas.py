@@ -2206,6 +2206,20 @@ class DirectorResolve(LenientModel):
     # handed to a specialist -- it exists so an honestly interior beat
     # stops reading like a beat that lost its changes (schemas.OmittedThought).
     thoughts_omitted: list[OmittedThought] = Field(default_factory=list)
+    # THE RULING, in the bookkeeper's own terms. Specialists exist to take
+    # the ledger work off the Director, not to adjudicate: they receive the
+    # finished prose and must each re-read it to decide what their channels
+    # now say, so six hands can reach six readings and nothing reconciles
+    # them. This is the Director keeping the authority the split was never
+    # meant to hand over -- one short natural-language ruling per specialist
+    # whose channels the beat touched, in that channel's terms.
+    #
+    # ABSENCE IS THE SIGNAL. A specialist with no note has no ruling to
+    # record, and a bookkeeper handed no entry writes none -- which is what
+    # a `poses` contract like "a touched pose is a COMPLETE replacement
+    # snapshot" otherwise turns into a restatement of the last paragraph.
+    # So the map carries only the channels this beat actually settled.
+    ledger_notes: dict[str, str] = Field(default_factory=dict)
     # DECLARED BUT NO LONGER REQUESTED. The resolve prompt used to ask the
     # model for both of these and neither answer was ever read: the engine
     # rolls the dice itself from the interpret flow's DiceSpec under a
