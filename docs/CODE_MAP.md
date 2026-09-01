@@ -25,7 +25,7 @@
 | `agents/mapping.py` | 337 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `core.db`, `llm.prompts`, `mind.memory`, `story.character_schema`, `story.scene` |
 | `agents/narration.py` | 1917 | Player-facing narration agent. | `agents`, `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `story.character_schema`, `story.scene`, `world.spatial`, `world.weather` |
 | `agents/perception.py` | 4651 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `mind`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
-| `agents/runtime.py` | 1376 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `core.db`, `core.pipeline_context`, `llm.providers`, `persist.checkpoints`, `persist.commit`, `story.character_schema`, `story.scene` |
+| `agents/runtime.py` | 1386 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `core.db`, `core.pipeline_context`, `llm.providers`, `persist.checkpoints`, `persist.commit`, `story.character_schema`, `story.scene` |
 | `agents/storage.py` | 123 | Step and active-variant persistence helpers. | `core.db` |
 | `core/__init__.py` | 6 |  | — |
 | `core/db.py` | 2319 | SQLite schema, migrations, connection management, transactions, and key/value world access. | `core.paths` |
@@ -43,7 +43,7 @@
 | `llm/llm_quality.py` | 774 | Strict JSON parsing, schema validation, and model-assisted repair. | `core.pipeline_context`, `llm.prompts`, `llm.providers`, `llm.schemas` |
 | `llm/prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `llm.providers` |
 | `llm/prompts.py` | 510 | Default system prompts and prompt preset access. | `core.db` |
-| `llm/providers.py` | 3554 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `core.db`, `core.logging_utils` |
+| `llm/providers.py` | 3581 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `core.db`, `core.logging_utils` |
 | `llm/schemas.py` | 5612 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `mind/__init__.py` | 6 |  | — |
 | `mind/affect.py` | 2406 |  | `mind.theory_of_mind` |
@@ -403,14 +403,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_run_pipeline()` | 976 | 345 lines |
-| `build_plan()` | 695 | 109 lines |
-| `resume_key_for_turn()` | 602 | 92 lines |
-| `_load_extra_players()` | 48 | 74 lines |
-| `_stream_one()` | 405 | 68 lines |
-| `_stream_parallel()` | 474 | 60 lines |
-| `run_pipeline()` | 1322 | 55 lines |
-| `_run_parallel_group()` | 539 | 46 lines |
+| `_run_pipeline()` | 986 | 345 lines |
+| `build_plan()` | 705 | 109 lines |
+| `resume_key_for_turn()` | 612 | 92 lines |
+| `_load_extra_players()` | 49 | 74 lines |
+| `_stream_one()` | 415 | 68 lines |
+| `_stream_parallel()` | 484 | 60 lines |
+| `run_pipeline()` | 1332 | 55 lines |
+| `_run_parallel_group()` | 549 | 46 lines |
 
 ### `agents/storage.py`
 
@@ -558,14 +558,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_chat_complete_once()` | 2270 | 288 lines |
-| `async _chat_complete_async_once()` | 2679 | 115 lines |
-| `chat_complete()` | 2012 | 110 lines |
-| `async chat_complete_async()` | 2588 | 90 lines |
-| `_sse_openai()` | 1870 | 79 lines |
-| `async _sse_openai_async()` | 2795 | 63 lines |
-| `_sse_anthropic()` | 1950 | 61 lines |
-| `_embed_request()` | 3115 | 58 lines |
+| `_chat_complete_once()` | 2302 | 282 lines |
+| `async _chat_complete_async_once()` | 2705 | 115 lines |
+| `chat_complete()` | 2044 | 110 lines |
+| `async chat_complete_async()` | 2614 | 90 lines |
+| `_sse_openai()` | 1902 | 79 lines |
+| `async _sse_openai_async()` | 2821 | 63 lines |
+| `_sse_anthropic()` | 1982 | 61 lines |
+| `_embed_request()` | 3141 | 59 lines |
 
 ### `llm/schemas.py`
 
