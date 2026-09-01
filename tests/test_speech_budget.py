@@ -16,7 +16,9 @@ Two defects, both pinned here.
    which describes the budget as optional and blesses the floor. The character
    contract now states the micro-beat bound as elapsed action and causal
    ownership, while line count remains governed explicitly by the authored
-   voice and `decision.speech_budget`.
+   voice and `decision.speech_budget`. (That bound was called MICRO-BEAT
+   SCOPE until 2026-08-31 and is now WHERE YOUR TURN ENDS; the rule is the
+   same one, named for what it limits rather than for a size.)
 
 Measured across the author's live chats (read-only, structural): line counts do
 not track the setting at all. A chat at `min_lines: 2` produced exactly one
@@ -103,7 +105,7 @@ class TestThePromptReadsTheBudget:
         assert "may_stay_silent:true" in self.SYSTEM
 
 
-class TestTheMicroBeatScopeDoesNotMinimizeVoice:
+class TestTheTurnBoundDoesNotMinimizeVoice:
     SYSTEM = DEFAULT_PROMPTS["character"]
 
     def test_the_directive_itself_is_intact(self):
@@ -116,14 +118,19 @@ class TestTheMicroBeatScopeDoesNotMinimizeVoice:
     def test_it_is_scoped_where_it_is_stated(self):
         # The qualification sits beside the scope directive, before any
         # epistemic rules can make it read as a personality preference.
+        # Renamed from MICRO-BEAT SCOPE 2026-08-31: the name said "small"
+        # and the rule is not about size, so it had to be disclaimed in four
+        # places. What is asserted is the property, not the old wording --
+        # the bound is stated here, and it states that it prefers no
+        # magnitude.
         head = self.SYSTEM[:self.SYSTEM.index("WHAT YOU KNOW is")]
-        assert "MICRO-BEAT SCOPE limits elapsed action and causal ownership" in head
-        assert "not personality or intensity" in head
-        assert "no preference for caution" in head
+        assert "WHERE YOUR TURN ENDS: it ends where someone else's begins" in head
+        assert "Nothing here prefers a small move to a large one" in head
+        assert "commit as hard as your own psychology" in head
 
     def test_the_voice_scoping_still_stands(self):
         # The distant voice anchor independently states the same boundary.
-        assert "constrains elapsed action and causal ownership, NOT " in self.SYSTEM
+        assert "is about elapsed action and causal ownership, NOT " in self.SYSTEM
         assert "word count" in self.SYSTEM
 
 
