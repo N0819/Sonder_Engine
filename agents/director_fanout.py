@@ -54,6 +54,11 @@ def fanout_is_parallel():
 
 def _resolve_beat_view(out, decls, char_actions, dice, p_name, interp):
     """The finished beat as every resolve-side specialist reads it."""
+    ledger_notes = {
+        str(k): str(v).strip()
+        for k, v in (out.get("ledger_notes") or {}).items()
+        if isinstance(v, str) and str(v).strip()
+    }
     declared = {}
     for name, acts in (char_actions or {}).items():
         attempts = [str(a.get("attempt") or "") for a in acts
@@ -165,6 +170,7 @@ def _resolve_beat_view(out, decls, char_actions, dice, p_name, interp):
     return {
         "source": "resolved_beat",
         "prose": out.get("resolved_event") or "",
+        "ledger_notes": ledger_notes,
         "dialogue": [
             {"speaker": d.get("speaker"), "exact_quote": d.get("exact_quote")}
             for d in (out.get("dialogue_log") or [])[:20]
@@ -254,6 +260,13 @@ def _specialist_payload(name, ctx, sc, view, extras):
     }
     if view["source"] == "resolved_beat":
         payload["resolved_event"] = view["prose"]
+        # The Director's ruling for THIS hand's channels, when it made one.
+        # Scoped like every other slice: a specialist sees its own note and
+        # no one else's, so this carries authority without carrying another
+        # hand's ledger. Absent when the beat settled nothing here.
+        note = (view.get("ledger_notes") or {}).get(name)
+        if isinstance(note, str) and note.strip():
+            payload["director_note"] = note.strip()
         # Dialogue only to the hands that own a channel a speech act can
         # write (`director_scopes.reads_dialogue`). Saying a thing is not a
         # physical action, so for `body`, `contact` and `objects` the
