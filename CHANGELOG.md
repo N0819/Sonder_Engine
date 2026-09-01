@@ -1,5 +1,56 @@
 # Changelog
 
+## alpha 9.10.1 — The switch, and the half of the ruling that never shipped
+
+A point release for three things 9.10 claimed or implied and did not deliver.
+
+### The Director's interpret half really does rule now
+
+9.10 said the interpret gap was closed. It was not: `ledger_notes` had to be
+named in a FOURTH place nobody had found. `interpret_delegation_note` is
+appended after the prompt body, so it gets the last word, and it closed with an
+enumeration of what stays the author's — `…speech, movement, follow_op,
+location_query, other_players, flow, notes` — with `ledger_notes` absent. A
+field declared in the output shape and omitted from a later, more specific list
+is a field the model is right to leave out.
+
+The test that should have caught it asserted on `DEFAULT_PROMPTS`, which is the
+prompt BODY, never the assembled text the stage sends. Green on the body,
+silent on the wire. It now builds the assembled prompt, and a second test pins
+the enumeration itself.
+
+The general lesson, since it cost two rounds: a prompt that enumerates what its
+output contains must be updated at EVERY place it enumerates, and an
+enumeration nobody remembers exists is exactly what a closed list decays into.
+
+### Debug capture has a switch
+
+It shipped readable only from a settings row or an env var — the same shape as
+the export that had no HTTP route. ⚙ **API** now carries **Debug capture**: the
+on/off, the hash-only-versus-full-text choice, and the log level, which applies
+on the spot rather than at next start. Off stays the default, and the help text
+says why in the reader's terms.
+
+Verified end to end on a real replayed beat: six calls captured — the prose
+author and all five dispatched specialists — each with its full system prompt,
+its payload, its output and its reasoning, for 199 KB of distinct text across
+60 blobs.
+
+### A number that disagreed with the order it sat in
+
+`seq` was assigned at insert, and the six specialists run concurrently and land
+in completion order, so the exported timeline sorted correctly by wall clock
+while the numbers printed beside each row contradicted it. `seq` is now the
+row's position in the timeline it appears in; the stored counter survives as
+`capture_id` for anyone joining back to the row.
+
+### Note for anyone upgrading
+
+The two capture tables are created by `db.init()` at startup, so a server that
+was already running when 9.10 landed does not have them — restart before
+switching capture on. Turns played before it is on export exactly as they did
+before, and say `capture_was_on: false` rather than looking complete.
+
 ## alpha 9.10 — Say what you decided, somewhere it can be read
 
 30 commits. The thread through most of them is the same: the engine knew

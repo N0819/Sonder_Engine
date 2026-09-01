@@ -471,7 +471,7 @@ def export_turn_debug(turn_id: int, *, include_content: bool = True) -> dict:
         events.append({
             "at": float(row.get("started") or 0.0),
             "kind": "call",
-            "seq": int(row.get("seq") or 0),
+            "capture_id": int(row.get("seq") or 0),
             "step": row.get("step_key") or "",
             "role": row.get("role") or "",
             "model": row.get("requested") or "",
@@ -514,7 +514,19 @@ def export_turn_debug(turn_id: int, *, include_content: bool = True) -> dict:
     # Steps and calls share one clock. Ties keep calls ahead of the step that
     # contains them, which is the order they happened in.
     events.sort(key=lambda e: (e["at"], 0 if e["kind"] == "call" else 1,
-                               e.get("seq", 0)))
+                               e.get("capture_id", 0)))
+
+    # `seq` on a row is its position in THIS timeline, renumbered after the
+    # sort. The stored counter is assigned at insert, and the Director's six
+    # specialists run concurrently and land in completion order -- so printing
+    # it raw put numbers on the rows that contradicted the ordering they sat
+    # in. The database's own counter survives as `capture_id` for anyone who
+    # needs to join back to the row.
+    position = 0
+    for event in events:
+        if event["kind"] == "call":
+            position += 1
+            event["seq"] = position
 
     captured = sum(1 for e in events if e["kind"] == "call")
     return {

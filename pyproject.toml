@@ -25,12 +25,12 @@ packages = [
 
 [project]
 name = "sonder-engine"
-# The release name is "alpha 9.10" and the git tag is `alpha9.10`; "alpha"
+# The release name is "alpha 9.10.1" and the git tag is `alpha9.10.1`; "alpha"
 # is this project's phase label, not a PEP 440 pre-release segment, so it
 # cannot ride in this field. Nothing installs this package — the field was
 # left at a placeholder 0.1.0 through nine releases, which is worse than a
 # version that is merely a different spelling of the tag.
-version = "9.10"
+version = "9.10.1"
 description = "Sonder Engine — a local multi-agent interactive-fiction engine"
 # Upper bound is real, not caution: the pinned pydantic-core has no wheel
 # above 3.13, so pip falls back to compiling it and fails inside a Rust
