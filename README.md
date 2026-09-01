@@ -187,11 +187,6 @@ which is why it is a switch and not a default.
 API keys, provider settings, and all story content live in the local database —
 **never commit a populated `engine.db`.**
 
-## Community
-
-The [Sonder Engine Discord](https://discord.gg/vwRrMUJ865) is the place for
-installation help, development discussion, ideas, and project updates.
-
 ## Credits
 
 Prior art and research the engine draws on is sourced in
