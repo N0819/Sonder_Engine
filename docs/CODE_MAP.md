@@ -42,7 +42,7 @@
 | `llm/__init__.py` | 6 |  | — |
 | `llm/llm_quality.py` | 774 | Strict JSON parsing, schema validation, and model-assisted repair. | `core.pipeline_context`, `llm.prompts`, `llm.providers`, `llm.schemas` |
 | `llm/prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `llm.providers` |
-| `llm/prompts.py` | 510 | Default system prompts and prompt preset access. | `core.db` |
+| `llm/prompts.py` | 516 | Default system prompts and prompt preset access. | `core.db` |
 | `llm/providers.py` | 3581 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `core.db`, `core.logging_utils` |
 | `llm/schemas.py` | 5612 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `mind/__init__.py` | 6 |  | — |
@@ -546,13 +546,13 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `preset_import_document()` | 259 | 51 lines |
-| `_relocate_character_identity()` | 408 | 31 lines |
-| `character_prompt()` | 458 | 28 lines |
+| `_relocate_character_identity()` | 414 | 31 lines |
+| `character_prompt()` | 464 | 28 lines |
 | `normalize_preset()` | 122 | 26 lines |
+| `specialist_prompt()` | 323 | 23 lines |
 | `_preset_override()` | 206 | 22 lines |
 | `_assembled_sheets()` | 38 | 21 lines |
-| `specialist_prompt()` | 323 | 17 lines |
-| `prose_author_prompt()` | 347 | 17 lines |
+| `prose_author_prompt()` | 353 | 17 lines |
 
 ### `llm/providers.py`
 

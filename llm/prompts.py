@@ -334,6 +334,12 @@ def specialist_prompt(name, scope, language=None):
         parts.extend(spec["chunks"][channel]
                      for channel in spec["order"] if channel in granted)
         sheet = "".join(parts)
+    # One statement, not six. The specialists share no preamble file, so a
+    # rule written into their cores is written six times and drifts six ways;
+    # this is the same seam `nsfw_overlay` already uses. It is appended for
+    # every hand because the rule is about the CHANNEL a note arrives on, not
+    # about any one hand's subject.
+    sheet += str(card["director_note"])
     if spec.get("nsfw") and nsfw_enabled():
         sheet += str(card["nsfw_overlay"])
     return apply_prompt_policy(sheet, _language(language), pid)
