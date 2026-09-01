@@ -2797,6 +2797,16 @@ def director_resolve(ctx, nonce, _corrections=None):
             # writing fresh each time, blind. Showing the exact part nouns
             # already on record is what lets a re-assertion BE one.
             "contacts": resolve_sc.get("contacts") or [],
+            # The overlay ledger, for the same reason and one step further.
+            # Contacts were withheld and the Director wrote them blind; these
+            # were withheld AND it is now asked to end them, which it cannot
+            # do for a mark it has never been shown. Live (chat 111 turn 54)
+            # it ended one anyway -- `{"text": "tears escape eyes", "active":
+            # false}` -- having inferred the mark existed from the transcript
+            # prose, which is the right judgement made without the record.
+            # Short: a handful of lines per body against a scene view already
+            # over 10,000 characters.
+            "overlays": sc.get("overlays") or {},
             # One line per body instead of the structured view: 3,789 chars
             # to 1,314 on chat 67, ~618 tokens off every resolve call. The
             # names the Director writes back are all still here, and
