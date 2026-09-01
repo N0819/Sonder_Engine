@@ -205,3 +205,66 @@ def test_an_export_with_capture_off_says_so_rather_than_looking_complete(
         "an artifact with no captured calls must SAY it captured none -- "
         "silence here reads as 'the turn made no calls'")
     assert [e["kind"] for e in art["timeline"]] == ["step"]
+
+
+@pytest.fixture
+def host_client(temp_db):
+    """A client that has completed host setup. The debug-capture route sits
+    behind host auth like every other settings write."""
+    from fastapi.testclient import TestClient
+    from web import app as app_module
+    from web import guest_access as guest
+
+    with TestClient(app_module.app) as client:
+        r = client.post("/api/auth/setup",
+                        json={"username": "host", "password": "pw12345"})
+        assert r.status_code == 200, r.text
+        yield client
+    guest.reset_host_account()
+    guest._join_attempts.clear()
+    guest._login_attempts.clear()
+
+
+class TestTheSettingsToggle:
+    """Capture is reachable from the API panel, and off is a real default.
+
+    It shipped readable only from a setting row or an env var, which meant the
+    feature existed and nobody could turn it on -- the same shape as the export
+    that had no route.
+    """
+
+    def test_the_route_round_trips_and_applies_the_level(self, host_client):
+        from core import db
+
+        out = host_client.put("/api/debug_capture",
+                              json={"enabled": True, "bodies": "full",
+                                    "log_level": "DEBUG"}).json()
+        assert out == {"enabled": True, "bodies": "full", "log_level": "DEBUG"}
+        assert db.get_setting("llm_capture_enabled") == "1"
+
+        import logging
+        from core.logging_utils import logger
+        assert logger.level == logging.DEBUG, (
+            "the level must apply now, not at next start -- an engine you have "
+            "to restart to make talkative has already lost the turn")
+
+    def test_a_nonsense_mode_is_refused_rather_than_stored(self, host_client):
+        from core import db
+
+        db.set_setting("llm_capture_bodies", "hash_only")
+        assert host_client.put(
+            "/api/debug_capture",
+            json={"bodies": "everything"}).status_code == 400
+        assert host_client.put(
+            "/api/debug_capture",
+            json={"log_level": "CHATTY"}).status_code == 400
+        assert db.get_setting("llm_capture_bodies") == "hash_only"
+
+    def test_an_absent_key_leaves_that_setting_alone(self, host_client):
+        """The panel sends all three, but a future toggle may send one."""
+        from core import db
+
+        db.set_setting("llm_capture_bodies", "full")
+        out = host_client.put(
+            "/api/debug_capture", json={"enabled": True}).json()
+        assert out["bodies"] == "full"

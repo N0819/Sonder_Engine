@@ -175,5 +175,9 @@
   "generated:${index}": "browser-only character key kept identical for payload routing",
   "generated:${i}": "browser-only character key kept identical for payload routing",
   "turn-${tid}-debug.json": "download filename — the placeholder and the .json extension must survive verbatim",
-  "chat-${S.chatId}-debug.json": "download filename — the placeholder and the .json extension must survive verbatim"
+  "chat-${S.chatId}-debug.json": "download filename — the placeholder and the .json extension must survive verbatim",
+  "DEBUG": "stored setting value and a Python logging level name — translating it would change what the setting means",
+  "INFO": "stored setting value and a Python logging level name — translating it would change what the setting means",
+  "WARNING": "stored setting value and a Python logging level name — translating it would change what the setting means",
+  "ERROR": "stored setting value and a Python logging level name — translating it would change what the setting means"
 }
