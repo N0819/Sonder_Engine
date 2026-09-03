@@ -20,10 +20,15 @@ import os
 import pytest
 
 from world.charter_generate import (
-    BERTH_CEILING, CREW_SIZE, HEAD_SEATS, HISTORIAN_RESIDENT_CAP,
-    HISTORIAN_TOKENS_BASE, HISTORIAN_TOKENS_PER_RESIDENT, PLAN_MAX_TOKENS,
-    POPULATION_TOLERANCE, _ensure_shift_crews, _head_posts, _post_seats,
-    close_plan, historian_budget)
+    BERTH_CEILING, CREW_SIZE, HEAD_SEATS, HISTORIAN_CITATIONS_PER_ENTRY,
+    HISTORIAN_OVERRUN_RETRIES, HISTORIAN_RESIDENT_CAP,
+    HISTORIAN_SUMMARY_WORDS, HISTORIAN_TOKENS_BASE,
+    HISTORIAN_TOKENS_PER_RESIDENT, HISTORIAN_TURNING_POINTS,
+    PLAN_MAX_TOKENS, POPULATION_TOLERANCE, _HISTORIAN_SYSTEM,
+    _ensure_shift_crews, _head_posts, _post_berths, _post_seats,
+    close_plan, historian_budget, narrate_actual_history)
+from world.charter_identity import (
+    _consonant_run, _joins, display_name, identity_aliases)
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -242,16 +247,119 @@ def test_an_assembled_name_is_a_proper_noun(harrowmere):
             assert word[:1] == word[:1].upper(), body["name"]
 
 
+class TestAFragmentJoinsAtASyllableBoundary:
+    """Harrowmere replay (2026-09-03): "Brgaron Brfordwick", "Brbrookmere",
+    "Stanwickwick", "Harfordford". The rule is on the boundary -- a fragment
+    ending in a consonant cluster does not join a fragment beginning with a
+    consonant, and no fragment joins a copy of itself -- never a list of
+    the names it produced."""
+
+    def test_the_boundary_rule(self):
+        assert not _joins("br", "gar")          # onset + consonant
+        assert not _joins("field", "dale")      # cluster + consonant
+        assert not _joins("wick", "wick")       # an echo
+        assert _joins("br", "ook")              # onset + vowel
+        assert _joins("hal", "in") and _joins("stan", "wick")
+        assert _joins("bren", "stone")          # a single consonant may meet a cluster
+        assert _consonant_run("west", leading=False) == 2
+        assert _consonant_run("field", leading=True) == 1
+        # A script the vowel class cannot read is not judged.
+        assert _consonant_run("\u3042\u304b", leading=False) == 0
+        assert _joins("\u3042\u304b", "\u3055\u305f")
+
+    def test_no_generated_name_meets_three_consonants_or_echoes(self, harrowmere):
+        import re
+        town = close_plan(harrowmere, population=100)
+        for body in _bodies(town).values():
+            given, family = body["given_name"], body["family_name"]
+            for word in (given, family):
+                assert not re.search(r"(.{3,})\1$", word.casefold()), body["name"]
+        assert len(_bodies(town)) >= 90
+
+    def test_a_law_of_onsets_and_consonant_middles_still_names_everyone(self):
+        from world.charter_identity import _syllable_name
+        parts = {"starts": ["br", "st"], "middles": ["gar", "ford"],
+                 "ends": ["on", "wick"]}
+        for seed in ("a", "b", "c", "d"):
+            name = _syllable_name(parts, seed)
+            assert name[:1].isupper() and name[2:3] in "aeiou", name
+
+    def test_a_name_carries_the_post_title_and_the_style_stays_an_alias(self):
+        profile = {
+            "name_format": "{given} {family}",
+            "formal_format": "{title} {given} {family}",
+            "titles": {"posts": {"reeve": "Reeve"},
+                       "ranks": {"head": "Reeve of Harrowmere"}},
+        }
+        body = {"name": "Bron Fenwick", "given_name": "Bron",
+                "family_name": "Fenwick", "rank": "head"}
+        assert display_name(body, ["reeve"], profile) == "Reeve Bron Fenwick"
+        assert "Reeve of Harrowmere Bron Fenwick" in identity_aliases(
+            body, ["reeve"], profile)
+        # A rank with no post title keeps rendering, as every ship's captain
+        # already does.
+        assert display_name(body, (), profile) == "Reeve of Harrowmere Bron Fenwick"
+
+
 # ---------------------------------------------------------------- budgets
 
 class TestTheHistorianBudgetFollowsTheResidents:
 
     def test_the_budget_scales_and_stays_under_the_plan_ceiling(self):
         tokens, afforded = historian_budget(108)
-        assert afforded == 108
-        assert tokens == HISTORIAN_TOKENS_BASE + 108 * HISTORIAN_TOKENS_PER_RESIDENT
+        assert afforded == min(
+            108, (PLAN_MAX_TOKENS - HISTORIAN_TOKENS_BASE)
+            // HISTORIAN_TOKENS_PER_RESIDENT)
+        assert tokens == HISTORIAN_TOKENS_BASE \
+            + afforded * HISTORIAN_TOKENS_PER_RESIDENT
         assert tokens <= PLAN_MAX_TOKENS
         assert tokens > 7000  # the fixed budget that overran at 108
+
+    def test_a_resident_is_allowed_what_its_entry_costs(self):
+        """Replay 2026-09-03: at 90 a resident, 100 residents were cut off
+        22,181 characters in. The allowance covers the entry the prompt
+        asks for, and the prompt asks for the numbers the engine reserved."""
+        assert HISTORIAN_TOKENS_PER_RESIDENT >= 200
+        for number in (HISTORIAN_SUMMARY_WORDS, HISTORIAN_CITATIONS_PER_ENTRY,
+                       HISTORIAN_TURNING_POINTS):
+            assert ("%d" % number) in _HISTORIAN_SYSTEM
+
+    def test_an_overrun_is_retried_with_half_the_residents(self):
+        registry = {"items": {"t": {"state": {
+            "bodies": {f"b{i}": {"name": f"B{i}"} for i in range(8)},
+            "stood": {f"b{i}": {"post": i + 1} for i in range(8)},
+            "travelled": {}, "posts": {}, "upkeeps": {}}}}}
+        seen = []
+
+        def historian(payload, budget=None):
+            seen.append((len(payload["residents"]), budget))
+            if len(payload["residents"]) > 2:
+                raise ValueError("the location generator returned 22181 "
+                                 "characters of unparseable JSON")
+            return {"overview": {"summary": "quiet", "event_ids": []},
+                    "eras": [], "residents": {}, "institutions": []}
+
+        out = narrate_actual_history({"name": "T"}, registry, [],
+                                     model_call=historian)
+        assert [n for n, _b in seen] == [8, 4, 2]
+        assert out["budget"]["residents"] == 2
+        assert out["budget"]["overrun_retries"] == HISTORIAN_OVERRUN_RETRIES
+        assert seen[-1][1] == historian_budget(2)[0]
+
+    def test_prose_where_json_should_be_is_not_retried(self):
+        registry = {"items": {"t": {"state": {
+            "bodies": {"b1": {"name": "B"}}, "stood": {}, "travelled": {},
+            "posts": {}, "upkeeps": {}}}}}
+        calls = []
+
+        def historian(payload):
+            calls.append(1)
+            raise ValueError("town generator returned a non-object")
+
+        with pytest.raises(ValueError):
+            narrate_actual_history({"name": "T"}, registry, [],
+                                   model_call=historian)
+        assert calls == [1]
 
     def test_residents_are_trimmed_to_what_the_ceiling_affords(self):
         tokens, afforded = historian_budget(HISTORIAN_RESIDENT_CAP)
@@ -270,3 +378,56 @@ class TestTheHistorianBudgetFollowsTheResidents:
         monkeypatch.setattr("llm.providers.chat_complete", fake)
         charter_generate._json_call("s", {"a": 1})
         assert seen["reasoning_effort"] == "off"
+
+
+# --------------------------------------------------------------- berths
+
+class TestABodySleepsWhereTheWorkItServesIs:
+    """Harrowmere replay (2026-09-03): one generic `household_member` post
+    served `keep_house_*` for ten houses and carried one address, so 48
+    sleepers were berthed behind one door and nine houses held three each."""
+
+    def _plan(self):
+        houses = [f"house_{c}" for c in "abcdefghij"]
+        rooms = {"lane": {"name": "Lane", "purpose": "lane", "adjacent": []}}
+        for house in houses:
+            rooms[house] = {"name": house.title(), "purpose": "dwelling",
+                            "adjacent": [{"to": "lane", "barrier": "open_door"}]}
+        upkeeps = {f"keep_{h}": {"place": h, "floor": 0.3, "level": 1,
+                                 "fails_untended": "a_week",
+                                 "one_body_restores_in": "a_shift"}
+                   for h in houses}
+        posts = {f"holder_{h}": {"place": h, "serves": [f"keep_{h}"]}
+                 for h in houses}
+        posts["member"] = {"place": houses[0],
+                           "serves": [f"keep_{h}" for h in houses]}
+        populations = [{"post": f"holder_{h}", "count": 1} for h in houses]
+        populations.append({"post": "member", "count": 45})
+        return {"name": "Lane", "structure": {"key": "lane"}, "rooms": rooms,
+                "charters": [{"key": "households", "upkeeps": upkeeps,
+                              "posts": posts, "populations": populations}]}
+
+    def test_the_post_is_dealt_round_the_places_its_work_is_served_at(self):
+        upkeeps = {"keep_a": {"place": "a"}, "keep_b": {"place": "b"}}
+        post = {"place": "a", "serves": ["keep_a", "keep_b"]}
+        assert _post_berths(post, upkeeps, {"a", "b"}, "", "a") == ["a", "b"]
+        assert _post_berths(post, upkeeps, {"a", "b"}, "b", "a") == ["b"]
+        assert _post_berths({"place": "a", "serves": ["keep_a"]},
+                            upkeeps, {"a", "b"}, "", "a") == ["a"]
+
+    def test_no_house_holds_more_than_the_ceiling_and_none_is_annexed(self):
+        town = close_plan(self._plan())
+        berths = {}
+        for body in town["charters"]["households"]["bodies"].values():
+            berths[body["berth"]] = berths.get(body["berth"], 0) + 1
+            assert body["place"] == body["berth"]
+        assert max(berths.values()) <= BERTH_CEILING
+        assert len(berths) == 10
+        assert town["closure"]["berths_split"] == {}
+
+    def test_the_real_plan_deals_its_households_across_its_lanes(self, harrowmere):
+        town = close_plan(harrowmere, population=100)
+        berths = {}
+        for body in _bodies(town).values():
+            berths[body["berth"]] = berths.get(body["berth"], 0) + 1
+        assert max(berths.values()) <= BERTH_CEILING

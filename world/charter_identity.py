@@ -104,17 +104,79 @@ def _number(seed, lane=0):
     return int.from_bytes(raw, "big")
 
 
+def _consonant_run(fragment, *, leading):
+    """How many consonants a fragment begins (or ends) with, read against
+    the same vowel class the syllable splitter uses. Zero for a fragment
+    whose phonology this class cannot see."""
+    text = str(fragment or "").casefold()
+    if not text.isascii():
+        return 0
+    run = 0
+    for ch in (text if leading else reversed(text)):
+        if ch in _VOWEL_CLASS or not ch.isalpha():
+            break
+        run += 1
+    return run
+
+
+def _joins(left, right):
+    """Whether two fragments may meet at a syllable boundary.
+
+    A FRAGMENT ENDING IN A CONSONANT CLUSTER DOES NOT JOIN A FRAGMENT
+    BEGINNING WITH A CONSONANT, and a fragment does not join a copy of
+    itself. Planners write onsets among their starts ("br", "st") and
+    consonant-initial middles, and joined as written those reached play as
+    "Brgaron Brfordwick" and "Brbrookmere" (Harrowmere replay, 2026-09-03),
+    with "Stanwickwick" and "Harfordford" beside them. This is a rule on the
+    boundary, not a list of bad names: it holds for every law the splitter
+    can read, and it leaves a script it cannot read (`_consonant_run` is
+    zero off the Latin range) exactly as the author wrote it.
+    """
+    if not left or not right:
+        return True
+    if left.casefold() == right.casefold():
+        return False
+    return not (_consonant_run(left, leading=False) >= 2
+                and _consonant_run(right, leading=True) >= 1)
+
+
+def _joinable(pool, seed, lane, left):
+    """The fragments of ``pool`` that join onto ``left``, in seeded order:
+    the seeded index first, then the rest of the pool once, so the choice
+    is as deterministic as the seed."""
+    if not pool:
+        return []
+    first = _number(seed, lane) % len(pool)
+    rotated = [pool[(first + step) % len(pool)] for step in range(len(pool))]
+    return [candidate for candidate in rotated if _joins(left, candidate)]
+
+
 def _syllable_name(parts, seed):
     starts, middles, ends = (
         parts.get("starts") or [], parts.get("middles") or [],
         parts.get("ends") or [])
     if not starts or not ends:
         return ""
-    start = starts[_number(seed, 0) % len(starts)]
-    middle = ""
-    if middles:
-        middle = middles[_number(seed, 1) % len(middles)]
-    end = ends[_number(seed, 2) % len(ends)]
+    first = _number(seed, 0) % len(starts)
+    start = middle = end = None
+    for step in range(len(starts)):
+        candidate = starts[(first + step) % len(starts)]
+        # A middle that joins the start but that no end can follow (every
+        # end consonant-initial after "field") is not a middle; the next
+        # one in seeded order is tried, and no middle at all last.
+        for chosen_middle in _joinable(middles, seed, 1, candidate) + [""]:
+            joinable_ends = _joinable(ends, seed, 2, chosen_middle or candidate)
+            if joinable_ends:
+                start, middle, end = candidate, chosen_middle, joinable_ends[0]
+                break
+        if end is not None:
+            break
+    if end is None:
+        # No start of this law joins any of its ends: the law cannot make a
+        # name under the rule, so it makes the one it wrote, as written.
+        start = starts[first]
+        middle = middles[_number(seed, 1) % len(middles)] if middles else ""
+        end = ends[_number(seed, 2) % len(ends)]
     assembled = f"{start}{middle}{end}"
     # A FRAGMENT IS SOUND; A NAME IS A PROPER NOUN. The law's parts are
     # syllables a model wrote in lower case ("hal", "in", "ham"), and joined
@@ -981,21 +1043,35 @@ def materialize_body_names(charter_key, raw_bodies, profile, reservation=None):
     return out
 
 
-def title_for(body, roles=(), profile=None):
-    """The authored/rank/post title currently presented for this body."""
+def title_for(body, roles=(), profile=None, *, address=False):
+    """The authored/rank/post title currently presented for this body.
+
+    Two titles can stand on one body: the POST title is what a body is
+    called at its post ("Reeve"), the RANK title is how the institution
+    styles the office ("Reeve of Harrowmere"). The styled title is the
+    default and what `identity_aliases` keeps; ``address`` asks for the one
+    a NAME carries, which is the post's -- a name is how a person is called,
+    and the style is a form of address, not a part of it. Measured on the
+    Harrowmere replay (2026-09-03): every head body was voiced as "Reeve of
+    Harrowmere Brgaron Brfordwick", the style rendered where a name was
+    asked for. An explicit authored title wins in both readings.
+    """
     body = body if isinstance(body, dict) else {}
     explicit = str(body.get("title") or "").strip()
     if explicit:
         return explicit
     profile = normalize_naming_profile(profile)
     rank = str(body.get("rank") or "").strip()
-    if rank and rank in profile["titles"]["ranks"]:
-        return profile["titles"]["ranks"][rank]
+    styled = profile["titles"]["ranks"].get(rank, "") if rank else ""
+    called = ""
     for role in roles or ():
         title = profile["titles"]["posts"].get(str(role))
         if title:
-            return title
-    return ""
+            called = title
+            break
+    if address:
+        return called or styled
+    return styled or called
 
 
 def heal_name_case(name):
@@ -1034,7 +1110,7 @@ def display_name(body, roles=(), profile=None):
     name = str(body.get("name") or body.get("key") or "").strip()
     if body.get("given_name") or body.get("family_name"):
         name = heal_name_case(name)
-    title = title_for(body, roles, profile)
+    title = title_for(body, roles, profile, address=True)
     if not title or name.casefold().startswith(title.casefold() + " "):
         return name
     fmt = normalize_naming_profile(profile)["formal_format"]

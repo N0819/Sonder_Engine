@@ -1611,6 +1611,49 @@ def test_prose_scope_gates_out_duties_whose_subject_is_absent(temp_db,
     assert "light" in prose["gated_out"]
 
 
+def _sustained_interp():
+    """A beat the interpret stage staged as SUSTAINED: hours may pass."""
+    return {
+        "sequence": [{"type": "action", "attempt": "sleep until first light",
+                      "stage": "sustained", "commitment": "asserted",
+                      "targets": [], "visibility": "overt",
+                      "conceal_from": []}],
+        "speech": None, "action": {"attempt": "sleep until first light"},
+        "movement": None,
+        "flow": {"reactors": [], "authority_claims": [], "dice": [],
+                 "resolution_flags": {}, "fiction_frame": {}},
+    }
+
+
+def test_the_light_duty_loads_on_a_beat_that_can_move_the_sun(temp_db,
+                                                             monkeypatch):
+    """Harrowmere replay (2026-09-03, t9): "I sleep right through until
+    first light" was staged sustained, the resolve skipped twenty-one hours
+    to dawn, and the author set the room dim with no light duty loaded --
+    the backstop's manifest half caught it, which is a warning, not a duty.
+    A sustained act in an ANCHORED day loads the duty; the same act in a
+    story with no day cycle, and a lit instantaneous beat under an anchored
+    day, leave it gated out as before."""
+    calls = []
+    monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {}))
+    anchored = json.loads(json.dumps(BASE_SCENE))
+    anchored["day_phase"] = "morning"
+
+    ctx = _make_ctx(temp_db, scene=anchored, interp=_sustained_interp())
+    out = director.director_resolve(ctx, nonce=0)
+    assert PROSE_DUTY_HEADINGS["light"] in _resolve_sheet(calls)
+    assert "light" in out["orchestration"]["prose_scope"]["granted"]
+
+    for scene, interp in ((json.loads(json.dumps(BASE_SCENE)),
+                           _sustained_interp()),
+                          (anchored, _action_interp())):
+        calls.clear()
+        ctx = _make_ctx(temp_db, scene=scene, interp=interp)
+        out = director.director_resolve(ctx, nonce=0)
+        assert PROSE_DUTY_HEADINGS["light"] not in _resolve_sheet(calls)
+        assert "light" in out["orchestration"]["prose_scope"]["gated_out"]
+
+
 def test_prose_scope_loads_a_block_when_its_subject_exists(temp_db,
                                                            monkeypatch):
     """The load direction: a pure-dialogue beat -- movement, comm and size
