@@ -49,8 +49,8 @@ DRAMATURGE_THREAD_LINES = 8
 DRAMATURGE_STEPS = 3
 #: Lore calls per pass, across its steps.
 DRAMATURGE_LORE_CALLS = 4
-#: Output budget per call.
-DRAMATURGE_MAX_TOKENS = 3000
+#: Output budget per call. One number across the room (2026-09-04).
+DRAMATURGE_MAX_TOKENS = 20_000
 #: Wall clock per pass.
 DRAMATURGE_WALL_SECONDS = 120.0
 #: Proposals one pass may file.

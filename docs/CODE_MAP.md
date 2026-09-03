@@ -28,7 +28,7 @@
 | `agents/perception.py` | 4733 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `mind`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
 | `agents/runtime.py` | 1382 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `core.db`, `core.pipeline_context`, `llm.providers`, `persist.checkpoints`, `persist.commit`, `story.character_schema`, `story.scene` |
 | `agents/storage.py` | 123 | Step and active-variant persistence helpers. | `core.db` |
-| `agents/story_planner.py` | 904 |  | `core.logging_utils` |
+| `agents/story_planner.py` | 911 |  | `core.logging_utils` |
 | `core/__init__.py` | 6 |  | — |
 | `core/db.py` | 2587 | SQLite schema, migrations, connection management, transactions, and key/value world access. | `core.paths` |
 | `core/frames.py` | 220 |  | `core.db` |
@@ -45,7 +45,7 @@
 | `llm/llm_quality.py` | 813 | Strict JSON parsing, schema validation, and model-assisted repair. | `core.pipeline_context`, `llm.prompts`, `llm.providers`, `llm.schemas` |
 | `llm/prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `llm.providers` |
 | `llm/prompts.py` | 516 | Default system prompts and prompt preset access. | `core.db` |
-| `llm/providers.py` | 3790 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `core.db`, `core.logging_utils` |
+| `llm/providers.py` | 3816 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `core.db`, `core.logging_utils` |
 | `llm/research_providers.py` | 247 |  | `core.db` |
 | `llm/schemas.py` | 5451 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `mind/__init__.py` | 6 |  | — |
@@ -107,11 +107,11 @@
 | `story/plot_packages.py` | 2163 |  | — |
 | `story/provenance_text.py` | 132 |  | — |
 | `story/room_bible.py` | 421 |  | `core.db` |
-| `story/room_conversation.py` | 357 |  | `core.db` |
+| `story/room_conversation.py` | 377 |  | `core.db` |
 | `story/room_frontier.py` | 217 |  | `core.db` |
 | `story/room_proposals.py` | 264 |  | `core.db` |
 | `story/room_research.py` | 371 |  | `core.db` |
-| `story/room_tools.py` | 745 |  | `story.plot_packages`, `story.room_research` |
+| `story/room_tools.py` | 819 |  | `story.plot_packages`, `story.room_research` |
 | `story/scene.py` | 2731 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `core.db`, `story`, `story.attire`, `story.character_schema`, `world.day_cycle`, `world.spatial` |
 | `web/__init__.py` | 6 |  | — |
 | `web/app.py` | 6813 | FastAPI application assembly, resource CRUD, turn control, and streaming endpoints. | `agents`, `agents.story_planner`, `core`, `core.db`, `core.frames`, `core.paths`, `dressing.ambience`, `dressing.backdrops`, `llm`, `llm.prompts`, `llm.providers`, `mind.memory`, `persist.chat_archive`, `persist.chat_delete`, `persist.checkpoints`, `persist.commit`, `story`, `story.character_schema`, `story.dialogue_colors`, `story.importers`, `story.scene`, `web`, `web.auth_routes`, `web.room_routes`, `world`, `world.survival` |
@@ -469,14 +469,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `run_planner()` | 420 | 163 lines |
-| `deliberate()` | 668 | 91 lines |
-| `schedule_room_work()` | 850 | 55 lines |
-| `_payload()` | 228 | 52 lines |
-| `run_dramaturge_pass()` | 761 | 40 lines |
-| `_run_task()` | 585 | 32 lines |
-| `charter_planner()` | 353 | 30 lines |
-| `run_fill()` | 821 | 27 lines |
+| `run_planner()` | 427 | 163 lines |
+| `deliberate()` | 675 | 91 lines |
+| `schedule_room_work()` | 857 | 55 lines |
+| `_payload()` | 235 | 52 lines |
+| `run_dramaturge_pass()` | 768 | 40 lines |
+| `_run_task()` | 592 | 32 lines |
+| `charter_planner()` | 360 | 30 lines |
+| `run_fill()` | 828 | 27 lines |
 
 ### `core/db.py`
 
@@ -617,14 +617,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_chat_complete_once()` | 2470 | 321 lines |
-| `chat_complete()` | 2203 | 119 lines |
-| `async _chat_complete_async_once()` | 2912 | 115 lines |
-| `async chat_complete_async()` | 2821 | 90 lines |
-| `_sse_openai()` | 2059 | 80 lines |
-| `async _sse_openai_async()` | 3028 | 64 lines |
-| `_sse_anthropic()` | 2140 | 62 lines |
-| `_embed_request()` | 3350 | 59 lines |
+| `_chat_complete_once()` | 2496 | 321 lines |
+| `chat_complete()` | 2229 | 119 lines |
+| `async _chat_complete_async_once()` | 2938 | 115 lines |
+| `async chat_complete_async()` | 2847 | 90 lines |
+| `_sse_openai()` | 2085 | 80 lines |
+| `async _sse_openai_async()` | 3054 | 64 lines |
+| `_sse_anthropic()` | 2166 | 62 lines |
+| `_embed_request()` | 3376 | 59 lines |
 
 ### `llm/research_providers.py`
 
@@ -1318,14 +1318,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `converse()` | 281 | 35 lines |
-| `restore_room_messages()` | 328 | 30 lines |
-| `status()` | 230 | 24 lines |
-| `add_message()` | 144 | 23 lines |
-| `normalize_mandate()` | 178 | 21 lines |
-| `revoke_mandate()` | 211 | 17 lines |
-| `messages()` | 128 | 14 lines |
-| `mandates()` | 201 | 8 lines |
+| `converse()` | 301 | 35 lines |
+| `restore_room_messages()` | 348 | 30 lines |
+| `status()` | 250 | 24 lines |
+| `add_message()` | 164 | 23 lines |
+| `normalize_mandate()` | 198 | 21 lines |
+| `revoke_mandate()` | 231 | 17 lines |
+| `messages()` | 148 | 14 lines |
+| `mandates()` | 221 | 8 lines |
 
 ### `story/room_frontier.py`
 
@@ -1370,14 +1370,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_t_inspect_contradictions()` | 404 | 71 lines |
+| `_t_inspect_contradictions()` | 475 | 71 lines |
+| `_t_inspect_config()` | 399 | 69 lines |
 | `_t_inspect_rooms()` | 186 | 49 lines |
 | `_t_inspect_route()` | 237 | 44 lines |
 | `_t_scan_lore()` | 125 | 33 lines |
 | `_t_inspect_charters()` | 321 | 30 lines |
-| `run_tool()` | 716 | 30 lines |
+| `run_tool()` | 790 | 30 lines |
 | `_t_inspect_reserved_identities()` | 286 | 26 lines |
-| `_t_inspect_events()` | 353 | 25 lines |
 
 ### `story/scene.py`
 

@@ -77,22 +77,29 @@ PLANNER_WALL_SECONDS = REPLY_WALL_SECONDS
 #: Passes one background task may take before it is left for the next job
 #: -- a safety ceiling under the spend that really bounds it.
 TASK_PASSES_CAP = 12
-#: Output budget per model call.
+#: Output budget per model call. Raised to 20k on the owner's ruling
+#: (2026-09-04): every response cap the room owns is the same number, so a
+#: step that needs room has it and no single call is the one that truncates.
 #: Measured on GLM 5.2 (chat 111, 2026-09-03): one step drafting a whole
-#: package ran past 4000 tokens and its truncated JSON parsed as nothing.
-PLANNER_MAX_TOKENS = 8000
+#: package ran past 4000 tokens and its truncated JSON parsed as nothing --
+#: which is what a cap costs when it binds, and why the loop reports a cut-off
+#: rather than reading it as "done" (CUT_OFF_NOTE).
+PLANNER_MAX_TOKENS = 20_000
 #: Conversation lines the Planner is shown, newest last -- the WINDOW. A
 #: line older than the window stays shown until the bible has folded it
 #: (`story/room_bible.py`), up to the hard cap.
 PLANNER_HISTORY_MESSAGES = 30
 PLANNER_HISTORY_HARD_CAP = 60
-#: The reply stored in the thread (the thread's own cap is larger).
-PLANNER_REPLY_CHARS = 2400
+#: The reply stored in the thread. Raised with the response cap on 2026-09-04:
+#: a 20k-token budget the reply was then cut to 2,400 characters is a cap that
+#: hides its own effect, which is the class this codebase keeps finding. Held
+#: to the thread's own room-reply ceiling so neither is the silent one.
+PLANNER_REPLY_CHARS = 80_000
 #: Tool results shown back to the model; oldest fall off past it.
 PLANNER_TRANSCRIPT_CHARS = 24_000
 #: Charter Planner delegations per reply and their output budget.
 CHARTER_PLANNER_CALLS_PER_REPLY = 1
-CHARTER_PLANNER_MAX_TOKENS = 3000
+CHARTER_PLANNER_MAX_TOKENS = 20_000
 #: The pseudo-tool the model names to delegate; not in the facade table.
 CHARTER_PLANNER_TOOL = "charter_planner"
 #: Open needs one fill job hands the Planner.

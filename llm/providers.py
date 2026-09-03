@@ -481,6 +481,32 @@ class OutputGuard:
                 "excessive control characters"
             )
 
+def guard_response(text):
+    """Run `OutputGuard` over a FINISHED response and return it unchanged.
+
+    The guard was fed only by `_guarded_sink`, which exists only when a caller
+    armed `token_sink` -- `agents/runtime.py` does that for pipeline steps and
+    nothing else does. Every non-streamed call was therefore unchecked, which
+    was invisible while the only such callers were small and short-lived, and
+    stopped being invisible when the Writers' Room got a 20k-token response
+    cap: a degenerating model now has room to run.
+
+    Checked here, where the text is complete, so ONE check covers both provider
+    shapes and every caller of either rather than a branch per call site.
+    `feed` in a single large call exceeds the check stride immediately, so a
+    finished response is judged by exactly the same battery a streamed one is,
+    including the under-160-character exemption -- a short answer must not be
+    held to a stricter bar because it did not arrive in pieces.
+
+    Raises `DegenerateOutput`, which is a retryable `LLMError`, so the retry
+    machinery already in place handles it and no caller needed a new branch.
+    """
+    if not text:
+        return text
+    OutputGuard().feed(str(text))
+    return text
+
+
 def _guarded_sink(sink):
     guard = OutputGuard()
 
@@ -2558,10 +2584,10 @@ def _chat_complete_once(
         _log_usage(role, model, _t0, parsed.get("usage"),
                    served=parsed.get("model"))
         _capture_finish_reason(parsed.get("stop_reason"))
-        return "".join(
+        return guard_response("".join(
             block.get("text", "")
             for block in parsed.get("content", [])
-        )
+        ))
 
     body = {
         "model": model,
@@ -2787,7 +2813,7 @@ def _chat_complete_once(
             content = _message_content(parsed, prov["name"], model)
     _log_usage(role, model, _t0, parsed.get("usage"),
                    served=parsed.get("model"))
-    return content
+    return guard_response(content)
 
 def _message_content(parsed, prov_name, model):
     """The answer, or a retryable failure that says what actually happened.
