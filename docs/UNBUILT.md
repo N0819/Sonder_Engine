@@ -6598,10 +6598,7 @@ items 5 and 6):** the popout panel is built in both shapes -- docked right
 prose plate, draggable, corner-resizable, opacity slider) -- with the
 persistent per-story, per-era thread (`room_messages`), the mandates list
 with revocation, and the spoiler-safe status line. Open from this half:
-the Story Planner is NOT seated -- `story/room_conversation.PLANNER` is the
-one seam, its placeholder keeps the note and answers `UNSEATED_LINE`;
-nothing writes `room_mandates` or `room_status` yet (the Planner will, as
-typed mandates from sentences, v2 § 6.4); the Dramaturge visibility setting
+the Dramaturge visibility setting
 (shown / summarised / hidden) is a per-viewer preference with no server
 side; there is no proposal card (v2 § 11.1) -- an actionable reply is a
 Phase B2 shape; no browser-tier test covers the drag and resize gestures
@@ -6614,22 +6611,45 @@ resolved/retired, pinned base with rebase-or-conflict, long operations
 prepared before a one-transaction publish, next-turn visibility, superseding
 truths, sealed projection) and the authoring facade (`story/room_tools.py`:
 one tool table, fifteen read and ten write tools, every write through a
-package). Items 3 (the Story Planner agent, Charter Planner delegation,
-just-in-time fills, the prepared frontier) and 4 (budgets and consultation as
-typed mandates) remain. What the landed half left open, as residuals of this
-entry rather than a section of their own:
+package). **Items 3 and 4 landed 2026-09-04:** the Story Planner is seated
+(`agents/story_planner.py`: a bounded tool-using loop over the facade, the
+Charter Planner as one scoped call per reply, the fill job under the
+`identity_fills` mandate, the frontier measured every commit in
+`story/room_frontier.py`) and the grant is state (`story/mandates.py`: a
+closed capability vocabulary, `plot_packages.authority_errors` at validation
+and at publish, the fill budget per story hour). Phase B is complete except
+for what follows. Residuals of this entry rather than a section of their own:
+
+- **No proposal card** (v2 § 11.1). An actionable reply is prose plus the
+  standing list and the status line; what a package would add, who led it,
+  its estimated cost and approve/revise/reject actions are not a card yet.
+  The projection the card would show already exists (`package_projection`).
+- **The Planner's tool discipline is unmeasured on a live model.** Every
+  bound is proven against a scripted provider; how many steps a real reply
+  spends, how often it publishes without validating, and whether it records
+  grants the player did not make are the first things to measure in play.
+- **A mandate is per era and never per package.** `authority.mandate_uid`
+  is honoured (a named mandate must be active) but nothing ties a grant to
+  one package's lifetime; `limits.packages` / `rooms` / `people` are shown to
+  the Planner and cited, not enforced by code -- only `fills_per_hour` is.
+- **The frontier is a count, not a ranking.** v2 § 3.2's predictive staging
+  (exits, declared destinations, projects that name places) is not read;
+  the measure is planned stubs within `FRONTIER_DEPTH_HOPS` and unrendered
+  person plans anywhere, and the Planner is told what is short.
+- **The fill job is queued from the commit tail, not from a threshold
+  crossing.** Every commit with an open need or a short frontier and a
+  grant submits one job (deduped per chat, capped per story hour); there
+  is no separate low-water trigger.
 
 - **No operation for author surgery on a charter** (v2 § 9.1's "explicit
   author surgery" on carried state): a package can generate a location and
   presimulate, and cannot move a body, change a post or edit a claim. The
   Planner's nudge toolkit (Phase C) is where that lands, as its own kinds in
   `OPERATIONS`.
-- **No mandate store.** `authority.mandate_uid` on a package is a string the
-  room fills; nothing checks it against a standing mandate, because there is
-  no mandate table yet (Phase B.4). The three authority flags on the package
-  are honoured by validation (`may_create_people`, `may_author_prehistory`);
-  `may_schedule_harm` is stored and has nothing yet to refuse, since no
-  operation schedules harm.
+- **`may_schedule_harm` has nothing yet to refuse.** The mandate store
+  exists now (`story/mandates.py`) and the flag asks for the
+  `schedule_harm` capability when claimed; no operation schedules harm, so
+  the capability gates nothing until Phase C's region events and nudges.
 - **A clock is a record, not a trigger.** Clocks carry `due_turns` /
   `due_story_hours` and nothing fires when one is due (v2 § 5.4). The
   activation hook in the commit tail is the place; it is bookkeeping only.

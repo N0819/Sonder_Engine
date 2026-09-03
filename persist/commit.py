@@ -615,6 +615,19 @@ def _commit_all_locked(ctx, nonce):
         ctx.add_warning(f"planning need scheduling failed: {exc}")
         results["planning_needs"] = {"error": str(exc)}
 
+    # The Writers' Room's own out-of-band work (agents/story_planner.py):
+    # measure the prepared frontier and, when a need is open or the frontier
+    # is short AND the player has granted identity fills, queue one bounded
+    # Planner job under the hour's budget. Never inside the turn's clock;
+    # with no grant the status row asks and nothing runs.
+    try:
+        from agents.story_planner import schedule_room_work
+        job = schedule_room_work(ctx)
+        results["room_work"] = job.as_dict() if job else None
+    except Exception as exc:
+        ctx.add_warning(f"room work scheduling failed: {exc}")
+        results["room_work"] = {"error": str(exc)}
+
     # -- Plot package store (story/plot_packages.py) ------------------------
     # A package published before this turn is now one the turn has seen:
     # `published -> active`. Bookkeeping on the package alone; what it

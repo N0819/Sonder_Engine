@@ -239,6 +239,8 @@ without a room in the loop. It is the widened "step 5".
 
 ### Phase B — the room, minimal
 
+*Landed 2026-09-04, all four items: the store and facade (`story/plot_packages.py`, `story/room_tools.py`), the Planner (`agents/story_planner.py`), the mandates (`story/mandates.py`), the frontier and fill job (`story/room_frontier.py`). Residuals in `docs/UNBUILT.md` § 2.26.*
+
 1. **Package store and lifecycle** (v2 § 10, § 7.2): draft → validating →
    published → active → resolved → retired; pinned base world revision;
    rebase-or-conflict on intervening history; atomic publish with the short
