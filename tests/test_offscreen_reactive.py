@@ -66,8 +66,11 @@ def _world(temp_db, *, enabled=True):
             "sequence": [{"type": "speech",
                           "text": "I will seal the gate after the warning bell."}],
             "intent_ops": [], "project_ops": [],
+            # The plan rides the CHARACTER's own result: the Director's
+            # diff no longer carries the channel (2026-09-04).
+            "offscreen_plan_ops": [op],
         }},
-        director_resolve={"state_diff": {"offscreen_plan_ops": [op]}},
+        director_resolve={"state_diff": {}},
         director_establish=None, warnings=[],
     )
     return cid, char_id, scene, ctx, op
@@ -97,20 +100,25 @@ class TestPlanAuthoring:
         assert wget(cid, "offscreen_plans", []) == []
 
     def test_the_director_cannot_invent_an_absent_minds_plan(self, temp_db):
+        """The Director has no plan channel at all any more: an op on its
+        diff is not read, and a mind that declared nothing opens nothing."""
         from core.db import wget
+        from llm.schemas import StateDiff, _fields
         from world.offscreen import apply_plan_ops
 
-        cid, _, scene, ctx, _ = _world(temp_db)
+        assert "offscreen_plan_ops" not in _fields(StateDiff)
+        cid, _, scene, ctx, op = _world(temp_db)
         ctx.character_results = {}
+        ctx.director_resolve = {"state_diff": {"offscreen_plan_ops": [op]}}
         result = apply_plan_ops(ctx, scene, {"elapsed_seconds": 0})
-        assert result["applied"] == 0 and result["warnings"] == 1
+        assert result["offered"] == 0 and result["applied"] == 0
         assert wget(cid, "offscreen_plans", []) == []
 
     def test_an_unrelated_basis_is_refused(self, temp_db):
         from world.offscreen import apply_plan_ops
 
-        _, _, scene, ctx, _ = _world(temp_db)
-        ctx.director_resolve["state_diff"]["offscreen_plan_ops"][0]["basis"] = (
+        _, char_id, scene, ctx, _ = _world(temp_db)
+        ctx.character_results[char_id]["offscreen_plan_ops"][0]["basis"] = (
             "Perhaps the northern fleet changes course")
         result = apply_plan_ops(ctx, scene, {"elapsed_seconds": 0})
         assert result["applied"] == 0
@@ -120,9 +128,9 @@ class TestPlanAuthoring:
         from core.db import wget
         from world.offscreen import apply_plan_ops
 
-        cid, _, scene, ctx, _ = _world(temp_db)
+        cid, char_id, scene, ctx, _ = _world(temp_db)
         apply_plan_ops(ctx, scene, {"elapsed_seconds": 0})
-        ctx.director_resolve["state_diff"]["offscreen_plan_ops"] = [{
+        ctx.character_results[char_id]["offscreen_plan_ops"] = [{
             "op": "cancel", "plan_id": "seal-the-gate", "actor": "Mora",
             "basis": "I will seal the gate after the warning bell",
         }]
@@ -302,15 +310,18 @@ class TestPlanFiring:
             "the path did not fire, so nothing was proved about it")
 
 
-def test_schema_keeps_plan_ops():
+def test_the_director_schema_no_longer_carries_plan_ops():
+    """A plan is a character's own declaration (2026-09-04): the channel
+    left the Director's diff with the offscreen hand, so a Director that
+    writes one is writing into a field nothing reads."""
     from llm.schemas import validate_llm_output
 
-    out, warnings = validate_llm_output("director_resolve", {
+    out, _warnings = validate_llm_output("director_resolve", {
+        "resolved_event": "Mora waits.",
         "state_diff": {"offscreen_plan_ops": [{
             "op": "open", "plan_id": "p", "actor": "Mora",
             "objective": "wait", "basis": "I will wait",
             "stages": [{"stage_id": "s", "trigger": {"after_seconds": 60}}],
         }]},
     })
-    assert not warnings
-    assert out["state_diff"]["offscreen_plan_ops"][0]["plan_id"] == "p"
+    assert "offscreen_plan_ops" not in out["state_diff"]

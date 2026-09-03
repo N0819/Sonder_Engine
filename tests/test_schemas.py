@@ -485,7 +485,7 @@ def test_every_list_valued_director_channel_is_registered_as_one():
         "cast_changes", "introductions", "world_facts", "contact_ops",
         "substance_ops", "remove_entities", "inventory_ops", "artifact_ops",
         "remove_rooms", "remove_adjacent", "crowd_ops", "courier_ops",
-        "telling_ops", "offscreen_plan_ops", "ratified_claims",
+        "telling_ops", "ratified_claims",
         "contradicted_claims", "comms_ops",
     }
     assert expected <= _LIST_DELEGATED, sorted(expected - _LIST_DELEGATED)

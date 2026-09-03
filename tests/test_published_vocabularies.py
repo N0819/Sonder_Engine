@@ -456,8 +456,11 @@ def _delegation_block(language: str) -> str:
     a fragment inserted above this one would silently move it.
     """
     card = installed_language_packs()[language].card("system_prompts")
+    # `SOCIAL FABRIC` is spelled the same in both packs and appears in this
+    # block alone (the world's traffic folded into it on 2026-09-04, when
+    # the offscreen hand was retired).
     blocks = [text for _key, text in card["prose_author_sheet"]
-              if isinstance(text, str) and "THE WORLD'S TRAFFIC" in text]
+              if isinstance(text, str) and "SOCIAL FABRIC" in text]
     assert len(blocks) == 1, (
         f"{language}: expected one delegated-channels block, got "
         f"{len(blocks)}")
@@ -471,10 +474,12 @@ def delegated_channels() -> list[str]:
 
 
 class TestEveryDelegatedChannelIsNamedAsDelegated:
-    def test_the_engine_owns_thirty_one(self):
+    def test_the_engine_owns_thirty(self):
         """Bounds the tests below: a specialist that gains a channel moves
-        this count, and the sheet has to move in the same commit."""
-        assert len(delegated_channels()) == 31
+        this count, and the sheet has to move in the same commit. 31 until
+        2026-09-04; `offscreen_plan_ops` left the Director's diff with the
+        offscreen hand (a plan is a character's own declaration)."""
+        assert len(delegated_channels()) == 30
 
     @pytest.mark.parametrize("language", LANGUAGES)
     def test_the_sheet_names_all_of_them(self, language):

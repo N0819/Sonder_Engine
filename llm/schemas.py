@@ -1815,48 +1815,6 @@ class BlurbMintOutput(LenientModel):
     blurbs: list[BlurbMintEntry] = Field(default_factory=list)
 
 
-class OffscreenPlanTrigger(LenientModel):
-    """One deterministic condition for an authored off-screen plan stage.
-
-    Exactly one trigger kind survives commit normalization: relative story
-    time, or a fired mechanical event kind optionally narrowed to a location.
-    Open strings here are intentional input tolerance; `offscreen.py` owns the
-    closed write vocabulary and refuses ambiguity before persistence.
-    """
-    after_seconds: Optional[float] = None
-    event_kind: str = ""
-    location: str = ""
-
-
-class OffscreenPlanEffect(LenientModel):
-    """A consequence adjudicated now and fired later without invention."""
-    what: str = ""
-    where: str = ""
-    due_seconds: Optional[float] = None
-    witnessed: str = ""
-    originator: str = ""
-
-
-class OffscreenPlanStage(LenientModel):
-    stage_id: str = ""
-    trigger: OffscreenPlanTrigger = Field(default_factory=OffscreenPlanTrigger)
-    effect: Optional[OffscreenPlanEffect] = None
-
-
-class OffscreenPlanOp(LenientModel):
-    """Director encoding of a character-owned declaration.
-
-    `basis` must quote/paraphrase that actor's declaration from this beat;
-    commit validates the attribution before a plan can exist. The Director
-    adjudicates stages/effects but cannot invent an absent mind's objective.
-    """
-    op: str = "open"
-    plan_id: str = ""
-    actor: str = ""
-    objective: str = ""
-    basis: str = ""
-    stages: list[OffscreenPlanStage] = Field(default_factory=list)
-
 class TellingOp(LenientModel):
     """One character passing a carried report to another, on-page.
 
@@ -2089,12 +2047,10 @@ class StateDiff(LenientModel):
     # per turn, and the whole lane is inert unless the chat's living-world
     # setting turned it on.
     consequences: list[dict] = Field(default_factory=list)
-    # Living world E, reactive floor. These are plans explicitly declared by
-    # a character THIS beat and adjudicated into bounded deterministic stages
-    # by the Director. Commit requires a grounded `basis`, a registered actor,
-    # the antagonist-ladder floor setting, and typed time/event triggers.
-    # `open` creates; `cancel` ends an existing plan owned by that actor.
-    offscreen_plan_ops: list[OffscreenPlanOp] = Field(default_factory=list)
+    # `offscreen_plan_ops` lived here until 2026-09-04. A reactive plan is a
+    # CHARACTER's own declaration, and the Director does not own psychology:
+    # `world/offscreen.apply_plan_ops` now reads plan ops from the character
+    # results alone, which is what `offscreen_life=reactive` always said.
     # Crowd blobs: one object with many people in it. A populous place cannot
     # be represented by managed presences -- `max_managed` is hard-capped at 8
     # and chat 57 spent three of six slots on ONE Dalek -- so a crowd is a
@@ -2404,6 +2360,13 @@ class DirectorSocialSpecialist(LenientModel):
     introductions: list[dict] = Field(default_factory=list)
     world_facts: list = Field(default_factory=list)
     public_evidence: list[CharterPublicEvidence] = Field(default_factory=list)
+    # The world's traffic, carried by this hand since the offscreen hand's
+    # retirement (2026-09-04): StateDiff's own shapes, same contract.
+    crowd_ops: list[CrowdOp] = Field(default_factory=list)
+    courier_ops: list[CourierOp] = Field(default_factory=list)
+    telling_ops: list[TellingOp] = Field(default_factory=list)
+    ratified_claims: list[str] = Field(default_factory=list)
+    contradicted_claims: list[str] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
     # The numbered manifest slice this call was handed, echoed back
     # with a verdict per event (schemas.ResolvedEvent).
@@ -2464,26 +2427,6 @@ class DirectorSpatialSpecialist(LenientModel):
         lambda cls, v: _coerce_station_table(v)
     )
 
-
-class DirectorOffscreenSpecialist(LenientModel):
-    """The world-traffic specialist: crowds, couriers, tellings, offscreen
-    plans and the hearsay verdict, in StateDiff's own shapes (same contract
-    as DirectorBodySpecialist). This is the OPS surface only -- the
-    offscreen SIMULATOR (design note 19's out-of-band parallel) remains
-    unbuilt, and nothing here schedules or simulates anything."""
-    crowd_ops: list[CrowdOp] = Field(default_factory=list)
-    courier_ops: list[CourierOp] = Field(default_factory=list)
-    telling_ops: list[TellingOp] = Field(default_factory=list)
-    offscreen_plan_ops: list[OffscreenPlanOp] = Field(default_factory=list)
-    ratified_claims: list[str] = Field(default_factory=list)
-    contradicted_claims: list[str] = Field(default_factory=list)
-    notes: list[str] = Field(default_factory=list)
-    # The numbered manifest slice this call was handed, echoed back
-    # with a verdict per event (schemas.ResolvedEvent).
-    resolved_events: list[ResolvedEvent] = Field(default_factory=list)
-    phase_sources: dict[str, str] = Field(default_factory=dict)
-
-# ---- Resolve reconciliation (agents/director.py's post-resolve seam) ----
 
 class ReconcileOmission(LenientModel):
     """One persistent, physically consequential change asserted as completed
@@ -3460,7 +3403,6 @@ SCHEMA_MAP = {
     "director_contact": DirectorContactSpecialist,
     "director_objects": DirectorObjectsSpecialist,
     "director_spatial": DirectorSpatialSpecialist,
-    "director_offscreen": DirectorOffscreenSpecialist,
     "resolve_reconcile": ResolveReconcileOutput,
     "resolve_repair": ResolveRepairOutput,
     "interpret_repair": InterpretRepairOutput,
@@ -3680,16 +3622,14 @@ _STATE_DIFF_DICT_FIELDS = (
 SPECIALIST_CHANNELS = {
     "director_body": ("attire", "conditions", "vitals", "overlays"),
     "director_social": ("cast_changes", "introductions", "world_facts",
-                        "public_evidence"),
+                        "public_evidence", "crowd_ops", "courier_ops",
+                        "telling_ops", "ratified_claims", "contradicted_claims"),
     "director_contact": ("contact_ops", "contact_action_ops",
                          "substance_ops", "containment", "scales"),
     "director_objects": ("entities", "remove_entities", "inventory_ops",
                          "artifact_ops", "destruction"),
     "director_spatial": ("positions", "rooms", "remove_rooms",
                          "remove_adjacent", "stations", "poses", "comms_ops"),
-    "director_offscreen": ("crowd_ops", "courier_ops", "telling_ops",
-                           "offscreen_plan_ops", "ratified_claims",
-                           "contradicted_claims"),
 }
 
 def _specialist_channel_shapes():
@@ -4812,6 +4752,15 @@ OUTPUT_EXAMPLES = {
                   "about": "Sable", "condition": "while she works"},
              ]},
         ],
+        "crowd_ops": [
+            {"op": "set", "crowd_id": "", "room": "market_square",
+             "band": "a few dozen", "composition": "market-goers",
+             "mood": "wary"},
+        ],
+        "courier_ops": [],
+        "telling_ops": [],
+        "ratified_claims": [],
+        "contradicted_claims": [],
         "notes": [],
     },
     "director_contact": {
@@ -4878,19 +4827,6 @@ OUTPUT_EXAMPLES = {
              "rooms": ["lamp_room", "gallery"], "carriers": [],
              "mode": "voice", "source": "", "private": False, "live": True},
         ],
-        "notes": [],
-    },
-    "director_offscreen": {
-        "crowd_ops": [
-            {"op": "set", "crowd_id": "", "room": "market_square",
-             "band": "a few dozen", "composition": "market-goers",
-             "mood": "wary"},
-        ],
-        "courier_ops": [],
-        "telling_ops": [],
-        "offscreen_plan_ops": [],
-        "ratified_claims": [],
-        "contradicted_claims": [],
         "notes": [],
     },
     "character": {

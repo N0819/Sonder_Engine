@@ -1221,7 +1221,9 @@ ROLES = [
     "director_contact",
     "director_objects",
     "director_spatial",
-    "director_offscreen",
+    # NO "director_offscreen". The world-traffic hand was retired
+    # 2026-09-04: its channels are the social hand's, its simulator is
+    # charter's, and its reactive-plan channel is a character's own.
     "narrator",
     # NO "mapping". Lore routing and retrieval is `agents/mapping.
     # compile_world_context`, deterministic since 2026-09-04: the two model
