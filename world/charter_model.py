@@ -31,6 +31,7 @@ from __future__ import annotations
 
 from .charter_chatter import normalize_window_acts
 from .charter_figure import normalize_figures
+from .charter_harm import GONE, normalize_condition
 from .charter_mark import normalize_marks
 
 #: A level is a fraction of nominal: 1.0 is perfectly kept, 0.0 is gone.
@@ -207,7 +208,20 @@ def normalize_body(key, entry):
         # should not trade professions every window. Older generated bodies
         # infer this from their ``post:...`` key at the planner boundary.
         "home_post": str(entry.get("home_post") or ""),
+        # What has been done to this body (`charter_harm.CONDITIONS`). Closed,
+        # and ``well`` for every body written before the field existed. A
+        # body that is dead or missing is unavailable HERE, at the one
+        # normalizer every path into the state runs through, so no reader
+        # can meet a corpse on a watch bill however the record arrived.
+        "condition": normalize_condition(entry.get("condition")),
     }
+    if body["condition"] in GONE:
+        body["available"] = False
+        body["stood_down"] = False
+    elif body["condition"] == "hurt":
+        hurt_at = entry.get("hurt_at_hours")
+        body["hurt_at_hours"] = number(hurt_at, 0.0) if hurt_at is not None \
+            else 0.0
     # An AUTHORED temperament only. The unauthored case is derived on demand
     # by `charter_temper.temperament_of` and stored nowhere, so the field is
     # absent for almost every body -- carrying five defaults per head would
@@ -385,7 +399,9 @@ def normalize_charter(stored, reservation=None):
     from .charter_economy import normalize_economy
     from .charter_social import (normalize_judgments, normalize_social_norms,
                                  normalize_ties)
-    from .charter_intervene import normalize_interventions
+    from .charter_creature import normalize_creature, normalize_spoor
+    from .charter_intervene import (normalize_interventions,
+                                    normalize_mobilisation)
     from .charter_trigger import (normalize_pending_changes,
                                   normalize_triggers, prune_trigger_last)
 
@@ -517,6 +533,26 @@ def normalize_charter(stored, reservation=None):
         "economy": normalize_economy(stored.get("economy")),
         "decisions": normalize_decisions(stored.get("decisions")),
         "interventions": normalize_interventions(stored.get("interventions")),
+        # A creature is an institution whose upkeep is fed from other
+        # institutions' bodies or stock (`charter_creature`). None for the
+        # ordinary case, and the ordinary case is byte-identical to before.
+        "creature": normalize_creature(stored.get("creature")),
+        # What its predation left standing for a body to read.
+        "spoor": normalize_spoor(stored.get("spoor")),
+        # Events the registry round handed this institution after its last
+        # window, for its next window to witness, appraise and fire on
+        # (`charter_predation`). Persisted for the reason `pending_changes`
+        # is: a restore that dropped them would lose a kill in flight.
+        "carried_events": [
+            dict(row) for row in (stored.get("carried_events") or ())
+            if isinstance(row, dict) and row.get("kind")][-64:],
+        # The watch called out, by place (`charter_intervene.watch_shock`),
+        # and how this institution decides to call it (`charter_decide`).
+        "mobilisations": {
+            str(place): dict(record)
+            for place, record in (stored.get("mobilisations") or {}).items()
+            if isinstance(record, dict)},
+        "mobilisation": normalize_mobilisation(stored.get("mobilisation")),
         "refused_interventions": [
             dict(row) for row in (stored.get("refused_interventions") or ())
             if isinstance(row, dict)][-24:],

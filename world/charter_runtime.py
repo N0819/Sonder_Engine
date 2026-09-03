@@ -927,6 +927,39 @@ def _presim_one(payload):
     return state, out
 
 
+def _presim_together(ordered, coarse, tail, active, seed):
+    """`_presim_one` for a registry whose institutions meet: every charter
+    one window, the predation round, the next window. Returns results in
+    `ordered`'s order, the shape the per-charter arm returns."""
+    from world.charter_predation import run_registry
+
+    states = {key: copy.deepcopy(item["state"]) for _i, (key, item) in ordered}
+    windows = {key: item["window_hours"] for _i, (key, item) in ordered}
+    window = min(windows.values()) if windows else DEFAULT_WINDOW_HOURS
+    out = {key: [] for key in states}
+    # The same per-index seeds `_presim_one` draws, so a charter that never
+    # meets a creature replays as it did alone.
+    seeds = {key: seed + index * 100_000 for index, (key, _item) in ordered}
+    if coarse:
+        for state in states.values():
+            state["active_places"] = []
+        states, events = run_registry(
+            states, coarse, window=max(8.0, window), seeds=seeds,
+            simulate_bound=True)
+        for key, rows in events.items():
+            out[key].extend({"charter": key, **copy.deepcopy(e)} for e in rows)
+    if tail:
+        for state in states.values():
+            state["active_places"] = list(active)
+        states, events = run_registry(
+            states, tail, window=min(4.0, window),
+            seeds={k: v + 50_000 for k, v in seeds.items()},
+            simulate_bound=True)
+        for key, rows in events.items():
+            out[key].extend({"charter": key, **copy.deepcopy(e)} for e in rows)
+    return [(states[key], out[key]) for _i, (key, _item) in ordered]
+
+
 def presim_registry(registry, *, horizon_hours=MAX_CATCHUP_HOURS,
                     active_tail_hours=DEFAULT_PRESIM_TAIL_HOURS,
                     tail_places=(), seed=0, scene=None, story_day=None):
@@ -1003,7 +1036,15 @@ def presim_registry(registry, *, horizon_hours=MAX_CATCHUP_HOURS,
                  coarse, tail, active, int(seed))
                 for index, (key, item) in ordered]
     results = None
-    if len(payloads) > 1 and (coarse + tail) >= PARALLEL_PRESIM_HOURS:
+    if any((item["state"] or {}).get("creature") for _i, (_k, item) in ordered):
+        # A CREATURE IN THE REGISTRY MEANS THE INSTITUTIONS MEET. The
+        # per-charter pool above is right only while nothing crosses between
+        # charters inside the run; predation crosses every window
+        # (`charter_predation.run_registry`), so the whole registry steps
+        # together, serially, and the parallel arm is not taken.
+        results = _presim_together(ordered, coarse, tail, active, int(seed))
+    if results is None and len(payloads) > 1 \
+            and (coarse + tail) >= PARALLEL_PRESIM_HOURS:
         try:
             from concurrent.futures import ProcessPoolExecutor
             import os as _os
@@ -1964,6 +2005,11 @@ def _event_surface(event):
                       else f"{subject} gave aid"),
         "harm_done": (f"{subject} caused harm to {toward}" if toward
                       else f"{subject} caused harm"),
+        "stock_taken": f"{subject} was taken",
+        "mobilisation_called": (f"{subject} called the watch out to {toward}"
+                                if toward else f"{subject} called the watch"),
+        "mobilisation_lapsed": (f"the watch at {toward} stood down" if toward
+                                else "the watch stood down"),
         "accusation": (f"{subject} accused {toward}" if toward
                        else f"{subject} made an accusation"),
         "apology": (f"{subject} made peace with {toward}" if toward
@@ -2040,6 +2086,13 @@ def advance_snapshot(registry, *, elapsed_seconds, epoch_id, base_turn,
     rows, produced = [], []
     elapsed_seconds = max(0.0, float(elapsed_seconds or 0.0))
     advanced_any = False
+    # A registry holding a creature is advanced TOGETHER (every charter one
+    # window, then the predation round) rather than one institution at a
+    # time; the states are prepared below exactly as before and stepped in
+    # one call at the end. A registry without one never enters that path.
+    together = any((item.get("state") or {}).get("creature")
+                   for item in registry["items"].values())
+    prepared = {}
     for index, (key, item) in enumerate(sorted(registry["items"].items())):
         if cancelled is not None and cancelled.is_set():
             break
@@ -2118,6 +2171,10 @@ def advance_snapshot(registry, *, elapsed_seconds, epoch_id, base_turn,
                 (hour_of_day(previous_elapsed, _anchor, _length)
                  - before_hours) % _length, 4)
             state["day_length_hours"] = _length
+        if together:
+            prepared[key] = (state, advanced_hours, previous_elapsed,
+                             before_hours, item)
+            continue
         state, events = run(
             state, hours=advanced_hours,
             window=item["window_hours"],
@@ -2139,6 +2196,39 @@ def advance_snapshot(registry, *, elapsed_seconds, epoch_id, base_turn,
             produced.append(stamped)
             rows.append(_scheduled_row(
                 cid, frame_id, base_turn, epoch_id, key, event, due_at))
+    if prepared:
+        from world.charter_predation import run_registry
+
+        # Grouped by how far each institution has to come: in practice one
+        # group, since a registry is landed whole; a charter added later
+        # catches up in its own group and meets the others next epoch.
+        groups = {}
+        for key, (state, hours, prev, before, item) in prepared.items():
+            groups.setdefault(round(hours, 6), {})[key] = state
+        for hours, states in sorted(groups.items()):
+            window = min(prepared[k][4]["window_hours"] for k in states)
+            seeds = {k: int(stable_event_key(epoch_id, k)[-8:], 16)
+                     for k in states}
+            states, events = run_registry(states, hours, window=window,
+                                          seeds=seeds)
+            for key, state in states.items():
+                _s, _h, previous_elapsed, before_hours, item = prepared[key]
+                item["state"] = state
+                advanced_any = True
+                item["last_elapsed_seconds"] = (
+                    previous_elapsed + hours * 3600.0)
+                item["last_epoch_id"] = str(epoch_id)
+                for event in events.get(key) or ():
+                    offset_hours = max(
+                        0.0, float(event.get("at_hours") or before_hours)
+                        - before_hours)
+                    due_at = min(elapsed_seconds,
+                                 previous_elapsed + offset_hours * 3600.0)
+                    stamped = {"charter": key, **copy.deepcopy(event)}
+                    produced.append(stamped)
+                    rows.append(_scheduled_row(
+                        cid, frame_id, base_turn, epoch_id, key, event,
+                        due_at))
     if advanced_any:
         cross_charter_gossip(registry)
     return registry, rows, produced
@@ -2273,6 +2363,11 @@ def land_snapshot(cid, frame_id, base_turn, epoch_id, registry, rows,
                         "discarded": len(produced),
                         "reason": "registry_changed"}
         wset_for_frame(cid, CHARTERS_KEY, registry, frame_id)
+        # WHAT THE CREATURES LEFT STANDING becomes a thing in a room
+        # (`story/artifacts.post_spoor`): the carcass is nailed to no wall,
+        # but it is read the same way, by whoever comes upon it.
+        from story.artifacts import post_spoor
+        post_spoor(cid, registry, base_turn, frame_id=frame_id)
         for row in rows:
             qtx(
                 "INSERT OR IGNORE INTO scheduled_events"

@@ -365,3 +365,207 @@ def small_town():
             "posts": posts, "bodies": bodies,
             "commons": ["square", "tavern"],
             "priority": ["forge_lit", "stall_stocked", "ale_kept"]}
+
+
+# ---------------------------------------------------------------------------
+# Creatures as charter (`docs/design/DESIGN_CREATURES_AS_CHARTER.md`). Three
+# institutions whose upkeep is fed from a town's bodies or stock, each the
+# same schema with different tables. Nothing below appears in `world/`: the
+# nouns here are the fixture's, as `charter_fixtures.py`'s are.
+# ---------------------------------------------------------------------------
+
+#: A pasture with a pen and a treasury with silver: the two things a creature
+#: can want that are not people. Keyed by place so any town scene can host it.
+def pasture_economy(pen_place, treasury_place):
+    return {
+        "goods": {"livestock": {"base_value": 2.0, "unit": "head"},
+                  "silver": {"base_value": 5.0, "unit": "lot"}},
+        "stocks": {"pen": {"livestock": 12.0}, "treasury": {"silver": 6.0}},
+        "targets": {"pen": {"livestock": {"minimum": 3, "desired": 12,
+                                          "capacity": 16}},
+                    "treasury": {"silver": {"minimum": 1, "desired": 6,
+                                            "capacity": 12}}},
+        "flows": {"lambing": {"holder": "pen", "good": "livestock",
+                              "kind": "produce", "lots_per_hour": 0.01}},
+        "markets": {"pen": {"place": pen_place, "holder": "pen"},
+                    "treasury": {"place": treasury_place,
+                                 "holder": "treasury"}},
+    }
+
+
+def with_wilds(scene, edge_room, *, den="den", wood="wood", cave="cave"):
+    """The rooms beyond a town's edge: a wood off ``edge_room``, a den off the
+    wood (small), and a cave off the wood (large, for a large thing). One
+    tiny room off the wood too, so a footprint has something not to fit."""
+    scene = {"rooms": {k: dict(v, adjacent=list(v.get("adjacent") or ()))
+                       for k, v in scene["rooms"].items()}}
+    rooms = scene["rooms"]
+    rooms[edge_room]["adjacent"].append({"to": wood, "barrier": "open"})
+    rooms[wood] = {"name": wood, "adjacent": [
+        {"to": edge_room, "barrier": "open"}, {"to": den, "barrier": "open"},
+        {"to": cave, "barrier": "open"}, {"to": "burrow", "barrier": "open"}]}
+    rooms[den] = {"name": den, "size": "small",
+                  "adjacent": [{"to": wood, "barrier": "open"}]}
+    rooms[cave] = {"name": cave, "size": "large",
+                   "adjacent": [{"to": wood, "barrier": "open"}]}
+    rooms["burrow"] = {"name": "burrow", "size": "tiny",
+                       "adjacent": [{"to": wood, "barrier": "open"}]}
+    return scene
+
+
+def guarded_town(town, *, pen_place, hall_place, treasury_place=None):
+    """A town that can answer: a reeve with the authority to call the watch,
+    a herder posted at the pen who reports to the reeve, stock to lose and
+    silver to pay with. The town's own posts and bodies are untouched."""
+    town = {k: (dict(v) if isinstance(v, dict) else v)
+            for k, v in town.items()}
+    town["posts"] = dict(town["posts"])
+    town["bodies"] = dict(town["bodies"])
+    town["economy"] = pasture_economy(pen_place, treasury_place or hall_place)
+    town["posts"]["reeve"] = {"place": hall_place, "serves": [],
+                              "requires": {"office": 1},
+                              "authority": ["mobilise"]}
+    town["posts"]["herder"] = {"place": pen_place, "serves": [],
+                               "requires": {"husbandry": 1},
+                               "reports_to": "reeve"}
+    town["bodies"]["reeve"] = {"competence": {"office": 2, "arms": 1},
+                               "place": hall_place, "berth": hall_place,
+                               "available": True}
+    # A crew of three, as the generator tops every continuous post: one at
+    # the pen, two off the bill -- and the two off it are who carries what
+    # the pen saw to the square (`charter_move.errands`, social phases).
+    for index in range(3):
+        town["bodies"][f"herder_{index}"] = {
+            "competence": {"husbandry": 1}, "place": pen_place,
+            "berth": pen_place, "available": True}
+    # A claim told once arrives at `RETOLD_RETENTION` (0.6) of its strength;
+    # this town acts on a neighbour's word, not only on what its reeve saw.
+    town["mobilisation"] = {"credence": 0.5, "duration_hours": 48.0,
+                            "crew_fraction": 0.25, "requires": {}}
+    return town
+
+
+def wolf_pack(scene, *, lair="den", ground, size=4):
+    """Nocturnal, livestock first, no doors, moves its den when a member is
+    killed, hunts harder when nothing has fed it."""
+    bodies = {f"hound_{i}": {"competence": {"fang": 1}, "place": lair,
+                             "berth": lair, "available": True}
+              for i in range(size)}
+    return {
+        "key": "pack", "scene": scene,
+        "upkeeps": {"belly": {"place": lair, "level": 0.7, "floor": 0.3,
+                              "drift_per_hour": 0.015,
+                              "service_per_hour": 0.0}},
+        "posts": {"hunt": {"place": ground, "serves": ["belly"],
+                           "requires": {"fang": 1}}},
+        "bodies": bodies, "priority": ["belly"],
+        "creature": {
+            "prey": ["stock", "unposted", "posted"],
+            "senses": {"range_rooms": 2}, "footprint": "small",
+            "can_open_doors": False, "encounter_odds": 0.6,
+            "kill_ceiling": 1, "stock_lots": 1.0,
+            "fed": {"upkeep": "belly", "per_body": 0.5, "per_lot": 0.3},
+            "spoor": {"body": "a carcass torn open",
+                      "stock": "a broken fence and blood on the grass",
+                      "tracks": "paw prints in the mud", "hours": 72},
+            "active_phases": ["dusk", "night", "pre-dawn"],
+            "boldness": 0.5,
+        },
+        "triggers": [
+            {"id": "a_member_killed_moves_the_den",
+             "on": "event:harm_done", "where": {"side": "suffered"},
+             "refractory_hours": 48.0,
+             "then": [{"op": "intervene",
+                       "intervention": {"op": "relocate", "to": "nearest",
+                                        "cause": "a member was hurt"}}]},
+        ],
+    }
+
+
+def bandit_band(scene, *, lair="cave", ground, size=5):
+    """Robbery as predation on stock: opens doors, takes people rather than
+    killing them, loses its nerve and moves on when hunted."""
+    bodies = {f"cutthroat_{i}": {"competence": {"knife": 1}, "place": lair,
+                                 "berth": lair, "available": True}
+              for i in range(size)}
+    return {
+        "key": "band", "scene": scene,
+        "upkeeps": {"purse": {"place": lair, "level": 0.5, "floor": 0.25,
+                              "drift_per_hour": 0.01,
+                              "service_per_hour": 0.0}},
+        "posts": {"lookout": {"place": ground, "serves": ["purse"],
+                              "requires": {"knife": 1}}},
+        "bodies": bodies, "priority": ["purse"],
+        "creature": {
+            "prey": ["stock", "unposted"],
+            "senses": {"range_rooms": 3}, "footprint": "point",
+            "can_open_doors": True, "encounter_odds": 0.5,
+            "kill_ceiling": 1, "stock_lots": 2.0, "take": True,
+            "fed": {"upkeep": "purse", "per_body": 0.3, "per_lot": 0.4},
+            "spoor": {"body": "", "stock": "a broken strongbox",
+                      "tracks": "boot prints and a dropped knife",
+                      "hours": 96},
+            "active_phases": [], "boldness": 0.6,
+            "hoard_holder": "loot",
+        },
+        "triggers": [
+            {"id": "hunted_once_loses_nerve",
+             "on": "event:harm_done", "where": {"side": "suffered"},
+             "refractory_hours": 24.0,
+             "then": [{"op": "intervene",
+                       "intervention": {"op": "creature_dial",
+                                        "field": "boldness",
+                                        "delta": -0.5}}]},
+            {"id": "hunted_again_moves_on",
+             "on": "event:harm_done", "where": {"side": "suffered"},
+             "refractory_hours": 0.0, "odds": 0.5,
+             "then": [{"op": "intervene",
+                       "intervention": {"op": "relocate", "to": "nearest",
+                                        "cause": "hunted"}}]},
+        ],
+    }
+
+
+def dragon(scene, *, lair="cave", ground, town_key="town"):
+    """Solitary, large, a hoard it wants filled, a tribute bargain it keeps
+    until it goes hungry, and a long sleep after it eats."""
+    return {
+        "key": "wyrm", "scene": scene,
+        "upkeeps": {"maw": {"place": lair, "level": 0.8, "floor": 0.3,
+                            # Half a maw a week: a lot of tribute a week
+                            # (`per_lot` 0.5) exactly keeps it, so the
+                            # bargain holds while the town pays and breaks
+                            # the week it cannot.
+                            "drift_per_hour": 0.003,
+                            "service_per_hour": 0.0}},
+        "posts": {"perch": {"place": ground, "serves": ["maw"],
+                            "requires": {"flame": 1}}},
+        "bodies": {"wyrm": {"competence": {"flame": 3}, "place": lair,
+                            "berth": lair, "available": True}},
+        "priority": ["maw"],
+        "creature": {
+            "prey": ["stock", "posted", "unposted"],
+            "senses": {"range_rooms": 4}, "footprint": "run",
+            "can_open_doors": False, "encounter_odds": 0.8,
+            "kill_ceiling": 2, "stock_lots": 3.0,
+            "contest": {"capability": 6.0, "caution": 0.05},
+            "fed": {"upkeep": "maw", "per_body": 0.9, "per_lot": 0.5},
+            "spoor": {"body": "a scorched carcass",
+                      "stock": "a scorched, emptied pen",
+                      "tracks": "a wide swathe of scorched ground",
+                      "hours": 168},
+            "active_phases": [], "boldness": 0.9, "hoard_holder": "hoard",
+            "bargains": [{"with": town_key, "good": "silver", "lots": 1.0,
+                          "every_hours": 168.0, "holder": "treasury"}],
+        },
+        "triggers": [
+            {"id": "fed_it_sleeps",
+             "on": "event:goods_exchanged", "where": {"side": "dealt"},
+             "refractory_hours": 72.0,
+             "then": [{"op": "intervene",
+                       "intervention": {"op": "drift_dial", "upkeep": "maw",
+                                        "drift_per_hour": 0.0,
+                                        "until_hours": 72.0,
+                                        "cause": "fed"}}]},
+        ],
+    }
