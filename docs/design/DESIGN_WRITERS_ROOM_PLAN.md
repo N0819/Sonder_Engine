@@ -254,25 +254,42 @@ without a room in the loop. It is the widened "step 5".
 The owner's shape for the pair (2026-09-03), which is the product-owner /
 engineer shape rather than author / reviewer:
 
-- **The Dramaturge is pure planning.** It sees the story and what the
-  player is experiencing, including the hidden truths it authors, and it
-  proposes direction: pressure, reversal, revelation, a turn nobody asked
-  for. It holds **no tools at all**: it is handed a briefing (the story so
-  far, the player's experience, the relevant lore, the standing plans and
-  mandates, the Planner's objections) and returns a plan. It never reads
-  the world itself and never writes it; the Planner fetches what it asks
-  for and cites it back. Its output is intent, not a package.
+- **The Dramaturge is pure planning.** Its input is the player's input and
+  the narration output — the player-visible stream, which is spoiler-safe
+  by construction and cheap — plus its own standing plans, the genre, and
+  how much the player asked to be surprised. It thinks: *what would be a
+  good progression of this story, from what I know of fiction, the chosen
+  genre, and how far I am licensed to surprise?* It proposes direction:
+  pressure, reversal, revelation, a turn nobody asked for. It holds **no
+  tools at all**: it never reads the world itself and never writes it; the
+  Planner fetches what it asks for and cites it back. Its output is
+  intent, not a package.
 - **A creativity dial, per story and named.** From holding to a target the
   player stated (a mandate the room was given) to wildly inventive. The
   dial is a setting the user turns, not a property of the agent.
-- **The Story Planner implements AND critiques.** It carries the tools, the
-  citations and the budget, and it does not blindly implement a Dramaturge
-  proposal: it answers with geography, identity, causal history and cost
-  ("that character is dead", "that town is three days' walk", "that would
-  retcon a sealed truth with realised evidence"). The Dramaturge answers
-  back on whether the coherent version is still worth encountering. That is
-  the deliberation loop (v2 § 5), bounded in rounds, ending in a package or
-  in a disagreement returned to the user.
+- **The Story Planner judges naturalness, then plots the implementation.**
+  Its criterion is that the result *feels like something that happened
+  within the world*. It carries the tools, the citations and the budget,
+  and it does not blindly implement a Dramaturge proposal: it answers with
+  geography, identity, causal history and cost ("that character is dead",
+  "that town is three days' walk", "that would retcon a sealed truth with
+  realised evidence"). The Dramaturge answers back on whether the natural
+  version is still worth encountering. That is the deliberation loop
+  (v2 § 5), bounded in rounds, ending in a package or in a disagreement
+  returned to the user.
+- **The Planner's intervention toolkit, used sensibly.** Beside the local
+  ops below, the Planner may **nudge a charter body of its choice**: an
+  errand toward a place or a figure, a need or drift shock, a trigger
+  armed on that body, a claim *delivered through a channel* (a carrier, a
+  letter, a rumour at the market), a commitment opened. A nudge is a
+  pressure the body's own state answers — it biases the decide seam the
+  way a project biases appraisal — never a puppet string; a body whose
+  ledgers say no still says no, and the Planner reads why. What the Planner
+  may **not** do is write a body's mind directly, or touch a major
+  character at all except by arranging circumstances that reach them
+  through a channel (an arrival, news, a summons): the firewall is the
+  same for authors as for models. "Sensibly" is a budget: nudges per story
+  hour, named and per story, alongside the pacing budget.
 
 **Local drama is a first-class op set, not a side effect of exploration**
 (owner, 2026-09-03: "drama shouldn't purely be from exploration"). The room
