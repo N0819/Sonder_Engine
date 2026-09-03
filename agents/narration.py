@@ -1203,8 +1203,35 @@ def _substitute_dialogue_tokens(prose, lines):
             missing.append((index, line))
     # A token for a line that does not exist is the model inventing an index.
     # Strip it rather than leaving `{{L9}}` on the page.
-    text = re.sub(r"\{\{L\d+\}\}", "", text)
+    text = _LINE_TOKEN_RE.sub("", text)
     return re.sub(r"[ \t]{2,}", " ", text), missing
+
+
+#: The placeholder protocol's own token. Engine-owned: the narrator card
+#: teaches this exact spelling, so matching it is reading the protocol back,
+#: not searching prose for a phrase.
+_LINE_TOKEN_RE = re.compile(r"\{\{L(\d+)\}\}")
+
+
+def _stray_line_tokens(prose, lines):
+    """Tokens the model wrote with no line behind them.
+
+    A TOKEN IS A LINE'S ADDRESS, AND A LINE THAT WAS NEVER HANDED OVER HAS
+    NONE. The protocol numbers the delivered lines and the model places
+    their tokens; on a beat with no `dialogue_lines` at all the model has
+    nothing to place, and the player's own line is never one of them (the
+    echo rule wants its ABSENCE). Measured, Harrowmere 2026-09-02, three of
+    forty beats: turn 15 put `{{L1}}` where the player's own question went,
+    turn 22 wrote one on a beat with no line anywhere, and turn 37 wrote one
+    for a line the view never carried. Substitution only ran when tokens
+    existed, so each reached the page verbatim -- the protocol leaking
+    through the story it was built to protect. Returns the token strings, in
+    page order, so the warning can name what was stripped.
+    """
+    known = len(lines or ())
+    return ["{{L%s}}" % m.group(1)
+            for m in _LINE_TOKEN_RE.finditer(str(prose or ""))
+            if int(m.group(1)) < 1 or int(m.group(1)) > known]
 
 
 def _generate_narration(payload, view, prev, p_lines, correction_notes=None,
@@ -1241,16 +1268,25 @@ def _generate_narration(payload, view, prev, p_lines, correction_notes=None,
         if _aliased:
             out["prose"] = _aliased
     out.setdefault("new_specifics", [])
-    if tokens:
-        # BEFORE the fidelity check, which is what makes the check measure the
-        # page the reader gets rather than a draft that still holds tokens.
-        prose, unplaced = _substitute_dialogue_tokens(
-            out.get("prose", ""), tokens)
-        out["prose"] = prose
-        for _index, line in unplaced:
-            warnings.append(
-                "Narrator omitted a delivered line's placeholder: "
-                f"\"{line[:80]}\"")
+    # ALWAYS, not only when tokens exist. The strip inside the substitution
+    # is the deterministic floor under the protocol -- a token is never
+    # prose -- and running it only on beats that had lines left every other
+    # beat's stray token on the page (`_stray_line_tokens`).
+    stray = _stray_line_tokens(out.get("prose", ""), tokens)
+    # BEFORE the fidelity check, which is what makes the check measure the
+    # page the reader gets rather than a draft that still holds tokens.
+    prose, unplaced = _substitute_dialogue_tokens(
+        out.get("prose", ""), tokens)
+    out["prose"] = prose
+    for _index, line in unplaced:
+        warnings.append(
+            "Narrator omitted a delivered line's placeholder: "
+            f"\"{line[:80]}\"")
+    if stray:
+        warnings.append(
+            "Narrator wrote a line token with no line behind it (%s); "
+            "stripped. A token exists only for a line in dialogue_lines, and "
+            "the player's own line is never one." % ", ".join(stray))
     # The player's own declared lines must NOT count toward DIALOGUE
     # FIDELITY -- PLAYER ECHO RULE requires the opposite of them (excluded,
     # not present), so scoring them here would make the two rules fight and
