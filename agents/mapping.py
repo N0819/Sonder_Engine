@@ -103,19 +103,34 @@ def classify_movement(interp, scene, *, planned_for):
     return {"to_room": target, "status": "unplanned"}
 
 
-def _location_query_status(query, scene, *, planned_for):
-    """A location query is answered by the scene, by the plan, or by nobody."""
+def _location_query_status(query, scene, *, planned_for, destination=None):
+    """A location query is answered by the scene, by the plan, or by nobody.
+
+    The Director writes the query as a DESCRIPTION, not an id -- "Reeve's
+    Hall interior and occupants", "Ford Inn kitchen Harrowmere" (21 of 21
+    on the Harrowmere replay named a room this way and none was an id) --
+    so a room answers it when the room's own spelling, uid or name, is the
+    query or sits inside it, which is the reading `structure.planned_context`
+    has always applied to the plan. And a query that rides a beat whose
+    destination the world already holds is a request for lore ABOUT that
+    room, not for the room: the destination answers it.
+    """
     if not query:
         return None
     from world.spatial import normalize_room_id
 
+    if destination in ("known", "planned"):
+        return destination
     folded = normalize_room_id(str(query))
+    if not folded:
+        return None
     rooms = (scene or {}).get("rooms") or {}
     for rid, room in rooms.items():
-        if normalize_room_id(str(rid)) == folded:
-            return "known"
-        if isinstance(room, dict) and normalize_room_id(
-                str(room.get("name") or "")) == folded:
+        spellings = {normalize_room_id(str(rid))}
+        if isinstance(room, dict):
+            spellings.add(normalize_room_id(str(room.get("name") or "")))
+        spellings.discard("")
+        if any(sp == folded or sp in folded for sp in spellings):
             return "known"
     if planned_for(query):
         return "planned"
@@ -186,7 +201,8 @@ def compile_world_context(ctx, nonce):
     movement = classify_movement(interp, scene, planned_for=planned_for)
     location_query = interp.get("location_query") or None
     query_status = _location_query_status(
-        location_query, scene, planned_for=planned_for)
+        location_query, scene, planned_for=planned_for,
+        destination=movement["status"])
 
     planned = None
     if movement["status"] == "planned":

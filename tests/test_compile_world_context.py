@@ -184,6 +184,31 @@ def test_a_location_query_the_scene_answers_raises_nothing(temp_db, no_retrieval
     assert out["planning_needs"] == []
 
 
+def test_a_descriptive_query_that_contains_a_rooms_name_is_answered(temp_db, no_retrieval):
+    """The Director writes the query as a description ("Bond Warehouse
+    interior and stock"); the room's own spelling inside it answers it, the
+    way `planned_context` has always read the plan."""
+    ctx = _ctx(temp_db, interp={"sequence": [], "flow": {}, "movement": None,
+                                "location_query": "Bond Warehouse interior and stock"})
+    out = mapping.compile_world_context(ctx, nonce=0)
+    assert out["location_query"]["status"] == "known"
+    assert out["planning_needs"] == []
+
+
+def test_a_query_riding_a_known_destination_is_answered_by_it(temp_db, no_retrieval):
+    """Lore ABOUT the room the beat walks into is not a request for the
+    room: 21 of 40 replay beats carried a descriptive query beside a known
+    destination, and each was a model call to re-describe a room the scene
+    held (the two-seeds-for-one-room class)."""
+    ctx = _ctx(temp_db, interp={
+        "sequence": [], "flow": {"needs_mapping": True},
+        "movement": {"to_room": "warehouse"},
+        "location_query": "the bonded stores by the quay and their keeper"})
+    out = mapping.compile_world_context(ctx, nonce=0)
+    assert out["location_query"]["status"] == "known"
+    assert out["planning_needs"] == []
+
+
 def test_a_location_query_nobody_answers_is_a_need(temp_db, no_retrieval):
     ctx = _ctx(temp_db, interp={"sequence": [], "flow": {}, "movement": None,
                                 "location_query": "the customs house"})

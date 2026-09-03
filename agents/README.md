@@ -3,7 +3,9 @@
 Each file owns one clear part of the turn pipeline:
 
 - `director.py` — scene establishment, input interpretation, and objective resolution.
-- `mapping.py` — lorebook routing and retrieval.
+- `mapping.py` — the world-context compiler (`compile_world_context`): lorebook
+  routing and retrieval, deterministic; it never invents, it records a
+  planning need.
 - `perception.py` — opening, action-onset, and outcome observer views. Fully
   deterministic: there is no `perception` model role, and this module imports no
   model seam.
