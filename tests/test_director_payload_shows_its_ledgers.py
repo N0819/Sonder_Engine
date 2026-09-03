@@ -247,8 +247,17 @@ def _interp():
 
 
 def _fake_agent(calls):
+    """Records every call. The Director's own answer rules for EVERY hand,
+    because a hand the ruling does not reach is not dispatched
+    (`director_scopes._dispatch_specialists`) and an undispatched hand has
+    no payload to check."""
+    from agents.director import SPECIALISTS
+
     def fake(role, step_key, system, payload, **kw):
         calls.append({"step_key": step_key, "payload": payload})
+        if step_key == "director_resolve":
+            return {"ledger_notes": {name: f"{name}: settled this beat"
+                                     for name in SPECIALISTS}}
         return {}
     return fake
 

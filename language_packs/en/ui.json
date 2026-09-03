@@ -885,6 +885,7 @@
   "Guest Player": "Guest Player",
   "Guest session required": "Guest session required",
   "Hair": "Hair",
+  "Hands the ruling did not reach (not run): ${unreached.join(\", \")}": "Hands the ruling did not reach (not run): ${unreached.join(\", \")}",
   "Hard mode — you declare what you attempt, the Director decides what it did": "Hard mode — you declare what you attempt, the Director decides what it did",
   "hardboiled mystery": "hardboiled mystery",
   "Harsh — weather you would not want to be caught out in": "Harsh — weather you would not want to be caught out in",

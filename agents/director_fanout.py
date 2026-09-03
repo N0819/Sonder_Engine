@@ -28,6 +28,8 @@ from .director_scopes import (
     _DELEGATED_CHANNELS,
     _LIST_DELEGATED,
     _PROSE_DUTY_SHIPPED,
+    _STRUCTURAL_CHANNEL_FACTS,
+    _note_key_forms,
 )
 
 def fanout_is_parallel():
@@ -253,24 +255,6 @@ def _specialist_manifest_slice(name, view):
         if _CATEGORY_CHANNELS.get(item.get("category")) in channels
     ]
 
-
-
-def _note_key_forms(key):
-    """The spellings one ledger name can arrive under.
-
-    Case and a trailing plural only. NOT a synonym table: the channels are a
-    closed set the engine owns, so matching their own names loosely is
-    schema-shaped, while guessing that "transit" means `positions` would be
-    the engine inventing vocabulary on the Director's behalf and getting it
-    wrong quietly.
-    """
-    k = str(key or "").strip().lower()
-    forms = {k}
-    if k.endswith("s"):
-        forms.add(k[:-1])
-    else:
-        forms.add(k + "s")
-    return forms
 
 
 def _note_for(notes, name):
@@ -621,10 +605,31 @@ def _index_addressed_events(dispatch):
     return index
 
 
-#: Channels whose existence is a property of the STORY, not of the beat: the
-#: gate is false because the ledger is switched off, so no beat can ever put
-#: work in them and an unserved one is never a mispredict.
-_STRUCTURAL_CHANNEL_FACTS = {"vitals": "vitals_tracked"}
+def _author_emitted_channels(out, stage):
+    """The delegated channels the STAGE AUTHOR itself put content in.
+
+    Read once, before any specialist merges, and kept on the orchestration
+    record as `author_emitted`, because it is the only thing the scope
+    backstop's channel half is about: the author's lean sheet says to leave
+    every delegated channel empty, so author content in a channel no served
+    hand owns is the mis-emission worth reporting. Everything else that
+    can stand in a delegated channel at the end of the beat is legitimate
+    and was being mistaken for it once dispatch stopped running every hand
+    on every physical beat -- the engine's own seams (`_ground_public_evidence`
+    mints `public_evidence` from the beat's source list on every beat with a
+    line or an act; the movement backstop writes a declared, unblocked move
+    into `positions` itself), and an owner's repair call landing in a
+    channel its hand was not dispatched for. Under the gate-keyed dispatch
+    the social and spatial hands ran on exactly those beats, so the
+    confusion never surfaced; under the ruling-keyed one it fired on a
+    quiet line of dialogue and on a plain walk through an open door.
+    """
+    emitted = []
+    for channel in _DELEGATED_CHANNELS:
+        container, key = _stage_container(out, stage, channel)
+        if container.get(key):
+            emitted.append(channel)
+    return emitted
 
 
 def _structurally_absent_channels(specialists):
@@ -642,14 +647,25 @@ def _orchestration_scope_backstop(ctx, out, stage):
     """`changes_asserted` reconciliation pointed at the SCOPE.
 
     Runs LAST, on the final reconciled output, and only on the orchestrated
-    path. One check covers both a wrongly-skipped specialist and a wrongly
-    omitted chunk, because both are the same fact: a channel was not in any
-    SERVED scope (granted to a specialist that ran) and content for it
-    shipped anyway -- a manifest entry in that channel's category, or
-    channel content in the final output (the stage model's own, or the
-    repair seam's). Every such channel is REPORTED through `tell_director`
-    and never dropped: fail-open means the unowned content stands and the
+    path. One check covers both an unserved hand and a wrongly omitted
+    chunk, because both are the same fact: a channel was not in any SERVED
+    scope (granted to a specialist that ran) and content for it shipped
+    anyway -- a manifest entry in that channel's category, or channel
+    content in the final output (the stage model's own, or the repair
+    seam's). Every such channel is REPORTED through `tell_director` and
+    never dropped: fail-open means the unowned content stands and the
     existing deterministic seams keep judging it.
+
+    Since dispatch keyed on the Director's ruling, an unserved CHANNEL has
+    one ordinary cause: the ruling never reached its hand -- no
+    `ledger_notes` line and no `changes_asserted` entry in its categories
+    -- and the author encoded the change itself anyway (`author_emitted`
+    is the snapshot that tells the author's content from an engine seam's
+    or a repair's), or a hand that was addressed failed. A manifest entry
+    always addresses its hand, so the manifest half of this check now
+    fires only for a failed call or a ledger the story does not keep. An
+    unserved PROSE DUTY is still a gate prediction that the beat proved
+    wrong.
 
     The record also carries the per-beat scope measurement the experiment
     is judged by: granted vs served vs produced, where over-grant is only
@@ -670,11 +686,17 @@ def _orchestration_scope_backstop(ctx, out, stage):
             failed.append(name)
     produced = []
     flags = []
+    # Only the AUTHOR's own content in an unserved channel is a flag; an
+    # engine seam's write or an owner's repair is not (see
+    # `_author_emitted_channels`). A record without the snapshot -- there
+    # is none on the live path -- falls back to flagging everything.
+    emitted = record.get("author_emitted")
     for channel in _DELEGATED_CHANNELS:
         container, key = _stage_container(out, stage, channel)
         if container.get(key):
             produced.append(channel)
-            if channel not in served:
+            if channel not in served \
+                    and (emitted is None or channel in emitted):
                 flags.append(f"{key} carries content for {channel!r}")
     if stage == "resolve":
         # A channel can be unserved for two different reasons, and only one
@@ -758,13 +780,16 @@ def _orchestration_scope_backstop(ctx, out, stage):
         ctx.tell_director(note)
         ctx.add_warning(note)
         return
-    why = "the scope gate read the scene as having no such work"
     note = (
-        "orchestration gate: content shipped for channels or prose duties "
-        "outside any served scope -- " + why + " -- "
+        "orchestration scope: content shipped for channels or prose duties "
+        "outside any served scope -- "
         + "; ".join(flags)
         + ". Nothing was dropped (fail-open); the stage model's encoding "
-        "and the reconciliation seam stand. The scope gate mispredicted."
+        "and the reconciliation seam stand. A channel here means the "
+        "Director's ruling never reached the hand that owns it (no "
+        "ledger_notes line and no changes_asserted entry in its categories) "
+        "and the author encoded the change itself; a prose duty here means "
+        "its gate mispredicted."
     )
     record["gate_flags"] = flags
     ctx.tell_director(note)

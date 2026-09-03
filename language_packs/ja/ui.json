@@ -867,6 +867,7 @@
   "Guest Player": "ゲストプレイヤー",
   "Guest session required": "ゲストセッションが必要です",
   "Hair": "髪",
+  "Hands the ruling did not reach (not run): ${unreached.join(\", \")}": "裁定が届かなかった手（未実行）：${unreached.join(\", \")}",
   "Hard mode — you declare what you attempt, the Director decides what it did": "ハードモード — 試みを宣言し、その結果はディレクターが決める",
   "hardboiled mystery": "ハードボイルドミステリー",
   "Harsh — weather you would not want to be caught out in": "厳しい — 外に出たくないような天気",

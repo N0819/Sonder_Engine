@@ -1463,8 +1463,17 @@ function specialistSlice(content, id) {
       }
       own[key] = kept;
     }
+    // A hand the ruling never reached has no lens of its own (it did not
+    // run), so it is named here, on the author's, where the ruling lives.
+    const unreached = Object.entries(table)
+      .filter(([, state]) => state && !state.run
+              && Array.isArray(state.addressed_by) && !state.addressed_by.length)
+      .map(([name]) => name);
     return [
       "The beat's account, and the state_diff channels no specialist owns.",
+      unreached.length
+        ? `Hands the ruling did not reach (not run): ${unreached.join(", ")}`
+        : "",
       "",
       JSON.stringify(own, null, 2)
     ].join("\n");

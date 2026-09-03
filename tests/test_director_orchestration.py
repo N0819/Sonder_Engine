@@ -13,9 +13,14 @@ These tests pin the ARCHITECTURE, not the implementation:
 
 - one pipeline step, no new stage keys in `agents/runtime.py`;
 - the monolithic path stays the default and stays byte-identical;
-- the gate keys on scene state, decided at resolve time, and FAILS OPEN;
-- a wrongly-skipped specialist is never silent (the backstop is
-  `changes_asserted` reconciliation pointed at the gate, via tell_director);
+- a hand runs only when the Director's own ruling reached it (a
+  `ledger_notes` line keyed by the hand or a channel it owns, or a
+  `changes_asserted` entry in one of its categories), decided at each
+  stage's own time from that stage's output; the scene-state gates decide
+  only how much sheet an addressed hand loads, and FAIL OPEN within it;
+- an unserved channel is never silent (the backstop is `changes_asserted`
+  reconciliation pointed at the served scopes, via tell_director), and a
+  ruling keyed by a name no hand answers to is reported as unrouted;
 - a dispatched specialist OWNS its channels; a failed one does not take the
   beat down and leaves the prose author's channels standing;
 - the specialist's payload is its written entitlement -- the body slice and
@@ -137,6 +142,16 @@ def _steps(calls):
     return [c["step_key"] for c in calls]
 
 
+def _ruling(*hands):
+    """A Director output that rules to exactly these hands. Dispatch keys on
+    the ruling, so a fake resolve/interpret that names nobody runs nobody."""
+    return {"ledger_notes": {hand: f"{hand}: settled this beat"
+                             for hand in hands}}
+
+
+_RULES_ALL = _ruling(*director.SPECIALISTS)
+
+
 # ---------------------------------------------------------------------------
 # The flag, and the monolithic default.
 # ---------------------------------------------------------------------------
@@ -154,7 +169,8 @@ def test_the_fanout_is_the_only_path_and_has_no_off_switch(temp_db,
     setting, in any spelling, that returns the old one.
     """
     calls = []
-    monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {}))
+    monkeypatch.setattr(director, "_agent_json",
+                        _fake_agent(calls, {"director_resolve": _ruling("body")}))
 
     # DELIBERATE USE OF A DEAD SETTING KEY. Nothing in the engine reads
     # `director_orchestration` any more, and this is the tripwire that keeps
@@ -312,9 +328,18 @@ def test_orchestration_record_survives_the_schema_round_trip():
     out, _ = validate_llm_output("director_resolve", {
         "resolved_event": "x",
         "orchestration": {"enabled": True,
-                          "specialists": {"body": {"run": True}}},
+                          "specialists": {"body": {
+                              "run": True, "addressed_by": ["note"],
+                              "gated": ["conditions"],
+                              "scope": ["conditions"]}},
+                          "unrouted_rulings": ["transit"]},
     })
-    assert out["orchestration"]["specialists"]["body"]["run"] is True
+    body = out["orchestration"]["specialists"]["body"]
+    assert body["run"] is True
+    # The two halves of the dispatch decision persist beside it, or a
+    # stored turn could never say WHY a hand did or did not run.
+    assert body["addressed_by"] == ["note"] and body["gated"] == ["conditions"]
+    assert out["orchestration"]["unrouted_rulings"] == ["transit"]
 
     # And a pre-orchestration variant (no record) still validates unchanged.
     old, _ = validate_llm_output("director_resolve", {"resolved_event": "x"})
@@ -322,17 +347,22 @@ def test_orchestration_record_survives_the_schema_round_trip():
 
 
 # ---------------------------------------------------------------------------
-# The gate: scene-state keyed, resolve-time, fails open.
+# Dispatch: the ruling decides who runs; the gate, decided at resolve time
+# from scene state, decides how much sheet an addressed hand loads, and
+# fails open within it.
 # ---------------------------------------------------------------------------
 
-def test_gate_fails_open_on_any_physical_beat(temp_db, monkeypatch):
-    """Requirement 1. A bare-bodied cast with no active conditions is NOT
-    evidence the body channels are out of play: a physical beat can wound a
-    body that wears nothing. Where structure cannot decide, the specialist
-    runs -- the saving comes from beats whose subjects cannot change, not
-    from predicting cleverly."""
+def test_the_gate_fails_open_within_an_addressed_hand(temp_db, monkeypatch):
+    """A bare-bodied cast with no active conditions is NOT evidence the body
+    channels are out of play: a physical beat can wound a body that wears
+    nothing. So when the ruling reaches the body hand, the channels
+    structure cannot decide (conditions, overlays) stay in its scope, and
+    only the one whose subject provably does not exist (attire, over bare
+    bodies) loads no chunk -- the saving comes from subjects that cannot
+    change, not from predicting cleverly."""
     calls = []
-    monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {}))
+    monkeypatch.setattr(director, "_agent_json",
+                        _fake_agent(calls, {"director_resolve": _ruling("body")}))
 
     ctx = _make_ctx(temp_db, interp=_action_interp())
     out = director.director_resolve(ctx, nonce=0)
@@ -340,6 +370,184 @@ def test_gate_fails_open_on_any_physical_beat(temp_db, monkeypatch):
     assert "director_body" in _steps(calls)
     body = out["orchestration"]["specialists"]["body"]
     assert body["run"] is True and body["ran"] is True
+    assert body["addressed_by"] == ["note"]
+    assert "conditions" in body["scope"] and "overlays" in body["scope"]
+    assert "attire" not in body["scope"]
+    assert body["gated"] == body["scope"]
+
+
+def test_no_ruling_runs_no_hand(temp_db, monkeypatch):
+    """The rule itself. A physical beat over worn attire -- every gate a
+    scene-state dispatch would have opened -- runs NO specialist when the
+    Director's output names none: no note, no manifest. Every hand records
+    that the ruling never reached it, which is a different fact from a
+    gate reading the scene as still, and the record says which."""
+    calls = []
+    monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {}))
+    scene = json.loads(json.dumps(BASE_SCENE))
+    scene["attire"] = {"Mara": {"wearing": ["wool coat"]}}
+
+    ctx = _make_ctx(temp_db, scene=scene, interp=_action_interp())
+    out = director.director_resolve(ctx, nonce=0)
+
+    assert _steps(calls) == ["director_resolve"]
+    for name, state in out["orchestration"]["specialists"].items():
+        assert state["run"] is False, name
+        assert state["scope"] == [], name
+        assert state["addressed_by"] == [], name
+    body = out["orchestration"]["specialists"]["body"]
+    assert "attire" in body["gated"]  # the scene admitted it; nobody ruled
+
+
+def test_a_manifest_entry_addresses_its_hand(temp_db, monkeypatch):
+    """The second half of the ruling: a `changes_asserted` entry in a
+    hand's category is the Director saying that channel changed, whether
+    or not it also wrote a note. The body hand runs, records that the
+    manifest reached it, and has the named channel in scope."""
+    calls = []
+    resolve_out = {
+        "resolved_event": "Mara shrugs the wool coat off.",
+        "summary": "Coat off.",
+        "changes_asserted": [
+            {"category": "attire", "subject": "Mara",
+             "change": "The wool coat is off."},
+        ],
+        "state_diff": {},
+    }
+    responses = {
+        "director_resolve": resolve_out,
+        "director_body": {"attire": {"Mara": {"remove": ["wool coat"]}},
+                          "conditions": {}, "vitals": {}, "overlays": {},
+                          "notes": []},
+    }
+    scene = json.loads(json.dumps(BASE_SCENE))
+    scene["attire"] = {"Mara": {"wearing": ["wool coat"]}}
+    monkeypatch.setattr(director, "_agent_json",
+                        _fake_agent(calls, responses))
+
+    ctx = _make_ctx(temp_db, scene=scene, interp=_action_interp())
+    out = director.director_resolve(ctx, nonce=0)
+
+    body = out["orchestration"]["specialists"]["body"]
+    assert body["run"] is True and body["ran"] is True
+    assert body["addressed_by"] == ["manifest"]
+    assert "attire" in body["scope"]
+    assert out["state_diff"]["attire"]["Mara"]["remove"] == ["wool coat"]
+    assert "director_spatial" not in _steps(calls)
+
+
+def test_a_note_keyed_by_a_channel_addresses_its_owner(temp_db, monkeypatch):
+    """Measured: most notes are keyed by CHANNEL, not by hand. A line under
+    `positions` reaches the spatial hand, and nobody else runs."""
+    calls = []
+    monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {
+        "director_resolve": {
+            "resolved_event": "Mara crosses to the lamp room.",
+            "summary": "A move.",
+            "ledger_notes": {"positions": "Mara is now in lamp_room"},
+            "state_diff": {},
+        }}))
+
+    ctx = _make_ctx(temp_db, interp=_action_interp())
+    out = director.director_resolve(ctx, nonce=0)
+
+    spatial = out["orchestration"]["specialists"]["spatial"]
+    assert spatial["run"] is True and spatial["addressed_by"] == ["note"]
+    assert "positions" in spatial["scope"]
+    assert [k for k in _steps(calls) if k != "director_resolve"] == \
+        ["director_spatial"]
+
+
+def test_a_ruling_widens_a_closed_gate(temp_db, monkeypatch):
+    """Sibling of the pure-dialogue skip below: the same still beat, but
+    the Director rules under `conditions`. A ruling is direct evidence and
+    a gate is a prediction, so the channel enters scope whatever the gate
+    read, and the body hand runs with it."""
+    scene = json.loads(json.dumps(BASE_SCENE))
+    scene["attire"] = {"Mara": {"wearing": ["wool coat"]}}
+    calls = []
+    monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {
+        "director_resolve": {
+            "resolved_event": "Mara says the burn has closed.",
+            "summary": "A burn, healed.",
+            "ledger_notes": {"conditions": "Mara's burn ends"},
+            "state_diff": {},
+        }}))
+
+    ctx = _make_ctx(temp_db, scene=scene, interp=_speech_interp())
+    out = director.director_resolve(ctx, nonce=0)
+
+    body = out["orchestration"]["specialists"]["body"]
+    assert body["gated"] == []               # the gate read nothing to do
+    assert body["run"] is True and body["scope"] == ["conditions"]
+    assert "director_body" in _steps(calls)
+
+
+def test_a_ruling_nobody_answers_to_is_reported_not_guessed(temp_db,
+                                                             monkeypatch):
+    """A note keyed `transit` names no hand and no channel. The engine
+    does not guess that it meant `positions`: nobody runs for it, the key
+    is recorded on the step, and the next beat's Director is told which
+    names route."""
+    calls = []
+    monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {
+        "director_resolve": {
+            "resolved_event": "The lift climbs.",
+            "summary": "Lift.",
+            "ledger_notes": {"transit": "the lift is between floors"},
+            "state_diff": {},
+        }}))
+
+    ctx = _make_ctx(temp_db, interp=_action_interp())
+    out = director.director_resolve(ctx, nonce=0)
+
+    assert _steps(calls) == ["director_resolve"]
+    assert out["orchestration"]["unrouted_rulings"] == ["transit"]
+    notes = [n for n in ctx.engine_feedback if n.startswith("ledger_notes:")]
+    assert notes and "'transit'" in notes[0] and "spatial" in notes[0]
+
+
+def test_at_interpret_only_the_notes_address(temp_db, monkeypatch):
+    """The interpret view carries no manifest (the declaration asserts, it
+    does not narrate changes), so at that stage a hand is reached by a
+    note alone. A note keyed `body` dispatches body; a `changes_asserted`
+    list in the interpret output reaches nobody."""
+    calls = []
+    interpret_out = {
+        "kind": "action",
+        "sequence": [{"type": "action", "attempt": "pull off my wool coat",
+                      "commitment": "asserted", "targets": [],
+                      "raw_text": "I pull off my wool coat"}],
+        "speech": None, "action": {"attempt": "pull off my wool coat"},
+        "movement": None,
+        "ledger_notes": {"body": "the coat comes off"},
+        "changes_asserted": [
+            {"category": "positions", "subject": "Mara", "change": "moves"},
+        ],
+        "flow": {"reactors": [], "authority_claims": [], "dice": [],
+                 "resolution_flags": {}, "fiction_frame": {}},
+    }
+    monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {
+        "director_interpret": interpret_out,
+        "director_body": {"attire": {}, "conditions": {}, "vitals": {},
+                          "overlays": {}, "notes": []},
+    }))
+    scene = json.loads(json.dumps(BASE_SCENE))
+    scene["attire"] = {"Mara": {"wearing": ["wool coat"]}}
+
+    ctx = _make_ctx(temp_db, scene=scene,
+                    player_input="I pull off my wool coat")
+    ctx.director_interpret = None
+    out = director.director_interpret(ctx, nonce=0)
+
+    assert director._interpret_beat_view(ctx, interpret_out, "P")[
+        "manifest"] == []
+    specialists = out["orchestration"]["specialists"]
+    assert specialists["body"]["run"] is True
+    assert specialists["body"]["addressed_by"] == ["note"]
+    assert specialists["spatial"]["run"] is False
+    assert specialists["spatial"]["addressed_by"] == []
+    assert "director_spatial" not in _steps(calls)
 
 
 def test_gate_skips_a_pure_dialogue_beat_over_clean_bodies(temp_db,
@@ -364,14 +572,17 @@ def test_gate_skips_a_pure_dialogue_beat_over_clean_bodies(temp_db,
 
 
 def test_gate_keys_on_scene_state_at_resolve_time(temp_db, monkeypatch):
-    """Requirements 1 and 3 together. An ACTIVE condition is standing scene
-    state that needs maintaining even on a still beat, so it fires the gate
-    with no physical activity at all -- and it is read from the ledger at
-    RESOLVE time, not from any plan fixed earlier: this row is inserted
-    after the interpretation already exists, the way a mid-turn character
-    declaration brings channels into play nothing earlier predicted."""
+    """An ACTIVE condition is standing scene state that needs maintaining
+    even on a still beat, so it opens the `conditions` gate with no
+    physical activity at all -- and it is read from the ledger at RESOLVE
+    time, not from any plan fixed earlier: this row is inserted after the
+    interpretation already exists, the way a mid-turn character
+    declaration brings channels into play nothing earlier predicted. The
+    ruling reaches the body hand by name; the gate, read now, is what puts
+    `conditions` in its sheet."""
     calls = []
-    monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {}))
+    monkeypatch.setattr(director, "_agent_json",
+                        _fake_agent(calls, {"director_resolve": _ruling("body")}))
 
     ctx = _make_ctx(temp_db, interp=_speech_interp())
     # After interpret, before resolve: a condition lands on the ledger.
@@ -384,27 +595,25 @@ def test_gate_keys_on_scene_state_at_resolve_time(temp_db, monkeypatch):
     out = director.director_resolve(ctx, nonce=0)
 
     assert "director_body" in _steps(calls)
-    assert out["orchestration"]["specialists"]["body"]["facts"][
-        "active_conditions"] is True
+    body = out["orchestration"]["specialists"]["body"]
+    assert body["facts"]["active_conditions"] is True
+    assert "conditions" in body["gated"] and "conditions" in body["scope"]
 
 
-def test_backstop_reports_a_wrongly_skipped_specialist(temp_db, monkeypatch):
-    """Requirement 2, the load-bearing one: A WRONGLY-SKIPPED SPECIALIST
-    MUST NEVER BE SILENT. The gate skips (pure dialogue, clean bodies), yet
-    the resolved prose asserts an attire change -- the exact silent-drop
-    shape that cost entry_ops, offscreen_plan_ops and project_ops their
-    measurements. The backstop must (a) say so via tell_director, and (b)
-    drop NOTHING: the prose author's own encoding stands, because the gate
-    fails open rather than enforcing its own prediction."""
+def test_backstop_reports_an_unserved_channel_that_shipped(temp_db,
+                                                           monkeypatch):
+    """The load-bearing one: AN UNSERVED CHANNEL MUST NEVER BE SILENT. A
+    manifest entry now addresses its hand, so the old shape (gate skipped,
+    manifest asserted) cannot occur; the shape that CAN is the Director
+    ruling to nobody -- no note, no manifest -- while its own `state_diff`
+    carries attire content anyway. The body hand does not run; the
+    content stands (fail-open, the author's encoding is never dropped);
+    and the backstop says so on both surfaces and records it."""
     calls = []
     resolve_out = {
         "resolved_event": "Mara shrugs the wool coat off her shoulders "
                           "and lets it fall.",
         "summary": "Mara sheds her coat.",
-        "changes_asserted": [
-            {"category": "attire", "subject": "Mara",
-             "change": "The wool coat is off."},
-        ],
         "state_diff": {"attire": {"Mara": {"remove": ["wool coat"]}}},
     }
     scene = json.loads(json.dumps(BASE_SCENE))
@@ -413,17 +622,18 @@ def test_backstop_reports_a_wrongly_skipped_specialist(temp_db, monkeypatch):
         director, "_agent_json",
         _fake_agent(calls, {"director_resolve": resolve_out}))
 
-    ctx = _make_ctx(temp_db, scene=scene, interp=_speech_interp())
+    ctx = _make_ctx(temp_db, scene=scene, interp=_action_interp())
     out = director.director_resolve(ctx, nonce=0)
 
     assert "director_body" not in _steps(calls)
+    assert out["orchestration"]["specialists"]["body"]["addressed_by"] == []
     # Fail-open: the author's channel content shipped untouched.
     assert out["state_diff"]["attire"]["Mara"]["remove"] == ["wool coat"]
-    # And the gate misprediction is REPORTED, on both surfaces.
-    gate_notes = [n for n in ctx.engine_feedback
-                  if "orchestration gate" in n]
-    assert gate_notes and "attire" in gate_notes[0]
-    assert any("orchestration gate" in w for w in ctx.warnings)
+    # And the unserved channel is REPORTED, on both surfaces.
+    scope_notes = [n for n in ctx.engine_feedback
+                   if "orchestration scope" in n]
+    assert scope_notes and "attire" in scope_notes[0]
+    assert any("orchestration scope" in w for w in ctx.warnings)
     assert out["orchestration"].get("gate_flags")
 
 
@@ -443,6 +653,7 @@ def test_dispatched_specialist_owns_its_channels(temp_db, monkeypatch):
             "resolved_event": "Mara pulls off her wool coat and drops it "
                               "by the door.",
             "summary": "Coat comes off.",
+            **_ruling("body", "spatial"),
             "state_diff": {
                 # Mis-emitted despite the delegation -- must lose.
                 "attire": {"Mara": {"state": ["coat loosened"]}},
@@ -540,7 +751,7 @@ def test_specialist_payload_is_the_body_slice_and_nothing_more(temp_db,
     responses = {
         "director_resolve": {
             "resolved_event": "Mara pulls off her wool coat.",
-            "summary": "Coat off.", "state_diff": {},
+            "summary": "Coat off.", "state_diff": {}, **_ruling("body"),
         },
         "director_body": {"attire": {}, "conditions": {}, "vitals": {},
                           "overlays": {}, "notes": []},
@@ -615,7 +826,8 @@ def test_specialist_call_carries_its_own_role(temp_db, monkeypatch):
     `_agent_json` the specialist's role string, or every specialist call is
     logged as director spend and the experiment cannot be judged."""
     calls = []
-    responses = {"director_body": {"attire": {}, "conditions": {},
+    responses = {"director_resolve": _ruling("body"),
+                 "director_body": {"attire": {}, "conditions": {},
                                    "vitals": {}, "overlays": {}, "notes": []}}
     monkeypatch.setattr(director, "_agent_json",
                         _fake_agent(calls, responses))
@@ -693,12 +905,13 @@ def test_the_detectors_fire_on_an_omission_no_hand_encoded(temp_db,
 def test_scope_selects_the_sheet_and_is_persisted(temp_db, monkeypatch):
     """Dispatch is `bool(scope)` and the sheet is assembled from exactly
     the granted channels' chunks -- one computation, one code path, so the
-    "which specialists run" gate and the "how much sheet loads" gate can
-    never disagree. The granted/served/produced report persists on the
+    "which specialists run" decision and the "how much sheet loads" gate
+    can never disagree. The granted/served/produced report persists on the
     step, because over-grant is the number that says how well scoping
     works and under-grant is the direction the backstop catches."""
     calls = []
-    monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {}))
+    monkeypatch.setattr(director, "_agent_json",
+                        _fake_agent(calls, {"director_resolve": _ruling("body")}))
 
     # Physical beat, someone wears something, no conditions, no vitals
     # tracking: body's scope must be attire+conditions+overlays (conditions
@@ -728,9 +941,11 @@ def test_scope_gates_out_channels_whose_subject_does_not_exist(temp_db,
     no tracked vitals gate out the reserves chunk, nothing destructible
     gates out the destruction chunk, no notice and nothing carried gate
     out the notices chunk -- while the undecidable channels stay in scope
-    (fail open) on the same physical beat."""
+    (fail open) on the same physical beat. The ruling reaches all three
+    hands by name; the gates decide the sheets."""
     calls = []
-    monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {}))
+    monkeypatch.setattr(director, "_agent_json", _fake_agent(
+        calls, {"director_resolve": _ruling("body", "objects", "contact")}))
 
     ctx = _make_ctx(temp_db, interp=_action_interp())  # bare-bodied scene
     out = director.director_resolve(ctx, nonce=0)
@@ -754,6 +969,7 @@ def test_specialist_notes_reach_tell_director(temp_db, monkeypatch):
     under-grant vanish into a log nobody reads."""
     calls = []
     responses = {
+        "director_resolve": _ruling("body"),
         "director_body": {"attire": {}, "conditions": {}, "vitals": {},
                           "overlays": {},
                           "notes": ["the prose asserts Mara's reserves "
@@ -792,6 +1008,7 @@ def test_interpret_dispatches_the_same_specialists(temp_db, monkeypatch):
                       "raw_text": "I pull off my wool coat"}],
         "speech": None, "action": {"attempt": "pull off my wool coat"},
         "movement": None,
+        **_ruling("body"),
         # The interpret model mis-emits the delegated channel despite the
         # delegation -- the specialist, which read the same declaration,
         # must win (ownership).
@@ -873,7 +1090,7 @@ def test_social_specialist_owns_the_roster_channels(temp_db, monkeypatch):
         "director_resolve": {
             "resolved_event": "Mara gives her name at last.",
             "summary": "Names exchanged.",
-            "state_diff": {},
+            "state_diff": {}, **_ruling("social"),
         },
         "director_social": {
             "cast_changes": [],
@@ -908,7 +1125,7 @@ def test_contact_specialist_owns_the_relation_channels(temp_db, monkeypatch):
             "resolved_event": "Mara rests her hand on the Stranger's "
                               "shoulder.",
             "summary": "A hand on a shoulder.",
-            "state_diff": {},
+            "state_diff": {}, **_ruling("contact"),
         },
         "director_contact": {
             "contact_ops": [{"op": "add", "actor": "Mara",
@@ -947,6 +1164,7 @@ def test_objects_specialist_owns_the_object_channels(temp_db, monkeypatch):
         "director_resolve": {
             "resolved_event": "Mara lights the storm lantern.",
             "summary": "Lantern lit.",
+            **_ruling("objects"),
             "state_diff": {
                 # Mis-emitted despite the delegation -- must lose to the
                 # specialist's channel.
@@ -1000,7 +1218,7 @@ def test_spatial_specialist_proposes_and_the_backstop_disposes(temp_db,
             "resolved_event": "Mara crosses into the lamp room; the "
                               "Stranger makes for the cliff path.",
             "summary": "Movement.",
-            "state_diff": {},
+            "state_diff": {}, **_ruling("spatial"),
         },
         "director_spatial": {
             # ...and the specialist wrongly asserts the impossible arrival,
@@ -1051,7 +1269,7 @@ def test_offscreen_is_genuinely_dispatchable(temp_db, monkeypatch):
             "resolved_event": "The Stranger pushes through the crowd of "
                               "keepers gathered in the lamp room.",
             "summary": "Through the crowd.",
-            "state_diff": {},
+            "state_diff": {}, **_ruling("offscreen"),
         },
         "director_offscreen": {
             "crowd_ops": [{"op": "move", "crowd_id": "crowd_1",
@@ -1144,6 +1362,7 @@ def test_parallel_specialists_assemble_in_canonical_order(temp_db,
             "resolved_event": "Mara sheds her coat and rests a hand on "
                               "the Stranger's shoulder.",
             "summary": "Coat off; a hand rests.", "state_diff": {},
+            **_ruling("body", "contact", "social", "objects", "spatial"),
         },
         "director_body": {
             "attire": {"Mara": {"remove": ["wool coat"]}},
@@ -1195,6 +1414,7 @@ def test_parallel_failures_are_isolated_even_two_at_once(temp_db,
         "director_resolve": {
             "resolved_event": "Mara sheds her coat.",
             "summary": "Coat off.", "state_diff": {},
+            **_ruling("body", "contact", "spatial"),
         },
         "director_body": {
             "attire": {"Mara": {"remove": ["wool coat"]}},
@@ -1231,7 +1451,7 @@ def test_parallel_cancellation_aborts_the_beat(temp_db, monkeypatch):
 
     responses = {
         "director_resolve": {"resolved_event": "x", "summary": "x",
-                             "state_diff": {}},
+                             "state_diff": {}, **_ruling("contact")},
         "director_contact": Aborted("generation aborted by user"),
     }
     calls = []
@@ -1258,7 +1478,7 @@ def test_specialists_never_stream(temp_db, monkeypatch):
 
     observed = {}
 
-    real_fake = _fake_agent([], {})
+    real_fake = _fake_agent([], {"director_resolve": _ruling("body", "contact")})
 
     def probing(role, step_key, system, payload, **kw):
         observed[step_key] = providers.token_sink.get()
@@ -1523,7 +1743,7 @@ def test_prose_backstop_reports_a_duty_shipped_without_its_block(temp_db,
     assert out["obligations"] and out["obligations"][0]["op"] == "open"
     # And the misprediction is REPORTED, on both surfaces, and recorded.
     notes = [n for n in ctx.engine_feedback if "'obligations' duty" in n]
-    assert notes and "orchestration gate" in notes[0]
+    assert notes and "orchestration scope" in notes[0]
     assert any("'obligations' duty" in w for w in ctx.warnings)
     assert any("obligations" in f
                for f in out["orchestration"]["gate_flags"])
@@ -2151,6 +2371,9 @@ def test_the_stage_variant_carries_every_call_made_under_its_fanout(
                                   "completion_tokens": 5})
             note_step_warning(f"{role}: repair ladder fired")
             seen_cancel_events.append(providers.cancel_event.get())
+            if role == "director":
+                return _ruling("body", "social", "contact", "objects",
+                               "spatial")
             return {}
         return respond
 
@@ -2953,6 +3176,7 @@ def test_interpret_drops_a_resolve_only_channel_and_says_so(temp_db,
                           "volume": "normal", "visibility": "overt",
                           "conceal_from": []}],
             "speech": "Quiet night.", "action": None, "movement": None,
+            **_ruling("social"),
             "flow": {"reactors": [], "authority_claims": [], "dice": [],
                      "resolution_flags": {}, "fiction_frame": {}},
         },
@@ -2991,7 +3215,7 @@ def test_resolve_still_fails_open_on_a_genuine_under_grant(temp_db,
         "director_resolve": {
             "resolved_event": "Mara says nothing more.",
             "summary": "Quiet.",
-            "state_diff": {},
+            "state_diff": {}, **_ruling("social"),
         },
         "director_social": {
             "cast_changes": [{"name": "Mara", "change": "present"}],

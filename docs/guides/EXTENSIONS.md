@@ -551,10 +551,15 @@ api.add_director_specialist(
 )   # -> "ext:<your-id>:morale", owning "ext:<your-id>:morale_ops"
 ```
 
-It joins the real fan-out: same scope gating, same parallelism, same fail-open (a
-failed specialist leaves the stage author's channels standing and never kills a
-beat), same canonical merge order. Omit `gate` and it runs on physical beats,
-which is the fail-open rule the engine's own gates follow.
+It joins the real fan-out: same parallelism, same fail-open (a failed
+specialist leaves the stage author's channels standing and never kills a beat),
+same canonical merge order. One difference in how it is DISPATCHED: the
+engine's own six hands run only when the Director's ruling reaches them — a
+`ledger_notes` line or a `changes_asserted` entry naming the hand or one of
+its channels — and a ruling cannot name a family the author's sheet does not
+know. So your family runs on its `gate` alone, read from the same scene facts
+the engine's gates read. Omit `gate` and it runs on physical beats, which is
+the fail-open rule the engine's gates followed before the ruling took over.
 
 Three things it deliberately is **not**:
 

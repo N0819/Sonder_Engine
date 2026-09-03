@@ -269,7 +269,10 @@ from .director_scopes import (
     _shipped_darkened_room,
     _shipped_bodiless_definition,
     _PROSE_DUTY_SHIPPED,
+    _STRUCTURAL_CHANNEL_FACTS,
     _gate_facts,
+    _ruling_for,
+    _unrouted_rulings,
     _dispatch_specialists,
 )
 from .director_fanout import (
@@ -284,7 +287,7 @@ from .director_fanout import (
     _EVENT_VERDICTS,
     _resolved_event_verdicts,
     _index_addressed_events,
-    _STRUCTURAL_CHANNEL_FACTS,
+    _author_emitted_channels,
     _structurally_absent_channels,
     _orchestration_scope_backstop,
 )
@@ -842,12 +845,16 @@ def director_interpret(ctx, nonce):
     # 4 `_crowds_view` calls (3.05s total on the 307-body town, measured
     # 2026-08-28, chat 95). The payload below reuses these same rows.
     _icrowds = _crowds_view(chat["id"], sc, ctx.turn["idx"])
+    # The view carries the interpret author's own ruling (`ledger_notes`),
+    # which is what decides who runs; the facts decide how much sheet an
+    # addressed hand is assembled with.
+    _iview = _interpret_beat_view(ctx, out, p_name)
     _idispatch = _dispatch_specialists(ctx, sc, _gate_facts(
         ctx, sc,
         physical=_beat_has_physical_activity(out, {}, []),
         speech=bool(player_speech_lines(out)),
         crowds_rows=_icrowds,
-    ))
+    ), _iview)
     _iparts = scene_extra_parts(ctx.cast, pers, p_name)
     try:
         from world.living_world import living_world_allows, living_world_config
@@ -863,7 +870,7 @@ def director_interpret(ctx, nonce):
         _iplanning = {"enabled": False, "plans": []}
     _run_specialists(
         ctx, out, sc, _idispatch,
-        _interpret_beat_view(ctx, out, p_name),
+        _iview,
         {
             "nonce": nonce,
             "clock": clock,
@@ -2225,7 +2232,9 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
     """Fan out to every dispatched specialist and assemble by ownership.
 
     Runs AFTER the stage's own output has settled (retries and validation
-    done), because every specialist reads the finished beat; and BEFORE the
+    done), because every specialist reads the finished beat -- and because
+    the finished beat's `ledger_notes` and `changes_asserted` are what
+    dispatched them (`_dispatch_specialists`); and BEFORE the
     stage's deterministic seams, so the movement backstop, the assertion
     validators, the restraint floor and the reconciliation manifest all
     judge the MERGED result -- the cross-channel judgments stay with the
@@ -2240,8 +2249,23 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
     A specialist that FAILS leaves the author's channels standing untouched
     and never kills the beat; the scope backstop reports its granted scope
     as unserved rather than letting the failure pass silently."""
-    record = {"enabled": True, "stage": stage, "specialists": dispatch}
+    record = {"enabled": True, "stage": stage, "specialists": dispatch,
+              # Before any hand merges: what the author itself put in the
+              # delegated channels, which is the scope backstop's subject.
+              "author_emitted": _author_emitted_channels(out, stage)}
     out["orchestration"] = record
+    # A ruling keyed by a name no hand answers to is a decision the engine
+    # cannot deliver. Reported, never guessed at: the next beat's author sees
+    # the key it used beside the names that route, and this beat's hands
+    # stand as the routable rulings dispatched them.
+    unrouted = _unrouted_rulings(view)
+    if unrouted:
+        record["unrouted_rulings"] = list(unrouted)
+        ctx.tell_director(
+            "ledger_notes: " + ", ".join(repr(k) for k in unrouted)
+            + " reached no hand -- key each line by the hand it rules for ("
+            + "|".join(SPECIALISTS) + ") or by a channel that hand owns; "
+            "a hand no line reaches does not run this beat.")
 
     # ---- Fan out: genuinely parallel, never streaming ------------------
     # Specialists produce structured output, not player-facing prose, so
@@ -2316,7 +2340,8 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
         # SEQUENTIAL, by host choice. Same context copy per job, same
         # canonical assembly below, same fail-open -- the only difference is
         # that the calls do not overlap. Still cheaper than the monolith
-        # was: a beat dispatches a mean 1.75 of 6 specialists and each
+        # was: under the gate-keyed dispatch a beat ran a mean 1.75 of 6
+        # specialists, the ruling-keyed dispatch runs no more, and each
         # carries a 1-4k sheet against the single sheet's ~21k, so the work
         # is smaller even when none of it runs at once.
         for name, state in jobs:
@@ -3087,12 +3112,15 @@ def director_resolve(ctx, nonce, _corrections=None):
         "variant_seed": nonce,
     }
 
-    # Orchestrated Director (design note 19): dispatch -- the scope each
-    # specialist is granted -- is decided HERE, at this stage's own time,
-    # from the scene as it stands after every character declared, never
-    # inherited from interpret. The prose author keeps the same role, step
-    # key, schema and payload; the instruction sheet is lean because the
-    # delegated machinery is cold-stored in the specialists.
+    # Orchestrated Director (design note 19): the scene facts every scope
+    # reads are computed HERE, at this stage's own time, from the scene as
+    # it stands after every character declared, never inherited from
+    # interpret. They scope the prose author's sheet now; the specialists'
+    # dispatch waits for the author's RULING (`ledger_notes` and
+    # `changes_asserted`), below, because that is what decides which hands
+    # run. The prose author keeps the same role, step key, schema and
+    # payload; the instruction sheet is lean because the delegated
+    # machinery is cold-stored in the specialists.
     _orch_facts = _gate_facts(
         ctx, sc,
         physical=_beat_has_physical_activity(interp, char_actions, dice),
@@ -3101,7 +3129,6 @@ def director_resolve(ctx, nonce, _corrections=None):
         resolved_stage=True,
         crowds_rows=_rcrowds,
     )
-    _orch_dispatch = _dispatch_specialists(ctx, sc, _orch_facts)
     # The prose author's OWN scope (same mechanism as the specialists'
     # channel scopes, same facts, same fail-open): which conditional
     # prose-duty blocks this beat can have work for. The sheet is
@@ -3430,6 +3457,9 @@ def director_resolve(ctx, nonce, _corrections=None):
     # all judge the MERGED diff exactly as they judge a monolithic one.
     _orch_view = _resolve_beat_view(out, decls, char_actions, dice,
                                     p_name, interp)
+    # Dispatch from the FINAL ruling: which hands the author's ledger_notes
+    # and changes_asserted addressed, scoped by the facts computed above.
+    _orch_dispatch = _dispatch_specialists(ctx, sc, _orch_facts, _orch_view)
     _orch_extras = {
         "nonce": nonce,
         "clock": clock,

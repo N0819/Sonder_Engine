@@ -50,19 +50,40 @@ from .director_views import (
 # preserved a way to make the engine worse. What remains a choice is
 # CONCURRENCY -- see `fanout_is_parallel`.
 #
-# THE GATE FAILS OPEN AND KEYS ON SCENE STATE, never on the beat's prose --
-# prose matching as a boundary is the silent-drop surface `docs/UNBUILT.md`
-# §3.1 refuses. Where structure cannot decide, the specialist runs: a scoped
-# specialist costs little to run needlessly, and that asymmetry is what makes
-# a generous gate affordable. A wrongly-skipped specialist is never silent:
-# `_orchestration_scope_backstop` is `changes_asserted` reconciliation pointed
-# at the GATE, and reports the misprediction through `tell_director`.
+# A HAND RUNS WHEN THE DIRECTOR'S RULING REACHES IT. The prose author (and
+# the interpret author, its structural mirror) rules to its bookkeepers
+# through two structured fields of its own output: `ledger_notes`, one line
+# per hand whose channels the beat settled, and `changes_asserted`, the
+# manifest of persistent changes with their categories. A specialist is
+# dispatched when either names it -- a note keyed by the hand or by one of
+# its channels, or a manifest entry in a category one of its channels
+# answers for. A hand neither names does not run: every sheet already tells
+# a hand with no note that "the Director settled nothing in your channels",
+# so a call made anyway was a call whose correct answer was `{}`. Measured
+# before this rule: five of six hands ran on an ordinary physical beat, and
+# the sheet's own absence rule made most of those answers empty by
+# instruction.
 #
-# Dispatch is decided at THIS stage's time, from what is true then. Nothing
-# here assumes a plan fixed at the top of the turn, and `director_interpret`
-# does the same: it has its own specialists and its own dispatch, against the
-# state IT sees, because characters declare between the two stages and bring
-# channels into play nothing at interpret time could predict.
+# The per-channel gates below survive with a narrower job. They key on
+# SCENE STATE, never on the beat's prose -- prose matching as a boundary is
+# the silent-drop surface `docs/UNBUILT.md` §3.1 refuses -- and they decide
+# how much SHEET an addressed hand is assembled with: a channel whose subject
+# provably does not exist (nobody wears anything, no vitals tracked) loads no
+# chunk. Within an addressed hand they fail open, and the ruling can widen
+# them: a note keyed by channel puts that channel in scope whatever the gate
+# read, because a ruling is direct evidence and a gate is a prediction.
+#
+# What is still never silent: `_orchestration_scope_backstop` audits shipped
+# content against the SERVED scopes and reports through `tell_director`, and
+# a note keyed by a name no hand answers to is reported as unrouted rather
+# than guessed at (`_unrouted_rulings`). Neither guard drops anything.
+#
+# Dispatch is decided at THIS stage's time, from that stage's own output.
+# Nothing here assumes a plan fixed at the top of the turn, and
+# `director_interpret` does the same: it has its own specialists and its own
+# dispatch, against the ruling IT wrote, because characters declare between
+# the two stages and bring channels into play nothing at interpret time
+# could predict.
 # ---------------------------------------------------------------------------
 
 #: The specialists, one authority for channel ownership on the runtime side.
@@ -291,10 +312,13 @@ def channel_serves_stage(channel, stage):
                                             ("interpret", "resolve"))
 
 
-#: Per-CHANNEL work gates: does this beat have possible work in this
-#: channel? Every input is standing scene state or a structured declaration
-#: -- never prose. FAIL OPEN is the rule: a channel is gated out only when
-#: its subject provably does not exist (nobody wears anything, no vitals
+
+#: Per-CHANNEL sheet gates: can this beat have work in this channel? Every
+#: input is standing scene state or a structured declaration -- never prose.
+#: They decide how much sheet an ADDRESSED hand is assembled with, not
+#: whether it runs (`_dispatch_specialists`: the Director's ruling decides
+#: that). FAIL OPEN is the rule: a channel is gated out only when its
+#: subject provably does not exist (nobody wears anything, no vitals
 #: tracked, no notice posted and nothing carried to post, nothing
 #: destructible standing); where structure cannot decide, the channel is in
 #: scope, which is why most gates degrade to `physical_beat`. The scope a
@@ -679,26 +703,169 @@ def _gate_facts(ctx, sc, *, physical, speech, material_effects=False,
     }
 
 
-def _dispatch_specialists(ctx, sc, facts):
+#: Channels whose existence is a property of the STORY, not of the beat: the
+#: gate is false because the ledger is switched off, so no beat can ever put
+#: work in them. Read twice: by dispatch, so a hand the ruling addresses by
+#: name on a still beat is not handed the chunk for a ledger its story does
+#: not keep; and by the scope backstop, where an unserved one is never a
+#: mispredict.
+_STRUCTURAL_CHANNEL_FACTS = {"vitals": "vitals_tracked"}
+
+
+def _note_key_forms(key):
+    """The spellings one ledger name can arrive under.
+
+    Case and a trailing plural only. NOT a synonym table: the channels are a
+    closed set the engine owns, so matching their own names loosely is
+    schema-shaped, while guessing that "transit" means `positions` would be
+    the engine inventing vocabulary on the Director's behalf and getting it
+    wrong quietly.
+    """
+    k = str(key or "").strip().lower()
+    forms = {k}
+    if k.endswith("s"):
+        forms.add(k[:-1])
+    else:
+        forms.add(k + "s")
+    return forms
+
+
+def _ruling_keys(view):
+    """Every spelling under which the beat's ledger_notes were keyed, with
+    blank rulings dropped (a key whose line is empty ruled nothing)."""
+    forms = set()
+    for key, value in ((view or {}).get("ledger_notes") or {}).items():
+        if isinstance(value, str) and value.strip():
+            forms |= _note_key_forms(key)
+    return forms
+
+
+def _ruling_for(name, view):
+    """What the Director's ruling addressed to this hand.
+
+    Returns ``(addressed_by, channels)``: which structured fields named the
+    hand -- ``"note"`` for a `ledger_notes` line keyed by the hand or by one
+    of its channels, ``"manifest"`` for a `changes_asserted` entry in a
+    category one of its channels answers for -- and the channels those
+    fields named DIRECTLY, in the hand's canonical order. A note keyed by
+    the hand's own name addresses it without naming a channel, which is
+    the one case dispatch has to fill in from the gates.
+
+    Keyed by hand OR by channel for the same reason `_note_for` is: measured
+    on gemini-3.6-flash, 8 of 11 notes were keyed by channel and 1 by hand,
+    and insisting on the hand's name would have left the hand undispatched
+    against a correct ruling about its own ledger.
+    """
+    spec = SPECIALISTS[name]
+    forms = _ruling_keys(view)
+    addressed_by = []
+    named = []
+    if forms & _note_key_forms(name):
+        addressed_by.append("note")
+    for channel in spec["channels"]:
+        if forms & _note_key_forms(channel):
+            named.append(channel)
+            if "note" not in addressed_by:
+                addressed_by.append("note")
+    own = set(spec["channels"])
+    for item in (view or {}).get("manifest") or []:
+        if not isinstance(item, dict):
+            continue
+        channel = _CATEGORY_CHANNELS.get(item.get("category"))
+        if channel in own:
+            if channel not in named:
+                named.append(channel)
+            if "manifest" not in addressed_by:
+                addressed_by.append("manifest")
+    named.sort(key=spec["channels"].index)
+    return addressed_by, named
+
+
+def _unrouted_rulings(view):
+    """The ledger_notes keys that reach no hand: not a hand's name, not a
+    channel any hand owns, under any spelling `_note_key_forms` accepts.
+
+    A ruling under such a key is the Director deciding something and the
+    engine being unable to say for whom, and the honest answer is to REPORT
+    it -- through `tell_director`, so the next beat's author sees the key it
+    used and the names that would have worked -- rather than to guess a hand
+    from the wording. Measured on the channel's first live week: 2 of 11
+    notes arrived as `pose` and `transit`; the first is `poses` with a letter
+    missing and is caught by the plural tolerance, the second names no
+    ledger and is exactly this case.
+    """
+    known = set()
+    for name, spec in SPECIALISTS.items():
+        known |= _note_key_forms(name)
+        for channel in spec["channels"]:
+            known |= _note_key_forms(channel)
+    unrouted = []
+    for key, value in ((view or {}).get("ledger_notes") or {}).items():
+        if not (isinstance(value, str) and value.strip()):
+            continue
+        if not (_note_key_forms(key) & known):
+            unrouted.append(str(key))
+    return unrouted
+
+
+def _dispatch_specialists(ctx, sc, facts, view):
     """The orchestrator measuring how much of a job each specialist needs
-    to do: per specialist, the SCOPE -- the set of its channels with
-    possible work this beat. Everything else follows from that one value:
-    an empty scope is a specialist not dispatched at all; a non-empty scope
-    is dispatched with its sheet assembled from exactly those channels'
-    chunks (prompts.specialist_prompt). Dispatch is `bool(scope)`, not a
-    second decision that could disagree with the sheet assembly, and the
-    single backstop below audits shipped content against the same value."""
+    to do, from the Director's own ruling.
+
+    Per specialist: whether the ruling ADDRESSED it (`_ruling_for` -- a
+    `ledger_notes` line keyed by the hand or a channel it owns, or a
+    `changes_asserted` entry in one of its categories), and if so its
+    SCOPE -- the channels its sheet is assembled from. Scope is the union
+    of the channels the gates leave open and the channels the ruling named
+    directly; a hand addressed by name alone on a beat whose gates are all
+    closed is granted every channel its story keeps, because a ruling that
+    reached it is better evidence than a prediction that nothing there
+    could change. A hand the ruling did not address has an empty scope and
+    is not dispatched: no prompt, no payload, no output surface.
+
+    Dispatch is `bool(scope)`, not a second decision that could disagree
+    with the sheet assembly (prompts.specialist_prompt reads the same
+    value), and `_orchestration_scope_backstop` audits shipped content
+    against the same value. The record carries the two halves separately
+    -- `gated` (what the scene admitted) and `addressed_by` (what the ruling
+    said) -- so a reader of the step can tell "the ruling never reached this
+    hand" from "this story has no such ledger".
+    """
     dispatch = {}
     for name, spec in SPECIALISTS.items():
         # `.get` with a fail-open default, not `[]`: a channel whose gate is
         # missing is a registration bug, and raising KeyError here would turn
         # it into a dead Director on every beat rather than one specialist
         # running more often than it needs to.
-        scope = [channel for channel in spec["channels"]
+        gated = [channel for channel in spec["channels"]
                  if _CHANNEL_GATES.get(channel, _default_channel_gate)(facts)]
+        addressed_by, named = _ruling_for(name, view)
+        scope = []
+        if spec.get("ext_id"):
+            # An extension family has no chunk in the prose author's sheet
+            # and no name in its output shape (docs/guides/EXTENSIONS.md), so
+            # no ruling can reach it. Its registered gate stays its dispatch:
+            # the fail-open rule the engine's own gates followed before the
+            # ruling took over.
+            scope = gated
+            addressed_by = ["gate"] if gated else []
+        elif addressed_by:
+            # A ruling widens a closed gate, never a ledger the story does
+            # not keep: a `vitals` entry in a survival-off story is a
+            # mis-categorisation for the backstop to say so about, not a
+            # reason to load the reserves chunk (chat 71's shape).
+            kept = [channel for channel in spec["channels"]
+                    if facts.get(_STRUCTURAL_CHANNEL_FACTS.get(channel),
+                                 True)]
+            scope = [channel for channel in kept
+                     if channel in gated or channel in named]
+            if not scope:
+                scope = kept
         dispatch[name] = {
             "run": bool(scope),
             "scope": scope,
+            "gated": gated,
+            "addressed_by": addressed_by,
             "channels": list(spec["channels"]),
             "facts": facts,
         }
