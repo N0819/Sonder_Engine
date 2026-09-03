@@ -1416,6 +1416,7 @@
   "Plays a looping sound bed for the room the player is standing in, chosen from the room's spatial description only — never from who is in it. It follows the room, the hour, the weather and any damage, and each distinct state is fetched once and cached. Mute, volume and reroll live beside the input box.": "プレイヤーが立っている部屋のループするサウンドベッドを再生します。部屋の空間記述のみから選択され、部屋にいる人物からは決して選択されません。部屋、時間、天気、および損傷に従い、各異なる状態は一度フェッチされ、キャッシュされます。ミュート、音量、およびリロールは入力ボックスの横にあります。",
   "Please restart the server": "サーバーを再起動してください",
   "Pleasure sensitivity (0..1)": "快感感度 (0..1)",
+  "population must be a number": "population は数値でなければなりません",
   "position:relative;flex:1": "position:relative;flex:1",
   "POST": "POST",
   "Prefer by": "優先順位",

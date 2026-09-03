@@ -926,8 +926,18 @@ def _presim_one(payload):
 
 def presim_registry(registry, *, horizon_hours=MAX_CATCHUP_HOURS,
                     active_tail_hours=DEFAULT_PRESIM_TAIL_HOURS,
-                    tail_places=(), seed=0):
+                    tail_places=(), seed=0, scene=None):
     """Live a generated registry forward before the first story beat.
+
+    ``scene`` is the room graph the prehistory is walked over -- the planted
+    skeleton, in ordinary scene shape (`world/structure.skeleton_rooms`).
+    Stamped on every institution that does not already carry one, so
+    `charter_run.run` takes its scene branch: bodies route over
+    `travel_rooms`, walks are recorded edge by edge, a shut door holds.
+    Without it every one of the 720 hours was a teleport (Harrowmere,
+    2026-09-02: `travelled` = 1 per body over a month), while the same
+    registry's first in-play catch-up composed exactly this scene from the
+    same skeleton -- so this is the missing argument, not a new model.
 
     The long body establishes durable service, acquaintance, politics and
     stock movement cheaply. The recent tail enables practices at authored
@@ -943,6 +953,10 @@ def presim_registry(registry, *, horizon_hours=MAX_CATCHUP_HOURS,
     any of them, nobody known.
     """
     registry = normalize_registry(copy.deepcopy(registry))
+    if isinstance(scene, dict) and scene.get("rooms"):
+        for item in registry["items"].values():
+            if not (item.get("state") or {}).get("scene"):
+                item["state"]["scene"] = copy.deepcopy(scene)
     horizon = max(0.0, min(MAX_PRESIM_HOURS, float(horizon_hours or 0.0)))
     tail = max(0.0, min(horizon, float(active_tail_hours or 0.0)))
     coarse = horizon - tail
@@ -1384,12 +1398,21 @@ def _plan_lived_location(cid, request, chat):
             taken_names.add(folded)
     except Exception:
         pass
+    population = request.get("population")
+    if population not in (None, ""):
+        try:
+            population = max(1, int(population))
+        except (TypeError, ValueError) as exc:
+            raise ValueError("population must be a number") from exc
+    else:
+        population = None
     constraints = {
         key: copy.deepcopy(value)
         for key, value in (("scale", request.get("scale")),
                            ("topology", request.get("topology")),
                            ("required_rooms", request.get("required_rooms")),
-                           ("featured_residents", requested_residents))
+                           ("featured_residents", requested_residents),
+                           ("population", population))
         if value not in (None, "", [])}
     plan = (propose_town(lore, brief, constraints=constraints)
             if constraints else propose_town(lore, brief))
@@ -1409,7 +1432,7 @@ def _plan_lived_location(cid, request, chat):
         plan, history=history,
         featured_residents=requested_residents,
         reservation=story_identity_reservation(cid, laws),
-        naming_law=naming_law)
+        naming_law=naming_law, population=population)
     unnamed = [
         f"{charter_key}/{body_key}"
         for charter_key, state in town["charters"].items()
@@ -1580,7 +1603,8 @@ def _generate_lived_location(cid, request, chat, frame_id, digest, artifact):
         active_tail_hours=float(request.get(
             "active_tail_hours", min(DEFAULT_PRESIM_TAIL_HOURS, horizon))),
         tail_places=tail_places,
-        seed=int(request.get("seed") or 0))
+        seed=int(request.get("seed") or 0),
+        scene=skeleton_scene(rooms))
     historian_error = ""
     if wants_history:
         try:
@@ -1614,7 +1638,9 @@ def _generate_lived_location(cid, request, chat, frame_id, digest, artifact):
         "ok": landed.get("reason") is None, "town": town["name"],
         "structure": structure, "rooms": len(rooms),
         "charters": list(presimmed["items"]), "presim": landed,
-        "warnings": structure_warnings(structure, rooms),
+        "warnings": structure_warnings(structure, rooms)
+        + list((town.get("closure") or {}).get("warnings") or ()),
+        "closure": copy.deepcopy(town.get("closure") or {}),
         "historian_error": historian_error,
         "required_rooms_added": required_rooms_added,
         "source_lorebook_id": source_book,
@@ -1629,6 +1655,22 @@ def _generate_lived_location(cid, request, chat, frame_id, digest, artifact):
     clear_lived_location_job(cid)
     result["resumed_plan"] = bool(was_resumed)
     return result
+
+
+def skeleton_scene(rooms):
+    """The planted rooms in ordinary scene shape, from `plant_structure`'s
+    own return -- the same shape `structure.skeleton_rooms` reads back from
+    the registry, built without a database round trip."""
+    return {"rooms": {
+        str(uid): {
+            "name": str(room.get("name") or uid),
+            "adjacent": [dict(edge) for edge in room.get("adjacent") or ()
+                         if isinstance(edge, dict) and edge.get("to")],
+            "planned": True,
+            "purpose": str(room.get("purpose") or ""),
+            "access": str(room.get("access") or ""),
+        }
+        for uid, room in (rooms or {}).items() if isinstance(room, dict)}}
 
 
 def land_presim(cid, frame_id, registry, produced, *, base_turn=0,

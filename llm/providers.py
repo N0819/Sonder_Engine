@@ -2192,7 +2192,14 @@ def chat_complete(
     candidate_offset=0,
     token_ceiling=None,
     json_schema=None,
+    reasoning_effort=None,
 ):
+    """``reasoning_effort`` is a per-CALL override of the role's configured
+    effort (`reasoning_effort_for`): "off" for a JSON-shaped utility call
+    whose output is the whole budget, because every OpenAI-style seam counts
+    a thinking model's private trace against `max_tokens` and the seam
+    offers no way to budget the two apart. None leaves the role's setting
+    in charge, exactly as before the parameter existed."""
     _check_cancel()
     # Final, universal boundary: even repair prompts and utility calls that do
     # not originate in prompts.py must know that free text is localized while
@@ -2221,7 +2228,9 @@ def chat_complete(
     # ask for a direct answer instead of spending the same budget the same way
     # again.  This is deliberately adaptive rather than a role/model default:
     # successful reasoning-enabled calls retain every configured feature.
-    reasoning_effort_override = None
+    # A caller that asked for an effort outright starts there instead.
+    reasoning_effort_override = _coerce_reasoning_effort(reasoning_effort) \
+        or None
 
     for attempt in range(retry_config.max_retries + 1):
         _check_cancel()

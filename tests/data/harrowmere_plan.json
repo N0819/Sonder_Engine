@@ -1,0 +1,2296 @@
+{
+ "name": "Harrowmere",
+ "structure": {
+  "key": "harrowmere",
+  "max_planned": 100,
+  "grammar": [
+   {
+    "kind": "civic",
+    "names": [
+     "Reeve's Hall",
+     "Gate Watch-house",
+     "Toll Bridge"
+    ],
+    "purposes": [
+     "toll collection",
+     "market peace",
+     "watch rota",
+     "ledger keeping"
+    ]
+   },
+   {
+    "kind": "hospitality",
+    "names": [
+     "Ford Inn"
+    ],
+    "purposes": [
+     "road traveller lodging",
+     "common room",
+     "small beer brewing",
+     "stabling"
+    ]
+   },
+   {
+    "kind": "trade",
+    "names": [
+     "Market Square",
+     "Mill",
+     "Smithy"
+    ],
+    "purposes": [
+     "Tuesday market",
+     "grain milling",
+     "horse shoeing",
+     "plough mending"
+    ]
+   },
+   {
+    "kind": "sacred",
+    "names": [
+     "Saint Orrin's Shrine"
+    ],
+    "purposes": [
+     "lamp tending",
+     "offering bowl",
+     "first-fish rites"
+    ]
+   },
+   {
+    "kind": "residential",
+    "names": [
+     "Stone House",
+     "Slate Roof House",
+     "Timber Upper House"
+    ],
+    "purposes": [
+     "family dwelling"
+    ]
+   }
+  ]
+ },
+ "rooms": {
+  "market_square": {
+   "name": "Market Square",
+   "purpose": "Tuesday market and town gathering ground",
+   "adjacent": [
+    {
+     "to": "gate_road",
+     "barrier": "open_door"
+    },
+    {
+     "to": "ford_inn_common",
+     "barrier": "open_door"
+    },
+    {
+     "to": "reeve_hall",
+     "barrier": "open_door"
+    },
+    {
+     "to": "smithy",
+     "barrier": "open_door"
+    },
+    {
+     "to": "bridge_road",
+     "barrier": "open_door"
+    },
+    {
+     "to": "mill_lane",
+     "barrier": "open_door"
+    },
+    {
+     "to": "shrine_path",
+     "barrier": "open_door"
+    }
+   ],
+   "frontier": [
+    "residential_lanes",
+    "upland_road_north",
+    "river_harrow"
+   ]
+  },
+  "gate_road": {
+   "name": "Gate Road",
+   "purpose": "Upland road entering town at the gate",
+   "adjacent": [
+    {
+     "to": "market_square",
+     "barrier": "open_door"
+    },
+    {
+     "to": "watch_house",
+     "barrier": "open_door"
+    }
+   ],
+   "frontier": [
+    "upland_road_north"
+   ]
+  },
+  "watch_house": {
+   "name": "Gate Watch-house",
+   "purpose": "Watch post at the upland gate for toll collection and drover turning",
+   "adjacent": [
+    {
+     "to": "gate_road",
+     "barrier": "open_door"
+    }
+   ],
+   "frontier": [
+    "upland_road_north"
+   ]
+  },
+  "reeve_hall": {
+   "name": "Reeve's Hall",
+   "purpose": "Reeve's seat on the square for toll ledger, market peace, and watch rota",
+   "adjacent": [
+    {
+     "to": "market_square",
+     "barrier": "open_door"
+    },
+    {
+     "to": "clerk_office",
+     "barrier": "open_door"
+    }
+   ],
+   "frontier": []
+  },
+  "clerk_office": {
+   "name": "Clerk's Office",
+   "purpose": "Ledger keeping and records for toll, market, and watch",
+   "adjacent": [
+    {
+     "to": "reeve_hall",
+     "barrier": "open_door"
+    }
+   ],
+   "frontier": []
+  },
+  "bridge_road": {
+   "name": "Bridge Road",
+   "purpose": "Road from square to the toll bridge",
+   "adjacent": [
+    {
+     "to": "market_square",
+     "barrier": "open_door"
+    },
+    {
+     "to": "toll_bridge",
+     "barrier": "open_door"
+    }
+   ],
+   "frontier": []
+  },
+  "toll_bridge": {
+   "name": "Toll Bridge",
+   "purpose": "Bridge over the Harrow ford where toll is collected",
+   "adjacent": [
+    {
+     "to": "bridge_road",
+     "barrier": "open_door"
+    },
+    {
+     "to": "shrine_path",
+     "barrier": "open_door"
+    }
+   ],
+   "frontier": [
+    "river_harrow",
+    "south_road"
+   ]
+  },
+  "shrine_path": {
+   "name": "Shrine Path",
+   "purpose": "Path from bridge foot to the shrine",
+   "adjacent": [
+    {
+     "to": "toll_bridge",
+     "barrier": "open_door"
+    },
+    {
+     "to": "orrin_shrine",
+     "barrier": "open_door"
+    },
+    {
+     "to": "market_square",
+     "barrier": "open_door"
+    }
+   ],
+   "frontier": [
+    "river_harrow"
+   ]
+  },
+  "orrin_shrine": {
+   "name": "Saint Orrin's Shrine",
+   "purpose": "Shrine to Saint Orrin of the Ford with lamp and offering bowl",
+   "adjacent": [
+    {
+     "to": "shrine_path",
+     "barrier": "open_door"
+    }
+   ],
+   "frontier": [
+    "river_harrow"
+   ]
+  },
+  "ford_inn_common": {
+   "name": "Ford Inn Common Room",
+   "purpose": "Inn common room, loudest room in town after dark",
+   "adjacent": [
+    {
+     "to": "market_square",
+     "barrier": "open_door"
+    },
+    {
+     "to": "inn_kitchen",
+     "barrier": "open_door"
+    },
+    {
+     "to": "inn_guest_room_1",
+     "barrier": "open_door"
+    },
+    {
+     "to": "inn_guest_room_2",
+     "barrier": "open_door"
+    }
+   ],
+   "frontier": []
+  },
+  "inn_kitchen": {
+   "name": "Inn Kitchen",
+   "purpose": "Kitchen and small beer brewing for the Ford Inn",
+   "adjacent": [
+    {
+     "to": "ford_inn_common",
+     "barrier": "open_door"
+    },
+    {
+     "to": "inn_cellar",
+     "barrier": "open_door"
+    }
+   ],
+   "frontier": []
+  },
+  "inn_cellar": {
+   "name": "Inn Cellar",
+   "purpose": "Storage for brewed small beer and provisions",
+   "adjacent": [
+    {
+     "to": "inn_kitchen",
+     "barrier": "open_door"
+    }
+   ],
+   "frontier": []
+  },
+  "inn_guest_room_1": {
+   "name": "Ford Inn Guest Room",
+   "purpose": "Lodging room for road travellers",
+   "adjacent": [
+    {
+     "to": "ford_inn_common",
+     "barrier": "open_door"
+    }
+   ],
+   "frontier": []
+  },
+  "inn_guest_room_2": {
+   "name": "Ford Inn Second Guest Room",
+   "purpose": "Lodging room for road travellers",
+   "adjacent": [
+    {
+     "to": "ford_inn_common",
+     "barrier": "open_door"
+    }
+   ],
+   "frontier": []
+  },
+  "inn_stable": {
+   "name": "Inn Stable",
+   "purpose": "Stabling for road travellers' horses",
+   "adjacent": [
+    {
+     "to": "market_square",
+     "barrier": "open_door"
+    }
+   ],
+   "frontier": [
+    "upland_road_north"
+   ]
+  },
+  "smithy": {
+   "name": "Smithy",
+   "purpose": "Smithy at the gate end of the square for shoeing horses and mending ploughs",
+   "adjacent": [
+    {
+     "to": "market_square",
+     "barrier": "open_door"
+    }
+   ],
+   "frontier": [
+    "upland_road_north"
+   ]
+  },
+  "mill_lane": {
+   "name": "Mill Lane",
+   "purpose": "Lane from the square down to the mill on the millrace",
+   "adjacent": [
+    {
+     "to": "market_square",
+     "barrier": "open_door"
+    },
+    {
+     "to": "mill",
+     "barrier": "open_door"
+    }
+   ],
+   "frontier": [
+    "river_harrow"
+   ]
+  },
+  "mill": {
+   "name": "Mill",
+   "purpose": "Mill on the millrace below the bridge grinding for the whole valley",
+   "adjacent": [
+    {
+     "to": "mill_lane",
+     "barrier": "open_door"
+    }
+   ],
+   "frontier": [
+    "river_harrow",
+    "millrace"
+   ]
+  },
+  "house_lane_east": {
+   "name": "East House Lane",
+   "purpose": "Residential lane of ordinary stone-and-timber houses",
+   "adjacent": [
+    {
+     "to": "market_square",
+     "barrier": "open_door"
+    }
+   ],
+   "frontier": [
+    "residential_lanes",
+    "upland_road_north"
+   ]
+  },
+  "house_lane_west": {
+   "name": "West House Lane",
+   "purpose": "Residential lane of ordinary stone-and-timber houses",
+   "adjacent": [
+    {
+     "to": "market_square",
+     "barrier": "open_door"
+    }
+   ],
+   "frontier": [
+    "residential_lanes",
+    "river_harrow"
+   ]
+  }
+ },
+ "charters": [
+  {
+   "key": "reeves_hall",
+   "name": "Reeve's Hall",
+   "naming": {
+    "seed": "harrowmere_civic",
+    "given_parts": {
+     "starts": [
+      "al",
+      "bram",
+      "cor",
+      "dun",
+      "ed",
+      "fen",
+      "gar",
+      "hal",
+      "iv",
+      "jed"
+     ],
+     "middles": [
+      "win",
+      "ric",
+      "mer",
+      "bert",
+      "gar",
+      "mund",
+      "wald",
+      "stan"
+     ],
+     "ends": [
+      "ed",
+      "y",
+      "ic",
+      "el",
+      "in",
+      "od",
+      "ard"
+     ]
+    },
+    "family_parts": {
+     "starts": [
+      "bren",
+      "cold",
+      "dun",
+      "elder",
+      "fen",
+      "grav",
+      "holl",
+      "thorn",
+      "west"
+     ],
+     "middles": [
+      "mere",
+      "wick",
+      "field",
+      "dale",
+      "ford",
+      "fell",
+      "wood",
+      "stone"
+     ],
+     "ends": [
+      "ton",
+      "well",
+      "wick",
+      "field",
+      "mere",
+      "dale",
+      "ford"
+     ]
+    },
+    "name_format": "{given} {family}",
+    "formal_format": "{title} {given} {family}",
+    "titles": {
+     "posts": {
+      "reeve": "Reeve",
+      "clerk": "Clerk"
+     },
+     "ranks": {}
+    }
+   },
+   "priority": "civic",
+   "commons": [
+    "market_square"
+   ],
+   "upkeeps": {
+    "reeve_ledger": {
+     "place": "reeve_hall",
+     "floor": "ground",
+     "level": "working",
+     "fails_untended": "toll ledger falls behind and market peace goes unenforced",
+     "one_body_restores_in": "a morning",
+     "requires": {
+      "literacy": 2,
+      "law": 1
+     },
+     "depends_on": []
+    },
+    "clerk_ledgers": {
+     "place": "clerk_office",
+     "floor": "ground",
+     "level": "working",
+     "fails_untended": "toll records and watch rota become disordered",
+     "one_body_restores_in": "a few hours",
+     "requires": {
+      "literacy": 2,
+      "records": 1
+     },
+     "depends_on": []
+    }
+   },
+   "posts": {
+    "reeve": {
+     "place": "reeve_hall",
+     "serves": [
+      "reeve_ledger"
+     ],
+     "requires": {
+      "literacy": 2,
+      "law": 1
+     },
+     "reports_to": "reeve",
+     "authority": "toll_ledger"
+    },
+    "clerk": {
+     "place": "clerk_office",
+     "serves": [
+      "clerk_ledgers"
+     ],
+     "requires": {
+      "literacy": 2,
+      "records": 1
+     },
+     "reports_to": "reeve",
+     "authority": "records"
+    }
+   },
+   "populations": [
+    {
+     "post": "reeve",
+     "count": 1,
+     "competence": {
+      "literacy": 2,
+      "law": 1
+     },
+     "berth": "house_lane_east",
+     "rank": "head"
+    },
+    {
+     "post": "clerk",
+     "count": 1,
+     "competence": {
+      "literacy": 2,
+      "records": 1
+     },
+     "berth": "house_lane_west",
+     "rank": "keeper"
+    }
+   ],
+   "economy": {
+    "goods": {
+     "toll_silver": {
+      "label": "Toll Silver",
+      "base_value": 1,
+      "unit": "coin"
+     },
+     "market_fee": {
+      "label": "Market Stall Fee",
+      "base_value": 1,
+      "unit": "coin"
+     }
+    },
+    "stocks": {
+     "reeve_hall": {
+      "toll_silver": 40,
+      "market_fee": 15
+     }
+    },
+    "targets": {
+     "reeve_hall": {
+      "toll_silver": {
+       "minimum": 10,
+       "desired": 50,
+       "capacity": 100
+      },
+      "market_fee": {
+       "minimum": 5,
+       "desired": 20,
+       "capacity": 50
+      }
+     }
+    },
+    "flows": {
+     "toll_income": {
+      "holder": "reeve_hall",
+      "good": "toll_silver",
+      "kind": "produce",
+      "lots_per_hour": 2,
+      "requires_upkeep": "reeve_ledger"
+     },
+     "market_income": {
+      "holder": "reeve_hall",
+      "good": "market_fee",
+      "kind": "produce",
+      "lots_per_hour": 1,
+      "requires_upkeep": "reeve_ledger"
+     }
+    },
+    "markets": {},
+    "supply_points": {}
+   },
+   "decisions": {
+    "policies": [
+     "The reeve is elected by householders each spring",
+     "Toll is collected at the gate and bridge",
+     "Drovers who will not pay are turned back",
+     "The reeve keeps the watch rota"
+    ]
+   }
+  },
+  {
+   "key": "watch",
+   "name": "Harrowmere Watch",
+   "naming": {
+    "seed": "harrowmere_watch",
+    "given_parts": {
+     "starts": [
+      "tol",
+      "mag",
+      "ru",
+      "pad",
+      "sel",
+      "cor",
+      "bran",
+      "hed",
+      "gil",
+      "tam"
+     ],
+     "middles": [
+      "win",
+      "ric",
+      "mer",
+      "bert",
+      "gar",
+      "mund",
+      "wald",
+      "stan"
+     ],
+     "ends": [
+      "ed",
+      "y",
+      "ic",
+      "el",
+      "in",
+      "od",
+      "ard"
+     ]
+    },
+    "family_parts": {
+     "starts": [
+      "bren",
+      "cold",
+      "dun",
+      "elder",
+      "fen",
+      "grav",
+      "holl",
+      "thorn",
+      "west"
+     ],
+     "middles": [
+      "mere",
+      "wick",
+      "field",
+      "dale",
+      "ford",
+      "fell",
+      "wood",
+      "stone"
+     ],
+     "ends": [
+      "ton",
+      "well",
+      "wick",
+      "field",
+      "mere",
+      "dale",
+      "ford"
+     ]
+    },
+    "name_format": "{given} {family}",
+    "formal_format": "{given} {family}",
+    "titles": {
+     "posts": {
+      "gate_watch": "Watch",
+      "bridge_watch": "Watch"
+     },
+     "ranks": {}
+    }
+   },
+   "priority": "civic",
+   "commons": [
+    "market_square"
+   ],
+   "upkeeps": {
+    "gate_toll": {
+     "place": "watch_house",
+     "floor": "ground",
+     "level": "working",
+     "fails_untended": "gate toll goes uncollected and unpaid drovers pass through",
+     "one_body_restores_in": "a watch shift",
+     "requires": {
+      "toll": 1,
+      "watch": 1
+     },
+     "depends_on": [
+      "reeve_ledger"
+     ]
+    },
+    "bridge_toll": {
+     "place": "toll_bridge",
+     "floor": "ground",
+     "level": "working",
+     "fails_untended": "bridge toll goes uncollected and crossing goes unsupervised",
+     "one_body_restores_in": "a watch shift",
+     "requires": {
+      "toll": 1,
+      "watch": 1
+     },
+     "depends_on": [
+      "reeve_ledger"
+     ]
+    }
+   },
+   "posts": {
+    "gate_watch": {
+     "place": "watch_house",
+     "serves": [
+      "gate_toll"
+     ],
+     "requires": {
+      "toll": 1,
+      "watch": 1
+     },
+     "reports_to": "reeve",
+     "authority": "toll_collection"
+    },
+    "bridge_watch": {
+     "place": "toll_bridge",
+     "serves": [
+      "bridge_toll"
+     ],
+     "requires": {
+      "toll": 1,
+      "watch": 1
+     },
+     "reports_to": "reeve",
+     "authority": "toll_collection"
+    }
+   },
+   "populations": [
+    {
+     "post": "gate_watch",
+     "count": 2,
+     "competence": {
+      "toll": 1,
+      "watch": 1
+     },
+     "berth": "house_lane_east",
+     "rank": "householder"
+    },
+    {
+     "post": "bridge_watch",
+     "count": 2,
+     "competence": {
+      "toll": 1,
+      "watch": 1
+     },
+     "berth": "house_lane_west",
+     "rank": "householder"
+    }
+   ],
+   "economy": {
+    "goods": {},
+    "stocks": {},
+    "targets": {},
+    "flows": {},
+    "markets": {},
+    "supply_points": {}
+   },
+   "decisions": {
+    "policies": [
+     "Four householders stand the gate and bridge in turns",
+     "Mostly collect the toll and turn back drovers who will not pay",
+     "No soldiers are kept"
+    ]
+   }
+  },
+  {
+   "key": "ford_inn",
+   "name": "Ford Inn",
+   "naming": {
+    "seed": "harrowmere_inn",
+    "given_parts": {
+     "starts": [
+      "al",
+      "bram",
+      "cor",
+      "dun",
+      "ed",
+      "fen",
+      "gar",
+      "hal",
+      "iv",
+      "jed"
+     ],
+     "middles": [
+      "win",
+      "ric",
+      "mer",
+      "bert",
+      "gar",
+      "mund",
+      "wald",
+      "stan"
+     ],
+     "ends": [
+      "ed",
+      "y",
+      "ic",
+      "el",
+      "in",
+      "od",
+      "ard"
+     ]
+    },
+    "family_parts": {
+     "starts": [
+      "bren",
+      "cold",
+      "dun",
+      "elder",
+      "fen",
+      "grav",
+      "holl",
+      "thorn",
+      "west"
+     ],
+     "middles": [
+      "mere",
+      "wick",
+      "field",
+      "dale",
+      "ford",
+      "fell",
+      "wood",
+      "stone"
+     ],
+     "ends": [
+      "ton",
+      "well",
+      "wick",
+      "field",
+      "mere",
+      "dale",
+      "ford"
+     ]
+    },
+    "name_format": "{given} {family}",
+    "formal_format": "{title} {given} {family}",
+    "titles": {
+     "posts": {
+      "innkeeper": "Innkeeper",
+      "brewer": "Brewer",
+      "stable_hand": "Stable Hand"
+     },
+     "ranks": {}
+    }
+   },
+   "priority": "hospitality",
+   "commons": [
+    "ford_inn_common"
+   ],
+   "upkeeps": {
+    "common_room": {
+     "place": "ford_inn_common",
+     "floor": "ground",
+     "level": "working",
+     "fails_untended": "common room falls quiet and travellers find no welcome",
+     "one_body_restores_in": "an evening",
+     "requires": {
+      "hospitality": 2
+     },
+     "depends_on": []
+    },
+    "brewing": {
+     "place": "inn_kitchen",
+     "floor": "ground",
+     "level": "working",
+     "fails_untended": "small beer runs dry and the common room goes dry with it",
+     "one_body_restores_in": "a day",
+     "requires": {
+      "brewing": 2
+     },
+     "depends_on": []
+    },
+    "stabling": {
+     "place": "inn_stable",
+     "floor": "ground",
+     "level": "working",
+     "fails_untended": "horses go unattended and road travellers stable elsewhere",
+     "one_body_restores_in": "a watch shift",
+     "requires": {
+      "stable": 1
+     },
+     "depends_on": []
+    }
+   },
+   "posts": {
+    "innkeeper": {
+     "place": "ford_inn_common",
+     "serves": [
+      "common_room"
+     ],
+     "requires": {
+      "hospitality": 2
+     },
+     "reports_to": "innkeeper",
+     "authority": "inn_management"
+    },
+    "brewer": {
+     "place": "inn_kitchen",
+     "serves": [
+      "brewing"
+     ],
+     "requires": {
+      "brewing": 2
+     },
+     "reports_to": "innkeeper",
+     "authority": "brewing"
+    },
+    "stable_hand": {
+     "place": "inn_stable",
+     "serves": [
+      "stabling"
+     ],
+     "requires": {
+      "stable": 1
+     },
+     "reports_to": "innkeeper",
+     "authority": "stabling"
+    }
+   },
+   "populations": [
+    {
+     "post": "innkeeper",
+     "count": 1,
+     "competence": {
+      "hospitality": 2
+     },
+     "berth": "house_lane_east",
+     "rank": "keeper"
+    },
+    {
+     "post": "brewer",
+     "count": 2,
+     "competence": {
+      "brewing": 2
+     },
+     "berth": "house_lane_west",
+     "rank": "hand"
+    },
+    {
+     "post": "stable_hand",
+     "count": 1,
+     "competence": {
+      "stable": 1
+     },
+     "berth": "house_lane_east",
+     "rank": "hand"
+    }
+   ],
+   "economy": {
+    "goods": {
+     "small_beer": {
+      "label": "Small Beer",
+      "base_value": 1,
+      "unit": "mug"
+     },
+     "lodging": {
+      "label": "Lodging",
+      "base_value": 3,
+      "unit": "night"
+     },
+     "grain": {
+      "label": "Grain",
+      "base_value": 1,
+      "unit": "sack"
+     }
+    },
+    "stocks": {
+     "inn_cellar": {
+      "small_beer": 30,
+      "grain": 10
+     },
+     "ford_inn_common": {
+      "lodging": 4
+     }
+    },
+    "targets": {
+     "inn_cellar": {
+      "small_beer": {
+       "minimum": 10,
+       "desired": 40,
+       "capacity": 60
+      },
+      "grain": {
+       "minimum": 5,
+       "desired": 15,
+       "capacity": 30
+      }
+     },
+     "ford_inn_common": {
+      "lodging": {
+       "minimum": 2,
+       "desired": 4,
+       "capacity": 4
+      }
+     }
+    },
+    "flows": {
+     "beer_brewing": {
+      "holder": "inn_cellar",
+      "good": "small_beer",
+      "kind": "produce",
+      "lots_per_hour": 2,
+      "requires_upkeep": "brewing"
+     },
+     "beer_serving": {
+      "holder": "inn_cellar",
+      "good": "small_beer",
+      "kind": "consume",
+      "lots_per_hour": 1,
+      "requires_upkeep": "common_room"
+     },
+     "grain_use": {
+      "holder": "inn_cellar",
+      "good": "grain",
+      "kind": "consume",
+      "lots_per_hour": 1,
+      "requires_upkeep": "brewing"
+     }
+    },
+    "markets": {},
+    "supply_points": {
+     "grain_supply": {
+      "place": "mill",
+      "holder": "inn_cellar",
+      "goods": {
+       "grain": 2
+      },
+      "reliability": "steady",
+      "route_burden": "light",
+      "mode": "cart"
+     }
+    }
+   },
+   "decisions": {
+    "policies": [
+     "The inn keeps rooms for road travellers",
+     "Small beer is brewed on the premises",
+     "The common room is the loudest room in town after dark"
+    ]
+   }
+  },
+  {
+   "key": "market_traders",
+   "name": "Market Traders",
+   "naming": {
+    "seed": "harrowmere_market",
+    "given_parts": {
+     "starts": [
+      "tol",
+      "mag",
+      "ru",
+      "pad",
+      "sel",
+      "cor",
+      "bran",
+      "hed",
+      "gil",
+      "tam"
+     ],
+     "middles": [
+      "win",
+      "ric",
+      "mer",
+      "bert",
+      "gar",
+      "mund",
+      "wald",
+      "stan"
+     ],
+     "ends": [
+      "ed",
+      "y",
+      "ic",
+      "el",
+      "in",
+      "od",
+      "ard"
+     ]
+    },
+    "family_parts": {
+     "starts": [
+      "bren",
+      "cold",
+      "dun",
+      "elder",
+      "fen",
+      "grav",
+      "holl",
+      "thorn",
+      "west"
+     ],
+     "middles": [
+      "mere",
+      "wick",
+      "field",
+      "dale",
+      "ford",
+      "fell",
+      "wood",
+      "stone"
+     ],
+     "ends": [
+      "ton",
+      "well",
+      "wick",
+      "field",
+      "mere",
+      "dale",
+      "ford"
+     ]
+    },
+    "name_format": "{given} {family}",
+    "formal_format": "{given} {family}",
+    "titles": {
+     "posts": {
+      "market_stall": "Trader"
+     },
+     "ranks": {}
+    }
+   },
+   "priority": "trade",
+   "commons": [
+    "market_square"
+   ],
+   "upkeeps": {
+    "market_stalls": {
+     "place": "market_square",
+     "floor": "ground",
+     "level": "working",
+     "fails_untended": "Tuesday market stalls stand empty and trade goes elsewhere",
+     "one_body_restores_in": "a market morning",
+     "requires": {
+      "trade": 1
+     },
+     "depends_on": []
+    }
+   },
+   "posts": {
+    "market_stall": {
+     "place": "market_square",
+     "serves": [
+      "market_stalls"
+     ],
+     "requires": {
+      "trade": 1
+     },
+     "reports_to": "reeve",
+     "authority": "stall_trade"
+    }
+   },
+   "populations": [
+    {
+     "post": "market_stall",
+     "count": 4,
+     "competence": {
+      "trade": 1
+     },
+     "berth": "house_lane_east",
+     "rank": "trader"
+    },
+    {
+     "post": "market_stall",
+     "count": 4,
+     "competence": {
+      "trade": 1
+     },
+     "berth": "house_lane_west",
+     "rank": "trader"
+    }
+   ],
+   "economy": {
+    "goods": {
+     "bread": {
+      "label": "Bread",
+      "base_value": 1,
+      "unit": "loaf"
+     },
+     "fish": {
+      "label": "Fish",
+      "base_value": 1,
+      "unit": "catch"
+     },
+     "wool": {
+      "label": "Wool",
+      "base_value": 2,
+      "unit": "fleece"
+     },
+     "cheese": {
+      "label": "Cheese",
+      "base_value": 2,
+      "unit": "round"
+     },
+     "eggs": {
+      "label": "Eggs",
+      "base_value": 1,
+      "unit": "dozen"
+     }
+    },
+    "stocks": {
+     "market_square": {
+      "bread": 20,
+      "fish": 15,
+      "wool": 10,
+      "cheese": 8,
+      "eggs": 12
+     }
+    },
+    "targets": {
+     "market_square": {
+      "bread": {
+       "minimum": 5,
+       "desired": 25,
+       "capacity": 40
+      },
+      "fish": {
+       "minimum": 5,
+       "desired": 20,
+       "capacity": 30
+      },
+      "wool": {
+       "minimum": 3,
+       "desired": 15,
+       "capacity": 25
+      },
+      "cheese": {
+       "minimum": 2,
+       "desired": 10,
+       "capacity": 20
+      },
+      "eggs": {
+       "minimum": 3,
+       "desired": 15,
+       "capacity": 25
+      }
+     }
+    },
+    "flows": {
+     "bread_sale": {
+      "holder": "market_square",
+      "good": "bread",
+      "kind": "consume",
+      "lots_per_hour": 2,
+      "requires_upkeep": "market_stalls"
+     },
+     "fish_sale": {
+      "holder": "market_square",
+      "good": "fish",
+      "kind": "consume",
+      "lots_per_hour": 1,
+      "requires_upkeep": "market_stalls"
+     },
+     "wool_sale": {
+      "holder": "market_square",
+      "good": "wool",
+      "kind": "consume",
+      "lots_per_hour": 1,
+      "requires_upkeep": "market_stalls"
+     },
+     "cheese_sale": {
+      "holder": "market_square",
+      "good": "cheese",
+      "kind": "consume",
+      "lots_per_hour": 1,
+      "requires_upkeep": "market_stalls"
+     },
+     "eggs_sale": {
+      "holder": "market_square",
+      "good": "eggs",
+      "kind": "consume",
+      "lots_per_hour": 1,
+      "requires_upkeep": "market_stalls"
+     }
+    },
+    "markets": {
+     "tuesday_market": {
+      "place": "market_square",
+      "holder": "market_square",
+      "margin": "modest",
+      "route_burden": "light",
+      "currency": "toll_silver"
+     }
+    },
+    "supply_points": {
+     "fish_supply": {
+      "place": "river_harrow",
+      "holder": "market_square",
+      "goods": {
+       "fish": 3
+      },
+      "reliability": "seasonal",
+      "route_burden": "light",
+      "mode": "foot"
+     },
+     "wool_supply": {
+      "place": "upland_road_north",
+      "holder": "market_square",
+      "goods": {
+       "wool": 2
+      },
+      "reliability": "steady",
+      "route_burden": "moderate",
+      "mode": "cart"
+     },
+     "cheese_supply": {
+      "place": "upland_road_north",
+      "holder": "market_square",
+      "goods": {
+       "cheese": 1
+      },
+      "reliability": "steady",
+      "route_burden": "moderate",
+      "mode": "cart"
+     }
+    }
+   },
+   "decisions": {
+    "policies": [
+     "Tuesday market is the town's chief trade day",
+     "Market peace is kept by the reeve",
+     "Stall fees are collected by the reeve's hall"
+    ]
+   }
+  },
+  {
+   "key": "mill",
+   "name": "Harrowmere Mill",
+   "naming": {
+    "seed": "harrowmere_mill",
+    "given_parts": {
+     "starts": [
+      "al",
+      "bram",
+      "cor",
+      "dun",
+      "ed",
+      "fen",
+      "gar",
+      "hal",
+      "iv",
+      "jed"
+     ],
+     "middles": [
+      "win",
+      "ric",
+      "mer",
+      "bert",
+      "gar",
+      "mund",
+      "wald",
+      "stan"
+     ],
+     "ends": [
+      "ed",
+      "y",
+      "ic",
+      "el",
+      "in",
+      "od",
+      "ard"
+     ]
+    },
+    "family_parts": {
+     "starts": [
+      "bren",
+      "cold",
+      "dun",
+      "elder",
+      "fen",
+      "grav",
+      "holl",
+      "thorn",
+      "west"
+     ],
+     "middles": [
+      "mere",
+      "wick",
+      "field",
+      "dale",
+      "ford",
+      "fell",
+      "wood",
+      "stone"
+     ],
+     "ends": [
+      "ton",
+      "well",
+      "wick",
+      "field",
+      "mere",
+      "dale",
+      "ford"
+     ]
+    },
+    "name_format": "{given} {family}",
+    "formal_format": "{title} {given} {family}",
+    "titles": {
+     "posts": {
+      "miller": "Miller"
+     },
+     "ranks": {}
+    }
+   },
+   "priority": "trade",
+   "commons": [
+    "market_square"
+   ],
+   "upkeeps": {
+    "milling": {
+     "place": "mill",
+     "floor": "ground",
+     "level": "working",
+     "fails_untended": "the millrace wheel stands idle and the valley's grain goes unground",
+     "one_body_restores_in": "a working day",
+     "requires": {
+      "milling": 2
+     },
+     "depends_on": []
+    }
+   },
+   "posts": {
+    "miller": {
+     "place": "mill",
+     "serves": [
+      "milling"
+     ],
+     "requires": {
+      "milling": 2
+     },
+     "reports_to": "miller",
+     "authority": "milling"
+    }
+   },
+   "populations": [
+    {
+     "post": "miller",
+     "count": 3,
+     "competence": {
+      "milling": 2
+     },
+     "berth": "house_lane_west",
+     "rank": "keeper"
+    }
+   ],
+   "economy": {
+    "goods": {
+     "flour": {
+      "label": "Flour",
+      "base_value": 2,
+      "unit": "sack"
+     },
+     "grain": {
+      "label": "Grain",
+      "base_value": 1,
+      "unit": "sack"
+     }
+    },
+    "stocks": {
+     "mill": {
+      "grain": 25,
+      "flour": 15
+     }
+    },
+    "targets": {
+     "mill": {
+      "grain": {
+       "minimum": 10,
+       "desired": 30,
+       "capacity": 50
+      },
+      "flour": {
+       "minimum": 5,
+       "desired": 20,
+       "capacity": 40
+      }
+     }
+    },
+    "flows": {
+     "flour_production": {
+      "holder": "mill",
+      "good": "flour",
+      "kind": "produce",
+      "lots_per_hour": 3,
+      "requires_upkeep": "milling"
+     },
+     "grain_milling": {
+      "holder": "mill",
+      "good": "grain",
+      "kind": "consume",
+      "lots_per_hour": 3,
+      "requires_upkeep": "milling"
+     }
+    },
+    "markets": {},
+    "supply_points": {
+     "grain_from_valley": {
+      "place": "upland_road_north",
+      "holder": "mill",
+      "goods": {
+       "grain": 5
+      },
+      "reliability": "seasonal",
+      "route_burden": "moderate",
+      "mode": "cart"
+     }
+    }
+   },
+   "decisions": {
+    "policies": [
+     "The mill grinds for the whole valley",
+     "The millrace below the bridge powers the wheel"
+    ]
+   }
+  },
+  {
+   "key": "smithy",
+   "name": "Harrowmere Smithy",
+   "naming": {
+    "seed": "harrowmere_smith",
+    "given_parts": {
+     "starts": [
+      "tol",
+      "mag",
+      "ru",
+      "pad",
+      "sel",
+      "cor",
+      "bran",
+      "hed",
+      "gil",
+      "tam"
+     ],
+     "middles": [
+      "win",
+      "ric",
+      "mer",
+      "bert",
+      "gar",
+      "mund",
+      "wald",
+      "stan"
+     ],
+     "ends": [
+      "ed",
+      "y",
+      "ic",
+      "el",
+      "in",
+      "od",
+      "ard"
+     ]
+    },
+    "family_parts": {
+     "starts": [
+      "bren",
+      "cold",
+      "dun",
+      "elder",
+      "fen",
+      "grav",
+      "holl",
+      "thorn",
+      "west"
+     ],
+     "middles": [
+      "mere",
+      "wick",
+      "field",
+      "dale",
+      "ford",
+      "fell",
+      "wood",
+      "stone"
+     ],
+     "ends": [
+      "ton",
+      "well",
+      "wick",
+      "field",
+      "mere",
+      "dale",
+      "ford"
+     ]
+    },
+    "name_format": "{given} {family}",
+    "formal_format": "{title} {given} {family}",
+    "titles": {
+     "posts": {
+      "smith": "Smith"
+     },
+     "ranks": {}
+    }
+   },
+   "priority": "trade",
+   "commons": [
+    "market_square"
+   ],
+   "upkeeps": {
+    "smithing": {
+     "place": "smithy",
+     "floor": "ground",
+     "level": "working",
+     "fails_untended": "horses go unshod and ploughs go unmended",
+     "one_body_restores_in": "a working day",
+     "requires": {
+      "smithing": 2
+     },
+     "depends_on": []
+    }
+   },
+   "posts": {
+    "smith": {
+     "place": "smithy",
+     "serves": [
+      "smithing"
+     ],
+     "requires": {
+      "smithing": 2
+     },
+     "reports_to": "smith",
+     "authority": "smithing"
+    }
+   },
+   "populations": [
+    {
+     "post": "smith",
+     "count": 3,
+     "competence": {
+      "smithing": 2
+     },
+     "berth": "house_lane_east",
+     "rank": "keeper"
+    }
+   ],
+   "economy": {
+    "goods": {
+     "ironwork": {
+      "label": "Ironwork",
+      "base_value": 3,
+      "unit": "piece"
+     },
+     "iron_bar": {
+      "label": "Iron Bar",
+      "base_value": 2,
+      "unit": "bar"
+     }
+    },
+    "stocks": {
+     "smithy": {
+      "iron_bar": 12,
+      "ironwork": 8
+     }
+    },
+    "targets": {
+     "smithy": {
+      "iron_bar": {
+       "minimum": 4,
+       "desired": 15,
+       "capacity": 30
+      },
+      "ironwork": {
+       "minimum": 3,
+       "desired": 10,
+       "capacity": 20
+      }
+     }
+    },
+    "flows": {
+     "ironwork_production": {
+      "holder": "smithy",
+      "good": "ironwork",
+      "kind": "produce",
+      "lots_per_hour": 2,
+      "requires_upkeep": "smithing"
+     },
+     "iron_use": {
+      "holder": "smithy",
+      "good": "iron_bar",
+      "kind": "consume",
+      "lots_per_hour": 2,
+      "requires_upkeep": "smithing"
+     }
+    },
+    "markets": {},
+    "supply_points": {
+     "iron_supply": {
+      "place": "upland_road_north",
+      "holder": "smithy",
+      "goods": {
+       "iron_bar": 2
+      },
+      "reliability": "steady",
+      "route_burden": "heavy",
+      "mode": "cart"
+     }
+    }
+   },
+   "decisions": {
+    "policies": [
+     "The smithy shoes road horses and mends ploughs",
+     "The smithy stands at the gate end of the square"
+    ]
+   }
+  },
+  {
+   "key": "orrin_shrine",
+   "name": "Saint Orrin's Shrine",
+   "naming": {
+    "seed": "harrowmere_shrine",
+    "given_parts": {
+     "starts": [
+      "al",
+      "bram",
+      "cor",
+      "dun",
+      "ed",
+      "fen",
+      "gar",
+      "hal",
+      "iv",
+      "jed"
+     ],
+     "middles": [
+      "win",
+      "ric",
+      "mer",
+      "bert",
+      "gar",
+      "mund",
+      "wald",
+      "stan"
+     ],
+     "ends": [
+      "ed",
+      "y",
+      "ic",
+      "el",
+      "in",
+      "od",
+      "ard"
+     ]
+    },
+    "family_parts": {
+     "starts": [
+      "bren",
+      "cold",
+      "dun",
+      "elder",
+      "fen",
+      "grav",
+      "holl",
+      "thorn",
+      "west"
+     ],
+     "middles": [
+      "mere",
+      "wick",
+      "field",
+      "dale",
+      "ford",
+      "fell",
+      "wood",
+      "stone"
+     ],
+     "ends": [
+      "ton",
+      "well",
+      "wick",
+      "field",
+      "mere",
+      "dale",
+      "ford"
+     ]
+    },
+    "name_format": "{given} {family}",
+    "formal_format": "{title} {given} {family}",
+    "titles": {
+     "posts": {
+      "shrine_keeper": "Shrine-keeper"
+     },
+     "ranks": {}
+    }
+   },
+   "priority": "sacred",
+   "commons": [
+    "shrine_path"
+   ],
+   "upkeeps": {
+    "shrine_lamp": {
+     "place": "orrin_shrine",
+     "floor": "ground",
+     "level": "working",
+     "fails_untended": "the shrine lamp goes dark and the offering bowl goes unattended",
+     "one_body_restores_in": "a morning",
+     "requires": {
+      "devotion": 1,
+      "lamp": 1
+     },
+     "depends_on": []
+    }
+   },
+   "posts": {
+    "shrine_keeper": {
+     "place": "orrin_shrine",
+     "serves": [
+      "shrine_lamp"
+     ],
+     "requires": {
+      "devotion": 1,
+      "lamp": 1
+     },
+     "reports_to": "shrine_keeper",
+     "authority": "shrine_rites"
+    }
+   },
+   "populations": [
+    {
+     "post": "shrine_keeper",
+     "count": 3,
+     "competence": {
+      "devotion": 1,
+      "lamp": 1
+     },
+     "berth": "house_lane_west",
+     "rank": "keeper"
+    }
+   ],
+   "economy": {
+    "goods": {
+     "lamp_oil": {
+      "label": "Lamp Oil",
+      "base_value": 1,
+      "unit": "flask"
+     },
+     "offerings": {
+      "label": "Offerings",
+      "base_value": 1,
+      "unit": "item"
+     }
+    },
+    "stocks": {
+     "orrin_shrine": {
+      "lamp_oil": 8,
+      "offerings": 5
+     }
+    },
+    "targets": {
+     "orrin_shrine": {
+      "lamp_oil": {
+       "minimum": 2,
+       "desired": 10,
+       "capacity": 15
+      },
+      "offerings": {
+       "minimum": 1,
+       "desired": 8,
+       "capacity": 20
+      }
+     }
+    },
+    "flows": {
+     "oil_burning": {
+      "holder": "orrin_shrine",
+      "good": "lamp_oil",
+      "kind": "consume",
+      "lots_per_hour": 1,
+      "requires_upkeep": "shrine_lamp"
+     },
+     "offering_flow": {
+      "holder": "orrin_shrine",
+      "good": "offerings",
+      "kind": "produce",
+      "lots_per_hour": 1,
+      "requires_upkeep": "shrine_lamp"
+     }
+    },
+    "markets": {},
+    "supply_points": {
+     "oil_supply": {
+      "place": "market_square",
+      "holder": "orrin_shrine",
+      "goods": {
+       "lamp_oil": 1
+      },
+      "reliability": "steady",
+      "route_burden": "light",
+      "mode": "foot"
+     }
+    }
+   },
+   "decisions": {
+    "policies": [
+     "The shrine-keeper tends the lamp and the offering bowl",
+     "Fisher families leave the first fish of the season at the shrine",
+     "The shrine stands at the bridge foot"
+    ]
+   }
+  },
+  {
+   "key": "households",
+   "name": "Harrowmere Households",
+   "naming": {
+    "seed": "harrowmere_household",
+    "given_parts": {
+     "starts": [
+      "al",
+      "bram",
+      "cor",
+      "dun",
+      "ed",
+      "fen",
+      "gar",
+      "hal",
+      "iv",
+      "jed",
+      "tol",
+      "mag",
+      "ru",
+      "pad",
+      "sel",
+      "bran",
+      "hed",
+      "gil",
+      "tam"
+     ],
+     "middles": [
+      "win",
+      "ric",
+      "mer",
+      "bert",
+      "gar",
+      "mund",
+      "wald",
+      "stan"
+     ],
+     "ends": [
+      "ed",
+      "y",
+      "ic",
+      "el",
+      "in",
+      "od",
+      "ard"
+     ]
+    },
+    "family_parts": {
+     "starts": [
+      "bren",
+      "cold",
+      "dun",
+      "elder",
+      "fen",
+      "grav",
+      "holl",
+      "thorn",
+      "west"
+     ],
+     "middles": [
+      "mere",
+      "wick",
+      "field",
+      "dale",
+      "ford",
+      "fell",
+      "wood",
+      "stone"
+     ],
+     "ends": [
+      "ton",
+      "well",
+      "wick",
+      "field",
+      "mere",
+      "dale",
+      "ford"
+     ]
+    },
+    "name_format": "{given} {family}",
+    "formal_format": "{given} {family}",
+    "titles": {
+     "posts": {
+      "householder": "Householder"
+     },
+     "ranks": {}
+    }
+   },
+   "priority": "residential",
+   "commons": [
+    "market_square",
+    "house_lane_east",
+    "house_lane_west"
+   ],
+   "upkeeps": {
+    "household_east": {
+     "place": "house_lane_east",
+     "floor": "ground",
+     "level": "domestic",
+     "fails_untended": "households on the east lane fall into disrepair",
+     "one_body_restores_in": "a day",
+     "requires": {
+      "household": 1
+     },
+     "depends_on": []
+    },
+    "household_west": {
+     "place": "house_lane_west",
+     "floor": "ground",
+     "level": "domestic",
+     "fails_untended": "households on the west lane fall into disrepair",
+     "one_body_restores_in": "a day",
+     "requires": {
+      "household": 1
+     },
+     "depends_on": []
+    }
+   },
+   "posts": {
+    "householder": {
+     "place": "house_lane_east",
+     "serves": [
+      "household_east",
+      "household_west"
+     ],
+     "requires": {
+      "household": 1
+     },
+     "reports_to": "householder",
+     "authority": "household"
+    }
+   },
+   "populations": [
+    {
+     "post": "householder",
+     "count": 38,
+     "competence": {
+      "household": 1
+     },
+     "berth": "house_lane_east",
+     "rank": "householder"
+    },
+    {
+     "post": "householder",
+     "count": 38,
+     "competence": {
+      "household": 1
+     },
+     "berth": "house_lane_west",
+     "rank": "householder"
+    }
+   ],
+   "economy": {
+    "goods": {
+     "bread": {
+      "label": "Bread",
+      "base_value": 1,
+      "unit": "loaf"
+     },
+     "fish": {
+      "label": "Fish",
+      "base_value": 1,
+      "unit": "catch"
+     },
+     "cheese": {
+      "label": "Cheese",
+      "base_value": 2,
+      "unit": "round"
+     },
+     "eggs": {
+      "label": "Eggs",
+      "base_value": 1,
+      "unit": "dozen"
+     },
+     "flour": {
+      "label": "Flour",
+      "base_value": 2,
+      "unit": "sack"
+     }
+    },
+    "stocks": {
+     "house_lane_east": {
+      "bread": 10,
+      "cheese": 4,
+      "eggs": 6,
+      "flour": 5
+     },
+     "house_lane_west": {
+      "bread": 10,
+      "fish": 8,
+      "cheese": 4,
+      "eggs": 6,
+      "flour": 5
+     }
+    },
+    "targets": {
+     "house_lane_east": {
+      "bread": {
+       "minimum": 3,
+       "desired": 12,
+       "capacity": 20
+      },
+      "cheese": {
+       "minimum": 1,
+       "desired": 5,
+       "capacity": 10
+      },
+      "eggs": {
+       "minimum": 2,
+       "desired": 8,
+       "capacity": 12
+      },
+      "flour": {
+       "minimum": 2,
+       "desired": 6,
+       "capacity": 10
+      }
+     },
+     "house_lane_west": {
+      "bread": {
+       "minimum": 3,
+       "desired": 12,
+       "capacity": 20
+      },
+      "fish": {
+       "minimum": 2,
+       "desired": 10,
+       "capacity": 15
+      },
+      "cheese": {
+       "minimum": 1,
+       "desired": 5,
+       "capacity": 10
+      },
+      "eggs": {
+       "minimum": 2,
+       "desired": 8,
+       "capacity": 12
+      },
+      "flour": {
+       "minimum": 2,
+       "desired": 6,
+       "capacity": 10
+      }
+     }
+    },
+    "flows": {
+     "bread_eating_east": {
+      "holder": "house_lane_east",
+      "good": "bread",
+      "kind": "consume",
+      "lots_per_hour": 1,
+      "requires_upkeep": "household_east"
+     },
+     "bread_eating_west": {
+      "holder": "house_lane_west",
+      "good": "bread",
+      "kind": "consume",
+      "lots_per_hour": 1,
+      "requires_upkeep": "household_west"
+     },
+     "fish_eating_west": {
+      "holder": "house_lane_west",
+      "good": "fish",
+      "kind": "consume",
+      "lots_per_hour": 1,
+      "requires_upkeep": "household_west"
+     },
+     "cheese_eating_east": {
+      "holder": "house_lane_east",
+      "good": "cheese",
+      "kind": "consume",
+      "lots_per_hour": 1,
+      "requires_upkeep": "household_east"
+     },
+     "cheese_eating_west": {
+      "holder": "house_lane_west",
+      "good": "cheese",
+      "kind": "consume",
+      "lots_per_hour": 1,
+      "requires_upkeep": "household_west"
+     },
+     "eggs_eating_east": {
+      "holder": "house_lane_east",
+      "good": "eggs",
+      "kind": "consume",
+      "lots_per_hour": 1,
+      "requires_upkeep": "household_east"
+     },
+     "eggs_eating_west": {
+      "holder": "house_lane_west",
+      "good": "eggs",
+      "kind": "consume",
+      "lots_per_hour": 1,
+      "requires_upkeep": "household_west"
+     },
+     "flour_eating_east": {
+      "holder": "house_lane_east",
+      "good": "flour",
+      "kind": "consume",
+      "lots_per_hour": 1,
+      "requires_upkeep": "household_east"
+     },
+     "flour_eating_west": {
+      "holder": "house_lane_west",
+      "good": "flour",
+      "kind": "consume",
+      "lots_per_hour": 1,
+      "requires_upkeep": "household_west"
+     }
+    },
+    "markets": {},
+    "supply_points": {
+     "bread_from_market_east": {
+      "place": "market_square",
+      "holder": "house_lane_east",
+      "goods": {
+       "bread": 2
+      },
+      "reliability": "steady",
+      "route_burden": "light",
+      "mode": "foot"
+     },
+     "bread_from_market_west": {
+      "place": "market_square",
+      "holder": "house_lane_west",
+      "goods": {
+       "bread": 2
+      },
+      "reliability": "steady",
+      "route_burden": "light",
+      "mode": "foot"
+     },
+     "fish_from_river_west": {
+      "place": "river_harrow",
+      "holder": "house_lane_west",
+      "goods": {
+       "fish": 2
+      },
+      "reliability": "seasonal",
+      "route_burden": "light",
+      "mode": "foot"
+     },
+     "flour_from_mill_east": {
+      "place": "mill",
+      "holder": "house_lane_east",
+      "goods": {
+       "flour": 2
+      },
+      "reliability": "steady",
+      "route_burden": "light",
+      "mode": "foot"
+     },
+     "flour_from_mill_west": {
+      "place": "mill",
+      "holder": "house_lane_west",
+      "goods": {
+       "flour": 2
+      },
+      "reliability": "steady",
+      "route_burden": "light",
+      "mode": "foot"
+     }
+    }
+   },
+   "decisions": {
+    "policies": [
+     "Houses are stone below and timber above, roofed in slate",
+     "Householders elect the reeve each spring",
+     "About a hundred people live in Harrowmere"
+    ]
+   }
+  }
+ ]
+}

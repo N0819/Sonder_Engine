@@ -282,7 +282,7 @@ first paragraph as a reading of the mechanism, not as a guarantee.
 | `GET/PUT /api/chats/{id}/living_world` | read/write the four-approach config; the PUT returns the normalized result so a dropped key is visible immediately |
 | `GET/PUT /api/chats/{id}/charters` | read/write the frame-scoped registry |
 | `GET /api/chats/{id}/charters/diagnostics` | inspect belief, judgment and planning state; `?body=` selects one body |
-| `POST /api/chats/{id}/charters/generate` | generate one lore-grounded lived location |
+| `POST /api/chats/{id}/charters/generate` | generate one lore-grounded lived location; the body's `population` (an integer) is a closure input the closer lands within `POPULATION_TOLERANCE`, and the result's `closure` record says what was asked, planned and closed, which head posts were held to one holder, and which berths were split |
 
 The three `charters` routes take a `frame_id` query parameter, and the
 mutating ones call `_require_frame_idle` first — a turn in flight refuses a

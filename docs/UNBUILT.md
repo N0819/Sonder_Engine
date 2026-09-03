@@ -366,6 +366,22 @@ as public; inherited nodes carry no bearing; and no live charter world has a
 scene for any of it to run on, which is the configuration question above and
 is still open.
 
+**THE CONFIGURATION QUESTION IS ANSWERED, 2026-09-02, and the answer was
+already in the code.** A generated institution is given the planted skeleton
+as its scene, composed under the live scene: `advance_snapshot` had been
+doing exactly that on the first in-play catch-up all along (measured on the
+Harrowmere playtest: 20 rooms after turn 9, 27 by the end, 371-474 walked
+edges per working charter), so the four scene-less corpus charters are
+worlds generated before a skeleton was planted, not a rule. What was still
+missing was PRESIM: `presim_registry` ran with no scene, so the whole 720h
+prehistory was teleports (`travelled` = 1 per body). `plant_structure`
+precedes presim, so it is one argument -- `presim_registry(scene=
+charter_runtime.skeleton_scene(rooms))` -- and the prehistory now walks the
+town's own graph: on the Harrowmere plan closed at 100 residents, 8,193
+walked edges over 91 bodies against 55, for 6.5s against 5.7s, replay
+byte-identical (`tests/test_presim_walks_the_skeleton.py`). The route half
+above stays a prototype's; this closes the half that had nothing to run on.
+
 ### 1.11 `ctx.warnings` reaches the pipeline drawer but not the story reader
 
 **Landed, alpha 6.9**, except for an aggregate reader. Every warning is tagged
@@ -2991,6 +3007,20 @@ still tops every post to three, so the charter that emits the warning is still
 the charter that gets minted. Fixing that is this entry's own work and needs
 1.84c's constraint nowhere near it.
 
+**PREVENTED AT THE GENERATOR, 2026-09-02.** `charter_generate._post_seats`
+fixes a post's headcount three ways, honoured in order: an authored `seats`
+(1.84e's shape (a), posts gain a headcount), an authored `singular`, or being
+a HEAD -- `_head_posts`: a post nobody reports past AND somebody reports to,
+a post reporting to itself counting as reporting to nobody, because planners
+write the top of a chain that way. A lone post (the smith of a one-post
+smithy) has no subordinate and is a watch, not a head. `_ensure_shift_crews`
+now trims a fixed-seat post to its seats as well as topping to them, from
+the highest generated index down and never a featured resident. Measured on
+the Harrowmere plan: the reeve and the innkeeper hold their offices alone,
+their clerks and brewers still rotate in threes. `HEAD_SEATS` = 1, named
+where the other closure numbers are. 1.84c is untouched: how a holder
+CHANGES is still the owner's. `tests/test_charter_closure_invariants.py`.
+
 The signal to tell a rotating post from a singular one is ALREADY IN THE DATA
 and needs no new field: `captain` carries `reports_to: ""`. A post nobody
 reports to is the root of the tree, and a chain of command with three tops is
@@ -3118,7 +3148,10 @@ they are not interchangeable:**
   (a) **POSTS GAIN A HEADCOUNT.** `normalize_post` grows a seats field, the
       plan asks for it, `_ensure_shift_crews` tops to it. Fixes 1.84b directly
       and cheaply. Does NOT produce a rank-and-file: it makes more top-post
-      holders legal, not more junior members exist.
+      holders legal, not more junior members exist. *Landed at the closer
+      2026-09-02 (`_post_seats` reads `seats`, and a head defaults to one);
+      the plan prompt does not yet ask for it and `normalize_post` does not
+      carry it, so it is an authoring tolerance rather than a surface.*
   (b) **UNPOSTED MEMBERS EXIST.** A population may name no post and mint bodies
       with empty `home_post` and an authored rank. `normalize_body` already
       tolerates it and `charter_plan` already staffs by competence, so the data
