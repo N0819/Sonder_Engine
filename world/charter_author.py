@@ -450,6 +450,92 @@ def _disposed(state, needs, commitments, other, actor):
     return True, ""
 
 
+def dealing_answer(state, needs, stores, actor, act, other, target):
+    """What a body's ledgers answer to a figure's dealing, READ-ONLY.
+
+    ``(act, answer, reason)``: the act as answered (an ``order`` from
+    somebody with no standing over the body's post comes back as a
+    ``request``), the answer word from `ANSWERS`, and the refusal's
+    reason when there is one. This is the whole of the decision
+    `_figure_dealing` records; it is split out so a preview -- the voice's
+    `presence_view` answers, the Director's `figure_answers` -- runs the
+    identical judgment on the identical stores without opening a
+    commitment, and so no second reading of "would the reeve grant this"
+    can exist to disagree with the ledger's. Trade and gift are not here:
+    a trade needs a good and a gift needs a thing, and neither is a
+    judgment about the asker.
+    """
+    commitments = stores.get("commitments") or {}
+    if act == "order":
+        standing = has_standing(
+            {"watch": stores.get("watch"), "posts": stores.get("posts"),
+             "bindings": stores.get("bindings"), "bodies": state["bodies"]},
+            actor, other)
+        if not standing:
+            act = "request"
+        elif not (target or {}).get("available"):
+            return "order", "refused", "unable"
+        elif regard_value(state["regard"], other, actor) \
+                < ORDER_REFUSAL_REGARD:
+            return "order", "refused", "regard"
+        else:
+            return "order", "obeyed", ""
+    if act == "request":
+        willing, reason = _disposed(state, needs, commitments, other, actor)
+        return "request", "granted" if willing else "declined", reason
+    if act == "bargain":
+        willing, reason = _disposed(state, needs, commitments, other, actor)
+        return "bargain", "accepted" if willing else "declined", reason
+    if act == "promise":
+        return "promise", "heard", ""
+    return act, "", ""
+
+
+def preview_dealings(charter, actor, others, acts):
+    """`dealing_answer` for several bodies of one charter, touching nothing.
+
+    ``{body_key: [{act, answered_as, answer, reason}, ...]}`` in the order
+    of ``acts``. Built the way `authored` builds its view of the charter
+    -- normalized, one `_state_of` -- and then only read, so it may run on
+    the shared cached registry. A body the charter does not hold gets no
+    entry.
+    """
+    charter = normalize_charter(charter)
+    at = float(charter["clock_hours"])
+    politics = normalize_politics(charter.get("politics"))
+    state = _state_of(
+        charter["bodies"], charter["minds"], charter["needs"],
+        dict(politics.get("regard") or {}), dict(politics.get("blame") or {}),
+        at, figures=charter["figures"],
+        experiences=charter.get("experiences"),
+        served_beside=charter.get("served_beside"),
+        judgments=charter.get("judgments"),
+        commitments=charter.get("commitments"))
+    stores = {
+        "commitments": normalize_commitments(charter.get("commitments")),
+        "posts": charter.get("posts") or {},
+        "watch": charter.get("watch") or {},
+        "bindings": charter.get("bindings") or {},
+    }
+    out = {}
+    for other in others or ():
+        other = str(other)
+        target = charter["bodies"].get(other)
+        if target is None:
+            continue
+        rows = []
+        for act in acts:
+            answered_as, answer, reason = dealing_answer(
+                state, charter["needs"], stores, str(actor), str(act),
+                other, target)
+            rows.append({
+                "act": str(act),
+                "answered_as": answered_as if answered_as != act else "",
+                "answer": answer, "reason": reason})
+        out[other] = rows
+    return out
+
+
 def _answered(record, commitments, cid, answer, reason, line):
     record.update({"answer": answer, "commitment": cid,
                    "_commitments": True, "line": line})
@@ -469,23 +555,15 @@ def _figure_dealing(actor, act, other, target, state, needs, at, stores, *,
         record["terms"] = terms[:320]
 
     if act == "order":
-        standing = has_standing(
-            {"watch": stores.get("watch"), "posts": stores.get("posts"),
-             "bindings": stores.get("bindings"), "bodies": state["bodies"]},
-            actor, other)
-        if not standing:
+        answered_as, answer, reason = dealing_answer(
+            state, needs, stores, actor, "order", other, target)
+        if answered_as == "request":
             # Nobody to obey: the words are a request, and are answered as
             # one. The record says what was attempted.
             record["as"] = "request"
             act = "request"
         else:
-            if not target.get("available"):
-                willing, reason = False, "unable"
-            elif regard_value(state["regard"], other, actor) \
-                    < ORDER_REFUSAL_REGARD:
-                willing, reason = False, "regard"
-            else:
-                willing, reason = True, ""
+            willing = answer == "obeyed"
             commitments, cid, _ = open_commitment(
                 commitments, source_id=source_id, kind="order",
                 promisor=other, beneficiary=actor, terms=terms or "an order",
@@ -500,7 +578,9 @@ def _figure_dealing(actor, act, other, target, state, needs, at, stores, *,
                     actor, other, "obeyed" if willing else "refused"))
 
     if act == "request":
-        willing, reason = _disposed(state, needs, commitments, other, actor)
+        _as, answer, reason = dealing_answer(
+            state, needs, stores, actor, "request", other, target)
+        willing = answer == "granted"
         commitments, cid, _ = open_commitment(
             commitments, source_id=source_id, kind="favour",
             promisor=other, beneficiary=actor, terms=terms or "a favour",
@@ -516,7 +596,9 @@ def _figure_dealing(actor, act, other, target, state, needs, at, stores, *,
                 "granted" if willing else "declined"))
 
     if act == "bargain":
-        willing, reason = _disposed(state, needs, commitments, other, actor)
+        _as, answer, reason = dealing_answer(
+            state, needs, stores, actor, "bargain", other, target)
+        willing = answer == "accepted"
         commitments, cid, _ = open_commitment(
             commitments, source_id=source_id, kind="bargain",
             promisor=actor, beneficiary=other, terms=terms or "a bargain",

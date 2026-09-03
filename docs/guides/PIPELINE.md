@@ -232,7 +232,12 @@ commitment accepted or repudiated, a price quoted and a deal recorded, an
 `aided` mark -- and the answer is previewed to the body's voice in
 `background_react` by the identical plan on a throwaway copy
 (`presence_view` -> `answers`), so the voice cannot say yes where the ledger
-will say no. Refusals surface as warnings naming the act and the reason.
+will say no -- and to the DIRECTOR before it rules, on the resolve payload's
+`present_figures` rows (`charter_runtime.figure_answers`: order, request and
+bargain by `charter_author.dealing_answer`, the one decision the commit
+records), so the prose cannot grant what the ledger declines. Refusals
+surface as warnings naming the act and the reason; a speech-act kind outside
+the vocabulary is read as `other` and warned by name.
 
 ## Normal turn
 

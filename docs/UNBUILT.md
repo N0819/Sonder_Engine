@@ -5235,11 +5235,35 @@ bodies the town stands in the scene's rooms into the merge
 (`charter_runtime.charter_carriers` -> `merge_scene_with_diff(carriers=)`);
 the record lands marked `by: "charter"`, survives hygiene on that mark, and is
 re-derived into the holder's current room every merge. An unresolvable
-destination is now reported in the same voice as an unrecorded thing. Still
-open: the record follows the holder only into rooms the scene knows (a body
-who walks off the map takes the thing off it, and it reappears where the map
-resumes), and a merge that does not pass `carriers` (`world/paradox.py`) keeps
-the last room rather than following.
+destination is now reported in the same voice as an unrecorded thing.
+
+**The replay on merged main (2026-09-03) found the fact still stuck, through
+two doors the op path did not cover.** The t5 handover reached the merge as a
+CONTAINMENT record from the contact hand ("Reeve of Harrowmere Brgaron
+Brfordwick takes hold of sealed letter"), not as an op; the reeve had no
+entity, so `normalize_scene_containment` dropped the record as an unknown
+holder and the letter lay loose in the hall for thirty-four beats. And the
+player's worn satchel -- a garment in her wardrobe ledger and a container
+entity in the scene, so the letter could sit in it -- had a position of its
+own that nothing tied to her: it stayed at the hall from t3 to t26 while she
+slept at the inn. Both closed at the merge: hygiene keeps a record naming a
+holder the town stands, on the same `by: "charter"` mark
+(`normalize_scene_containment(carriers=)`), and `derive_worn_containment`
+ties a worn garment entity to its wearer every merge (`by: "attire"`,
+retired when the garment leaves the wardrobe, yielding to any carriage a
+hand declared). The objects chunk now says the carriage is the hand's to
+write, including what a body arrives carrying. `tests/test_carried_follows_
+wearer.py`.
+
+Still open: the record follows the holder only into rooms the scene knows
+(a body who walks off the map takes the thing off it, and it reappears where
+the map resumes); a merge that does not pass `carriers` (`world/paradox.py`)
+keeps the last room rather than following; a thing said to be INSIDE a worn
+container at the opening ("the letter in my satchel") is tied to the
+container only if a hand wrote the op or the record -- the wardrobe
+derivation reaches the garment, not its contents; and `_MAX_CONTAINED` (40)
+now counts derived garment records beside declared ones, which a story
+minting many garments as entities could feel.
 
 ### 1.103 The player's dealings with a townsperson: what the ledgers do not yet answer
 
@@ -5264,6 +5288,31 @@ each a decision rather than a defect:
     (t9) were an ACTION row the objects hand wrote no op for; they are no
     gift and no trade. That is the objects hand's miss, not this seam's, and
     the chunk now tells it a listed person is a body it may hand things to.
+    The replay's t5 letter arrived as a containment record instead (the
+    contact hand's door); the THING now follows the reeve (1.101), but the
+    ledger records no `give`, because a grasp is not a gift and only the op
+    says one was made.
+  * **The reader, after the 2026-09-03 replay.** Fixed: a compound kind
+    carries every kind it names, a determiner is not a word of a name, a
+    role noun resolves through the post's authored forms, a posted body
+    outranks an ambient shadow (`tests/test_figure_act_reading.py`). Left,
+    each named in its docstring: the interpreter's communication verb
+    ("ask", t18) is its own vocabulary, kept as written, and names no public
+    kind, so it reaches no ledger -- t18's "ask whether he would have his
+    clerk pull the rolls" was in substance a request, and reading the verb
+    as one is a synonym table; the social hand's own kind outside the
+    vocabulary is `other` and WARNED by name; a role noun with no form in
+    common with the post ("the blacksmith" against `smith`) reaches only an
+    ambient shadow; and a duty that names the people it acts on ("turns
+    back drovers") makes that noun a form of the post, so "the drover" said
+    in the watchman's room reaches the watchman -- widening the authored
+    duty vocabulary into subject and object is the charter model's question.
+  * **The Director's preview names three dealings and no trade.**
+    `PREVIEWED_DEALINGS` is order, request, bargain: a trade needs a good
+    the beat has not named yet, so the Director learns a price only from
+    the voice's own `answers` (which run the full plan). The preview is
+    computed for the PLAYER as asker; a cast member's dealings are previewed
+    to nobody but the voice.
   * **Standing is the `reports_to` chain, and a persona rides nobody.**
     `has_standing` reads bindings (a promoted character riding a body) and
     members acting as figures; a player persona who IS the reeve by
