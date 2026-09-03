@@ -179,5 +179,8 @@
   "DEBUG": "stored setting value and a Python logging level name — translating it would change what the setting means",
   "INFO": "stored setting value and a Python logging level name — translating it would change what the setting means",
   "WARNING": "stored setting value and a Python logging level name — translating it would change what the setting means",
-  "ERROR": "stored setting value and a Python logging level name — translating it would change what the setting means"
+  "ERROR": "stored setting value and a Python logging level name — translating it would change what the setting means",
+  "?frame_id=": "URL, route, or query-string fragment",
+  "before=": "URL, route, or query-string fragment",
+  "an empty line is not a message": "engine-internal ValueError text in story/room_conversation.py; the room route refuses an empty line with its own translated 400 before this can be raised, so no reader sees it"
 }

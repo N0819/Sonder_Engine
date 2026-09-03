@@ -6592,6 +6592,23 @@ planning-need ledger, `world/planning_needs.py`, written by the compiler and
 by the surface-only mint alike, with its drain job). Residuals: § 2.26a (the
 compiler's half) and § 2.33 (the plan tier's half).
 
+**Phase B, the panel (2026-09-04, `design/DESIGN_WRITERS_ROOM_PLAN.md` § 6
+items 5 and 6):** the popout panel is built in both shapes -- docked right
+(opaque chrome, width-resizable, collapsing to its tab) and floating (the
+prose plate, draggable, corner-resizable, opacity slider) -- with the
+persistent per-story, per-era thread (`room_messages`), the mandates list
+with revocation, and the spoiler-safe status line. Open from this half:
+the Story Planner is NOT seated -- `story/room_conversation.PLANNER` is the
+one seam, its placeholder keeps the note and answers `UNSEATED_LINE`;
+nothing writes `room_mandates` or `room_status` yet (the Planner will, as
+typed mandates from sentences, v2 § 6.4); the Dramaturge visibility setting
+(shown / summarised / hidden) is a per-viewer preference with no server
+side; there is no proposal card (v2 § 11.1) -- an actionable reply is a
+Phase B2 shape; no browser-tier test covers the drag and resize gestures
+(the Playwright harness has no comparable panel to extend); the panel
+refreshes by watching the story view's identity once a second while open
+(`ROOM_WATCH_MS`), not by an event the turn pipeline emits.
+
 Build the cross-system Writers' Room agent set described in
 [`design/DESIGN_STORY_PLANNER_AND_DRAMATURGE.md`](design/DESIGN_STORY_PLANNER_AND_DRAMATURGE.md):
 two principal conversational specializations, Story Planner and Dramaturge,
