@@ -103,6 +103,23 @@ def _owned_channels(resolve_output, *, omit=(), repair=None, verdicts=None):
     return out
 
 
+def _ruled(resolve_output, owners):
+    """The resolve fixture with the Director's ruling reaching each OWNER.
+
+    A hand is dispatched only when the author's `ledger_notes` or
+    `changes_asserted` reaches it (`director_scopes._dispatch_specialists`),
+    so a fixture that hands a stub to an owner must also have the author
+    rule for that owner, or the stub is never called and its channels never
+    fill. `owners` is the `_owned_channels` dict (or any dict keyed by
+    specialist step key); one note per owner, keyed by the hand's name.
+    """
+    hands = [str(key).removeprefix("director_") for key in owners]
+    return {**resolve_output,
+            "ledger_notes": {**(resolve_output.get("ledger_notes") or {}),
+                             **{hand: f"{hand}: settled this beat"
+                                for hand in hands}}}
+
+
 def _core(calls):
     """Call step keys with the specialist fan-out filtered out.
 
@@ -467,19 +484,20 @@ def test_elevator_omission_is_repaired(temp_db, monkeypatch):
     ctx = _make_ctx(temp_db, "I slam the door-close button.",
                     _action_interp())
     calls = []
+    # The prose author owns none of these channels, so whatever the
+    # resolve fixture puts in them is replaced by what the OWNER said --
+    # each owner has to emit its own share. `spatial` emits the blank
+    # room placeholder the live Director emitted and withholds the mend
+    # until its repair call, which is the omission under test; `body`
+    # carries the descent condition, which is its channel and was never
+    # the omitted thing.
+    owners = _owned_channels(ELEVATOR_RESOLVE_OUTPUT,
+                             omit={"director_spatial"},
+                             repair=ELEVATOR_REPAIR_OUTPUT)
     monkeypatch.setattr(director, "_agent_json", _dispatching_agent_json({
-        "director_resolve": ELEVATOR_RESOLVE_OUTPUT,
+        "director_resolve": _ruled(ELEVATOR_RESOLVE_OUTPUT, owners),
         "resolve_repair": ELEVATOR_REPAIR_OUTPUT,
-        # The prose author owns none of these channels, so whatever the
-        # resolve fixture puts in them is replaced by what the OWNER said --
-        # each owner has to emit its own share. `spatial` emits the blank
-        # room placeholder the live Director emitted and withholds the mend
-        # until its repair call, which is the omission under test; `body`
-        # carries the descent condition, which is its channel and was never
-        # the omitted thing.
-        **_owned_channels(ELEVATOR_RESOLVE_OUTPUT,
-                          omit={"director_spatial"},
-                          repair=ELEVATOR_REPAIR_OUTPUT),
+        **owners,
     }, calls))
 
     out = director.director_resolve(ctx, nonce=0)
@@ -605,7 +623,7 @@ def test_manifest_covered_beat_costs_zero_extra_calls(temp_db, monkeypatch):
         "state_diff": ELEVATOR_REPAIR_OUTPUT["state_diff"],
     }
     monkeypatch.setattr(director, "_agent_json", _dispatching_agent_json({
-        "director_resolve": covered,
+        "director_resolve": _ruled(covered, _owned_channels(covered)),
         # Encoded by the channel's OWNER, which is where the encoding lives
         # on this path -- the assertion is that a beat encoded correctly the
         # first time buys no second pass over it.
@@ -773,7 +791,7 @@ def test_encoded_player_claim_is_silent(temp_db, monkeypatch):
         "state_diff": {"remove_entities": ["vault_door"]},
     }
     monkeypatch.setattr(director, "_agent_json", _dispatching_agent_json({
-        "director_resolve": encoded,
+        "director_resolve": _ruled(encoded, _owned_channels(encoded)),
         # `remove_entities` belongs to the objects specialist; the claim's
         # coverage check reads the MERGED diff, so the claim is covered by
         # whichever hand encoded it.
@@ -956,11 +974,14 @@ def test_tripwire_escalates_to_deep_audit_when_opted_in(
         ctx = _make_ctx(temp_db, "I force the hatch.", interp)
         calls = []
         monkeypatch.setattr(director, "_agent_json", _dispatching_agent_json({
-            "director_resolve": {
+            # The ruling reaches `objects` (so it is dispatched and returns
+            # its empty first answer); the audit's finding then routes its
+            # repair to the same hand, which is the path under test.
+            "director_resolve": _ruled({
                 "resolved_event": "The hatch tears free of its hinges.",
                 "summary": "Hatch forced.", "dialogue_log": [],
                 "changes_asserted": [], "state_diff": {},
-            },
+            }, {"director_objects": ()}),
             "resolve_reconcile": {"omissions": [{
                 "category": "entities", "subject": "hatch",
                 "change": "The hatch is torn from its hinges.",

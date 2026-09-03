@@ -5769,6 +5769,15 @@ unbuilt:
 - **The offscreen SIMULATOR** (out-of-band propose/ratify) remains
   owner-deferred. The `offscreen` specialist ships the ops surface only, and
   schedules nothing.
+- **The dispatch rate under ruling-keyed dispatch is unmeasured.** Since
+  2026-09-02 a hand runs only when the author's `ledger_notes` or
+  `changes_asserted` reaches it. The 1.75-of-6 mean and the five-of-six
+  physical beat were both measured under the gate-keyed dispatch; the
+  9.10 arms found the author writing about a fifth of its channels with no
+  ruling, and under the new rule that fifth is a hand not run rather than a
+  hand run without a note -- the reconciliation seam's owner-routed repair
+  is what catches it, at one serial call. Measure both before trusting the
+  saving.
 - **The replaced-channel warning rate has never been re-measured live.**
   Stored variants hold only the MERGED output, so the after-rate cannot be
   read from run 20's own beats.

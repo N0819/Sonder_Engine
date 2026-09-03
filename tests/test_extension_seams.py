@@ -687,13 +687,20 @@ class TestDirectorSpecialists:
             "destructible_entity", "crowds_present", "couriers_present",
             "unratified_claims_present", "offscreen_planning_enabled")}
 
-        cold = director._dispatch_specialists(None, None, facts)
+        # No ruling in the view: the engine's own hands would all stay
+        # home, and an extension family -- which no ruling can name --
+        # is dispatched by its gate alone.
+        cold = director._dispatch_specialists(None, None, facts, {})
         assert cold["ext:seams:morale"]["run"] is False
 
         hot = director._dispatch_specialists(None, None,
-                                             {**facts, "physical_beat": True})
+                                             {**facts, "physical_beat": True},
+                                             {})
         assert hot["ext:seams:morale"]["run"] is True
         assert hot["ext:seams:morale"]["scope"] == ["ext:seams:ops"]
+        assert hot["ext:seams:morale"]["addressed_by"] == ["gate"]
+        assert all(not state["run"] for name, state in hot.items()
+                   if not name.startswith("ext:"))
 
     def test_disabling_takes_the_family_back_out(self, temp_db, bare):
         """A disabled extension whose specialist stayed would be dispatched --

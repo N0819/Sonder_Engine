@@ -674,9 +674,13 @@ committed position are written from one answer.
 
 Both Director stages stay ONE step each and fan out inside themselves
 (design note 19). This is the only Director path; there is no monolithic
-sheet and no setting that returns one. A deterministic, scene-state-keyed dispatch computes each
-specialist's per-beat channel SCOPE (dispatch is `bool(scope)`), the stage
-model runs with a lean instruction sheet (same role, step key, schema, and
+sheet and no setting that returns one. A deterministic dispatch keyed on the stage author's own ruling — a
+`ledger_notes` line naming the hand or one of its channels, or a
+`changes_asserted` entry in one of its categories — decides which hands run,
+and the scene-state gates compute each addressed hand's channel SCOPE
+(dispatch is `bool(scope)`; a hand the ruling never reached has an empty one,
+and at interpret only the notes address, since that view carries no
+manifest), the stage model runs with a lean instruction sheet (same role, step key, schema, and
 payload), and each dispatched specialist — `body`, `social`, `contact`,
 `objects`, `spatial`, `offscreen`, with sheets assembled per beat from its
 granted channels' chunks (`prompts.specialist_prompt`) — reads the finished
@@ -688,8 +692,9 @@ and have nothing to say to each other, so the beat costs its slowest hand
 rather than their sum. `director_fanout_mode: sequential` runs them one at a
 time for a provider that will not take concurrent requests; it is not a
 fallback to the removed monolith, since the same hands run with the same
-scopes and assemble in the same order, and a beat still dispatches a mean
-1.75 of 6 sheets of 1-4k against the single sheet's ~21k. The SAME specialist definitions serve both stages: resolve's
+scopes and assemble in the same order, and a beat still dispatches only
+the hands the ruling addressed, each a 1-4k sheet against the single sheet's
+~21k. The SAME specialist definitions serve both stages: resolve's
 instances read the resolved prose and own `state_diff` channels;
 interpret's read the player's structured declaration (never the raw input)
 and own the same channels of `state_assertions` (contact under
@@ -697,9 +702,10 @@ and own the same channels of `state_assertions` (contact under
 is ownership per granted channel; every deterministic seam above — the
 movement backstop above all — judges the merged result. Scope gates fail
 open per channel, a single backstop reports any channel that ships content
-outside every served scope through `tell_director`, and the dispatch/scope
-record (granted vs served vs produced) persists on the step under
-`orchestration`.
+outside every served scope through `tell_director`, a note keyed by a name
+no hand answers to is reported as unrouted rather than guessed at, and the
+dispatch/scope record (per hand: `addressed_by`, `gated`, `scope`; granted
+vs served vs produced overall) persists on the step under `orchestration`.
 
 ### `background_react`
 

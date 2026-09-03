@@ -11,15 +11,15 @@
 | `agents/character.py` | 4149 | Private character decision agent. | `agents.common`, `core.db`, `core.frames`, `llm.prompts`, `llm.schemas`, `mind`, `mind.affect`, `mind.memory`, `mind.memory_judge`, `mind.psychology_runtime`, `mind.theory_of_mind`, `story.character_schema`, `story.scene`, `world.gaps`, `world.place_purpose`, `world.spatial`, `world.survival` |
 | `agents/common.py` | 9062 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
 | `agents/composer.py` | 3325 |  | `agents.common`, `core.pipeline_context`, `story.provenance_text`, `story.scene`, `world.spatial` |
-| `agents/director.py` | 4289 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial`, `world.survival` |
+| `agents/director.py` | 4319 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial`, `world.survival` |
 | `agents/director_contact.py` | 457 |  | `story.character_schema`, `world.spatial` |
 | `agents/director_evidence.py` | 1190 |  | `agents.common`, `agents.director_lingua`, `llm`, `world.spatial` |
-| `agents/director_fanout.py` | 771 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
+| `agents/director_fanout.py` | 796 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
 | `agents/director_floors.py` | 1355 |  | `agents.common`, `agents.director_lingua`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
 | `agents/director_lingua.py` | 29 |  | — |
 | `agents/director_movement.py` | 969 |  | `agents.director_lingua`, `story.character_schema`, `world.spatial` |
 | `agents/director_reconcile.py` | 592 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story`, `world.spatial` |
-| `agents/director_scopes.py` | 705 |  | `agents.director_views`, `core.db`, `world.survival` |
+| `agents/director_scopes.py` | 872 |  | `agents.director_views`, `core.db`, `world.survival` |
 | `agents/director_views.py` | 627 |  | `agents.common`, `story.character_schema`, `story.scene`, `world.background_claims` |
 | `agents/loops.py` | 1337 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `core.db`, `story.character_schema`, `story.scene`, `world.spatial` |
 | `agents/mapping.py` | 337 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `core.db`, `llm.prompts`, `mind.memory`, `story.character_schema`, `story.scene` |
@@ -232,14 +232,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `director_resolve()` | 2584 | 1672 lines |
-| `director_interpret()` | 515 | 629 lines |
-| `_reconcile_resolution()` | 1520 | 522 lines |
-| `_run_specialists()` | 2224 | 245 lines |
-| `director_establish()` | 307 | 141 lines |
-| `_reconcile_interpretation()` | 1146 | 139 lines |
-| `_specialist_repairs()` | 1347 | 119 lines |
-| `_prose_gate_facts()` | 2106 | 92 lines |
+| `director_resolve()` | 2609 | 1677 lines |
+| `director_interpret()` | 518 | 633 lines |
+| `_reconcile_resolution()` | 1527 | 522 lines |
+| `_run_specialists()` | 2231 | 263 lines |
+| `director_establish()` | 310 | 141 lines |
+| `_reconcile_interpretation()` | 1153 | 139 lines |
+| `_specialist_repairs()` | 1354 | 119 lines |
+| `_prose_gate_facts()` | 2113 | 92 lines |
 
 ### `agents/director_contact.py`
 
@@ -271,14 +271,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_specialist_payload()` | 301 | 235 lines |
-| `_orchestration_scope_backstop()` | 641 | 131 lines |
-| `_resolve_beat_view()` | 71 | 127 lines |
-| `_interpret_beat_view()` | 200 | 40 lines |
-| `_resolved_event_verdicts()` | 572 | 30 lines |
-| `_note_for()` | 276 | 24 lines |
-| `fanout_is_parallel()` | 33 | 20 lines |
-| `_index_addressed_events()` | 604 | 18 lines |
+| `_specialist_payload()` | 285 | 235 lines |
+| `_orchestration_scope_backstop()` | 646 | 151 lines |
+| `_resolve_beat_view()` | 73 | 127 lines |
+| `_interpret_beat_view()` | 202 | 40 lines |
+| `_resolved_event_verdicts()` | 556 | 30 lines |
+| `_author_emitted_channels()` | 608 | 25 lines |
+| `_note_for()` | 260 | 24 lines |
+| `fanout_is_parallel()` | 35 | 20 lines |
 
 ### `agents/director_floors.py`
 
@@ -329,14 +329,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_gate_facts()` | 593 | 87 lines |
-| `register_specialist()` | 451 | 49 lines |
-| `_rebuild_channel_owners()` | 420 | 25 lines |
-| `_dispatch_specialists()` | 682 | 24 lines |
-| `_schema_list_channels()` | 238 | 23 lines |
-| `reads_dialogue()` | 146 | 18 lines |
-| `_extension_specialist_call()` | 514 | 17 lines |
-| `_shipped_transit_state()` | 533 | 12 lines |
+| `_gate_facts()` | 617 | 87 lines |
+| `_dispatch_specialists()` | 811 | 62 lines |
+| `register_specialist()` | 475 | 49 lines |
+| `_ruling_for()` | 743 | 39 lines |
+| `_rebuild_channel_owners()` | 444 | 25 lines |
+| `_unrouted_rulings()` | 784 | 25 lines |
+| `_schema_list_channels()` | 259 | 23 lines |
+| `reads_dialogue()` | 167 | 18 lines |
 
 ### `agents/director_views.py`
 
@@ -2339,9 +2339,9 @@ Sections: Scene backdrops (`:2`).
 
 Declared functions: `backdropLayers()`, `backdropLuminance()`, `applyBackdropContrast()`, `releaseBackdropLayer()`, `clearBackdrop()`, `showBackdrop()`, `backdropWorking()`, `awaitBackdrop()`, `generateBackdrop()`, `backdropForTurn()`, `backdropOnVisibleTurn()`, `backdropResetForRender()`, `updateBackdropBtn()`, `toggleBackdrops()`, `syncBackdrops()`.
 
-### `static/js/chat.js` (2970 lines)
+### `static/js/chat.js` (2979 lines)
 
-Sections: The turn being read (`:1`); Colouring who spoke (`:172`); `dialogue_log` is committed per turn and arrives as `turn.speech` -- and (`:175`); Flipping between rerolls of the newest beat (`:978`); Pipeline drawer: reading a step through a lens (`:1292`); Pipeline drawer (`:1616`); Relationship viewer (`:2045`); Memory browser (`:2124`); Private history (`:2912`).
+Sections: The turn being read (`:1`); Colouring who spoke (`:172`); `dialogue_log` is committed per turn and arrives as `turn.speech` -- and (`:175`); Flipping between rerolls of the newest beat (`:978`); Pipeline drawer: reading a step through a lens (`:1292`); Pipeline drawer (`:1625`); Relationship viewer (`:2054`); Memory browser (`:2133`); Private history (`:2921`).
 
 Declared functions: `observeVisibleTurn()`, `openChat()`, `foldTypography()`, `decodeProseEntities()`, `splitEmphasis()`, `appendEmphasized()`, `quoteBody()`, `quotedRegions()`, `speechSpans()`, `paintProse()`, `proseEl()`, `renderFrameBar()`, `switchFrame()`, `updateChatScopedButtons()`, `renderChat()`, `branchTurn()`, `editTurnInput()`, `editTurnProse()`, `liveReset()`, `friendlyPhase()`, `turnStatusStart()`, `turnStatusSet()`, `turnStatusStop()`, `_streamOn()`, `liveFlush()`, `liveAppend()`, `liveStep()`, `handleEvt()`, `showNarrationEarly()`, `clearNarrationEarly()`, `_mountRerollNav()`, `_paintRerollCount()`, `showRerollVariant()`, `abortActiveRun()`, `runStream()`, `confirmCheckpointRestore()`, `runReroll()`, `rerollTurn()`, `exportChat()`, `importChatModal()`, `perceiverViews()`, `loopMindIds()`, `specialistIds()`, `stepLenses()`, `perceiverLabel()`, `facetBadge()`, `lensLabel()`, `renderLensBar()`, `lensSlice()`, `specialistSlice()`, `perceiverSlice()`, `mindSlice()`, `keySlice()`, `renderEngineNotes()`, `openPipeline()`, `relMeter()`, `relationshipModal()`, `memModal()`, `exportCharacterMemories()`, `importCharacterMemoriesModal()`, `memQS()`, `memCharId()`, `loadMemoryBrowse()`, `getMemUI()`, `renderMemorySummary()`, `sortedMems()`, `renderMemoryList()`, `memoryCard()`, `fieldWrap()`, `reloadMemView()`, `runMemorySearch()`, `showNewMemoryForm()`, `checkMemoryCoverage()`, `backfillMemoryEras()`, `consolidateMemories()`, `previewMemoryContext()`, `chatPH()`, `personaPH()`.
 
