@@ -2654,15 +2654,111 @@ def pick_background_reactors(ctx, dr_output, cap=1):
     return pick_voice_demand(ctx, dr_output, cap=cap)["picks"]
 
 
+def addressed_rooms(ctx, dr_output, sc, player_room):
+    """The rooms the PLAYER's own lines are aimed INTO this beat, other than
+    the one they stand in.
+
+    A LINE AIMED AT A DOOR IS AIMED AT WHOEVER IS INSIDE. The gate's address
+    triggers all name a PERSON -- a flow ref, an exact name, an aimed
+    dialogue entry -- and a body the story has never named cannot be
+    addressed by any of them; so a player calling through a doorway to a
+    house they have not entered addressed nobody, the beat's evidence
+    reached every mind inside (Harrowmere replay 2026-09-03 turn 17: 26
+    claims acquired) and no voice could answer, because a voice candidate
+    had to stand in the player's own room. The room the line is aimed into
+    is read from what the beat already says: the target of each player
+    line (`dialogue_log.intended_target`, the resolve stage's speech
+    `target`) resolved to a room -- a room id, a room's name, or the
+    position the beat leaves that target in -- and, when the player spoke
+    and no target resolved anywhere, the room a declared move has not
+    reached (the threshold). Whether the words ARRIVE is still the hearing
+    channel's question (`demand_reaches`, aimed): an open door carries
+    them, a shut one grades them down, and nothing here widens that.
+    Bodies standing in these rooms are candidates on the place-addressed
+    trigger, which ranks between a precise address and a loose mention and
+    never forces the slot -- a house is answered by one person.
+    """
+    from story.scene import is_player_speaker
+
+    sc = sc or {}
+    rooms_by_id = sc.get("rooms") or {}
+    room_ids = {str(r) for r in rooms_by_id}
+    by_name = {}
+    for rid, rdata in rooms_by_id.items():
+        if isinstance(rdata, dict) and str(rdata.get("name") or "").strip():
+            by_name.setdefault(
+                str(rdata["name"]).strip().casefold(), str(rid))
+    positions = dict(sc.get("positions") or {})
+    sd = (dr_output or {}).get("state_diff") or {}
+    if isinstance(sd.get("positions"), dict):
+        positions.update({str(k): str(v) for k, v in sd["positions"].items()
+                          if str(v or "")})
+    after = {**sc, "positions": positions}
+
+    def _room_for(target):
+        t = str(target or "").strip()
+        if not t:
+            return ""
+        if t in room_ids:
+            return t
+        rid = by_name.get(t.casefold())
+        if rid:
+            return rid
+        return str(room_of(after, t) or "")
+
+    chat = ctx.chat
+    targets, spoke = [], False
+    for d in ((dr_output or {}).get("dialogue_log") or []):
+        if not isinstance(d, dict):
+            continue
+        if not is_player_speaker(str(d.get("speaker") or ""), chat):
+            continue
+        spoke = True
+        targets.append(d.get("intended_target"))
+    for row in ((dr_output or {}).get("public_evidence") or []):
+        if not isinstance(row, dict) or row.get("kind") != "speech":
+            continue
+        if not is_player_speaker(str(row.get("actor") or ""), chat):
+            continue
+        spoke = True
+        targets.append(row.get("target"))
+    here = str(player_room or "")
+    out, resolved_any = set(), False
+    for target in targets:
+        for one in (target if isinstance(target, (list, tuple))
+                    else [target]):
+            room = _room_for(one)
+            if not room:
+                continue
+            resolved_any = True
+            if room != here:
+                out.add(room)
+    if spoke and not resolved_any:
+        interp = ctx.get("director_interpret") or {}
+        mv = interp.get("movement") if isinstance(interp, dict) else None
+        if isinstance(mv, dict) and mv.get("to_room") \
+                and str(mv.get("mover") or "self") == "self":
+            to = str(mv["to_room"])
+            p_name = _player_name_or_none(ctx) or ""
+            if to in room_ids and to != here \
+                    and str(positions.get(p_name) or "") != to:
+                out.add(to)
+    return out
+
+
 def pick_voice_demand(ctx, dr_output, cap=1):
     """The demand gate with its working, for the chorus rule's reader.
 
     Returns ``{"picks": [names], "meta": {name: {"addressed", "refs",
-    "room"}}}``: `background_react` needs to know which picks are addressees
-    and which charter bodies they are, because addressees alone exceeding
-    the path's ceiling means the address was to a crowd and is answered as
-    one through the derived crowd (§C3) -- a decision this gate cannot take
-    alone, since the crowd object lives on the perception seam.
+    "room", "why"}}}``: `background_react` needs to know which picks are
+    addressees and which charter bodies they are, because addressees alone
+    exceeding the path's ceiling means the address was to a crowd and is
+    answered as one through the derived crowd (§C3) -- a decision this gate
+    cannot take alone, since the crowd object lives on the perception seam.
+    ``why`` is the trigger set that qualified the pick and the channel it
+    arrived on, so a pick is auditable from the step (Harrowmere replay
+    2026-09-03 turn 23: a gate watchman answered a line spoken in the
+    smithy, and the step could not say which trigger reached him).
     """
     chat = ctx.chat
     cid = chat.id
@@ -2723,6 +2819,11 @@ def pick_voice_demand(ctx, dr_output, cap=1):
             charter_places.update(str(p) for p in (nearby or ()) if p)
         except Exception:
             pass
+    # The rooms the player's lines are aimed INTO (`addressed_rooms`): the
+    # bodies standing there are candidates too, on the place-addressed
+    # trigger below.
+    aimed_rooms = addressed_rooms(ctx, dr_output, sc, player_room)
+    charter_places.update(aimed_rooms)
     presences = with_charter_presences(
         cid, presences, sc, places=charter_places,
         frame_id=getattr(getattr(ctx, "turn", None), "frame_id", None))
@@ -2851,11 +2952,27 @@ def pick_voice_demand(ctx, dr_output, cap=1):
         # EMERGED (§C1.4): stepping out of a crowd this beat is a demand by
         # definition -- someone wanted this person.
         emerged = name in emerged_names
+        # PLACE-ADDRESSED: the player's line was aimed into the room this
+        # body stands in (`addressed_rooms`) -- a call through a doorway to
+        # whoever is inside. Ranks below a precise address and above a
+        # loose mention; never forces the slot.
+        place_addressed = bool(here) and str(here) in aimed_rooms
         addressed_precise = bool(flow_addressed or routed or addressed_exact
                                  or char_addr)
-        addressed_any = bool(addressed_precise or addressed)
+        addressed_any = bool(addressed_precise or addressed
+                             or place_addressed)
         if not (addressed_any or owed or acting or emerged):
             continue
+        # THE WORKING, for the step's audit: which triggers qualified this
+        # candidate, then (below) the channel that carried the demand.
+        why = [w for w, hit in (
+            ("flow_addressed", flow_addressed), ("routed", routed),
+            ("named_exactly", addressed_exact),
+            ("character_address", bool(char_addr)),
+            ("mentioned", addressed and not addressed_exact),
+            ("place_addressed:%s" % here, place_addressed),
+            ("owed", bool(owed)), ("acting", acting), ("emerged", emerged),
+        ) if hit]
         # THE CHANNEL TEST (`demand_reaches`). A trigger says a demand was
         # RAISED; it does not say the demand arrived. Three of the spellings
         # above are the Director's own judgment for THIS beat -- it routed a
@@ -2872,9 +2989,14 @@ def pick_voice_demand(ctx, dr_output, cap=1):
         # was spending slots on debts its own writer would have refused to
         # accrue.
         if not (routed or flow_addressed or emerged or char_addr):
-            if not demand_reaches(sc, here, authored_rooms,
-                                  aimed=bool(addressed or acting)):
+            _aimed = bool(addressed or acting or place_addressed)
+            if not demand_reaches(sc, here, authored_rooms, aimed=_aimed):
                 continue
+            why.append("channel:%s" % (
+                "unplaced" if not here or not authored_rooms
+                else ("hearing" if _aimed else "same_room")))
+        else:
+            why.append("channel:exempt")
         # Only a person may hold a background speaking turn. The ledger says
         # nothing about what a name DENOTES, so a device with an accrued
         # record qualified exactly like a barkeep: chat 80's ceiling-mounted
@@ -2916,7 +3038,8 @@ def pick_voice_demand(ctx, dr_output, cap=1):
         familiar = max(
             [int(t) for t in (record.get("dialogue_turns") or ())
              if isinstance(t, int)] or [-1])
-        priority = [2 if addressed_precise else (1 if addressed_any else 0),
+        priority = [3 if addressed_precise
+                    else (2 if place_addressed else (1 if addressed_any else 0)),
                     bool(owed), bool(acting),
                     bool(emerged), familiar, 0.0,
                     record.get("last_turn") or -1]
@@ -2924,9 +3047,12 @@ def pick_voice_demand(ctx, dr_output, cap=1):
             {"priority": priority, "name": name, "record": record,
              "room": str(here or ""),
              "addressed": bool(addressed_precise),
+             "why": why,
              # Qualified on the loose word-match ALONE: no precise address,
-             # no debt, no act, no emergence. See the subject rule below.
+             # no debt, no act, no emergence, no place. See the subject
+             # rule below.
              "loose_only": bool(addressed and not addressed_precise
+                                and not place_addressed
                                 and not (owed or acting or emerged)),
              # The PLAYER's own precise address specifically (a flow ref --
              # description bindings included -- or their exact name in the
@@ -2998,7 +3124,7 @@ def pick_voice_demand(ctx, dr_output, cap=1):
         picks.append(c["name"])
         meta[c["name"]] = {"addressed": c["addressed"], "refs": c["refs"],
                            "player_addressed": bool(c.get("player_addressed")),
-                           "room": c["room"]}
+                           "room": c["room"], "why": list(c.get("why") or [])}
     return {"picks": picks, "meta": meta}
 
 def _propose_promotions(ctx, presences, scene):

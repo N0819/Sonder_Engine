@@ -6684,6 +6684,36 @@ What the fixes for replay defects N2, N9, N10 and N11 deliberately left:
   healed at all. `_body_refs` compares casefolded, so resolution is
   unaffected.
 
+**Replay residuals (2026-09-03, `tests/test_replay_defects_h.py`):**
+
+- **A role noun the post's noun neither equals nor ends is not bound.**
+  The identity floor matches a minted role by head noun, or by a compound
+  ending in the post's noun (a blacksmith is a smith); "the hostler" beside
+  a stablehand and "the brewer" beside a cook are the same person in the
+  charter's own authority text and the floor does not read it. Measured on
+  the replay's seven mints against the final registry (ambient shadows
+  excluded): the arrival-room fix plus the compound rule reach the ones
+  whose post noun is a head or a tail of the minted noun; the rest wait
+  on the authority-text resolver (§1.103's target rule, fork I).
+- **The measure above is against the post-run registry.** A body's place
+  at turn N is not stored; the seven mints were re-bound against where the
+  bodies stand at turn 39, which is right for posted bodies and a guess
+  for the rest.
+- **Chatter names an unmet SUBJECT by design** (`subject_label`: the name
+  was said aloud, which is how a name first reaches you); only the
+  speaker and the addressee now follow the observer's recognition. A
+  subject named by chatter still does not enter the observer's `known`
+  ledger, so the next fragment renders them anonymous again.
+- **The threshold rule is one hop.** A player speaking at the door of a
+  house they have declared a move into addresses the bodies inside; a
+  player speaking at a door with NO declared move and no resolvable target
+  addresses nobody, as before. Whether a knock without words is a demand
+  is not modelled: a knock is an act, and only a line is aimed.
+- **The narrator's invented-reply tripwire still reports and does not
+  remove.** The unanswered-line clause states the class on the card; the
+  measurement of whether it held is the next replay's invented-dialogue
+  count (5 on 40 beats before it).
+
 ## 3. Information-pipeline leaks still open
 
 Ids are the erased pipeline sweep's own. Severity vocabulary: **leak** (a mind
