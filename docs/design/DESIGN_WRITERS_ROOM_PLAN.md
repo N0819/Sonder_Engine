@@ -364,9 +364,15 @@ The player's bubble sees it when it arrives: a fuse notice fires only
 where the player stands (the living-world floor's own rule), and the
 Director renders the beat; off screen, charter and the harm model carry
 it. The room authors it as a package with a clock; the Planner judges
-naturalness; and it is gated by the **harm and permanent-loss budget**
-(v2 § 6.2) and by protected characters — a disaster that would kill a
-protected character asks first. Prerequisites: the creature fork (harm,
+naturalness; and **the player has to allow these as things** (owner,
+2026-09-03). The default budget for region events is zero: the room asks
+every time until the player grants a scope — which kinds, what scale,
+which characters and places are protected, whether permanent loss is
+acceptable — through the **harm and permanent-loss budget** (v2 § 6.2) or
+a sealed envelope (v2 § 6.3). Silence is not authorization. The same
+default holds for a nudge that would harm and for any local op that is
+irreversible; ordinary local drama (an arrival, an errand, a summons)
+runs under the pacing budget once the room is enabled at all. Prerequisites: the creature fork (harm,
 relocation, mobilisation) and Phase A.1 (planned entities, so displaced
 bodies have somewhere to be).
 
