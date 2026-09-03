@@ -73,6 +73,7 @@ from world.spatial import (
     _entities_named,
     _entity_named,
     _is_body_entity,
+    body_visibility,
     entity_arc,
     entity_side,
     hear_level,
@@ -627,15 +628,34 @@ def _surface_suddenness(surface):
 # Layer A -- standing-state percepts
 # --------------------------------------------------------------------------
 
-def environment_percept(room_id, room_name, room_notes="", light=""):
+def environment_percept(room_id, room_name, room_notes="", light="",
+                        features=None):
     """The room as standing state -- or None when the observer has no
     resolvable room. A mind in unloaded space perceives NOTHING here; the
     old path fabricated "You are in an unspecified area." for it, which
     became 812 identical memory rows (97.3% collision). No room, no
-    percept, no view sentence, no episode."""
+    percept, no view sentence, no episode.
+
+    `features` is what THIS observer's eyes reach of the room's furniture
+    (`world.spatial_fov.feature_visibility`, already subtracted by cone and
+    line): rows of {desc, tier, side, peripheral}, near to far. Absent or
+    empty, the percept is byte-identical to the one it always was -- a room
+    with no geometry authored on its anchors composes exactly as before.
+    """
     if not room_id or not str(room_name or "").strip() \
             or str(room_name).strip().casefold() == "an unspecified area":
         return None
+    rows = []
+    for row in features or ():
+        if not isinstance(row, dict) or not str(row.get("desc") or "").strip():
+            continue
+        rows.append({
+            "desc": str(row.get("desc")).strip(),
+            "tier": str(row.get("tier") or ""),
+            "side": row.get("side") if row.get("side") in ("left", "right")
+            else None,
+            "peripheral": bool(row.get("peripheral")),
+        })
     # THE DELIVERY FLOOR for engine provenance. Room notes are the one field in
     # a view whose text the ENGINE may have written about itself -- a
     # synthesised description can carry the reason it was synthesised, and that
@@ -647,13 +667,24 @@ def environment_percept(room_id, room_name, room_notes="", light=""):
     # the render and `observations_from_render` cannot disagree about it.
     room_notes = strip_engine_provenance(room_notes)
     light = str(light or "")
+    data = {"room_id": room_id, "room_name": room_name,
+            "room_notes": room_notes or "", "light": light}
+    if rows:
+        data["features"] = rows
+    # The visible set is part of the CONTENT: turning to face the hearth
+    # changes what this observer has of the room, and the ledger must read
+    # that as the room changed for them, not as the same fact said again.
+    feature_sig = "|".join(
+        f"{r['desc']}:{r['tier']}:{r['side'] or ''}:{int(r['peripheral'])}"
+        for r in rows)
     return Percept(
         kind="environment", channel="sight",
-        data={"room_id": room_id, "room_name": room_name,
-              "room_notes": room_notes or "", "light": light},
+        data=data,
         salience=0.2,
-        dedupe_key=standing_key("env", (room_id,),
-                                (room_name, room_notes, light)),
+        dedupe_key=standing_key(
+            "env", (room_id,),
+            (room_name, room_notes, light)
+            + ((feature_sig,) if rows else ())),
     )
 
 
@@ -771,6 +802,16 @@ def presence_percepts(scene, observer_name, co_present, display_map,
         arc = entity_arc(scene, observer_name, name)
         if arc == "rear":
             continue                       # no new visual detail from behind
+        # WHAT STANDS BETWEEN. `visual_level_between` above has already
+        # refused a body the line does not reach at all (the FOV layer is
+        # folded into that one sight decision, so no second copy of the
+        # rule lives here). What survives is the PARTIAL case -- a body seen
+        # over a counter from the waist up -- and a measured side where the
+        # anchor-bearing approximation had none. Both subtract-or-qualify;
+        # neither admits.
+        fov = body_visibility(scene, observer_name, name)
+        behind = fov.get("occluded_by") if fov.get("hidden_below") else None
+        shows = fov.get("hidden_below")
         # DEGRADED SIGHT COSTS DETAIL, NOT ACQUAINTANCE. Knowing who has
         # been standing in the room with you is knowledge you already have;
         # the dim light takes their face, not their name. Rendering every
@@ -788,7 +829,8 @@ def presence_percepts(scene, observer_name, co_present, display_map,
             label = display or _unfamiliar_person()
         else:
             label = display if display == name else _dim_figure()
-        side = entity_side(scene, observer_name, name)
+        side = entity_side(scene, observer_name, name) or (
+            fov.get("side") if fov.get("basis") == "line" else None)
         # `body` is the opaque per-body ledger key, carried so the
         # orchestrator can answer "whose presence did this observer's view
         # get composed about" from the percepts themselves rather than by
@@ -807,11 +849,13 @@ def presence_percepts(scene, observer_name, co_present, display_map,
             data={"tier": tier, "side": side, "arc": arc, "sight": level,
                   "body": body_key(name),
                   **({"size": size} if size else {}),
-                  **({"room": room} if room else {})},
+                  **({"room": room} if room else {}),
+                  **({"behind": behind, "shows": shows} if behind else {})},
             salience=0.35,
             dedupe_key=standing_key(
                 "presence", (body_key(name),),
-                (tier, arc, level, size or "")),
+                (tier, arc, level, size or "")
+                + ((behind, shows) if behind else ())),
         ))
     return out
 
@@ -2293,7 +2337,16 @@ def _presence_clause(p):
     # unknown or absent label costs wording and never the beat.
     size = _SIZE_PHRASES.get(str(p.data.get("size") or ""), "")
     size_clause = f", {size}" if size else ""
-    return f"{p.source_label} is {tier}{side_clause}{size_clause}"
+    # Seen over something: name what, and how much of them shows. Plain
+    # words -- "behind the counter, from the waist up" -- never a fraction.
+    behind = str(p.data.get("behind") or "").strip()
+    cover_clause = ""
+    if behind:
+        cover_clause = _en("presence_behind", behind=behind)
+        shows = str(p.data.get("shows") or "").strip()
+        if shows:
+            cover_clause += _en("presence_shows", shows=shows)
+    return f"{p.source_label} is {tier}{side_clause}{size_clause}{cover_clause}"
 
 
 def _join_clauses(clauses):
@@ -2474,6 +2527,31 @@ _POSE_BARE_DETERMINERS = frozenset(
     _ENGLISH_COMPOSITOR.get("pose_bare_determiners") or ())
 
 
+def _render_features(rows):
+    """The furniture this observer's eyes reach, as one sentence a person
+    would say -- near to far, each thing by where it lies. NEVER the grid:
+    no cell, no fraction, no degree, no sector name reaches the page; a
+    thing is close by, across the room, on your left, or at the edge of
+    sight, which is the whole vocabulary a body has for it."""
+    items = []
+    for row in rows or ():
+        desc = str((row or {}).get("desc") or "").strip()
+        if not desc:
+            continue
+        if row.get("peripheral"):
+            items.append(_en("feature_glimpse", desc=desc))
+            continue
+        tier = _TIER_PHRASES.get(str(row.get("tier") or ""), "")
+        side = row.get("side")
+        where = _en("side", side=side).strip() if side in ("left", "right") \
+            else ""
+        place = " ".join(part for part in (tier, where) if part)
+        items.append(_en("feature_item", desc=desc, place=place).strip())
+    if not items:
+        return ""
+    return _en("features", items=_join_clauses(items))
+
+
 def _render_standing(p):
     if p.kind == "environment":
         parts = []
@@ -2484,6 +2562,9 @@ def _render_standing(p):
             if notes and notes[-1:] not in ".!?":
                 notes += "."
             parts.append(notes)
+        sentence = _render_features(p.data.get("features"))
+        if sentence:
+            parts.append(sentence)
         light = str(p.data.get("light") or "").casefold()
         if light in ("dim", "low"):
             parts.append(_en("light_dim"))
