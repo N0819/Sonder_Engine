@@ -410,9 +410,14 @@ Each changes what a phase builds; none blocks Phase A.
    have different clocks (v2 § 7.1). In it the player talks with the Story
    Planner (and through it, or directly, with the Dramaturge), reads the
    spoiler-safe status of standing plans (v2 § 5.3: what is in motion,
-   never what it is), and sees the room's questions when it asks. Detail
-   (layout, what the status shows, how a sealed plan is represented) is
-   Phase B work. Implementation note: the frontend is browser globals
+   never what it is), and sees the room's questions when it asks. **It
+   looks like a simple LLM chat interface** (owner): one conversation,
+   the Planner answering, the Dramaturge's contributions shown or
+   summarised as the visibility setting allows (v2 § 5.2); the standing
+   mandates and the plan status are the only things beside the chat. No
+   forms for budgets or events — those are sentences. Detail (how a
+   sealed plan is represented, what the status line shows) is Phase B
+   work. Implementation note: the frontend is browser globals
    over `static/index.html`; a separate page keeps the room out of the
    turn pipeline's scripts.
 6. **Budgets are set by talking.** Event and op scale — what the room may
