@@ -54,7 +54,9 @@ Housekeeping tables not described below: `schema_meta` (the migration version), 
   the room afterwards. Pruned to `ROOM_HISTORY_KEPT` per thread on write.
   The mandates and status the panel shows beside it are `world` rows
   (`room_mandates`, `room_status`, frame-scoped), so they follow the world
-  table's own carriage.
+  table's own carriage; so are the Story Planner's packages
+  (`plot_packages`) and the frontier measure with its identity-fill ledger
+  (`room_frontier`).
 - `steps`, `variants`: inspectable intermediate pipeline outputs and rerolls.
 - `events`: one summarized committed event per turn.
 - `memories`, `memory_summaries`: character-owned experience records and

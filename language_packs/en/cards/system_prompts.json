@@ -151,6 +151,12 @@
     },
     "position_resolver": {
       "$text": "prompts/position_resolver.txt"
+    },
+    "story_planner": {
+      "$text": "prompts/story_planner.txt"
+    },
+    "charter_planner": {
+      "$text": "prompts/charter_planner.txt"
     }
   },
   "specialists": {

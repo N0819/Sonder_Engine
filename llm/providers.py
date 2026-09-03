@@ -1244,6 +1244,12 @@ ROLES = [
     "repair",
     "utility",
     "embeddings",
+    # The Writers' Room's author (agents/story_planner.py): a tool-using
+    # loop the room panel calls and the out-of-band fill job runs. NEVER in
+    # the turn pipeline; at rest it costs nothing. Its Charter Planner
+    # delegation is a scoped call on this same role. Unset, it follows
+    # `default` like every other role.
+    "story_planner",
     # Writes an image prompt from spatial data (backdrops.py). OPTIONAL and
     # deliberately out of band: it never runs inside the turn pipeline, so a
     # slow or failed image prompt cannot delay or break a beat. When no model

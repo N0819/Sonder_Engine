@@ -964,6 +964,71 @@ OPERATIONS = {
 }
 
 
+#: Who authored a package decides whether it needs a grant. A package the
+#: HOST drafted by hand (`created_by` = "writers_room", the default) is the
+#: host's own world and needs none; a package an AGENT drafted publishes only
+#: under standing mandates that cover it (`story/mandates.py`). The Planner
+#: passes its name through `room_tools.run_tool(actor=)`.
+AGENT_AUTHORS = ("story_planner",)
+
+#: The capability each authority flag asks for, in the mandate vocabulary.
+AUTHORITY_CAPABILITY = {
+    "may_create_people": "create_people",
+    "may_author_prehistory": "author_prehistory",
+    "may_schedule_harm": "schedule_harm",
+}
+
+
+def package_requirements(pkg):
+    """The capabilities a package needs a grant for: one per operation kind
+    it carries; `create_people` when an operation makes a person (a person
+    plan, a location request); `author_prehistory` when one presimulates;
+    `schedule_harm` when the package claims that authority; `surprise` when
+    it is sealed. A flag a package merely carries by default is not an act
+    and asks for nothing. The vocabulary is `mandates.MANDATE_CAPABILITIES`."""
+    needed = []
+    ops = list(pkg.get("operations") or ())
+    for op in ops:
+        if op["op"] not in needed:
+            needed.append(op["op"])
+    if any(op["op"] == "request_location"
+           or (op["op"] == "plan_entity" and op.get("kind") == "person")
+           for op in ops):
+        needed.append(AUTHORITY_CAPABILITY["may_create_people"])
+    if any(op["op"] == "presimulate" for op in ops):
+        needed.append(AUTHORITY_CAPABILITY["may_author_prehistory"])
+    if (pkg.get("authority") or {}).get("may_schedule_harm"):
+        needed.append(AUTHORITY_CAPABILITY["may_schedule_harm"])
+    if pkg.get("spoiler_policy") == "sealed":
+        needed.append("surprise")
+    return needed
+
+
+def authority_errors(cid, frame_id, pkg):
+    """Why the standing mandates refuse this package, as error strings; empty
+    when the package is the host's own or the grants cover it. The named
+    `authority.mandate_uid`, when set, must itself be active."""
+    if str((pkg.get("provenance") or {}).get("created_by") or "") not in AGENT_AUTHORS:
+        return []
+    from story.mandates import active_mandates, citation, coverage
+    errors = []
+    named = str((pkg.get("authority") or {}).get("mandate_uid") or "")
+    if named:
+        active = {m["uid"] for m in active_mandates(cid, frame_id)}
+        if named not in active:
+            errors.append("the package cites mandate %s, which is not active (%s)"
+                          % (named, citation(cid, frame_id, [named]) or "unknown"))
+    cov = coverage(cid, frame_id, package_requirements(pkg))
+    if not cov["ok"]:
+        errors.append(
+            "no standing mandate permits %s; the room does not do this unasked "
+            "-- ask the player for the grant%s"
+            % (", ".join(cov["missing"]),
+               (" (standing: %s)" % citation(cid, frame_id, cov["cited"]))
+               if cov["cited"] else ""))
+    return errors
+
+
 # ---------------------------------------------------------------------------
 # Package-level validation
 # ---------------------------------------------------------------------------
@@ -1048,6 +1113,7 @@ def preview_package(cid, uid, *, frame_id=None):
         errors.extend("op %d (%s): %s" % (i, op["op"], e) for e in result["errors"])
         warnings.extend("op %d (%s): %s" % (i, op["op"], w) for w in result["warnings"])
     p_errors, p_warnings = _package_checks(pkg, world)
+    p_errors += authority_errors(cid, frame_id, pkg)
     return {"uid": pkg["uid"], "revision": pkg["revision"],
             "changes": changes, "errors": errors + p_errors,
             "warnings": warnings + p_warnings,
@@ -1149,6 +1215,12 @@ def publish_package(cid, uid, *, expected_revision=None, frame_id=None):
     if unprepared:
         raise ValueError("operations %s are long and unprepared; prepare the "
                          "package first" % unprepared)
+    # The grant is checked AGAIN here, not only at validation: a mandate
+    # revoked between the two prevents the write (v2 § 14.1), and a queued
+    # fill job publishes through this same seam.
+    refused = authority_errors(cid, frame_id, pkg)
+    if refused:
+        raise ValueError("; ".join(refused))
     turn_idx = _latest_turn_idx(cid, frame_id)
     revision_now = _registry_revision(cid, frame_id)
     moved = (pkg["base"].get("turn_idx") != turn_idx

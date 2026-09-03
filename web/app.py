@@ -493,6 +493,12 @@ class _SelectiveGZipResponder:
 app.add_middleware(SelectiveGZipMiddleware, minimum_size=2048)
 app.include_router(auth_router)
 app.include_router(room_router)
+# The Story Planner takes the room's seat once, here: the routes stay
+# transport, the agent stays out of the turn pipeline, and a test that wants
+# the placeholder back unseats it (`story_planner.unseat`).
+from agents.story_planner import seat as _seat_story_planner  # noqa: E402
+
+_seat_story_planner()
 
 # The voice anchor rides EVERY narrator call, so it is bounded on both axes:
 # a handful of short passages is a calibration, and a dozen long ones is a
