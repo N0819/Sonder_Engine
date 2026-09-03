@@ -1815,48 +1815,6 @@ class BlurbMintOutput(LenientModel):
     blurbs: list[BlurbMintEntry] = Field(default_factory=list)
 
 
-class OffscreenPlanTrigger(LenientModel):
-    """One deterministic condition for an authored off-screen plan stage.
-
-    Exactly one trigger kind survives commit normalization: relative story
-    time, or a fired mechanical event kind optionally narrowed to a location.
-    Open strings here are intentional input tolerance; `offscreen.py` owns the
-    closed write vocabulary and refuses ambiguity before persistence.
-    """
-    after_seconds: Optional[float] = None
-    event_kind: str = ""
-    location: str = ""
-
-
-class OffscreenPlanEffect(LenientModel):
-    """A consequence adjudicated now and fired later without invention."""
-    what: str = ""
-    where: str = ""
-    due_seconds: Optional[float] = None
-    witnessed: str = ""
-    originator: str = ""
-
-
-class OffscreenPlanStage(LenientModel):
-    stage_id: str = ""
-    trigger: OffscreenPlanTrigger = Field(default_factory=OffscreenPlanTrigger)
-    effect: Optional[OffscreenPlanEffect] = None
-
-
-class OffscreenPlanOp(LenientModel):
-    """Director encoding of a character-owned declaration.
-
-    `basis` must quote/paraphrase that actor's declaration from this beat;
-    commit validates the attribution before a plan can exist. The Director
-    adjudicates stages/effects but cannot invent an absent mind's objective.
-    """
-    op: str = "open"
-    plan_id: str = ""
-    actor: str = ""
-    objective: str = ""
-    basis: str = ""
-    stages: list[OffscreenPlanStage] = Field(default_factory=list)
-
 class TellingOp(LenientModel):
     """One character passing a carried report to another, on-page.
 
@@ -2089,12 +2047,10 @@ class StateDiff(LenientModel):
     # per turn, and the whole lane is inert unless the chat's living-world
     # setting turned it on.
     consequences: list[dict] = Field(default_factory=list)
-    # Living world E, reactive floor. These are plans explicitly declared by
-    # a character THIS beat and adjudicated into bounded deterministic stages
-    # by the Director. Commit requires a grounded `basis`, a registered actor,
-    # the antagonist-ladder floor setting, and typed time/event triggers.
-    # `open` creates; `cancel` ends an existing plan owned by that actor.
-    offscreen_plan_ops: list[OffscreenPlanOp] = Field(default_factory=list)
+    # `offscreen_plan_ops` lived here until 2026-09-04. A reactive plan is a
+    # CHARACTER's own declaration, and the Director does not own psychology:
+    # `world/offscreen.apply_plan_ops` now reads plan ops from the character
+    # results alone, which is what `offscreen_life=reactive` always said.
     # Crowd blobs: one object with many people in it. A populous place cannot
     # be represented by managed presences -- `max_managed` is hard-capped at 8
     # and chat 57 spent three of six slots on ONE Dalek -- so a crowd is a
@@ -2404,6 +2360,13 @@ class DirectorSocialSpecialist(LenientModel):
     introductions: list[dict] = Field(default_factory=list)
     world_facts: list = Field(default_factory=list)
     public_evidence: list[CharterPublicEvidence] = Field(default_factory=list)
+    # The world's traffic, carried by this hand since the offscreen hand's
+    # retirement (2026-09-04): StateDiff's own shapes, same contract.
+    crowd_ops: list[CrowdOp] = Field(default_factory=list)
+    courier_ops: list[CourierOp] = Field(default_factory=list)
+    telling_ops: list[TellingOp] = Field(default_factory=list)
+    ratified_claims: list[str] = Field(default_factory=list)
+    contradicted_claims: list[str] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
     # The numbered manifest slice this call was handed, echoed back
     # with a verdict per event (schemas.ResolvedEvent).
@@ -2464,26 +2427,6 @@ class DirectorSpatialSpecialist(LenientModel):
         lambda cls, v: _coerce_station_table(v)
     )
 
-
-class DirectorOffscreenSpecialist(LenientModel):
-    """The world-traffic specialist: crowds, couriers, tellings, offscreen
-    plans and the hearsay verdict, in StateDiff's own shapes (same contract
-    as DirectorBodySpecialist). This is the OPS surface only -- the
-    offscreen SIMULATOR (design note 19's out-of-band parallel) remains
-    unbuilt, and nothing here schedules or simulates anything."""
-    crowd_ops: list[CrowdOp] = Field(default_factory=list)
-    courier_ops: list[CourierOp] = Field(default_factory=list)
-    telling_ops: list[TellingOp] = Field(default_factory=list)
-    offscreen_plan_ops: list[OffscreenPlanOp] = Field(default_factory=list)
-    ratified_claims: list[str] = Field(default_factory=list)
-    contradicted_claims: list[str] = Field(default_factory=list)
-    notes: list[str] = Field(default_factory=list)
-    # The numbered manifest slice this call was handed, echoed back
-    # with a verdict per event (schemas.ResolvedEvent).
-    resolved_events: list[ResolvedEvent] = Field(default_factory=list)
-    phase_sources: dict[str, str] = Field(default_factory=dict)
-
-# ---- Resolve reconciliation (agents/director.py's post-resolve seam) ----
 
 class ReconcileOmission(LenientModel):
     """One persistent, physically consequential change asserted as completed
@@ -3233,27 +3176,6 @@ class LoreOp(LenientModel):
     source_notes: Optional[str] = None
     reason: str = ""
 
-class ValidatedFact(LenientModel):
-    fact: str = ""
-    ok: bool = False
-    conflict_with: str = ""
-
-class ValidatedIntroduction(LenientModel):
-    who: str = ""
-    learns: str = ""
-    ok: bool = False
-    corrected_learns: Optional[str] = None
-
-class MappingCommit(LenientModel):
-    validated: list[ValidatedFact] = Field(default_factory=list)
-    lore_ops: list[LoreOp] = Field(default_factory=list)
-    book_ops: list[BookOp] = Field(default_factory=list)
-    shadow_profile: Optional[str] = None
-    offscreen_events: list[dict] = Field(default_factory=list)
-    standing_intentions: list[dict] = Field(default_factory=list)
-    coherence_notes: list[str] = Field(default_factory=list)
-    validated_introductions: list[ValidatedIntroduction] = Field(default_factory=list)
-
 # `PerceptionOutput` lived here, keyed as the `perception` step. Removed: it
 # was unreachable. Perception makes no model call -- every view is composed
 # deterministically in `agents/composer.py` -- so there is no model output to
@@ -3264,13 +3186,13 @@ class MappingCommit(LenientModel):
 # firewall protection went with it: a guard that cannot fire protects nothing,
 # and reads as though something is covered when it is not.
 
-class MappingStageOutput(LenientModel):
-    relevant_books: list[int] = Field(default_factory=list)
-    relevant_lore: list[dict] = Field(default_factory=list)
-    staged_lore: list[dict] = Field(default_factory=list)
-    scene_patch: ScenePatch = Field(default_factory=ScenePatch)
-    npc_suggestions: list[dict] = Field(default_factory=list)
-    notes: str = ""
+# `MappingStageOutput` and `MappingCommit` lived here, keyed as the
+# `mapping_stage` and `mapping_commit` steps. Removed 2026-09-04 with the
+# mapping model: lore routing is `agents/mapping.compile_world_context`, a
+# deterministic step with no model output to validate, and the filing of a
+# beat's rooms and facts is a structured write from the Director's committed
+# diff (persist/commit_mapping). `ScenePatch`, `BookOp` and `LoreOp` above
+# survive as the shapes the scene-patch fold and the lorebook writer read.
 
 # ---- Greeting interpretation (ingest-time, per docs/design/GREETING_IMPORT_DESIGN.md) ----
 
@@ -3481,14 +3403,11 @@ SCHEMA_MAP = {
     "director_contact": DirectorContactSpecialist,
     "director_objects": DirectorObjectsSpecialist,
     "director_spatial": DirectorSpatialSpecialist,
-    "director_offscreen": DirectorOffscreenSpecialist,
     "resolve_reconcile": ResolveReconcileOutput,
     "resolve_repair": ResolveRepairOutput,
     "interpret_repair": InterpretRepairOutput,
     "narrator": NarratorOutput,
     "character": CharacterOutput,
-    "mapping_stage": MappingStageOutput,
-    "mapping_commit": MappingCommit,
     "background_react": BackgroundReactOutput,
     "scene_life": SceneLifeOutput,
     "blurb_mint": BlurbMintOutput,
@@ -3527,38 +3446,6 @@ def _sequence_event_from_prose(text):
         return {"type": "speech", "text": quoted.group(1).strip(),
                 "volume": "normal"}
     return {"type": "action", "attempt": text}
-
-
-def _flatten_staged_lore(result):
-    """A staged lore entry's `content` is prose, and has to actually be prose.
-
-    `staged_lore` and `relevant_lore` are declared `list[dict]`, so nothing
-    checks what is inside an entry -- and a model asked to draft a lore entry
-    about a room will sometimes return the entry as an OBJECT
-    (`{"name": ..., "desc": ...}`) rather than as the paragraph the prompt
-    asks for. Nothing rejects it, and it then reaches code that treats it as
-    text: observed live on an opening turn, `_room_notes_from_lore` did
-    `content[:600]` on that dict and killed the turn with
-    `KeyError: slice(None, 600, None)`. The same value is also what
-    `commit.py` writes into `lore_entries.content`.
-
-    Flattened here rather than at either reader, because both of them --
-    and the database -- want the same thing, and this is the last point
-    where the model's own structure is still visible enough to join in
-    traversal order.
-    """
-    for key in ("staged_lore", "relevant_lore"):
-        entries = result.get(key)
-        if not isinstance(entries, list):
-            continue
-        flattened = []
-        for entry in entries:
-            if isinstance(entry, dict) and not isinstance(
-                    entry.get("content"), (str, type(None))):
-                entry = dict(entry)
-                entry["content"] = _flatten_view_value(entry["content"]) or ""
-            flattened.append(entry)
-        result[key] = flattened
 
 
 def _coerce_int_list(value):
@@ -3735,16 +3622,14 @@ _STATE_DIFF_DICT_FIELDS = (
 SPECIALIST_CHANNELS = {
     "director_body": ("attire", "conditions", "vitals", "overlays"),
     "director_social": ("cast_changes", "introductions", "world_facts",
-                        "public_evidence"),
+                        "public_evidence", "crowd_ops", "courier_ops",
+                        "telling_ops", "ratified_claims", "contradicted_claims"),
     "director_contact": ("contact_ops", "contact_action_ops",
                          "substance_ops", "containment", "scales"),
     "director_objects": ("entities", "remove_entities", "inventory_ops",
                          "artifact_ops", "destruction"),
     "director_spatial": ("positions", "rooms", "remove_rooms",
                          "remove_adjacent", "stations", "poses", "comms_ops"),
-    "director_offscreen": ("crowd_ops", "courier_ops", "telling_ops",
-                           "offscreen_plan_ops", "ratified_claims",
-                           "contradicted_claims"),
 }
 
 def _specialist_channel_shapes():
@@ -3789,12 +3674,6 @@ _STATE_DIFF_SIBLING_FIELDS = (
     "attire", "cast_changes",
     "world_facts", "introductions", "time", "claim_dispositions",
 )
-
-_SCENE_PATCH_SIBLING_FIELDS = (
-    "rooms", "positions", "stations", "remove_entities", "remove_rooms",
-    "remove_adjacent",
-)
-
 
 def _non_entity_field_keys():
     """Keys that can never denote an entity: the field names that sit BESIDE
@@ -4325,23 +4204,6 @@ def preprocess_llm_output(step_key: str, raw: dict) -> dict:
         return {}
 
     result = dict(_unwrap_envelope(step_key, raw))
-
-    if step_key in ("mapping_stage", "mapping_quick"):
-        _flatten_staged_lore(result)
-
-    if step_key == "mapping_stage":
-        patch = result.get("scene_patch")
-        if isinstance(patch, dict):
-            _hoist_misplaced_entity_siblings(patch, _SCENE_PATCH_SIBLING_FIELDS)
-            for field in ("remove_entities", "remove_rooms", "remove_adjacent"):
-                if field in patch:
-                    patch[field] = _coerce_empty_dict_to_list(patch[field])
-            # ScenePatch.entities is untyped so a missing name does not fail
-            # validation here -- but it lands in the scene, where readers key
-            # display name -> entity id (commit.track_background_presences,
-            # agents/background._name_to_entity_id). A nameless entity is
-            # invisible to both.
-            _fill_entity_names(patch)
 
     if step_key == "narrator":
         # PARAGRAPHS ARE MARKED WITH <p>...</p> AND RENDERED HERE.
@@ -4890,6 +4752,15 @@ OUTPUT_EXAMPLES = {
                   "about": "Sable", "condition": "while she works"},
              ]},
         ],
+        "crowd_ops": [
+            {"op": "set", "crowd_id": "", "room": "market_square",
+             "band": "a few dozen", "composition": "market-goers",
+             "mood": "wary"},
+        ],
+        "courier_ops": [],
+        "telling_ops": [],
+        "ratified_claims": [],
+        "contradicted_claims": [],
         "notes": [],
     },
     "director_contact": {
@@ -4958,19 +4829,6 @@ OUTPUT_EXAMPLES = {
         ],
         "notes": [],
     },
-    "director_offscreen": {
-        "crowd_ops": [
-            {"op": "set", "crowd_id": "", "room": "market_square",
-             "band": "a few dozen", "composition": "market-goers",
-             "mood": "wary"},
-        ],
-        "courier_ops": [],
-        "telling_ops": [],
-        "offscreen_plan_ops": [],
-        "ratified_claims": [],
-        "contradicted_claims": [],
-        "notes": [],
-    },
     "character": {
         "observations_used": [],
         "present_evidence_used": [],
@@ -5011,21 +4869,6 @@ OUTPUT_EXAMPLES = {
         },
         "salience": 0.5,
     },
-    "mapping_stage": {
-        "relevant_books": [],
-        "relevant_lore": [],
-        "staged_lore": [],
-        "scene_patch": {
-            "rooms": {},
-            "entities": {},
-            "positions": {},
-            "remove_entities": [],
-            "remove_rooms": [],
-            "remove_adjacent": [],
-        },
-        "npc_suggestions": [],
-        "notes": "",
-    },
     "narrator": {
         # Handed to the model on every repair and fallback call, so it must
         # match the live contract exactly -- an example carrying a stale shape
@@ -5033,16 +4876,6 @@ OUTPUT_EXAMPLES = {
         # repair then "succeeds" into the wrong format.
         "prose": "<p>One paragraph per pair of markers.</p>",
         "new_specifics": [],
-    },
-    "mapping_commit": {
-        "validated": [],
-        "lore_ops": [],
-        "book_ops": [],
-        "shadow_profile": None,
-        "offscreen_events": [],
-        "standing_intentions": [],
-        "coherence_notes": [],
-        "validated_introductions": [],
     },
     # Without an example, output_example() returned {} and the repair prompt
     # steered a compliant model to return {} -- which validates (all defaults),
@@ -5371,10 +5204,6 @@ def semantic_output_errors(
 
         if not isinstance(output.get("interaction"), dict):
             errors.append("interaction must be an object")
-
-    elif step_key == "mapping_stage":
-        if not isinstance(output.get("scene_patch"), dict):
-            errors.append("scene_patch must be an object")
 
     # NARRATION IS NOT VALIDATED HERE ANY MORE. A narrator answer blocks on
     # being parseable JSON of the declared shape and on nothing else: no

@@ -24,7 +24,7 @@ OVER-CREATION IS ALSO A FAILURE, and is scored as one. A player opening one
 door should not mint nine rooms and a cast of strangers. The engine has to
 carry everything that gets made, forever.
 
-    python3 tools/creation_probe.py --step mapping_stage --models a,b
+    python3 tools/creation_probe.py --step director_resolve --models a,b
     python3 tools/creation_probe.py --step director_resolve --models a,b
 
 Run it alone. The rate limit is per account.
@@ -83,14 +83,6 @@ PLAYER = ("You put your shoulder to the painted-over side door until it gives, "
           "and step through into whatever is behind it.")
 
 PAYLOADS = {
-    "mapping_stage": {
-        "player_input": PLAYER,
-        "scene": SCENE,
-        "cast": [],
-        "recent_turns": [],
-        "books": [],
-        "variant_seed": "creation",
-    },
     "director_resolve": {
         "interpretation": {
             "speech": "",
@@ -112,10 +104,7 @@ PAYLOADS = {
 
 def _created(parsed, step):
     """The rooms and entities this reply actually minted."""
-    if step == "mapping_stage":
-        patch = parsed.get("scene_patch") or {}
-    else:
-        patch = parsed.get("state_diff") or {}
+    patch = parsed.get("state_diff") or {}
     rooms = patch.get("rooms") if isinstance(patch, dict) else {}
     ents = patch.get("entities") if isinstance(patch, dict) else {}
     rooms = rooms if isinstance(rooms, dict) else {}
@@ -199,7 +188,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--db", default="engine.db")
     ap.add_argument("--provider", type=int, default=1)
-    ap.add_argument("--step", default="mapping_stage",
+    ap.add_argument("--step", default="director_resolve",
                     choices=sorted(PAYLOADS))
     ap.add_argument("--models", required=True)
     ap.add_argument("--trials", type=int, default=2)

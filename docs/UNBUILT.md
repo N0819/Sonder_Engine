@@ -6582,14 +6582,15 @@ accepts `aspects`, so this is a caller-side change with no plumbing.
 
 ### 2.26 Writers' Room and Dramaturge
 
-**Phase A (engine seams) progress, per `design/DESIGN_WRITERS_ROOM_PLAN.md`
-§ 5:** items 1 (planned entities: view, settle, reservation), 2 (surface-only
-mint, planning need, deterministic fill by enrolment; the ambient charter
-deleted) and 5 (the planning-need store and its drain job) landed
-2026-09-03 (`world/planned_entities.py`, `world/charter_enrol.py`,
-`tests/test_planned_entities.py`, `tests/test_charter_enrol.py`; residuals
-in § 2.33). Items 3 (`compile_world_context` replacing the mapping stages)
-and 4 (retiring the offscreen hand) remain.
+**Phase A (engine seams) landed 2026-09-03/04, per
+`design/DESIGN_WRITERS_ROOM_PLAN.md` § 5:** items 1 (planned entities: view,
+settle, reservation), 2 (surface-only mint, planning need, deterministic
+fill by enrolment; the ambient charter deleted), 3 (`compile_world_context`
+replacing the mapping stages; the filing a structured write through
+`canon_provenance.promote`), 4 (the offscreen hand retired) and 5 (ONE
+planning-need ledger, `world/planning_needs.py`, written by the compiler and
+by the surface-only mint alike, with its drain job). Residuals: § 2.26a (the
+compiler's half) and § 2.33 (the plan tier's half).
 
 Build the cross-system Writers' Room agent set described in
 [`design/DESIGN_STORY_PLANNER_AND_DRAMATURGE.md`](design/DESIGN_STORY_PLANNER_AND_DRAMATURGE.md):
@@ -6607,6 +6608,51 @@ for authored history and retcons, atomic cross-system application, sealed-plan
 presentation, and bounded inter-agent deliberation. Neither principal agent is
 confined to a subsystem; their names describe perspective and usual lead, not
 exclusive authority. At rest the whole set makes zero provider calls.
+
+### 2.26a Phase A's residuals: the compiler, the filing and the retired hand
+
+Landed 2026-09-04 (`agents/mapping.compile_world_context`,
+`world/planning_needs.py`, `persist/commit_mapping` without a model, the
+offscreen hand retired). What it deliberately does not do:
+
+- **A planning need has no answerer yet.** The compiler records the need
+  and the Director renders the surface; nothing fills the plan behind it.
+  Phase A.5 (the queue and the `core/jobs.py` job with a deterministic fill)
+  and Phase B (the Writers' Room's just-in-time job) are the answer. Until
+  then a need stays `open` on the frame's ledger and falls off after
+  `PLANNING_NEEDS_CAP` newer ones.
+- **The reactive-plan rung is inert.** `offscreen.apply_plan_ops` reads
+  `offscreen_plan_ops` from a character's own result, and no character
+  prompt or schema writes that field yet; the Director's diff no longer
+  carries the channel. The character frames are the intended writer.
+- **Couriers and crowds are ops on the social hand, not charter's.** Charter
+  simulates both, but raising a crowd or sending a rider is still a Director
+  op the social hand encodes; a charter-owned dispatch (a body walking a
+  route with news as a charter errand) is the direction the plan names.
+- **Nothing proposes lorebooks during a turn.** The mapping model's
+  `book_ops` are gone; `_apply_mapping_book_ops` survives for the authoring
+  package (v2 § 9.4 `apply_authoring_change`). A new subject files into the
+  canon book until then.
+- **`shadow_profile` and `standing_intentions` have no writer.** Both were
+  the mapping model's; the world keys survive for their readers
+  (`world/offscreen.py` reads standing intentions) and stay empty.
+- **`style_guide.mapping_notes` reaches the Director payloads only.** It was
+  the mapping model's standing instruction for new rooms; the prose author
+  and the spatial hand furnish rooms now and receive the guide through the
+  Director payload, but no card names the key.
+- **The classification is measured on stored interpretations, not live.**
+  Replayed over the Harrowmere replay's 39 stored `director_interpret`
+  outputs against the audit's per-turn room ledger: the compiler agrees
+  with the retired quick stage's escalation on 31 beats and disagrees on 8,
+  and every one of the 8 is the old stage escalating to a model call on a
+  DESCRIPTIVE location query about a room the scene already held ("Ford Inn
+  cellar cool storage beer casks provisions Harrowmere" beside a known
+  `inn_cellar`) -- the two-seeds-for-one-room class, which the compiler
+  answers from the destination or the room's own spelling inside the
+  query. It raises needs on 13 of 39 beats: 12 `generation_request` (the
+  interpreter's captured declarations, kept as records) and one
+  `declared_destination_unplanned` (t38's `upland_road`, which the plan did
+  not hold). A live replay under the compiler is the next measurement.
 
 ### 2.27 Room geometry and occlusion — PROTOTYPE on a branch
 
@@ -6637,9 +6683,10 @@ reaches `director_establish`/`director_resolve` and the spatial hand as
 adjacent through a non-wall barrier; planned exits are protected at commit;
 a described stub settles. Residual: the count of stubs developed per trigger
 in a played story is unmeasured on this branch (no live model call was made
-here), and the mapping stage's own `planned_context` path still exists
-beside it — two seeds for one room until the mapping agent's creative half
-moves (§2.26's Phase B).
+here). The mapping stage's own `planned_context` path went with the mapping
+model (2026-09-04): the world-context compiler reads the plan for a named
+room and raises a planning need for an unplanned one, so there is one seed
+per room again.
 
 ### 2.28 The day cycle's residuals
 
@@ -7018,11 +7065,10 @@ with the other deliberate keeps.)*
   encounter tracking; category, tag and range are model-proposed at
   `mapping_commit` with only vocabulary validation. **One mis-filed secret is
   instantly in every character's `world_knowledge`.**
-- **P7 — `known` introductions are validated by model judgment** over the
-  objective log: the mapping model judges from `beat_dialogue_log` /
-  `beat_resolved_event`, concealed lines included, and the engine takes its
-  verdict. The application gate is materially tighter than when this was
-  written — roster resolution, then a positive presence test on BOTH parties
+- **P7 — CLOSED 2026-09-04.** Introductions are the Director's typed
+  `{who, learns}` rows; no model judges them any more (the `mapping_commit`
+  model is retired). The application gate is what remains, and it is the
+  same one the verdicts had — roster resolution, then a positive presence test on BOTH parties
   (an introduction between two people who were both absent used to pass once
   the roster admitted offscreen characters, trading a missed edge for an
   invented one, which is worse because a wrong edge is indistinguishable from a
@@ -7142,17 +7188,16 @@ taken by accident. Wired into `world/gaps.py`, `world/offscreen.py`, `world/subj
 
 Two things remain, and they are the ones with teeth:
 
-- **Promotion out of the provisional tier is an explicit `NotImplementedError`
-  seam** (`canon_provenance.promote`). It belongs to the Director —
-  `state_diff.ratified_claims` → `background_claims.settle_claims`, which today
-  sets a status flag in the world-KV blob and writes nothing into canon. That
-  missing write is the whole of it, and it was left out so the tier could land
-  without touching the Director seam.
-- **The mapping path is not routed through it**, which is the privilege this
-  gap was opened about: mapping can still turn a proposal into durable lore
-  without a disposition. §3.5's P6 and P7 are the same gap seen from the read
-  side, and §1.30's warning applies — the read-side gate and the first real
-  producer must land together.
+- **Promotion is implemented and the mapping path is routed through it**
+  (2026-09-04). `canon_provenance.promote` validates a provisional record and
+  returns it under an adjudicated disposition with its adjudicator named,
+  writing nothing; `persist/commit_mapping.room_filings` is the first real
+  producer -- every room the Director's committed diff described is promoted
+  to `spatial_generation` on the ruling stage's authority before it is filed.
+  What remains of this gap: background claims still take their own path
+  (`settle_claims` → `write_canon`, keyed by content hash) rather than this
+  module's shape, and world facts file through the fallback writer with no
+  disposition at all. §3.5's P6 (the knowledge-tag door) is untouched.
 
 ### 4.4 Gap 6 / Priority 2 — frame/global conflict control
 

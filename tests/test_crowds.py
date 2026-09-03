@@ -508,7 +508,7 @@ class TestTheDirectorCanActuallySayIt:
         drift is checked here on the field this feature depends on."""
         from llm import prompts
 
-        text = prompts.DEFAULT_PROMPTS["director_offscreen"]
+        text = prompts.DEFAULT_PROMPTS["director_social"]
         assert "crowd_ops" in text
         assert "state_diff.crowd_ops" in text
 
@@ -527,13 +527,13 @@ class TestTheDirectorCanActuallySayIt:
         can never converge on — `state_diff.time` died that way.
 
         Asked of the hand that OWNS the channel. `crowd_ops` belongs to the
-        offscreen specialist, and the prose author's example carries only its
+        social specialist, and the prose author's example carries only its
         own four channels: showing it a delegated one asks it to spend the
         beat writing into a diff the owner replaces in the same fan-out."""
         from llm import schemas
 
-        assert "crowd_ops" in schemas.SPECIALIST_CHANNELS["director_offscreen"]
-        assert "crowd_ops" in schemas.OUTPUT_EXAMPLES["director_offscreen"]
+        assert "crowd_ops" in schemas.SPECIALIST_CHANNELS["director_social"]
+        assert "crowd_ops" in schemas.OUTPUT_EXAMPLES["director_social"]
         assert "crowd_ops" not in (
             schemas.OUTPUT_EXAMPLES["director_resolve"]["state_diff"])
 

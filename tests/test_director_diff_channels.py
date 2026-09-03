@@ -193,7 +193,6 @@ def test_an_empty_diff_is_not_substantive():
      "Mara"),
     ({"artifact_ops": [{"op": "post", "poster": "Mara", "room": "quay"}]},
      "quay"),
-    ({"offscreen_plan_ops": [{"op": "open", "actor": "Sable"}]}, "Sable"),
     ({"consequences": [{"what": "it opens", "where": "quay_road"}]},
      "quay_road"),
     ({"destruction": {"target_id": "the_bridge"}}, "the_bridge"),

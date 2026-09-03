@@ -2069,7 +2069,7 @@ def track_background_presences(ctx, nonce, *, prepared=None):
     # the person IS -- institution, seat, home, a past -- is a plan, and
     # the Director was never its author (docs/design/DESIGN_WRITERS_ROOM_
     # PLAN.md § 2). So the beat files a typed need with the surface attached
-    # (`world.planned_entities.file_planning_need`) and the deterministic
+    # (`world.planning_needs.file_planning_need`) and the deterministic
     # fill answers a person-need in this same commit by ENROLMENT into a
     # real institution (`world.charter_enrol.enrol_person`): the post the
     # role names when a seat is open, a lodging house's guest, else a house
@@ -2081,8 +2081,8 @@ def track_background_presences(ctx, nonce, *, prepared=None):
     # had and the need stays open for the drain job and, later, the room.
     try:
         from world.charter_enrol import enrol_person
-        from world.planned_entities import (file_planning_need,
-                                            fill_planning_need)
+        from world.planning_needs import (file_planning_need,
+                                          fill_planning_need)
         for key, record in presences.items():
             if record.get("charter_refs") or record.get("plan_ref"):
                 continue
@@ -2106,8 +2106,8 @@ def track_background_presences(ctx, nonce, *, prepared=None):
                 "role": "",
             }
             need, fresh = file_planning_need(
-                cid, {"kind": "person", "surface": _surface,
-                      "presence": str(key)},
+                cid, {"kind": "person", "reason": "rendered_unplanned",
+                      "surface": _surface, "presence": str(key)},
                 frame_id=ctx.turn.frame_id, turn_idx=turn_idx)
             if need.get("status") == "filled" and isinstance(
                     (need.get("fill") or {}).get("ref"), dict):
@@ -2129,7 +2129,7 @@ def track_background_presences(ctx, nonce, *, prepared=None):
                     frame_id=ctx.turn.frame_id, turn_idx=turn_idx)
                 if filled.get("room_need"):
                     file_planning_need(
-                        cid, {"kind": "room",
+                        cid, {"kind": "room", "reason": "berth_ceiling",
                               "surface": {"name": "a dwelling for %s" % _name,
                                           "room": filled.get("berth") or _room,
                                           "description": "every house is at "

@@ -1,7 +1,7 @@
 """The opening turn is a plan like any other, and extensions may splice it.
 
 `build_plan` ends in `_extension_splices`; `establishment_plan` returned a bare
-literal, so an extension anchored `after:mapping_stage`, `before:narrator` or
+literal, so an extension anchored `after:compile_world_context`, `before:narrator` or
 `after:commit` -- all steps the opening turn DOES run -- was silently not
 planned there. `docs/guides/EXTENSIONS.md` states the opposite rule: a stage is
 skipped only when the turn does not run its anchor step.
@@ -27,9 +27,9 @@ def _splice_after(monkeypatch, core, entry):
 
 def test_an_opening_turn_carries_extension_stages(monkeypatch):
     entry = ("ext:demo:seed", "Demo · seed the world")
-    _splice_after(monkeypatch, "mapping_stage", entry)
+    _splice_after(monkeypatch, "compile_world_context", entry)
     keys = [key for key, _ in establishment_plan(7)]
-    assert keys == ["mapping_stage", "ext:demo:seed", "director_establish",
+    assert keys == ["compile_world_context", "ext:demo:seed", "director_establish",
                     "perception_establish", "narrator", "commit"]
 
 
@@ -41,7 +41,7 @@ def test_a_broken_splice_leaves_the_opening_plan_untouched(monkeypatch):
     # Same totality the normal-turn path has: a broken extension may never
     # cost a turn, least of all the first one.
     assert [key for key, _ in establishment_plan(7)] == [
-        "mapping_stage", "director_establish", "perception_establish",
+        "compile_world_context", "director_establish", "perception_establish",
         "narrator", "commit"]
 
 

@@ -1248,7 +1248,7 @@ _PRE_CHARACTER = ("perception_act",)
 
 # Then the rest of the beat. mapping_quick reconciles against world/lore and
 # changes what reaches director_resolve.
-_LLM_CHAIN = ("mapping_quick", "director_resolve", "perception_outcome", "commit")
+_LLM_CHAIN = ("compile_world_context", "director_resolve", "perception_outcome", "commit")
 
 
 def install_scripted_models(name, walls):

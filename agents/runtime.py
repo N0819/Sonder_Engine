@@ -39,8 +39,7 @@ from .character import character_step
 from .common import _assert_plan_materialized, _dict, _present_cast_bodies
 from .director import director_establish, director_interpret, director_resolve
 from .loops import interaction_loop, reaction_loop, rehydrate_loop_views
-from .mapping import (mapping_quick, mapping_request_stages_a_room,
-                      mapping_stage)
+from .mapping import compile_world_context
 from .narration import narrator, narrator_extra
 from .perception import perception_act, perception_establish, perception_outcome
 from .storage import (
@@ -224,8 +223,7 @@ STEP_HANDLERS = {
     "reaction_loop": reaction_loop,
     "director_establish": director_establish,
     "director_interpret": director_interpret,
-    "mapping_stage": mapping_stage,
-    "mapping_quick": mapping_quick,
+    "compile_world_context": compile_world_context,
     "perception_establish": perception_establish,
     "perception_act": perception_act,
     "director_resolve": director_resolve,
@@ -254,8 +252,7 @@ STEP_HANDLERS = {
 # is a template.
 STEP_LABELS = {
     "director_interpret": "Director · interpret & flow plan",
-    "mapping_stage": "Mapping · route books & lore",
-    "mapping_quick": "Mapping · cached recall",
+    "compile_world_context": "World context · compiled from canon",
     "perception_act": "Perception · pass 1 — the act",
     "reaction_loop": "Characters · physical reactions",
     "interaction_loop": "Characters · interaction loop",
@@ -747,10 +744,10 @@ def build_plan(interp, cast_rows, chat_id=None, frame_id=None, *, extra_players=
     if not isinstance(fl, dict):
         fl = {}
         
-    if fl.get("needs_mapping"):
-        plan.append(("mapping_stage", step_label("mapping_stage")))
-    else:
-        plan.append(("mapping_quick", step_label("mapping_quick")))
+    # One deterministic step where two model stages were chosen between:
+    # the compiler runs on every beat, and `flow.needs_mapping` is now a
+    # fact the compiler reads rather than a branch the plan takes.
+    plan.append(("compile_world_context", step_label("compile_world_context")))
     plan.append(("perception_act", step_label("perception_act")))
 
     valid_ids = {int(row["id"]) for row in cast_rows}
@@ -870,28 +867,6 @@ def _background_stage_label(chat_id):
     return step_label(_BG_KEY)
 
 
-def _mapping_must_precede_perception(ctx):
-    """Return True when perception needs freshly staged spatial lore.
-
-    Full mapping is usually independent and worth overlapping with the
-    perception LLM.  A newly entered or explicitly queried location is the
-    exception: perception's room-notes fallback reads mapping_stage output,
-    so running both concurrently would make the first view of that room lose
-    its freshly generated sensory description.
-    """
-    interp = ctx.get("director_interpret") or {}
-    if interp.get("location_query"):
-        return True
-    movement = interp.get("movement")
-    target = movement.get("to_room") if isinstance(movement, dict) else None
-    if target:
-        scene = get_scene(ctx.chat.id, ctx.chat)
-        if target not in (scene.get("rooms") or {}):
-            return True
-    return mapping_request_stages_a_room(
-        (interp.get("flow") or {}).get("mapping_request"))
-
-
 def _chat_has_extra_players(chat_id, frame_id=None):
     # Same-frame filter as _load_extra_players: a co-player stationed in a
     # DIFFERENT frame is not in this scene, so their presence must not add
@@ -907,15 +882,15 @@ def _chat_has_extra_players(chat_id, frame_id=None):
 
 def establishment_plan(chat_id=None):
     plan = [
-        ("mapping_stage", step_label("mapping_stage")),
+        ("compile_world_context", step_label("compile_world_context")),
         ("director_establish", step_label("director_establish")),
         ("perception_establish", step_label("perception_establish")),
         ("narrator", step_label("narrator.establish")),
         ("commit", step_label("commit")),
     ]
     # Spliced for the same reason build_plan's return is, and it was not:
-    # `mapping_stage`, `narrator` and `commit` all RUN on turn 0, so an
-    # extension anchored `after:mapping_stage` or `before:narrator` was
+    # `compile_world_context`, `narrator` and `commit` all RUN on turn 0, so
+    # an extension anchored `after:compile_world_context` or `before:narrator` was
     # silently unplanned there. EXTENSIONS.md's contract says an anchor is
     # skipped when the turn does not run that step; here the step ran and the
     # splice still did not happen, which is the opposite of what the document
@@ -1324,21 +1299,6 @@ def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None):
                 j += 1
             yield from _run_parallel_group(bus, turn_id, group, keys, ctx)
             i = j
-            continue
-        if (
-            key == "mapping_stage"
-            and i + 1 < len(plan)
-            and plan[i + 1][0] == "perception_act"
-            and not _mapping_must_precede_perception(ctx)
-        ):
-            # Existing-world lore routing and action-onset perception are
-            # independent, so overlap their provider latency.  Spatially novel
-            # turns are excluded by _mapping_must_precede_perception: on those
-            # turns perception genuinely consumes the freshly staged room lore
-            # and must run second for first-turn sensory fidelity.
-            yield from _run_parallel_group(
-                bus, turn_id, [(key, label), plan[i + 1]], keys, ctx)
-            i += 2
             continue
         if (
             key == "narrator"

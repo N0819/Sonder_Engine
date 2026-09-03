@@ -62,7 +62,7 @@ def test_a_step_the_plan_gained_after_the_run_is_not_a_resume_point(temp_db):
     # commit included. The rouse is now persisted, so recomputing the plan here
     # -- against the live, un-restored world -- produces an interaction_loop.
     _seed(temp_db, turn_id, char_id,
-          ["director_interpret", "mapping_quick", "perception_act"] + TAIL)
+          ["director_interpret", "compile_world_context", "perception_act"] + TAIL)
 
     assert resume_key_for_turn(turn_id, chat_id) is None
 
@@ -75,7 +75,7 @@ def test_an_interrupted_turn_still_reports_where_to_resume(temp_db):
     # Stopped after the interaction loop: the whole tail is missing, so the run
     # plainly did not finish without it.
     _seed(temp_db, turn_id, char_id,
-          ["director_interpret", "mapping_quick", "perception_act",
+          ["director_interpret", "compile_world_context", "perception_act",
            "interaction_loop"])
 
     assert resume_key_for_turn(turn_id, chat_id) == "director_resolve"
@@ -89,7 +89,7 @@ def test_a_turn_that_never_committed_resumes_at_commit(temp_db):
     # The missing step is the LAST one, so there are no successors to prove the
     # run finished without it. A tail is an interrupted turn, never drift.
     _seed(temp_db, turn_id, char_id,
-          ["director_interpret", "mapping_quick", "perception_act",
+          ["director_interpret", "compile_world_context", "perception_act",
            "interaction_loop"] + TAIL[:-1])
 
     assert resume_key_for_turn(turn_id, chat_id) == "commit"
@@ -100,7 +100,7 @@ def test_a_stale_step_is_still_a_resume_point(temp_db):
     char_id = _cast_member(temp_db, chat_id)
     turn_id = _turn(temp_db, chat_id)
     _seed(temp_db, turn_id, char_id,
-          ["director_interpret", "mapping_quick", "perception_act",
+          ["director_interpret", "compile_world_context", "perception_act",
            "interaction_loop"] + TAIL)
     temp_db.qi("UPDATE steps SET stale=1 WHERE turn_id=? AND key=?",
                (turn_id, "narrator"))

@@ -404,6 +404,22 @@ def planned_room_ids(cid):
     return set(_planned_specs(cid))
 
 
+def planned_rooms_named_in(cid, text):
+    """The planned rooms whose uid or name spelling sits inside ``text``,
+    folded the way `planned_context` folds a query -- the rooms a scenario
+    names without ids. Sorted, for a stable payload."""
+    folded = normalize_room_id(str(text or ""))
+    if not folded:
+        return []
+    out = []
+    for rid, (name, _spec) in _planned_specs(cid).items():
+        keys = {normalize_room_id(str(rid)), normalize_room_id(str(name or ""))}
+        keys.discard("")
+        if any(k == folded or k in folded for k in keys):
+            out.append(str(rid))
+    return sorted(out)
+
+
 def protect_planned_edges(cid, scene):
     """Put back every planned exit a development dropped.
 

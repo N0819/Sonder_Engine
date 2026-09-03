@@ -149,12 +149,10 @@ LEDGERS = {
     "stations": ("stations", "zolhearth"),
     "poses": ("poses", "zolkneel"),
     "comms_ops": ("comms", "zolradio"),
-    # --- offscreen --------------------------------------------------------
+    # --- the world's traffic (the social hand's since 2026-09-04) ---------
     "crowd_ops": (None, "the crowds table; delivered as `crowds`"),
     "courier_ops": (None, "the couriers table; delivered as `couriers`"),
     "telling_ops": (None, "world events; delivered as `carried_reports`"),
-    "offscreen_plan_ops": (None, "plans in the world store; delivered as "
-                                 "`offscreen_planning`"),
     "ratified_claims": (None, "background claims; delivered as "
                               "`unratified_claims`"),
     "contradicted_claims": (None, "background claims; delivered as "

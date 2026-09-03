@@ -42,6 +42,10 @@ FRAME_SCOPED_WORLD_KEYS = {
     # a rewind takes the bill off the wall, and a branch that never posted
     # it has a bare post.
     "artifacts",
+    # What a beat reached for that no plan holds (`world/planning_needs.py`).
+    # Per-era like the scene the door was opened in: a branch that never
+    # walked through it has nothing to plan.
+    "planning_needs",
     # The PLAYER's carrier envelope (`carriers.PERSONA_STATE_KEY`). Per-era
     # for exactly the reason the three keys above it are, and it was the one
     # carrier home that was not: a cast member's reports ride the frame-scoped

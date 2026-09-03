@@ -3071,8 +3071,7 @@ def _book_weights(ctx, refresh=False):
     return ctx["_book_weights"]
 
 def lore_for(ctx):
-    entries = ((ctx.get("mapping_stage") or ctx.get("mapping_quick") or {})
-               .get("relevant_lore") or [])
+    entries = ctx.world_context().get("relevant_lore") or []
     allowed = ("id", "entry_uid", "book_id", "keys", "content", "category", "locked")
     return [{k: e.get(k) for k in allowed if k in e}
             for e in entries if isinstance(e, dict)]
@@ -3156,8 +3155,9 @@ def _room_notes_from_lore(room_id, ctx, scene=None):
     # whose keys ALSO name an ancestor-scope room/location carries ambient
     # information they cannot perceive right now -- skip it.
     blocked = _ambient_blocked_slugs(sc, room_id)
-    staged = ((ctx.get("mapping_stage") or {}).get("staged_lore") or []) + \
-             ((ctx.get("mapping_quick") or {}).get("staged_lore") or [])
+    # The compiler stages nothing; this read survives for a beat stored
+    # before it existed, whose staged layout entry still describes the room.
+    staged = ctx.world_context().get("staged_lore") or []
     room_norm = room_id.lower().replace("_", " ")
     for entry in staged:
         _k = entry.get("keys")

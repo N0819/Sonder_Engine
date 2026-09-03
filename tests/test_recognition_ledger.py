@@ -99,8 +99,10 @@ def _story(temp_db, *, presence_place="ten_forward"):
 
 def _commit(ctx, introductions):
     return commit_mapping(ctx, "nonce", prepared={
-        "mout": {"validated_introductions": introductions},
+        "skipped": False, "mout": {},
+        "introductions": introductions,
         "ops": [], "book_ops": [], "book_ids": [], "seed": "seed",
+        "needs": [],
     })
 
 

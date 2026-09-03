@@ -107,8 +107,15 @@ SPECIALISTS = {
         # (`_collect_following_ops` overwrites the channel deterministically
         # every resolve), so no model authors it -- a specialist "owning" it
         # would own a channel whose content is discarded.
+        # ...and, since 2026-09-04, the world's traffic: crowds, couriers,
+        # tellings and the hearsay verdict, which the retired offscreen hand
+        # carried. A crowd is a charter projection already and a courier is
+        # a body walking a route with news, so both are charter's to SIMULATE;
+        # the OPS that raise, send, tell and adjudicate are speech and roster
+        # work, and this is the hand that owns speech consequences.
         "channels": ("cast_changes", "introductions", "world_facts",
-                     "public_evidence"),
+                     "public_evidence", "crowd_ops", "courier_ops",
+                     "telling_ops", "ratified_claims", "contradicted_claims"),
         # This channel is step metadata rather than StateDiff, so its list
         # shape cannot be derived from StateDiff's annotations below.
         "list_channels": ("public_evidence",),
@@ -135,19 +142,6 @@ SPECIALISTS = {
         "role": "director_spatial",
         "channels": ("positions", "rooms", "remove_rooms",
                      "remove_adjacent", "stations", "poses", "comms_ops"),
-    },
-    # The world's traffic. The ops surface ONLY -- the offscreen SIMULATOR
-    # (design note 19's out-of-band parallel) remains owner-deferred, and
-    # nothing here schedules or simulates anything. Genuinely dispatchable:
-    # it runs whenever its subjects exist in scene (crowds, couriers,
-    # carried reports, unratified hearsay, the planning floor switched on),
-    # and is cold in practice only because most scenes contain none.
-    "offscreen": {
-        "step_key": "director_offscreen",
-        "role": "director_offscreen",
-        "channels": ("crowd_ops", "courier_ops", "telling_ops",
-                     "offscreen_plan_ops", "ratified_claims",
-                     "contradicted_claims"),
     },
 }
 
@@ -387,7 +381,6 @@ _CHANNEL_GATES = {
     "crowd_ops": lambda f: f["crowds_present"],
     "courier_ops": lambda f: f["couriers_present"] or f["reports_carried"],
     "telling_ops": lambda f: f["reports_carried"] or f["crowds_present"],
-    "offscreen_plan_ops": lambda f: f["offscreen_planning_enabled"],
     "ratified_claims": lambda f: f["unratified_claims_present"],
     "contradicted_claims": lambda f: f["unratified_claims_present"],
 }
@@ -667,16 +660,6 @@ def _gate_facts(ctx, sc, *, physical, speech, material_effects=False,
             chat_id, ctx.turn["idx"]))
     except Exception:
         unratified = True
-    try:
-        from world.living_world import living_world_allows, living_world_config
-        planning = bool(living_world_allows(
-            living_world_config(chat_id), "antagonist_ladder", "floor"))
-    except Exception:
-        # The one deliberate deviation from fail-open-on-error: plan ops are
-        # refused deterministically at commit unless this setting is on, so
-        # granting the chunk on a failed read could never yield an op commit
-        # would accept -- it would only spend tokens on a dead channel.
-        planning = False
     return {
         "physical_beat": bool(physical),
         "speech_present": bool(speech),
@@ -701,7 +684,6 @@ def _gate_facts(ctx, sc, *, physical, speech, material_effects=False,
         "crowds_present": crowds,
         "couriers_present": couriers,
         "unratified_claims_present": unratified,
-        "offscreen_planning_enabled": planning,
     }
 
 

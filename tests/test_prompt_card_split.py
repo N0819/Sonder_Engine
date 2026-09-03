@@ -48,8 +48,11 @@ LANGUAGES = ("en", "ja")
 #: BOTH lost the same file. It moves when a prompt or fragment is added, and
 #: the move belongs in the same commit as the addition.
 #: 111 at the split (2026-08-29); 112 since `card_person_note` (2026-08-30).
-PART_COUNT = 113   # +1 (2026-09-01): director_note.txt, the specialists' one
-                   # statement about the Director's ruling channel
+PART_COUNT = 109   # +1 (2026-09-01): director_note.txt, the specialists' one
+                   # statement about the Director's ruling channel;
+                   # -2 (2026-09-04): mapping_stage and mapping_commit,
+                   # retired with the mapping model; -2 (2026-09-04): the
+                   # offscreen hand's core and its reactive-plan chunk
 
 
 def _pack_dir(language: str) -> Path:
@@ -139,8 +142,8 @@ def test_the_card_still_loads_and_publishes_every_prompt(language):
 
     pack = installed_language_packs()[language]
     card = pack.card(CARD)
-    assert len(card["prompts"]) == 36
-    assert len(card["specialists"]) == 6
+    assert len(card["prompts"]) == 34
+    assert len(card["specialists"]) == 5
     assert len(card["prose_author_sheet"]) == 28
     # Fragments resolve AFTER assembly, so the loaded card must carry none.
     # (The loaded card is deeply frozen, so walk it rather than serialize it.)
@@ -391,12 +394,12 @@ def test_canonical_part_path_covers_exactly_the_five_prose_shapes():
 
 
 def test_the_sheet_is_named_index_first_because_the_index_is_the_identity():
-    """`mapping_proposal` is the gate name at BOTH 11 and 15, and 12 of the 28
+    """`planning_need` is the gate name at BOTH 11 and 15, and 12 of the 28
     segments have no name at all. Naming key-first would collide and would
     not sort into assembly order."""
     card = raw_card("en")
     keys = [entry[0] for entry in card["prose_author_sheet"]]
-    assert keys[11] == keys[15] == "mapping_proposal"
+    assert keys[11] == keys[15] == "planning_need"
     assert keys.count(None) == 12
     names = [rel for leaf, rel, _text in part_plan(card)
              if leaf[0] == "prose_author_sheet"]

@@ -39,7 +39,7 @@ from agents.director import SPECIALISTS
 
 ROOT = Path(__file__).resolve().parents[1]
 LANGUAGES = ("en", "ja")
-HANDS = ("body", "social", "contact", "objects", "spatial", "offscreen")
+HANDS = ("body", "social", "contact", "objects", "spatial")
 #: How many trailing paragraphs are the shared contract rather than the hand's
 #: own preamble. 8 of 10 (spatial has one extra preamble paragraph, the
 #: movement backstop, so 8 of 11).

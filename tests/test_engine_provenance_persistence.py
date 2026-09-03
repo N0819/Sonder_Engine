@@ -137,45 +137,45 @@ def test_a_staged_layout_entry_does_not_put_bookkeeping_in_the_room(temp_db):
 
 # ---- the lore-commit route: real prepare + commit, read the column back ----
 
-def _wire_mapping(monkeypatch, lore_ops):
-    import llm.llm_quality as q
+def _wire_filing(monkeypatch):
     import persist.commit_mapping as cm
-    monkeypatch.setattr(q, "complete_validated_json",
-                        lambda **kw: {"validated": [], "lore_ops": lore_ops,
-                                      "book_ops": [], "coherence_notes": []})
     monkeypatch.setattr(cm, "embed_texts", lambda docs: [[0.0] * 8 for _ in docs])
     monkeypatch.setattr(cm, "search_lore", lambda *a, **k: [])
 
 
-def _mapping_ctx(temp_db, staged, lore_ops, monkeypatch):
+def _filing_ctx(temp_db, room_desc, monkeypatch, *, world_facts=()):
+    """A beat whose Director described a room: the filing path since the
+    mapping model's retirement is the committed diff, not a staged entry."""
     ctx, char_id = _mk(temp_db, "")
     book_id = temp_db.qi(
         "INSERT INTO lorebooks(name) VALUES(?)", ("B",))
     temp_db.qi("INSERT INTO chat_lorebooks(chat_id,lorebook_id) VALUES(?,?)",
                (ctx.chat.id, book_id))
     ctx.chat.lorebook_id = book_id
-    ctx.mapping_stage = {"staged_lore": staged, "relevant_books": [book_id]}
-    ctx.director_resolve = {"state_diff": {}, "resolved_event": "",
-                            "summary": "s", "dialogue_log": []}
-    _wire_mapping(monkeypatch, [dict(o, book_id=book_id) for o in lore_ops])
+    ctx.compile_world_context = {"relevant_lore": [], "relevant_books": [book_id],
+                                 "staged_lore": [], "planning_needs": []}
+    ctx.director_resolve = {
+        "state_diff": {
+            "rooms": {"back_office": {"name": "Back Office", "desc": room_desc,
+                                      "adjacent": []}},
+            "world_facts": list(world_facts),
+        },
+        "resolved_event": "", "summary": "s", "dialogue_log": []}
+    _wire_filing(monkeypatch)
     return ctx, book_id
 
 
 def _rows(temp_db, book_id):
     return [dict(r) for r in temp_db.q(
-        "SELECT content, source_notes FROM lore_entries WHERE lorebook_id=?",
-        (book_id,))]
+        "SELECT content, source_notes, category FROM lore_entries "
+        "WHERE lorebook_id=?", (book_id,))]
 
 
 def test_a_diagnostic_in_the_op_text_is_moved_to_the_column(temp_db, monkeypatch):
-    """The model writes it into the prose anyway -- the floor. Driven through
-    the real prepare/commit pair and read back out of SQLite."""
+    """The Director writes it into the room's prose anyway -- the floor.
+    Driven through the real prepare/commit pair and read back out of SQLite."""
     from persist.commit import prepare_mapping_commit, commit_mapping
-    staged = [{"category": "layout", "keys": "back office",
-               "content": ROOM_NOTES, "title": "back office"}]
-    ops = [{"op": "create", "keys": "back office", "content": ROOM_NOTES,
-            "category": "layout", "title": "back office"}]
-    ctx, book_id = _mapping_ctx(temp_db, staged, ops, monkeypatch)
+    ctx, book_id = _filing_ctx(temp_db, ROOM_NOTES, monkeypatch)
     commit_mapping(ctx, "n0", prepared=prepare_mapping_commit(ctx))
     rows = _rows(temp_db, book_id)
     assert rows, "nothing committed"
@@ -183,34 +183,30 @@ def test_a_diagnostic_in_the_op_text_is_moved_to_the_column(temp_db, monkeypatch
     assert any("no candidate" in (r["source_notes"] or "") for r in rows), rows
 
 
-def test_a_declared_provenance_field_survives_the_default_commit_path(temp_db, monkeypatch):
-    """What the CHANGED PROMPT actually produces: the declaration arrives as a
-    `provenance` FIELD on the staged entry and never as a sentence. The claim
-    is that the signal survives -- so it must reach the column from there."""
+def test_a_filed_room_carries_its_disposition_and_adjudicator(temp_db, monkeypatch):
+    """The provenance a filing carries is the promotion itself: the room's
+    entry names the disposition (`spatial_generation`) and the stage that
+    ruled it, on the column, never in the prose -- the seam UNBUILT § 4.3
+    called "the mapping path is not routed through it"."""
     from persist.commit import prepare_mapping_commit, commit_mapping
-    staged = [{"category": "layout", "keys": "back office", "content": WORLD,
-               "title": "back office",
-               "provenance": "generated; no candidate described this part of the place"}]
-    # The mapping_commit model's normal output: it confirms the staged stub.
-    ops = [{"op": "create", "keys": "back office", "content": WORLD,
-            "category": "layout", "title": "back office"}]
-    ctx, book_id = _mapping_ctx(temp_db, staged, ops, monkeypatch)
+    ctx, book_id = _filing_ctx(temp_db, WORLD, monkeypatch)
     commit_mapping(ctx, "n0", prepared=prepare_mapping_commit(ctx))
     rows = _rows(temp_db, book_id)
     assert rows, "nothing committed"
-    assert any("no candidate" in (r["source_notes"] or "") for r in rows), rows
+    assert rows[0]["category"] == "layout"
+    assert rows[0]["content"] == WORLD
+    assert "spatial_generation by director_resolve" in (rows[0]["source_notes"] or "")
 
 
-def test_the_fallback_branch_is_the_only_one_that_carries_the_field(temp_db, monkeypatch):
-    """Control for the failure above: `_generate_fallback_ops` DOES copy
-    `provenance` across -- and it runs only when the mapping_commit model
-    returns no lore_ops at all."""
+def test_a_world_fact_files_without_a_disposition_stamp(temp_db, monkeypatch):
+    """Control: the fact writer is the old fallback branch and carries no
+    promotion, so its entry has no engine stamp -- the stamp is the room
+    filing's alone."""
     from persist.commit import prepare_mapping_commit, commit_mapping
-    staged = [{"category": "layout", "keys": "back office", "content": WORLD,
-               "title": "back office",
-               "provenance": "generated; no candidate described this part of the place"}]
-    ctx, book_id = _mapping_ctx(temp_db, staged, [], monkeypatch)
+    ctx, book_id = _filing_ctx(
+        temp_db, "", monkeypatch,
+        world_facts=[{"fact": "The ferry runs at dawn.", "source": {"kind": "resolved"}}])
     commit_mapping(ctx, "n0", prepared=prepare_mapping_commit(ctx))
     rows = _rows(temp_db, book_id)
-    assert rows, "nothing committed"
-    assert any("no candidate" in (r["source_notes"] or "") for r in rows), rows
+    assert [r["content"] for r in rows] == ["The ferry runs at dawn."]
+    assert not (rows[0]["source_notes"] or "")

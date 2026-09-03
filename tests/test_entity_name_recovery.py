@@ -98,16 +98,6 @@ def test_opening_turn_entities_are_covered_too():
     assert report.output["entities"]["sake_carafe"]["name"] == "Sake Carafe"
 
 
-def test_mapping_scene_patch_entities_are_named():
-    """ScenePatch.entities is untyped so this never failed validation -- but a
-    nameless entity still reaches the scene, where readers key display name to
-    entity id."""
-    raw = {"scene_patch": {"entities": {"sake_carafe": {"kind": "object"}}}}
-    report = validate_llm_output_strict("mapping_stage", raw)
-    assert report.output["scene_patch"]["entities"]["sake_carafe"]["name"] \
-        == "Sake Carafe"
-
-
 def test_a_scalar_entity_value_keeps_the_entity():
     """Malformed input must not raise inside preprocessing.
 

@@ -314,7 +314,7 @@ from .director_reconcile import (
 def director_establish(ctx, nonce):
     chat = ctx.chat
     pers = persona_of(chat)
-    mapping = ctx.mapping_stage or ctx.mapping_quick or {}
+    world = ctx.world_context()
     fm = fiction_model(chat.id)
 
     cast = cast_scene_context(ctx.cast)
@@ -344,15 +344,18 @@ def director_establish(ctx, nonce):
         },
         "present_characters": cast,
         "relevant_lore": lore_for(ctx),
-        "mapping_scene_proposal": _normalize_scene_patch(mapping.get("scene_patch")),
         # WHO THE PLAN ALREADY PUT IN THE OPENING'S ROOMS: the charter
-        # bodies and authored plans standing in the rooms the proposal
-        # names (`_figures_in_view`). Absent when nobody is, so an opening
-        # with no town is byte-identical.
+        # bodies and authored plans standing in the planned rooms the
+        # scenario names (`_figures_in_view`; the compiler proposes no rooms,
+        # so the scenario's own spellings are the opening's rooms). Absent
+        # when nobody is, so an opening with no town is byte-identical.
         **({"present_figures": _present_figure_rows(_opening_figures)}
            if (_opening_figures := _figures_in_view(
-               ctx, list((_normalize_scene_patch(mapping.get("scene_patch"))
-                          or {}).get("rooms") or {}))) else {}),
+               ctx, _opening_rooms(ctx))) else {}),
+        # What the opening reached for that no plan holds (the compiler's
+        # needs): the author renders the surface and files nothing more.
+        **({"planning_needs": world.get("planning_needs")}
+           if world.get("planning_needs") else {}),
         "fiction_model": fm,
         "player_seed": ctx.get("input") or "",
         "variant_seed": nonce,
@@ -467,6 +470,17 @@ def director_establish(ctx, nonce):
     # pooled by the rooms the opening places anybody in.
     _establish_identity_floor(ctx, out, player_name)
     return out
+
+
+def _opening_rooms(ctx):
+    """The planned rooms the scenario names by uid or name -- the opening's
+    rooms before the Director has drawn any. Fail-open: no plan, no rooms."""
+    try:
+        from world.structure import planned_rooms_named_in
+        return planned_rooms_named_in(
+            ctx.chat["id"], str(ctx.chat.get("scenario") or ""))
+    except Exception:
+        return []
 
 
 def _figures_in_view(ctx, rooms, reserved=False):
@@ -982,18 +996,6 @@ def director_interpret(ctx, nonce):
         crowds_rows=_icrowds,
     ), _iview)
     _iparts = scene_extra_parts(ctx.cast, pers, p_name)
-    try:
-        from world.living_world import living_world_allows, living_world_config
-        _iplanning = {
-            "enabled": bool(living_world_allows(
-                living_world_config(chat["id"]),
-                "antagonist_ladder", "floor")),
-        }
-        if _iplanning["enabled"]:
-            _iplanning["plans"] = (
-                wget(chat["id"], "offscreen_plans", []) or [])[:8]
-    except Exception:
-        _iplanning = {"enabled": False, "plans": []}
     _run_specialists(
         ctx, out, sc, _idispatch,
         _iview,
@@ -1017,14 +1019,13 @@ def director_interpret(ctx, nonce):
             "notices": _artifacts_view(chat["id"], sc),
             "movement": out.get("movement"),
             "movers": {p_name: {"exits": _egocentric_exits(sc, p_name)}},
-            "proposal": None,
+            "planning_needs": [],
             "sightlines": _sightlines_view(sc, ctx, p_name),
             "crowds": _icrowds,
             "couriers": _couriers_view(chat["id"], sc),
             "carried_reports": _carried_reports_view(ctx),
             "unratified_claims": _unratified_background_claims(
                 chat["id"], ctx.turn["idx"]),
-            "offscreen_planning": _iplanning,
         },
         "interpret")
 
@@ -2216,7 +2217,7 @@ _PROSE_DUTY_GATES = {
     # beats -- so this is one of the few duties that genuinely costs nothing
     # when it is not needed.
     "travel": lambda f: f["travel_in_flight"],
-    "mapping_proposal": lambda f: f["proposal_present"],
+    "planning_need": lambda f: f["planning_needs_present"],
     "hearsay": lambda f: f["unratified_claims_present"],
     "road": lambda f: f["road_subjects_present"],
     "approach": lambda f: f["physical_beat"],
@@ -2287,14 +2288,10 @@ def _prose_gate_facts(ctx, sc, payload, facts, p_name):
                 return True
         return False
 
-    def proposal_content():
-        # _normalize_scene_patch always yields the container keys, so an
-        # empty proposal is a dict of empty containers -- content, not
-        # truthiness, is the exact fact.
-        proposal = payload.get("mapping_scene_proposal")
-        if not isinstance(proposal, dict):
-            return proposal
-        return any(bool(value) for value in proposal.values())
+    def planning_needs_content():
+        # Exact presence: the compiler either raised a need this beat or it
+        # did not, and it is empty on the great majority of beats.
+        return bool(payload.get("planning_needs"))
 
     def not_fully_lit():
         # The engine's own sight semantics (spatial.effective_light: absent
@@ -2343,7 +2340,7 @@ def _prose_gate_facts(ctx, sc, payload, facts, p_name):
         "transit_capable": _true_on_error(transit_capable),
         "travel_in_flight": _true_on_error(
             lambda: payload.get("travel_in_flight")),
-        "proposal_present": _true_on_error(proposal_content),
+        "planning_needs_present": _true_on_error(planning_needs_content),
         "due_events_present": _true_on_error(
             lambda: payload.get("due_authored_events")),
         "pressure_ledger_open": _true_on_error(
@@ -2817,7 +2814,7 @@ def director_resolve(ctx, nonce, _corrections=None):
     turn = ctx.turn
     pers = persona_of(chat)
     p_name = pers.get("name") or persona_name(pers)
-    mapping = ctx.mapping_stage or ctx.mapping_quick or {}
+    world = ctx.world_context()
     fm = fiction_model(chat["id"])
     clock = simulation_clock(chat["id"])
 
@@ -3009,17 +3006,12 @@ def director_resolve(ctx, nonce, _corrections=None):
     # same room the same way. Delivered to THIS payload only: no character
     # receives it; what a mind knows about a room rides its own gap record.
     _destination_residue = None
-    _offscreen_planning = {"enabled": False, "plans": []}
     try:
         from world.living_world import living_world_allows, living_world_config
         _living_cfg = living_world_config(chat["id"])
-        _offscreen_planning["enabled"] = living_world_allows(
-            _living_cfg, "antagonist_ladder", "floor")
-        if _offscreen_planning["enabled"]:
-            _offscreen_planning["plans"] = (
-                wget(chat["id"], "offscreen_plans", []) or [])[:8]
     except Exception as exc:
-        ctx.add_warning(f"offscreen plan context skipped: {exc}")
+        _living_cfg = None
+        ctx.add_warning(f"living world config skipped: {exc}")
     if _mv_target:
         try:
             if living_world_allows(_living_cfg,
@@ -3226,7 +3218,11 @@ def director_resolve(ctx, nonce, _corrections=None):
         "paradox": paradox_visible_to(chat["id"], ctx.turn.frame_id),
         "fiction_model": fm,
         "fiction_frame": _dict(flow.get("fiction_frame")),
-        "mapping_scene_proposal": _normalize_scene_patch(mapping.get("scene_patch")),
+        # The doors this beat reached for that no plan holds, as the
+        # world-context compiler recorded them. Render the surface a body
+        # perceives and no more; the plan behind it is the room's to write.
+        **({"planning_needs": world.get("planning_needs")}
+           if world.get("planning_needs") else {}),
         # Walks already under way that this beat did not mention. Handed to
         # the author BEFORE the prose is written so the scenery changes on
         # the page, in the same breath as everything else the beat does --
@@ -3297,7 +3293,6 @@ def director_resolve(ctx, nonce, _corrections=None):
         "dialogue_mode": bool(flow.get("dialogue_mode", False)),
         "relevant_lore": lore_for(ctx),
         "standing_intentions": raw_intents[:12],
-        "offscreen_planning": _offscreen_planning,
         "pending_obligations": pending_obligation_view(chat["id"], turn["idx"]),
         # F5: the world-pressure ledger -- every open ongoing off-character
         # process, each of which the prompt's WORLD PRESSURE rule requires
@@ -3760,7 +3755,7 @@ def director_resolve(ctx, nonce, _corrections=None):
             }
             for d in decls if d.get("name")
         },
-        "proposal": payload.get("mapping_scene_proposal"),
+        "planning_needs": payload.get("planning_needs") or [],
         "present_figures": _present_figures,
         "sightlines": payload.get("sightlines"),
         "planned_rooms": payload.get("planned_rooms"),
@@ -3768,8 +3763,6 @@ def director_resolve(ctx, nonce, _corrections=None):
         "couriers": payload.get("couriers") or [],
         "carried_reports": payload.get("carried_reports") or [],
         "unratified_claims": payload.get("unratified_claims") or [],
-        "offscreen_planning": payload.get("offscreen_planning")
-                              or {"enabled": False, "plans": []},
     }
     _run_specialists(ctx, out, sc, _orch_dispatch, _orch_view,
                      _orch_extras, "resolve")
@@ -3834,8 +3827,9 @@ def director_resolve(ctx, nonce, _corrections=None):
     # than arriving after them as an unexamined teleport.
     _travel_continues(ctx, out, sc, sd, interp, p_name)
 
-    staged = ((ctx.get("mapping_stage") or {}).get("staged_lore") or []) + \
-             ((ctx.get("mapping_quick") or {}).get("staged_lore") or [])
+    # The compiler stages nothing, so this loop materialises a room only on
+    # a beat stored before it existed (a rerun from an old mapping step).
+    staged = ctx.world_context().get("staged_lore") or []
     mv = interp.get("movement")
     target_room = mv.get("to_room") if isinstance(mv, dict) else None
 

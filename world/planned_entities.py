@@ -1,5 +1,5 @@
-"""Planned entities and planning needs: the PLAN tier's ledger for people,
-things and creatures, beside the planned rooms in `world/structure.py`.
+"""Planned entities: the PLAN tier's ledger for people, things and
+creatures, beside the planned rooms in `world/structure.py`.
 
 THE DIVISION OF LABOUR (docs/design/DESIGN_WRITERS_ROOM_PLAN.md § 2): a plan
 is what a thing is FOR and what is true of it before anyone sees it -- its
@@ -23,43 +23,33 @@ Three functions, the same three the planned-room handoff needed
   identity (name or alias) anywhere is a render of it, through the identity
   floor (`agents.director_floors._bind_minted_entities_to_present_figures`).
 
-And the PLANNING NEED: a Director mint with no plan behind it commits its
-SURFACE (what was seen: appearance, position, what it did) and files a typed
-need -- person, thing or room -- with that surface attached, so the plan is
-authored behind what was seen and never contradicts it (v2 § 7.4, the
-causal-exposure rule). A person-need is answered the same commit by
-enrolment into a real charter (`world/charter_enrol.py`); thing- and
-room-needs stay open for the Writers' Room. Both ledgers ride the `world`
-row under their own keys, so archive, checkpoint, branch and frame split
-carry them without their own handling.
+A Director mint with no plan behind it commits its SURFACE (what was seen:
+appearance, position, what it did) and files a typed PLANNING NEED with
+that surface attached -- the one ledger in `world/planning_needs.py`, shared
+with the world-context compiler -- so the plan is authored behind what was
+seen and never contradicts it (v2 § 7.4, the causal-exposure rule). This
+ledger rides the `world` row under its own key, so archive, checkpoint,
+branch and frame split carry it without their own handling.
 """
 from __future__ import annotations
 
 import hashlib
 import re
-import time
 
 from core.db import wget_for_frame, wset_for_frame
 
 PLANNED_ENTITIES_KEY = "planned_entities"
-PLANNING_NEEDS_KEY = "planning_needs"
 
 #: What a plan may be for. A ROOM plan lives in the structure registry
-#: (`world/structure.py`), not here; a room-NEED does live here, because a
-#: need is filed before anything plans the room.
+#: (`world/structure.py`), not here, and a NEED of any kind lives in
+#: `world/planning_needs.py`, because a need is filed before anything plans.
 PLAN_KINDS = ("person", "thing", "creature")
-NEED_KINDS = ("person", "thing", "room")
-NEED_STATUSES = ("open", "filled", "closed")
 
-#: Open needs kept per frame. Past it the OLDEST open need is closed as
-#: stale: a need nobody answered while sixty-four newer ones were filed is
-#: a need the story walked away from, and an unbounded queue of them would
-#: be read into every drain forever.
-PLANNING_NEEDS_CAP = 64
-#: The brief's prose fields and a committed surface's description are capped
-#: so a ledger read on every beat stays a ledger.
+#: The brief's prose fields are capped so a ledger read on every beat stays
+#: a ledger.
 PLAN_BRIEF_CHARS = 600
 PLAN_ALIASES_CAP = 8
+#: A plan's rendered surface, kept at the same ceiling as a need's.
 SURFACE_CHARS = 600
 
 
@@ -298,177 +288,3 @@ def _contradicted_axis(surface, render):
             if _phrase_in(value, render) and not _phrase_in(dealt, value):
                 return axis
     return ""
-
-
-# ---------------------------------------------------------------------------
-# Planning needs
-# ---------------------------------------------------------------------------
-
-def need_identity(kind, surface):
-    """What deduplicates a need: a person or thing by its name, a room by
-    the room id it was asked for -- the surface's own identity, so the same
-    unplanned stranger met twice files one need."""
-    surface = surface if isinstance(surface, dict) else {}
-    kind = str(kind or "").casefold()
-    if kind == "room":
-        return "room:%s" % _text(surface.get("room") or surface.get("name"),
-                                 120).casefold()
-    return "%s:%s" % (kind, _text(surface.get("name"), 120).casefold())
-
-
-def normalize_need(entry):
-    entry = entry if isinstance(entry, dict) else {}
-    kind = str(entry.get("kind") or "person").strip().casefold()
-    if kind not in NEED_KINDS:
-        kind = "person"
-    surface = entry.get("surface") if isinstance(entry.get("surface"), dict) \
-        else {}
-    status = str(entry.get("status") or "open").casefold()
-    if status not in NEED_STATUSES:
-        status = "open"
-    out = {
-        "uid": str(entry.get("uid") or ""),
-        "kind": kind,
-        "status": status,
-        # WHAT WAS SEEN, committed: the Director's description, where it
-        # stood, what it did this beat. The plan authored behind it may add
-        # to this and never contradict it.
-        "surface": {
-            "name": _text(surface.get("name"), 120),
-            "room": _text(surface.get("room"), 120),
-            "description": _text(surface.get("description"), SURFACE_CHARS),
-            "did": _text(surface.get("did"), SURFACE_CHARS),
-            "role": _text(surface.get("role"), 120),
-        },
-        "filed_turn": entry.get("filed_turn"),
-        "filed_at": float(entry.get("filed_at") or 0.0),
-        "presence": _text(entry.get("presence"), 120),
-    }
-    out["identity"] = str(entry.get("identity") or need_identity(kind, out["surface"]))
-    if not out["uid"]:
-        out["uid"] = "need:%s" % hashlib.sha256(
-            out["identity"].encode("utf-8")).hexdigest()[:10]
-    fill = entry.get("fill")
-    if isinstance(fill, dict) and fill:
-        out["fill"] = dict(fill)
-    if entry.get("filled_turn") is not None:
-        out["filled_turn"] = entry.get("filled_turn")
-    if entry.get("closed_reason"):
-        out["closed_reason"] = _text(entry.get("closed_reason"), 200)
-    return out
-
-
-def planning_needs(cid, frame_id=None):
-    stored = wget_for_frame(cid, PLANNING_NEEDS_KEY, frame_id, []) or []
-    return [normalize_need(e) for e in stored if isinstance(e, dict)]
-
-
-def save_planning_needs(cid, needs, frame_id=None):
-    wset_for_frame(cid, PLANNING_NEEDS_KEY,
-                   [normalize_need(e) for e in needs], frame_id)
-
-
-def open_planning_needs(cid, frame_id=None, kind=None):
-    return [n for n in planning_needs(cid, frame_id)
-            if n["status"] == "open" and (kind is None or n["kind"] == kind)]
-
-
-def file_planning_need(cid, need, frame_id=None, turn_idx=None):
-    """File a typed need; returns ``(record, fresh)``. Deduplicated on the
-    surface's identity: a need already open (or already filled) for the same
-    person, thing or room is returned as it stands and not filed twice. Past
-    `PLANNING_NEEDS_CAP` open needs, the oldest open one is closed as stale."""
-    need = dict(need or {})
-    if turn_idx is not None and need.get("filed_turn") is None:
-        need["filed_turn"] = int(turn_idx)
-    if not need.get("filed_at"):
-        need["filed_at"] = time.time()
-    record = normalize_need(need)
-    needs = planning_needs(cid, frame_id)
-    for existing in needs:
-        if existing["identity"] == record["identity"] \
-                and existing["status"] != "closed":
-            return existing, False
-    needs.append(record)
-    open_needs = [n for n in needs if n["status"] == "open"]
-    while len(open_needs) > PLANNING_NEEDS_CAP:
-        stale = open_needs.pop(0)
-        stale["status"] = "closed"
-        stale["closed_reason"] = "stale: past the open-need cap"
-    save_planning_needs(cid, needs, frame_id)
-    return record, True
-
-
-def fill_planning_need(cid, uid, fill, frame_id=None, turn_idx=None):
-    """Mark a need filled and record what filled it (a charter ref for a
-    person, a plan uid for a thing, a room id for a room)."""
-    needs = planning_needs(cid, frame_id)
-    for need in needs:
-        if need["uid"] == str(uid):
-            need["status"] = "filled"
-            need["fill"] = dict(fill or {})
-            if turn_idx is not None:
-                need["filled_turn"] = int(turn_idx)
-            save_planning_needs(cid, needs, frame_id)
-            return need
-    return None
-
-
-def close_planning_need(cid, uid, reason, frame_id=None):
-    needs = planning_needs(cid, frame_id)
-    for need in needs:
-        if need["uid"] == str(uid):
-            need["status"] = "closed"
-            need["closed_reason"] = _text(reason, 200)
-            save_planning_needs(cid, needs, frame_id)
-            return need
-    return None
-
-
-def drain_planning_needs(cid, frame_id=None, scene=None):
-    """Answer what the deterministic fill can answer and leave the rest.
-
-    A person-need still open (the commit could not enrol it -- no registry
-    yet, a refused surface) is tried again by enrolment; a thing-need and a
-    room-need stay open for the Writers' Room, which is the job's later
-    owner. Returns ``{"filled": [...], "open": n}``; pure bookkeeping, no
-    model call.
-    """
-    from world.charter_enrol import enrol_person
-
-    filled = []
-    for need in open_planning_needs(cid, frame_id, kind="person"):
-        try:
-            record = enrol_person(cid, need, frame_id=frame_id, scene=scene)
-        except Exception:
-            continue
-        if record and record.get("ref"):
-            fill_planning_need(cid, need["uid"],
-                               {"ref": record["ref"], "how": record["how"]},
-                               frame_id=frame_id)
-            filled.append({"uid": need["uid"], "ref": record["ref"],
-                           "how": record["how"]})
-    return {"filled": filled,
-            "open": len(open_planning_needs(cid, frame_id))}
-
-
-PLANNING_NEEDS_JOB_KEY = "planning_needs"
-
-
-def schedule_planning_needs(ctx):
-    """Queue the drain out of band, beside memory consolidation: nothing
-    here is a turn fact, and a need the commit could not answer is answered
-    at leisure or left for the room. Returns the job, or None when there is
-    nothing open."""
-    from core import jobs
-
-    cid = ctx.chat.id
-    frame_id = getattr(ctx.turn, "frame_id", None)
-    if not open_planning_needs(cid, frame_id):
-        return None
-    base_turn = getattr(ctx.turn, "idx", None)
-
-    def _run(job):
-        return drain_planning_needs(cid, frame_id=frame_id)
-
-    return jobs.submit(cid, PLANNING_NEEDS_JOB_KEY, _run, base_turn=base_turn)

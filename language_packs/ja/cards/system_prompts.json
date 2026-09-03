@@ -1,664 +1,644 @@
 {
- "category_note": {
-  "$text": "category_note.txt"
- },
- "book_type_note": {
-  "$text": "book_type_note.txt"
- },
- "transit_note": {
-  "$text": "transit_note.txt"
- },
- "extra_parts_note": {
-  "$text": "extra_parts_note.txt"
- },
- "interior_note": {
-  "$text": "interior_note.txt"
- },
- "card_person_note": {
-  "$text": "card_person_note.txt"
- },
- "narrator_fidelity_correction": {
-  "$text": "narrator_fidelity_correction.txt"
- },
- "narrator_craft_correction": {
-  "$text": "narrator_craft_correction.txt"
- },
- "nsfw_overlay": {
-  "$text": "nsfw_overlay.txt"
- },
- "director_note": {
-  "$text": "director_note.txt"
- },
- "nsfw_prompt_ids": [
-  "background_react",
-  "character",
-  "director_body",
-  "director_contact",
-  "director_establish",
-  "director_interpret",
-  "director_resolve_lean",
-  "director_spatial",
-  "fill_appearance",
-  "fill_character_psychology",
-  "generator_character",
-  "generator_greeting",
-  "generator_persona",
-  "narrator",
-  "scene_life"
- ],
- "interpret_delegation_note": {
-  "$text": "interpret_delegation_note.txt"
- },
- "prompts": {
-  "greeting_interpret": {
-   "$text": "prompts/greeting_interpret.txt"
+  "category_note": {
+    "$text": "category_note.txt"
   },
-  "director_interpret": {
-   "$text": "prompts/director_interpret.txt"
+  "book_type_note": {
+    "$text": "book_type_note.txt"
   },
-  "director_establish": {
-   "$text": "prompts/director_establish.txt"
+  "transit_note": {
+    "$text": "transit_note.txt"
   },
-  "character": {
-   "$text": "prompts/character.txt"
+  "extra_parts_note": {
+    "$text": "extra_parts_note.txt"
   },
-  "background_react": {
-   "$text": "prompts/background_react.txt"
+  "interior_note": {
+    "$text": "interior_note.txt"
   },
-  "backdrop_prompt": {
-   "$text": "prompts/backdrop_prompt.txt"
+  "card_person_note": {
+    "$text": "card_person_note.txt"
   },
-  "ambience_prompt": {
-   "$text": "prompts/ambience_prompt.txt"
+  "narrator_fidelity_correction": {
+    "$text": "narrator_fidelity_correction.txt"
   },
-  "blurb_mint": {
-   "$text": "prompts/blurb_mint.txt"
+  "narrator_craft_correction": {
+    "$text": "narrator_craft_correction.txt"
   },
-  "scene_life": {
-   "$text": "prompts/scene_life.txt"
+  "nsfw_overlay": {
+    "$text": "nsfw_overlay.txt"
   },
-  "resolve_reconcile": {
-   "$text": "prompts/resolve_reconcile.txt"
+  "director_note": {
+    "$text": "director_note.txt"
   },
-  "resolve_repair": {
-   "$text": "prompts/resolve_repair.txt"
+  "nsfw_prompt_ids": [
+    "background_react",
+    "character",
+    "director_body",
+    "director_contact",
+    "director_establish",
+    "director_interpret",
+    "director_resolve_lean",
+    "director_spatial",
+    "fill_appearance",
+    "fill_character_psychology",
+    "generator_character",
+    "generator_greeting",
+    "generator_persona",
+    "narrator",
+    "scene_life"
+  ],
+  "interpret_delegation_note": {
+    "$text": "interpret_delegation_note.txt"
   },
-  "interpret_repair": {
-   "$text": "prompts/interpret_repair.txt"
+  "prompts": {
+    "greeting_interpret": {
+      "$text": "prompts/greeting_interpret.txt"
+    },
+    "director_interpret": {
+      "$text": "prompts/director_interpret.txt"
+    },
+    "director_establish": {
+      "$text": "prompts/director_establish.txt"
+    },
+    "character": {
+      "$text": "prompts/character.txt"
+    },
+    "background_react": {
+      "$text": "prompts/background_react.txt"
+    },
+    "backdrop_prompt": {
+      "$text": "prompts/backdrop_prompt.txt"
+    },
+    "ambience_prompt": {
+      "$text": "prompts/ambience_prompt.txt"
+    },
+    "blurb_mint": {
+      "$text": "prompts/blurb_mint.txt"
+    },
+    "scene_life": {
+      "$text": "prompts/scene_life.txt"
+    },
+    "resolve_reconcile": {
+      "$text": "prompts/resolve_reconcile.txt"
+    },
+    "resolve_repair": {
+      "$text": "prompts/resolve_repair.txt"
+    },
+    "interpret_repair": {
+      "$text": "prompts/interpret_repair.txt"
+    },
+    "narrator": {
+      "$text": "prompts/narrator.txt"
+    },
+    "lore_reinterpret": {
+      "$text": "prompts/lore_reinterpret.txt"
+    },
+    "memory_consolidate": {
+      "$text": "prompts/memory_consolidate.txt"
+    },
+    "recall_review": {
+      "$text": "prompts/recall_review.txt"
+    },
+    "promote_character": {
+      "$text": "prompts/promote_character.txt"
+    },
+    "generator_greeting": {
+      "$text": "prompts/generator_greeting.txt"
+    },
+    "fill_character_psychology": {
+      "$text": "prompts/fill_character_psychology.txt"
+    },
+    "fill_appearance": {
+      "$text": "prompts/fill_appearance.txt"
+    },
+    "fill_body_interior": {
+      "$text": "prompts/fill_body_interior.txt"
+    },
+    "generator_character": {
+      "$text": "prompts/generator_character.txt"
+    },
+    "generator_persona": {
+      "$text": "prompts/generator_persona.txt"
+    },
+    "generator_lorebook": {
+      "$text": "prompts/generator_lorebook.txt"
+    },
+    "generator_lorebook_entries": {
+      "$text": "prompts/generator_lorebook_entries.txt"
+    },
+    "repair_json": {
+      "$text": "prompts/repair_json.txt"
+    },
+    "patch_json_field": {
+      "$text": "prompts/patch_json_field.txt"
+    },
+    "import_character_reinterpret": {
+      "$text": "prompts/import_character_reinterpret.txt"
+    },
+    "import_persona_reinterpret": {
+      "$text": "prompts/import_persona_reinterpret.txt"
+    },
+    "offscreen_profile": {
+      "$text": "prompts/offscreen_profile.txt"
+    },
+    "offscreen_agent_attempt": {
+      "$text": "prompts/offscreen_agent_attempt.txt"
+    },
+    "offscreen_agent_adjudicate": {
+      "$text": "prompts/offscreen_agent_adjudicate.txt"
+    },
+    "artifact_wording": {
+      "$text": "prompts/artifact_wording.txt"
+    },
+    "position_resolver": {
+      "$text": "prompts/position_resolver.txt"
+    }
   },
-  "narrator": {
-   "$text": "prompts/narrator.txt"
+  "specialists": {
+    "body": {
+      "core": {
+        "$text": "specialists/body/core.txt"
+      },
+      "order": [
+        "attire",
+        "conditions",
+        "vitals",
+        "overlays"
+      ],
+      "chunks": {
+        "attire": {
+          "$text": "specialists/body/chunks/attire.txt"
+        },
+        "conditions": {
+          "$text": "specialists/body/chunks/conditions.txt"
+        },
+        "vitals": {
+          "$text": "specialists/body/chunks/vitals.txt"
+        },
+        "overlays": {
+          "$text": "specialists/body/chunks/overlays.txt"
+        }
+      },
+      "nsfw": true
+    },
+    "social": {
+      "core": {
+        "$text": "specialists/social/core.txt"
+      },
+      "order": [
+        "cast_changes",
+        "introductions",
+        "world_facts",
+        "public_evidence",
+        "crowd_ops",
+        "courier_ops",
+        "telling_ops",
+        "ratified_claims",
+        "contradicted_claims"
+      ],
+      "chunks": {
+        "cast_changes": {
+          "$text": "specialists/social/chunks/cast_changes.txt"
+        },
+        "introductions": {
+          "$text": "specialists/social/chunks/introductions.txt"
+        },
+        "world_facts": {
+          "$text": "specialists/social/chunks/world_facts.txt"
+        },
+        "public_evidence": {
+          "$text": "specialists/social/chunks/public_evidence.txt"
+        },
+        "crowd_ops": {
+          "$text": "specialists/social/chunks/crowd_ops.txt"
+        },
+        "courier_ops": {
+          "$text": "specialists/social/chunks/courier_ops.txt"
+        },
+        "telling_ops": {
+          "$text": "specialists/social/chunks/telling_ops.txt"
+        },
+        "ratified_claims": {
+          "$text": "specialists/social/chunks/ratified_claims.txt"
+        },
+        "contradicted_claims": {
+          "$text": "specialists/social/chunks/contradicted_claims.txt"
+        }
+      },
+      "nsfw": false
+    },
+    "contact": {
+      "core": {
+        "$text": "specialists/contact/core.txt"
+      },
+      "order": [
+        "contact_ops",
+        "contact_action_ops",
+        "substance_ops",
+        "containment",
+        "scales"
+      ],
+      "chunks": {
+        "contact_ops": {
+          "$text": "specialists/contact/chunks/contact_ops.txt"
+        },
+        "substance_ops": {
+          "$text": "specialists/contact/chunks/substance_ops.txt"
+        },
+        "containment": {
+          "$text": "specialists/contact/chunks/containment.txt"
+        },
+        "scales": {
+          "$text": "specialists/contact/chunks/scales.txt"
+        },
+        "contact_action_ops": {
+          "$text": "specialists/contact/chunks/contact_action_ops.txt"
+        }
+      },
+      "nsfw": true
+    },
+    "objects": {
+      "core": {
+        "$text": "specialists/objects/core.txt"
+      },
+      "order": [
+        "entities",
+        "remove_entities",
+        "inventory_ops",
+        "artifact_ops",
+        "destruction"
+      ],
+      "chunks": {
+        "entities": {
+          "$text": "specialists/objects/chunks/entities.txt"
+        },
+        "remove_entities": {
+          "$text": "specialists/objects/chunks/remove_entities.txt"
+        },
+        "inventory_ops": {
+          "$text": "specialists/objects/chunks/inventory_ops.txt"
+        },
+        "artifact_ops": {
+          "$text": "specialists/objects/chunks/artifact_ops.txt"
+        },
+        "destruction": {
+          "$text": "specialists/objects/chunks/destruction.txt"
+        }
+      },
+      "nsfw": false
+    },
+    "spatial": {
+      "core": {
+        "$text": "specialists/spatial/core.txt"
+      },
+      "order": [
+        "positions",
+        "rooms",
+        "remove_rooms",
+        "remove_adjacent",
+        "stations",
+        "poses",
+        "comms_ops"
+      ],
+      "chunks": {
+        "positions": {
+          "$text": "specialists/spatial/chunks/positions.txt"
+        },
+        "rooms": {
+          "$text": "specialists/spatial/chunks/rooms.txt"
+        },
+        "remove_rooms": {
+          "$text": "specialists/spatial/chunks/remove_rooms.txt"
+        },
+        "remove_adjacent": {
+          "$text": "specialists/spatial/chunks/remove_adjacent.txt"
+        },
+        "stations": {
+          "$text": "specialists/spatial/chunks/stations.txt"
+        },
+        "poses": {
+          "$text": "specialists/spatial/chunks/poses.txt"
+        },
+        "comms_ops": {
+          "$text": "specialists/spatial/chunks/comms_ops.txt"
+        }
+      },
+      "nsfw": true
+    }
   },
-  "mapping_stage": {
-   "$text": "prompts/mapping_stage.txt"
-  },
-  "mapping_commit": {
-   "$text": "prompts/mapping_commit.txt"
-  },
-  "lore_reinterpret": {
-   "$text": "prompts/lore_reinterpret.txt"
-  },
-  "memory_consolidate": {
-   "$text": "prompts/memory_consolidate.txt"
-  },
-  "recall_review": {
-   "$text": "prompts/recall_review.txt"
-  },
-  "promote_character": {
-   "$text": "prompts/promote_character.txt"
-  },
-  "generator_greeting": {
-   "$text": "prompts/generator_greeting.txt"
-  },
-  "fill_character_psychology": {
-   "$text": "prompts/fill_character_psychology.txt"
-  },
-  "fill_appearance": {
-   "$text": "prompts/fill_appearance.txt"
-  },
-  "fill_body_interior": {
-   "$text": "prompts/fill_body_interior.txt"
-  },
-  "generator_character": {
-   "$text": "prompts/generator_character.txt"
-  },
-  "generator_persona": {
-   "$text": "prompts/generator_persona.txt"
-  },
-  "generator_lorebook": {
-   "$text": "prompts/generator_lorebook.txt"
-  },
-  "generator_lorebook_entries": {
-   "$text": "prompts/generator_lorebook_entries.txt"
-  },
-  "repair_json": {
-   "$text": "prompts/repair_json.txt"
-  },
-  "patch_json_field": {
-   "$text": "prompts/patch_json_field.txt"
-  },
-  "import_character_reinterpret": {
-   "$text": "prompts/import_character_reinterpret.txt"
-  },
-  "import_persona_reinterpret": {
-   "$text": "prompts/import_persona_reinterpret.txt"
-  },
-  "offscreen_profile": {
-   "$text": "prompts/offscreen_profile.txt"
-  },
-  "offscreen_agent_attempt": {
-   "$text": "prompts/offscreen_agent_attempt.txt"
-  },
-  "offscreen_agent_adjudicate": {
-   "$text": "prompts/offscreen_agent_adjudicate.txt"
-  },
-  "artifact_wording": {
-   "$text": "prompts/artifact_wording.txt"
-  },
-  "position_resolver": {
-   "$text": "prompts/position_resolver.txt"
+  "prose_author_sheet": [
+    [
+      "voices",
+      {
+        "$text": "prose_author_sheet/00_voices.txt"
+      }
+    ],
+    [
+      null,
+      {
+        "$text": "prose_author_sheet/01.txt"
+      }
+    ],
+    [
+      null,
+      {
+        "$text": "prose_author_sheet/02.txt"
+      }
+    ],
+    [
+      "obligations",
+      {
+        "$text": "prose_author_sheet/03_obligations.txt"
+      }
+    ],
+    [
+      null,
+      {
+        "$text": "prose_author_sheet/04.txt"
+      }
+    ],
+    [
+      "other_players",
+      {
+        "$text": "prose_author_sheet/05_other_players.txt"
+      }
+    ],
+    [
+      null,
+      {
+        "$text": "prose_author_sheet/06.txt"
+      }
+    ],
+    [
+      "comm",
+      {
+        "$text": "prose_author_sheet/07_comm.txt"
+      }
+    ],
+    [
+      null,
+      {
+        "$text": "prose_author_sheet/08.txt"
+      }
+    ],
+    [
+      "transit",
+      {
+        "$text": "prose_author_sheet/09_transit.txt"
+      }
+    ],
+    [
+      "travel",
+      {
+        "$text": "prose_author_sheet/10_travel.txt"
+      }
+    ],
+    [
+      "planning_need",
+      {
+        "$text": "prose_author_sheet/11_planning_need.txt"
+      }
+    ],
+    [
+      null,
+      {
+        "$text": "prose_author_sheet/12.txt"
+      }
+    ],
+    [
+      "hearsay",
+      {
+        "$text": "prose_author_sheet/13_hearsay.txt"
+      }
+    ],
+    [
+      "road",
+      {
+        "$text": "prose_author_sheet/14_road.txt"
+      }
+    ],
+    [
+      "planning_need",
+      {
+        "$text": "prose_author_sheet/15_planning_need.txt"
+      }
+    ],
+    [
+      null,
+      {
+        "$text": "prose_author_sheet/16.txt"
+      }
+    ],
+    [
+      "approach",
+      {
+        "$text": "prose_author_sheet/17_approach.txt"
+      }
+    ],
+    [
+      "due_events",
+      {
+        "$text": "prose_author_sheet/18_due_events.txt"
+      }
+    ],
+    [
+      null,
+      {
+        "$text": "prose_author_sheet/19.txt"
+      }
+    ],
+    [
+      "world_pressure",
+      {
+        "$text": "prose_author_sheet/20_world_pressure.txt"
+      }
+    ],
+    [
+      null,
+      {
+        "$text": "prose_author_sheet/21.txt"
+      }
+    ],
+    [
+      null,
+      {
+        "$text": "prose_author_sheet/22.txt"
+      }
+    ],
+    [
+      "residue",
+      {
+        "$text": "prose_author_sheet/23_residue.txt"
+      }
+    ],
+    [
+      null,
+      {
+        "$text": "prose_author_sheet/24.txt"
+      }
+    ],
+    [
+      "light",
+      {
+        "$text": "prose_author_sheet/25_light.txt"
+      }
+    ],
+    [
+      "size",
+      {
+        "$text": "prose_author_sheet/26_size.txt"
+      }
+    ],
+    [
+      null,
+      {
+        "$text": "prose_author_sheet/27.txt"
+      }
+    ]
+  ],
+  "character_block_keys": [
+    [
+      "何も言わないとき：",
+      [
+        "decision.they_said_nothing"
+      ]
+    ],
+    [
+      "誰かがあなたを待っている：",
+      [
+        "decision.awaiting_your_answer"
+      ]
+    ],
+    [
+      "作者からの提案：",
+      [
+        "decision.comes_to_you"
+      ]
+    ],
+    [
+      "要約ウィンドウも過去のもの：",
+      [
+        "memory.summary_citations",
+        "memory.earlier_in_my_life",
+        "memory.where_i_came_from"
+      ]
+    ],
+    [
+      "あなたの人生の初期：",
+      [
+        "memory.earlier_in_my_life"
+      ]
+    ],
+    [
+      "呼ばれざる記憶：",
+      [
+        "memory.surfaces_unbidden"
+      ]
+    ],
+    [
+      "場所とその用途：",
+      [
+        "perception.here_affords",
+        "memory.recalled_places"
+      ]
+    ],
+    [
+      "連絡の終了：",
+      [
+        "self.standing_contacts"
+      ]
+    ],
+    [
+      "口を動かしながら話す：",
+      [
+        "self.speaking_now"
+      ]
+    ],
+    [
+      "あなたが完了する物質的効果：",
+      [
+        "self.embodiment_capabilities"
+      ]
+    ],
+    [
+      "あなたが身に着けているもの：",
+      [
+        "self.attire"
+      ]
+    ],
+    [
+      "現在の仮説：",
+      [
+        "self.active_hypotheses"
+      ]
+    ],
+    [
+      "追跡中：",
+      [
+        "self.following"
+      ]
+    ],
+    [
+      "self.project_review が現れる",
+      [
+        "self.project_review"
+      ]
+    ],
+    [
+      "`fading` を伴う意図",
+      [
+        "self.intentions[].fading"
+      ]
+    ],
+    [
+      "途中：",
+      [
+        "self.en_route"
+      ]
+    ],
+    [
+      "走行中：",
+      [
+        "perception.sprint_reach"
+      ]
+    ],
+    [
+      "走ることは歩法の一種、",
+      [
+        "perception.sprint_reach"
+      ]
+    ],
+    [
+      "出口は`onward_exits_visible`を伴うことがある",
+      [
+        "perception.spatial_frame{}.onward_exits_visible"
+      ]
+    ],
+    [
+      "`visibly_no_way_through`（同義で",
+      [
+        "perception.spatial_frame{}.visibly_no_way_through",
+        "perception.corridor_sight"
+      ]
+    ],
+    [
+      "あなた自身のルートも示されている。",
+      [
+        "perception.spatial_frame{}.been_there",
+        "perception.spatial_frame{}.times_entered",
+        "perception.spatial_frame{}.entered_recently",
+        "perception.spatial_frame{}.circling_here",
+        "perception.spatial_frame{}.no_new_ground_that_way",
+        "perception.spatial_frame{}.worked_before"
+      ]
+    ],
+    [
+      "フレーム自体の上の`ground_fully_known`",
+      [
+        "perception.spatial_frame.ground_fully_known"
+      ]
+    ]
+  ],
+  "prose_author_output_shape": {
+    "$text": "prose_author_output_shape.txt"
   }
- },
- "specialists": {
-  "body": {
-   "core": {
-    "$text": "specialists/body/core.txt"
-   },
-   "order": [
-    "attire",
-    "conditions",
-    "vitals",
-    "overlays"
-   ],
-   "chunks": {
-    "attire": {
-     "$text": "specialists/body/chunks/attire.txt"
-    },
-    "conditions": {
-     "$text": "specialists/body/chunks/conditions.txt"
-    },
-    "vitals": {
-     "$text": "specialists/body/chunks/vitals.txt"
-    },
-    "overlays": {
-     "$text": "specialists/body/chunks/overlays.txt"
-    }
-   },
-   "nsfw": true
-  },
-  "social": {
-   "core": {
-    "$text": "specialists/social/core.txt"
-   },
-   "order": [
-    "cast_changes",
-    "introductions",
-    "world_facts",
-    "public_evidence"
-   ],
-   "chunks": {
-    "cast_changes": {
-     "$text": "specialists/social/chunks/cast_changes.txt"
-    },
-    "introductions": {
-     "$text": "specialists/social/chunks/introductions.txt"
-    },
-    "world_facts": {
-     "$text": "specialists/social/chunks/world_facts.txt"
-    },
-    "public_evidence": {
-     "$text": "specialists/social/chunks/public_evidence.txt"
-    }
-   },
-   "nsfw": false
-  },
-  "contact": {
-   "core": {
-    "$text": "specialists/contact/core.txt"
-   },
-   "order": [
-    "contact_ops",
-    "contact_action_ops",
-    "substance_ops",
-    "containment",
-    "scales"
-   ],
-   "chunks": {
-    "contact_ops": {
-     "$text": "specialists/contact/chunks/contact_ops.txt"
-    },
-    "substance_ops": {
-     "$text": "specialists/contact/chunks/substance_ops.txt"
-    },
-    "containment": {
-     "$text": "specialists/contact/chunks/containment.txt"
-    },
-    "scales": {
-     "$text": "specialists/contact/chunks/scales.txt"
-    },
-    "contact_action_ops": {
-     "$text": "specialists/contact/chunks/contact_action_ops.txt"
-    }
-   },
-   "nsfw": true
-  },
-  "objects": {
-   "core": {
-    "$text": "specialists/objects/core.txt"
-   },
-   "order": [
-    "entities",
-    "remove_entities",
-    "inventory_ops",
-    "artifact_ops",
-    "destruction"
-   ],
-   "chunks": {
-    "entities": {
-     "$text": "specialists/objects/chunks/entities.txt"
-    },
-    "remove_entities": {
-     "$text": "specialists/objects/chunks/remove_entities.txt"
-    },
-    "inventory_ops": {
-     "$text": "specialists/objects/chunks/inventory_ops.txt"
-    },
-    "artifact_ops": {
-     "$text": "specialists/objects/chunks/artifact_ops.txt"
-    },
-    "destruction": {
-     "$text": "specialists/objects/chunks/destruction.txt"
-    }
-   },
-   "nsfw": false
-  },
-  "spatial": {
-   "core": {
-    "$text": "specialists/spatial/core.txt"
-   },
-   "order": [
-    "positions",
-    "rooms",
-    "remove_rooms",
-    "remove_adjacent",
-    "stations",
-    "poses",
-    "comms_ops"
-   ],
-   "chunks": {
-    "positions": {
-     "$text": "specialists/spatial/chunks/positions.txt"
-    },
-    "rooms": {
-     "$text": "specialists/spatial/chunks/rooms.txt"
-    },
-    "remove_rooms": {
-     "$text": "specialists/spatial/chunks/remove_rooms.txt"
-    },
-    "remove_adjacent": {
-     "$text": "specialists/spatial/chunks/remove_adjacent.txt"
-    },
-    "stations": {
-     "$text": "specialists/spatial/chunks/stations.txt"
-    },
-    "poses": {
-     "$text": "specialists/spatial/chunks/poses.txt"
-    },
-    "comms_ops": {
-     "$text": "specialists/spatial/chunks/comms_ops.txt"
-    }
-   },
-   "nsfw": true
-  },
-  "offscreen": {
-   "core": {
-    "$text": "specialists/offscreen/core.txt"
-   },
-   "order": [
-    "crowd_ops",
-    "courier_ops",
-    "telling_ops",
-    "offscreen_plan_ops",
-    "ratified_claims",
-    "contradicted_claims"
-   ],
-   "chunks": {
-    "crowd_ops": {
-     "$text": "specialists/offscreen/chunks/crowd_ops.txt"
-    },
-    "courier_ops": {
-     "$text": "specialists/offscreen/chunks/courier_ops.txt"
-    },
-    "telling_ops": {
-     "$text": "specialists/offscreen/chunks/telling_ops.txt"
-    },
-    "offscreen_plan_ops": {
-     "$text": "specialists/offscreen/chunks/offscreen_plan_ops.txt"
-    },
-    "ratified_claims": {
-     "$text": "specialists/offscreen/chunks/ratified_claims.txt"
-    },
-    "contradicted_claims": {
-     "$text": "specialists/offscreen/chunks/contradicted_claims.txt"
-    }
-   },
-   "nsfw": false
-  }
- },
- "prose_author_sheet": [
-  [
-   "voices",
-   {
-    "$text": "prose_author_sheet/00_voices.txt"
-   }
-  ],
-  [
-   null,
-   {
-    "$text": "prose_author_sheet/01.txt"
-   }
-  ],
-  [
-   null,
-   {
-    "$text": "prose_author_sheet/02.txt"
-   }
-  ],
-  [
-   "obligations",
-   {
-    "$text": "prose_author_sheet/03_obligations.txt"
-   }
-  ],
-  [
-   null,
-   {
-    "$text": "prose_author_sheet/04.txt"
-   }
-  ],
-  [
-   "other_players",
-   {
-    "$text": "prose_author_sheet/05_other_players.txt"
-   }
-  ],
-  [
-   null,
-   {
-    "$text": "prose_author_sheet/06.txt"
-   }
-  ],
-  [
-   "comm",
-   {
-    "$text": "prose_author_sheet/07_comm.txt"
-   }
-  ],
-  [
-   null,
-   {
-    "$text": "prose_author_sheet/08.txt"
-   }
-  ],
-  [
-   "transit",
-   {
-    "$text": "prose_author_sheet/09_transit.txt"
-   }
-  ],
-  [
-   "travel",
-   {
-    "$text": "prose_author_sheet/10_travel.txt"
-   }
-  ],
-  [
-   "mapping_proposal",
-   {
-    "$text": "prose_author_sheet/11_mapping_proposal.txt"
-   }
-  ],
-  [
-   null,
-   {
-    "$text": "prose_author_sheet/12.txt"
-   }
-  ],
-  [
-   "hearsay",
-   {
-    "$text": "prose_author_sheet/13_hearsay.txt"
-   }
-  ],
-  [
-   "road",
-   {
-    "$text": "prose_author_sheet/14_road.txt"
-   }
-  ],
-  [
-   "mapping_proposal",
-   {
-    "$text": "prose_author_sheet/15_mapping_proposal.txt"
-   }
-  ],
-  [
-   null,
-   {
-    "$text": "prose_author_sheet/16.txt"
-   }
-  ],
-  [
-   "approach",
-   {
-    "$text": "prose_author_sheet/17_approach.txt"
-   }
-  ],
-  [
-   "due_events",
-   {
-    "$text": "prose_author_sheet/18_due_events.txt"
-   }
-  ],
-  [
-   null,
-   {
-    "$text": "prose_author_sheet/19.txt"
-   }
-  ],
-  [
-   "world_pressure",
-   {
-    "$text": "prose_author_sheet/20_world_pressure.txt"
-   }
-  ],
-  [
-   null,
-   {
-    "$text": "prose_author_sheet/21.txt"
-   }
-  ],
-  [
-   null,
-   {
-    "$text": "prose_author_sheet/22.txt"
-   }
-  ],
-  [
-   "residue",
-   {
-    "$text": "prose_author_sheet/23_residue.txt"
-   }
-  ],
-  [
-   null,
-   {
-    "$text": "prose_author_sheet/24.txt"
-   }
-  ],
-  [
-   "light",
-   {
-    "$text": "prose_author_sheet/25_light.txt"
-   }
-  ],
-  [
-   "size",
-   {
-    "$text": "prose_author_sheet/26_size.txt"
-   }
-  ],
-  [
-   null,
-   {
-    "$text": "prose_author_sheet/27.txt"
-   }
-  ]
- ],
- "character_block_keys": [
-  [
-   "何も言わないとき：",
-   [
-    "decision.they_said_nothing"
-   ]
-  ],
-  [
-   "誰かがあなたを待っている：",
-   [
-    "decision.awaiting_your_answer"
-   ]
-  ],
-  [
-   "作者からの提案：",
-   [
-    "decision.comes_to_you"
-   ]
-  ],
-  [
-   "要約ウィンドウも過去のもの：",
-   [
-    "memory.summary_citations",
-    "memory.earlier_in_my_life",
-    "memory.where_i_came_from"
-   ]
-  ],
-  [
-   "あなたの人生の初期：",
-   [
-    "memory.earlier_in_my_life"
-   ]
-  ],
-  [
-   "呼ばれざる記憶：",
-   [
-    "memory.surfaces_unbidden"
-   ]
-  ],
-  [
-   "場所とその用途：",
-   [
-    "perception.here_affords",
-    "memory.recalled_places"
-   ]
-  ],
-  [
-   "連絡の終了：",
-   [
-    "self.standing_contacts"
-   ]
-  ],
-  [
-   "口を動かしながら話す：",
-   [
-    "self.speaking_now"
-   ]
-  ],
-  [
-   "あなたが完了する物質的効果：",
-   [
-    "self.embodiment_capabilities"
-   ]
-  ],
-  [
-   "あなたが身に着けているもの：",
-   [
-    "self.attire"
-   ]
-  ],
-  [
-   "現在の仮説：",
-   [
-    "self.active_hypotheses"
-   ]
-  ],
-  [
-   "追跡中：",
-   [
-    "self.following"
-   ]
-  ],
-  [
-   "self.project_review が現れる",
-   [
-    "self.project_review"
-   ]
-  ],
-  [
-   "`fading` を伴う意図",
-   [
-    "self.intentions[].fading"
-   ]
-  ],
-  [
-   "途中：",
-   [
-    "self.en_route"
-   ]
-  ],
-  [
-   "走行中：",
-   [
-    "perception.sprint_reach"
-   ]
-  ],
-  [
-   "走ることは歩法の一種、",
-   [
-    "perception.sprint_reach"
-   ]
-  ],
-  [
-   "出口は`onward_exits_visible`を伴うことがある",
-   [
-    "perception.spatial_frame{}.onward_exits_visible"
-   ]
-  ],
-  [
-   "`visibly_no_way_through`（同義で",
-   [
-    "perception.spatial_frame{}.visibly_no_way_through",
-    "perception.corridor_sight"
-   ]
-  ],
-  [
-   "あなた自身のルートも示されている。",
-   [
-    "perception.spatial_frame{}.been_there",
-    "perception.spatial_frame{}.times_entered",
-    "perception.spatial_frame{}.entered_recently",
-    "perception.spatial_frame{}.circling_here",
-    "perception.spatial_frame{}.no_new_ground_that_way",
-    "perception.spatial_frame{}.worked_before"
-   ]
-  ],
-  [
-   "フレーム自体の上の`ground_fully_known`",
-   [
-    "perception.spatial_frame.ground_fully_known"
-   ]
-  ]
- ],
- "prose_author_output_shape": {
-  "$text": "prose_author_output_shape.txt"
- }
 }

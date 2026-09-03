@@ -59,7 +59,7 @@ TEMPLATE_STAGES = {
 }
 
 SHEET_STAGES = ("director_body", "director_contact", "director_objects",
-                "director_offscreen", "director_social", "director_spatial")
+                "director_social", "director_spatial")
 
 _SHAPE_MARKER = "Output STRICT JSON"
 
@@ -304,6 +304,6 @@ def test_caravan_freight_is_published_to_the_hand_that_writes_it():
     (world/charter_runtime.load_caravan_freight reads exactly `from_holder`,
     `stock` and `wants`), which is the kind of vocabulary that SHOULD be
     published rather than guessed at."""
-    sheet = DEFAULT_PROMPTS["director_offscreen"]
+    sheet = DEFAULT_PROMPTS["director_social"]
     for token in ("freight", "from_holder", "stock", "wants"):
         assert token in sheet, token

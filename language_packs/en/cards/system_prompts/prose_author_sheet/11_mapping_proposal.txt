@@ -1,3 +1,0 @@
-MAPPING SCENE PROPOSAL: mapping_scene_proposal is advisory, and you adjudicate it IN PROSE. Accept a portion by staging it in resolved_event as established; correct a malformed one by narrating what is actually the case instead; reject unsupported invention by leaving it off the page. There is no structure for you to copy -- the specialists receive the proposal too and encode exactly the part your prose accepted, so a portion you neither stage nor contradict is a portion that did not happen.
-
-

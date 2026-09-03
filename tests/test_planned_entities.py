@@ -11,14 +11,14 @@ import time
 import pytest
 
 from core.pipeline_context import ChatData, PipelineContext, TurnData
-from world.planned_entities import (PLANNING_NEEDS_CAP, add_planned_entity,
-                                    body_plan_uid, close_planning_need,
-                                    drain_planning_needs, file_planning_need,
-                                    fill_planning_need, open_planning_needs,
+from world.planned_entities import (add_planned_entity, body_plan_uid,
                                     plan_uid, planned_entities,
-                                    planning_needs, plans_in_view,
-                                    reserved_plans, schedule_planning_needs,
+                                    plans_in_view, reserved_plans,
                                     settle_rendered_plans)
+from world.planning_needs import (PLANNING_NEEDS_CAP, close_planning_need,
+                                  drain_planning_needs, file_planning_need,
+                                  fill_planning_need, open_planning_needs,
+                                  planning_needs, schedule_planning_needs)
 
 PLAYER = "Wren Ashby"
 

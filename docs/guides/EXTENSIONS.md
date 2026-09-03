@@ -353,7 +353,7 @@ def register(api):
 - `key` matches `^[a-z][a-z0-9_-]{0,63}$`; the real step key becomes
   `ext:<your-id>:<key>`, so two extensions can both call a stage `pulse`.
 - `anchor` is `after:<step>` or `before:<step>` naming a **core** step
-  (`director_interpret`, `mapping_stage`, `perception_act`, `interaction_loop`,
+  (`director_interpret`, `compile_world_context`, `perception_act`, `interaction_loop`,
   `director_resolve`, `background_react`, `perception_outcome`, `narrator`,
   `commit`, …). See [`PIPELINE.md`](PIPELINE.md) for the full plan.
 - Anchoring on `character:*` or `ext:*` is **refused at registration**, with a
@@ -1104,7 +1104,7 @@ would be worse than no capability set at all.
 anchor := ("after" | "before") ":" <step-key>
 ```
 
-- `<step-key>` names a **core** step (`director_interpret`, `mapping_stage`,
+- `<step-key>` names a **core** step (`director_interpret`, `compile_world_context`,
   `perception_act`, `interaction_loop`, `director_resolve`, `background_react`,
   `perception_outcome`, `narrator`, `commit`, …). See [`PIPELINE.md`](PIPELINE.md).
 - Any other mode (`beside:`, a bare key, an empty core) is **refused** by
