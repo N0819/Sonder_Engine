@@ -73,6 +73,14 @@ WITNESSABLE = {
     # the objective carrier rail.
     "accusation": "an accusation made aloud",
     "apology": "a public reconciliation",
+    # Lots leaving a store with no buyer -- a raid, a theft, a loss -- is as
+    # visible as goods changing hands, and the band change it causes is
+    # reported separately by `advance_economy`.
+    "stock_taken": "stock visibly taken from a store or market",
+    # The watch being called out, and stood down: an institution's answer
+    # to a threat, given in public at the post it is given from.
+    "mobilisation_called": "the watch publicly called out to a place",
+    "mobilisation_lapsed": "the watch publicly stood down",
 }
 
 #: Claims a body can settle by LOOKING, and what each one asserts about the
@@ -275,6 +283,12 @@ def _native_news_phrase(claim):
                    if toward else f"{about} made peace at {place}",
         "report_confirmed": f"what {about} said about {place} was borne out",
         "report_refuted": f"what {about} said about {place} was not so",
+        "harm_done": f"{about} did harm to {toward} at {place}"
+                     if toward else f"{about} did harm at {place}",
+        "stock_taken": f"{about} was taken from {place}",
+        "sighting": f"something passed through {place}",
+        "mobilisation_called": f"{about} called the watch out to {place}",
+        "mobilisation_lapsed": f"the watch at {place} stood down",
     }
     return phrases.get(str(claim.get("event_kind") or ""),
                        f"{about} changed at {place}")
