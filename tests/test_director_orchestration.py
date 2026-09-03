@@ -217,16 +217,15 @@ def test_every_delegated_block_has_exactly_one_owner():
         "BODY POSE": "director_spatial",
         "ROOM CREATION": "director_spatial",
         "RUNNING COVERS GROUND": "director_spatial",
-        "CROWDS:": "director_offscreen",
-        "COURIERS:": "director_offscreen",
-        "PASSING ON WHAT": "director_offscreen",
-        "OFF-SCREEN REACTIVE PLANS": "director_offscreen",
-        "UNRATIFIED CLAIMS": "director_offscreen",
+        "CROWDS:": "director_social",
+        "COURIERS:": "director_social",
+        "PASSING ON WHAT": "director_social",
+        "UNRATIFIED CLAIMS": "director_social",
     }
     sheets = {pid: DEFAULT_PROMPTS[pid]
               for pid in ("director_body", "director_social",
                           "director_contact", "director_objects",
-                          "director_spatial", "director_offscreen")}
+                          "director_spatial")}
     for marker, owner in owners.items():
         carrying = [pid for pid, text in sheets.items() if marker in text]
         assert carrying == [owner], (marker, carrying)
@@ -269,7 +268,7 @@ def test_a_preset_can_actually_replace_a_chunked_sheet(temp_db):
     assert "LANGUAGE AND SCHEMA CONTRACT" in body
     assert "LANGUAGE AND SCHEMA CONTRACT" in prose
     # An untouched sheet still assembles from its chunks.
-    assert "CROWDS:" in prompts.specialist_prompt("offscreen", ["crowd_ops"])
+    assert "CROWDS:" in prompts.specialist_prompt("social", ["crowd_ops"])
 
     temp_db.set_setting("active_preset", "Default")
     assert "CLOTHING TRACKING" in prompts.specialist_prompt("body", ["attire"])
@@ -1112,7 +1111,9 @@ def test_social_specialist_owns_the_roster_channels(temp_db, monkeypatch):
     # Entitlement: the roster and the beat, nothing more.
     spayload = next(c["payload"] for c in calls
                     if c["step_key"] == "director_social")
-    for forbidden in ("attire", "contacts", "entities", "rooms",
+    # `rooms` is no longer forbidden: the social hand carries the world's
+    # traffic since 2026-09-04, and a crowd or courier op names a room.
+    for forbidden in ("attire", "contacts", "entities",
                       "relevant_lore", "world_pressure", "vitals"):
         assert forbidden not in spayload, forbidden
     assert "background_presences" in spayload
@@ -1255,13 +1256,11 @@ def test_spatial_specialist_proposes_and_the_backstop_disposes(temp_db,
         assert forbidden not in spayload, forbidden
 
 
-def test_offscreen_is_genuinely_dispatchable(temp_db, monkeypatch):
-    """The offscreen carve is a PROMPT operation: the simulator stays
-    unbuilt, but the specialist must be genuinely dispatchable -- cold in
-    practice only because most scenes contain no crowds, couriers, carried
-    reports or hearsay. With a crowd standing in a scene room it must
-    dispatch, and its ops must survive assembly into state_diff, or
-    "accessible" is a claim nothing checks."""
+def test_the_traffic_channels_dispatch_through_the_social_hand(temp_db, monkeypatch):
+    """The offscreen hand is retired (2026-09-04): its channels are the
+    social hand's. A ruling that reaches the social hand with a crowd in
+    the room dispatches it with the traffic ledgers -- the crowd's uid its
+    op needs -- and the op survives assembly into state_diff."""
     scene = json.loads(json.dumps(BASE_SCENE))
     calls = []
     responses = {
@@ -1269,12 +1268,13 @@ def test_offscreen_is_genuinely_dispatchable(temp_db, monkeypatch):
             "resolved_event": "The Stranger pushes through the crowd of "
                               "keepers gathered in the lamp room.",
             "summary": "Through the crowd.",
-            "state_diff": {}, **_ruling("offscreen"),
+            "state_diff": {}, **_ruling("social"),
         },
-        "director_offscreen": {
+        "director_social": {
+            "cast_changes": [], "introductions": [], "world_facts": [],
             "crowd_ops": [{"op": "move", "crowd_id": "crowd_1",
                            "room": "lamp_room", "heading": "keeper_room"}],
-            "courier_ops": [], "telling_ops": [], "offscreen_plan_ops": [],
+            "courier_ops": [], "telling_ops": [],
             "ratified_claims": [], "contradicted_claims": [], "notes": [],
         },
     }
@@ -1288,37 +1288,21 @@ def test_offscreen_is_genuinely_dispatchable(temp_db, monkeypatch):
     ])
     out = director.director_resolve(ctx, nonce=0)
 
-    offscreen = out["orchestration"]["specialists"]["offscreen"]
-    assert offscreen["run"] is True and offscreen["ran"] is True
-    assert "crowd_ops" in offscreen["scope"]
+    social = out["orchestration"]["specialists"]["social"]
+    assert social["run"] is True and social["ran"] is True
+    assert "crowd_ops" in social["scope"]
     assert out["state_diff"]["crowd_ops"] == [
         {"op": "move", "crowd_id": "crowd_1", "room": "lamp_room",
          "heading": "keeper_room"}]
-    # Its entitlement is the traffic ledgers -- with the uid its ops need.
     spayload = next(c["payload"] for c in calls
-                    if c["step_key"] == "director_offscreen")
+                    if c["step_key"] == "director_social")
     assert spayload["crowds"] and spayload["crowds"][0]["crowd_id"] == \
         "crowd_1"
+    assert "offscreen" not in out["orchestration"]["specialists"]
     for forbidden in ("attire", "contacts", "entities", "relevant_lore",
-                      "world_pressure", "active_awareness", "movers"):
+                      "world_pressure", "active_awareness", "movers",
+                      "offscreen_planning"):
         assert forbidden not in spayload, forbidden
-
-
-def test_offscreen_is_cold_when_its_subjects_are_absent(temp_db,
-                                                        monkeypatch):
-    """The other direction of the same fact: an ordinary indoor beat with
-    no crowds, no couriers, nothing carried, no hearsay and the planning
-    floor off never dispatches the traffic specialist -- which is the
-    entire saving of the coldest carve (0 fires in 2,243 beats)."""
-    calls = []
-    monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {}))
-
-    ctx = _make_ctx(temp_db, interp=_action_interp())
-    out = director.director_resolve(ctx, nonce=0)
-
-    assert "director_offscreen" not in _steps(calls)
-    offscreen = out["orchestration"]["specialists"]["offscreen"]
-    assert offscreen["run"] is False and offscreen["scope"] == []
 
 
 # ---------------------------------------------------------------------------
@@ -1928,8 +1912,7 @@ class TestTheHostCanFindTheSwitch:
 
         roles = app_module.bootstrap()["roles"]
         for name in ("director_body", "director_social", "director_contact",
-                     "director_objects", "director_spatial",
-                     "director_offscreen"):
+                     "director_objects", "director_spatial"):
             assert name in roles, f"{name} has no settings row"
 
     def test_sequential_runs_the_same_specialists_in_the_same_order(
@@ -2662,7 +2645,7 @@ def test_diff_application_is_order_independent_by_construction():
     independent_ops = {
         "cast_changes", "introductions", "world_facts", "remove_entities",
         "inventory_ops", "artifact_ops", "remove_rooms", "remove_adjacent",
-        "crowd_ops", "courier_ops", "telling_ops", "offscreen_plan_ops",
+        "crowd_ops", "courier_ops", "telling_ops",
         "ratified_claims", "contradicted_claims",
         # Observer evidence is stage metadata applied later to independent
         # Charter minds; it reads no scene-diff channel while assembling.
@@ -2732,10 +2715,9 @@ _UNREACHABLE_BY_DESIGN = {
     "remove_rooms": "reached as 'rooms'",
     "remove_adjacent": "reached as 'adjacency'",
     "following_ops": "engine-projected, never model-authored",
-    "crowd_ops": "offscreen ops surface, not a manifest category",
-    "courier_ops": "offscreen ops surface, not a manifest category",
-    "telling_ops": "offscreen ops surface, not a manifest category",
-    "offscreen_plan_ops": "offscreen ops surface, not a manifest category",
+    "crowd_ops": "traffic ops surface, not a manifest category",
+    "courier_ops": "traffic ops surface, not a manifest category",
+    "telling_ops": "traffic ops surface, not a manifest category",
     # Adjudications of a CARRIED claim, not changes the beat's prose
     # asserts: they answer "was this hearsay true?", which the manifest --
     # an enumeration of what this beat changed -- has nothing to say about.
@@ -3114,7 +3096,7 @@ def test_dialogue_reaches_only_the_hands_a_speech_act_can_write(temp_db):
             "player": "Mara", "cast": [], "declared_actions": [],
             "dice": [], "manifest": []}
 
-    for name in ("social", "spatial", "offscreen"):
+    for name in ("social", "spatial"):
         payload = director._specialist_payload(name, ctx, scene, view, {})
         assert payload.get("dialogue_log"), name
     for name in ("body", "contact", "objects"):

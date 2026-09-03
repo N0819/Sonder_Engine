@@ -188,7 +188,12 @@
         "cast_changes",
         "introductions",
         "world_facts",
-        "public_evidence"
+        "public_evidence",
+        "crowd_ops",
+        "courier_ops",
+        "telling_ops",
+        "ratified_claims",
+        "contradicted_claims"
       ],
       "chunks": {
         "cast_changes": {
@@ -202,6 +207,21 @@
         },
         "public_evidence": {
           "$text": "specialists/social/chunks/public_evidence.txt"
+        },
+        "crowd_ops": {
+          "$text": "specialists/social/chunks/crowd_ops.txt"
+        },
+        "courier_ops": {
+          "$text": "specialists/social/chunks/courier_ops.txt"
+        },
+        "telling_ops": {
+          "$text": "specialists/social/chunks/telling_ops.txt"
+        },
+        "ratified_claims": {
+          "$text": "specialists/social/chunks/ratified_claims.txt"
+        },
+        "contradicted_claims": {
+          "$text": "specialists/social/chunks/contradicted_claims.txt"
         }
       },
       "nsfw": false
@@ -303,40 +323,6 @@
         }
       },
       "nsfw": true
-    },
-    "offscreen": {
-      "core": {
-        "$text": "specialists/offscreen/core.txt"
-      },
-      "order": [
-        "crowd_ops",
-        "courier_ops",
-        "telling_ops",
-        "offscreen_plan_ops",
-        "ratified_claims",
-        "contradicted_claims"
-      ],
-      "chunks": {
-        "crowd_ops": {
-          "$text": "specialists/offscreen/chunks/crowd_ops.txt"
-        },
-        "courier_ops": {
-          "$text": "specialists/offscreen/chunks/courier_ops.txt"
-        },
-        "telling_ops": {
-          "$text": "specialists/offscreen/chunks/telling_ops.txt"
-        },
-        "offscreen_plan_ops": {
-          "$text": "specialists/offscreen/chunks/offscreen_plan_ops.txt"
-        },
-        "ratified_claims": {
-          "$text": "specialists/offscreen/chunks/ratified_claims.txt"
-        },
-        "contradicted_claims": {
-          "$text": "specialists/offscreen/chunks/contradicted_claims.txt"
-        }
-      },
-      "nsfw": false
     }
   },
   "prose_author_sheet": [

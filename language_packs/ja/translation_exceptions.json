@@ -75,7 +75,7 @@
   "character_bg / character_mid / character_major": "canonical engine identifier",
   "css": "canonical engine identifier",
   "cursor:pointer;font-size:12px": "CSS declarations handed to a style attribute",
-  "director_body / _social / _contact / _objects / _spatial / _offscreen": "canonical engine identifier",
+  "director_body / _social / _contact / _objects / _spatial": "canonical engine identifier",
   "display:block;margin-top:10px": "CSS declarations handed to a style attribute",
   "display:block;margin-top:8px": "CSS declarations handed to a style attribute",
   "display:block;margin:6px 0": "CSS declarations handed to a style attribute",

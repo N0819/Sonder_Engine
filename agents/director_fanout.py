@@ -403,6 +403,19 @@ def _specialist_payload(name, ctx, sc, view, extras):
                 wget(ctx.chat["id"], "background_presences", {}) or {}))
         if view.get("public_sources"):
             payload["public_sources"] = list(view.get("public_sources") or [])
+        # The traffic ledgers, exactly as the retired offscreen hand
+        # received them (built precisely so a Director could name the uids
+        # its ops require): crowds and couriers in reach, who carries which
+        # report, the standing hearsay, and a room index for the rooms an
+        # op names. A crowd is a charter projection and a courier a body on
+        # a route, so charter SIMULATES both; the ops are this hand's.
+        payload.update({
+            "crowds": extras.get("crowds") or [],
+            "couriers": extras.get("couriers") or [],
+            "carried_reports": extras.get("carried_reports") or [],
+            "unratified_claims": extras.get("unratified_claims") or [],
+            "rooms": rooms_index,
+        })
     elif name == "contact":
         raw_contacts = (extras.get("contacts")
                         if extras.get("contacts") is not None
@@ -530,20 +543,6 @@ def _specialist_payload(name, ctx, sc, view, extras):
         # on an objective-causality surface; no mind receives it.
         if extras.get("planned_rooms"):
             payload["planned_rooms"] = extras["planned_rooms"]
-    elif name == "offscreen":
-        # The traffic ledgers, exactly as the monolithic payload delivers
-        # them (built precisely so a Director could name the uids its ops
-        # require): crowds and couriers in reach, who carries which report,
-        # the standing hearsay, the planning switch and its open plans.
-        payload.update({
-            "crowds": extras.get("crowds") or [],
-            "couriers": extras.get("couriers") or [],
-            "carried_reports": extras.get("carried_reports") or [],
-            "unratified_claims": extras.get("unratified_claims") or [],
-            "offscreen_planning": extras.get("offscreen_planning")
-                                  or {"enabled": False, "plans": []},
-            "rooms": rooms_index,
-        })
     return payload
 
 

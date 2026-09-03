@@ -67,7 +67,7 @@ def test_english_is_an_installed_complete_default_pack():
     # Counted over what the pack PUBLISHES, not what it stores: the seven
     # Director sheets are assembled from `specialists`/`prose_author_sheet`
     # and deliberately carry no stored body of their own.
-    assert len(default_prompts_for("en")) >= 41
+    assert len(default_prompts_for("en")) >= 40
     # Perception composes every view deterministically and has no model role,
     # so it must carry no prompt: one in the pack is 28k characters shipped to
     # nobody, surfaced in the host's prompt editor as if it were editable, and

@@ -206,7 +206,7 @@ def _normalize_diff_shape(sd):
     for k in ("cast_changes", "world_facts", "introductions", "following_ops",
               "remove_entities", "remove_rooms", "remove_adjacent",
               "inventory_ops", "contact_ops", "contact_action_ops", "substance_ops", "claim_dispositions",
-              "consequences", "offscreen_plan_ops", "crowd_ops",
+              "consequences", "crowd_ops",
               "telling_ops"):
         if not isinstance(sd.get(k), list):
             sd[k] = []
@@ -353,8 +353,6 @@ _NON_SUBSTANTIVE_CHANNELS = {
                           "encoded in the counted channels",
     "consequences": "explicitly NOT this beat's outcome -- a fuse fired when "
                     "the clock reaches it (the schema's own comment says so)",
-    "offscreen_plan_ops": "a plan adjudicated into future stages, for the "
-                          "reason consequences gives",
 }
 
 _SUBSTANTIVE_CHANNELS = frozenset(
@@ -411,7 +409,6 @@ _SUBJECT_OP_CHANNELS = {
     "courier_ops": ("courier_id", "sender", "addressee", "listener", "by",
                     "from_room", "to_room"),
     "artifact_ops": ("artifact_id", "poster", "room", "reader", "by"),
-    "offscreen_plan_ops": ("plan_id", "actor"),
     "consequences": ("where", "originator"),
     "destruction": ("effect_id", "target_id", "affected_locations"),
 }

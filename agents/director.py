@@ -928,18 +928,6 @@ def director_interpret(ctx, nonce):
         crowds_rows=_icrowds,
     ), _iview)
     _iparts = scene_extra_parts(ctx.cast, pers, p_name)
-    try:
-        from world.living_world import living_world_allows, living_world_config
-        _iplanning = {
-            "enabled": bool(living_world_allows(
-                living_world_config(chat["id"]),
-                "antagonist_ladder", "floor")),
-        }
-        if _iplanning["enabled"]:
-            _iplanning["plans"] = (
-                wget(chat["id"], "offscreen_plans", []) or [])[:8]
-    except Exception:
-        _iplanning = {"enabled": False, "plans": []}
     _run_specialists(
         ctx, out, sc, _idispatch,
         _iview,
@@ -970,7 +958,6 @@ def director_interpret(ctx, nonce):
             "carried_reports": _carried_reports_view(ctx),
             "unratified_claims": _unratified_background_claims(
                 chat["id"], ctx.turn["idx"]),
-            "offscreen_planning": _iplanning,
         },
         "interpret")
 
@@ -2951,17 +2938,12 @@ def director_resolve(ctx, nonce, _corrections=None):
     # same room the same way. Delivered to THIS payload only: no character
     # receives it; what a mind knows about a room rides its own gap record.
     _destination_residue = None
-    _offscreen_planning = {"enabled": False, "plans": []}
     try:
         from world.living_world import living_world_allows, living_world_config
         _living_cfg = living_world_config(chat["id"])
-        _offscreen_planning["enabled"] = living_world_allows(
-            _living_cfg, "antagonist_ladder", "floor")
-        if _offscreen_planning["enabled"]:
-            _offscreen_planning["plans"] = (
-                wget(chat["id"], "offscreen_plans", []) or [])[:8]
     except Exception as exc:
-        ctx.add_warning(f"offscreen plan context skipped: {exc}")
+        _living_cfg = None
+        ctx.add_warning(f"living world config skipped: {exc}")
     if _mv_target:
         try:
             if living_world_allows(_living_cfg,
@@ -3234,7 +3216,6 @@ def director_resolve(ctx, nonce, _corrections=None):
         "dialogue_mode": bool(flow.get("dialogue_mode", False)),
         "relevant_lore": lore_for(ctx),
         "standing_intentions": raw_intents[:12],
-        "offscreen_planning": _offscreen_planning,
         "pending_obligations": pending_obligation_view(chat["id"], turn["idx"]),
         # F5: the world-pressure ledger -- every open ongoing off-character
         # process, each of which the prompt's WORLD PRESSURE rule requires
@@ -3709,8 +3690,6 @@ def director_resolve(ctx, nonce, _corrections=None):
         "couriers": payload.get("couriers") or [],
         "carried_reports": payload.get("carried_reports") or [],
         "unratified_claims": payload.get("unratified_claims") or [],
-        "offscreen_planning": payload.get("offscreen_planning")
-                              or {"enabled": False, "plans": []},
     }
     _run_specialists(ctx, out, sc, _orch_dispatch, _orch_view,
                      _orch_extras, "resolve")

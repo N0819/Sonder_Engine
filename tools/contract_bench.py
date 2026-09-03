@@ -200,13 +200,6 @@ PAYLOADS.update({
         "stations": {"Wren": "at the casement"},
         "poses": {}, "contained": {}, "movement": None, "movers": {},
     },
-    "director_offscreen": {
-        **_SPEC_BASE,
-        "crowds": [], "couriers": [], "carried_reports": [],
-        "unratified_claims": [],
-        "offscreen_planning": {"enabled": False, "plans": []},
-        "rooms": _ROOMS_INDEX,
-    },
 })
 
 # The engine does not key its prompts, its schemas and its provider roles the
@@ -228,9 +221,8 @@ STEP_ROLE = {
     "director_establish": "director",
     "character": "character_major",
     "narrator": "narrator",
-    "mapping": "mapping",
     **{f"director_{n}": f"director_{n}" for n in
-       ("body", "social", "contact", "objects", "spatial", "offscreen")},
+       ("body", "social", "contact", "objects", "spatial")},
 }
 
 

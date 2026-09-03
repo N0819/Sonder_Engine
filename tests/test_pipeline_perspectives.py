@@ -278,8 +278,7 @@ class TestTheDirectorsSpecialistsAreTabsOfItsOwnWindow:
         block = _between(CHAT_JS, "function specialistIds(",
                          "function stepLenses(")
         assert "record.specialists" in block
-        for name in ("body", "social", "contact", "objects", "spatial",
-                     "offscreen"):
+        for name in ("body", "social", "contact", "objects", "spatial"):
             assert f'"{name}"' not in block, name
 
     def test_a_specialist_that_never_ran_gets_no_tab(self):

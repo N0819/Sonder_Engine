@@ -624,7 +624,6 @@
   "Director · establish scene": "ディレクター · 場面の確立",
   "Director · interpret & flow plan": "ディレクター · 解釈と流れの計画",
   "Director · resolve": "ディレクター · 解決",
-  "director_body / _social / _contact / _objects / _spatial / _offscreen": "director_body / _social / _contact / _objects / _spatial / _offscreen",
   "Disable": "無効にする",
   "Discard": "破棄",
   "Discarding…": "破棄中…",
@@ -2131,5 +2130,6 @@
   "a planning need names what was asked for": "計画上の必要は何が求められたかを名指しします",
   "disposition ${disposition} is not one of the adjudicated dispositions ${ADJUDICATED_DISPOSITIONS}": "処置 ${disposition} は裁定済みの処置 ${ADJUDICATED_DISPOSITIONS} のいずれでもありません",
   "promotion names its adjudicator": "昇格には裁定者の名が必要です",
-  "Reading the surroundings": "周囲を読み取っています"
+  "Reading the surroundings": "周囲を読み取っています",
+  "director_body / _social / _contact / _objects / _spatial": "director_body / _social / _contact / _objects / _spatial"
 }
