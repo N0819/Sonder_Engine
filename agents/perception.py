@@ -3496,18 +3496,31 @@ def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
     # decisions were being made for.
     percepts.extend(composer.room_content_percepts(
         p.get("crowds"), p.get("couriers"), p.get("notices")))
+    recognized = set(known.get(name) or [])
     # The room's talk, as ground plus at most one figure — same admission
     # story as the three seams above: `common.chatter_for_room` already
     # decided what a bystander hears, and this is only the delivery
-    # (DESIGN_BACKGROUND_PRESENTATION Part A).
-    percepts.extend(composer.chatter_percepts(p.get("chatter")))
+    # (DESIGN_BACKGROUND_PRESENTATION Part A). Except attribution: WHO the
+    # fragment names is this observer's question, not the room's. The
+    # entry carries each participant's name beside the anonymous form, and
+    # the name is read only by an observer who recognises it -- the same
+    # gate every speaker and actor label in this view passes
+    # (`charter_chatter.relabel_fragment`; Harrowmere replay t32, where the
+    # room's chatter named a trader to a player who had never been told).
+    from world.charter_chatter import relabel_fragment
+    percepts.extend(composer.chatter_percepts([
+        relabel_fragment(
+            entry, recognizes=lambda n: _recognizes(n, recognized),
+            display_for=display_map.get)
+        if isinstance(entry, dict) and entry.get("kind") == "fragment"
+        else entry
+        for entry in (p.get("chatter") or [])]))
     senses = p.get("sense_card")
     percepts.extend(composer.presence_percepts(
         sc, name, others, display_map, senses))
     percepts.extend(composer.pose_percepts(
         sc, name, others, display_map, senses,
         self_forms=self_forms, self_pronouns=self_pronouns))
-    recognized = set(known.get(name) or [])
     for body in others:
         b_name = body.get("name")
         if not b_name:
