@@ -353,12 +353,28 @@ function wizardHistoryCharacters(state) {
   return rows;
 }
 
-async function discardFailedStorySetup(chat) {
-  if (!chat?.id) return;
-  try {
-    await api("DELETE", `/api/chats/${chat.id}`);
-  } catch (cleanupError) {
-    console.warn("Could not remove incomplete story setup", cleanupError);
+async function discardFailedStorySetup(chat, created = {}) {
+  // Everything THIS setup made comes out together: the chat, then the
+  // persona and characters the wizard generated for it -- never a row the
+  // player picked from the library. Measured on the owner's database
+  // (2026-09-03): five generated "Vespera" rows and a generated "The Doctor"
+  // attached to no chat, one per failed quick start, because only the chat
+  // was removed and the retry generated the cast again. The greeting path
+  // never showed it: it generates nothing.
+  if (chat?.id) {
+    try {
+      await api("DELETE", `/api/chats/${chat.id}`);
+    } catch (cleanupError) {
+      console.warn("Could not remove incomplete story setup", cleanupError);
+    }
+  }
+  for (const id of created.characters || []) {
+    try { await api("DELETE", `/api/characters/${id}`); }
+    catch (cleanupError) { console.warn("Could not remove incomplete story setup", cleanupError); }
+  }
+  for (const id of created.personas || []) {
+    try { await api("DELETE", `/api/personas/${id}`); }
+    catch (cleanupError) { console.warn("Could not remove incomplete story setup", cleanupError); }
   }
 }
 
@@ -621,12 +637,18 @@ function renderWizardScenario(b, state) {
 
 async function runWizard(state) {
   backgroundTask("Setting up story", async () => {
+    // The library rows this run generates, so a failure anywhere after them
+    // removes them with the chat (see discardFailedStorySetup).
+    const created = { personas: [], characters: [] };
+    let chat = null;
+    try {
     let personaId = state.personaId;
     if (state.personaMode === "generate") {
       const r = await api("POST", "/api/personas/generate", {
         prompt: state.personaBrief, language: state.language
       });
       personaId = r.id;
+      created.personas.push(r.id);
     }
 
     const characterIds = [...state.existingCharacterIds];
@@ -641,16 +663,16 @@ async function runWizard(state) {
       });
       showCardWarnings(r);
       characterIds.push(r.id);
+      created.characters.push(r.id);
       historyCharacterIds.set(`generated:${i}`, r.id);
       if (state.characterBriefsKnown[i]) knownIds.add(r.id);
     }
 
-    const chat = await api("POST", "/api/chats", {
+    chat = await api("POST", "/api/chats", {
       name: state.name || "New story",
       scenario: state.scenario,
       language: state.language
     });
-    try {
       if (personaId) {
         await api("PUT", `/api/chats/${chat.id}`, { persona_id: personaId });
       }
@@ -680,7 +702,7 @@ async function runWizard(state) {
       }
       return chat;
     } catch (error) {
-      await discardFailedStorySetup(chat);
+      await discardFailedStorySetup(chat, created);
       throw error;
     }
   }, {

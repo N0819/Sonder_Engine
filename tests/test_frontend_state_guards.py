@@ -339,3 +339,24 @@ def test_the_pipeline_drawer_explains_a_turn_blocked_by_another_frame():
     # Present in both, modulo each language's own string-concatenation breaks.
     assert sentence in re.sub(r'"\s*\n\s*"', "", server)
     assert sentence in re.sub(r'"\s*\n\s*\+ "', "", CHAT)
+
+
+def test_a_failed_quick_start_removes_the_rows_it_generated():
+    """The wizard generates the persona and cast BEFORE the chat exists and,
+    until 2026-09-03, deleted only the chat on failure: measured on the
+    owner's database, five generated "Vespera" rows and a generated "The
+    Doctor" attached to no chat, one per retried quick start (the greeting
+    path generates nothing, so it never showed it). The run records every
+    library row it generated and the cleanup removes them with the chat;
+    rows the player chose from the library are never touched."""
+    import pathlib
+    src = (pathlib.Path(__file__).resolve().parents[1] / "static" / "js" / "app.js"
+           ).read_text("utf-8")
+    run = src[src.index("async function runWizard("):src.index("function renderCharacterSidebar(")]
+    assert "created.personas.push(r.id)" in run
+    assert "created.characters.push(r.id)" in run
+    assert "discardFailedStorySetup(chat, created)" in run
+    cleanup = src[src.index("async function discardFailedStorySetup("):src.index("function wizardFromScratch(")]
+    assert "created.characters" in cleanup and "`/api/characters/${id}`" in cleanup
+    assert "created.personas" in cleanup and "`/api/personas/${id}`" in cleanup
+    assert "existingCharacterIds" not in cleanup, "library picks are never deleted"
