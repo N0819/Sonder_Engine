@@ -292,6 +292,9 @@ def _stored_name_components(body, profile):
     name = str(body.get("name") or body.get("key") or "").strip()
     given = str(body.get("given_name") or "").strip()
     family = str(body.get("family_name") or "").strip()
+    # A law assembled this name: its components take the heal
+    # `display_name` applies under the same test.
+    assembled = bool(given or family)
     parts = name.split()
     if parts and not (given and family):
         if profile["name_format"] == "{given} {family}":
@@ -302,6 +305,8 @@ def _stored_name_components(body, profile):
             given = given or " ".join(parts[1:]) or parts[-1]
     # A custom format may not expose separable components. Repeating the full
     # identity is imperfect but never collapses "Dr. Sarah Moon" to "Dr.".
+    if assembled:
+        return heal_name_case(given or name), heal_name_case(family or name)
     return given or name, family or name
 
 
@@ -993,10 +998,42 @@ def title_for(body, roles=(), profile=None):
     return ""
 
 
+def heal_name_case(name):
+    """A personal name written with no capital anywhere takes one at the
+    front of each component.
+
+    The generator now capitalises an assembled component (`_syllable_name`),
+    but every body generated before it did is stored as it was written --
+    "halinham nookfeller" -- and a registry is never regenerated for a
+    spelling. The RENDER is the one place all of them pass through, so the
+    heal lives here and only for the case the generator's bug produced: a
+    name with a capital anywhere in it is an authored spelling (a particle,
+    a house style) and is returned untouched, and `upper()` is a no-op on
+    a script without case, so a kana name is left exactly as stored.
+
+    Callers apply it only to a body WHOSE NAME A LAW ASSEMBLED -- one
+    carrying the `given_name`/`family_name` components the generator stores
+    beside the name it built (`_assign_names`). A body named any other way
+    -- an ambient presence the prose called "the reeve's clerk", a
+    hand-authored roster -- carries an authored spelling or a description,
+    neither of which is the engine's to recapitalise. The normalized
+    registry gives EVERY charter a naming profile, so the profile cannot be
+    the test; the components can.
+    """
+    text = str(name or "")
+    if not text.strip() or any(ch.isupper() for ch in text):
+        return text
+    parts = text.split(" ")
+    healed = [part[:1].upper() + part[1:] for part in parts]
+    return " ".join(healed)
+
+
 def display_name(body, roles=(), profile=None):
     """Formal scene-facing name; the underlying body key remains identity."""
     body = body if isinstance(body, dict) else {}
     name = str(body.get("name") or body.get("key") or "").strip()
+    if body.get("given_name") or body.get("family_name"):
+        name = heal_name_case(name)
     title = title_for(body, roles, profile)
     if not title or name.casefold().startswith(title.casefold() + " "):
         return name

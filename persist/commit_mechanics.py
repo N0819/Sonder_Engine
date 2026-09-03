@@ -368,5 +368,20 @@ def commit_cast_changes(ctx, nonce):
                 ctx.add_warning(
                     "cast change names %r, who is not an attached character; "
                     "the roster is unchanged" % (chg.get("who"),))
+                # And say WHY to the hand that wrote it, next beat: the
+                # Director reached for this channel three times on
+                # Harrowmere to keep a person it had met, and a bare
+                # refusal left it nothing else to reach for. A mind is
+                # earned through the presence ledger and proposed by the
+                # engine (`commit_background._propose_promotions`).
+                ctx.tell_director(
+                    "cast_changes named %r, who is not an attached "
+                    "character, and attached nobody: that channel only "
+                    "moves the registered cast in and out of the scene. A "
+                    "presence earns a mind by being spoken to and answering "
+                    "-- the engine proposes promotion when that crosses the "
+                    "story's threshold and the owner confirms -- so keep "
+                    "voicing them through the background stage."
+                    % (chg.get("who"),))
                 continue
             set_char_status(cid, name2id[who], status, frame_id=frame_id)
