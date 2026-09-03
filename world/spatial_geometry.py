@@ -310,7 +310,14 @@ def effective_anchors(scene: dict, room_id) -> dict:
     rooms = scene.get("rooms") or {}
     room = rooms.get(room_id) or {}
     out = {}
-    for aid, anchor in (room.get("anchors") or {}).items():
+    authored = room.get("anchors") or {}
+    if isinstance(authored, (list, tuple)):
+        # A bare list of names is the shape some older scenes and fixtures
+        # carry: each is an anchor with no bearing and its id for a desc.
+        authored = {str(a): {"desc": str(a)} for a in authored if str(a)}
+    if not isinstance(authored, dict):
+        authored = {}
+    for aid, anchor in authored.items():
         if isinstance(anchor, dict):
             out[aid] = anchor
 

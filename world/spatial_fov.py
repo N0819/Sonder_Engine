@@ -159,9 +159,9 @@ def room_has_geometry(scene: dict, room_id) -> bool:
     that says how tall its counter is has asked to be seen from somewhere.
     """
     room = ((scene or {}).get("rooms") or {}).get(room_id)
-    if not isinstance(room, dict):
+    if not isinstance(room, dict) or not isinstance(room.get("anchors"), dict):
         return False
-    for anchor in (room.get("anchors") or {}).values():
+    for anchor in room["anchors"].values():
         if isinstance(anchor, dict) and any(
                 str(anchor.get(k) or "").strip() for k in _GEOMETRY_KEYS):
             return True

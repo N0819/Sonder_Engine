@@ -6407,6 +6407,39 @@ presentation, and bounded inter-agent deliberation. Neither principal agent is
 confined to a subsystem; their names describe perspective and usual lead, not
 exclusive authority. At rest the whole set makes zero provider calls.
 
+### 2.27 Room geometry and occlusion — PROTOTYPE on a branch
+
+Built 2026-09-02 on an isolated branch, not merged:
+[`design/DESIGN_ROOM_GEOMETRY.md`](design/DESIGN_ROOM_GEOMETRY.md).
+`world/spatial_fov.py` derives a per-room grid from the size tier, places
+anchors from their bearing with a seed keyed on (room, anchor), derives body
+cells from stations (with a new `cover` field for the far side of a fixture),
+and casts sight by recursive shadowcasting with eye height from posture. The
+verdict is folded into `visual_level_between`, so a body behind the counter
+is refused to every sight consumer at once; the composer renders what
+survives as a person would say it; the Director reads `payload.sightlines`.
+Subtracts only on evidence it has, and a room without geometry composes
+byte-identically (pinned). Measured first: the cone bites on ~27% of live
+bodies and body occlusion on ~11%, so the residual is the INPUT — whether
+the Director writes stations, and `cover` at all, once the two clauses ask.
+
+What is still open, from the note's own §10: no elevation or per-cell light;
+seeded placement can disagree with specific prose and nothing surfaces it;
+`cover` on an interior anchor is relative to the room's centre; two doorways
+on one wall cannot both cast; the features sentence is a per-room opt-in
+that changes a room's whole view once one anchor is annotated; the archive
+round-trip of the new fields is asserted, not measured.
+
+The same commit carries the planned-room handoff (note §8): the plan's seed
+reaches `director_establish`/`director_resolve` and the spatial hand as
+`payload.planned_rooms` when a body enters a planned stub or has one
+adjacent through a non-wall barrier; planned exits are protected at commit;
+a described stub settles. Residual: the count of stubs developed per trigger
+in a played story is unmeasured on this branch (no live model call was made
+here), and the mapping stage's own `planned_context` path still exists
+beside it — two seeds for one room until the mapping agent's creative half
+moves (§2.26's Phase B).
+
 ## 3. Information-pipeline leaks still open
 
 Ids are the erased pipeline sweep's own. Severity vocabulary: **leak** (a mind

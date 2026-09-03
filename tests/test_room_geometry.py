@@ -462,8 +462,8 @@ def test_sight_digest_names_who_sees_whom_and_what_stands_between():
 
 
 def test_the_director_payload_carries_the_digest_and_the_spatial_hand_reads_it():
-    from agents.director_fanout import _specialist_payload
-    from agents.director_movement import _sightlines_view
+    from agents.director import _specialist_payload
+    from agents.director import _sightlines_view
 
     class _Ctx:
         cast = [{"sheet": json.dumps({"identity": {"name": "H"}})}]
