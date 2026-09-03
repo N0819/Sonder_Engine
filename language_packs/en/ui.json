@@ -1437,6 +1437,7 @@
   "Plays a looping sound bed for the room the player is standing in, chosen from the room's spatial description only — never from who is in it. It follows the room, the hour, the weather and any damage, and each distinct state is fetched once and cached. Mute, volume and reroll live beside the input box.": "Plays a looping sound bed for the room the player is standing in, chosen from the room's spatial description only — never from who is in it. It follows the room, the hour, the weather and any damage, and each distinct state is fetched once and cached. Mute, volume and reroll live beside the input box.",
   "Please restart the server": "Please restart the server",
   "Pleasure sensitivity (0..1)": "Pleasure sensitivity (0..1)",
+  "population must be a number": "population must be a number",
   "position:relative;flex:1": "position:relative;flex:1",
   "POST": "POST",
   "Prefer by": "Prefer by",
