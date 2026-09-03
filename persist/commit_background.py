@@ -1107,9 +1107,31 @@ def authored_mind_rooms(scene, roster):
     return rooms
 
 
-def demand_reaches(scene, here, authored_rooms):
+def demand_reaches(scene, here, authored_rooms, *, aimed=False):
     """Is there a CHANNEL between where this presence stands and where an
     authored mind stands?
+
+    A DEBT DOES NOT CROSS A DOORWAY. `aimed` says whether somebody turned
+    toward the other THIS beat or last window -- the player's words naming
+    this person, exactly or by a word of their name, or this body's own act
+    toward an authored mind (§C1.3, which is the body aiming). An aimed
+    demand travels on the hearing channel below -- calling "Clerk?" to
+    someone in the next room is ordinary (chat 72's night clerk, one open
+    doorway from the bell), and the channel test is deliberately not a
+    radius. A reply OWED from an earlier beat is not aimed by anyone now:
+    the player asked, walked away, and the debt discharges where they meet
+    again, not through the open door the hearing channel grades as full
+    hearing at any distance (`hear_level`: barrier open_door, volume normal
+    -> full -- the right answer for whether a line can be made out, the
+    wrong one for whether anyone is still waiting on it). Measured,
+    Harrowmere turn 16: the miller, owed a reply from the mill, answered a
+    player who was by then knocking on a door in another lane.
+
+    The word-of-a-name case has a rule of its own, in `pick_voice_demand`:
+    a name that merely occurs in a line aimed at somebody ELSE is a subject,
+    and once the beat has a precise addressee it is not voiced at all
+    (Harrowmere turn 2: the trader was asked, and two reeves in the hall
+    next door answered on the word "reeve").
 
     Co-presence is not a TRIGGER -- §C2 settled that, and it stays settled.
     It is a FILTER. A demand from an authored mind reaches a person through
@@ -1153,6 +1175,8 @@ def demand_reaches(scene, here, authored_rooms):
     """
     if not here or not authored_rooms:
         return True
+    if not aimed:
+        return str(here) in {str(r) for r in authored_rooms if r}
     for room in authored_rooms:
         if not room:
             continue
@@ -1527,6 +1551,15 @@ def track_background_presences(ctx, nonce, *, prepared=None):
             desc = str(entity_def.get("description") or "").strip()
             if desc:
                 sk["role_hint"] = desc[:160]
+            # A mint the Director's floor bound to a charter body carries
+            # that body's permanent identity (`_bind_minted_entities_to_
+            # present_figures`); the record keys on it from its first beat,
+            # so the derived overlay and this ledger agree who this is.
+            _cref = entity_def.get("charter_ref")
+            if (isinstance(_cref, dict) and _cref.get("charter")
+                    and _cref.get("body")):
+                sk["_charter_ref"] = {"charter": str(_cref["charter"]),
+                                      "body": str(_cref["body"])}
             # Positions are usually keyed by the entity ID, not the display
             # name this sketch is filed under. Looking up the name alone left
             # the station on the floor -- and the positions harvest below then
@@ -1708,9 +1741,14 @@ def track_background_presences(ctx, nonce, *, prepared=None):
                     _engaged.append(turn_idx)
             sk = sketches.get(name)
             if sk:
+                sk = dict(sk)
+                _cref = sk.pop("_charter_ref", None)
+                if _cref and _cref not in record.setdefault("charter_refs", []):
+                    record["charter_refs"].append(dict(_cref))
                 # Director restated this presence's own description/position
                 # -> objective self-knowledge wins; overwrite the prior sketch.
-                record.setdefault("sketch", {}).update(sk)
+                if sk:
+                    record.setdefault("sketch", {}).update(sk)
             touched.add(key)
 
     # Scene-manager bookkeeping (docs/design/BACKGROUND_LIFE_DESIGN.md §3.8, §3.11).
@@ -1813,8 +1851,9 @@ def track_background_presences(ctx, nonce, *, prepared=None):
     # them in their own input, and a registered character aiming a line at
     # them. The signal for the first already existed and was used only as a
     # same-beat liveness bit; nothing accumulated it.
-    _bindings = descriptor_bindings(ctx)
-    addressed_refs = [_bindings.get(r, r) for r in _addressed_ref_strings(ctx)]
+    _bindings = descriptor_bindings(ctx, res)
+    addressed_refs = [_bindings.get(r, r)
+                      for r in _addressed_ref_strings(ctx, res)]
     # A description address is a BINDING (descriptor_bindings): persist the
     # player's own phrase on the bound body, so the fact the bind minted
     # exists -- the next "the man with the braided cords" resolves by
@@ -2153,12 +2192,62 @@ def _unresolved_address_fallback(ctx):
     return names
 
 
-def _addressed_ref_strings(ctx):
+def _player_intended_targets(ctx, dr_output=None):
+    """Whom the PLAYER's own lines were aimed at, as the resolve stage
+    recorded it -- the third source of the address channel.
+
+    `dialogue_log[].intended_target` is a structured field the Director
+    fills for every line it logs, the player's included, and it is the one
+    place a resolve-time judgment about the player's addressee survives
+    when interpret marked no address at all. Measured, Harrowmere turn 2:
+    the player walked to a market stall and asked the trader what they
+    sold; interpret wrote `addressed_to: []`, resolve wrote
+    `intended_target: "market trader"`, and with the flow channel empty the
+    demand gate never saw an addressee -- two reeves in the hall next door
+    were picked on the word "reeve" instead, the trader stayed silent, and
+    the narrator invented the trader's answer.
+
+    Only the player's own lines, and only when they are the player's: a
+    line the Director logged for somebody else names that speaker's
+    addressee, not the player's. The Director's OTHER judgments about
+    addressees already reach the gate (`_character_address_of` reads every
+    speaker's `intended_target` against a presence's exact name); this
+    hands the same field to the DESCRIPTION binder, so "market trader" can
+    bind to one body the way a flow ref would.
+    """
+    dr = dr_output if dr_output is not None else (
+        ctx.get("director_resolve") or {})
+    if not isinstance(dr, dict):
+        return []
+    p_name = _player_name_or_none(ctx)
+    if not p_name:
+        return []
+    out, seen = [], set()
+    for d in (dr.get("dialogue_log") or []):
+        if not isinstance(d, dict):
+            continue
+        if str(d.get("speaker") or "").strip().casefold() != p_name.casefold():
+            continue
+        target = " ".join(str(d.get("intended_target") or "").split())
+        if not target or target.casefold() in seen:
+            continue
+        seen.add(target.casefold())
+        out.append(target)
+    return out
+
+
+def _addressed_ref_strings(ctx, dr_output=None):
     """The address channel's usable strings: the director's own refs when it
     spelled any, else the structured-fallback names for an address it marked
-    but could not spell."""
+    but could not spell, else whom the resolve stage says the player's own
+    lines were aimed at (`_player_intended_targets`)."""
     refs = _raw_flow_addressed_refs(ctx)
-    return refs if refs else _unresolved_address_fallback(ctx)
+    if refs:
+        return refs
+    refs = _unresolved_address_fallback(ctx)
+    if refs:
+        return refs
+    return _player_intended_targets(ctx, dr_output)
 
 
 def _normalized_descriptor(text):
@@ -2171,7 +2260,7 @@ def _normalized_descriptor(text):
     return " ".join(words)
 
 
-def descriptor_bindings(ctx):
+def descriptor_bindings(ctx, dr_output=None):
     """{addressed_to string: bound presence display name} for every flow
     ref that names NOBODY -- no registered character, no extra player, no
     tracked or charter-derived presence.
@@ -2199,7 +2288,7 @@ def descriptor_bindings(ctx):
     through appearance labels); the binding publishes only what any
     onlooker in the room already sees.
     """
-    refs = _addressed_ref_strings(ctx)
+    refs = _addressed_ref_strings(ctx, dr_output)
     if not refs:
         return {}
     chat = ctx.chat
@@ -2273,14 +2362,16 @@ def descriptor_bindings(ctx):
     return bindings
 
 
-def _flow_addressed_refs(ctx):
+def _flow_addressed_refs(ctx, dr_output=None):
     """flow.addressed_to strings with every description address resolved to
     the body it binds to (descriptor_bindings above), so every consumer of
     the addressed class -- the demand gate, owed-reply bookkeeping, auto
     promotion, the scene manager -- hears an address-by-description exactly
-    as it hears an address-by-name."""
-    bindings = descriptor_bindings(ctx)
-    return [bindings.get(ref, ref) for ref in _addressed_ref_strings(ctx)]
+    as it hears an address-by-name. `dr_output` is this beat's resolve
+    output where the caller holds it before `ctx` does."""
+    bindings = descriptor_bindings(ctx, dr_output)
+    return [bindings.get(ref, ref)
+            for ref in _addressed_ref_strings(ctx, dr_output)]
 
 
 def _presence_addressed_match(name, ref):
@@ -2485,7 +2576,7 @@ def pick_voice_demand(ctx, dr_output, cap=1):
     presences = _fold_duplicate_presences(
         wget(cid, "background_presences", {}) or {}, sc)
 
-    addressed_refs = _flow_addressed_refs(ctx)
+    addressed_refs = _flow_addressed_refs(ctx, dr_output)
 
     # Where the player is standing, scoping which charter bodies overlay
     # into the candidate ledger at all.
@@ -2644,7 +2735,8 @@ def pick_voice_demand(ctx, dr_output, cap=1):
         # was spending slots on debts its own writer would have refused to
         # accrue.
         if not (routed or flow_addressed or emerged or char_addr):
-            if not demand_reaches(sc, here, authored_rooms):
+            if not demand_reaches(sc, here, authored_rooms,
+                                  aimed=bool(addressed or acting)):
                 continue
         # Only a person may hold a background speaking turn. The ledger says
         # nothing about what a name DENOTES, so a device with an accrued
@@ -2680,6 +2772,10 @@ def pick_voice_demand(ctx, dr_output, cap=1):
             {"priority": priority, "name": name, "record": record,
              "room": str(here or ""),
              "addressed": bool(addressed_precise),
+             # Qualified on the loose word-match ALONE: no precise address,
+             # no debt, no act, no emergence. See the subject rule below.
+             "loose_only": bool(addressed and not addressed_precise
+                                and not (owed or acting or emerged)),
              # The PLAYER's own precise address specifically (a flow ref --
              # description bindings included -- or their exact name in the
              # declaration), so the stage downstream can hand the presence
@@ -2692,6 +2788,20 @@ def pick_voice_demand(ctx, dr_output, cap=1):
 
     if not candidates:
         return {"picks": [], "meta": {}}
+    # A NAME IN A LINE AIMED AT SOMEONE ELSE IS A SUBJECT, NOT AN ADDRESSEE.
+    # The loose word-match exists so "Crusher" can carry a scene once the
+    # doctor has been established; it was never a finding that the speaker
+    # turned toward that person. When this beat HAS a precise addressee --
+    # a flow ref, an exact name, an aimed line, a routed hand-off -- every
+    # candidate that qualified on the loose match alone was merely talked
+    # ABOUT, and voicing them answers a question that was put to somebody
+    # else. Measured, Harrowmere turn 4: the player asked the reeve's
+    # clerk "which of you is the reeve?"; the clerk was the addressee, and
+    # the reeve, picked on the word "reeve", answered "give it here" in the
+    # same beat, so two people replied to one question and their answers
+    # disagreed about whether the reeve was even in the building.
+    if any(c["addressed"] for c in candidates):
+        candidates = [c for c in candidates if not c["loose_only"]]
     if any(c["refs"] for c in candidates):
         # The B3 tie-break, computed against the authored minds standing in
         # the candidate's own room; one registry fetch for every candidate.
