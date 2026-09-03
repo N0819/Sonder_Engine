@@ -31,6 +31,7 @@ from __future__ import annotations
 import json
 
 from story.plot_packages import operation_shape_text
+from story.room_research import tool_entries as _research_tool_entries
 
 #: Result ceiling, in characters of JSON; past it the result is truncated
 #: with a `truncated` marker rather than a model being handed a transcript.
@@ -626,6 +627,10 @@ TOOLS = [
      "description": "Retire a package from any state, with a note. What a landed package placed in the world stays; retiring closes the file.",
      "args": _schema({"uid": _S, "note": _S}, ["uid"]), "handler": _t_retire_package,
      "host_only": True},
+    # -- research (story/room_research.py): the web, under a `research`
+    # mandate, disclosed in the thread, cached per story, usable only as
+    # filed lore. Never handed to the Dramaturge (RESEARCH_TOOL_NAMES).
+    *_research_tool_entries(_schema),
 ]
 
 TOOL_INDEX = {tool["name"]: tool for tool in TOOLS}

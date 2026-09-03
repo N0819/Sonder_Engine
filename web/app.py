@@ -1432,6 +1432,7 @@ def bootstrap():
         # anyway until the reader has clicked something. The API key is never
         # sent back, only whether one is set.
         "ambience": {k: v for k, v in ambience_settings().items() if k != "key"},
+        "research": research_settings(),
         "ambience_licenses": list(FREESOUND_LICENCES),
         "auto_promote": _auto_promote_enabled(),
         "default_prompts": DEFAULT_PROMPTS,
@@ -1644,6 +1645,42 @@ def put_ambience(body: dict = Body(...)):
                   if lic in FREESOUND_LICENCES]
         set_setting("ambience_licenses", json.dumps(picked))
     return {k: v for k, v in ambience_settings().items() if k != "key"}
+
+def research_settings():
+    """The Writers' Room's research provider: which one, and whether a key is
+    set. The key itself is never returned."""
+    from llm.research_providers import (RESEARCH_KEY_SETTING, RESEARCH_PROVIDERS,
+                                        RESEARCH_PROVIDER_SETTING)
+    provider = str(get_setting(RESEARCH_PROVIDER_SETTING) or "").strip()
+    return {"provider": provider if provider in RESEARCH_PROVIDERS else "",
+            "providers": list(RESEARCH_PROVIDERS),
+            "has_key": bool(str(get_setting(RESEARCH_KEY_SETTING) or "").strip())}
+
+
+@app.get("/api/research")
+def get_research():
+    return research_settings()
+
+
+@app.put("/api/research")
+def put_research(body: dict = Body(...)):
+    """The Writers' Room's research provider and key. Same contract as the
+    ambience route: an absent field is unchanged, an empty key keeps the
+    stored one, clearing is explicit. The tools it feeds
+    (`story/room_research.py`) still refuse without a standing `research`
+    mandate in the story -- this only says WHICH service answers."""
+    from llm.research_providers import (RESEARCH_KEY_SETTING, RESEARCH_PROVIDERS,
+                                        RESEARCH_PROVIDER_SETTING)
+    if "provider" in body:
+        provider = str(body.get("provider") or "").strip().casefold()
+        if provider and provider not in RESEARCH_PROVIDERS:
+            raise HTTPException(400, "provider must be one of the research providers")
+        set_setting(RESEARCH_PROVIDER_SETTING, provider)
+    if body.get("key"):
+        set_setting(RESEARCH_KEY_SETTING, str(body["key"]).strip())
+    if body.get("clear_key"):
+        set_setting(RESEARCH_KEY_SETTING, "")
+    return research_settings()
 
 @app.put("/api/openrouter_routing")
 def put_openrouter_routing(body: dict = Body(...)):
