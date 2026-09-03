@@ -515,9 +515,19 @@ def _specialist_payload(name, ctx, sc, view, extras):
             ],
             "movement": extras.get("movement"),
             "movers": extras.get("movers") or {},
+            # The geometry's sight digest -- who sees whom, who is within
+            # reach, what cover stands between -- computed from the ledgers
+            # this hand writes (stations, poses, facing) so it can see what
+            # its own entries come to. Objective causality, not a mind.
+            "sightlines": extras.get("sightlines"),
         })
         if extras.get("proposal"):
             payload["mapping_scene_proposal"] = extras["proposal"]
+        # The plan's seed for the stubs in reach: this hand furnishes them
+        # (rooms chunk, A ROOM YOU ARE HANDED AS PLANNED). Author knowledge
+        # on an objective-causality surface; no mind receives it.
+        if extras.get("planned_rooms"):
+            payload["planned_rooms"] = extras["planned_rooms"]
     elif name == "offscreen":
         # The traffic ledgers, exactly as the monolithic payload delivers
         # them (built precisely so a Director could name the uids its ops

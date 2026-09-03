@@ -220,6 +220,16 @@ from world.spatial_prose import (
 )
 
 
+from world.spatial_fov import (
+    DEFAULT_FOOTPRINT, DEFAULT_HEIGHT, DEFAULT_OPACITY, FOOTPRINTS,
+    GRID_SIDE, HEIGHTS, OPACITIES, anchor_cells, anchor_geometry,
+    bearing_between, body_cell, body_visibility, cover_between, eye_rank,
+    feature_visibility, grid_side, height_rank, normalize_footprint,
+    normalize_height, normalize_opacity, observer_field, posture_class,
+    room_has_geometry, shadowcast, sight_digest,
+)
+
+
 from world.spatial_merge import (
     _dedup_duplicate_entity_keys, _dedup_duplicate_position_keys,
     _dedupe_adjacent, _ENTITY_DEFAULT_FIELDS, _ENTITY_STRUCTURAL_FIELDS,

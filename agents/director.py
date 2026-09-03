@@ -167,6 +167,8 @@ from .director_views import (
 )
 from .director_movement import (
     _egocentric_exits,
+    _planned_rooms_view,
+    _sightlines_view,
     _ci_mapping_key,
     _reconcile_near_group_positions,
     _declares_rapid_movement,
@@ -626,6 +628,15 @@ def director_interpret(ctx, nonce):
             "exits": _egocentric_exits(
                 sc, pers.get("name") or persona_name(pers)),
         },
+        # Who can see whom, and what stands between: the geometry's own
+        # answer, for the hand that places bodies (see `_sightlines_view`).
+        "sightlines": _sightlines_view(
+            sc, ctx, pers.get("name") or persona_name(pers)),
+        # The plan's seed for the stubs this opening stands in or looks
+        # into -- purpose and exits given, contents the Director's. Absent
+        # when no planned room is in reach (see `_planned_rooms_view`).
+        **({"planned_rooms": _planned} if (
+            _planned := _planned_rooms_view(sc, ctx, p_room)) else {}),
         "present_characters": cast_info,
         # Named figures with no character id. `flow.addressed_to` accepts a
         # NAME STRING for exactly these (schemas.py: "the only way the director
@@ -885,6 +896,7 @@ def director_interpret(ctx, nonce):
             "movement": out.get("movement"),
             "movers": {p_name: {"exits": _egocentric_exits(sc, p_name)}},
             "proposal": None,
+            "sightlines": _sightlines_view(sc, ctx, p_name),
             "crowds": _icrowds,
             "couriers": _couriers_view(chat["id"], sc),
             "carried_reports": _carried_reports_view(ctx),
@@ -2960,6 +2972,15 @@ def director_resolve(ctx, nonce, _corrections=None):
         # computing the leg afterwards would move bodies the resolve had
         # just described standing still.
         "travel_in_flight": _travel_in_flight_view(sc, interp, p_name),
+        # The geometry's sight digest (`_sightlines_view`): read before the
+        # prose is written, so "she ducks behind the bar" is resolved
+        # against whether the bar is between them.
+        "sightlines": _sightlines_view(sc, ctx, p_name),
+        # The plan's seed for every stub this beat stands in, moves into or
+        # looks into. See `_planned_rooms_view`; absent when none.
+        **({"planned_rooms": _planned} if (
+            _planned := _planned_rooms_view(
+                sc, ctx, ctx.get("_player_room"), _mv_target)) else {}),
         "player_declaration": {
             "ABSOLUTE": True,
             "sequence": interp.get("sequence") or [],
@@ -3450,6 +3471,8 @@ def director_resolve(ctx, nonce, _corrections=None):
             for d in decls if d.get("name")
         },
         "proposal": payload.get("mapping_scene_proposal"),
+        "sightlines": payload.get("sightlines"),
+        "planned_rooms": payload.get("planned_rooms"),
         "crowds": payload.get("crowds") or [],
         "couriers": payload.get("couriers") or [],
         "carried_reports": payload.get("carried_reports") or [],

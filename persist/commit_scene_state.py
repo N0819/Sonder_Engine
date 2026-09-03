@@ -1114,7 +1114,18 @@ def prepare_scene_commit(ctx):
     _frontier_mutations = []
     try:
         from world.structure import (
-            materialize_planned_fringe, prepare_frontier_expansion)
+            materialize_planned_fringe, prepare_frontier_expansion,
+            protect_planned_edges, settle_developed_stubs)
+        # THE PLAN'S EXITS ARE PROTECTED. A developed room may add ways
+        # through; the way the plan gave it comes back if the development
+        # dropped it, because every other planned room counts on it.
+        for _room, _to in protect_planned_edges(cid, sc):
+            ctx.warnings.append(
+                f"planned exit restored: {_room} -> {_to} (a developed room "
+                "keeps every exit the plan gave it)")
+        # And a stub that now has a description is a room: the flag and the
+        # seed come off the live record, which the registry still keeps.
+        settle_developed_stubs(sc)
         sc, _frontier_mutations = prepare_frontier_expansion(cid, sc)
         sc, _planned_added = materialize_planned_fringe(cid, sc)
     except Exception as _planned_exc:  # diagnostics, never a story blocker

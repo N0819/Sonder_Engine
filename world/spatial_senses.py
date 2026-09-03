@@ -653,6 +653,19 @@ def visual_level_between(scene: dict, observer: str, target: str) -> str:
         if rel.get("distance") in ("far", "remote"):
             cap = _weaker_sight(cap, "shapes")
         level = _weaker_sight(level, cap)
+    # WHAT THE LINE MEETS. The within-room geometry (`world.spatial_fov`)
+    # is asked HERE, in the one function every sight decision goes through,
+    # so a body behind the counter is refused to presence, pose,
+    # appearance, the act channel and the micro-loop at once, with no
+    # second copy of the rule anywhere. It answers only on evidence it has
+    # -- both bodies at a measured station, an opaque anchor of a stated
+    # height between them (`basis == "line"`) -- and otherwise leaves the
+    # level exactly as the light and the barriers graded it.
+    if level != "none":
+        from world.spatial_fov import body_visibility
+        line = body_visibility(scene, observer, target)
+        if line.get("basis") == "line" and not line.get("visible"):
+            level = "none"
     if crossing and level == "none":
         return "shapes"
     return level
