@@ -6763,6 +6763,47 @@ What the fixes for replay defects N2, N9, N10 and N11 deliberately left:
   measurement of whether it held is the next replay's invented-dialogue
   count (5 on 40 beats before it).
 
+### 2.31 Creatures as charter — residuals (2026-09-03)
+
+Landed as `docs/design/DESIGN_CREATURES_AS_CHARTER.md`. What it deliberately
+does not do, and what the measurement left open:
+
+- **Figures are never prey off screen.** `figure` is a prey category so a
+  creature may notice the player or a major character, and the round does
+  nothing about it: their fate is the causality bubble's. A creature that
+  meets the player in play is the Director's to render from the same state.
+- **No tactics.** Stalking, ambush and defending a lair against a hunt are
+  character-frame work; off screen a creature is needs and routes.
+- **A creature does not hunt the watch that hunts it.** A called watch at a
+  place changes the contest there and can hurt an attacker; nothing walks the
+  watch to the lair. A hunt is a post with a destination and is not built.
+- **Spoor stands in play until the Director removes it or the next landing
+  takes it down.** The registry's `until_hours` sweeps the record; the
+  artifact follows on the next `land_snapshot`, so a beat between may show a
+  carcass the town has already forgotten.
+- **News reaches an office only through channels**, which is correct and is
+  why a month of the small-town fixture shows one mobilisation in three arms:
+  a posted herder who never leaves the pen never tells the reeve. The fixture's
+  crew of three carries the news in the social phases; a town whose offices
+  never meet its posts does not mobilise.
+- **Between-creature predation** is allowed by the class and untested.
+- **The last window's kills are reported at the next.** Events are carried
+  and returned by the institution that lives through them, so a run's final
+  window can end with a body dead and its `harm_done` not yet in the returned
+  list (measured: big_town 48h, 2 gone, 1 reported). The state is right; the
+  event arrives on the next window or catch-up.
+- **The stepper's own overhead** on a thousand-body town is the difference
+  between the two `alone` rows in the note's §10 (about four per cent over
+  `run`, same events); a creature costs about nine per cent over `run`
+  alone, flat in the number of creatures. The owner's bound was "no more
+  than the creature's own bodies explain", and four bodies in a thousand
+  explain half a per cent: the number is named in §10 rather than absorbed,
+  and the round's company index, senses walk and spoor read are where the
+  rest goes.
+- **Cost bound.** A deep copy per kill was most of the round's cost on
+  `big_town` and was removed (`apply_harm(copy_state=False)`); re-measure
+  after any change to the round with `tests/charter_worlds.big_town`.
+
 ## 3. Information-pipeline leaks still open
 
 Ids are the erased pipeline sweep's own. Severity vocabulary: **leak** (a mind
