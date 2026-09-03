@@ -44,6 +44,17 @@ Housekeeping tables not described below: `schema_meta` (the migration version), 
   player's declaration lives on `turns`, everyone else's lives here.
 - `turns`: the primary player's declaration in sequence, plus the beat's
   `frame_id`.
+- `room_messages`: the Writers' Room thread (`story/room_conversation.py`),
+  one line per row, per story and era (`frame_id` NULL is the present),
+  stamped with the beat it was said at. AUTHOR-SIDE state: a branch carries
+  it up to the branch turn with frame ids remapped, a portable archive
+  carries every era (`room_messages` in the archive), a deleted story
+  cascades it -- and the turn checkpoint deliberately does NOT snapshot or
+  restore it, because a reroll unsays a beat, never what the player told
+  the room afterwards. Pruned to `ROOM_HISTORY_KEPT` per thread on write.
+  The mandates and status the panel shows beside it are `world` rows
+  (`room_mandates`, `room_status`, frame-scoped), so they follow the world
+  table's own carriage.
 - `steps`, `variants`: inspectable intermediate pipeline outputs and rerolls.
 - `events`: one summarized committed event per turn.
 - `memories`, `memory_summaries`: character-owned experience records and

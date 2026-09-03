@@ -406,7 +406,11 @@ Each changes what a phase builds; none blocks Phase A.
 4. **`mapping_quick` too.** Phase A.3 retires both mapping stages; if the
    quick stage's cheap movement classification is wanted as a deterministic
    pre-pass, it survives as code, not a call.
-5. **The user experience** — settled in shape (owner, 2026-09-03): the
+5. **The user experience** — settled in shape (owner, 2026-09-03), and
+   BUILT in both shapes on 2026-09-04 (`static/js/writers_room.js`,
+   `web/room_routes.py`, `story/room_conversation.py`; the Planner seam is
+   `room_conversation.PLANNER`, a placeholder until Phase B seats the
+   agent): the
    room is **a popout panel in the main UI**, opened from a small tab on
    the right edge of the play view, so the story and the conversation
    about it are on one screen (the Dramaturge's input *is* the
