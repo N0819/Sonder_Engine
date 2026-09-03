@@ -270,10 +270,15 @@ engineer shape rather than author / reviewer:
   how much the player asked to be surprised. It thinks: *what would be a
   good progression of this story, from what I know of fiction, the chosen
   genre, and how far I am licensed to surprise?* It proposes direction:
-  pressure, reversal, revelation, a turn nobody asked for. It holds **no
-  tools at all**: it never reads the world itself and never writes it; the
-  Planner fetches what it asks for and cites it back. Its output is
-  intent, not a package.
+  pressure, reversal, revelation, a turn nobody asked for. It holds **one
+  tool, and it reads**: lore search and lookup (`search_lore`, `read_lore`,
+  bounded per proposal), because the setting bible is the one thing it
+  cannot propose without — a heresy trial needs a faith to exist — and it
+  is now almost solely an author's reference (owner, 2026-09-03: the story
+  and its history exist as the physical map of rooms and people; lore is
+  what the map cannot hold). It never inspects the live world and never
+  writes it; the Planner fetches everything else it asks for and cites it
+  back. Its output is intent, not a package.
 - **A creativity dial, per story and named.** From holding to a target the
   player stated (a mandate the room was given) to wildly inventive. The
   dial is a setting the user turns, not a property of the agent.
