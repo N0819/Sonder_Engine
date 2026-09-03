@@ -1250,6 +1250,13 @@ ROLES = [
     # delegation is a scoped call on this same role. Unset, it follows
     # `default` like every other role.
     "story_planner",
+    # The Writers' Room's other author (agents/dramaturge.py): pure
+    # planning, proposes direction and builds nothing, reads lore and
+    # nothing else of the world. Its own row because the owner may want a
+    # more inventive model here than the Planner's. NEVER in the turn
+    # pipeline; runs out of band under the surprise dial. Unset, it
+    # follows `default`.
+    "dramaturge",
     # Writes an image prompt from spatial data (backdrops.py). OPTIONAL and
     # deliberately out of band: it never runs inside the turn pipeline, so a
     # slow or failed image prompt cannot delay or break a beat. When no model
