@@ -417,6 +417,19 @@ def get_scene(chat_id, chat=None):
     return sc
 
 
+def seed_scene_from_plan(chat_id, sc):
+    """Seed ``sc["rooms"]`` with every planted room of every planned
+    structure (see `_seed_scene_from_plan`). Public because the scene commit
+    needs the same seed the readers got: `get_scene` hands mapping and the
+    Director a scene born with the plan in it, and until 2026-09-02
+    `prepare_scene_commit` merged the opening diff onto the STORED scene --
+    `{}` -- so the committed opening held four Director-minted rooms and the
+    square's seven planned exits became one (Harrowmere turn 1: "dropped
+    exit(s) from bridge_approach to undefined room(s) orrin_shrine,
+    toll_bridge")."""
+    _seed_scene_from_plan(chat_id, sc)
+
+
 def _seed_scene_from_plan(chat_id, sc):
     """A story that had a location generated for it opens INSIDE it.
 
