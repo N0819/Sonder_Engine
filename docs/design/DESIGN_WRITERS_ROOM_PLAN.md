@@ -413,9 +413,18 @@ Each changes what a phase builds; none blocks Phase A.
    existing slide-in drawer on narrow viewports); then a **float mode**
    that undocks it into a draggable, corner-resizable window over the
    story. Dock state, geometry and opacity persist per viewer (local
-   storage, defaults when blocked). Translucent chrome with a backdrop
-   blur; the text surface keeps a readable opacity floor behind a slider
-   rather than a fixed transparency. Its own script and routes, loaded
+   storage, defaults when blocked). Two rendering rules the page already
+   has decide the look, and the panel reuses them rather than inventing
+   a third: **docked, it is opaque chrome** (`static/styles.css` "OPAQUE
+   CHROME": every surface directly over the page background is opaque,
+   so an ambient colour meant for the story never washes the frame);
+   **floating, it is the prose plate** (`body.has-backdrop .prose`: the
+   translucent plate at `--bd-panel`, the 3px backdrop blur, the
+   four-way text outline, and the same weather gate that drops the blur
+   while streaks move behind it). The float sits over the story column
+   the way the prose does, so it earns the prose's treatment; the opacity
+   slider drives `--bd-panel` for the panel alone, above the readable
+   floor the prose rule already assumes. Its own script and routes, loaded
    after the chat script, sharing only auth and theme helpers, so it
    stays out of the turn pipeline's scripts. (An earlier note here said
    a separate tab; superseded the same day.) In it the player talks with the Story
