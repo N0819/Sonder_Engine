@@ -6641,6 +6641,19 @@ for what follows. Residuals of this entry rather than a section of their own:
   grant submits one job (deduped per chat, capped per story hour); there
   is no separate low-water trigger.
 
+- **No story bible.** The Planner's memory is the last 30 thread lines plus
+  its typed state; what rolls off (the player's words, promises, planted
+  setups, rejected ideas) is gone. Design in
+  `design/DESIGN_WRITERS_ROOM_PLAN.md` § 6 item 7 (2026-09-03), a Phase B
+  residual: typed state first, sections not a summary, particulars with
+  sources, folded out of band, served to no mind.
+- **The Planner's live measure (chat 111, 2026-09-03, three replies):**
+  47s / 61s / 19s; the first two runs each found a defect class (calls under
+  a misspelled key dropped silently; a grant written once per step; drafts
+  refused with a message naming neither the kind's key nor its fields; an
+  empty package validating clean and being reported as prepared), each fixed
+  at its class; the third published a three-room, two-person package in five
+  steps and eleven calls.
 - **No operation for author surgery on a charter** (v2 § 9.1's "explicit
   author surgery" on carried state): a package can generate a location and
   presimulate, and cannot move a body, change a post or edit a claim. The

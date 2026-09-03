@@ -407,9 +407,16 @@ def draft_operation(cid, uid, op, *, frame_id=None):
         raise ValueError("a %s package takes no new operations" % pkg["status"])
     op = dict(op or {})
     kind = str(op.get("op") or "")
+    # `kind` is accepted as the kind key only when its value IS a kind, so a
+    # plan_entity's own `kind` (person | thing | creature) is never read as
+    # the operation's.
+    if not kind and str(op.get("kind") or "") in OPERATIONS:
+        kind = str(op.pop("kind"))
     if kind not in OPERATIONS:
         raise ValueError(
-            "operation kind %r is not one the room may perform; the kinds are %s"
+            "operation kind %r is not one the room may perform; an operation is "
+            "an object whose `op` names its kind and whose other keys are that "
+            "kind's fields; the kinds are %s"
             % (kind, ", ".join(sorted(OPERATIONS))))
     if len(pkg["operations"]) >= OPS_CAP:
         raise ValueError("a package carries at most %d operations" % OPS_CAP)
@@ -964,6 +971,47 @@ OPERATIONS = {
 }
 
 
+#: THE FIELDS OF EACH KIND, as the model is told them (the draft_operation
+#: tool description renders this table). A closed set the engine owns: the
+#: shape functions above are the authority and this table restates them, so
+#: a model drafts against a schema instead of guessing field names. Measured
+#: live (chat 111, 2026-09-03): four drafts in a row were refused because the
+#: model spelled the kind `kind` and the fields as it imagined them, and the
+#: refusal named neither.
+OPERATION_FIELDS = {
+    "plan_rooms": {
+        "structure": "{key, name} -- the structure the rooms belong to",
+        "rooms": "{<room_id>: {name, purpose, access, adjacent: [{to: <room_id>, barrier?, bearing?}], frontier: [<direction>]}}",
+        "owning_book_id?": "lorebook id"},
+    "plan_entity": {
+        "name": "the entity's name", "kind": "person | thing | creature",
+        "role?": "what they are for, in a word or two", "aliases?": "[names]",
+        "brief": "{purpose, truths, where: <room_id>}",
+        "look?": "how they read at a glance", "answers_need?": "a planning-need uid"},
+    "post_artifact": {"room": "<room_id>", "description": "what the bill is, briefly",
+                      "text?": "what it says", "report?": "{...}"},
+    "schedule_event": {"summary": "what happens", "due_in_turns": "1..EVENT_DUE_CAP"},
+    "file_lore": {"subject_id": "a room id, a plan uid, a charter key, or an id-shaped slug",
+                  "content": "the entry", "subject_kind?": "place | person | thing | setting",
+                  "category?": "a lore category", "title?": "", "keys?": "comma-separated",
+                  "knowledge_locations?": "[room ids]", "book_id?": "lorebook id"},
+    "answer_need": {"need_uid": "an open need", "fill": "{...what fills it}"},
+    "close_need": {"need_uid": "an open need", "reason": "why it closes unanswered"},
+    "request_location": {"request": "{name | brief, ...as the Charter Planner returned it}"},
+    "presimulate": {"hours": "0 < hours <= PRESIM_HOURS_CAP", "charters?": "[charter keys]"},
+}
+
+
+def operation_shape_text():
+    """One line per kind for a tool description: `op` names the kind, the
+    other keys are its fields (`?` marks an optional one)."""
+    lines = []
+    for kind, fields in OPERATION_FIELDS.items():
+        lines.append("%s: %s" % (kind, ", ".join(
+            "%s=%s" % (k, v) if v else k for k, v in fields.items())))
+    return "; ".join(lines)
+
+
 #: Who authored a package decides whether it needs a grant. A package the
 #: HOST drafted by hand (`created_by` = "writers_room", the default) is the
 #: host's own world and needs none; a package an AGENT drafted publishes only
@@ -1038,6 +1086,12 @@ def _package_checks(pkg, world):
     evidence that is evidence (v2 § 5.3), clocks with a due, participants
     that resolve, sealed policy with an envelope, authority honoured."""
     errors, warnings = [], []
+    if not pkg["operations"]:
+        # A package with nothing in it validates clean and publishes nothing;
+        # a model that read `ok: true` as "prepared" told the player so
+        # (chat 111, 2026-09-03). Said here, where the verdict is built.
+        warnings.append("the package carries no operations; publishing it "
+                        "changes nothing")
     for ev in pkg["evidence"]:
         missing = [f for f in ("origin", "location", "bears_on", "admission_path")
                    if not ev.get(f)]

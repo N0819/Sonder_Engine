@@ -462,6 +462,52 @@ Each changes what a phase builds; none blocks Phase A.
    Defaults for a new story are the zero-harm floor above; everything
    else is granted in words.
 
+7. **The room's memory: the story bible.** Measured on the first live runs
+   (chat 111, 2026-09-03): the Planner reads the last 30 thread lines and
+   nothing older, rebuilds its whole payload every step, and keeps no
+   memory of a reply once the thread rolls past it. Its typed state
+   (mandates, packages, status, needs) IS a compaction of intent -- but only
+   of the part that has a typed home. What rolls off is exactly what a
+   writer regrets losing: what the player asked for and in what words, what
+   the room promised, what it planted meaning to pay off, what it decided
+   against and why. Recommended design, the **story bible** (`room_bible`,
+   frame-scoped, shown in every payload, read later by the Dramaturge too):
+   - **Typed state first.** Anything that can be a mandate, a package truth,
+     question or clock, a planning need or a lore entry goes THERE, and the
+     bible holds a pointer. The bible is for what has no typed home: intent,
+     promises, setups, taste, rejections.
+   - **Sections, not a summary.** `wants` (what the player asked for, in
+     their words, and their hard nos; a reversal keeps both lines), `promises`
+     (what the room said it would do and has not; one with no package behind
+     it after a while becomes a question), `setups` (planted and unpaid, with
+     where the evidence lives -- the Chekhov ledger; an unpaid setup never
+     falls off), `open_loops` (questions the story raised and what would
+     answer them), `paid` (payoffs landed, one line each, so nothing is
+     planted twice), `decided` (decisions and rejected alternatives with the
+     reason, so the room does not re-propose or contradict itself), `voice`
+     (genre, tone, the creativity dial as the player stated it).
+   - **Particulars, not gists.** An entry is a sentence carrying names,
+     turns, room ids and the player's phrase, with a `source` (message ids,
+     a package uid, a lore id) and a `since_turn`. Code refuses an entry
+     with no source or a source that does not exist. Same rule as character
+     memory: detailed and personal, never "the player wanted things".
+   - **When it fires.** Out of band (`core/jobs.py`, keyed `room_bible`),
+     never in a reply's wall clock: when the thread holds a batch of lines
+     older than the window not yet folded, one bounded model call is asked
+     what in those lines a writer would regret forgetting, under the schema
+     above; a publish or resolve adds its line deterministically with no
+     call. A line leaves the window only after the fold.
+   - **Author memory, never mind memory.** The bible is served to the room's
+     agents and to no mind; it is not a channel. Caps to name: bible chars
+     shown, entries per section, the fold batch, the fold call's tokens.
+   - **Caching, the same measurement.** The tool table was 10.3k of a 13k
+     payload and identical on every step; it now rides the system block,
+     which the provider seam marks cacheable, and the per-step message fell
+     to 3-10k. The bible belongs beside it: stable within a reply, so the
+     per-step message is only the transcript, the budget and the thread.
+     `cached_tokens` read 0 on every live call (Gemini through OpenRouter);
+     the block is arranged for the providers that honour it.
+
 ## 7. Measures
 
 The Harrowmere replay (`../../demos/harrowmere-replay-2026-09-03/COMPARISON.md`)

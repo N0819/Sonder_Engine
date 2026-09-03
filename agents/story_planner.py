@@ -133,6 +133,16 @@ def _manifest():
     return tools
 
 
+def _tools_block():
+    """The tool table as a system-block suffix. It is the largest and the
+    most stable thing the Planner reads (10.3k of a 13k-character payload
+    on the first live run, identical on every step), so it rides the system
+    block, which `providers.chat_complete` marks cacheable, and not the
+    per-step user message."""
+    return ("\n\nTOOLS. The room's table; the player never hears these "
+            "names:\n" + json.dumps(_manifest(), ensure_ascii=False))
+
+
 def _payload(cid, frame_id, *, text, task, transcript, step, calls_left,
              seconds_left, turn_idx):
     from story import room_conversation as room
@@ -169,7 +179,6 @@ def _payload(cid, frame_id, *, text, task, transcript, step, calls_left,
         "status": room.status(cid, frame_id),
         "frontier": frontier,
         "packages": list_packages(cid, frame_id=frame_id),
-        "tools": _manifest(),
         "transcript": shown,
         "budget": {"step": step, "steps": PLANNER_STEPS_PER_REPLY,
                    "calls_left": calls_left,
@@ -302,7 +311,7 @@ def run_planner(cid, frame_id, *, text=None, task=None, base_turn=None):
     from story.mandates import expire_mandates
     from story.room_tools import ToolError, run_tool
 
-    system = get_prompt("story_planner")
+    system = get_prompt("story_planner") + _tools_block()
     turn_idx = room.current_turn_idx(cid)
     expire_mandates(cid, frame_id, turn_idx)
     started = time.time()
@@ -337,9 +346,19 @@ def run_planner(cid, frame_id, *, text=None, task=None, base_turn=None):
             if calls_made >= PLANNER_TOOL_CALLS_PER_REPLY:
                 stopped = "calls"
                 break
-            if not isinstance(call, dict) or not call.get("tool"):
+            # A call the loop cannot run is REPORTED, never dropped: measured
+            # live (chat 111, 2026-09-03), a model spelled the tool key
+            # `name` for three steps running, each silently skipped, and
+            # repeated itself into an empty transcript for 27 seconds.
+            if not isinstance(call, dict):
+                transcript.append({"tool": None, "args": call, "result": {
+                    "error": "a call is an object with `tool` and `args`"}})
                 continue
-            name = str(call.get("tool"))
+            name = str(call.get("tool") or call.get("name") or "")
+            if not name:
+                transcript.append({"tool": None, "args": call, "result": {
+                    "error": "a call names its tool under `tool`"}})
+                continue
             args = call.get("args") if isinstance(call.get("args"), dict) else {}
             calls_made += 1
             if base_turn is not None and _is_write(name) \

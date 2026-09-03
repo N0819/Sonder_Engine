@@ -141,6 +141,16 @@ def grant_mandate(cid, frame_id, *, text, capabilities, scope=DEFAULT_SCOPE,
             int(clean_limits["fills_per_hour"]), FILLS_PER_STORY_HOUR_CAP)
     granted_turn = int(_turn_now(cid) if turn_idx is None else turn_idx)
     rows = _load(cid, frame_id)
+    # THE SAME SENTENCE IS ONE GRANT. A model re-emits a grant on every step
+    # of a reply it is still working (measured: two rows for one sentence,
+    # chat 111, 2026-09-03); the store, not the loop, is where a grant is
+    # made idempotent, so every writer gets the same answer.
+    clean_scope = _text(scope, MANDATE_SCOPE_CHARS) or DEFAULT_SCOPE
+    for existing in rows:
+        if existing["status"] == "active" \
+                and existing["text"].casefold() == text.casefold() \
+                and existing["scope"].casefold() == clean_scope.casefold():
+            return dict(existing)
     row = {
         "uid": _uid(cid, text, _text(scope, MANDATE_SCOPE_CHARS) or DEFAULT_SCOPE,
                     granted_turn, len(rows)),
