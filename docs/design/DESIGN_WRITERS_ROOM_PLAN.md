@@ -272,6 +272,38 @@ engineer shape rather than author / reviewer:
   the deliberation loop (v2 § 5), bounded in rounds, ending in a package or
   in a disagreement returned to the user.
 
+**Local drama is a first-class op set, not a side effect of exploration**
+(owner, 2026-09-03: "drama shouldn't purely be from exploration"). The room
+runs outside the turn and publishes for the next beat, which is close
+enough to be *local*: the package's `pressures`, `clocks` and
+`opportunities` (v2 § 10) need concrete ops that reach the player's
+locale through existing seams, and the room may use them without a
+planning miss having occurred:
+
+- **an arrival** — a courier, caravan, visitor or creature reaches a named
+  place on a clock (`story/couriers.py`, charter routes, a creature
+  trigger), carrying news, a letter or a grievance;
+- **an errand aimed at a figure** — a charter body is sent to find the
+  player or a major character (the clerk fetches you to the reeve; the
+  innkeeper's child knocks), through the post's own reporting line;
+- **an incident at a place** — a charter shock (`charter_intervene`:
+  need, upkeep, watch) or an authored trigger fires where the player
+  stands, and the bodies there act on it: a brawl, a collapse, a theft,
+  an alarm;
+- **a summons or invitation** — a commitment opened toward the player
+  (`charter_commitment`), so refusing it has a ledger;
+- **a placed artifact** — a letter under the door, a mark on a wall, a
+  body in the alley (`story/artifacts.py`), read by whoever reads it;
+- **a scheduled consequence** — a fuse the living-world floor fires at a
+  location (`world/living_world.py`, `world/mechanics.py`), noticed only
+  by who is there.
+
+Every one of these authors a *circumstance that arrives*; the Director
+rules what happens when it does, and no op writes the player's conduct
+or a major character's mind. The Dramaturge's dial governs how much of
+this the room reaches for; a **pacing budget** (pressures per story
+hour, named and per story) keeps it from becoming weather.
+
 Then: sealed envelopes and surprise authorization (v2 § 6.3), spoiler-safe
 status (v2 § 5.3), plot packages with truths, evidence, clocks and
 pressures, mystery integrity (v2 § 4.3, and the original design note),
