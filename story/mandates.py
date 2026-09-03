@@ -52,10 +52,37 @@ MANDATE_CAPABILITIES = (
 )
 
 #: The limits a grant may carry, each a number. `fills_per_hour` is read by
-#: the fill job; the rest are ceilings the Planner is told to honour and
-#: cites when it declines.
-MANDATE_LIMITS = ("fills_per_hour", "packages", "rooms", "people", "hours",
-                  "turns")
+#: the fill job; `calls_per_reply` and `calls_per_hour` are the SPEND the
+#: room may make (the loop's own ceilings are safety only, 2026-09-03:
+#: "the bounds may potentially be too strict"); `surprise` is the
+#: Dramaturge's creativity dial and `beats_per_proposal` its pacing; the
+#: rest are ceilings the Planner is told to honour and cites when it
+#: declines.
+MANDATE_LIMITS = ("fills_per_hour", "calls_per_reply", "calls_per_hour",
+                  "surprise", "beats_per_proposal",
+                  "packages", "rooms", "people", "hours", "turns")
+
+#: SPEND. Tool calls the room may make in one reply and in one story hour,
+#: when a grant names no number, and the engine's ceilings a grant may not
+#: raise past. The loop's own step and call counts are safety ceilings an
+#: order of magnitude above these; a mandate's number is the real stop.
+CALLS_PER_REPLY = 60
+CALLS_PER_REPLY_CAP = 200
+CALLS_PER_STORY_HOUR = 240
+CALLS_PER_STORY_HOUR_CAP = 1200
+
+#: THE CREATIVITY DIAL (`surprise`): 0 holds to the target the player
+#: stated and proposes only what serves it; 4 is wildly inventive, a turn
+#: nobody asked for. A grant that names the dial without a number gets the
+#: middle. The Dramaturge runs at all only under a grant that carries the
+#: dial: a story begins with it unset, and it proposes nothing.
+SURPRISE_DEFAULT = 2
+SURPRISE_MAX = 4
+#: PACING: the Dramaturge is asked at most once every this many beats,
+#: when no grant names another number; it may not be asked more often than
+#: every beat.
+BEATS_PER_PROPOSAL = 6
+BEATS_PER_PROPOSAL_MIN = 1
 
 #: Rows kept per frame, active and lapsed together; past it the oldest
 #: lapsed rows fall off. An active mandate is never dropped by the cap.
@@ -142,6 +169,18 @@ def grant_mandate(cid, frame_id, *, text, capabilities, scope=DEFAULT_SCOPE,
     if "fills_per_hour" in clean_limits:
         clean_limits["fills_per_hour"] = min(
             int(clean_limits["fills_per_hour"]), FILLS_PER_STORY_HOUR_CAP)
+    if "calls_per_reply" in clean_limits:
+        clean_limits["calls_per_reply"] = min(
+            int(clean_limits["calls_per_reply"]), CALLS_PER_REPLY_CAP)
+    if "calls_per_hour" in clean_limits:
+        clean_limits["calls_per_hour"] = min(
+            int(clean_limits["calls_per_hour"]), CALLS_PER_STORY_HOUR_CAP)
+    if "surprise" in clean_limits:
+        clean_limits["surprise"] = max(0, min(int(clean_limits["surprise"]),
+                                              SURPRISE_MAX))
+    if "beats_per_proposal" in clean_limits:
+        clean_limits["beats_per_proposal"] = max(
+            BEATS_PER_PROPOSAL_MIN, int(clean_limits["beats_per_proposal"]))
     granted_turn = int(_turn_now(cid) if turn_idx is None else turn_idx)
     rows = _load(cid, frame_id)
     # THE SAME SENTENCE IS ONE GRANT. A model re-emits a grant on every step
@@ -235,6 +274,79 @@ def fill_limit(cid, frame_id, turn_idx=None):
         own = min(own, FILLS_PER_STORY_HOUR_CAP)
         limit = own if limit is None else max(limit, own)
     return limit
+
+
+def _most_permissive(cid, frame_id, key, default, cap, turn_idx=None,
+                     *, requires=None):
+    """A numeric limit under the standing grants: the most permissive row
+    wins, under the engine's ceiling; a row naming no number contributes the
+    default. ``requires`` narrows to rows carrying that capability. None
+    when no row qualifies."""
+    limit = None
+    for row in active_mandates(cid, frame_id, turn_idx):
+        if requires and requires not in row["capabilities"]:
+            continue
+        own = row["limits"].get(key)
+        own = default if own is None else int(own)
+        own = min(own, cap)
+        limit = own if limit is None else max(limit, own)
+    return limit
+
+
+def spend_limits(cid, frame_id, turn_idx=None):
+    """What the room may spend: tool calls per reply and per story hour.
+    Every active mandate carries spend, because every grant is a licence to
+    work; with no active mandate the defaults stand (the room can still
+    answer a question), so this never returns None."""
+    per_reply = _most_permissive(cid, frame_id, "calls_per_reply",
+                                 CALLS_PER_REPLY, CALLS_PER_REPLY_CAP, turn_idx)
+    per_hour = _most_permissive(cid, frame_id, "calls_per_hour",
+                                CALLS_PER_STORY_HOUR, CALLS_PER_STORY_HOUR_CAP,
+                                turn_idx)
+    return {"calls_per_reply": CALLS_PER_REPLY if per_reply is None else per_reply,
+            "calls_per_hour": CALLS_PER_STORY_HOUR if per_hour is None else per_hour}
+
+
+def spend_citation(cid, frame_id, key, turn_idx=None):
+    """The active mandate that set ``key`` most permissively, for the
+    Planner to cite when spend stops it; '' when the default is in force."""
+    best, best_uid = None, ""
+    for row in active_mandates(cid, frame_id, turn_idx):
+        own = row["limits"].get(key)
+        if own is None:
+            continue
+        if best is None or int(own) > best:
+            best, best_uid = int(own), row["uid"]
+    return best_uid
+
+
+def surprise_dial(cid, frame_id, turn_idx=None):
+    """The Dramaturge's creativity dial under the standing grants, or None
+    when no active mandate carries it -- in which case the Dramaturge does
+    not run. The dial is the grant: a player who names how much they want
+    to be surprised has licensed the room to propose."""
+    dial = None
+    for row in active_mandates(cid, frame_id, turn_idx):
+        own = row["limits"].get("surprise")
+        if own is None:
+            continue
+        own = max(0, min(int(own), SURPRISE_MAX))
+        dial = own if dial is None else max(dial, own)
+    return dial
+
+
+def beats_per_proposal(cid, frame_id, turn_idx=None):
+    """The pacing budget: how many beats pass between Dramaturge passes.
+    Read only from rows that carry the dial; the most frequent wins."""
+    beats = None
+    for row in active_mandates(cid, frame_id, turn_idx):
+        if row["limits"].get("surprise") is None:
+            continue
+        own = row["limits"].get("beats_per_proposal")
+        own = BEATS_PER_PROPOSAL if own is None else max(
+            BEATS_PER_PROPOSAL_MIN, int(own))
+        beats = own if beats is None else min(beats, own)
+    return beats
 
 
 def revoked_since(cid, frame_id, turn_idx):

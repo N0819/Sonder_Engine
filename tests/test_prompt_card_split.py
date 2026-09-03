@@ -48,13 +48,15 @@ LANGUAGES = ("en", "ja")
 #: BOTH lost the same file. It moves when a prompt or fragment is added, and
 #: the move belongs in the same commit as the addition.
 #: 111 at the split (2026-08-29); 112 since `card_person_note` (2026-08-30).
-PART_COUNT = 111   # +1 (2026-09-01): director_note.txt, the specialists' one
+PART_COUNT = 113   # +1 (2026-09-01): director_note.txt, the specialists' one
                    # statement about the Director's ruling channel;
                    # -2 (2026-09-04): mapping_stage and mapping_commit,
                    # retired with the mapping model; -2 (2026-09-04): the
                    # offscreen hand's core and its reactive-plan chunk;
                    # +2 (2026-09-04): story_planner and charter_planner,
-                   # the Writers' Room's author and its delegate
+                   # the Writers' Room's author and its delegate;
+                   # +2 (2026-09-04): dramaturge and bible_fold, the room's
+                   # other author and the fold into its story bible
 
 
 def _pack_dir(language: str) -> Path:
@@ -144,7 +146,7 @@ def test_the_card_still_loads_and_publishes_every_prompt(language):
 
     pack = installed_language_packs()[language]
     card = pack.card(CARD)
-    assert len(card["prompts"]) == 36
+    assert len(card["prompts"]) == 38
     assert len(card["specialists"]) == 5
     assert len(card["prose_author_sheet"]) == 28
     # Fragments resolve AFTER assembly, so the loaded card must carry none.

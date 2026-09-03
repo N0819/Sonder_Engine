@@ -67,6 +67,9 @@ const ROOM_UNSEATED_LINE = "The Story Planner is not seated yet. Your note is ke
 // tests/test_story_planner.py holds these spellings and the module's together.
 const ROOM_PLANNER_LINES = [
   "The room stopped at its budget for this reply; what it settled stands, and it can go on when asked.",
+  "The room reached the spend you allowed for this reply; what it settled stands, and it goes on under your next word.",
+  "The room has spent this story hour's allowance; its background work resumes with the next hour.",
+  "The room could not agree on a direction; the proposal and the objection are yours to settle.",
   "The room has nothing in motion.",
   "The room has open planning needs and no grant to answer them. Tell the Story Planner what it may prepare.",
   "The story rewound under the room's work; nothing landed.",

@@ -21,15 +21,16 @@
 | `agents/director_reconcile.py` | 592 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story`, `world.spatial` |
 | `agents/director_scopes.py` | 856 |  | `agents.director_views`, `core.db`, `world.survival` |
 | `agents/director_views.py` | 627 |  | `agents.common`, `story.character_schema`, `story.scene`, `world.background_claims` |
+| `agents/dramaturge.py` | 308 |  | `core.logging_utils` |
 | `agents/loops.py` | 1337 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `core.db`, `story.character_schema`, `story.scene`, `world.spatial` |
 | `agents/mapping.py` | 308 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `core.db`, `mind.memory`, `story.scene` |
 | `agents/narration.py` | 1953 | Player-facing narration agent. | `agents`, `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `story.character_schema`, `story.scene`, `world.spatial`, `world.weather` |
 | `agents/perception.py` | 4733 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `mind`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
 | `agents/runtime.py` | 1382 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `core.db`, `core.pipeline_context`, `llm.providers`, `persist.checkpoints`, `persist.commit`, `story.character_schema`, `story.scene` |
 | `agents/storage.py` | 123 | Step and active-variant persistence helpers. | `core.db` |
-| `agents/story_planner.py` | 530 |  | `core.logging_utils` |
+| `agents/story_planner.py` | 896 |  | `core.logging_utils` |
 | `core/__init__.py` | 6 |  | — |
-| `core/db.py` | 2398 | SQLite schema, migrations, connection management, transactions, and key/value world access. | `core.paths` |
+| `core/db.py` | 2406 | SQLite schema, migrations, connection management, transactions, and key/value world access. | `core.paths` |
 | `core/frames.py` | 220 |  | `core.db` |
 | `core/jobs.py` | 312 |  | `core.logging_utils` |
 | `core/logging_utils.py` | 122 | Structured timing and observability helpers. | — |
@@ -44,7 +45,7 @@
 | `llm/llm_quality.py` | 813 | Strict JSON parsing, schema validation, and model-assisted repair. | `core.pipeline_context`, `llm.prompts`, `llm.providers`, `llm.schemas` |
 | `llm/prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `llm.providers` |
 | `llm/prompts.py` | 516 | Default system prompts and prompt preset access. | `core.db` |
-| `llm/providers.py` | 3783 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `core.db`, `core.logging_utils` |
+| `llm/providers.py` | 3790 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `core.db`, `core.logging_utils` |
 | `llm/research_providers.py` | 247 |  | `core.db` |
 | `llm/schemas.py` | 5451 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `mind/__init__.py` | 6 |  | — |
@@ -100,12 +101,14 @@
 | `story/importers.py` | 3124 | Native and AI-assisted character, persona, and lorebook import/generation. | `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.memory`, `story.character_schema`, `story.scene` |
 | `story/journey_history.py` | 431 |  | — |
 | `story/lore_structure.py` | 248 |  | — |
-| `story/mandates.py` | 249 |  | `core.db` |
+| `story/mandates.py` | 361 |  | `core.db` |
 | `story/naming.py` | 555 |  | `core.db`, `world.charter_identity` |
 | `story/plot_packages.py` | 1437 |  | — |
 | `story/provenance_text.py` | 132 |  | — |
+| `story/room_bible.py` | 421 |  | `core.db` |
 | `story/room_conversation.py` | 357 |  | `core.db` |
-| `story/room_frontier.py` | 176 |  | `core.db` |
+| `story/room_frontier.py` | 212 |  | `core.db` |
+| `story/room_proposals.py` | 264 |  | `core.db` |
 | `story/room_research.py` | 371 |  | `core.db` |
 | `story/room_tools.py` | 712 |  | `story.plot_packages`, `story.room_research` |
 | `story/scene.py` | 2648 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `core.db`, `story`, `story.attire`, `story.character_schema`, `world.day_cycle`, `world.spatial` |
@@ -369,6 +372,18 @@
 | `_round_conduct()` | 165 | 29 lines |
 | `_artifacts_view()` | 570 | 29 lines |
 
+### `agents/dramaturge.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `propose()` | 189 | 82 lines |
+| `_payload()` | 131 | 36 lines |
+| `revise()` | 273 | 36 lines |
+| `player_visible_stream()` | 92 | 31 lines |
+| `_file()` | 173 | 14 lines |
+| `_call()` | 78 | 8 lines |
+| `system_block()` | 125 | 4 lines |
+
 ### `agents/loops.py`
 
 | Function | Start | Size |
@@ -449,27 +464,27 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `run_planner()` | 316 | 116 lines |
-| `_payload()` | 159 | 46 lines |
-| `schedule_room_work()` | 497 | 34 lines |
-| `charter_planner()` | 274 | 30 lines |
-| `run_fill()` | 470 | 25 lines |
-| `write_status()` | 241 | 22 lines |
-| `_manifest()` | 130 | 17 lines |
-| `_apply_grants()` | 211 | 17 lines |
+| `run_planner()` | 418 | 157 lines |
+| `deliberate()` | 660 | 91 lines |
+| `schedule_room_work()` | 842 | 55 lines |
+| `_payload()` | 226 | 52 lines |
+| `run_dramaturge_pass()` | 753 | 40 lines |
+| `_run_task()` | 577 | 32 lines |
+| `charter_planner()` | 351 | 30 lines |
+| `run_fill()` | 813 | 27 lines |
 
 ### `core/db.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `init()` | 2191 | 109 lines |
-| `_recover_scene_time_of_day()` | 2121 | 59 lines |
-| `transaction()` | 1860 | 43 lines |
-| `conn()` | 1820 | 38 lines |
-| `_opening_time_of_day()` | 2065 | 30 lines |
-| `_establish_time_of_day_from_variant()` | 2035 | 28 lines |
-| `wset()` | 2356 | 23 lines |
-| `_stamp_clock_display()` | 2097 | 22 lines |
+| `init()` | 2199 | 109 lines |
+| `_recover_scene_time_of_day()` | 2129 | 59 lines |
+| `transaction()` | 1868 | 43 lines |
+| `conn()` | 1828 | 38 lines |
+| `_opening_time_of_day()` | 2073 | 30 lines |
+| `_establish_time_of_day_from_variant()` | 2043 | 28 lines |
+| `wset()` | 2364 | 23 lines |
+| `_stamp_clock_display()` | 2105 | 22 lines |
 
 ### `core/frames.py`
 
@@ -596,14 +611,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_chat_complete_once()` | 2463 | 321 lines |
-| `chat_complete()` | 2196 | 119 lines |
-| `async _chat_complete_async_once()` | 2905 | 115 lines |
-| `async chat_complete_async()` | 2814 | 90 lines |
-| `_sse_openai()` | 2052 | 80 lines |
-| `async _sse_openai_async()` | 3021 | 64 lines |
-| `_sse_anthropic()` | 2133 | 62 lines |
-| `_embed_request()` | 3343 | 59 lines |
+| `_chat_complete_once()` | 2470 | 321 lines |
+| `chat_complete()` | 2203 | 119 lines |
+| `async _chat_complete_async_once()` | 2912 | 115 lines |
+| `async chat_complete_async()` | 2821 | 90 lines |
+| `_sse_openai()` | 2059 | 80 lines |
+| `async _sse_openai_async()` | 3028 | 64 lines |
+| `_sse_anthropic()` | 2140 | 62 lines |
+| `_embed_request()` | 3350 | 59 lines |
 
 ### `llm/research_providers.py`
 
@@ -1225,14 +1240,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `grant_mandate()` | 112 | 61 lines |
-| `coverage()` | 196 | 16 lines |
-| `expire_mandates()` | 175 | 14 lines |
-| `fill_limit()` | 225 | 13 lines |
-| `revoked_since()` | 240 | 10 lines |
-| `_save()` | 96 | 9 lines |
-| `citation()` | 214 | 9 lines |
-| `_uid()` | 80 | 4 lines |
+| `grant_mandate()` | 139 | 73 lines |
+| `coverage()` | 235 | 16 lines |
+| `_most_permissive()` | 279 | 15 lines |
+| `expire_mandates()` | 214 | 14 lines |
+| `fill_limit()` | 264 | 13 lines |
+| `surprise_dial()` | 323 | 13 lines |
+| `spend_limits()` | 296 | 12 lines |
+| `beats_per_proposal()` | 338 | 12 lines |
 
 ### `story/naming.py`
 
@@ -1268,6 +1283,19 @@
 | `looks_like_engine_provenance()` | 81 | 3 lines |
 | `strip_engine_provenance()` | 130 | 3 lines |
 
+### `story/room_bible.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `fold()` | 357 | 52 lines |
+| `render_block()` | 281 | 42 lines |
+| `add_entry()` | 194 | 40 lines |
+| `source_exists()` | 83 | 33 lines |
+| `_row()` | 144 | 18 lines |
+| `mark_paid()` | 236 | 16 lines |
+| `_normalize_entry()` | 122 | 15 lines |
+| `_evict()` | 180 | 12 lines |
+
 ### `story/room_conversation.py`
 
 | Function | Start | Size |
@@ -1287,12 +1315,25 @@
 |---|---:|---:|
 | `rooms_ahead()` | 66 | 32 lines |
 | `frontier_report()` | 100 | 29 lines |
-| `fills_this_hour()` | 163 | 14 lines |
+| `record_spend()` | 168 | 14 lines |
+| `fills_this_hour()` | 199 | 14 lines |
+| `spend_this_hour()` | 184 | 13 lines |
 | `_player_room()` | 53 | 11 lines |
 | `record_fill()` | 150 | 11 lines |
 | `record_measure()` | 131 | 8 lines |
-| `_clock_seconds()` | 141 | 7 lines |
-| `_row()` | 44 | 3 lines |
+
+### `story/room_proposals.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `file_proposal()` | 134 | 34 lines |
+| `normalize_proposal()` | 64 | 31 lines |
+| `judge_proposal()` | 170 | 30 lines |
+| `revise_proposal()` | 202 | 21 lines |
+| `settle_proposal()` | 225 | 17 lines |
+| `_row()` | 97 | 9 lines |
+| `_save()` | 108 | 9 lines |
+| `record_pass()` | 244 | 7 lines |
 
 ### `story/room_research.py`
 
@@ -2672,8 +2713,8 @@ Sections: Weather effects (`:2`); the tile (`:178`); the layers (`:251`); lifecy
 
 Declared functions: `weatherFxReduced()`, `weatherFxEffectsOff()`, `weatherFxSupported()`, `weatherFxHost()`, `weatherFxRandom()`, `weatherFxTile()`, `weatherFxReach()`, `weatherFxBuild()`, `weatherFxClearLayers()`, `weatherFxStop()`, `weatherFxVisible()`, `weatherFxApply()`, `weatherFxStormy()`, `weatherFxScheduleFlash()`, `weatherFxFlash()`, `weatherFxOpenSky()`, `weatherFxBolt()`, `weatherFxThunder()`, `weatherFxForTurn()`.
 
-### `static/js/writers_room.js` (538 lines)
+### `static/js/writers_room.js` (541 lines)
 
-Sections: The Writers' Room panel (`:3`); bd-panel for this element alone. (`:20`); Named limits (`:33`); Shape: docked / floating / closed (`:129`); Loading (`:186`); Sending (`:251`); Rendering (`:301`); Building the panel (`:414`); Boot (`:527`).
+Sections: The Writers' Room panel (`:3`); bd-panel for this element alone. (`:20`); Named limits (`:33`); Shape: docked / floating / closed (`:132`); Loading (`:189`); Sending (`:254`); Rendering (`:304`); Building the panel (`:417`); Boot (`:530`).
 
 Declared functions: `roomCls()`, `roomStoreGet()`, `roomStoreSet()`, `roomRestorePrefs()`, `roomClampWidth()`, `roomClampOpacity()`, `roomClampGeometry()`, `roomApplyShape()`, `roomOpen()`, `roomSetMode()`, `roomKey()`, `roomFrameQuery()`, `roomLoad()`, `roomLoadEarlier()`, `roomStartWatch()`, `roomStopWatch()`, `roomSend()`, `roomRevoke()`, `roomRender()`, `roomRenderStatus()`, `roomRenderMandates()`, `roomRenderThread()`, `roomBuild()`, `roomWireDrag()`, `track()`.

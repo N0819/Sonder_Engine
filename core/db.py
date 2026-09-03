@@ -51,9 +51,17 @@ FRAME_SCOPED_WORLD_KEYS = {
     # status. Per-era like the plans they license: a branch that never
     # granted the room a harbour has no harbour mandate.
     "room_mandates", "room_status",
-    # The prepared frontier's measure and the identity-fill ledger
-    # (story/room_frontier.py). Per-era like the rooms it counts ahead of.
+    # The prepared frontier's measure and the identity-fill and spend
+    # ledgers (story/room_frontier.py). Per-era like the rooms it counts
+    # ahead of.
     "room_frontier",
+    # The story bible (story/room_bible.py): the room's narrative memory,
+    # folded from the thread. Per-era like the thread it folds -- a branch
+    # remembers what was said up to its point and nothing after.
+    "room_bible",
+    # The Dramaturge's proposals and the Planner's verdicts on them
+    # (story/room_proposals.py). Per-era like the packages they lead to.
+    "room_proposals",
     # -- Plot package store (story/plot_packages.py) --------------------
     # The Writers' Room's packages: drafts, what was published and when.
     # Per-era like the scene: a branch that never published a package
