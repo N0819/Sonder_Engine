@@ -121,7 +121,7 @@ def test_in_view_hands_the_neighbour_alone_when_the_focus_is_developed(temp_db):
 
 
 def test_the_director_view_is_absent_when_nothing_is_in_reach(temp_db):
-    from agents.director_movement import _planned_rooms_view
+    from agents.director import _planned_rooms_view
     cid, scene = _chat(temp_db)
     for rid in scene["rooms"]:
         scene["rooms"][rid]["desc"] = "Done."
@@ -132,8 +132,8 @@ def test_the_director_view_is_absent_when_nothing_is_in_reach(temp_db):
 
 
 def test_the_spatial_hand_is_handed_the_brief_and_the_body_hand_is_not(temp_db):
-    from agents.director_fanout import _specialist_payload
-    from agents.director_movement import _planned_rooms_view
+    from agents.director import _specialist_payload
+    from agents.director import _planned_rooms_view
     cid, scene = _chat(temp_db)
     brief = _planned_rooms_view(scene, _Ctx(cid), "square", "inn")
     assert brief and set(brief) == {"square", "inn"}
