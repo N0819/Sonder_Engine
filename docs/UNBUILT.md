@@ -6592,6 +6592,30 @@ planning-need ledger, `world/planning_needs.py`, written by the compiler and
 by the surface-only mint alike, with its drain job). Residuals: § 2.26a (the
 compiler's half) and § 2.33 (the plan tier's half).
 
+**Phase C, the agents (2026-09-04, `design/DESIGN_WRITERS_ROOM_PLAN.md` § 5
+Phase C, first half):** the Dramaturge is seated (`agents/dramaturge.py`,
+role `dramaturge`): pure planning over the player-visible stream with lore
+search and lookup as its one tool, proposing typed direction
+(`story/room_proposals.py`) under the creativity dial (`surprise` 0..4, a
+mandate limit; unset, it proposes nothing) and a pacing budget
+(`beats_per_proposal`, default 6). The deliberation loop
+(`agents/story_planner.deliberate`, `DELIBERATION_ROUNDS` = 2) has the
+Planner judge each proposal for naturalness -- accept and implement through
+a package, refuse with the contradiction named, or send back for revision
+-- and returns a disagreement to the player after the rounds. The bounds
+rework landed with it: steps and calls per reply are safety ceilings (40,
+200), the wall splits by regime (600s interactive with the status row
+rewritten every step; 600s per pass in the background, resuming under the
+same mandate up to `TASK_PASSES_CAP` = 12 passes), and SPEND is the stop
+(`calls_per_reply` default 60 / ceiling 200, `calls_per_hour` default 240 /
+ceiling 1200, mandate limits the Planner cites). Left from this half: no
+proposal card (the exchange is thread lines and the status row's
+`proposal` entries); the Dramaturge's and the fold's judgement are
+unmeasured on a live model; a verdict the Planner does not name a
+`proposal_uid` for leaves the proposal pending into the next round; the
+local drama, nudge and region-event operations and firing clocks are the
+other half (fork C2).
+
 **Phase B, the panel (2026-09-04, `design/DESIGN_WRITERS_ROOM_PLAN.md` § 6
 items 5 and 6):** the popout panel is built in both shapes -- docked right
 (opaque chrome, width-resizable, collapsing to its tab) and floating (the
@@ -6641,12 +6665,16 @@ for what follows. Residuals of this entry rather than a section of their own:
   grant submits one job (deduped per chat, capped per story hour); there
   is no separate low-water trigger.
 
-- **No story bible.** The Planner's memory is the last 30 thread lines plus
-  its typed state; what rolls off (the player's words, promises, planted
-  setups, rejected ideas) is gone. Design in
-  `design/DESIGN_WRITERS_ROOM_PLAN.md` § 6 item 7 (2026-09-03), a Phase B
-  residual: typed state first, sections not a summary, particulars with
-  sources, folded out of band, served to no mind.
+- **The story bible is built** (2026-09-04, `story/room_bible.py`, plan § 6
+  item 7): seven sections, every entry with a source the code verifies,
+  unpaid setups never evicted, reversals keeping both lines, folded out of
+  band on the Planner's role (`prompts/bible_fold`) and deterministically on
+  publish and resolve, served in both agents' system block and to no mind.
+  Left: the fold is one model call and its judgement of "what a writer
+  would regret" is unmeasured live; a thread that outruns the hard cap
+  (`PLANNER_HISTORY_HARD_CAP` = 60 lines) before a fold lands loses its
+  oldest lines from the Planner's context until the fold reads them (the
+  lines themselves stay in the thread).
 - **The Planner's live measure (chat 111, 2026-09-03, three replies):**
   47s / 61s / 19s; the first two runs each found a defect class (calls under
   a misspelled key dropped silently; a grant written once per step; drafts
@@ -6659,8 +6687,10 @@ for what follows. Residuals of this entry rather than a section of their own:
   read as "done"; six steps were the bare floor and the model spent three
   reading -- then 51s, nine steps, eighteen calls, previewed, validated and
   published. Ceilings after the runs: 10 steps, 40 calls, 8000 tokens per
-  step, 180s. Prompt caching held on Fireworks (5-7k cached tokens per step)
-  and read 0 on Gemini through OpenRouter.
+  step, 180s -- superseded 2026-09-04 by the bounds rework above (safety
+  ceilings 40 / 200, spend the stop, 600s per regime). Prompt caching held
+  on Fireworks (5-7k cached tokens per step) and read 0 on Gemini through
+  OpenRouter.
 - **No operation for author surgery on a charter** (v2 § 9.1's "explicit
   author surgery" on carried state): a package can generate a location and
   presimulate, and cannot move a body, change a post or edit a claim. The
