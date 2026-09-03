@@ -62,7 +62,8 @@ from . import charter_chatter
 from .charter_log import window_note
 from .charter_figure import sight_figures
 from .charter_mind import cap_minds, decay_minds
-from .charter_move import ERRAND_RATE, errands, homecomings, relocate, walk
+from .charter_move import (ERRAND_RATE, continue_walks, errands, homecomings,
+                           relocate, walk)
 from .charter_news import (check_reports, decay_news, news_keys_in,
                           witness)
 from .charter_practice import (
@@ -397,7 +398,7 @@ def _record_coarse_experiences(experiences, bodies, watch, stood_before,
 
 
 def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
-         simulate_bound=False):
+         simulate_bound=False, neighbors=None, routes=None):
     """Advance one planning window. Returns ``(charter, events)``.
 
     The charter is returned rather than mutated, so a caller may explore a
@@ -566,9 +567,25 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
     movable_watch = (plan["watch"] if not external else
                      {post: body for post, body in plan["watch"].items()
                       if body not in external})
-    bodies, travelled = relocate(
-        charter["bodies"], movable_watch, charter["posts"], scene,
-        charter.get("travelled"))
+    # THE GRAPH THE WALK IS CHECKED AGAINST, once per window. `walk_route`
+    # plans on the same graph, so the check only ever differs from the plan
+    # when the scene changed between them -- which is the case it exists for.
+    if neighbors is None and scene:
+        from .spatial import passable_neighbors
+        neighbors = passable_neighbors(scene)
+    routes = {} if routes is None else routes
+    # Bodies caught in the street at the last window's end walk on FIRST,
+    # before the watch bill can post them anywhere new. A bound body's walk
+    # is the registered character's from promotion on, and is not advanced.
+    walking = {key: body for key, body in charter["bodies"].items()
+               if key not in external}
+    walking, travelled, walked = continue_walks(
+        walking, hours, neighbors, charter.get("travelled"),
+        charter.get("walked"))
+    bodies = dict(charter["bodies"], **walking)
+    bodies, travelled, walked = relocate(
+        bodies, movable_watch, charter["posts"], scene, travelled,
+        hours=hours, neighbors=neighbors, walked=walked, cache=routes)
 
     # THEN EVERYBODY ELSE'S DAY. Errands are the circulation without which
     # a town has no rumour: a famine month minted 244 witnessable events
@@ -590,8 +607,9 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
             moves = {body: place for body, place in moves.items()
                      if body not in external}
         if moves:
-            bodies, travelled = walk(bodies, moves, scene, travelled,
-                                     cache=paths)
+            bodies, travelled, walked = walk(
+                bodies, moves, scene, travelled, cache=routes, hours=hours,
+                neighbors=neighbors, walked=walked)
 
     upkeeps = {}
     for key, upkeep in charter["upkeeps"].items():
@@ -1173,6 +1191,7 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
     after_charter["bodies"] = bodies
     after_charter["needs"] = needs_after
     after_charter["travelled"] = travelled
+    after_charter["walked"] = walked
     after_charter["minds"] = minds
     after_charter["judgments"] = judgments
     after_charter["commitments"] = commitments
@@ -1298,6 +1317,14 @@ def run(charter, hours, window=4.0, seed=0, trace=False, simulate_bound=False):
     paths = {}
     reach = reach_map(scene, places, charter["bodies"], cache=paths) \
         if scene else None
+    # The walk's own two caches, for the same reason `paths` is one: the
+    # passable graph and the route between two rooms are properties of a
+    # fixed scene, so a run derives each once and every window looks up.
+    neighbors = None
+    if scene:
+        from .spatial import passable_neighbors
+        neighbors = passable_neighbors(scene)
+    routes = {}
     where = {k: b["place"] for k, b in charter["bodies"].items()}
     while remaining > 0.0:
         span = min(window, remaining)
@@ -1312,7 +1339,8 @@ def run(charter, hours, window=4.0, seed=0, trace=False, simulate_bound=False):
         # caller's seed.
         charter, produced = step(charter, hours=span, seed=int(seed) + index,
                                  reach=reach, paths=paths,
-                                 simulate_bound=simulate_bound)
+                                 simulate_bound=simulate_bound,
+                                 neighbors=neighbors, routes=routes)
         events.extend(produced)
         if trace:
             notes.append(window_note(charter, produced,
