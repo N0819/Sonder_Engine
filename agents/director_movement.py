@@ -76,6 +76,47 @@ def _egocentric_exits(sc, observer):
     return summary or None
 
 
+def _sightlines_view(sc, ctx, p_name):
+    """The Director's deterministic sight digest: who can see whom, who is
+    within reach of whom, and what cover stands between named parties
+    (`world.spatial_fov.sight_digest`).
+
+    Objective, un-arguable, and the Director's to READ rather than write:
+    it declares through the channels it already owns -- a station `at` or
+    `near` an anchor, a station's `cover`, a pose, a facing -- and this is
+    what those declarations come to. A pair the layer has no evidence about
+    reads as open, never as hidden, so nothing here can talk the Director
+    out of a body it can plainly place.
+    """
+    try:
+        from story.character_schema import character_name_from_text
+        from world.spatial import sight_digest
+        names = [p_name] + [character_name_from_text(c["sheet"])
+                            for c in (ctx.cast or [])]
+        return sight_digest(sc, [n for n in names if n])
+    except Exception:
+        return None
+
+
+def _planned_rooms_view(sc, ctx, focus_room, *extra):
+    """The plan's seed for every stub this beat stands in or looks into
+    (`world.structure.planned_room_brief` over `rooms_to_develop`), or
+    None when none is in reach -- so the payload shape of a story with no
+    plan is unchanged.
+
+    The trigger is deterministic and reads no prose: the focus room, the
+    declared movement target, and every non-wall neighbour of the focus
+    room. Author knowledge, for the Director and its spatial hand only.
+    """
+    try:
+        from world.structure import planned_room_brief, rooms_to_develop
+        brief = planned_room_brief(
+            ctx.chat["id"], sc, rooms_to_develop(sc, focus_room, extra))
+        return brief or None
+    except Exception:
+        return None
+
+
 def _ci_mapping_key(mapping, name):
     """Return the existing key in ``mapping`` that names ``name``.
 

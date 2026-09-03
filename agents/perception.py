@@ -61,8 +61,10 @@ from world.spatial import (
     _entity_named,
     entity_arc,
     entity_side,
+    feature_visibility,
     has_visual,
     effective_light,
+    room_has_geometry,
     visual_level_between,
     hear_level,
     measured_proximity_rel,
@@ -3435,6 +3437,28 @@ def _with_body_description(appearance, described):
     return "%s; %s" % (appearance.rstrip(" ;"), described)
 
 
+def _visible_features(sc, name, room, *, sweep=False):
+    """The room's furniture as THIS observer's eyes reach it, or None.
+
+    None -- not an empty list -- for a room nobody authored geometry on
+    (`spatial_fov.room_has_geometry`), so the environment percept of every
+    story written before the layer existed is byte-identical to what it
+    was. For a room that has opted in, `feature_visibility` has already
+    subtracted the cone and the line; what is left is delivered near to
+    far, and a deliberate look around (`sweep`) turns the observer through
+    the whole room for that one beat. Door pseudo-anchors are left out: the
+    exits digest already carries them.
+    """
+    if not room or not room_has_geometry(sc, room):
+        return None
+    rows = feature_visibility(sc, name, sweep=bool(sweep))
+    return [
+        {"desc": r["desc"], "tier": r["tier"], "side": r["side"],
+         "peripheral": r["peripheral"]}
+        for r in rows if r.get("visible") and not r.get("implicit")
+    ]
+
+
 def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
                                 entity_state=None, appearance_changed=(),
                                 appearance_deltas=None, prev_seen=None,
@@ -3460,7 +3484,8 @@ def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
         room_notes = gate(room_notes)
     env = composer.environment_percept(
         room, p.get("room_name"), room_notes,
-        effective_light(sc, room) if room else "")
+        effective_light(sc, room) if room else "",
+        features=_visible_features(sc, name, room, sweep=p.get("sweep")))
     if env:
         percepts.append(env)
     # Crowds, couriers and posted notices: three built subsystems whose whole
@@ -3916,6 +3941,9 @@ def _composer_act(ctx, sc, interp, perceivers, known, p_name, p_visible,
             others = [b for b in co_present
                       if not _is_the_observer(sc, b["name"], name)]
             others.append(actor_body)
+            # A deliberate look is a sweep: the player turns through the
+            # whole room for this beat, so the cone does not subtract.
+            p["sweep"] = pid == "player" and _explicit_look_intent(interp)
             display_map = composer.observer_display_map(
                 sc, name, others, known, p.get("sense_card"))
             self_forms = _composer_self_forms(
@@ -4432,6 +4460,7 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
         else:
             others = [b for b in bodies
                       if not _is_the_observer(sc, b["name"], name)]
+            p["sweep"] = is_player_view and full_player_render
             display_map = composer.observer_display_map(
                 sc, name, others, known, p.get("sense_card"))
             self_forms = _composer_self_forms(

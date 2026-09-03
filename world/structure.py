@@ -228,6 +228,175 @@ def materialize_planned_fringe(cid, scene):
     return scene, added
 
 
+def _planned_specs(cid):
+    """{room_uid: (name, planned spec)} for every live planned registry row."""
+    from core.db import q
+
+    out = {}
+    for row in q(
+            "SELECT room_uid,name,payload FROM room_registry "
+            "WHERE chat_id=? AND retired_turn_id IS NULL", (cid,)):
+        payload = _payload(row)
+        spec = payload.get("planned") if isinstance(payload, dict) else None
+        if isinstance(spec, dict):
+            out[str(row["room_uid"])] = (str(row["name"] or row["room_uid"]),
+                                         spec)
+    return out
+
+
+def is_planned_stub(scene, room_id, specs=None):
+    """Is this live room still the plan's prose-free stub?
+
+    A stub is a room the scene marks `planned` with no `desc`, or one the
+    registry plans that the scene has not yet described. A room with a
+    description has been developed, whatever flag it still carries.
+    """
+    room = ((scene or {}).get("rooms") or {}).get(room_id)
+    if not isinstance(room, dict):
+        return False
+    if str(room.get("desc") or room.get("description") or "").strip():
+        return False
+    if room.get("planned"):
+        return True
+    return bool(specs and room_id in specs)
+
+
+def rooms_to_develop(scene, focus_room, extra=()):
+    """The rooms a Director beat is standing in or could be looking into:
+    the focus room, any movement target, and every neighbour of the focus
+    room joined by something other than a wall -- a closed door is a room
+    the beat may open, and a room in view through an open one is a room
+    the beat may describe. Deterministic; reads no prose."""
+    from world.spatial import effective_adjacent, normalize_barrier
+
+    rooms = (scene or {}).get("rooms") or {}
+    out = []
+    for rid in (focus_room, *extra):
+        if rid and rid in rooms and rid not in out:
+            out.append(str(rid))
+    if focus_room and focus_room in rooms:
+        for edge in effective_adjacent(scene, focus_room):
+            if not isinstance(edge, dict) or not edge.get("to"):
+                continue
+            if normalize_barrier(edge.get("barrier")) == "wall":
+                continue
+            to = str(edge["to"])
+            if to in rooms and to not in out:
+                out.append(to)
+    return out
+
+
+def planned_room_brief(cid, scene, room_ids):
+    """The Director's development brief for the planned stubs among
+    `room_ids`: {room_id: {name, purpose, access, exits, structure}}.
+
+    THE SEED, HANDED TO THE HAND THAT FURNISHES. The plan says what a room
+    is FOR and what it joins; the Director says what is in it. Purpose and
+    exits are given and protected (`protect_planned_edges`); contents are
+    the Director's, and this brief is the one place the plan's purpose
+    reaches a model during play. It is author knowledge: it goes to the
+    Director stages and the spatial hand, never to a mind or the narrator,
+    which learn the room by perceiving what the Director wrote.
+    """
+    specs = _planned_specs(cid)
+    rooms = (scene or {}).get("rooms") or {}
+    names = {rid: str((r or {}).get("name") or rid) for rid, r in rooms.items()}
+    names.update({rid: name for rid, (name, _s) in specs.items()})
+    structures = None
+    out = {}
+    for rid in room_ids or ():
+        if not is_planned_stub(scene, rid, specs):
+            continue
+        room = rooms.get(rid) or {}
+        name, spec = specs.get(rid, (names.get(rid, rid), {}))
+        exits = {}
+        for edge in list(spec.get("adjacent") or ()) + list(
+                room.get("adjacent") or ()):
+            if not isinstance(edge, dict) or not edge.get("to"):
+                continue
+            to = str(edge["to"])
+            entry = exits.setdefault(to, {"to": to, "name": names.get(to, to)})
+            for key in ("barrier", "dir", "name"):
+                if edge.get(key) and key not in entry or key == "name" \
+                        and edge.get(key):
+                    entry[key if key != "name" else "way"] = edge[key]
+        brief = {
+            "name": name,
+            "purpose": str(spec.get("purpose") or room.get("purpose") or ""),
+            "access": str(spec.get("access") or room.get("access") or ""),
+            "exits": list(exits.values()),
+        }
+        skey = str(spec.get("structure") or "")
+        if skey:
+            if structures is None:
+                from core.db import wget_for_frame
+                structures = normalize_structures(
+                    wget_for_frame(cid, STRUCTURES_KEY, None, {}) or {})["items"]
+            structure = structures.get(skey)
+            if structure:
+                brief["structure"] = {
+                    "key": skey,
+                    "grammar": structure.get("grammar") or [],
+                }
+        out[rid] = brief
+    return out
+
+
+def protect_planned_edges(cid, scene):
+    """Put back every planned exit a development dropped.
+
+    A developed room may ADD exits; it may not lose one the plan gave it,
+    because the plan is the town's topology and every other planned room
+    counts on the way through. Restores the edge from the plan's own record
+    (barrier, bearing, name) on the room that lost it. Returns
+    [(room_id, to)] restored, for the caller's warning.
+    """
+    specs = _planned_specs(cid)
+    rooms = (scene or {}).get("rooms") or {}
+    restored = []
+    for rid, (_name, spec) in specs.items():
+        room = rooms.get(rid)
+        if not isinstance(room, dict):
+            continue
+        present = {
+            str(e.get("to")) for e in (room.get("adjacent") or [])
+            if isinstance(e, dict) and e.get("to")}
+        for other_id, other in rooms.items():
+            if isinstance(other, dict):
+                for e in other.get("adjacent") or []:
+                    if isinstance(e, dict) and e.get("to") == rid:
+                        present.add(str(other_id))
+        for edge in spec.get("adjacent") or ():
+            if not isinstance(edge, dict) or not edge.get("to"):
+                continue
+            to = str(edge["to"])
+            if to in present or (to not in rooms and to not in specs):
+                continue
+            room.setdefault("adjacent", []).append(dict(edge))
+            restored.append((rid, to))
+    return restored
+
+
+def settle_developed_stubs(scene):
+    """A planned stub that now carries a description is a room.
+
+    Drops the `planned` flag and the plan's `purpose`/`access` seed from the
+    live record: the registry keeps the plan, and the seed was author
+    knowledge that has done its work. Returns the room ids settled.
+    """
+    settled = []
+    for rid, room in ((scene or {}).get("rooms") or {}).items():
+        if not isinstance(room, dict) or not room.get("planned"):
+            continue
+        if not str(room.get("desc") or room.get("description") or "").strip():
+            continue
+        room.pop("planned", None)
+        room.pop("purpose", None)
+        room.pop("access", None)
+        settled.append(str(rid))
+    return settled
+
+
 def planned_context(cid, query):
     """Short structural context for mapping a specifically requested room."""
     from core.db import q
