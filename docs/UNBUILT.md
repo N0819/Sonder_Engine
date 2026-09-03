@@ -5297,6 +5297,54 @@ manager directed lines tagged with their audience, which relaxes an
 information rule, and by the standing invariant a leak must be an engine
 failure rather than a model's.
 
+### 1.106 Promotion has four authorities and the owner wants two
+
+**Owner, 2026-09-04**, deliberating rather than deciding: promotion matters
+less now that charter gives a townsperson real depth for almost nothing, and it
+should become "solely within the player and Story Planner's authority."
+Recorded here with what that would actually cost, since three of the four
+authorities that exist today are the engine's.
+
+**What holds the power now.**
+
+- **The engine's autonomous sweep** (`auto_promote_background_characters`,
+  commit tail). Mints a sheet with a model call and attaches a permanent cast
+  member. Already off unless the host sets `auto_promote`, on the argument in
+  `_auto_promote_enabled`: a story must not acquire cast the host never asked
+  for from a passer-by who happened to talk twice.
+- **The engine's deterministic proposal** (`_propose_promotions`). "A mind is
+  earned, and the engine says when." At the per-chat thresholds it stamps the
+  record, tells the Director through `tell_director`, and raises a turn
+  warning. It was built for a measured failure, Harrowmere turns 5, 15 and 17:
+  the Director wanted to keep a person, wrote them into `cast_changes` which
+  attaches nobody, and the refusal told it nothing about the channel the
+  engine already held.
+- **The host's review** (`/promotions/draft` and `/promotions/confirm`, the
+  presences panel). This is the half the owner wants to keep.
+- **The Story Planner: nothing.** The room cannot propose, plan or perform a
+  promotion. It has `plan_entity` with `kind: person`, which plans somebody
+  who does not exist yet; promotion is the opposite motion, a presence the
+  story has already been playing becoming a mind.
+
+**What moving it means, concretely.** Retire the sweep and the setting that
+gates it. Keep the draft and confirm routes exactly as they are. Give the room
+a promotion proposal that lands in the room thread rather than a turn warning,
+so the judgement "this innkeeper has become someone" is made by something that
+has read the story rather than by two counters.
+
+**Two things must not be lost with the counters.** The Director still needs to
+be told, in the beat, that a presence it wants to keep is proposed and that
+`cast_changes` attaches nobody -- that is what `_propose_promotions` was built
+for, and the room proposing on its own schedule does not reach the Director on
+the beat it matters. And a story with no room seated needs SOME answer, or
+promotion silently stops existing for it; the thresholds are the current
+answer and would become the fallback rather than the mechanism.
+
+**A live defect either way:** `promotion_thresholds` is absent from
+`SETTING_PROVENANCE` and therefore from `PRESERVED_SETTING_KEYS`, while
+`background_config` and `dialogue_config` both have entries -- so a threshold
+set by hand is rolled back by any restore or reroll.
+
 ## 2. Roadmap
 
 Features the architecture intends and has not built. Ordered by value per unit
