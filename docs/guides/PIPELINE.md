@@ -883,7 +883,7 @@ fidelity payload ([`UNBUILT.md`](../UNBUILT.md) §3.4, S3-A6).
 4. cast status/state
 5. paradox checks
 6. spatial-frame reconciliation
-7. canon filing: every room the committed diff described is promoted through `canon_provenance.promote` and filed as a `layout` entry; world facts and typed introductions; the beat's planning needs onto the frame's ledger (`persist/commit_mapping.py`, no model)
+7. typed records: the Director's typed introductions; the beat's planning needs onto the frame's ledger with the committed surface attached, a containment room's need dropped; the Director's `world_facts` as `setting_fact` needs. No lore is filed here since 2026-09-03 -- the room `layout` filing is retired and the fallback fact writer with it (`persist/commit_mapping.py`, no model)
 8. character active psychology, beliefs/associations, memories, relationships,
    and event row — dialogue memories store appearance labels for unrecognized
    speakers (F2/P1); a character deciding turn N never retrieves memories from

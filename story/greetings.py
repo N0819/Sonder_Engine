@@ -27,6 +27,7 @@ from language_runtime import (
 from llm.llm_quality import complete_validated_json
 from llm.prompts import get_prompt
 from mind.memory import (
+    ensure_chat_canon_book,
     add_memories_batch, duplicate_lorebook_for_chat, get_relationships,
     record_relationship_event, save_relationships,
 )
@@ -736,19 +737,26 @@ def start_story(char_id: int, persona_id: int, greeting_index: int = 0,
                                       "display": sub(extraction.get("time") or ""),
                                       "time_scale": "scene"})
 
-    # Attach the chosen lorebook before turn 0 runs. A global (template) book is
-    # duplicated into a per-chat copy the same way attach_lore does; a book that
-    # is already chat-scoped attaches directly.
+    # Attach the chosen lorebook before turn 0 runs. A LIBRARY book is
+    # attached BY REFERENCE, the same way attach_lore does (2026-09-03: a
+    # story's deviations are overlays, never a copy); a book this chat owns
+    # attaches directly; another story's book is forked, since it has no
+    # shared origin to overlay.
     generation_book_id = None
     if lb:
-        if lb["chat_id"] == cid:
-            new_lb, origin = lb["id"], lb["origin_id"]
+        if lb["chat_id"] is None or lb["chat_id"] == cid:
+            new_lb, origin = lb["id"], None
         else:
             new_lb = duplicate_lorebook_for_chat(lb["id"], cid)
             origin = lb["id"]
-        db.qi("INSERT INTO chat_lorebooks(chat_id,lorebook_id,origin_id,enabled) "
+        db.qi("INSERT OR IGNORE INTO chat_lorebooks(chat_id,lorebook_id,origin_id,enabled) "
               "VALUES(?,?,?,1)", (cid, new_lb, origin))
-        generation_book_id = new_lb
+        # The generated location is GROUNDED in a book the story owns -- its
+        # rooms' registry ownership and the phonology the generator records
+        # are the story's, never the library's -- so a library attachment
+        # grounds in the story's canon book, minted here if it has none.
+        generation_book_id = (new_lb if lb["chat_id"] is not None
+                              else ensure_chat_canon_book(cid))
 
     # A selected prehistory must exist before establishment authors turn 0.
     # Running this from the browser after /start returns made the supposedly
@@ -786,9 +794,8 @@ def start_story(char_id: int, persona_id: int, greeting_index: int = 0,
             request.pop("featured_residents", None)
             request.pop("featured_resident_private", None)
         if generation_book_id is not None:
-            # Read the selected library subtree (the legacy attachment seam
-            # copies one book, not its children) while grounding the resulting
-            # rooms in the story-local copy.
+            # Read the selected library subtree while grounding the resulting
+            # rooms in a book the story owns.
             request["lorebook_id"] = lb["id"]
             request["owning_lorebook_id"] = generation_book_id
         try:

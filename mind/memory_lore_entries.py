@@ -4,6 +4,7 @@ Add/update/delete, embedding stamps and their health, `search_lore`, and the
 knowledge scoping that decides which entries a character may draw on."""
 
 import json
+import time
 import numpy as np
 from core.db import q, qi, transaction
 from llm.providers import embed_texts, embed_texts_meta
@@ -101,6 +102,18 @@ def add_lore(lorebook_id, keys, content, turn_added=None, locked=0, category="ot
              importance=0.5, aliases=None, scope=None, relations=None,
              source_notes="", embedding=None, embedding_model=None,
              embedding_dim=None, circles=None):
+    """One lore entry, written with its GATE FIELDS stated.
+
+    Lore is an author's reference and the Director's setting rulebook, and
+    it is the ONE channel by which a mind knows something by standing rather
+    than by living (`knowledge_for_character`). The three gate fields decide
+    who that is: `knowledge_tag` (depth -- common, scholarly, esoteric),
+    `circles` (compartment; NULL inherits the book, `[]` is public) and
+    `knowledge_range` + `knowledge_locations` (where it applies). An entry
+    with NO depth tag reaches no mind: it is Director-only, by design, and
+    every writer that leaves the tag empty is choosing that. Say so where
+    you call this.
+    """
     import uuid
     entry_uid = entry_uid or f"entry_{uuid.uuid4().hex}"
     vec = embedding
@@ -176,7 +189,14 @@ def update_lore(entry_id, keys, content, category=None, title=None,
     qi(f"UPDATE lore_entries SET {','.join(fields)} WHERE id=?", tuple(values))
 
 def duplicate_lorebook_tree_for_chat(root_id, chat_id, include_links=True):
-    """Duplicate a lorebook subtree for a chat, preserving hierarchy and links."""
+    """Duplicate a lorebook subtree for a chat, preserving hierarchy and links.
+
+    NOT the attach path for a library book any more (2026-09-03): a library
+    book is attached by reference and a story's deviations are overlays
+    (`set_lore_overlay`). This survives for the one case that is a genuine
+    fork -- taking another STORY's book into this one, which has no shared
+    origin to overlay -- and for the tests that pin its embedding stamps.
+    """
     book_ids = lorebook_descendants(root_id)
     if not book_ids:
         return {}
@@ -245,7 +265,168 @@ def duplicate_lorebook_for_chat(src_id, chat_id):
 def delete_lore(entry_id):
     qi("DELETE FROM lore_entries WHERE id=?", (entry_id,))
 
-def search_lore(lorebook_ids, query, k=6, exclude_categories=None):
+
+# ---- Overlays: one story's deviation from a library entry -----------------
+
+#: The fields a story may override on a library entry. NULL inherits.
+OVERLAY_FIELDS = ("keys", "content", "category", "title", "knowledge_tag",
+                  "knowledge_range", "knowledge_locations", "circles",
+                  "canon_locked")
+
+#: Why an overlay exists. A closed set the engine owns: a hand edit made from
+#: inside a story, the Writers' Room superseding an entry through a package,
+#: or the one-time conversion of a pre-2026-09 chat copy.
+OVERLAY_DISPOSITIONS = ("story_edit", "room_supersession", "migrated_copy")
+
+
+def _row_dict(row):
+    return dict(row) if not isinstance(row, dict) else dict(row)
+
+
+def lore_overlays(chat_id, frame_id=None, entry_ids=None):
+    """``{entry_id: overlay row}`` for one story and era. Empty when the
+    story has never deviated from its library."""
+    if chat_id is None:
+        return {}
+    sql = "SELECT * FROM lore_overlays WHERE chat_id=? AND frame_id IS ?"
+    args = [chat_id, frame_id]
+    if entry_ids is not None:
+        ids = [int(i) for i in entry_ids]
+        if not ids:
+            return {}
+        sql += " AND entry_id IN (%s)" % ",".join("?" * len(ids))
+        args += ids
+    return {r["entry_id"]: dict(r) for r in q(sql, tuple(args))}
+
+
+def merge_overlay(row, overlay):
+    """The library row as this story reads it. A NULL overlay field inherits
+    the library value; a set one overrides it. The merged row carries
+    `overlay_id` and `overlay_disposition` so a reader can say so."""
+    out = _row_dict(row)
+    if not overlay:
+        out["overlay_id"] = None
+        return out
+    for field in OVERLAY_FIELDS + ("embedding", "embedding_model", "embedding_dim"):
+        value = overlay.get(field)
+        if value is not None:
+            out[field] = value
+    out["overlay_id"] = overlay["id"]
+    out["overlay_disposition"] = overlay.get("disposition")
+    out["overlay_source_notes"] = overlay.get("source_notes") or ""
+    return out
+
+
+def lore_rows(lorebook_ids, *, chat_id=None, frame_id=None,
+              exclude_categories=None, order="lorebook_id, id"):
+    """Every entry of the given books, as ``chat_id`` reads them: the library
+    rows with the story's overlays merged. ``chat_id`` None reads the library
+    as written."""
+    ids = _ids(lorebook_ids)
+    if not ids:
+        return []
+    ph = ",".join("?" * len(ids))
+    rows = q(f"SELECT * FROM lore_entries WHERE lorebook_id IN ({ph}) "
+             f"ORDER BY {order}", tuple(ids))
+    overlays = lore_overlays(chat_id, frame_id) if chat_id is not None else {}
+    merged = [merge_overlay(r, overlays.get(r["id"])) for r in rows]
+    if exclude_categories:
+        merged = [r for r in merged
+                  if (r.get("category") or "other") not in exclude_categories]
+    return merged
+
+
+def lore_overlay(chat_id, entry_id, frame_id=None):
+    row = q("SELECT * FROM lore_overlays WHERE chat_id=? AND entry_id=? "
+            "AND frame_id IS ?", (chat_id, entry_id, frame_id), one=True)
+    return dict(row) if row else None
+
+
+def set_lore_overlay(chat_id, entry_id, *, frame_id=None, turn_idx=None,
+                     disposition="story_edit", source_notes="",
+                     embedding=None, embedding_model=None, embedding_dim=None,
+                     **fields):
+    """Record what one story changes about one LIBRARY entry.
+
+    Refused for an entry of a book the story OWNS (edit the entry itself --
+    an overlay on one's own row is a copy wearing a new name) and for an
+    entry of another story's book (that story's canon is not this one's to
+    read, let alone amend). Fields not passed are left as they were; a field
+    passed as None is cleared back to inheriting the library. When the text
+    changes and no vector is handed in, the merged text is embedded so
+    retrieval ranks the story's reading, not the library's.
+    """
+    entry = q("SELECT e.*, b.chat_id AS book_chat FROM lore_entries e "
+              "JOIN lorebooks b ON b.id=e.lorebook_id WHERE e.id=?",
+              (entry_id,), one=True)
+    if entry is None:
+        raise ValueError("no lore entry %r" % entry_id)
+    if entry["book_chat"] is not None:
+        if entry["book_chat"] == chat_id:
+            raise ValueError("the story owns this entry; edit it directly "
+                             "rather than overlaying it")
+        raise ValueError("this entry belongs to another story's book")
+    if disposition not in OVERLAY_DISPOSITIONS:
+        raise ValueError("overlay disposition %r is not one of %s"
+                         % (disposition, ", ".join(OVERLAY_DISPOSITIONS)))
+    unknown = [k for k in fields if k not in OVERLAY_FIELDS]
+    if unknown:
+        raise ValueError("an overlay may not set %s" % ", ".join(sorted(unknown)))
+    existing = lore_overlay(chat_id, entry_id, frame_id) or {}
+    values = {f: existing.get(f) for f in OVERLAY_FIELDS}
+    for key, value in fields.items():
+        if key in ("knowledge_locations", "circles") and isinstance(value, (list, tuple, set)):
+            value = _storage_json(list(value))
+        if key == "canon_locked" and value is not None:
+            value = int(bool(value))
+        values[key] = value
+    text_changed = ("keys" in fields or "content" in fields)
+    vec, model_key, dims = existing.get("embedding"), existing.get("embedding_model"), existing.get("embedding_dim")
+    if embedding is not None:
+        model_key, dims = _carried_stamp(embedding, embedding_model, embedding_dim)
+        vec = _blob(embedding)
+    elif text_changed and (values.get("keys") is not None or values.get("content") is not None):
+        merged_keys = values["keys"] if values.get("keys") is not None else entry["keys"]
+        merged_content = values["content"] if values.get("content") is not None else entry["content"]
+        v, model_key, dims = _embed_lore_document(merged_keys, merged_content)
+        vec = _blob(v)
+    elif text_changed:
+        vec, model_key, dims = None, None, None
+    with transaction():
+        qi("DELETE FROM lore_overlays WHERE chat_id=? AND entry_id=? AND frame_id IS ?",
+           (chat_id, entry_id, frame_id))
+        qi("""INSERT INTO lore_overlays(
+                chat_id, frame_id, entry_id, keys, content, category, title,
+                knowledge_tag, knowledge_range, knowledge_locations, circles,
+                canon_locked, embedding, embedding_model, embedding_dim,
+                disposition, source_notes, turn_idx, created
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+           (chat_id, frame_id, entry_id, values["keys"], values["content"],
+            values["category"], values["title"], values["knowledge_tag"],
+            values["knowledge_range"], values["knowledge_locations"],
+            values["circles"], values["canon_locked"], vec, model_key, dims,
+            disposition, source_notes or "", turn_idx, time.time()))
+    return lore_overlay(chat_id, entry_id, frame_id)
+
+
+def clear_lore_overlay(chat_id, entry_id, frame_id=None):
+    """Back to the library's reading. True when a row was removed."""
+    before = lore_overlay(chat_id, entry_id, frame_id)
+    if before is None:
+        return False
+    qi("DELETE FROM lore_overlays WHERE chat_id=? AND entry_id=? AND frame_id IS ?",
+       (chat_id, entry_id, frame_id))
+    return True
+
+def search_lore(lorebook_ids, query, k=6, exclude_categories=None, *,
+                chat_id=None, frame_id=None):
+    """Rank the books' entries against ``query``. With ``chat_id``, the
+    entries are read as that story reads them -- library rows with the
+    story's overlays merged (`lore_rows`), the overlay's own vector ranking
+    where the story changed the text. Without it, the library as written.
+    The keyword term always scores the library text (the FTS index holds
+    the entry, not its overlays); an overlay that rewrote an entry ranks by
+    meaning alone on that term."""
     # lorebook_ids may be a plain list/int (existing callers, unweighted --
     # every book competes as an equal) or a {book_id: weight} dict as
     # returned by chat_lorebook_weights -- _ids() already extracts the id
@@ -260,10 +441,8 @@ def search_lore(lorebook_ids, query, k=6, exclude_categories=None):
     ids = _ids(lorebook_ids)
     if not ids:
         return []
-    ph = ",".join("?" * len(ids))
-    rows = q(f"SELECT * FROM lore_entries WHERE lorebook_id IN ({ph})", tuple(ids))
-    if exclude_categories:
-        rows = [r for r in rows if (r["category"] or "other") not in exclude_categories]
+    rows = lore_rows(ids, chat_id=chat_id, frame_id=frame_id,
+                     exclude_categories=exclude_categories, order="id")
     if not rows:
         return []
     _batch = embed_texts_meta([query or ""])
@@ -328,7 +507,8 @@ def search_lore(lorebook_ids, query, k=6, exclude_categories=None):
         {"id": row["id"], "entry_uid": row["entry_uid"],
          "book_id": row["lorebook_id"], "keys": row["keys"],
          "content": row["content"], "category": row["category"] or "other",
-         "locked": bool(row["canon_locked"])}
+         "locked": bool(row["canon_locked"]),
+         "overlay": bool(row.get("overlay_id"))}
         for _, row in scored[:k]
     ]
 
@@ -530,8 +710,9 @@ def knowledge_circles(value):
     return {str(v).strip().casefold() for v in value if str(v or "").strip()}
 
 
-def declared_circles(lorebook_ids):
-    """Every compartment the given books declare, at book or entry level.
+def declared_circles(lorebook_ids, chat_id=None, frame_id=None):
+    """Every compartment the given books declare, at book or entry level --
+    and, with ``chat_id``, at the story's overlay level too.
 
     Exists so a mind can be told it is an OUTSIDER on purpose rather than by
     omission. `knowledge.circles` is a field, and an empty field fails
@@ -551,12 +732,22 @@ def declared_circles(lorebook_ids):
     for r in q(f"SELECT circles AS c FROM lore_entries "
                f"WHERE lorebook_id IN ({ph}) AND circles IS NOT NULL", tuple(ids)):
         out |= knowledge_circles(r["c"])
+    if chat_id is not None:
+        for overlay in lore_overlays(chat_id, frame_id).values():
+            if overlay.get("circles") is not None:
+                out |= knowledge_circles(overlay["circles"])
     return out
 
 
 def knowledge_for_character(lorebook_ids, char_room, known_tags,
-                            excluded_titles, circles=None, limit=30):
+                            excluded_titles, circles=None, limit=30, *,
+                            chat_id=None, frame_id=None):
     """World knowledge this mind may hold, on three ORTHOGONAL axes.
+
+    With ``chat_id``, the entries are read as that story reads them: the
+    library rows with the story's overlays merged, so a fact the story
+    amended reaches its minds amended, and a compartment the story opened
+    or closed on an entry is the compartment that gates it.
 
     DEPTH (`knowledge_tag`) -- how hard the fact is to know: common,
     scholarly, esoteric, matched against the character's own access tags. An
@@ -594,8 +785,7 @@ def knowledge_for_character(lorebook_ids, char_room, known_tags,
         for r in q(f"SELECT id, default_circles FROM lorebooks "
                    f"WHERE id IN ({ph})", tuple(ids))
     }
-    rows = q(f"""SELECT * FROM lore_entries WHERE lorebook_id IN ({ph})
-             ORDER BY lorebook_id, id""", tuple(ids))
+    rows = lore_rows(ids, chat_id=chat_id, frame_id=frame_id)
     mine = knowledge_circles(circles)
     excl = set(excluded_titles or [])
     seen_titles = set()

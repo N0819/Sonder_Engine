@@ -355,14 +355,16 @@ def validate_provisional(
 def promote(record: Mapping[str, Any], disposition: str, *, adjudicator: str) -> dict[str, Any]:
     """Lift a provisional record into an adjudicated disposition.
 
-    THE NAMED SEAM, IMPLEMENTED 2026-09-04 for the first real producer: the
+    THE NAMED SEAM, IMPLEMENTED 2026-09-04 for its first real producer: the
     filing of what a beat established about a place. The mapping model used
     to confirm a staged room description into a lore entry with no
     disposition at all -- the privilege `docs/UNBUILT.md` § 4.3 Gap 5 was
-    opened about. Now `persist/commit_mapping.room_filings` builds a
-    provisional record for every room the Director's committed diff
-    described, and promotes it here to `spatial_generation` with the stage
-    that ruled it as adjudicator, before anything is written.
+    opened about. That room filing was itself retired on 2026-09-03 (the
+    registry and the scene ARE the record of a room; see
+    `persist/commit_mapping`), and the producers today are the Writers'
+    Room's package operations (`story/plot_packages`'s `file_lore`,
+    `imported_canon` with the package as adjudicator) and whatever else
+    lifts a provisional record into canon.
 
     What this does: validates the record as a PROVISIONAL one (same write
     path check as everything else in this tier -- an id-shaped subject, a

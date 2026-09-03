@@ -3071,10 +3071,23 @@ def _book_weights(ctx, refresh=False):
     return ctx["_book_weights"]
 
 def lore_for(ctx):
-    entries = ctx.world_context().get("relevant_lore") or []
-    allowed = ("id", "entry_uid", "book_id", "keys", "content", "category", "locked")
-    return [{k: e.get(k) for k in allowed if k in e}
-            for e in entries if isinstance(e, dict)]
+    """The Director's lore slice: the beat's relevant entries, then the
+    RULEBOOK rows the compiler rendered from typed data (`agents.mapping.
+    rulebook_rows`) in the same row shape, marked `source: engine:rulebook`
+    and carrying no id -- they are not entries and never enter the cache."""
+    world = ctx.world_context()
+    entries = world.get("relevant_lore") or []
+    allowed = ("id", "entry_uid", "book_id", "keys", "content", "category",
+               "locked", "overlay", "source")
+    out = [{k: e.get(k) for k in allowed if k in e}
+           for e in entries if isinstance(e, dict)]
+    for row in world.get("rulebook") or []:
+        if not isinstance(row, dict) or not row.get("text"):
+            continue
+        out.append({"keys": str(row.get("subject") or ""),
+                    "content": str(row["text"]), "category": "mechanic",
+                    "locked": True, "source": "engine:rulebook"})
+    return out
 
 def _ambient_blocked_slugs(sc, room_id):
     """Item-5 coarse nesting filter: None when the observer's room is open
@@ -3136,45 +3149,31 @@ def _room_notes_for_view(rdata, room_id, ctx, scene=None):
 
 
 def _room_notes_from_lore(room_id, ctx, scene=None):
-    """The room's description as PROSE, for delivery to a mind.
+    """The room's description as PROSE, for delivery to a mind -- from the
+    SCENE, which is the record of a room.
 
-    Every return runs through `strip_engine_provenance`: a `layout` entry the
+    The name is historical: until 2026-09-03 this fell through to the lore
+    layer, where every described room had been filed as a `layout` entry --
+    a second representation of the scene kept so a model stage could
+    retrieve it. That filing is retired (`persist/commit_mapping`), so the
+    room's own `notes`, else its `desc`/`description`, is the whole answer;
+    a room the scene does not describe has no notes, and nobody invents any.
+
+    Every return runs through `strip_engine_provenance`: a description the
     engine wrote for a room it had no canon for may carry the reason it was
-    written, and that reason is bookkeeping about a retrieval, not a fact about
-    the room. It stays on the lore row's `source_notes` where an author and an
-    audit can read it; it does not travel into a view. See
+    written, and that reason is bookkeeping, not a fact about the room. See
     `story/provenance_text` for the measurement.
     """
     if not room_id:
         return ""
     sc = scene if scene is not None else get_scene(ctx.chat.id, ctx.chat)
     rdata = (sc.get("rooms") or {}).get(room_id)
-    if rdata and rdata.get("notes"):
-        return strip_engine_provenance(rdata["notes"])
-    # Coarse scope-by-nesting-depth: for a sealed nested observer, an entry
-    # whose keys ALSO name an ancestor-scope room/location carries ambient
-    # information they cannot perceive right now -- skip it.
-    blocked = _ambient_blocked_slugs(sc, room_id)
-    # The compiler stages nothing; this read survives for a beat stored
-    # before it existed, whose staged layout entry still describes the room.
-    staged = ctx.world_context().get("staged_lore") or []
-    room_norm = room_id.lower().replace("_", " ")
-    for entry in staged:
-        _k = entry.get("keys")
-        keys = (" ".join(map(str, _k)) if isinstance(_k, list) else str(_k or "")).lower()
-        content = entry.get("content") or ""
-        if (room_norm in keys or room_id.lower() in keys) and content:
-            if blocked and _keys_reference_blocked(keys, blocked):
-                continue
-            return strip_engine_provenance(content)[:600]
-    for entry in lore_for(ctx):
-        _k = entry.get("keys")
-        keys = (" ".join(map(str, _k)) if isinstance(_k, list) else str(_k or "")).lower()
-        content = entry.get("content") or ""
-        if (room_norm in keys or room_id.lower() in keys) and content:
-            if blocked and _keys_reference_blocked(keys, blocked):
-                continue
-            return strip_engine_provenance(content)[:600]
+    if not isinstance(rdata, dict):
+        return ""
+    for field in ("notes", "desc", "description"):
+        text = rdata.get(field)
+        if text:
+            return strip_engine_provenance(str(text))[:600]
     return ""
 
 # A stage direction written INSIDE a speech element: "*leans in* Sit down."
