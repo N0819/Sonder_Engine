@@ -296,6 +296,31 @@ class TestOperations:
         assert row["source_notes"].startswith("imported_canon by writers_room:plot:")
         assert "imported_canon" not in row["content"]
 
+    def test_a_web_result_files_under_its_own_disposition_and_cites_the_page(self, temp_db):
+        # The shape `story.room_research.as_lore` hands the Planner: the
+        # disposition, address and date ride the op and land in provenance.
+        cid = _story(temp_db, book=True)
+        uid = _ready(temp_db, cid, ops=[{
+            "op": "file_lore", "subject_id": "tide_tables", "subject_kind": "setting",
+            "title": "Spring tides", "content": "Spring tides run highest at syzygy.",
+            "category": "other", "disposition": "web_reference",
+            "source_url": "https://example.org/tides", "fetched_at": "2026-09-03"}])
+        assert preview_package(cid, uid)["errors"] == []
+        validate_package(cid, uid)
+        out = publish_package(cid, uid, expected_revision=_rev(cid, uid))
+        entry_id = out["applied"][0]["result"]["entry_id"]
+        row = temp_db.q("SELECT * FROM lore_entries WHERE id=?", (entry_id,), one=True)
+        assert row["source_notes"].startswith(
+            "web_reference https://example.org/tides fetched 2026-09-03; web_reference by")
+
+    def test_an_unknown_disposition_is_refused_at_preview(self, temp_db):
+        cid = _story(temp_db, book=True)
+        uid = _ready(temp_db, cid, ops=[{
+            "op": "file_lore", "subject_id": "tide_tables", "content": "x",
+            "disposition": "gospel"}])
+        errors = preview_package(cid, uid)["errors"]
+        assert any("gospel" in e and "disposition" in e for e in errors)
+
     def test_lore_with_no_book_or_a_bad_subject_is_refused(self, temp_db):
         cid = _story(temp_db)
         uid = _ready(temp_db, cid, ops=[{

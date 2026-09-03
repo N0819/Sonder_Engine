@@ -737,6 +737,11 @@ def _shape_file_lore(op):
         "knowledge_locations": [_text(x, 120) for x in op.get("knowledge_locations") or ()
                                 if _text(x, 120)],
         "book_id": op.get("book_id"),
+        # A result of `story/room_research` files itself under the disposition
+        # it came in with, and keeps where and when it was fetched.
+        "disposition": _text(op.get("disposition"), 40),
+        "source_url": _text(op.get("source_url"), 400),
+        "fetched_at": _text(op.get("fetched_at"), 40),
     }
 
 
@@ -766,7 +771,8 @@ def _preview_file_lore(cid, frame_id, op, world):
               "subject": {"kind": op["subject_kind"], "id": op["subject_id"]},
               "base_turn": 0, "basis": "model"}
     try:
-        promote(record, LORE_DISPOSITION, adjudicator="writers_room")
+        promote(record, op.get("disposition") or LORE_DISPOSITION,
+                adjudicator="writers_room")
     except ValueError as exc:
         errors.append("file_lore: %s" % exc)
     return {"changes": [{"kind": "lore_filed", "book_id": book,
@@ -781,13 +787,18 @@ def _apply_file_lore(cid, frame_id, op, turn_idx, package_uid_=""):
 
     world = {"chat": _chat_row(cid)}
     book, _attached = _target_book(cid, world, op)
+    disposition = op.get("disposition") or LORE_DISPOSITION
     record = promote({
         "disposition": "provisional",
         "subject": {"kind": op["subject_kind"], "id": op["subject_id"]},
         "base_turn": int(turn_idx), "basis": "model",
-    }, LORE_DISPOSITION, adjudicator="writers_room:%s" % package_uid_)
+    }, disposition, adjudicator="writers_room:%s" % package_uid_)
     provenance = "%s by %s (subject %s)" % (
         record["disposition"], record["adjudicator"], op["subject_id"])
+    if op.get("source_url"):
+        provenance = "%s %s fetched %s; %s" % (
+            record["disposition"], op["source_url"], op.get("fetched_at") or "?",
+            provenance)
     entry_id = add_lore(
         book, op["keys"] or op["title"], op["content"], turn_added=turn_idx,
         category=op["category"], title=op["title"] or None,
