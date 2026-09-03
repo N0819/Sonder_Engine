@@ -172,94 +172,6 @@ def _stored_shape(registry):
             "items": items, "people": people}
 
 
-#: The charter a person belongs to when they belong to no institution.
-#: Not a fake institution of one -- an institution of NONE: no posts, no
-#: upkeeps, no watch bill, nothing to stand. It exists because a person still
-#: has to be somewhere for the simulation to advance their needs, their
-#: feeling and their acquaintance, and `charter_run.step` advances a charter's
-#: MEMBERS. A hermit joins it and stands nothing; that is the whole of what
-#: having no institution means here.
-AMBIENT_CHARTER = "ambient"
-
-
-def _ambient_body_key(name):
-    """A stable key for a person the story named but no generator minted."""
-    slug = re.sub(r"[^a-z0-9]+", "_",
-                  " ".join(str(name or "").split()).casefold()).strip("_")
-    digest = hashlib.sha256(str(name or "").encode("utf-8")).hexdigest()[:6]
-    return "%s:%s" % (slug[:32] or "person", digest)
-
-
-def ensure_ambient_bodies(cid, wanted, frame_id=None):
-    """Give every named background person a body. Returns ``{name: ref}``.
-
-    WHY THIS EXISTS. Measured across the corpus: 84 tracked background
-    presences carried no charter body against 14 that did, so 86% of the
-    people a story actually populates itself with reached none of the memory,
-    familiarity, ties, marks or history-reading volition Charter was built to
-    give them. They were a name in a dict, invented fresh each time, keyed by
-    DISPLAY NAME -- which two people in one story may share.
-
-    A presence minted here is an ordinary person from that moment: it
-    accumulates a past, forms acquaintance, can be transferred to a real
-    institution when the story gives it one, and promotes through the single
-    path every other body promotes through. Nothing about it is a second tier.
-
-    Bodies only, and no cognition is invented: a fresh person knows nobody and
-    remembers nothing, which is true of somebody the story has only just
-    introduced. What they come to know arrives through the same channels as
-    everybody else's.
-    """
-    # The common turn mints nobody, so the alias lookup runs on the shared
-    # cached registry; only the first actually-fresh name pays for a private
-    # copy to mutate (`registry_for_update` -- the shared object is
-    # read-only). Both shapes hold the same bodies, so a lookup answered by
-    # the cache is answered identically by the private copy.
-    registry = registry_for(cid, frame_id)
-    known = {}
-    for charter_key, item in (registry.get("items") or {}).items():
-        for body_key, body in ((item.get("state") or {}).get("bodies")
-                               or {}).items():
-            for alias in (str(body.get("name") or ""), str(body_key)):
-                if alias:
-                    known.setdefault(alias.casefold(),
-                                     {"charter": charter_key, "body": body_key})
-    fresh = {}
-    private = None
-    for row in wanted or ():
-        name = " ".join(str((row or {}).get("name") or "").split())
-        if not name:
-            continue
-        hit = known.get(name.casefold())
-        if hit:
-            fresh[name] = dict(hit)
-            continue
-        if private is None:
-            private = registry_for_update(cid, frame_id)
-        body_key = _ambient_body_key(name)
-        place = str((row or {}).get("place") or "")
-        item = private.setdefault("items", {}).setdefault(
-            AMBIENT_CHARTER, {"state": {
-                "key": AMBIENT_CHARTER, "posts": {}, "upkeeps": {},
-                "priority": [], "bodies": {}}})
-        state = item.setdefault("state", {})
-        state.setdefault("bodies", {})[body_key] = {
-            "key": body_key, "name": name, "place": place,
-            "berth": place, "competence": {}, "available": True,
-        }
-        known[name.casefold()] = {"charter": AMBIENT_CHARTER, "body": body_key}
-        fresh[name] = {"charter": AMBIENT_CHARTER, "body": body_key}
-    if fresh:
-        # The pre-cache code saved whenever any wanted name RESOLVED, mint
-        # or not, and that save re-applies the identity-reservation
-        # subtraction; keep that exact write so nothing about the stored
-        # blob's history changes shape.
-        if private is None:
-            private = registry_for_update(cid, frame_id)
-        save_registry(cid, private, frame_id)
-    return fresh
-
-
 def transfer_person(registry, body_key, to_charter, *, place=None):
     """Move one person between institutions. Identity is not touched.
 
@@ -3247,8 +3159,7 @@ def presence_view(cid, place, name, frame_id=None, figures=None, *,
                     row["practice"] = row["practice"].replace(
                         other, labels[other])
             rows.append(row)
-        berth = ("" if charter_key == AMBIENT_CHARTER
-                 else str(body.get("berth") or ""))
+        berth = str(body.get("berth") or "")
         out.append({
             "charter": charter_key,
             "body": body_key,
@@ -3359,6 +3270,8 @@ def background_presence_records(cid, *, places=None, names=None,
             # members' own bodies were derived here as background people.
             if body_of_an_authored_mind(state, body_key, body):
                 continue
+            if body.get("departed"):
+                continue  # a guest whose stay ran out stands nowhere
             display = display_name(
                 body, roles.get(body_key) or (), state.get("naming"))
             place = str(body.get("place") or "")
@@ -3390,12 +3303,10 @@ def background_presence_records(cid, *, places=None, names=None,
             sketch["appearance"] = appearance_text(
                 surface, noun=member_noun(state, body_key))
         berth = str(body.get("berth") or "")
-        if berth and charter_key != AMBIENT_CHARTER:
+        if berth:
             # Where this body SLEEPS -- the fact that makes a room private
             # (`charter_dwellings`), carried on the sketch so every reader
-            # of the record (the Director's figures, the voice) has it. An
-            # ambient body's berth is the room it was first seen in
-            # (`ensure_ambient_bodies`), a placeholder and not a home.
+            # of the record (the Director's figures, the voice) has it.
             sketch["home_room"] = berth
         out[display] = {
             "dialogue_turns": [], "mention_turns": [],
@@ -3495,12 +3406,6 @@ def charter_dwellings(cid, rooms, frame_id=None):
         return []
     homes = {}
     for charter_key, item in sorted((registry.get("items") or {}).items()):
-        # An ambient body carries the room it was first seen in as its
-        # berth (`ensure_ambient_bodies`): a placeholder, not a home, and
-        # the ambient charter serves no upkeep, so every hall with a
-        # minted clerk in it would otherwise be listed as his dwelling.
-        if charter_key == AMBIENT_CHARTER:
-            continue
         state = (item or {}).get("state") or {}
         work = charter_work_places(state)
         roles = {}
