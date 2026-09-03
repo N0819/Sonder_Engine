@@ -17,7 +17,7 @@
 | `agents/director_fanout.py` | 830 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
 | `agents/director_floors.py` | 1586 |  | `agents.common`, `agents.director_lingua`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
 | `agents/director_lingua.py` | 29 |  | — |
-| `agents/director_movement.py` | 1037 |  | `agents.director_lingua`, `story.character_schema`, `world.spatial` |
+| `agents/director_movement.py` | 1028 |  | `agents.director_lingua`, `story.character_schema`, `world.spatial` |
 | `agents/director_reconcile.py` | 592 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story`, `world.spatial` |
 | `agents/director_scopes.py` | 856 |  | `agents.director_views`, `core.db`, `world.survival` |
 | `agents/director_views.py` | 627 |  | `agents.common`, `story.character_schema`, `story.scene`, `world.background_claims` |
@@ -36,7 +36,7 @@
 | `core/logging_utils.py` | 122 | Structured timing and observability helpers. | — |
 | `core/outofband.py` | 392 |  | `core.logging_utils` |
 | `core/paths.py` | 32 |  | — |
-| `core/pipeline_context.py` | 473 | Typed mutable context passed through a turn pipeline. | `core.db` |
+| `core/pipeline_context.py` | 505 | Typed mutable context passed through a turn pipeline. | `core.db` |
 | `core/updates.py` | 399 |  | `core.paths` |
 | `dressing/__init__.py` | 6 |  | — |
 | `dressing/ambience.py` | 2064 |  | `core`, `core.db`, `core.paths`, `dressing.backdrops`, `world.weather` |
@@ -86,7 +86,7 @@
 | `persist/commit_memory_write.py` | 325 | The durable memory write and its out-of-band consolidation twin. | `core.db`, `mind.memory`, `persist.commit_memory`, `story.character_schema`, `story.scene` |
 | `persist/commit_place_graph.py` | 321 | Per-mind durable place graph and per-beat spatial experience. | `world.spatial` |
 | `persist/commit_room_registry.py` | 486 | Room identity across frames: registry projection, mint dedup, renames, retirement, exit pruning. | `core.db`, `persist.commit_common`, `story.character_schema`, `world.spatial` |
-| `persist/commit_scene_state.py` | 1420 | The prepared post-turn scene: pre-lock build, scene commit domain, book anchoring, ground advance. | `core.db`, `core.pipeline_context`, `mind.memory`, `persist.commit_attire`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_room_registry`, `story.character_schema`, `story.provenance_text`, `world.mechanics`, `world.spatial`, `world.spatial_frames`, `world.weather` |
+| `persist/commit_scene_state.py` | 1421 | The prepared post-turn scene: pre-lock build, scene commit domain, book anchoring, ground advance. | `core.db`, `core.pipeline_context`, `mind.memory`, `persist.commit_attire`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_room_registry`, `story.character_schema`, `story.provenance_text`, `world.mechanics`, `world.spatial`, `world.spatial_frames`, `world.weather` |
 | `persist/llm_capture.py` | 229 |  | `core.db` |
 | `persist/pipeline_trace.py` | 574 | Privacy-conscious export, validation, and offline replay of persisted pipeline history. | `core.db` |
 | `story/__init__.py` | 6 |  | — |
@@ -327,14 +327,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_reconcile_near_group_positions()` | 166 | 276 lines |
-| `_travel_continues()` | 847 | 109 lines |
-| `_apply_following_movement()` | 533 | 88 lines |
-| `_guard_approach_is_not_arrival()` | 958 | 80 lines |
-| `_unreachable_position_writes()` | 622 | 68 lines |
-| `_travel_in_flight_view()` | 796 | 49 lines |
+| `_reconcile_near_group_positions()` | 157 | 276 lines |
+| `_travel_continues()` | 838 | 109 lines |
+| `_apply_following_movement()` | 524 | 88 lines |
+| `_guard_approach_is_not_arrival()` | 949 | 80 lines |
+| `_unreachable_position_writes()` | 613 | 68 lines |
+| `_travel_in_flight_view()` | 787 | 49 lines |
 | `_egocentric_exits()` | 29 | 48 lines |
-| `_resolve_movement_mover()` | 692 | 37 lines |
+| `_resolve_movement_mover()` | 683 | 37 lines |
 
 ### `agents/director_reconcile.py`
 
@@ -535,6 +535,7 @@
 
 | Function | Start | Size |
 |---|---:|---:|
+| `canonical_movement()` | 101 | 18 lines |
 | `note_step_decision()` | 86 | 12 lines |
 | `note_step_warning()` | 46 | 11 lines |
 | `note_step_exchange()` | 75 | 9 lines |
@@ -1069,7 +1070,7 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `prepare_scene_commit()` | 607 | 764 lines |
+| `prepare_scene_commit()` | 607 | 765 lines |
 | `_advance_day_cycle()` | 66 | 111 lines |
 | `_merge_overlays()` | 537 | 68 lines |
 | `sync_anchored_books()` | 195 | 66 lines |

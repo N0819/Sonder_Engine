@@ -2852,8 +2852,8 @@ def addressed_rooms(ctx, dr_output, sc, player_room):
             if room != here:
                 out.add(room)
     if spoke and not resolved_any:
-        interp = ctx.get("director_interpret") or {}
-        mv = interp.get("movement") if isinstance(interp, dict) else None
+        mv = ctx.declared_movement() if hasattr(ctx, "declared_movement") \
+            else ((ctx.get("director_interpret") or {}).get("movement"))
         if isinstance(mv, dict) and mv.get("to_room") \
                 and str(mv.get("mover") or "self") == "self":
             to = str(mv["to_room"])

@@ -97,6 +97,26 @@ def note_step_decision(kind: str, subject: str, verdict: str,
             pass
 
 
+
+def canonical_movement(declared, compiled):
+    """`declared` (the Director's movement row) with its `to_room` replaced
+    by `compiled["to_room"]` when the compiler classified the destination
+    `planned` under another spelling; the spelling survives as
+    `declared_as`. Returns `declared` itself when nothing changes. Pure, so
+    the Director's readers and commit's share one answer (bench, chat 114,
+    2026-09-03: the two disagreed and a second room was minted)."""
+    if not isinstance(declared, dict) or not declared.get("to_room"):
+        return declared
+    if not isinstance(compiled, dict) or compiled.get("status") != "planned":
+        return declared
+    canonical = str(compiled.get("to_room") or "")
+    if not canonical or canonical == str(declared.get("to_room")):
+        return declared
+    out = dict(declared)
+    out["declared_as"] = str(declared["to_room"])
+    out["to_room"] = canonical
+    return out
+
 class StepTaggedWarnings(list):
     """A list of warning strings that also remembers which step raised each.
 
@@ -336,6 +356,18 @@ class PipelineContext:
                 or self._extra.get("mapping_stage")
                 or self._extra.get("mapping_quick")
                 or {})
+
+    def declared_movement(self):
+        """The beat's declared movement, its destination spelled as the
+        world spells it: the Director's `movement` row with `to_room`
+        replaced by the compiler's canonical id when the compiler resolved
+        the spelling to a planned room (`canonical_movement`). Every reader
+        of where the beat is going -- the resolve floors, the hands'
+        payloads, commit's destination and approach ledgers -- takes it
+        from here, so one spelling of a room is one room."""
+        interp = self.director_interpret or {}
+        declared = interp.get("movement") if isinstance(interp, dict) else None
+        return canonical_movement(declared, self.world_context().get("movement"))
 
     def get(self, key: str, default=None):
         if hasattr(self, key):

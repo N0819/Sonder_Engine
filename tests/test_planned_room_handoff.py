@@ -133,6 +133,36 @@ def test_the_resolve_destination_is_the_compilers(temp_db):
     assert movement_for_resolve(Ctx(None), {"movement": None}) is None
 
 
+def test_every_reader_of_the_destination_shares_one_spelling(temp_db):
+    """`PipelineContext.declared_movement` is the one reader; the resolve
+    floors and commit's destination and approach ledgers go through it (the
+    bench's second run minted an empty stub under the Director's spelling
+    from commit's "a declared destination always exists" floor)."""
+    import inspect
+    import time as _t
+    from core.pipeline_context import (ChatData, PipelineContext, TurnData,
+                                       canonical_movement)
+    from persist import commit_background, commit_scene_state
+    ctx = PipelineContext(
+        chat=ChatData(id=1, name="x", persona_id=None, lorebook_id=None,
+                      scenario="", created=_t.time()),
+        turn=TurnData(id=1, chat_id=1, idx=3, player_input="go", created=_t.time()),
+        cast=[], input="go")
+    ctx.director_interpret = {"movement": {"to_room": "rocky_tide_path", "mover": "self"}}
+    ctx.compile_world_context = {"movement": {"to_room": "tide_path", "status": "planned",
+                                              "declared_as": "rocky_tide_path"}}
+    assert ctx.declared_movement() == {"to_room": "tide_path", "mover": "self",
+                                       "declared_as": "rocky_tide_path"}
+    ctx.compile_world_context = {"movement": {"to_room": "rocky_tide_path", "status": "unplanned"}}
+    assert ctx.declared_movement() is ctx.director_interpret["movement"]
+    assert canonical_movement(None, {"to_room": "x", "status": "planned"}) is None
+    assert "declared_movement()" in inspect.getsource(commit_background)
+    scene_src = inspect.getsource(commit_scene_state)
+    assert "declared_movement()" in scene_src
+    assert '.get("movement")' not in scene_src, \
+        "commit reads the destination through the context, never the raw row"
+
+
 def test_entry_hands_the_seed_and_a_developed_room_is_no_longer_a_stub(temp_db):
     cid, scene = _chat(temp_db)
     brief = planned_room_brief(cid, scene, rooms_to_develop(scene, "square"))

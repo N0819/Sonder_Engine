@@ -3831,7 +3831,7 @@ def director_resolve(ctx, nonce, _corrections=None):
     # The compiler stages nothing, so this loop materialises a room only on
     # a beat stored before it existed (a rerun from an old mapping step).
     staged = ctx.world_context().get("staged_lore") or []
-    mv = interp.get("movement")
+    mv = _mv_for_context
     target_room = mv.get("to_room") if isinstance(mv, dict) else None
 
     # Who is actually relocating this beat (movement.mover): the player's
