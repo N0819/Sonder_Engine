@@ -328,6 +328,48 @@ status (v2 § 5.3), plot packages with truths, evidence, clocks and
 pressures, mystery integrity (v2 § 4.3, and the original design note),
 derailment replanning (v2 § 7.5).
 
+**Region events** (owner, 2026-09-03: "big disaster events like large
+regions of a story map being damaged at once or sequentially over time").
+One op class with a footprint, a profile in time, and per-room effects
+that are all existing ops:
+
+- **Footprint:** a set of rooms named directly, a lorebook scope (the
+  destruction domain's cascade already walks scope + registered rooms,
+  `persist/commit_destruction.py`), a graph radius from an epicentre, or a
+  spatial `zone`.
+- **Profile:** *at once* (every room in the footprint on one beat), a
+  **front** (a due event that advances over passable edges at an authored
+  rate per window — fire along a street, flood from the river, a siege
+  line — through the living-world fuse machinery, `world/mechanics.py`
+  `_fire_due_events` and `world/living_world.py`), or a **decay** (a
+  plague: a contagion trigger on co-presence, the creature fork's
+  condition model spreading by the encounter odds).
+- **Per-room effects**, each one op: **damage** as a state short of ruin
+  (burning / flooded / collapsed / blocked — a hazard the composer
+  renders, geometry marks impassable or as cover, and charter routes
+  avoid like a known threat); **destruction** (retire-not-delete, ruin
+  kept, `commit_destruction`); **shocks** to every charter serving an
+  upkeep there (`charter_intervene`); **harm** to bodies present by the
+  contest (creature fork); **displacement** — bodies whose berth is gone
+  relocate to another charter's berths or the commons (the creature
+  fork's relocation op, applied to victims: refugees are an enrolment);
+  **artifacts** left (rubble, the dead, a notice); **news** by carrier;
+  **weather** where the event is one (`weather.room_exposure`).
+- **Afterwards:** rebuilding as a town **project** — an upkeep that
+  restores a damaged room over hours, staffed from the posts, so a burned
+  street is a thing the town is seen doing something about; the
+  head-seat rule re-elects the dead; grievances and politics follow.
+
+The player's bubble sees it when it arrives: a fuse notice fires only
+where the player stands (the living-world floor's own rule), and the
+Director renders the beat; off screen, charter and the harm model carry
+it. The room authors it as a package with a clock; the Planner judges
+naturalness; and it is gated by the **harm and permanent-loss budget**
+(v2 § 6.2) and by protected characters — a disaster that would kill a
+protected character asks first. Prerequisites: the creature fork (harm,
+relocation, mobilisation) and Phase A.1 (planned entities, so displaced
+bodies have somewhere to be).
+
 ### Phase D — the room authors the data tiers
 
 Room-written creature files and look laws (§ 4); time-skip plans and the
