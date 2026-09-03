@@ -133,10 +133,10 @@ The payload. Each row is a conjunction: **every** requirement must hold.
 | A place carrying its owed history into a scene | `offscreen_life ≥ deterministic` **and** `place_obligations = floor` |
 | An authored antagonist advancing a plan unwatched | `offscreen_life ≥ reactive` **and** `antagonist_ladder ≥ floor` |
 | A named absent character advancing their **own** plans | `offscreen_life = character_agent` **and** `antagonist_ladder = ceiling` **and** the card's `simulation.offscreen_agent = true` **and** `max_offscreen_actors > 0` **and** that character's `chat_chars` status is `dormant` **and** the beat minted an epoch **and** that mind has a *private reason* |
-| An institution **catching up** — its people, duties, markets and gossip advancing over elapsed time | `offscreen_life ≥ deterministic` (`world/charter_runtime.py:1071`) plus a charter in the registry. This gate covers the catch-up tick **only** — see §7. |
+| An institution **catching up** — its people, duties, markets and gossip advancing over elapsed time | A charter in the registry, and nothing else. Ungated since 2026-09-04: charter is where an unwatched body lives, not a mechanism a ladder rung may switch off, and its advance path spends no model call. |
 | A room showing what changed while it was unwatched | `routine_residue ≥ floor` **and** `offscreen_life ≥ deterministic` **and** a declared movement — but Charter incidents reach the same payload slot ungated, and are prepended ahead of routine texture (`agents/director.py:2594`) |
 | An unregistered presence speaking in the room | none of the above — this is `background_react`, gated only by `pick_background_reactors` and `max_reactors` |
-| A creature hunting a town off screen — kills, raids, spoor, tribute, and the watch called out | `offscreen_life ≥ deterministic` plus a charter carrying `creature` in the registry (`world/charter_creature.py`); the catch-up then steps every charter TOGETHER with a predation round between windows (`world/charter_predation.run_registry`, `charter_runtime.advance_snapshot`'s together arm). A registry with no creature never enters that arm. The town answers through `charter_decide.mobilisation_calls` when a post with `mobilise` authority holds a threat claim above its credence |
+| A creature hunting a town off screen — kills, raids, spoor, tribute, and the watch called out | A charter carrying `creature` in the registry (ungated, as above) (`world/charter_creature.py`); the catch-up then steps every charter TOGETHER with a predation round between windows (`world/charter_predation.run_registry`, `charter_runtime.advance_snapshot`'s together arm). A registry with no creature never enters that arm. The town answers through `charter_decide.mobilisation_calls` when a post with `mobilise` authority holds a threat claim above its credence |
 | A whole location's populace voiced in one call | `background_config.scene_life = ambient` or `full` |
 
 **The paid-tick row is the one people get wrong**, and `AGENTS.md:97`'s
@@ -392,9 +392,11 @@ have no `offscreen_life` gate anywhere in the path
 (`persist/commit_mechanics.py:132` says so explicitly). A story set to `inert`
 keeps delivering the arrivals, news and consequences it already scheduled.
 
-**`offscreen_life` gates the Charter CATCH-UP TICK only.** This is the single
-most misleading thing about the ladder. Four other Charter paths carry no
-ladder gate at all and run at every rung including `inert`:
+**`offscreen_life` no longer gates ANY Charter path.** It gated the catch-up
+tick until 2026-09-04, and that was the single most misleading thing about the
+ladder; the gate is now gone, so a charter in the registry advances at every
+rung including `inert`. Four other Charter paths never carried a ladder gate at
+all:
 `commit_charter_observations`, an ordinary commit domain writing bodies'
 private claims from `director_resolve.public_evidence` every beat and letting
 the bodies in a figure's room see the figure (`sight_figures_in_scene`)
@@ -402,8 +404,8 @@ the bodies in a figure's room see the figure (`sight_figures_in_scene`)
 from `background_react` output (`persist/commit_background.py:1110`); the
 arrival-residue read; and the planted-structure read. Charter *generation* is
 ungated too (`web/app.py:4633`). A story set to `inert` still accrues Charter
-evidence, still forms beliefs, and can still have a whole town generated into
-it.
+evidence, still forms beliefs, still advances its institutions, and can still
+have a whole town generated into it.
 
 **The carrier network is ungated in the same way, and it is large.**
 `world/crowds.py`, `story/carriers.py` and `story/couriers.py` contain zero

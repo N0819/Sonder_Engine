@@ -384,17 +384,16 @@ $("#b-dlg").onclick = async () => {
         permits(d) ? "" : `off-screen life at ${offLife.value} caps it (needs ${d.requires})`]
         .filter(Boolean).join("; ");
   });
-  // Institutions (docs/design/DESIGN_INSTITUTIONS_AND_UPKEEP.md). Both ways a
-  // defined institution can be silently inert are already computed by
-  // `charter_runtime.schedule_charter_ticks` (`charter_skip`) and thrown
-  // away; a ceiling below `deterministic` is the one an author can act on, so
-  // it is shown here in the same words `refreshLw` uses for the mechanisms.
+  // Institutions (docs/design/DESIGN_INSTITUTIONS_AND_UPKEEP.md). There is now
+  // exactly ONE way a defined institution can be inert, and it is not a
+  // setting: `charter_runtime.schedule_charter_ticks` is ungated, so a story
+  // that has a charter runs it. The clamp line this panel used to carry --
+  // "off-screen life at inert caps it" -- was removed 2026-09-04 with the gate
+  // it described, because a ladder rung that reads as a spend ceiling was
+  // silencing work that spends nothing.
   const charterItems = Object.entries((ch.charters || {}).items || {});
   const charterClamp = el("div", { class: "small dim" });
-  const refreshCharter = () => charterClamp.textContent =
-    !charterItems.length || offLife.value !== "inert" ? ""
-      : `not running — off-screen life at ${offLife.value} caps it `
-        + "(needs deterministic)";
+  const refreshCharter = () => charterClamp.textContent = "";
   const countOf = o => Object.keys(o || {}).length;
   const charterRows = charterItems.map(([key, item]) => {
     const st = item.state || {};

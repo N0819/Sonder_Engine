@@ -2303,16 +2303,27 @@ def land_snapshot(cid, frame_id, base_turn, epoch_id, registry, rows,
 
 
 def schedule_charter_ticks(ctx, epoch=None):
-    """Queue deterministic institution catch-up for one committed epoch."""
+    """Queue deterministic institution catch-up for one committed epoch.
+
+    NOT GATED, and that is deliberate (owner ruling, 2026-09-04). Charter is
+    where an unwatched body lives, not a feature with a switch, so the only
+    reason this returns without scheduling is that the story has no charter
+    yet -- `charter_skip: "no_charters"`.
+
+    It used to refuse below the `offscreen_life` ladder's `deterministic`
+    rung. That ladder is a SPEND gate: `living_world.effective_depth` says so
+    in as many words, and `artifacts.schedule_artifact_text` uses it to
+    withhold model-authored wording. This path spends nothing -- there is no
+    provider seam anywhere in this module, and `advance_snapshot` is a
+    deterministic walk of a copied registry -- so the ceiling was withholding
+    free work, and a host who lowered the ladder to save money silently froze
+    the town instead of saving anything. Everything the ladder still gates
+    costs a model call; this does not.
+    """
     from core.db import wget_for_frame
-    from story.scene import dialogue_config, offscreen_life_allows
 
     epoch = epoch if isinstance(epoch, dict) else {}
     if not epoch.get("opportunity") or not epoch.get("epoch_id"):
-        return None
-    cfg = dialogue_config(ctx.chat.id) or {}
-    if not offscreen_life_allows(cfg.get("offscreen_life"), "deterministic"):
-        epoch["charter_skip"] = "ceiling"
         return None
     cid, frame_id, base_turn = ctx.chat.id, ctx.turn.frame_id, ctx.turn.idx
     registry = registry_for_update(cid, frame_id)
