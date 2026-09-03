@@ -30,6 +30,8 @@ from __future__ import annotations
 
 import json
 
+from story.plot_packages import operation_shape_text
+
 #: Result ceiling, in characters of JSON; past it the result is truncated
 #: with a `truncated` marker rather than a model being handed a transcript.
 TOOL_RESULT_CHARS = 12_000
@@ -596,7 +598,7 @@ TOOLS = [
      "args": _schema({"uid": _S, "fields": _O, "reason": _S}, ["uid", "fields"]),
      "handler": _t_edit_package},
     {"name": "draft_operation",
-     "description": "Add one typed operation to a draft. Kinds: plan_rooms (a structure and its rooms), plan_entity (a person, thing or creature with purpose, truths and where), post_artifact (a bill in a room), schedule_event (a summary due in N turns), file_lore (a setting fact under a subject id), answer_need / close_need (a planning need), request_location (a lived-location generation request; long), presimulate (live the town forward; long). Anything else is refused: the room writes the world only through these.",
+     "description": "Add one typed operation to a draft. `operation` is an object whose `op` names the kind and whose other keys are that kind's fields (`?` marks an optional one): " + operation_shape_text() + ". request_location and presimulate are long (prepared before publish). Anything else is refused: the room writes the world only through these.",
      "args": _schema({"uid": _S, "operation": _O}, ["uid", "operation"]),
      "handler": _t_draft_operation},
     {"name": "remove_operation",

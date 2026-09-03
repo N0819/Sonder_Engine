@@ -57,11 +57,13 @@ class Script:
     def __init__(self, *steps):
         self.steps = list(steps)
         self.payloads = []
+        self.systems = []
 
     def __call__(self, role, system, user, **kw):
         assert role == sp.PLANNER_ROLE
         payload = json.loads(user)
         self.payloads.append(payload)
+        self.systems.append(system)
         if not self.steps:
             return json.dumps({"reply": "nothing more"})
         step = self.steps.pop(0)
@@ -432,7 +434,8 @@ def test_the_delegation_is_once_per_reply_and_lands_as_a_request(temp_db, script
     assert results[0]["request"]["name"] == "The Mill"
     assert "once per reply" in results[1]["refused"]
     assert out["calls"] == 2
-    assert any(t["name"] == sp.CHARTER_PLANNER_TOOL for t in script.payloads[0]["tools"])
+    assert sp.CHARTER_PLANNER_TOOL in script.systems[0]
+    assert "tools" not in script.payloads[0]
 
 
 # ---------------------------------------------------------------------------
@@ -504,3 +507,70 @@ def test_the_planners_fixed_lines_are_in_both_catalogs():
     for line in (sp.BOUNDED_LINE, sp.NO_STATUS_LINE, sp.WAITING_LINE, sp.REWOUND_LINE):
         assert line in en and line in script
         assert ja.get(line) not in (None, line)
+
+
+def test_a_call_the_loop_cannot_run_is_reported_not_dropped(temp_db, monkeypatch):
+    """Measured live (chat 111, 2026-09-03): three steps of calls spelled
+    with `name` for the tool key were skipped silently and the model, seeing
+    an empty transcript, repeated them. A misspelled key is accepted; a call
+    with no tool at all comes back in the transcript as an error."""
+    from agents import story_planner as sp
+    from llm import providers
+    seen = []
+    answers = iter([
+        {"calls": [{"name": "inspect_needs", "args": {}}, {"args": {}}, "junk"]},
+        {"calls": [], "reply": "done"},
+    ])
+    def script(role, system, user, **kw):
+        import json
+        seen.append(json.loads(user))
+        return json.dumps(next(answers))
+    monkeypatch.setattr(providers, "chat_complete", script)
+    cid = temp_db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+                     ("Room", "", 0.0))
+    out = sp.run_planner(cid, None, text="hello")
+    transcript = seen[1]["transcript"]
+    assert [t["tool"] for t in transcript] == ["inspect_needs", None, None]
+    assert all("error" in t["result"] for t in transcript[1:])
+    assert out["calls"] == 1 and out["reply"] == "done"
+
+
+def test_the_same_sentence_granted_twice_is_one_mandate(temp_db):
+    """A model re-emits a grant on every step of a reply it is still working
+    (chat 111, 2026-09-03: two rows for one sentence). The store answers
+    the same row for the same active sentence and scope."""
+    cid = temp_db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+                     ("Room", "", 0.0))
+    a = md.grant_mandate(cid, None, text="You may plan rooms ahead of me.",
+                         capabilities=["plan_rooms"], scope="the town")
+    b = md.grant_mandate(cid, None, text="you may plan rooms ahead of me.",
+                         capabilities=["plan_rooms"], scope="The town")
+    assert a["uid"] == b["uid"]
+    assert len(md.active_mandates(cid, None)) == 1
+    c = md.grant_mandate(cid, None, text="You may plan rooms ahead of me.",
+                         capabilities=["plan_rooms"], scope="the harbour")
+    assert c["uid"] != a["uid"]
+
+
+def test_an_operation_may_spell_its_kind_as_kind_and_a_refusal_names_the_shape(temp_db):
+    """Four live drafts were refused with a message that named neither the
+    key the kind goes under nor the fields (chat 111, 2026-09-03)."""
+    from story.plot_packages import (OPERATION_FIELDS, OPERATIONS,
+                                     draft_operation, new_package,
+                                     preview_package)
+    from story.room_tools import TOOL_INDEX
+    cid = temp_db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+                     ("Room", "", 0.0))
+    pkg = new_package(cid, title="Morning", premise="p")
+    # An empty package validates with a warning that says it changes nothing.
+    assert any("no operations" in w for w in preview_package(cid, pkg["uid"])["warnings"])
+    pkg = draft_operation(cid, pkg["uid"], {
+        "kind": "plan_entity", "name": "Marta", "brief": {"where": "hall"}})
+    assert pkg["operations"][0]["op"] == "plan_entity"
+    assert pkg["operations"][0]["kind"] == "person"
+    with pytest.raises(ValueError) as exc:
+        draft_operation(cid, pkg["uid"], {"rooms": {"hall": {}}})
+    assert "`op` names its kind" in str(exc.value)
+    assert set(OPERATION_FIELDS) == set(OPERATIONS)
+    description = TOOL_INDEX["draft_operation"]["description"]
+    assert all(kind in description for kind in OPERATIONS)
