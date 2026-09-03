@@ -152,6 +152,17 @@ turn check catches rollback behind the producer, while the epoch check catches
 a restore/branch at the same numeric turn but on a different world edge. Stable
 epoch+rung batch identity makes landing idempotent.
 
+`planned_entities` and `planning_needs` (`world/planned_entities.py`) are
+frame-scoped world keys beside `charters`: the authored plans no charter
+simulates (`{uid: {kind, name, aliases, role, brief:{purpose, truths, where},
+surface?, rendered?}}`) and the typed needs a surface-only Director mint files
+(`[{uid, kind: person|thing|room, status: open|filled|closed, surface:{name,
+room, description, did, role}, identity, fill?}]`). Both ride the whole-`world`
+checkpoint/archive/branch path with no handling of their own; a charter body
+enrolled to answer a need lives in `charters` like any other body, with
+`guest`, `guest_until` and `departed` as the only fields enrolment adds to a
+body's shape.
+
 `charters` stores `{version, items}`. Each item separates its
 normalized pure `state` from runtime markers (`last_elapsed_seconds`,
 `last_epoch_id`, `window_hours`). Directed regard keys are JSON strings

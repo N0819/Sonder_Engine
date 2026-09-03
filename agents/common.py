@@ -2008,6 +2008,7 @@ def present_charter_figures(cid, sc, rooms, frame_id=None):
     payload keeps the people a role could be mistaken for.
     """
     from world import charter_crowd
+    from world.planned_entities import body_plan_uid
 
     places = {str(r) for r in (rooms or ()) if str(r or "")}
     if not places:
@@ -2048,9 +2049,39 @@ def present_charter_figures(cid, sc, rooms, frame_id=None):
             # the whole surface rather than a graded label.
             "look": str(((record or {}).get("sketch") or {})
                         .get("appearance") or ""),
+            # A charter body IS a plan the charter simulates: the uid the
+            # Director's render settles through, in the same field an
+            # authored plan carries (`world.planned_entities`).
+            "plan": body_plan_uid(ref.get("charter"), ref.get("body"))
+            if ref.get("charter") and ref.get("body") else "",
         })
     rows.sort(key=lambda r: (0 if r["posts"] else 1, r["name"].casefold()))
     return rows
+
+
+def planned_figures_in_view(cid, rooms, frame_id=None):
+    """The authored plans standing in `rooms` that no render has settled
+    (`world.planned_entities.plans_in_view`), in the same row shape as
+    `present_charter_figures`, so the Director's payload and the identity
+    floor read charter bodies and authored plans as one list. Empty for a
+    story that authored none."""
+    try:
+        from world.planned_entities import plans_in_view
+        return plans_in_view(cid, rooms, frame_id=frame_id)
+    except Exception:
+        return []
+
+
+def reserved_plan_figures(cid, frame_id=None, exclude_rooms=()):
+    """Every unrendered authored plan wherever it stands, flagged
+    ``reserved`` (`world.planned_entities.reserved_plans`): a mint naming
+    one by name or alias is a render of it in any room."""
+    try:
+        from world.planned_entities import reserved_plans
+        return reserved_plans(cid, frame_id=frame_id,
+                              exclude_rooms=exclude_rooms)
+    except Exception:
+        return []
 
 
 def dwellings_in_reach(cid, rooms, frame_id=None):

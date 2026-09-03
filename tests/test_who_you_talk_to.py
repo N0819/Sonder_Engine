@@ -360,28 +360,33 @@ class TestARoomSomeoneSleepsInIsTheirs:
         ctx = _mk_ctx(temp_db, charters=_registry())
         assert charter_dwellings(ctx.chat.id, {"ford_inn_common"}) == []
 
-    def test_an_ambient_bodys_room_is_not_its_home(self, temp_db):
-        """`ensure_ambient_bodies` writes `berth = place` for a minted
-        presence: a placeholder, so the hall a minted clerk stands in
-        must not read as the clerk's dwelling."""
-        from world.charter_runtime import (AMBIENT_CHARTER,
-                                           charter_dwellings, presence_view)
+    def test_an_enrolled_persons_home_is_a_real_berth(self, temp_db):
+        """A person the Director rendered with no plan behind them is
+        enrolled somewhere real (`charter_enrol`): a guest of a lodging
+        sleeps at the lodging, which is a workplace and so no dwelling; a
+        householder sleeps in a house, which is one. There is no ambient
+        placeholder for the hall a minted clerk stands in to read as his."""
+        from world.charter_enrol import enrol_person
+        from world.charter_runtime import charter_dwellings, presence_view
         from agents.common import present_charter_figures
-        reg = _registry()
-        reg["items"][AMBIENT_CHARTER] = {"state": {
-            "key": AMBIENT_CHARTER, "posts": {}, "upkeeps": {},
-            "priority": [], "watch": {},
-            "bodies": {"the_reeve_s_clerk:f15922": {
-                "key": "the_reeve_s_clerk:f15922", "name": "the reeve's clerk",
-                "place": "reeve_hall", "berth": "reeve_hall",
-                "competence": {}, "available": True}}}}
-        ctx = _mk_ctx(temp_db, charters=reg)
-        assert charter_dwellings(ctx.chat.id, {"reeve_hall"}) == []
+        ctx = _mk_ctx(temp_db, charters=_registry())
+        guest = enrol_person(ctx.chat.id, {"kind": "person", "surface": {
+            "name": "Marrow", "room": "ford_inn_common"}})
+        assert guest["how"] == "guest"
+        assert charter_dwellings(ctx.chat.id, {"ford_inn_common"}) == []
+        view = presence_view(ctx.chat.id, "ford_inn_common", "Marrow")
+        assert view and view[0]["home"] == {"room": "ford_inn_common",
+                                            "at_home": True}
+        # A clerk minted in the hall with no clerk's post to take, and no
+        # institution keeping its own berths here, joins a households
+        # charter minted for the story -- and the hall is where they were
+        # seen, not a house the town has: a dwelling is owed.
+        clerk = enrol_person(ctx.chat.id, {"kind": "person", "surface": {
+            "name": "the reeve's clerk", "room": "reeve_hall"}})
+        assert clerk["how"] == "minted_households" and clerk["room_need"]
         rows = present_charter_figures(ctx.chat.id, _hall(), {"reeve_hall"})
         homes = {r["name"]: r["home"] for r in rows}
-        assert homes["the reeve's clerk"] == ""
-        view = presence_view(ctx.chat.id, "reeve_hall", "the reeve's clerk")
-        assert view and view[0]["home"] == {"room": "", "at_home": False}
+        assert homes["the reeve's clerk"] == "reeve_hall"
 
     def test_a_room_out_of_reach_is_not_listed(self, temp_db):
         from world.charter_runtime import charter_dwellings

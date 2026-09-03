@@ -1479,6 +1479,8 @@ def track_background_presences(ctx, nonce, *, prepared=None):
                                # the durable key the harvests used to resolve
                                # into names and throw away
     renders = []               # [{charter, body, render}] for bound mints
+    plan_renders = []          # [{plan, entity_id, render, turn}] likewise
+    seen_surfaces = {}         # name -> the description the beat committed
 
     # Scene entities are keyed by an opaque id ("char_guard_alpha") but carry
     # a human display name ("Security Guard Alpha"). The director normally
@@ -1607,6 +1609,17 @@ def track_background_presences(ctx, nonce, *, prepared=None):
                 # townsperson looks the same next visit.
                 if desc:
                     sk["_render"] = desc
+            # A mint the floor bound to an AUTHORED plan
+            # (`world.planned_entities`): the render settles onto the plan
+            # the same way, once.
+            _pref = entity_def.get("plan_ref")
+            if isinstance(_pref, dict) and str(_pref.get("uid") or ""):
+                sk["_plan_ref"] = str(_pref["uid"])
+                sk["_entity_id"] = str(entity_id)
+            # WHAT WAS SEEN, whole: the committed surface a planning need
+            # carries when this person has no plan behind them.
+            if desc:
+                sk["_desc"] = desc
             # Positions are usually keyed by the entity ID, not the display
             # name this sketch is filed under. Looking up the name alone left
             # the station on the floor -- and the positions harvest below then
@@ -1791,12 +1804,23 @@ def track_background_presences(ctx, nonce, *, prepared=None):
                 sk = dict(sk)
                 _cref = sk.pop("_charter_ref", None)
                 _render = sk.pop("_render", None)
+                _pref = sk.pop("_plan_ref", None)
+                _eid = sk.pop("_entity_id", None)
+                _desc = sk.pop("_desc", None)
                 if _cref and _cref not in record.setdefault("charter_refs", []):
                     record["charter_refs"].append(dict(_cref))
                 if _cref and _render:
                     renders.append({"charter": _cref["charter"],
                                     "body": _cref["body"],
                                     "render": _render})
+                if _pref:
+                    record["plan_ref"] = _pref
+                    if _desc:
+                        plan_renders.append({"plan": _pref, "entity_id": _eid,
+                                             "render": _desc,
+                                             "turn": turn_idx})
+                if _desc:
+                    seen_surfaces[name] = _desc
                 # Director restated this presence's own description/position
                 # -> objective self-knowledge wins; overwrite the prior sketch.
                 if sk:
@@ -1820,6 +1844,19 @@ def track_background_presences(ctx, nonce, *, prepared=None):
                                              rec["refused"]))
         except Exception as exc:
             ctx.add_warning(f"rendered surface not settled: {exc}")
+    # ...and onto an AUTHORED plan the floor bound (`world.planned_entities.
+    # settle_rendered_plans`), by the same once-only rule.
+    if plan_renders:
+        try:
+            from world.planned_entities import settle_rendered_plans
+            for rec in settle_rendered_plans(
+                    cid, plan_renders, frame_id=ctx.turn.frame_id):
+                if rec.get("refused"):
+                    ctx.add_warning(
+                        "render of planned %s not settled: it contradicts "
+                        "the plan's dealt %s" % (rec["plan"], rec["refused"]))
+        except Exception as exc:
+            ctx.add_warning(f"rendered plan not settled: {exc}")
 
     # Scene-manager bookkeeping (docs/design/BACKGROUND_LIFE_DESIGN.md §3.8, §3.11).
     _persist_blurbs(br, presences)
@@ -2025,20 +2062,29 @@ def track_background_presences(ctx, nonce, *, prepared=None):
     named = _mint_missing_presence_names(cid, presences, live_scene,
                                          reserved=roster)
 
-    # EVERY BACKGROUND PERSON IS A CHARTER BODY, from here on. Measured across
-    # the corpus before this: 84 tracked presences with no charter body against
-    # 14 with one, so 86% of the people a story populates itself with reached
-    # none of the memory, familiarity, ties or history-reading volition built
-    # for exactly them -- they were a name in a dict, keyed by DISPLAY NAME,
-    # which two people in one story may share. A body gives them one identity
-    # space, a past that accumulates, and the single promotion path every other
-    # body already uses. Failure is not fatal: a story with no registry keeps
-    # the ledger it had.
+    # A PERSON WITH NO PLAN BEHIND THEM IS A PLANNING NEED, AND THE TOWN
+    # ANSWERS IT. The Director rendered a person nobody planned -- no charter
+    # body bound (`identity_bindings`), no authored plan reserved. What it
+    # rendered is the SURFACE, and the surface is committed as seen; what
+    # the person IS -- institution, seat, home, a past -- is a plan, and
+    # the Director was never its author (docs/design/DESIGN_WRITERS_ROOM_
+    # PLAN.md § 2). So the beat files a typed need with the surface attached
+    # (`world.planned_entities.file_planning_need`) and the deterministic
+    # fill answers a person-need in this same commit by ENROLMENT into a
+    # real institution (`world.charter_enrol.enrol_person`): the post the
+    # role names when a seat is open, a lodging house's guest, else a house
+    # of the households charter. The placeholder that used to hold such a
+    # person -- an ambient charter of none -- is gone: measured on the
+    # Harrowmere replay (2026-09-03), seven such mints, six of them shadows
+    # of a post-holder standing beside them, none with a home or a seat.
+    # Failure is not fatal: a story with no registry keeps the ledger it
+    # had and the need stays open for the drain job and, later, the room.
     try:
-        from world.charter_runtime import ensure_ambient_bodies
-        _wanted = []
+        from world.charter_enrol import enrol_person
+        from world.planned_entities import (file_planning_need,
+                                            fill_planning_need)
         for key, record in presences.items():
-            if record.get("charter_refs"):
+            if record.get("charter_refs") or record.get("plan_ref"):
                 continue
             _name = presence_display_name(key, record)
             if not _name:
@@ -2047,27 +2093,70 @@ def track_background_presences(ctx, nonce, *, prepared=None):
             # this for the adjacent question -- may this presence hold a
             # speaking turn -- and the answer is the same one: a ceiling-
             # mounted suppression fixture is not somebody who can stand a
-            # watch, form an acquaintance or be promoted. Minting one a body
-            # made an unpromotable device promotable, because a charter body
-            # IS a person and nothing downstream asks twice.
+            # watch, form an acquaintance or be promoted.
             if _presence_speech_verdict(live_scene, _name, record) != "person":
                 continue
-            _wanted.append({
-                "name": _name,
-                "place": str(presence_room(live_scene, _name, record) or ""),
-            })
-        for _name, _ref in (ensure_ambient_bodies(
-                cid, _wanted, frame_id=ctx.turn.frame_id) or {}).items():
-            for key, record in presences.items():
-                if presence_display_name(key, record) != _name:
+            _room = str(presence_room(live_scene, _name, record) or "")
+            _sk = record.get("sketch") or {}
+            _surface = {
+                "name": _name, "room": _room,
+                "description": seen_surfaces.get(_name)
+                or str(_sk.get("role_hint") or ""),
+                "did": str(_sk.get("last_act") or ""),
+                "role": "",
+            }
+            need, fresh = file_planning_need(
+                cid, {"kind": "person", "surface": _surface,
+                      "presence": str(key)},
+                frame_id=ctx.turn.frame_id, turn_idx=turn_idx)
+            if need.get("status") == "filled" and isinstance(
+                    (need.get("fill") or {}).get("ref"), dict):
+                _ref = dict(need["fill"]["ref"])
+            else:
+                filled = enrol_person(cid, need, frame_id=ctx.turn.frame_id,
+                                      scene=live_scene)
+                if not filled or not filled.get("ref"):
+                    ctx.tell_director(
+                        "%s has no plan behind them and the town could not "
+                        "place them; a planning need is open." % _name)
                     continue
-                refs = [r for r in (record.get("charter_refs") or [])
-                        if isinstance(r, dict)]
-                if _ref not in refs:
-                    refs.append(_ref)
-                record["charter_refs"] = refs
+                _ref = dict(filled["ref"])
+                fill_planning_need(
+                    cid, need["uid"],
+                    {"ref": _ref, "how": filled["how"],
+                     "post": filled.get("post") or "",
+                     "berth": filled.get("berth") or ""},
+                    frame_id=ctx.turn.frame_id, turn_idx=turn_idx)
+                if filled.get("room_need"):
+                    file_planning_need(
+                        cid, {"kind": "room",
+                              "surface": {"name": "a dwelling for %s" % _name,
+                                          "room": filled.get("berth") or _room,
+                                          "description": "every house is at "
+                                          "the berth ceiling"}},
+                        frame_id=ctx.turn.frame_id, turn_idx=turn_idx)
+                if filled["how"] != "held":
+                    _how = {
+                        "post": "enrolled at the post %s of %s" % (
+                            filled.get("post"), filled.get("charter")),
+                        "guest": "lodged as a guest of %s" % filled.get("charter"),
+                        "household": "enrolled in %s, berthed at %s" % (
+                            filled.get("charter"), filled.get("berth")),
+                        "minted_households": "enrolled in a households "
+                        "charter minted for this story",
+                    }.get(filled["how"], filled["how"])
+                    ctx.tell_director(
+                        "%s had no plan behind them; the town has %s. Their "
+                        "look as you wrote it stands." % (_name, _how))
+                    for note in filled.get("notes") or ():
+                        ctx.add_warning("enrolment of %s: %s" % (_name, note))
+            refs = [r for r in (record.get("charter_refs") or [])
+                    if isinstance(r, dict)]
+            if _ref not in refs:
+                refs.append(_ref)
+            record["charter_refs"] = refs
     except Exception as exc:  # a ledger without bodies is still a ledger
-        ctx.add_warning(f"charter body mint skipped: {exc}")
+        ctx.add_warning(f"charter enrolment skipped: {exc}")
 
     # THE OVERLAY IS AN APERTURE, NOT A LEDGER ENTRY. `with_charter_presences`
     # says so itself -- "merely noticing a Charter worker must not write a

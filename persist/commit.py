@@ -603,6 +603,18 @@ def _commit_all_locked(ctx, nonce):
         ctx.add_warning(f"memory tension scheduling failed: {exc}")
         results["memory_tension"] = {"error": str(exc)}
 
+    # Planning needs the commit could not answer (a person the fill could
+    # not place, a dwelling owed, a thing with no plan) drain out of band
+    # on the same terms: the deterministic fill tries again, the rest stays
+    # open for the Writers' Room (`world.planned_entities`).
+    try:
+        from world.planned_entities import schedule_planning_needs
+        job = schedule_planning_needs(ctx)
+        results["planning_needs"] = job.as_dict() if job else None
+    except Exception as exc:
+        ctx.add_warning(f"planning need scheduling failed: {exc}")
+        results["planning_needs"] = {"error": str(exc)}
+
     # Autonomous background->cast promotion likewise runs after the primary
     # transaction: it mints a sheet with an LLM call and is additive and
     # forward-only (the new character becomes step-eligible next turn), so a
