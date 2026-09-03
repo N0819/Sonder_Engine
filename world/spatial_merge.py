@@ -1076,8 +1076,15 @@ def merge_scene_with_diff(
     clock_seconds=None,
     crossing_report=None,
     inventory_report=None,
+    carriers=None,
 ) -> dict:
-    """`clock_seconds` is where the STORY clock stands at the end of this
+    """`carriers` is ``{spelling: room}`` for the bodies another ledger
+    stands in the scene's rooms this beat (`charter_runtime.charter_carriers`),
+    so a transfer to one of them resolves and the thing follows them
+    afterwards; see `derive_inventory_placements` and
+    `derive_contained_positions`.
+
+    `clock_seconds` is where the STORY clock stands at the end of this
     beat, and it is what lets a passage carry its occupants onward (see
     `advance_room_transits`). None is a hard no-op for that pass: a caller
     merging for a purpose other than living a beat -- a paradox probe, a
@@ -1444,7 +1451,7 @@ def merge_scene_with_diff(
         merged, diff.get("inventory_ops"),
         declared=(set(incoming_positions or {})
                   | set(diff.get("containment") or {})),
-        report=inventory_report)
+        report=inventory_report, carriers=carriers)
     # ...AND A BODY THAT HANDED A THING OVER IS NO LONGER HOLDING IT, in the
     # one field that says so in prose. `poses[x]["detail"]` is re-derived by
     # nothing, rendered verbatim into every view including the subject's own
@@ -1511,7 +1518,7 @@ def merge_scene_with_diff(
     place_enclosed_bodies(merged)
     # Derived LAST among position writes: whatever else this beat did to
     # positions, a carried body ends up where its carrier is.
-    derive_contained_positions(merged)
+    derive_contained_positions(merged, carriers=carriers)
     # ...and a position that names an ENTITY rather than a room is repaired
     # after that, so a real containment record always wins over the guess.
     repair_entity_positions(merged)
@@ -1572,7 +1579,7 @@ def merge_scene_with_diff(
         # stated.
         _materialize_interior_places(merged)
         place_enclosed_bodies(merged)
-        derive_contained_positions(merged)
+        derive_contained_positions(merged, carriers=carriers)
 
     # Contact and containment are two ledgers describing one arrangement, and
     # this is the first point at which both are final -- containment can still

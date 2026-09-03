@@ -2112,17 +2112,32 @@ def commit_charter_observations(ctx, prepared_scene):
         ctx.chat.id, figures, frame_id=ctx.turn.frame_id)
     resolved = ctx.get("director_resolve") or {}
     evidence = resolved.get("public_evidence") or []
-    if not evidence:
+    # The beat's transfer ops ride along for the one figure act that is
+    # not speech: a thing handed to a body. The actors are everyone the
+    # story knows by name -- membership only, never iterated into a payload.
+    inventory_ops = (resolved.get("state_diff") or {}).get("inventory_ops") \
+        or []
+    if not evidence and not inventory_ops:
         return {"sources": 0, "opportunities": 0, "acquired": 0,
                 "sighted": int(sighted.get("sighted") or 0)}
     result = ingest_public_evidence(
-        ctx.chat.id, evidence, scene, turn_id=ctx.turn.id,
+        ctx.chat.id, evidence, scene or {}, turn_id=ctx.turn.id,
         frame_id=ctx.turn.frame_id,
-        labels={f["key"]: f["label"] for f in figures})
+        labels={f["key"]: f["label"] for f in figures},
+        inventory_ops=inventory_ops,
+        figures=list(_registered_name_roster(ctx.chat, ctx.cast)))
     for actor in result.get("unplaced") or ():
         ctx.add_warning(
             "charter observations: the scene places %r nowhere, so no body "
             "could receive what they said or did" % actor)
+    for record in result.get("figure_acts") or ():
+        if record.get("refused"):
+            ctx.add_warning(
+                "Charter refused %s's %s toward %s: %s%s" % (
+                    record.get("actor"), record.get("act"),
+                    record.get("other"), record["refused"],
+                    (" (%s)" % record["reason"]) if record.get("reason")
+                    else ""))
     result["sighted"] = int(sighted.get("sighted") or 0)
     return result
 
