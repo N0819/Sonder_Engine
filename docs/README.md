@@ -141,6 +141,11 @@ they answer different questions about it:
   on, the phases (engine seams first, then the Planner, then the
   Dramaturge, then room-authored creatures, look laws and skips), open
   owner decisions and the replay measures each phase reports against.
+- [`DESIGN_ROOM_DIALS.md`](design/DESIGN_ROOM_DIALS.md) — how the story's
+  configuration might become the Writers' Room's (2026-09-04): the rule that
+  decides whether a value is authored or configured, why a package operation
+  writing the world key cannot work, and the overlay this codebase already
+  reaches for whenever two authors share one value.
 - [`DESIGN_STORY_PLANNER_AND_DRAMATURGE.md`](design/DESIGN_STORY_PLANNER_AND_DRAMATURGE.md)
   — design draft for one cross-system Writers' Room agent set: the Story
   Planner and Dramaturge share broad authorial sway, while a narrow Charter
