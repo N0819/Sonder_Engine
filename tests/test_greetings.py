@@ -183,7 +183,7 @@ class TestQuickStartLorebook:
                 ("SCP", "general", ""))
         return cid_char, pid, lb
 
-    def test_attaches_selected_lorebook_as_chat_copy(self, temp_db, monkeypatch):
+    def test_attaches_selected_lorebook_by_reference(self, temp_db, monkeypatch):
         from core.db import q
         greetings = self._stub_launch(monkeypatch)
         cid_char, pid, lb = self._fixtures()
@@ -195,10 +195,13 @@ class TestQuickStartLorebook:
                  "FROM chat_lorebooks cl JOIN lorebooks lb2 ON lb2.id=cl.lorebook_id "
                  "WHERE cl.chat_id=?", (chat_id,))
         assert len(rows) == 1
-        # attached as a per-chat duplicate that points back to the template.
-        assert rows[0]["origin_id"] == lb
-        assert rows[0]["lorebook_id"] != lb
-        assert rows[0]["book_chat"] == chat_id
+        # Attached AS the library book (2026-09-03): no per-chat duplicate,
+        # no origin pointer; the story's deviations are overlays.
+        assert rows[0]["origin_id"] is None
+        assert rows[0]["lorebook_id"] == lb
+        assert rows[0]["book_chat"] is None
+        assert q("SELECT COUNT(*) c FROM lorebooks WHERE chat_id=? AND origin_id IS NOT NULL",
+                 (chat_id,), one=True)["c"] == 0
 
     def test_no_lorebook_attaches_nothing(self, temp_db, monkeypatch):
         from core.db import q
@@ -233,9 +236,14 @@ class TestQuickStartLorebook:
             selected = temp_db.q(
                 "SELECT chat_id FROM lorebooks WHERE id=?",
                 (request["owning_lorebook_id"],), one=True)
+            # The library subtree is READ; the generated rooms are GROUNDED in
+            # the story's own canon book, never in the library.
             assert selected["chat_id"] == chat_id
             assert request["lorebook_id"] == lb
             assert request["owning_lorebook_id"] != lb
+            canon = temp_db.q("SELECT lorebook_id FROM chats WHERE id=?",
+                              (chat_id,), one=True)["lorebook_id"]
+            assert request["owning_lorebook_id"] == canon
             return {"ok": True}
 
         monkeypatch.setattr(charter_runtime, "generate_lived_location", generated)

@@ -182,5 +182,6 @@
   "ERROR": "stored setting value and a Python logging level name — translating it would change what the setting means",
   "?frame_id=": "URL, route, or query-string fragment",
   "before=": "URL, route, or query-string fragment",
-  "an empty line is not a message": "engine-internal ValueError text in story/room_conversation.py; the room route refuses an empty line with its own translated 400 before this can be raised, so no reader sees it"
+  "an empty line is not a message": "engine-internal ValueError text in story/room_conversation.py; the room route refuses an empty line with its own translated 400 before this can be raised, so no reader sees it",
+  "?chat_id=${encodeURIComponent(S.chatId)}": "A query-string fragment with a template placeholder, harvested from static/js/lorebooks.js; it is a URL, not a sentence anybody reads."
 }

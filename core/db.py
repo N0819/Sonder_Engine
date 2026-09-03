@@ -51,6 +51,10 @@ FRAME_SCOPED_WORLD_KEYS = {
     # status. Per-era like the plans they license: a branch that never
     # granted the room a harbour has no harbour mandate.
     "room_mandates", "room_status",
+    # KNOWLEDGE CIRCLES a character joined or left DURING the story
+    # (mind/knowledge_circles.py), overlaying the sheet's authored circles for
+    # the knowledge gate. Per-era like the initiation that granted them.
+    "knowledge_circles",
     # The prepared frontier's measure and the identity-fill ledger
     # (story/room_frontier.py). Per-era like the rooms it counts ahead of.
     "room_frontier",
@@ -830,6 +834,44 @@ CREATE TABLE IF NOT EXISTS room_messages(
     created REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_room_messages_thread ON room_messages(chat_id, frame_id, id);
+
+-- LORE OVERLAYS (mind/memory_lore_entries.py): one story's deviation from one
+-- LIBRARY lore entry. A library book is attached to a story BY REFERENCE
+-- (chat_lorebooks points at the library row; nothing is copied), and what the
+-- story changes about an entry -- a hand edit, a canon lock, the room's
+-- supersession -- is this row, merged over the library row at read time. A
+-- NULL field inherits the library value; a non-NULL one overrides it. Per
+-- story and per era like the scene: a branch that never edited the entry
+-- reads the library. Replaces the per-chat "(chat copy)" of every attached
+-- book, measured 2026-09-03 at 1,681 of 2,044 copied entries byte-identical
+-- to their origin.
+CREATE TABLE IF NOT EXISTS lore_overlays(
+    id INTEGER PRIMARY KEY,
+    chat_id INTEGER NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
+    frame_id INTEGER REFERENCES frames(id) ON DELETE CASCADE,
+    entry_id INTEGER NOT NULL REFERENCES lore_entries(id) ON DELETE CASCADE,
+    keys TEXT,
+    content TEXT,
+    category TEXT,
+    title TEXT,
+    knowledge_tag TEXT,
+    knowledge_range TEXT,
+    knowledge_locations TEXT,
+    circles TEXT,
+    canon_locked INTEGER,
+    embedding BLOB,
+    embedding_model TEXT,
+    embedding_dim INTEGER,
+    disposition TEXT NOT NULL DEFAULT 'story_edit',
+    source_notes TEXT NOT NULL DEFAULT '',
+    turn_idx INTEGER,
+    created REAL NOT NULL
+);
+-- One overlay per story, era and entry. COALESCE because a UNIQUE index
+-- treats two NULL frame ids as distinct, and the present era is NULL.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_lore_overlays_scope
+    ON lore_overlays(chat_id, entry_id, COALESCE(frame_id, 0));
+CREATE INDEX IF NOT EXISTS idx_lore_overlays_chat ON lore_overlays(chat_id, frame_id);
 
 CREATE TABLE IF NOT EXISTS world_events(
     event_id TEXT NOT NULL,
@@ -2032,6 +2074,141 @@ def _backfill_resource_uids(c):
                 (value, row["id"]),
             )
 
+def _migrate_chat_copies_to_overlays(c):
+    """Convert every "(chat copy)" of a LIBRARY book into a reference plus
+    overlays, once.
+
+    Until 2026-09-03 attaching a library book duplicated its whole subtree
+    into chat-owned copies marked with `origin_id`. Measured on the owner's
+    database: 143 copies, 2,044 copied entries, 1,681 of them byte-identical
+    to their origin, 363 edited or added in-story, 5 copies whose origin was
+    gone. This pass, per copy whose origin is a live library book:
+
+      * an entry identical (keys + content) to an origin entry is dropped;
+      * an entry that differs but matches an origin entry by title, else by
+        keys, becomes an overlay on that origin entry (disposition
+        `migrated_copy`, the copy's own vector carried);
+      * an entry matching nothing was added in-story and MOVES to the chat's
+        canon book (minted here if the chat has none);
+      * every reference to the copy -- the attachment, room-registry
+        ownership, links, a chat-owned child's parent -- is re-pointed at the
+        origin, and the copy is deleted (cascade takes what is left).
+
+    A copy whose origin no longer exists, or whose origin is another chat's
+    book, or which IS the chat's canon (bind_lore used to duplicate a library
+    book as canon), stays a chat-owned book: `origin_id` is cleared so it is
+    never read as a copy again. Returns the counts, for the caller's log.
+    """
+    rows = c.execute(
+        "SELECT id, chat_id, origin_id, name FROM lorebooks "
+        "WHERE chat_id IS NOT NULL AND origin_id IS NOT NULL").fetchall()
+    report = {"copies": len(rows), "converted": 0, "kept_own": 0,
+              "dropped": 0, "overlaid": 0, "moved": 0}
+    if not rows:
+        return report
+    now = time.time()
+    for copy in rows:
+        origin = c.execute(
+            "SELECT id, chat_id FROM lorebooks WHERE id=?",
+            (copy["origin_id"],)).fetchone()
+        chat = c.execute("SELECT id, name, lorebook_id FROM chats WHERE id=?",
+                         (copy["chat_id"],)).fetchone()
+        if (origin is None or origin["chat_id"] is not None or chat is None
+                or chat["lorebook_id"] == copy["id"]):
+            c.execute("UPDATE lorebooks SET origin_id=NULL WHERE id=?", (copy["id"],))
+            report["kept_own"] += 1
+            continue
+        cid, oid = copy["chat_id"], origin["id"]
+        origin_entries = c.execute(
+            "SELECT * FROM lore_entries WHERE lorebook_id=?", (oid,)).fetchall()
+        by_text = {}
+        by_title = {}
+        by_keys = {}
+        for e in origin_entries:
+            by_text.setdefault((e["keys"] or "", e["content"] or ""), e["id"])
+            if (e["title"] or "").strip():
+                by_title.setdefault(e["title"].strip().casefold(), []).append(e["id"])
+            if (e["keys"] or "").strip():
+                by_keys.setdefault(e["keys"].strip().casefold(), []).append(e["id"])
+        canon = chat["lorebook_id"]
+        for e in c.execute("SELECT * FROM lore_entries WHERE lorebook_id=?",
+                           (copy["id"],)).fetchall():
+            if (e["keys"] or "", e["content"] or "") in by_text:
+                report["dropped"] += 1
+                continue
+            target = None
+            title = (e["title"] or "").strip().casefold()
+            keys = (e["keys"] or "").strip().casefold()
+            if title and len(by_title.get(title) or []) == 1:
+                target = by_title[title][0]
+            elif keys and len(by_keys.get(keys) or []) == 1:
+                target = by_keys[keys][0]
+            if target is not None:
+                c.execute(
+                    "INSERT OR IGNORE INTO lore_overlays("
+                    "chat_id, frame_id, entry_id, keys, content, category, title,"
+                    " knowledge_tag, knowledge_range, knowledge_locations, circles,"
+                    " canon_locked, embedding, embedding_model, embedding_dim,"
+                    " disposition, source_notes, turn_idx, created"
+                    ") VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (cid, None, target, e["keys"], e["content"], e["category"],
+                     e["title"], e["knowledge_tag"], e["knowledge_range"],
+                     e["knowledge_locations"], e["circles"], e["canon_locked"],
+                     e["embedding"], e["embedding_model"], e["embedding_dim"],
+                     "migrated_copy",
+                     "migrated 2026-09 from the story's copy of %s"
+                     % (copy["name"] or "a library book"),
+                     e["turn_added"], now))
+                report["overlaid"] += 1
+                continue
+            if canon is None:
+                canon = c.execute(
+                    "INSERT INTO lorebooks(name,chat_id,book_type,summary,resource_uid)"
+                    " VALUES(?,?,?,?,?)",
+                    (f"{chat['name']} \u2014 canon", cid, "general",
+                     "Chat canon: facts, events and specifics established "
+                     "during this chat.", f"book_{uuid.uuid4().hex}")).lastrowid
+                c.execute("UPDATE chats SET lorebook_id=? WHERE id=?", (canon, cid))
+            c.execute("UPDATE lore_entries SET lorebook_id=?, source_notes=? WHERE id=?",
+                      (canon, "; ".join(x for x in (
+                          (e["source_notes"] or "").strip(),
+                          "moved 2026-09 from the story's copy of %s"
+                          % (copy["name"] or "a library book")) if x),
+                       e["id"]))
+            report["moved"] += 1
+        # Re-point every reference at the origin, then drop the copy.
+        att = c.execute(
+            "SELECT enabled FROM chat_lorebooks WHERE chat_id=? AND lorebook_id=?",
+            (cid, copy["id"])).fetchone()
+        if att is not None:
+            c.execute("DELETE FROM chat_lorebooks WHERE chat_id=? AND lorebook_id=?",
+                      (cid, copy["id"]))
+            c.execute(
+                "INSERT OR IGNORE INTO chat_lorebooks(chat_id,lorebook_id,origin_id,enabled)"
+                " VALUES(?,?,NULL,?)", (cid, oid, att["enabled"]))
+        c.execute("UPDATE room_registry SET owning_book_id=? "
+                  "WHERE chat_id=? AND owning_book_id=?", (oid, cid, copy["id"]))
+        for col, other in (("source_book_id", "target_book_id"),
+                           ("target_book_id", "source_book_id")):
+            for link in c.execute(
+                    f"SELECT id, {other} AS other, relation_type FROM lorebook_links"
+                    f" WHERE {col}=?", (copy["id"],)).fetchall():
+                dup = c.execute(
+                    f"SELECT 1 FROM lorebook_links WHERE {col}=? AND {other}=? "
+                    f"AND relation_type=?", (oid, link["other"], link["relation_type"])
+                ).fetchone()
+                if dup or link["other"] == oid:
+                    c.execute("DELETE FROM lorebook_links WHERE id=?", (link["id"],))
+                else:
+                    c.execute(f"UPDATE lorebook_links SET {col}=? WHERE id=?",
+                              (oid, link["id"]))
+        c.execute("UPDATE lorebooks SET parent_id=? WHERE parent_id=? AND chat_id=?",
+                  (oid, copy["id"], cid))
+        c.execute("DELETE FROM lorebooks WHERE id=?", (copy["id"],))
+        report["converted"] += 1
+    return report
+
+
 def _establish_time_of_day_from_variant(content):
     """The standing time of day a stored `director_establish` variant named.
 
@@ -2291,6 +2468,10 @@ def init():
     c.executescript(LATE_SCHEMA)
 
     _backfill_resource_uids(c)
+    # Chat copies of library books become references plus overlays. Idempotent
+    # (a copy converted is a copy gone) and gated on the copies' existence, so
+    # a fresh file and a converted one both do nothing here.
+    _migrate_chat_copies_to_overlays(c)
     # After the chain and on both paths, like the backfill above: a fresh file
     # has no scenes to repair, and an existing one is repaired exactly once
     # (see the function -- the key's presence is the gate).

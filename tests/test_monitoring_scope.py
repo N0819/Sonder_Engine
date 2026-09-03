@@ -79,7 +79,12 @@ class _StubCtx:
         return {"staged_lore": self._staged, "relevant_lore": []}
 
 
-def test_ancestor_scoped_lore_is_filtered_for_sealed_observer():
+def test_staged_lore_never_reaches_a_room_note_sealed_or_open():
+    """Room notes are the SCENE's own record of the room (2026-09-03: the
+    layout filing is retired and the lore fallback with it). A staged entry
+    keyed to the van and the port reaches neither a sealed nor an open van:
+    there is no lore layer under a room note any more, so the ambient leak
+    this test used to guard cannot occur by that route."""
     from agents.common import _room_notes_from_lore
 
     staged = [{
@@ -90,26 +95,18 @@ def test_ancestor_scoped_lore_is_filtered_for_sealed_observer():
     ctx = _StubCtx(staged)
 
     sealed = _nested_scene(van_phase="sealed")
-    assert _room_notes_from_lore("van_interior", ctx, sealed) == "", \
-        "port ambience must not leak into the sealed van"
-
+    assert _room_notes_from_lore("van_interior", ctx, sealed) == ""
     open_scene = _nested_scene(van_phase="docked", van_hatch="open")
-    assert "Port Kael" in _room_notes_from_lore(
-        "van_interior", ctx, open_scene)
+    assert "Port Kael" not in _room_notes_from_lore("van_interior", ctx, open_scene)
 
 
-def test_own_room_lore_still_reaches_the_sealed_observer():
+def test_the_rooms_own_description_reaches_the_sealed_observer():
     from agents.common import _room_notes_from_lore
 
-    staged = [{
-        "keys": "van_interior",
-        "content": "The van's cargo netting sways overhead.",
-        "category": "layout",
-    }]
-    ctx = _StubCtx(staged)
+    ctx = _StubCtx([])
     sealed = _nested_scene(van_phase="sealed")
-    assert "cargo netting" in _room_notes_from_lore(
-        "van_interior", ctx, sealed)
+    sealed["rooms"]["van_interior"]["desc"] = "The van's cargo netting sways overhead."
+    assert "cargo netting" in _room_notes_from_lore("van_interior", ctx, sealed)
 
 
 def test_perception_payload_scopes_ambient_location_by_nesting():

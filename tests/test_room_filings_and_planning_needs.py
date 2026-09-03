@@ -50,7 +50,6 @@ def _story(temp_db, *, frame_id=None):
 
 @pytest.fixture
 def wired(monkeypatch):
-    monkeypatch.setattr(cm, "embed_texts", lambda docs: [[0.0] * 4 for _ in docs])
     monkeypatch.setattr(cm, "search_lore", lambda *a, **k: [])
 
 
@@ -75,84 +74,79 @@ def test_a_quiet_beat_is_skipped(temp_db, wired):
     assert prepared["skipped"] is True and prepared["ops"] == []
 
 
-# ---- room filings through the seam ----------------------------------------
+# ---- room filings are RETIRED; world facts are needs -------------------------
 
-def test_a_described_room_is_filed_as_layout_with_a_disposition(temp_db, wired):
+def test_a_described_room_files_no_lore(temp_db, wired):
+    """Until 2026-09-03 every described room became a `layout` lore entry --
+    a second representation of the scene, kept so a model stage could
+    retrieve it. The registry and the scene are the record of a room; the
+    commit files nothing about one."""
     ctx, book = _story(temp_db)
     ctx.director_resolve["state_diff"]["rooms"] = {
         "bond_warehouse": {"name": "Bond Warehouse",
                            "desc": "Crates to the rafters, a smell of tar.",
                            "adjacent": [{"to": "quay", "barrier": "open"}]}}
     prepared = cm.prepare_mapping_commit(ctx)
-    assert prepared["mout"]["rooms_filed"] == ["bond_warehouse"]
-    cm.commit_mapping(ctx, "n", prepared=prepared)
-    (row,) = _entries(temp_db, book)
-    assert row["category"] == "layout"
-    assert row["content"] == "Crates to the rafters, a smell of tar."
-    assert "bond_warehouse" in row["knowledge_locations"]
-    assert row["keys"].startswith("Bond Warehouse")
-    assert "spatial_generation by director_resolve" in row["source_notes"]
+    assert prepared["skipped"] is True
+    assert "rooms_filed" not in prepared["mout"]
+    assert _entries(temp_db, book) == []
+    src = __import__("inspect").getsource(cm)
+    assert "'layout'" not in src and '"layout"' not in src, "no writer files layout"
 
 
-def test_the_record_is_promoted_not_written_provisional(temp_db, wired):
-    ctx, _ = _story(temp_db)
-    diff = {"rooms": {"bond_warehouse": {"name": "Bond Warehouse", "desc": "Crates."}}}
-    (record,) = cm.room_filings(ctx, diff, {"rooms": {}}, adjudicator="director_resolve")
-    assert record["disposition"] == cm.FILED_ROOM_DISPOSITION
-    assert record["adjudicator"] == "director_resolve"
-    assert record["promoted_from"] == "provisional"
-    assert record["subject"] == {"kind": "room", "id": "bond_warehouse",
-                                 "display": "Bond Warehouse"}
-    assert record["base_turn"] == 6 and record["basis"] == "deterministic"
-
-
-def test_a_room_key_that_is_not_an_id_is_still_filed_under_its_slug(temp_db, wired):
+def test_a_setting_fact_is_a_planning_need_not_a_filing(temp_db, wired):
+    """The Director's `world_facts` used to file through a fallback writer.
+    A fact with no physical seat is the setting bible's, and the bible is
+    the Writers' Room's to file with provenance and a gate: the commit
+    records a `setting_fact` need and writes no entry."""
     ctx, book = _story(temp_db)
-    ctx.director_resolve["state_diff"]["rooms"] = {
-        "Mirelle Sulmirath_throat": {"name": "Throat", "desc": "Wet dark."}}
+    ctx.director_resolve["state_diff"]["world_facts"] = [
+        {"fact": "Iron burns the fae.", "source": {"kind": "resolved"}},
+        {"fact": "From the lore.", "source": {"kind": "lore"}},
+        "Salt keeps a door shut.",
+    ]
     prepared = cm.prepare_mapping_commit(ctx)
+    assert prepared["skipped"] is False and prepared["ops"] == []
+    assert prepared["mout"]["facts"] == 2
+    kinds = [(n["kind"], n["reason"], n["subject"]) for n in prepared["needs"]]
+    assert ("thing", "setting_fact", "Iron burns the fae.") in kinds
+    assert ("thing", "setting_fact", "Salt keeps a door shut.") in kinds
+    assert all(n["subject"] != "From the lore." for n in prepared["needs"])
     cm.commit_mapping(ctx, "n", prepared=prepared)
-    (row,) = _entries(temp_db, book)
-    assert "Mirelle Sulmirath_throat" in row["knowledge_locations"], (
-        "the entry is keyed to the scene's own room key; the provenance "
-        "subject is the id-shaped slug")
+    assert _entries(temp_db, book) == []
+    opened = open_planning_needs(ctx.chat.id)
+    assert {n["reason"] for n in opened} == {"setting_fact"}
+    assert opened[0]["surface"]["fact"] == "Iron burns the fae."
 
 
-def test_an_unchanged_room_files_nothing_and_a_changed_one_updates(temp_db, wired):
-    ctx, book = _story(temp_db)
-    ctx.director_resolve["state_diff"]["rooms"] = {
-        "quay": {"name": "The Quay", "desc": "Wet stone."}}
-    assert cm.prepare_mapping_commit(ctx)["skipped"] is True, "re-asserted unchanged"
-    ctx.director_resolve["state_diff"]["rooms"] = {
-        "quay": {"name": "The Quay", "desc": "Wet stone, and a body."}}
-    cm.commit_mapping(ctx, "n", prepared=cm.prepare_mapping_commit(ctx))
-    ctx.director_resolve["state_diff"]["rooms"] = {
-        "quay": {"name": "The Quay", "desc": "Wet stone, a body, a lantern."}}
-    wset(ctx.chat.id, "scene", {"rooms": {"quay": {"name": "The Quay",
-                                                   "desc": "Wet stone, and a body."}}})
-    prepared = cm.prepare_mapping_commit(ctx)
-    assert prepared["ops"][0]["op"] == "update"
-    result = cm.commit_mapping(ctx, "n", prepared=prepared)
-    assert result["applied"] == {"created": 0, "updated": 1}
-    (row,) = _entries(temp_db, book)
-    assert row["content"] == "Wet stone, a body, a lantern."
-
-
-def test_a_room_without_a_description_is_not_filed(temp_db, wired):
+def test_a_setting_fact_an_entry_already_covers_raises_no_need(temp_db, monkeypatch):
     ctx, _ = _story(temp_db)
-    ctx.director_resolve["state_diff"]["rooms"] = {
-        "cellar": {"name": "Cellar", "adjacent": []}}
+    monkeypatch.setattr(cm, "search_lore", lambda *a, **k: [
+        {"content": "Iron burns the fae, as every smith knows."}])
+    ctx.director_resolve["state_diff"]["world_facts"] = [
+        {"fact": "Iron burns the fae.", "source": {"kind": "resolved"}}]
     assert cm.prepare_mapping_commit(ctx)["skipped"] is True
 
 
-def test_the_opening_stage_is_its_own_adjudicator(temp_db, wired):
-    ctx, book = _story(temp_db)
-    ctx.director_resolve = None
-    ctx.director_establish = {"state_diff": {"rooms": {
-        "quay": {"name": "The Quay", "desc": "Fog on the water."}}}}
+def test_a_containment_room_need_is_dropped_at_commit(temp_db, wired):
+    """Where a body walks is its own; where the world puts it is the
+    Director's. A room-need whose committed record carries `parent_entity`
+    is a containment room the spatial hand minted the moment a body went
+    inside another, and no plan could have held it."""
+    ctx, _ = _story(temp_db)
+    inside = planning_need("room", "declared_destination_unplanned",
+                           subject="Mirelle Sulmirath_throat", turn_idx=6)
+    door = planning_need("room", "declared_destination_unplanned",
+                         subject="drowned_chapel", turn_idx=6)
+    ctx.compile_world_context["planning_needs"] = [inside, door]
+    ctx.director_resolve["state_diff"]["rooms"] = {
+        "Mirelle Sulmirath_throat": {"name": "Throat", "desc": "Wet dark.",
+                                     "parent_entity": "mirelle_sulmirath"},
+        "drowned_chapel": {"name": "Drowned Chapel", "desc": "A bell.",
+                           "adjacent": [{"to": "quay", "barrier": "open"}]}}
     cm.commit_mapping(ctx, "n", prepared=cm.prepare_mapping_commit(ctx))
-    (row,) = _entries(temp_db, book)
-    assert "spatial_generation by director_establish" in row["source_notes"]
+    opened = open_planning_needs(ctx.chat.id)
+    assert [n["subject"] for n in opened] == ["drowned_chapel"]
 
 
 # ---- introductions are the Director's typed rows --------------------------

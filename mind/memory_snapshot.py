@@ -649,6 +649,77 @@ def dump_lorebook(lb_id):
         for r in q("SELECT * FROM lore_entries WHERE lorebook_id=? ORDER BY id", (lb_id,))
     ]
 
+def dump_lore_overlays(chat_id):
+    """Every overlay of one story, PORTABLE: the library entry it amends is
+    named by `entry_uid` (and its book by `resource_uid`), never by row id,
+    so a checkpoint, an archive and a branch can put it back on whatever
+    id the same entry holds there."""
+    return [
+        {
+            "entry_uid": r["entry_uid"], "book_uid": r["book_uid"],
+            "frame_id": r["frame_id"],
+            "keys": r["keys"], "content": r["content"], "category": r["category"],
+            "title": r["title"], "knowledge_tag": r["knowledge_tag"],
+            "knowledge_range": r["knowledge_range"],
+            "knowledge_locations": r["knowledge_locations"],
+            "circles": r["circles"], "canon_locked": r["canon_locked"],
+            "embedding": _blob_to_b64(r["embedding"]),
+            "embedding_model": r["embedding_model"],
+            "embedding_dim": r["embedding_dim"],
+            "disposition": r["disposition"], "source_notes": r["source_notes"],
+            "turn_idx": r["turn_idx"], "created": r["created"],
+        }
+        for r in q("SELECT o.*, e.entry_uid AS entry_uid, b.resource_uid AS book_uid "
+                   "FROM lore_overlays o JOIN lore_entries e ON e.id=o.entry_id "
+                   "JOIN lorebooks b ON b.id=e.lorebook_id "
+                   "WHERE o.chat_id=? ORDER BY o.id", (chat_id,))
+    ]
+
+
+def restore_lore_overlays(chat_id, rows, *, frame_idmap=None, replace=True):
+    """Put a story's overlays back. ``frame_idmap`` remaps era ids for a
+    branch or an import (an unmapped era collapses to the present; a mapped
+    None stays present). An overlay whose entry this install does not hold
+    is DROPPED and counted -- the library it amended is not here. Returns
+    ``{"restored": n, "dropped": n}``."""
+    frame_idmap = frame_idmap or {}
+    report = {"restored": 0, "dropped": 0}
+    with transaction():
+        if replace:
+            qi("DELETE FROM lore_overlays WHERE chat_id=?", (chat_id,))
+        for row in rows or []:
+            if not isinstance(row, dict) or not row.get("entry_uid"):
+                report["dropped"] += 1
+                continue
+            entry = q("SELECT id FROM lore_entries WHERE entry_uid=?",
+                      (row["entry_uid"],), one=True)
+            if not entry:
+                report["dropped"] += 1
+                continue
+            raw = row.get("embedding")
+            blob = _b64_to_blob(raw) if isinstance(raw, str) else (
+                bytes(raw) if isinstance(raw, (bytes, bytearray, memoryview)) else None)
+            frame_id = row.get("frame_id")
+            if frame_id is not None:
+                frame_id = frame_idmap.get(frame_id) if frame_idmap else frame_id
+            qi("""INSERT OR REPLACE INTO lore_overlays(
+                    chat_id, frame_id, entry_id, keys, content, category, title,
+                    knowledge_tag, knowledge_range, knowledge_locations, circles,
+                    canon_locked, embedding, embedding_model, embedding_dim,
+                    disposition, source_notes, turn_idx, created
+                ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+               (chat_id, frame_id, entry["id"], row.get("keys"), row.get("content"),
+                row.get("category"), row.get("title"), row.get("knowledge_tag"),
+                row.get("knowledge_range"), row.get("knowledge_locations"),
+                row.get("circles"), row.get("canon_locked"), blob,
+                row.get("embedding_model"), row.get("embedding_dim"),
+                row.get("disposition") or "story_edit",
+                row.get("source_notes") or "", row.get("turn_idx"),
+                row.get("created") or time.time()))
+            report["restored"] += 1
+    return report
+
+
 def restore_lorebook(lb_id, entries):
     import hashlib, uuid
 
