@@ -146,8 +146,21 @@ def classify_movement(interp, scene, *, planned_for):
     target = str(target)
     if target in ((scene or {}).get("rooms") or {}):
         return {"to_room": target, "status": "known"}
-    if planned_for(target):
-        return {"to_room": target, "status": "planned"}
+    plan = planned_for(target)
+    if plan:
+        # THE PLAN'S ROOM ENTERS UNDER THE PLAN'S IDENTITY. The Director
+        # spells a destination as it heard it ("lantern_path" for a room the
+        # plan keys "coastal_lane"); the plan resolved that spelling, so the
+        # step carries the plan's id and keeps the spelling as `declared_as`.
+        # Measured (bench, chat 114, 2026-09-03): the slug went downstream
+        # unchanged, the spatial hand found no brief under it, minted a
+        # second "Lantern Path" beside the planned one, and commit filed a
+        # need for a room the plan held.
+        uid = str(plan.get("room_uid") or target) if isinstance(plan, dict) else target
+        out = {"to_room": uid, "status": "planned"}
+        if uid != target:
+            out["declared_as"] = target
+        return out
     if is_contained_destination(target, scene):
         return {"to_room": target, "status": "contained"}
     return {"to_room": target, "status": "unplanned"}
@@ -389,6 +402,11 @@ def compile_world_context(ctx, nonce):
             continue
         subject = request.get("subject") or request.get("location_id")
         if not subject:
+            continue
+        # A request for a room the plan holds is not a need: the plan is
+        # the answer, and the Director is handed it (`planned_rooms`).
+        if str(request.get("kind") or "room") == "room" and (
+                planned_for(subject) or planned_for(request.get("location_id"))):
             continue
         try:
             needs.append(planning_need(

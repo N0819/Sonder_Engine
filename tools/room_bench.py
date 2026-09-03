@@ -269,6 +269,47 @@ def derive_walk(cid, frame_id, pkgs):
     return rid, "You step through into the %s, looking about you." % room["name"]
 
 
+def walk_is_adjacent(cid, frame_id, rid):
+    """Does an edge join the player's room and ``rid`` in the scene or the
+    plan? A walk into a room no edge reaches measures the Director's answer
+    to a teleport, which is a different measurement (chat 114, 2026-09-03:
+    the hand invented the edge)."""
+    from core.db import wget_for_frame
+    from world.structure import planned_room_ids
+    if not rid:
+        return None
+    scene = wget_for_frame(cid, "scene", frame_id, {}) or {}
+    here = str((scene.get("positions") or {}).get(player_name(cid)) or "")
+    edges = {str(e.get("to")) for e in
+             ((scene.get("rooms") or {}).get(here) or {}).get("adjacent") or ()
+             if isinstance(e, dict)}
+    if rid in edges:
+        return True
+    try:
+        from core.db import q
+        for row in q("SELECT room_uid,payload FROM room_registry WHERE chat_id=? "
+                     "AND retired_turn_id IS NULL", (cid,)):
+            spec = (json.loads(row["payload"] or "{}") or {}).get("planned") or {}
+            tos = {str(e.get("to")) for e in spec.get("adjacent") or () if isinstance(e, dict)}
+            if (row["room_uid"] == rid and here in tos) or (row["room_uid"] == here and rid in tos):
+                return True
+    except Exception:
+        pass
+    return False
+
+
+def duplicate_room_names(cid):
+    """Live registry rooms sharing a name: the mark of a plan's room minted
+    again beside itself. [] is the healthy answer."""
+    from core.db import q
+    from world.spatial import normalize_room_id
+    by_name = {}
+    for row in q("SELECT room_uid,name FROM room_registry WHERE chat_id=? "
+                 "AND retired_turn_id IS NULL", (cid,)):
+        by_name.setdefault(normalize_room_id(str(row["name"] or "")), []).append(row["room_uid"])
+    return [{"name": k, "rooms": v} for k, v in sorted(by_name.items()) if k and len(v) > 1]
+
+
 # ---------------------------------------------------------------------------
 # The beat
 # ---------------------------------------------------------------------------
@@ -382,6 +423,7 @@ def measure(cid, frame_id, *, before_plans, before_needs, stages, warnings, pkgs
         "narrator_mentions": _mentions(prose, names),
         "narration": prose[:CRITIC_TEXT_CHARS],
         "warnings": warnings,
+        "duplicate_rooms": duplicate_room_names(cid),
         "warning_count": sum(len(v) for v in warnings.values()),
         "character_steps": sorted(k for k in stages if k.startswith("character:")),
         "stages_present": [k for k in STAGE_KEYS if k in stages],
@@ -623,6 +665,7 @@ def run(cid, *, grant, walk=None, planner=None, dramaturge=None, critic=False,
         if not no_turn and pkgs:
             room_id, text = (None, walk) if walk else derive_walk(cid, frame_id, pkgs)
             summary["walk_target"] = room_id
+            summary["walk_adjacent"] = walk_is_adjacent(cid, frame_id, room_id)
             if text:
                 summary["beat"] = run_beat(cid, frame_id, text)
                 stages, warnings = read_stages(summary["beat"]["turn_id"])

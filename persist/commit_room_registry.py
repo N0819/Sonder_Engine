@@ -148,12 +148,14 @@ def dedup_minted_rooms(cid, prev_scene, diff, add_warning=None):
     remove_rooms self-heal in prepare_scene_commit stays as the backstop
     for duplicates that predate this check.
     """
+    from world.structure import planned_room_spellings
     rooms = diff.get("rooms")
     if not isinstance(rooms, dict) or not rooms:
         return {}
     prev_rooms = prev_scene.get("rooms") or {}
     anchor_books = _anchored_book_ids(cid)
     registry_cache = {}
+    planned_spellings = None
     renames = {}
     taken = set(prev_rooms) | set(rooms)
 
@@ -207,6 +209,27 @@ def dedup_minted_rooms(cid, prev_scene, diff, add_warning=None):
                 or registry_cache[book_id].get(rid_slug)
             if registered and registered in prev_rooms:
                 match = registered
+        if match is None and incoming_owner is None:
+            # A MINTED ROOM THE PLAN ALREADY HOLDS IS THAT ROOM. The plan
+            # keys a room the scene has not reached yet; a Director that
+            # spells it its own way ("lantern_path" for the plan's
+            # "coastal_lane") is describing the plan's room, not minting a
+            # neighbour of it -- the same rule `_bind_minted_entities_to_
+            # present_figures` applies to a body. Redirected onto the
+            # plan's id, so the plan's exits, purpose and registry row are
+            # its own. A name two plans share names neither (refused).
+            if planned_spellings is None:
+                planned_spellings = planned_room_spellings(cid)
+            hit = planned_spellings.get(slug)
+            if hit is None:
+                hit = planned_spellings.get(rid_slug)
+            if hit == "":
+                if add_warning:
+                    add_warning(
+                        f"Room mint '{rid}' names a room two plans share; "
+                        "left as minted (two rooms, two plans).")
+            elif hit and hit != rid and hit not in prev_rooms:
+                match = hit
         if match and match != rid:
             renames[rid] = match
             if add_warning:

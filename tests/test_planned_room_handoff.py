@@ -95,6 +95,44 @@ def test_the_trigger_is_the_focus_room_the_target_and_non_wall_neighbours(temp_d
     assert "kitchen" not in rooms_to_develop(scene, "square")
 
 
+def test_a_target_the_scene_has_not_reached_is_briefed(temp_db):
+    """A planned room the registry holds and the scene does not yet is the
+    declared target's stub: in reach, briefed, with the plan's exits. A
+    target the plan never drew is in reach and briefed as nothing."""
+    cid, scene = _chat(temp_db)
+    del scene["rooms"]["kitchen"]
+    assert rooms_to_develop(scene, "square", ("kitchen",)) == ["square", "kitchen", "inn"]
+    assert is_planned_stub(scene, "kitchen", {"kitchen": ("Inn Kitchen", {})})
+    brief = planned_room_brief(cid, scene, rooms_to_develop(scene, "inn", ("kitchen",)))
+    assert brief["kitchen"]["purpose"] == "cooking"
+    assert {e["to"] for e in brief["kitchen"]["exits"]} == {"inn"}
+    assert rooms_to_develop(scene, "square", ("nowhere",)) == ["square", "nowhere", "inn"]
+    assert "nowhere" not in planned_room_brief(cid, scene, ["nowhere"])
+
+
+def test_the_resolve_destination_is_the_compilers(temp_db):
+    """`movement_for_resolve`: the compiled step's canonical id replaces the
+    Director's spelling; the spelling survives as `declared_as`; nothing
+    changes when the compiler classified no plan or agreed."""
+    from agents.director import movement_for_resolve
+
+    class Ctx:
+        def __init__(self, compiled):
+            self._c = compiled
+        def world_context(self):
+            return {"movement": self._c} if self._c else {}
+
+    interp = {"movement": {"to_room": "lantern_path", "why": "steps in"}}
+    out = movement_for_resolve(Ctx({"to_room": "coastal_lane", "status": "planned",
+                                    "declared_as": "lantern_path"}), interp)
+    assert out == {"to_room": "coastal_lane", "why": "steps in", "declared_as": "lantern_path"}
+    assert interp["movement"]["to_room"] == "lantern_path", "the interpret row is not rewritten"
+    assert movement_for_resolve(Ctx({"to_room": "lantern_path", "status": "unplanned"}), interp) \
+        is interp["movement"]
+    assert movement_for_resolve(Ctx(None), interp) is interp["movement"]
+    assert movement_for_resolve(Ctx(None), {"movement": None}) is None
+
+
 def test_entry_hands_the_seed_and_a_developed_room_is_no_longer_a_stub(temp_db):
     cid, scene = _chat(temp_db)
     brief = planned_room_brief(cid, scene, rooms_to_develop(scene, "square"))

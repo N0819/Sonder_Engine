@@ -300,6 +300,20 @@ def _planned_specs(cid):
     return out
 
 
+def planned_room_spellings(cid):
+    """{spelling: room_uid} for every live planned registry room, under its
+    id and its name as `normalize_room_id` spells them. A spelling two
+    plans share maps to ``""``: two rooms answer to it, so it names
+    neither (the room rule `dedup_minted_rooms` applies to bodies too)."""
+    out = {}
+    for uid, (name, _spec) in _planned_specs(cid).items():
+        for key in {normalize_room_id(str(uid)), normalize_room_id(str(name or ""))}:
+            if not key:
+                continue
+            out[key] = "" if key in out and out[key] != uid else uid
+    return out
+
+
 def is_planned_stub(scene, room_id, specs=None):
     """Is this live room still the plan's prose-free stub?
 
@@ -309,7 +323,9 @@ def is_planned_stub(scene, room_id, specs=None):
     """
     room = ((scene or {}).get("rooms") or {}).get(room_id)
     if not isinstance(room, dict):
-        return False
+        # Planned by the registry and not yet a scene row: a stub the
+        # scene has not reached, which is exactly what a brief is for.
+        return bool(specs and room_id in specs)
     if str(room.get("desc") or room.get("description") or "").strip():
         return False
     if room.get("planned"):
@@ -327,8 +343,13 @@ def rooms_to_develop(scene, focus_room, extra=()):
 
     rooms = (scene or {}).get("rooms") or {}
     out = []
-    for rid in (focus_room, *extra):
-        if rid and rid in rooms and rid not in out:
+    if focus_room and focus_room in rooms:
+        out.append(str(focus_room))
+    # A declared target is in reach whether or not the scene holds it yet:
+    # a planned room the beat walks into is briefed before it is a scene
+    # row (`planned_room_brief` keeps only what the plan knows).
+    for rid in extra:
+        if rid and str(rid) not in out:
             out.append(str(rid))
     if focus_room and focus_room in rooms:
         for edge in effective_adjacent(scene, focus_room):

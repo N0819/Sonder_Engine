@@ -176,6 +176,28 @@ def test_a_planned_destination_carries_the_plan_and_no_need(temp_db, no_retrieva
     assert out["planning_needs"] == []
 
 
+def test_a_planned_destination_enters_under_the_plans_id(temp_db, no_retrieval, monkeypatch):
+    """The Director spelled the room as it heard it; the plan keys it
+    otherwise. The step carries the plan's id, keeps the spelling, and the
+    interpreter's request to generate that room is no need (bench, chat
+    114: a second "Lantern Path" was minted beside the planned one)."""
+    from world import structure
+    plan = {"room_uid": "coastal_lane", "name": "Lantern Path", "purpose": "a lit path",
+            "structure": "", "access": "", "adjacent": ["The Quay"]}
+    monkeypatch.setattr(structure, "planned_context", lambda cid, query: plan
+                        if "lantern" in str(query).casefold() or "coastal_lane" in str(query) else None)
+    ctx = _ctx(temp_db, interp={
+        "sequence": [], "movement": {"to_room": "lantern_path", "why": "steps in"},
+        "flow": {"generation_requests": [
+            {"kind": "room", "subject": "Lantern Path", "location_id": "lantern_path"},
+            {"kind": "room", "subject": "Gull Stair", "location_id": "gull_stair"}]}})
+    out = mapping.compile_world_context(ctx, nonce=0)
+    assert out["movement"] == {"to_room": "coastal_lane", "status": "planned",
+                               "declared_as": "lantern_path"}
+    assert out["planned"]["room_uid"] == "coastal_lane"
+    assert [n["subject"] for n in out["planning_needs"]] == ["Gull Stair"]
+
+
 def test_a_location_query_the_scene_answers_raises_nothing(temp_db, no_retrieval):
     ctx = _ctx(temp_db, interp={"sequence": [], "flow": {}, "movement": None,
                                 "location_query": "Bond Warehouse"})
