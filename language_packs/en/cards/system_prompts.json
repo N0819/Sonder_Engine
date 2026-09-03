@@ -157,6 +157,12 @@
     },
     "charter_planner": {
       "$text": "prompts/charter_planner.txt"
+    },
+    "dramaturge": {
+      "$text": "prompts/dramaturge.txt"
+    },
+    "bible_fold": {
+      "$text": "prompts/bible_fold.txt"
     }
   },
   "specialists": {

@@ -160,6 +160,42 @@ def record_fill(cid, frame_id, *, turn_idx, package_uid="", needs=()):
     return row
 
 
+#: Spend records kept on the row (one per Planner or Dramaturge pass);
+#: older ones fall off.
+SPEND_KEPT = 96
+
+
+def record_spend(cid, frame_id, *, turn_idx, calls, who="planner"):
+    """One pass's tool calls, counted against the hour's spend
+    (`mandates.spend_limits`). Zero-call passes are not recorded."""
+    calls = int(calls or 0)
+    if calls <= 0:
+        return _row(cid, frame_id)
+    row = _row(cid, frame_id)
+    spend = [s for s in (row.get("spend") or []) if isinstance(s, dict)]
+    spend.append({"turn": int(turn_idx or 0),
+                  "elapsed_seconds": _clock_seconds(cid, frame_id),
+                  "at": time.time(), "calls": calls, "who": str(who)[:24]})
+    row["spend"] = spend[-SPEND_KEPT:]
+    _save(cid, frame_id, row)
+    return row
+
+
+def spend_this_hour(cid, frame_id, turn_idx=None):
+    """Tool calls made within the last story hour, on the same clock the
+    fill budget uses."""
+    row = _row(cid, frame_id)
+    spend = [s for s in (row.get("spend") or []) if isinstance(s, dict)]
+    now = _clock_seconds(cid, frame_id)
+    if now is not None:
+        return sum(int(s.get("calls") or 0) for s in spend
+                   if s.get("elapsed_seconds") is not None
+                   and now - float(s["elapsed_seconds"]) < STORY_HOUR_SECONDS)
+    turn = int(turn_idx or 0)
+    return sum(int(s.get("calls") or 0) for s in spend
+               if turn - int(s.get("turn") or 0) < HOUR_AS_TURNS_FALLBACK)
+
+
 def fills_this_hour(cid, frame_id, turn_idx=None):
     """How many fills landed within the last story hour -- by the clock's
     elapsed seconds when the story keeps one, else within the last
