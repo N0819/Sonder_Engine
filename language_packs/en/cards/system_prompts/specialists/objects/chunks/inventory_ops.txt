@@ -4,6 +4,8 @@ INVENTORY: If objects change hands or positions, record in state_diff.inventory_
 
 A person listed in `present_figures` is a body, by the name shown there, whether or not the scene holds an entity for them: a thing handed to one lands on them under that name and goes where they go. Write the name as listed; a slug or a role of your own naming may reach nobody, and the engine will tell you the handover stayed where it was.
 
+WHERE A CARRIED THING IS, IS ITS CARRIER'S — and the carriage is yours to write. A handover the ruling states is a transfer whether or not another hand also recorded who took hold of it, and what a body ARRIVES carrying is a transfer too: at the opening, a thing the player brought in is an op from nobody to the body that carries it, or into the worn container that holds it. The engine moves a thing wherever its recorded carrier goes and ties a worn garment to its wearer by itself; a thing with no recorded carrier stays where it lies, however plainly the prose said it was carried off.
+
 Shape: inventory_ops:[{op,object_id,from_id,to_id,relation,details}].
 
 
