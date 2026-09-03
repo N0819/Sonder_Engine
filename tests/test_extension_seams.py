@@ -685,7 +685,7 @@ class TestDirectorSpecialists:
             "contacts_standing", "containment_active", "scales_active",
             "material_effects_declared", "notices_in_scene", "reports_carried",
             "destructible_entity", "crowds_present", "couriers_present",
-            "unratified_claims_present", "offscreen_planning_enabled")}
+            "unratified_claims_present")}
 
         # No ruling in the view: the engine's own hands would all stay
         # home, and an extension family -- which no ruling can name --
@@ -728,7 +728,7 @@ class TestDirectorSpecialists:
 
         assert before == after
         assert set(before) == {"body", "social", "contact", "objects",
-                               "spatial", "offscreen"}
+                               "spatial"}
 
     def test_a_family_with_no_channels_or_no_prompt_is_refused(self, temp_db,
                                                                bare):

@@ -73,7 +73,7 @@ from .common import (
 from .director import (director_establish, director_interpret,
                        director_resolve, fanout_is_parallel)
 from .loops import deterministic_micro_perception, interaction_loop, reaction_loop
-from .mapping import mapping_quick, mapping_stage
+from .mapping import compile_world_context, merge_lore
 from .narration import narrator, narrator_extra
 from .perception import perception_act, perception_establish, perception_outcome
 from .runtime import (

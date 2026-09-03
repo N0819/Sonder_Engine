@@ -705,8 +705,7 @@ $("#streamtgl").addEventListener("change", () => {
 const FRIENDLY_STEP_LABELS = {
   director_establish: "Setting the scene",
   director_interpret: "Reading what you did",
-  mapping_stage: "Working out the surroundings",
-  mapping_quick: "Checking the surroundings",
+  compile_world_context: "Reading the surroundings",
   perception_establish: "Working out what you notice",
   perception_act: "Working out who notices",
   reaction_loop: "Characters reacting",

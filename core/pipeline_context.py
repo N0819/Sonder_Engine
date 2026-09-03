@@ -222,8 +222,12 @@ class PipelineContext:
 
     director_establish: Optional[dict] = None
     director_interpret: Optional[dict] = None
-    mapping_stage: Optional[dict] = None
-    mapping_quick: Optional[dict] = None
+    # The world-context compiler's step (`agents/mapping.py`). The two model
+    # stages it replaced, `mapping_stage` and `mapping_quick`, are no longer
+    # declared: a stored turn from before the compiler still hydrates them
+    # into `_extra`, and `world_context()` below reads whichever is present,
+    # so a rerun of an old beat serves the lore it was served then.
+    compile_world_context: Optional[dict] = None
     perception_establish: Optional[dict] = None
     perception_act: Optional[dict] = None
     director_resolve: Optional[dict] = None
@@ -321,6 +325,17 @@ class PipelineContext:
     # beat.
     engine_feedback: list[str] = field(default_factory=list)
     _extra: dict[str, Any] = field(default_factory=dict)
+
+    def world_context(self) -> dict:
+        """The beat's compiled world context: the compiler's step, or -- for a
+        turn stored before the compiler existed -- whichever of the two
+        retired mapping stages this turn ran. Every reader of relevant
+        lore, staged lore or the scene patch goes through here, so an old
+        beat reruns against the context it was resolved with."""
+        return (self.compile_world_context
+                or self._extra.get("mapping_stage")
+                or self._extra.get("mapping_quick")
+                or {})
 
     def get(self, key: str, default=None):
         if hasattr(self, key):

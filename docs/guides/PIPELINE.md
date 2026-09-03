@@ -22,7 +22,7 @@ This dual representation allows live execution through `PipelineContext` and lat
 ## Opening turn (`turn.idx == 0`)
 
 ```text
-mapping_stage
+compile_world_context
     ↓
 director_establish
     ↓
@@ -33,9 +33,9 @@ narrator
 commit
 ```
 
-### `mapping_stage`
+### `compile_world_context`
 
-Routes attached lorebooks, retrieves relevant canon, and stages information needed to establish the scene.
+Deterministic (`agents/mapping.py`; no model role). Routes attached lorebooks, retrieves the relevant canon as the engine's own rows, attaches owed history, resolves the plan's brief for any room the opening names, and records a planning need for anything the opening reaches for that no plan holds. It stages nothing: the scene is the Director's to establish, the plan the Writers' Room's to write.
 
 ### `director_establish`
 
@@ -94,14 +94,16 @@ is stable/idempotent and shares the outer transaction, so a later domain failure
 rolls both the fired status and its objective record back. Checkpoints restore
 the table with the rest of the pre-turn world.
 
-Off-screen life has two named commit domains after mapping and before memory.
-`offscreen_plans` first accepts/cancels only Director encodings grounded in a
-present character's declaration from this beat. `offscreen_epoch` then derives one
+Off-screen life has two named commit domains after the canon filing and before memory.
+`offscreen_plans` first accepts/cancels only plan ops a present character's OWN
+result carried this beat, grounded in that character's declaration (the
+Director's diff carried the channel until 2026-09-04; nothing writes the
+character field yet, so the rung is inert until the character frames do). `offscreen_epoch` then derives one
 stable frame-scoped opportunity from the committed beat: opening, top-level
 location change, crossed simulation-hour bucket, due mechanical event, or
 crossed deadline of the active stage in a stored plan. A reactive stage may
 fire only its already-adjudicated effect and performs no provider call. The
-epoch domain is independent of mapping's no-work skip. Its
+epoch domain is independent of the filing's no-work skip. Its
 seeded draw and epoch/log writes remain inside the turn transaction. Only the
 model-priced profile producer starts at the post-commit tail, carrying the base
 turn, frame, and epoch id; landing refuses a world restored to another epoch.
@@ -246,7 +248,7 @@ The plan is built dynamically from `director_interpret.flow`.
 ```text
 director_interpret
     ↓
-mapping_stage OR mapping_quick
+compile_world_context
     ↓
 perception_act
     ↓
@@ -288,8 +290,8 @@ Two conditions the diagram cannot show:
   the engine built it, so a broken extension cannot cost a turn. See
   [`EXTENSIONS.md`](EXTENSIONS.md) for `register_step` and the splice manifest.
   **`establishment_plan()` splices too**, and did not until recently: three of
-  its five steps (`mapping_stage`, `narrator`, `commit`) also run on a normal
-  turn, so an extension anchored `after:mapping_stage` or `before:narrator` was
+  its five steps (`compile_world_context`, `narrator`, `commit`) also run on a normal
+  turn, so an extension anchored `after:compile_world_context` or `before:narrator` was
   silently unplanned on turn zero — the step ran and the splice did not, which
   is the opposite of what the extension contract predicts.
 
@@ -335,12 +337,11 @@ permission to respond, not a requirement, and explicitly not "who was
 addressed"). The underlying conflation — one field answering both "who
 perceived this" and "who may act on it" — is not fixed: `docs/UNBUILT.md`.
 
-### `mapping_stage` versus `mapping_quick`
+### `compile_world_context`
 
-- `mapping_stage` performs fuller lore routing and candidate staging when the interpretation says new mapping is needed.
-- `mapping_quick` combines fast retrieval with the last confirmed lore cache when existing context is sufficient.
+One deterministic step on every beat (since 2026-09-04; it replaced `mapping_stage` and `mapping_quick`, the two model stages the plan chose between on `flow.needs_mapping`). It assembles the beat's relevant lore from the story's own rows merged with the last cache (`WORLD_CONTEXT_LORE_CAP` = 12 entries on the step), the books they came from, the owed history a place has accrued, the plan's brief for a room the beat named, and a movement classification -- `known` (a scene room), `planned` (the plan holds it; the Director furnishes it on entry), `unplanned` (a planning need). It invents nothing: `staged_lore` is always empty and `scene_patch` always the empty containers. What the mapping model used to stage for an unplanned door is now a typed PLANNING NEED on the step (`world/planning_needs.py`), recorded at commit and answered by the Writers' Room (or, until it exists, by a deterministic fill); the Director renders the surface a body perceives and no more.
 
-Neither stage should directly decide what a character perceives. Full mapping may overlap with `perception_act` when it is only routing existing-world lore. When the turn enters or explicitly queries a new location, mapping runs first so the first perception pass can consume freshly staged room notes.
+The step never decides what a character perceives. It runs before `perception_act` in plan order; there is no provider latency left to overlap.
 
 ### `perception_act`
 
@@ -707,7 +708,7 @@ and the scene-state gates compute each addressed hand's channel SCOPE
 and at interpret only the notes address, since that view carries no
 manifest), the stage model runs with a lean instruction sheet (same role, step key, schema, and
 payload), and each dispatched specialist — `body`, `social`, `contact`,
-`objects`, `spatial`, `offscreen`, with sheets assembled per beat from its
+`objects`, `spatial` (the `offscreen` hand was retired 2026-09-04; its traffic channels are `social`'s), with sheets assembled per beat from its
 granted channels' chunks (`prompts.specialist_prompt`) — reads the finished
 beat and owns its channels. The specialist calls never stream (structured
 output only; results merge in canonical order, never completion order; a
@@ -882,7 +883,7 @@ fidelity payload ([`UNBUILT.md`](../UNBUILT.md) §3.4, S3-A6).
 4. cast status/state
 5. paradox checks
 6. spatial-frame reconciliation
-7. mapping/canon updates
+7. canon filing: every room the committed diff described is promoted through `canon_provenance.promote` and filed as a `layout` entry; world facts and typed introductions; the beat's planning needs onto the frame's ledger (`persist/commit_mapping.py`, no model)
 8. character active psychology, beliefs/associations, memories, relationships,
    and event row — dialogue memories store appearance labels for unrecognized
    speakers (F2/P1); a character deciding turn N never retrieves memories from
@@ -901,7 +902,7 @@ Domains 5 and 6 run deliberately after the scene/entity/cast writes so they
 inspect this turn's projected world, while staying inside the same rollback
 boundary.
 
-A failure in any domain aborts immediately and rolls back all earlier writes from that turn. Two things run *after* the primary transaction, both because they may call an LLM and neither can corrupt a committed fact: character autobiographical consolidation (a reconstructible derived cache) and autonomous background-to-cast promotion (additive and forward-only — the new character becomes step-eligible next turn). A failure in either is a warning. Consolidation is additionally OUT OF BAND (`commit.schedule_memory_consolidation` → `core/jobs.py`, beside the offscreen ticks): measured live, the first consolidation of a chat spent 29.5s of a 45.8s commit stage on one `utility`-role LLM call inside the player's wait. The job is deduped per chat, abandonable between characters, silent-per-character on failure, and cooperatively cancelled by `restore_checkpoint` so a rolled-back turn does not land a summary computed from rows that no longer exist. Planning needs the commit could not answer drain on the same terms (`world.planned_entities.schedule_planning_needs`, keyed `planning_needs` per chat): a person the deterministic fill could not enrol is tried again; a dwelling owed or a thing with no plan stays open for the Writers' Room.
+A failure in any domain aborts immediately and rolls back all earlier writes from that turn. Two things run *after* the primary transaction, both because they may call an LLM and neither can corrupt a committed fact: character autobiographical consolidation (a reconstructible derived cache) and autonomous background-to-cast promotion (additive and forward-only — the new character becomes step-eligible next turn). A failure in either is a warning. Consolidation is additionally OUT OF BAND (`commit.schedule_memory_consolidation` → `core/jobs.py`, beside the offscreen ticks): measured live, the first consolidation of a chat spent 29.5s of a 45.8s commit stage on one `utility`-role LLM call inside the player's wait. The job is deduped per chat, abandonable between characters, silent-per-character on failure, and cooperatively cancelled by `restore_checkpoint` so a rolled-back turn does not land a summary computed from rows that no longer exist. Planning needs the commit could not answer drain on the same terms (`world.planning_needs.schedule_planning_needs`, keyed `planning_needs` per chat): a person the deterministic fill could not enrol is tried again; a dwelling owed or a thing with no plan stays open for the Writers' Room.
 
 ## Streaming
 
@@ -914,17 +915,16 @@ A failure in any domain aborts immediately and rolls back all earlier writes fro
 - `done`: the planned pipeline fully materialized.
 - `aborted`: cancellation was observed.
 
-Consecutive `character:<id>` stages can run in parallel. Primary and extra-player narration may also overlap. Full mapping and action-onset perception overlap only when no newly staged location description is required; otherwise plan order is preserved.
+Consecutive `character:<id>` stages can run in parallel. Primary and extra-player narration may also overlap. (The third pairing, full mapping beside action-onset perception, went with the mapping model: the world context is compiled deterministically before perception, so there is no provider latency to overlap.)
 
-All three pairings go through `_run_parallel_group`, which is also where
+Both pairings go through `_run_parallel_group`, which is also where
 concurrency is made visible — twice, because it is asked twice. Each
 `step_start` in a group carries `group` (the keys starting together) for the
 live log; each saved step carries `_engine_notes.parallel_with` for the
 persisted pipeline view, which reads the `steps` table long after the events
 are gone and has nothing but `ord` to go on. Note how narrow the conditions
 are: parallel `character:<id>` steps require `autonomy == 0` on an uncontested
-beat, `narrator_extra` requires extra players, and the mapping overlap requires
-`flow.needs_mapping` on a spatially familiar turn — so a typical story runs
+beat and `narrator_extra` requires extra players — so a typical story runs
 strictly sequentially and correctly shows no groups at all.
 
 `_engine_notes` is a reserved key on a step's saved content (`agents/storage.py`),
@@ -990,7 +990,7 @@ model stream.
 | Symptom | Earliest likely stage |
 |---|---|
 | Player speech omitted or misattributed | `director_interpret`, then `perception_act` |
-| NPC knows hidden lore | mapping-to-character context, `perception_act`, or `character_step` |
+| NPC knows hidden lore | the compiled world context reaching a character payload, `perception_act`, or `character_step` |
 | NPC reacts to an outcome before it happens | `perception_act` / reaction planning |
 | Action result is implausible | `director_resolve` or deterministic spatial/state support |
 | Correct result is narrated incorrectly | `perception_outcome`, then `narrator` |

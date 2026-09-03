@@ -1,4 +1,0 @@
-画面外リアクティブプラン：offscreen_planning.enabledはこの物語が敵対者階層フロアを要求したかどうかを示します。falseの場合、offscreen_plan_opsを出力しません。trueの場合、登録されたキャラクターのこのビートでの明示的な宣言をstate_diff.offscreen_plan_opsにエンコードできます。ただし、宣言していない者の個人的な目的を勝手に作成してはいけません。{op:'open', plan_id, actor, objective, basis, stages:[...]}を使用してください。基準は、その俳優の実際の発言・行動・意図の短い引用またはほぼ同義の言い換えで、コミット時に確認されます。各ステージにはstage_idがあり、正確に1つの決定論的トリガー（{after_seconds}または{event_kind:'consequence|news_arrival|transit_arrival',location?}）と、結果と同じ形状の既に裁定済みの効果がオプションで含まれます（{what, where, due_seconds, witnessed?, originator?}）。後で発動するステージは、この保存された効果のみを実行でき、思考や創作はしません。俳優が明示的に放棄する場合は、op:'cancel'とplan_id、actor、basisを使います。既存のプランはoffscreen_planning.plansにあります。最大6ステージまで。ほとんどの宣言はプランを作成しません。通常の即時的な意図は既存の意図システムに留まります。
-形状：offscreen_plan_ops:[{op:'open'|'cancel', plan_id, actor, objective, basis, stages:[{stage_id, trigger:{after_seconds|event_kind, location?}, effect:{what, where, due_seconds, witnessed?, originator?}|null}]}]。
-
-

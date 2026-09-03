@@ -228,17 +228,17 @@ def test_the_generative_stages_do_send_it(monkeypatch, temp_db):
     assert any(payload.get("style_guide") == GUIDE for payload in sent)
 
 
-def test_the_mapping_agent_is_told_about_it_and_the_minds_are_not():
+def test_the_minds_are_never_told_about_it():
     """Asserted on the PROMPT CARDS, which are data rather than source layout.
 
-    A stage whose instructions never mention the key cannot be asked to honour
-    one, and the card is the durable statement of what a stage is told --
-    it survives a refactor that moves where the payload is assembled, which
-    is precisely what the source slice did not.
+    The Director payloads carry the guide (the test above proves it reaches
+    `director_establish`); the cards a MIND reads never name the key, so no
+    mind can be asked to honour an author's instruction. The mapping card
+    that used to name it is retired with the mapping model.
     """
     from llm.prompts import DEFAULT_PROMPTS
 
-    assert "style_guide" in DEFAULT_PROMPTS["mapping_stage"]
+    assert "mapping_stage" not in DEFAULT_PROMPTS
     for pid in ("character", "narrator", "director_interpret",
                 "perception_act" if "perception_act" in DEFAULT_PROMPTS
                 else "narrator"):

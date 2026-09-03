@@ -456,17 +456,19 @@ class TestNothingToReportWhereAnObjectWasDeclared:
         `lore_ops[].knowledge_locations: ""`, which cost the mapping
         commit -- on both majors, since neither ever accepted it."""
         from llm.schemas import validate_llm_output
-        out, warnings = validate_llm_output("mapping_commit", {"lore_ops": [
-            {"op": "create", "content": "c", "knowledge_locations": ""}]})
+        out, warnings = validate_llm_output("director_resolve", {
+            "resolved_event": "A rider is sent.", "state_diff": {"courier_ops": [
+                {"op": "send", "sender": "Kess", "to_room": "gate", "stops": ""}]}})
         assert warnings == []
-        assert out["lore_ops"][0]["knowledge_locations"] == []
+        assert out["state_diff"]["courier_ops"][0]["stops"] == []
 
     def test_an_empty_object_where_a_list_was_declared(self):
         from llm.schemas import validate_llm_output
-        out, warnings = validate_llm_output("mapping_commit", {"lore_ops": [
-            {"op": "create", "content": "c", "knowledge_locations": {}}]})
+        out, warnings = validate_llm_output("director_resolve", {
+            "resolved_event": "A rider is sent.", "state_diff": {"courier_ops": [
+                {"op": "send", "sender": "Kess", "to_room": "gate", "stops": {}}]}})
         assert warnings == []
-        assert out["lore_ops"][0]["knowledge_locations"] == []
+        assert out["state_diff"]["courier_ops"][0]["stops"] == []
 
     def test_a_non_empty_list_is_still_a_real_disagreement(self):
         """Only the empty spellings mean "nothing". A populated list where an
@@ -507,17 +509,15 @@ class TestListElementsAndDictValuesAreCoercedToo:
         """Pydantic 1's own truncation, kept rather than discovered: a
         fractional book id is still pointing at a book."""
         from llm.schemas import validate_llm_output
-        out, warnings = validate_llm_output(
-            "mapping_stage", {"relevant_books": [12.5]})
-        assert warnings == []
-        assert out["relevant_books"] == [12]
+        from llm.schemas import FlowPlan, _dump
+        # On the model itself: the interpret step's own validator prunes
+        # `reactors` to the live cast afterwards, which is a different rule.
+        assert _dump(FlowPlan(reactors=[12.5]))["reactors"] == [12]
 
     def test_a_whole_float_is_a_count_on_either_major(self):
         from llm.schemas import validate_llm_output
-        out, warnings = validate_llm_output(
-            "mapping_stage", {"relevant_books": [12.0]})
-        assert warnings == []
-        assert out["relevant_books"] == [12]
+        from llm.schemas import FlowPlan, _dump
+        assert _dump(FlowPlan(reactors=[12.0]))["reactors"] == [12]
 
     def test_prose_in_a_list_of_prose_is_untouched(self):
         from llm.schemas import validate_llm_output
@@ -525,46 +525,6 @@ class TestListElementsAndDictValuesAreCoercedToo:
             "director_resolve", {"dialogue_order": ["Mara", "Vesk"]})
         assert warnings == []
         assert out["dialogue_order"] == ["Mara", "Vesk"]
-
-
-class TestStagedLoreContentIsProse:
-    """A drafted lore entry has to actually be text by the time anything
-    reads it.
-
-    `staged_lore` is declared `list[dict]`, so nothing checks inside an
-    entry -- and a model asked to draft an entry about a room will sometimes
-    return the entry as an object instead of the paragraph the prompt asks
-    for. Observed live on an opening turn: `_room_notes_from_lore` did
-    `content[:600]` against that dict and the turn died with
-    `KeyError: slice(None, 600, None)`. The same value is what `commit.py`
-    writes into `lore_entries.content`.
-    """
-
-    def test_a_structured_entry_is_flattened_into_prose(self):
-        from llm.schemas import validate_llm_output
-        out, warnings = validate_llm_output("mapping_stage", {"staged_lore": [
-            {"keys": ["field_clinic"],
-             "content": {"name": "Field Clinic",
-                         "desc": "One lamp, one generator."}}]})
-        assert warnings == []
-        content = out["staged_lore"][0]["content"]
-        assert isinstance(content, str)
-        assert "One lamp" in content and "Field Clinic" in content
-
-    def test_the_quick_mapping_path_is_covered_too(self):
-        """`mapping_quick` has no schema of its own, so preprocess is the
-        only place this can happen for it -- and `_room_notes_from_lore`
-        reads both."""
-        from llm.schemas import validate_llm_output
-        out, _ = validate_llm_output("mapping_quick", {"staged_lore": [
-            {"keys": ["hold"], "content": {"desc": "Rope, and water below."}}]})
-        assert out["staged_lore"][0]["content"] == "Rope, and water below."
-
-    def test_prose_content_is_left_exactly_as_written(self):
-        from llm.schemas import validate_llm_output
-        out, _ = validate_llm_output("mapping_stage", {"staged_lore": [
-            {"keys": ["hold"], "content": "Rope, and water below."}]})
-        assert out["staged_lore"][0]["content"] == "Rope, and water below."
 
 
 class TestARepairPromptMustNameTheRealDisagreement:
@@ -690,13 +650,6 @@ class TestAMapKeyIsTheItemsSubject:
         change = out["changes_asserted"][0]
         assert change["subject"] == "vault_door"
         assert change["category"] == "other"      # its chosen default, untouched
-
-    def test_a_book_op_takes_the_key_as_its_name_not_its_temp_handle(self):
-        from llm.schemas import validate_llm_output
-        out, _ = validate_llm_output("mapping_commit", {
-            "book_ops": {"Aran's Reach": {"book_type": "location"}}})
-        assert out["book_ops"][0]["name"] == "Aran's Reach"
-        assert not out["book_ops"][0].get("temp_id")
 
     def test_a_required_slot_still_wins(self):
         from llm.schemas import validate_llm_output
@@ -985,12 +938,12 @@ class TestAnUnpolicedListOfObjects:
 
     def test_scalar_elements_are_dropped_and_real_ones_kept(self):
         from llm.schemas import validate_llm_output
-        out, warnings = validate_llm_output("mapping_stage", {
-            "relevant_lore": [1934, 1938, {"id": 1, "content": "kept"}],
-            "npc_suggestions": ["Severine might follow."]})
+        out, warnings = validate_llm_output("director_social", {
+            "introductions": [1934, 1938, {"who": "Kess", "learns": "Rook"}],
+            "cast_changes": ["Severine might follow."]})
         assert warnings == []
-        assert out["relevant_lore"] == [{"id": 1, "content": "kept"}]
-        assert out["npc_suggestions"] == []
+        assert out["introductions"] == [{"who": "Kess", "learns": "Rook"}]
+        assert out["cast_changes"] == []
 
     def test_a_typed_list_of_models_still_refuses_rather_than_lose_content(self):
         """There the item model names what is missing, and repair can act on

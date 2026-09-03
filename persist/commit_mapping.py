@@ -1,17 +1,40 @@
-"""Lore/book mapping commit: proposed book ops, canon fallback ops, and the
-off-screen event normaliser feeding it.
+"""Lore/book filing commit: what a beat established, written as structured
+canon from the Director's committed diff -- no model in the loop.
 
-Extracted verbatim from commit.py, which re-exports every name here.
-See docs/experiments/AUDIT_COMMIT.md for the split record.
+Extracted verbatim from commit.py in the 2026-08 split, which re-exports
+every name here (see docs/experiments/AUDIT_COMMIT.md). Rewritten 2026-09-04
+with the mapping model's retirement: `prepare_mapping_commit` used to hand a
+`mapping_commit` model the beat's staged lore, world facts and introductions
+and take back its verdict (`validated`, `lore_ops`, `book_ops`,
+`validated_introductions`, a shadow profile, standing intentions and
+volunteered off-screen ticks). Every one of those was either a model
+re-describing what the Director had already resolved (v2 § 9.4: "immediate
+commit must not require an author agent to redescribe reality as prose") or
+an unadjudicated authoring channel wearing a payload field. What survives is
+the deterministic writer:
+
+  * ROOM FILINGS -- every room the committed diff described gets a `layout`
+    lore entry keyed to it, through `canon_provenance.promote` with the
+    ruling stage as adjudicator, so the description perception serves as
+    room notes is canon with a disposition rather than a model's
+    confirmation (UNBUILT § 4.3 Gap 5's "mapping path is not routed through
+    it", closed here).
+  * WORLD FACTS -- the Director's typed `world_facts` not already covered
+    by an existing entry, filed as before through the fallback op writer.
+  * INTRODUCTIONS -- the Director's typed `introductions`, applied under
+    the same presence and same-room gates the model's verdicts were
+    (UNBUILT § 3.5 P7's "validated by model judgment", closed here).
+  * PLANNING NEEDS -- what the world-context compiler found the beat
+    reaching for that no plan holds, recorded on the frame's ledger with
+    the surface the beat committed attached (`world/planning_needs.py`).
 """
 
 import json
 from core.db import q, qi, transaction, wget, wset
 from mind.memory import (search_lore, add_lore, update_lore, LORE_CATEGORIES,
                     LOREBOOK_TYPES, chat_lorebook_ids, chat_lorebook_weights,
-                    lorebook_manifest, ensure_chat_canon_book)
+                    ensure_chat_canon_book)
 from llm.providers import embed_texts
-from llm.prompts import get_prompt
 from story.character_schema import character_name_from_text, new_uid, persona_name
 from story.provenance_text import split_engine_provenance
 from core.frames import is_recognized_in_frame
@@ -28,6 +51,16 @@ from persist.commit_common import (_address_index, _canonical_anchor,
 # the engine invented for a place canon had not described.
 GENERATED_SOURCE_PREFIX = "engine-generated"
 
+#: The disposition a filed room description is promoted to. It is the
+#: Director's own spatial authority made durable: the room exists because the
+#: beat put a body in it, and it reads as the ruling stage described it.
+FILED_ROOM_DISPOSITION = "spatial_generation"
+
+#: How much of a room's description one lore entry carries. The scene's own
+#: `notes` field is capped at 500 by the scene commit; the entry keeps the
+#: whole description the diff carried, up to this.
+FILED_ROOM_CHARS = 2400
+
 
 def _file_engine_provenance(op):
     """Move the engine's bookkeeping out of a lore entry's prose and into
@@ -43,8 +76,8 @@ def _file_engine_provenance(op):
 
     Same signal, different column. `source_notes` is already the provenance
     column, is returned by the lore API (`web/app.py`), and reaches no prompt
-    and no view. The model's own structured `provenance` field rides along
-    here too, so the declaration survives whichever way it arrives.
+    and no view. The structured `provenance` field rides along here too, so
+    the declaration survives whichever way it arrives.
     """
     prose, note = split_engine_provenance(op.get("content"))
     declared = " ".join(str(op.get("provenance") or "").split())
@@ -59,52 +92,19 @@ def _file_engine_provenance(op):
     return op
 
 
-def normalize_offscreen_events(events):
-    """Coerce a beat's off-screen ticks to one shape: [{actor, tick}].
-
-    `MappingCommitOut.offscreen_events` is typed `list[dict]` with no inner
-    model, so the model invented a shape per call and the stored logs prove it:
-    across eight live chats the same field holds `{actor, tick}`, `{event}`,
-    `{who, event}` and `{description}`. Nothing read the log, so nothing
-    noticed — and the first reader would have had to handle all four, or
-    silently miss three.
-
-    An actor is optional and stays empty when the tick names none: inventing
-    one would be worse than admitting the tick is about the world rather than
-    about a person.
-    """
-    if not isinstance(events, list):
-        return []
-    out = []
-    for entry in events:
-        if isinstance(entry, str):
-            text, actor = entry, ""
-        elif isinstance(entry, dict):
-            text = next(
-                (str(entry[k]) for k in ("tick", "event", "description",
-                                         "text", "summary")
-                 if entry.get(k)), "")
-            actor = next(
-                (str(entry[k]) for k in ("actor", "who", "name", "character")
-                 if entry.get(k)), "")
-        else:
-            continue
-        text = " ".join(text.split())
-        if not text:
-            continue
-        out.append({"actor": actor.strip(), "tick": text[:600]})
-    return out
-
 def _apply_mapping_book_ops(cid, lb, book_ops):
-    """Deterministically validates and creates the child lorebooks
-    mapping_commit proposed this turn (schemas.py's BookOp, prompts.py's
-    BOOK CREATION rule) -- the model proposes a subject and a place in
-    the tree, this function is what actually decides whether that's
-    trustworthy enough to write, mirroring how every other model
-    proposal in this codebase (state_diff, lore_ops themselves) is
-    validated deterministically rather than applied on the model's say.
-    Returns {temp_id: real_book_id} so lore_ops filed against a book
-    that didn't have a database id a moment ago can still resolve it.
+    """Deterministically validates and creates the child lorebooks an
+    authoring seam proposed this turn (schemas.py's BookOp) -- the proposer
+    names a subject and a place in the tree, this function is what actually
+    decides whether that's trustworthy enough to write, mirroring how every
+    other proposal in this codebase (state_diff, lore ops themselves) is
+    validated deterministically rather than applied on the proposer's say.
+    Returns {temp_id: real_book_id} so lore ops filed against a book that
+    didn't have a database id a moment ago can still resolve it.
+
+    No turn stage proposes books any more (the mapping model that did is
+    retired); this survives for the authoring package that will
+    (v2 § 9.4's `apply_authoring_change`), and for its own tests.
     """
     temp_map = {}
     if not book_ops:
@@ -164,8 +164,8 @@ def _apply_mapping_book_ops(cid, lb, book_ops):
             # coerced `"77"` to 77, 2.x's smart union keeps the string. So a
             # digit string has to be read as the id it is, or the book
             # silently reparents to canon root on 2.x -- the same op, filed
-            # somewhere else, with nothing logged. Matches how lore_ops
-            # already resolves `book_id` below.
+            # somewhere else, with nothing logged. Matches how lore ops
+            # already resolve `book_id` below.
             parent_id = temp_map.get(raw_parent) or (
                 int(raw_parent) if raw_parent.isdigit() else None
             )
@@ -184,7 +184,7 @@ def _apply_mapping_book_ops(cid, lb, book_ops):
                 name, cid, book_type, str(op.get("summary") or "")[:500], parent_id,
                 inheritance_mode,
                 str(op.get("scope_world_id") or "").strip() or None,
-                # Store the CANONICAL entity id (not the model's alias
+                # Store the CANONICAL entity id (not the proposer's alias
                 # spelling) so sync_anchored_books and future dedup all
                 # agree on which entity this book tracks.
                 scope_loc, canon_anchor, new_uid("book"),
@@ -199,37 +199,153 @@ def _apply_mapping_book_ops(cid, lb, book_ops):
             temp_map[op["temp_id"]] = new_id
     return temp_map
 
-def prepare_mapping_commit(ctx):
-    """Resolve and embed mapping operations without mutating durable state.
 
-    Mapping commit may require a long LLM round-trip and one or more remote
-    embedding calls.  Preparing those decisions before the outer turn
-    transaction prevents network latency from holding SQLite's write lock and
-    lets commit_all apply every durable domain atomically.
+def _room_description(room):
+    if not isinstance(room, dict):
+        return ""
+    text = room.get("desc") or room.get("description") or room.get("notes") or ""
+    return " ".join(str(text).split())
+
+
+def _existing_layout_entry(cid, book_ids, room_id, room_name):
+    """The `layout` entry already filed for this room, if any: keyed to the
+    room by its knowledge location, or by its keys when filed before the
+    location was carried. Locked entries are found and left alone."""
+    if not book_ids:
+        return None
+    marks = ", ".join("?" for _ in book_ids)
+    rows = q(
+        "SELECT id, lorebook_id, keys, knowledge_locations, canon_locked "
+        "FROM lore_entries WHERE lorebook_id IN (%s) AND category='layout' "
+        "ORDER BY id" % marks, tuple(book_ids))
+    folded = {normalize_room_id(str(room_id)),
+              normalize_room_id(str(room_name or ""))} - {""}
+    for row in rows:
+        try:
+            locations = json.loads(row["knowledge_locations"] or "[]")
+        except (TypeError, ValueError):
+            locations = []
+        if any(normalize_room_id(str(loc)) in folded for loc in locations
+               if isinstance(loc, str)):
+            return row
+        keys = [normalize_room_id(k.strip())
+                for k in str(row["keys"] or "").split(",") if k.strip()]
+        if keys and keys[0] in folded:
+            return row
+    return None
+
+
+def room_filings(ctx, diff, prev_scene, *, adjudicator):
+    """The rooms this beat described, as promoted provenance records.
+
+    One record per room in the committed diff whose description is new or
+    changed against the scene the beat began in. Each is built as a
+    PROVISIONAL record (subject kind `room`, id-shaped, the ruling stage's
+    turn as base) and promoted through `canon_provenance.promote` to
+    `spatial_generation` on the ruling stage's authority -- the seam UNBUILT
+    § 4.3 named -- before anything is written. A room the diff re-asserts
+    unchanged files nothing; a room with no description files nothing.
+    """
+    from mind.canon_provenance import PROVISIONAL, promote
+
+    rooms = diff.get("rooms") if isinstance(diff.get("rooms"), dict) else {}
+    prev_rooms = (prev_scene or {}).get("rooms") or {}
+    out = []
+    for rid, room in rooms.items():
+        desc = _room_description(room)
+        if not desc:
+            continue
+        if _room_description(prev_rooms.get(rid)) == desc:
+            continue
+        subject_id = normalize_room_id(str(rid))
+        if not subject_id:
+            continue
+        name = str((room or {}).get("name") or "").strip() or str(rid)
+        record = {
+            "disposition": PROVISIONAL,
+            "subject": {"kind": "room", "id": subject_id,
+                        **({"display": name} if name != subject_id else {})},
+            "base_turn": int(getattr(ctx.turn, "idx", 0) or 0),
+            "basis": "deterministic",
+            "room_key": str(rid),
+            "content": desc[:FILED_ROOM_CHARS],
+        }
+        try:
+            out.append(promote(record, FILED_ROOM_DISPOSITION,
+                               adjudicator=adjudicator))
+        except ValueError as exc:
+            ctx.add_warning(f"room {rid!r} not filed: {exc}")
+    return out
+
+
+def _filing_ops(cid, book_ids, filings):
+    """Lore ops for promoted room records: an update where the room already
+    has a layout entry, a creation otherwise. Locked entries are skipped
+    with the room's description left to the scene alone."""
+    ops = []
+    for record in filings:
+        rid = record["room_key"]
+        name = (record.get("subject") or {}).get("display") or rid
+        existing = _existing_layout_entry(cid, book_ids, rid, name)
+        provenance = "%s by %s (room %s)" % (
+            record["disposition"], record["adjudicator"], rid)
+        op = {
+            "op": "update" if existing else "create",
+            "keys": name if normalize_room_id(name) == normalize_room_id(rid)
+                    else "%s, %s" % (name, rid),
+            "content": record["content"],
+            "category": "layout",
+            "title": name,
+            "knowledge_locations": [rid],
+            "provenance": provenance,
+            "book_id": existing["lorebook_id"] if existing else None,
+        }
+        if existing:
+            if existing["canon_locked"]:
+                continue
+            op["id"] = existing["id"]
+        ops.append(op)
+    return ops
+
+
+def prepare_mapping_commit(ctx):
+    """Resolve and embed the beat's lore filings without mutating durable state.
+
+    The embedding round-trip is the slow part; preparing it before the outer
+    turn transaction keeps network latency off SQLite's write lock and lets
+    commit_all apply every durable domain atomically. No model is consulted:
+    every op here is derived from the Director's committed diff and the
+    world-context compiler's step.
     """
     chat = ctx.chat
     turn = ctx.turn
     cid = chat.id
     res = ctx.director_resolve or ctx.director_establish or {}
+    adjudicator = "director_resolve" if ctx.director_resolve else "director_establish"
     diff = res.get("state_diff") or {}
     book_ids = chat_lorebook_ids(cid)
     # Narration is a rendering layer, not a source of objective truth.
     # `new_specifics` is an audit field for unsupported details the narrator
-    # accidentally introduced; never launder those details into canon through
-    # the privileged mapping agent.
+    # accidentally introduced; never launder those details into canon.
     narrator_specificity_flags = (ctx.narrator or {}).get("new_specifics") or []
     if narrator_specificity_flags:
         ctx.add_warning(
             "Narrator-originated specifics were excluded from canon: "
             + "; ".join(map(str, narrator_specificity_flags[:8]))
         )
-    specifics = []
-    staged = (ctx.mapping_stage or {}).get("staged_lore") or []
-    world_facts = diff.get("world_facts") or []
-    introductions = diff.get("introductions") or []
+    world_facts = [f for f in (diff.get("world_facts") or [])
+                   if isinstance(f, (dict, str)) and f]
+    introductions = [i for i in (diff.get("introductions") or [])
+                     if isinstance(i, dict) and i.get("who") and i.get("learns")]
+    # The scene the beat began in: prepare runs before the write lock, so
+    # the stored scene is still the pre-turn one.
+    prev_scene = wget(cid, "scene", {}) or {}
+    filings = room_filings(ctx, diff, prev_scene, adjudicator=adjudicator)
+    needs = [n for n in (ctx.world_context().get("planning_needs") or [])
+             if isinstance(n, dict)]
     seed = f"tick:{cid}:{turn.idx}"
 
-    if not (staged or world_facts or introductions):
+    if not (filings or world_facts or introductions or needs):
         return {
             "skipped": True,
             "mout": {"skipped": "nothing new to commit"},
@@ -237,98 +353,32 @@ def prepare_mapping_commit(ctx):
             "book_ops": [],
             "book_ids": book_ids,
             "seed": seed,
+            "introductions": [],
+            "needs": [],
         }
 
-    lore_ctx = search_lore(
-        chat_lorebook_weights(cid),
-        " ".join(map(str, specifics)) or res.get("summary", ""), k=10,
-    )
-    raw_shadow = wget(cid, "shadow_profile", "") or ""
-    raw_intents = wget(cid, "standing_intentions", []) or []
-    # Off-screen ticks no longer ride this call AT ALL. The dormant cast is
-    # not offered to the model at any level: the stochastic rung is a seeded
-    # draw in `offscreen.stochastic_ticks` (free, replayable), taken in
-    # `offscreen.advance_epoch` -- a commit domain of its own
-    # (`commit.commit_offscreen_epoch`), which this module neither calls nor
-    # imports -- and the model-priced rung above it is the out-of-band
-    # profile summary. Asking a lore validator to also author offscreen life
-    # was an unadjudicated authoring channel wearing a payload field -- and
-    # the seed it was shown seeded nothing, since no RNG ever consumed it.
-    payload = {
-        "proposed_specifics": specifics,
-        "narrator_specificity_audit": narrator_specificity_flags,
-        "staged_lore_to_confirm": staged,
-        "world_facts": world_facts,
-        "existing_lore": lore_ctx,
-        "lorebook_manifest": lorebook_manifest(cid),
-        "resolved_summary": res.get("summary") or (res.get("resolved_event") or "")[:400],
-        "player_public_behavior": {
-            "speech": (ctx.director_interpret or {}).get("speech"),
-            "visible_action": ((ctx.director_interpret or {}).get("action") or {}).get("attempt"),
-        },
-        "current_shadow_profile": raw_shadow[:1200],
-        # `scene_changed` stays truthful about the scene; it is a fact about
-        # the world, not a gate on anything.
-        "scene_changed": bool(ctx.director_establish),
-        "standing_intentions": raw_intents[:12],
-        "beat_introductions": diff.get("introductions") or [],
-        "beat_dialogue_log": res.get("dialogue_log") or [],
-        "beat_resolved_event": res.get("resolved_event") or "",
-    }
-    try:
-        from llm.llm_quality import complete_validated_json
-
-        mout = complete_validated_json(
-            role="mapping",
-            step_key="mapping_commit",
-            system=get_prompt("mapping_commit"),
-            payload=payload,
-            temperature=0.0,
-            repair_attempts=1,
+    # The canon book is always a valid filing target (commit falls back to
+    # it), so it is searched for an existing entry even when the chat's
+    # attached-book graph does not list it yet.
+    search_books = list(book_ids)
+    if chat.lorebook_id and chat.lorebook_id not in search_books:
+        search_books.append(chat.lorebook_id)
+    ops = _filing_ops(cid, search_books, filings)
+    if world_facts:
+        lore_ctx = search_lore(
+            chat_lorebook_weights(cid),
+            res.get("summary") or " ".join(
+                str(f.get("fact") if isinstance(f, dict) else f)
+                for f in world_facts)[:400],
+            k=10,
         )
-    except Exception as e:
-        ctx.add_warning(f"mapping_commit failed: {e}")
-        mout = {
-            "validated": [],
-            "lore_ops": [],
-            "coherence_notes": [f"mapping commit failed: {e}"],
-        }
-
-    validated_list = mout.get("validated") if isinstance(mout.get("validated"), list) else []
-    ok_facts = [v for v in validated_list if isinstance(v, dict) and v.get("ok")]
-    ops = mout.get("lore_ops") if isinstance(mout.get("lore_ops"), list) else []
-    ops = [dict(o) for o in ops if isinstance(o, dict) and o.get("content")]
-    book_ops = mout.get("book_ops") if isinstance(mout.get("book_ops"), list) else []
-    book_ops = [dict(o) for o in book_ops if isinstance(o, dict)]
-
-    if not ops:
-        ops = _generate_fallback_ops(
-            ok_facts, staged, world_facts, existing_lore=lore_ctx,
-        )
-    # An op that CONFIRMS a staged entry inherits that entry's declared
-    # provenance. The declaration is made when the entry is staged; the model
-    # is asked to confirm the stub, not to restate the bookkeeping, so its own
-    # lore_ops carry no `provenance` field. Only `_generate_fallback_ops`
-    # copied it across -- and that branch runs solely when the model returns
-    # no lore_ops at all, so on the COMMON path the signal was dropped.
-    staged_provenance = {}
-    for entry in (staged or []):
-        if not isinstance(entry, dict):
-            continue
-        declared = " ".join(str(entry.get("provenance") or "").split())
-        if declared:
-            staged_provenance[_keys_str(entry.get("keys"))] = declared
+        ops += _generate_fallback_ops([], [], world_facts, existing_lore=lore_ctx)
     for o in ops:
         if "keys" in o:
             o["keys"] = _keys_str(o["keys"])
-        if not o.get("provenance"):
-            inherited = staged_provenance.get(_keys_str(o.get("keys")))
-            if inherited:
-                o["provenance"] = inherited
         _file_engine_provenance(o)
     # An entry whose whole text was bookkeeping has nothing left to say about
-    # the world. The provenance is not lost -- it is simply not worth a lore
-    # row on its own.
+    # the world.
     ops = [o for o in ops if o.get("content")]
 
     # Lore embeddings are independent of final routing/book IDs. Compute them
@@ -346,12 +396,49 @@ def prepare_mapping_commit(ctx):
 
     return {
         "skipped": False,
-        "mout": mout,
+        "mout": {
+            "rooms_filed": [r["room_key"] for r in filings],
+            "facts": len(world_facts),
+            "introductions": len(introductions),
+            "planning_needs": len(needs),
+        },
         "ops": ops,
-        "book_ops": book_ops,
+        "book_ops": [],
         "book_ids": book_ids,
         "seed": seed,
+        "introductions": introductions,
+        "needs": needs,
     }
+
+
+def _attach_committed_surface(ctx, needs):
+    """A room need whose stub the beat rendered carries that stub's surface:
+    the name and the exits the committed diff gave it, so the plan that
+    answers the need may not contradict what a body already saw."""
+    res = ctx.director_resolve or ctx.director_establish or {}
+    rooms = (res.get("state_diff") or {}).get("rooms") or {}
+    if not isinstance(rooms, dict):
+        return needs
+    by_slug = {normalize_room_id(str(rid)): (rid, room)
+               for rid, room in rooms.items() if isinstance(room, dict)}
+    out = []
+    for need in needs:
+        need = dict(need)
+        if need.get("kind") == "room":
+            hit = by_slug.get(normalize_room_id(str(need.get("subject") or "")))
+            if hit:
+                rid, room = hit
+                surface = dict(need.get("surface") or {})
+                surface["room"] = str(rid)
+                if room.get("name"):
+                    surface["name"] = str(room["name"])
+                exits = [str(e.get("to")) for e in (room.get("adjacent") or [])
+                         if isinstance(e, dict) and e.get("to")]
+                if exits:
+                    surface["exits"] = exits
+                need["surface"] = surface
+        out.append(need)
+    return out
 
 
 def commit_mapping(ctx, nonce, *, prepared=None):
@@ -363,11 +450,11 @@ def commit_mapping(ctx, nonce, *, prepared=None):
     book_ids = prepared["book_ids"]
     seed = prepared["seed"]
 
+    world = ctx.world_context()
     if prepared.get("skipped"):
         wset(cid, "lore_cache", _lore_for(ctx)[:12])
-        mstep = ctx.mapping_stage or ctx.mapping_quick or {}
-        if not mstep.get("cached") and isinstance(mstep.get("relevant_books"), list):
-            wset(cid, "active_books", mstep["relevant_books"])
+        if isinstance(world.get("relevant_books"), list):
+            wset(cid, "active_books", world["relevant_books"])
         return {
             "mout": mout,
             "applied": {"created": 0, "updated": 0},
@@ -376,7 +463,7 @@ def commit_mapping(ctx, nonce, *, prepared=None):
         }
 
     ops = prepared["ops"]
-    book_ops = prepared["book_ops"]
+    book_ops = prepared.get("book_ops") or []
     applied = {"created": 0, "updated": 0}
     lb = chat.lorebook_id
     if (ops or book_ops) and not lb:
@@ -385,7 +472,10 @@ def commit_mapping(ctx, nonce, *, prepared=None):
         lb = ensure_chat_canon_book(cid)
 
     temp_book_map = _apply_mapping_book_ops(cid, lb, book_ops)
-    valid_books = set(chat_lorebook_ids(cid))
+    # The canon book is a valid target whatever the attached-book graph
+    # says: every op that resolves nowhere else lands in it, so an entry
+    # already filed there must be updatable in place.
+    valid_books = set(chat_lorebook_ids(cid)) | ({lb} if lb else set())
     with transaction() as c:
         for o in ops:
             cat = o.get("category") if o.get("category") in LORE_CATEGORIES else "other"
@@ -433,31 +523,22 @@ def commit_mapping(ctx, nonce, *, prepared=None):
             )
 
     wset(cid, "lore_cache", _lore_for(ctx)[:12])
-    mstep = ctx.mapping_stage or ctx.mapping_quick or {}
-    if not mstep.get("cached") and isinstance(mstep.get("relevant_books"), list):
-        wset(cid, "active_books", mstep["relevant_books"])
-    if mout.get("shadow_profile"):
-        sp = mout["shadow_profile"]
-        if isinstance(sp, str) and len(sp) > 2000:
-            sp = sp[:2000]
-        wset(cid, "shadow_profile", sp)
-    if mout.get("standing_intentions"):
-        si = mout["standing_intentions"]
-        if isinstance(si, list) and len(si) > 20:
-            si = si[-20:]
-        wset(cid, "standing_intentions", si)
-    _volunteered = normalize_offscreen_events(mout.get("offscreen_events"))
-    if _volunteered:
-        # Nothing asks the model for ticks any more, so anything here is a
-        # field nobody requested -- refused on the write path regardless of
-        # the chat's level, because a model-authored tick is an
-        # unadjudicated authoring channel whatever the setting says.
-        ctx.add_warning(
-            f"discarded {len(_volunteered)} model-volunteered off-screen "
-            "tick(s): ticks are drawn seeded, not authored")
+    if isinstance(world.get("relevant_books"), list):
+        wset(cid, "active_books", world["relevant_books"])
+
+    needs = prepared.get("needs") or []
+    if needs:
+        from world.planning_needs import record_planning_needs
+        recorded = record_planning_needs(
+            cid, _attach_committed_surface(ctx, needs), frame_id=turn.frame_id)
+        if recorded:
+            ctx.add_warning(
+                "%d planning need(s) recorded: the beat reached for %s no "
+                "plan holds" % (recorded, ", ".join(
+                    "%s %r" % (n.get("kind"), n.get("subject"))
+                    for n in needs[:4])))
     known = wget(cid, "known", {})
-    introductions = [vi for vi in (mout.get("validated_introductions") or [])
-                     if isinstance(vi, dict) and vi.get("ok")]
+    introductions = prepared.get("introductions") or []
     # Nothing to resolve, so nothing is built. The Charter projection below is
     # O(bodies) and this runs on every beat; a thousand-body institution must
     # not be walked for a turn that introduced nobody.
@@ -504,10 +585,7 @@ def commit_mapping(ctx, nonce, *, prepared=None):
 
     for vi in introductions:
         who = _resolve_roster_name(vi.get("who"), roster, address_index)
-        learns = _resolve_roster_name(
-            vi.get("corrected_learns") or vi.get("learns"), roster,
-            address_index,
-        )
+        learns = _resolve_roster_name(vi.get("learns"), roster, address_index)
         if not (who and learns):
             continue
         if who == learns:
@@ -520,7 +598,7 @@ def commit_mapping(ctx, nonce, *, prepared=None):
         # person the story knows about", which is what resolving a name needs.
         # An introduction needs more: somebody has to have been THERE to be
         # introduced. Now that the roster includes offscreen characters, a
-        # single check would let the model write an introduction between two
+        # single check would let a diff write an introduction between two
         # people who were both absent -- trading a missed edge for an invented
         # one, which is worse, because a wrong edge is indistinguishable from a
         # right one afterwards and nothing downstream can catch it.
@@ -563,7 +641,7 @@ def commit_mapping(ctx, nonce, *, prepared=None):
 # ---- Fallback helpers ----
 
 def _lore_for(ctx):
-    return (ctx.mapping_stage or ctx.mapping_quick or {}).get("relevant_lore") or []
+    return ctx.world_context().get("relevant_lore") or []
 
 
 def _fact_is_covered(fact, existing_lore):

@@ -365,32 +365,28 @@ def test_failed_repair_falls_back_to_verbatim_generation_request(
     assert any("PLAYER AUTHORITY" in w for w in ctx.warnings)
 
 
-def test_generation_requests_reach_the_mapping_payload(temp_db, monkeypatch):
-    """Item 2 gap (C): the revived generation_requests channel must
-    actually arrive in mapping_stage's LLM payload."""
+def test_generation_requests_become_planning_needs(temp_db, monkeypatch):
+    """Item 2 gap (C): the revived generation_requests channel must actually
+    arrive somewhere. It used to arrive in the mapping model's payload; the
+    world-context compiler records each one as a typed planning need."""
     import agents.mapping as mapping
 
     ctx, out, _ = _run_interpret(
         temp_db, monkeypatch, _WEAK_INTERPRET, repair_raises=True)
     ctx.director_interpret = out
+    monkeypatch.setattr(mapping, "search_lore", lambda *a, **k: [])
 
-    captured = {}
+    compiled = mapping.compile_world_context(ctx, nonce=0)
 
-    def fake_mapping_json(role, step_key, system, payload, **kwargs):
-        captured.update(payload)
-        return {"relevant_lore": [], "staged_lore": [], "scene_patch": {},
-                "relevant_books": []}
-
-    monkeypatch.setattr(mapping, "_agent_json", fake_mapping_json)
-    mapping.mapping_stage(ctx, nonce=0)
-
-    assert captured.get("generation_requests"), \
-        "captured declarations must be forwarded to mapping"
-    assert any("armory" in str(g.get("subject"))
-               for g in captured["generation_requests"])
+    needs = compiled["planning_needs"]
+    assert needs, "captured declarations must be recorded as planning needs"
+    assert any(n["reason"] == "generation_request" and "armory" in n["subject"]
+               for n in needs)
 
 
-def test_mapping_quick_escalates_on_generation_requests(temp_db, monkeypatch):
+def test_a_generation_request_raises_a_need_without_any_movement(temp_db, monkeypatch):
+    """Cached recall used to escalate to the full stage here; the compiler
+    cannot mint declared content either, so the need is the record."""
     import agents.mapping as mapping
 
     ctx = _make_ctx(temp_db, "look around")
@@ -399,11 +395,9 @@ def test_mapping_quick_escalates_on_generation_requests(temp_db, monkeypatch):
         "flow": {"mapping_request": "", "generation_requests": [
             {"kind": "player_declaration", "subject": "a rifle"}]},
     }
-    called = {}
-    monkeypatch.setattr(
-        mapping, "mapping_stage",
-        lambda c, n: called.setdefault("stage", True) or {"escalated": True})
-
-    result = mapping.mapping_quick(ctx, nonce=0)
-    assert called.get("stage"), \
-        "cached recall cannot mint declared content; must escalate"
+    monkeypatch.setattr(mapping, "search_lore", lambda *a, **k: [])
+    result = mapping.compile_world_context(ctx, nonce=0)
+    assert [n["subject"] for n in result["planning_needs"]] == ["a rifle"]
+    assert result["planning_needs"][0]["kind"] == "thing"
+    assert result["planning_needs"][0]["surface"]["declared_kind"] == "player_declaration"
+    assert result["staged_lore"] == [] and result["movement"]["status"] is None

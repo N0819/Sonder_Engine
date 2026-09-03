@@ -739,10 +739,20 @@ def apply_plan_ops(ctx, scene, clock):
     from world.living_world import living_world_allows, living_world_config
 
     cid = ctx.chat.id
-    raw_ops = ((ctx.director_resolve or ctx.director_establish or {})
-               .get("state_diff") or {}).get("offscreen_plan_ops") or []
-    if not isinstance(raw_ops, list):
-        raw_ops = []
+    # A plan is a CHARACTER'S declaration, so its ops ride the character's
+    # own result (`offscreen_plan_ops` on a character step). The Director's
+    # diff carried this channel until 2026-09-04; the Director does not own
+    # psychology, and `offscreen_life=reactive` always said a plan is opened
+    # by a present character's own declaration. Nothing writes the field
+    # yet -- the character frames will (docs/UNBUILT.md) -- so the rung is
+    # inert until they do, and a plan on the Director's diff is ignored.
+    raw_ops = []
+    for result in (getattr(ctx, "character_results", None) or {}).values():
+        if not isinstance(result, dict):
+            continue
+        ops = result.get("offscreen_plan_ops") or []
+        if isinstance(ops, list):
+            raw_ops.extend(op for op in ops if isinstance(op, dict))
     allowed = living_world_allows(
         living_world_config(cid), "antagonist_ladder", "floor")
     if not allowed:
