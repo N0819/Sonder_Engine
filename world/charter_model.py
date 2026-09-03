@@ -145,7 +145,7 @@ def normalize_post(key, entry):
     entry = entry if isinstance(entry, dict) else {}
     serves = _string_list(entry.get("serves"))
     authority = _string_list(entry.get("authority"), mapping_keys=True)
-    return {
+    out = {
         "key": str(key),
         "place": str(entry.get("place") or ""),
         # Human meaning for a duty. ``serves`` remains the mechanical edge;
@@ -165,6 +165,17 @@ def normalize_post(key, entry):
             str(value) for value in authority
             if str(value).strip()}),
     }
+    # What this post's holders visibly wear and what the work marks them
+    # with, authored by the planner in the population's words
+    # (`charter_surface.post_dress`). Absent when the plan wrote none: the
+    # engine invents no apron for a forge it has never seen.
+    from .charter_surface import post_dress
+    dress = post_dress(entry)
+    if dress["worn"]:
+        out["worn"] = dress["worn"]
+    if dress["marks"]:
+        out["marks"] = dress["marks"]
+    return out
 
 
 def normalize_body(key, entry):
@@ -234,6 +245,13 @@ def normalize_body(key, entry):
         value = str(entry.get(field) or "").strip()
         if value:
             body[field] = value
+    # What this body looks like, where generation dealt it or a Director
+    # render settled it (`charter_surface`). Kept only when present: a body
+    # from before the field existed is dealt the same surface on read
+    # (`surface_of`), so storing nothing here keeps its bytes unchanged.
+    from .charter_surface import surface_has_content
+    if surface_has_content(entry.get("surface")):
+        body["surface"] = dict(entry["surface"])
     # A walk in progress: the courier's shape (`charter_move`), carried only
     # while the body is between its origin and its target. Dropped on arrival
     # by the mover, and dropped here if it is not a route at all -- a body
@@ -346,6 +364,7 @@ def normalize_charter(stored, reservation=None):
         for k, v in (stored.get("posts") or {}).items()}
     from .charter_identity import (
         materialize_body_names, normalize_naming_profile, strip_reserved_pools)
+    from .charter_surface import normalize_looks_profile
     naming = strip_reserved_pools(
         normalize_naming_profile(stored.get("naming")), reservation)
     raw_bodies = materialize_body_names(
@@ -390,6 +409,9 @@ def normalize_charter(stored, reservation=None):
         "posts": posts,
         "bodies": bodies,
         "naming": naming,
+        # The population's look law (`charter_surface`): pools per axis in
+        # its own words. Empty pools mean the engine default deals.
+        "looks": normalize_looks_profile(stored.get("looks")),
         "priority": priority,
         "roster": dict(stored.get("roster") or {}),
         # Last planned watch is present institutional state: it tells a scene

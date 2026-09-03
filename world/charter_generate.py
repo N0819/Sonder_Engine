@@ -13,6 +13,9 @@ import hashlib
 import json
 
 from world.charter_identity import materialize_body_names
+from world.charter_surface import (deal_surface, default_looks,
+                                   looks_material_exists,
+                                   normalize_looks_profile, post_dress)
 from world.charter_model import (
     integer as _integer, normalize_charter, number as _number)
 from world.charter_needs import seed_needs
@@ -90,6 +93,15 @@ them that the population does not repeat. Every generated body must resolve to
 a stable scene-facing personal name before simulation. If the setting does not
 use ordinary names, supply lore-compatible callsigns, serial names, epithets or
 syllable parts; never expose a post/body machine id as the person's name.
+Each charter also carries looks:{stature:[],build:[],gait:[],complexion:[],
+hair:[],age:[],marks:[]} -- its LOOK LAW, the counterpart of naming for
+bodies: per axis, short phrases in this population's own words for what a
+stranger takes in at a glance, enough of them that a hundred people do not
+repeat, and none describing an individual the lore names. stature, build,
+gait, complexion and age are words that stand before a noun; hair and marks
+are the thing itself. Each post may carry worn:[] (what its holders visibly
+wear at the work) and marks:[] (what the work leaves on a body); supply them
+where the trade shows on the person and omit them where it does not.
 Economy is strictly id-keyed:
 goods:{good:{label,base_value,unit}}, stocks:{holder:{good:lots}}, targets:
 {holder:{good:{minimum,desired,capacity}}}, flows:{id:{holder,good,kind:
@@ -750,6 +762,13 @@ def close_plan(plan, *, history=None, featured_residents=None,
             post["requires"] = _competence(post.get("requires"))
             if str(post.get("place") or "") not in room_ids:
                 post["place"] = default_place
+            dress = post_dress(post)
+            post.pop("worn", None)
+            post.pop("marks", None)
+            if dress["worn"]:
+                post["worn"] = dress["worn"]
+            if dress["marks"]:
+                post["marks"] = dress["marks"]
         bodies = {}
         for pi, population in enumerate(raw.get("populations") or ()):
             if not isinstance(population, dict):
@@ -856,6 +875,24 @@ def close_plan(plan, *, history=None, featured_residents=None,
                 raw.get("naming"), reservation,
                 place_words + [str(raw.get("name") or ""), ckey])
         bodies = materialize_body_names(ckey, bodies, naming, reservation)
+        # THE LOOK LAW, dealt now so the stored registry carries every
+        # surface and a replay is byte-identical. A plan without one gets
+        # the engine's default pools and says so: a hundred bodies dealt
+        # from six words an axis will repeat, and the author should know
+        # the town is wearing the engine's face rather than its own.
+        looks = normalize_looks_profile(raw.get("looks"))
+        if looks_material_exists(looks):
+            look_source = "authored"
+        else:
+            looks, look_source = default_looks(), "default"
+            closure_warnings.append(
+                f"{ckey!r} authored no look law; bodies dealt from the "
+                f"engine's default pools")
+        for body_id, body in bodies.items():
+            body["surface"] = deal_surface(
+                ckey, body_id, looks,
+                post=posts.get(str(body.get("home_post") or "")),
+                source=look_source)
         from world.charter_economy import ensure_supply_points
         economy = ensure_supply_points(
             copy.deepcopy(raw.get("economy") or {}), rooms)
@@ -891,6 +928,7 @@ def close_plan(plan, *, history=None, featured_residents=None,
             "key": ckey, "structure": structure["key"],
             "upkeeps": upkeeps, "posts": posts, "bodies": bodies,
             "naming": naming,
+            "looks": looks,
             "priority": _strings(raw.get("priority")),
             # Where its people go for their own sake, as distinct from where
             # its work is. Filtered to real rooms here for the same reason

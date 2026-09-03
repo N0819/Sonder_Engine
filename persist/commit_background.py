@@ -1478,6 +1478,7 @@ def track_background_presences(ctx, nonce, *, prepared=None):
     candidate_ids = {}         # name -> {entity ids the beat proved for it}:
                                # the durable key the harvests used to resolve
                                # into names and throw away
+    renders = []               # [{charter, body, render}] for bound mints
 
     # Scene entities are keyed by an opaque id ("char_guard_alpha") but carry
     # a human display name ("Security Guard Alpha"). The director normally
@@ -1601,6 +1602,11 @@ def track_background_presences(ctx, nonce, *, prepared=None):
                     and _cref.get("body")):
                 sk["_charter_ref"] = {"charter": str(_cref["charter"]),
                                       "body": str(_cref["body"])}
+                # The Director's render of the body it bound to: settled
+                # onto that body's surface once, below, so the same
+                # townsperson looks the same next visit.
+                if desc:
+                    sk["_render"] = desc
             # Positions are usually keyed by the entity ID, not the display
             # name this sketch is filed under. Looking up the name alone left
             # the station on the floor -- and the positions harvest below then
@@ -1784,13 +1790,36 @@ def track_background_presences(ctx, nonce, *, prepared=None):
             if sk:
                 sk = dict(sk)
                 _cref = sk.pop("_charter_ref", None)
+                _render = sk.pop("_render", None)
                 if _cref and _cref not in record.setdefault("charter_refs", []):
                     record["charter_refs"].append(dict(_cref))
+                if _cref and _render:
+                    renders.append({"charter": _cref["charter"],
+                                    "body": _cref["body"],
+                                    "render": _render})
                 # Director restated this presence's own description/position
                 # -> objective self-knowledge wins; overwrite the prior sketch.
                 if sk:
                     record.setdefault("sketch", {}).update(sk)
             touched.add(key)
+
+    # RENDER-ON-VIEW SETTLES. A mint the floor bound to a charter body is
+    # the Director's high-fidelity render of that body; it lands on the
+    # body's surface once (`charter_runtime.settle_rendered_surfaces`) and a
+    # later render may add to it but never contradict a dealt axis -- the
+    # refusal is a warning, and the entity keeps its description either way.
+    if renders:
+        try:
+            from world.charter_runtime import settle_rendered_surfaces
+            for rec in settle_rendered_surfaces(
+                    cid, renders, frame_id=ctx.turn.frame_id):
+                if rec.get("refused"):
+                    ctx.add_warning(
+                        "render of %s (%s) not settled: it contradicts the "
+                        "body's dealt %s" % (rec["body"], rec["charter"],
+                                             rec["refused"]))
+        except Exception as exc:
+            ctx.add_warning(f"rendered surface not settled: {exc}")
 
     # Scene-manager bookkeeping (docs/design/BACKGROUND_LIFE_DESIGN.md §3.8, §3.11).
     _persist_blurbs(br, presences)
