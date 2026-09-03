@@ -2588,19 +2588,109 @@ def exchange_caravan_freight(cid, freight, room, *, frame_id=None):
     return carried, events
 
 
+def plan_figure_acts(registry, evidence_rows, inventory_ops, scene,
+                     figures):
+    """Which figure acts this beat lands on which body, read-only.
+
+    `charter_author.acts_in_evidence` says what the beat DID; this says to
+    WHOM, against the registry: the actor must stand in a scene room, the
+    target spelling must resolve (`charter_observe.resolve_target_body`) to
+    exactly one unpromoted body in that room across every charter, and a
+    request or an offer that names a good sold there is a trade. Rows carry
+    everything `charter_author.authored` needs, so the commit that applies
+    them and the voice that previews them run the identical plan.
+    """
+    from world.charter_author import acts_in_evidence, good_named
+    from world.charter_observe import resolve_target_body
+    from world.spatial import room_of
+
+    plans = []
+    items = (registry or {}).get("items") or {}
+    for row in acts_in_evidence(evidence_rows, inventory_ops, figures):
+        room = room_of(scene or {}, row["actor"])
+        if not room:
+            continue
+        found = []
+        for charter_key, item in sorted(items.items()):
+            body_key = resolve_target_body(
+                item["state"], row["target"], place=room, scene=scene)
+            if body_key:
+                found.append((charter_key, body_key))
+        if len(found) != 1:
+            continue
+        charter_key, body_key = found[0]
+        act, good = row["act"], ""
+        if act in ("request", "bargain"):
+            good = good_named(items[charter_key]["state"].get("economy"),
+                              room, row["terms"], row.get("about"))
+            if good:
+                act = "trade"
+        plans.append({
+            "charter": charter_key, "body": body_key, "actor": row["actor"],
+            "act": act, "terms": row["terms"], "source_id": row["source_id"],
+            "thing": row.get("thing") or "", "good": good, "room": room,
+            "target": row["target"],
+        })
+    return plans
+
+
+def apply_figure_acts(state, plans, charter_key):
+    """Land every planned act aimed at one charter; returns (state, records).
+
+    The figure is injected for the act and removed after, exactly as
+    `apply_presence_conduct` does for a body's act toward one: a figure
+    has no mind here and leaves none behind. A refused act changes nothing
+    and its record says why.
+    """
+    from world.charter import authored
+
+    records = []
+    for plan in plans or ():
+        if str(plan.get("charter") or "") != str(charter_key):
+            continue
+        actor = str(plan["actor"])
+        temporary = actor not in (state.get("bodies") or {})
+        if temporary:
+            state.setdefault("figures", {})[actor] = {
+                "key": actor, "place": str(plan.get("room") or ""),
+                "surface": {"label": actor},
+            }
+        try:
+            state, record = authored(
+                state, actor, plan["act"], plan["body"],
+                terms=plan.get("terms") or "",
+                source_id=plan.get("source_id") or "",
+                thing=plan.get("thing") or "", good=plan.get("good") or "")
+        finally:
+            if temporary:
+                state.setdefault("figures", {}).pop(actor, None)
+        records.append({"charter": str(charter_key), **record})
+    return state, records
+
+
 def ingest_public_evidence(cid, evidence_rows, scene, *, turn_id,
-                           frame_id=None):
+                           frame_id=None, inventory_ops=None, figures=None):
     """Deliver one resolved beat to the Charter bodies that sensed it.
 
     One registry read and one conditional write regardless of population or
     witness count.  The expensive/semantic work was already shared at resolve;
     this side is deterministic perception plus sparse claim insertion.
+
+    The figure acts the beat carries (`plan_figure_acts`: an order, a
+    request, a bargain, a promise, a trade, a gift aimed at a body) land in
+    the same private parse and the same save, after the evidence they rode
+    in on, so a request's words are in the body's mind before the body's
+    answer to it is in the ledger. Their records come back under
+    ``figure_acts``.
     """
     from world.charter_observe import (apply_public_evidence,
                                        plan_public_evidence)
 
     rows = [row for row in (evidence_rows or ()) if isinstance(row, dict)]
-    if not rows:
+    shared = registry_for(cid, frame_id)
+    plans = plan_figure_acts(shared, rows, inventory_ops, scene, figures) \
+        if figures else []
+    if not rows and not plans:
         return {"sources": 0, "opportunities": 0, "acquired": 0}
     # Appraise on the SHARED cached registry first: most beats reach no
     # Charter mind, and this runs inside the locked commit every turn a
@@ -2612,37 +2702,128 @@ def ingest_public_evidence(cid, evidence_rows, scene, *, turn_id,
     # private parse, so a wrong gate can cost a skipped save or a spare
     # parse, never a wrong stored byte.
     opportunities = acquired = 0
-    for item in registry_for(cid, frame_id)["items"].values():
+    for item in shared["items"].values():
         plan = plan_public_evidence(item["state"], rows, scene or {}, turn_id)
         opportunities += int(plan["opportunities"])
         acquired += int(plan["acquired"])
-    if not acquired:
+    if not acquired and not plans:
         return {"sources": len(rows), "opportunities": opportunities,
                 "acquired": acquired}
     registry = registry_for_update(cid, frame_id)
     opportunities = acquired = 0
-    for item in registry["items"].values():
-        state, metrics = apply_public_evidence(
-            item["state"], rows, scene or {}, turn_id)
+    landed = []
+    for charter_key, item in registry["items"].items():
+        state = item["state"]
+        if rows:
+            state, metrics = apply_public_evidence(
+                state, rows, scene or {}, turn_id)
+            opportunities += int(metrics.get("opportunities") or 0)
+            acquired += int(metrics.get("acquired") or 0)
+        if plans:
+            state, records = apply_figure_acts(state, plans, charter_key)
+            landed.extend(records)
         item["state"] = state
-        opportunities += int(metrics.get("opportunities") or 0)
-        acquired += int(metrics.get("acquired") or 0)
-    if acquired:
+    if acquired or any(not r.get("refused") for r in landed):
         save_registry(cid, registry, frame_id)
+    # Sparse: the key appears only on a beat that carried an act, so every
+    # metrics reader that pins the three counts keeps pinning them.
     return {"sources": len(rows), "opportunities": opportunities,
-            "acquired": acquired}
+            "acquired": acquired,
+            **({"figure_acts": landed} if landed else {})}
 
 
-def presence_view(cid, place, name, frame_id=None, figures=None):
-    """Only what one Charter body earned, never its institution's register."""
+def charter_carriers(cid, rooms, frame_id=None):
+    """Every unpromoted Charter body standing in ``rooms``, by every spelling
+    it answers to, with the room it stands in -- the vouching the scene's
+    transfer ledger needs for a holder it keeps no record of.
+
+    `world.spatial.derive_inventory_placements` resolves a handover's
+    destination against the scene alone, and a townsperson the Charter
+    stands in the room has no scene record until something mints one; so
+    a thing handed to one went nowhere, silently (Harrowmere t5: the reeve
+    took the letter in prose and the ledger kept it on the player for the
+    rest of the story). This is the answer the scene lacked, read from the
+    cached registry, keyed by body key, name, display name and authored
+    aliases so the Director's spelling can land on it.
+    """
+    from world.charter_identity import display_name, identity_aliases
+
+    places = {str(r) for r in (rooms or ()) if str(r or "")}
+    if not places:
+        return {}
+    out = {}
+    registry = registry_for(cid, frame_id)
+    for charter_key, item in sorted((registry.get("items") or {}).items()):
+        state = item["state"]
+        bindings = state.get("bindings") or {}
+        roles = {}
+        for post, assigned in (state.get("watch") or {}).items():
+            roles.setdefault(str(assigned), []).append(str(post))
+        for body_key, body in sorted((state.get("bodies") or {}).items()):
+            if body_key in bindings:
+                continue
+            place = str(body.get("place") or "")
+            if place not in places:
+                continue
+            spellings = [str(body_key), str(body.get("name") or ""),
+                         display_name(body, roles.get(body_key) or (),
+                                      state.get("naming"))]
+            spellings.extend(identity_aliases(
+                body, roles.get(body_key) or (), state.get("naming")))
+            for spelling in spellings:
+                spelling = " ".join(str(spelling or "").split())
+                if spelling and spelling not in out:
+                    out[spelling] = place
+    return out
+
+
+def presence_view(cid, place, name, frame_id=None, figures=None, *,
+                  evidence=None, inventory_ops=None, scene=None,
+                  actors=None):
+    """Only what one Charter body earned, never its institution's register.
+
+    ``evidence``, ``inventory_ops``, ``scene`` and ``actors`` are this
+    beat's resolved sources, and with them the view carries ``answers``:
+    what this body's own ledgers say to each act the beat aimed at it (an
+    order obeyed or refused, a favour granted or declined, a price quoted,
+    a gift taken), computed by the identical plan the commit will apply
+    (`plan_figure_acts` + `apply_figure_acts`) on a throwaway copy. The
+    voice speaks AFTER the act and BEFORE the commit, so without this it
+    would answer a request in prose and the ledger would answer it the
+    other way a beat later. No name of the asker rides along -- the
+    addressed-by block already carries whatever label this presence is
+    licensed to know them by.
+    """
     out = []
     registry = registry_for(cid, frame_id)
+    plans = plan_figure_acts(registry, evidence, inventory_ops, scene,
+                             actors) if actors and scene is not None else []
     for charter_key, body_key in _body_refs(registry, name=name):
         item = registry["items"][charter_key]
         state = copy.deepcopy(item["state"])
         body = state["bodies"].get(body_key) or {}
         if str(body.get("place") or "") != str(place or ""):
             continue
+        answers = []
+        mine = [p for p in plans if p["charter"] == charter_key
+                and p["body"] == body_key]
+        if mine:
+            _state, records = apply_figure_acts(
+                copy.deepcopy(state), mine, charter_key)
+            for record in records:
+                row = {"act": str(record.get("act") or "")}
+                if record.get("as"):
+                    row["answered_as"] = str(record["as"])
+                for key in ("terms", "thing", "good", "answer", "reason",
+                            "refused"):
+                    if record.get(key):
+                        row[key] = record[key]
+                if isinstance(record.get("quote"), dict):
+                    row["quote"] = {k: record["quote"][k] for k in
+                                    ("good", "quantity", "unit_value",
+                                     "total_value", "currency")
+                                    if k in record["quote"]}
+                answers.append(row)
         # Scene-owned people are figures here: visible subjects with no mind
         # for Charter to read or simulate.  They exist only in this aperture;
         # a landed act may leave a claim about the encounter, but no copied
@@ -2676,6 +2857,7 @@ def presence_view(cid, place, name, frame_id=None, figures=None):
             # smuggle a Charter mutation through this seam.
             "action_instances": copy.deepcopy(
                 (action_instances(state, actor=body_key).get(body_key) or [])[:6]),
+            **({"answers": answers} if answers else {}),
         })
     return out[:2]
 

@@ -666,12 +666,29 @@ def prepare_scene_commit(ctx):
         _subject for _subject, _level in (awareness_map(cid) or {}).items()
         if _level == "asleep"
     }
+    # WHO THE TOWN STANDS HERE, for the transfer ledger. A handover's
+    # destination resolves against the scene, and a Charter body standing
+    # in the room has no scene record until something mints one -- so the
+    # letter the reeve took (Harrowmere t5) stayed on the player for
+    # thirty-five beats with no notice. The registry is the ledger that
+    # stands those bodies; read from its cache, passed through so the thing
+    # lands on the holder and follows them on every later merge.
+    _carriers = {}
+    try:
+        from world.charter_runtime import charter_carriers
+
+        _carriers = charter_carriers(
+            cid, set(prev_scene.get("rooms") or {})
+            | set(diff.get("rooms") or {}),
+            frame_id=getattr(getattr(ctx, "turn", None), "frame_id", None))
+    except Exception as exc:  # the scene must commit without the town
+        ctx.add_warning("charter carriers unavailable to the merge: %s" % exc)
     sc = merge_scene_with_diff(
         prev_scene, diff, contact_report=_contact_report,
         substance_report=_substance_report.append,
         sleeping=_sleeping,
         clock_seconds=_beat_end, crossing_report=_crossing_report,
-        inventory_report=_inventory_report)
+        inventory_report=_inventory_report, carriers=_carriers)
     # Tell the Director how its contact ops were read -- a re-description taken
     # as the same limb moving, a part refused as not being one, an envelopment
     # folded onto the enclosed side. Corrections it can only make if it knows

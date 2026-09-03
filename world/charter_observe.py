@@ -15,6 +15,7 @@ news claim, so observed scene conduct does not create a parallel history.
 from __future__ import annotations
 
 import copy
+import re
 
 from world.charter_figure import figure_claim
 from world.charter_identity import display_name, identity_aliases
@@ -145,6 +146,71 @@ def evidence_claim(evidence, turn_id, at_hours, place):
     }
 
 
+def _tokens(text):
+    return set(re.findall(r"[a-z0-9]+", str(text or "").casefold()))
+
+
+def resolve_target_body(charter, label, *, place=None, scene=None):
+    """The one unpromoted body a Director spelling names, or None.
+
+    The Director writes a person as whatever the prose reached for -- an
+    entity id it minted, a role noun, a display name, a slug of two of the
+    three words in a name -- and every ledger below this line is keyed by
+    BODY KEY. Four readings, each exact in its own way, tried in order and
+    never widened: an identity form (`_identity_forms`: key, name, display
+    name, authored aliases); a scene entity the identity floor bound to a
+    body (`charter_ref`); and a token subset (every word of the label is a
+    word of exactly one body's identity forms -- "reeve_halinham" is the
+    body named "Reeve Halinham Nookfeller" and nobody else). ``place``
+    narrows the candidates to the bodies standing there, which is where an
+    act toward somebody has to land anyway. Two bodies matching is nobody:
+    an act that cannot say WHOM it means must not land on either.
+    """
+    label = " ".join(str(label or "").split())
+    if not label:
+        return None
+    bodies = charter.get("bodies") or {}
+    bindings = charter.get("bindings") or {}
+    naming = charter.get("naming") or {}
+    role_map = {}
+    for post, assigned in (charter.get("watch") or {}).items():
+        role_map.setdefault(str(assigned), []).append(str(post))
+    candidates = {}
+    for body_key, body in sorted(bodies.items()):
+        if body_key in bindings:
+            continue
+        if place is not None and str(body.get("place") or "") != str(place):
+            continue
+        candidates[str(body_key)] = _identity_forms(
+            body_key, body, role_map.get(body_key) or (), naming)
+    if not candidates:
+        return None
+    folded = _fold(label)
+    exact = [key for key, forms in candidates.items() if folded in forms]
+    if len(exact) == 1:
+        return exact[0]
+    if exact:
+        return None
+    # An entity the identity floor already bound to a body.
+    for eid, entity in ((scene or {}).get("entities") or {}).items():
+        if not isinstance(entity, dict):
+            continue
+        ref = entity.get("charter_ref")
+        if not isinstance(ref, dict):
+            continue
+        spellings = {_fold(eid), _fold(entity.get("name"))} | {
+            _fold(a) for a in (entity.get("aliases") or ())}
+        body_key = str(ref.get("body") or "")
+        if folded in spellings and body_key in candidates:
+            return body_key
+    words = _tokens(label)
+    if not words:
+        return None
+    subset = [key for key, forms in candidates.items()
+              if any(words <= _tokens(form) for form in forms)]
+    return subset[0] if len(subset) == 1 else None
+
+
 def plan_public_evidence(charter, evidence_rows, scene, turn_id):
     """READ-ONLY appraisal: what `apply_public_evidence` WOULD land.
 
@@ -263,9 +329,28 @@ def apply_public_evidence(charter, evidence_rows, scene, turn_id):
     from world.charter_commitment import observe_public_commitments
     from world.charter_social import update_judgments_from_minds, update_ties
 
+    # The party a promise names, as the body key its ledgers are read by
+    # (`resolve_target_body`): among the bodies that heard it, since a
+    # promise made to somebody who did not hear it was made to nobody.
+    targets = {}
+    for evidence in evidence_rows or ():
+        if not isinstance(evidence, dict) or evidence.get("kind") != "speech":
+            continue
+        source_id = str(evidence.get("source_id") or "")
+        heard = recipients.get(source_id) or ()
+        if not heard:
+            continue
+        listening = {"bodies": {k: v for k, v in (charter.get("bodies") or {}).items()
+                                if k in heard},
+                     "watch": charter.get("watch"),
+                     "naming": charter.get("naming")}
+        body_key = resolve_target_body(
+            listening, evidence.get("target"), scene=scene)
+        if body_key:
+            targets[source_id] = body_key
     charter["commitments"], commitment_metrics = observe_public_commitments(
         charter.get("commitments"), evidence_rows, recipients,
-        at_hours=float(charter.get("clock_hours") or 0.0))
+        at_hours=float(charter.get("clock_hours") or 0.0), targets=targets)
     charter["judgments"], movements = update_judgments_from_minds(
         charter.get("judgments"), charter["minds"],
         politics=charter.get("politics"), norms=charter.get("social_norms"))
@@ -295,5 +380,5 @@ def apply_public_evidence(charter, evidence_rows, scene, turn_id):
 __all__ = [
     "PUBLIC_EVIDENCE_CAP", "apply_public_evidence", "body_receives_evidence",
     "evidence_claim", "evidence_key", "evidence_phrase",
-    "plan_public_evidence",
+    "plan_public_evidence", "resolve_target_body",
 ]
