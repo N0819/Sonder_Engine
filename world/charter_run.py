@@ -75,6 +75,7 @@ from .charter_decide import advance_decisions, deliver_orders, execute_orders
 from .charter_economy import advance_economy
 from .charter_social import update_judgments_from_minds, update_ties
 from .charter_intervene import apply_due
+from .charter_harm import HURT_RELUCTANCE, advance_harm, normalize_condition
 
 
 def _event(kind, at_hours, place, **payload):
@@ -417,6 +418,15 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
     events = []
     charter, intervention_events = apply_due(charter, at + hours)
     events.extend(intervention_events)
+    # A hurt body heals on its own clock (`charter_harm.HURT_RECOVERY_HOURS`)
+    # and says so where it stands, the way a body needs put down says so
+    # when it gets up. Before the plan, so a healed hand is postable this
+    # window rather than next.
+    charter, healed = advance_harm(charter, at)
+    for key in healed:
+        events.append(_event(
+            "body_recovered", at, charter["bodies"][key].get("place", ""),
+            body=key, healed="hurt"))
 
     # A scene is optional. Without one the institution is a single place and
     # everyone can stand any post, which is the right simplification for six
@@ -481,6 +491,11 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
         weight = spend_reluctance(politics, key) + pressure(held)
         if "disgraced" in held_marks(marks_before, key, at):
             weight += DISGRACE_RELUCTANCE
+        # A hurt body is spent last for the same reason a spent one is: it
+        # can still stand the post, and it should not have to.
+        if normalize_condition(charter["bodies"][key].get("condition")) \
+                == "hurt":
+            weight += HURT_RELUCTANCE
         if mood_weight:
             # Felt state joins the SAME axis as standing and exhaustion: a
             # body the institution is reluctant to spend, for whatever reason,

@@ -31,6 +31,7 @@ from __future__ import annotations
 
 from .charter_chatter import normalize_window_acts
 from .charter_figure import normalize_figures
+from .charter_harm import GONE, normalize_condition
 from .charter_mark import normalize_marks
 
 #: A level is a fraction of nominal: 1.0 is perfectly kept, 0.0 is gone.
@@ -196,7 +197,20 @@ def normalize_body(key, entry):
         # should not trade professions every window. Older generated bodies
         # infer this from their ``post:...`` key at the planner boundary.
         "home_post": str(entry.get("home_post") or ""),
+        # What has been done to this body (`charter_harm.CONDITIONS`). Closed,
+        # and ``well`` for every body written before the field existed. A
+        # body that is dead or missing is unavailable HERE, at the one
+        # normalizer every path into the state runs through, so no reader
+        # can meet a corpse on a watch bill however the record arrived.
+        "condition": normalize_condition(entry.get("condition")),
     }
+    if body["condition"] in GONE:
+        body["available"] = False
+        body["stood_down"] = False
+    elif body["condition"] == "hurt":
+        hurt_at = entry.get("hurt_at_hours")
+        body["hurt_at_hours"] = number(hurt_at, 0.0) if hurt_at is not None \
+            else 0.0
     # An AUTHORED temperament only. The unauthored case is derived on demand
     # by `charter_temper.temperament_of` and stored nowhere, so the field is
     # absent for almost every body -- carrying five defaults per head would
