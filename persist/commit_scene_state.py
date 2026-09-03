@@ -844,8 +844,9 @@ def prepare_scene_commit(ctx):
             (sc.get("rooms") or {}).pop(rid, None)
 
     staged = ctx.world_context().get("staged_lore") or []
-    interp = ctx.director_interpret or {}
-    mv = interp.get("movement")
+    # The destination as the world spells it (`ctx.declared_movement`): a
+    # planned room's own id, never the Director's spelling of it.
+    mv = ctx.declared_movement()
     target_room = mv.get("to_room") if isinstance(mv, dict) else None
     target_room = room_renames.get(target_room, target_room)
 
@@ -968,7 +969,7 @@ def prepare_scene_commit(ctx):
     # agents/director._guard_approach_is_not_arrival). Without the record the
     # feature has no memory and an approach can never complete -- the engine
     # answers "you get closer" for as long as the player keeps asking.
-    _mv = (ctx.director_interpret or {}).get("movement")
+    _mv = ctx.declared_movement()
     if isinstance(_mv, dict) and _mv.get("to_room"):
         _who = _mv.get("mover") or "self"
         if _who == "self":
