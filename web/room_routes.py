@@ -20,7 +20,10 @@ the present, else a frame row of this chat):
 
 from __future__ import annotations
 
+import json
+
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from core.db import q
@@ -69,6 +72,36 @@ def room_say(cid: int, body: RoomMessage):
             400, detail="That note is longer than the room reads at once; "
                         "attach a document as lore instead")
     return room.converse(cid, body.frame_id, text)
+
+
+@router.post("/messages/stream")
+def room_say_stream(cid: int, body: RoomMessage):
+    """`room_say`, as a stream, so the panel shows the room working.
+
+    NDJSON rather than server-sent events, matching the turn stream this
+    engine already speaks (`web/app._stream`) so the browser has one decoder
+    and one reconnection story rather than two.
+
+    The generator does the writes, in the same order the non-streaming route
+    does, so a client that cannot stream loses only the watching. Refusals
+    stay HTTP: the argument checks below run BEFORE the response begins,
+    because a 400 delivered as an event inside a 200 is a refusal the client
+    has to be taught to look for.
+    """
+    _chat_and_frame(cid, body.frame_id)
+    text = str(body.text or "").strip()
+    if not text:
+        raise HTTPException(400, detail="Say something to the room first")
+    if len(text) > room.ROOM_MESSAGE_CHARS:
+        raise HTTPException(
+            400, detail="That note is longer than the room reads at once; "
+                        "attach a document as lore instead")
+
+    def lines():
+        for event in room.converse_stream(cid, body.frame_id, text):
+            yield json.dumps(event, ensure_ascii=False, default=str) + "\n"
+
+    return StreamingResponse(lines(), media_type="application/x-ndjson")
 
 
 @router.post("/mandates/{uid}/revoke")

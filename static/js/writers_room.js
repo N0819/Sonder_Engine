@@ -56,6 +56,7 @@ const ROOM_STORE = {
   open: "room.open", mode: "room.mode", width: "room.width",
   geometry: "room.geometry", opacity: "room.opacity",
   dramaturge: "room.dramaturge",
+  reasoning: "room.reasoning",
 };
 // The placeholder's line, spelled here so the UI catalog harvests it and the
 // stored English line translates on render. tests/test_room_routes.py holds
@@ -87,6 +88,15 @@ const ROOM = {
   loadedKey: null, seated: false, messages: [], mandates: [], status: null,
   messageChars: 4000, page: 60, oldestId: null, busy: false, watch: null,
   expanded: new Set(),
+  // THE LIVE ANSWER, while one is being written. `live.text` is the reply so
+  // far, `live.reasoning` the model's working, `live.note` what the loop is
+  // doing right now. All three are cleared when the stored rows arrive, so
+  // the thread never holds two copies of one answer.
+  live: null,
+  // Whether the working is expanded, per viewer. Collapsed by default: it is
+  // there to be opened when an answer surprises you, not to be read every
+  // time.
+  showReasoning: roomStoreGet(ROOM_STORE.reasoning, "0") === "1",
 };
 
 function roomStoreGet(key, fallback) {
@@ -267,25 +277,80 @@ async function roomSend() {
   ROOM.busy = true;
   const send = $("#room-send");
   if (send) send.disabled = true;
+  box.value = "";
+  ROOM.live = { text: "", reasoning: "", note: "" };
+  roomRender();
   try {
-    const out = await api("POST", "/api/chats/" + S.chatId + "/room/messages", {
-      text, frame_id: S.currentFrameId,
-    });
-    box.value = "";
-    ROOM.messages = ROOM.messages.concat([out.message], out.replies || []);
-    ROOM.mandates = out.mandates || ROOM.mandates;
-    ROOM.status = out.status || ROOM.status;
-    ROOM.seated = !!out.seated;
-    ROOM.loadedKey = roomKey();
-    roomRender();
-    if (out.error) toast(t("The room could not answer: {why}", { why: out.error }), "err");
+    await roomStream(text);
   } catch (error) {
     toast(error.message || String(error), "err");
   } finally {
+    ROOM.live = null;
     ROOM.busy = false;
     if (send) send.disabled = false;
+    roomRender();
     box.focus();
   }
+}
+
+// ---- The stream ----
+//
+// NDJSON, the same shape the turn stream speaks, so there is one decoder here
+// and not two. A line can be split across chunks, so the tail is carried; the
+// last chunk may end without a newline, so it is flushed at the end.
+async function roomStream(text) {
+  const response = await fetch(
+    "/api/chats/" + S.chatId + "/room/messages/stream",
+    { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, frame_id: S.currentFrameId }) });
+  if (!response.ok) {
+    let detail = "";
+    try { detail = (await response.json()).detail || ""; } catch (e) {}
+    throw new Error(detail || t("The room could not be reached ({status})",
+                                { status: response.status }));
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let tail = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    tail += decoder.decode(value, { stream: true });
+    const lines = tail.split("\n");
+    tail = lines.pop();
+    for (const line of lines) if (line.trim()) roomEvent(JSON.parse(line));
+  }
+  if (tail.trim()) roomEvent(JSON.parse(tail));
+}
+
+// One event. Renders on every one: the panel is small, the thread is short,
+// and a render per token is what makes the answer look written rather than
+// delivered.
+function roomEvent(event) {
+  const live = ROOM.live || (ROOM.live = { text: "", reasoning: "", note: "" });
+  if (event.type === "room_message") {
+    ROOM.messages = ROOM.messages.concat([event.message]);
+  } else if (event.type === "token") {
+    live.text += event.delta || "";
+  } else if (event.type === "reasoning") {
+    live.reasoning += event.delta || "";
+  } else if (event.type === "room_step") {
+    live.note = t("Step {n}", { n: event.step });
+  } else if (event.type === "room_tool") {
+    // What it DID, refusal included -- the thing a spinner hides.
+    live.note = event.error ? t("{tool} failed", { tool: event.tool })
+      : event.refused ? t("{tool} refused", { tool: event.tool })
+      : t("Read {tool}", { tool: event.tool });
+  } else if (event.type === "room_done") {
+    ROOM.live = null;
+    ROOM.messages = ROOM.messages.concat(event.replies || []);
+    ROOM.mandates = event.mandates || ROOM.mandates;
+    ROOM.status = event.status || ROOM.status;
+    ROOM.seated = !!event.seated;
+    ROOM.loadedKey = roomKey();
+    if (event.error) toast(t("The room could not answer: {why}", { why: event.error }), "err");
+  }
+  roomRender(true);
 }
 
 async function roomRevoke(uid) {
@@ -413,6 +478,37 @@ function roomRenderThread(box) {
     }
     box.append(node);
   }
+  if (ROOM.live) box.append(roomLiveNode());
+}
+
+// The answer as it is written: the working (collapsed), what the loop is
+// doing, and the prose so far. One node, replaced on every event and dropped
+// when the stored row arrives, so the thread never holds two copies of one
+// answer.
+function roomLiveNode() {
+  const live = ROOM.live;
+  const node = el("div", { class: roomCls("room-msg", "planner", "room-live") },
+    el("div", { class: "room-who" }, ROOM_ROLE_LABELS.planner || "planner"));
+  if (live.reasoning) {
+    const open = ROOM.showReasoning;
+    node.append(el("button", {
+      class: roomCls("ghost", "small", "room-think-toggle"),
+      onclick: () => {
+        ROOM.showReasoning = !ROOM.showReasoning;
+        roomStoreSet(ROOM_STORE.reasoning, ROOM.showReasoning ? "1" : "0");
+        roomRender(true);
+      },
+    }, open ? "Hide working" : "Show working"));
+    if (open) node.append(el("div", { class: "room-think" }, live.reasoning));
+  }
+  if (live.note && !live.text) {
+    node.append(el("div", { class: roomCls("room-note", "dim") }, live.note));
+  }
+  if (live.text) node.append(el("div", { class: "room-text" }, live.text));
+  else if (!live.reasoning && !live.note) {
+    node.append(el("div", { class: roomCls("room-note", "dim") }, "Thinking…"));
+  }
+  return node;
 }
 
 // ---- Building the panel ----

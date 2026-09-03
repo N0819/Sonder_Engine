@@ -425,13 +425,29 @@ def _note_bible(cid, frame_id, name, args, result, turn_idx):
 
 
 def run_planner(cid, frame_id, *, text=None, task=None, base_turn=None,
-                regime=None):
+                regime=None, on_event=None):
     """One bounded reply. ``text`` is the player's line (the interactive
     regime); ``task`` a brief from a job (the background regime; no grants
     are read from a task). Returns ``{"reply", "dramaturge": None,
     "mandates", "status", "published": [uids], "verdicts": [...],
     "ask_dramaturge": str|None, "calls": n, "steps": n, "notes": [...],
-    "stopped": why|None, "regime"}``."""
+    "stopped": why|None, "regime"}``.
+
+    ``on_event`` is an optional callable taking one dict, for a caller
+    watching the loop rather than waiting on it. It is told when a step
+    begins and what each tool call was and returned, so a panel can show the
+    room working instead of a spinner over a reply that takes half a minute.
+    Advisory by construction: a raising or slow callback must not be able to
+    change what the room does, so every call is swallowed, and a caller that
+    passes nothing runs exactly the code that ran before this existed."""
+
+    def _emit(event):
+        if on_event is None:
+            return
+        try:
+            on_event(event)
+        except Exception:  # a watcher is never allowed to break the work
+            pass
     from core.jobs import story_rewound_past
     from story import room_conversation as room
     from story.mandates import expire_mandates, spend_citation, spend_limits
@@ -457,6 +473,8 @@ def run_planner(cid, frame_id, *, text=None, task=None, base_turn=None,
     for step in range(1, PLANNER_STEPS_PER_REPLY + 1):
         if stopped:
             break
+        _emit({"type": "room_step", "step": step,
+               "calls_made": calls_made, "seconds": round(time.time() - started, 1)})
         seconds_left = wall - (time.time() - started)
         if seconds_left <= 0:
             stopped = "wall"
@@ -559,6 +577,14 @@ def run_planner(cid, frame_id, *, text=None, task=None, base_turn=None,
                 if name in ("publish_package", "resolve_package"):
                     _note_bible(cid, frame_id, name, args, result, turn_idx)
             transcript.append({"tool": name, "args": args, "result": result})
+            # What the room DID, not what it meant to do: a refusal and an
+            # error are the two the watcher most needs, and they are exactly
+            # what a spinner hides (see REPORT WHAT LANDED on the card).
+            _emit({"type": "room_tool", "step": step, "tool": name,
+                   "refused": (result or {}).get("refused")
+                   if isinstance(result, dict) else None,
+                   "error": (result or {}).get("error")
+                   if isinstance(result, dict) else None})
         if stopped:
             break
     else:
@@ -623,7 +649,7 @@ def _run_task(cid, frame_id, task, *, base_turn, job=None):
     return out
 
 
-def planner_reply(cid, frame_id, text):
+def planner_reply(cid, frame_id, text, *, on_event=None):
     """The seam's shape: what `room_conversation.PLANNER` returns. When the
     Planner hands a brief to the Dramaturge, the pass runs OUT OF BAND (a
     background task has no wall) and its lines land in the thread; the
@@ -631,7 +657,8 @@ def planner_reply(cid, frame_id, text):
     from core import jobs
     from story.mandates import surprise_dial
     from story.room_bible import schedule_fold
-    out = run_planner(cid, frame_id, text=text, regime="reply")
+    out = run_planner(cid, frame_id, text=text, regime="reply",
+                      on_event=on_event)
     if out.get("ask_dramaturge"):
         dial = surprise_dial(cid, frame_id)
         if dial is not None:

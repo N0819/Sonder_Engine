@@ -994,3 +994,13 @@ flex:0 0 auto}
 .room-corner{position:absolute;right:0;bottom:0;width:16px;height:16px;cursor:nwse-resize;
 display:none;background:linear-gradient(135deg,transparent 50%,var(--bd) 50%)}
 #room.floating .room-corner{display:block}
+
+/* The answer while it is being written. It is a planner message like any
+   other -- same border, same alignment -- with the model's working folded
+   above it, so nothing jumps when the stored row replaces it. */
+.room-msg.room-live{border-style:dashed}
+.room-think-toggle{padding:0;margin-bottom:4px}
+.room-think{font-size:12px;color:var(--dim);white-space:pre-wrap;
+border-left:2px solid var(--bd);padding-left:8px;margin-bottom:6px;
+max-height:220px;overflow:auto}
+.room-note{font-size:12px;font-style:italic}
