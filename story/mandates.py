@@ -46,6 +46,14 @@ MANDATE_CAPABILITIES = (
     "identity_fills",
     # Author a SEALED package -- work the player will not read until revealed.
     "surprise",
+    # Local drama (plan § 5 Phase C): circumstances that arrive where the
+    # player is, each its own grant because each is its own kind of hand.
+    "arrival", "errand", "incident", "summons", "scheduled_consequence",
+    # The nudge toolkit: author surgery on an institution (v2 § 9.1).
+    "move_body", "assign_post", "plant_claim", "adjust_stock", "arm_trigger",
+    "charter_shock",
+    # A change over a region of the map; default budget ZERO, granted in words.
+    "region_events",
 )
 
 #: The limits a grant may carry, each a number. `fills_per_hour` is read by

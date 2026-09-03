@@ -368,7 +368,8 @@ class TestViews:
         assert view["sealed"] and "truths" not in view
         assert view["counts"]["truths"] == 1
         assert view["clocks"] == [{"id": view["clocks"][0]["id"], "label": "an inquest",
-                                   "due_story_hours": None, "due_turns": 6}]
+                                   "due_story_hours": None, "due_turns": 6,
+                                   "fired_turn": None}]
         assert "verger" not in json.dumps(view)
         revealed = package_view(cid, uid, reveal=True)
         assert revealed["truths"][0]["text"].startswith("The verger")

@@ -279,6 +279,12 @@ def normalize_body(key, entry):
         body["departed"] = True
         body["available"] = False
         body["stood_down"] = False
+    # An errand the room sent this body on (`charter_surgery.send_errand`):
+    # where and what for, kept while the walk it started is alive so the
+    # body can say why it is where it is. Dropped with the walk.
+    if isinstance(entry.get("errand"), dict) and isinstance(entry.get("walk"), dict):
+        body["errand"] = {"to": str(entry["errand"].get("to") or "")[:120],
+                          "purpose": str(entry["errand"].get("purpose") or "")[:200]}
     # A walk in progress: the courier's shape (`charter_move`), carried only
     # while the body is between its origin and its target. Dropped on arrival
     # by the mover, and dropped here if it is not a route at all -- a body
@@ -415,6 +421,7 @@ def normalize_charter(stored, reservation=None):
     from .charter_creature import normalize_creature, normalize_spoor
     from .charter_intervene import (normalize_interventions,
                                     normalize_mobilisation)
+    from .charter_surgery import normalize_authored
     from .charter_trigger import (normalize_pending_changes,
                                   normalize_triggers, prune_trigger_last)
 
@@ -546,6 +553,10 @@ def normalize_charter(stored, reservation=None):
         "economy": normalize_economy(stored.get("economy")),
         "decisions": normalize_decisions(stored.get("decisions")),
         "interventions": normalize_interventions(stored.get("interventions")),
+        # What the Writers' Room did to this institution by hand
+        # (`charter_surgery`): who, when, which operation. The author's hand
+        # kept visible to the author's tools; nothing in the fiction reads it.
+        "authored": normalize_authored(stored.get("authored")),
         # A creature is an institution whose upkeep is fed from other
         # institutions' bodies or stock (`charter_creature`). None for the
         # ordinary case, and the ordinary case is byte-identical to before.

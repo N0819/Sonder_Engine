@@ -632,10 +632,19 @@ def _commit_all_locked(ctx, nonce):
     # A package published before this turn is now one the turn has seen:
     # `published -> active`. Bookkeeping on the package alone; what it
     # placed in the world landed at publish, through the world's own seams.
+    # Then the FUSES: a package clock due at this beat creates the
+    # circumstance it scheduled -- the deferred operations riding it land
+    # through their seams under the mandate re-checked now, and a region
+    # event's pending waves advance -- so the next beat meets what the room
+    # authored. Out of band like its neighbours: the turn's facts are
+    # committed, this is the room's hand for the beat after.
     try:
-        from story.plot_packages import activate_due_packages
+        from story.plot_packages import activate_due_packages, fire_due_clocks
         results["plot_packages"] = activate_due_packages(
             ctx.chat.id, ctx.turn.idx, frame_id=ctx.turn.frame_id)
+        results["plot_clocks"] = fire_due_clocks(
+            ctx.chat.id, ctx.turn.idx, frame_id=ctx.turn.frame_id,
+            turn_id=getattr(ctx.turn, "id", None))
     except Exception as exc:
         ctx.add_warning(f"plot package activation failed: {exc}")
         results["plot_packages"] = {"error": str(exc)}
