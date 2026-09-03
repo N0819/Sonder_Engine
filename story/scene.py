@@ -2474,14 +2474,22 @@ def fiction_model(chat_id):
 # do not follow that routing: each is read by exactly the stage it gates
 # (`weather_severity` by the world, `narration_tense` by the narrator), through
 # its own named accessor rather than by handing anyone the whole guide.
-#: The free-text fields a host may set. `genre`, `director_notes`,
-#: `mapping_notes` and `avoid` were removed 2026-09-04: standing intent is the
-#: Writers' Room's, said in words to something that reads the story back and
-#: argues, rather than a paragraph every stage carries forever; and
-#: `mapping_notes` outlived the agent it was named for. `tone` stays because
-#: it is the register the Director writes resolved events in, and because the
-#: backdrop and ambience seams key their caches on it.
-STYLE_GUIDE_FIELDS = ("tone",)
+#: The free-text fields a host may set. `genre`, `director_notes` and
+#: `mapping_notes` were removed 2026-09-04: standing intent is the Writers'
+#: Room's, said in words to something that reads the story back and argues,
+#: rather than a paragraph every stage carries forever; and `mapping_notes`
+#: outlived the agent it was named for.
+#:
+#: THE TWO THAT STAY ARE THE TWO NO CONVERSATION CAN REACH. Both are read by
+#: deterministic code the room does not feed: `tone` is the register the
+#: Director writes resolved events in and the only style term left in the
+#: backdrop prompt, the backdrop cache key and the acoustic fingerprint;
+#: `avoid` is a CONTENT VETO, and the image prompt is the one place it is
+#: enforced by anything other than a sentence a model may or may not honour.
+#: A plan the room writes is a plan; a veto has to hold on every beat, and
+#: asking an author to say it again in conversation each time is how it stops
+#: being said.
+STYLE_GUIDE_FIELDS = ("tone", "avoid")
 STYLE_GUIDE_LIMIT = 2000
 
 # How far the sky is allowed to go, and how much of the world it may touch.

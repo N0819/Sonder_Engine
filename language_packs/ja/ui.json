@@ -2241,5 +2241,8 @@
   "{tool} failed": "{tool} が失敗しました",
   "{tool} refused": "{tool} は拒否されました",
   "The room could not be reached ({status})": "ルームに接続できませんでした（{status}）",
-  "Their manner and look follow the story's tone and what the Writers' Room has planned for the place they stand in.": "彼らの物腰と見た目は、物語のトーンと、ライターズルームがその場所について計画した内容に従います。"
+  "Their manner and look follow the story's tone and what the Writers' Room has planned for the place they stand in.": "彼らの物腰と見た目は、物語のトーンと、ライターズルームがその場所について計画した内容に従います。",
+  "Avoid": "避けるもの",
+  "e.g. gore, jump scares, modern brand names": "例：流血、驚かし演出、現代のブランド名",
+  "What this world does not contain, in your words. It is written into every backdrop image's prompt as an explicit instruction and hashed into that picture's key, so changing it redraws the rooms it touched. It also rides the Director's payload for anything the engine invents. It is deliberately kept out of the ambience search: adding these words to a query would ask for the thing they forbid. It is a standing veto, not a plan, which is why it stays a field rather than something you say to the Writers' Room once.": "この世界に存在しないものを、あなたの言葉で。すべての背景画像のプロンプトに明示的な指示として書き込まれ、その画像のキーにも含まれるため、変更すると該当する部屋が描き直されます。エンジンが創作するものについては、ディレクターのペイロードにも同行します。環境音の検索からは意図的に除外しています。これらの語を検索に加えると、禁じたものをかえって求めることになるからです。これは計画ではなく恒常的な禁止事項であり、だからこそライターズルームに一度伝える形ではなく、設定項目のままにしてあります。"
 }

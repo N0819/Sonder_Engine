@@ -44,11 +44,12 @@ $("#b-attire").onclick = async () => {
 
 // Genre & style: the dials that GATE engine behaviour, plus the narrator's
 // register. The free-text standing instructions that used to live here --
-// genre, director notes, mapping notes, avoid -- were removed 2026-09-04:
+// genre, director notes and mapping notes -- were removed 2026-09-04:
 // standing intent is the Writers' Room's, said in words to something that can
 // read the story back and argue, and mapping notes outlived their agent. What
-// is left is the closed vocabularies and the two clocks, which no conversation
-// can stand in for because deterministic code reads them.
+// is left is the closed vocabularies, the two clocks, the narrator's register
+// and the content veto -- none of which a conversation can stand in for,
+// because deterministic code reads every one of them.
 $("#b-style").onclick = async () => {
   if (!S.chatId) return;
   const chatId = S.chatId;
@@ -99,6 +100,15 @@ $("#b-style").onclick = async () => {
 
   const tone = el("input", { style: "flex:1", value: g.tone || "",
     placeholder: "e.g. cold, clinical, understated" });
+
+  // The one VETO the engine enforces outside a sentence a model may or may not
+  // honour: it is written into the backdrop prompt as an explicit "avoid"
+  // clause and hashed into the picture's key. Kept here rather than handed to
+  // the Writers' Room, because a veto has to hold on every beat and nothing
+  // routes a conversation into an image prompt.
+  const avoid = el("textarea", { rows: "2", style: "width:100%",
+    placeholder: "e.g. gore, jump scares, modern brand names" },
+    g.avoid || "");
 
   const survivalState = await api("GET", `/api/chats/${chatId}/survival`);
   if (S.chatId !== chatId) return;
@@ -180,6 +190,17 @@ $("#b-style").onclick = async () => {
       + "in every setting and is never rewritten. Changing this mid-story is "
       + "allowed and is recorded, because it changes what the earlier turns "
       + "meant."),
+    el("div", { style: "margin-top:10px" },
+      el("div", { class: "small" }, "Avoid"), avoid),
+    el("div", { class: "small dim", style: "margin-top:4px" },
+      "What this world does not contain, in your words. It is written into "
+      + "every backdrop image's prompt as an explicit instruction and hashed "
+      + "into that picture's key, so changing it redraws the rooms it touched. "
+      + "It also rides the Director's payload for anything the engine invents. "
+      + "It is deliberately kept out of the ambience search: adding these words "
+      + "to a query would ask for the thing they forbid. It is a standing veto, "
+      + "not a plan, which is why it stays a field rather than something you "
+      + "say to the Writers' Room once."),
     el("div", { style: "margin-top:12px;border-top:1px solid var(--bd);padding-top:10px" },
       el("label", { class: "tgl" }, survivalBox, " track bodily condition"),
       el("div", { class: "small dim", style: "margin-top:4px" },
@@ -195,7 +216,8 @@ $("#b-style").onclick = async () => {
                     show_npcs: npcBox.checked });
         const out = await api("PUT", `/api/chats/${chatId}/style_guide`, {
           style_guide: {
-            tone: tone.value, weather_severity: severity.value,
+            tone: tone.value, avoid: avoid.value,
+            weather_severity: severity.value,
             // "" normalizes away to an absent key, which is how the author
             // clears the dial. A PUT replaces the whole guide, so a field
             // omitted here is a field silently deleted -- the reason this

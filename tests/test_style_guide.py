@@ -6,9 +6,11 @@ instructions for the Director and the mapping agent. Four went on 2026-09-04.
 Standing intent belongs to the Writers' Room, which reads the story back and
 can be argued with, rather than to a paragraph every generative stage carries
 forever and nothing ever revisits; and `mapping_notes` outlived the agent it
-was named for. What is left is `tone`, the register the Director writes
-resolved events in, kept because deterministic code reads it: the backdrop
-cache key and the acoustic fingerprint are both computed from it.
+was named for. TWO STAY, and they are the two no conversation can reach:
+`tone`, the register the Director writes resolved events in and the only style
+term in the backdrop prompt, the backdrop key and the acoustic fingerprint;
+and `avoid`, a content veto the image prompt enforces as an explicit clause. A
+plan is a plan; a veto has to hold on every beat.
 
 Two properties the design still turns on:
 
@@ -33,9 +35,11 @@ from story.scene import STYLE_GUIDE_FIELDS, normalize_style_guide, style_guide
 # ---- Normalization ----
 
 def test_full_guide_round_trips():
-    guide = normalize_style_guide({"tone": "cold, clinical, understated"})
+    guide = normalize_style_guide({"tone": "cold, clinical, understated",
+                                   "avoid": "gore, jump scares"})
     assert set(guide) == set(STYLE_GUIDE_FIELDS)
     assert guide["tone"] == "cold, clinical, understated"
+    assert guide["avoid"] == "gore, jump scares"
 
 
 def test_the_retired_fields_are_dropped_on_read():
@@ -49,11 +53,12 @@ def test_the_retired_fields_are_dropped_on_read():
         "mapping_notes": "Rooms are wrong in one small way each.",
         "avoid": "jump scares, gore",
     })
-    assert guide == {"tone": "cold, clinical, understated"}
+    assert guide == {"tone": "cold, clinical, understated",
+                     "avoid": "jump scares, gore"}
 
 
 def test_blank_and_whitespace_fields_are_dropped():
-    assert normalize_style_guide({"tone": "   "}) == {}
+    assert normalize_style_guide({"tone": "   ", "avoid": "\n\t "}) == {}
 
 
 def test_tone_is_collapsed_to_one_line():
@@ -114,13 +119,14 @@ def test_endpoints_round_trip(temp_db):
 
     out = app_module.style_guide_put(chat_id, {"style_guide": {
         "tone": "dust, and long odds", "avoid": "anachronisms"}})
-    assert out["style_guide"] == {"tone": "dust, and long odds"}
+    assert out["style_guide"] == {"tone": "dust, and long odds",
+                                  "avoid": "anachronisms"}
     assert app_module.style_guide_get(chat_id)["style_guide"]["tone"] == \
         "dust, and long odds"
 
     # Clearing restores self-determination.
     assert app_module.style_guide_put(
-        chat_id, {"style_guide": {"tone": ""}})["style_guide"] == {}
+        chat_id, {"style_guide": {"tone": "", "avoid": ""}})["style_guide"] == {}
 
 
 GUIDE = {"tone": "dust, and long odds"}
