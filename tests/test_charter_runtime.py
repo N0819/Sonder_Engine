@@ -344,6 +344,12 @@ def test_the_presence_aperture_excludes_the_register(temp_db):
             "watches_stood", "can_bring_up", "knows_here", "strangers_here",
             "blamed", "knows_it_is_blamed", "social_judgments",
             "commitments", "institutional", "marks",
+            # `own_state` (2026-09-03) widened it the way `marks` did, and
+            # for the same reason: how this body is faring is a fact about
+            # the body, not about its view of another, so it has no
+            # per-other slice to ride in. It reads only this body's own
+            # needs and feel stores (`charter_log.own_state_of`).
+            "own_state",
         }
     for presence in (row["presence"] for row in own):
         for row in presence.get("marks") or ():

@@ -100,8 +100,17 @@ def evidence_key(turn_id, source_id):
     return f"scene:{int(turn_id)}:{str(source_id)}"
 
 
-def evidence_phrase(evidence):
-    actor = " ".join(str(evidence.get("actor") or "someone").split())
+def evidence_phrase(evidence, label=None):
+    """The sentence a witness keeps.
+
+    ``label`` is how the witnesses render the actor -- what a stranger in the
+    room sees, never the name the engine keys the actor by. A Charter body
+    that has not been told a name holds "the slight woman said ..." exactly
+    as a full character's memory would; the canonical name travels only
+    where recognition earned it. Absent, the actor string itself is used,
+    which is right for a role or a description and wrong for a name.
+    """
+    actor = " ".join(str(label or evidence.get("actor") or "someone").split())
     if evidence.get("kind") == "speech":
         quote = " ".join(str(evidence.get("exact_quote") or "").split())
         return f"{actor} said {quote}"[:320]
@@ -114,13 +123,21 @@ def evidence_phrase(evidence):
     return f"{actor} {surface}"[:320]
 
 
-def evidence_claim(evidence, turn_id, at_hours, place):
-    """One firsthand claim, retaining only the public licensed structure."""
+def evidence_claim(evidence, turn_id, at_hours, place, label=None):
+    """One firsthand claim, retaining only the public licensed structure.
+
+    The actor is keyed under ``subject`` by the engine's canonical name, so
+    the same person met twice is one subject; every RENDERED field --
+    ``about``, ``claim_text`` and the licensed ``actor`` -- carries the
+    witnesses' label instead, because those three are copied straight into
+    a voiced payload and a name there is a name nobody said.
+    """
     source_id = str(evidence.get("source_id") or "")
     if not source_id:
         return None
     key = evidence_key(turn_id, source_id)
     actor = str(evidence.get("actor") or "")
+    shown = " ".join(str(label or actor).split())
     licensed = {
         field: copy.deepcopy(evidence[field])
         for field in (
@@ -128,10 +145,13 @@ def evidence_claim(evidence, turn_id, at_hours, place):
             "speech_acts", "status", "salience")
         if field in evidence
     }
+    if "actor" in licensed:
+        licensed["actor"] = shown
     return {
         "kind": "news", "body": key,
         "event_kind": f"figure_{evidence.get('kind') or 'conduct'}",
-        "about": actor, "claim_text": evidence_phrase(evidence),
+        "about": shown, "subject": actor,
+        "claim_text": evidence_phrase(evidence, shown),
         "place": str(place or ""), "happened_at": float(at_hours),
         # Scene turns may advance while the off-screen simulation clock does
         # not.  This tie-breaker keeps the latest encountered conduct at the
@@ -145,8 +165,17 @@ def evidence_claim(evidence, turn_id, at_hours, place):
     }
 
 
-def plan_public_evidence(charter, evidence_rows, scene, turn_id):
+def plan_public_evidence(charter, evidence_rows, scene, turn_id,
+                         labels=None):
     """READ-ONLY appraisal: what `apply_public_evidence` WOULD land.
+
+    ``labels`` maps an actor's canonical name to what a stranger sees of
+    them (``agents.common._unknown_actor_label``); it decides how the claim
+    READS, never whether it lands. ``unplaced`` in the result names actors
+    the scene could not place: reception is a spatial question, so an actor
+    with no room reaches nobody -- and a silent zero there is exactly how
+    this seam failed for forty turns of the Harrowmere playtest (the commit
+    domain handed it the prepared-commit envelope instead of the scene).
 
     Mutates nothing, so it may run against the shared cached registry
     (`charter_runtime.cached_registry`) -- which is the point: the commit
@@ -158,7 +187,7 @@ def plan_public_evidence(charter, evidence_rows, scene, turn_id):
     drift.
 
     Returns ``{"opportunities", "acquired", "receiving", "inserts",
-    "recipients"}`` where ``receiving`` is the first-reception order of
+    "recipients", "unplaced"}`` where ``receiving`` is the first-reception order of
     body keys (the mutating pass creates mind rows in that order -- a body
     that receives but acquires nothing still gets its empty mind row, and
     stored-byte identity depends on the creation order) and ``inserts`` is
@@ -187,9 +216,17 @@ def plan_public_evidence(charter, evidence_rows, scene, turn_id):
     # skip sees planned insertions exactly as it would see landed ones.
     planned = {}
     clock = float(charter.get("clock_hours") or 0.0)
+    labels = labels if isinstance(labels, dict) else {}
+    unplaced = []
     for evidence in list(evidence_rows or ())[:PUBLIC_EVIDENCE_CAP]:
         if not isinstance(evidence, dict):
             continue
+        actor = str(evidence.get("actor") or "")
+        if actor and not room_of(scene or {}, actor):
+            if actor not in unplaced:
+                unplaced.append(actor)
+            continue
+        shown = str(labels.get(actor) or actor)
         for body_key, body in sorted(bodies.items()):
             if body_key in bindings:
                 continue
@@ -216,7 +253,7 @@ def plan_public_evidence(charter, evidence_rows, scene, turn_id):
                 new = planned[str(body_key)] = set()
                 receiving.append(str(body_key))
             claim = evidence_claim(evidence, turn_id, clock,
-                                   body.get("place") or "")
+                                   body.get("place") or "", label=shown)
             if claim is None or claim["body"] in held or claim["body"] in new:
                 continue
             inserts.append((str(body_key), claim["body"], claim))
@@ -224,27 +261,30 @@ def plan_public_evidence(charter, evidence_rows, scene, turn_id):
             # The same reception also refreshes the body's coarse view of the
             # figure.  This is not a second mind for the player/character: it
             # is what this Charter person believes they saw at this place.
-            actor = str(evidence.get("actor") or "")
+            # Keyed by the canonical name so the person met twice is one
+            # subject; the surface carries what the body actually saw.
             if actor:
                 inserts.append((str(body_key), actor, figure_claim({
                     "key": actor, "place": str(body.get("place") or ""),
-                    "surface": {"label": actor},
+                    "surface": {"label": shown},
                 }, clock)))
                 new.add(actor)
             acquired += 1
     return {"opportunities": opportunities, "acquired": acquired,
             "receiving": receiving, "inserts": inserts,
-            "recipients": recipients}
+            "recipients": recipients, "unplaced": unplaced}
 
 
-def apply_public_evidence(charter, evidence_rows, scene, turn_id):
+def apply_public_evidence(charter, evidence_rows, scene, turn_id,
+                          labels=None):
     """Land each row only in the Charter bodies that received it.
 
     Returns ``(charter, metrics)``.  The input is normalized state owned by the
     caller; this function mutates that copy for the same reason Charter's other
     pure reducers do, then returns it explicitly.
     """
-    plan = plan_public_evidence(charter, evidence_rows, scene, turn_id)
+    plan = plan_public_evidence(charter, evidence_rows, scene, turn_id,
+                                labels=labels)
     opportunities, acquired = plan["opportunities"], plan["acquired"]
     recipients = plan["recipients"]
     minds = charter.setdefault("minds", {})

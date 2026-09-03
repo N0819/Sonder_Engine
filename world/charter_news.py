@@ -130,7 +130,45 @@ def _report_strength(report):
     return max(PERSONAL_FLOOR, 1.0 - 0.16 * retellings)
 
 
-def claim_from_report(report, at_hours):
+def charter_hours_of(seconds, anchor):
+    """A simulation-clock instant on one charter's own hour clock.
+
+    TWO CLOCKS, ONE FIELD. ``world_events.occurred_at`` counts simulation
+    SECONDS from the story's opening (negative before it); a charter's
+    ``clock_hours`` counts HOURS from the start of its own prehistory. A
+    carrier envelope crossing from the first into a mind kept on the second
+    used to land its ``occurred_at`` in ``happened_at`` unconverted, so every
+    piece of imported news was stamped hundreds of thousands of hours ago --
+    measured, Harrowmere playtest: ``hours_ago`` 1,728,720 on news of a
+    market that ran out twenty days earlier. ``anchor`` is the pair the
+    registry keeps per charter, ``{"clock_hours", "elapsed_seconds"}``: the
+    charter hour that corresponds to that many simulation seconds. Absent,
+    the number passes through as before.
+    """
+    if not isinstance(anchor, dict):
+        return float(seconds)
+    try:
+        clock = float(anchor.get("clock_hours"))
+        elapsed = float(anchor.get("elapsed_seconds"))
+    except (TypeError, ValueError):
+        return float(seconds)
+    return clock - (elapsed - float(seconds)) / 3600.0
+
+
+def sim_seconds_of(hours, anchor):
+    """The inverse of ``charter_hours_of``: a charter hour as simulation
+    seconds, for news projected back onto the physical carrier rail."""
+    if not isinstance(anchor, dict):
+        return float(hours)
+    try:
+        clock = float(anchor.get("clock_hours"))
+        elapsed = float(anchor.get("elapsed_seconds"))
+    except (TypeError, ValueError):
+        return float(hours)
+    return elapsed - (clock - float(hours)) * 3600.0
+
+
+def claim_from_report(report, at_hours, anchor=None):
     """Translate one legitimately acquired carrier envelope into news.
 
     The holder receives WHAT THE ENVELOPE SAYS, never the objective event.
@@ -138,6 +176,9 @@ def claim_from_report(report, at_hours):
     mind must be just as deceivable as a full character.  Provenance and the
     retelling count survive so promotion can hand the same epistemic past to
     the full cognition tier later.
+
+    ``anchor`` converts the envelope's ``occurred_at`` (simulation seconds)
+    onto the charter's hour clock -- see ``charter_hours_of``.
     """
     report = report if isinstance(report, dict) else {}
     key = report_key(report)
@@ -147,6 +188,11 @@ def claim_from_report(report, at_hours):
     told_by = str(report.get("told_by") or "").strip()
     firsthand = provenance in FIRSTHAND_PROVENANCE
     invented = provenance == "invented"
+    occurred = report.get("occurred_at")
+    if occurred is None or occurred == "":
+        happened_at = float(at_hours or 0.0)
+    else:
+        happened_at = charter_hours_of(float(occurred), anchor)
     return {
         "kind": "news",
         "body": key,
@@ -157,7 +203,7 @@ def claim_from_report(report, at_hours):
         "claim_text": " ".join(str(report.get("claim") or "").split())[:320],
         "place": str(report.get("acquired_location")
                      or report.get("current_location") or ""),
-        "happened_at": float(report.get("occurred_at") or at_hours or 0.0),
+        "happened_at": happened_at,
         "strength": _report_strength(report),
         "as_of_hours": float(at_hours or 0.0),
         "heard_from": None if firsthand or invented else (told_by or None),
@@ -168,8 +214,11 @@ def claim_from_report(report, at_hours):
     }
 
 
-def report_from_claim(claim, *, current_location=""):
-    """Project Charter news back onto the existing physical carrier rail."""
+def report_from_claim(claim, *, current_location="", anchor=None):
+    """Project Charter news back onto the existing physical carrier rail.
+
+    ``anchor`` puts ``happened_at`` (charter hours) back into the rail's
+    simulation seconds -- see ``charter_hours_of``."""
     claim = claim if isinstance(claim, dict) else {}
     if claim.get("kind") != "news" or not claim.get("body"):
         return None
@@ -190,7 +239,8 @@ def report_from_claim(claim, *, current_location=""):
         "source_event_id": str(claim.get("source_event_id") or ""),
         "claim": text,
         "kind": str(claim.get("event_kind") or "report"),
-        "occurred_at": float(claim.get("happened_at") or 0.0),
+        "occurred_at": sim_seconds_of(
+            float(claim.get("happened_at") or 0.0), anchor),
         "acquired_location": place,
         "current_location": place,
         "route": [place] if place else [],
