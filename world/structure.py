@@ -404,6 +404,17 @@ def planned_room_ids(cid):
     return set(_planned_specs(cid))
 
 
+def planned_topology(cid):
+    """``{room_uid: [adjacent room uids]}`` for every live planned registry
+    row -- the plan's edges by ID. `planned_context` renders the same edges
+    by NAME for a reader; a walk over the graph wants the ids."""
+    out = {}
+    for rid, (_name, spec) in _planned_specs(cid).items():
+        out[rid] = [str(edge.get("to")) for edge in spec.get("adjacent") or ()
+                    if isinstance(edge, dict) and edge.get("to")]
+    return out
+
+
 def planned_rooms_named_in(cid, text):
     """The planned rooms whose uid or name spelling sits inside ``text``,
     folded the way `planned_context` folds a query -- the rooms a scenario

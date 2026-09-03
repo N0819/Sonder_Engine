@@ -61,6 +61,16 @@ const ROOM_STORE = {
 // stored English line translates on render. tests/test_room_routes.py holds
 // this spelling and story/room_conversation.UNSEATED_LINE together.
 const ROOM_UNSEATED_LINE = "The Story Planner is not seated yet. Your note is kept for it; nothing has been planned.";
+// The seated Planner's own fixed lines (agents/story_planner.py), spelled
+// here for the same reason: a bounded-out reply, an empty status, the fill
+// job waiting on a grant, and a rewind under the room's work.
+// tests/test_story_planner.py holds these spellings and the module's together.
+const ROOM_PLANNER_LINES = [
+  "The room stopped at its budget for this reply; what it settled stands, and it can go on when asked.",
+  "The room has nothing in motion.",
+  "The room has open planning needs and no grant to answer them. Tell the Story Planner what it may prepare.",
+  "The story rewound under the room's work; nothing landed.",
+];
 
 // Class lists are composed from single words so the UI-catalog harvester,
 // which reads every JS string literal, does not publish CSS classes as
