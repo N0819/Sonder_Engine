@@ -361,9 +361,11 @@ _CHANNEL_GATES = {
     "destruction": lambda f: f["physical_beat"] and f["destructible_entity"],
     # Geography: every one of these changes by an act (moving, building,
     # sealing, sitting, rising), so the structural physical-beat fact is the
-    # gate. Residual: a room's light changing on a pure time-skip beat
-    # (dusk falls) is undecidable from state and is caught by the manifest
-    # half of the backstop.
+    # gate. A room's light changing on a pure time-skip beat (dusk falls)
+    # is undecidable from state for the CHANNEL, which ships under
+    # `rooms` on the physical-beat fact anyway; the prose author's light
+    # DUTY reads the interpret stage's sustained acts for it
+    # (`director._prose_gate_facts`, `sun_can_move`).
     "positions": lambda f: f["physical_beat"],
     "rooms": lambda f: f["physical_beat"],
     "remove_rooms": lambda f: f["physical_beat"],

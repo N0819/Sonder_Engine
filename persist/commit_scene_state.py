@@ -63,7 +63,8 @@ def _establish_time_of_day(est):
     return normalize_time_of_day(est.get("time"))
 
 
-def _advance_day_cycle(ctx, sc, clock, prev_clock, *, declared, opening):
+def _advance_day_cycle(ctx, sc, clock, prev_clock, *, declared, opening,
+                       advance=""):
     """Derive the hour and the phase of the day from the clock, and let the
     standing label follow them. Returns the clock to store (possibly the
     one it was handed, untouched).
@@ -80,6 +81,16 @@ def _advance_day_cycle(ctx, sc, clock, prev_clock, *, declared, opening):
     clock reading -- stands untouched, because the cycle cannot say it is
     wrong. See `world/day_cycle.py`.
 
+    A SKIP THAT NAMES WHERE IT LANDS LANDS THERE. ``advance`` is the beat's
+    passage phrase ("by dusk", "the following morning") from a `time` block
+    that carried a duration. The phrase is the Director's intent and the
+    duration its estimate, and when the two disagree -- "by dusk" with an
+    eleven-hour duration from dawn lands at 17:19, in the afternoon
+    (Harrowmere replay, 2026-09-03) -- the clock is re-anchored to the
+    START of the phase the phrase names (or to the reading it carries), and
+    the warning says which hour the duration had reached. The phrase is
+    still written nowhere: the phase word is what the label becomes.
+
     FAIL OPEN, TWICE. A story whose opening named no readable time has no
     anchor, gets no phase, and keeps every reader's behaviour as it was; and
     the day length is the author's dial with a Terran default, so a story
@@ -90,8 +101,8 @@ def _advance_day_cycle(ctx, sc, clock, prev_clock, *, declared, opening):
     """
     from story.scene import style_guide
     from world.day_cycle import (
-        anchor_from_hour, clock_anchor, hour_of_day, label_hour, label_phase,
-        phase_of_hour)
+        anchor_from_hour, clock_anchor, clock_reading_hour, hour_of_day,
+        label_hour, label_phase, phase_bounds_hours, phase_of_hour)
 
     cid = ctx.chat.id
     style = style_guide(cid)
@@ -128,6 +139,25 @@ def _advance_day_cycle(ctx, sc, clock, prev_clock, *, declared, opening):
                         hour_of_day(elapsed, anchor, length), length,
                         declared))
                 anchor = anchor_from_hour(hour, elapsed, length)
+    elif advance and anchor is not None:
+        reading = clock_reading_hour(advance)
+        named = label_phase(advance, length)
+        target = None
+        if reading is not None and reading < float(length):
+            target = reading
+        elif named:
+            target = phase_bounds_hours(named, length)[0] % float(length)
+        if target is not None:
+            reached = hour_of_day(elapsed, anchor, length)
+            derived = phase_of_hour(reached, length)
+            landed = named or phase_of_hour(target, length)
+            if landed != derived:
+                ctx.add_warning(
+                    "time of day landed: the beat's passage %r names %s, "
+                    "but its duration reached hour %.1f (%s) of a %g-hour "
+                    "day; the clock now stands at the start of %s" % (
+                        advance, landed, reached, derived, length, landed))
+                anchor = anchor_from_hour(target, elapsed, length)
     if anchor is None:
         return clock
     hour = hour_of_day(elapsed, anchor, length)
@@ -1171,9 +1201,12 @@ def prepare_scene_commit(ctx):
     # THE DAY MOVES WITH THE CLOCK. Everything above keeps the label the
     # Director last declared; this is where the clock says what phase of the
     # day that label now stands in, and moves it on when the hours have.
+    _time_block = diff.get("time")
     clock = _advance_day_cycle(
         ctx, sc, clock, prev_clock,
-        declared=_declared_time_of_day, opening=_opening_time_of_day)
+        declared=_declared_time_of_day, opening=_opening_time_of_day,
+        advance=(str(_time_block.get("display_advance") or "")
+                 if isinstance(_time_block, dict) else ""))
 
     # Weather. The Director's own change wins outright; otherwise the sky
     # drifts on the simulation clock, deterministically and idempotently, so a

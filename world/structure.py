@@ -12,6 +12,7 @@ import copy
 import hashlib
 import json
 import random
+import re
 
 from world.charter_model import integer as _integer
 from world.spatial import normalize_room_id
@@ -114,24 +115,79 @@ def composed_scene(skeleton, live_scene):
     return live
 
 
+def _axis_words(text):
+    return set(re.findall(r"[^\W\d_]+", str(text or "").casefold()))
+
+
+def _proper(name):
+    """A room name is a proper noun. A grammar name or an axis label a
+    planner wrote in lower case ("upland road") takes a capital at the front
+    of each word; a name with a capital anywhere keeps its author's spelling
+    ("Saint Orrin's Shrine", "McKay's Yard")."""
+    text = " ".join(str(name or "").split())
+    if not text or any(ch.isupper() for ch in text):
+        return text
+    return " ".join(part[:1].upper() + part[1:] for part in text.split(" "))
+
+
 def mint_frontier(structure, from_uid, axis, seed, existing=()):
-    """Deterministically turn one structure-side frontier label into a room."""
+    """Deterministically turn one structure-side frontier label into a room.
+
+    A FRONTIER STUB IS NAMED FOR THE DIRECTION IT LEAVES IN, never for a room
+    the plan already has. The grammar's rule is chosen by its affinity with
+    the axis (the words the axis shares with the rule's kind, names and
+    purposes), so the "upland road" axis draws on the road rule and not the
+    residential one; and a grammar name that is already a room -- the
+    planner wrote its planned rooms into the grammar's name pool -- is
+    RESERVED and never a stub's name. When every name in the rule is
+    reserved, the axis label is the name: it is what the planner said leaves
+    here. Measured on the Harrowmere replay (2026-09-03): the axis "upland
+    road" off the gate minted "bridge road" (`bridge_road_2`, purpose
+    "crossing") beside the real Bridge Road, and the Director, shown a stub
+    called "bridge road" north of the gate, minted `upland_road` beside it;
+    `slate_lane_2`, `market_square_2` and `_3` were the same class, and
+    those were every duplicate room of the run.
+    """
     structure = normalize_structure(structure)
     material = "|".join((structure["key"], str(from_uid), str(axis), str(seed)))
     digest = hashlib.sha256(material.encode("utf-8")).hexdigest()
     rng = random.Random(int(digest[:16], 16))
+    axis_label = str(axis).replace("_", " ")
     grammar = structure["grammar"] or [{
-        "kind": "place", "names": [str(axis).replace("_", " ").title()],
-        "purposes": [str(axis).replace("_", " ")]}]
-    rule = grammar[rng.randrange(len(grammar))]
-    names = rule["names"] or [str(axis).replace("_", " ").title()]
+        "kind": "place", "names": [axis_label], "purposes": [axis_label]}]
+    words = _axis_words(axis_label)
+
+    def affinity(rule):
+        pool = _axis_words(rule.get("kind"))
+        for text in list(rule.get("names") or ()) + list(rule.get("purposes") or ()):
+            pool |= _axis_words(text)
+        return len(words & pool)
+
+    best = max(affinity(rule) for rule in grammar)
+    rules = [rule for rule in grammar if affinity(rule) == best] if best \
+        else list(grammar)
+    rule = rules[rng.randrange(len(rules))]
+    taken = {str(x) for x in existing}
+    # A grammar name is the stub's only when the axis asked for it by a
+    # word of its own -- "north" draws "North Lane"; "upland road" draws
+    # "upland road" -- and never by the rule's kind word alone, or the "far
+    # road" axis would draw the road rule's "upland road" and be one more
+    # stub named for a place it is not. Otherwise the axis label is the
+    # name, and the Director names the room properly when it furnishes it.
+    kind_words = _axis_words(rule.get("kind"))
+    names = [name for name in (rule["names"] or ())
+             if normalize_room_id(name) not in taken
+             and (_axis_words(name) & words) - kind_words]
     purposes = rule["purposes"] or [rule["kind"]]
-    name = names[rng.randrange(len(names))]
+    name = _proper(names[rng.randrange(len(names))] if names else axis_label)
     base = normalize_room_id(name) or "planned_room"
     uid, suffix = base, 2
-    taken = {str(x) for x in existing}
     while uid in taken:
         uid, suffix = f"{base}_{suffix}", suffix + 1
+    if uid != base:
+        # A second segment of the same axis is the same name with an
+        # ordinal, so the Director never sees two rooms spelled alike.
+        name = f"{name} {suffix - 1}"
     return uid, {
         "name": name, "purpose": purposes[rng.randrange(len(purposes))],
         "structure": structure["key"], "access": "",
@@ -468,7 +524,21 @@ def prepare_frontier_expansion(cid, scene):
     structures = normalize_structures(
         wget_for_frame(cid, STRUCTURES_KEY, None, {}) or {})["items"]
     mutations = []
-    existing = set(by_uid)
+    # A planned room reserves its uid, its name and every alias: a stub may
+    # not be minted under any spelling the plan already answers to, and an
+    # axis written in one of those spellings is an edge to that room.
+    by_name = {}
+    for row_uid, row in by_uid.items():
+        by_name.setdefault(row_uid, row_uid)
+        by_name.setdefault(normalize_room_id(str(row["name"] or "")), row_uid)
+        try:
+            aliases = json.loads(row["aliases"] or "[]")
+        except (TypeError, ValueError):
+            aliases = []
+        for alias in aliases or ():
+            by_name.setdefault(normalize_room_id(str(alias or "")), row_uid)
+    by_name.pop("", None)
+    existing = set(by_uid) | set(by_name)
     rooms = scene.setdefault("rooms", {})
     for uid in sorted(occupied):
         if uid not in specs:
@@ -480,6 +550,21 @@ def prepare_frontier_expansion(cid, scene):
         frontiers = [str(x) for x in spec.get("frontier") or () if str(x)]
         retained = []
         for axis in frontiers:
+            # An axis that names a room the plan already has is not a stub
+            # to mint but an edge to draw: "the lane continues to Market
+            # Square" reaches the square, never a second one.
+            target = by_name.get(
+                normalize_room_id(str(axis).replace("_", " ")))
+            if target and target != uid:
+                edge = {"to": target, "barrier": "open_door", "axis": axis}
+                spec.setdefault("adjacent", []).append(edge)
+                rooms.setdefault(uid, {"name": str(by_uid[uid]["name"] or uid),
+                                       "adjacent": []})
+                rooms[uid].setdefault("adjacent", []).append(dict(edge))
+                if isinstance(rooms.get(target), dict):
+                    rooms[target].setdefault("adjacent", []).append(
+                        {"to": uid, "barrier": "open_door"})
+                continue
             if counts.get(structure_key, 0) >= normalize_structure(
                     structure)["max_planned"]:
                 retained.append(axis)

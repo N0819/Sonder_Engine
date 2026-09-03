@@ -125,6 +125,25 @@ by that op. upkeep_shock may include an observable surface. Never write minds,
 memories, relationships, judgments, politics, decisions, promises, or outcomes.
 The simulator will decide consequences. Prefer 2-8 consequential interventions."""
 
+#: What one resident may cost the historian, stated to the model as a budget
+#: per entry and to the engine as tokens per resident. Measured 2026-09-03
+#: (Harrowmere replay, 100 residents): at 90 tokens a resident the call was
+#: cut off 22,181 characters in with the JSON unterminated -- cited event ids
+#: are token-dense, under two characters a token -- so the town opened with
+#: no history brief for the second run running. A summary of 40 words, three
+#: citations and two turning points is about 200 tokens; the allowance is
+#: that with a margin, and the prompt states the same numbers so the model
+#: writes to the budget the engine reserved.
+HISTORIAN_SUMMARY_WORDS = 40
+HISTORIAN_CITATIONS_PER_ENTRY = 3
+HISTORIAN_TURNING_POINTS = 2
+
+#: When the historian outruns its budget anyway, the call is retried with
+#: half the residents, this many times, before the town is allowed to open
+#: without its brief. A ceiling that does not hold is a number, not a
+#: ceiling.
+HISTORIAN_OVERRUN_RETRIES = 2
+
 _HISTORIAN_SYSTEM = """Summarize the actual simulated prehistory of these
 residents. Return JSON {overview:{summary,event_ids}, eras:[{summary,event_ids}],
 residents:{body_id:{summary,event_ids,turning_points:
@@ -136,7 +155,12 @@ watches_stood for a concise career summary, and mention route travel only when
 it is materially notable. It is not evidence for an invented incident or
 feeling. Every non-empty resident
 summary must cite event_ids too. Do not invent an event, private memory,
-relationship, quote, or outcome. Omit anything the chronicle cannot support."""
+relationship, quote, or outcome. Omit anything the chronicle cannot support.
+Budget, per entry: a resident summary is at most %d words and cites at most
+%d event_ids; a resident has at most %d turning_points; an overview, era or
+institution entry cites at most %d event_ids.""" % (
+    HISTORIAN_SUMMARY_WORDS, HISTORIAN_CITATIONS_PER_ENTRY,
+    HISTORIAN_TURNING_POINTS, HISTORIAN_CITATIONS_PER_ENTRY)
 
 
 #: Token budget for one generation call. A location plan grows with the rooms
@@ -156,7 +180,7 @@ PLAN_MAX_TOKENS = 16000
 #: Residents are trimmed to what the ceiling affords rather than the call
 #: being allowed to outrun it, and the trim is reported in the record.
 HISTORIAN_TOKENS_BASE = 3000
-HISTORIAN_TOKENS_PER_RESIDENT = 90
+HISTORIAN_TOKENS_PER_RESIDENT = 220
 
 
 def historian_budget(resident_count):
@@ -466,6 +490,31 @@ def _scale_populations(plan, target, seats_by_charter):
     return record
 
 
+def _post_berths(post, upkeeps, room_ids, requested_place, default_place):
+    """Where a population's bodies sleep, in the order they are dealt.
+
+    A BODY SLEEPS WHERE THE WORK IT SERVES IS. The plan's own place for the
+    population wins when it named one; otherwise a post that serves upkeeps
+    in several places is dealt round those places, one body to each in
+    turn, and only a post whose work is in one place berths everyone at
+    that place. A post's single `place` is the watch bill's, not the
+    sleeper's: the planner writes one generic post for every household of
+    a town ("household_member", serving `keep_house_*` for ten houses) and
+    gives it one address, and read as a berth that address held 48
+    sleepers behind one door while nine houses held three each
+    (Harrowmere replay, 2026-09-03) -- the berth split then hung five
+    annexes off the one house rather than fill the nine.
+    """
+    if requested_place in room_ids:
+        return [requested_place]
+    served = sorted({
+        str((upkeeps.get(key) or {}).get("place") or "")
+        for key in _strings(post.get("serves"))} & set(room_ids))
+    if len(served) > 1:
+        return served
+    return [str(post.get("place") or default_place)]
+
+
 def _spread_berths(rooms, charter_bodies, ceiling=BERTH_CEILING):
     """Split a berth over its ceiling into rooms beside it.
 
@@ -722,12 +771,13 @@ def close_plan(plan, *, history=None, featured_residents=None,
             # not make the generated institution incapable of staffing itself.
             for tag, level in required.items():
                 competence[tag] = max(competence.get(tag, 0), level)
-            berth = (requested_place if requested_place in room_ids
-                      else str(posts[post].get("place") or default_place))
+            berths = _post_berths(posts[post], upkeeps, room_ids,
+                                  requested_place, default_place)
             existing = sum(1 for body_id in bodies
                            if body_id.startswith(f"{post}:"))
             for index in range(count):
                 body_id = f"{post}:{existing + index + 1:04d}"
+                berth = berths[(existing + index) % len(berths)]
                 bodies[body_id] = {
                     "competence": competence,
                     "place": berth, "berth": berth, "available": True,
@@ -1087,28 +1137,59 @@ def narrate_actual_history(town, registry, events, *, model_call=None):
     candidates.sort(key=lambda row: (-row[0], -row[1], row[2]))
     budget, afforded = historian_budget(HISTORIAN_RESIDENT_CAP)
     selected = candidates[:afforded]
-    budget, _n = historian_budget(len(selected))
-    chronicle = event_chronicle(events)
-    chronicle.extend(resident_service_chronicle(
-        registry, [row[2] for row in selected]))
-    payload = {
-        "town": {"name": town.get("name"),
-                 "structure": town.get("structure")},
-        "population_context": population_context,
-        # One call remains bounded even for a thousand-person location. The
-        # overview speaks for the whole population; individual sketches go to
-        # the residents with the richest actual service/travel evidence.
-        "residents": {row[2]: row[3] for row in selected},
-        "chronicle": chronicle,
-    }
-    value = (model_call or (lambda p: _json_call(
-        _HISTORIAN_SYSTEM, p, max_tokens=budget, temperature=0.45)))(payload)
-    return ground_history_output(value, chronicle)
+    call = model_call or (lambda p, budget: _json_call(
+        _HISTORIAN_SYSTEM, p, max_tokens=budget, temperature=0.45))
+    retries = 0
+    while True:
+        budget, _n = historian_budget(len(selected))
+        chronicle = event_chronicle(events)
+        chronicle.extend(resident_service_chronicle(
+            registry, [row[2] for row in selected]))
+        payload = {
+            "town": {"name": town.get("name"),
+                     "structure": town.get("structure")},
+            "population_context": population_context,
+            # One call remains bounded even for a thousand-person location.
+            # The overview speaks for the whole population; individual
+            # sketches go to the residents with the richest actual
+            # service/travel evidence.
+            "residents": {row[2]: row[3] for row in selected},
+            "chronicle": chronicle,
+        }
+        try:
+            value = _call_historian(call, payload, budget)
+            break
+        except ValueError as exc:
+            # A plan cut off mid-object is the one failure asking for less
+            # fixes (`_json_call` names it); prose where JSON should be is
+            # not, and is raised as it was.
+            if ("unparseable" not in str(exc) or len(selected) <= 1
+                    or retries >= HISTORIAN_OVERRUN_RETRIES):
+                raise
+            retries += 1
+            selected = selected[:max(1, len(selected) // 2)]
+    out = ground_history_output(value, chronicle)
+    out["budget"] = {"max_tokens": budget, "residents": len(selected),
+                     "afforded": afforded, "overrun_retries": retries}
+    return out
+
+
+def _call_historian(call, payload, budget):
+    """Hand the budget to a caller that takes it; a test double that takes
+    only the payload is called the way it always was."""
+    try:
+        return call(payload, budget)
+    except TypeError as exc:
+        if "positional" not in str(exc):
+            raise
+        return call(payload)
 
 
 __all__ = [
     "BERTH_CEILING", "CREW_SIZE", "HEAD_SEATS", "POPULATION_TOLERANCE",
-    "HISTORIAN_RESIDENT_CAP", "historian_budget",
+    "HISTORIAN_RESIDENT_CAP", "HISTORIAN_OVERRUN_RETRIES",
+    "HISTORIAN_SUMMARY_WORDS", "HISTORIAN_CITATIONS_PER_ENTRY",
+    "HISTORIAN_TURNING_POINTS", "historian_budget",
     "close_plan", "ensure_required_rooms",
     "event_chronicle", "ground_history_output",
     "narrate_actual_history", "propose_history", "propose_town",
