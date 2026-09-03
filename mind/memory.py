@@ -104,15 +104,18 @@ from mind.memory_lore_entries import (  # noqa: F401
     duplicate_lorebook_tree_for_chat, ensure_chat_canon_book,
     declared_circles, knowledge_circles, knowledge_for_character,
     lore_embedding_health,
+    OVERLAY_DISPOSITIONS, OVERLAY_FIELDS, clear_lore_overlay, lore_overlay,
+    lore_overlays, lore_rows, merge_overlay, set_lore_overlay,
     search_lore, update_lore,
 )
 from mind.memory_snapshot import (  # noqa: F401
     _StoredEmbeddingMeta, apply_chat_memory_restore,
     apply_memory_summary_restore, dump_character_memories, dump_chat_memories,
-    dump_lorebook, dump_memory_summaries, dump_memory_vectors,
+    dump_lorebook, dump_lore_overlays, dump_memory_summaries, dump_memory_vectors,
     get_memory_vectors, import_character_memories,
     prepare_chat_memory_restore, prepare_memory_summary_restore,
     put_memory_vector, restore_chat_memories, restore_lorebook,
+    restore_lore_overlays,
     restore_memory_summaries, restore_memory_vectors, vector_address,
 )
 from mind.memory_relationships import (  # noqa: F401

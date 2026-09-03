@@ -1324,6 +1324,15 @@ def _plan_lived_location(cid, request, chat):
     # reviewable could only be read out of the raw stored law.
     owning_book = (request.get("owning_lorebook_id") or source_book
                    or chat["lorebook_id"])
+    if request.get("owning_lorebook_id") in (None, "") and owning_book is not None:
+        # A LIBRARY source book is not the story's to write into (2026-09-03:
+        # library books are attached by reference, and `_record_phonology`
+        # writes lore entries into the owning book). Fall back to the story's
+        # canon, minted if it has none.
+        owner = q("SELECT chat_id FROM lorebooks WHERE id=?", (owning_book,), one=True)
+        if not owner or int(owner["chat_id"] or -1) != int(cid):
+            from mind.memory import ensure_chat_canon_book
+            owning_book = ensure_chat_canon_book(cid)
     if request.get("owning_lorebook_id") not in (None, ""):
         try:
             owning_book = int(request["owning_lorebook_id"])

@@ -543,6 +543,12 @@ legitimately perceive, learn, remember or infer.
   surfaces in the right place.
 - **Canon written during play** — Facts established in the story are written
   back into the story's own book.
+- **Library books by reference** — Attaching a library book to a story no
+  longer copies it. The story reads the library, and what it changes about an
+  entry (an edit made from inside the story, a lock) is kept as the story's
+  own reading, shown with a `story edit` badge and revertible; an entry added
+  from inside a story lands in the story's canon book. Every existing copy is
+  converted once at start-up.
 - **Canon lock** — Lock an entry so nothing may rewrite it; entries settle into
   locked canon on their own once they are old enough. *(partial)*
 - **Books that follow a thing** — A book pinned to a ship or building reports

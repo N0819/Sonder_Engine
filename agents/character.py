@@ -3229,8 +3229,19 @@ def character_step(ctx, cid, nonce):
         resurfaced_subject=_resurfaced,
     )
     known_tags, excl_titles, circles = _char_known_tags(sh)
+    # The sheet says where this mind began; the story says where it has gone
+    # since (`mind/knowledge_circles`: an initiation, an enrolment, a
+    # package). Read as an overlay, never a rewrite of the card.
+    try:
+        from mind.knowledge_circles import effective_circles, identity_key
+        circles = effective_circles(
+            circles, chat.id, identity_key(sh),
+            getattr(ctx.turn, "frame_id", None))
+    except Exception as exc:
+        ctx.add_warning(f"story circles not read for {character_name(sh)}: {exc}")
     knowledge = knowledge_for_character(
-        _books(ctx), char_room, known_tags, excl_titles, circles=circles)
+        _books(ctx), char_room, known_tags, excl_titles, circles=circles,
+        chat_id=chat.id, frame_id=getattr(ctx.turn, "frame_id", None))
     # An OUTSIDER by declaration is fine; an outsider by omission is a sheet
     # nobody finished. The two are indistinguishable in the payload -- both
     # are simply a mind that receives the public world -- and the second one

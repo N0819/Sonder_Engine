@@ -61,6 +61,12 @@ NEED_REASONS = (
     # The town could not berth a newcomer: every house is at the berth
     # ceiling, so a dwelling is owed (`charter_enrol.enrol_person`).
     "berth_ceiling",
+    # The Director asserted a SETTING fact with no physical seat -- how a
+    # thing works, what a people hold true -- in `state_diff.world_facts`.
+    # The Director owns causality, not the setting bible: the fact is a
+    # need for the Writers' Room to file with provenance and a gate, and it
+    # is filed by nobody else (`persist/commit_mapping`).
+    "setting_fact",
 )
 
 NEED_STATUSES = ("open", "filled", "closed")

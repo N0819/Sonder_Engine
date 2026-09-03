@@ -6707,6 +6707,32 @@ for what follows. Residuals of this entry rather than a section of their own:
   reports -- planned figures rendered, `plan_ref` bound, renders settled --
   have not been read off a played beat with a published package behind it.
   The critic's scores are one model's opinion, kept out of every loop.
+- **Lore by reference, landed 2026-09-03 (fork C3), and what it left.**
+  Library books attach by reference and a story deviates by overlay
+  (`lore_overlays`, `mind/memory_lore_entries.set_lore_overlay`); the room
+  `layout` filing and the Director's fallback fact writer are retired
+  (`persist/commit_mapping`); circles are story state
+  (`mind/knowledge_circles.py`); the compiler renders a rulebook slice from
+  typed data (`agents/mapping.rulebook_rows`). The migration, measured on a
+  scratch copy of the owner's database: 143 copies in 0.39s -- 44 converted
+  (1,537 identical entries dropped, 2 overlaid, 93 in-story additions moved
+  to canon), 99 kept as the story's own book (their origin missing, another
+  story's book, or the copy bound as canon), 40 attachments now by reference,
+  entries 2,754 -> 1,215, a second run a no-op. Open from this half: the FTS
+  keyword term scores the LIBRARY text, so an overlay that rewrote an entry
+  ranks by meaning alone on that term; `lore_entries.canon_locked` on a
+  library row is the library's lock and a story's lock lives on its overlay,
+  while the twenty-beat auto-lock still covers only the canon book; existing
+  `layout` entries stay readable and age out unrefreshed (nothing prunes
+  them); no caller yet writes `join_circle`/`leave_circle` -- a Director
+  `state_diff` channel for an initiation, or a package operation, is the
+  writer to build, and `charter_enrol` could grant an institution's circle
+  on enrolment; `file_lore`'s `_target_book` in `story/plot_packages.py`
+  still resolves a book id and does not offer an overlay as a target (the
+  seam is `set_lore_overlay(cid, entry_id, disposition="room_supersession")`);
+  `setting_fact` needs are filed and nothing answers them until the Planner's
+  fill job learns the kind; the rulebook renders four sources and no
+  institution's upkeep or occupation tables.
 - **Phase C's operation set landed 2026-09-04** (`story/plot_packages.py`,
   `world/charter_surgery.py`, `world/region_events.py`): the five local-drama
   kinds (arrival, errand, incident, summons, scheduled consequence), the six
@@ -7471,8 +7497,10 @@ cap, mirroring `commit_obligations`; inject the recent N into every co-present
 character payload alongside `world_knowledge`, with a prompt rule: *settled
 on-page facts may be disputed, never forgotten or contradicted.*
 
-Note the existing `world_facts` path feeds lore, not character payloads — this is
-a separate, always-included ledger.
+Note the `world_facts` path feeds neither lore nor character payloads since
+2026-09-03: a Director world fact is a `setting_fact` planning need for the
+Writers' Room (`persist/commit_mapping._setting_fact_needs`). This ledger
+would still be separate.
 
 **Test.** Establish a fact at turn N; assert it appears in a later turn's
 character payload and that the prompt carries the no-contradict rule.

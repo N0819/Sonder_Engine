@@ -116,6 +116,8 @@ from mind.memory import (
     restore_memory_summaries,
     chat_lorebook_ids, delete_turn_memories,
     restore_lorebook_links,
+    clear_lore_overlay, ensure_chat_canon_book, lore_overlay, lore_rows,
+    restore_lore_overlays, set_lore_overlay,
     relationships_for_payload,
     dramatic_irony_feed, promise_ledger,
     dump_character_memories, import_character_memories,
@@ -1055,6 +1057,11 @@ def _remap_cp_blob(blob, turn_idmap, bookmap, fallback_canon,
         old_id = lore.get("lorebook_id")
         lore["lorebook_id"] = bookmap.get(old_id) or fallback_canon
 
+    for overlay in blob.get("lore_overlays") or []:
+        # Portable by entry uid; only the era is this chat's.
+        if overlay.get("frame_id") is not None:
+            overlay["frame_id"] = frame_idmap.get(overlay.get("frame_id"))
+
     for book in blob.get("lorebooks") or []:
         old_id = book.get("lorebook_id")
         old_parent_id = book.get("parent_id")
@@ -1280,8 +1287,13 @@ def _stored_locations(value):
     return json.dumps(value, ensure_ascii=False)
 
 def _lore_entry_json(row) -> dict:
+    row = dict(row)
     return {
         "id": row["id"],
+        # A STORY'S reading of a library entry (`lore_rows` merged it): the
+        # editor marks it and offers the library's text back.
+        "overlay": bool(row.get("overlay_id")),
+        "overlay_disposition": row.get("overlay_disposition"),
         "entry_uid": row["entry_uid"],
         "lorebook_id": row["lorebook_id"],
         "keys": row["keys"],
@@ -2966,7 +2978,11 @@ def persona_del(pid: int):
 
 # ============================ LOREBOOKS ============================
 @app.get("/api/lorebooks/{lid}")
-def lore_get(lid: int):
+def lore_get(lid: int, chat_id: int | None = None, frame_id: int | None = None):
+    """A book and its entries. With ``chat_id``, a LIBRARY book's entries are
+    returned as that story reads them -- the story's overlays merged, each
+    marked -- so the editor opened from inside a story edits the story's
+    reading and not the shared library."""
     book = q("SELECT * FROM lorebooks WHERE id=?", (lid,), one=True)
     if not book:
         raise HTTPException(404, "Lorebook not found")
@@ -2975,12 +2991,12 @@ def lore_get(lid: int):
         "SELECT COUNT(*) c FROM lore_entries WHERE lorebook_id=?",
         (lid,), one=True
     )["c"]
+    story = chat_id if (chat_id is not None and book["chat_id"] is None) else None
+    book_dict["library"] = book["chat_id"] is None
+    book_dict["read_as_story"] = story
     entries = [
         _lore_entry_json(r)
-        for r in q(
-            "SELECT * FROM lore_entries WHERE lorebook_id=? ORDER BY id",
-            (lid,),
-        )
+        for r in lore_rows([lid], chat_id=story, frame_id=frame_id, order="id")
     ]
     return {"book": book_dict, "entries": entries}
     
@@ -3129,7 +3145,7 @@ def lore_generate(lid: int, body: dict = Body(default={})):
 
 @app.post("/api/lorebooks/{lid}/entries")
 def lore_entry_create(lid: int, body: dict = Body(...)):
-    _require_lorebook(lid)
+    book = _require_lorebook(lid)
 
     content = str(body.get("content") or "").strip()
     if not content:
@@ -3138,6 +3154,24 @@ def lore_entry_create(lid: int, body: dict = Body(...)):
     category = body.get("category") or "other"
     if category not in LORE_CATEGORIES:
         category = "other"
+
+    # AN ADDITION MADE FROM INSIDE A STORY TO A LIBRARY BOOK is the story's
+    # own fact, not the library's: it lands in the story's canon book, with
+    # the book it was meant for named on `source_notes`. An overlay cannot
+    # hold it -- there is no library entry underneath to deviate from -- and
+    # writing it into the library would publish one story's fact to every
+    # other story that reads the book.
+    redirected_from = None
+    story = body.get("chat_id")
+    if story is not None and book["chat_id"] is None:
+        if not q("SELECT 1 FROM chats WHERE id=?", (int(story),), one=True):
+            raise HTTPException(404, "Chat not found")
+        redirected_from = lid
+        lid = ensure_chat_canon_book(int(story))
+        body = dict(body)
+        note = "added in the story to %s" % (book["name"] or "a library book")
+        body["source_notes"] = "; ".join(
+            x for x in (str(body.get("source_notes") or "").strip(), note) if x)
 
     eid = add_lore(
         lid,
@@ -3149,16 +3183,56 @@ def lore_entry_create(lid: int, body: dict = Body(...)):
         knowledge_tag=body.get("knowledge_tag"),
         knowledge_range=body.get("knowledge_range"),
         knowledge_locations=body.get("knowledge_locations"),
+        source_notes=str(body.get("source_notes") or ""),
     )
 
     return {
         "id": eid,
         "entry": _lore_entry_json(_require_lore_entry(eid)),
+        **({"redirected_to": lid, "redirected_from": redirected_from}
+           if redirected_from is not None else {}),
     }
+
+def _story_overlay_edit(eid, current, body):
+    """An edit made from inside a story to a LIBRARY entry writes the story's
+    overlay, not the library row. Returns the merged entry as the story now
+    reads it."""
+    story = int(body["chat_id"])
+    frame_id = body.get("frame_id")
+    fields = {}
+    for key in ("keys", "content", "category", "title", "knowledge_tag",
+                "knowledge_range", "knowledge_locations", "circles"):
+        if key in body:
+            value = body[key]
+            if key == "keys":
+                value = _lore_keys(value)
+            if key == "knowledge_locations":
+                value = _stored_locations(value)
+            if key == "category" and value not in LORE_CATEGORIES:
+                value = "other"
+            fields[key] = value
+    if "canon_locked" in body or "locked" in body:
+        fields["canon_locked"] = int(bool(body.get("canon_locked", body.get("locked"))))
+    if "content" in fields and not str(fields["content"] or "").strip():
+        raise HTTPException(400, "Lore entry content is required")
+    try:
+        set_lore_overlay(story, eid, frame_id=frame_id,
+                         source_notes=str(body.get("source_notes") or ""),
+                         **fields)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    merged = lore_rows([current["lorebook_id"]], chat_id=story, frame_id=frame_id)
+    row = next((r for r in merged if r["id"] == eid), None)
+    return {"ok": True, "entry": _lore_entry_json(row or current)}
+
 
 @app.put("/api/lore_entries/{eid}")
 def lore_entry_edit(eid: int, body: dict = Body(...)):
     current = _require_lore_entry(eid)
+    if body.get("chat_id") is not None:
+        book = _require_lorebook(current["lorebook_id"])
+        if book["chat_id"] is None:
+            return _story_overlay_edit(eid, current, body)
 
     keys = _lore_keys(body["keys"] if "keys" in body else current["keys"])
     content = str(body["content"] if "content" in body else current["content"])
@@ -3229,10 +3303,28 @@ def lore_entry_edit(eid: int, body: dict = Body(...)):
     }
 
 @app.delete("/api/lore_entries/{eid}")
-def lore_entry_delete(eid: int):
-    _require_lore_entry(eid)
+def lore_entry_delete(eid: int, chat_id: int | None = None):
+    current = _require_lore_entry(eid)
+    if chat_id is not None:
+        book = _require_lorebook(current["lorebook_id"])
+        if book["chat_id"] is None:
+            raise HTTPException(
+                400, "A library entry is deleted from the library, not from a story")
     delete_lore(eid)
     return {"ok": True}
+
+
+@app.delete("/api/lore_entries/{eid}/overlay")
+def lore_entry_overlay_clear(eid: int, chat_id: int, frame_id: int | None = None):
+    """Back to the library's reading of one entry, for one story and era."""
+    current = _require_lore_entry(eid)
+    if not q("SELECT 1 FROM chats WHERE id=?", (chat_id,), one=True):
+        raise HTTPException(404, "Chat not found")
+    cleared = clear_lore_overlay(chat_id, eid, frame_id)
+    merged = lore_rows([current["lorebook_id"]], chat_id=chat_id, frame_id=frame_id)
+    row = next((r for r in merged if r["id"] == eid), None)
+    return {"ok": True, "cleared": cleared,
+            "entry": _lore_entry_json(row or current)}
 
 # ============================ CHATS ============================
 @app.post("/api/chats")
@@ -3377,10 +3469,16 @@ def attach_lore(cid: int, body: dict = Body(...)):
     if not row: raise HTTPException(404, "Lorebook not found")
     ex = q("SELECT cl.lorebook_id FROM chat_lorebooks cl JOIN lorebooks lb ON lb.id=cl.lorebook_id WHERE cl.chat_id=? AND (cl.lorebook_id=? OR lb.origin_id=?)", (cid, src, src), one=True)
     if ex: return {"lorebook_id": ex["lorebook_id"], "already": True}
-    if row["chat_id"] == cid:
+    if row["chat_id"] is None or row["chat_id"] == cid:
+        # A LIBRARY book is attached BY REFERENCE (2026-09-03): the story
+        # reads the library row and records what it changes as overlays
+        # (`set_lore_overlay`). Nothing is copied. A book the story owns
+        # attaches directly.
         new = src
-        origin = row["origin_id"]
+        origin = None
     else:
+        # Another STORY's book has no shared origin to overlay; taking it
+        # is a fork, and the fork is a chat-owned copy as before.
         new = duplicate_lorebook_for_chat(src, cid)
         origin = src
     qi("INSERT INTO chat_lorebooks(chat_id,lorebook_id,origin_id,enabled) VALUES(?,?,?,1)", (cid, new, origin))
@@ -3454,6 +3552,11 @@ def bind_lore(cid: int, body: dict = Body(...)):
         return {"lorebook_id": None}
     row = q("SELECT * FROM lorebooks WHERE id=?", (src,), one=True)
     if not row: raise HTTPException(404, "Lorebook not found")
+    if row["chat_id"] is None:
+        # In-play writers file into canon; a library book bound as canon
+        # would take every story's filings. Attach it instead.
+        raise HTTPException(
+            400, "Canon is the story's own book; attach a library book instead")
     new = src if row["chat_id"] == cid else duplicate_lorebook_for_chat(src, cid)
     qi("UPDATE chats SET lorebook_id=? WHERE id=?", (new, cid))
     last = _latest_turn(cid)
@@ -5647,6 +5750,23 @@ def turn_branch(tid: int):
         # Pass 1: Create all books without parent references, clone entries safely
         for b in snap_books or []:
             old_id = b.get("lorebook_id")
+            # A LIBRARY REFERENCE (or a pre-2026-09 copy whose origin is a live
+            # library book) is re-attached, never cloned: the branch reads the
+            # same library and carries its own overlays below.
+            lib_id = None
+            if b.get("library"):
+                lib_id = old_id if q("SELECT 1 FROM lorebooks WHERE id=? AND chat_id IS NULL",
+                                     (old_id,), one=True) else None
+            elif b.get("origin_id") is not None and q(
+                    "SELECT 1 FROM lorebooks WHERE id=? AND chat_id IS NULL",
+                    (b["origin_id"],), one=True):
+                lib_id = b["origin_id"]
+            if lib_id is not None:
+                qtx("INSERT OR IGNORE INTO chat_lorebooks(chat_id,lorebook_id,origin_id,enabled) "
+                    "VALUES(?,?,NULL,?)", (ncid, lib_id, 1 if b.get("enabled", 1) else 0))
+                if old_id:
+                    bookmap[int(old_id)] = lib_id
+                continue
             _anchor = b.get("anchor_entity_id")
             nb = qtx(
                 "INSERT INTO lorebooks("
@@ -5696,6 +5816,8 @@ def turn_branch(tid: int):
 
         # Pass 2: Remap parent IDs to preserve hierarchy
         for b in snap_books or []:
+            if b.get("library"):
+                continue
             old_parent = b.get("parent_id")
             new_book = bookmap.get(b.get("lorebook_id"))
             new_parent = bookmap.get(old_parent)
@@ -5715,6 +5837,10 @@ def turn_branch(tid: int):
                 branch_links.append(link)
 
         restore_lorebook_links(ncid, bookmap, branch_links)
+        # The branch's own reading of the library: the source's overlays, on
+        # the branch's eras.
+        restore_lore_overlays(ncid, json.loads(json.dumps(blob.get("lore_overlays") or [])),
+                              frame_idmap=frame_idmap)
 
         # Restore world state (deep-copy so blob stays untouched for checkpoints)
         world = json.loads(json.dumps(blob.get("world") or {}))
