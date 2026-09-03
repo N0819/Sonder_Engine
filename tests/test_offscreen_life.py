@@ -70,13 +70,20 @@ class TestTheDefaultPreservesWhatTheEngineAlreadyDid:
             "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
             ("Test", "", time.time()))
         config = dialogue_config(chat_id)
-        assert config["offscreen_life"] == "stochastic"
+        # Since the 2026-09-04 collapse a chat that answered nothing is
+        # answering the TOGGLE's default, not the ladder's, so its rung is what
+        # "cognition allowed" means. `OFFSCREEN_LIFE_DEFAULT` is still the
+        # ladder's own default and still what a stored-rung read falls back to.
+        assert config["offscreen_life"] == "character_agent"
+        assert config["offscreen_cognition"] is True
         assert config["max_offscreen_actors"] == 3
 
     def test_the_default_is_the_rung_that_was_already_running(self):
         """Turning a setting on must not silently change a running story, and
         the ungated behaviour was exactly this rung: seeded ticks for dormant
-        actors at meaningful world boundaries."""
+        actors at meaningful world boundaries. It remains the fallback for an
+        unreadable stored rung; what a chat with NO stored answer gets is the
+        cognition toggle's default (see the collapse, 2026-09-04)."""
         from story.scene import OFFSCREEN_LIFE_DEFAULT
 
         assert OFFSCREEN_LIFE_DEFAULT == "stochastic"
@@ -91,7 +98,11 @@ class TestTheDefaultPreservesWhatTheEngineAlreadyDid:
         wset(chat_id, "dialogue_config",
              {"offscreen_life": "maximum", "max_offscreen_actors": "lots"})
         config = dialogue_config(chat_id)
+        # A chat that STORED a rung is read through the ladder, so an
+        # unreadable one falls to the ladder's own default -- never to the
+        # floor, which is the failure this test exists for.
         assert config["offscreen_life"] == "stochastic"
+        assert config["offscreen_cognition"] is True
         assert config["max_offscreen_actors"] == 3
 
     def test_the_cap_is_bounded_on_read_as_well_as_on_write(self, temp_db):
@@ -187,18 +198,24 @@ class TestFullRungDocumentationStaysHonest:
 
         js = (Path(__file__).resolve().parents[1]
               / "static/js/settings.js").read_text(encoding="utf-8")
-        block = js[js.index('"Off-screen life"'):js.index('"Background life"')]
+        block = js[js.index('"Simulation reach"'):js.index('"Background life"')]
         assert "Not built yet" not in block
         assert "opted in" in block
 
-    def test_the_ui_renders_the_engines_own_ladder(self):
-        """Listing the rungs in the menu would drift the first time one was
-        added."""
+    def test_the_ui_asks_one_question_and_maps_it_to_the_engines_rungs(self):
+        """The rung menu is gone (2026-09-04): a host answers whether minds may
+        think off screen, and the panel derives the ladder rung from that
+        through the same two constants the server uses, so the two cannot
+        drift into separate vocabularies."""
         from pathlib import Path
 
         js = (Path(__file__).resolve().parents[1]
               / "static/js/settings.js").read_text(encoding="utf-8")
-        assert "c.offscreen_life_levels" in js
+        # The levels still ride along -- the living-world clamp orders its
+        # `requires` rungs against them -- but nothing builds a menu from them.
+        assert "lvl.built === false" not in js
+        assert "offscreen_cognition: offCog.checked" in js
+        assert 'offCog.checked ? "character_agent" : "reactive"' in js
 
 
 def test_the_api_round_trips_the_setting(temp_db):

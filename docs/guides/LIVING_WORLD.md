@@ -392,6 +392,8 @@ have no `offscreen_life` gate anywhere in the path
 (`persist/commit_mechanics.py:132` says so explicitly). A story set to `inert`
 keeps delivering the arrivals, news and consequences it already scheduled.
 
+**The five rungs are no longer a host-facing setting.** Since 2026-09-04 the panel asks one question -- *allow off-screen cognition* -- and derives the rung from it: `reactive` when off, `character_agent` when on (`story/scene.py`, `COGNITION_OFF_RUNG`). The ladder survives as the MECHANISM, because the four approaches below are written against its rungs and `provision_story(offscreen_life=...)` is a published extension contract, so every table in this guide still reads true; what changed is that a host no longer picks a rung. The line falls where the code spends: `advance_epoch`, `advance_reactive_plans`, `apply_plan_ops` and `stochastic_ticks` hold no model seam, while `schedule_profile_ticks` and `schedule_agent_ticks` do.
+
 **`offscreen_life` no longer gates ANY Charter path.** It gated the catch-up
 tick until 2026-09-04, and that was the single most misleading thing about the
 ladder; the gate is now gone, so a charter in the registry advances at every

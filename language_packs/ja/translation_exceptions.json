@@ -14,7 +14,6 @@
   "${loreBookTypeIcon(book.book_type)} ${book.name}": "placeholders and punctuation only — no prose to translate",
   "${loreBookTypeIcon(lb.book_type)} ${lb.name}": "placeholders and punctuation only — no prose to translate",
   "${loreBookTypeIcon(state.selected.book_type)}": "placeholders and punctuation only — no prose to translate",
-  "${lvl.value} — ${lvl.description}": "placeholders and punctuation only — no prose to translate",
   "${mems.length}": "placeholders and punctuation only — no prose to translate",
   "${name} (${id})": "placeholders and punctuation only — no prose to translate",
   "${name}: ${exc}": "placeholders and punctuation only — no prose to translate",

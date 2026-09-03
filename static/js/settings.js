@@ -350,16 +350,15 @@ $("#b-dlg").onclick = async () => {
   // all and nothing on screen to say it might.
   const promoteAfter = el("input", { type: "number", min: "0", max: "99",
                                      value: c.promote_after_addressed ?? 0 });
-  // Off-screen life (docs/design/OFFSCREEN_LIFE_DESIGN.md). The rungs come from the
-  // server rather than being listed here, so the menu cannot drift from the
-  // ladder the engine actually implements.
-  const offLife = el("select", {}, (c.offscreen_life_levels || []).map(
-    lvl => el("option",
-      { value: lvl.value, ...(lvl.value === c.offscreen_life ? { selected: "" } : {}) },
-      lvl.built === false ? `${lvl.value} — not built yet`
-        : `${lvl.value} — ${lvl.description}`)));
-  // The rung names are the engine's own (schemas.BehaviorController), so the
-  // menu spells out what each one means rather than relying on the word.
+  // ONE QUESTION (scene.COGNITION_OFF_RUNG). The five-rung ladder is still the
+  // mechanism underneath -- the living-world approaches are written against
+  // its rungs and `provision_story` publishes it -- but a host answers whether
+  // a mind nobody is watching may think and act. `offLifeRung` is what the
+  // toggle means on the ladder, computed here so the clamp lines below keep
+  // reading the engine's own vocabulary rather than a second one.
+  const offCog = el("input", { type: "checkbox",
+                               ...(c.offscreen_cognition === false ? {} : { checked: "" }) });
+  const offLifeRung = () => offCog.checked ? "character_agent" : "reactive";
   const maxOffscreen = el("input", { type: "number", min: "0", max: "12",
                                      value: c.max_offscreen_actors ?? 3 });
   // Living world mechanisms (docs/design/DESIGN_LIVING_WORLD.md), same convention —
@@ -370,7 +369,7 @@ $("#b-dlg").onclick = async () => {
   // will actually run as. One ceiling, many mechanisms; a mechanism above
   // the ceiling is clamped visibly, never silently run or ignored.
   const ladder = (c.offscreen_life_levels || []).map(l => l.value);
-  const permits = d => ladder.indexOf(offLife.value) >= ladder.indexOf(d.requires);
+  const permits = d => ladder.indexOf(offLifeRung()) >= ladder.indexOf(d.requires);
   const lwSelects = {}, lwStatus = {};
   const refreshLw = () => (lw.approaches || []).forEach(a => {
     const value = lwSelects[a.approach].value;
@@ -381,7 +380,7 @@ $("#b-dlg").onclick = async () => {
     }
     lwStatus[a.approach].textContent = !d || eff === value ? "" :
       `runs as ${eff} — ` + [d.built ? "" : "that tier is unbuilt",
-        permits(d) ? "" : `off-screen life at ${offLife.value} caps it (needs ${d.requires})`]
+        permits(d) ? "" : "off-screen cognition is off, and this needs it"]
         .filter(Boolean).join("; ");
   });
   // Institutions (docs/design/DESIGN_INSTITUTIONS_AND_UPKEEP.md). There is now
@@ -458,7 +457,7 @@ $("#b-dlg").onclick = async () => {
       title: "Generate a lived-in location from story lore"
     });
   } }, "Generate a lived-in location from lore");
-  offLife.onchange = () => { refreshLw(); refreshCharter(); };
+  offCog.onchange = () => { refreshLw(); refreshCharter(); };
   const lwRows = (lw.approaches || []).map(a => {
     const sel = el("select", { onchange: refreshLw },
       [el("option", { value: "off", ...(a.value === "off" ? { selected: "" } : {}) }, "off")]
@@ -500,38 +499,28 @@ $("#b-dlg").onclick = async () => {
     el("div", { class: "card", style: "margin-top:10px" },
       el("div", { class: "section-title", style: "margin-top:0" }, "Simulation reach"),
       el("div", { class: "small dim" },
-        "What the world and cast may do while you are not watching. One "
-        + "ceiling, many mechanisms: ", el("b", {}, "Off-screen life"),
-        " says how much authority any off-screen work may have, and every "
-        + "mechanism beneath runs only up to it. A ceiling, not an instruction: "
-        + "nothing is obliged to act at any level, "
-        + "and a quiet turn still costs nothing. Each level adds to the one above it."),
+        "What the world and cast may do while you are not watching. The world "
+        + "moves either way: institutions keep themselves running, things "
+        + "already on a clock still land, and a stage a character declared "
+        + "while present still fires. One question is yours."),
       el("table", { class: "grid", style: "margin-top:6px" },
-        el("tr", {}, el("td", {}, "off-screen life"), el("td", {}, offLife)),
+        el("tr", {}, el("td", {}, "allow off-screen cognition"), el("td", {}, offCog)),
         el("tr", {}, el("td", {}, "max off-screen actors"), el("td", {}, maxOffscreen))),
       el("div", { class: "small dim", style: "margin-top:6px" },
-        el("div", {}, el("b", {}, "inert"), " — nothing happens off screen. A dormant "
-          + "character is exactly where you left them."),
-        el("div", {}, el("b", {}, "deterministic"), " — only things already on a "
-          + "clock: someone arriving when they said they would, food spoiling, a "
-          + "consequence landing on the day it was set for. No model calls. If you "
-          + "have defined an institution, this is also the rung at which it starts "
-          + "keeping itself running while you are elsewhere."),
-        el("div", {}, el("b", {}, "reactive"), " — a character may carry out bounded "
-          + "stages they explicitly declared while present. Time and event triggers "
-          + "fire only the effect already adjudicated; there is no new model call or plan."),
-        el("div", {}, el("b", {}, "stochastic"), " — at meaningful world changes, dormant "
-          + "characters get a sentence of what they have been up to, kept in a log. "
-          + "No plans, no decisions, nothing that moves anyone. This is what the "
-          + "engine has always done, which is why it is the default. Posted "
-          + "notices and proclamations also get their real written text at this "
-          + "level — one small call per notice, off the turn path."),
-        el("div", {}, el("b", {}, "character_agent"), " — characters you have "
-          + "explicitly opted in on their card actually advance their own plans "
-          + "while you are away, acting only on what has genuinely reached them, "
-          + "and the consequences are waiting when you arrive. A villain with a "
-          + "clock can beat you to something. Also requires the antagonist "
-          + "ladder's ceiling under Living world."),
+        el("div", {}, el("b", {}, "Off"), " — nothing thinks while you are away. "
+          + "A dormant character is exactly where you left them, doing nothing "
+          + "you were not told about. Everything deterministic still runs: an "
+          + "institution keeps itself going, someone arrives when they said "
+          + "they would, food spoils, a consequence lands on the day it was set "
+          + "for, and a bounded stage a character declared out loud still "
+          + "fires on its trigger. No model call is ever spent off the turn."),
+        el("div", {}, el("b", {}, "On"), " — dormant characters get a sentence of "
+          + "what they have been up to at meaningful world changes, kept in a "
+          + "log; posted notices get their real written text; and a character "
+          + "you have explicitly opted in on their card advances their own "
+          + "plans, so a villain with a clock can beat you to something. Each "
+          + "of those is a small call made off the turn path, and the last one "
+          + "also needs the antagonist ladder's ceiling under Living world."),
         el("div", { style: "margin-top:4px" },
           el("b", {}, "Max off-screen actors"), " — how many characters may be ticked "
           + "in one beat. 0 means none, whatever the level says."),
@@ -639,7 +628,7 @@ $("#b-dlg").onclick = async () => {
           autonomy: +auto.value, allow_npc_initiative: npcInit.checked, allow_npc_to_npc_dialogue: npcNpc.checked,
           stop_on_player_address: stopAddr.checked, stop_on_question_to_player: stopQ.checked, silence_ends_exchange: silence.checked,
           promote_after_addressed: +promoteAfter.value,
-          offscreen_life: offLife.value,
+          offscreen_cognition: offCog.checked,
           max_offscreen_actors: +maxOffscreen.value
         });
         await api("PUT", `/api/chats/${chatId}/background_config`, {

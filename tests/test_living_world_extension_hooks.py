@@ -97,7 +97,9 @@ class TestTheSliceReportsWhatWillActuallyRun:
         from web.story_view import story_view
 
         slice_ = story_view(_chat(temp_db))["living_world"]
-        assert slice_["offscreen_life"] == "stochastic"
+        # A chat that answered nothing rides the cognition toggle's default
+        # since 2026-09-04; the ceiling still rides along, which is the point.
+        assert slice_["offscreen_life"] == "character_agent"
         assert slice_["max_offscreen_actors"] == 3
 
     def test_no_charter_means_an_empty_list_not_a_crash(self, temp_db):
