@@ -312,6 +312,16 @@ def body_of_an_authored_mind(charter, body_key, body=None):
 EXPERIENCE_CAP = 4000
 
 
+def _optional_float(value):
+    """A float, or None for absent/unreadable. Booleans are not numbers."""
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def normalize_charter(stored, reservation=None):
     """A whole institution, from any shape, with its priority ordering closed.
 
@@ -421,6 +431,17 @@ def normalize_charter(stored, reservation=None):
         # Optional registry-side planned location graph. The live scene is
         # composed under it by charter_runtime and never replaces it.
         "structure": str(stored.get("structure") or ""),
+        # WHEN THIS INSTITUTION'S DAY BEGINS. A charter counts its own hours
+        # from zero; these two say what hour of the story's day that zero was
+        # and how long that day is, so `world/day_cycle.charter_phase` can
+        # name the phase of any window -- and so a presimulated month and an
+        # in-play catch-up read the same table. Set by `charter_runtime`
+        # from the story clock (never authored), and None for an institution
+        # the story has not yet told when it is, which is every charter
+        # written before the cycle existed and every fixture: no anchor, no
+        # phase, and the movers behave exactly as they always have.
+        "day_anchor_hours": _optional_float(stored.get("day_anchor_hours")),
+        "day_length_hours": _optional_float(stored.get("day_length_hours")),
         # Places a body may go FOR ITS OWN SAKE: rooms that belong to no post
         # and no upkeep and that people are in anyway. `posts` and `upkeeps`
         # between them say where the WORK is, and until this existed that was

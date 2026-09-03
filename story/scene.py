@@ -1,9 +1,10 @@
 # scene.py
 """Scene management with entity awareness, genre config, and world state."""
 
-import json, re, random
+import json, math, re, random
 from core.db import active_frame_id, q, qi, wget, wset
 from world.spatial import room_of, spatial_rel
+from world.day_cycle import DAY_LENGTH_HOURS_DEFAULT
 
 _UNSET = object()
 
@@ -2431,6 +2432,20 @@ STYLE_GUIDE_AUTO = {"auto", "self determine", "self-determine", "selfdetermine",
                     "engine", "unspecified", "any", "default"}
 
 
+def _finite_number(value):
+    """A float from a style-guide field, or None for anything that is not
+    one. Booleans are refused too: `True` is not an hour."""
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, str) and not value.strip():
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
+
+
 def normalize_style_guide(raw):
     """A style guide from arbitrary input. Every field is optional free text;
     anything unrecognized is dropped and the whole thing degrades to {} rather
@@ -2459,6 +2474,24 @@ def normalize_style_guide(raw):
     tense = str(raw.get("narration_tense") or "").strip().casefold()
     if tense in NARRATION_TENSES:
         out["narration_tense"] = tense
+    # THE DAY. Two numbers, both optional, both validated rather than
+    # trimmed because the clock does arithmetic on them (`world/day_cycle`):
+    # `day_length_hours` is how long this world's day is (absent means the
+    # Terran 24, and 24 is normalized AWAY so an untouched dial leaves no
+    # key), and `opening_hour` is where on that day the story opens when its
+    # own opening names no readable time -- a fallback, never an override of
+    # what the Director declared. A non-number, a non-positive length or an
+    # hour outside the day drops to unset, the same way an unreadable tense
+    # does: an opinion the author did not express is not invented for them.
+    length = _finite_number(raw.get("day_length_hours"))
+    if length is not None and length > 0.0 \
+            and length != DAY_LENGTH_HOURS_DEFAULT:
+        out["day_length_hours"] = length
+    opening = _finite_number(raw.get("opening_hour"))
+    if opening is not None and 0.0 <= opening < (
+            length if length is not None and length > 0.0
+            else DAY_LENGTH_HOURS_DEFAULT):
+        out["opening_hour"] = opening
     for key in STYLE_GUIDE_FIELDS:
         value = raw.get(key)
         if value is None:
