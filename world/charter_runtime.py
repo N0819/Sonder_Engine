@@ -21,6 +21,7 @@ import uuid
 
 from core import jobs
 from core.logging_utils import logger
+from world.day_cycle import hour_of_day
 from world.charter import (normalize_charter, run, trigger_view,
                           trigger_warnings)
 from world.charter_news import WITNESSABLE
@@ -926,7 +927,7 @@ def _presim_one(payload):
 
 def presim_registry(registry, *, horizon_hours=MAX_CATCHUP_HOURS,
                     active_tail_hours=DEFAULT_PRESIM_TAIL_HOURS,
-                    tail_places=(), seed=0, scene=None):
+                    tail_places=(), seed=0, scene=None, story_day=None):
     """Live a generated registry forward before the first story beat.
 
     ``scene`` is the room graph the prehistory is walked over -- the planted
@@ -938,6 +939,13 @@ def presim_registry(registry, *, horizon_hours=MAX_CATCHUP_HOURS,
     2026-09-02: `travelled` = 1 per body over a month), while the same
     registry's first in-play catch-up composed exactly this scene from the
     same skeleton -- so this is the missing argument, not a new model.
+
+    ``story_day`` is ``(hour_of_day_now, day_length_hours)`` -- where the
+    story's sun stands at the moment the prehistory ENDS, since that is the
+    moment it lands on the story clock (`land_presim` maps the horizon to
+    `now_seconds`). Each charter is anchored so its last presimulated hour
+    is that hour, and the whole month before it has nights and days. None
+    leaves every charter unanchored, which is the prehistory as it was.
 
     The long body establishes durable service, acquaintance, politics and
     stock movement cheaply. The recent tail enables practices at authored
@@ -962,6 +970,13 @@ def presim_registry(registry, *, horizon_hours=MAX_CATCHUP_HOURS,
     coarse = horizon - tail
     produced = []
     ordered = list(enumerate(sorted(registry["items"].items())))
+    if story_day is not None:
+        _hour_now, _length = float(story_day[0]), float(story_day[1])
+        for _index, (_key, _item) in ordered:
+            _start = float(_item["state"].get("clock_hours") or 0.0)
+            _item["state"]["day_anchor_hours"] = round(
+                (_hour_now - (_start + coarse + tail)) % _length, 4)
+            _item["state"]["day_length_hours"] = _length
     # ACROSS CHARTERS, IN PARALLEL. Each institution is a closed state advanced
     # from a seed derived from its own INDEX, so nothing crosses between them
     # here -- `cross_charter_gossip` is the barrier afterwards and is where
@@ -1598,13 +1613,19 @@ def _generate_lived_location(cid, request, chat, frame_id, digest, artifact):
                 continue
             tail_places.extend((body.get("place"), body.get("berth")))
     tail_places = list(dict.fromkeys(str(place) for place in tail_places if place))
+    _clock_now = wget_for_frame(
+        cid, "simulation_clock", frame_id, {"elapsed_seconds": 0.0}) or {}
+    _day = _story_day(cid, frame_id, clock=_clock_now)
     presimmed, events = presim_registry(
         generated, horizon_hours=horizon,
         active_tail_hours=float(request.get(
             "active_tail_hours", min(DEFAULT_PRESIM_TAIL_HOURS, horizon))),
         tail_places=tail_places,
         seed=int(request.get("seed") or 0),
-        scene=skeleton_scene(rooms))
+        scene=skeleton_scene(rooms),
+        story_day=((hour_of_day(float(_clock_now.get("elapsed_seconds") or 0.0),
+                                _day[0], _day[1]), _day[1])
+                   if _day is not None else None))
     historian_error = ""
     if wants_history:
         try:
@@ -1994,6 +2015,22 @@ def _scheduled_row(cid, frame_id, base_turn, epoch_id, charter_key, event,
     }
 
 
+def _story_day(cid, frame_id, clock=None):
+    """``(anchor_hour, day_length_hours)`` of the story's clock, or None when
+    the story has never said what time it is. The one reader of the clock
+    record this module has; `world/day_cycle.clock_anchor` owns the rule."""
+    from core.db import wget_for_frame as _wget_for_frame
+    from story.scene import style_guide
+    from world.day_cycle import clock_anchor
+    if clock is None:
+        clock = _wget_for_frame(
+            cid, "simulation_clock", frame_id, {"elapsed_seconds": 0.0}) or {}
+    anchor, length = clock_anchor(clock, style_guide(cid))
+    if anchor is None:
+        return None
+    return anchor, length
+
+
 def advance_snapshot(registry, *, elapsed_seconds, epoch_id, base_turn,
                      cid, frame_id, scene=None, cancelled=None):
     """Advance a copied registry and compose stable scheduled-event rows."""
@@ -2063,6 +2100,22 @@ def advance_snapshot(registry, *, elapsed_seconds, epoch_id, base_turn,
                 # whatever route Charter had it on is over.
                 state["bodies"][body_key].pop("walk", None)
         before_hours = float(state.get("clock_hours") or 0.0)
+        # THE STORY TELLS THE INSTITUTION WHEN IT IS. Charter hour
+        # `before_hours` is story elapsed `previous_elapsed` by construction
+        # (the two advance together below), so the story's hour of the day
+        # at that elapsed, less the charter's own count, is the hour its
+        # count began at. Re-derived every catch-up rather than once, so a
+        # re-anchored story clock (a declared time skip) reaches the town
+        # on its next window instead of never. A story with no anchor
+        # leaves the charter's own field alone, which is None for every
+        # charter that predates the cycle: no phase, no change.
+        _day = _story_day(cid, frame_id)
+        if _day is not None:
+            _anchor, _length = _day
+            state["day_anchor_hours"] = round(
+                (hour_of_day(previous_elapsed, _anchor, _length)
+                 - before_hours) % _length, 4)
+            state["day_length_hours"] = _length
         state, events = run(
             state, hours=advanced_hours,
             window=item["window_hours"],

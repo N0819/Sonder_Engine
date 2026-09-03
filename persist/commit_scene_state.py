@@ -63,6 +63,89 @@ def _establish_time_of_day(est):
     return normalize_time_of_day(est.get("time"))
 
 
+def _advance_day_cycle(ctx, sc, clock, prev_clock, *, declared, opening):
+    """Derive the hour and the phase of the day from the clock, and let the
+    standing label follow them. Returns the clock to store (possibly the
+    one it was handed, untouched).
+
+    THE LABEL IS THE DIRECTOR'S UNTIL THE CLOCK LEAVES THE PHASE IT NAMES.
+    An opening's "before dawn" stands verbatim while the hour is still in
+    pre-dawn; when the clock crosses into dawn the label becomes "dawn",
+    and from then on it is the phase table's word until a beat declares
+    another. A declared label that names a phase the derived hour is NOT in
+    re-anchors the clock to it (a Director saying "the next morning" has
+    moved the day, in words rather than in seconds) and says so in a
+    warning; one that names the phase the clock is already in changes
+    nothing; one this engine cannot read at all -- a stardate carrying no
+    clock reading -- stands untouched, because the cycle cannot say it is
+    wrong. See `world/day_cycle.py`.
+
+    FAIL OPEN, TWICE. A story whose opening named no readable time has no
+    anchor, gets no phase, and keeps every reader's behaviour as it was; and
+    the day length is the author's dial with a Terran default, so a story
+    that never touched it runs a 24-hour day. A story written before the
+    cycle existed anchors itself on its own standing label the first time a
+    beat commits under it, at that beat's elapsed -- the label was standing
+    at that hour by construction, so the bootstrap is exact.
+    """
+    from story.scene import style_guide
+    from world.day_cycle import (
+        anchor_from_hour, clock_anchor, hour_of_day, label_hour, label_phase,
+        phase_of_hour)
+
+    cid = ctx.chat.id
+    style = style_guide(cid)
+    record = clock if clock is not None else (prev_clock or {})
+    elapsed = clock_elapsed(record)
+    stored_anchor = record.get("anchor_hour") if isinstance(record, dict) \
+        else None
+    anchor, length = clock_anchor(record, style)
+    standing = normalize_time_of_day(sc.get("time_of_day"))
+    if opening:
+        # The opening anchors the day: its label if readable, else the
+        # author's `opening_hour`. `clock_anchor` already tried the
+        # greeting-seeded display label; the opening's own word leads.
+        hour = label_hour(opening, length)
+        if hour is not None:
+            anchor = anchor_from_hour(hour, elapsed, length)
+    elif stored_anchor is None and anchor is None and standing:
+        # A story that predates the cycle: its standing label was standing
+        # at this elapsed, so it anchors exactly.
+        hour = label_hour(standing, length)
+        if hour is not None:
+            anchor = anchor_from_hour(hour, elapsed, length)
+    elif declared and anchor is not None:
+        hour = label_hour(declared, length)
+        if hour is not None:
+            derived = phase_of_hour(hour_of_day(elapsed, anchor, length), length)
+            named = label_phase(declared, length)
+            if named != derived:
+                ctx.add_warning(
+                    "time of day re-anchored: the beat declared %r while the "
+                    "clock stood in %s (hour %.1f of a %g-hour day); the "
+                    "clock now reads %r" % (
+                        declared, derived,
+                        hour_of_day(elapsed, anchor, length), length,
+                        declared))
+                anchor = anchor_from_hour(hour, elapsed, length)
+    if anchor is None:
+        return clock
+    hour = hour_of_day(elapsed, anchor, length)
+    phase = phase_of_hour(hour, length)
+    sc["day_phase"] = phase
+    named = label_phase(standing, length) if standing else None
+    if not standing or (named is not None and named != phase):
+        sc["time_of_day"] = phase
+    if clock is None:
+        clock = copy.deepcopy(prev_clock or {})
+    clock["anchor_hour"] = round(anchor, 4)
+    clock["day_length_hours"] = length
+    clock["hour_of_day"] = round(hour, 2)
+    clock["phase"] = phase
+    clock["display"] = sc.get("time_of_day") or ""
+    return clock
+
+
 def _anchor_current_room(sc, entity_id):
     """The anchor entity's current exterior room, tolerating positions
     keyed by entity id, display name, or alias (the same read tolerance
@@ -1067,6 +1150,13 @@ def prepare_scene_commit(ctx):
         # `display` of "moments later". A beat that writes a clock at all
         # restates the scene's own answer on it.
         clock["display"] = sc.get("time_of_day") or ""
+
+    # THE DAY MOVES WITH THE CLOCK. Everything above keeps the label the
+    # Director last declared; this is where the clock says what phase of the
+    # day that label now stands in, and moves it on when the hours have.
+    clock = _advance_day_cycle(
+        ctx, sc, clock, prev_clock,
+        declared=_declared_time_of_day, opening=_opening_time_of_day)
 
     # Weather. The Director's own change wins outright; otherwise the sky
     # drifts on the simulation clock, deterministically and idempotently, so a

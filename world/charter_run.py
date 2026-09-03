@@ -598,10 +598,16 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
     rate = charter.get("errand_rate")
     rate = ERRAND_RATE if rate is None else float(rate)
     if scene and rate > 0.0:
+        # The window's phase of the day, read at its middle so a four-hour
+        # window straddling dusk is called by the hours most of it spent.
+        # None for a charter the story has not told when it is, and then the
+        # errands run as they always did.
+        from .day_cycle import charter_phase
         visits = errands(bodies, needs, charter["upkeeps"], plan["watch"],
                          frequented_places(charter), reach, seed=seed,
                          rate=rate, hours=hours,
-                         commons=commons_places(charter))
+                         commons=commons_places(charter),
+                         phase=charter_phase(charter, at + hours / 2.0))
         moves = dict(homecomings(bodies, plan["watch"], visits), **visits)
         if external:
             moves = {body: place for body, place in moves.items()

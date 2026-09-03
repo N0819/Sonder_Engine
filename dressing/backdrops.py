@@ -44,6 +44,7 @@ from core.logging_utils import logger
 from world.spatial import effective_light, light_at, normalize_light, room_of
 from core.paths import INSTALL_ROOT
 from world.weather import weather_for_room, weather_words
+from world.day_cycle import CLOCK_READING, PM_MARKER, clock_reading_hour
 
 # Where generated images live. Deliberately NOT the database: engine.db is
 # already ~400MB of text, and a few hundred backdrops would dwarf it while
@@ -73,7 +74,8 @@ _VISUAL_STATE_KEYS = ("overlays", "conditions", "ground")
 # it bucketed to "" and so survived. That writer is gone; the field now holds
 # one kind of statement. See `world.mechanics.normalize_time_of_day`.)
 _TIME_BUCKETS = (
-    ("night", ("night", "midnight", "small hours", "after dark", "nocturn")),
+    ("night", ("night", "midnight", "small hours", "after dark", "nocturn",
+               "pre-dawn", "predawn", "before dawn")),
     ("evening", ("evening", "dusk", "sunset", "twilight", "nightfall")),
     ("morning", ("morning", "dawn", "sunrise", "daybreak", "first light")),
     ("day", ("noon", "midday", "afternoon", "daylight", "daytime")),
@@ -92,12 +94,11 @@ _TIME_BUCKETS = (
 # ("0830") or an explicit unit ("1430 hours"), because otherwise every year in
 # every establish -- "Late night, 2026" -- becomes twenty past eight. And the
 # minute must be a real minute, which is what stops "1893" reading as 18:93.
-_CLOCK_READING = re.compile(
-    r"(?<![-+\d])(\d{1,2}):(\d{2})"
-    r"|(?<![-+\d])0(\d)(\d{2})(?!\d)"
-    r"|(?<![-+\d])(\d{2})(\d{2})(?=\s*(?:hours|hrs|h\b))"
-)
-_PM_MARKER = re.compile(r"^[^a-z0-9]{0,3}(?:\d{1,2}\s*)?p\.?\s?m\.?")
+# The regex itself now lives with the day cycle (`world/day_cycle.py`, which
+# anchors a clock on the same reading), imported rather than restated so a
+# guard added to one reader cannot go missing from the other.
+_CLOCK_READING = CLOCK_READING
+_PM_MARKER = PM_MARKER
 
 
 def _hour_bucket(hour):
@@ -118,16 +119,9 @@ def time_bucket(value):
     for bucket, words in _TIME_BUCKETS:
         if any(word in text for word in words):
             return bucket
-    for match in _CLOCK_READING.finditer(text):
-        # Every alternative captures exactly (hour, minute) -- the leading
-        # zero and the unit suffix are guards, not data.
-        found = [g for g in match.groups() if g is not None]
-        hour, minute = int(found[0]), int(found[1])
-        if hour > 23 or minute > 59:
-            continue
-        if hour < 12 and _PM_MARKER.match(text[match.end():match.end() + 12]):
-            hour += 12
-        return _hour_bucket(hour)
+    hour = clock_reading_hour(text)
+    if hour is not None:
+        return _hour_bucket(int(hour))
     return ""
 
 

@@ -263,8 +263,17 @@ def _nearest(reach, key, places, seed):
 
 
 def errands(bodies, needs, upkeeps, watch, places, reach, seed=0,
-            rate=ERRAND_RATE, hours=4.0, commons=()):
+            rate=ERRAND_RATE, hours=4.0, commons=(), phase=None):
     """Who goes where this window, off the watch bill. ``{body: place}``.
+
+    THE DAY DECIDES WHETHER ANYONE GOES OUT. ``phase`` is the window's phase
+    of the day (`world/day_cycle.charter_phase`, None for an institution the
+    story has not told when it is): in the resting phases nobody runs an
+    errand, so everyone off the watch walks home through `homecomings` and
+    the town sleeps in its berths; in the social phases a body goes out only
+    for its own sake -- to a commons, the tavern rather than the granary --
+    and a charter with no commons keeps its people home. No phase is the
+    day as it was before the cycle: errands at every hour.
 
     THE CIRCULATION THE RUMOUR CHANNEL WAS MISSING, and the measurement
     that demanded it: a famine month minted 244 witnessable news events and
@@ -300,6 +309,10 @@ def errands(bodies, needs, upkeeps, watch, places, reach, seed=0,
     chance = min(1.0, float(rate) * max(0.0, float(hours)))
     if chance <= 0.0:
         return out
+    from .day_cycle import RESTING_PHASES, SOCIAL_PHASES
+    if phase in RESTING_PHASES:
+        return out
+    social = phase in SOCIAL_PHASES
     for key in sorted(bodies or {}):
         body = bodies[key]
         if key in posted or not body.get("available") or en_route(body):
@@ -307,6 +320,11 @@ def errands(bodies, needs, upkeeps, watch, places, reach, seed=0,
         if _roll(key, seed) >= chance:
             continue
         target = None
+        if social:
+            target = _nearest(reach, key, commons or (), seed)
+            if target is not None:
+                out[key] = target
+            continue
         held = (needs or {}).get(key) or {}
         fed = [(float(n.get("level", 1.0)), str(n.get("fed_by")))
                for n in held.values() if n.get("fed_by")]
