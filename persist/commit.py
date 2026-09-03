@@ -615,6 +615,19 @@ def _commit_all_locked(ctx, nonce):
         ctx.add_warning(f"planning need scheduling failed: {exc}")
         results["planning_needs"] = {"error": str(exc)}
 
+    # -- Plot package store (story/plot_packages.py) ------------------------
+    # A package published before this turn is now one the turn has seen:
+    # `published -> active`. Bookkeeping on the package alone; what it
+    # placed in the world landed at publish, through the world's own seams.
+    try:
+        from story.plot_packages import activate_due_packages
+        results["plot_packages"] = activate_due_packages(
+            ctx.chat.id, ctx.turn.idx, frame_id=ctx.turn.frame_id)
+    except Exception as exc:
+        ctx.add_warning(f"plot package activation failed: {exc}")
+        results["plot_packages"] = {"error": str(exc)}
+    # -- end plot package store ----------------------------------------------
+
     # Autonomous background->cast promotion likewise runs after the primary
     # transaction: it mints a sheet with an LLM call and is additive and
     # forward-only (the new character becomes step-eligible next turn), so a
