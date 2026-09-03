@@ -295,3 +295,73 @@ def big_town(folk=1000):
             "bodies": bodies,
             "priority": ["water_drawn", "grain_standing", "flour_milled",
                          "bread_baked", "market_stocked", "roads_kept"]}
+
+
+def small_town():
+    """A dozen rooms a body can be watched walking across.
+
+    Two streets off a square, a market, a tavern, a smithy, two houses and
+    one private back room (a berth that is no post's and no commons' place).
+    Every charter place IS a room id, so `charter_move` takes its scene
+    branch rather than the no-scene branch every live charter world takes
+    (`docs/UNBUILT.md` §1.10a). Built for the traversal prototype: small
+    enough that a walk of four rooms is most of the map, so a body that
+    teleports and a body that walks are distinguishable in one window.
+    """
+    rooms = {}
+
+    def room(key, *edges):
+        rooms[key] = {"name": key.replace("_", " "),
+                      "adjacent": [{"to": to, "barrier": DOOR}
+                                   for to in edges]}
+
+    room("square", "north_0", "south_0", "market")
+    room("north_0", "square", "north_1")
+    room("north_1", "north_0", "north_2", "tavern")
+    room("north_2", "north_1", "house_a")
+    room("south_0", "square", "south_1", "smithy")
+    room("south_1", "south_0", "house_b")
+    room("market", "square")
+    room("tavern", "north_1")
+    room("smithy", "south_0")
+    room("house_a", "north_2")
+    room("house_b", "south_1", "house_b_back")
+    room("house_b_back", "house_b")
+    scene = {"rooms": rooms}
+
+    upkeeps = {
+        "forge_lit": {"place": "smithy", "drift_per_hour": 0.02,
+                      "service_per_hour": 0.08, "floor": 0.3,
+                      "requires": {"smithing": 1}},
+        "stall_stocked": {"place": "market", "drift_per_hour": 0.02,
+                          "service_per_hour": 0.08, "floor": 0.3,
+                          "requires": {"trade": 1}},
+        "ale_kept": {"place": "tavern", "drift_per_hour": 0.02,
+                     "service_per_hour": 0.08, "floor": 0.3,
+                     "requires": {"hosting": 1}},
+    }
+    posts = {
+        "smith_shift": {"place": "smithy", "serves": ["forge_lit"],
+                        "requires": {"smithing": 1}},
+        "stall_shift": {"place": "market", "serves": ["stall_stocked"],
+                        "requires": {"trade": 1}},
+        "tavern_shift": {"place": "tavern", "serves": ["ale_kept"],
+                         "requires": {"hosting": 1}},
+    }
+    bodies = {
+        "smith": {"competence": {"smithing": 2}, "place": "house_a",
+                  "berth": "house_a", "available": True},
+        "stallholder": {"competence": {"trade": 2}, "place": "house_b",
+                        "berth": "house_b", "available": True},
+        "tapster": {"competence": {"hosting": 2}, "place": "house_b_back",
+                    "berth": "house_b_back", "available": True},
+    }
+    for index in range(5):
+        berth = ("house_a", "house_b")[index % 2]
+        bodies[f"folk_{index}"] = {
+            "competence": {"labour": 1}, "place": berth, "berth": berth,
+            "available": True}
+    return {"key": "small_town", "scene": scene, "upkeeps": upkeeps,
+            "posts": posts, "bodies": bodies,
+            "commons": ["square", "tavern"],
+            "priority": ["forge_lit", "stall_stocked", "ale_kept"]}

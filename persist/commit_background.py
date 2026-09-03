@@ -2879,7 +2879,8 @@ def promote_background_character(cid, name, sheet=None, memory_seeds=None,
             "no real name yet.")
     from world.charter_runtime import promotion_bundle
     charter_bundle = promotion_bundle(
-        cid, name, record=presence_record, frame_id=frame_id)
+        cid, name, record=presence_record, frame_id=frame_id,
+        promoted_turn=promoted_turn)
 
     if sheet is None:
         draft = draft_promoted_character(cid, name)
@@ -2932,6 +2933,15 @@ def promote_background_character(cid, name, sheet=None, memory_seeds=None,
                 "body": charter_bundle["body"],
                 "stood": handoff.get("stood") or {},
             }} if charter_bundle else {}),
+            # The map a townsperson arrives with: the town's public rooms
+            # and the routes this body walked, seeded once and thereafter
+            # written only by `commit_place_graph.update_place_graph` --
+            # the same graph any character builds, with a head start the
+            # firewall permits because a life in a town is a channel to
+            # its streets (`charter_promote.inherited_place_graph`).
+            **({"place_graph": charter_bundle["place_graph"]}
+               if charter_bundle and (charter_bundle.get("place_graph")
+                                      or {}).get("nodes") else {}),
         }, ensure_ascii=False), _charter_color),
     )
 
