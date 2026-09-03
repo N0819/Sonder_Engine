@@ -89,7 +89,8 @@ def test_a_backdrop_appearing_does_not_reflow_the_story():
     surface, a border, a blur and a shadow; the moment it carries a width or a
     padding the two states can disagree again."""
     styles = _styles()
-    panel = styles[styles.index("body.has-backdrop .prose{"):]
+    panel = styles[styles.index("body.has-backdrop .prose,\n"
+                                "body.has-backdrop #room.floating{"):]
     panel = panel[:panel.index("}")]
     for sizing in ("padding", "max-width", "width", "margin",
                    "grid-template-columns"):
@@ -113,7 +114,8 @@ def test_the_blur_and_the_outline_are_present_and_gated():
     anything behind it changes -- so it drops under weather, the same
     unconditional gate the vitals plates get."""
     styles = _styles()
-    panel = styles[styles.index("body.has-backdrop .prose{"):]
+    panel = styles[styles.index("body.has-backdrop .prose,\n"
+                                "body.has-backdrop #room.floating{"):]
     panel = panel[:panel.index("}")]
     assert "backdrop-filter:blur(3px)" in panel
     assert "-webkit-backdrop-filter:blur(3px)" in panel
@@ -121,7 +123,8 @@ def test_the_blur_and_the_outline_are_present_and_gated():
     # glyph unprotected from three directions, and a light edge in the picture
     # above a letterform eats it.
     assert panel.count("--prose-outline") == 4
-    assert "body.has-weather-fx .prose{backdrop-filter:none!important" in styles
+    assert ("body.has-weather-fx .prose,\nbody.has-weather-fx #room.floating{"
+            "backdrop-filter:none!important") in styles
 
 
 def test_the_panel_is_actually_transparent_in_every_theme():

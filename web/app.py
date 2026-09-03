@@ -136,6 +136,7 @@ from dressing.ambience import (FREESOUND_LICENCES, ambience_error, ambience_erro
                       ONESHOT_VARIANTS, request_ambience, request_oneshot,
                       search_candidates,
                       set_ambience_pin)
+from web.room_routes import router as room_router
 from web.auth_routes import (
     GUEST_ALLOWED_API_PATHS,
     GUEST_COOKIE,
@@ -491,6 +492,7 @@ class _SelectiveGZipResponder:
 
 app.add_middleware(SelectiveGZipMiddleware, minimum_size=2048)
 app.include_router(auth_router)
+app.include_router(room_router)
 
 # The voice anchor rides EVERY narrator call, so it is bounded on both axes:
 # a handful of short passages is a calibration, and a dozen long ones is a
@@ -5778,6 +5780,15 @@ def turn_branch(tid: int):
                 "VALUES(?,?,?,?,?)",
                 (ncid, tpi["turn_idx"], tpi["persona_id"], tpi["input"], tpi["created"]),
             )
+
+        # ROOM CONVERSATION (story/room_conversation.py): a branch inherits
+        # what the player told the Writers' Room up to its point, in the
+        # branch's own eras; what was said after the branch turn stays with
+        # the source, because in this timeline it has not been said.
+        from story.room_conversation import (dump_room_messages,
+                                             restore_room_messages)
+        restore_room_messages(ncid, dump_room_messages(cid),
+                              frame_idmap=frame_idmap, up_to_turn=idx)
 
         # Copy checkpoints safely (using deep copies to prevent mutation issues)
         for cp in q("SELECT * FROM checkpoints WHERE chat_id=? AND turn_idx<=?", (cid, idx)):

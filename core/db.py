@@ -46,6 +46,11 @@ FRAME_SCOPED_WORLD_KEYS = {
     # Per-era like the scene the door was opened in: a branch that never
     # walked through it has nothing to plan.
     "planning_needs",
+    # ROOM CONVERSATION (story/room_conversation.py): the standing mandates
+    # the player granted the Writers' Room and the room's spoiler-safe
+    # status. Per-era like the plans they license: a branch that never
+    # granted the room a harbour has no harbour mandate.
+    "room_mandates", "room_status",
     # The PLAYER's carrier envelope (`carriers.PERSONA_STATE_KEY`). Per-era
     # for exactly the reason the three keys above it are, and it was the one
     # carrier home that was not: a cast member's reports ride the frame-scoped
@@ -799,6 +804,22 @@ CREATE TABLE IF NOT EXISTS checkpoints(
     UNIQUE(chat_id, turn_idx)
 );
 CREATE INDEX IF NOT EXISTS idx_checkpoints_chat ON checkpoints(chat_id, turn_idx);
+
+-- ROOM CONVERSATION (story/room_conversation.py): the player's thread with
+-- the Writers' Room, per story and era. Author-side, so it is carried by a
+-- branch (web/app.turn_branch) and an archive (persist/chat_archive) and is
+-- NOT in the turn checkpoint: a reroll unsays a beat, never a conversation.
+-- frame_id NULL is the present, as everywhere else.
+CREATE TABLE IF NOT EXISTS room_messages(
+    id INTEGER PRIMARY KEY,
+    chat_id INTEGER NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
+    frame_id INTEGER REFERENCES frames(id) ON DELETE SET NULL,
+    turn_idx INTEGER NOT NULL DEFAULT 0,
+    role TEXT NOT NULL,
+    text TEXT NOT NULL,
+    created REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_room_messages_thread ON room_messages(chat_id, frame_id, id);
 
 CREATE TABLE IF NOT EXISTS world_events(
     event_id TEXT NOT NULL,
