@@ -143,10 +143,17 @@ def co_present(bodies, speaking=False):
 
     ``speaking`` narrows to the bodies that can actually hold a conversation.
     """
+    from .charter_harm import is_gone
+
     rooms = {}
     for key in sorted(bodies or {}):
         body = bodies[key]
         if speaking and not body.get("available"):
+            continue
+        # A body that is dead or missing (`charter_harm.GONE`) is in no
+        # room: it witnesses nothing and is talked to by nobody, whatever
+        # `place` still says about where it fell.
+        if is_gone(body):
             continue
         place = str(body.get("place") or "")
         if place:

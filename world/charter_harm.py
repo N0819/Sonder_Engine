@@ -139,21 +139,28 @@ def _successor(charter, post_key, gone_key):
 
 
 def apply_harm(charter, victim, *, by, at_hours, outcome="hurt", place=None,
-               cause=""):
-    """One body harmed. Returns ``(charter, events)``; never mutates its input.
+               cause="", copy_state=True):
+    """One body harmed. Returns ``(charter, events)``; never mutates its
+    input unless ``copy_state`` is False.
 
     ``outcome`` is ``hurt``, ``dead`` or ``missing``. ``by`` names the actor
     as the victim's own institution can name it -- a body key of its own, or
     the qualified id of a body elsewhere (`charter_runtime.person_id`) --
     and it is the `actor` of the emitted event, which is what makes the
     grievance land on the right party.
+
+    ``copy_state=False`` mutates the charter handed in. It exists for the
+    registry round, which owns its states outright: a deep copy of a
+    thousand-body town on every kill measured as most of the round's cost
+    (big_town, 48 hours: +2.4s over the town alone, for two kills).
     """
     import copy
 
     outcome = normalize_condition(outcome)
     if outcome == "well":
         return charter, []
-    charter = copy.deepcopy(charter)
+    if copy_state:
+        charter = copy.deepcopy(charter)
     bodies = charter.setdefault("bodies", {})
     body = bodies.get(str(victim))
     if body is None or is_gone(body):

@@ -57,7 +57,8 @@ from .charter_space import (commons_places, frequented_places, reach_map,
 from .charter_feel import STRAIN_REST_TOLL, advance_feel, strain_of
 from .charter_mark import (BY_MARKS, DISGRACE_RELUCTANCE, advance_marks,
                            held_marks)
-from .charter_trigger import changes_from, fire_triggers
+from .charter_trigger import (changes_from, fire_institution_rules,
+                              fire_triggers)
 from . import charter_chatter
 from .charter_log import window_note
 from .charter_figure import sight_figures
@@ -71,7 +72,8 @@ from .charter_practice import (
 from .charter_needs import advance_needs, mood, pressure, unmet
 from .charter_talk import converse, report_to_superiors, report_up
 from .charter_commitment import advance_commitments
-from .charter_decide import advance_decisions, deliver_orders, execute_orders
+from .charter_decide import (advance_decisions, deliver_orders,
+                             execute_orders, mobilisation_calls)
 from .charter_economy import advance_economy
 from .charter_social import update_judgments_from_minds, update_ties
 from .charter_intervene import apply_due
@@ -398,6 +400,27 @@ def _record_coarse_experiences(experiences, bodies, watch, stood_before,
             }, fold=False)
 
 
+def _settle_commitments(commitments, state, kind, at_hours, note):
+    """Every open undertaking of ``kind`` settles into ``state``; empty kind
+    settles every open one. Returns ``(commitments, settled ids)``."""
+    from .charter_commitment import OPEN_STATES, normalize_commitments
+
+    out = normalize_commitments(commitments)
+    settled = []
+    for cid, record in out.items():
+        if record["state"] not in OPEN_STATES:
+            continue
+        if kind and record.get("kind") != kind:
+            continue
+        record["state"] = state
+        record["lifecycle"].append({
+            "kind": state, "at_hours": round(float(at_hours), 6),
+            "evidence_id": str(note or ""), "by": "", "to": "",
+            "note": str(note or "")[:240]})
+        settled.append(cid)
+    return normalize_commitments(out), settled
+
+
 def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
          simulate_bound=False, neighbors=None, routes=None):
     """Advance one planning window. Returns ``(charter, events)``.
@@ -418,6 +441,17 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
     events = []
     charter, intervention_events = apply_due(charter, at + hours)
     events.extend(intervention_events)
+    # WHAT THE ROUND BETWEEN INSTITUTIONS HANDED THIS ONE after its last
+    # window (`charter_predation`): a body of its own killed at a place,
+    # stock taken, a bargain defaulted. Treated as this window's happenings
+    # from here on -- witnessed by presence, appraised, deposited as changes
+    # for the rules, remembered by whoever stood there -- through exactly
+    # the code every other event takes, which is the whole reason they are
+    # carried rather than applied where they were minted.
+    carried = list(charter.get("carried_events") or ())
+    if carried:
+        events.extend(dict(row) for row in carried)
+        charter = dict(charter, carried_events=[])
     # A hurt body heals on its own clock (`charter_harm.HURT_RECOVERY_HOURS`)
     # and says so where it stands, the way a body needs put down says so
     # when it gets up. Before the plan, so a healed hand is postable this
@@ -813,6 +847,19 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
             body=source_body, to_post=order["to_post"]))
     events.extend(decision_events)
 
+    # AND THE WATCH IS CALLED OUT, from the same reports. A body with
+    # standing over the watch that holds a threat claim above the
+    # institution's credence schedules a `watch_shock` for the NEXT window
+    # (`charter_decide.mobilisation_calls`); `apply_due` raises the posts
+    # there and emits the call as an event where the office stands. One
+    # window of lag, uniformly with orders and triggers.
+    calls = mobilisation_calls(
+        charter, minds, plan["watch"], charter["posts"], owned_bodies,
+        at_hours=at + hours)
+    interventions = list(charter.get("interventions") or ())
+    if calls:
+        charter = dict(charter, interventions=interventions + calls)
+
     # Decisions happen after conversation because reports are their input.
     # Their public consequences still belong to this window: people standing
     # at the issuing/executing post witness them now, then may retell them in a
@@ -928,6 +975,33 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
     for key, entry in trigger_opened.items():
         practices.setdefault(key, entry)
     events.extend(trigger_events)
+    # AND WHAT THE INSTITUTION ITSELF DOES ABOUT A CHANGE: a physical
+    # intervention scheduled for the next window (a lair moved, a dial
+    # turned, the watch called), or an undertaking settled. Same frame,
+    # same firewall, same one-window lag (`fire_institution_rules`).
+    institution_ops, trigger_last, institution_fired = \
+        fire_institution_rules(
+            charter.get("pending_changes"), in_focus, at + hours,
+            seed=seed, rules=charter.get("triggers"),
+            last_fired=trigger_last)
+    trigger_fired = list(trigger_fired) + list(institution_fired)
+    if institution_ops:
+        scheduled = list(charter.get("interventions") or ())
+        commitments_now = charter.get("commitments")
+        for op in institution_ops:
+            if op["op"] == "intervene":
+                scheduled.append(op["intervention"])
+                continue
+            commitments_now, settled = _settle_commitments(
+                commitments_now, op["state"], op["kind"], at + hours,
+                op["rule"])
+            for cid in settled:
+                events.append(_event(
+                    "commitment_" + op["state"], at + hours, "",
+                    commitment_id=cid, by=charter["key"], actor=charter["key"],
+                    note=op["rule"]))
+        charter = dict(charter, interventions=scheduled,
+                       commitments=commitments_now)
     regard = dict(politics.get("regard") or {})
     # AND THEY DECIDE FROM WHAT HAS PASSED BETWEEN THEM. The INCOMING
     # `charter["experiences"]`, not the copy-on-write local built further
@@ -1022,6 +1096,18 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
     # this package keeps paying for. `TestReplay` recomputes the counter over
     # the full returned event list to catch it.
     blame_before = dict(politics.get("blame") or {})
+    # A WATCH CALLED OUT ON A CLAIM THAT PROVED FALSE lands on the caller,
+    # in the same counter a failed post lands in: the institution spent
+    # hands on nothing and knows whose word it spent them on. `harm_seen`
+    # is set by `charter_predation` when harm lands at the guarded place.
+    lapsed = [e for e in events if e.get("kind") == "mobilisation_lapsed"
+              and e.get("false_alarm") and e.get("actor") in charter["bodies"]
+              and e.get("actor") not in external]
+    if lapsed:
+        blame = dict(politics.get("blame") or {})
+        for event in lapsed:
+            blame[event["actor"]] = int(blame.get(event["actor"], 0)) + 1
+        politics = dict(politics, blame=blame)
     politics = attribute_blame(politics, events, plan["watch"],
                                charter["posts"])
     disgraced = sorted(

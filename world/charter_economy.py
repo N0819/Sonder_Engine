@@ -346,6 +346,32 @@ def trade(economy, *, seller, buyer, good, quantity, at_hours=0.0,
     return normalize_economy(out), event, moved
 
 
+def take_stock(economy, *, holder, good, amount, at_hours=0.0, place="",
+               by=""):
+    """Lots leaving a holder's books without a buyer: taken, spoiled, lost.
+
+    The one movement `trade` cannot express, because a trade has two
+    parties on ONE set of books and this has one party on these books and
+    another somewhere else entirely (`charter_predation`). Returns
+    ``(economy, event)``; the event is ``stock_taken`` at the place, which
+    a bystander perceives as plainly as goods changing hands, and the band
+    change it causes is reported by `advance_economy` on the next window
+    like any other. ``None`` for nothing to take.
+    """
+    out = normalize_economy(economy)
+    holder, good = str(holder), str(good)
+    if good not in out["goods"] or not holder:
+        return out, None
+    available = float((out["stocks"].get(holder) or {}).get(good, 0.0))
+    moved = round(min(available, _amount(amount)), 6)
+    if moved <= 0.0:
+        return out, None
+    out["stocks"].setdefault(holder, {})[good] = round(available - moved, 6)
+    event = _event("stock_taken", at_hours, holder, good, moved, place=place,
+                   by=str(by or ""), actor=str(by or ""))
+    return normalize_economy(out), event
+
+
 def caravan_exchange(economy, freight, room, *, at_hours=0.0):
     """Trade a caravan's freight with every authored market at one stop."""
     out = normalize_economy(economy)
@@ -397,5 +423,5 @@ def caravan_exchange(economy, freight, room, *, at_hours=0.0):
 
 __all__ = [
     "advance_economy", "caravan_exchange", "normalize_economy", "quote",
-    "stock_band", "trade",
+    "stock_band", "take_stock", "trade",
 ]
