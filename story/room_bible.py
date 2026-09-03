@@ -64,8 +64,8 @@ BIBLE_CHARS_SHOWN = 6000
 BIBLE_FOLD_BATCH = 12
 #: Lines one fold reads at most (a long-neglected thread folds in passes).
 BIBLE_FOLD_LINES = 40
-#: The fold call's output budget.
-BIBLE_FOLD_MAX_TOKENS = 2500
+#: The fold call's output budget. One number across the room (2026-09-04).
+BIBLE_FOLD_MAX_TOKENS = 20_000
 #: The job key (`core/jobs.py`), deduped per chat.
 BIBLE_JOB_KEY = "room_bible"
 #: The fold runs on the Planner's role.

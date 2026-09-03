@@ -396,6 +396,77 @@ def _t_inspect_clock(cid, frame_id):
             "day_phase": scene.get("day_phase")}
 
 
+def _t_inspect_config(cid, frame_id):
+    """The dials this story runs under. READ ONLY, and host-owned.
+
+    The room authors rooms and people the Director then renders under a house
+    style, a populace budget and an off-screen answer it had no way to see. So
+    it could not be ASKED about them either, which is the cheaper half of what
+    this room is for: a critique before anything is drafted costs one question
+    and no package.
+
+    Every value here is preserved across a rewind and a branch
+    (`checkpoints.PRESERVED_SETTING_KEYS`), which is exactly the test that says
+    it belongs to the host rather than to an authoring agent -- so this reads
+    and never writes, and says so in `host_owned` rather than leaving the room
+    to draft a change the engine would refuse.
+
+    Install-wide settings are deliberately absent: model roles, providers and
+    credentials are not story state, they are already kept out of the chat
+    archive, and a story-facing tool must not be the thing that carries them
+    back in.
+    """
+    from story.scene import (background_config, dialogue_config,
+                             promotion_config, style_guide)
+    guide = style_guide(cid) or {}
+    dialogue = dialogue_config(cid) or {}
+    populace = background_config(cid) or {}
+    try:
+        promotion = promotion_config(cid) or {}
+    except Exception:
+        promotion = {}
+    return {
+        "host_owned": True,
+        "note": ("These are the host's dials, not the room's. Read them to "
+                 "reason and to answer questions about them; a package that "
+                 "tried to change one would be refused. Say what you would "
+                 "change and why, and let the host turn it."),
+        "style": {
+            "genre": guide.get("genre", ""),
+            "tone": guide.get("tone", ""),
+            "avoid": guide.get("avoid", ""),
+            "director_notes": guide.get("director_notes", ""),
+            "weather_severity": guide.get("weather_severity"),
+            "narration_tense": guide.get("narration_tense"),
+            "day_length_hours": guide.get("day_length_hours"),
+            "survival_enabled": guide.get("survival_enabled"),
+        },
+        "scene": {
+            "autonomy": dialogue.get("autonomy"),
+            "min_lines": dialogue.get("min_lines"),
+            "max_lines": dialogue.get("max_lines"),
+            "max_character_calls": dialogue.get("max_character_calls"),
+            "initial_parallel_reactors": dialogue.get(
+                "initial_parallel_reactors"),
+        },
+        "populace": {
+            "max_reactors": populace.get("max_reactors"),
+            "scene_life": populace.get("scene_life"),
+            "max_managed": populace.get("max_managed"),
+            "promotion_dialogue": promotion.get("dialogue"),
+            "promotion_mention": promotion.get("mention"),
+        },
+        "offscreen": {
+            # ONE QUESTION (scene.COGNITION_OFF_RUNG). The rung rides along
+            # because the living-world approaches are still written against
+            # it, so a plan that leans on one can check what it will run as.
+            "cognition": dialogue.get("offscreen_cognition"),
+            "rung": dialogue.get("offscreen_life"),
+            "max_offscreen_actors": dialogue.get("max_offscreen_actors"),
+        },
+    }
+
+
 def _t_inspect_needs(cid, frame_id, *, kind=None):
     from world.planning_needs import open_planning_needs
     return {"needs": open_planning_needs(cid, frame_id, kind=kind)}
@@ -608,6 +679,9 @@ TOOLS = [
     {"name": "inspect_clock",
      "description": "Where the story stands in time: the latest turn index, elapsed story seconds, the hour of the day, the day phase, and the scene's declared time of day.",
      "args": _schema({}), "handler": _t_inspect_clock},
+    {"name": "inspect_config",
+     "description": "The dials this story runs under, which the host owns and the room only reads: house style (genre, tone, what to avoid, weather, tense, day length), the scene's pacing and call budget, how many of the populace may speak in a beat and what earns a promotion, and whether minds may think off screen. Read it before proposing anything that leans on one, and when asked whether a change would land.",
+     "args": _schema({}), "handler": _t_inspect_config},
     {"name": "inspect_needs",
      "description": "The open planning needs: what a beat reached for that no plan holds -- an unplanned destination, a query nobody answered, a person the Director rendered with no plan behind them. Each carries the surface the beat committed, which a plan may add to and never contradict.",
      "args": _schema({"kind": _S}), "handler": _t_inspect_needs},

@@ -45,10 +45,30 @@ from core.db import q, qtx, transaction, wget_for_frame, wset_for_frame
 #: notice (the unseated line, a revocation receipt) -- a line nobody wrote.
 ROLES = ("player", "planner", "dramaturge", "room")
 
-#: One message's ceiling. A brief to the room is a few paragraphs at most;
+#: A PLAYER message's ceiling. A brief to the room is a few paragraphs at most;
 #: anything past this is a pasted document, and the room reads documents
 #: through the lore it is handed, not through its chat box.
 ROOM_MESSAGE_CHARS = 4000
+
+#: A ROOM message's ceiling, which is a different question and was answered by
+#: the same constant until 2026-09-04. What the room says back is bounded by
+#: what it was allowed to generate, not by an argument about pasted documents,
+#: and with the room's response cap at 20k tokens the shared 4,000 would have
+#: silently truncated the answers the raise exists to allow. 20k tokens at the
+#: four-characters-per-token ratio this codebase already estimates with
+#: (`memory_write._CHARS_PER_TOKEN`), so the store can hold whatever the cap
+#: permits and nothing is cut on the way in.
+ROOM_REPLY_CHARS = 80_000
+
+#: The limit each role is held to. A role the table does not name is held to
+#: the player's, which is the smaller of the two -- an unknown speaker is
+#: refused by `add_message` anyway, and a ceiling must fail toward less.
+ROLE_MESSAGE_CHARS = {
+    "player": ROOM_MESSAGE_CHARS,
+    "planner": ROOM_REPLY_CHARS,
+    "dramaturge": ROOM_REPLY_CHARS,
+    "room": ROOM_REPLY_CHARS,
+}
 
 #: How many messages one story-and-era thread keeps. Past it the OLDEST fall
 #: off at the next write: the thread is a working conversation, not a record
@@ -146,7 +166,7 @@ def add_message(cid, frame_id, role, text, *, turn_idx=0):
     Returns the stored row. Refuses an unknown role and an empty line."""
     if role not in ROLES:
         raise ValueError("unknown room role %r" % (role,))
-    text = _clean(text)
+    text = _clean(text, ROLE_MESSAGE_CHARS.get(role, ROOM_MESSAGE_CHARS))
     if not text:
         raise ValueError("an empty line is not a message")
     clause, args = _frame_clause(frame_id)

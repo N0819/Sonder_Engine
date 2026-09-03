@@ -968,14 +968,19 @@ color:var(--dim);margin-bottom:4px}
 .room-mandate.spent{border:0;padding:2px 0;margin:0}
 .room-thread{flex:1 1 auto;overflow:auto;padding:8px 10px;display:flex;
 flex-direction:column;gap:8px}
+/* NO FILL BEHIND A MESSAGE. The panel is already a blurred plate over the
+   story, so an opaque bubble on top of it is a second surface: it fights the
+   blur, hides the backdrop the panel was made translucent to show, and the
+   speaker is legible from the border and the alignment alone. Each role keeps
+   its own colour, moved from the fill to the edge. */
 .room-msg{border-radius:10px;padding:6px 10px;max-width:92%;font-size:13px;
-white-space:pre-wrap}
-.room-msg.player{align-self:flex-end;background:color-mix(in srgb,var(--acc) 18%,var(--bg3))}
-.room-msg.planner{align-self:flex-start;background:var(--bg3)}
-.room-msg.dramaturge{align-self:flex-start;background:color-mix(in srgb,var(--acc2) 16%,var(--bg3));
+white-space:pre-wrap;background:transparent;border:1px solid var(--bd)}
+.room-msg.player{align-self:flex-end;border-color:color-mix(in srgb,var(--acc) 55%,var(--bd))}
+.room-msg.planner{align-self:flex-start}
+.room-msg.dramaturge{align-self:flex-start;
+border-color:color-mix(in srgb,var(--acc2) 55%,var(--bd));
 border-left:2px solid var(--acc2)}
-.room-msg.room{align-self:center;background:transparent;border:1px dashed var(--bd);
-color:var(--dim)}
+.room-msg.room{align-self:center;border-style:dashed;color:var(--dim)}
 .room-who{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);
 margin-bottom:2px}
 .room-earlier{align-self:center}
