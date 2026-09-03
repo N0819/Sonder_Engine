@@ -6608,6 +6608,41 @@ Phase B2 shape; no browser-tier test covers the drag and resize gestures
 (the Playwright harness has no comparable panel to extend); the panel
 refreshes by watching the story view's identity once a second while open
 (`ROOM_WATCH_MS`), not by an event the turn pipeline emits.
+**Phase B items 1 and 2 landed 2026-09-04:** the plot-package store and
+lifecycle (`story/plot_packages.py`: draft/validating/published/active/
+resolved/retired, pinned base with rebase-or-conflict, long operations
+prepared before a one-transaction publish, next-turn visibility, superseding
+truths, sealed projection) and the authoring facade (`story/room_tools.py`:
+one tool table, fifteen read and ten write tools, every write through a
+package). Items 3 (the Story Planner agent, Charter Planner delegation,
+just-in-time fills, the prepared frontier) and 4 (budgets and consultation as
+typed mandates) remain. What the landed half left open, as residuals of this
+entry rather than a section of their own:
+
+- **No operation for author surgery on a charter** (v2 § 9.1's "explicit
+  author surgery" on carried state): a package can generate a location and
+  presimulate, and cannot move a body, change a post or edit a claim. The
+  Planner's nudge toolkit (Phase C) is where that lands, as its own kinds in
+  `OPERATIONS`.
+- **No mandate store.** `authority.mandate_uid` on a package is a string the
+  room fills; nothing checks it against a standing mandate, because there is
+  no mandate table yet (Phase B.4). The three authority flags on the package
+  are honoured by validation (`may_create_people`, `may_author_prehistory`);
+  `may_schedule_harm` is stored and has nothing yet to refuse, since no
+  operation schedules harm.
+- **A clock is a record, not a trigger.** Clocks carry `due_turns` /
+  `due_story_hours` and nothing fires when one is due (v2 § 5.4). The
+  activation hook in the commit tail is the place; it is bookkeeping only.
+- **Lore filed by the room carries the `model` basis** because
+  `canon_provenance` admits `deterministic|model|unavailable` and the room's
+  entries are author claims through a model role; an `authored` basis is an
+  eighth-disposition question for that module, not this one.
+- **`inspect_events` reads the omniscient `events` row** by design (the room
+  is an author); it is the only reader of that row outside the pipeline, and
+  it is not served to any mind.
+- **`retire_package` keeps what landed.** A package that planted rooms and
+  bodies and is then retired leaves them in the world; there is no
+  un-publish, because the world's own seams have no un-plant.
 
 Build the cross-system Writers' Room agent set described in
 [`design/DESIGN_STORY_PLANNER_AND_DRAMATURGE.md`](design/DESIGN_STORY_PLANNER_AND_DRAMATURGE.md):
