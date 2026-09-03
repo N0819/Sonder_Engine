@@ -468,3 +468,137 @@ def acquainted(body_key, charter):
     out.sort(key=lambda row: (-row["familiarity"], -row["strength"],
                               row["body"]))
     return out[:ACQUAINTANCE_EDGE_CAP]
+
+
+#: How many rooms a promotion may hand over. `persist/commit_place_graph.
+#: PLACE_GRAPH_NODE_CAP` restated -- `world/` does not import `persist/` --
+#: and pinned equal by `tests/test_charter_traversal.py`. A town larger than
+#: the mind's own map would be trimmed by that map's eviction the first beat
+#: anyway; trimming here decides WHICH rooms go (the never-walked first)
+#: rather than leaving it to a last-turn tie.
+PLACE_GRAPH_INHERIT_CAP = 400
+
+
+def private_rooms(charter, body_key):
+    """The rooms this body has no standing channel to: somebody ELSE's berth
+    that is not also its own.
+
+    THE PUBLIC/PRIVATE RULE, stated once. A room nobody sleeps in -- a
+    street, a square, a market, a workshop, a tavern -- is the town's, and a
+    life lived in the town is a channel to it. A berth is a home, and a home
+    is its residents': a body that shares a house knows the house, a body
+    that does not has never had a reason to stand in it. The rule is spelled
+    in the charter's own vocabulary (`berth`) rather than a new room field,
+    and its stated limit is that a private interior nobody berths in -- a
+    vault, a back office -- reads as public. A room the body WALKED is never
+    private to it whatever this says: `inherited_place_graph` lets the walked
+    record override, because walking there is the channel.
+    """
+    bodies = (charter or {}).get("bodies") or {}
+    own = str((bodies.get(str(body_key)) or {}).get("berth") or "")
+    return {
+        str(body.get("berth"))
+        for key, body in bodies.items()
+        if str(key) != str(body_key) and str(body.get("berth") or "")
+        and str(body.get("berth")) != own}
+
+
+def inherited_place_graph(charter, body_key, turn_idx=None,
+                          cap=PLACE_GRAPH_INHERIT_CAP):
+    """The map a promoted townsperson arrives with, in `chat_chars.state.
+    place_graph`'s own shape (`persist/commit_place_graph.update_place_graph`).
+
+    Two channels and nothing else, each spelled in the node's `basis`:
+
+    * ``told`` -- the town's PUBLIC rooms (`private_rooms`' complement) and
+      the passable doorways between them, read from the charter's own scene
+      graph. This is the one writer of ``told`` the design note reserved for
+      a structured source: a life in a town is testimony about its streets,
+      and the charter's graph is structured, so no prose is mined.
+    * ``walked`` -- every room this body crossed and every edge it took
+      (`charter_move`'s ``walked`` record), with `visits` counting the
+      crossings. Walked overrides private: the route through a neighbour's
+      front room to one's own back room is earned.
+
+    Never the whole scene, and never another body's record. A charter with
+    no scene hands over nothing, and the promoted mind learns its map by
+    walking like any other character. Nodes are stamped `first_turn` and
+    `last_turn` at ``turn_idx`` (the promotion turn) so the walker's eviction
+    order -- least recent, fewest visits first -- forgets the streets the
+    character never walks before the ones it did.
+
+    The cap keeps walked rooms first and public rooms by name after, which
+    is a deterministic choice rather than a good one: a town bigger than the
+    cap loses its far streets alphabetically. Stated so the number that
+    decides it (`PLACE_GRAPH_INHERIT_CAP`) is read as the limit it is.
+    """
+    from .spatial import passable_neighbors
+
+    charter = charter if isinstance(charter, dict) else {}
+    scene = charter.get("scene") if isinstance(charter.get("scene"), dict) \
+        else {}
+    rooms = scene.get("rooms") or {}
+    if not rooms:
+        return {"nodes": {}, "edges": {}}
+    key = str(body_key)
+    turn = int(turn_idx or 0)
+    private = private_rooms(charter, key)
+    nodes, edges = {}, {}
+
+    def node(rid, basis):
+        rec = nodes.get(rid)
+        if rec is None:
+            rec = {"basis": basis, "visits": 0, "first_turn": turn,
+                   "last_turn": turn}
+            name = str((rooms.get(rid) or {}).get("name") or "")
+            if name:
+                rec["name"] = name
+            nodes[rid] = rec
+        if basis == "walked":
+            rec["basis"] = "walked"
+        return rec
+
+    def edge(a, b, basis):
+        rec = edges.setdefault(a, {}).setdefault(b, {})
+        rec["last_confirmed"] = turn
+        if basis == "walked":
+            rec["basis"] = "walked"
+            rec["taken"] = True
+        else:
+            rec.setdefault("basis", "told")
+
+    public = sorted(str(rid) for rid in rooms if str(rid) not in private)
+    for rid in public:
+        node(rid, "told")
+    neighbors = passable_neighbors(scene)
+    for a in public:
+        for b in sorted(neighbors.get(a) or ()):
+            if b in nodes:
+                edge(a, b, "told")
+    body = (charter.get("bodies") or {}).get(key) or {}
+    for rid in (str(body.get("place") or ""), str(body.get("berth") or "")):
+        if rid in rooms:
+            node(rid, "walked")
+    walked = (charter.get("walked") or {}).get(key) or {}
+    for a, ends in sorted(walked.items()):
+        if a not in rooms:
+            continue
+        node(a, "walked")
+        for b, count in sorted((ends or {}).items()):
+            if b not in rooms:
+                continue
+            node(b, "walked")["visits"] += int(count or 0)
+            edge(a, b, "walked")
+
+    overflow = len(nodes) - int(cap)
+    if overflow > 0:
+        order = sorted(nodes, key=lambda rid: (
+            nodes[rid]["basis"] == "walked", nodes[rid]["visits"], rid),
+            reverse=True)
+        for rid in order[int(cap):]:
+            nodes.pop(rid, None)
+            edges.pop(rid, None)
+        for side in edges.values():
+            for gone in [b for b in side if b not in nodes]:
+                side.pop(gone, None)
+    return {"nodes": nodes, "edges": edges}

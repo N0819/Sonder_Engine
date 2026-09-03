@@ -71,7 +71,7 @@
 | `persist/checkpoints.py` | 1350 | Whole-chat snapshots and checkpoint restore orchestration. | `core.db`, `mind.memory` |
 | `persist/commit.py` | 717 | Atomic commit orchestrator, per-turn lock, thin tail domains, and the facade re-exporting every commit_* name. | `core.db`, `core.frames`, `llm.prompts`, `llm.providers`, `mind`, `mind.memory`, `mind.theory_of_mind`, `persist.commit_attire`, `persist.commit_background`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_entities`, `persist.commit_ledgers`, `persist.commit_mapping`, `persist.commit_mechanics`, `persist.commit_memory`, `persist.commit_memory_write`, `persist.commit_place_graph`, `persist.commit_room_registry`, `persist.commit_scene_state`, `story`, `story.character_schema`, `story.scene`, `world.comfort`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.spatial_frames`, `world.survival`, `world.weather` |
 | `persist/commit_attire.py` | 1458 | The mutable clothing ledger: attire notes, shed/worn garment entities, the validated attire diff. | `persist.commit_common`, `story`, `story.attire` |
-| `persist/commit_background.py` | 3299 | Background presences: tracking, identity folding, the reactor gate, promotion to cast. | `core.db`, `mind.memory`, `persist.commit_common`, `story.character_schema`, `story.scene`, `world.spatial` |
+| `persist/commit_background.py` | 3309 | Background presences: tracking, identity folding, the reactor gate, promotion to cast. | `core.db`, `mind.memory`, `persist.commit_common`, `story.character_schema`, `story.scene`, `world.spatial` |
 | `persist/commit_common.py` | 595 | Leaf helpers shared across commit domains: scalar utilities, name/address roster, entity-id canonicalisation. | `core.db`, `mind.memory`, `story.character_schema`, `world.mechanics`, `world.spatial` |
 | `persist/commit_destruction.py` | 411 | Single- and multi-book destruction cascades, retirement, and latency-gated news. | `core.db`, `mind.memory`, `persist.commit_common`, `world.mechanics`, `world.spatial`, `world.spatial_frames` |
 | `persist/commit_entities.py` | 560 | world_entities projection of the scene commit, awareness gate, disguise supersession. | `core.db`, `persist.commit_common`, `story.character_schema`, `story.scene`, `world.spatial` |
@@ -108,7 +108,7 @@
 | `web/story_view.py` | 1023 |  | `core.db`, `world.charter_runtime`, `world.living_world` |
 | `world/__init__.py` | 6 |  | — |
 | `world/background_claims.py` | 598 |  | `core.db` |
-| `world/charter.py` | 474 |  | `world.charter_author`, `world.charter_chatter`, `world.charter_commitment`, `world.charter_decide`, `world.charter_drift`, `world.charter_economy`, `world.charter_feel`, `world.charter_figure`, `world.charter_identity`, `world.charter_intervene`, `world.charter_log`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_move`, `world.charter_needs`, `world.charter_news`, `world.charter_plan`, `world.charter_politics`, `world.charter_practice`, `world.charter_promote`, `world.charter_roster`, `world.charter_run`, `world.charter_social`, `world.charter_space`, `world.charter_talk`, `world.charter_temper`, `world.charter_trigger` |
+| `world/charter.py` | 479 |  | `world.charter_author`, `world.charter_chatter`, `world.charter_commitment`, `world.charter_decide`, `world.charter_drift`, `world.charter_economy`, `world.charter_feel`, `world.charter_figure`, `world.charter_identity`, `world.charter_intervene`, `world.charter_log`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_move`, `world.charter_needs`, `world.charter_news`, `world.charter_plan`, `world.charter_politics`, `world.charter_practice`, `world.charter_promote`, `world.charter_roster`, `world.charter_run`, `world.charter_social`, `world.charter_space`, `world.charter_talk`, `world.charter_temper`, `world.charter_trigger` |
 | `world/charter_author.py` | 318 |  | `world.charter_figure`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_politics`, `world.charter_practice` |
 | `world/charter_chatter.py` | 371 |  | `world.crowds` |
 | `world/charter_commitment.py` | 217 |  | `world.charter_model` |
@@ -125,20 +125,20 @@
 | `world/charter_log.py` | 448 |  | `world.charter_commitment`, `world.charter_decide`, `world.charter_economy`, `world.charter_feel`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_needs`, `world.charter_news`, `world.charter_politics`, `world.charter_social`, `world.charter_temper` |
 | `world/charter_mark.py` | 302 |  | — |
 | `world/charter_mind.py` | 262 |  | — |
-| `world/charter_model.py` | 616 |  | `world.charter_chatter`, `world.charter_figure`, `world.charter_mark` |
-| `world/charter_move.py` | 240 |  | `world.charter_space` |
+| `world/charter_model.py` | 645 |  | `world.charter_chatter`, `world.charter_figure`, `world.charter_mark` |
+| `world/charter_move.py` | 393 |  | `world.charter_space` |
 | `world/charter_needs.py` | 297 |  | `world.charter_model` |
 | `world/charter_news.py` | 453 |  | `world.charter_mind`, `world.charter_model`, `world.charter_talk` |
 | `world/charter_observe.py` | 299 |  | `world.charter_figure`, `world.charter_identity`, `world.charter_mind`, `world.spatial` |
 | `world/charter_plan.py` | 227 |  | `world.charter_drift`, `world.charter_model`, `world.charter_roster` |
 | `world/charter_politics.py` | 161 |  | — |
 | `world/charter_practice.py` | 1200 |  | `world.charter_commitment`, `world.charter_figure`, `world.charter_mind`, `world.charter_politics`, `world.charter_talk` |
-| `world/charter_promote.py` | 470 |  | `world.charter_commitment`, `world.charter_feel`, `world.charter_politics`, `world.charter_social` |
+| `world/charter_promote.py` | 604 |  | `world.charter_commitment`, `world.charter_feel`, `world.charter_politics`, `world.charter_social` |
 | `world/charter_roster.py` | 134 |  | `world.charter_model` |
-| `world/charter_run.py` | 1324 |  | `world`, `world.charter_commitment`, `world.charter_decide`, `world.charter_drift`, `world.charter_economy`, `world.charter_feel`, `world.charter_figure`, `world.charter_intervene`, `world.charter_log`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_move`, `world.charter_needs`, `world.charter_news`, `world.charter_plan`, `world.charter_politics`, `world.charter_practice`, `world.charter_roster`, `world.charter_social`, `world.charter_space`, `world.charter_talk`, `world.charter_trigger` |
-| `world/charter_runtime.py` | 3047 |  | `core`, `core.logging_utils`, `world.charter`, `world.charter_news`, `world.mechanics` |
+| `world/charter_run.py` | 1352 |  | `world`, `world.charter_commitment`, `world.charter_decide`, `world.charter_drift`, `world.charter_economy`, `world.charter_feel`, `world.charter_figure`, `world.charter_intervene`, `world.charter_log`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_move`, `world.charter_needs`, `world.charter_news`, `world.charter_plan`, `world.charter_politics`, `world.charter_practice`, `world.charter_roster`, `world.charter_social`, `world.charter_space`, `world.charter_talk`, `world.charter_trigger` |
+| `world/charter_runtime.py` | 3088 |  | `core`, `core.logging_utils`, `world.charter`, `world.charter_news`, `world.mechanics` |
 | `world/charter_social.py` | 743 |  | `world.charter_politics` |
-| `world/charter_space.py` | 145 |  | `world.spatial` |
+| `world/charter_space.py` | 167 |  | `world.spatial` |
 | `world/charter_talk.py` | 344 |  | `world.charter_mind`, `world.charter_politics`, `world.charter_roster` |
 | `world/charter_temper.py` | 167 |  | — |
 | `world/charter_trigger.py` | 748 |  | `world.charter_mark`, `world.charter_news`, `world.charter_practice` |
@@ -869,11 +869,11 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `track_background_presences()` | 1378 | 610 lines |
-| `promote_background_character()` | 2833 | 334 lines |
+| `promote_background_character()` | 2833 | 344 lines |
 | `pick_voice_demand()` | 2433 | 303 lines |
 | `_fold_duplicate_presences()` | 685 | 143 lines |
 | `descriptor_bindings()` | 2174 | 100 lines |
-| `auto_promote_background_characters()` | 3206 | 94 lines |
+| `auto_promote_background_characters()` | 3216 | 94 lines |
 | `_mint_missing_presence_names()` | 1294 | 82 lines |
 | `_unresolved_address_fallback()` | 2083 | 71 lines |
 
@@ -1470,26 +1470,27 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `normalize_charter()` | 299 | 296 lines |
-| `normalize_body()` | 170 | 68 lines |
-| `body_of_an_authored_mind()` | 240 | 45 lines |
+| `normalize_charter()` | 315 | 309 lines |
+| `normalize_body()` | 170 | 84 lines |
+| `body_of_an_authored_mind()` | 256 | 45 lines |
 | `normalize_upkeep()` | 110 | 31 lines |
 | `normalize_post()` | 143 | 25 lines |
 | `_tags()` | 71 | 15 lines |
 | `_string_list()` | 93 | 15 lines |
-| `priority_rank()` | 609 | 8 lines |
+| `priority_rank()` | 638 | 8 lines |
 
 ### `world/charter_move.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `errands()` | 127 | 57 lines |
-| `relocate()` | 66 | 34 lines |
-| `walk()` | 186 | 29 lines |
-| `_nearest()` | 102 | 23 lines |
-| `_roll()` | 43 | 21 lines |
-| `homecomings()` | 217 | 18 lines |
-| `furthest_travelled()` | 237 | 4 lines |
+| `errands()` | 265 | 60 lines |
+| `_advance()` | 143 | 44 lines |
+| `walk()` | 327 | 30 lines |
+| `_dispatch()` | 114 | 27 lines |
+| `continue_walks()` | 189 | 27 lines |
+| `_nearest()` | 240 | 23 lines |
+| `_roll()` | 80 | 21 lines |
+| `relocate()` | 218 | 20 lines |
 
 ### `world/charter_needs.py`
 
@@ -1571,8 +1572,10 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `remembered()` | 111 | 260 lines |
+| `inherited_place_graph()` | 506 | 99 lines |
 | `acquainted()` | 406 | 65 lines |
 | `promotion_handoff()` | 373 | 23 lines |
+| `private_rooms()` | 482 | 22 lines |
 | `_news_phrase()` | 101 | 8 lines |
 
 ### `world/charter_roster.py`
@@ -1589,14 +1592,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `step()` | 399 | 867 lines |
-| `_record_coarse_experiences()` | 237 | 160 lines |
-| `run()` | 1268 | 57 lines |
-| `_remember_experience()` | 149 | 32 lines |
-| `_run_private_habits()` | 206 | 29 lines |
-| `_social_events()` | 104 | 25 lines |
-| `_record_social_experiences()` | 183 | 21 lines |
-| `_event()` | 79 | 3 lines |
+| `step()` | 400 | 885 lines |
+| `_record_coarse_experiences()` | 238 | 160 lines |
+| `run()` | 1287 | 66 lines |
+| `_remember_experience()` | 150 | 32 lines |
+| `_run_private_habits()` | 207 | 29 lines |
+| `_social_events()` | 105 | 25 lines |
+| `_record_social_experiences()` | 184 | 21 lines |
+| `_event()` | 80 | 3 lines |
 
 ### `world/charter_runtime.py`
 
@@ -1607,9 +1610,9 @@
 | `_plan_lived_location()` | 1309 | 150 lines |
 | `_generate_lived_location()` | 1519 | 113 lines |
 | `generation_lore()` | 997 | 101 lines |
-| `cross_charter_gossip()` | 2023 | 92 lines |
-| `charter_diagnostics()` | 2257 | 86 lines |
-| `_remap_generated_town()` | 1123 | 78 lines |
+| `advance_snapshot()` | 1955 | 93 lines |
+| `cross_charter_gossip()` | 2050 | 92 lines |
+| `charter_diagnostics()` | 2284 | 86 lines |
 
 ### `world/charter_social.py`
 
@@ -1628,12 +1631,13 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `commons_places()` | 104 | 32 lines |
-| `reach_map()` | 65 | 29 lines |
-| `refresh_reach()` | 46 | 17 lines |
+| `commons_places()` | 126 | 32 lines |
+| `reach_map()` | 87 | 29 lines |
+| `walk_route()` | 46 | 20 lines |
+| `refresh_reach()` | 68 | 17 lines |
 | `travel_rooms()` | 31 | 13 lines |
-| `frequented_places()` | 138 | 8 lines |
-| `charter_places()` | 96 | 6 lines |
+| `frequented_places()` | 160 | 8 lines |
+| `charter_places()` | 118 | 6 lines |
 
 ### `world/charter_talk.py`
 

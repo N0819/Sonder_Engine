@@ -43,6 +43,28 @@ def travel_rooms(scene, from_room, to_room, limit=REACH_LIMIT):
     return len(path) if path else None
 
 
+def walk_route(scene, from_room, to_room, limit=REACH_LIMIT, cache=None):
+    """The rooms a body walks from one place to another, INCLUSIVE of both
+    ends -- the courier's `route` shape -- or ``None`` if unreachable.
+
+    Same pathfinder as `travel_rooms`, kept beside it so the two can never
+    disagree about whether a post is reachable: a route exists exactly when
+    a distance does. ``cache`` maps ``(origin, target) -> route-or-None`` and
+    may outlive the call for a fixed scene, as `reach_map`'s does.
+    """
+    a, b = str(from_room or ""), str(to_room or "")
+    if not a or not b:
+        return None
+    if a == b:
+        return [a]
+    cache = {} if cache is None else cache
+    pair = (a, b)
+    if pair not in cache:
+        path = passable_path(scene, a, b, limit=limit)
+        cache[pair] = [a] + [str(r) for r in path] if path else None
+    return list(cache[pair]) if cache[pair] else None
+
+
 def refresh_reach(reach, scene, places, bodies, moved, limit=REACH_LIMIT,
                   cache=None):
     """Update reach for the bodies that MOVED, and no others.
