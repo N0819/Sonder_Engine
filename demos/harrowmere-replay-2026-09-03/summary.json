@@ -1,0 +1,2312 @@
+{
+ "turns": 40,
+ "resumed_turns": {},
+ "errors": [],
+ "seconds_median": 35.85,
+ "seconds_mean": 35.8,
+ "seconds_max": 67.3,
+ "calls_median": 8.0,
+ "calls_mean": 8.2,
+ "mapping_stage_turns": 21,
+ "mapping_quick_turns": 19,
+ "planned_context_calls": 21,
+ "planned_context_hits": 12,
+ "background_react_fired_turns": 21,
+ "warnings_total": 97,
+ "tripwires": [
+  [
+   32,
+   "[perception_outcome] perception_outcome: COMPOSER TRIPWIRE -- unearned identity ['Kelselwell Brbrookmere'] reached the composed view of Wren Ashby; Layer A admi"
+  ]
+ ],
+ "placeholder_leak_turns": [],
+ "narrator_invented_dialogue_turns": [
+  5,
+  18,
+  24,
+  26,
+  33
+ ],
+ "planned_rooms_total": 43,
+ "planned_rooms_in_scene": 43,
+ "planned_stubs_still_bare": [
+  "bridge_road_2",
+  "far_bank",
+  "hall_back",
+  "house_aldred_2",
+  "house_aldred_3",
+  "house_aldred_4",
+  "house_aldred_5",
+  "house_aldred_6",
+  "house_bryne",
+  "house_bryne_2",
+  "house_cael",
+  "house_dalla",
+  "house_edda",
+  "house_fen",
+  "house_gareth",
+  "house_hale",
+  "house_iron",
+  "house_jen",
+  "inn_guest_room_west",
+  "market_square_2",
+  "market_square_3",
+  "mill_sack_store",
+  "mill_stone_floor",
+  "slate_lane_2",
+  "smithy_forge"
+ ],
+ "rooms_entered": [
+  "upland_gate",
+  "market_square",
+  "reeve_hall",
+  "inn_common",
+  "inn_guest_room_east",
+  "bridge_road",
+  "shrine",
+  "toll_bridge",
+  "mill_lane",
+  "mill",
+  "stone_lane",
+  "smithy",
+  "slate_lane",
+  "clerk_office",
+  "inn_stable",
+  "inn_kitchen",
+  "inn_cellar",
+  "upland_road"
+ ],
+ "planned_entered": [
+  "upland_gate",
+  "market_square",
+  "reeve_hall",
+  "inn_common",
+  "inn_guest_room_east",
+  "bridge_road",
+  "shrine",
+  "toll_bridge",
+  "mill_lane",
+  "mill",
+  "stone_lane",
+  "smithy",
+  "slate_lane",
+  "clerk_office",
+  "inn_stable",
+  "inn_kitchen",
+  "inn_cellar"
+ ],
+ "planned_entered_described_before_entry": [
+  "market_square",
+  "clerk_office"
+ ],
+ "planned_entered_described_on_entry": [
+  "upland_gate",
+  "reeve_hall",
+  "inn_common",
+  "inn_guest_room_east",
+  "bridge_road",
+  "shrine",
+  "toll_bridge",
+  "mill_lane",
+  "mill",
+  "stone_lane",
+  "smithy",
+  "slate_lane",
+  "inn_stable",
+  "inn_kitchen",
+  "inn_cellar"
+ ],
+ "planned_entered_never_described": [],
+ "described_but_never_entered": [
+  "house_aldred",
+  "upland_road_rise"
+ ],
+ "in_view_development_events": [
+  {
+   "turn": 0,
+   "player_room": "upland_gate",
+   "developed_in_view": [
+    "market_square"
+   ],
+   "mapping": "mapping_stage",
+   "needs_mapping": null
+  },
+  {
+   "turn": 17,
+   "player_room": "stone_lane",
+   "developed_in_view": [
+    "house_aldred"
+   ],
+   "mapping": "mapping_stage",
+   "needs_mapping": true
+  },
+  {
+   "turn": 26,
+   "player_room": "reeve_hall",
+   "developed_in_view": [
+    "clerk_office"
+   ],
+   "mapping": "mapping_stage",
+   "needs_mapping": true
+  },
+  {
+   "turn": 38,
+   "player_room": "upland_road",
+   "developed_in_view": [
+    "upland_road_rise"
+   ],
+   "mapping": "mapping_stage",
+   "needs_mapping": true
+  }
+ ],
+ "unplanned_live_rooms": [
+  "upland_road",
+  "upland_road_rise"
+ ],
+ "suffix_duplicate_rooms": [],
+ "frontier_stubs": [],
+ "director_minted_people": [
+  "bridge_watch",
+  "gatekeeper",
+  "shrine_keeper",
+  "the_blacksmith",
+  "the_brewer",
+  "the_hostler",
+  "the_miller"
+ ],
+ "minted_people_bound": {},
+ "minted_people_unbound_role_duplicates": [
+  "bridge_watch",
+  "gatekeeper",
+  "shrine_keeper",
+  "the_blacksmith",
+  "the_brewer",
+  "the_hostler",
+  "the_miller"
+ ],
+ "identity_bindings_by_turn": [],
+ "charter_observations_by_turn": [
+  {
+   "turn": 0,
+   "sources": 0,
+   "opportunities": 0,
+   "acquired": 0,
+   "sighted": 1,
+   "unplaced": null
+  },
+  {
+   "turn": 1,
+   "sources": 2,
+   "opportunities": 202,
+   "acquired": 6,
+   "sighted": 1,
+   "unplaced": []
+  },
+  {
+   "turn": 2,
+   "sources": 2,
+   "opportunities": 202,
+   "acquired": 25,
+   "sighted": 0,
+   "unplaced": []
+  },
+  {
+   "turn": 3,
+   "sources": 1,
+   "opportunities": 101,
+   "acquired": 1,
+   "sighted": 0,
+   "unplaced": []
+  },
+  {
+   "turn": 4,
+   "sources": 3,
+   "opportunities": 303,
+   "acquired": 5,
+   "sighted": 0,
+   "unplaced": []
+  },
+  {
+   "turn": 5,
+   "sources": 2,
+   "opportunities": 202,
+   "acquired": 4,
+   "sighted": 0,
+   "unplaced": []
+  },
+  {
+   "turn": 6,
+   "sources": 2,
+   "opportunities": 202,
+   "acquired": 4,
+   "sighted": 0,
+   "unplaced": []
+  },
+  {
+   "turn": 7,
+   "sources": 2,
+   "opportunities": 202,
+   "acquired": 12,
+   "sighted": 0,
+   "unplaced": []
+  },
+  {
+   "turn": 8,
+   "sources": 2,
+   "opportunities": 202,
+   "acquired": 11,
+   "sighted": 0,
+   "unplaced": []
+  },
+  {
+   "turn": 9,
+   "sources": 4,
+   "opportunities": 404,
+   "acquired": 0,
+   "sighted": 0,
+   "unplaced": []
+  },
+  {
+   "turn": 10,
+   "sources": 3,
+   "opportunities": 303,
+   "acquired": 3,
+   "sighted": 0,
+   "unplaced": []
+  },
+  {
+   "turn": 11,
+   "sources": 1,
+   "opportunities": 101,
+   "acquired": 0,
+   "sighted": 0,
+   "unplaced": []
+  },
+  {
+   "turn": 12,
+   "sources": 3,
+   "opportunities": 303,
+   "acquired": 1,
+   "sighted": 1,
+   "unplaced": []
+  },
+  {
+   "turn": 13,
+   "sources": 1,
+   "opportunities": 102,
+   "acquired": 0,
+   "sighted": 0,
+   "unplaced": []
+  },
+  {
+   "turn": 14,
+   "sources": 1,
+   "opportunities": 103,
+   "acquired": 0,
+   "sighted": 0,
+   "unplaced": []
+  },
+  {
+   "turn": 15,
+   "sources": 2,
+   "opportunities": 206,
+   "acquired": 4,
+   "sighted": 1,
+   "unplaced": []
+  },
+  {
+   "turn": 16,
+   "sources": 2,
+   "opportunities": 208,
+   "acquired": 0,
+   "sighted": 0,
+   "unplaced": []
+  },
+  {
+   "turn": 17,
+   "sources": 2,
+   "opportunities": 208,
+   "acquired": 26,
+   "sighted": 0,
+   "unplaced": []
+  },
+  {
+   "turn": 18,
+   "sources": 3,
+   "opportunities": 312,
+   "acquired": 7,
+   "sighted": 0,
+   "unplaced": []
+  },
+  {
+   "turn": 19,
+   "sources": 2,
+   "opportunities": 208,
+   "acquired": 6,
+   "sighted": 0,
+   "unplaced": []
+  },
+  {
+   "turn": 20,
+   "sources": 3,
+   "opportunities": 312,
+   "acquired": 9,
+   "sighted": 0,
+   "unplaced": []
+  },
+  {
+   "turn": 21,
+   "sources": 1,
+   "opportunities": 104,
+   "acquired": 7,
+   "sighted": 0,
+   "unplaced": []
+  },
+  {
+   "turn": 22,
+   "sources": 1,
+   "opportunities": 104,
+   "acquired": 2,
+   "sighted": 0,
+   "unplaced": []
+  },
+  {
+   "turn": 23,
+   "sources": 2,
+   "opportunities": 208,
+   "acquired": 4,
+   "sighted": 0,
+   "unplaced": []
+  },
+  {
+   "turn": 24,
+   "sources": 2,
+   "opportunities": 210,
+   "acquired": 6,
+   "sighted": 0,
+   "unplaced": []
+  },
+  {
+   "turn": 25,
+   "sources": 2,
+   "opportunities": 210,
+   "acquired": 18,
+   "sighted": 0,
+   "unplaced": []
+  },
+  {
+   "turn": 26,
+   "sources": 2,
+   "opportunities": 210,
+   "acquired": 5,
+   "sighted": 0,
+   "unplaced": []
+  },
+  {
+   "turn": 27,
+   "sources": 3,
+   "opportunities": 315,
+   "acquired": 0,
+   "sighted": 0,
+   "unplaced": []
+  },
+  {
+   "turn": 28,
+   "sources": 2,
+   "opportunities": 210,
+   "acquired": 0,
+   "sighted": 0,
+   "unplaced": []
+  },
+  {
+   "turn": 29,
+   "sources": 3,
+   "opportunities": 315,
+   "acquired": 5,
+   "sighted": 1,
+   "unplaced": []
+  },
+  {
+   "turn": 30,
+   "sources": 1,
+   "opportunities": 105,
+   "acquired": 5,
+   "sighted": 0,
+   "unplaced": []
+  },
+  {
+   "turn": 31,
+   "sources": 3,
+   "opportunities": 315,
+   "acquired": 0,
+   "sighted": 0,
+   "unplaced": []
+  },
+  {
+   "turn": 32,
+   "sources": 2,
+   "opportunities": 210,
+   "acquired": 25,
+   "sighted": 0,
+   "unplaced": []
+  },
+  {
+   "turn": 33,
+   "sources": 2,
+   "opportunities": 210,
+   "acquired": 7,
+   "sighted": 0,
+   "unplaced": []
+  },
+  {
+   "turn": 34,
+   "sources": 3,
+   "opportunities": 315,
+   "acquired": 2,
+   "sighted": 0,
+   "unplaced": []
+  },
+  {
+   "turn": 35,
+   "sources": 1,
+   "opportunities": 105,
+   "acquired": 0,
+   "sighted": 0,
+   "unplaced": []
+  },
+  {
+   "turn": 36,
+   "sources": 2,
+   "opportunities": 212,
+   "acquired": 3,
+   "sighted": 0,
+   "unplaced": []
+  },
+  {
+   "turn": 37,
+   "sources": 1,
+   "opportunities": 107,
+   "acquired": 0,
+   "sighted": 0,
+   "unplaced": []
+  },
+  {
+   "turn": 38,
+   "sources": 2,
+   "opportunities": 214,
+   "acquired": 0,
+   "sighted": 0,
+   "unplaced": []
+  },
+  {
+   "turn": 39,
+   "sources": 2,
+   "opportunities": 214,
+   "acquired": 0,
+   "sighted": 0,
+   "unplaced": []
+  }
+ ],
+ "turns_with_acquired": [
+  1,
+  2,
+  3,
+  4,
+  5,
+  6,
+  7,
+  8,
+  10,
+  12,
+  15,
+  17,
+  18,
+  19,
+  20,
+  21,
+  22,
+  23,
+  24,
+  25,
+  26,
+  29,
+  30,
+  32,
+  33,
+  34,
+  36
+ ],
+ "turns_with_sighted": [
+  0,
+  1,
+  12,
+  15,
+  29
+ ],
+ "figure_acts_landed": [
+  {
+   "turn": 26,
+   "actor": "Wren Ashby",
+   "act": "request",
+   "other": "reeve:0001",
+   "as": null,
+   "answer": "declined",
+   "refused": null,
+   "reason": "pressed",
+   "thing": null,
+   "good": null
+  }
+ ],
+ "figure_acts_refused": [],
+ "letter_track": [
+  [
+   0,
+   "upland_gate",
+   "upland_gate",
+   "upland_gate"
+  ],
+  [
+   1,
+   "upland_gate",
+   "upland_gate",
+   "market_square"
+  ],
+  [
+   2,
+   "upland_gate",
+   "upland_gate",
+   "market_square"
+  ],
+  [
+   3,
+   "reeve_hall",
+   "reeve_hall",
+   "reeve_hall"
+  ],
+  [
+   4,
+   "reeve_hall",
+   "reeve_hall",
+   "reeve_hall"
+  ],
+  [
+   5,
+   "reeve_hall",
+   "reeve_hall",
+   "reeve_hall"
+  ],
+  [
+   6,
+   "reeve_hall",
+   "reeve_hall",
+   "reeve_hall"
+  ],
+  [
+   7,
+   "reeve_hall",
+   "reeve_hall",
+   "inn_common"
+  ],
+  [
+   8,
+   "reeve_hall",
+   "reeve_hall",
+   "inn_common"
+  ],
+  [
+   9,
+   "reeve_hall",
+   "reeve_hall",
+   "inn_guest_room_east"
+  ],
+  [
+   10,
+   "reeve_hall",
+   "reeve_hall",
+   "inn_common"
+  ],
+  [
+   11,
+   "reeve_hall",
+   "reeve_hall",
+   "bridge_road"
+  ],
+  [
+   12,
+   "reeve_hall",
+   "reeve_hall",
+   "shrine"
+  ],
+  [
+   13,
+   "reeve_hall",
+   "reeve_hall",
+   "toll_bridge"
+  ],
+  [
+   14,
+   "reeve_hall",
+   "reeve_hall",
+   "mill_lane"
+  ],
+  [
+   15,
+   "reeve_hall",
+   "reeve_hall",
+   "mill"
+  ],
+  [
+   16,
+   "reeve_hall",
+   "reeve_hall",
+   "stone_lane"
+  ],
+  [
+   17,
+   "reeve_hall",
+   "reeve_hall",
+   "stone_lane"
+  ],
+  [
+   18,
+   "reeve_hall",
+   "reeve_hall",
+   "reeve_hall"
+  ],
+  [
+   19,
+   "reeve_hall",
+   "reeve_hall",
+   "market_square"
+  ],
+  [
+   20,
+   "reeve_hall",
+   "reeve_hall",
+   "inn_common"
+  ],
+  [
+   21,
+   "reeve_hall",
+   "reeve_hall",
+   "inn_common"
+  ],
+  [
+   22,
+   "reeve_hall",
+   "reeve_hall",
+   "upland_gate"
+  ],
+  [
+   23,
+   "reeve_hall",
+   "reeve_hall",
+   "smithy"
+  ],
+  [
+   24,
+   "reeve_hall",
+   "reeve_hall",
+   "upland_gate"
+  ],
+  [
+   25,
+   "reeve_hall",
+   "reeve_hall",
+   "slate_lane"
+  ],
+  [
+   26,
+   "reeve_hall",
+   "reeve_hall",
+   "reeve_hall"
+  ],
+  [
+   27,
+   "inn_guest_room_east",
+   "inn_guest_room_east",
+   "inn_guest_room_east"
+  ],
+  [
+   28,
+   "market_square",
+   "market_square",
+   "market_square"
+  ],
+  [
+   29,
+   "market_square",
+   "market_square",
+   "smithy"
+  ],
+  [
+   30,
+   "market_square",
+   "market_square",
+   "smithy"
+  ],
+  [
+   31,
+   "market_square",
+   "market_square",
+   "market_square"
+  ],
+  [
+   32,
+   "market_square",
+   "market_square",
+   "market_square"
+  ],
+  [
+   33,
+   "market_square",
+   "market_square",
+   "reeve_hall"
+  ],
+  [
+   34,
+   "market_square",
+   "market_square",
+   "clerk_office"
+  ],
+  [
+   35,
+   "market_square",
+   "market_square",
+   "inn_stable"
+  ],
+  [
+   36,
+   "market_square",
+   "market_square",
+   "inn_kitchen"
+  ],
+  [
+   37,
+   "market_square",
+   "market_square",
+   "inn_cellar"
+  ],
+  [
+   38,
+   "market_square",
+   "market_square",
+   "upland_road"
+  ],
+  [
+   39,
+   "market_square",
+   "market_square",
+   "stone_lane"
+  ]
+ ],
+ "carrier_records": [],
+ "inventory_ops": [
+  [
+   4,
+   [
+    {
+     "op": "transfer",
+     "object_id": "sealed_letter",
+     "from_id": "canvas_satchel",
+     "to_id": "Wren Ashby",
+     "relation": "held"
+    }
+   ]
+  ],
+  [
+   34,
+   [
+    {
+     "op": "transfer",
+     "object_id": "town_tax_rolls",
+     "to_id": "Wren Ashby",
+     "relation": "held"
+    }
+   ]
+  ]
+ ],
+ "voices_by_turn": [
+  [
+   2,
+   "market_square",
+   [
+    "Kelselwell Brbrookmere"
+   ]
+  ],
+  [
+   4,
+   "reeve_hall",
+   [
+    "Reeve of Harrowmere Brgaron Brfordwick"
+   ]
+  ],
+  [
+   5,
+   "reeve_hall",
+   [
+    "Reeve of Harrowmere Brgaron Brfordwick"
+   ]
+  ],
+  [
+   6,
+   "reeve_hall",
+   [
+    "Reeve of Harrowmere Brgaron Brfordwick"
+   ]
+  ],
+  [
+   7,
+   "inn_common",
+   [
+    "Reeve of Harrowmere Brgaron Brfordwick"
+   ]
+  ],
+  [
+   8,
+   "inn_common",
+   [
+    "Innkeeper of the Ford Inn Tamriced Fenbrookfield"
+   ]
+  ],
+  [
+   11,
+   "bridge_road",
+   [
+    "Innkeeper of the Ford Inn Tamriced Fenbrookfield"
+   ]
+  ],
+  [
+   13,
+   "toll_bridge",
+   [
+    "The Shrine-Keeper"
+   ]
+  ],
+  [
+   15,
+   "mill",
+   [
+    "Miller of Harrowmere Keldunwick Stanwickbridge"
+   ]
+  ],
+  [
+   18,
+   "reeve_hall",
+   [
+    "Corvala Dunselford"
+   ]
+  ],
+  [
+   20,
+   "inn_common",
+   [
+    "Innkeeper of the Ford Inn Tamriced Fenbrookfield"
+   ]
+  ],
+  [
+   21,
+   "inn_common",
+   [
+    "Innkeeper of the Ford Inn Tamriced Fenbrookfield"
+   ]
+  ],
+  [
+   23,
+   "smithy",
+   [
+    "Householder Irmerwell Fenfordton"
+   ]
+  ],
+  [
+   24,
+   "upland_gate",
+   [
+    "The Blacksmith"
+   ]
+  ],
+  [
+   25,
+   "slate_lane",
+   [
+    "The Gatekeeper"
+   ]
+  ],
+  [
+   27,
+   "inn_guest_room_east",
+   [
+    "Reeve of Harrowmere Brgaron Brfordwick"
+   ]
+  ],
+  [
+   29,
+   "smithy",
+   [
+    "The Blacksmith"
+   ]
+  ],
+  [
+   30,
+   "smithy",
+   [
+    "Smith of Harrowmere Tamstanmere Gargatebridge"
+   ]
+  ],
+  [
+   32,
+   "market_square",
+   [
+    "Kelselwell Brbrookmere"
+   ]
+  ],
+  [
+   34,
+   "clerk_office",
+   [
+    "Reeve of Harrowmere Brgaron Brfordwick"
+   ]
+  ],
+  [
+   37,
+   "inn_cellar",
+   [
+    "The Brewer"
+   ]
+  ]
+ ],
+ "voices_by_room": {
+  "market_square": [
+   [
+    2,
+    [
+     "Kelselwell Brbrookmere"
+    ]
+   ],
+   [
+    32,
+    [
+     "Kelselwell Brbrookmere"
+    ]
+   ]
+  ],
+  "reeve_hall": [
+   [
+    4,
+    [
+     "Reeve of Harrowmere Brgaron Brfordwick"
+    ]
+   ],
+   [
+    5,
+    [
+     "Reeve of Harrowmere Brgaron Brfordwick"
+    ]
+   ],
+   [
+    6,
+    [
+     "Reeve of Harrowmere Brgaron Brfordwick"
+    ]
+   ],
+   [
+    18,
+    [
+     "Corvala Dunselford"
+    ]
+   ]
+  ],
+  "inn_common": [
+   [
+    7,
+    [
+     "Reeve of Harrowmere Brgaron Brfordwick"
+    ]
+   ],
+   [
+    8,
+    [
+     "Innkeeper of the Ford Inn Tamriced Fenbrookfield"
+    ]
+   ],
+   [
+    20,
+    [
+     "Innkeeper of the Ford Inn Tamriced Fenbrookfield"
+    ]
+   ],
+   [
+    21,
+    [
+     "Innkeeper of the Ford Inn Tamriced Fenbrookfield"
+    ]
+   ]
+  ],
+  "bridge_road": [
+   [
+    11,
+    [
+     "Innkeeper of the Ford Inn Tamriced Fenbrookfield"
+    ]
+   ]
+  ],
+  "toll_bridge": [
+   [
+    13,
+    [
+     "The Shrine-Keeper"
+    ]
+   ]
+  ],
+  "mill": [
+   [
+    15,
+    [
+     "Miller of Harrowmere Keldunwick Stanwickbridge"
+    ]
+   ]
+  ],
+  "smithy": [
+   [
+    23,
+    [
+     "Householder Irmerwell Fenfordton"
+    ]
+   ],
+   [
+    29,
+    [
+     "The Blacksmith"
+    ]
+   ],
+   [
+    30,
+    [
+     "Smith of Harrowmere Tamstanmere Gargatebridge"
+    ]
+   ]
+  ],
+  "upland_gate": [
+   [
+    24,
+    [
+     "The Blacksmith"
+    ]
+   ]
+  ],
+  "slate_lane": [
+   [
+    25,
+    [
+     "The Gatekeeper"
+    ]
+   ]
+  ],
+  "inn_guest_room_east": [
+   [
+    27,
+    [
+     "Reeve of Harrowmere Brgaron Brfordwick"
+    ]
+   ]
+  ],
+  "clerk_office": [
+   [
+    34,
+    [
+     "Reeve of Harrowmere Brgaron Brfordwick"
+    ]
+   ]
+  ],
+  "inn_cellar": [
+   [
+    37,
+    [
+     "The Brewer"
+    ]
+   ]
+  ]
+ },
+ "lowercase_voice_names": [
+  "Innkeeper of the Ford Inn Tamriced Fenbrookfield",
+  "Miller of Harrowmere Keldunwick Stanwickbridge",
+  "Reeve of Harrowmere Brgaron Brfordwick",
+  "Smith of Harrowmere Tamstanmere Gargatebridge"
+ ],
+ "promotion_warnings": [
+  [
+   5,
+   "[commit] promotion proposed: Reeve of Harrowmere Brgaron Brfordwick has spoken on 2 beats and been turned to on 4; the engine has proposed them for promotion to a character, which the owner confirms f"
+  ],
+  [
+   10,
+   "[commit] promotion proposed: Innkeeper of the Ford Inn Tamriced Fenbrookfield has spoken on 1 beat and been turned to on 2; the engine has proposed them for promotion to a character, which the owner c"
+  ],
+  [
+   28,
+   "[commit] promotion proposed: The Gatekeeper has spoken on 1 beat and been turned to on 1; the engine has proposed them for promotion to a character, which the owner confirms from the presences panel. "
+  ],
+  [
+   29,
+   "[commit] promotion proposed: The Blacksmith has spoken on 2 beats and been turned to on 2; the engine has proposed them for promotion to a character, which the owner confirms from the presences panel."
+  ],
+  [
+   32,
+   "[commit] promotion proposed: Kelselwell Brbrookmere has spoken on 2 beats and been turned to on 2; the engine has proposed them for promotion to a character, which the owner confirms from the presence"
+  ]
+ ],
+ "promotion_proposed": {
+  "p_5950bd28b65611a2": 28,
+  "p_abfa30402536f6a2": 10,
+  "p_101c8ce0c7fcd29d": 5,
+  "p_bc0f49c7f0ecf324": 32,
+  "p_70163a10bd47b979": 29
+ },
+ "cast_changes": [],
+ "tell_director": [],
+ "clock_by_turn": [
+  {
+   "turn": 0,
+   "display": "mid-morning",
+   "hour": 9.0,
+   "phase": "morning",
+   "day_phase": "morning",
+   "light": {
+    "room": "upland_gate",
+    "declared": "bright",
+    "room_light": "lit",
+    "effective": "lit",
+    "exposure": "sheltered"
+   },
+   "time": null
+  },
+  {
+   "turn": 1,
+   "display": "mid-morning",
+   "hour": 9.01,
+   "phase": "morning",
+   "day_phase": "morning",
+   "light": {
+    "room": "market_square",
+    "declared": "bright",
+    "room_light": "lit",
+    "effective": "lit",
+    "exposure": "open"
+   },
+   "time": {
+    "start_seconds": 0.0,
+    "duration_seconds": 25.0,
+    "end_seconds": 25.0,
+    "mode": "action",
+    "explicit": false,
+    "display_advance": "a moment later"
+   }
+  },
+  {
+   "turn": 2,
+   "display": "mid-morning",
+   "hour": 9.01,
+   "phase": "morning",
+   "day_phase": "morning",
+   "light": {
+    "room": "market_square",
+    "declared": "bright",
+    "room_light": "lit",
+    "effective": "lit",
+    "exposure": "open"
+   },
+   "time": {
+    "start_seconds": 25.0,
+    "duration_seconds": 15.0,
+    "end_seconds": 40.0,
+    "mode": "action",
+    "explicit": false,
+    "display_advance": "a moment later"
+   }
+  },
+  {
+   "turn": 3,
+   "display": "mid-morning",
+   "hour": 9.02,
+   "phase": "morning",
+   "day_phase": "morning",
+   "light": {
+    "room": "reeve_hall",
+    "declared": "moderate",
+    "room_light": "lit",
+    "effective": "lit",
+    "exposure": "enclosed"
+   },
+   "time": {
+    "start_seconds": 40.0,
+    "duration_seconds": 25.0,
+    "end_seconds": 65.0,
+    "mode": "action",
+    "explicit": false,
+    "display_advance": "a moment later"
+   }
+  },
+  {
+   "turn": 4,
+   "display": "mid-morning",
+   "hour": 9.02,
+   "phase": "morning",
+   "day_phase": "morning",
+   "light": {
+    "room": "reeve_hall",
+    "declared": "moderate",
+    "room_light": "lit",
+    "effective": "lit",
+    "exposure": "enclosed"
+   },
+   "time": {
+    "start_seconds": 65.0,
+    "duration_seconds": 15.0,
+    "end_seconds": 80.0,
+    "mode": "action",
+    "explicit": false,
+    "display_advance": "a moment later"
+   }
+  },
+  {
+   "turn": 5,
+   "display": "mid-morning",
+   "hour": 9.03,
+   "phase": "morning",
+   "day_phase": "morning",
+   "light": {
+    "room": "reeve_hall",
+    "declared": "moderate",
+    "room_light": "lit",
+    "effective": "lit",
+    "exposure": "enclosed"
+   },
+   "time": {
+    "start_seconds": 80.0,
+    "duration_seconds": 15.0,
+    "end_seconds": 95.0,
+    "mode": "action",
+    "explicit": false,
+    "display_advance": "a moment later"
+   }
+  },
+  {
+   "turn": 6,
+   "display": "mid-morning",
+   "hour": 9.03,
+   "phase": "morning",
+   "day_phase": "morning",
+   "light": {
+    "room": "reeve_hall",
+    "declared": "moderate",
+    "room_light": "lit",
+    "effective": "lit",
+    "exposure": "enclosed"
+   },
+   "time": {
+    "start_seconds": 95.0,
+    "duration_seconds": 15.0,
+    "end_seconds": 110.0,
+    "mode": "action",
+    "explicit": false,
+    "display_advance": "a moment"
+   }
+  },
+  {
+   "turn": 7,
+   "display": "mid-morning",
+   "hour": 9.05,
+   "phase": "morning",
+   "day_phase": "morning",
+   "light": {
+    "room": "inn_common",
+    "declared": "lit",
+    "room_light": "lit",
+    "effective": "lit",
+    "exposure": "enclosed"
+   },
+   "time": {
+    "start_seconds": 110.0,
+    "duration_seconds": 60.0,
+    "end_seconds": 170.0,
+    "mode": "action",
+    "explicit": false,
+    "display_advance": "a minute later"
+   }
+  },
+  {
+   "turn": 8,
+   "display": "mid-morning",
+   "hour": 9.05,
+   "phase": "morning",
+   "day_phase": "morning",
+   "light": {
+    "room": "inn_common",
+    "declared": "lit",
+    "room_light": "lit",
+    "effective": "lit",
+    "exposure": "enclosed"
+   },
+   "time": {
+    "start_seconds": 170.0,
+    "duration_seconds": 15.0,
+    "end_seconds": 185.0,
+    "mode": "action",
+    "explicit": false,
+    "display_advance": "a moment"
+   }
+  },
+  {
+   "turn": 9,
+   "display": "dawn",
+   "hour": 6.05,
+   "phase": "dawn",
+   "day_phase": "dawn",
+   "light": {
+    "room": "inn_guest_room_east",
+    "declared": "dim",
+    "room_light": "dim",
+    "effective": "dim",
+    "exposure": "enclosed"
+   },
+   "time": {
+    "start_seconds": 185.0,
+    "duration_seconds": 75600.0,
+    "end_seconds": 75785.0,
+    "mode": "time_skip",
+    "explicit": true,
+    "display_advance": "by dawn the following morning"
+   }
+  },
+  {
+   "turn": 10,
+   "display": "dawn",
+   "hour": 6.08,
+   "phase": "dawn",
+   "day_phase": "dawn",
+   "light": {
+    "room": "inn_common",
+    "declared": "lit",
+    "room_light": "lit",
+    "effective": "lit",
+    "exposure": "enclosed"
+   },
+   "time": {
+    "start_seconds": 75785.0,
+    "duration_seconds": 120.0,
+    "end_seconds": 75905.0,
+    "mode": "action",
+    "explicit": false,
+    "display_advance": "a few minutes later"
+   }
+  },
+  {
+   "turn": 11,
+   "display": "dawn",
+   "hour": 6.1,
+   "phase": "dawn",
+   "day_phase": "dawn",
+   "light": {
+    "room": "bridge_road",
+    "declared": "bright",
+    "room_light": "dim",
+    "effective": "dim",
+    "exposure": "open"
+   },
+   "time": {
+    "start_seconds": 75905.0,
+    "duration_seconds": 60.0,
+    "end_seconds": 75965.0,
+    "mode": "action",
+    "explicit": false,
+    "display_advance": "a minute later"
+   }
+  },
+  {
+   "turn": 12,
+   "display": "dawn",
+   "hour": 6.11,
+   "phase": "dawn",
+   "day_phase": "dawn",
+   "light": {
+    "room": "shrine",
+    "declared": "lit",
+    "room_light": "dim",
+    "effective": "dim",
+    "exposure": "sheltered"
+   },
+   "time": {
+    "start_seconds": 75965.0,
+    "duration_seconds": 30.0,
+    "end_seconds": 75995.0,
+    "mode": "action",
+    "explicit": false,
+    "display_advance": "a moment later"
+   }
+  },
+  {
+   "turn": 13,
+   "display": "dawn",
+   "hour": 6.12,
+   "phase": "dawn",
+   "day_phase": "dawn",
+   "light": {
+    "room": "toll_bridge",
+    "declared": "bright",
+    "room_light": "dim",
+    "effective": "dim",
+    "exposure": "open"
+   },
+   "time": {
+    "start_seconds": 75995.0,
+    "duration_seconds": 30.0,
+    "end_seconds": 76025.0,
+    "mode": "action",
+    "explicit": false,
+    "display_advance": "a moment later"
+   }
+  },
+  {
+   "turn": 14,
+   "display": "dawn",
+   "hour": 6.13,
+   "phase": "dawn",
+   "day_phase": "dawn",
+   "light": {
+    "room": "mill_lane",
+    "declared": "bright",
+    "room_light": "dim",
+    "effective": "dim",
+    "exposure": "open"
+   },
+   "time": {
+    "start_seconds": 76025.0,
+    "duration_seconds": 60.0,
+    "end_seconds": 76085.0,
+    "mode": "action",
+    "explicit": false,
+    "display_advance": "a minute later"
+   }
+  },
+  {
+   "turn": 15,
+   "display": "dawn",
+   "hour": 6.14,
+   "phase": "dawn",
+   "day_phase": "dawn",
+   "light": {
+    "room": "mill",
+    "declared": "lit",
+    "room_light": "lit",
+    "effective": "lit",
+    "exposure": "enclosed"
+   },
+   "time": {
+    "start_seconds": 76085.0,
+    "duration_seconds": 30.0,
+    "end_seconds": 76115.0,
+    "mode": "action",
+    "explicit": false,
+    "display_advance": "a moment later"
+   }
+  },
+  {
+   "turn": 16,
+   "display": "dawn",
+   "hour": 6.18,
+   "phase": "dawn",
+   "day_phase": "dawn",
+   "light": {
+    "room": "stone_lane",
+    "declared": "bright",
+    "room_light": "dim",
+    "effective": "dim",
+    "exposure": "open"
+   },
+   "time": {
+    "start_seconds": 76115.0,
+    "duration_seconds": 120.0,
+    "end_seconds": 76235.0,
+    "mode": "action",
+    "explicit": false,
+    "display_advance": "a couple of minutes later"
+   }
+  },
+  {
+   "turn": 17,
+   "display": "dawn",
+   "hour": 6.18,
+   "phase": "dawn",
+   "day_phase": "dawn",
+   "light": {
+    "room": "stone_lane",
+    "declared": "bright",
+    "room_light": "dim",
+    "effective": "dim",
+    "exposure": "open"
+   },
+   "time": {
+    "start_seconds": 76235.0,
+    "duration_seconds": 15.0,
+    "end_seconds": 76250.0,
+    "mode": "action",
+    "explicit": false,
+    "display_advance": "a moment"
+   }
+  },
+  {
+   "turn": 18,
+   "display": "dawn",
+   "hour": 6.19,
+   "phase": "dawn",
+   "day_phase": "dawn",
+   "light": {
+    "room": "reeve_hall",
+    "declared": "moderate",
+    "room_light": "lit",
+    "effective": "lit",
+    "exposure": "enclosed"
+   },
+   "time": {
+    "start_seconds": 76250.0,
+    "duration_seconds": 45,
+    "end_seconds": 76295.0,
+    "mode": "action",
+    "explicit": false,
+    "display_advance": "a moment later"
+   }
+  },
+  {
+   "turn": 19,
+   "display": "afternoon",
+   "hour": 17.19,
+   "phase": "afternoon",
+   "day_phase": "afternoon",
+   "light": {
+    "room": "market_square",
+    "declared": "bright",
+    "room_light": "lit",
+    "effective": "lit",
+    "exposure": "open"
+   },
+   "time": {
+    "start_seconds": 76295.0,
+    "duration_seconds": 39600.0,
+    "end_seconds": 115895.0,
+    "mode": "time_skip",
+    "explicit": true,
+    "display_advance": "by dusk"
+   }
+  },
+  {
+   "turn": 20,
+   "display": "afternoon",
+   "hour": 17.2,
+   "phase": "afternoon",
+   "day_phase": "afternoon",
+   "light": {
+    "room": "inn_common",
+    "declared": "lit",
+    "room_light": "lit",
+    "effective": "lit",
+    "exposure": "enclosed"
+   },
+   "time": {
+    "start_seconds": 115895.0,
+    "duration_seconds": 35.0,
+    "end_seconds": 115930.0,
+    "mode": "action",
+    "explicit": false,
+    "display_advance": "a moment later"
+   }
+  },
+  {
+   "turn": 21,
+   "display": "afternoon",
+   "hour": 17.21,
+   "phase": "afternoon",
+   "day_phase": "afternoon",
+   "light": {
+    "room": "inn_common",
+    "declared": "lit",
+    "room_light": "lit",
+    "effective": "lit",
+    "exposure": "enclosed"
+   },
+   "time": {
+    "start_seconds": 115930.0,
+    "duration_seconds": 15.0,
+    "end_seconds": 115945.0,
+    "mode": "action",
+    "explicit": false,
+    "display_advance": null
+   }
+  },
+  {
+   "turn": 22,
+   "display": "afternoon",
+   "hour": 17.22,
+   "phase": "afternoon",
+   "day_phase": "afternoon",
+   "light": {
+    "room": "upland_gate",
+    "declared": "bright",
+    "room_light": "lit",
+    "effective": "lit",
+    "exposure": "sheltered"
+   },
+   "time": {
+    "start_seconds": 115945.0,
+    "duration_seconds": 30.0,
+    "end_seconds": 115975.0,
+    "mode": "action",
+    "explicit": false,
+    "display_advance": "a moment later"
+   }
+  },
+  {
+   "turn": 23,
+   "display": "afternoon",
+   "hour": 17.22,
+   "phase": "afternoon",
+   "day_phase": "afternoon",
+   "light": {
+    "room": "smithy",
+    "declared": "dim",
+    "room_light": "dim",
+    "effective": "dim",
+    "exposure": "enclosed"
+   },
+   "time": {
+    "start_seconds": 115975.0,
+    "duration_seconds": 25.0,
+    "end_seconds": 116000.0,
+    "mode": "action",
+    "explicit": false,
+    "display_advance": "a moment later"
+   }
+  },
+  {
+   "turn": 24,
+   "display": "afternoon",
+   "hour": 17.23,
+   "phase": "afternoon",
+   "day_phase": "afternoon",
+   "light": {
+    "room": "upland_gate",
+    "declared": "bright",
+    "room_light": "lit",
+    "effective": "lit",
+    "exposure": "sheltered"
+   },
+   "time": {
+    "start_seconds": 116000.0,
+    "duration_seconds": 45.0,
+    "end_seconds": 116045.0,
+    "mode": "action",
+    "explicit": false,
+    "display_advance": "a moment later"
+   }
+  },
+  {
+   "turn": 25,
+   "display": "afternoon",
+   "hour": 17.25,
+   "phase": "afternoon",
+   "day_phase": "afternoon",
+   "light": {
+    "room": "slate_lane",
+    "declared": "bright",
+    "room_light": "lit",
+    "effective": "lit",
+    "exposure": "open"
+   },
+   "time": {
+    "start_seconds": 116045.0,
+    "duration_seconds": 45.0,
+    "end_seconds": 116090.0,
+    "mode": "action",
+    "explicit": false,
+    "display_advance": "a minute later"
+   }
+  },
+  {
+   "turn": 26,
+   "display": "afternoon",
+   "hour": 17.28,
+   "phase": "afternoon",
+   "day_phase": "afternoon",
+   "light": {
+    "room": "reeve_hall",
+    "declared": "moderate",
+    "room_light": "lit",
+    "effective": "lit",
+    "exposure": "enclosed"
+   },
+   "time": {
+    "start_seconds": 116090.0,
+    "duration_seconds": 120.0,
+    "end_seconds": 116210.0,
+    "mode": "action",
+    "explicit": false,
+    "display_advance": "a few minutes later"
+   }
+  },
+  {
+   "turn": 27,
+   "display": "morning",
+   "hour": 7.73,
+   "phase": "morning",
+   "day_phase": "morning",
+   "light": {
+    "room": "inn_guest_room_east",
+    "declared": "dim",
+    "room_light": "dim",
+    "effective": "dim",
+    "exposure": "enclosed"
+   },
+   "time": {
+    "start_seconds": 116210.0,
+    "duration_seconds": 52000.0,
+    "end_seconds": 168210.0,
+    "mode": "time_skip",
+    "explicit": true,
+    "display_advance": "the following morning"
+   }
+  },
+  {
+   "turn": 28,
+   "display": "morning",
+   "hour": 7.89,
+   "phase": "morning",
+   "day_phase": "morning",
+   "light": {
+    "room": "market_square",
+    "declared": "bright",
+    "room_light": "dim",
+    "effective": "dim",
+    "exposure": "open"
+   },
+   "time": {
+    "start_seconds": 168210.0,
+    "duration_seconds": 600.0,
+    "end_seconds": 168810.0,
+    "mode": "action",
+    "explicit": false,
+    "display_advance": "ten minutes later"
+   }
+  },
+  {
+   "turn": 29,
+   "display": "morning",
+   "hour": 7.9,
+   "phase": "morning",
+   "day_phase": "morning",
+   "light": {
+    "room": "smithy",
+    "declared": "dim",
+    "room_light": "dim",
+    "effective": "dim",
+    "exposure": "enclosed"
+   },
+   "time": {
+    "start_seconds": 168810.0,
+    "duration_seconds": 15.0,
+    "end_seconds": 168825.0,
+    "mode": "action",
+    "explicit": false,
+    "display_advance": "a moment later"
+   }
+  },
+  {
+   "turn": 30,
+   "display": "morning",
+   "hour": 7.9,
+   "phase": "morning",
+   "day_phase": "morning",
+   "light": {
+    "room": "smithy",
+    "declared": "dim",
+    "room_light": "dim",
+    "effective": "dim",
+    "exposure": "enclosed"
+   },
+   "time": {
+    "start_seconds": 168825.0,
+    "duration_seconds": 15.0,
+    "end_seconds": 168840.0,
+    "mode": "action",
+    "explicit": false,
+    "display_advance": "a moment later"
+   }
+  },
+  {
+   "turn": 31,
+   "display": "midday",
+   "hour": 12.0,
+   "phase": "midday",
+   "day_phase": "midday",
+   "light": {
+    "room": "market_square",
+    "declared": "bright",
+    "room_light": "dim",
+    "effective": "dim",
+    "exposure": "open"
+   },
+   "time": {
+    "start_seconds": 168840.0,
+    "duration_seconds": 14760.0,
+    "end_seconds": 183600.0,
+    "mode": "time_skip",
+    "explicit": true,
+    "display_advance": "by midday"
+   }
+  },
+  {
+   "turn": 32,
+   "display": "midday",
+   "hour": 12.0,
+   "phase": "midday",
+   "day_phase": "midday",
+   "light": {
+    "room": "market_square",
+    "declared": "bright",
+    "room_light": "dim",
+    "effective": "dim",
+    "exposure": "open"
+   },
+   "time": {
+    "start_seconds": 183600.0,
+    "duration_seconds": 15,
+    "end_seconds": 183615.0,
+    "mode": "action",
+    "explicit": false,
+    "display_advance": "a moment"
+   }
+  },
+  {
+   "turn": 33,
+   "display": "midday",
+   "hour": 12.01,
+   "phase": "midday",
+   "day_phase": "midday",
+   "light": {
+    "room": "reeve_hall",
+    "declared": "moderate",
+    "room_light": "lit",
+    "effective": "lit",
+    "exposure": "enclosed"
+   },
+   "time": {
+    "start_seconds": 183615.0,
+    "duration_seconds": 25.0,
+    "end_seconds": 183640.0,
+    "mode": "action",
+    "explicit": false,
+    "display_advance": "a moment later"
+   }
+  },
+  {
+   "turn": 34,
+   "display": "midday",
+   "hour": 12.03,
+   "phase": "midday",
+   "day_phase": "midday",
+   "light": {
+    "room": "clerk_office",
+    "declared": "dim",
+    "room_light": "dim",
+    "effective": "dim",
+    "exposure": "enclosed"
+   },
+   "time": {
+    "start_seconds": 183640.0,
+    "duration_seconds": 60.0,
+    "end_seconds": 183700.0,
+    "mode": "action",
+    "explicit": false,
+    "display_advance": "a minute later"
+   }
+  },
+  {
+   "turn": 35,
+   "display": "midday",
+   "hour": 12.04,
+   "phase": "midday",
+   "day_phase": "midday",
+   "light": {
+    "room": "inn_stable",
+    "declared": "dim",
+    "room_light": "dim",
+    "effective": "dim",
+    "exposure": "enclosed"
+   },
+   "time": {
+    "start_seconds": 183700.0,
+    "duration_seconds": 60.0,
+    "end_seconds": 183760.0,
+    "mode": "action",
+    "explicit": false,
+    "display_advance": "a minute later"
+   }
+  },
+  {
+   "turn": 36,
+   "display": "midday",
+   "hour": 12.05,
+   "phase": "midday",
+   "day_phase": "midday",
+   "light": {
+    "room": "inn_kitchen",
+    "declared": "lit",
+    "room_light": "lit",
+    "effective": "lit",
+    "exposure": "enclosed"
+   },
+   "time": {
+    "start_seconds": 183760.0,
+    "duration_seconds": 20.0,
+    "end_seconds": 183780.0,
+    "mode": "action",
+    "explicit": false,
+    "display_advance": "a moment later"
+   }
+  },
+  {
+   "turn": 37,
+   "display": "midday",
+   "hour": 12.06,
+   "phase": "midday",
+   "day_phase": "midday",
+   "light": {
+    "room": "inn_cellar",
+    "declared": "dim",
+    "room_light": "dim",
+    "effective": "dim",
+    "exposure": "enclosed"
+   },
+   "time": {
+    "start_seconds": 183780.0,
+    "duration_seconds": 20.0,
+    "end_seconds": 183800.0,
+    "mode": "action",
+    "explicit": false,
+    "display_advance": "a moment later"
+   }
+  },
+  {
+   "turn": 38,
+   "display": "midday",
+   "hour": 12.22,
+   "phase": "midday",
+   "day_phase": "midday",
+   "light": {
+    "room": "upland_road",
+    "declared": null,
+    "room_light": "lit",
+    "effective": "lit",
+    "exposure": "enclosed"
+   },
+   "time": {
+    "start_seconds": 183800.0,
+    "duration_seconds": 600.0,
+    "end_seconds": 184400.0,
+    "mode": "action",
+    "explicit": false,
+    "display_advance": "ten minutes later"
+   }
+  },
+  {
+   "turn": 39,
+   "display": "dusk",
+   "hour": 18.22,
+   "phase": "dusk",
+   "day_phase": "dusk",
+   "light": {
+    "room": "stone_lane",
+    "declared": "bright",
+    "room_light": "dim",
+    "effective": "dim",
+    "exposure": "open"
+   },
+   "time": {
+    "start_seconds": 184400.0,
+    "duration_seconds": 21600.0,
+    "end_seconds": 206000.0,
+    "mode": "time_skip",
+    "explicit": true,
+    "display_advance": "by dusk"
+   }
+  }
+ ],
+ "clock_displays": [
+  "mid-morning",
+  "dawn",
+  "afternoon",
+  "morning",
+  "midday",
+  "dusk"
+ ],
+ "outdoor_light_by_turn": [
+  [
+   0,
+   "morning",
+   "lit",
+   "bright"
+  ],
+  [
+   1,
+   "morning",
+   "lit",
+   "bright"
+  ],
+  [
+   2,
+   "morning",
+   "lit",
+   "bright"
+  ],
+  [
+   11,
+   "dawn",
+   "dim",
+   "bright"
+  ],
+  [
+   12,
+   "dawn",
+   "dim",
+   "lit"
+  ],
+  [
+   13,
+   "dawn",
+   "dim",
+   "bright"
+  ],
+  [
+   14,
+   "dawn",
+   "dim",
+   "bright"
+  ],
+  [
+   16,
+   "dawn",
+   "dim",
+   "bright"
+  ],
+  [
+   17,
+   "dawn",
+   "dim",
+   "bright"
+  ],
+  [
+   19,
+   "afternoon",
+   "lit",
+   "bright"
+  ],
+  [
+   22,
+   "afternoon",
+   "lit",
+   "bright"
+  ],
+  [
+   24,
+   "afternoon",
+   "lit",
+   "bright"
+  ],
+  [
+   25,
+   "afternoon",
+   "lit",
+   "bright"
+  ],
+  [
+   28,
+   "morning",
+   "dim",
+   "bright"
+  ],
+  [
+   31,
+   "midday",
+   "dim",
+   "bright"
+  ],
+  [
+   32,
+   "midday",
+   "dim",
+   "bright"
+  ],
+  [
+   39,
+   "dusk",
+   "dim",
+   "bright"
+  ]
+ ],
+ "outdoor_levels_seen": [
+  "dim",
+  "lit"
+ ],
+ "reanchors": [],
+ "station_write_turns": [
+  0,
+  1,
+  2,
+  3,
+  5,
+  7,
+  8,
+  9,
+  11,
+  12,
+  13,
+  14,
+  15,
+  16,
+  18,
+  19,
+  20,
+  21,
+  22,
+  23,
+  24,
+  25,
+  26,
+  27,
+  28,
+  29,
+  31,
+  33,
+  34,
+  35,
+  36,
+  37,
+  38,
+  39
+ ],
+ "cover_write_turns": [],
+ "final_sight_digest": {
+  "sees": {},
+  "hidden": [],
+  "cover": [],
+  "within_reach": {}
+ },
+ "sightlines_log_lines": 0,
+ "charter": {
+  "reeves_hall": {
+   "bodies": 7,
+   "clock_hours": 777.2222222222223,
+   "travelled_total": 1560,
+   "bodies_with_walked": 7,
+   "walked_edges": 1560,
+   "scene_rooms": 45,
+   "news_keys": 69,
+   "bindings": 0,
+   "figures": [],
+   "day_anchor_hours": 9.0
+  },
+  "ford_inn": {
+   "bodies": 7,
+   "clock_hours": 777.2222222222223,
+   "travelled_total": 1679,
+   "bodies_with_walked": 7,
+   "walked_edges": 1679,
+   "scene_rooms": 45,
+   "news_keys": 81,
+   "bindings": 0,
+   "figures": [],
+   "day_anchor_hours": 9.0
+  },
+  "orrin_shrine": {
+   "bodies": 3,
+   "clock_hours": 777.2222222222223,
+   "travelled_total": 820,
+   "bodies_with_walked": 3,
+   "walked_edges": 820,
+   "scene_rooms": 45,
+   "news_keys": 2,
+   "bindings": 0,
+   "figures": [],
+   "day_anchor_hours": 9.0
+  },
+  "mill_charter": {
+   "bodies": 4,
+   "clock_hours": 777.2222222222223,
+   "travelled_total": 666,
+   "bodies_with_walked": 4,
+   "walked_edges": 666,
+   "scene_rooms": 45,
+   "news_keys": 48,
+   "bindings": 0,
+   "figures": [],
+   "day_anchor_hours": 9.0
+  },
+  "smithy_charter": {
+   "bodies": 4,
+   "clock_hours": 777.2222222222223,
+   "travelled_total": 807,
+   "bodies_with_walked": 4,
+   "walked_edges": 807,
+   "scene_rooms": 45,
+   "news_keys": 50,
+   "bindings": 0,
+   "figures": [],
+   "day_anchor_hours": 9.0
+  },
+  "market_traders": {
+   "bodies": 3,
+   "clock_hours": 777.2222222222223,
+   "travelled_total": 390,
+   "bodies_with_walked": 3,
+   "walked_edges": 390,
+   "scene_rooms": 45,
+   "news_keys": 28,
+   "bindings": 0,
+   "figures": [],
+   "day_anchor_hours": 9.0
+  },
+  "households": {
+   "bodies": 72,
+   "clock_hours": 777.2222222222223,
+   "travelled_total": 5214,
+   "bodies_with_walked": 72,
+   "walked_edges": 5214,
+   "scene_rooms": 45,
+   "news_keys": 17,
+   "bindings": 0,
+   "figures": [],
+   "day_anchor_hours": 9.0
+  },
+  "ambient": {
+   "bodies": 7,
+   "clock_hours": 57.22222222222223,
+   "travelled_total": 0,
+   "bodies_with_walked": 0,
+   "walked_edges": 0,
+   "scene_rooms": 45,
+   "news_keys": 35,
+   "bindings": 0,
+   "figures": [],
+   "day_anchor_hours": 9.0
+  }
+ },
+ "total_bodies": 107,
+ "charter_window_4h_seconds": 0.76,
+ "final_clock_hours": 57.2,
+ "final_clock": {
+  "elapsed_seconds": 206000.0,
+  "display": "dusk",
+  "anchor_hour": 9.0,
+  "day_length_hours": 24.0,
+  "hour_of_day": 18.22,
+  "phase": "dusk"
+ }
+}
