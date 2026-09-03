@@ -694,3 +694,24 @@ def test_a_shapeless_output_is_reported_and_the_loop_goes_on(temp_db, monkeypatc
     assert first["tool"] is None and "cut off" in first["result"]["error"]
     called = seen[2]["transcript"][-1]
     assert called["tool"] == "inspect_needs" and called["args"] == {"frame": "x"}
+
+
+def test_a_round_that_judged_and_said_nothing_did_not_stop_at_a_budget(
+        temp_db, scripted, monkeypatch):
+    """Bench, chat 114: a deliberation round answered verdicts with no reply
+    and the thread told the player the room had stopped at its budget. A
+    task that finishes unstopped posts no line; a reply owes the player a
+    truthful one."""
+    cid, _ = _story(temp_db)
+    scripted({"verdicts": [{"proposal_uid": "prop_x", "verdict": "accept",
+                            "reason": "fits"}]})
+    out = sp._run_task(cid, None, {"kind": "deliberate", "round": 1, "rounds": 2,
+                                   "dial": 2, "proposals": []}, base_turn=2)
+    assert out["stopped"] is None
+    assert out["reply"] == ""
+    assert out["verdicts"][0]["verdict"] == "accept"
+    scripted({"status_line": "Reading."})
+    out = sp.run_planner(cid, None, text="anything there?")
+    assert out["stopped"] is None
+    assert out["reply"] == sp.SILENT_LINE
+    assert sp.BOUNDED_LINE not in out["reply"]

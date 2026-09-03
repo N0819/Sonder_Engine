@@ -28,7 +28,7 @@
 | `agents/perception.py` | 4733 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `mind`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
 | `agents/runtime.py` | 1382 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `core.db`, `core.pipeline_context`, `llm.providers`, `persist.checkpoints`, `persist.commit`, `story.character_schema`, `story.scene` |
 | `agents/storage.py` | 123 | Step and active-variant persistence helpers. | `core.db` |
-| `agents/story_planner.py` | 896 |  | `core.logging_utils` |
+| `agents/story_planner.py` | 904 |  | `core.logging_utils` |
 | `core/__init__.py` | 6 |  | — |
 | `core/db.py` | 2587 | SQLite schema, migrations, connection management, transactions, and key/value world access. | `core.paths` |
 | `core/frames.py` | 220 |  | `core.db` |
@@ -469,14 +469,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `run_planner()` | 418 | 157 lines |
-| `deliberate()` | 660 | 91 lines |
-| `schedule_room_work()` | 842 | 55 lines |
-| `_payload()` | 226 | 52 lines |
-| `run_dramaturge_pass()` | 753 | 40 lines |
-| `_run_task()` | 577 | 32 lines |
-| `charter_planner()` | 351 | 30 lines |
-| `run_fill()` | 813 | 27 lines |
+| `run_planner()` | 420 | 163 lines |
+| `deliberate()` | 668 | 91 lines |
+| `schedule_room_work()` | 850 | 55 lines |
+| `_payload()` | 228 | 52 lines |
+| `run_dramaturge_pass()` | 761 | 40 lines |
+| `_run_task()` | 585 | 32 lines |
+| `charter_planner()` | 353 | 30 lines |
+| `run_fill()` | 821 | 27 lines |
 
 ### `core/db.py`
 
@@ -2759,8 +2759,8 @@ Sections: Weather effects (`:2`); the tile (`:178`); the layers (`:251`); lifecy
 
 Declared functions: `weatherFxReduced()`, `weatherFxEffectsOff()`, `weatherFxSupported()`, `weatherFxHost()`, `weatherFxRandom()`, `weatherFxTile()`, `weatherFxReach()`, `weatherFxBuild()`, `weatherFxClearLayers()`, `weatherFxStop()`, `weatherFxVisible()`, `weatherFxApply()`, `weatherFxStormy()`, `weatherFxScheduleFlash()`, `weatherFxFlash()`, `weatherFxOpenSky()`, `weatherFxBolt()`, `weatherFxThunder()`, `weatherFxForTurn()`.
 
-### `static/js/writers_room.js` (541 lines)
+### `static/js/writers_room.js` (542 lines)
 
-Sections: The Writers' Room panel (`:3`); bd-panel for this element alone. (`:20`); Named limits (`:33`); Shape: docked / floating / closed (`:132`); Loading (`:189`); Sending (`:254`); Rendering (`:304`); Building the panel (`:417`); Boot (`:530`).
+Sections: The Writers' Room panel (`:3`); bd-panel for this element alone. (`:20`); Named limits (`:33`); Shape: docked / floating / closed (`:133`); Loading (`:190`); Sending (`:255`); Rendering (`:305`); Building the panel (`:418`); Boot (`:531`).
 
 Declared functions: `roomCls()`, `roomStoreGet()`, `roomStoreSet()`, `roomRestorePrefs()`, `roomClampWidth()`, `roomClampOpacity()`, `roomClampGeometry()`, `roomApplyShape()`, `roomOpen()`, `roomSetMode()`, `roomKey()`, `roomFrameQuery()`, `roomLoad()`, `roomLoadEarlier()`, `roomStartWatch()`, `roomStopWatch()`, `roomSend()`, `roomRevoke()`, `roomRender()`, `roomRenderStatus()`, `roomRenderMandates()`, `roomRenderThread()`, `roomBuild()`, `roomWireDrag()`, `track()`.
