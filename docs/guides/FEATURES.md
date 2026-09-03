@@ -671,7 +671,12 @@ legitimately perceive, learn, remember or infer.
   through its tools, drafts what you ask for as a plot package, and acts only
   under what you have granted it in words -- a grant becomes a standing
   mandate you can read and withdraw. No proposal card yet: an actionable
-  reply is prose plus the standing list.
+  reply is prose plus the standing list. Under ⚙ Settings, *Writers' Room
+  research* names a web search provider and its key; once a story has also
+  granted the room research in words, the Planner may search the web for
+  reference material, every query shown in the thread before it is sent and
+  nothing from the web entering the world until filed as lore with its
+  address and date.
 
 ## Your data
 

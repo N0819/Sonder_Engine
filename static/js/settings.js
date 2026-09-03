@@ -2742,6 +2742,43 @@ function renderFullApiSettings(b) {
           "A local folder is searched by filename — name files for what they sound like (“rain_on_tin_roof.ogg”), or drop an index.json beside them mapping a file to extra words. Freesound needs a free API key from freesound.org/apiv2/apply; it fetches CC0 and Attribution sounds by default, and whatever is playing is credited in the 🎧 panel."));
     }
 
+    // The Writers' Room's research provider. A source of reference material
+    // for the Story Planner, not a chat model: which web search answers, and
+    // its key. The room still needs the player's spoken grant in each story
+    // before either tool runs; this only names the service.
+    {
+      const cfg = S.boot.research || {};
+      const provSel = el("select", {},
+        el("option", { value: "", ...(!cfg.provider ? { selected: "" } : {}) }, "not configured"),
+        ...((cfg.providers || []).map((p) =>
+          el("option", { value: p, ...(cfg.provider === p ? { selected: "" } : {}) }, p))));
+      const keyIn = el("input", {
+        type: "password", style: "width:190px",
+        placeholder: cfg.has_key ? "•••• (key set — blank keeps it)" : "Search API key",
+      });
+      b.append(el("h4", {}, "Writers' Room research"),
+        el("div", { class: "small dim" },
+          "Lets the Story Planner search the web for reference material — how a trade, a place or a period really worked — once a story has granted it research in words. Every query is written into the room thread before it is sent, results are cached per story, and nothing from the web enters the world until it is filed as lore with its address and date."),
+        el("div", { class: "row", style: "margin:6px 0" }, provSel, keyIn,
+          el("button", {
+            onclick: async () => {
+              await api("PUT", "/api/research", {
+                provider: provSel.value,
+                key: keyIn.value.trim(),
+              });
+              await boot();
+              toast("Research settings saved.", "ok");
+            },
+          }, "Save"),
+          el("button", {
+            onclick: async () => {
+              await api("PUT", "/api/research", { clear_key: true });
+              await boot();
+              toast("Research key cleared.", "ok");
+            },
+          }, "Clear key")));
+    }
+
     // Fan-out concurrency, switched where the specialists are configured.
     // The fan-out itself is not a choice and has no switch -- it is the
     // only Director path. Whether its specialists run AT ONCE is a choice,
