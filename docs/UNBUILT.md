@@ -5446,6 +5446,38 @@ charter's own clock, and `own_state` reaches the per-presence voice.
   The slice is right and safe (the stranger label); it is merely never the
   name.
 
+### 1.104 The persona has no per-story copy, so a card edit reaches every story at once
+
+**Found:** 2026-09-03, auditing the per-chat copy design against the code.
+
+Every attached CHARACTER carries a story-local copy: `chat_chars.sheet` holds
+the authored card this story reads (`COALESCE(cc.sheet, ch.sheet)` in every
+one of the ten readers), `chat_chars.state` holds the runtime mind, and
+`chat_char_frames` splits both per frame. A branch copies all three, and a
+checkpoint snapshots `state`/`status` while deliberately leaving `sheet`
+alone, because a card is configuration and not a turn fact.
+
+The PLAYER has none of it. `chats.persona_id` points straight at the library
+row and `persona_of` reads `personas.sheet` verbatim; there is no
+`chat_personas.sheet`, no COALESCE, and no writer that would fill one. So
+editing your persona in the library rewrites who you were in every story that
+persona has ever played, retroactively, with no branch and no checkpoint able
+to recover the earlier reading. The engine treats characters and players as
+near-equals everywhere else, and this is the largest place it does not.
+
+What DOES vary per story for the player is real but partial, and all of it is
+name-keyed scene state rather than a card: `persona_private_history` (a world
+key that shadows the sheet's authored copy), the attire ledger, conditions,
+positions, and the recognition map. Those branch and checkpoint correctly,
+because they live in `world` and the snapshot takes it whole.
+
+The shape of the fix is the one the characters already have: a nullable
+`chat_personas.sheet` (plus `chats.persona_id`'s row for the primary player),
+one COALESCE at `persona_of` and `story.scene`'s two persona reads, the same
+identity-immutability refusal `chat_char_card_put` enforces, archive and
+branch carry, and a checkpoint that leaves it alone. Until then, tell hosts
+plainly: a persona edit is retroactive across their whole library.
+
 ## 2. Roadmap
 
 Features the architecture intends and has not built. Ordered by value per unit

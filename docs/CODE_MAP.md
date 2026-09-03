@@ -72,7 +72,7 @@
 | `persist/__init__.py` | 6 |  | — |
 | `persist/chat_archive.py` | 1274 | Typed, atomic chat archive export/import service and HTTP routes. | `core.db`, `llm.schemas`, `mind.memory`, `persist.checkpoints`, `story.character_schema`, `story.room_conversation` |
 | `persist/chat_delete.py` | 42 |  | `core.db` |
-| `persist/checkpoints.py` | 1412 | Whole-chat snapshots and checkpoint restore orchestration. | `core.db`, `mind.memory` |
+| `persist/checkpoints.py` | 1450 | Whole-chat snapshots and checkpoint restore orchestration. | `core.db`, `mind.memory` |
 | `persist/commit.py` | 767 | Atomic commit orchestrator, per-turn lock, thin tail domains, and the facade re-exporting every commit_* name. | `core.db`, `core.frames`, `llm.prompts`, `llm.providers`, `mind`, `mind.memory`, `mind.theory_of_mind`, `persist.commit_attire`, `persist.commit_background`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_entities`, `persist.commit_ledgers`, `persist.commit_mapping`, `persist.commit_mechanics`, `persist.commit_memory`, `persist.commit_memory_write`, `persist.commit_place_graph`, `persist.commit_room_registry`, `persist.commit_scene_state`, `story`, `story.character_schema`, `story.scene`, `world.comfort`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.spatial_frames`, `world.survival`, `world.weather` |
 | `persist/commit_attire.py` | 1458 | The mutable clothing ledger: attire notes, shed/worn garment entities, the validated attire diff. | `persist.commit_common`, `story`, `story.attire` |
 | `persist/commit_background.py` | 3869 | Background presences: tracking, identity folding, the reactor gate, promotion to cast. | `core.db`, `mind.memory`, `persist.commit_common`, `story.character_schema`, `story.scene`, `world.spatial` |
@@ -906,13 +906,13 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `snapshot_state()` | 16 | 190 lines |
-| `_restore_checkpoint_body()` | 778 | 150 lines |
+| `_restore_checkpoint_body()` | 815 | 151 lines |
 | `_restore_books()` | 265 | 148 lines |
-| `compact_checkpoints()` | 1071 | 123 lines |
+| `compact_checkpoints()` | 1109 | 123 lines |
 | `insert_world_tables()` | 501 | 105 lines |
-| `ensure_checkpoint()` | 1260 | 53 lines |
-| `propagate_memory_summaries_to_checkpoints()` | 1315 | 53 lines |
-| `_verify_no_loss()` | 1019 | 50 lines |
+| `ensure_checkpoint()` | 1298 | 53 lines |
+| `propagate_memory_summaries_to_checkpoints()` | 1353 | 53 lines |
+| `_verify_no_loss()` | 1057 | 50 lines |
 
 ### `persist/commit.py`
 
