@@ -870,6 +870,13 @@ def with_charter_presences(cid, presences, scene=None, *, places=None,
             merged[key] = fresh
         else:
             _merge_presence_record(merged[key], record)
+            # A spelling that differs only by case is the same name, and
+            # the charter's is the healed one (`charter_identity.
+            # display_name`): a ledger written before a lower-case mash
+            # was repaired keeps presenting it otherwise.
+            stored = str(merged[key].get("name") or "")
+            if stored != str(name) and stored.casefold() == str(name).casefold():
+                merged[key]["name"] = str(name)
     return merged
 
 
@@ -1010,13 +1017,18 @@ def overt_declaration_text(ctx):
     return " ".join(p for p in parts if p).strip()
 
 
-def _background_name_mentioned(name, text):
+def _background_name_mentioned(name, text, shared=()):
     """resolved_event prose almost never repeats someone's full tracked
     name after their first introduction -- "Crusher" carries a scene once
     "Dr. Crusher" has been established -- so a plain substring check
     against the full name would undercount real mentions. Fall back to
     any significant word of the name (title words and short filler
-    stripped) appearing at a word boundary."""
+    stripped) appearing at a word boundary.
+
+    `shared` is the set of words this name holds IN COMMON with other
+    tracked names (`_shared_name_words`): a word every holder of a post
+    carries is the post's name, not anyone's, and a full-name match is the
+    only way such a word reaches this person."""
     text_cf = text.casefold()
     name_cf = name.casefold()
     if re.search(rf"\b{re.escape(name_cf)}\b", text_cf):
@@ -1025,10 +1037,39 @@ def _background_name_mentioned(name, text):
     significant = [
         w for w in words
         if w and w not in _BACKGROUND_NAME_TITLE_WORDS and len(w) >= 3
+        and w not in shared
     ]
     return any(
         re.search(rf"\b{re.escape(w)}\b", text_cf) for w in significant
     )
+
+
+def _shared_name_words(names):
+    """The significant words two or more distinct tracked names share.
+
+    A WORD SHARED BY EVERY HOLDER OF A POST IS THE POST'S NAME. Three reeves
+    are "Reeve <given> <family>" and the loose matcher read the word
+    "reeve" in the player's declaration as a mention of each: measured on
+    Harrowmere, every reeve accrued an `addressed_turns` entry on eight
+    beats the player spoke to one of them, and on turn 33 "ask Nookfeller"
+    qualified the other reeve beside him, with the pick then decided by a
+    string sort. The engine cannot list the world's titles (the corpus
+    already holds reeve, trader, clerk, innkeeper, and every story adds
+    one), but it can see which words its own tracked names have in common,
+    and that set is exactly the title vocabulary of THIS story. A word
+    unique to one name -- "nookfeller" -- still reaches its owner alone.
+    """
+    seen = {}
+    for name in names or ():
+        key = str(name or "").strip().casefold()
+        if not key:
+            continue
+        words = {w.strip(".,;:").casefold() for w in key.split()}
+        for word in words:
+            if word and word not in _BACKGROUND_NAME_TITLE_WORDS \
+                    and len(word) >= 3:
+                seen.setdefault(word, set()).add(key)
+    return {word for word, owners in seen.items() if len(owners) > 1}
 
 
 def _background_name_named_exactly(name, text):
@@ -1799,12 +1840,18 @@ def track_background_presences(ctx, nonce, *, prepared=None):
                   canon_embeddings=(prepared or {}).get("canon_embeddings"))
 
     resolved_event = str(res.get("resolved_event") or "")
+    # The story's title vocabulary, derived from its own tracked names: a
+    # word every holder of a post shares names the post, and a mention of
+    # it is not a mention of each of them (`_shared_name_words`).
+    shared_words = _shared_name_words(
+        n for k, r in presences.items() for n in _presence_names(k, r))
     for key, record in presences.items():
         if key in touched:
             continue
         # Former spellings count too: after a rename the prose keeps saying
         # "the guard" for a while, and it still means her.
-        if any(_background_name_mentioned(n, resolved_event)
+        if any(_background_name_mentioned(n, resolved_event,
+                                          shared=shared_words)
                for n in _presence_names(key, record)):
             record["last_turn"] = turn_idx
             if turn_idx not in record.setdefault("mention_turns", []):
@@ -1886,7 +1933,8 @@ def track_background_presences(ctx, nonce, *, prepared=None):
             continue
         addressed = any(
             _presence_in_addressed_refs(n, addressed_refs)
-            or _background_name_mentioned(n, player_input)
+            or _background_name_mentioned(n, player_input,
+                                          shared=shared_words)
             for n in _presence_names(key, record)
         )
         pr = record.get("pending_reply")
@@ -2020,8 +2068,10 @@ def track_background_presences(ctx, nonce, *, prepared=None):
                 "pending_reply")):
             _earned[key] = record
     presences = _earned
+    proposed = _propose_promotions(ctx, presences, sc)
     wset(cid, "background_presences", presences)
     return {"tracked": len(presences),
+            "promotion_proposed": proposed,
             "named": named,
             "charter_conduct": charter_conduct}
 
@@ -2236,18 +2286,56 @@ def _player_intended_targets(ctx, dr_output=None):
     return out
 
 
+def _communication_targets(ctx):
+    """Whom the player's INDIRECT speech was aimed at, as interpret
+    recorded it -- the fourth source of the address channel.
+
+    A `communication` element is an address by construction: it carries an
+    act and a target and nothing else ("asks Nookfeller whether the clerk
+    found anything"). It writes no dialogue_log line, so the resolve
+    stage's `intended_target` (`_player_intended_targets`) never exists
+    for it, and interpret marked no `addressed_to` because the prompt
+    licenses an empty channel for an ambiguous address. Measured,
+    Harrowmere turn 33: the sequence held `targets: ["Reeve Halinham
+    Nookfeller"]`, both address channels were empty, and the demand gate
+    fell through to the loose word match, which qualified the other reeve
+    too. Overt elements only, the player's own sequence only.
+    """
+    interp = ctx.get("director_interpret") or {}
+    if not isinstance(interp, dict):
+        return []
+    out, seen = [], set()
+    for element in (interp.get("sequence") or []):
+        if not isinstance(element, dict):
+            continue
+        if element.get("type") != "communication":
+            continue
+        if element.get("visibility") == "concealed":
+            continue
+        for target in (element.get("targets") or []):
+            text = " ".join(str(target or "").split())
+            if text and text.casefold() not in seen:
+                seen.add(text.casefold())
+                out.append(text)
+    return out
+
+
 def _addressed_ref_strings(ctx, dr_output=None):
     """The address channel's usable strings: the director's own refs when it
     spelled any, else the structured-fallback names for an address it marked
     but could not spell, else whom the resolve stage says the player's own
-    lines were aimed at (`_player_intended_targets`)."""
+    lines were aimed at (`_player_intended_targets`), else whom the
+    player's indirect speech was aimed at (`_communication_targets`)."""
     refs = _raw_flow_addressed_refs(ctx)
     if refs:
         return refs
     refs = _unresolved_address_fallback(ctx)
     if refs:
         return refs
-    return _player_intended_targets(ctx, dr_output)
+    refs = _player_intended_targets(ctx, dr_output)
+    if refs:
+        return refs
+    return _communication_targets(ctx)
 
 
 def _normalized_descriptor(text):
@@ -2652,6 +2740,10 @@ def pick_voice_demand(ctx, dr_output, cap=1):
     # each candidate below. Computed once: `positions` does not move inside
     # this loop.
     authored_rooms = authored_mind_rooms(sc, roster)
+    # The words this story's tracked names hold in common -- its title
+    # vocabulary, derived rather than listed (`_shared_name_words`).
+    shared_words = _shared_name_words(
+        presence_display_name(k, r) for k, r in ranked.items())
 
     candidates = []
     forced = 0
@@ -2693,7 +2785,7 @@ def pick_voice_demand(ctx, dr_output, cap=1):
         # measured six-for-one failure that split them.
         addressed_exact = _background_name_named_exactly(name, player_input)
         addressed = addressed_exact or _background_name_mentioned(
-            name, player_input)
+            name, player_input, shared=shared_words)
         # Where they ARE, for anything about what reaches them.
         here = presence_room(sc, name, record)
         # A registered character (or the player) who spoke directly TO this
@@ -2765,9 +2857,24 @@ def pick_voice_demand(ctx, dr_output, cap=1):
         # bodies only), then stably. Precise addresses outrank loose ones,
         # or a cap of one could hand the beat to a shared-word cousin of
         # the person actually named.
+        # THE SAME BODY ANSWERS NEXT TIME. Among candidates the triggers
+        # rank equally, the one who has already spoken in this story --
+        # most recently first -- outranks one who never has: the reader
+        # met a person, and a visit back to the room should find that
+        # person, not whichever holder of the same post the tie-break
+        # reached. Measured, Harrowmere turn 33: the reeve the player had
+        # handed a letter to and the reeve who had never been spoken to
+        # tied on every trigger bit and the string sort chose between
+        # them. Sits below the four demand triggers (a debt or an act is a
+        # stronger claim on the beat than familiarity) and above the
+        # charter entanglement digest and recency of record.
+        familiar = max(
+            [int(t) for t in (record.get("dialogue_turns") or ())
+             if isinstance(t, int)] or [-1])
         priority = [2 if addressed_precise else (1 if addressed_any else 0),
                     bool(owed), bool(acting),
-                    bool(emerged), 0.0, record.get("last_turn") or -1]
+                    bool(emerged), familiar, 0.0,
+                    record.get("last_turn") or -1]
         candidates.append(
             {"priority": priority, "name": name, "record": record,
              "room": str(here or ""),
@@ -2818,11 +2925,16 @@ def pick_voice_demand(ctx, dr_output, cap=1):
                     n for n, where in positions.items()
                     if str(where or "") == c["room"]
                     and str(n).casefold() in roster)
-                c["priority"][4] = round(charter_entanglement_of(
+                c["priority"][5] = round(charter_entanglement_of(
                     cid, c["refs"], present, registry=registry), 6)
         except Exception:
             pass
-    candidates.sort(key=lambda c: (c["priority"], c["name"]), reverse=True)
+    # Case-blind on the name: a stored spelling's capitalisation is not a
+    # fact about the person, and it once decided this sort ("Reeve H..."
+    # against "Reeve f...", with the lower-case f sorting later and so
+    # winning the reverse order).
+    candidates.sort(key=lambda c: (c["priority"], c["name"].casefold()),
+                    reverse=True)
     # Every addressee sorts first (top priority bit) and must answer THIS
     # beat: widen the cap to fit them all, then fill any slots left up to
     # `cap` with the remaining demand set.
@@ -2843,6 +2955,55 @@ def pick_voice_demand(ctx, dr_output, cap=1):
                            "player_addressed": bool(c.get("player_addressed")),
                            "room": c["room"]}
     return {"picks": picks, "meta": meta}
+
+def _propose_promotions(ctx, presences, scene):
+    """A MIND IS EARNED, AND THE ENGINE SAYS WHEN. Deterministic, at commit,
+    once per presence: the beat a tracked person's record first crosses
+    the story's promotion threshold (`promotion_thresholds` -- dialogue
+    turns at `BACKGROUND_PROMOTION_DIALOGUE_THRESHOLD`, mentions at
+    `BACKGROUND_PROMOTION_MENTION_THRESHOLD`, both per-chat overridable)
+    with a person's verdict and a real name, the record is stamped
+    `promotion_proposed_turn` and the Director is told through the engine
+    channel it reads next beat (`tell_director`), alongside a turn warning
+    for the owner. The offer itself was always here (`promotable`, read by
+    the presences panel and by auto-promotion); what was missing was the
+    MOMENT, surfaced to the two readers who act on it. Measured, Harrowmere
+    turns 5, 15 and 17: the Director, wanting to keep a person, wrote them
+    into `cast_changes`, which names attached characters only, and the
+    refusal said so and nothing more -- the Director had no other channel
+    to reach for and no signal that the engine already held one. Returns
+    the display names proposed this beat.
+    """
+    limits = promotion_thresholds(ctx.chat.id)
+    turn_idx = ctx.turn.idx
+    out = []
+    for key, record in (presences or {}).items():
+        if not isinstance(record, dict) or record.get(
+                "promotion_proposed_turn") is not None:
+            continue
+        dialogue = len(record.get("dialogue_turns") or [])
+        mentions = len(record.get("mention_turns") or [])
+        if dialogue < limits["dialogue"] and mentions < limits["mention"]:
+            continue
+        name = presence_display_name(key, record)
+        if presence_is_unnamed(key, record):
+            continue
+        if _presence_speech_verdict(scene, name, record) != "person":
+            continue
+        record["promotion_proposed_turn"] = turn_idx
+        out.append(name)
+        addressed = len(record.get("addressed_turns") or [])
+        msg = ("%s has spoken on %d beat%s and been turned to on %d; the "
+               "engine has proposed them for promotion to a character, "
+               "which the owner confirms from the presences panel. Until "
+               "then they stay a presence: voice them through the "
+               "background stage, and never name them in cast_changes, "
+               "which attaches nobody."
+               % (name, dialogue, "" if dialogue == 1 else "s", addressed))
+        ctx.tell_director(msg)
+        ctx.add_warning("promotion proposed: " + msg)
+    return out
+
 
 def promotable_background_presences(chat_id):
     sc = wget(chat_id, "scene", {}) or {}

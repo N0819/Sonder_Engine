@@ -828,11 +828,15 @@ def _demanded_presences(ctx, dr, managed, ceiling):
                                 _background_name_named_exactly,
                                 _character_address_of, _flow_addressed_refs,
                                 _presence_in_addressed_refs,
+                                _shared_name_words,
                                 _valid_pending_reply, authored_mind_rooms,
                                 demand_reaches, emerged_this_beat,
                                 overt_declaration_text)
 
     sc = wget(ctx.chat.id, "scene", {}) or {}
+    # The words the managed names hold in common are this story's titles,
+    # and a title names nobody in particular (`_shared_name_words`).
+    shared_words = _shared_name_words(str(t[1]) for t in managed)
     roster = {n.casefold() for n in _registered_name_roster(ctx.chat, ctx.cast)}
     roster |= {(e.get("name") or "").casefold()
                for e in (ctx.extra_players or [])}
@@ -855,7 +859,7 @@ def _demanded_presences(ctx, dr, managed, ceiling):
         named_exactly = _background_name_named_exactly(name, player_input)
         precise = bool(flow_hit or named_exactly or aimed)
         addressed_any = precise or _background_name_mentioned(
-            name, player_input)
+            name, player_input, shared=shared_words)
         owed = bool(_valid_pending_reply(rec, turn_idx))
         acting = (turn_idx - 1) in (rec.get("engaged_turns") or ())
         emerged_hit = name in emerged
