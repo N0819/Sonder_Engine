@@ -13,6 +13,7 @@ from story.character_schema import (
     _UNSPACED_SCRIPT,
     _extra_part_placement,
     character_appearance,
+    persona_appearance,
     character_body_interior,
     character_extra_parts,
     character_knowledge_config,
@@ -4093,6 +4094,52 @@ def _label_safe(text):
         " " if ch in _LABEL_STRUCTURAL_CHARS else ch for ch in str(text or ""))
     cleaned = _LABEL_LOOSE_QUOTE_RE.sub(" ", cleaned)
     return re.sub(r"\s+", " ", cleaned).strip()
+
+
+def scene_figures(chat, cast, scene, recognized=None):
+    """The scene-owned people -- the player and the cast -- as figures a
+    Charter body could coarsely perceive: ``[{key, label, place}]``.
+
+    ``key`` is the engine's canonical name (what `known` and every charter
+    claim key by), ``place`` the room the scene puts them in (absent when
+    it puts them nowhere), ``label`` how the observer in ``recognized``
+    renders them: the name where recognition earned it, otherwise the same
+    stranger label `_unknown_actor_label` mints for every other seam.
+    ``recognized`` None means no vantage at all, so nothing is recognised --
+    the right answer for the commit-side sighting, which stores the
+    stranger label and lets each viewing observer relabel.
+    """
+    from world.spatial import room_of
+
+    recognized = set(recognized or ())
+    scene = scene or {}
+    out = []
+    pers = persona_of(chat)
+    p_name = persona_name(pers)
+    if p_name:
+        out.append({
+            "key": p_name,
+            "label": (p_name if p_name in recognized
+                      else _unknown_actor_label(
+                          p_name, persona_appearance(pers))),
+            "place": str(room_of(scene, p_name) or ""),
+        })
+    for row in cast or ():
+        try:
+            sheet = json.loads(row["sheet"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        cname = character_name(sheet)
+        if not cname:
+            continue
+        out.append({
+            "key": cname,
+            "label": (cname if cname in recognized
+                      else _unknown_actor_label(
+                          cname, character_appearance(sheet))),
+            "place": str(character_room(scene, sheet) or ""),
+        })
+    return out
 
 
 def _unknown_actor_label(actor_name, appearance_text=None, aliases=None, *,

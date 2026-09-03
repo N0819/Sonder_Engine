@@ -31,7 +31,7 @@ from __future__ import annotations
 from .charter_feel import normalize_feel, overloaded_bodies
 from .charter_mark import mark_view
 from .charter_mind import acquaintance, contested, divergence
-from .charter_needs import mood, pressure
+from .charter_needs import mood, pressure, unmet
 from .charter_news import known_news
 from .charter_feel import strain_of
 from .charter_model import out_of_band
@@ -223,6 +223,55 @@ def life_of(body_key, charter, events, trace=(), hours_per_day=24.0):
     }
 
 
+#: News items one presence's slice may carry, strongest first. Three,
+#: because the slice is copied into a voiced payload and a payload large
+#: enough to restate gets restated (chat 78's wardrobe).
+NEWS_BRING_UP_CAP = 3
+
+#: People standing here that one presence's slice names an opinion about,
+#: ranked by how much of a view the body has. Four: a room of forty produced
+#: forty entries on the first run of this function.
+ACQUAINTANCE_BRING_UP_CAP = 4
+
+
+def own_state_of(held_needs, feel_entry):
+    """How this body is faring right now, as one bounded digest.
+
+    The needs ledger already reached the voiced payload as `condition` --
+    per-need levels, 0.92 rest -- which is a number a voice model cannot
+    read as anything, and the feel ledger reached it only as the `strain`
+    scalar. This is the same two stores read the way the engine already
+    reads them for itself: `pressure` (how spent, 0 rested to 1 spent) and
+    `unmet` (how far below its floor the worst need is, 0 until a breach)
+    from `charter_needs`, the worst need's own name, and the hedonic and
+    stress records `charter_feel` persists, only when they carry anything.
+    No third affect model: `mood()` stays unwired by its own decision.
+    """
+    held = held_needs or {}
+    worst = ""
+    worst_spent = -1.0
+    for name, need in held.items():
+        try:
+            spent = 1.0 - float(need["level"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if spent > worst_spent:
+            worst, worst_spent = str(name), spent
+    out = {"pressed": round(pressure(held), 3),
+           "unmet": round(unmet(held), 3),
+           "worst_need": worst}
+    entry = feel_entry if isinstance(feel_entry, dict) else {}
+    for store in ("hedonic", "stress"):
+        record = entry.get(store)
+        if isinstance(record, dict) and any(
+                isinstance(v, (int, float)) and abs(float(v)) >= 0.02
+                for v in record.values()):
+            out[store] = {k: (round(float(v), 3)
+                              if isinstance(v, (int, float)) else v)
+                          for k, v in record.items()}
+    return out
+
+
 def scene_ledger(charter, place, events=(), hours_per_day=24.0):
     """Everything a scene manager could riff from, for one place, per presence.
 
@@ -292,7 +341,7 @@ def scene_ledger(charter, place, events=(), hours_per_day=24.0):
                  - float(n.get("happened_at") or 0.0), 1),
              "firsthand": n.get("heard_from") is None,
              "from": n.get("heard_from")}
-            for n in known_news(minds, key)[:3]]
+            for n in known_news(minds, key)[:NEWS_BRING_UP_CAP]]
         # CAPPED, and ranked by what would actually come up. A room of forty
         # produced forty entries of `regard: 1.0` on the first run of this
         # function — the payload-dump failure named two paragraphs up, made
@@ -320,7 +369,8 @@ def scene_ledger(charter, place, events=(), hours_per_day=24.0):
 
         ranked = sorted(
             (o for o in company if o != key and o in (minds.get(key) or {})),
-            key=lambda o: (_salience(o), o), reverse=True)[:4]
+            key=lambda o: (_salience(o), o),
+            reverse=True)[:ACQUAINTANCE_BRING_UP_CAP]
         # THE DISCRETE TIE RIDES INSIDE `knows_here`, next to the `regard`
         # number it summarizes, and deliberately not beside it as a list of
         # its own: `presences[key]`'s key set is an allowlist a firewall test
@@ -339,12 +389,23 @@ def scene_ledger(charter, place, events=(), hours_per_day=24.0):
         known_here = {}
         for other in ranked:
             label = tie_of(ties, key, other, served_beside=served_beside)
+            claim = minds[key][other]
+            # A figure met before is a RETURN, and the slice says so: a body
+            # that saw this person earlier greets them as met, and how long
+            # ago it last laid eyes on them is the one number that decides
+            # between "back again" and "the one from the spring". A figure
+            # with no claim here at all is in `strangers_here` -- the first
+            # meeting -- so the two lists together are the distinction.
             known_here[other] = {
-                "firsthand": (minds[key][other].get("heard_from") is None),
-                "believes_present": _believes_present(minds[key][other]),
+                "firsthand": (claim.get("heard_from") is None),
+                "believes_present": _believes_present(claim),
                 "regard": round(regard_value(regard, key, other), 3),
-                **({"figure": True}
-                   if minds[key][other].get("kind") == "figure" else {}),
+                **({"figure": True,
+                    "met": claim.get("heard_from") is None,
+                    "last_seen_hours_ago": round(max(
+                        0.0, at_hours - float(claim.get("as_of_hours")
+                                              or 0.0)), 1)}
+                   if claim.get("kind") == "figure" else {}),
                 **({"tie": label} if label else {}),
             }
         presences[key] = {
@@ -356,6 +417,7 @@ def scene_ledger(charter, place, events=(), hours_per_day=24.0):
             "condition": {n: round(float(v["level"]), 2)
                           for n, v in held_needs.items()},
             "strain": round(float(strains.get(key, 0.0)), 3),
+            "own_state": own_state_of(held_needs, feel.get(key)),
             "standing_post": next(
                 (p for p, who in watch.items() if who == key), None),
             "watches_stood": sum(

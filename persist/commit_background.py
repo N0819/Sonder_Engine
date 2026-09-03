@@ -2028,23 +2028,53 @@ def track_background_presences(ctx, nonce, *, prepared=None):
 BACKGROUND_RECENT_TAIL = 4
 
 
-def commit_charter_observations(ctx, scene):
-    """Persist this beat's observer-scoped player/major-character evidence.
+def commit_charter_observations(ctx, prepared_scene):
+    """Persist this beat's observer-scoped player/major-character evidence,
+    and let the bodies standing beside a figure see it.
 
     ``director_resolve.public_evidence`` has already been grounded against
     exact declarations/dialogue.  This commit domain does no interpretation;
     it only asks the Charter runtime which unpromoted bodies could see/hear
     each source and writes those bodies' private claims.
+
+    ``prepared_scene`` is `prepare_scene_commit`'s envelope, whose ``scene``
+    is the post-turn scene -- the same shape `commit_information_carriers`
+    unwraps. THIS DOMAIN DID NOT UNWRAP IT. The envelope went to
+    `room_of(scene, actor)` as if it were the scene, no actor ever had a
+    room, and every body failed reception: measured on the Harrowmere
+    playtest, ``acquired: 0`` on all forty turns against 109-345
+    opportunities each, with the player speaking to the reeve in the
+    reeve's own hall. A bare scene dict is still accepted for callers that
+    hold one.
     """
+    scene = prepared_scene if isinstance(prepared_scene, dict) else {}
+    if isinstance(scene.get("scene"), dict) and "rooms" not in scene:
+        scene = scene["scene"]
+    from agents.common import scene_figures
+    from world.charter_runtime import (ingest_public_evidence,
+                                       sight_figures_in_scene)
+
+    figures = scene_figures(ctx.chat, ctx.cast, scene)
+    # Standing in the room is the channel a stranger is noticed by. Runs
+    # whether or not the beat produced evidence: a player who walks in and
+    # says nothing has still been seen.
+    sighted = sight_figures_in_scene(
+        ctx.chat.id, figures, frame_id=ctx.turn.frame_id)
     resolved = ctx.get("director_resolve") or {}
     evidence = resolved.get("public_evidence") or []
     if not evidence:
-        return {"sources": 0, "opportunities": 0, "acquired": 0}
-    from world.charter_runtime import ingest_public_evidence
-
-    return ingest_public_evidence(
-        ctx.chat.id, evidence, scene or {}, turn_id=ctx.turn.id,
-        frame_id=ctx.turn.frame_id)
+        return {"sources": 0, "opportunities": 0, "acquired": 0,
+                "sighted": int(sighted.get("sighted") or 0)}
+    result = ingest_public_evidence(
+        ctx.chat.id, evidence, scene, turn_id=ctx.turn.id,
+        frame_id=ctx.turn.frame_id,
+        labels={f["key"]: f["label"] for f in figures})
+    for actor in result.get("unplaced") or ():
+        ctx.add_warning(
+            "charter observations: the scene places %r nowhere, so no body "
+            "could receive what they said or did" % actor)
+    result["sighted"] = int(sighted.get("sighted") or 0)
+    return result
 
 def _persist_blurbs(br, presences):
     """Write minted blurbs (§3.8). FROZEN: a blurb is written once and never
