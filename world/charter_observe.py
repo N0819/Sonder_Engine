@@ -170,6 +170,106 @@ def _tokens(text):
     return set(re.findall(r"[a-z0-9]+", str(text or "").casefold()))
 
 
+def _determiners():
+    """The story language's determiners, from its linguistics pack.
+
+    AN ARTICLE IS NOT PART OF A NAME. "The Miller" and "the miller" name
+    the same person as "Miller", and the token-subset reading below
+    required every word of the label to be a word of the body's forms, so
+    the article alone made a role noun match nobody (Harrowmere replay
+    t15/t23/t29, 2026-09-03: "The Miller" and "The Blacksmith" landed only
+    on the ambient duplicate whose stored name happened to carry the
+    article). A closed grammatical class of the language, read from the
+    pack the way every other cue table is, never a list of how English
+    phrases a person.
+    """
+    from language_runtime import linguistic
+    try:
+        return frozenset(linguistic("world.charter_observe", "_DETERMINERS"))
+    except Exception:
+        return frozenset()
+
+
+def _stem_role_word(token):
+    """The crude suffix stem `agents.common._stem_token` uses for verb
+    matching, widened by the agent-noun suffix: a role noun IS an agent
+    noun, and the post's authored duty is a verb phrase ("brews small
+    beer"), so "brewer" and "brews" must meet at "brew"."""
+    for suffix in ("ing", "ers", "er", "es", "ed", "s"):
+        if len(token) > len(suffix) + 2 and token.endswith(suffix):
+            return token[:-len(suffix)]
+    return token
+
+
+def _post_forms(charter):
+    """``{post: [stem-set, ...]}`` -- every closed, authored form a post is
+    known by: its key, its title and its rank title from the naming
+    profile, its public noun, the upkeeps it serves (key and label) and
+    its authority entries. The engine's own occupation table, read as
+    stems so a role noun meets the duty it names."""
+    posts = charter.get("posts") or {}
+    upkeeps = charter.get("upkeeps") or {}
+    naming = charter.get("naming") or {}
+    titles = naming.get("titles") if isinstance(naming.get("titles"), dict) \
+        else {}
+    post_titles = titles.get("posts") if isinstance(titles.get("posts"), dict) \
+        else {}
+    from world.charter_crowd import _role_noun
+    out = {}
+    for post_key, post in posts.items():
+        post = post if isinstance(post, dict) else {}
+        forms = [str(post_key), _role_noun(post_key),
+                 str(post_titles.get(str(post_key)) or "")]
+        for upkeep_key in post.get("serves") or ():
+            forms.append(str(upkeep_key))
+            spec = upkeeps.get(str(upkeep_key))
+            if isinstance(spec, dict):
+                forms.append(str(spec.get("label") or ""))
+        forms.extend(str(a) for a in (post.get("authority") or ()))
+        stems = []
+        for form in forms:
+            tokens = {_stem_role_word(t) for t in _tokens(form)}
+            if tokens and tokens not in stems:
+                stems.append(tokens)
+        out[str(post_key)] = stems
+    return out
+
+
+def _bodies_by_role(charter, candidates, role_map, words):
+    """The candidates whose held post a role noun names.
+
+    Two grades, never mixed: a form whose stems ARE the label's ("smith"
+    against the post `smith`, not against `smith_apprentice`, which also
+    contains the word), then a form whose stems CONTAIN the label's ("the
+    brewer" against a cook whose authority reads "brews small beer"). One
+    body at the strongest grade reached is the answer; two is nobody.
+    """
+    stems = {_stem_role_word(w) for w in words}
+    if not stems:
+        return []
+    forms = _post_forms(charter)
+    rank_titles = ((charter.get("naming") or {}).get("titles") or {})
+    rank_titles = rank_titles.get("ranks") if isinstance(
+        rank_titles.get("ranks"), dict) else {}
+    exact, within = [], []
+    for body_key in candidates:
+        held = []
+        for post in role_map.get(body_key) or ():
+            held.extend(forms.get(str(post)) or [])
+        rank = str(((charter.get("bodies") or {}).get(body_key) or {})
+                   .get("rank") or "")
+        title = rank_titles.get(rank) if rank else ""
+        if title:
+            held.append({_stem_role_word(t) for t in _tokens(title)})
+        if not held:
+            continue
+        if any(stems == form for form in held):
+            exact.append(body_key)
+        elif any(stems <= form for form in held):
+            within.append(body_key)
+    return exact or within
+
+
 def resolve_target_body(charter, label, *, place=None, scene=None):
     """The one unpromoted body a Director spelling names, or None.
 
@@ -179,12 +279,25 @@ def resolve_target_body(charter, label, *, place=None, scene=None):
     BODY KEY. Four readings, each exact in its own way, tried in order and
     never widened: an identity form (`_identity_forms`: key, name, display
     name, authored aliases); a scene entity the identity floor bound to a
-    body (`charter_ref`); and a token subset (every word of the label is a
-    word of exactly one body's identity forms -- "reeve_halinham" is the
-    body named "Reeve Halinham Nookfeller" and nobody else). ``place``
-    narrows the candidates to the bodies standing there, which is where an
-    act toward somebody has to land anyway. Two bodies matching is nobody:
-    an act that cannot say WHOM it means must not land on either.
+    body (`charter_ref`); a ROLE NOUN against the post a body holds
+    (`_bodies_by_role`: the post's key, titles, public noun, the upkeeps
+    it serves and its authority entries, compared as stems, so "the
+    brewer" reaches the cook whose duty is "brews small beer"); and a
+    token subset (every word of the label is a word of exactly one body's
+    identity forms -- "reeve_halinham" is the body named "Reeve Halinham
+    Nookfeller" and nobody else). The story language's determiners are
+    not words of a name (`_determiners`). ``place`` narrows the
+    candidates to the bodies standing there, which is where an act toward
+    somebody has to land anyway. Two bodies matching is nobody: an act
+    that cannot say WHOM it means must not land on either.
+
+    The role reading's known edge: a duty that names the people it acts
+    ON ("turns back drovers") makes that noun a form of the post too, so
+    "the drover" said in the watchman's room reaches the watchman. The
+    identity forms are tried first and the reading is scoped to the
+    actor's room, which bounds it; widening the authored duty vocabulary
+    into subject and object is the charter model's question, not this
+    reader's.
     """
     label = " ".join(str(label or "").split())
     if not label:
@@ -223,8 +336,13 @@ def resolve_target_body(charter, label, *, place=None, scene=None):
         body_key = str(ref.get("body") or "")
         if folded in spellings and body_key in candidates:
             return body_key
-    words = _tokens(label)
+    words = _tokens(label) - _determiners()
     if not words:
+        return None
+    by_role = _bodies_by_role(charter, candidates, role_map, words)
+    if len(by_role) == 1:
+        return by_role[0]
+    if by_role:
         return None
     subset = [key for key, forms in candidates.items()
               if any(words <= _tokens(form) for form in forms)]

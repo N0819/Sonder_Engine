@@ -4221,5 +4221,11 @@
         ]
       }
     }
+  },
+  "world.charter_observe": {
+    "_DETERMINERS": {
+      "$type": "frozenset",
+      "items": ["the", "a", "an"]
+    }
   }
 }

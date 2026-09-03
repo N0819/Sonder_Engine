@@ -278,11 +278,15 @@ def _clean_containment(raw, subject):
         return None
     mode = str(raw.get("mode") or "").strip().casefold() or "carried"
     record = {"in": holder, "mode": mode}
-    # WHO STANDS THE HOLDER, when the scene does not. A holder the scene
-    # keeps no record of is ordinarily a record to drop (`normalize_scene_
-    # containment`); one another ledger vouches for -- a Charter body,
-    # today -- is kept, and this is the field that says so. Sparse: absent
-    # for every holder the scene places itself.
+    # WHICH LEDGER VOUCHES FOR THE CARRIAGE, when the scene's own records do
+    # not. Two values today. "charter": the holder is a body the scene keeps
+    # no record of but the town stands (`normalize_scene_containment`
+    # would otherwise drop the record, handing the thing back to whoever
+    # held it last). "attire": the thing is a garment the wearer's own
+    # wardrobe ledger says is on the body (`derive_worn_containment`), so
+    # the record is re-derived from that ledger every merge and retired
+    # when the garment comes off. Sparse: absent for every carriage a hand
+    # declared against a holder the scene places itself.
     by = str(raw.get("by") or "").strip()
     if by:
         record["by"] = by
@@ -626,12 +630,24 @@ def containment_conceals(scene: dict, observer: str, target: str) -> bool:
             != _innermost_hiding_holder(scene, target))
 
 
-def normalize_scene_containment(scene: dict) -> dict:
+def normalize_scene_containment(scene: dict, carriers=None) -> dict:
     """Containment hygiene, run at merge.
 
     Drops a record whose container has left the scene, and any record that
     would make a body contain itself directly or through a chain -- a cycle
     would otherwise make position derivation unresolvable.
+
+    ``carriers`` (``{spelling: room}``, `charter_runtime.charter_carriers`)
+    stands the holders the scene does not. A record naming one of them is
+    KEPT and marked ``by: "charter"`` -- the same mark a transfer op's
+    vouched destination gets -- instead of being dropped as unknown.
+    Measured, Harrowmere replay t5 (2026-09-03): the contact hand wrote the
+    handover as a containment record, ``sealed_letter in "Reeve of
+    Harrowmere Brgaron Brfordwick"``, the reeve had no entity and no
+    position, and this pass dropped the record on the spot, so the letter
+    the reeve took in prose stayed loose in the hall for thirty-four beats.
+    The op path had been taught to vouch the day before; this is the other
+    door the same fact arrives through.
     """
     contained = scene.get("contained")
     if not isinstance(contained, dict):
@@ -671,7 +687,11 @@ def normalize_scene_containment(scene: dict) -> dict:
         # it does not place, and dropping the record would hand the thing
         # back to whoever held it last.
         if _fold(record["in"]) not in known and not record.get("by"):
-            continue
+            spelling, _room = carrier_lookup(carriers, record["in"]) \
+                if carriers else (None, None)
+            if not spelling:
+                continue
+            record["by"] = "charter"
         cleaned[subject] = record
 
     scene["contained"] = dict(list(cleaned.items())[-_MAX_CONTAINED:])
@@ -689,6 +709,88 @@ def normalize_scene_containment(scene: dict) -> dict:
             record = _ci_get(scene["contained"], current)
             current = record.get("in") if isinstance(record, dict) else None
 
+    return scene
+
+
+def derive_worn_containment(scene: dict) -> dict:
+    """A garment the wardrobe ledger says is ON a body is carried by it.
+
+    `scene.attire` records what each body wears; `scene.contained` records
+    what each thing is carried in; and nothing joined them, so a garment
+    that was ALSO a scene entity -- a satchel minted as a container so it
+    could hold a letter -- had a position of its own that no merge tied to
+    its wearer. Measured, Harrowmere replay (2026-09-03): the player's worn
+    satchel, and the letter stationed in it, stayed at the reeve's hall
+    from t3 to t26 while she slept at the inn and walked the town, moving
+    only when the spatial hand happened to restate a `near` group.
+
+    WHERE A WORN THING IS, IS ITS WEARER'S. For every garment named in a
+    body's attire entry (the ``wearing`` list and every region's
+    ``garments``) that the scene holds as an entity, this writes
+    ``{in: wearer, mode: "worn", by: "attire"}`` when no record for the
+    thing exists, so `derive_contained_positions` puts it where the wearer
+    is. It yields to any record already there -- a hand that declared the
+    thing handed to somebody else has outranked the wardrobe, and the
+    wardrobe's disagreement is the attire seam's to reconcile -- and it
+    RETIRES its own records when the garment leaves the wearer's ledger,
+    so a shed coat stays where it was dropped rather than trailing its
+    owner. Only its own: a `worn` record some hand wrote is not touched.
+    A wearer is never a garment (an entity keyed like a body with a
+    wardrobe is skipped), nor is a bodiless voice.
+    """
+    attire = scene.get("attire")
+    if not isinstance(attire, dict) or not attire:
+        contained = scene.get("contained")
+        if isinstance(contained, dict):
+            for subject in [k for k, v in contained.items()
+                            if isinstance(v, dict) and v.get("by") == "attire"]:
+                contained.pop(subject, None)
+        return scene
+    contained = scene.get("contained")
+    if not isinstance(contained, dict):
+        contained = scene["contained"] = {}
+    wearers = {str(k).strip().casefold() for k in attire}
+
+    worn_now = {}
+    for wearer, entry in attire.items():
+        wearer = str(wearer or "").strip()
+        if not wearer or not isinstance(entry, dict):
+            continue
+        names = [g for g in (entry.get("wearing") or []) if isinstance(g, str)]
+        for region in (entry.get("regions") or {}).values():
+            if not isinstance(region, dict):
+                continue
+            names.extend(str(g.get("name") or "")
+                         for g in (region.get("garments") or [])
+                         if isinstance(g, dict))
+        for name in names:
+            eid, entity = _unique_entity_keyed(scene, name)
+            if not eid or not isinstance(entity, dict):
+                continue
+            if entity.get("ubiquitous"):
+                continue
+            if str(eid).strip().casefold() in wearers or \
+                    str(entity.get("name") or "").strip().casefold() in wearers:
+                continue
+            subject = _placement_subject_key(scene, eid, entity)
+            if subject.strip().casefold() == wearer.casefold():
+                continue
+            worn_now.setdefault(subject.strip().casefold(), (subject, wearer))
+
+    for subject in list(contained):
+        record = contained[subject]
+        if not isinstance(record, dict) or record.get("by") != "attire":
+            continue
+        current = worn_now.get(str(subject).strip().casefold())
+        if current is None or \
+                str(record.get("in") or "").strip().casefold() \
+                != current[1].casefold():
+            contained.pop(subject, None)
+
+    for _folded, (subject, wearer) in worn_now.items():
+        if isinstance(_ci_get(contained, subject), dict):
+            continue
+        contained[subject] = {"in": wearer, "mode": "worn", "by": "attire"}
     return scene
 
 
