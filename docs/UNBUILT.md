@@ -6661,18 +6661,35 @@ for what follows. Residuals of this entry rather than a section of their own:
   published. Ceilings after the runs: 10 steps, 40 calls, 8000 tokens per
   step, 180s. Prompt caching held on Fireworks (5-7k cached tokens per step)
   and read 0 on Gemini through OpenRouter.
-- **No operation for author surgery on a charter** (v2 § 9.1's "explicit
-  author surgery" on carried state): a package can generate a location and
-  presimulate, and cannot move a body, change a post or edit a claim. The
-  Planner's nudge toolkit (Phase C) is where that lands, as its own kinds in
-  `OPERATIONS`.
-- **`may_schedule_harm` has nothing yet to refuse.** The mandate store
-  exists now (`story/mandates.py`) and the flag asks for the
-  `schedule_harm` capability when claimed; no operation schedules harm, so
-  the capability gates nothing until Phase C's region events and nudges.
-- **A clock is a record, not a trigger.** Clocks carry `due_turns` /
-  `due_story_hours` and nothing fires when one is due (v2 § 5.4). The
-  activation hook in the commit tail is the place; it is bookkeeping only.
+- **Phase C's operation set landed 2026-09-04** (`story/plot_packages.py`,
+  `world/charter_surgery.py`, `world/region_events.py`): the five local-drama
+  kinds (arrival, errand, incident, summons, scheduled consequence), the six
+  nudge kinds (author surgery on an institution, each recorded under the
+  charter's `authored`), `region_event` (footprint, profile in time, per-room
+  effects through existing seams), and package clocks that FIRE from the
+  commit tail (`fire_due_clocks`) landing what rode them under the mandate
+  re-checked at that hour. `schedule_harm` now gates every operation that
+  can hurt a body. What that half left open, as residuals here:
+  - **A front and a decay are approximations.** A `front` advances one ring
+    of hops per `1/rate` hours over the footprint's own graph; it does not
+    consume passable edges the way the living-world fuse machinery does, and
+    a `decay` revisits the whole footprint at falling intensity rather than
+    spreading by co-presence. The plan's contagion-by-encounter and the
+    creature fork's condition model are the fuller shape.
+  - **No rebuilding afterwards.** A ruined room stays a ruin; the plan's
+    "rebuilding as a town project" (an upkeep restoring a room over hours)
+    is not built, and displacement rehouses a body at its own institution's
+    standing workplace or commons, never at another charter's berths.
+  - **Harm in a region is a stable draw, not a contest.** Who is hurt is
+    drawn per body against `fraction × intensity`, capped at
+    `HARM_BODIES_PER_HOUR` = 12 per wave; the creature fork's contest
+    (capability, posted, weights) is not consulted.
+  - **A body's inside is refused, not explained.** The Planner's read tools
+    report containment on the holder and refuse the room; nothing yet tells
+    the Planner why a plan it reads as sensible was refused beyond the
+    message.
+  - **Fired operations are not undone by anything but a rewind.** A retire
+    after a fire keeps what landed, as retire has always done.
 - **Lore filed by the room carries the `model` basis** because
   `canon_provenance` admits `deterministic|model|unavailable` and the room's
   entries are author claims through a model role; an `authored` basis is an
