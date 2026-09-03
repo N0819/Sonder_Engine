@@ -41,6 +41,9 @@ MANDATE_CAPABILITIES = (
     "file_lore", "answer_need", "close_need", "request_location",
     "presimulate",
     "create_people", "author_prehistory", "schedule_harm",
+    # Reach the web (`story/room_research.py`): a query leaves the machine,
+    # so the player grants it in so many words.
+    "research",
     # Answer open planning needs and keep the prepared frontier out of band
     # (the fill job), within `limits.fills_per_hour`.
     "identity_fills",

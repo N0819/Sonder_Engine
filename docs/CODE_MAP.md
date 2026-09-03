@@ -49,7 +49,7 @@
 | `llm/schemas.py` | 5451 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `mind/__init__.py` | 6 |  | — |
 | `mind/affect.py` | 2406 |  | `mind.theory_of_mind` |
-| `mind/canon_provenance.py` | 392 |  | — |
+| `mind/canon_provenance.py` | 396 |  | — |
 | `mind/memory.py` | 134 | Facade re-exporting every mind.memory_* name; holds no domain code of its own. | `core`, `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.memory_common`, `mind.memory_context`, `mind.memory_inference`, `mind.memory_lore_entries`, `mind.memory_lorebooks`, `mind.memory_read`, `mind.memory_relationships`, `mind.memory_retrieval`, `mind.memory_snapshot`, `mind.memory_summaries`, `mind.memory_time`, `mind.memory_vectors`, `mind.memory_write`, `mind.theory_of_mind` |
 | `mind/memory_common.py` | 255 | Leaf helpers shared by every memory domain: vocabularies, blob/vector codecs, FTS query, cosine. | `core.db` |
 | `mind/memory_context.py` | 635 | The character memory payload: where retrieval, summaries and active state become one context. | `core.db`, `llm.prompts`, `llm.providers`, `mind.memory_common`, `mind.memory_retrieval`, `mind.memory_summaries`, `mind.memory_time`, `mind.memory_write` |
@@ -100,9 +100,9 @@
 | `story/importers.py` | 3124 | Native and AI-assisted character, persona, and lorebook import/generation. | `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.memory`, `story.character_schema`, `story.scene` |
 | `story/journey_history.py` | 431 |  | — |
 | `story/lore_structure.py` | 248 |  | — |
-| `story/mandates.py` | 246 |  | `core.db` |
+| `story/mandates.py` | 249 |  | `core.db` |
 | `story/naming.py` | 555 |  | `core.db`, `world.charter_identity` |
-| `story/plot_packages.py` | 1426 |  | — |
+| `story/plot_packages.py` | 1437 |  | — |
 | `story/provenance_text.py` | 132 |  | — |
 | `story/room_conversation.py` | 357 |  | `core.db` |
 | `story/room_frontier.py` | 176 |  | `core.db` |
@@ -647,14 +647,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `validate_provisional()` | 243 | 106 lines |
-| `promote()` | 351 | 42 lines |
-| `_node_id_errors()` | 209 | 32 lines |
-| `unavailable()` | 188 | 19 lines |
-| `outranks()` | 169 | 17 lines |
-| `may_assert_consequence()` | 152 | 15 lines |
-| `is_node_id()` | 135 | 9 lines |
-| `is_canon()` | 146 | 4 lines |
+| `validate_provisional()` | 247 | 106 lines |
+| `promote()` | 355 | 42 lines |
+| `_node_id_errors()` | 213 | 32 lines |
+| `unavailable()` | 192 | 19 lines |
+| `outranks()` | 173 | 17 lines |
+| `may_assert_consequence()` | 156 | 15 lines |
+| `is_node_id()` | 139 | 9 lines |
+| `is_canon()` | 150 | 4 lines |
 
 ### `mind/memory_common.py`
 
@@ -1225,14 +1225,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `grant_mandate()` | 109 | 61 lines |
-| `coverage()` | 193 | 16 lines |
-| `expire_mandates()` | 172 | 14 lines |
-| `fill_limit()` | 222 | 13 lines |
-| `revoked_since()` | 237 | 10 lines |
-| `_save()` | 93 | 9 lines |
-| `citation()` | 211 | 9 lines |
-| `_uid()` | 77 | 4 lines |
+| `grant_mandate()` | 112 | 61 lines |
+| `coverage()` | 196 | 16 lines |
+| `expire_mandates()` | 175 | 14 lines |
+| `fill_limit()` | 225 | 13 lines |
+| `revoked_since()` | 240 | 10 lines |
+| `_save()` | 96 | 9 lines |
+| `citation()` | 214 | 9 lines |
+| `_uid()` | 80 | 4 lines |
 
 ### `story/naming.py`
 
@@ -1251,13 +1251,13 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `publish_package()` | 1243 | 77 lines |
+| `publish_package()` | 1254 | 77 lines |
 | `normalize_package()` | 156 | 73 lines |
-| `_package_checks()` | 1084 | 67 lines |
+| `_package_checks()` | 1095 | 67 lines |
 | `edit_package()` | 339 | 57 lines |
 | `_world_snapshot()` | 464 | 43 lines |
 | `draft_operation()` | 398 | 34 lines |
-| `prepare_package()` | 1207 | 34 lines |
+| `prepare_package()` | 1218 | 34 lines |
 | `new_package()` | 308 | 29 lines |
 
 ### `story/provenance_text.py`

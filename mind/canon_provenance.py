@@ -56,6 +56,10 @@ ADJUDICATED_DISPOSITIONS = (
     "character_belief",
     "narrator_audit",
     "inferred_mapping",
+    # A fact the Writers' Room brought in from the web (`story/room_research`):
+    # authority is the cited page, never the story, so it is filed as a
+    # reference and reads as one.
+    "web_reference",
 )
 
 KNOWN_DISPOSITIONS = (PROVISIONAL,) + ADJUDICATED_DISPOSITIONS
