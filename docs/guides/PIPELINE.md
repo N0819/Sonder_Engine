@@ -840,7 +840,15 @@ fidelity payload ([`UNBUILT.md`](../UNBUILT.md) §3.4, S3-A6).
 
 1. transit sweep — first, because it mutates the prepared scene (timed
    arrivals, engine notices) that the scene domain then persists
-2. scene and simulation clock
+2. scene and simulation clock — the clock's `elapsed_seconds` is charged
+   by `beat_end_elapsed`, and `_advance_day_cycle` then derives the hour
+   of the day and the phase from it (`world/day_cycle.py`): `scene.
+   day_phase` and `simulation_clock.{anchor_hour, day_length_hours,
+   hour_of_day, phase}` are written here, `scene.time_of_day` moves to
+   the phase's name once the clock has left the phase the Director's
+   last label named, and a declared label the clock is not in re-anchors
+   it with a warning. A story whose opening named no readable time has no
+   anchor and none of this runs
 3. world entities and conditions (a derived projection built from the same
    prepared post-dedup diff as the scene) — an entity state blob referencing a
    concealed actor raises a `"possible stale clause (S3-A8)"` warning and is
