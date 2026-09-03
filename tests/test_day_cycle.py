@@ -240,6 +240,58 @@ def test_a_declared_time_the_clock_is_already_in_changes_nothing(temp_db):
     assert not any("re-anchored" in w for w in warnings)
 
 
+def test_a_skip_that_names_where_it_lands_lands_there(temp_db):
+    """Harrowmere replay (2026-09-03, t19): "by dusk" with an eleven-hour
+    duration from 06:19 landed at 17:19, in the afternoon, and the phase
+    the Director named was silently wrong. The phrase is the intent and the
+    duration the estimate: the clock lands at the START of the named phase
+    and says which hour the duration had reached."""
+    cid = _make_chat(temp_db)
+    _open(temp_db, cid, "dawn")                              # 06:30
+    scene, clock, warnings = _beat(temp_db, cid, {"time": {
+        "duration_seconds": 11 * 3600, "mode": "time_skip",
+        "display_advance": "by dusk"}})
+    assert clock["phase"] == "dusk"
+    assert clock["hour_of_day"] == pytest.approx(18.0, abs=0.05)
+    assert scene["time_of_day"] == "dusk"
+    assert any("landed" in w and "afternoon" in w for w in warnings), warnings
+
+
+def test_a_skip_whose_duration_agrees_with_its_phrase_keeps_its_hour(temp_db):
+    cid = _make_chat(temp_db)
+    _, opened, _ = _open(temp_db, cid, "midday")             # 12:15
+    scene, clock, warnings = _beat(temp_db, cid, {"time": {
+        "duration_seconds": 6 * 3600, "mode": "time_skip",
+        "display_advance": "by dusk"}})
+    assert clock["phase"] == "dusk"
+    assert clock["hour_of_day"] == pytest.approx(18.25, abs=0.05)
+    assert clock["anchor_hour"] == pytest.approx(opened["anchor_hour"])
+    assert not any("landed" in w for w in warnings)
+
+
+def test_a_skip_phrase_carrying_a_reading_lands_on_the_reading(temp_db):
+    cid = _make_chat(temp_db)
+    _open(temp_db, cid, "dawn")
+    scene, clock, warnings = _beat(temp_db, cid, {"time": {
+        "duration_seconds": 3 * 3600, "mode": "time_skip",
+        "display_advance": "by 20:00"}})
+    assert clock["hour_of_day"] == pytest.approx(20.0, abs=0.05)
+    assert clock["phase"] == "evening"
+    assert any("landed" in w for w in warnings)
+    # The passage phrase is still written nowhere: the label is the phase.
+    assert scene["time_of_day"] == "evening"
+
+
+def test_a_skip_phrase_the_cycle_cannot_read_changes_nothing(temp_db):
+    cid = _make_chat(temp_db)
+    _open(temp_db, cid, "dawn")
+    scene, clock, warnings = _beat(temp_db, cid, {"time": {
+        "duration_seconds": 5 * 3600, "mode": "time_skip",
+        "display_advance": "some hours later"}})
+    assert clock["hour_of_day"] == pytest.approx(11.5, abs=0.05)
+    assert not any("landed" in w for w in warnings)
+
+
 def test_a_label_the_cycle_cannot_read_stands_untouched(temp_db):
     cid = _make_chat(temp_db)
     _open(temp_db, cid, "08:42")
