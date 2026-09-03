@@ -147,16 +147,108 @@ def test_a_reply_runs_tools_then_answers_and_writes_status(temp_db, scripted):
     assert env["replies"][0]["text"] == "Still dusk."
 
 
-def test_the_loop_stops_at_its_step_and_call_budgets(temp_db, scripted):
+def test_spend_is_the_real_stop_and_the_ceilings_are_safety(temp_db, scripted,
+                                                            monkeypatch):
+    """Owner, 2026-09-03: the bounds were too strict. Steps and calls per
+    reply are safety ceilings an order of magnitude above the work; what
+    stops a reply is the spend the player granted (a default when no grant
+    names one), and the Planner says so."""
     cid, _ = _story(temp_db)
+    assert sp.PLANNER_STEPS_PER_REPLY >= 40 and sp.PLANNER_TOOL_CALLS_PER_REPLY >= 200
+    scripted(*[{"calls": [{"tool": "inspect_clock", "args": {}}] * 8}] * 60)
+    out = sp.run_planner(cid, None, text="loop")
+    assert out["stopped"] == "spend_reply" and out["calls"] == md.CALLS_PER_REPLY
+    assert out["reply"] == sp.SPENT_LINE
+    assert rf.spend_this_hour(cid, None, 2) == md.CALLS_PER_REPLY
+    # A grant may raise spend up to the engine's ceiling, never past it.
+    md.grant_mandate(cid, None, text="Spend freely", capabilities=["plan_rooms"],
+                     limits={"calls_per_reply": 10_000, "calls_per_hour": 10_000})
+    assert md.spend_limits(cid, None) == {"calls_per_reply": md.CALLS_PER_REPLY_CAP,
+                                          "calls_per_hour": md.CALLS_PER_STORY_HOUR_CAP}
+    # With spend out of the way the safety ceilings hold, lowered here so
+    # the test does not script two hundred calls.
+    monkeypatch.setattr(sp, "PLANNER_STEPS_PER_REPLY", 5)
     scripted(*[{"calls": [{"tool": "inspect_clock", "args": {}}]}] * 20)
     out = sp.run_planner(cid, None, text="loop")
-    assert out["stopped"] == "steps" and out["steps"] == sp.PLANNER_STEPS_PER_REPLY
+    assert out["stopped"] == "steps" and out["steps"] == 5
     assert out["reply"] == sp.BOUNDED_LINE
-    scripted(*[{"calls": [{"tool": "inspect_clock", "args": {}}] * 10}] * 20)
+    monkeypatch.setattr(sp, "PLANNER_STEPS_PER_REPLY", 40)
+    monkeypatch.setattr(sp, "PLANNER_TOOL_CALLS_PER_REPLY", 16)
+    scripted(*[{"calls": [{"tool": "inspect_clock", "args": {}}] * 8}] * 20)
     out = sp.run_planner(cid, None, text="loop")
-    assert out["stopped"] == "calls"
-    assert out["calls"] == sp.PLANNER_TOOL_CALLS_PER_REPLY
+    assert out["stopped"] == "calls" and out["calls"] == 16
+
+
+def test_the_hour_spend_stops_the_room_and_the_grant_is_cited(temp_db, scripted):
+    cid, _ = _story(temp_db)
+    row = md.grant_mandate(cid, None, text="Ten calls an hour",
+                           capabilities=["plan_rooms"], limits={"calls_per_hour": 10})
+    scripted(*[{"calls": [{"tool": "inspect_clock", "args": {}}] * 8}] * 10)
+    out = sp.run_planner(cid, None, text="loop")
+    assert out["stopped"] == "spend_hour" and out["calls"] == 10
+    assert out["reply"] == sp.HOUR_SPENT_LINE
+    assert "spend stop under %s" % row["uid"] in out["notes"]
+    # Nothing left this hour: the next reply stops before a step.
+    scripted({"reply": "never asked"})
+    out = sp.run_planner(cid, None, text="again")
+    assert out["stopped"] == "spend_hour" and out["steps"] == 0
+
+
+def test_a_background_task_resumes_in_passes_and_a_reply_shows_progress(
+        temp_db, scripted, monkeypatch):
+    cid, _ = _story(temp_db)
+    monkeypatch.setattr(sp, "PLANNER_STEPS_PER_REPLY", 2)
+    script = scripted(
+        {"calls": [{"tool": "inspect_clock", "args": {}}], "status_line": "Reading the port."},
+        {"calls": [{"tool": "inspect_clock", "args": {}}], "status_line": "Still reading."},
+        {"calls": [{"tool": "inspect_clock", "args": {}}]},
+        {"reply": "Done in two passes."},
+    )
+    out = sp._run_task(cid, None, {"kind": "fill", "needs": []}, base_turn=2)
+    assert out["passes"] == 2 and out["reply"] == "Done in two passes."
+    assert out["stopped"] is None and out["steps"] == 4
+    assert script.payloads[0]["budget"]["regime"] == "task"
+    assert "resumed" not in script.payloads[0]["task"]
+    assert script.payloads[2]["task"]["resumed"]["pass"] == 2
+    assert script.payloads[2]["task"]["resumed"]["last_stopped"] == "steps"
+    # The interactive regime rewrites the status row every step the model
+    # names one, so the panel's watch shows a long reply working.
+    monkeypatch.setattr(sp, "PLANNER_STEPS_PER_REPLY", 40)
+    lines = []
+    original = sp.write_status
+
+    def spy(*args, **kwargs):
+        lines.append(kwargs.get("line"))
+        return original(*args, **kwargs)
+    monkeypatch.setattr(sp, "write_status", spy)
+    scripted({"calls": [{"tool": "inspect_clock", "args": {}}], "status_line": "Step one."},
+             {"reply": "ok", "status_line": "Step two."})
+    out = sp.run_planner(cid, None, text="hi")
+    assert out["regime"] == "reply" and lines[:2] == ["Step one.", "Step two."]
+
+
+def test_the_bible_rides_the_system_block_and_the_window_waits_for_the_fold(
+        temp_db, scripted):
+    from story import room_bible as rb
+    cid, _ = _story(temp_db)
+    rb.add_entry(cid, None, "wants", "The player asked for a harbour (beat 1).", ["turn:1"])
+    ids = [room.add_message(cid, None, "player", "line %d" % n)["id"] for n in range(45)]
+    script = scripted({"reply": "ok"})
+    sp.run_planner(cid, None, text="hi")
+    assert "STORY BIBLE" in script.systems[0] and "asked for a harbour" in script.systems[0]
+    shown = [m["id"] for m in script.payloads[0]["conversation"]]
+    # Every unfolded line is still shown (45 lines, none folded), past the
+    # thirty-line window and up to the hard cap.
+    assert len(shown) == 45 and shown[-1] == ids[-1]
+    # Once the fold has read the oldest lines, the window is the window.
+    row = rb.bible(cid, None)
+    row["folded_through"] = ids[14]
+    from core.db import wset_for_frame
+    wset_for_frame(cid, rb.BIBLE_KEY, row, None)
+    script = scripted({"reply": "ok"})
+    sp.run_planner(cid, None, text="hi")
+    shown = [m["id"] for m in script.payloads[0]["conversation"]]
+    assert shown[0] == ids[15] and len(shown) == 30
 
 
 def test_a_bad_tool_call_is_an_error_the_model_sees_not_a_crash(temp_db, scripted):
@@ -504,7 +596,8 @@ def test_the_planners_fixed_lines_are_in_both_catalogs():
     en = json.loads((root / "language_packs" / "en" / "ui.json").read_text("utf-8"))
     ja = json.loads((root / "language_packs" / "ja" / "ui.json").read_text("utf-8"))
     script = (root / "static" / "js" / "writers_room.js").read_text("utf-8")
-    for line in (sp.BOUNDED_LINE, sp.NO_STATUS_LINE, sp.WAITING_LINE, sp.REWOUND_LINE):
+    for line in (sp.BOUNDED_LINE, sp.NO_STATUS_LINE, sp.WAITING_LINE, sp.REWOUND_LINE,
+                 sp.SPENT_LINE, sp.HOUR_SPENT_LINE, sp.DISAGREEMENT_LINE):
         assert line in en and line in script
         assert ja.get(line) not in (None, line)
 
