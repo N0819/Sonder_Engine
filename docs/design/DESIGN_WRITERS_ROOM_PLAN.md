@@ -404,11 +404,26 @@ Each changes what a phase builds; none blocks Phase A.
 4. **`mapping_quick` too.** Phase A.3 retires both mapping stages; if the
    quick stage's cheap movement classification is wanted as a deterministic
    pre-pass, it survives as code, not a call.
-5. **The user experience** (v2 § 11) — chat surfaces for the Planner and
-   Dramaturge, budget grants, sealed-status display — is undesigned in this
-   note and is Phase B/C work with its own owner conversation.
-6. **Default budgets** for a new story (v2 § 6.2's dimensions), since
-   "silence is not authorization".
+5. **The user experience** — settled in shape (owner, 2026-09-03): the
+   room is **a separate window or tab**, not a panel in the play view, so
+   authoring time and simulation time have different screens the way they
+   have different clocks (v2 § 7.1). In it the player talks with the Story
+   Planner (and through it, or directly, with the Dramaturge), reads the
+   spoiler-safe status of standing plans (v2 § 5.3: what is in motion,
+   never what it is), and sees the room's questions when it asks. Detail
+   (layout, what the status shows, how a sealed plan is represented) is
+   Phase B work. Implementation note: the frontend is browser globals
+   over `static/index.html`; a separate page keeps the room out of the
+   turn pipeline's scripts.
+6. **Budgets are set by talking.** Event and op scale — what the room may
+   do, how big, to whom — is granted by telling the Story Planner what
+   you allow it and the Dramaturge (v2 § 6.2). The conversation is the
+   intent; the grant is **state**: the Planner writes it back as a typed
+   mandate (v2 § 2.2 "conversation is intent; typed operations are
+   state"), frame- and branch-scoped, shown as a standing list the player
+   can read and revoke, and cited by the Planner when it declines or asks.
+   Defaults for a new story are the zero-harm floor above; everything
+   else is granted in words.
 
 ## 7. Measures
 
