@@ -72,7 +72,7 @@
 | `persist/chat_archive.py` | 1211 | Typed, atomic chat archive export/import service and HTTP routes. | `core.db`, `llm.schemas`, `mind.memory`, `persist.checkpoints`, `story.character_schema`, `story.room_conversation` |
 | `persist/chat_delete.py` | 42 |  | `core.db` |
 | `persist/checkpoints.py` | 1350 | Whole-chat snapshots and checkpoint restore orchestration. | `core.db`, `mind.memory` |
-| `persist/commit.py` | 757 | Atomic commit orchestrator, per-turn lock, thin tail domains, and the facade re-exporting every commit_* name. | `core.db`, `core.frames`, `llm.prompts`, `llm.providers`, `mind`, `mind.memory`, `mind.theory_of_mind`, `persist.commit_attire`, `persist.commit_background`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_entities`, `persist.commit_ledgers`, `persist.commit_mapping`, `persist.commit_mechanics`, `persist.commit_memory`, `persist.commit_memory_write`, `persist.commit_place_graph`, `persist.commit_room_registry`, `persist.commit_scene_state`, `story`, `story.character_schema`, `story.scene`, `world.comfort`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.spatial_frames`, `world.survival`, `world.weather` |
+| `persist/commit.py` | 766 | Atomic commit orchestrator, per-turn lock, thin tail domains, and the facade re-exporting every commit_* name. | `core.db`, `core.frames`, `llm.prompts`, `llm.providers`, `mind`, `mind.memory`, `mind.theory_of_mind`, `persist.commit_attire`, `persist.commit_background`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_entities`, `persist.commit_ledgers`, `persist.commit_mapping`, `persist.commit_mechanics`, `persist.commit_memory`, `persist.commit_memory_write`, `persist.commit_place_graph`, `persist.commit_room_registry`, `persist.commit_scene_state`, `story`, `story.character_schema`, `story.scene`, `world.comfort`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.spatial_frames`, `world.survival`, `world.weather` |
 | `persist/commit_attire.py` | 1458 | The mutable clothing ledger: attire notes, shed/worn garment entities, the validated attire diff. | `persist.commit_common`, `story`, `story.attire` |
 | `persist/commit_background.py` | 3869 | Background presences: tracking, identity folding, the reactor gate, promotion to cast. | `core.db`, `mind.memory`, `persist.commit_common`, `story.character_schema`, `story.scene`, `world.spatial` |
 | `persist/commit_common.py` | 595 | Leaf helpers shared across commit domains: scalar utilities, name/address roster, entity-id canonicalisation. | `core.db`, `mind.memory`, `story.character_schema`, `world.mechanics`, `world.spatial` |
@@ -101,16 +101,16 @@
 | `story/importers.py` | 3124 | Native and AI-assisted character, persona, and lorebook import/generation. | `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.memory`, `story.character_schema`, `story.scene` |
 | `story/journey_history.py` | 431 |  | — |
 | `story/lore_structure.py` | 248 |  | — |
-| `story/mandates.py` | 361 |  | `core.db` |
+| `story/mandates.py` | 369 |  | `core.db` |
 | `story/naming.py` | 555 |  | `core.db`, `world.charter_identity` |
-| `story/plot_packages.py` | 1437 |  | — |
+| `story/plot_packages.py` | 2163 |  | — |
 | `story/provenance_text.py` | 132 |  | — |
 | `story/room_bible.py` | 421 |  | `core.db` |
 | `story/room_conversation.py` | 357 |  | `core.db` |
-| `story/room_frontier.py` | 212 |  | `core.db` |
+| `story/room_frontier.py` | 217 |  | `core.db` |
 | `story/room_proposals.py` | 264 |  | `core.db` |
 | `story/room_research.py` | 371 |  | `core.db` |
-| `story/room_tools.py` | 712 |  | `story.plot_packages`, `story.room_research` |
+| `story/room_tools.py` | 745 |  | `story.plot_packages`, `story.room_research` |
 | `story/scene.py` | 2648 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `core.db`, `story`, `story.attire`, `story.character_schema`, `world.day_cycle`, `world.spatial` |
 | `web/__init__.py` | 6 |  | — |
 | `web/app.py` | 6666 | FastAPI application assembly, resource CRUD, turn control, and streaming endpoints. | `agents`, `agents.story_planner`, `core`, `core.db`, `core.frames`, `core.paths`, `dressing.ambience`, `dressing.backdrops`, `llm`, `llm.prompts`, `llm.providers`, `mind.memory`, `persist.chat_archive`, `persist.chat_delete`, `persist.checkpoints`, `persist.commit`, `story`, `story.character_schema`, `story.dialogue_colors`, `story.importers`, `story.scene`, `web`, `web.auth_routes`, `web.room_routes`, `world`, `world.survival` |
@@ -140,7 +140,7 @@
 | `world/charter_log.py` | 510 |  | `world.charter_commitment`, `world.charter_decide`, `world.charter_economy`, `world.charter_feel`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_needs`, `world.charter_news`, `world.charter_politics`, `world.charter_social`, `world.charter_temper` |
 | `world/charter_mark.py` | 302 |  | — |
 | `world/charter_mind.py` | 262 |  | — |
-| `world/charter_model.py` | 737 |  | `world.charter_chatter`, `world.charter_figure`, `world.charter_harm`, `world.charter_mark` |
+| `world/charter_model.py` | 748 |  | `world.charter_chatter`, `world.charter_figure`, `world.charter_harm`, `world.charter_mark` |
 | `world/charter_move.py` | 411 |  | `world.charter_space` |
 | `world/charter_needs.py` | 297 |  | `world.charter_model` |
 | `world/charter_news.py` | 517 |  | `world.charter_mind`, `world.charter_model`, `world.charter_talk` |
@@ -152,10 +152,11 @@
 | `world/charter_promote.py` | 604 |  | `world.charter_commitment`, `world.charter_feel`, `world.charter_politics`, `world.charter_social` |
 | `world/charter_roster.py` | 134 |  | `world.charter_model` |
 | `world/charter_run.py` | 1464 |  | `world`, `world.charter_commitment`, `world.charter_decide`, `world.charter_drift`, `world.charter_economy`, `world.charter_enrol`, `world.charter_feel`, `world.charter_figure`, `world.charter_harm`, `world.charter_intervene`, `world.charter_log`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_move`, `world.charter_needs`, `world.charter_news`, `world.charter_plan`, `world.charter_politics`, `world.charter_practice`, `world.charter_roster`, `world.charter_social`, `world.charter_space`, `world.charter_talk`, `world.charter_trigger` |
-| `world/charter_runtime.py` | 3775 |  | `core`, `core.logging_utils`, `world.charter`, `world.charter_news`, `world.charter_surface`, `world.day_cycle`, `world.mechanics` |
+| `world/charter_runtime.py` | 3789 |  | `core`, `core.logging_utils`, `world.charter`, `world.charter_news`, `world.charter_surface`, `world.day_cycle`, `world.mechanics` |
 | `world/charter_social.py` | 743 |  | `world.charter_politics` |
 | `world/charter_space.py` | 167 |  | `world.spatial` |
 | `world/charter_surface.py` | 341 |  | — |
+| `world/charter_surgery.py` | 341 |  | — |
 | `world/charter_talk.py` | 351 |  | `world.charter_mind`, `world.charter_politics`, `world.charter_roster` |
 | `world/charter_temper.py` | 167 |  | — |
 | `world/charter_trigger.py` | 881 |  | `world.charter_mark`, `world.charter_news`, `world.charter_practice` |
@@ -171,6 +172,7 @@
 | `world/place_purpose.py` | 545 |  | `mind.theory_of_mind`, `world.comfort`, `world.spatial`, `world.survival` |
 | `world/planned_entities.py` | 290 |  | `core.db` |
 | `world/planning_needs.py` | 340 |  | — |
+| `world/region_events.py` | 420 |  | — |
 | `world/routines.py` | 208 |  | — |
 | `world/spatial.py` | 241 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `llm.schemas`, `world.spatial_barriers`, `world.spatial_contact_migration`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_merge`, `world.spatial_orientation`, `world.spatial_prose`, `world.spatial_routing`, `world.spatial_senses`, `world.spatial_substance`, `world.spatial_transit` |
 | `world/spatial_barriers.py` | 666 |  | `world.spatial_orientation` |
@@ -900,7 +902,7 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_commit_all_locked()` | 453 | 305 lines |
+| `_commit_all_locked()` | 453 | 314 lines |
 | `commit_crowds()` | 266 | 149 lines |
 | `commit_authored_events()` | 212 | 30 lines |
 | `commit_narration_person()` | 180 | 29 lines |
@@ -1240,14 +1242,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `grant_mandate()` | 139 | 73 lines |
-| `coverage()` | 235 | 16 lines |
-| `_most_permissive()` | 279 | 15 lines |
-| `expire_mandates()` | 214 | 14 lines |
-| `fill_limit()` | 264 | 13 lines |
-| `surprise_dial()` | 323 | 13 lines |
-| `spend_limits()` | 296 | 12 lines |
-| `beats_per_proposal()` | 338 | 12 lines |
+| `grant_mandate()` | 147 | 73 lines |
+| `coverage()` | 243 | 16 lines |
+| `_most_permissive()` | 287 | 15 lines |
+| `expire_mandates()` | 222 | 14 lines |
+| `fill_limit()` | 272 | 13 lines |
+| `surprise_dial()` | 331 | 13 lines |
+| `spend_limits()` | 304 | 12 lines |
+| `beats_per_proposal()` | 346 | 12 lines |
 
 ### `story/naming.py`
 
@@ -1266,14 +1268,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `publish_package()` | 1254 | 77 lines |
-| `normalize_package()` | 156 | 73 lines |
-| `_package_checks()` | 1095 | 67 lines |
-| `edit_package()` | 339 | 57 lines |
-| `_world_snapshot()` | 464 | 43 lines |
-| `draft_operation()` | 398 | 34 lines |
-| `prepare_package()` | 1218 | 34 lines |
-| `new_package()` | 308 | 29 lines |
+| `publish_package()` | 1854 | 84 lines |
+| `_package_checks()` | 1684 | 78 lines |
+| `fire_due_clocks()` | 1979 | 77 lines |
+| `normalize_package()` | 166 | 74 lines |
+| `edit_package()` | 350 | 57 lines |
+| `_world_snapshot()` | 475 | 52 lines |
+| `draft_operation()` | 409 | 34 lines |
+| `prepare_package()` | 1818 | 34 lines |
 
 ### `story/provenance_text.py`
 
@@ -1313,14 +1315,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `rooms_ahead()` | 66 | 32 lines |
-| `frontier_report()` | 100 | 29 lines |
-| `record_spend()` | 168 | 14 lines |
-| `fills_this_hour()` | 199 | 14 lines |
-| `spend_this_hour()` | 184 | 13 lines |
+| `rooms_ahead()` | 66 | 37 lines |
+| `frontier_report()` | 105 | 29 lines |
+| `record_spend()` | 173 | 14 lines |
+| `fills_this_hour()` | 204 | 14 lines |
+| `spend_this_hour()` | 189 | 13 lines |
 | `_player_room()` | 53 | 11 lines |
-| `record_fill()` | 150 | 11 lines |
-| `record_measure()` | 131 | 8 lines |
+| `record_fill()` | 155 | 11 lines |
+| `record_measure()` | 136 | 8 lines |
 
 ### `story/room_proposals.py`
 
@@ -1352,14 +1354,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_t_inspect_contradictions()` | 374 | 68 lines |
-| `_t_inspect_route()` | 214 | 37 lines |
-| `_t_inspect_rooms()` | 177 | 35 lines |
+| `_t_inspect_contradictions()` | 404 | 71 lines |
+| `_t_inspect_rooms()` | 186 | 49 lines |
+| `_t_inspect_route()` | 237 | 44 lines |
 | `_t_scan_lore()` | 125 | 33 lines |
-| `_t_inspect_charters()` | 291 | 30 lines |
-| `run_tool()` | 683 | 30 lines |
-| `_t_inspect_reserved_identities()` | 256 | 26 lines |
-| `_t_inspect_events()` | 323 | 25 lines |
+| `_t_inspect_charters()` | 321 | 30 lines |
+| `run_tool()` | 716 | 30 lines |
+| `_t_inspect_reserved_identities()` | 286 | 26 lines |
+| `_t_inspect_events()` | 353 | 25 lines |
 
 ### `story/scene.py`
 
@@ -1690,14 +1692,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `normalize_charter()` | 370 | 346 lines |
-| `normalize_body()` | 182 | 117 lines |
-| `body_of_an_authored_mind()` | 301 | 45 lines |
+| `normalize_charter()` | 376 | 351 lines |
+| `normalize_body()` | 182 | 123 lines |
+| `body_of_an_authored_mind()` | 307 | 45 lines |
 | `normalize_post()` | 144 | 36 lines |
 | `normalize_upkeep()` | 111 | 31 lines |
 | `_tags()` | 72 | 15 lines |
 | `_string_list()` | 94 | 15 lines |
-| `_optional_float()` | 360 | 8 lines |
+| `_optional_float()` | 366 | 8 lines |
 
 ### `world/charter_move.py`
 
@@ -1843,7 +1845,7 @@
 | `_plan_lived_location()` | 1293 | 159 lines |
 | `advance_snapshot()` | 1994 | 153 lines |
 | `_generate_lived_location()` | 1512 | 122 lines |
-| `presence_view()` | 3066 | 114 lines |
+| `presence_view()` | 3080 | 114 lines |
 | `presim_registry()` | 875 | 104 lines |
 | `generation_lore()` | 981 | 101 lines |
 
@@ -1884,6 +1886,19 @@
 | `surface_of()` | 185 | 13 lines |
 | `_strings()` | 74 | 11 lines |
 | `_home_post()` | 173 | 10 lines |
+
+### `world/charter_surgery.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `plant_claim()` | 141 | 33 lines |
+| `adjust_stock()` | 176 | 25 lines |
+| `open_summons()` | 289 | 25 lines |
+| `send_errand()` | 243 | 24 lines |
+| `assign_post()` | 114 | 21 lines |
+| `charter_shock()` | 221 | 20 lines |
+| `harm_body()` | 269 | 18 lines |
+| `apply_surgery()` | 325 | 17 lines |
 
 ### `world/charter_talk.py`
 
@@ -2076,6 +2091,19 @@
 | `record_planning_needs()` | 250 | 16 lines |
 | `fill_planning_need()` | 268 | 14 lines |
 | `normalize_planning_needs()` | 187 | 12 lines |
+
+### `world/region_events.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `apply_wave()` | 274 | 137 lines |
+| `normalize_region_event()` | 75 | 67 lines |
+| `resolve_footprint()` | 166 | 46 lines |
+| `plan_waves()` | 218 | 37 lines |
+| `_graph()` | 154 | 10 lines |
+| `_decay_steps()` | 257 | 6 lines |
+| `harms_a_body()` | 144 | 4 lines |
+| `_number()` | 70 | 3 lines |
 
 ### `world/routines.py`
 
