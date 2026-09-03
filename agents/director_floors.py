@@ -1353,3 +1353,146 @@ def _scan_for_untracked_restraint(resolved_event, dialogue_log, conditions,
         for name in _untracked_restraint_subjects(
             resolved_event, dialogue_log, conditions, tracked_names)
     ]
+
+
+# ---------------------------------------------------------------------------
+# A minted person who is already standing here
+# ---------------------------------------------------------------------------
+
+_FIGURE_STOPWORDS = frozenset({"the", "a", "an", "of", "s"})
+
+
+def _figure_head_noun(text):
+    """The last significant word of a role phrase or a person label, bare.
+
+    "the reeve's clerk" -> "clerk"; "the innkeeper" -> "innkeeper";
+    "ford_innkeeper" -> "innkeeper". The HEAD noun, because a role phrase
+    names the kind of person last and qualifies it first: a reeve's clerk
+    is a clerk, not a reeve, and a post id carries its disambiguator in
+    front (`reeve_clerk`) the way English puts it in front.
+    """
+    words = [w for w in re.split(r"[^a-z0-9]+",
+                                 str(text or "").casefold().replace("'s", ""))
+             if w and w not in _FIGURE_STOPWORDS and not w.isdigit()
+             and len(w) > 1]
+    return words[-1] if words else ""
+
+
+def _bare_person_name(text):
+    """A display name without ranks, honorifics or articles, casefolded, so
+    "Reeve Halinham Nookfeller" and "reeve halinham nookfeller" compare
+    equal, as they should."""
+    from persist.commit import strip_name_titles
+    return " ".join(strip_name_titles(str(text or "")).split()).casefold()
+
+
+def _bind_minted_entities_to_present_figures(sc, sd, figures, *,
+                                             fallback_room=None,
+                                             dialogue_log=None,
+                                             dialogue_order=None):
+    """A MINTED ROLE A PRESENT BODY ALREADY HOLDS IS THAT BODY.
+
+    The Director mints what exists and does not see who is standing here
+    (`present_charter_figures` is the payload half of this floor); so
+    "the innkeeper" is minted beside three innkeepers, and the story then
+    has four, one of whom nobody simulates. This floor rebinds such a mint
+    to the body it duplicates: the entity keeps its id and description, its
+    `name` becomes the body's display name (the name every other seam
+    resolves), the minted name survives as an alias, and `charter_ref`
+    records the permanent identity so the presence ledger keys on the body
+    (`track_background_presences`). Lines the Director logged under the
+    minted name follow it.
+
+    Two grades of match, in order, against the figures in the mint's own
+    room (the diff's position for it, else `fallback_room`, else every
+    figure offered): the body's NAME, bare of titles, equal to the entity's
+    name or an alias; else the body's ROLE head noun equal to the head noun
+    of the entity's name or an alias, for figures that hold a post. A name
+    that two bodies answer to is REFUSED (two records, two people --
+    `_presence_lookup`'s rule); a role two posted bodies hold binds to the
+    first by name and says so, because a wrong clerk is still the clerk on
+    watch and a phantom fourth clerk is worse. Things are never bound: a
+    minted `kind` in the inert set, a ubiquitous voice, a portable, a thing
+    with an interior, and anything the scene already holds under that id
+    are left alone.
+
+    Mutates `sd` (and the two dialogue fields when given) in place and
+    returns one record per binding for the caller's warning and the step's
+    audit: ``{entity_id, minted_name, bound_to, room, by, ambiguous}``.
+    """
+    from persist.commit import _INERT_ENTITY_KINDS
+
+    entities = (sd or {}).get("entities")
+    if not isinstance(entities, dict) or not entities or not figures:
+        return []
+    positions = (sd or {}).get("positions")
+    positions = positions if isinstance(positions, dict) else {}
+    existing = (sc or {}).get("entities") or {}
+    by_room = {}
+    for fig in figures:
+        by_room.setdefault(str(fig.get("room") or ""), []).append(fig)
+    bindings = []
+    for eid, ent in list(entities.items()):
+        if not isinstance(ent, dict):
+            continue
+        if str(eid) in existing:
+            continue  # a redeclaration, not a mint
+        kind = str(ent.get("kind") or "").strip().casefold()
+        if kind in _INERT_ENTITY_KINDS or ent.get("ubiquitous"):
+            continue
+        if ent.get("interior_rooms") or ent.get("portable"):
+            continue
+        minted = " ".join(str(ent.get("name") or "").split())
+        if not minted:
+            continue
+        labels = [minted] + [str(a) for a in (ent.get("aliases") or [])
+                             if str(a or "").strip()]
+        room = str(positions.get(str(eid)) or positions.get(minted)
+                   or fallback_room or "")
+        pool = by_room.get(room) if room else None
+        if not pool:
+            pool = list(figures)
+        bare_labels = {_bare_person_name(label) for label in labels}
+        bare_labels.discard("")
+        by_name = [f for f in pool
+                   if _bare_person_name(f.get("name")) in bare_labels]
+        chosen, how, ambiguous = None, "", False
+        if len(by_name) == 1:
+            chosen, how = by_name[0], "name"
+        elif len(by_name) > 1:
+            continue  # two bodies answer to the name; refuse to guess
+        else:
+            heads = {_figure_head_noun(label) for label in labels}
+            heads.discard("")
+            by_role = [f for f in pool if f.get("posts")
+                       and _figure_head_noun(f.get("role")) in heads]
+            if by_role:
+                by_role.sort(key=lambda f: str(f.get("name") or "").casefold())
+                chosen, how = by_role[0], "role"
+                ambiguous = len(by_role) > 1
+        if chosen is None:
+            continue
+        display = str(chosen.get("name") or "")
+        if not display:
+            continue
+        ent["name"] = display
+        aliases = [str(a) for a in (ent.get("aliases") or []) if str(a or "")]
+        if minted.casefold() != display.casefold() and minted not in aliases:
+            aliases.append(minted)
+        ent["aliases"] = aliases
+        if chosen.get("charter") and chosen.get("body"):
+            ent["charter_ref"] = {"charter": chosen["charter"],
+                                  "body": chosen["body"]}
+        if minted in positions and str(eid) not in positions:
+            positions[str(eid)] = positions.pop(minted)
+        for d in (dialogue_log or []):
+            if isinstance(d, dict) and str(d.get("speaker") or "") == minted:
+                d["speaker"] = display
+        if isinstance(dialogue_order, list):
+            for i, who in enumerate(dialogue_order):
+                if str(who) == minted:
+                    dialogue_order[i] = display
+        bindings.append({"entity_id": str(eid), "minted_name": minted,
+                         "bound_to": display, "room": room, "by": how,
+                         "ambiguous": ambiguous})
+    return bindings

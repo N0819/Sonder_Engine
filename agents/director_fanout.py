@@ -455,6 +455,17 @@ def _specialist_payload(name, ctx, sc, view, extras):
         })
         if extras.get("proposal"):
             payload["mapping_scene_proposal"] = extras["proposal"]
+        if extras.get("present_figures"):
+            # WHO IS ALREADY STANDING HERE, for the one hand that mints
+            # people. Derived, not the durable ledger: a charter body
+            # holding a post in this room whether or not it has earned a
+            # presence record (`agents.common.present_charter_figures`).
+            # Absent when nobody is, so an ordinary scene's payload is
+            # unchanged.
+            payload["present_figures"] = [
+                {"name": f.get("name"), "role": f.get("role"),
+                 "room": f.get("room")}
+                for f in extras["present_figures"]]
     elif name == "spatial":
         # The one specialist entitled to the full graph: it is the graph's
         # keeper. Everything else here is the geography's own ledgers plus

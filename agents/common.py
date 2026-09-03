@@ -1953,6 +1953,66 @@ def presence_figures_for_room(cid, sc, room_id, inputs=None, *,
     return [dict(row) for row in rows]
 
 
+def present_charter_figures(cid, sc, rooms, frame_id=None):
+    """Every unpromoted charter body standing in `rooms`, with the post it
+    holds -- the DIRECTOR's view of who is already here.
+
+    `presence_figures_for_room` is the PERCEPTION view and subtracts the
+    bodies a derived crowd carries, because a room's crowd is their
+    presentation there. The Director is not a perceiver: it owns what
+    exists, and what it needs to know before minting "the innkeeper" is
+    that three innkeepers hold that post in this room whether a crowd
+    presents them or not. Measured, Harrowmere: ten Director-minted people
+    over forty turns, eight of them a second copy of a charter post-holder
+    standing in the room -- a clerk beside three clerks, an innkeeper
+    beside three, a reeve minted under the ledgered reeve's own name --
+    because the resolve payload showed the durable presence ledger (who
+    has EARNED a record) and never the derived bodies (who is HERE).
+
+    Rows: ``name`` (the display name every other seam speaks), ``room``,
+    ``role`` (the institution's public noun for the post held, or "" for
+    a member holding no post this window), ``posts`` (the post ids on
+    watch), ``charter`` and ``body`` (the permanent identity a binding
+    keys on). Posted bodies first, then members, then by name, so a capped
+    payload keeps the people a role could be mistaken for.
+    """
+    from world import charter_crowd
+
+    places = {str(r) for r in (rooms or ()) if str(r or "")}
+    if not places:
+        return []
+    try:
+        from world.charter_runtime import background_presence_records
+        derived = background_presence_records(
+            cid, places=places, frame_id=frame_id)
+    except Exception:
+        return []
+    rows = []
+    for name, record in derived.items():
+        refs = [r for r in (record.get("charter_refs") or [])
+                if isinstance(r, dict)]
+        ref = refs[0] if refs else {}
+        hint = str(((record or {}).get("sketch") or {}).get("role_hint") or "")
+        posts = ([] if hint.startswith("member of ")
+                 else [p.strip() for p in hint.split(",") if p.strip()])
+        role = ""
+        for post in posts:
+            role = charter_crowd._role_noun(post)
+            if role:
+                break
+        rows.append({
+            "name": str(name),
+            "room": str(((record or {}).get("sketch") or {})
+                        .get("station_room") or ""),
+            "role": role,
+            "posts": posts,
+            "charter": str(ref.get("charter") or ""),
+            "body": str(ref.get("body") or ""),
+        })
+    rows.sort(key=lambda r: (0 if r["posts"] else 1, r["name"].casefold()))
+    return rows
+
+
 def chatter_for_room(cid, sc, room_id, inputs=None):
     """What an observer in this room hears of the crowd's talk: a hum band
     as ground, and at most one overheard fragment as figure.

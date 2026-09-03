@@ -190,6 +190,7 @@ from .director_movement import (
 )
 from .director_floors import (
     _unplaced_minted_entities,
+    _bind_minted_entities_to_present_figures,
     _untracked_restraint_subjects,
     _MAX_UNCONSCIOUSNESS_GAP,
     _sentence_break_positions,
@@ -2888,6 +2889,26 @@ def director_resolve(ctx, nonce, _corrections=None):
     # turn's 4 calls, 307-body town, 2026-08-28).
     _rcrowds = _crowds_view(chat["id"], sc, turn["idx"])
 
+    # The charter bodies standing where this beat is: the player's room, its
+    # ambient scope, and the room a declared move targets. Payload and floor
+    # read the SAME list, so a mint the prose author makes against a name it
+    # was shown binds to exactly the body it was shown.
+    _present_figures = []
+    try:
+        from .common import present_charter_figures
+        from world.spatial import ambient_scope
+        _fig_rooms = set()
+        if ctx.get("_player_room"):
+            _fig_rooms.add(str(ctx.get("_player_room")))
+            _nearby, _ = ambient_scope(sc, str(ctx.get("_player_room")))
+            _fig_rooms.update(str(r) for r in (_nearby or ()) if r)
+        if _mv_target:
+            _fig_rooms.add(str(_mv_target))
+        _present_figures = present_charter_figures(
+            chat["id"], sc, _fig_rooms, frame_id=ctx.turn.frame_id)
+    except Exception as exc:  # a story with no charter has nobody to list
+        ctx.add_warning(f"present figures not derived: {exc}")
+
     payload = {
         # Authored house style, for the prose and any world detail this stage
         # mints. director_interpret deliberately does NOT get it: that stage
@@ -3128,6 +3149,19 @@ def director_resolve(ctx, nonce, _corrections=None):
             for _pn, _pr in presence_name_items(
                 wget(chat["id"], "background_presences", {}) or {})
         ],
+        # WHO IS ALREADY STANDING HERE, derived from the charter this beat
+        # rather than read from the durable ledger above -- the ledger holds
+        # who has EARNED a record by participating, and this stage mints
+        # people against who is HERE. Measured, Harrowmere: with this block
+        # absent, eight of ten people minted over forty turns were second
+        # copies of a charter post-holder standing in the room. The floor
+        # below (`_bind_minted_entities_to_present_figures`) binds such a
+        # mint to its body regardless; this is the payload half, so the
+        # model has no reason to mint. Absent when nobody is here.
+        **({"present_figures": [
+                {"name": _f["name"], "role": _f["role"], "room": _f["room"]}
+                for _f in _present_figures[:24]]}
+           if _present_figures else {}),
         "interaction_rounds": _round_conduct(loop.get("rounds")),
         "reaction_rounds": _round_conduct((ctx.reaction_loop or {}).get("rounds")),
         "variant_seed": nonce,
@@ -3501,6 +3535,7 @@ def director_resolve(ctx, nonce, _corrections=None):
             for d in decls if d.get("name")
         },
         "proposal": payload.get("mapping_scene_proposal"),
+        "present_figures": _present_figures,
         "sightlines": payload.get("sightlines"),
         "planned_rooms": payload.get("planned_rooms"),
         "crowds": payload.get("crowds") or [],
@@ -3864,6 +3899,28 @@ def director_resolve(ctx, nonce, _corrections=None):
             "state_diff.positions, or move it with a state_diff.inventory_ops "
             "entry whose to_id names a room or a body the scene already "
             "knows." % ", ".join(_unplaced[:6]))
+
+    # A MINTED ROLE A PRESENT BODY ALREADY HOLDS IS THAT BODY. The payload
+    # showed the prose author and the objects hand who is standing here
+    # (`present_figures`); this is the floor under it, for the beat where
+    # the model mints "the innkeeper" anyway. Runs on the merged diff after
+    # every placement pass so the mint's room is the room it ended up in.
+    _bound = _bind_minted_entities_to_present_figures(
+        sc, sd, _present_figures,
+        fallback_room=ctx.get("_player_room"),
+        dialogue_log=out.get("dialogue_log"),
+        dialogue_order=out.get("dialogue_order"))
+    for _b in _bound:
+        ctx.add_warning(
+            "Minted %r is %s, the %s standing in %s; bound to them rather "
+            "than admitting a second one%s." % (
+                _b["minted_name"], _b["bound_to"],
+                "person" if _b["by"] == "name" else "post-holder",
+                _b["room"] or "this room",
+                " (more than one holds that post here; bound to the first "
+                "by name)" if _b["ambiguous"] else ""))
+    if _bound:
+        out["identity_bindings"] = _bound
 
     # `_guard_approach_is_not_arrival` used to run HERE and was undone on every
     # beat it fired. It now runs at the END of this function; see the call site
