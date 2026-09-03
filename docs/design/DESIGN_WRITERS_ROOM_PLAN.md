@@ -405,9 +405,20 @@ Each changes what a phase builds; none blocks Phase A.
    quick stage's cheap movement classification is wanted as a deterministic
    pre-pass, it survives as code, not a call.
 5. **The user experience** — settled in shape (owner, 2026-09-03): the
-   room is **a separate window or tab**, not a panel in the play view, so
-   authoring time and simulation time have different screens the way they
-   have different clocks (v2 § 7.1). In it the player talks with the Story
+   room is **a popout panel in the main UI**, opened from a small tab on
+   the right edge of the play view, so the story and the conversation
+   about it are on one screen (the Dramaturge's input *is* the
+   player-visible stream). Built in two steps: first **docked right**,
+   resizable in width from a drag handle and collapsing to its tab (the
+   existing slide-in drawer on narrow viewports); then a **float mode**
+   that undocks it into a draggable, corner-resizable window over the
+   story. Dock state, geometry and opacity persist per viewer (local
+   storage, defaults when blocked). Translucent chrome with a backdrop
+   blur; the text surface keeps a readable opacity floor behind a slider
+   rather than a fixed transparency. Its own script and routes, loaded
+   after the chat script, sharing only auth and theme helpers, so it
+   stays out of the turn pipeline's scripts. (An earlier note here said
+   a separate tab; superseded the same day.) In it the player talks with the Story
    Planner (and through it, or directly, with the Dramaturge), reads the
    spoiler-safe status of standing plans (v2 § 5.3: what is in motion,
    never what it is), and sees the room's questions when it asks. **It
@@ -417,9 +428,7 @@ Each changes what a phase builds; none blocks Phase A.
    mandates and the plan status are the only things beside the chat. No
    forms for budgets or events — those are sentences. Detail (how a
    sealed plan is represented, what the status line shows) is Phase B
-   work. Implementation note: the frontend is browser globals
-   over `static/index.html`; a separate page keeps the room out of the
-   turn pipeline's scripts.
+   work.
 6. **Budgets are set by talking.** Event and op scale — what the room may
    do, how big, to whom — is granted by telling the Story Planner what
    you allow it and the Dramaturge (v2 § 6.2). The conversation is the
