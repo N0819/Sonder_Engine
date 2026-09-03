@@ -3309,6 +3309,10 @@ def director_resolve(ctx, nonce, _corrections=None):
         # model has no reason to mint. Absent when nobody is here.
         **({"present_figures": [
                 {"name": _f["name"], "role": _f["role"], "room": _f["room"],
+                 # What they look like at full sight (`charter_surface`):
+                 # the render this hand writes for a body it mints against
+                 # them must add to it, never contradict it.
+                 **({"look": _f["look"]} if _f.get("look") else {}),
                  # WHAT THIS PERSON'S OWN LEDGERS ANSWER the player's order,
                  # request or bargain -- the same judgment the commit will
                  # record (`charter_runtime.figure_answers`). Present only

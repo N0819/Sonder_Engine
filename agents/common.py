@@ -1916,6 +1916,21 @@ def presence_figures_for_room(cid, sc, room_id, inputs=None, *,
                 return noun
         return ""
 
+    def _surface_for(refs):
+        """What the body LOOKS like (`world.charter_surface.surface_of`):
+        the surface generation dealt it, or the same one dealt now for a
+        registry from before the field existed. The stranger label every
+        observer builds is cut from this, at the light they see it in."""
+        from world.charter_surface import surface_has_content, surface_of
+        for charter_key, body_key in sorted(refs):
+            charter = by_key.get(charter_key)
+            if not charter or body_key not in (charter.get("bodies") or {}):
+                continue
+            surface = surface_of(charter, body_key)
+            if surface_has_content(surface):
+                return surface
+        return None
+
     rows, seen, seen_refs = [], set(), set()
     for name, rec in presence_name_items(ledger):
         name = str(name or "").strip()
@@ -1930,12 +1945,21 @@ def presence_figures_for_room(cid, sc, room_id, inputs=None, *,
             continue
         seen.add(name.casefold())
         seen_refs |= refs
-        rows.append({
+        surface = _surface_for(refs)
+        row = {
             "name": name, "room": room,
             "appearance": (str(((rec or {}).get("sketch") or {}).get(
                 "appearance") or "") or _noun_for(refs)),
             "role": _noun_for(refs),
-        })
+        }
+        if surface:
+            from world.charter_surface import appearance_text
+            row["surface"] = surface
+            if not str(((rec or {}).get("sketch") or {}).get("appearance")
+                       or ""):
+                row["appearance"] = appearance_text(
+                    surface, noun=_noun_for(refs))
+        rows.append(row)
 
     try:
         from world.charter_runtime import background_presence_records
@@ -1948,8 +1972,14 @@ def presence_figures_for_room(cid, sc, room_id, inputs=None, *,
         if str(name).casefold() in seen or (refs & seen_refs) or (refs & carried):
             continue
         seen.add(str(name).casefold())
-        rows.append({"name": str(name), "room": room,
-                     "appearance": _noun_for(refs), "role": _noun_for(refs)})
+        sketch = (record or {}).get("sketch") or {}
+        row = {"name": str(name), "room": room,
+               "appearance": str(sketch.get("appearance") or "")
+               or _noun_for(refs),
+               "role": _noun_for(refs)}
+        if isinstance(sketch.get("surface"), dict):
+            row["surface"] = dict(sketch["surface"])
+        rows.append(row)
     memo[room] = rows
     return [dict(row) for row in rows]
 
@@ -2013,6 +2043,11 @@ def present_charter_figures(cid, sc, rooms, frame_id=None):
             # that makes private).
             "home": str(((record or {}).get("sketch") or {})
                         .get("home_room") or ""),
+            # What this body looks like at full sight (`charter_surface`):
+            # the Director owns what exists and renders it, so it is shown
+            # the whole surface rather than a graded label.
+            "look": str(((record or {}).get("sketch") or {})
+                        .get("appearance") or ""),
         })
     rows.sort(key=lambda r: (0 if r["posts"] else 1, r["name"].casefold()))
     return rows
@@ -4166,7 +4201,7 @@ def scene_figures(chat, cast, scene, recognized=None):
 
 
 def _unknown_actor_label(actor_name, appearance_text=None, aliases=None, *,
-                         role=""):
+                         role="", surface=None, sight="full"):
     # Every unrecognized actor used to render as the exact same generic
     # "the unfamiliar person" -- two strangers in one scene (or the same
     # stranger across a perceiver's dialogue and action lines) were
@@ -4198,6 +4233,21 @@ def _unknown_actor_label(actor_name, appearance_text=None, aliases=None, *,
     # because the same noun is what `charter_crowd` already renders to any
     # observer for the band these bodies are members of. Nothing about "an
     # ensign" narrows down which ensign.
+    #
+    # A STRUCTURED SURFACE OUTRANKS A SUMMARY (`world.charter_surface`). A
+    # charter body's look is dealt per axis from its population's law, so
+    # the descriptor is composed from the tier the observer's ``sight``
+    # admits -- a silhouette's stature, build and worn outline short of
+    # full light, the face tier at full -- and from the surface ALONE: no
+    # name token is in it to strip, and the post's name never enters it
+    # (the role shows only through what is worn and marked). Measured,
+    # Harrowmere replay 2026-09-03: a hundred townspeople with no
+    # appearance text, every unrecognised one the fallback below.
+    if surface:
+        from world.charter_surface import surface_label
+        described = surface_label(surface, sight, noun=role)
+        if described:
+            return _text("unknown_actor", description=described)
     if appearance_text:
         articles = frozenset(compositor_value("articles"))
         name_tokens = _identity_token_set(actor_name, aliases)

@@ -6763,6 +6763,41 @@ What the fixes for replay defects N2, N9, N10 and N11 deliberately left:
   measurement of whether it held is the next replay's invented-dialogue
   count (5 on 40 beats before it).
 
+### 2.31 A townsperson's surface — residuals
+
+**Landed 2026-09-03** (`world/charter_surface.py`, Design.md "A townsperson
+has a surface"). What it deliberately does not do:
+
+- **The replay's town wears the engine's face.** The Harrowmere plan in
+  `tests/data/harrowmere_plan.json` was written before the look law
+  existed, so every body there deals from the six-value default pools and
+  the closure warns; a hundred bodies over six values an axis repeat.
+  Measured on the replay registry: 27 bodies met, all 27 from the default.
+  The next generated town is the first measurement of an authored law.
+- **Worn does not come off.** A post's `worn` is its holders' working
+  dress and rides the body all day and night; a smith asleep in a cottage
+  is still "in a leather apron" to a silhouette. Tying `worn` to the
+  body's phase (at post / off duty) is the obvious next step and was not
+  asked for.
+- **A render is refused on a phrase match.** `settle_render` refuses a
+  Director render that names another value of an axis's pool than the one
+  dealt, by word-boundary phrase; a pool value that is also an ordinary
+  word ("short" in "short sword") refuses a render that contradicts
+  nothing. The refusal is a warning and the entity keeps its description,
+  so the cost is one unsettled render.
+- **A silhouette descriptor is a memory entity.** `generic_labels` keeps
+  the fixed dim-figure label out of memory; a composed silhouette ("the
+  tall broad-shouldered figure in an apron") is not in that set and is
+  indexed like any stranger descriptor. Deliberate -- it is a real thing
+  the observer saw -- but it is a change to what a dim room leaves in a
+  mind, and unmeasured.
+- **The default pool is English-shaped.** `DEFAULT_LOOKS` in the ja pack
+  is a translation of the en pool, not a Japanese look law; the compositor
+  templates order adjectives for the language, and that is all.
+- **`surface.gait` is dealt and never rendered in a label** (it rides
+  `appearance_text` and the widening words only); a limp is the kind of
+  thing a silhouette shows and could join the silhouette tier.
+
 ## 3. Information-pipeline leaks still open
 
 Ids are the erased pipeline sweep's own. Severity vocabulary: **leak** (a mind
