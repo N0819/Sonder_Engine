@@ -379,9 +379,16 @@ def test_charter_bodies_are_derived_background_people_with_stable_refs(temp_db):
     # `home_room` is where the body sleeps (`charter_dwellings`), carried
     # on the sketch since 2026-09-03 so the Director's figures and the
     # voice both have it; a working pair berths where it stands.
-    assert records["Bob Vale"]["sketch"] == {
+    sketch = records["Bob Vale"]["sketch"]
+    # `surface` and `appearance` are the body's dealt look
+    # (`charter_surface`, 2026-09-03); the rest is pinned exactly.
+    assert set(sketch) == {"role_hint", "station_room", "home_room",
+                           "surface", "appearance"}
+    assert {k: sketch[k] for k in ("role_hint", "station_room",
+                                   "home_room")} == {
         "role_hint": "fail_post", "station_room": "room_b",
         "home_room": state["bodies"]["bob"]["berth"]}
+    assert sketch["appearance"] and sketch["surface"]["law"] == "default"
 
 
 def test_presence_packet_carries_temperament_and_exact_scene_affordances(temp_db):

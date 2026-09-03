@@ -464,7 +464,8 @@ def _specialist_payload(name, ctx, sc, view, extras):
             # unchanged.
             payload["present_figures"] = [
                 {"name": f.get("name"), "role": f.get("role"),
-                 "room": f.get("room")}
+                 "room": f.get("room"),
+                 **({"look": f["look"]} if f.get("look") else {})}
                 for f in extras["present_figures"]]
     elif name == "spatial":
         # The one specialist entitled to the full graph: it is the graph's

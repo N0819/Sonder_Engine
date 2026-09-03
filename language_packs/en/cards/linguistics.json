@@ -3212,5 +3212,16 @@
       "$type": "frozenset",
       "items": ["the", "a", "an"]
     }
+  },
+  "world.charter_surface": {
+    "DEFAULT_LOOKS": {
+      "stature": ["tall", "short", "average-height", "long-limbed", "compact", "rangy"],
+      "build": ["stocky", "slight", "broad-shouldered", "wiry", "heavyset", "lean"],
+      "gait": ["quick-stepping", "slow-moving", "stooped", "straight-backed", "limping", "restless"],
+      "complexion": ["weathered", "pale", "sun-dark", "ruddy", "sallow", "freckled"],
+      "hair": ["cropped hair", "a grey braid", "unruly hair", "a shaved head", "a long plait", "thinning hair"],
+      "age": ["young", "greying", "old", "middle-aged", "barely grown", "elderly"],
+      "marks": ["a burn-scarred hand", "a missing tooth", "a notched ear", "a crooked nose", "ink-stained fingers", "a healed cut across the brow"]
+    }
   }
 }

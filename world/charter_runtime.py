@@ -26,6 +26,8 @@ from world.charter import (normalize_charter, run, trigger_view,
                           trigger_warnings)
 from world.charter_news import WITNESSABLE
 from world.mechanics import stable_event_key
+from world.charter_surface import (appearance_text, surface_has_content,
+                                   surface_of)
 
 
 CHARTERS_KEY = "charters"
@@ -3079,6 +3081,7 @@ def presence_view(cid, place, name, frame_id=None, figures=None, *,
     licensed to know them by.
     """
     out = []
+    from world.charter_crowd import member_noun
     registry = registry_for(cid, frame_id)
     labels = _figure_labels(figures)
     plans = plan_figure_acts(registry, evidence, inventory_ops, scene,
@@ -3161,6 +3164,10 @@ def presence_view(cid, place, name, frame_id=None, figures=None, *,
             # -- a caller at its door is asking ITS leave.
             "home": {"room": berth,
                      "at_home": bool(berth) and berth == str(place or "")},
+            # Its own look, at full sight: a body knows what it wears and
+            # what its work has marked it with (`charter_surface`).
+            "look": appearance_text(surface_of(state, body_key, body),
+                                    noun=member_noun(state, body_key)),
             **({"answers": answers} if answers else {}),
         })
     return out[:2]
@@ -3274,8 +3281,19 @@ def background_presence_records(cid, *, places=None, names=None,
             continue
         role = (", ".join(roles) if roles else f"member of {charter_key}")
         sketch = {"role_hint": role, "station_room": place}
-        body = registry["items"][charter_key]["state"]["bodies"].get(
-            body_key) or {}
+        state = registry["items"][charter_key]["state"]
+        body = state["bodies"].get(body_key) or {}
+        # What this body LOOKS like, dealt from its population's law
+        # (`charter_surface`), carried on the sketch so every reader of the
+        # record -- the perceiver's stranger label, the Director's figures,
+        # the voice -- describes the same person. `appearance` is the
+        # full-sight summary in the shape every other presence carries.
+        surface = surface_of(state, body_key, body)
+        if surface_has_content(surface):
+            from world.charter_crowd import member_noun
+            sketch["surface"] = surface
+            sketch["appearance"] = appearance_text(
+                surface, noun=member_noun(state, body_key))
         berth = str(body.get("berth") or "")
         if berth and charter_key != AMBIENT_CHARTER:
             # Where this body SLEEPS -- the fact that makes a room private
@@ -3290,6 +3308,50 @@ def background_presence_records(cid, *, places=None, names=None,
             "charter_refs": [{"charter": charter_key, "body": body_key}],
             "sketch": sketch,
         }
+    return out
+
+
+def settle_rendered_surfaces(cid, renders, frame_id=None):
+    """The Director's render of a body it minted and the floor bound
+    (`identity_bindings`), settled onto that body's surface ONCE
+    (`charter_surface.settle_render`). ``renders`` is
+    ``[{charter, body, render}]``; returns one record per entry with
+    ``settled`` or ``refused`` (the contradicted axis), and saves the
+    registry only when something settled. A body already carrying a render
+    keeps it and is reported as neither.
+    """
+    from world.charter_surface import settle_render
+
+    rows = [r for r in (renders or ()) if isinstance(r, dict)
+            and r.get("charter") and r.get("body")
+            and str(r.get("render") or "").strip()]
+    if not rows:
+        return []
+    registry = registry_for_update(cid, frame_id)
+    out, changed = [], False
+    for row in rows:
+        item = registry["items"].get(str(row["charter"]))
+        if not item:
+            continue
+        state = item["state"]
+        body = (state.get("bodies") or {}).get(str(row["body"]))
+        if body is None:
+            continue
+        surface, refused = settle_render(
+            state, str(row["body"]), row["render"], body)
+        record = {"charter": str(row["charter"]), "body": str(row["body"])}
+        if refused:
+            record["refused"] = refused
+            out.append(record)
+            continue
+        if surface.get("rendered") and \
+                (body.get("surface") or {}).get("rendered") != surface["rendered"]:
+            body["surface"] = surface
+            record["settled"] = surface["rendered"]
+            out.append(record)
+            changed = True
+    if changed:
+        save_registry(cid, registry, frame_id)
     return out
 
 

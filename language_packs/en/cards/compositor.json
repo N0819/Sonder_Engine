@@ -345,7 +345,12 @@
     "tone_behavior": " with {article}{tone}",
     "tone_noun": " with {tone} in their voice",
     "unknown_actor": "the {description}",
-    "unknown_actor_fallback": "the unfamiliar person"
+    "unknown_actor_fallback": "the unfamiliar person",
+    "surface_label": "{adjectives} {noun}",
+    "surface_with": "{label} with {feature}",
+    "surface_in": "{label} in {worn}",
+    "surface_summary_with": "{text}, with {items}",
+    "surface_summary_wearing": "{text}, wearing {items}"
   },
   "muffle_ellipsis": "...",
   "muffle_join": "... ",
@@ -376,5 +381,9 @@
     "w": "west",
     "nw": "northwest"
   },
-  "attire_delta_join": ", "
+  "attire_delta_join": ", ",
+  "surface_person": "person",
+  "surface_figure": "figure",
+  "surface_adjective_join": " ",
+  "surface_list_join": ", "
 }

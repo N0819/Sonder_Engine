@@ -261,7 +261,12 @@
     "tone_behavior": "{tone}を浮かべ、",
     "tone_noun": "{tone}を声ににじませ、",
     "unknown_actor": "見知らぬ{description}",
-    "unknown_actor_fallback": "見知らぬ人物"
+    "unknown_actor_fallback": "見知らぬ人物",
+    "surface_label": "{adjectives}{noun}",
+    "surface_with": "{feature}のある{label}",
+    "surface_in": "{worn}をまとった{label}",
+    "surface_summary_with": "{text}、{items}",
+    "surface_summary_wearing": "{text}、{items}を身につけている"
   },
   "count_generic": {
     "1": "",
@@ -345,5 +350,9 @@
     "w": "西",
     "nw": "北西"
   },
-  "attire_delta_join": "、"
+  "attire_delta_join": "、",
+  "surface_person": "人物",
+  "surface_figure": "人影",
+  "surface_adjective_join": "",
+  "surface_list_join": "、"
 }
