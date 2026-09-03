@@ -164,6 +164,15 @@ def _scene(cid):
     return get_scene(cid, chat) or {}
 
 
+def _containment(scene):
+    """``{room_id: holder}`` for every room that is the inside of a body
+    (`parent_entity`). Such a room is a fact about the holder, never a
+    place the Planner plans, routes through, or reads as a gap."""
+    return {str(r): str(room.get("parent_entity"))
+            for r, room in ((scene or {}).get("rooms") or {}).items()
+            if isinstance(room, dict) and room.get("parent_entity")}
+
+
 def _t_inspect_structures(cid, frame_id):
     from core.db import wget_for_frame
     from world.structure import STRUCTURES_KEY, normalize_structures, planned_room_ids
@@ -183,11 +192,24 @@ def _t_inspect_rooms(cid, frame_id, *, room_ids=None, include_planned=True):
     for who, room in positions.items():
         occupants.setdefault(str(room), []).append(str(who))
     wanted = {str(r) for r in (room_ids or ())}
-    out = []
+    out, containment = [], []
     for rid, room in rooms.items():
         if wanted and str(rid) not in wanted:
             continue
         room = room if isinstance(room, dict) else {}
+        if room.get("parent_entity"):
+            # THE INSIDE OF A BODY IS NOT A ROOM TO PLAN. The Planner may
+            # know somebody is contained -- that is a fact about the world
+            # -- but a room whose record carries `parent_entity` is where
+            # the world put a body, minted by the Director and living only
+            # while the containment does. Reported as containment on its
+            # holder, never as a room with exits (owner ruling, 2026-09-03).
+            holder = str(room["parent_entity"])
+            containment.append({
+                "inside": holder, "who": occupants.get(str(rid), []),
+                "holder_room": str(positions.get(holder) or ""),
+                "room_id": str(rid)})
+            continue
         out.append({
             "id": str(rid), "name": room.get("name"),
             "description": _excerpt(room.get("desc") or room.get("description")),
@@ -208,15 +230,18 @@ def _t_inspect_rooms(cid, frame_id, *, room_ids=None, include_planned=True):
                             "purpose": brief.get("purpose"),
                             "exits": brief.get("adjacent") or []})
     return {"location": scene.get("location"), "rooms": out,
-            "planned_only": planned}
+            "planned_only": planned,
+            **({"containment": containment} if containment else {})}
 
 
 def _t_inspect_route(cid, frame_id, *, from_room, to_room):
     from world.spatial import passable_neighbors
     from world.structure import planned_topology
     scene = _scene(cid)
-    graph = {str(k): {str(v) for v in vs}
-             for k, vs in passable_neighbors(scene).items()}
+    contained = _containment(scene)
+    graph = {str(k): {str(v) for v in vs if str(v) not in contained}
+             for k, vs in passable_neighbors(scene).items()
+             if str(k) not in contained}
     # The plan's topology counts as walkable: a planned stub is a room the
     # Director furnishes on entry. By ID: `planned_context` renders edges by
     # NAME for a reader, and a walk over names reached nothing planned.
@@ -225,6 +250,11 @@ def _t_inspect_route(cid, frame_id, *, from_room, to_room):
             graph.setdefault(rid, set()).add(other)
             graph.setdefault(other, set()).add(rid)
     start, goal = str(from_room), str(to_room)
+    for end in (start, goal):
+        if end in contained:
+            raise ToolError("%r is the inside of %s, not a place a route "
+                            "reaches; where the world puts a body is the "
+                            "Director's" % (end, contained[end]))
     if start not in graph and start not in (scene.get("rooms") or {}):
         raise ToolError("room %r exists nowhere" % start)
     frontier, seen, parent = [start], {start}, {}
@@ -383,9 +413,12 @@ def _t_inspect_contradictions(cid, frame_id):
     from world.planning_needs import open_planning_needs
     from world.structure import planned_context, planned_room_ids
     scene = _scene(cid)
-    rooms = set(scene.get("rooms") or {})
+    contained = _containment(scene)
+    # A containment room is not a room the world is missing and not one a
+    # thing can dangle in: it is a body's inside, transient by nature.
+    rooms = set(scene.get("rooms") or {}) - set(contained)
     planned = set(planned_room_ids(cid))
-    known = rooms | planned
+    known = rooms | planned | set(contained)
     out = {"registry": [], "structure": [], "dangling": []}
     try:
         from world.charter_runtime import registry_for, registry_warnings

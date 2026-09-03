@@ -89,8 +89,13 @@ def rooms_ahead(cid, scene, start, depth=FRONTIER_DEPTH_HOPS):
                     seen.add(other)
                     nxt.append(other)
         frontier = nxt
-    reachable = sorted(seen - {start})
     rooms = scene.get("rooms") or {}
+    # The inside of a body (`parent_entity`) is not a place ahead of the
+    # player and never a frontier gap: where the world puts a body is the
+    # Director's, and it is transient (owner ruling, 2026-09-03).
+    contained = {str(r) for r, room in rooms.items()
+                 if isinstance(room, dict) and room.get("parent_entity")}
+    reachable = sorted((seen - {start}) - contained)
     stubs = [rid for rid in reachable
              if (rid in rooms and is_planned_stub(scene, rid))
              or (rid not in rooms and rid in planned)]

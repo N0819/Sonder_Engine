@@ -2385,6 +2385,20 @@ def residue_facts(cid, place, frame_id=None, cap=3):
     return facts[:max(0, int(cap))]
 
 
+def author_surgery(cid, frame_id, op, *, by="writers_room", turn_idx=None):
+    """The Writers' Room's hand on one institution (`charter_surgery`):
+    load the frame's registry privately, apply ONE surgery, record it on the
+    institution, save. The facade seam a package operation calls; refuses
+    (`ValueError`) on the surgery module's terms and writes nothing then.
+    Returns ``{"charter", "op", "result"}``."""
+    from .charter_surgery import apply_surgery
+    registry = registry_for_update(cid, frame_id)
+    result = apply_surgery(registry, op, by=by, turn_idx=turn_idx)
+    save_registry(cid, registry, frame_id)
+    return {"charter": str((op or {}).get("charter") or ""),
+            "op": str((op or {}).get("op") or ""), "result": result}
+
+
 def charter_diagnostics(cid, frame_id=None, *, charter_key="", body_key=""):
     """Author-only explanation surface; no result is delivered to a mind."""
     from core.db import q, wget_for_frame
