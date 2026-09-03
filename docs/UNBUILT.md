@@ -6619,6 +6619,39 @@ clock"). What it deliberately does not do:
   to the same rule: it is what the cycle can READ, and a label outside it is
   left standing rather than misread. Expect it to be widened; a widening
   changes which stories get a cycle, never what the cycle does.
+- **A skip lands at the START of the phase it names** (2026-09-03, replay
+  N13), never inside it: "by dusk" is 18:00 whatever the duration said, and
+  "late in the afternoon" is the afternoon's first minute. The phrase is
+  read by the same word table, so a phrase it cannot read changes nothing.
+  The light duty loads on a `sustained` interpret element under an anchored
+  day; an instantaneous beat that crosses a phase boundary by its floor
+  charge alone still relies on the backstop's manifest half.
+
+### 2.30 The replay closer's residuals (2026-09-03)
+
+What the fixes for replay defects N2, N9, N10 and N11 deliberately left:
+
+- **A frontier stub named for its axis is a label, not a place name.** An
+  axis the planner wrote as a bare direction ("east") now mints a room
+  called "East" unless the grammar has a name that shares a word with it
+  ("North Lane" for "north"); the Director names the room when it furnishes
+  it (`structure.planned_room_brief`). The grammar's names are otherwise
+  unused, and a planner that writes only its planned rooms into them has
+  written nothing the closer reads.
+- **The boundary rule refuses "Westfield".** A fragment ending in a
+  consonant cluster does not join a consonant-initial one, which refuses
+  "Brgaron" and also "west"+"field"; the law still names everyone (the next
+  fragment in seeded order joins, or the middle is dropped), and a law whose
+  every start and end refuse each other is joined as written. The rule reads
+  the Latin range only; a kana law is untouched.
+- **The historian's per-resident allowance is an estimate.** 220 tokens
+  covers a 40-word summary with three citations and two turning points with
+  a margin; the ceiling holds by the retry, not the estimate, and the retry
+  halves the residents rather than the prose. The per-resident recent-life
+  call in `charter_history.py` (7,000 fixed) was not touched.
+- **Berths are dealt round, not read.** A post serving ten houses puts its
+  bodies one to each in turn; nothing reads a household's composition, so a
+  house of one holder and four members is the closer's, not the planner's.
 ### 2.29 Who the player talks to — residuals
 
 **Found:** the Harrowmere playtest (2026-09-02), landed 2026-09-03 as

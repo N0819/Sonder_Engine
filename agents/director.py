@@ -2109,7 +2109,11 @@ _PROSE_DUTY_GATES = {
     "due_events": lambda f: f["due_events_present"],
     "world_pressure": lambda f: f["pressure_ledger_open"],
     "residue": lambda f: f["residue_present"],
-    "light": lambda f: f["scene_not_fully_lit"],
+    # A beat that can move the sun can change every outdoor room's light
+    # before the author writes it (a night's sleep, an afternoon in the
+    # square): the duty loads on a sustained act in an anchored day, the
+    # one prediction the interpret stage's own closed vocabulary affords.
+    "light": lambda f: f["scene_not_fully_lit"] or f["sun_can_move"],
     "size": lambda f: f["scales_active"] or f["physical_beat"],
 }
 
@@ -2189,6 +2193,25 @@ def _prose_gate_facts(ctx, sc, payload, facts, p_name):
         return any(effective_light(sc, rid) not in ("lit", "bright")
                    for rid in rooms)
 
+    def sun_can_move():
+        # The day is anchored (`scene.day_phase` is derived) and the beat
+        # carries an act the interpret stage staged as SUSTAINED
+        # (`schemas.ActionStage`): hours may pass, and the sun with them.
+        # Measured (Harrowmere replay, 2026-09-03, t9): "I sleep right
+        # through until first light" was staged sustained, the resolve
+        # skipped twenty-one hours to dawn, and the author set the room dim
+        # with no light duty loaded -- the backstop's manifest half caught
+        # it, which is a warning, not a duty.
+        if not sc.get("day_phase"):
+            return False
+        interp = ctx.get("director_interpret") or {}
+        for element in interp.get("sequence") or ():
+            if not isinstance(element, dict):
+                continue
+            if str(element.get("stage") or "").strip().casefold() == "sustained":
+                return True
+        return False
+
     return {
         "physical_beat": facts["physical_beat"],
         "speech_present": facts["speech_present"],
@@ -2214,6 +2237,7 @@ def _prose_gate_facts(ctx, sc, payload, facts, p_name):
         "residue_present": _true_on_error(
             lambda: payload.get("destination_residue")),
         "scene_not_fully_lit": _true_on_error(not_fully_lit),
+        "sun_can_move": _true_on_error(sun_can_move),
     }
 
 
