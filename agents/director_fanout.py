@@ -465,8 +465,15 @@ def _specialist_payload(name, ctx, sc, view, extras):
             payload["present_figures"] = [
                 {"name": f.get("name"), "role": f.get("role"),
                  "room": f.get("room"),
-                 **({"look": f["look"]} if f.get("look") else {})}
-                for f in extras["present_figures"]]
+                 **({"look": f["look"]} if f.get("look") else {}),
+                 # The plan uid a render settles through, and for an
+                 # authored plan (`world.planned_entities`) its kind and
+                 # brief: what it is for, what is true of it.
+                 **({"plan": f["plan"]} if f.get("plan") else {}),
+                 **({"kind": f["kind"]}
+                    if str(f.get("kind") or "person") != "person" else {}),
+                 **({"brief": f["brief"]} if f.get("brief") else {})}
+                for f in extras["present_figures"] if not f.get("reserved")]
     elif name == "spatial":
         # The one specialist entitled to the full graph: it is the graph's
         # keeper. Everything else here is the geography's own ledgers plus

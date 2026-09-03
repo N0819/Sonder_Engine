@@ -266,6 +266,19 @@ def normalize_body(key, entry):
     from .charter_surface import surface_has_content
     if surface_has_content(entry.get("surface")):
         body["surface"] = dict(entry["surface"])
+    # A GUEST of a lodging house (`charter_enrol`): berthed there until the
+    # hour the town runs their departure, after which the body is departed
+    # -- unavailable, standing nowhere, and skipped by every reader that
+    # lists who is here. Kept only when set, like the surface.
+    if entry.get("guest"):
+        body["guest"] = True
+        until = entry.get("guest_until")
+        if until is not None:
+            body["guest_until"] = number(until, 0.0)
+    if entry.get("departed"):
+        body["departed"] = True
+        body["available"] = False
+        body["stood_down"] = False
     # A walk in progress: the courier's shape (`charter_move`), carried only
     # while the body is between its origin and its target. Dropped on arrival
     # by the mover, and dropped here if it is not a route at all -- a body
