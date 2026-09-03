@@ -202,13 +202,15 @@ with `make check` green and a row in `Design.md`.
 Everything here is deterministic and measurable on the Harrowmere replay
 without a room in the loop. It is the widened "step 5".
 
-1. **Planned entities.** A `planned_entities` ledger with a brief, the same
+1. **Planned entities** — *landed 2026-09-03* (`world/planned_entities.py`;
+   `UNBUILT.md` § 2.33). A `planned_entities` ledger with a brief, the same
    three functions the room handoff needed: a view that puts the plans in
    view into the Director's resolve payload (charter bodies as the first
    plan source, through the position ledger), a settle that writes the
    render back, and a reservation so a mint naming a planned identity is a
    render of it. Measure: replay duplicates (7 mints / 6 shadows → 0).
-2. **Surface + planning need.** A Director mint with no plan behind it is
+2. **Surface + planning need** — *landed 2026-09-03* (`world/charter_enrol.py`;
+   the ambient charter is deleted). A Director mint with no plan behind it is
    surface-only and files a typed planning-need record (room, person,
    thing; with the committed surface attached). A deterministic fill
    answers it *today* by enrolment into a real charter (§ 2), so the
@@ -225,7 +227,7 @@ without a room in the loop. It is the widened "step 5".
    replay's 21 `planned_context` calls and 12 hits become 0 calls.
 4. **Retire the offscreen hand** as in § 2, once charter carriers cover
    couriers.
-5. **Planning-need queue and job.** The record type, its frame/branch
+5. **Planning-need queue and job** — *landed 2026-09-03*. The record type, its frame/branch
    scoping, and a `core/jobs.py` job that drains it — the deterministic
    fill now, the room's job later.
 

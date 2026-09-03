@@ -6582,6 +6582,15 @@ accepts `aspects`, so this is a caller-side change with no plumbing.
 
 ### 2.26 Writers' Room and Dramaturge
 
+**Phase A (engine seams) progress, per `design/DESIGN_WRITERS_ROOM_PLAN.md`
+§ 5:** items 1 (planned entities: view, settle, reservation), 2 (surface-only
+mint, planning need, deterministic fill by enrolment; the ambient charter
+deleted) and 5 (the planning-need store and its drain job) landed
+2026-09-03 (`world/planned_entities.py`, `world/charter_enrol.py`,
+`tests/test_planned_entities.py`, `tests/test_charter_enrol.py`; residuals
+in § 2.33). Items 3 (`compile_world_context` replacing the mapping stages)
+and 4 (retiring the offscreen hand) remain.
+
 Build the cross-system Writers' Room agent set described in
 [`design/DESIGN_STORY_PLANNER_AND_DRAMATURGE.md`](design/DESIGN_STORY_PLANNER_AND_DRAMATURGE.md):
 two principal conversational specializations, Story Planner and Dramaturge,
@@ -6706,12 +6715,6 @@ What the fixes for replay defects N2, N9, N10 and N11 deliberately left:
 **Found:** the Harrowmere playtest (2026-09-02), landed 2026-09-03 as
 `tests/test_who_you_talk_to.py`; what the fix deliberately left.
 
-- **An ambient body has no home.** `ensure_ambient_bodies` writes `berth =
-  place` for a presence the Director minted, so the room it was first seen
-  in would read as its dwelling; `charter_dwellings`, the sketch's
-  `home_room` and `presence_view`'s `home` skip the ambient charter instead.
-  A minted cottager therefore lives nowhere until the story says otherwise,
-  and there is no seam for the story to say it.
 - **Title words are derived per story, not per room.** `_shared_name_words`
   reads every tracked name in the ledger, so a story with one reeve in the
   hall and one in a distant town shares "reeve" between them and the loose
@@ -6837,6 +6840,45 @@ does not do, and what the measurement left open:
 - **Cost bound.** A deep copy per kill was most of the round's cost on
   `big_town` and was removed (`apply_harm(copy_state=False)`); re-measure
   after any change to the round with `tests/charter_worlds.big_town`.
+
+### 2.33 Planned entities and enrolment — residuals (2026-09-03)
+
+Landed as Phase A items 1, 2 and 5 of the Writers' Room plan. What it
+deliberately does not do:
+
+- **An authored plan has no writer but the API.** `add_planned_entity` is
+  the seam the Writers' Room will publish through; nothing in play files
+  one yet, so the ledger holds only what a test or a tool wrote. Charter
+  bodies are the first and, in play, the only plan source.
+- **A thing-need and a room-need are filed and never answered.** The drain
+  job answers person-needs by enrolment; a dwelling owed, or a thing with
+  no plan, waits for the room. `PLANNING_NEEDS_CAP` (64 open) closes the
+  oldest as stale rather than growing forever.
+- **Enrolment reads the post's forms, not its situation.** A role naming
+  a post whose seats are all held enrols the person as a householder and
+  says so; nothing considers whether the town should GROW the post (a
+  second watch at the bridge). That is a planning revision, the room's.
+- **A guest's departure is a disappearance.** `depart_guests` marks the
+  body departed and unavailable at `GUEST_STAY_HOURS`; no event, no news,
+  no walk to the gate. The room's own plans can extend or end a stay by
+  editing the body; nothing in play does.
+- **The minimal households charter berths the newcomer where they stood.**
+  A story with no town has no house to offer, so `berth = place` and a
+  room-need is filed; until the room answers it, the room they were first
+  seen in is listed as their home (`charter_dwellings`), which is at least
+  the truth about where they sleep.
+- **The seen surface wins by phrase, not by understanding.** `reconcile_
+  surface` adopts a pool value the description names; a description that
+  contradicts a dealt axis in other words leaves the dealt value standing,
+  and the render is settled beside it either way.
+- **A planned thing binds by name alone.** The floor never binds a minted
+  object to a planned thing by kind or description; a plan the Director
+  renders under another name is a second thing until the room reconciles
+  them.
+- **Measured on the replay's registry at its end state**, as fork H's
+  measurement was: six of seven mints bind, the seventh (the bridge
+  watchman: the watchman post's three seats held) enrols as a householder.
+  The live rate under a new run is unmeasured.
 
 ## 3. Information-pipeline leaks still open
 
