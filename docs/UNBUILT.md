@@ -6701,38 +6701,41 @@ for what follows. Residuals of this entry rather than a section of their own:
   should key on it. Thread notices are a fixed prefix plus the query, so the
   prefix is in the catalog and the query is shown as sent. No live measure
   yet.
-- **The bench has not been run live.** `tools/room_bench.py` proves its
-  readers and checks against stubs; the first real run (a clean scenario, a
-  grant, one beat, the critic) is the owner's, and the Phase A measures it
-  reports -- planned figures rendered, `plan_ref` bound, renders settled --
-  have not been read off a played beat with a published package behind it.
-  The critic's scores are one model's opinion, kept out of every loop.
-- **Lore by reference, landed 2026-09-03 (fork C3), and what it left.**
-  Library books attach by reference and a story deviates by overlay
-  (`lore_overlays`, `mind/memory_lore_entries.set_lore_overlay`); the room
-  `layout` filing and the Director's fallback fact writer are retired
-  (`persist/commit_mapping`); circles are story state
-  (`mind/knowledge_circles.py`); the compiler renders a rulebook slice from
-  typed data (`agents/mapping.rulebook_rows`). The migration, measured on a
-  scratch copy of the owner's database: 143 copies in 0.39s -- 44 converted
-  (1,537 identical entries dropped, 2 overlaid, 93 in-story additions moved
-  to canon), 99 kept as the story's own book (their origin missing, another
-  story's book, or the copy bound as canon), 40 attachments now by reference,
-  entries 2,754 -> 1,215, a second run a no-op. Open from this half: the FTS
-  keyword term scores the LIBRARY text, so an overlay that rewrote an entry
-  ranks by meaning alone on that term; `lore_entries.canon_locked` on a
-  library row is the library's lock and a story's lock lives on its overlay,
-  while the twenty-beat auto-lock still covers only the canon book; existing
-  `layout` entries stay readable and age out unrefreshed (nothing prunes
-  them); no caller yet writes `join_circle`/`leave_circle` -- a Director
-  `state_diff` channel for an initiation, or a package operation, is the
-  writer to build, and `charter_enrol` could grant an institution's circle
-  on enrolment; `file_lore`'s `_target_book` in `story/plot_packages.py`
-  still resolves a book id and does not offer an overlay as a target (the
-  seam is `set_lore_overlay(cid, entry_id, disposition="room_supersession")`);
-  `setting_fact` needs are filed and nothing answers them until the Planner's
-  fill job learns the kind; the rulebook renders four sources and no
-  institution's upkeep or occupation tables.
+- **The bench ran live 2026-09-03** (chat 114, four runs, Planner and
+  Dramaturge on Gemini 3.7 Flash; `tmp/live/room_live.py` around
+  `tools/room_bench.py`). What it found is fixed (Design.md "A planned
+  person or thing is rendered", the room half; `SILENT_LINE`; the Planner's
+  live-mind ground). What it left, measured:
+  - **An accepted proposal with no package is never picked up again.**
+    Three of four accepted proposals across the runs were accepted without a
+    package in the same reply (the card asks for one) and stayed `accepted`
+    forever; nothing re-tasks the Planner with them. `schedule_room_work`
+    should hand accepted-unimplemented proposals back as a task, or the
+    deliberation should treat accept-without-package as revise.
+  - **The Dramaturge proposed a live mind's conduct in every run** ("the
+    Doctor gestures toward the blue box") although its card forbids it; the
+    Planner now sends such a proposal back and the restated circumstance
+    (the box standing ajar, light spilling) was accepted. One model, one
+    story; the card's sentence may want the complement stated (what the
+    world can make true) rather than the prohibition alone.
+  - **The Planner names room ids to the player** (`coastal_lane` in
+    backticks) against its card, and called `inspect_clock` five times per
+    reply though the clock cannot move within one. Unmeasured cost, a
+    prompt question.
+  - **A walk into a room no edge reaches was accepted as a step** (run 1:
+    beach to a room planned off the terrace); the hand invented the edge.
+    The bench now reports `walk_adjacent`; whether the Director should
+    refuse or route the teleport is the approach seam's question.
+  - **The terrace's planned exits churn every beat**: `protect_planned_edges`
+    restores terrace -> lounge/dining/garden, then `prune_dangling_exits`
+    drops them as undefined because the fringe materialises only around
+    occupied rooms. Three warnings per beat, no behaviour; the two seams
+    should agree on which planned neighbours become stubs.
+  - **No prompt caching on Gemini through OpenRouter** (0 cached tokens on
+    every call, 6-13k system tokens per step); Fireworks caches.
+  - The critic is one model's opinion (five 4s and 5s on every run) and
+    scored the run with the identity defect as highly as the run without;
+    its `contradictions` list, not its scores, is the useful signal.
 - **Phase C's operation set landed 2026-09-04** (`story/plot_packages.py`,
   `world/charter_surgery.py`, `world/region_events.py`): the five local-drama
   kinds (arrival, errand, incident, summons, scheduled consequence), the six

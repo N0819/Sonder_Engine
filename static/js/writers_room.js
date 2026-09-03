@@ -73,6 +73,7 @@ const ROOM_PLANNER_LINES = [
   "The room has nothing in motion.",
   "The room has open planning needs and no grant to answer them. Tell the Story Planner what it may prepare.",
   "The story rewound under the room's work; nothing landed.",
+  "The room finished without a word; what it settled stands, and its status line says what is in motion.",
 ];
 
 // Class lists are composed from single words so the UI-catalog harvester,

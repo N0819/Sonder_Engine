@@ -1895,6 +1895,7 @@
   "The room has nothing in motion.": "ルームには動いているものがありません。",
   "The room has open planning needs and no grant to answer them. Tell the Story Planner what it may prepare.": "ルームには未解決の計画ニーズがあり、それに応える権限委任がありません。ストーリープランナーに何を準備してよいか伝えてください。",
   "The room stopped at its budget for this reply; what it settled stands, and it can go on when asked.": "ルームはこの返答の予算で止まりました。決着したことはそのまま残り、求められれば続けられます。",
+  "The room finished without a word; what it settled stands, and its status line says what is in motion.": "ルームは一言も発せずに作業を終えました。定めたことはそのまま残り、状況行が何が進行中かを示しています。",
   "the room's mandate vocabulary has no research capability; nothing can grant the web until it is added": "ルームの権限委任語彙に調査の能力がありません。追加されるまで、ウェブを許可することはできません",
   "The rule that matters most:": "最も重要なルール:",
   "the search failed": "検索に失敗しました",

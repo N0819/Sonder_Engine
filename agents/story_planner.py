@@ -127,6 +127,8 @@ HOUR_SPENT_LINE = ("The room has spent this story hour's allowance; its "
 DISAGREEMENT_LINE = ("The room could not agree on a direction; the proposal "
                      "and the objection are yours to settle.")
 NO_STATUS_LINE = "The room has nothing in motion."
+SILENT_LINE = ("The room finished without a word; what it settled stands, and "
+               "its status line says what is in motion.")
 WAITING_LINE = ("The room has open planning needs and no grant to answer "
                 "them. Tell the Story Planner what it may prepare.")
 REWOUND_LINE = "The story rewound under the room's work; nothing landed."
@@ -561,7 +563,13 @@ def run_planner(cid, frame_id, *, text=None, task=None, base_turn=None,
             cited = spend_citation(cid, frame_id, key, turn_idx)
             if cited:
                 notes.append("spend stop under %s" % cited)
-    reply = str(reply or BOUNDED_LINE).strip()[:PLANNER_REPLY_CHARS]
+    if not reply and not stopped:
+        # THE LINE SAYS WHAT HAPPENED. A model that judged or built and said
+        # nothing did not stop at a budget (bench, chat 114: a deliberation
+        # round with verdicts and no reply told the player the room had run
+        # out). A task posts no line; a reply owes the player one.
+        reply = "" if regime == "task" else SILENT_LINE
+    reply = str(reply or "").strip()[:PLANNER_REPLY_CHARS]
     if calls_made:
         record_spend(cid, frame_id, turn_idx=turn_idx, calls=calls_made,
                      who="planner")
