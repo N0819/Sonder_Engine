@@ -342,6 +342,12 @@ def planned_room_brief(cid, scene, room_ids):
     return out
 
 
+def planned_room_ids(cid):
+    """Every live registry room that carries a plan -- the town's own
+    topology, which a beat may furnish and may not delete."""
+    return set(_planned_specs(cid))
+
+
 def protect_planned_edges(cid, scene):
     """Put back every planned exit a development dropped.
 

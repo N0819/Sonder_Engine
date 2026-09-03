@@ -507,6 +507,26 @@ def prepare_scene_commit(ctx):
     # mutating the shared dict would desync it from what was saved.
     diff = copy.deepcopy(res.get("state_diff") or {})
     prev_scene = wget(cid, "scene", {}) or {}
+    if not (prev_scene.get("rooms") or {}):
+        # THE OPENING MERGES ONTO THE SCENE THE READERS SAW. `get_scene`
+        # seeds a scene with no rooms from the planted skeleton, so mapping
+        # and the Director opened inside the town -- and this merge started
+        # from the stored `{}` instead, so the committed opening had the
+        # Director's four rooms and none of the plan's exits (Harrowmere,
+        # 2026-09-02). Seeding the base here is what makes planned adjacency
+        # authority from turn 0: a diff may add exits to a planned room and
+        # `protect_planned_edges` below puts back any it dropped. A story
+        # with no plan seeds nothing and is exactly as it was; a story whose
+        # scene already has rooms never reaches this branch. Seeded BEFORE
+        # `dedup_minted_rooms`, so a room the Director mints under the
+        # plan's name is redirected onto the planned id rather than minted
+        # beside it.
+        try:
+            from story.scene import seed_scene_from_plan
+            seed_scene_from_plan(cid, prev_scene)
+        except Exception as _seed_exc:  # a scene that cannot read a plan is a scene
+            ctx.add_warning(
+                f"planned skeleton could not seed the opening: {_seed_exc}")
     # Carried beside prev_scene for the off-screen epoch. Once the scene
     # domain writes the new clock, a later commit domain cannot recover which
     # coarse time boundary THIS beat crossed. Keep the exact pre-turn value in
@@ -781,6 +801,14 @@ def prepare_scene_commit(ctx):
         protected.update(str(v) for v in (sc.get("positions") or {}).values())
         if target_room:
             protected.add(str(target_room))
+        # A PLANNED ROOM IS THE TOWN'S TOPOLOGY. Map curation may retire a
+        # room the story minted and abandoned; it may not retire one the
+        # plan gave every other planned room a way through.
+        try:
+            from world.structure import planned_room_ids
+            protected.update(planned_room_ids(cid))
+        except Exception:  # diagnostics only; the plan's absence is ordinary
+            pass
         for ent in (sc.get("entities") or {}).values():
             if not isinstance(ent, dict):
                 continue

@@ -25,6 +25,30 @@ RESTORE_HOURS = {"hours": 6.0, "a_shift": 12.0, "days": 72.0}
 GENERATION_VERSION = 1
 HISTORIAN_RESIDENT_CAP = 240
 
+#: CLOSURE INVARIANTS, each a named number because each is a decision the
+#: closer takes on the author's behalf (Harrowmere playtest, 2026-09-02: one
+#: brief closed to 14 bodies on one run and 108 on the next, three reeves and
+#: three innkeepers held singular offices, and 65 householders were berthed in
+#: one house).
+#:
+#: A closed population may miss its requested total by this fraction before
+#: the closer says so. Rounding across a dozen posts and the crew floor make
+#: an exact landing impossible; a tenth is the width inside which "about a
+#: hundred" is still a hundred.
+POPULATION_TOLERANCE = 0.10
+#: Sleepers one dwelling may berth before the closer splits it into siblings.
+#: Applies only to a room that is ONLY a berth -- no post's place, no
+#: upkeep's place, no commons -- because a workplace is not a dwelling and
+#: minting a second common room does not house anybody.
+BERTH_CEILING = 8
+#: Holders of a post nobody reports past. One, because the post's title is an
+#: address (docs/UNBUILT.md 1.84b) and an address resolving to three minds is
+#: the collision the engine already refuses for display names.
+HEAD_SEATS = 1
+#: The rotation every other post is topped to: a Charter post is a
+#: continuous watch, and three is the smallest crew that lets fatigue rotate.
+CREW_SIZE = 3
+
 
 _PLAN_SYSTEM = """You design one inhabited location from supplied lore.
 Return one JSON object and no prose outside it. Do not invent an institution
@@ -44,9 +68,13 @@ is being in them rather than working at them. Name them; posts and upkeeps say
 where the work is, and off-duty people cannot go anywhere you do not list here.
 Every population.post MUST name an entry in posts, every place and berth MUST
 be a rooms id, population competence MUST meet that post's numeric requires,
-and every upkeep id MUST occur in at least one post.serves. Charter posts are
-continuous watches, so provide at least three people for each post unless the
-brief explicitly calls for a dangerously short-handed institution. Use competence and
+and every upkeep id MUST occur in at least one post.serves. A post that other
+posts report to and that reports to nobody is ONE person, and closure keeps
+exactly one holder for it; every other post is a continuous watch, so provide
+at least three people for it unless the brief explicitly calls for a
+dangerously short-handed institution. When the payload carries population, it
+is the total number of residents across every charter; make the population
+counts sum to it. Use competence and
 requires objects like {"medicine":2}, never vague levels or lists. Naming is
 {seed,given_parts:{starts,middles,ends},family_parts:{starts,middles,ends},
 name_format,formal_format,titles:{posts:{},ranks:{}}}; supply SYLLABLE
@@ -121,12 +149,41 @@ relationship, quote, or outcome. Omit anything the chronicle cannot support."""
 PLAN_MAX_TOKENS = 16000
 
 
+#: The historian's output budget: a floor for the overview, eras and
+#: institutions, plus a per-resident allowance for one summary with its cited
+#: event ids and turning points, capped at the plan budget. Measured
+#: 2026-09-02: a fixed 7,000 overran at 108 residents (`historian_error`).
+#: Residents are trimmed to what the ceiling affords rather than the call
+#: being allowed to outrun it, and the trim is reported in the record.
+HISTORIAN_TOKENS_BASE = 3000
+HISTORIAN_TOKENS_PER_RESIDENT = 90
+
+
+def historian_budget(resident_count):
+    """``(max_tokens, residents_afforded)`` for one historian call."""
+    afforded = max(0, (PLAN_MAX_TOKENS - HISTORIAN_TOKENS_BASE)
+                   // HISTORIAN_TOKENS_PER_RESIDENT)
+    residents = min(int(resident_count), afforded)
+    return (min(PLAN_MAX_TOKENS,
+                HISTORIAN_TOKENS_BASE
+                + HISTORIAN_TOKENS_PER_RESIDENT * residents),
+            residents)
+
+
 def _json_call(system, payload, *, max_tokens=PLAN_MAX_TOKENS,
                temperature=0.5):
     from llm.providers import chat_complete
+    # REASONING OFF, EXPLICITLY. Every OpenAI-style seam counts private
+    # reasoning against `max_tokens`, so a thinking model spends the plan's
+    # whole budget on a trace and returns 8,484 characters of half-written
+    # JSON (measured 2026-09-02 with the utility role's effort left to the
+    # settings map). These calls are JSON-shaped and the output IS the
+    # budget; the provider layer already turns reasoning off on the retry
+    # after that failure, and here it is off on the first attempt.
     raw = chat_complete(
         "utility", system, json.dumps(payload, ensure_ascii=False),
-        temperature=temperature, max_tokens=max_tokens, json_mode=True)
+        temperature=temperature, max_tokens=max_tokens, json_mode=True,
+        reasoning_effort="off")
     try:
         value = json.loads(raw)
     except json.JSONDecodeError as exc:
@@ -151,7 +208,7 @@ def propose_town(lore, brief="", *, constraints=None, model_call=None):
         payload.update({
             key: copy.deepcopy(constraints[key])
             for key in ("scale", "topology", "required_rooms",
-                        "featured_residents")
+                        "featured_residents", "population")
             if constraints.get(key) not in (None, "", [])})
     return (model_call or (lambda p: _json_call(_PLAN_SYSTEM, p)))(payload)
 
@@ -197,8 +254,52 @@ def _competence(value):
     return {tag: 1 for tag in _strings(value)}
 
 
-def _ensure_shift_crews(bodies, posts, *, crew_size=3):
-    """Give every generated continuous post a real rotation.
+def _head_posts(posts):
+    """The posts nobody reports past and somebody reports to.
+
+    Read from `reports_to` alone, the signal docs/UNBUILT.md 1.84b found
+    already in the data. A post with no superior AND no subordinate is not a
+    head, it is a lone watch -- the smith of a one-post smithy rotates like
+    any other duty. A chain has to have been authored for a top to exist.
+    """
+    superiors = {}
+    for key, post in (posts or {}).items():
+        if not isinstance(post, dict):
+            continue
+        superior = str(post.get("reports_to") or "")
+        # A post reporting to ITSELF has no superior: planners write the top
+        # of a chain that way ("reeve reports to reeve"), and
+        # `charter_runtime` refuses the self-edge on validation anyway.
+        superiors[str(key)] = "" if superior == str(key) else superior
+    reported_to = {sup for sup in superiors.values() if sup in superiors}
+    return {key for key, sup in superiors.items()
+            if not sup and key in reported_to}
+
+
+def _post_seats(posts):
+    """{post: exact holder count} for every post whose headcount is fixed.
+
+    Three ways a post fixes its headcount, in the order they are honoured:
+    an authored `seats` (docs/UNBUILT.md 1.84e's shape (a) -- posts gain a
+    headcount), an authored `singular` flag, or being a head of the chain
+    (`_head_posts`). A post in this map is neither topped to a crew nor
+    scaled with the population; it holds exactly what it says.
+    """
+    seats = {}
+    heads = _head_posts(posts)
+    for key, post in (posts or {}).items():
+        post = post if isinstance(post, dict) else {}
+        explicit = post.get("seats")
+        if explicit not in (None, ""):
+            seats[str(key)] = max(1, _integer(explicit, 1))
+        elif post.get("singular") or str(key) in heads:
+            seats[str(key)] = HEAD_SEATS
+    return seats
+
+
+def _ensure_shift_crews(bodies, posts, *, crew_size=CREW_SIZE, seats=None):
+    """Give every generated continuous post a real rotation -- and every
+    fixed-seat post exactly its seats.
 
     Charter's post primitive is a watch, not a nine-to-five job: if a post is
     present it is planned every window. Model-authored populations commonly
@@ -209,19 +310,39 @@ def _ensure_shift_crews(bodies, posts, *, crew_size=3):
     Post-specific ids make the coverage guarantee structural. Counting all
     broadly competent bodies would let the same three administrators appear
     to cover four simultaneous offices.
+
+    ``seats`` (`_post_seats`) is the complement: a post whose headcount is
+    fixed is TRIMMED to it as well as topped to it. Measured on a generated
+    starship the rotation floor produced three captains (docs/UNBUILT.md
+    1.84b), and on a generated town three reeves and three innkeepers -- an
+    address resolving to three minds. Trimming drops generated bodies from
+    the highest index down and never a featured resident, who was placed at
+    that post under a registered name on purpose.
+
+    Returns ``(added, trimmed)``, both lists of body keys.
     """
     bodies = bodies if isinstance(bodies, dict) else {}
-    added = []
+    seats = seats if isinstance(seats, dict) else {}
+    added, trimmed = [], []
     crew_size = max(1, int(crew_size))
     for post_key, post in sorted((posts or {}).items()):
         prefix = f"{post_key}:"
         own = sorted(key for key in bodies if str(key).startswith(prefix))
+        target = int(seats.get(post_key, crew_size))
+        if post_key in seats:
+            surplus = [key for key in reversed(own)
+                       if ":featured:" not in str(key)]
+            while len(own) > target and surplus:
+                victim = surplus.pop(0)
+                bodies.pop(victim, None)
+                own.remove(victim)
+                trimmed.append(victim)
         template = dict(bodies[own[0]]) if own else {}
         competence = _competence(template.get("competence"))
         for tag, level in _competence(post.get("requires")).items():
             competence[tag] = max(competence.get(tag, 0), level)
         place = str(post.get("place") or template.get("place") or "")
-        while len(own) < crew_size:
+        while len(own) < target:
             index = len(own) + 1
             body_id = f"{post_key}:{index:04d}"
             while body_id in bodies:
@@ -237,7 +358,198 @@ def _ensure_shift_crews(bodies, posts, *, crew_size=3):
             }
             own.append(body_id)
             added.append(body_id)
-    return added
+    return added, trimmed
+
+
+def _population_counts(raw):
+    """{post: authored count} for one raw charter's populations."""
+    counts = {}
+    for pi, population in enumerate(raw.get("populations") or ()):
+        if not isinstance(population, dict):
+            continue
+        post = str(population.get("post") or f"role_{pi + 1}")
+        counts[post] = counts.get(post, 0) + max(
+            0, min(5000, _integer(population.get("count"))))
+    return counts
+
+
+def _projected_bodies(raw, factor, seats, crew_size=CREW_SIZE):
+    """How many bodies one raw charter closes to at a population factor.
+
+    Mirrors closure without running it: a fixed-seat post holds its seats,
+    every other post holds max(round(factor x authored), crew), and an
+    upkeep no post serves mints one crewed duty post unless a post already
+    stands at its place. Exact enough for a bisection; the tolerance covers
+    the rest.
+    """
+    posts = {str(k): (v if isinstance(v, dict) else {})
+             for k, v in _mapping(raw.get("posts")).items()}
+    scaled = {}
+    for pi, population in enumerate(raw.get("populations") or ()):
+        if not isinstance(population, dict):
+            continue
+        post = str(population.get("post") or f"role_{pi + 1}")
+        count = max(0, min(5000, _integer(population.get("count"))))
+        # Per ENTRY, as closure rounds: two populations of four at one post
+        # scale to 3 + 3, not round(8 x factor).
+        scaled[post] = scaled.get(post, 0) + (
+            max(1, int(round(count * factor))) if count else 0)
+    total = 0
+    for post in sorted(set(posts) | set(scaled)):
+        if post in seats:
+            total += int(seats[post])
+            continue
+        total += max(scaled.get(post, 0), crew_size)
+    served = set()
+    places = {str(post.get("place") or "") for post in posts.values()}
+    for post in posts.values():
+        served.update(_strings(post.get("serves")))
+    for upkeep_key, upkeep in _mapping(raw.get("upkeeps")).items():
+        upkeep = upkeep if isinstance(upkeep, dict) else {}
+        if str(upkeep_key) in served:
+            continue
+        if str(upkeep.get("place") or "") not in places:
+            total += crew_size
+    return total
+
+
+def _scale_populations(plan, target, seats_by_charter):
+    """Scale a plan's population counts so closure lands near ``target``.
+
+    The planner is told the number and does not reliably hit it -- the same
+    brief closed to 14 bodies on one run and 108 on the next -- so the
+    requested population is a CLOSURE INPUT. Fixed-seat posts are never
+    scaled (a head is one person whatever the town's size), the crew floor
+    is respected (a post cannot be scaled below its rotation), and the factor
+    is found by bisection over the projected closed total, which is monotone
+    in it. Rewrites `populations[].count` on the plan in place and returns the
+    record; a plan with no target is returned untouched.
+    """
+    charters = [raw for raw in (plan.get("charters") or ())[:8]
+                if isinstance(raw, dict)]
+    record = {"target": None, "authored": None, "projected": None,
+              "factor": 1.0}
+    if target is None or not charters:
+        return record
+    target = max(1, int(target))
+
+    def projected(factor):
+        return sum(_projected_bodies(raw, factor, seats_by_charter[ci])
+                   for ci, raw in enumerate(charters))
+
+    authored = projected(1.0)
+    record.update({"target": target, "authored": authored})
+    low, high = 0.0, 1.0
+    while projected(high) < target and high < 4096:
+        high *= 2
+    for _ in range(64):
+        mid = (low + high) / 2
+        if projected(mid) < target:
+            low = mid
+        else:
+            high = mid
+    # Two candidates straddle the target; take the nearer, the lower on a tie
+    # -- fewer invented people is the conservative miss.
+    factor = min((low, high), key=lambda f: (abs(projected(f) - target), f))
+    for ci, raw in enumerate(charters):
+        seats = seats_by_charter[ci]
+        for pi, population in enumerate(raw.get("populations") or ()):
+            if not isinstance(population, dict):
+                continue
+            post = str(population.get("post") or f"role_{pi + 1}")
+            if post in seats:
+                continue
+            count = max(0, min(5000, _integer(population.get("count"))))
+            if count:
+                population["count"] = max(1, int(round(count * factor)))
+    record.update({"projected": projected(factor), "factor": factor})
+    return record
+
+
+def _spread_berths(rooms, charter_bodies, ceiling=BERTH_CEILING):
+    """Split a berth over its ceiling into rooms beside it.
+
+    A berth room holding more than ``ceiling`` sleepers is split one of two
+    ways, and the engine's own vocabulary decides which -- WORK is serving
+    an upkeep, so a room where one is served (placed there, or served by a
+    post placed there) is a workplace and every other berth is a dwelling:
+
+      * a DWELLING gets siblings: same purpose, same neighbours, reciprocal
+        edges on those neighbours, an ordinal on the name -- more houses on
+        the same lane -- and its sleepers are dealt across the set;
+      * a WORKPLACE keeps its first ``ceiling`` sleepers and the overflow
+        moves into annexes hung off it, which claim no purpose: the plan
+        does not know what an inn's staff sleep in, and the Director
+        furnishes a planned room on entry (`structure.planned_room_brief`),
+        so an empty seed is a room it will write rather than a room the
+        closer guessed at.
+
+    `place` follows `berth` for a body that was standing at home.
+    ``charter_bodies`` is ``[(charter_key, bodies_dict, work_places)]``.
+    Mutates ``rooms`` and the bodies in place. Returns
+    ``{berth: {"mode": "siblings"|"annexes", "rooms": [ids]}}``.
+    """
+    occupancy = {}
+    workplaces = set()
+    for ckey, bodies, places in charter_bodies:
+        workplaces.update(str(place) for place in places or () if str(place))
+        for bkey, body in (bodies or {}).items():
+            berth = str(body.get("berth") or "")
+            if berth in rooms:
+                occupancy.setdefault(berth, []).append((str(ckey), str(bkey)))
+    by_charter = {str(ckey): bodies for ckey, bodies, _p in charter_bodies}
+    minted = {}
+    for berth in sorted(occupancy):
+        sleepers = sorted(occupancy[berth])
+        if len(sleepers) <= ceiling:
+            continue
+        base = rooms[berth] if isinstance(rooms.get(berth), dict) else {}
+        annexes = berth in workplaces
+        needed = -(-len(sleepers) // ceiling)
+        new_rooms = []
+        index = 2
+        while len(new_rooms) + 1 < needed:
+            uid = f"{berth}_{index}"
+            while uid in rooms:
+                index += 1
+                uid = f"{berth}_{index}"
+            if annexes:
+                edges = [{"to": berth, "barrier": "open_door"}]
+                purpose = ""
+            else:
+                edges = [dict(edge) for edge in base.get("adjacent") or ()
+                         if isinstance(edge, dict) and edge.get("to")]
+                purpose = str(base.get("purpose") or "")
+            rooms[uid] = {
+                "name": f"{base.get('name') or berth} {index}",
+                "purpose": purpose,
+                "adjacent": edges,
+                "frontier": [],
+            }
+            for edge in edges:
+                neighbour = rooms.get(str(edge["to"]))
+                if isinstance(neighbour, dict):
+                    neighbour.setdefault("adjacent", []).append(
+                        {"to": uid,
+                         "barrier": str(edge.get("barrier") or "open_door")})
+            new_rooms.append(uid)
+            index += 1
+        if annexes:
+            assignment = [berth] * ceiling
+            for uid in new_rooms:
+                assignment.extend([uid] * ceiling)
+        else:
+            cycle = [berth] + new_rooms
+            assignment = [cycle[n % len(cycle)] for n in range(len(sleepers))]
+        for n, (ckey, bkey) in enumerate(sleepers):
+            new_berth = assignment[n]
+            body = by_charter[ckey][bkey]
+            if str(body.get("place") or "") == berth:
+                body["place"] = new_berth
+            body["berth"] = new_berth
+        minted[berth] = {"mode": "annexes" if annexes else "siblings",
+                         "rooms": new_rooms}
+    return minted
 
 
 def _words(value):
@@ -293,7 +605,7 @@ def _featured_assignments(plan, residents):
 
 
 def close_plan(plan, *, history=None, featured_residents=None,
-               reservation=None, naming_law=None):
+               reservation=None, naming_law=None, population=None):
     """Convert qualitative model output to bounded executable structures.
 
     ``reservation`` is the story's registered identity forms
@@ -311,11 +623,26 @@ def close_plan(plan, *, history=None, featured_residents=None,
     law for every charter in this plan. `story/naming.py` already ranks an
     authored profile above a Charter's own; a mint that ignored that ranking
     would be a second naming authority beside the story's.
+
+    ``population``, when the author gave a number, is a CLOSURE INPUT rather
+    than a hope in the brief: `_scale_populations` scales the plan's
+    population counts so the closed total lands within
+    `POPULATION_TOLERANCE` of it, and the returned ``closure`` record says
+    what was asked, what the planner wrote, and what closed. The same record
+    carries the head posts held to `HEAD_SEATS`, the dwellings split at
+    `BERTH_CEILING`, and the warnings each invariant raised.
     """
     from world.charter_identity import (normalize_naming_profile,
                                     refuse_harvested_material)
 
-    plan = plan if isinstance(plan, dict) else {}
+    plan = copy.deepcopy(plan) if isinstance(plan, dict) else {}
+    closure_warnings = []
+    raw_charters = [raw for raw in (plan.get("charters") or ())[:8]
+                    if isinstance(raw, dict)]
+    seats_by_charter = [_post_seats(_mapping(raw.get("posts")))
+                        for raw in raw_charters]
+    population_record = _scale_populations(
+        plan, population, seats_by_charter)
     structure = _mapping(plan.get("structure"))
     structure["key"] = _key(structure.get("key"), "town")
     rooms = {}
@@ -344,12 +671,11 @@ def close_plan(plan, *, history=None, featured_residents=None,
     place_words = [str(plan.get("name") or ""), str(structure.get("key") or "")]
     place_words.extend(str(room.get("name") or "") for room in rooms.values())
     charters = {}
+    pending = []
     resident_sources, resident_assignments = _featured_assignments(
         plan, featured_residents)
     interventions = list((history or {}).get("interventions") or ())
-    for ci, raw in enumerate((plan.get("charters") or ())[:8]):
-        if not isinstance(raw, dict):
-            continue
+    for ci, raw in enumerate(raw_charters):
         ckey = _key(raw.get("key"), f"institution_{ci + 1}")
         upkeeps = {}
         for uid, upkeep in (raw.get("upkeeps") or {}).items():
@@ -462,7 +788,9 @@ def close_plan(plan, *, history=None, featured_residents=None,
                 }
             posts[chosen]["serves"] = sorted(set(
                 _strings(posts[chosen].get("serves")) + [upkeep_key]))
-        staffing_reserve_added = _ensure_shift_crews(bodies, posts)
+        seats = _post_seats(posts)
+        staffing_reserve_added, staffing_trimmed = _ensure_shift_crews(
+            bodies, posts, seats=seats)
         if naming_law:
             # The story's own authored law, ranked above a generated one by
             # `story/naming.py`. An author's list is theirs.
@@ -496,8 +824,20 @@ def close_plan(plan, *, history=None, featured_residents=None,
         history_record["closure"] = {
             "staffing_model": "three_person_continuous_watch",
             "staffing_reserve_added": list(staffing_reserve_added),
+            "staffing_trimmed": list(staffing_trimmed),
+            "seats": dict(seats),
         }
-        charter = normalize_charter({
+        commons = [place for place in _strings(raw.get("commons"))
+                   if place in room_ids]
+        # WORK IS SERVING AN UPKEEP: the places upkeeps live, and the places
+        # of the posts that serve one. Read by `_spread_berths` to tell a
+        # workplace from a dwelling without reading a word of purpose.
+        work_places = {str(upkeep.get("place") or "")
+                       for upkeep in upkeeps.values()}
+        work_places.update(
+            str(post.get("place") or "") for post in posts.values()
+            if _strings(post.get("serves")))
+        pending.append((ckey, {
             "key": ckey, "structure": structure["key"],
             "upkeeps": upkeeps, "posts": posts, "bodies": bodies,
             "naming": naming,
@@ -505,15 +845,47 @@ def close_plan(plan, *, history=None, featured_residents=None,
             # Where its people go for their own sake, as distinct from where
             # its work is. Filtered to real rooms here for the same reason
             # `post.place` is: a place id the plan never minted is not a place.
-            "commons": [place for place in _strings(raw.get("commons"))
-                        if place in room_ids],
-            "needs": seed_needs(bodies), "economy": economy,
+            "commons": commons,
+            "economy": economy,
             "decisions": raw.get("decisions") or {},
             "interventions": local_interventions,
             "history": {"architecture": history_record},
-        }, reservation)
+        }, work_places))
+    # BERTHS ARE SPREAD ACROSS EVERY CHARTER BEFORE ANY IS NORMALIZED. A
+    # dwelling is a room, and rooms are the town's; a house that the
+    # households charter and the inn's staff both berth in overflows as one
+    # room, so the split has to see every charter's sleepers at once.
+    minted_dwellings = _spread_berths(
+        rooms, [(ckey, state["bodies"], places)
+                for ckey, state, places in pending])
+    if minted_dwellings:
+        structure["max_planned"] = max(
+            len(rooms), _integer(structure.get("max_planned"), len(rooms)))
+        for berth, record in sorted(minted_dwellings.items()):
+            closure_warnings.append(
+                f"{berth!r} berthed more than {BERTH_CEILING} sleepers; "
+                f"{len(record['rooms'])} {record['mode']} minted "
+                f"({', '.join(record['rooms'])})")
+    heads = {}
+    for ckey, state, _places in pending:
+        state["needs"] = seed_needs(state["bodies"])
+        charter = normalize_charter(state, reservation)
         charter["roster"] = seed_roster(charter["bodies"])
         charters[ckey] = charter
+        for post_key, count in sorted(
+                (state["history"]["architecture"]["closure"]["seats"]
+                 or {}).items()):
+            heads[f"{ckey}/{post_key}"] = count
+    closed_total = sum(len(state["bodies"]) for state in charters.values())
+    population_record["closed"] = closed_total
+    target = population_record.get("target")
+    if target is not None:
+        miss = abs(closed_total - target)
+        if miss > POPULATION_TOLERANCE * target:
+            closure_warnings.append(
+                f"population closed to {closed_total} against a requested "
+                f"{target} (planner wrote {population_record['authored']}; "
+                f"tolerance {POPULATION_TOLERANCE:.0%})")
     return {"version": GENERATION_VERSION,
             "name": str(plan.get("name") or structure["key"]),
             "structure": structure, "rooms": rooms, "charters": charters,
@@ -521,6 +893,12 @@ def close_plan(plan, *, history=None, featured_residents=None,
                 seed_id: {"name": source.get("name"),
                           "placed": seed_id in resident_assignments}
                 for seed_id, source in resident_sources.items()},
+            "closure": {
+                "population": population_record,
+                "heads": heads,
+                "berths_split": minted_dwellings,
+                "warnings": closure_warnings,
+            },
             }
 
 
@@ -707,7 +1085,9 @@ def narrate_actual_history(town, registry, events, *, model_call=None):
                     "travelled": (state.get("travelled") or {}).get(body_id, 0),
                 }))
     candidates.sort(key=lambda row: (-row[0], -row[1], row[2]))
-    selected = candidates[:HISTORIAN_RESIDENT_CAP]
+    budget, afforded = historian_budget(HISTORIAN_RESIDENT_CAP)
+    selected = candidates[:afforded]
+    budget, _n = historian_budget(len(selected))
     chronicle = event_chronicle(events)
     chronicle.extend(resident_service_chronicle(
         registry, [row[2] for row in selected]))
@@ -722,12 +1102,14 @@ def narrate_actual_history(town, registry, events, *, model_call=None):
         "chronicle": chronicle,
     }
     value = (model_call or (lambda p: _json_call(
-        _HISTORIAN_SYSTEM, p, max_tokens=7000, temperature=0.45)))(payload)
+        _HISTORIAN_SYSTEM, p, max_tokens=budget, temperature=0.45)))(payload)
     return ground_history_output(value, chronicle)
 
 
 __all__ = [
-    "HISTORIAN_RESIDENT_CAP", "close_plan", "ensure_required_rooms",
+    "BERTH_CEILING", "CREW_SIZE", "HEAD_SEATS", "POPULATION_TOLERANCE",
+    "HISTORIAN_RESIDENT_CAP", "historian_budget",
+    "close_plan", "ensure_required_rooms",
     "event_chronicle", "ground_history_output",
     "narrate_actual_history", "propose_history", "propose_town",
     "resident_service_chronicle",
