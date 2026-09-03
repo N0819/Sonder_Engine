@@ -5251,6 +5251,52 @@ identity-immutability refusal `chat_char_card_put` enforces, archive and
 branch carry, and a checkpoint that leaves it alone. Until then, tell hosts
 plainly: a persona edit is retroactive across their whole library.
 
+### 1.105 The off-screen ladder should collapse to one toggle, and it has five rungs
+
+**Ruled by the owner 2026-09-04**, in three parts. The first landed with the
+ruling; the other two are what is left.
+
+**Charter is unconditional, and that is done.** `schedule_charter_ticks` no
+longer reads the `offscreen_life` ceiling. Charter is where an unwatched body
+lives rather than a mechanism a rung may switch off, its advance path holds no
+provider seam at all, and the ladder is a SPEND gate -- so the rung was
+withholding free work, and a host lowering it to save money froze the town
+instead of saving anything. The only reason the tick does not run is
+`charter_skip: "no_charters"`.
+
+**What is left of the ladder should become one toggle: "allow off-screen
+cognition", enabling the playerless causality bubbles.** Everything else the
+five rungs gate is either free (charter, now ungated) or a different question
+wearing the ladder's clothes. The bubbles are the one thing that genuinely
+costs a model call for a mind nobody is watching, and they are NOT BUILT -- no
+playerless-frame path exists in source -- so the toggle cannot replace the
+ladder until they are. What the rungs still hold that must find a home first:
+`artifacts.schedule_artifact_text` (model-authored wording for posted notices,
+at `stochastic`), `living_world.effective_depth` (four approaches, each with
+its own required rung), `offscreen.schedule_profile_ticks` and
+`schedule_agent_ticks` (the machinery the bubbles replace), and
+`max_offscreen_actors`. Retiring the ladder means answering each of those, not
+deleting the field.
+
+**On-screen voicing is already default and already bounded by a count, and
+the panel does not say so.** A charter body in the player's room reaches the
+ordinary per-presence path -- `with_charter_presences` merges derived charter
+identities into the presence set before the demand gate, at every `scene_life`
+level including `off` -- so it speaks when the beat demands it, capped by
+`background_config.max_reactors` (default 1, hard ceiling 3). What `scene_life`
+buys is a different thing entirely: ONE batched call voicing several presences
+coherently. `ambient` is firewall-safe by construction, since the manager's
+context holds only what every managed presence legitimately shares.
+
+**The open decision, and it is the owner's:** should `scene_life` default to
+`ambient` rather than `off`? It is the only remaining sense in which on-screen
+voicing is not default. It costs one batched call on beats with a demand set,
+against N per-presence calls today, so it is plausibly cheaper as well as more
+coherent. `full` is a separate question and does not follow: it hands the
+manager directed lines tagged with their audience, which relaxes an
+information rule, and by the standing invariant a leak must be an engine
+failure rather than a model's.
+
 ## 2. Roadmap
 
 Features the architecture intends and has not built. Ordered by value per unit
