@@ -63,16 +63,19 @@ class TestWhatItReturns:
             assert section in out, section
 
     def test_it_carries_the_house_style_the_director_is_handed(self, temp_db):
+        """One free-text field since 2026-09-04: `genre`, `director_notes`,
+        `mapping_notes` and `avoid` were retired to the room itself, which is
+        where standing intent now lives."""
         cid = _chat(temp_db)
         temp_db.wset(cid, "style_guide", {
-            "genre": "salt-worn maritime noir", "tone": "wry, unhurried",
-            "avoid": "no on-page harm to children"})
+            "tone": "wry, unhurried",
+            "genre": "retired", "avoid": "retired"})
 
         out = run_tool(cid, "inspect_config", {})
 
-        assert out["style"]["genre"] == "salt-worn maritime noir"
         assert out["style"]["tone"] == "wry, unhurried"
-        assert out["style"]["avoid"] == "no on-page harm to children"
+        assert "genre" not in out["style"]
+        assert "avoid" not in out["style"]
 
     def test_it_reports_the_one_offscreen_question_not_five_rungs(self, temp_db):
         cid = _chat(temp_db)

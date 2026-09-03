@@ -42,56 +42,23 @@ $("#b-attire").onclick = async () => {
       el("button", { class: "primary", onclick: async () => { let j; try { j = JSON.parse(ta.value) } catch (e) { return toast("Invalid JSON", "err") } await api("PUT", `/api/chats/${chatId}/attire${frameQuery()}`, j); closeModal(); toast("Attire saved.", "ok"); } }, "Save"))));
 };
 
-// Genre & style: the author's standing instruction for anything the engine
-// INVENTS. Self-determination is the default and stays first-class -- a blank
-// genre means "you work it out", which is what the engine did before this
-// existed, not "this world has no style".
+// Genre & style: the dials that GATE engine behaviour, plus the narrator's
+// register. The free-text standing instructions that used to live here --
+// genre, director notes, mapping notes, avoid -- were removed 2026-09-04:
+// standing intent is the Writers' Room's, said in words to something that can
+// read the story back and argue, and mapping notes outlived their agent. What
+// is left is the closed vocabularies and the two clocks, which no conversation
+// can stand in for because deterministic code reads them.
 $("#b-style").onclick = async () => {
   if (!S.chatId) return;
   const chatId = S.chatId;
   const r = await api("GET", `/api/chats/${chatId}/style_guide`);
   if (S.chatId !== chatId) return;
   const g = r.style_guide || {};
-  // Non-fatal: api() throws on any non-ok response, so a language failure
-  // used to mean the whole style-guide modal never opened.
-  let languageState = { language: "en", stored: "en", installed: true };
-  try { languageState = await api("GET", `/api/chats/${chatId}/language`); }
-  catch (e) { toast(e.message, "warn"); }
-  if (S.chatId !== chatId) return;
-  // When the stored pack is not installed on this machine (a chat carried
-  // over from another install), the value on disk is still correct and comes
-  // back when the pack returns. Offer it as the selected option rather than
-  // silently showing English -- pressing Save then wrote English over it, and
-  // that is not recoverable.
-  const storedMissing = languageState.installed === false;
-  const language = el("select", { style: "flex:1" }, [
-    ...(storedMissing ? [el("option", { value: languageState.stored, selected: "" },
-      `${languageState.stored} (pack not installed)`)] : []),
-    ...((S.boot && S.boot.language_packs) || []).filter(pack => pack.story)
-      .map(pack => el("option", {
-        value: pack.id,
-        ...(!storedMissing && pack.id === languageState.language ? { selected: "" } : {})
-      }, pack.native_name || pack.name || pack.id))]);
-  const uiLanguage = el("select", { style: "flex:1" },
-    ((S.boot && S.boot.language_packs) || []).filter(pack => pack.ui)
-      .map(pack => el("option", {
-        value: pack.id,
-        ...(pack.id === S.uiLanguage ? { selected: "" } : {})
-      }, pack.native_name || pack.name || pack.id)));
-
-  const SELF = "(self-determine — infer from scenario & lore)";
-  const PRESETS = ["cosmic horror", "noir", "cyberpunk", "high fantasy",
-    "grimdark", "space opera", "weird western", "gothic romance",
-    "hardboiled mystery", "post-apocalyptic", "slice of life"];
-
-  // A datalist rather than a fixed dropdown: the presets are a starting point,
-  // not a closed set -- any genre can be typed.
-  const listId = "style-genre-presets";
-  const genre = el("input", {
-    style: "flex:1", list: listId, placeholder: SELF, value: g.genre || "",
-  });
-  const datalist = el("datalist", { id: listId },
-    PRESETS.map(x => el("option", { value: x })));
+  // ONE LANGUAGE SETTING, and it is not here. The Prompts menu's switch moves
+  // the prompt sheets, the interface and the open story together; this modal
+  // carried a second pair of selects for the same two values, so a host could
+  // set them in two places and have them disagree. Removed 2026-09-04.
 
   // How far the sky may go, and how much of the world it may touch. A closed
   // set, unlike everything else here, because it GATES engine behaviour rather
@@ -119,9 +86,6 @@ $("#b-style").onclick = async () => {
   ].map(([v, label]) => el("option",
     { value: v, ...(v === (g.narration_tense || "") ? { selected: "" } : {}) },
     label)));
-  const selfBtn = el("button", {
-    onclick: () => { genre.value = ""; toast("Genre left to the engine.", "ok"); },
-  }, "Self-determine");
   // The day. Two numbers the clock does arithmetic on (world/day_cycle.py):
   // how long this world's day is, and -- only when the opening names no
   // readable time -- where on that day the story opens. Blank is the Terran
@@ -135,15 +99,6 @@ $("#b-style").onclick = async () => {
 
   const tone = el("input", { style: "flex:1", value: g.tone || "",
     placeholder: "e.g. cold, clinical, understated" });
-  const dirNotes = el("textarea", { rows: "3", style: "width:100%",
-    placeholder: "Standing instruction for the Director — how events should resolve and read." },
-    g.director_notes || "");
-  const mapNotes = el("textarea", { rows: "3", style: "width:100%",
-    placeholder: "Standing instruction for mapping — how NEW rooms, objects and lore should feel." },
-    g.mapping_notes || "");
-  const avoid = el("textarea", { rows: "2", style: "width:100%",
-    placeholder: "Never generate — e.g. modern tech, gore, named real people." },
-    g.avoid || "");
 
   const survivalState = await api("GET", `/api/chats/${chatId}/survival`);
   if (S.chatId !== chatId) return;
@@ -184,16 +139,6 @@ $("#b-style").onclick = async () => {
       "Applies to what the engine ", el("b", {}, "invents"),
       " — new rooms, objects, lore, and the register of resolved events. It never overrides canon, an established room, or something you declared yourself, and it is never quoted back into the prose."),
     el("div", { class: "row", style: "margin-top:10px" },
-      el("span", { class: "small", style: "width:100px" }, "Story language"), language),
-    el("div", { class: "small dim", style: "margin-top:4px" },
-      "Controls future Director interpretation, deterministic compositor output, and generated memories. Existing prose and memories are not translated."),
-    el("div", { class: "row", style: "margin-top:8px" },
-      el("span", { class: "small", style: "width:100px" }, "Interface"), uiLanguage),
-    el("div", { class: "small dim", style: "margin-top:4px" },
-      "Controls menus, dialogs, labels, and error messages for this installation."),
-    el("div", { class: "row", style: "margin-top:10px" },
-      el("span", { class: "small", style: "width:70px" }, "Genre"), genre, datalist, selfBtn),
-    el("div", { class: "row", style: "margin-top:6px" },
       el("span", { class: "small", style: "width:70px" }, "Tone"), tone),
     el("div", { class: "row", style: "margin-top:6px" },
       el("span", { class: "small", style: "width:70px" }, "Tense"), tense),
@@ -235,12 +180,6 @@ $("#b-style").onclick = async () => {
       + "in every setting and is never rewritten. Changing this mid-story is "
       + "allowed and is recorded, because it changes what the earlier turns "
       + "meant."),
-    el("div", { style: "margin-top:10px" },
-      el("div", { class: "small" }, "Director notes"), dirNotes),
-    el("div", { style: "margin-top:8px" },
-      el("div", { class: "small" }, "Mapping notes ", el("span", { class: "dim" }, "— shapes newly generated rooms")), mapNotes),
-    el("div", { style: "margin-top:8px" },
-      el("div", { class: "small" }, "Avoid"), avoid),
     el("div", { style: "margin-top:12px;border-top:1px solid var(--bd);padding-top:10px" },
       el("label", { class: "tgl" }, survivalBox, " track bodily condition"),
       el("div", { class: "small dim", style: "margin-top:4px" },
@@ -251,16 +190,12 @@ $("#b-style").onclick = async () => {
         "Your own condition sits in the margin beside the prose. Everyone else's is tracked either way and read in the Cast panel — turn this on to have theirs surface alongside yours as well.")),
     el("div", { class: "row", style: "margin-top:10px" },
       el("button", { class: "primary", onclick: async () => {
-        const uiChanged = uiLanguage.value !== S.uiLanguage;
-        const languageChanged = language.value !== languageState.stored;
         await api("PUT", `/api/chats/${chatId}/survival${frameQuery()}`,
                   { enabled: survivalBox.checked,
                     show_npcs: npcBox.checked });
         const out = await api("PUT", `/api/chats/${chatId}/style_guide`, {
           style_guide: {
-            genre: genre.value, tone: tone.value,
-            director_notes: dirNotes.value, mapping_notes: mapNotes.value,
-            avoid: avoid.value, weather_severity: severity.value,
+            tone: tone.value, weather_severity: severity.value,
             // "" normalizes away to an absent key, which is how the author
             // clears the dial. A PUT replaces the whole guide, so a field
             // omitted here is a field silently deleted -- the reason this
@@ -278,24 +213,10 @@ $("#b-style").onclick = async () => {
               ? S.chat.turns[S.chat.turns.length - 1].idx : null,
           });
         }
-        // Last, and only on a real change: this is the one field here whose
-        // route refuses to run mid-turn, and the only one whose loss is
-        // permanent.
-        if (languageChanged) {
-          const languageOut = await api(
-            "PUT", `/api/chats/${chatId}/language`, { language: language.value });
-          if (S.chat && S.chatId === chatId) {
-            S.chat.chat.story_language = languageOut.language;
-          }
-        }
-        if (uiChanged) {
-          await api("PUT", "/api/ui-language", { language: uiLanguage.value });
-        }
         if (S.chatId === chatId) await refreshVitalsHud();
         closeModal();
         toast(Object.keys(out.style_guide).length
           ? "Style guide saved." : "Style guide cleared — the engine self-determines.", "ok");
-        if (uiChanged) window.location.reload();
       } }, "Save"),
       el("button", { onclick: async () => {
         await api("PUT", `/api/chats/${chatId}/style_guide`, { style_guide: {} });
@@ -605,8 +526,8 @@ $("#b-dlg").onclick = async () => {
           "Extras invent small local details — a name, an old grudge. These are recorded "
           + "as hearsay for the Director to confirm, contradict, or quietly drop; they "
           + "never become fact on their own."),
-        el("div", {}, "Their manner and look follow ",
-          el("b", {}, "Genre & style"), " — set the genre there first."),
+        el("div", {}, "Their manner and look follow the story's tone and what "
+          + "the Writers' Room has planned for the place they stand in."),
         el("div", { style: "margin-top:4px" },
           el("b", {}, "Turns till auto-promotion"), " — how many turns of DELIBERATE "
           + "interaction turn an extra into a full character with a sheet, memory and "

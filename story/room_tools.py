@@ -432,10 +432,7 @@ def _t_inspect_config(cid, frame_id):
                  "tried to change one would be refused. Say what you would "
                  "change and why, and let the host turn it."),
         "style": {
-            "genre": guide.get("genre", ""),
             "tone": guide.get("tone", ""),
-            "avoid": guide.get("avoid", ""),
-            "director_notes": guide.get("director_notes", ""),
             "weather_severity": guide.get("weather_severity"),
             "narration_tense": guide.get("narration_tense"),
             "day_length_hours": guide.get("day_length_hours"),
