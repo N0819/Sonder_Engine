@@ -6661,6 +6661,26 @@ for what follows. Residuals of this entry rather than a section of their own:
   published. Ceilings after the runs: 10 steps, 40 calls, 8000 tokens per
   step, 180s. Prompt caching held on Fireworks (5-7k cached tokens per step)
   and read 0 on Gemini through OpenRouter.
+- **Research is built and not yet grantable.** `story/room_research.py`
+  (2026-09-03) gates `web_search` and `fetch_page` on a `research` mandate
+  and files results only as `web_reference` lore; the capability is not yet
+  in `story/mandates.MANDATE_CAPABILITIES` and the disposition not yet in
+  `mind/canon_provenance.ADJUDICATED_DISPOSITIONS` (both are one-line
+  additions the owning forks make at merge), and `file_lore` does not yet
+  carry a `disposition` / `source_url` / `fetched_at` through to
+  `source_notes`, so a filed result lands under the room's ordinary
+  provenance until `plot_packages._shape_file_lore` / `_apply_file_lore`
+  read the three fields the `as_lore` template names. Budgets are per beat,
+  not per reply, because a tool has no notion of the reply it serves; when
+  the Planner's loop hands tools a reply context, the ledger should key on
+  it. Thread notices are a fixed prefix plus the query, so the prefix is in
+  the catalog and the query is shown as sent. No live measure yet.
+- **The bench has not been run live.** `tools/room_bench.py` proves its
+  readers and checks against stubs; the first real run (a clean scenario, a
+  grant, one beat, the critic) is the owner's, and the Phase A measures it
+  reports -- planned figures rendered, `plan_ref` bound, renders settled --
+  have not been read off a played beat with a published package behind it.
+  The critic's scores are one model's opinion, kept out of every loop.
 - **No operation for author surgery on a charter** (v2 § 9.1's "explicit
   author surgery" on carried state): a package can generate a location and
   presimulate, and cannot move a body, change a post or edit a claim. The

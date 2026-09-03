@@ -443,6 +443,21 @@ institution advances, reports failure and replays deterministically. Measured
 at the split: the Charter pytest family fell from 342 seconds to 8.1 seconds.
 Do not move a population experiment back under `tests/` merely because it has
 assertions—an executable audit can and should fail too.
+
+The Writers' Room has the same split. `tests/test_room_tools.py`,
+`test_plot_packages.py`, `test_story_planner.py`, `test_room_research.py` and
+`test_room_bench.py` prove the facade, the package lifecycle, the Planner's
+loop, the research gate and the bench's readers against scripted providers
+and never call a model. The MEASURE is `tools/room_bench.py`: it copies a
+database over a read-only connection (and refuses to run against anything it
+did not copy), runs the Planner on a grant with every tool call captured,
+plays ONE real beat into a room the package planned, reads every stage's
+active variant against the ledgers, and optionally asks a `utility`-role
+critic to score the package on five axes -- evaluation only, never in the
+loop. `python3 tools/room_bench.py --db engine.db --chat <id> --grant "..."
+--planner <provider_id>:<model> --critic --out <dir>` writes `report.md` and
+`summary.json`. Run it on a clean scenario when the provider refuses explicit
+content.
 `tests/test_charter_identity.py` pins thousand-body deterministic naming,
 non-renaming after profile edits/insertion, title aliases and permanent color
 seeds. `tests/test_charter_name_learning.py` pins the delivered-view and
