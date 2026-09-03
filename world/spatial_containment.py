@@ -277,7 +277,16 @@ def _clean_containment(raw, subject):
     if not holder or holder.casefold() == str(subject or "").strip().casefold():
         return None
     mode = str(raw.get("mode") or "").strip().casefold() or "carried"
-    return {"in": holder, "mode": mode}
+    record = {"in": holder, "mode": mode}
+    # WHO STANDS THE HOLDER, when the scene does not. A holder the scene
+    # keeps no record of is ordinarily a record to drop (`normalize_scene_
+    # containment`); one another ledger vouches for -- a Charter body,
+    # today -- is kept, and this is the field that says so. Sparse: absent
+    # for every holder the scene places itself.
+    by = str(raw.get("by") or "").strip()
+    if by:
+        record["by"] = by
+    return record
 
 
 def container_of(scene: dict, name: str):
@@ -656,8 +665,12 @@ def normalize_scene_containment(scene: dict) -> dict:
         record = _clean_containment(raw, subject)
         if record is None:
             continue
-        # The container must be something the scene actually knows about.
-        if _fold(record["in"]) not in known:
+        # The container must be something the scene actually knows about --
+        # or something another ledger vouched for when the record was
+        # written (`by`), since the scene will never come to know a holder
+        # it does not place, and dropping the record would hand the thing
+        # back to whoever held it last.
+        if _fold(record["in"]) not in known and not record.get("by"):
             continue
         cleaned[subject] = record
 
@@ -679,13 +692,60 @@ def normalize_scene_containment(scene: dict) -> dict:
     return scene
 
 
-def derive_contained_positions(scene: dict) -> dict:
+def _label_tokens(text):
+    return set(re.findall(r"[a-z0-9]+", str(text or "").casefold()))
+
+
+def carrier_lookup(carriers, label):
+    """The vouched carrier a destination names, as ``(spelling, room)``.
+
+    ``carriers`` is ``{spelling: room}`` from whatever ledger stands the
+    holder (`charter_runtime.charter_carriers`). Exact fold first; else a
+    token subset -- every word of the label is a word of exactly one
+    carrier's spelling, so a slug the Director made of two words of a
+    three-word name still lands, and a word two people share lands on
+    neither. Returns ``(None, None)`` for nothing or for two.
+    """
+    text = " ".join(str(label or "").split())
+    if not text or not isinstance(carriers, dict) or not carriers:
+        return (None, None)
+    folded = text.casefold()
+    for spelling, room in carriers.items():
+        if str(spelling).strip().casefold() == folded:
+            return (str(spelling), str(room))
+    words = _label_tokens(text)
+    if not words:
+        return (None, None)
+    rooms = {}
+    for spelling, room in carriers.items():
+        if words <= _label_tokens(spelling):
+            rooms.setdefault(str(room), []).append(str(spelling))
+    # Several spellings of ONE body (key, name, formal name) all match and
+    # all stand in one room; two bodies matching stand as two entries with
+    # tokens that differ, and the tie is not broken.
+    if len(rooms) != 1:
+        return (None, None)
+    room, spellings = next(iter(rooms.items()))
+    longest = sorted(spellings, key=lambda x: (-len(_label_tokens(x)), x))
+    for spelling in spellings:
+        if _label_tokens(spelling) != _label_tokens(longest[0]) and not (
+                _label_tokens(spelling) <= _label_tokens(longest[0])):
+            return (None, None)
+    return (longest[0], room)
+
+
+def derive_contained_positions(scene: dict, carriers=None) -> dict:
     """Put every contained body where its container is.
 
     This is what makes containment mean something: the position is not the
     contained body's to set. A tiny person in a pocket goes where the pocket
     goes and cannot be somewhere else, which is precisely what contact alone
     could not express.
+
+    ``carriers`` stands the holders the scene does not (a record written
+    with ``by``): where such a holder is THIS beat is read from it, so a
+    thing handed to a townsperson goes home with them. Without it the
+    thing stays where it was last derived, which is stale, never wrong.
     """
     contained = scene.get("contained")
     if not isinstance(contained, dict) or not contained:
@@ -693,6 +753,7 @@ def derive_contained_positions(scene: dict) -> dict:
     positions = scene.get("positions")
     if not isinstance(positions, dict):
         return scene
+    rooms = scene.get("rooms") if isinstance(scene.get("rooms"), dict) else {}
 
     for subject in contained:
         room = None
@@ -708,6 +769,15 @@ def derive_contained_positions(scene: dict) -> dict:
             # Director wrote the carrier's id into `positions` as though it
             # were a room, is a room that does not exist.
             room = room_of(scene, holder)
+            if room is None and carriers:
+                _spelling, vouched = carrier_lookup(carriers, holder)
+                # Only into a room the scene knows: a holder who walked out
+                # of the story's map takes the thing out of it too, and a
+                # position naming a room that does not exist is the
+                # category error `repair_entity_positions` exists for.
+                if vouched and (vouched in rooms
+                                or _ci_get(rooms, vouched) is not None):
+                    room = vouched
             if room is not None:
                 break
         if room is None:
@@ -764,7 +834,7 @@ def _positions_write(positions: dict, subject: str, room: str) -> None:
 # exactly as unplaced as it is today.
 
 
-def resolve_placement_target(scene: dict, to_id):
+def resolve_placement_target(scene: dict, to_id, carriers=None):
     """What a transfer's destination refers to, resolved against the scene.
 
     Returns one of:
@@ -773,7 +843,12 @@ def resolve_placement_target(scene: dict, to_id):
                              is follows from where the holder is.
       ("anchor", key)     -- something else the scene already places; the
                              subject is in that thing's room, at it.
-      (None, None)        -- nothing the scene can vouch for. REFUSED.
+      ("vouched", holder) -- a BODY the scene keeps no record of but
+                             ``carriers`` stands (a Charter townsperson);
+                             carried, and where it is follows the ledger
+                             that stands the holder.
+      (None, None)        -- nothing the scene or the town can vouch for.
+                             REFUSED.
 
     The refusal is the point. A destination is variously a room id, a body's
     display name, a bare noun the fiction invented for a surface, or null, and
@@ -823,6 +898,13 @@ def resolve_placement_target(scene: dict, to_id):
         if _is_body_entity(scene, text, None):
             return ("carrier", text)
         return ("anchor", text)
+    # Last: somebody the scene never placed but the town stands here. The
+    # measured case (Harrowmere t5): `to_id: "reeve_halinham"`, a Charter
+    # body with no entity and no position, and a letter that consequently
+    # stayed on the player for thirty-five beats.
+    spelling, _room = carrier_lookup(carriers, text)
+    if spelling:
+        return ("vouched", spelling)
     return (None, None)
 
 
@@ -851,6 +933,23 @@ def _placement_subject_key(scene: dict, eid: str, entity) -> str:
                 if str(key).strip().casefold() == text.casefold():
                     return key
     return eid
+
+
+def _report_unvouched_destination(report, op) -> None:
+    """Say what the transfer ledger could not resolve as a destination."""
+    if report is None:
+        return
+    thing = str(op.get("object_id") or "").strip()
+    where = str(op.get("to_id") or "").strip()
+    if not thing or not where:
+        return
+    note = ("possession: a transfer moved %r to %r, but %r names no room, "
+            "no body and nobody the town stands in the scene, so the thing "
+            "stayed where it was. Name the holder as the payload lists them "
+            "if a person took it, or the room if it was set down."
+            % (thing, where, where))
+    if note not in report:
+        report.append(note)
 
 
 def _report_unrecorded_transfer(report, op) -> None:
@@ -987,7 +1086,8 @@ def mint_transferred_objects(scene: dict, inventory_ops, shedding=()) -> list:
 
 
 def derive_inventory_placements(scene: dict, inventory_ops,
-                                *, declared=(), report=None) -> list:
+                                *, declared=(), report=None,
+                                carriers=None) -> list:
     """Place what a transfer op moved, from the ledger the objects hand fills.
 
     THREE RULES, ALL SUBTRACTIVE:
@@ -1070,16 +1170,24 @@ def derive_inventory_placements(scene: dict, inventory_ops,
                    for a in (entity.get("aliases") or [])}
         if labels & spoken_for:
             continue          # a hand placed it by name; the derivation yields
-        kind, destination = resolve_placement_target(scene, op.get("to_id"))
+        kind, destination = resolve_placement_target(
+            scene, op.get("to_id"), carriers=carriers)
         if not kind:
+            # A destination nobody vouches for is the other half of rule 4,
+            # and it was silent until 2026-09-03: the thing was known, the
+            # holder was not, and the op fell through this line without a
+            # word. Said out loud now, in the same voice.
+            _report_unvouched_destination(report, op)
             continue
         subject = _placement_subject_key(scene, eid, entity)
         folded_subject = subject.strip().casefold()
-        if kind == "carrier":
+        if kind in ("carrier", "vouched"):
             if str(destination).strip().casefold() == folded_subject:
                 continue
-            record = _clean_containment(
-                {"in": destination, "mode": op.get("relation")}, subject)
+            raw = {"in": destination, "mode": op.get("relation")}
+            if kind == "vouched":
+                raw["by"] = "charter"
+            record = _clean_containment(raw, subject)
             if record is None:
                 continue
             # An interior is a PLACE, with rooms minted for it and bodies

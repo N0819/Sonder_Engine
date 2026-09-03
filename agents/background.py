@@ -1502,9 +1502,17 @@ def _react_one(ctx, dr, name, present_others, roster, sc, rec, nonce,
     if here:
         try:
             from world.charter_runtime import presence_view
+            # This beat's sources go along so the view can carry the body's
+            # ANSWERS to what was asked of it -- the same plan the commit
+            # applies, previewed; the voice speaks before the ledger writes.
             institutional_context = presence_view(
                 ctx.chat.id, here, name, frame_id=ctx.turn.frame_id,
-                figures=[p for p in present_others if p != name])
+                figures=[p for p in present_others if p != name],
+                evidence=dr.get("public_evidence") or [],
+                inventory_ops=(dr.get("state_diff") or {}).get(
+                    "inventory_ops") or [],
+                scene=sc,
+                actors=list(_registered_name_roster(ctx.chat, ctx.cast)))
         except Exception as exc:
             ctx.add_warning(f"charter presence context skipped: {exc}")
 

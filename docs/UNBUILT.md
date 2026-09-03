@@ -5225,6 +5225,51 @@ that may or may not act on it; nothing yet measures whether it does.
 
 Until that is settled, the giver has let go and nobody is recorded holding it.
 
+**The other half of the class landed 2026-09-03: a handover to somebody the
+scene has no record of.** Harrowmere t5 (the 2026-09-02 playtest): the thing
+was known, the HOLDER was not -- `to_id: "reeve_halinham"` named a Charter body
+with no entity and no position -- and `derive_inventory_placements` fell
+through that case without even the notice above, so the letter the reeve took
+in prose stayed on the player for thirty-five beats. The commit now passes the
+bodies the town stands in the scene's rooms into the merge
+(`charter_runtime.charter_carriers` -> `merge_scene_with_diff(carriers=)`);
+the record lands marked `by: "charter"`, survives hygiene on that mark, and is
+re-derived into the holder's current room every merge. An unresolvable
+destination is now reported in the same voice as an unrecorded thing. Still
+open: the record follows the holder only into rooms the scene knows (a body
+who walks off the map takes the thing off it, and it reappears where the map
+resumes), and a merge that does not pass `carriers` (`world/paradox.py`) keeps
+the last room rather than following.
+
+### 1.103 The player's dealings with a townsperson: what the ledgers do not yet answer
+
+Landed 2026-09-03 (`charter_author.FIGURE_ACTS` widened to order, request,
+bargain, promise, trade, give; `tests/test_figure_acts.py`). Four residuals,
+each a decision rather than a defect:
+
+  * **A body's answer does not trigger its own voice.** `bodies_acting_toward_
+    authored` reads `window_acts` rows whose `other` is a persisted figure
+    key, and figures are injected per call and never persisted, so an act
+    answered at commit does not fire the §C1.3 "acting" trigger next beat.
+    The voice reaches the answer two other ways -- the owed-reply debt the
+    same utterance wrote, and `presence_view`'s same-beat `answers` preview
+    -- so nothing is lost for a spoken act; a GIFT with no words is taken in
+    the ledger and voiced only if something else demands it.
+  * **Trade is one lot, bought.** `plan_figure_acts` fixes `quantity` at 1
+    and the figure as buyer; selling needs the figure to hold stock under its
+    own key in `economy.stocks`, which only an earlier purchase gives it.
+    Quantity is not read from prose on purpose (a word list) and no channel
+    carries it yet.
+  * **A gift is read only from `inventory_ops`.** The playtest's five coppers
+    (t9) were an ACTION row the objects hand wrote no op for; they are no
+    gift and no trade. That is the objects hand's miss, not this seam's, and
+    the chunk now tells it a listed person is a body it may hand things to.
+  * **Standing is the `reports_to` chain, and a persona rides nobody.**
+    `has_standing` reads bindings (a promoted character riding a body) and
+    members acting as figures; a player persona who IS the reeve by
+    authorship has no binding and no standing, so their orders are requests.
+    Giving a persona a body to ride is the promotion seam's question.
+
 ### 1.77a Speaking turns and the page: what the utterance fix reached, and what it did not
 
 Landed 2026-08-29 from the 40-turn bridge run (chat 98), every stage of the

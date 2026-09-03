@@ -203,4 +203,4 @@ def test_the_merge_folds_before_it_derives():
     from world import spatial
     src = inspect.getsource(spatial.merge_scene_with_diff)
     assert src.index("normalize_scene_subjects(merged)") < \
-        src.index("derive_contained_positions(merged)")
+        src.index("derive_contained_positions(merged")

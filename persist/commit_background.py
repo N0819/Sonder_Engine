@@ -2038,13 +2038,29 @@ def commit_charter_observations(ctx, scene):
     """
     resolved = ctx.get("director_resolve") or {}
     evidence = resolved.get("public_evidence") or []
-    if not evidence:
+    # The beat's transfer ops ride along for the one figure act that is
+    # not speech: a thing handed to a body. The figures are everyone the
+    # story knows by name -- membership only, never iterated into a payload.
+    inventory_ops = (resolved.get("state_diff") or {}).get("inventory_ops") \
+        or []
+    if not evidence and not inventory_ops:
         return {"sources": 0, "opportunities": 0, "acquired": 0}
     from world.charter_runtime import ingest_public_evidence
 
-    return ingest_public_evidence(
+    figures = list(_registered_name_roster(ctx.chat, ctx.cast))
+    out = ingest_public_evidence(
         ctx.chat.id, evidence, scene or {}, turn_id=ctx.turn.id,
-        frame_id=ctx.turn.frame_id)
+        frame_id=ctx.turn.frame_id, inventory_ops=inventory_ops,
+        figures=figures)
+    for record in out.get("figure_acts") or ():
+        if record.get("refused"):
+            ctx.add_warning(
+                "Charter refused %s's %s toward %s: %s%s" % (
+                    record.get("actor"), record.get("act"),
+                    record.get("other"), record["refused"],
+                    (" (%s)" % record["reason"]) if record.get("reason")
+                    else ""))
+    return out
 
 def _persist_blurbs(br, presences):
     """Write minted blurbs (§3.8). FROZEN: a blurb is written once and never
