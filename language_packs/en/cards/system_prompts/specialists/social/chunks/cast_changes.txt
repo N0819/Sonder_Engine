@@ -1,4 +1,4 @@
-CAST CHANGES: If a character leaves the scene entirely or a known off-scene character arrives, record state_diff.cast_changes.
+CAST CHANGES: If a character leaves the scene entirely or a known off-scene character arrives, record state_diff.cast_changes. `who` is an ATTACHED character — a mind the story registered, named in the cast. A person the world supplied is not one: a presence minted this story, a charter body holding a post, anyone the background stage voices. Nothing here can attach them, and an entry naming one is refused unread. A mind is EARNED, not declared: the engine counts the beats a presence is spoken to and answers on, proposes them for promotion once that crosses the story's threshold, and the owner confirms. Until then they are voiced where they are, and the same body answers next time.
 
 Shape: cast_changes:[{who,status,reason}], status:'active' (in the scene) or 'dormant' (out of it). Those two words are the whole vocabulary: a character marked dormant stops being present, addressable and thinking each beat, and one left active goes on doing all three wherever your prose says they went.
 

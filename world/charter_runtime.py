@@ -2894,11 +2894,18 @@ def presence_view(cid, place, name, frame_id=None, figures=None):
                     row["practice"] = row["practice"].replace(
                         other, labels[other])
             rows.append(row)
+        berth = ("" if charter_key == AMBIENT_CHARTER
+                 else str(body.get("berth") or ""))
         out.append({
             "charter": charter_key,
             "body": body_key,
             "presence": _relabel(copy.deepcopy(presence), labels),
             "action_instances": rows,
+            # Where this body sleeps, and whether it is standing there now:
+            # the voice's own half of "a room someone sleeps in is theirs"
+            # -- a caller at its door is asking ITS leave.
+            "home": {"room": berth,
+                     "at_home": bool(berth) and berth == str(place or "")},
         })
     return out[:2]
 
@@ -3010,13 +3017,100 @@ def background_presence_records(cid, *, places=None, names=None,
         if counts.get(display.casefold(), 0) != 1:
             continue
         role = (", ".join(roles) if roles else f"member of {charter_key}")
+        sketch = {"role_hint": role, "station_room": place}
+        body = registry["items"][charter_key]["state"]["bodies"].get(
+            body_key) or {}
+        berth = str(body.get("berth") or "")
+        if berth and charter_key != AMBIENT_CHARTER:
+            # Where this body SLEEPS -- the fact that makes a room private
+            # (`charter_dwellings`), carried on the sketch so every reader
+            # of the record (the Director's figures, the voice) has it. An
+            # ambient body's berth is the room it was first seen in
+            # (`ensure_ambient_bodies`), a placeholder and not a home.
+            sketch["home_room"] = berth
         out[display] = {
             "dialogue_turns": [], "mention_turns": [],
             "addressed_turns": [], "nature": "person",
             "charter_refs": [{"charter": charter_key, "body": body_key}],
-            "sketch": {"role_hint": role, "station_room": place},
+            "sketch": sketch,
         }
     return out
+
+
+def charter_work_places(state):
+    """The rooms where this charter's WORK is, in the closer's own terms:
+    work is serving an upkeep, so an upkeep's place and the place of every
+    post that serves one are workplaces (`charter_generate._spread_berths`
+    reads the same rule at generation). Everything else a body berths in
+    is a dwelling."""
+    out = set()
+    for upkeep in (state.get("upkeeps") or {}).values():
+        if isinstance(upkeep, dict) and str(upkeep.get("place") or ""):
+            out.add(str(upkeep["place"]))
+    for post in (state.get("posts") or {}).values():
+        if not isinstance(post, dict):
+            continue
+        if post.get("serves") and str(post.get("place") or ""):
+            out.add(str(post["place"]))
+    return out
+
+
+def charter_dwellings(cid, rooms, frame_id=None):
+    """Which of `rooms` are somebody's HOME, and whose.
+
+    A ROOM SOMEONE SLEEPS IN IS THEIRS. The registry already holds the fact
+    -- every body carries a `berth` -- and nothing read it at play time, so
+    the Director adjudicated a knock on a cottage door with no way to know
+    the cottage was anyone's (Harrowmere turn 17: the door opened and the
+    player was inside in one beat, with nobody's leave spoken). The rule
+    is stated as the class the closer already uses: a berth where no
+    upkeep is served is a dwelling; a berth that is also a workplace (an
+    inn's staff sleeping over the taproom) is public-purpose and refuses
+    nobody, so it is not listed. Rows: ``room``, ``home_of`` (display
+    names of everyone who berths there, sorted), ``at_home`` (those of
+    them standing there now). Read-only; a story with no registry lists
+    nothing.
+    """
+    from world.charter_identity import display_name
+
+    wanted = {str(r) for r in (rooms or ()) if str(r or "")}
+    if not wanted:
+        return []
+    try:
+        registry = registry_for(cid, frame_id)
+    except Exception:
+        return []
+    homes = {}
+    for charter_key, item in sorted((registry.get("items") or {}).items()):
+        # An ambient body carries the room it was first seen in as its
+        # berth (`ensure_ambient_bodies`): a placeholder, not a home, and
+        # the ambient charter serves no upkeep, so every hall with a
+        # minted clerk in it would otherwise be listed as his dwelling.
+        if charter_key == AMBIENT_CHARTER:
+            continue
+        state = (item or {}).get("state") or {}
+        work = charter_work_places(state)
+        roles = {}
+        for post, body_key in (state.get("watch") or {}).items():
+            roles.setdefault(str(body_key), []).append(str(post))
+        for body_key, body in sorted((state.get("bodies") or {}).items()):
+            if not isinstance(body, dict):
+                continue
+            berth = str(body.get("berth") or "")
+            if berth not in wanted or berth in work:
+                continue
+            name = display_name(
+                body, roles.get(body_key) or (), state.get("naming"))
+            if not name:
+                continue
+            row = homes.setdefault(berth, {"home_of": set(), "at_home": set()})
+            row["home_of"].add(name)
+            if str(body.get("place") or "") == berth:
+                row["at_home"].add(name)
+    return [{"room": room,
+             "home_of": sorted(homes[room]["home_of"]),
+             "at_home": sorted(homes[room]["at_home"])}
+            for room in sorted(homes)]
 
 
 def bodies_acting_toward_authored(cid, authored, frame_id=None):

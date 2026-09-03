@@ -2894,6 +2894,7 @@ def director_resolve(ctx, nonce, _corrections=None):
     # read the SAME list, so a mint the prose author makes against a name it
     # was shown binds to exactly the body it was shown.
     _present_figures = []
+    _dwellings = []
     try:
         from .common import present_charter_figures
         from world.spatial import ambient_scope
@@ -2906,6 +2907,12 @@ def director_resolve(ctx, nonce, _corrections=None):
             _fig_rooms.add(str(_mv_target))
         _present_figures = present_charter_figures(
             chat["id"], sc, _fig_rooms, frame_id=ctx.turn.frame_id)
+        # The rooms in the same reach that are somebody's HOME, and whose:
+        # the player's room, its scope and the declared target. Read by
+        # the prose author's threshold clause (prose_author_sheet/17).
+        from .common import dwellings_in_reach
+        _dwellings = dwellings_in_reach(
+            chat["id"], _fig_rooms, frame_id=ctx.turn.frame_id)
     except Exception as exc:  # a story with no charter has nobody to list
         ctx.add_warning(f"present figures not derived: {exc}")
 
@@ -3162,6 +3169,10 @@ def director_resolve(ctx, nonce, _corrections=None):
                 {"name": _f["name"], "role": _f["role"], "room": _f["room"]}
                 for _f in _present_figures[:24]]}
            if _present_figures else {}),
+        # A ROOM SOMEONE SLEEPS IN IS THEIRS: the homes within reach, who
+        # lives in each and who is in now (`charter_dwellings`). Absent
+        # when none is, so an ordinary payload is byte-identical.
+        **({"dwellings": _dwellings[:12]} if _dwellings else {}),
         "interaction_rounds": _round_conduct(loop.get("rounds")),
         "reaction_rounds": _round_conduct((ctx.reaction_loop or {}).get("rounds")),
         "variant_seed": nonce,

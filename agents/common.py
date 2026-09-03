@@ -2009,9 +2009,24 @@ def present_charter_figures(cid, sc, rooms, frame_id=None):
             "posts": posts,
             "charter": str(ref.get("charter") or ""),
             "body": str(ref.get("body") or ""),
+            # Where this body sleeps (`charter_dwellings` says which rooms
+            # that makes private).
+            "home": str(((record or {}).get("sketch") or {})
+                        .get("home_room") or ""),
         })
     rows.sort(key=lambda r: (0 if r["posts"] else 1, r["name"].casefold()))
     return rows
+
+
+def dwellings_in_reach(cid, rooms, frame_id=None):
+    """`charter_dwellings` for the Director's payload: the rooms in reach
+    that are somebody's home, who lives there and who is in. Empty for a
+    story with no charter, so an ordinary payload is unchanged."""
+    try:
+        from world.charter_runtime import charter_dwellings
+        return charter_dwellings(cid, rooms, frame_id=frame_id)
+    except Exception:
+        return []
 
 
 def chatter_for_room(cid, sc, room_id, inputs=None):

@@ -6574,6 +6574,37 @@ clock"). What it deliberately does not do:
   to the same rule: it is what the cycle can READ, and a label outside it is
   left standing rather than misread. Expect it to be widened; a widening
   changes which stories get a cycle, never what the cycle does.
+### 2.29 Who the player talks to — residuals
+
+**Found:** the Harrowmere playtest (2026-09-02), landed 2026-09-03 as
+`tests/test_who_you_talk_to.py`; what the fix deliberately left.
+
+- **An ambient body has no home.** `ensure_ambient_bodies` writes `berth =
+  place` for a presence the Director minted, so the room it was first seen
+  in would read as its dwelling; `charter_dwellings`, the sketch's
+  `home_room` and `presence_view`'s `home` skip the ambient charter instead.
+  A minted cottager therefore lives nowhere until the story says otherwise,
+  and there is no seam for the story to say it.
+- **Title words are derived per story, not per room.** `_shared_name_words`
+  reads every tracked name in the ledger, so a story with one reeve in the
+  hall and one in a distant town shares "reeve" between them and the loose
+  match reaches neither; the flow refs, the descriptor binder and the exact
+  name still do. Measured on nothing yet.
+- **The Director learns of a proposed promotion one beat late** — the
+  engine channel is read next beat by design — and the owner sees it as a
+  turn warning plus the presences panel's `promotable` badge; there is no
+  chat-level notice.
+- **Leave at a threshold is a clause, not a fact.** Nothing records that a
+  resident said yes; the next beat's Director reads the resident's line in
+  the dialogue log like any other. A knock at an EMPTY home is answered by
+  the clause ("a door unanswered stays a door") and by nothing else.
+- **A legacy lower-case name is healed at render, not in the registry.**
+  `heal_name_case` runs in `display_name`, and only for a body carrying the
+  `given_name`/`family_name` components a law stores beside a name it
+  built; a reader that takes `body["name"]` raw still sees the stored
+  spelling, and a generated body from before those fields existed is not
+  healed at all. `_body_refs` compares casefolded, so resolution is
+  unaffected.
 
 ## 3. Information-pipeline leaks still open
 
