@@ -251,10 +251,31 @@ without a room in the loop. It is the widened "step 5".
 
 ### Phase C — the Dramaturge and plots
 
-Deliberation (v2 § 5, bounded rounds), sealed envelopes and surprise
-authorization (v2 § 6.3), spoiler-safe status (v2 § 5.3), plot packages
-with truths, evidence, clocks and pressures, mystery integrity (v2 § 4.3,
-and the original design note), derailment replanning (v2 § 7.5).
+The owner's shape for the pair (2026-09-03), which is the product-owner /
+engineer shape rather than author / reviewer:
+
+- **The Dramaturge is the creative agent.** It sees the story and what the
+  player is experiencing, including the hidden truths it authors, and it
+  proposes direction: pressure, reversal, revelation, a turn nobody asked
+  for. It needs almost no tools — read access to the story so far and the
+  lore, and none of the Planner's inspect/validate/publish facade. Its
+  output is intent, not a package.
+- **A creativity dial, per story and named.** From holding to a target the
+  player stated (a mandate the room was given) to wildly inventive. The
+  dial is a setting the user turns, not a property of the agent.
+- **The Story Planner implements AND critiques.** It carries the tools, the
+  citations and the budget, and it does not blindly implement a Dramaturge
+  proposal: it answers with geography, identity, causal history and cost
+  ("that character is dead", "that town is three days' walk", "that would
+  retcon a sealed truth with realised evidence"). The Dramaturge answers
+  back on whether the coherent version is still worth encountering. That is
+  the deliberation loop (v2 § 5), bounded in rounds, ending in a package or
+  in a disagreement returned to the user.
+
+Then: sealed envelopes and surprise authorization (v2 § 6.3), spoiler-safe
+status (v2 § 5.3), plot packages with truths, evidence, clocks and
+pressures, mystery integrity (v2 § 4.3, and the original design note),
+derailment replanning (v2 § 7.5).
 
 ### Phase D — the room authors the data tiers
 
