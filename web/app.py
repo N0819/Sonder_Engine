@@ -70,10 +70,12 @@ from story.character_schema import (
     persona_name,
 )
 from story.scene import (background_config, dialogue_config, interaction_limits,
-                   normalize_offscreen_life, player_authority,
+                   cognition_rung, normalize_offscreen_life,
+                   normalize_offscreen_cognition, player_authority,
                    set_player_authority, PLAYER_AUTHORITY_GRANTS,
                    PLAYER_AUTHORITY_MODES,
                    style_guide, normalize_style_guide,
+                   OFFSCREEN_COGNITION_DEFAULT,
                    OFFSCREEN_LIFE_BUILT, OFFSCREEN_LIFE_DEFAULT,
                    OFFSCREEN_LIFE_DESCRIPTIONS, OFFSCREEN_LIFE_LADDER,
                    STYLE_GUIDE_FIELDS)
@@ -4857,12 +4859,15 @@ def dlg_put(cid: int, body: dict = Body(...)):
             # would be theatre rather than a setting.
             "promote_after_addressed": max(
                 0, min(99, int(submitted("promote_after_addressed", 0)))),
-            # The ceiling on what the cast may do off screen. Normalized
-            # rather than rejected: an unreadable value falls to the default,
-            # never to the floor, so a typo cannot quietly switch a story's
-            # off-screen life off (scene.normalize_offscreen_life).
-            "offscreen_life": normalize_offscreen_life(
-                submitted("offscreen_life", OFFSCREEN_LIFE_DEFAULT)),
+            # MAY A MIND NOBODY IS WATCHING THINK AND ACT. The one question
+            # the panel asks since 2026-09-04; `dialogue_config` derives the
+            # ladder rung from it, and the rung stays writable below for the
+            # extension contract and for archives that carry one. Normalized
+            # rather than rejected, like the rung: an unreadable value falls to
+            # the default, never to the floor, so a typo cannot quietly switch
+            # a story's off-screen life off.
+            "offscreen_cognition": normalize_offscreen_cognition(
+                submitted("offscreen_cognition", OFFSCREEN_COGNITION_DEFAULT)),
             # 0 means no ticks however high the level is set -- the bound and
             # the permission are separate answers, and a cap of zero is a
             # legitimate way to say "not right now" without losing the level.
@@ -4876,6 +4881,22 @@ def dlg_put(cid: int, body: dict = Body(...)):
         raise HTTPException(400, "dialogue config numeric fields must be numbers")
 
     config["max_lines"] = max(config["min_lines"], config["max_lines"])
+
+    # A CALLER WHO NAMED THE RUNG MEANT THE RUNG. `provision_story` publishes
+    # `offscreen_life` and archives carry it, so a body that sends one is
+    # answering the ladder directly and its answer outranks the toggle's
+    # derivation; `dialogue_config` then reads the toggle back out of it. A
+    # body that sends neither is the ordinary panel save, and the rung it
+    # implies is STORED beside the toggle rather than derived on every read --
+    # an archive, an extension and the living-world slice all read this blob
+    # directly, and a key that exists only in `dialogue_config`'s return value
+    # would be missing from all three.
+    if "offscreen_life" in body:
+        config["offscreen_life"] = normalize_offscreen_life(
+            body.get("offscreen_life"))
+        config.pop("offscreen_cognition", None)
+    else:
+        config["offscreen_life"] = cognition_rung(config["offscreen_cognition"])
 
     wset(cid, "dialogue_config", config)
     return config

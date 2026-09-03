@@ -2087,6 +2087,65 @@ OFFSCREEN_LIFE_BUILT = frozenset({
 })
 
 
+#: THE HOST-FACING QUESTION, and since 2026-09-04 the only one. The five-rung
+#: ladder above survives as the MECHANISM -- the four `living_world` approaches
+#: are written against its rungs, and `provision_story(offscreen_life=...)` is a
+#: published extension contract -- but a host answers one thing: may a mind
+#: nobody is watching think and act.
+#:
+#: The two rungs it maps to are not a taste. They are where the code already
+#: spends: over `world/offscreen.py`, `advance_epoch`, `advance_reactive_plans`,
+#: `apply_plan_ops` and `stochastic_ticks` hold no model seam at all, while
+#: `schedule_profile_ticks` composes through `profile_summary_record` and
+#: `schedule_agent_ticks` through `agent_proposal`. `reactive` is therefore the
+#: highest rung at which nothing off screen costs anything and no dormant mind
+#: acts on its own -- so it is what OFF means, and OFF still leaves the world
+#: moving: charter (ungated entirely), scheduled consequences, arrivals, expiry,
+#: news latency, and the villain ladder's floor, which is deliberately kept
+#: reachable because that ladder stays as a placeholder.
+COGNITION_OFF_RUNG = "reactive"
+COGNITION_ON_RUNG = "character_agent"
+
+#: ON, because that is what the ladder already did. `OFFSCREEN_LIFE_DEFAULT` is
+#: `stochastic`, which permits both spending paths, so defaulting the toggle to
+#: True is the no-change answer for every story that never opened the panel.
+OFFSCREEN_COGNITION_DEFAULT = True
+
+_COGNITION_FALSE = frozenset({"0", "off", "false", "no", "none"})
+_COGNITION_TRUE = frozenset({"1", "on", "true", "yes"})
+
+
+def normalize_offscreen_cognition(value):
+    """Coerce a stored or submitted answer to a bool, defaulting to the default.
+
+    Falls to the DEFAULT rather than to False, for the reason
+    `normalize_offscreen_life` gives one function down: a value the reader
+    cannot parse must not quietly switch a story's off-screen life off.
+    """
+    if isinstance(value, bool):
+        return value
+    text = str(value if value is not None else "").strip().casefold()
+    if text in _COGNITION_FALSE:
+        return False
+    if text in _COGNITION_TRUE:
+        return True
+    return OFFSCREEN_COGNITION_DEFAULT
+
+
+def cognition_rung(allowed):
+    """The ladder rung one answer to the toggle means."""
+    return COGNITION_ON_RUNG if allowed else COGNITION_OFF_RUNG
+
+
+def cognition_from_rung(level):
+    """Does a stored rung permit off-screen cognition. The read half of the
+    migration: an existing chat keeps the rung it stored and the toggle is
+    DERIVED from it, so nothing changes behaviour on the deploy that lands
+    the collapse.
+    """
+    return offscreen_life_allows(level, "stochastic")
+
+
 def normalize_offscreen_life(value):
     """Coerce a stored or submitted level to a rung, defaulting to the default.
 
@@ -2131,8 +2190,11 @@ DEFAULT_INTERACTION_CONFIG = {
     # into a full character. 0 means never, and is the default: acquiring cast
     # is not something a story should do without being asked.
     "promote_after_addressed": 0,
-    # How much life the cast is permitted OFF screen. See OFFSCREEN_LIFE_LADDER.
+    # How much life the cast is permitted OFF screen. See OFFSCREEN_LIFE_LADDER
+    # for the mechanism and COGNITION_OFF_RUNG for the one question a host is
+    # actually asked; `dialogue_config` keeps the two in step.
     "offscreen_life": OFFSCREEN_LIFE_DEFAULT,
+    "offscreen_cognition": OFFSCREEN_COGNITION_DEFAULT,
     "max_offscreen_actors": 3,
 }
 
@@ -2185,7 +2247,28 @@ def dialogue_config(chat_id):
     for key, value in derived.items():
         if key not in stored:
             config[key] = value
-    config["offscreen_life"] = normalize_offscreen_life(config.get("offscreen_life"))
+    # ONE QUESTION, TWO SPELLINGS, and the toggle wins where both are stored.
+    # A chat written before 2026-09-04 has only the rung, so its answer is read
+    # OUT of the rung and its behaviour is untouched; a chat the panel has
+    # saved since has the toggle, and the rung is derived from it so every
+    # reader written against the ladder keeps working unchanged.
+    # An explicitly STORED rung wins over both: it is either a story written
+    # before the collapse, or an extension setting the ladder through the
+    # contract it is published under, and neither may be overwritten by a
+    # default. Otherwise the toggle decides and the rung follows it, so the
+    # two never disagree about a story nobody has configured.
+    if "offscreen_cognition" in stored:
+        config["offscreen_cognition"] = normalize_offscreen_cognition(
+            stored["offscreen_cognition"])
+        config["offscreen_life"] = cognition_rung(config["offscreen_cognition"])
+    elif "offscreen_life" in stored:
+        config["offscreen_life"] = normalize_offscreen_life(
+            stored["offscreen_life"])
+        config["offscreen_cognition"] = cognition_from_rung(
+            config["offscreen_life"])
+    else:
+        config["offscreen_cognition"] = OFFSCREEN_COGNITION_DEFAULT
+        config["offscreen_life"] = cognition_rung(OFFSCREEN_COGNITION_DEFAULT)
     try:
         config["max_offscreen_actors"] = max(
             0, min(12, int(config.get("max_offscreen_actors", 3))))

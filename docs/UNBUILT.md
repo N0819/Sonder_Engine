@@ -5264,19 +5264,28 @@ withholding free work, and a host lowering it to save money froze the town
 instead of saving anything. The only reason the tick does not run is
 `charter_skip: "no_charters"`.
 
-**What is left of the ladder should become one toggle: "allow off-screen
-cognition", enabling the playerless causality bubbles.** Everything else the
-five rungs gate is either free (charter, now ungated) or a different question
-wearing the ladder's clothes. The bubbles are the one thing that genuinely
-costs a model call for a mind nobody is watching, and they are NOT BUILT -- no
-playerless-frame path exists in source -- so the toggle cannot replace the
-ladder until they are. What the rungs still hold that must find a home first:
-`artifacts.schedule_artifact_text` (model-authored wording for posted notices,
-at `stochastic`), `living_world.effective_depth` (four approaches, each with
-its own required rung), `offscreen.schedule_profile_ticks` and
-`schedule_agent_ticks` (the machinery the bubbles replace), and
-`max_offscreen_actors`. Retiring the ladder means answering each of those, not
-deleting the field.
+**The host-facing collapse landed 2026-09-04**, with the owner's ruling that
+the villain ladder stays as a placeholder. The panel asks one question, *allow
+off-screen cognition*, and `dialogue_config` derives the rung: `reactive` off,
+`character_agent` on. The five rungs survive as the MECHANISM, because
+`living_world`'s four approaches are written against them and
+`provision_story(offscreen_life=...)` is a published extension contract -- so
+nothing that reads the ladder had to change, including
+`artifacts.schedule_artifact_text` and the two tick schedulers.
+
+**What is still open is the other half of the ruling: the toggle should enable
+the playerless causality bubbles, and those are NOT BUILT.** Today it enables
+the machinery they would replace -- `offscreen.schedule_profile_ticks` and
+`schedule_agent_ticks`. When the bubbles land, the toggle's meaning moves to
+them and that machinery retires; the toggle itself does not change.
+
+**One behaviour change, stated because it is easy to miss.** A chat that never
+opened the panel used to sit at `stochastic`; it now rides the toggle's default
+and sits at `character_agent`. Nothing new fires from that alone: an agent tick
+additionally needs the card's `simulation.offscreen_agent`, the antagonist
+ladder at `ceiling` (default off), dormant status, a non-zero
+`max_offscreen_actors` and a private reason. A chat that STORED a rung keeps
+it, so no configured story moved.
 
 **On-screen voicing is already default and already bounded by a count, and
 the panel does not say so.** A charter body in the player's room reaches the

@@ -609,5 +609,5 @@ class TestOneAuthorityCeiling:
         assert '"Living world"' not in js  # the second card is gone
         block = js[js.index('"Simulation reach"'):
                    js.index('"Background life"')]
-        assert block.index("offLife") < block.index("lwRows")
+        assert block.index("offCog") < block.index("lwRows")
         assert "d.requires" in js and "refreshLw" in js
