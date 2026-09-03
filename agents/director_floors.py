@@ -1454,9 +1454,19 @@ def _bind_minted_entities_to_present_figures(sc, sd, figures, *,
     with an interior, and anything the scene already holds under that id
     are left alone.
 
+    A PLANNED IDENTITY IS RESERVED. A figure carrying ``plan`` is a plan
+    (`world.planned_entities`): a charter body, or an authored person or
+    thing no charter simulates yet. One flagged ``reserved`` stands in some
+    other room and is offered for its NAME only, in any room -- a mint
+    naming it is a render of it wherever the mint stands; its role reaches
+    only the room the plan put it in, like every other figure's. A bound
+    mint carries ``plan_ref`` so the commit settles the render onto the
+    plan. A THING the beat mints (inert kind, portable, an interior) binds
+    only to a planned thing, and only by name.
+
     Mutates `sd` (and the two dialogue fields when given) in place and
     returns one record per binding for the caller's warning and the step's
-    audit: ``{entity_id, minted_name, bound_to, room, by, ambiguous}``.
+    audit: ``{entity_id, minted_name, bound_to, room, by, ambiguous, plan}``.
     """
     from persist.commit import _INERT_ENTITY_KINDS
 
@@ -1467,8 +1477,13 @@ def _bind_minted_entities_to_present_figures(sc, sd, figures, *,
     positions = positions if isinstance(positions, dict) else {}
     existing = (sc or {}).get("entities") or {}
     by_room = {}
+    reserved = []
     for fig in figures:
+        if fig.get("reserved"):
+            reserved.append(fig)
+            continue
         by_room.setdefault(str(fig.get("room") or ""), []).append(fig)
+    people = [f for f in figures if not f.get("reserved")]
     bindings = []
     for eid, ent in list(entities.items()):
         if not isinstance(ent, dict):
@@ -1476,10 +1491,8 @@ def _bind_minted_entities_to_present_figures(sc, sd, figures, *,
         if str(eid) in existing:
             continue  # a redeclaration, not a mint
         kind = str(ent.get("kind") or "").strip().casefold()
-        if kind in _INERT_ENTITY_KINDS or ent.get("ubiquitous"):
-            continue
-        if ent.get("interior_rooms") or ent.get("portable"):
-            continue
+        thing = (kind in _INERT_ENTITY_KINDS or bool(ent.get("ubiquitous"))
+                 or bool(ent.get("interior_rooms")) or bool(ent.get("portable")))
         minted = " ".join(str(ent.get("name") or "").split())
         if not minted:
             continue
@@ -1489,16 +1502,37 @@ def _bind_minted_entities_to_present_figures(sc, sd, figures, *,
                    or fallback_room or "")
         pool = by_room.get(room) if room else None
         if not pool:
-            pool = list(figures)
+            pool = list(people)
+        if thing:
+            # A minted thing may be the render of a PLANNED thing, by name
+            # alone; it is never a person standing here.
+            pool = [f for f in pool if str(f.get("kind") or "") == "thing"]
+            named = [f for f in reserved if str(f.get("kind") or "") == "thing"]
+        else:
+            pool = [f for f in pool if str(f.get("kind") or "person") != "thing"]
+            named = [f for f in reserved if str(f.get("kind") or "person") != "thing"]
         bare_labels = {_bare_person_name(label) for label in labels}
         bare_labels.discard("")
-        by_name = [f for f in pool
-                   if _bare_person_name(f.get("name")) in bare_labels]
+        seen_ids = set()
+        name_pool = []
+        for f in list(pool) + named:
+            ident = (str(f.get("plan") or ""), str(f.get("charter") or ""),
+                     str(f.get("body") or ""), str(f.get("name") or ""))
+            if ident in seen_ids:
+                continue
+            seen_ids.add(ident)
+            name_pool.append(f)
+        by_name = [f for f in name_pool
+                   if _bare_person_name(f.get("name")) in bare_labels
+                   or any(_bare_person_name(a) in bare_labels
+                          for a in (f.get("aliases") or ()))]
         chosen, how, ambiguous = None, "", False
         if len(by_name) == 1:
             chosen, how = by_name[0], "name"
         elif len(by_name) > 1:
             continue  # two bodies answer to the name; refuse to guess
+        elif thing:
+            continue  # a thing binds by name or not at all
         else:
             heads = {_figure_head_noun(label) for label in labels}
             heads.discard("")
@@ -1511,7 +1545,10 @@ def _bind_minted_entities_to_present_figures(sc, sd, figures, *,
             # cannot make a watchman of a chairman. (Harrowmere replay
             # 2026-09-03 turn 23: "The Blacksmith" beside the smith on
             # watch, unbound on the head noun alone.)
-            by_role = [f for f in pool if f.get("posts")
+            # A figure with a role: a posted body (the institution's noun
+            # for its post) or an authored plan whose brief names one. A
+            # member holding no post has no role and is never bound by one.
+            by_role = [f for f in pool if f.get("role")
                        and _role_noun_matches(
                            _figure_head_noun(f.get("role")), heads)]
             if by_role:
@@ -1531,6 +1568,8 @@ def _bind_minted_entities_to_present_figures(sc, sd, figures, *,
         if chosen.get("charter") and chosen.get("body"):
             ent["charter_ref"] = {"charter": chosen["charter"],
                                   "body": chosen["body"]}
+        if chosen.get("plan"):
+            ent["plan_ref"] = {"uid": str(chosen["plan"])}
         if minted in positions and str(eid) not in positions:
             positions[str(eid)] = positions.pop(minted)
         for d in (dialogue_log or []):
@@ -1542,5 +1581,6 @@ def _bind_minted_entities_to_present_figures(sc, sd, figures, *,
                     dialogue_order[i] = display
         bindings.append({"entity_id": str(eid), "minted_name": minted,
                          "bound_to": display, "room": room, "by": how,
-                         "ambiguous": ambiguous})
+                         "ambiguous": ambiguous,
+                         "plan": str(chosen.get("plan") or "")})
     return bindings

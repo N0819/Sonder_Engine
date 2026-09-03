@@ -345,6 +345,14 @@ def director_establish(ctx, nonce):
         "present_characters": cast,
         "relevant_lore": lore_for(ctx),
         "mapping_scene_proposal": _normalize_scene_patch(mapping.get("scene_patch")),
+        # WHO THE PLAN ALREADY PUT IN THE OPENING'S ROOMS: the charter
+        # bodies and authored plans standing in the rooms the proposal
+        # names (`_figures_in_view`). Absent when nobody is, so an opening
+        # with no town is byte-identical.
+        **({"present_figures": _present_figure_rows(_opening_figures)}
+           if (_opening_figures := _figures_in_view(
+               ctx, list((_normalize_scene_patch(mapping.get("scene_patch"))
+                          or {}).get("rooms") or {}))) else {}),
         "fiction_model": fm,
         "player_seed": ctx.get("input") or "",
         "variant_seed": nonce,
@@ -461,6 +469,61 @@ def director_establish(ctx, nonce):
     return out
 
 
+def _figures_in_view(ctx, rooms, reserved=False):
+    """The plans standing in `rooms`, as one list: the charter bodies
+    there (`present_charter_figures`) and the authored plans there
+    (`planned_figures_in_view`); with ``reserved``, every other unrendered
+    authored plan too, flagged so the floor offers it by name alone.
+    Fail-open: a story with no charter and no plans lists nobody."""
+    rooms = {str(r) for r in (rooms or ()) if str(r or "")}
+    if not rooms and not reserved:
+        return []
+    frame_id = getattr(ctx.turn, "frame_id", None)
+    out = []
+    try:
+        from .common import (planned_figures_in_view, present_charter_figures,
+                             reserved_plan_figures)
+        if rooms:
+            out.extend(present_charter_figures(
+                ctx.chat["id"], {}, rooms, frame_id=frame_id))
+            out.extend(planned_figures_in_view(
+                ctx.chat["id"], rooms, frame_id=frame_id))
+        if reserved:
+            out.extend(reserved_plan_figures(
+                ctx.chat["id"], frame_id=frame_id, exclude_rooms=rooms))
+    except Exception:
+        return out
+    return out
+
+
+def _present_figure_rows(figures, answers=None, cap=24):
+    """The payload rows for `present_figures`: name, role, room, the
+    full-sight look, the plan uid, and for an authored plan its kind and
+    brief; ``answers`` where the registry answered. A reserved plan
+    (standing elsewhere) is not shown -- it is the floor's, not the
+    hand's."""
+    rows = []
+    for f in figures or ():
+        if f.get("reserved"):
+            continue
+        row = {"name": f.get("name"), "role": f.get("role"),
+               "room": f.get("room")}
+        if f.get("look"):
+            row["look"] = f["look"]
+        if f.get("plan"):
+            row["plan"] = f["plan"]
+        if str(f.get("kind") or "person") != "person":
+            row["kind"] = f["kind"]
+        if f.get("brief"):
+            row["brief"] = f["brief"]
+        if answers and f.get("name") in answers:
+            row["answers"] = answers[f["name"]]
+        rows.append(row)
+        if len(rows) >= cap:
+            break
+    return rows
+
+
 def _establish_identity_floor(ctx, out, player_name):
     """Run the minted-role floor on the opening's diff, in place.
 
@@ -482,13 +545,7 @@ def _establish_identity_floor(ctx, out, player_name):
     rooms = {str(r) for r in positions.values() if str(r or "")}
     if not rooms:
         return []
-    try:
-        from .common import present_charter_figures
-        figures = present_charter_figures(
-            ctx.chat["id"], {}, rooms,
-            frame_id=getattr(ctx.turn, "frame_id", None))
-    except Exception:
-        return []
+    figures = _figures_in_view(ctx, rooms, reserved=True)
     if not figures:
         return []
     bound = _bind_minted_entities_to_present_figures(
@@ -3027,6 +3084,7 @@ def director_resolve(ctx, nonce, _corrections=None):
     # read the SAME list, so a mint the prose author makes against a name it
     # was shown binds to exactly the body it was shown.
     _present_figures = []
+    _reserved_figures = []
     _figure_answers = {}
     _dwellings = []
     try:
@@ -3041,6 +3099,14 @@ def director_resolve(ctx, nonce, _corrections=None):
             _fig_rooms.add(str(_mv_target))
         _present_figures = present_charter_figures(
             chat["id"], sc, _fig_rooms, frame_id=ctx.turn.frame_id)
+        # THE AUTHORED PLANS standing in the same rooms, and -- for the
+        # floor only -- every unrendered plan elsewhere, by name
+        # (`world.planned_entities`; the plan half of plan-and-render).
+        from .common import planned_figures_in_view, reserved_plan_figures
+        _present_figures = list(_present_figures) + planned_figures_in_view(
+            chat["id"], _fig_rooms, frame_id=ctx.turn.frame_id)
+        _reserved_figures = reserved_plan_figures(
+            chat["id"], frame_id=ctx.turn.frame_id, exclude_rooms=_fig_rooms)
         # What each of them would answer the player's order, request or
         # bargain, by the judgment the commit applies -- so the ruling
         # cannot grant what the ledger declines (Harrowmere replay t26).
@@ -3307,20 +3373,16 @@ def director_resolve(ctx, nonce, _corrections=None):
         # below (`_bind_minted_entities_to_present_figures`) binds such a
         # mint to its body regardless; this is the payload half, so the
         # model has no reason to mint. Absent when nobody is here.
-        **({"present_figures": [
-                {"name": _f["name"], "role": _f["role"], "room": _f["room"],
-                 # What they look like at full sight (`charter_surface`):
-                 # the render this hand writes for a body it mints against
-                 # them must add to it, never contradict it.
-                 **({"look": _f["look"]} if _f.get("look") else {}),
-                 # WHAT THIS PERSON'S OWN LEDGERS ANSWER the player's order,
-                 # request or bargain -- the same judgment the commit will
-                 # record (`charter_runtime.figure_answers`). Present only
-                 # where the registry answered, so a figure with no
-                 # dealings to preview is byte-identical to before.
-                 **({"answers": _figure_answers[_f["name"]]}
-                    if _f["name"] in _figure_answers else {})}
-                for _f in _present_figures[:24]]}
+        # Each row: name, role, room, the full-sight look (the render this
+        # hand writes for a body it mints against them must add to it,
+        # never contradict it), the plan uid the render settles through,
+        # an authored plan's kind and brief, and WHAT THIS PERSON'S OWN
+        # LEDGERS ANSWER the player's order, request or bargain -- the
+        # same judgment the commit will record
+        # (`charter_runtime.figure_answers`), present only where the
+        # registry answered.
+        **({"present_figures": _present_figure_rows(
+                _present_figures, _figure_answers)}
            if _present_figures else {}),
         # A ROOM SOMEONE SLEEPS IN IS THEIRS: the homes within reach, who
         # lives in each and who is in now (`charter_dwellings`). Absent
@@ -4079,7 +4141,7 @@ def director_resolve(ctx, nonce, _corrections=None):
     # position for the player, written by the movement backstop above, is
     # the answer; the pre-move room only when the beat did not move them.
     _bound = _bind_minted_entities_to_present_figures(
-        sc, sd, _present_figures,
+        sc, sd, list(_present_figures) + list(_reserved_figures),
         fallback_room=_mint_fallback_room(sd, p_name, ctx.get("_player_room")),
         dialogue_log=out.get("dialogue_log"),
         dialogue_order=out.get("dialogue_order"))

@@ -635,65 +635,76 @@ class TestEveryBackgroundPersonIsACharterBody:
     history-reading volition Charter was built to give them -- they were a
     name in a dict, invented fresh each time, and keyed by DISPLAY NAME, which
     two people in one story may share.
+
+    The first answer was an AMBIENT charter: an institution of none that any
+    named person joined. It is gone (Harrowmere replay 2026-09-03: seven
+    mints, six of them shadows of a post-holder beside them, none with a
+    home or a seat). A person with no plan behind them now files a planning
+    need and is ENROLLED in a real institution (`world/charter_enrol.py`);
+    a story with no town gets a households charter minted for it.
     """
 
-    def test_a_named_person_is_given_a_body(self, temp_db):
-        from world.charter_runtime import (AMBIENT_CHARTER,
-                                           ensure_ambient_bodies, registry_for)
+    def test_a_named_person_is_given_a_body_in_a_real_institution(self, temp_db):
+        from world.charter_enrol import HOUSEHOLDS_CHARTER, enrol_person
+        from world.charter_runtime import registry_for
         cid = _make_chat(temp_db)
 
-        refs = ensure_ambient_bodies(
-            cid, [{"name": "Dock Hand", "place": "quay"}])
+        rec = enrol_person(cid, {"kind": "person", "surface": {
+            "name": "Dock Hand", "room": "quay"}})
 
-        assert refs["Dock Hand"]["charter"] == AMBIENT_CHARTER
-        state = registry_for(cid)["items"][AMBIENT_CHARTER]["state"]
-        body = state["bodies"][refs["Dock Hand"]["body"]]
+        assert rec["ref"]["charter"] == HOUSEHOLDS_CHARTER
+        state = registry_for(cid)["items"][HOUSEHOLDS_CHARTER]["state"]
+        body = state["bodies"][rec["ref"]["body"]]
         assert body["name"] == "Dock Hand" and body["place"] == "quay"
+        assert "ambient" not in registry_for(cid)["items"]
 
-    def test_an_institution_of_none_stands_nothing(self, temp_db):
-        """The ambient charter is not a fake institution of one. It has no
-        posts and no upkeeps -- it exists so a person with no institution is
-        still somewhere the simulation advances them, which is what
-        `charter_run.step` does for a charter's MEMBERS."""
-        from world.charter_runtime import (AMBIENT_CHARTER,
-                                           ensure_ambient_bodies, registry_for)
+    def test_a_households_charter_minted_for_a_story_owes_a_dwelling(self, temp_db):
+        """The minimal households charter is an institution with nothing to
+        stand yet -- no posts, no upkeeps -- and the enrolment says a
+        dwelling is owed, which is a room-need for the room to answer."""
+        from world.charter_enrol import HOUSEHOLDS_CHARTER, enrol_person
+        from world.charter_runtime import registry_for
         cid = _make_chat(temp_db)
 
-        ensure_ambient_bodies(cid, [{"name": "Dock Hand", "place": "quay"}])
+        rec = enrol_person(cid, {"kind": "person", "surface": {
+            "name": "Dock Hand", "room": "quay"}})
 
-        state = registry_for(cid)["items"][AMBIENT_CHARTER]["state"]
+        state = registry_for(cid)["items"][HOUSEHOLDS_CHARTER]["state"]
         assert not state["posts"] and not state["upkeeps"]
+        assert rec["room_need"] is True
 
     def test_the_same_person_is_not_minted_twice(self, temp_db):
-        from world.charter_runtime import ensure_ambient_bodies, registry_for
+        from world.charter_enrol import HOUSEHOLDS_CHARTER, enrol_person
+        from world.charter_runtime import registry_for
         cid = _make_chat(temp_db)
 
-        first = ensure_ambient_bodies(cid, [{"name": "Dock Hand",
-                                             "place": "quay"}])
-        again = ensure_ambient_bodies(cid, [{"name": "Dock Hand",
-                                             "place": "hold"}])
+        first = enrol_person(cid, {"kind": "person", "surface": {
+            "name": "Dock Hand", "room": "quay"}})
+        again = enrol_person(cid, {"kind": "person", "surface": {
+            "name": "Dock Hand", "room": "hold"}})
 
-        assert first == again
-        bodies = registry_for(cid)["items"]["ambient"]["state"]["bodies"]
+        assert first["ref"] == again["ref"] and again["how"] == "held"
+        bodies = registry_for(cid)["items"][HOUSEHOLDS_CHARTER]["state"]["bodies"]
         assert len(bodies) == 1
 
     def test_a_person_a_real_institution_already_employs_is_left_there(
             self, temp_db):
-        """The mint is a floor, not a claimant: somebody a generated charter
+        """The fill is a floor, not a claimant: somebody a generated charter
         already employs keeps that employer, or the consolidation would tear
         people out of the institutions they belong to."""
-        from world.charter_runtime import (ensure_ambient_bodies,
-                                           registry_for, save_registry)
+        from world.charter_enrol import enrol_person
+        from world.charter_runtime import registry_for, save_registry
         cid = _make_chat(temp_db)
         save_registry(cid, {"crew": {
             "key": "crew", "posts": {}, "upkeeps": {},
             "bodies": {"tech:0001": {"name": "Dock Hand", "place": "quay",
                                      "competence": {}, "available": True}}}})
 
-        refs = ensure_ambient_bodies(cid, [{"name": "Dock Hand",
-                                            "place": "quay"}])
+        rec = enrol_person(cid, {"kind": "person", "surface": {
+            "name": "Dock Hand", "room": "quay"}})
 
-        assert refs["Dock Hand"] == {"charter": "crew", "body": "tech:0001"}
+        assert rec["ref"] == {"charter": "crew", "body": "tech:0001"}
+        assert "households" not in registry_for(cid)["items"]
         assert "ambient" not in registry_for(cid)["items"]
 
 

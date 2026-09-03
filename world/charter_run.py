@@ -77,6 +77,7 @@ from .charter_decide import (advance_decisions, deliver_orders,
 from .charter_economy import advance_economy
 from .charter_social import update_judgments_from_minds, update_ties
 from .charter_intervene import apply_due
+from .charter_enrol import depart_guests
 from .charter_harm import HURT_RELUCTANCE, advance_harm, normalize_condition
 
 
@@ -441,6 +442,10 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
     events = []
     charter, intervention_events = apply_due(charter, at + hours)
     events.extend(intervention_events)
+    # A guest whose stay has run out leaves before the window is lived
+    # (`charter_enrol.depart_guests`): a departed body stands nowhere and is
+    # listed by nobody, and the berth it held is free again.
+    charter, _departed = depart_guests(charter, at + hours)
     # WHAT THE ROUND BETWEEN INSTITUTIONS HANDED THIS ONE after its last
     # window (`charter_predation`): a body of its own killed at a place,
     # stock taken, a bargain defaulted. Treated as this window's happenings
