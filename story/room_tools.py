@@ -210,17 +210,17 @@ def _t_inspect_rooms(cid, frame_id, *, room_ids=None, include_planned=True):
 
 def _t_inspect_route(cid, frame_id, *, from_room, to_room):
     from world.spatial import passable_neighbors
-    from world.structure import planned_context, planned_room_ids
+    from world.structure import planned_topology
     scene = _scene(cid)
     graph = {str(k): {str(v) for v in vs}
              for k, vs in passable_neighbors(scene).items()}
     # The plan's topology counts as walkable: a planned stub is a room the
-    # Director furnishes on entry.
-    for rid in planned_room_ids(cid):
-        brief = planned_context(cid, rid) or {}
-        for other in brief.get("adjacent") or ():
-            graph.setdefault(rid, set()).add(str(other))
-            graph.setdefault(str(other), set()).add(rid)
+    # Director furnishes on entry. By ID: `planned_context` renders edges by
+    # NAME for a reader, and a walk over names reached nothing planned.
+    for rid, others in planned_topology(cid).items():
+        for other in others:
+            graph.setdefault(rid, set()).add(other)
+            graph.setdefault(other, set()).add(rid)
     start, goal = str(from_room), str(to_room)
     if start not in graph and start not in (scene.get("rooms") or {}):
         raise ToolError("room %r exists nowhere" % start)
@@ -453,11 +453,15 @@ def _t_read_package(cid, frame_id, *, uid, reveal=False):
 # ---------------------------------------------------------------------------
 
 def _t_new_package(cid, frame_id, *, title, premise="", spoiler_policy="open",
-                   scope=None, authority=None):
+                   scope=None, authority=None, actor="writers_room"):
     from story.plot_packages import new_package, package_projection
+    # `actor` is not a model argument: `run_tool` passes the caller's name
+    # so a package records who drafted it, and a package the Planner drafted
+    # publishes only under a mandate (`plot_packages.AGENT_AUTHORS`).
     pkg = new_package(cid, title=title, premise=premise,
                       spoiler_policy=spoiler_policy, scope=scope,
-                      authority=authority, frame_id=frame_id)
+                      authority=authority, frame_id=frame_id,
+                      created_by=str(actor or "writers_room"))
     return package_projection(pkg)
 
 
@@ -586,7 +590,7 @@ TOOLS = [
      "description": "Open a draft plot package: a title, an author-facing premise, open or sealed spoiler policy, a scope (locations, earliest/latest time) and an authority (what the package may do: create people, author prehistory, schedule harm). Everything the room wants to change in the world is drafted into a package and lands when it is published.",
      "args": _schema({"title": _S, "premise": _S, "spoiler_policy": _S,
                       "scope": _O, "authority": _O}, ["title"]),
-     "handler": _t_new_package},
+     "handler": _t_new_package, "takes_actor": True},
     {"name": "edit_package",
      "description": "Change a draft's fields: title, premise, truths, questions, participants, evidence, pressures, clocks, opportunities, constraints, planner_requests, scope, authority, spoiler_policy. Evidence needs an origin, a location, the truth ids it bears_on and an admission_path. A published package accepts only a superseding truth ({supersedes: <truth id>, text}) with a reason.",
      "args": _schema({"uid": _S, "fields": _O, "reason": _S}, ["uid", "fields"]),
@@ -669,11 +673,14 @@ def _check_args(tool, args):
     return args
 
 
-def run_tool(cid, name, args=None, *, frame_id=None, host=False):
+def run_tool(cid, name, args=None, *, frame_id=None, host=False,
+             actor="writers_room"):
     """The one call site. Checks the arguments against the tool's schema,
     refuses a host-only tool (or a host-only argument) unless ``host``,
     runs the handler, and caps the result at `TOOL_RESULT_CHARS` of JSON.
-    A seam's ValueError is returned as the tool's refusal, not raised."""
+    A seam's ValueError is returned as the tool's refusal, not raised.
+    ``actor`` names the caller -- the host by default, an agent by its name
+    -- and reaches only the tools that record it (`takes_actor`)."""
     tool = TOOL_INDEX.get(str(name))
     if tool is None:
         raise ToolError("no tool %r" % name)
@@ -683,6 +690,8 @@ def run_tool(cid, name, args=None, *, frame_id=None, host=False):
     for key in tool.get("host_only_args") or ():
         if args.get(key) and not host:
             raise ToolError("%s.%s is a host action" % (name, key))
+    if tool.get("takes_actor"):
+        args["actor"] = str(actor or "writers_room")
     try:
         result = tool["handler"](cid, frame_id, **args)
     except ToolError:
