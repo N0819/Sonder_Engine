@@ -574,3 +574,30 @@ def test_an_operation_may_spell_its_kind_as_kind_and_a_refusal_names_the_shape(t
     assert set(OPERATION_FIELDS) == set(OPERATIONS)
     description = TOOL_INDEX["draft_operation"]["description"]
     assert all(kind in description for kind in OPERATIONS)
+
+
+def test_a_shapeless_output_is_reported_and_the_loop_goes_on(temp_db, monkeypatch):
+    """GLM 5.2, live (chat 111, 2026-09-03): a step drafting a whole package
+    ran past the token ceiling; its truncated JSON parsed to {"text": ...},
+    the loop read "no calls" as done and told the player the room had
+    stopped at its budget. Now the model is told, and the next step runs.
+    Arguments written beside the tool name are the arguments."""
+    from agents import story_planner as sp
+    from llm import providers
+    seen = []
+    answers = iter([
+        {"text": "{\"calls\": [{\"tool\": \"draft_op"},
+        {"calls": [{"tool": "inspect_needs", "frame": "x"}]},
+        {"calls": [], "reply": "done"},
+    ])
+    def script(role, system, user, **kw):
+        seen.append(json.loads(user)); return json.dumps(next(answers))
+    monkeypatch.setattr(providers, "chat_complete", script)
+    cid = temp_db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+                     ("Room", "", 0.0))
+    out = sp.run_planner(cid, None, text="hello")
+    assert out["reply"] == "done" and out["steps"] == 3
+    first = seen[1]["transcript"][0]
+    assert first["tool"] is None and "cut off" in first["result"]["error"]
+    called = seen[2]["transcript"][-1]
+    assert called["tool"] == "inspect_needs" and called["args"] == {"frame": "x"}
