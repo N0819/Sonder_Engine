@@ -395,7 +395,8 @@ keeps delivering the arrivals, news and consequences it already scheduled.
 most misleading thing about the ladder. Four other Charter paths carry no
 ladder gate at all and run at every rung including `inert`:
 `commit_charter_observations`, an ordinary commit domain writing bodies'
-private claims from `director_resolve.public_evidence` every beat
+private claims from `director_resolve.public_evidence` every beat and letting
+the bodies in a figure's room see the figure (`sight_figures_in_scene`)
 (`persist/commit.py:453`); `apply_presence_conduct`, which mutates the registry
 from `background_react` output (`persist/commit_background.py:1110`); the
 arrival-residue read; and the planted-structure read. Charter *generation* is

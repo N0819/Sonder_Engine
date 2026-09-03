@@ -2479,6 +2479,7 @@ def carrier_entries(cid, frame_id=None):
     out = []
     for charter_key, item in sorted(registry["items"].items()):
         state = item["state"]
+        anchor = clock_anchor(item)
         roles = {}
         for post, body_key in (state.get("watch") or {}).items():
             roles.setdefault(str(body_key), []).append(str(post))
@@ -2488,7 +2489,8 @@ def carrier_entries(cid, frame_id=None):
             place = str(body.get("place") or "")
             reports = []
             for claim in (state.get("minds") or {}).get(body_key, {}).values():
-                row = report_from_claim(claim, current_location=place)
+                row = report_from_claim(claim, current_location=place,
+                                        anchor=anchor)
                 if row is not None:
                     reports.append(row)
             aliases = identity_aliases(
@@ -2528,8 +2530,9 @@ def save_carrier_state(cid, entry, carrier_state, frame_id=None):
     held = state.setdefault("minds", {}).setdefault(body_key, {})
     changed = False
     at_hours = float(state.get("clock_hours") or 0.0)
+    anchor = clock_anchor(item)
     for report in (carrier_state or {}).get("carried_reports") or ():
-        claim = claim_from_report(report, at_hours)
+        claim = claim_from_report(report, at_hours, anchor=anchor)
         if claim is None:
             continue
         current = held.get(claim["body"])
@@ -2554,6 +2557,101 @@ def save_carrier_state(cid, entry, carrier_state, frame_id=None):
     item["state"] = state
     save_registry(cid, registry, frame_id)
     return True
+
+
+def clock_anchor(item):
+    """The pair `charter_news.charter_hours_of` converts with: this
+    charter's hour clock and the simulation second it was last advanced to.
+    `last_elapsed_seconds` is stamped 0.0 when presim lands and moved by
+    `advance_snapshot`, so the two always describe the same instant. None
+    for a charter never landed, and the converters pass numbers through."""
+    item = item if isinstance(item, dict) else {}
+    elapsed = item.get("last_elapsed_seconds")
+    state = item.get("state") or {}
+    if elapsed is None or state.get("clock_hours") is None:
+        return None
+    return {"clock_hours": float(state.get("clock_hours") or 0.0),
+            "elapsed_seconds": float(elapsed or 0.0)}
+
+
+def sight_figures_in_scene(cid, figures, *, frame_id=None):
+    """Every unbound Charter body standing where a figure stands sees it.
+
+    THE CO-PRESENCE CHANNEL, live. `charter_figure.sight_figures` is the
+    rule -- presence is the whole test -- and it ran only inside offscreen
+    windows over `state.figures`, which nothing in live play ever filled:
+    measured on the Harrowmere playtest, `figures` was `{}` in all eight
+    charters after forty turns, so a body the player stood in front of for
+    a whole conversation held no claim about them unless the player also
+    spoke or acted (`ingest_public_evidence`) or the body greeted them
+    (`apply_presence_conduct`). Walking into a room is the channel a
+    stranger is noticed by; this is that channel.
+
+    ``figures`` is ``[{"key", "place", "label"}]``: the engine's canonical
+    name, the room, and what a stranger sees. The claim is keyed by the
+    name -- one subject per person, however they are dressed -- and its
+    surface carries the label; `presence_view` renders the key back to
+    each observer's own label, so the name reaches a voice only where
+    recognition earned it.
+
+    One cached read decides whether anything would change; the private
+    parse and the save are paid only when a body gains or refreshes a
+    claim (the same gate `ingest_public_evidence` keeps).
+    """
+    from world.charter_figure import sight_figures
+    from world.charter_mind import cap_minds
+
+    wanted = {}
+    for figure in figures or ():
+        if not isinstance(figure, dict):
+            continue
+        key = str(figure.get("key") or "").strip()
+        place = str(figure.get("place") or "").strip()
+        if not key or not place:
+            continue
+        wanted[key] = {"key": key, "place": place,
+                       "surface": {"label": str(figure.get("label") or key)}}
+    if not wanted:
+        return {"figures": 0, "sighted": 0}
+
+    def _unbound(state):
+        bindings = state.get("bindings") or {}
+        return {k: b for k, b in (state.get("bodies") or {}).items()
+                if k not in bindings and k not in wanted}
+
+    def _would_change(state):
+        minds = state.get("minds") or {}
+        for fig_key, figure in wanted.items():
+            for body_key, body in _unbound(state).items():
+                if str(body.get("place") or "") != figure["place"]:
+                    continue
+                current = (minds.get(body_key) or {}).get(fig_key)
+                if current is None or current.get("heard_from") is not None \
+                        or float(current.get("strength") or 0.0) < 1.0 \
+                        or str(current.get("place") or "") != figure["place"]:
+                    return True
+        return False
+
+    if not any(_would_change(item["state"])
+               for item in registry_for(cid, frame_id)["items"].values()):
+        return {"figures": len(wanted), "sighted": 0}
+    registry = registry_for_update(cid, frame_id)
+    sighted = 0
+    for item in registry["items"].values():
+        state = item["state"]
+        if not _would_change(state):
+            continue
+        before = {h: set(c) for h, c in (state.get("minds") or {}).items()}
+        minds = sight_figures(
+            state.setdefault("minds", {}), _unbound(state), wanted,
+            float(state.get("clock_hours") or 0.0))
+        state["minds"] = cap_minds(minds)
+        for holder, claims in state["minds"].items():
+            sighted += len(set(claims) & set(wanted)
+                           - before.get(holder, set()))
+        item["state"] = state
+    save_registry(cid, registry, frame_id)
+    return {"figures": len(wanted), "sighted": sighted}
 
 
 def load_caravan_freight(cid, request, origin, *, frame_id=None):
@@ -2642,12 +2740,17 @@ def exchange_caravan_freight(cid, freight, room, *, frame_id=None):
 
 
 def ingest_public_evidence(cid, evidence_rows, scene, *, turn_id,
-                           frame_id=None):
+                           frame_id=None, labels=None):
     """Deliver one resolved beat to the Charter bodies that sensed it.
 
     One registry read and one conditional write regardless of population or
     witness count.  The expensive/semantic work was already shared at resolve;
     this side is deterministic perception plus sparse claim insertion.
+
+    ``labels`` (canonical actor name -> what a stranger sees) decides how a
+    landed claim reads; ``unplaced`` in the result names actors the scene
+    could not place, which is the one way this seam yields zero for
+    everybody at once and used to do so silently.
     """
     from world.charter_observe import (apply_public_evidence,
                                        plan_public_evidence)
@@ -2665,31 +2768,86 @@ def ingest_public_evidence(cid, evidence_rows, scene, *, turn_id,
     # private parse, so a wrong gate can cost a skipped save or a spare
     # parse, never a wrong stored byte.
     opportunities = acquired = 0
+    unplaced = []
     for item in registry_for(cid, frame_id)["items"].values():
-        plan = plan_public_evidence(item["state"], rows, scene or {}, turn_id)
+        plan = plan_public_evidence(item["state"], rows, scene or {}, turn_id,
+                                    labels=labels)
         opportunities += int(plan["opportunities"])
         acquired += int(plan["acquired"])
+        for actor in plan.get("unplaced") or ():
+            if actor not in unplaced:
+                unplaced.append(actor)
     if not acquired:
         return {"sources": len(rows), "opportunities": opportunities,
-                "acquired": acquired}
+                "acquired": acquired, "unplaced": unplaced}
     registry = registry_for_update(cid, frame_id)
     opportunities = acquired = 0
     for item in registry["items"].values():
         state, metrics = apply_public_evidence(
-            item["state"], rows, scene or {}, turn_id)
+            item["state"], rows, scene or {}, turn_id, labels=labels)
         item["state"] = state
         opportunities += int(metrics.get("opportunities") or 0)
         acquired += int(metrics.get("acquired") or 0)
     if acquired:
         save_registry(cid, registry, frame_id)
     return {"sources": len(rows), "opportunities": opportunities,
-            "acquired": acquired}
+            "acquired": acquired, "unplaced": unplaced}
+
+
+def _figure_labels(figures):
+    """``{canonical key: label}`` from the figures a caller hands over.
+
+    A bare string is a figure whose key and label coincide (a role, a
+    description); a dict carries ``key`` -- the engine's canonical name,
+    which the mind keys its claims by -- and ``label``, how THIS observer
+    renders it (the name where recognition earned it, the stranger label
+    otherwise). Keeping the two apart is what lets a body that met "the
+    slight woman" this morning recognise her this afternoon under a new
+    coat, and lets the name stay out of a payload where nobody said it.
+    """
+    out = {}
+    for figure in figures or ():
+        if isinstance(figure, dict):
+            key = str(figure.get("key") or "").strip()
+            label = str(figure.get("label") or key).strip()
+        else:
+            key = label = str(figure or "").strip()
+        if key:
+            out[key] = label or key
+    return out
+
+
+def _relabel(value, mapping):
+    """Replace every string equal to a figure key -- as a dict key or a
+    value -- with that observer's label, recursively. The presence slice is
+    copied into a voiced payload, so a canonical name surviving anywhere in
+    it (an acquaintance key, a judgment subject, a commitment party) is a
+    name reaching a mind nothing told it to."""
+    if not mapping:
+        return value
+    if isinstance(value, dict):
+        return {mapping.get(k, k) if isinstance(k, str) else k:
+                _relabel(v, mapping) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_relabel(v, mapping) for v in value]
+    if isinstance(value, str):
+        return mapping.get(value, value)
+    return value
 
 
 def presence_view(cid, place, name, frame_id=None, figures=None):
-    """Only what one Charter body earned, never its institution's register."""
+    """Only what one Charter body earned, never its institution's register.
+
+    ``figures`` are the scene-owned people standing here, as ``{key,
+    label}`` (or a bare string where the two coincide); see
+    `_figure_labels`. Everything returned is rendered in this observer's
+    labels, and each affordance row aimed at a figure carries the canonical
+    ``key`` beside its rendered ``other`` so the echo can be resolved
+    without guessing.
+    """
     out = []
     registry = registry_for(cid, frame_id)
+    labels = _figure_labels(figures)
     for charter_key, body_key in _body_refs(registry, name=name):
         item = registry["items"][charter_key]
         state = copy.deepcopy(item["state"])
@@ -2700,12 +2858,11 @@ def presence_view(cid, place, name, frame_id=None, figures=None):
         # for Charter to read or simulate.  They exist only in this aperture;
         # a landed act may leave a claim about the encounter, but no copied
         # character mind survives the call.
-        for figure in figures or ():
-            figure = str(figure or "").strip()
-            if figure and figure not in state["bodies"]:
+        for figure, label in labels.items():
+            if figure not in state["bodies"]:
                 state.setdefault("figures", {})[figure] = {
                     "key": figure, "place": str(place or ""),
-                    "surface": {"label": figure},
+                    "surface": {"label": label},
                 }
         from world.charter import (action_instances, opportunities,
                                    scene_ledger)
@@ -2721,14 +2878,27 @@ def presence_view(cid, place, name, frame_id=None, figures=None):
                     .get("presences", {}).get(body_key))
         if presence is None:
             continue
+        # Exact typed options.  The model may echo one; prose can never
+        # smuggle a Charter mutation through this seam. A row aimed at a
+        # figure keeps the canonical key beside the rendered `other`.
+        rows = []
+        for row in (action_instances(state, actor=body_key)
+                    .get(body_key) or [])[:6]:
+            row = copy.deepcopy(row)
+            other = str(row.get("other") or "")
+            if other in labels:
+                row["key"] = other
+                row["other"] = labels[other]
+                # The practice id embeds its parties' keys.
+                if isinstance(row.get("practice"), str):
+                    row["practice"] = row["practice"].replace(
+                        other, labels[other])
+            rows.append(row)
         out.append({
             "charter": charter_key,
             "body": body_key,
-            "presence": copy.deepcopy(presence),
-            # Exact typed options.  The model may echo one; prose can never
-            # smuggle a Charter mutation through this seam.
-            "action_instances": copy.deepcopy(
-                (action_instances(state, actor=body_key).get(body_key) or [])[:6]),
+            "presence": _relabel(copy.deepcopy(presence), labels),
+            "action_instances": rows,
         })
     return out[:2]
 
@@ -3043,6 +3213,16 @@ def apply_presence_conduct(cid, name, conduct, *, record=None, frame_id=None,
     if (act, other) not in permitted:
         return {"actor": str(name), "act": act, "other": other,
                 "refused": "not_offered_to_scene_life"}
+    # The model echoed the rendered label; the offer row that licensed it
+    # carries the canonical key (`presence_view`), which is what the mind
+    # keys the encounter by. Without this the greet path minted a second
+    # subject under the label beside the one sighting and evidence keep.
+    shown = other
+    other = next((str(row.get("key")) for row in (allowed or ())
+                  if isinstance(row, dict) and row.get("key")
+                  and (str(row.get("act") or ""),
+                       str(row.get("other") or "")) == (act, shown)),
+                 other)
     registry = registry_for_update(cid, frame_id)
     refs = (record or {}).get("charter_refs") or ()
     matches = _body_refs(registry, name=name, refs=refs)
@@ -3057,7 +3237,7 @@ def apply_presence_conduct(cid, name, conduct, *, record=None, frame_id=None,
     if temporary_figure:
         state.setdefault("figures", {})[other] = {
             "key": other, "place": str(place or ""),
-            "surface": {"label": other},
+            "surface": {"label": shown},
         }
     state, result = authored(state, body_key, act, other)
     if temporary_figure:
