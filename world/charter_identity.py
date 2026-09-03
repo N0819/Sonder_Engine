@@ -115,7 +115,16 @@ def _syllable_name(parts, seed):
     if middles:
         middle = middles[_number(seed, 1) % len(middles)]
     end = ends[_number(seed, 2) % len(ends)]
-    return f"{start}{middle}{end}"
+    assembled = f"{start}{middle}{end}"
+    # A FRAGMENT IS SOUND; A NAME IS A PROPER NOUN. The law's parts are
+    # syllables a model wrote in lower case ("hal", "in", "ham"), and joined
+    # as written they reached play as "halinham nookfeller" on every body of a
+    # generated town (Harrowmere playtest, 2026-09-02). A pool word keeps its
+    # author's spelling; an assembled component has no author's spelling to
+    # keep, so it takes the one thing every proper noun has -- a capital at
+    # the front. `upper()` is a no-op on a script without case, so a law
+    # written in kana is left exactly as assembled.
+    return assembled[:1].upper() + assembled[1:]
 
 
 def _component(pool, parts, seed, lane):
