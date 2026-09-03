@@ -775,6 +775,43 @@ def _preserved_settings(chat_id):
     return preserved
 
 
+def _discard_orphaned_mint(chat_id, char_id):
+    """Take a promotion's LIBRARY row back with its cast link.
+
+    The sweep above removes the `chat_chars` row of a character the discarded
+    run promoted; until 2026-09-03 the `characters` row it minted stayed
+    behind, attached to nothing, and the library tab listed it beside the
+    story's real cast. The presence ledger, restored from the checkpoint,
+    still held the same person, so the next beat promoted them AGAIN --
+    `_refuse_name_collision` reads attached cast, and an orphan is not
+    attached. Measured on chat 58: "A Dalek" minted twice in one evening
+    (characters 48 and 49), the first in no story and with no memory.
+
+    Narrow by construction, because a library row is the host's: only a row
+    whose `source` says THIS chat promoted it, that no chat links (a branch
+    copies the link, never the character -- web.app.turn_branch), and that
+    no other chat's memory names. Everything else the sweep detached is left
+    exactly where it is.
+    """
+    row = q("SELECT source FROM characters WHERE id=?", (char_id,), one=True)
+    if not row:
+        return
+    try:
+        source = json.loads(row["source"] or "{}")
+    except (TypeError, ValueError):
+        return
+    if not isinstance(source, dict) or source.get("format") != "promoted":
+        return
+    if str(source.get("chat_id")) != str(chat_id):
+        return
+    if q("SELECT 1 FROM chat_chars WHERE char_id=?", (char_id,), one=True):
+        return
+    if q("SELECT 1 FROM memories WHERE char_id=? AND chat_id!=?",
+         (char_id, chat_id), one=True):
+        return
+    qi("DELETE FROM characters WHERE id=?", (char_id,))
+
+
 def _restore_checkpoint_body(chat_id, r):
     b = json.loads(r["blob"])
     # Any embedding work (only needed for legacy blobs that predate
@@ -832,6 +869,7 @@ def _restore_checkpoint_body(chat_id, r):
                     "DELETE FROM chat_chars WHERE chat_id=? AND char_id=?",
                     (chat_id, row["char_id"]),
                 )
+                _discard_orphaned_mint(chat_id, row["char_id"])
         for cidk, st in (b.get("chars") or {}).items():
             if isinstance(st, dict) and "status" in st and "state" in st:
                 qi("UPDATE chat_chars SET state=?,status=? WHERE chat_id=? AND char_id=?",
