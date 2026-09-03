@@ -10,6 +10,7 @@ from mind.memory import (
     prepare_memory_summary_restore, apply_memory_summary_restore,
     dump_lorebook, restore_lorebook, chat_lorebook_ids,
     dump_lorebook_links, restore_lorebook_links,
+    dump_lore_overlays, restore_lore_overlays,
 )
 
 def snapshot_state(chat_id):
@@ -72,6 +73,19 @@ def snapshot_state(chat_id):
             continue
         att = q("SELECT enabled FROM chat_lorebooks WHERE chat_id=? AND lorebook_id=?",
                 (chat_id, lid), one=True)
+        if lbrow["chat_id"] != chat_id:
+            # A LIBRARY book the story reads by reference: the snapshot keeps
+            # the reference (and the attachment's enabled flag), never the
+            # entries -- restoring a shared resource from one story's
+            # checkpoint is not this snapshot's business. What the story
+            # changed about it is in `lore_overlays` below.
+            books.append({
+                "lorebook_id": lid, "library": True,
+                "resource_uid": lbrow["resource_uid"], "name": lbrow["name"],
+                "origin_id": None, "canon": False,
+                "enabled": att["enabled"] if att else 1,
+            })
+            continue
         books.append({
             "lorebook_id": lid, "origin_id": lbrow["origin_id"],
             # A book's PORTABLE identity, carried so a re-created book comes
@@ -98,6 +112,8 @@ def snapshot_state(chat_id):
 
     # Snapshot links
     links = dump_lorebook_links(book_ids)
+    # The story's deviations from its library, portable by entry uid.
+    overlays = dump_lore_overlays(chat_id)
 
     world_entities = [
         {"entity_id": r["entity_id"], "kind": r["kind"], "subtype": r["subtype"],
@@ -176,6 +192,7 @@ def snapshot_state(chat_id):
         "memory_summaries": dump_memory_summaries(chat_id),
         "lore": lore, "lorebooks": books,
         "lorebook_links": links,
+        "lore_overlays": overlays,
         "world_entities": world_entities,
         "world_placements": world_placements,
         "world_conditions": world_conditions,
@@ -263,7 +280,41 @@ def _restore_books(chat_id, books, links=None):
         by_name.setdefault(row["name"], lid)
     
     old_to_new = {}
+    library_kept = set()
     for snapshot in (books or []):
+        # A LIBRARY REFERENCE -- snapshotted as one (`library`), or a
+        # pre-2026-09 copy whose `origin_id` still names a live library
+        # book (its copy is gone, converted by `db._migrate_chat_copies_to_
+        # overlays`, and must NOT be re-created from the snapshot's entries,
+        # which would undo the conversion on the next reroll). Either way
+        # the restore is: attach the library book at the snapshot's enabled,
+        # touch none of its entries, and map the snapshot id onto it so links
+        # follow.
+        lib_id = None
+        if snapshot.get("library"):
+            lib_id = snapshot.get("lorebook_id")
+            if lib_id is not None and not q(
+                    "SELECT 1 FROM lorebooks WHERE id=? AND chat_id IS NULL",
+                    (lib_id,), one=True):
+                uid = snapshot.get("resource_uid")
+                row = q("SELECT id FROM lorebooks WHERE resource_uid=? "
+                        "AND chat_id IS NULL", (uid,), one=True) if uid else None
+                lib_id = row["id"] if row else None
+        elif snapshot.get("origin_id") is not None \
+                and snapshot.get("lorebook_id") not in current:
+            row = q("SELECT id FROM lorebooks WHERE id=? AND chat_id IS NULL",
+                    (snapshot["origin_id"],), one=True)
+            lib_id = row["id"] if row else None
+        if lib_id is not None:
+            qi("INSERT OR IGNORE INTO chat_lorebooks(chat_id,lorebook_id,enabled) "
+               "VALUES(?,?,?)",
+               (chat_id, lib_id, 1 if snapshot.get("enabled", 1) else 0))
+            qi("UPDATE chat_lorebooks SET enabled=? WHERE chat_id=? AND lorebook_id=?",
+               (1 if snapshot.get("enabled", 1) else 0, chat_id, lib_id))
+            library_kept.add(lib_id)
+            if snapshot.get("lorebook_id"):
+                old_to_new[snapshot["lorebook_id"]] = lib_id
+            continue
         target = snapshot.get("lorebook_id")
         if target not in current:
             origin = snapshot.get("origin_id")
@@ -323,6 +374,14 @@ def _restore_books(chat_id, books, links=None):
     for lid in list(current.keys()):
         if lid not in matched:
             qi("DELETE FROM lorebooks WHERE id=? AND chat_id=?", (lid, chat_id))
+    # A library book attached AFTER the snapshot is detached by the same
+    # rule that deletes a book minted after it: the snapshot is the book set.
+    for row in q("SELECT cl.lorebook_id AS lid FROM chat_lorebooks cl "
+                 "JOIN lorebooks lb ON lb.id=cl.lorebook_id "
+                 "WHERE cl.chat_id=? AND lb.chat_id IS NULL", (chat_id,)):
+        if row["lid"] not in library_kept:
+            qi("DELETE FROM chat_lorebooks WHERE chat_id=? AND lorebook_id=?",
+               (chat_id, row["lid"]))
 
     # Restore the canon binding to the snapshot's -- and clear a canon bound
     # AFTER the snapshot (the snapshot had no canon) so discarded-timeline
@@ -801,6 +860,9 @@ def _restore_checkpoint_body(chat_id, r):
         if "lorebooks" in b:
             book_map = _restore_books(
                 chat_id, b.get("lorebooks") or [], b.get("lorebook_links") or [])
+        if "lore_overlays" in b:
+            # Same chat, same frame ids: the overlays go back as dumped.
+            restore_lore_overlays(chat_id, b.get("lore_overlays") or [])
 
         # room_registry rows embed book ids; a same-chat restore usually
         # maps books onto their original ids, but _restore_books can match
@@ -1342,7 +1404,7 @@ def refresh_checkpoint(chat_id, turn_idx):
                 (chat_id, turn_idx, json.dumps(fresh), time.time()),
             )
         blob = json.loads(row["blob"])
-        for key in ("lore", "lorebooks", "lorebook_links"):
+        for key in ("lore", "lorebooks", "lorebook_links", "lore_overlays"):
             blob[key] = fresh.get(key)
         qi(
             "UPDATE checkpoints SET blob=?, created=? WHERE chat_id=? AND turn_idx=?",

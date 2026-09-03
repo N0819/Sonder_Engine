@@ -44,12 +44,14 @@ from mind.memory import (
     dump_chat_memories,
     dump_lorebook,
     dump_lorebook_links,
+    dump_lore_overlays,
     dump_memory_summaries,
     dump_memory_vectors,
     restore_chat_memories,
     restore_memory_vectors,
     restore_lorebook,
     restore_lorebook_links,
+    restore_lore_overlays,
     restore_memory_summaries,
 )
 
@@ -197,6 +199,9 @@ class ChatArchiveData(LenientModel):
     # `memory_vectors` is declared above: an undeclared field validates and
     # is silently dropped.
     room_messages: list[dict[str, Any]] = Field(default_factory=list)
+    # LORE OVERLAYS (mind/memory_lore_entries.py): what this story changed
+    # about the library entries it reads, portable by entry uid.
+    lore_overlays: list[dict[str, Any]] = Field(default_factory=list)
 
     @validator(
         "frames",
@@ -214,6 +219,7 @@ class ChatArchiveData(LenientModel):
         "turn_player_inputs",
         "lorebook_links",
         "room_messages",
+        "lore_overlays",
         pre=True,
         always=True,
     )
@@ -289,6 +295,7 @@ class ChatArchiveService:
             "checkpoints": [],
             "lorebook": None,
             "lorebooks": [],
+            "lore_overlays": [],
         }
         export["frames"] = [
             dict(f) for f in q("SELECT * FROM frames WHERE chat_id=?", (cid,))
@@ -408,9 +415,14 @@ class ChatArchiveService:
                     "book": dict(lorebook),
                     "canon": lorebook_id == canon,
                     "enabled": attachment["enabled"] if attachment else 1,
+                    # A LIBRARY book is bundled whole so an install that lacks
+                    # it can create it, and flagged so one that has it (by
+                    # `resource_uid`) links to its own copy instead.
+                    "library": lorebook["chat_id"] is None,
                     "entries": dump_lorebook(lorebook_id),
                 }
             )
+        export["lore_overlays"] = dump_lore_overlays(cid)
         if canon:
             lorebook = q(
                 "SELECT * FROM lorebooks WHERE id=?", (canon,), one=True
@@ -839,6 +851,50 @@ class ChatArchiveService:
                 # cannot break a child-before-parent hierarchy.
                 for book_data in books:
                     book = book_data.get("book", {})
+                    if book_data.get("library"):
+                        # A library book: link to this install's own by
+                        # portable uid, else create it AS a library book and
+                        # attach by reference. Never a chat copy.
+                        existing = q(
+                            "SELECT id FROM lorebooks WHERE resource_uid=? "
+                            "AND chat_id IS NULL",
+                            (book.get("resource_uid"),), one=True
+                        ) if book.get("resource_uid") else None
+                        if existing:
+                            lib_id = existing["id"]
+                        else:
+                            lib_id = qtx(
+                                "INSERT INTO lorebooks("
+                                "name,chat_id,origin_id,book_type,summary,"
+                                "resource_uid,parent_id,scope_world_id,"
+                                "scope_location_id,inheritance_mode,"
+                                "default_circles,sort_order,anchor_entity_id"
+                                ") VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                                (
+                                    book.get("name") or "book", None, None,
+                                    book.get("book_type") or "general",
+                                    book.get("summary") or "",
+                                    self._import_book_uid(book.get("resource_uid")),
+                                    None,
+                                    book.get("scope_world_id"),
+                                    book.get("scope_location_id"),
+                                    book.get("inheritance_mode") or "inherit",
+                                    book.get("default_circles") or "[]",
+                                    int(book.get("sort_order") or 0),
+                                    book.get("anchor_entity_id"),
+                                ),
+                            )
+                            restore_lorebook(lib_id, book_data.get("entries") or [])
+                        if book.get("id"):
+                            bookmap[book["id"]] = lib_id
+                        qtx(
+                            "INSERT OR IGNORE INTO chat_lorebooks("
+                            "chat_id,lorebook_id,origin_id,enabled"
+                            ") VALUES(?,?,NULL,?)",
+                            (new_chat_id, lib_id,
+                             1 if book_data.get("enabled", 1) else 0),
+                        )
+                        continue
                     new_book_id = qtx(
                         "INSERT INTO lorebooks("
                         "name,chat_id,origin_id,book_type,summary,resource_uid,"
@@ -893,6 +949,8 @@ class ChatArchiveService:
 
                 for book_data in books:
                     book = book_data.get("book", {})
+                    if book_data.get("library"):
+                        continue
                     new_book_id = bookmap.get(book.get("id"))
                     if new_book_id is None:
                         continue
@@ -975,6 +1033,11 @@ class ChatArchiveService:
             # remapped, a line of an era that did not come across dropped.
             restore_room_messages(
                 new_chat_id, data.get("room_messages") or [],
+                frame_idmap=frame_idmap)
+            # LORE OVERLAYS: resolved by entry uid onto whichever library
+            # rows this install holds; an overlay on an entry it lacks drops.
+            restore_lore_overlays(
+                new_chat_id, data.get("lore_overlays") or [],
                 frame_idmap=frame_idmap)
 
             for event in data.get("events") or []:

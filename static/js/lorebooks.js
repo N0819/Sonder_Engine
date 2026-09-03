@@ -458,10 +458,23 @@ function renderLoreLibrarySidebar(list, actions) {
 
 // ---- Data loading ----------------------------------------------------------
 
+// A LIBRARY book opened from inside a story is read AS THAT STORY reads it:
+// the story's overlays merged over the library rows, each marked
+// (`entry.overlay`). Edits made here write the story's overlay, never the
+// shared library; additions land in the story's canon book. Opened with no
+// story selected, the library is shown and edited as written.
+function loreStoryQuery() {
+  return S.chatId ? `?chat_id=${encodeURIComponent(S.chatId)}` : "";
+}
+
+function loreBookIsLibrary(book) {
+  return book && (book.chat_id == null);
+}
+
 async function loadLoreWorkspaceData(selectedId) {
   const selectedResponse = await api(
     "GET",
-`/api/lorebooks/${selectedId}`
+`/api/lorebooks/${selectedId}${loreStoryQuery()}`
   );
 
   const selectedBook = normalizeLoreBook(
@@ -1698,15 +1711,21 @@ function renderLoreEntries(state, container) {
       "button",
       {
         onclick: async () => {
+          const inStory = S.chatId && loreBookIsLibrary(state.selected);
           const result = await api(
             "POST",
 `/api/lorebooks/${state.selected.id}/entries`,
             {
               keys: "",
               content: "New entry",
-              category: "other"
+              category: "other",
+              ...(inStory ? { chat_id: S.chatId } : {})
             }
           );
+
+          if (result?.redirected_to) {
+            toast("Added to the story's canon book; the library is unchanged.", "ok");
+          }
 
           await refreshLoreUI(state.selected.id);
 
@@ -2000,6 +2019,16 @@ function buildLoreEntryCard(state, entry) {
       entry.canon_locked || entry.locked
         ? el("span", { class: "badge warn" }, "locked")
         : null,
+      entry.overlay
+        ? el(
+            "span",
+            {
+              class: "badge",
+              title: "This story's reading of a library entry; the library is unchanged"
+            },
+            "story edit"
+          )
+        : null,
       el(
         "span",
         { class: "small dim" },
@@ -2070,10 +2099,12 @@ function buildLoreEntryCard(state, entry) {
                     ? splitCL(knowledgeLocationsInput.value)
                     : [];
 
-                  await api(
+                  const inStory = S.chatId && loreBookIsLibrary(state.selected);
+                  const saved = await api(
                     "PUT",
 `/api/lore_entries/${entry.id}`,
                     {
+                      ...(inStory ? { chat_id: S.chatId } : {}),
                       keys: keysInput.value,
                       title: titleInput.value || null,
                       category: categorySelect.value,
@@ -2119,7 +2150,12 @@ function buildLoreEntryCard(state, entry) {
                     }
                   );
 
-                  toast("Entry saved.", "ok");
+                  toast(
+                    saved?.entry?.overlay
+                      ? "Story edit saved; the library is unchanged."
+                      : "Entry saved.",
+                    "ok"
+                  );
                   await refreshLoreUI(state.selected.id);
                 }
               );
@@ -2127,7 +2163,32 @@ function buildLoreEntryCard(state, entry) {
           },
           "Save entry"
         ),
-        el(
+        (S.chatId && loreBookIsLibrary(state.selected))
+          ? (entry.overlay
+              ? el(
+                  "button",
+                  {
+                    title: "Drop this story's edit and read the library's entry again",
+                    onclick: async () => {
+                      if (!await confirmModal("Revert this entry to the library's text?", { confirmLabel: "Revert" })) {
+                        return;
+                      }
+                      await api(
+                        "DELETE",
+`/api/lore_entries/${entry.id}/overlay?chat_id=${encodeURIComponent(S.chatId)}`
+                      );
+                      toast("Reverted to the library.", "ok");
+                      await refreshLoreUI(state.selected.id);
+                    }
+                  },
+                  "Revert to library"
+                )
+              : el(
+                  "span",
+                  { class: "small dim" },
+                  "A library entry is deleted from the library, not from a story."
+                ))
+          : el(
           "button",
           {
             class: "danger",

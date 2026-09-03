@@ -37,6 +37,12 @@ from persist.checkpoints import snapshot_state
 _CARRIED_ELSEWHERE = {
     "world", "frames", "chat_personas", "memories", "memory_summaries",
     "lorebooks",
+    # `lore_overlays` ride the blob PORTABLY -- by the library entry's uid,
+    # not its row id -- and `turn_branch` puts them back through
+    # `restore_lore_overlays` with the branch's frame map. A probe row cannot
+    # be inserted for them either: `entry_id` is a NOT NULL foreign key onto
+    # `lore_entries`, so a synthetic 0 fails before the branch is asked.
+    "lore_overlays",
 }
 
 

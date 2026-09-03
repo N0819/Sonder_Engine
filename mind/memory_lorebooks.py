@@ -233,14 +233,23 @@ def resolve_lorebook_graph(
     max_link_depth=2,
 ):
     def _owned(book_id):
+        """READABLE by this chat, which is what the walk actually asks.
+
+        A story reads its own books and the LIBRARY (books no chat owns);
+        it never reads another story's. Until 2026-09-03 a library book was
+        excluded here too, which was harmless only because attaching one
+        duplicated it into a chat-owned copy; a book attached by reference
+        has to be admitted as itself, and so do the library ancestors,
+        children and links it hangs with.
+        """
         if book_id is None:
             return False
         row = q("SELECT chat_id FROM lorebooks WHERE id=?", (book_id,), one=True)
         if not row:
             return False
-        if chat_id is None:
-            return row["chat_id"] is None
-        return row["chat_id"] == chat_id
+        if row["chat_id"] is None:
+            return True
+        return chat_id is not None and row["chat_id"] == chat_id
 
     root_ids = [rid for rid in root_ids if _owned(rid)]
     visited = {}

@@ -19,13 +19,14 @@ the empty containers). `PipelineContext.world_context()` is the one read.
 
 from __future__ import annotations
 
-from core.db import wget
+from core.db import wget, wget_for_frame
 from mind.memory import search_lore
 from story.scene import (
     cast_scene_context,
     get_scene,
     recent_events,
 )
+from world.spatial import normalize_room_id
 
 from .common import (
     _books,
@@ -41,6 +42,17 @@ WORLD_CONTEXT_LORE_K = 14
 WORLD_CONTEXT_LORE_CAP = 12
 #: Recent beats folded into the retrieval query -- the full stage's window.
 WORLD_CONTEXT_RECENT_EVENTS = 5
+
+#: The RULEBOOK slice: engine rows rendered from typed data the Director
+#: rules on -- the day cycle, the weather, the authored mechanics of a
+#: creature in view, the posts an institution holds here. A mechanic authored
+#: as data is never also authored as prose: the compiler renders the prose
+#: from the data, so the two cannot disagree. Bounded so a town with forty
+#: institutions in view does not hand the Director a treatise.
+RULEBOOK_ROWS_CAP = 8
+RULEBOOK_ROW_CHARS = 400
+#: Rooms of the scene walked for figures and creatures in view.
+RULEBOOK_ROOMS_CAP = 24
 
 #: The fields a relevant-lore row carries onto the step. The engine's own
 #: rows, verbatim -- there is no model echo to join any more, which was the
@@ -80,6 +92,40 @@ def _query(ctx, interp):
     return _join_text(pieces)
 
 
+def is_contained_destination(target, scene):
+    """True when ``target`` names a scene ENTITY or an entity's inside.
+
+    WHERE A BODY WALKS IS ITS OWN; WHERE THE WORLD PUTS IT IS THE DIRECTOR'S.
+    A body put inside another body is a place the moment it happens -- the
+    spatial hand mints the room with `parent_entity` -- and no plan can hold
+    it in advance, so a destination that is an entity (by id or name), a room
+    an entity already lists as its interior, or a spelling of that entity's
+    inside (the engine's containment rooms are `<entity>_<part>`) is
+    `contained`, never `unplanned`, and raises no need. Measured live
+    (chats 74-76): every containment room the Director minted would have
+    been filed as a door the plan forgot.
+    """
+    folded = normalize_room_id(str(target or ""))
+    if not folded:
+        return False
+    rooms = (scene or {}).get("rooms") or {}
+    room = rooms.get(str(target))
+    if isinstance(room, dict) and str(room.get("parent_entity") or "").strip():
+        return True
+    for eid, entity in ((scene or {}).get("entities") or {}).items():
+        entity = entity if isinstance(entity, dict) else {}
+        spellings = {normalize_room_id(str(eid)),
+                     normalize_room_id(str(entity.get("name") or ""))} - {""}
+        if folded in spellings:
+            return True
+        if any(folded.startswith(sp + "_") for sp in spellings):
+            return True
+        for rid in entity.get("interior_rooms") or ():
+            if normalize_room_id(str(rid)) == folded:
+                return True
+    return False
+
+
 def classify_movement(interp, scene, *, planned_for):
     """Where the beat is going, and whether the world has it.
 
@@ -87,9 +133,11 @@ def classify_movement(interp, scene, *, planned_for):
     plan holds under that spelling, or None. Returns
     ``{"to_room", "status"}`` with status one of ``known`` (a scene room),
     ``planned`` (the plan holds it; the Director furnishes it on entry),
-    ``unplanned`` (neither -- a planning need), or ``None`` when the beat
-    declares no destination. This is the classification `mapping_quick`
-    made to decide whether to escalate; it is now a fact on the step.
+    ``contained`` (an entity or its inside -- the Director's to mint, see
+    `is_contained_destination`), ``unplanned`` (none of these -- a planning
+    need), or ``None`` when the beat declares no destination. This is the
+    classification `mapping_quick` made to decide whether to escalate; it is
+    now a fact on the step.
     """
     mv = interp.get("movement") if isinstance(interp, dict) else None
     target = mv.get("to_room") if isinstance(mv, dict) else None
@@ -100,6 +148,8 @@ def classify_movement(interp, scene, *, planned_for):
         return {"to_room": target, "status": "known"}
     if planned_for(target):
         return {"to_room": target, "status": "planned"}
+    if is_contained_destination(target, scene):
+        return {"to_room": target, "status": "contained"}
     return {"to_room": target, "status": "unplanned"}
 
 
@@ -117,9 +167,8 @@ def _location_query_status(query, scene, *, planned_for, destination=None):
     """
     if not query:
         return None
-    from world.spatial import normalize_room_id
 
-    if destination in ("known", "planned"):
+    if destination in ("known", "planned", "contained"):
         return destination
     folded = normalize_room_id(str(query))
     if not folded:
@@ -134,7 +183,114 @@ def _location_query_status(query, scene, *, planned_for, destination=None):
             return "known"
     if planned_for(query):
         return "planned"
+    if is_contained_destination(query, scene):
+        return "contained"
     return "unmatched"
+
+
+def _rulebook_text(text):
+    return " ".join(str(text or "").split())[:RULEBOOK_ROW_CHARS]
+
+
+def rulebook_rows(cid, scene, frame_id=None):
+    """The RULEBOOK slice: what the Director rules on, rendered verbatim
+    from the engine's own typed data -- no model, no lore entry, no second
+    authored copy. Rows: ``{source, subject, text}``. Fail-open: a story with
+    no clock, no weather and no charter has no rulebook.
+    """
+    rows = []
+    # The day. `simulation_clock` is the day cycle's ledger
+    # (`persist/commit_scene_state._advance_day_cycle`).
+    try:
+        from world.day_cycle import (DAY_LENGTH_HOURS_DEFAULT, DIMMING_SKIES,
+                                     SUN_LIGHT, phase_of_hour)
+        clock = wget_for_frame(cid, "simulation_clock", frame_id, {}) or {}
+        hour = clock.get("hour_of_day")
+        length = float(clock.get("day_length_hours") or DAY_LENGTH_HOURS_DEFAULT)
+        phase = clock.get("phase") or (
+            phase_of_hour(float(hour), length) if hour is not None else None)
+        if phase:
+            sky = str(((scene or {}).get("weather") or {}).get("sky") or "")
+            light = SUN_LIGHT.get(phase, "")
+            if light == "lit" and sky in DIMMING_SKIES:
+                light = "dim"
+            text = "The day here runs %g hours; it is %s%s." % (
+                length, phase,
+                (" (about hour %g)" % round(float(hour), 1)) if hour is not None else "")
+            if light:
+                text += " The sun gives an outdoor room %s light%s." % (
+                    light, (" under a %s sky" % sky) if sky else "")
+            rows.append({"source": "day_cycle", "subject": "the day",
+                         "text": _rulebook_text(text)})
+    except Exception:
+        pass
+    # The weather, as declared (`world/weather.normalize_weather`).
+    try:
+        from world.weather import normalize_weather
+        weather = normalize_weather((scene or {}).get("weather"))
+        if weather:
+            parts = ["sky %s" % weather.get("sky")]
+            if weather.get("precipitation") and weather["precipitation"] != "none":
+                parts.append("%s %s" % (weather.get("intensity") or "",
+                                        weather["precipitation"]))
+            if weather.get("wind"):
+                parts.append("wind %s" % weather["wind"])
+            if weather.get("temperature"):
+                parts.append("%s" % weather["temperature"])
+            rows.append({"source": "weather", "subject": "the weather",
+                         "text": _rulebook_text("Weather: " + ", ".join(
+                             " ".join(p.split()) for p in parts) + ".")})
+    except Exception:
+        pass
+    # Institutions and creatures in view (`world/charter_runtime`).
+    try:
+        from agents.common import present_charter_figures
+        from world.charter_creature import normalize_creature
+        from world.charter_runtime import registry_for
+        rooms = list(((scene or {}).get("rooms") or {}).keys())[:RULEBOOK_ROOMS_CAP]
+        figures = present_charter_figures(cid, scene, rooms, frame_id=frame_id) if rooms else []
+        by_charter = {}
+        for row in figures:
+            key = str(row.get("charter") or "")
+            if key:
+                by_charter.setdefault(key, []).append(row)
+        if by_charter:
+            registry = registry_for(cid, frame_id) or {}
+            items = registry.get("items") or {}
+            for key, present in by_charter.items():
+                item = items.get(key) or {}
+                state = item.get("state") if isinstance(item.get("state"), dict) else item
+                name = str(state.get("name") or state.get("title") or key)
+                creature = normalize_creature(state.get("creature"))
+                if creature:
+                    text = ("%s is a creature: it hunts %s within %d room(s) of "
+                            "itself, %s open doors, and is abroad %s. It is %s "
+                            "bold; %d of its kind stand here." % (
+                                name, ", ".join(creature["prey"]) or "nothing",
+                                creature["senses"]["range_rooms"],
+                                "can" if creature["can_open_doors"] else "cannot",
+                                ("in the %s" % ", ".join(creature["active_phases"]))
+                                if creature["active_phases"] else "at any hour",
+                                "%.0f%%" % (100 * creature["boldness"]), len(present)))
+                    if creature["bargains"]:
+                        text += " It holds a bargain with %s." % ", ".join(
+                            b["with"] for b in creature["bargains"])
+                    rows.append({"source": "creature:%s" % key, "subject": name,
+                                 "text": _rulebook_text(text)})
+                    continue
+                posts = {}
+                for row in present:
+                    for post in row.get("posts") or ():
+                        posts[post] = posts.get(post, 0) + 1
+                if posts:
+                    text = "%s holds these posts here: %s." % (name, ", ".join(
+                        "%s (%d)" % (post, n) if n > 1 else post
+                        for post, n in sorted(posts.items())))
+                    rows.append({"source": "charter:%s" % key, "subject": name,
+                                 "text": _rulebook_text(text)})
+    except Exception:
+        pass
+    return rows[:RULEBOOK_ROWS_CAP]
 
 
 def compile_world_context(ctx, nonce):
@@ -155,8 +311,10 @@ def compile_world_context(ctx, nonce):
     query = _query(ctx, interp)
     books = _books(ctx, refresh=True)
     weights = _book_weights(ctx, refresh=True)
+    frame_id = getattr(ctx.turn, "frame_id", None)
     hits = search_lore(weights, query, k=WORLD_CONTEXT_LORE_K,
-                       exclude_categories=["knowledge"])
+                       exclude_categories=["knowledge"],
+                       chat_id=cid, frame_id=frame_id)
     # Living world, approach D: a location entry the beat is about to work
     # from may carry the history the unvisited place has accrued. This seam
     # is the obligation ledger's ONLY consumer -- the place's debt surfaces
@@ -211,7 +369,6 @@ def compile_world_context(ctx, nonce):
         planned = planned_for(location_query)
 
     needs = []
-    frame_id = getattr(ctx.turn, "frame_id", None)
     turn_idx = getattr(ctx.turn, "idx", 0) or 0
     mv = interp.get("movement") if isinstance(interp.get("movement"), dict) else {}
     if movement["status"] == "unplanned":
@@ -255,9 +412,17 @@ def compile_world_context(ctx, nonce):
                f"{len(relevant_books)} book(s)")
     if unique:
         summary += f"; {len(unique)} planning need(s) raised"
+    try:
+        rulebook = rulebook_rows(cid, scene, frame_id)
+    except Exception as exc:
+        ctx.add_warning(f"rulebook not compiled: {exc}")
+        rulebook = []
+
     return {
         "relevant_lore": merged,
         "relevant_books": relevant_books,
+        # Engine rows the Director rules on, rendered from typed data.
+        "rulebook": rulebook,
         # The compiler never stages and never patches: a room the beat
         # reached with no plan is a NEED, not a proposal.
         "staged_lore": [],
