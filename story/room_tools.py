@@ -433,6 +433,7 @@ def _t_inspect_config(cid, frame_id):
                  "change and why, and let the host turn it."),
         "style": {
             "tone": guide.get("tone", ""),
+            "avoid": guide.get("avoid", ""),
             "weather_severity": guide.get("weather_severity"),
             "narration_tense": guide.get("narration_tense"),
             "day_length_hours": guide.get("day_length_hours"),

@@ -39,7 +39,7 @@
 | `core/pipeline_context.py` | 505 | Typed mutable context passed through a turn pipeline. | `core.db` |
 | `core/updates.py` | 399 |  | `core.paths` |
 | `dressing/__init__.py` | 6 |  | — |
-| `dressing/ambience.py` | 2064 |  | `core`, `core.db`, `core.paths`, `dressing.backdrops`, `world.weather` |
+| `dressing/ambience.py` | 2072 |  | `core`, `core.db`, `core.paths`, `dressing.backdrops`, `world.weather` |
 | `dressing/backdrops.py` | 1313 |  | `core`, `core.db`, `core.logging_utils`, `core.paths`, `world.day_cycle`, `world.spatial`, `world.weather` |
 | `llm/__init__.py` | 6 |  | — |
 | `llm/llm_quality.py` | 813 | Strict JSON parsing, schema validation, and model-assisted repair. | `core.pipeline_context`, `llm.prompts`, `llm.providers`, `llm.schemas` |
@@ -111,8 +111,8 @@
 | `story/room_frontier.py` | 217 |  | `core.db` |
 | `story/room_proposals.py` | 264 |  | `core.db` |
 | `story/room_research.py` | 371 |  | `core.db` |
-| `story/room_tools.py` | 816 |  | `story.plot_packages`, `story.room_research` |
-| `story/scene.py` | 2738 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `core.db`, `story`, `story.attire`, `story.character_schema`, `world.day_cycle`, `world.spatial` |
+| `story/room_tools.py` | 817 |  | `story.plot_packages`, `story.room_research` |
+| `story/scene.py` | 2746 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `core.db`, `story`, `story.attire`, `story.character_schema`, `world.day_cycle`, `world.spatial` |
 | `web/__init__.py` | 6 |  | — |
 | `web/app.py` | 6813 | FastAPI application assembly, resource CRUD, turn control, and streaming endpoints. | `agents`, `agents.story_planner`, `core`, `core.db`, `core.frames`, `core.paths`, `dressing.ambience`, `dressing.backdrops`, `llm`, `llm.prompts`, `llm.providers`, `mind.memory`, `persist.chat_archive`, `persist.chat_delete`, `persist.checkpoints`, `persist.commit`, `story`, `story.character_schema`, `story.dialogue_colors`, `story.importers`, `story.scene`, `web`, `web.auth_routes`, `web.room_routes`, `world`, `world.survival` |
 | `web/auth_routes.py` | 279 | Typed host-authentication HTTP routes and cookie transport. | `web` |
@@ -557,14 +557,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `resolve_ambience()` | 1653 | 221 lines |
-| `_rank_candidates()` | 1065 | 105 lines |
-| `refine_layers()` | 756 | 89 lines |
-| `cached_ambience()` | 479 | 62 lines |
-| `search_freesound()` | 1350 | 61 lines |
-| `search_local()` | 867 | 54 lines |
-| `_query_ladder()` | 1179 | 51 lines |
-| `acoustic_fingerprint()` | 260 | 45 lines |
+| `resolve_ambience()` | 1661 | 221 lines |
+| `_rank_candidates()` | 1073 | 105 lines |
+| `refine_layers()` | 764 | 89 lines |
+| `cached_ambience()` | 482 | 62 lines |
+| `search_freesound()` | 1358 | 61 lines |
+| `search_local()` | 875 | 54 lines |
+| `_query_ladder()` | 1187 | 51 lines |
+| `acoustic_fingerprint()` | 260 | 48 lines |
 
 ### `dressing/backdrops.py`
 
@@ -1370,13 +1370,13 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_t_inspect_contradictions()` | 472 | 71 lines |
-| `_t_inspect_config()` | 399 | 66 lines |
+| `_t_inspect_contradictions()` | 473 | 71 lines |
+| `_t_inspect_config()` | 399 | 67 lines |
 | `_t_inspect_rooms()` | 186 | 49 lines |
 | `_t_inspect_route()` | 237 | 44 lines |
 | `_t_scan_lore()` | 125 | 33 lines |
 | `_t_inspect_charters()` | 321 | 30 lines |
-| `run_tool()` | 787 | 30 lines |
+| `run_tool()` | 788 | 30 lines |
 | `_t_inspect_reserved_identities()` | 286 | 26 lines |
 
 ### `story/scene.py`
@@ -1388,7 +1388,7 @@
 | `recent_events_for_observer()` | 1804 | 59 lines |
 | `_positive_presented_appearance()` | 871 | 58 lines |
 | `awareness_conditions()` | 1200 | 58 lines |
-| `normalize_style_guide()` | 2552 | 58 lines |
+| `normalize_style_guide()` | 2560 | 58 lines |
 | `active_transformations()` | 736 | 54 lines |
 | `director_context()` | 1864 | 53 lines |
 
@@ -2735,9 +2735,9 @@ Sections: Library sidebar (`:252`); Data loading (`:459`); Workspace (`:569`); B
 
 Declared functions: `loreBookTypeIcon()`, `loreLinkTypes()`, `normalizeLoreBook()`, `loreOwnershipKey()`, `loreBooksByParent()`, `loreBookMatches()`, `loreVisibleIds()`, `loreBookLabel()`, `parseStoredJSON()`, `loreField()`, `loreSelect()`, `loreBookOptions()`, `renderLoreLibrarySidebar()`, `renderNode()`, `loreStoryQuery()`, `loreBookIsLibrary()`, `loadLoreWorkspaceData()`, `collectLoreLinkTargets()`, `loreWorkspaceVisible()`, `renderLoreWorkspaceBody()`, `openLoreWorkspace()`, `renderLoreInspector()`, `selectTab()`, `buildLoreWorkspace()`, `renderWorkspaceTree()`, `renderNode()`, `renderTreeList()`, `renderLoreBookEditor()`, `moveLoreBook()`, `reorderLoreBook()`, `promoteLoreBook()`, `demoteLoreBook()`, `createSiblingLoreBook()`, `createLoreBookDialog()`, `refreshLoreUI()`, `renderLoreEntries()`, `renderList()`, `buildLoreEntryCard()`, `splitNumberList()`, `reinterpretLoreBook()`, `generateLoreEntriesPrompt()`, `buildDirectLoreRequest()`, `renderRelationshipOverview()`, `renderLoreRelationshipEditor()`, `renderRelationshipList()`, `showNewRelationshipForm()`, `renderLoreGenerator()`, `adoptGeneratorPlan()`, `generatorPlanMessage()`, `loreGenAgo()`, `refreshLoreGenRecovery()`, `normalizeGeneratorPlan()`, `renderLorePlanPreview()`, `renderOperations()`, `planStat()`, `renderAnalysisSection()`, `addPlanGroup()`, `stripPlanUIFields()`, `acceptedGeneratorPlan()`.
 
-### `static/js/settings.js` (4047 lines)
+### `static/js/settings.js` (4069 lines)
 
-Sections: Chat tool modals (`:1`); Condition tab (`:862`); Survival tracker (`:922`); Character relocation (`:1234`); API connections (`:1967`); Software updates (host-only; git fast-forward from GitHub origin) (`:3276`); Legacy checkpoint conversion (host-only maintenance) (`:3308`); Prompts (`:3542`); and be able to load that pack's own sheets to edit, rather than (`:3553`); Extensions (`:3720`).
+Sections: Chat tool modals (`:1`); Condition tab (`:884`); Survival tracker (`:944`); Character relocation (`:1256`); API connections (`:1989`); Software updates (host-only; git fast-forward from GitHub origin) (`:3298`); Legacy checkpoint conversion (host-only maintenance) (`:3330`); Prompts (`:3564`); and be able to load that pack's own sheets to edit, rather than (`:3575`); Extensions (`:3742`).
 
 Declared functions: `frameQuery()`, `charterDiagnosticsPanel()`, `selectTab()`, `dialogueColorControl()`, `save()`, `renderCastTab()`, `renderConditionTab()`, `hydrateConditionTab()`, `vitalMeter()`, `syncVitalsGutterNow()`, `syncVitalsGutter()`, `hideVitalsHud()`, `vitalsBlock()`, `refreshVitalsHud()`, `clearVitalsHud()`, `hydrateCastLocations()`, `castRoomLabel()`, `castRoomSelect()`, `renderLorebooksTab()`, `renderBookNode()`, `renderMultiplayerTab()`, `renderFramesTab()`, `renderFramesListPanel()`, `renderPersonaStationingPanel()`, `renderParadoxPanel()`, `renderBackgroundPresencesPanel()`, `renderGuestInvitePanel()`, `renderInsightsTab()`, `renderDramaticIronyPanel()`, `renderPromiseLedgerPanel()`, `embeddingBankBlock()`, `modelRecommendationsBlock()`, `renderFirstRunProviderSetup()`, `preferredBackdropSize()`, `renderFullApiSettings()`, `propagateToFollowers()`, `renderUpdateChecking()`, `renderUpdateError()`, `checkpointCompactionBlock()`, `renderUpdateStatus()`, `runUpdateInstall()`, `renderUpdateDone()`, `openPromptsModal()`, `reopenPromptsIfRequested()`, `extensionTrustNote()`, `extensionCapabilitySummary()`, `extensionSettingsSections()`, `openExtensionsMenu()`.
 

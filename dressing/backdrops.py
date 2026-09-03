@@ -158,7 +158,7 @@ def _room_of_player(scene, player_name):
 # This is `place_desc`'s rule applied to the other half of the key -- the key is
 # a function of what reaches the image, and a key that hashes text the prompt
 # never sees pays for regenerations the picture cannot show.
-VISUAL_STYLE_KEYS = ("tone",)
+VISUAL_STYLE_KEYS = ("tone", "avoid")
 
 
 def visual_style(style):

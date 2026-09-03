@@ -228,8 +228,8 @@ def test_anchors_carry_no_occupants():
 
 def test_style_is_part_of_the_key():
     sc = _scene()
-    assert acoustic_signature(sc, "ten_forward", {"genre": "noir"}) \
-        != acoustic_signature(sc, "ten_forward", {"genre": "pastoral"})
+    assert acoustic_signature(sc, "ten_forward", {"tone": "noir"}) \
+        != acoustic_signature(sc, "ten_forward", {"tone": "pastoral"})
 
 
 # --- library paths ---------------------------------------------------------
@@ -782,12 +782,19 @@ def test_a_new_material_does_move_the_key():
     assert a != b
 
 
-def test_the_style_guide_only_reaches_the_key_through_its_genre():
-    """Prose has no sound: editing the tone or the POV must not re-fetch."""
+def test_the_style_guide_only_reaches_the_key_through_one_term():
+    """Prose has no sound, so only the term the QUERY uses is hashed.
+
+    That term was `genre` until 2026-09-04, when the field left the guide and
+    this loop was left reading a key nothing could set -- the query silently
+    lost its only style word. It is `tone` now. `avoid` is deliberately not
+    here: it is a veto, and putting its words in a search asks for the thing
+    they forbid.
+    """
     scene = _room_scene("A long bar.")
-    a = acoustic_signature(scene, "ten_forward", {"genre": "noir", "tone": "wry"})
-    b = acoustic_signature(scene, "ten_forward", {"genre": "noir", "tone": "bleak"})
-    c = acoustic_signature(scene, "ten_forward", {"genre": "horror", "tone": "wry"})
+    a = acoustic_signature(scene, "ten_forward", {"tone": "noir", "avoid": "x"})
+    b = acoustic_signature(scene, "ten_forward", {"tone": "noir", "avoid": "y"})
+    c = acoustic_signature(scene, "ten_forward", {"tone": "horror", "avoid": "x"})
     assert a == b
     assert a != c
 

@@ -263,7 +263,7 @@ def acoustic_fingerprint(scene, room_id, style=None):
     Deliberately coarser than the room's own data. The key has to be a function
     of what the engine would go LOOKING for, not of the prose it was written
     from: a description reworded without changing a material, a style guide
-    edited anywhere but its genre, an overlay rephrased -- none of those change
+    edited anywhere but its tone, an overlay rephrased -- none of those change
     what the place sounds like, and each of them used to buy a fresh model call
     and a fresh download for the identical bed.
 
@@ -297,9 +297,12 @@ def acoustic_fingerprint(scene, room_id, style=None):
         # audible/visible split doing the work: an enclosed room's key moves
         # for rain it can hear and not for a sky it cannot see.
         "weather": weather_words(weather_for_room(scene, room_id), "sound"),
-        # Only the genre reaches `compose_query`; the rest of a style guide is
-        # about prose, and prose has no sound.
-        "genre": sorted(_keywords((style or {}).get("genre"), 2)),
+        # Only the one style term that reaches `compose_query` is hashed --
+        # the rest of a style guide is about prose, and prose has no sound.
+        # It was `genre` until that field left the guide (2026-09-04); the key
+        # keeps its name so a story's existing beds are not orphaned by the
+        # rename alone.
+        "genre": sorted(_keywords((style or {}).get("tone"), 2)),
         "state": sorted(_keywords(" ".join(state), 6)),
     }
 
@@ -651,7 +654,12 @@ def compose_query(place, style=None):
         terms.extend(_keywords(place["ground"], 2))
     if place.get("time") in ("night", "evening"):
         terms.append(place["time"])
-    for key in ("genre",):
+    # `tone` since 2026-09-04, when `genre` left the style guide -- this loop
+    # was reading a key that could no longer be set, so the query lost its one
+    # style term outright. Tone is the survivor and is what a search should be
+    # nudged by; `avoid` deliberately does NOT ride here, because it is a veto
+    # and adding its words to a query asks for the very thing it forbids.
+    for key in ("tone",):
         if (style or {}).get(key):
             terms.extend(_keywords(style[key], 1))
     seen, out = set(), []
