@@ -205,6 +205,65 @@ def execute_orders(decisions, economy, *, at_hours=0.0, posts=None):
     return normalize_decisions(out), economy, events
 
 
+def mobilisation_calls(charter, minds, watch, posts, bodies, *, at_hours=0.0):
+    """The watch called out, from what a body with standing over it holds.
+
+    THE ONLY INPUT IS THE CALLER'S OWN HEAD. An office whose post carries
+    `charter_intervene.MOBILISE_AUTHORITY` reads its own claims
+    (`known_news`), and a claim of a `THREAT_KINDS` kind that names a place
+    and holds at or above the institution's authored credence
+    (`normalize_mobilisation`) is a call. Strength already carries regard
+    for the teller and the retelling count (`charter_mind.hear_claim`), so
+    who said it and how many mouths it crossed are in the number before it
+    is compared. A stranger's warning is a weaker call than a neighbour's;
+    a lie that clears the bar is a mobilisation the liar will be blamed
+    for when it lapses with nothing seen (`charter_run.step`).
+
+    Returns ``[intervention rows]`` for the caller to schedule -- one
+    `watch_shock` per place, due at the next window, so the call is applied
+    where every other physical change is applied and reported as an event
+    from there. A place already under a called watch is not called again.
+    """
+    from .charter_intervene import (MOBILISE_AUTHORITY, THREAT_KINDS,
+                                    normalize_mobilisation)
+
+    config = normalize_mobilisation((charter or {}).get("mobilisation"))
+    standing = (charter or {}).get("mobilisations") or {}
+    able = sum(1 for body in (bodies or {}).values()
+               if body.get("available", True))
+    crew = min(int(config["crew_cap"]),
+               max(1, int(round(config["crew_fraction"] * able))))
+    calls, called = [], set(standing)
+    for post_key, post in sorted((posts or {}).items()):
+        if MOBILISE_AUTHORITY not in set(post.get("authority") or ()):
+            continue
+        body_key = str((watch or {}).get(post_key) or "")
+        body = (bodies or {}).get(body_key) or {}
+        if not body_key or not body.get("available", True):
+            continue
+        for claim in known_news(minds or {}, body_key):
+            if str(claim.get("event_kind") or "") not in THREAT_KINDS:
+                continue
+            place = str(claim.get("place") or "")
+            if not place or place in called:
+                continue
+            if float(claim.get("strength") or 0.0) < config["credence"]:
+                continue
+            called.add(place)
+            calls.append({
+                "op": "watch_shock", "at_hours": round(float(at_hours), 6),
+                "place": place,
+                "until_hours": round(float(at_hours)
+                                     + config["duration_hours"], 6),
+                "crew": crew, "requires": dict(config["requires"]),
+                "called_by": body_key, "from_place": str(post.get("place")
+                                                         or ""),
+                "evidence": str(claim.get("body") or ""),
+                "cause": "a threat reported at %s" % place,
+            })
+    return calls
+
+
 def decision_view(decisions, *, post="", body="", cap=6):
     out = normalize_decisions(decisions)
     orders = [o for o in out["orders"] if (
@@ -216,5 +275,5 @@ def decision_view(decisions, *, post="", body="", cap=6):
 
 __all__ = [
     "ORDER_ACTIONS", "advance_decisions", "decision_view", "deliver_orders",
-    "execute_orders", "normalize_decisions",
+    "execute_orders", "mobilisation_calls", "normalize_decisions",
 ]

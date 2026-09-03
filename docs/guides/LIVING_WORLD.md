@@ -136,6 +136,7 @@ The payload. Each row is a conjunction: **every** requirement must hold.
 | An institution **catching up** — its people, duties, markets and gossip advancing over elapsed time | `offscreen_life ≥ deterministic` (`world/charter_runtime.py:1071`) plus a charter in the registry. This gate covers the catch-up tick **only** — see §7. |
 | A room showing what changed while it was unwatched | `routine_residue ≥ floor` **and** `offscreen_life ≥ deterministic` **and** a declared movement — but Charter incidents reach the same payload slot ungated, and are prepended ahead of routine texture (`agents/director.py:2594`) |
 | An unregistered presence speaking in the room | none of the above — this is `background_react`, gated only by `pick_background_reactors` and `max_reactors` |
+| A creature hunting a town off screen — kills, raids, spoor, tribute, and the watch called out | `offscreen_life ≥ deterministic` plus a charter carrying `creature` in the registry (`world/charter_creature.py`); the catch-up then steps every charter TOGETHER with a predation round between windows (`world/charter_predation.run_registry`, `charter_runtime.advance_snapshot`'s together arm). A registry with no creature never enters that arm. The town answers through `charter_decide.mobilisation_calls` when a post with `mobilise` authority holds a threat claim above its credence |
 | A whole location's populace voiced in one call | `background_config.scene_life = ambient` or `full` |
 
 **The paid-tick row is the one people get wrong**, and `AGENTS.md:97`'s

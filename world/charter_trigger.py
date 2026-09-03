@@ -96,14 +96,21 @@ CHANGE_FAMILIES = frozenset({"blame_landed", "event", "act"})
 #: which is what keeps the persisted field bounded and the firewall a
 #: structural fact rather than a review item.
 CHANGE_FIELDS = ("kind", "key", "at_hours", "place", "actor", "subject",
-                 "about", "depth")
+                 "about", "depth", "side")
 
 #: What a `where` clause may test. Strictly narrower than `CHANGE_FIELDS`:
 #: `kind` is already `on`, `key` is an identity rather than a property, and
 #: `at_hours`/`depth` are the machinery's own bookkeeping. Matching a body
 #: against a place, an actor, a subject or a named thing is the whole of what
 #: an objective rule needs.
-MATCHABLE = ("place", "actor", "subject", "about")
+MATCHABLE = ("place", "actor", "subject", "about", "side")
+
+#: Which SIDE of an event the institution's own body was on. Objective and
+#: closed: ``dealt`` when the actor is one of ours, ``suffered`` when the
+#: subject is, empty otherwise. It is what lets a creature's rule say "a
+#: member of mine was killed" (`event:harm_done` where ``side`` is
+#: ``suffered``) without naming a body, and it reads the body index alone.
+SIDES = ("dealt", "suffered")
 
 #: What a consequence may be. Three, and each one is objective: a situation, a
 #: temporary fact about a body, a thing that visibly happened.
@@ -114,7 +121,21 @@ MATCHABLE = ("place", "actor", "subject", "about")
 #: axes next window with a citable evidence id under its own idempotence
 #: guard. Writing an axis here would produce a stance with no evidence to
 #: cite, which is a leak wearing a convenience.
-TRIGGER_OPS = frozenset({"open_practice", "set_mark", "emit"})
+TRIGGER_OPS = frozenset({"open_practice", "set_mark", "emit",
+                         "intervene", "settle_commitment"})
+
+#: The two ops that move the INSTITUTION rather than a body: schedule a
+#: physical intervention (`charter_intervene.INTERVENTION_OPS`, due at the
+#: next window, applied where every other physical change is applied), or
+#: settle an undertaking the institution holds (`charter_commitment`).
+#: Fired by `fire_institution_rules`, a second pass under the same firewall
+#: as `fire_triggers`, so the per-body pass keeps its signature and its
+#: return shape. ``docs/design/DESIGN_CREATURES_AS_CHARTER.md`` §5.
+INSTITUTION_OPS = frozenset({"intervene", "settle_commitment"})
+
+#: The commitment states a rule may settle an open undertaking into.
+SETTLE_STATES = frozenset({"fulfilled", "defaulted", "repudiated",
+                           "released"})
 
 #: The event kinds a rule may mint. See the allowlist paragraph in the module
 #: docstring -- this is a subset of `charter_news.WITNESSABLE` and it is a
@@ -364,6 +385,30 @@ def _normalize_rule(index, raw):
             if not entry["on"]:
                 refused.append(f"set_mark wants one of {sorted(REFERENTS)}")
                 continue
+        elif op == "intervene":
+            from .charter_intervene import normalize_interventions
+            raw_row = op_raw.get("intervention")
+            if not isinstance(raw_row, dict):
+                refused.append("intervene carries no intervention")
+                continue
+            rows = normalize_interventions([dict(raw_row, at_hours=0.0)])
+            if not rows or rows[0].get("refused"):
+                refused.append("intervene: %s" % (
+                    rows[0]["refused"] if rows else "unreadable"))
+                continue
+            entry = {"op": op, "intervention": {
+                k: v for k, v in rows[0].items()
+                if k not in ("id", "at_hours")}}
+            entry["intervention"]["delay_hours"] = max(
+                0.0, _number(op_raw.get("delay_hours")))
+        elif op == "settle_commitment":
+            state = str(op_raw.get("state") or "")
+            if state not in SETTLE_STATES:
+                refused.append(
+                    f"settle_commitment cannot settle into {state!r}")
+                continue
+            entry = {"op": op, "state": state,
+                     "kind": _text(op_raw.get("kind"), 64)}
         else:
             kind = str(op_raw.get("kind") or "")
             if kind not in TRIGGER_EMITTABLE:
@@ -429,30 +474,38 @@ def change_key(kind, at_hours, place, actor, subject, about=""):
         kind, float(at_hours), place, actor, subject, about)
 
 
-def _change(kind, at_hours, place, actor, subject, about="", depth=0):
+def _change(kind, at_hours, place, actor, subject, about="", depth=0,
+            side=""):
     row = {
         "kind": str(kind), "at_hours": round(_number(at_hours), 6),
         "place": _text(place), "actor": _text(actor),
         "subject": _text(subject), "about": _text(about),
         "depth": max(0, int(depth)),
+        "side": side if side in SIDES else "",
     }
     row["key"] = change_key(row["kind"], row["at_hours"], row["place"],
                             row["actor"], row["subject"], row["about"])
     return row
 
 
-def _row_for_event(event, at_hours=0.0, depth=0):
+def _row_for_event(event, at_hours=0.0, depth=0, bodies=None):
     """One event as a change. `actor`/`body` are the same body on every event
     kind this package emits (`charter_run._social_events` writes all three of
     `about`, `actor` and `body`), and taking either means a rule matches the
-    same way whichever writer minted the row."""
+    same way whichever writer minted the row. ``bodies`` decides `side`."""
+    actor = str(event.get("actor") or event.get("body") or "")
+    subject = str(event.get("subject") or "")
+    side = ""
+    if bodies:
+        if actor and actor in bodies:
+            side = "dealt"
+        elif subject and subject in bodies:
+            side = "suffered"
     return _change(
         "event:" + str(event.get("kind") or ""),
-        event.get("at_hours", at_hours), event.get("place"),
-        event.get("actor") or event.get("body"),
-        event.get("subject"),
-        event.get("upkeep") or event.get("post") or "",
-        depth=depth)
+        event.get("at_hours", at_hours), event.get("place"), actor, subject,
+        event.get("upkeep") or event.get("post") or event.get("good") or "",
+        depth=depth, side=side)
 
 
 def normalize_pending_changes(stored):
@@ -466,7 +519,8 @@ def normalize_pending_changes(stored):
             continue
         rows.append(_change(kind, raw.get("at_hours"), raw.get("place"),
                             raw.get("actor"), raw.get("subject"),
-                            raw.get("about"), raw.get("depth") or 0))
+                            raw.get("about"), raw.get("depth") or 0,
+                            str(raw.get("side") or "")))
     return _cap_changes(rows)
 
 
@@ -511,7 +565,7 @@ def changes_from(*, events=(), acts=(), blamed=(), bodies=None, at_hours=0.0,
     for event in events or ():
         if not isinstance(event, dict):
             continue
-        row = _row_for_event(event, at_hours)
+        row = _row_for_event(event, at_hours, bodies=bodies)
         row["depth"] = max(0, int(depths.get(row["key"], 0)))
         rows.append(row)
     for act in acts or ():
@@ -660,6 +714,10 @@ def fire_triggers(changes, bodies, at_hours, *, seed=0, rules=None,
             for op in rule["then"]:
                 if yielded >= TRIGGER_YIELD_CAP:
                     break
+                if op["op"] in INSTITUTION_OPS:
+                    # `fire_institution_rules`' business, under its own
+                    # refractory key; this pass neither fires nor counts it.
+                    continue
                 if op["op"] == "open_practice":
                     a = _resolve(op["a"], change, rule)
                     b = _resolve(op["b"], change, rule)
@@ -718,6 +776,81 @@ def fire_triggers(changes, bodies, at_hours, *, seed=0, rules=None,
     return events, opened, onsets, memory, fired, depths
 
 
+def fire_institution_rules(changes, bodies, at_hours, *, seed=0, rules=None,
+                           last_fired=None):
+    """Fire what the last window's changes license the INSTITUTION to do.
+
+    Returns ``(ops, last_fired, fired)``: resolved institution ops for
+    `charter_run.step` to apply (an ``intervene`` row carries the
+    intervention to schedule, a ``settle_commitment`` row the state and
+    kind), the refractory store carried forward, and the ``rule|change``
+    ids that fired. THE SAME PARAMETER LIST AS `fire_triggers`, and the
+    same reason: change rows and a body index, nothing that is inside a
+    head. Refractory rows are keyed apart (``inst|``) so a rule carrying
+    both a body op and an institution op fires each on its own clock.
+    """
+    memory = dict(last_fired or {})
+    changes = normalize_pending_changes(changes)
+    if not changes:
+        return [], memory, []
+    rules = normalize_triggers(rules)
+    by_kind = {}
+    for rule in rules:
+        if rule.get("refused"):
+            continue
+        if not any(op["op"] in INSTITUTION_OPS for op in rule["then"]):
+            continue
+        by_kind.setdefault(rule["on"], []).append(rule)
+    if not by_kind:
+        return [], memory, []
+    at = _number(at_hours)
+    ops, fired = [], []
+    yielded = 0
+    for change in changes:
+        if yielded >= TRIGGER_YIELD_CAP:
+            break
+        if int(change["depth"]) >= TRIGGER_DEPTH:
+            continue
+        for rule in by_kind.get(change["kind"], ()):
+            if yielded >= TRIGGER_YIELD_CAP:
+                break
+            if any(change.get(field) != value
+                   for field, value in rule["where"].items()):
+                continue
+            memory_key = "inst|%s|%s|%s" % (rule["id"], change["actor"],
+                                            change["subject"])
+            since = memory.get(memory_key)
+            if since is not None and rule["refractory_hours"] and \
+                    at - _number(since) < rule["refractory_hours"]:
+                continue
+            if rule["odds"] < 1.0 and \
+                    _draw(seed, at, rule["id"], change["key"], "inst") \
+                    >= rule["odds"]:
+                continue
+            produced = 0
+            for op in rule["then"]:
+                if op["op"] not in INSTITUTION_OPS:
+                    continue
+                if op["op"] == "intervene":
+                    row = dict(op["intervention"])
+                    delay = float(row.pop("delay_hours", 0.0) or 0.0)
+                    row["at_hours"] = round(at + delay, 6)
+                    row["id"] = "trigger:%s:%0.4f" % (rule["id"], at)
+                    row["cause"] = str(row.get("cause") or rule["id"])
+                    ops.append({"op": "intervene", "intervention": row,
+                                "rule": rule["id"], "change": change["key"]})
+                else:
+                    ops.append({"op": "settle_commitment",
+                                "state": op["state"], "kind": op["kind"],
+                                "rule": rule["id"], "change": change["key"]})
+                produced += 1
+                yielded += 1
+            if produced:
+                memory[memory_key] = at
+                fired.append("%s|%s" % (rule["id"], change["key"]))
+    return ops, memory, fired
+
+
 def trigger_view(rules, pending_changes=None, last_fired=None):
     """Author-only: what is loaded, what it refused, and what is in flight.
 
@@ -738,11 +871,11 @@ def trigger_view(rules, pending_changes=None, last_fired=None):
 
 
 __all__ = [
-    "CHANGE_FAMILIES", "CHANGE_FIELDS", "DEFAULT_TRIGGERS", "MATCHABLE",
-    "PENDING_CHANGE_CAP", "REFERENTS", "TRIGGER_CAP", "TRIGGER_DEPTH",
-    "TRIGGER_EMITTABLE", "TRIGGER_MEMORY_CAP", "TRIGGER_OPS",
-    "TRIGGER_THEN_CAP", "TRIGGER_YIELD_CAP", "change_key", "changes_from",
-    "fire_triggers", "normalize_pending_changes", "normalize_triggers",
-    "perceivable_change", "prune_trigger_last", "trigger_view",
-    "trigger_warnings",
+    "CHANGE_FAMILIES", "CHANGE_FIELDS", "DEFAULT_TRIGGERS", "INSTITUTION_OPS",
+    "MATCHABLE", "PENDING_CHANGE_CAP", "REFERENTS", "SETTLE_STATES", "SIDES",
+    "TRIGGER_CAP", "TRIGGER_DEPTH", "TRIGGER_EMITTABLE", "TRIGGER_MEMORY_CAP",
+    "TRIGGER_OPS", "TRIGGER_THEN_CAP", "TRIGGER_YIELD_CAP", "change_key",
+    "changes_from", "fire_institution_rules", "fire_triggers",
+    "normalize_pending_changes", "normalize_triggers", "perceivable_change",
+    "prune_trigger_last", "trigger_view", "trigger_warnings",
 ]

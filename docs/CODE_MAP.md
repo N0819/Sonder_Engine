@@ -86,7 +86,7 @@
 | `persist/llm_capture.py` | 229 |  | `core.db` |
 | `persist/pipeline_trace.py` | 574 | Privacy-conscious export, validation, and offline replay of persisted pipeline history. | `core.db` |
 | `story/__init__.py` | 6 |  | — |
-| `story/artifacts.py` | 566 |  | `llm.prompts` |
+| `story/artifacts.py` | 649 |  | `llm.prompts` |
 | `story/attire.py` | 3358 |  | — |
 | `story/authored_events.py` | 224 |  | `core.db` |
 | `story/carriers.py` | 788 |  | `core.db`, `story.character_schema`, `story.scene`, `world`, `world.spatial` |
@@ -112,37 +112,40 @@
 | `world/charter_author.py` | 800 |  | `world.charter_commitment`, `world.charter_economy`, `world.charter_figure`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_politics`, `world.charter_practice` |
 | `world/charter_chatter.py` | 443 |  | `world.crowds` |
 | `world/charter_commitment.py` | 292 |  | `world.charter_model` |
+| `world/charter_creature.py` | 363 |  | `world.charter_harm`, `world.charter_model` |
 | `world/charter_crowd.py` | 276 |  | `world.crowds` |
-| `world/charter_decide.py` | 220 |  | `world.charter_model`, `world.charter_news` |
+| `world/charter_decide.py` | 279 |  | `world.charter_model`, `world.charter_news` |
 | `world/charter_drift.py` | 106 |  | `world.charter_model` |
-| `world/charter_economy.py` | 401 |  | `world.charter_model` |
+| `world/charter_economy.py` | 427 |  | `world.charter_model` |
 | `world/charter_feel.py` | 444 |  | `mind.psychology_runtime`, `world.charter_mark`, `world.charter_needs`, `world.charter_temper` |
 | `world/charter_figure.py` | 140 |  | — |
 | `world/charter_generate.py` | 1320 |  | `world.charter_identity`, `world.charter_model`, `world.charter_needs`, `world.charter_roster`, `world.charter_surface` |
+| `world/charter_harm.py` | 264 |  | — |
 | `world/charter_history.py` | 873 |  | — |
 | `world/charter_identity.py` | 1167 |  | — |
-| `world/charter_intervene.py` | 112 |  | `world.charter_model` |
+| `world/charter_intervene.py` | 343 |  | `world.charter_model` |
 | `world/charter_log.py` | 510 |  | `world.charter_commitment`, `world.charter_decide`, `world.charter_economy`, `world.charter_feel`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_needs`, `world.charter_news`, `world.charter_politics`, `world.charter_social`, `world.charter_temper` |
 | `world/charter_mark.py` | 302 |  | — |
 | `world/charter_mind.py` | 262 |  | — |
-| `world/charter_model.py` | 688 |  | `world.charter_chatter`, `world.charter_figure`, `world.charter_mark` |
+| `world/charter_model.py` | 724 |  | `world.charter_chatter`, `world.charter_figure`, `world.charter_harm`, `world.charter_mark` |
 | `world/charter_move.py` | 411 |  | `world.charter_space` |
 | `world/charter_needs.py` | 297 |  | `world.charter_model` |
-| `world/charter_news.py` | 503 |  | `world.charter_mind`, `world.charter_model`, `world.charter_talk` |
+| `world/charter_news.py` | 517 |  | `world.charter_mind`, `world.charter_model`, `world.charter_talk` |
 | `world/charter_observe.py` | 542 |  | `world.charter_figure`, `world.charter_identity`, `world.charter_mind`, `world.spatial` |
 | `world/charter_plan.py` | 227 |  | `world.charter_drift`, `world.charter_model`, `world.charter_roster` |
 | `world/charter_politics.py` | 161 |  | — |
 | `world/charter_practice.py` | 1200 |  | `world.charter_commitment`, `world.charter_figure`, `world.charter_mind`, `world.charter_politics`, `world.charter_talk` |
+| `world/charter_predation.py` | 712 |  | `world.charter_creature`, `world.charter_harm`, `world.charter_model`, `world.charter_move` |
 | `world/charter_promote.py` | 604 |  | `world.charter_commitment`, `world.charter_feel`, `world.charter_politics`, `world.charter_social` |
 | `world/charter_roster.py` | 134 |  | `world.charter_model` |
-| `world/charter_run.py` | 1358 |  | `world`, `world.charter_commitment`, `world.charter_decide`, `world.charter_drift`, `world.charter_economy`, `world.charter_feel`, `world.charter_figure`, `world.charter_intervene`, `world.charter_log`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_move`, `world.charter_needs`, `world.charter_news`, `world.charter_plan`, `world.charter_politics`, `world.charter_practice`, `world.charter_roster`, `world.charter_social`, `world.charter_space`, `world.charter_talk`, `world.charter_trigger` |
-| `world/charter_runtime.py` | 3775 |  | `core`, `core.logging_utils`, `world.charter`, `world.charter_news`, `world.charter_surface`, `world.day_cycle`, `world.mechanics` |
+| `world/charter_run.py` | 1459 |  | `world`, `world.charter_commitment`, `world.charter_decide`, `world.charter_drift`, `world.charter_economy`, `world.charter_feel`, `world.charter_figure`, `world.charter_harm`, `world.charter_intervene`, `world.charter_log`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_move`, `world.charter_needs`, `world.charter_news`, `world.charter_plan`, `world.charter_politics`, `world.charter_practice`, `world.charter_roster`, `world.charter_social`, `world.charter_space`, `world.charter_talk`, `world.charter_trigger` |
+| `world/charter_runtime.py` | 3870 |  | `core`, `core.logging_utils`, `world.charter`, `world.charter_news`, `world.charter_surface`, `world.day_cycle`, `world.mechanics` |
 | `world/charter_social.py` | 743 |  | `world.charter_politics` |
 | `world/charter_space.py` | 167 |  | `world.spatial` |
 | `world/charter_surface.py` | 341 |  | — |
-| `world/charter_talk.py` | 344 |  | `world.charter_mind`, `world.charter_politics`, `world.charter_roster` |
+| `world/charter_talk.py` | 351 |  | `world.charter_mind`, `world.charter_politics`, `world.charter_roster` |
 | `world/charter_temper.py` | 167 |  | — |
-| `world/charter_trigger.py` | 748 |  | `world.charter_mark`, `world.charter_news`, `world.charter_practice` |
+| `world/charter_trigger.py` | 881 |  | `world.charter_mark`, `world.charter_news`, `world.charter_practice` |
 | `world/comfort.py` | 349 |  | `world.spatial` |
 | `world/crowds.py` | 759 |  | `world.spatial` |
 | `world/day_cycle.py` | 351 |  | — |
@@ -1036,13 +1039,13 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `run_artifacts()` | 183 | 202 lines |
-| `schedule_artifact_wording()` | 392 | 66 lines |
-| `mint_wording()` | 460 | 55 lines |
-| `land_artifact_wording()` | 517 | 50 lines |
+| `schedule_artifact_wording()` | 475 | 66 lines |
+| `mint_wording()` | 543 | 55 lines |
+| `land_artifact_wording()` | 600 | 50 lines |
+| `post_spoor()` | 420 | 48 lines |
 | `reading_copy()` | 150 | 25 lines |
+| `spoor_artifact()` | 397 | 21 lines |
 | `new_artifact()` | 128 | 20 lines |
-| `artifact_voice()` | 95 | 11 lines |
-| `posted_in_room()` | 116 | 10 lines |
 
 ### `story/attire.py`
 
@@ -1318,6 +1321,19 @@
 | `commitment_id()` | 26 | 4 lines |
 | `_frame_terms()` | 72 | 2 lines |
 
+### `world/charter_creature.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `normalize_creature()` | 103 | 92 lines |
+| `creature_neighbors()` | 236 | 32 lines |
+| `normalize_spoor()` | 205 | 18 lines |
+| `prey_capability()` | 326 | 14 lines |
+| `predator_capability()` | 312 | 12 lines |
+| `is_active()` | 280 | 11 lines |
+| `room_fits()` | 225 | 9 lines |
+| `hunger_of()` | 293 | 9 lines |
+
 ### `world/charter_crowd.py`
 
 | Function | Start | Size |
@@ -1335,11 +1351,12 @@
 
 | Function | Start | Size |
 |---|---:|---:|
+| `mobilisation_calls()` | 208 | 57 lines |
 | `advance_decisions()` | 75 | 54 lines |
 | `execute_orders()` | 159 | 47 lines |
 | `normalize_decisions()` | 25 | 35 lines |
 | `deliver_orders()` | 131 | 26 lines |
-| `decision_view()` | 208 | 7 lines |
+| `decision_view()` | 267 | 7 lines |
 | `_leaders()` | 67 | 6 lines |
 | `_order_id()` | 62 | 3 lines |
 
@@ -1360,11 +1377,11 @@
 | `normalize_economy()` | 74 | 96 lines |
 | `ensure_supply_points()` | 172 | 48 lines |
 | `advance_economy()` | 275 | 47 lines |
-| `caravan_exchange()` | 349 | 47 lines |
+| `caravan_exchange()` | 375 | 47 lines |
 | `quote()` | 240 | 27 lines |
 | `_holdings()` | 46 | 26 lines |
+| `take_stock()` | 349 | 24 lines |
 | `trade()` | 324 | 23 lines |
-| `_keyed()` | 28 | 16 lines |
 
 ### `world/charter_feel.py`
 
@@ -1403,6 +1420,18 @@
 | `resident_service_chronicle()` | 1058 | 47 lines |
 | `ground_history_output()` | 1107 | 46 lines |
 
+### `world/charter_harm.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `apply_harm()` | 141 | 85 lines |
+| `advance_harm()` | 228 | 29 lines |
+| `_successor()` | 119 | 20 lines |
+| `head_posts()` | 99 | 18 lines |
+| `capability_of()` | 88 | 9 lines |
+| `normalize_condition()` | 79 | 3 lines |
+| `is_gone()` | 84 | 2 lines |
+
 ### `world/charter_history.py`
 
 | Function | Start | Size |
@@ -1433,9 +1462,13 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `apply_due()` | 50 | 57 lines |
-| `normalize_interventions()` | 18 | 23 lines |
-| `intervention_warnings()` | 43 | 5 lines |
+| `apply_due()` | 177 | 157 lines |
+| `_apply_relocate()` | 128 | 47 lines |
+| `normalize_interventions()` | 82 | 29 lines |
+| `normalize_mobilisation()` | 63 | 17 lines |
+| `intervention_warnings()` | 113 | 5 lines |
+| `watch_post_key()` | 120 | 2 lines |
+| `watch_upkeep_key()` | 124 | 2 lines |
 
 ### `world/charter_log.py`
 
@@ -1477,14 +1510,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `normalize_charter()` | 343 | 324 lines |
-| `normalize_body()` | 181 | 91 lines |
-| `body_of_an_authored_mind()` | 274 | 45 lines |
-| `normalize_post()` | 143 | 36 lines |
-| `normalize_upkeep()` | 110 | 31 lines |
-| `_tags()` | 71 | 15 lines |
-| `_string_list()` | 93 | 15 lines |
-| `_optional_float()` | 333 | 8 lines |
+| `normalize_charter()` | 357 | 346 lines |
+| `normalize_body()` | 182 | 104 lines |
+| `body_of_an_authored_mind()` | 288 | 45 lines |
+| `normalize_post()` | 144 | 36 lines |
+| `normalize_upkeep()` | 111 | 31 lines |
+| `_tags()` | 72 | 15 lines |
+| `_string_list()` | 94 | 15 lines |
+| `_optional_float()` | 347 | 8 lines |
 
 ### `world/charter_move.py`
 
@@ -1516,14 +1549,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `check_reports()` | 346 | 92 lines |
-| `claim_from_report()` | 171 | 44 lines |
-| `report_from_claim()` | 217 | 38 lines |
-| `decay_news()` | 440 | 26 lines |
-| `_native_news_phrase()` | 257 | 24 lines |
-| `news_claim()` | 296 | 24 lines |
-| `charter_hours_of()` | 133 | 23 lines |
-| `witness()` | 322 | 22 lines |
+| `check_reports()` | 360 | 92 lines |
+| `claim_from_report()` | 179 | 44 lines |
+| `report_from_claim()` | 225 | 38 lines |
+| `_native_news_phrase()` | 265 | 30 lines |
+| `decay_news()` | 454 | 26 lines |
+| `news_claim()` | 310 | 24 lines |
+| `charter_hours_of()` | 141 | 23 lines |
+| `witness()` | 336 | 22 lines |
 
 ### `world/charter_observe.py`
 
@@ -1574,6 +1607,19 @@
 | `entanglement()` | 437 | 40 lines |
 | `_afford_tell()` | 583 | 39 lines |
 
+### `world/charter_predation.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `_attack()` | 251 | 118 lines |
+| `_tribute()` | 504 | 95 lines |
+| `predation_round()` | 371 | 67 lines |
+| `run_registry()` | 647 | 60 lines |
+| `read_spoor()` | 452 | 48 lines |
+| `hunt_moves()` | 201 | 35 lines |
+| `_company()` | 97 | 29 lines |
+| `_prey_here()` | 177 | 22 lines |
+
 ### `world/charter_promote.py`
 
 | Function | Start | Size |
@@ -1599,27 +1645,27 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `step()` | 400 | 891 lines |
-| `_record_coarse_experiences()` | 238 | 160 lines |
-| `run()` | 1293 | 66 lines |
-| `_remember_experience()` | 150 | 32 lines |
-| `_run_private_habits()` | 207 | 29 lines |
-| `_social_events()` | 105 | 25 lines |
-| `_record_social_experiences()` | 184 | 21 lines |
-| `_event()` | 80 | 3 lines |
+| `step()` | 424 | 968 lines |
+| `_record_coarse_experiences()` | 241 | 160 lines |
+| `run()` | 1394 | 66 lines |
+| `_remember_experience()` | 153 | 32 lines |
+| `_run_private_habits()` | 210 | 29 lines |
+| `_social_events()` | 108 | 25 lines |
+| `_record_social_experiences()` | 187 | 21 lines |
+| `_settle_commitments()` | 403 | 19 lines |
 
 ### `world/charter_runtime.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `registry_warnings()` | 1735 | 182 lines |
+| `registry_warnings()` | 1776 | 182 lines |
 | `_prepare_cast_histories()` | 647 | 172 lines |
-| `_plan_lived_location()` | 1340 | 159 lines |
-| `_generate_lived_location()` | 1559 | 122 lines |
-| `presence_view()` | 3059 | 115 lines |
-| `advance_snapshot()` | 2036 | 109 lines |
-| `generation_lore()` | 1028 | 101 lines |
-| `presim_registry()` | 930 | 96 lines |
+| `_plan_lived_location()` | 1381 | 159 lines |
+| `advance_snapshot()` | 2082 | 153 lines |
+| `_generate_lived_location()` | 1600 | 122 lines |
+| `presence_view()` | 3154 | 115 lines |
+| `presim_registry()` | 963 | 104 lines |
+| `generation_lore()` | 1069 | 101 lines |
 
 ### `world/charter_social.py`
 
@@ -1663,14 +1709,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `report_to_superiors()` | 295 | 50 lines |
-| `converse()` | 200 | 49 lines |
-| `report_up()` | 251 | 42 lines |
+| `report_to_superiors()` | 302 | 50 lines |
+| `converse()` | 207 | 49 lines |
+| `report_up()` | 258 | 42 lines |
 | `tell_ranking()` | 88 | 38 lines |
-| `co_present()` | 128 | 27 lines |
+| `co_present()` | 128 | 34 lines |
 | `tellable()` | 61 | 25 lines |
-| `witnessed()` | 178 | 20 lines |
-| `pair_up()` | 157 | 19 lines |
+| `witnessed()` | 185 | 20 lines |
+| `pair_up()` | 164 | 19 lines |
 
 ### `world/charter_temper.py`
 
@@ -1689,14 +1735,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `fire_triggers()` | 575 | 144 lines |
-| `_normalize_rule()` | 302 | 87 lines |
-| `changes_from()` | 498 | 41 lines |
-| `perceivable_change()` | 264 | 36 lines |
-| `_cap_changes()` | 473 | 23 lines |
-| `normalize_triggers()` | 391 | 20 lines |
-| `prune_trigger_last()` | 541 | 20 lines |
-| `trigger_view()` | 721 | 17 lines |
+| `fire_triggers()` | 629 | 148 lines |
+| `_normalize_rule()` | 323 | 111 lines |
+| `fire_institution_rules()` | 779 | 73 lines |
+| `changes_from()` | 552 | 41 lines |
+| `perceivable_change()` | 285 | 36 lines |
+| `_cap_changes()` | 527 | 23 lines |
+| `normalize_triggers()` | 436 | 20 lines |
+| `prune_trigger_last()` | 595 | 20 lines |
 
 ### `world/comfort.py`
 

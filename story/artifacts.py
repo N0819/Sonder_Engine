@@ -385,6 +385,89 @@ def run_artifacts(ctx, scene, ops):
 
 
 # --------------------------------------------------------------------------
+# Spoor: what a creature left, standing where it fell. Read like a bill.
+# --------------------------------------------------------------------------
+
+#: How many spoor artifacts may stand at once, apart from the notice cap:
+#: a carcass is not a bill the Director papered a room with, and the two
+#: must not compete for the same eight slots. Oldest spoor gives way.
+SPOOR_STANDING_CAP = 8
+
+
+def spoor_artifact(chat_id, row, turn):
+    """One standing spoor record (`world/charter_creature.normalize_spoor`)
+    as an artifact: no poster, the thing itself as the voice, the record's
+    description as the claim. Pure."""
+    room = str(row.get("place") or "")
+    description = str(row.get("description") or "").strip() or "spoor"
+    artifact = new_artifact(
+        chat_id, room=room, turn=turn, description=description,
+        report={
+            "world_event_id": str(row.get("key") or ""),
+            "source_event_id": "",
+            "claim": description,
+            "kind": str(row.get("kind") or ""),
+            "occurred_at": float(row.get("at_hours") or 0.0),
+            "retellings": 0,
+        },
+        posted_by="")
+    artifact["uid"] = "artifact:spoor:%s" % hashlib.sha256(
+        str(row.get("key") or "").encode("utf-8")).hexdigest()[:16]
+    artifact["spoor"] = True
+    return artifact
+
+
+def post_spoor(cid, registry, turn, *, frame_id=None):
+    """Every spoor record a landed registry holds becomes a standing
+    artifact, once; spoor the registry no longer holds comes down. Returns
+    the count standing. Writes only when something changed."""
+    from core.db import wget_for_frame, wset_for_frame
+
+    rows = []
+    for state in ((registry or {}).get("items") or {}).values():
+        for row in ((state or {}).get("state") or {}).get("spoor") or ():
+            if isinstance(row, dict) and row.get("key") and row.get("place"):
+                rows.append(row)
+    artifacts = [dict(a) for a in wget_for_frame(
+        cid, ARTIFACTS_WORLD_KEY, frame_id, []) or [] if isinstance(a, dict)]
+    before = json.dumps(artifacts, sort_keys=True, ensure_ascii=False)
+    wanted = {}
+    for row in rows:
+        artifact = spoor_artifact(cid, row, turn)
+        wanted[artifact["uid"]] = artifact
+    kept = []
+    for artifact in artifacts:
+        if not artifact.get("spoor"):
+            kept.append(artifact)
+            continue
+        if artifact.get("status") != POSTED:
+            kept.append(artifact)
+            continue
+        if artifact.get("uid") in wanted:
+            kept.append(artifact)
+            wanted.pop(artifact["uid"])
+        else:
+            gone = dict(artifact, status=REMOVED, removed_turn=int(turn),
+                        removed_manner="gone")
+            kept.append(gone)
+    fresh = sorted(wanted.values(), key=lambda a: a["uid"])
+    standing_spoor = [a for a in kept if a.get("spoor")
+                      and a.get("status") == POSTED] + fresh
+    if len(standing_spoor) > SPOOR_STANDING_CAP:
+        surplus = standing_spoor[:len(standing_spoor) - SPOOR_STANDING_CAP]
+        for artifact in surplus:
+            artifact["status"] = REMOVED
+            artifact["removed_turn"] = int(turn)
+            artifact["removed_manner"] = "gone"
+        fresh = [a for a in fresh if a.get("status") == POSTED]
+    artifacts = kept + fresh
+    if json.dumps(artifacts, sort_keys=True, ensure_ascii=False) != before:
+        wset_for_frame(cid, ARTIFACTS_WORLD_KEY, artifacts, frame_id)
+    return sum(1 for a in artifacts if a.get("spoor")
+               and a.get("status") == POSTED)
+
+
+# --------------------------------------------------------------------------
 # The ceiling: authored wording, one small call, off the critical path.
 # --------------------------------------------------------------------------
 
