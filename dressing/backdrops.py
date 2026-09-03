@@ -158,7 +158,7 @@ def _room_of_player(scene, player_name):
 # This is `place_desc`'s rule applied to the other half of the key -- the key is
 # a function of what reaches the image, and a key that hashes text the prompt
 # never sees pays for regenerations the picture cannot show.
-VISUAL_STYLE_KEYS = ("genre", "tone", "avoid")
+VISUAL_STYLE_KEYS = ("tone",)
 
 
 def visual_style(style):
@@ -908,7 +908,7 @@ def compose_prompt(place, style=None, flavour=""):
     parts.extend(_source_lighting(place))
     if flavour:
         parts.append(flavour)
-    for key in ("genre", "tone"):
+    for key in ("tone",):
         if (style or {}).get(key):
             parts.append("%s: %s" % (key, style[key]))
     parts.append(_BACKDROP_STYLE)

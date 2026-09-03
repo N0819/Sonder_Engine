@@ -6627,10 +6627,6 @@ offscreen hand retired). What it deliberately does not do:
 - **`shadow_profile` and `standing_intentions` have no writer.** Both were
   the mapping model's; the world keys survive for their readers
   (`world/offscreen.py` reads standing intentions) and stay empty.
-- **`style_guide.mapping_notes` reaches the Director payloads only.** It was
-  the mapping model's standing instruction for new rooms; the prose author
-  and the spatial hand furnish rooms now and receive the guide through the
-  Director payload, but no card names the key.
 - **The classification is measured on stored interpretations, not live.**
   Replayed over the Harrowmere replay's 39 stored `director_interpret`
   outputs against the audit's per-turn room ledger: the compiler agrees

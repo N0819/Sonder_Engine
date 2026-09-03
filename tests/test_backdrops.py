@@ -80,8 +80,8 @@ def test_damage_elsewhere_does_not_invalidate_this_room():
 
 def test_style_is_part_of_the_key():
     sc = _scene()
-    assert visual_signature(sc, "ten_forward", {"genre": "noir"}) \
-        != visual_signature(sc, "ten_forward", {"genre": "pastoral"})
+    assert visual_signature(sc, "ten_forward", {"tone": "noir"}) \
+        != visual_signature(sc, "ten_forward", {"tone": "pastoral"})
 
 
 # --- keeping people out of the frame --------------------------------------
@@ -900,15 +900,17 @@ def test_a_directors_note_does_not_invalidate_every_backdrop():
     assert noted == plain
 
 
-def test_a_genre_does_invalidate_because_it_reaches_the_prompt():
+def test_a_tone_does_invalidate_because_it_reaches_the_prompt():
     """The other direction, and the reason this is a whitelist rather than a
-    denylist of the two note fields: `genre` is written into `compose_prompt`,
-    so a room drawn under one genre really is a different picture."""
+    denylist of the retired note fields: `tone` is written into
+    `compose_prompt`, so a room drawn under one tone really is a different
+    picture. It was `genre` until 2026-09-04, when four of the guide's five
+    fields were retired to the Writers' Room and `tone` was the one kept."""
     scene = _scene()
     plain = visual_signature(scene, "ten_forward", None, viewer="Hinami")
-    genred = visual_signature(scene, "ten_forward", {"genre": "RE:Zero"},
-                              viewer="Hinami")
-    assert genred != plain
+    toned = visual_signature(scene, "ten_forward", {"tone": "RE:Zero"},
+                             viewer="Hinami")
+    assert toned != plain
 
 
 def test_clearing_a_style_field_returns_the_images_it_had():
@@ -918,7 +920,7 @@ def test_clearing_a_style_field_returns_the_images_it_had():
     scene = _scene()
     assert (visual_signature(scene, "ten_forward", {}, viewer="Hinami")
             == visual_signature(scene, "ten_forward",
-                                {"genre": "", "tone": None}, viewer="Hinami"))
+                                {"tone": None}, viewer="Hinami"))
 
 
 @pytest.mark.parametrize("field", backdrops.VISUAL_STYLE_KEYS)
@@ -933,7 +935,7 @@ def test_every_keyed_style_field_actually_reaches_a_prompt(field):
     assert "SENTINELVALUE" in after
 
 
-@pytest.mark.parametrize("field", ("director_notes", "mapping_notes"))
+@pytest.mark.parametrize("field", ("genre", "director_notes", "mapping_notes"))
 def test_a_field_the_prompt_ignores_stays_out_of_the_key(field):
     """The converse, stated as a property rather than a list: if setting a
     field cannot change the prompt, it must not change the key."""

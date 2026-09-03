@@ -2474,7 +2474,14 @@ def fiction_model(chat_id):
 # do not follow that routing: each is read by exactly the stage it gates
 # (`weather_severity` by the world, `narration_tense` by the narrator), through
 # its own named accessor rather than by handing anyone the whole guide.
-STYLE_GUIDE_FIELDS = ("genre", "tone", "director_notes", "mapping_notes", "avoid")
+#: The free-text fields a host may set. `genre`, `director_notes`,
+#: `mapping_notes` and `avoid` were removed 2026-09-04: standing intent is the
+#: Writers' Room's, said in words to something that reads the story back and
+#: argues, rather than a paragraph every stage carries forever; and
+#: `mapping_notes` outlived the agent it was named for. `tone` stays because
+#: it is the register the Director writes resolved events in, and because the
+#: backdrop and ambience seams key their caches on it.
+STYLE_GUIDE_FIELDS = ("tone",)
 STYLE_GUIDE_LIMIT = 2000
 
 # How far the sky is allowed to go, and how much of the world it may touch.
@@ -2592,7 +2599,7 @@ def normalize_style_guide(raw):
         value = raw.get(key)
         if value is None:
             continue
-        text = " ".join(str(value).split()) if key in ("genre", "tone") \
+        text = " ".join(str(value).split()) if key == "tone" \
             else str(value).strip()
         if not text:
             continue

@@ -648,7 +648,7 @@ def _place_block(ctx, room_id):
         from story.scene import fiction_model, style_guide
         block["genre"] = (fiction_model(ctx.chat.id).get("genre") or {}).get("primary") or ""
         sg = style_guide(ctx.chat.id) or {}
-        block["style"] = {k: sg[k] for k in ("genre", "tone", "avoid") if sg.get(k)}
+        block["style"] = {k: sg[k] for k in ("tone",) if sg.get(k)}
     except Exception:
         pass
     return block
