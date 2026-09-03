@@ -1223,7 +1223,12 @@ ROLES = [
     "director_spatial",
     "director_offscreen",
     "narrator",
-    "mapping",
+    # NO "mapping". Lore routing and retrieval is `agents/mapping.
+    # compile_world_context`, deterministic since 2026-09-04: the two model
+    # stages it replaced staged rooms and lore a plan had not drawn, and
+    # the filing of what a beat established is a structured write from the
+    # Director's committed diff (persist/commit_mapping). A model chosen for
+    # this role would never be called, so no row is offered for it.
     # SHAPE, never content. When a stage's output fails validation, this
     # model is asked about the failed FIELDS ALONE and its answer is spliced
     # back at exactly the paths the validator named -- everything else is

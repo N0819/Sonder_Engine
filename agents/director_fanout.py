@@ -453,8 +453,11 @@ def _specialist_payload(name, ctx, sc, view, extras):
             "notices": extras.get("notices") or [],
             "worn_garments": worn_index,
         })
-        if extras.get("proposal"):
-            payload["mapping_scene_proposal"] = extras["proposal"]
+        # The doors this beat reached for that no plan holds: the compiler's
+        # needs. This hand renders the surface -- a stub with the exits the
+        # beat perceived -- and never a plan.
+        if extras.get("planning_needs"):
+            payload["planning_needs"] = extras["planning_needs"]
         if extras.get("present_figures"):
             # WHO IS ALREADY STANDING HERE, for the one hand that mints
             # people. Derived, not the durable ledger: a charter body
@@ -517,8 +520,11 @@ def _specialist_payload(name, ctx, sc, view, extras):
             # its own entries come to. Objective causality, not a mind.
             "sightlines": extras.get("sightlines"),
         })
-        if extras.get("proposal"):
-            payload["mapping_scene_proposal"] = extras["proposal"]
+        # The doors this beat reached for that no plan holds: the compiler's
+        # needs. This hand renders the surface -- a stub with the exits the
+        # beat perceived -- and never a plan.
+        if extras.get("planning_needs"):
+            payload["planning_needs"] = extras["planning_needs"]
         # The plan's seed for the stubs in reach: this hand furnishes them
         # (rooms chunk, A ROOM YOU ARE HANDED AS PLANNED). Author knowledge
         # on an objective-causality surface; no mind receives it.

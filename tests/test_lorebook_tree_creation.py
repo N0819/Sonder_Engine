@@ -288,12 +288,14 @@ class TestCommitMappingRoutesIntoBookOpsTemp:
         chat_id = _make_chat(temp_db)
         ctx = _make_ctx(chat_id, 1, {"introductions": ["The Long Odds"]})
         ctx.narrator = {"new_specifics": ["The Long Odds is Kess's freighter"]}
-        ctx.mapping_stage = {}
-
-        from llm import llm_quality
-        monkeypatch.setattr(llm_quality, "complete_validated_json", lambda **k: {
-            "validated": [{"fact": "The Long Odds is Kess's freighter", "ok": True}],
-            "lore_ops": [{
+        # No stage proposes books during a turn any more (the mapping model
+        # is retired); the routing survives for an authoring package, which
+        # is what this prepared dict stands in for.
+        commit.commit_mapping(ctx, nonce=0, prepared={
+            "skipped": False, "mout": {}, "seed": "seed",
+            "book_ids": commit.chat_lorebook_ids(chat_id),
+            "introductions": [], "needs": [],
+            "ops": [{
                 "op": "create", "book_id": "vehicle_book", "keys": "long_odds",
                 "content": "Kess's battered independent freighter.", "category": "technology",
             }],
@@ -302,8 +304,6 @@ class TestCommitMappingRoutesIntoBookOpsTemp:
                 "book_type": "vehicle", "anchor_entity_id": "long_odds",
             }],
         })
-
-        commit.commit_mapping(ctx, nonce=0)
 
         vehicle_book = temp_db.q(
             "SELECT * FROM lorebooks WHERE chat_id=? AND anchor_entity_id='long_odds'",

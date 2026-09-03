@@ -5,7 +5,7 @@ import agents
 
 def test_agent_roles_live_in_focused_modules():
     assert agents.director_interpret.__module__ == "agents.director"
-    assert agents.mapping_stage.__module__ == "agents.mapping"
+    assert agents.compile_world_context.__module__ == "agents.mapping"
     assert agents.perception_act.__module__ == "agents.perception"
     assert agents.character_step.__module__ == "agents.character"
     assert agents.interaction_loop.__module__ == "agents.loops"

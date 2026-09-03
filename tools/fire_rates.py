@@ -258,8 +258,7 @@ def pipeline_rows(con, turn_ids):
     named = [("reaction_loop", "contested physical reactions"),
              ("interaction_loop", "sequenced conversation"),
              ("background_react", "an unregistered presence reacted"),
-             ("mapping_stage", "full spatial mapping"),
-             ("mapping_quick", "cheap spatial refresh"),
+             ("compile_world_context", "world context compiled from canon"),
              ("narrator_extra", "a second narration pass")]
     rows = [Row("pipeline", key, counts[key], turns, note)
             for key, note in named]

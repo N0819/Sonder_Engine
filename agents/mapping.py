@@ -1,27 +1,33 @@
-"""Lore routing and retrieval agents."""
+"""The world-context compiler: lore routing and retrieval, deterministic.
+
+`compile_world_context` is what the two mapping model stages used to be. It
+assembles, with no model call, what they assembled -- the beat's relevant
+lore from the story's own rows, the books that lore came from, the owed
+history a place has accrued, the plan's brief for a room the beat named,
+and the movement classification the cached-recall stage did cheaply -- and
+it refuses the one thing they also did: inventing. Where `mapping_stage`
+staged a room for a door the plan had not drawn, the compiler emits a typed
+PLANNING NEED (`world/planning_needs.py`) and the Director renders the
+surface the beat perceived, the way it renders an unplanned frontier stub.
+The creative fallback belongs to the Writers' Room (v2 § 9.3), and until
+the room exists a deterministic fill answers the need at commit.
+
+Every reader of the old stages' output keeps its keys: `relevant_lore`,
+`relevant_books`, `staged_lore` (always empty now) and `scene_patch` (always
+the empty containers). `PipelineContext.world_context()` is the one read.
+"""
 
 from __future__ import annotations
 
-from story.character_schema import (
-    persona_appearance,
-    persona_name,
-    persona_public_history,
-)
 from core.db import wget
-from mind.memory import lorebook_manifest, search_lore, resolve_lorebook_graph
-from llm.prompts import get_prompt
+from mind.memory import search_lore
 from story.scene import (
     cast_scene_context,
-    director_context,
-    fiction_model,
     get_scene,
-    persona_of,
     recent_events,
-    style_guide,
 )
 
 from .common import (
-    _agent_json,
     _books,
     _book_weights,
     _join_text,
@@ -29,18 +35,37 @@ from .common import (
     _normalize_scene_patch,
 )
 
-def mapping_stage(ctx, nonce):
-    chat = ctx.chat
-    interp = ctx.get("director_interpret") or {}
-    fl = interp.get("flow", {})
+#: Candidates retrieved for a beat -- the full stage's `k`.
+WORLD_CONTEXT_LORE_K = 14
+#: Entries carried on the step after the cache merge -- the quick stage's cap.
+WORLD_CONTEXT_LORE_CAP = 12
+#: Recent beats folded into the retrieval query -- the full stage's window.
+WORLD_CONTEXT_RECENT_EVENTS = 5
 
+#: The fields a relevant-lore row carries onto the step. The engine's own
+#: rows, verbatim -- there is no model echo to join any more, which was the
+#: transcription that lost sentences in 13.6% of 855 measured entries.
+LORE_ROW_FIELDS = (
+    "id", "entry_uid", "book_id", "keys", "content", "category", "locked")
+
+
+def _lore_row(hit):
+    return {field: hit.get(field) for field in LORE_ROW_FIELDS if field in hit}
+
+
+def _query(ctx, interp):
+    chat = ctx.chat
+    fl = interp.get("flow") or {}
     pieces = [e.get("text") or e.get("attempt") or ""
-              for e in (interp.get("sequence") or [])]
+              for e in (interp.get("sequence") or []) if isinstance(e, dict)]
     pieces += [fl.get("mapping_request") or "",
                interp.get("location_query") or "", ctx.input or ""]
-    pieces += recent_events(chat["id"], 5)
-
-    if not ctx.get("director_interpret"):
+    # Frame-scoped and scrubbed (audit X18): a routing stage is never
+    # entitled to the omniscient events row.
+    pieces += recent_events(chat["id"], WORLD_CONTEXT_RECENT_EVENTS)
+    if not interp:
+        # The opening: no interpretation yet, so the scenario and the cast's
+        # public surface are the query.
         pieces += [chat.get("scenario") or ""]
         for actor in cast_scene_context(ctx.cast):
             pieces.extend([
@@ -52,253 +77,182 @@ def mapping_stage(ctx, nonce):
                 " ".join(str(ab.get("notes") or "") for ab in actor["abilities"]
                          if isinstance(ab, dict)),
             ])
+    return _join_text(pieces)
 
-    query = _join_text(pieces)
+
+def classify_movement(interp, scene, *, planned_for):
+    """Where the beat is going, and whether the world has it.
+
+    ``planned_for(query)`` answers with the plan's record for a room the
+    plan holds under that spelling, or None. Returns
+    ``{"to_room", "status"}`` with status one of ``known`` (a scene room),
+    ``planned`` (the plan holds it; the Director furnishes it on entry),
+    ``unplanned`` (neither -- a planning need), or ``None`` when the beat
+    declares no destination. This is the classification `mapping_quick`
+    made to decide whether to escalate; it is now a fact on the step.
+    """
+    mv = interp.get("movement") if isinstance(interp, dict) else None
+    target = mv.get("to_room") if isinstance(mv, dict) else None
+    if not target:
+        return {"to_room": None, "status": None}
+    target = str(target)
+    if target in ((scene or {}).get("rooms") or {}):
+        return {"to_room": target, "status": "known"}
+    if planned_for(target):
+        return {"to_room": target, "status": "planned"}
+    return {"to_room": target, "status": "unplanned"}
+
+
+def _location_query_status(query, scene, *, planned_for):
+    """A location query is answered by the scene, by the plan, or by nobody."""
+    if not query:
+        return None
+    from world.spatial import normalize_room_id
+
+    folded = normalize_room_id(str(query))
+    rooms = (scene or {}).get("rooms") or {}
+    for rid, room in rooms.items():
+        if normalize_room_id(str(rid)) == folded:
+            return "known"
+        if isinstance(room, dict) and normalize_room_id(
+                str(room.get("name") or "")) == folded:
+            return "known"
+    if planned_for(query):
+        return "planned"
+    return "unmatched"
+
+
+def compile_world_context(ctx, nonce):
+    """Assemble the beat's world context from the story's own rows.
+
+    Deterministic: same inputs, same output, no provider call. ``nonce`` is
+    accepted for the step-handler signature and unused -- a reroll of this
+    step is the same compilation.
+    """
+    from world.planning_needs import planning_need
+    from world.structure import planned_context
+
+    chat = ctx.chat
+    cid = chat["id"]
+    interp = ctx.get("director_interpret") or {}
+    fl = interp.get("flow") if isinstance(interp.get("flow"), dict) else {}
+
+    query = _query(ctx, interp)
     books = _books(ctx, refresh=True)
     weights = _book_weights(ctx, refresh=True)
-    hits = search_lore(weights, query, k=14, exclude_categories=["knowledge"])
-    # Living world, approach D: a location entry the mapping agent is about
-    # to work from may carry the history the unvisited place has accrued
-    # (living_world.owed_history). This seam is the obligation ledger's ONLY
-    # consumer -- the place's debt surfaces where the place itself is
-    # generated, never in any mind's payload; arrival is the earning event.
+    hits = search_lore(weights, query, k=WORLD_CONTEXT_LORE_K,
+                       exclude_categories=["knowledge"])
+    # Living world, approach D: a location entry the beat is about to work
+    # from may carry the history the unvisited place has accrued. This seam
+    # is the obligation ledger's ONLY consumer -- the place's debt surfaces
+    # where the place itself is compiled, never in any mind's payload;
+    # arrival is the earning event.
+    owed = 0
     try:
         from world.living_world import attach_owed_history
-        hits = attach_owed_history(chat["id"], hits)
+        before = [dict(h) for h in hits]
+        hits = attach_owed_history(cid, hits)
+        owed = sum(1 for b, a in zip(before, hits)
+                   if isinstance(a, dict) and a.get("content") != b.get("content"))
     except Exception as exc:
         ctx.add_warning(f"owed history not attached: {exc}")
 
-    pers = persona_of(chat)
-    planned = None
-    try:
-        from world.structure import planned_context
-        planned = planned_context(chat["id"], interp.get("location_query"))
-    except Exception as exc:
-        ctx.add_warning(f"planned room context not attached: {exc}")
-
-    payload = {
-        # X18: mapping is NOT entitled to the omniscient record. It emits lore
-        # entries and scene_patch room notes, and room_notes is served into
-        # every perceiver's payload -- so an unscrubbed concealed line here
-        # launders into everyone's context two model hops later.
-        "director_recent_messages": director_context(
-            chat["id"], 5, entitled=False),
-        "player_action": {
-            "sequence": interp.get("sequence") or [],
-            "speech": interp.get("speech"),
-            "action": (interp.get("action") or {}).get("attempt"),
-        },
-        "player_raw_input": ctx.input or "",
-        "scenario": chat.get("scenario") or "",
-        # Authored house style for generated content (see scene.style_guide).
-        # Omitted entirely when unset, so the self-determining default path is
-        # byte-identical to what it was before this existed.
-        **({"style_guide": style_guide(chat["id"])}
-           if style_guide(chat["id"]) else {}),
-        "player": {
-            "name": persona_name(pers),
-            "appearance": persona_appearance(pers),
-            "public_history": persona_public_history(pers),
-        },
-        "present_characters": cast_scene_context(ctx.cast),
-        "location_query": interp.get("location_query"),
-        **({"planned_context": planned} if planned else {}),
-        # Captured player declarations forwarded for BOUNDED ADDITIVE
-        # elaboration (see the GENERATION REQUESTS prompt rule): the player
-        # owns the declared existence and stated specifics; mapping owns
-        # only what was left unstated, at the scale of the declaration.
-        "generation_requests": [
-            g for g in (fl.get("generation_requests") or [])
-            if isinstance(g, dict)
-        ],
-        "lorebook_manifest": lorebook_manifest(chat["id"]),
-        "currently_active_books": wget(chat["id"], "active_books", None),
-        "candidate_lore": hits,
-        "scene": get_scene(chat["id"], chat),
-        "fiction_model": fiction_model(chat["id"]),
-        "pending": wget(chat["id"], "pending", []),
-        "variant_seed": nonce,
-    }
-
-    out = _agent_json(
-        "mapping",
-        "mapping_stage",
-        get_prompt("mapping_stage", ctx.language),
-        payload,
-        temperature=0.2,
-    )
-
-    out["relevant_lore"] = _join_relevant_lore(
-        ctx, out.get("relevant_lore"), hits)
-    out.setdefault("staged_lore", [])
-    out["scene_patch"] = _normalize_scene_patch(out.get("scene_patch"))
+    fresh = [_lore_row(h) for h in hits if isinstance(h, dict)]
+    # Owed history is attached to the hit's `content`, which `_lore_row`
+    # carries -- so the debt rides the step exactly as it rode the model
+    # payload, and `lore_for` serves it to the Director.
+    cache = wget(cid, "lore_cache", []) or []
+    merged = merge_lore(fresh, cache)[:WORLD_CONTEXT_LORE_CAP]
 
     valid = set(books)
-    rb = []
-    for b in (out.get("relevant_books") or []):
+    relevant_books = []
+    for entry in merged:
         try:
-            bi = int(b)
-        except Exception:
+            bid = int(entry.get("book_id"))
+        except (TypeError, ValueError):
             continue
-        if bi in valid and bi not in rb:
-            rb.append(bi)
-    out["relevant_books"] = rb
-    # The full candidate list is NOT stored back on the step. Nothing read it
-    # -- the entries the model actually cited are already merged into
-    # `relevant_lore` above, from this same in-memory `hits`, and
-    # `common.lore_for` is the only consumer of a stored mapping step. Live,
-    # it was 462 of 463 active mapping_stage variants and 4,961,385 of
-    # 7,510,198 stored bytes: 66% of the step, riding every checkpoint,
-    # branch, archive and trace as opaque content, and re-read on every
-    # rerun's hydration.
-    return out
+        if bid in valid and bid not in relevant_books:
+            relevant_books.append(bid)
 
+    scene = get_scene(cid, chat)
 
-# The entry text the engine hands the model, and the entry text the engine
-# takes back, are the same rows -- so the return trip is transcription, and
-# transcription is where a lore entry quietly loses sentences.
-#
-# Measured over all 416 real mapping calls in the corpus (855 relevant_lore
-# entries): 86.3% of echoed `content` came back byte-identical, 5.8% came
-# back truncated, and 7.7% came back rewritten at a median 59% of the true
-# length. That mutated 13.6% is not a cosmetic loss. `lore_for` forwards the
-# echo into the Director's payloads, and `commit.py` writes it into
-# `lore_cache`, which `mapping_quick` then re-serves with NO further model
-# call for 1,879 of 1,881 measured steps -- so one abridged echo becomes the
-# served copy of that entry until the next real mapping call happens to
-# replace it. The engine still holds every candidate in `hits` two hundred
-# lines up; joining by id is free, in memory, and cannot abridge anything.
-#
-# What the model is still authoring, and what this must not touch: WHICH
-# entries are relevant, and `why_relevant`. That judgement is the whole
-# point of the ask. Only the echo goes.
-_LORE_JOINED_FIELDS = (
-    "entry_uid", "book_id", "keys", "content", "category", "locked")
+    def planned_for(spelling):
+        try:
+            return planned_context(cid, spelling)
+        except Exception as exc:
+            ctx.add_warning(f"planned room context not attached: {exc}")
+            return None
 
+    movement = classify_movement(interp, scene, planned_for=planned_for)
+    location_query = interp.get("location_query") or None
+    query_status = _location_query_status(
+        location_query, scene, planned_for=planned_for)
 
-def _join_relevant_lore(ctx, entries, hits):
-    """Replace the model's echoed lore text with the engine's own rows.
+    planned = None
+    if movement["status"] == "planned":
+        planned = planned_for(movement["to_room"])
+    elif query_status == "planned":
+        planned = planned_for(location_query)
 
-    An id the engine never offered keeps whatever the model wrote and warns:
-    that is either a hallucinated citation or an entry retrieved by some
-    path this function does not know about, and silently dropping either
-    one would hide it.
-    """
-    by_id = {}
-    for hit in (hits or []):
-        if isinstance(hit, dict) and hit.get("id") is not None:
-            by_id[str(hit["id"])] = hit
-    joined, uncited = [], []
-    for entry in (entries or []):
-        if not isinstance(entry, dict):
+    needs = []
+    frame_id = getattr(ctx.turn, "frame_id", None)
+    turn_idx = getattr(ctx.turn, "idx", 0) or 0
+    mv = interp.get("movement") if isinstance(interp.get("movement"), dict) else {}
+    if movement["status"] == "unplanned":
+        needs.append(planning_need(
+            "room", "declared_destination_unplanned",
+            subject=movement["to_room"],
+            surface={"why": str(mv.get("why") or ""),
+                     "request": str(fl.get("mapping_request") or "")},
+            turn_idx=turn_idx, frame_id=frame_id))
+    if query_status == "unmatched":
+        needs.append(planning_need(
+            "room", "location_query_unmatched",
+            subject=location_query,
+            surface={"request": str(fl.get("mapping_request") or "")},
+            turn_idx=turn_idx, frame_id=frame_id))
+    for request in (fl.get("generation_requests") or []):
+        if not isinstance(request, dict):
             continue
-        source = by_id.get(str(entry.get("id")))
-        if source is None:
-            uncited.append(entry.get("id"))
-            joined.append(entry)
+        subject = request.get("subject") or request.get("location_id")
+        if not subject:
             continue
-        merged = dict(entry)
-        for field in _LORE_JOINED_FIELDS:
-            if field in source:
-                merged[field] = source[field]
-        joined.append(merged)
-    if uncited:
-        ctx.add_warning(
-            "mapping cited lore not offered as a candidate "
-            f"(ids {uncited}); their text is the model's own and was not "
-            "verified against a stored entry")
-    return joined
+        try:
+            needs.append(planning_need(
+                request.get("kind"), "generation_request",
+                subject=subject,
+                surface={k: request[k] for k in (
+                    "location_id", "constraints", "urgency") if request.get(k)},
+                turn_idx=turn_idx, frame_id=frame_id))
+        except ValueError as exc:
+            ctx.add_warning(f"generation request not recorded: {exc}")
+    # One need per id: the same door reached twice in one beat is one need.
+    unique, seen = [], set()
+    for need in needs:
+        if need["need_id"] in seen:
+            continue
+        seen.add(need["need_id"])
+        unique.append(need)
 
-
-# The phrases in the Director's free-text `flow.mapping_request` that mean this
-# beat needs a place STAGED rather than recalled.
-#
-# One list, because there were two and they had already drifted apart by
-# `"new location"`. They answer adjacent questions -- runtime's
-# `_mapping_must_precede_perception` decides whether mapping must run BEFORE
-# perception, `mapping_quick` below decides whether cached recall may serve at
-# all -- but a request that forces the serialization and does not force the
-# staging produces the worst of both: mapping runs first, cheaply, and the
-# location is never staged, so perception's room-notes fallback reads nothing.
-#
-# Still a naked substring test against model-authored prose, which is the
-# literal-guard shape that fails when a model rewrites. Keeping it in one place
-# is what makes replacing it with a structured signal a single edit later.
-STAGING_REQUEST_PHRASES = (
-    "new room", "generate room", "scene graph", "new location")
-
-
-def mapping_request_stages_a_room(request) -> bool:
-    """True when `flow.mapping_request` asks for a place to be brought into
-    existence, rather than for lore about one that already is."""
-    text = str(request or "").casefold()
-    return any(phrase in text for phrase in STAGING_REQUEST_PHRASES)
-
-
-def mapping_quick(ctx, nonce):
-    chat = ctx.chat
-    interp = ctx.get("director_interpret") or {}
-    sc = get_scene(chat["id"], chat)
-    mv = interp.get("movement")
-    if isinstance(mv, dict) and mv.get("to_room"):
-        if mv["to_room"] not in (sc.get("rooms") or {}):
-            return mapping_stage(ctx, nonce)
-    if interp.get("location_query"):
-        return mapping_stage(ctx, nonce)
-    if (interp.get("flow") or {}).get("generation_requests"):
-        # A captured player declaration awaits elaboration -- cached recall
-        # cannot mint the declared content; escalate to the full stage.
-        return mapping_stage(ctx, nonce)
-    if mapping_request_stages_a_room(
-            (interp.get("flow") or {}).get("mapping_request")):
-        return mapping_stage(ctx, nonce)
-
-    pieces = [ctx.input or ""]
-    pieces += [e.get("text") or e.get("attempt") or ""
-               for e in (interp.get("sequence") or [])]
-    pieces += recent_events(chat["id"], 3)
-    books = _books(ctx)
-    active = wget(chat["id"], "active_books", None)
-    canon = chat.get("lorebook_id")
-    if isinstance(active, list) and active:
-        # `active` is whatever specific book ids the last full mapping_
-        # stage call flagged as relevant_books -- typically just the
-        # current location, not its ancestor region/setting book, even
-        # though that ancestor is exactly the kind of thing a location
-        # should keep inheriting from. A flat intersection against
-        # `books` (already hierarchy-expanded) silently dropped any
-        # ancestor that active's own listing didn't happen to name --
-        # re-expand active through the hierarchy again before
-        # intersecting, so its ancestors survive here too.
-        expanded = {r["id"] for r in resolve_lorebook_graph(active, chat_id=chat["id"])}
-        if canon:
-            expanded.add(canon)
-        sel = [b for b in books if b in expanded]
-        if not sel:
-            sel = books
-    else:
-        sel = books
-    query = _join_text(pieces)
-    weights = _book_weights(ctx)
-    hits = search_lore(
-        {b: weights.get(b, 1.0) for b in sel},
-        query,
-        k=8,
-        exclude_categories=["knowledge"],
-    )
-    cache = wget(chat["id"], "lore_cache", []) or []
-    merged = merge_lore(hits, cache)
+    summary = (f"{len(merged)} lore entries compiled from "
+               f"{len(relevant_books)} book(s)")
+    if unique:
+        summary += f"; {len(unique)} planning need(s) raised"
     return {
-        "relevant_lore": merged[:12], "staged_lore": [],
-        # The same normalizer `mapping_stage` runs, rather than the same shape
-        # written out again: this copy was already a field behind
-        # (`remove_adjacent`), and it survived only because every consumer
-        # spells the read `diff.get("remove_adjacent") or []`. The next field
-        # the normalizer grows would be missing here too, silently.
+        "relevant_lore": merged,
+        "relevant_books": relevant_books,
+        # The compiler never stages and never patches: a room the beat
+        # reached with no plan is a NEED, not a proposal.
+        "staged_lore": [],
         "scene_patch": _normalize_scene_patch({}),
-        "cached": True,
-        "summary": f"{len(merged[:12])} lore entries recalled from "
-                   f"{len(sel)} active book(s) (no mapping call needed).",
+        "movement": movement,
+        "location_query": {"query": location_query, "status": query_status}
+                          if location_query else None,
+        **({"planned": planned} if planned else {}),
+        "planning_needs": unique,
+        "owed_history_attached": owed,
+        "compiled": True,
+        "summary": summary,
     }
 
 

@@ -153,7 +153,6 @@ class TestCommitMappingHonorsExistenceMasking:
             "state_diff": {"introductions": ["Alice meets Bob"]},
         }
         ctx.narrator = {}
-        ctx.mapping_stage = {}
         return ctx
 
     def test_a_masked_characters_identity_is_not_recognized_via_introduction(
@@ -174,12 +173,8 @@ class TestCommitMappingHonorsExistenceMasking:
             (chat_id,),
         )
         ctx = self._base_ctx(temp_db, chat_id, past, cast)
-
-        from llm import llm_quality
-        monkeypatch.setattr(llm_quality, "complete_validated_json", lambda **k: {
-            "validated": [], "lore_ops": [],
-            "validated_introductions": [{"ok": True, "who": "Alice", "learns": "Bob"}],
-        })
+        ctx.director_resolve["state_diff"]["introductions"] = [
+            {"who": "Alice", "learns": "Bob"}]
 
         from core.db import active_frame_id, wget
         token = active_frame_id.set(past)
@@ -206,12 +201,8 @@ class TestCommitMappingHonorsExistenceMasking:
             (chat_id,),
         )
         ctx = self._base_ctx(temp_db, chat_id, past, cast)
-
-        from llm import llm_quality
-        monkeypatch.setattr(llm_quality, "complete_validated_json", lambda **k: {
-            "validated": [], "lore_ops": [],
-            "validated_introductions": [{"ok": True, "who": "Alice", "learns": "Bob"}],
-        })
+        ctx.director_resolve["state_diff"]["introductions"] = [
+            {"who": "Alice", "learns": "Bob"}]
 
         from core.db import active_frame_id, wget
         token = active_frame_id.set(past)

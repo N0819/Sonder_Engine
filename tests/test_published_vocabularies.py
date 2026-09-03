@@ -385,14 +385,13 @@ class TestTheFourKindsThatCouldNotArriveNowMoveTheLedger:
 # are the ones carrying the most information: a cupboard graded as a bedroom,
 # a cathedral graded as a hall.
 
-SIZING_PROMPTS = ("director_establish", "mapping_stage")
+SIZING_PROMPTS = ("director_establish",)
 
 #: The exact text each hand carried, quoted so the fix cannot regress into a
 #: paraphrase of the same three-value scale. Substring checks, so they also
 #: catch the alternation reappearing inside a longer sentence.
 SUPERSEDED_SIZE_TEXT = {
     "director_establish": ("size:'small'|'medium'|'large'",),
-    "mapping_stage": ("'small' by default", "デフォルトは'small'"),
 }
 
 

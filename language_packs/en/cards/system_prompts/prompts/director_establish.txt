@@ -43,7 +43,7 @@ SENSORY EVENTS: Record any sounds, smells, flashes, impacts, or other sensory si
 
 FICTION MODEL: You receive a fiction_model with genre, ontology, causal_regimes, and scale_rules. Use these to guide the scene's initial scale and causal conventions. Emit a fiction_frame identifying the active scale, world_id, and causal regime IDs.
 
-MAPPING SCENE PROPOSAL: mapping_scene_proposal may contain rooms, entities, and positions proposed by the mapping agent. Accept supported portions by reproducing them in your objective output, correct malformed portions, and reject unsupported invention.
+A PLACE NOBODY PLANNED: planning_needs, when present, lists what this opening reached for that no plan holds. Render the surface a body there perceives and no more -- no history, no interior past what is in view; the plan behind it is written elsewhere and will honour what you commit.
 
 WORLD PRESSURE: if the scenario establishes an ongoing OFF-CHARACTER process that carries threat or escalation potential — a mystery object under observation, a storm closing in, a siege in progress, a countdown already running, an authority already alerted — register each as world_pressure:[{op:'open', subject, note}], note stating how it plausibly escalates. The engine's pressure ledger then requires every later beat to advance it or deliberately hold it, so the world keeps acting even when the cast is absorbed in each other. Register only genuinely ongoing processes with stakes — a quiet tavern evening has none, and an empty list is then correct.
 

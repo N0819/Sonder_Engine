@@ -217,10 +217,22 @@ def test_provisional_is_below_everything_and_the_seven_are_not_ranked():
     assert outranks("nonsense", PROVISIONAL) is None
 
 
-def test_promotion_is_a_named_seam_and_is_not_implemented_here():
-    """Without this the seam can be quietly filled in by whatever needs it first,
-    which is how the Director boundary gets touched without anyone deciding to."""
-
-    with pytest.raises(NotImplementedError) as excinfo:
-        promote(record(), "resolved_fact", adjudicator="director")
-    assert "settle_claims" in str(excinfo.value)
+def test_promotion_returns_an_adjudicated_copy_and_writes_nothing():
+    """The seam, implemented for its first real producer (a beat's room
+    filings): a provisional record comes back carrying the disposition and
+    the adjudicator, marked as promoted; the original is untouched; nothing
+    that is not provisional, not adjudicated, or unnamed gets through."""
+    original = record()
+    promoted = promote(original, "spatial_generation", adjudicator="director_resolve")
+    assert promoted["disposition"] == "spatial_generation"
+    assert promoted["adjudicator"] == "director_resolve"
+    assert promoted["promoted_from"] == PROVISIONAL
+    assert original["disposition"] == PROVISIONAL
+    assert promoted["subject"] == original["subject"]
+    with pytest.raises(ValueError):
+        promote(original, "provisional", adjudicator="director_resolve")
+    with pytest.raises(ValueError):
+        promote(original, "resolved_fact", adjudicator="")
+    with pytest.raises(ValueError):
+        promote({**original, "subject": {"kind": "room", "id": "Not An Id"}},
+                "resolved_fact", adjudicator="director_resolve")

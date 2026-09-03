@@ -73,9 +73,10 @@ class _StubCtx:
         self._staged = staged
 
     def get(self, key, default=None):
-        if key == "mapping_stage":
-            return {"staged_lore": self._staged, "relevant_lore": []}
         return default
+
+    def world_context(self):
+        return {"staged_lore": self._staged, "relevant_lore": []}
 
 
 def test_ancestor_scoped_lore_is_filtered_for_sealed_observer():

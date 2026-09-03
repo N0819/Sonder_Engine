@@ -11,10 +11,12 @@ laundering section 2C describes, arriving from a new direction. This module
 gives that output its own tier and refuses, on the write path, to let it look
 like anything else.
 
-WHAT THIS IS NOT. It does not promote. Promotion is the Director's, per
-section 7 of ``docs/archive/PROPOSAL_2026-08-06_AMENDMENTS.md``; the seam is named in
-``promote`` below and is deliberately unimplemented here so the tier can land
-and be tested without touching the Director seam.
+PROMOTION. ``promote`` below lifts a provisional record into one of the
+adjudicated dispositions, on the say of a named adjudicator, and returns the
+record the caller may then write; it writes nothing itself. Its first real
+producer is the filing of a beat's rooms (`persist/commit_mapping`), the
+path that used to turn a model's confirmation into durable lore with no
+disposition at all.
 
 SUBJECT KIND IS AN OPEN VOCABULARY, on purpose. ``KNOWN_SUBJECT_KINDS`` is a
 courtesy list, not an enum: an unrecognised kind VALIDATES and is reported in
@@ -347,33 +349,44 @@ def validate_provisional(
 
 
 def promote(record: Mapping[str, Any], disposition: str, *, adjudicator: str) -> dict[str, Any]:
-    """NOT IMPLEMENTED, and deliberately so. This is the named seam.
+    """Lift a provisional record into an adjudicated disposition.
 
-    Promotion out of the provisional tier belongs to the Director, per section 7
-    of ``docs/archive/PROPOSAL_2026-08-06_AMENDMENTS.md``: the Director names a
-    claim in ``state_diff.ratified_claims``, ``commit`` hands that list to
-    ``background_claims.settle_claims``, and settling it is what makes the
-    outcome real.
+    THE NAMED SEAM, IMPLEMENTED 2026-09-04 for the first real producer: the
+    filing of what a beat established about a place. The mapping model used
+    to confirm a staged room description into a lore entry with no
+    disposition at all -- the privilege `docs/UNBUILT.md` § 4.3 Gap 5 was
+    opened about. Now `persist/commit_mapping.room_filings` builds a
+    provisional record for every room the Director's committed diff
+    described, and promotes it here to `spatial_generation` with the stage
+    that ruled it as adjudicator, before anything is written.
 
-    THE MISSING WRITE IS NO LONGER MISSING, and this docstring said for a long
-    time that it was. ``background_claims.write_canon`` exists and
-    ``settle_claims`` calls it: a ratified claim is written into the chat's
-    canon lorebook, keyed by its own content hash so a replayed beat cannot
-    mint it twice. Flipping a status field and stopping was the defect that
-    path already repaired.
+    What this does: validates the record as a PROVISIONAL one (same write
+    path check as everything else in this tier -- an id-shaped subject, a
+    base turn, a basis, no consequence keys), checks the target disposition
+    is one of the seven adjudicated ones and the adjudicator is named, and
+    returns a NEW record carrying the disposition, the adjudicator and a
+    `promoted_from: provisional` mark. It writes nothing: the caller owns
+    the write, in its own transaction, and the returned record is what it
+    may write. It raises rather than warns, because a record that cannot be
+    promoted must not be filed as if it had been.
 
-    What is still unimplemented is promotion of a record in THIS module's
-    shape -- a provisional record with a subject, a base_turn and a basis --
-    which is a different object from a background claim and has no adjudicated
-    path yet. It is left unimplemented so this tier can land, be tested and be
-    committed without touching the Director seam, which the proposal itself
-    warns should be approached test-first and small.
+    Background claims are NOT routed here: `state_diff.ratified_claims` ->
+    `background_claims.settle_claims` -> `write_canon` is their own path,
+    keyed by content hash, and a claim is a different object from a record
+    in this module's shape.
     """
-
-    raise NotImplementedError(
-        "promotion out of the provisional tier is the Director's; the seam is "
-        "state_diff.ratified_claims -> settle_claims. That path writes ratified "
-        "background claims into canon (background_claims.write_canon); a "
-        "provisional record in this module's shape has no adjudicated path yet. "
-        "See docs/archive/PROPOSAL_2026-08-06_AMENDMENTS.md section 7."
-    )
+    if disposition not in ADJUDICATED_DISPOSITIONS:
+        raise ValueError(
+            f"disposition {disposition!r} is not one of the adjudicated "
+            f"dispositions {ADJUDICATED_DISPOSITIONS}")
+    if not isinstance(adjudicator, str) or not adjudicator.strip():
+        raise ValueError("promotion names its adjudicator")
+    result = validate_provisional(record)
+    if not result.ok:
+        raise ValueError(
+            "record cannot be promoted: " + "; ".join(result.errors))
+    promoted = dict(record)
+    promoted["disposition"] = disposition
+    promoted["adjudicator"] = adjudicator.strip()
+    promoted["promoted_from"] = PROVISIONAL
+    return promoted

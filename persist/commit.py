@@ -113,10 +113,10 @@ from persist.commit_ledgers import (OBLIGATION_OVERDUE_AGE, OBLIGATION_CAP,
     pending_obligation_view, _find_obligation, commit_obligations,
     WORLD_PRESSURE_STALL_AGE, WORLD_PRESSURE_CAP, world_pressure_view,
     _find_pressure, commit_world_pressure)
-from persist.commit_mapping import (normalize_offscreen_events,
+from persist.commit_mapping import (
     _apply_mapping_book_ops, prepare_mapping_commit, commit_mapping, _lore_for,
     _fact_is_covered, _generate_fallback_ops, GENERATED_SOURCE_PREFIX,
-    _file_engine_provenance)
+    _file_engine_provenance, room_filings, FILED_ROOM_DISPOSITION)
 from persist.commit_background import (BACKGROUND_PROMOTION_DIALOGUE_THRESHOLD,
     BACKGROUND_PROMOTION_MENTION_THRESHOLD, promotion_thresholds,
     _BACKGROUND_NAME_TITLE_WORDS, _NAME_TITLE_PREFIXES, strip_name_titles,

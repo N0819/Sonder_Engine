@@ -686,8 +686,10 @@ def prepare_scene_commit(ctx):
     # (like it drops remove_rooms below). Fill ONLY fields the Director's room
     # LACKS (it wins if it echoed them); apply room_renames so a rekeyed minted
     # room keeps its detail; never CREATE a room the Director itself didn't.
-    _mapping_patch = ((ctx.mapping_stage or {}).get("scene_patch")
-                      or (ctx.mapping_quick or {}).get("scene_patch") or {})
+    # Empty since the compiler (it patches nothing); read through the one
+    # seam so a beat stored under the old mapping stages still folds its
+    # advisory detail on a rerun.
+    _mapping_patch = ctx.world_context().get("scene_patch") or {}
     _diff_rooms = diff.get("rooms")
     if isinstance(_diff_rooms, dict):
         for _rid, _mroom in (_mapping_patch.get("rooms") or {}).items():
@@ -841,11 +843,7 @@ def prepare_scene_commit(ctx):
         for rid in destruction.get("doomed_rooms") or []:
             (sc.get("rooms") or {}).pop(rid, None)
 
-    staged = (
-        (ctx.mapping_stage or {}).get("staged_lore") or []
-    ) + (
-        (ctx.mapping_quick or {}).get("staged_lore") or []
-    )
+    staged = ctx.world_context().get("staged_lore") or []
     interp = ctx.director_interpret or {}
     mv = interp.get("movement")
     target_room = mv.get("to_room") if isinstance(mv, dict) else None
@@ -921,8 +919,7 @@ def prepare_scene_commit(ctx):
     # removals apply deterministically here -- conservatively: never a room
     # this turn's diff (re)asserts, never an occupied room, never an entity
     # interior, never a room any transit state still targets.
-    mapping_patch = ((ctx.mapping_stage or {}).get("scene_patch")
-                     or (ctx.mapping_quick or {}).get("scene_patch") or {})
+    mapping_patch = ctx.world_context().get("scene_patch") or {}
     proposed_removals = [str(r) for r in (mapping_patch.get("remove_rooms")
                                           or []) if r]
     if proposed_removals:
