@@ -149,7 +149,7 @@ install embeds onto — `want_fallback = target_key == "cheap:crc32:256"`
 (`mind/memory_vectors.py:215`) — and `b467762` applied the same discriminator to
 the import path: "a fallback is a failure only when the hash is not what this
 install embeds onto." **Undeclared substitution is the defect; a declared mode
-is not.** That is the whole of `docs/UNBUILT.md` §1.75.
+is not.** That was `docs/UNBUILT.md` §1.75, deleted 2026-09-04 when the request-sized chunking landed in `mind/memory_write.py`.
 
 So `--allow-fallback-queries` turns the refusal into a declared arm rather than
 removing it:
