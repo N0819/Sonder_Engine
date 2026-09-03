@@ -1378,12 +1378,50 @@ def _figure_head_noun(text):
     return words[-1] if words else ""
 
 
+#: The shortest post noun a compound may end in and still name it: below
+#: this, an ending is a suffix ("-man", "-er"), not a word.
+ROLE_TAIL_MIN_LETTERS = 4
+
+
+def _role_noun_matches(post_noun, minted_heads):
+    """Does the post's head noun name the same kind of person as one of the
+    minted labels' head nouns -- equal, or the minted head a compound
+    ending in the post noun (`_bind_minted_entities_to_present_figures`)."""
+    post_noun = str(post_noun or "")
+    if not post_noun:
+        return False
+    if post_noun in minted_heads:
+        return True
+    if len(post_noun) < ROLE_TAIL_MIN_LETTERS:
+        return False
+    return any(head.endswith(post_noun) and head != post_noun
+               for head in minted_heads)
+
+
 def _bare_person_name(text):
     """A display name without ranks, honorifics or articles, casefolded, so
     "Reeve Halinham Nookfeller" and "reeve halinham nookfeller" compare
     equal, as they should."""
     from persist.commit import strip_name_titles
     return " ".join(strip_name_titles(str(text or "")).split()).casefold()
+
+
+def _mint_fallback_room(sd, player_name, player_room_before):
+    """The room a positionless mint stands in: where the beat RESOLVED the
+    player into, else where they stood before it.
+
+    A person is minted overwhelmingly on the beat the player walks in on
+    them, and a mint written without a position stands where the player
+    arrived, not where they left from. The merged diff's own position for
+    the player is the movement backstop's answer for this beat; the
+    pre-move room is right only when the beat did not move them (the
+    opening beat has no "before" at all and passes None).
+    """
+    positions = (sd or {}).get("positions") if isinstance(sd, dict) else None
+    positions = positions if isinstance(positions, dict) else {}
+    arrived = str(positions.get(str(player_name or "")) or "").strip() \
+        if player_name else ""
+    return arrived or (str(player_room_before or "").strip() or None)
 
 
 def _bind_minted_entities_to_present_figures(sc, sd, figures, *,
@@ -1464,8 +1502,18 @@ def _bind_minted_entities_to_present_figures(sc, sd, figures, *,
         else:
             heads = {_figure_head_noun(label) for label in labels}
             heads.discard("")
+            # The head noun equal, or the minted head a COMPOUND of the
+            # post's noun: English puts the kind of person last and the
+            # qualifier in front, so a role noun that ends in the post's
+            # noun names a specialisation of that post -- a blacksmith is a
+            # smith, a gatekeeper is a keeper. The tail must be a whole
+            # word of at least four letters, so "-man" and "-er" endings
+            # cannot make a watchman of a chairman. (Harrowmere replay
+            # 2026-09-03 turn 23: "The Blacksmith" beside the smith on
+            # watch, unbound on the head noun alone.)
             by_role = [f for f in pool if f.get("posts")
-                       and _figure_head_noun(f.get("role")) in heads]
+                       and _role_noun_matches(
+                           _figure_head_noun(f.get("role")), heads)]
             if by_role:
                 by_role.sort(key=lambda f: str(f.get("name") or "").casefold())
                 chosen, how = by_role[0], "role"

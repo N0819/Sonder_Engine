@@ -191,6 +191,7 @@ from .director_movement import (
 from .director_floors import (
     _unplaced_minted_entities,
     _bind_minted_entities_to_present_figures,
+    _mint_fallback_room,
     _untracked_restraint_subjects,
     _MAX_UNCONSCIOUSNESS_GAP,
     _sentence_break_positions,
@@ -450,7 +451,63 @@ def director_establish(ctx, nonce):
     out["resolved_event"] = out.get("scene_description", "")
     out["summary"] = "Scene established: " + (out.get("location") or "")
     out["dialogue_log"] = []
+    # THE OPENING BEAT BINDS LIKE ANY OTHER. The identity floor ran only in
+    # resolve, so a person the opening minted beside the charter body
+    # holding that post was a second copy from the story's first line
+    # (Harrowmere replay 2026-09-03 turn 0: "The Gatekeeper" minted at the
+    # gate the town's own watch stands). Same floor, same figures source,
+    # pooled by the rooms the opening places anybody in.
+    _establish_identity_floor(ctx, out, player_name)
     return out
+
+
+def _establish_identity_floor(ctx, out, player_name):
+    """Run the minted-role floor on the opening's diff, in place.
+
+    Figures come from the charter bodies standing in every room the
+    opening's positions name (`present_charter_figures`, the same list
+    resolve shows its hands); the mint's room is its own position, else
+    the player's opening room. Records land on ``identity_bindings`` and
+    a warning, exactly as resolve reports them. Fail-open: a story with
+    no charter, or a registry that cannot be read, binds nothing and
+    changes nothing.
+    """
+    sd = out.get("state_diff") if isinstance(out.get("state_diff"), dict) \
+        else None
+    if not sd or not isinstance(sd.get("entities"), dict) \
+            or not sd["entities"]:
+        return []
+    positions = sd.get("positions") if isinstance(sd.get("positions"), dict) \
+        else {}
+    rooms = {str(r) for r in positions.values() if str(r or "")}
+    if not rooms:
+        return []
+    try:
+        from .common import present_charter_figures
+        figures = present_charter_figures(
+            ctx.chat["id"], {}, rooms,
+            frame_id=getattr(ctx.turn, "frame_id", None))
+    except Exception:
+        return []
+    if not figures:
+        return []
+    bound = _bind_minted_entities_to_present_figures(
+        {}, sd, figures,
+        fallback_room=_mint_fallback_room(sd, player_name, None),
+        dialogue_log=out.get("dialogue_log"),
+        dialogue_order=out.get("dialogue_order"))
+    for _b in bound:
+        ctx.add_warning(
+            "Minted %r is %s, the %s standing in %s; bound to them rather "
+            "than admitting a second one%s." % (
+                _b["minted_name"], _b["bound_to"],
+                "person" if _b["by"] == "name" else "post-holder",
+                _b["room"] or "this room",
+                " (more than one holds that post here; bound to the first "
+                "by name)" if _b["ambiguous"] else ""))
+    if bound:
+        out["identity_bindings"] = bound
+    return bound
 
 
 def _interpret_scene_entities(sc, contextual_rooms):
@@ -3916,9 +3973,18 @@ def director_resolve(ctx, nonce, _corrections=None):
     # (`present_figures`); this is the floor under it, for the beat where
     # the model mints "the innkeeper" anyway. Runs on the merged diff after
     # every placement pass so the mint's room is the room it ended up in.
+    # A MINT STANDS WHERE THE BEAT RESOLVED THE PLAYER INTO. The fallback
+    # was the room the player stood in BEFORE the beat, and a person is
+    # minted overwhelmingly on the beat the player walks in on them:
+    # measured, Harrowmere replay 2026-09-03, six of seven person mints
+    # came on a movement beat, every one without a position, and the
+    # floor -- pooling figures by the pre-move room -- bound none of them
+    # (`identity_bindings` null on all forty turns). The merged diff's own
+    # position for the player, written by the movement backstop above, is
+    # the answer; the pre-move room only when the beat did not move them.
     _bound = _bind_minted_entities_to_present_figures(
         sc, sd, _present_figures,
-        fallback_room=ctx.get("_player_room"),
+        fallback_room=_mint_fallback_room(sd, p_name, ctx.get("_player_room")),
         dialogue_log=out.get("dialogue_log"),
         dialogue_order=out.get("dialogue_order"))
     for _b in _bound:
