@@ -135,6 +135,12 @@ they answer different questions about it:
   the three above as sources.
 - [`DESIGN_CROWDS.md`](design/DESIGN_CROWDS.md) — crowd blobs: one row with many
   people in it. Built 2026-08-10; §7a records what the building changed.
+- [`DESIGN_WRITERS_ROOM_PLAN.md`](design/DESIGN_WRITERS_ROOM_PLAN.md) — the
+  current plan for the Writers' Room (2026-09-03): the plan / render /
+  simulate division of labour, what already landed that the room stands
+  on, the phases (engine seams first, then the Planner, then the
+  Dramaturge, then room-authored creatures, look laws and skips), open
+  owner decisions and the replay measures each phase reports against.
 - [`DESIGN_STORY_PLANNER_AND_DRAMATURGE.md`](design/DESIGN_STORY_PLANNER_AND_DRAMATURGE.md)
   — design draft for one cross-system Writers' Room agent set: the Story
   Planner and Dramaturge share broad authorial sway, while a narrow Charter
