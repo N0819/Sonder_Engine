@@ -124,7 +124,14 @@
   </main>
 
   <aside id="drawer" class="hidden"></aside>
+
+  <!-- The Writers' Room (writers_room.js): the player's conversation with the
+       Story Planner, docked as the last column of #app or floated over the
+       story. Built by its script; the shell is here so the tab exists
+       before first paint and the panel keeps its place in the flex row. -->
+  <aside id="room" class="hidden docked" aria-label="Writers' Room"></aside>
 </div>
+<button id="room-tab" title="Open the Writers' Room" aria-label="Open the Writers' Room" aria-controls="room" aria-expanded="false">Writers' Room</button>
 
 <div id="modal" class="hidden">
   <div id="modalbox">
@@ -181,6 +188,10 @@
      background tab, which is the only place it matters. -->
 <script src="/static/js/chime.js?v=20260822-alpha98"></script>
 <script src="/static/js/chat.js?v=20260822-alpha98"></script>
+<!-- The Writers' Room panel. After chat.js because it reads the story view's
+     state (S.chatId, S.currentFrameId, S.chat); before app.js like every
+     other panel; and nothing in the turn pipeline's scripts calls into it. -->
+<script src="/static/js/writers_room.js?v=20260904-room"></script>
 <script src="/static/js/settings.js?v=20260822-alpha98"></script>
 <script src="/static/js/themes.js?v=20260822-alpha98"></script>
 <!-- The extension registry, before app.js so the consult points in

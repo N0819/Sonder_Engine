@@ -20,6 +20,8 @@ from pydantic import BaseModel, Field, ValidationError, validator
 from llm.schemas import LenientModel
 
 from persist.checkpoints import insert_world_tables
+from story.room_conversation import (dump_room_messages,
+                                     restore_room_messages)
 from story.character_schema import (
     character_name,
     new_uid,
@@ -190,6 +192,11 @@ class ChatArchiveData(LenientModel):
     chat_personas: list[dict[str, Any]] = Field(default_factory=list)
     turn_player_inputs: list[dict[str, Any]] = Field(default_factory=list)
     lorebook_links: list[dict[str, Any]] = Field(default_factory=list)
+    # ROOM CONVERSATION (story/room_conversation.py): the player's thread
+    # with the Writers' Room, every era. Declared for the reason
+    # `memory_vectors` is declared above: an undeclared field validates and
+    # is silently dropped.
+    room_messages: list[dict[str, Any]] = Field(default_factory=list)
 
     @validator(
         "frames",
@@ -206,6 +213,7 @@ class ChatArchiveData(LenientModel):
         "chat_personas",
         "turn_player_inputs",
         "lorebook_links",
+        "room_messages",
         pre=True,
         always=True,
     )
@@ -353,6 +361,8 @@ class ChatArchiveService:
                 "SELECT * FROM turn_player_inputs WHERE chat_id=?", (cid,)
             )
         ]
+        # ROOM CONVERSATION (story/room_conversation.py).
+        export["room_messages"] = dump_room_messages(cid)
 
         canon = chat["lorebook_id"]
         # Preserve owned books, attached library books, and retrieval-reachable
@@ -960,6 +970,12 @@ class ChatArchiveService:
                 if old_char_map.get(summary.get("char_id"))
             ]
             restore_memory_summaries(new_chat_id, summaries)
+
+            # ROOM CONVERSATION (story/room_conversation.py): frame ids
+            # remapped, a line of an era that did not come across dropped.
+            restore_room_messages(
+                new_chat_id, data.get("room_messages") or [],
+                frame_idmap=frame_idmap)
 
             for event in data.get("events") or []:
                 qtx(
