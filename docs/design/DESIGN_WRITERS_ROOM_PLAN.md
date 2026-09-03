@@ -254,12 +254,14 @@ without a room in the loop. It is the widened "step 5".
 The owner's shape for the pair (2026-09-03), which is the product-owner /
 engineer shape rather than author / reviewer:
 
-- **The Dramaturge is the creative agent.** It sees the story and what the
+- **The Dramaturge is pure planning.** It sees the story and what the
   player is experiencing, including the hidden truths it authors, and it
   proposes direction: pressure, reversal, revelation, a turn nobody asked
-  for. It needs almost no tools — read access to the story so far and the
-  lore, and none of the Planner's inspect/validate/publish facade. Its
-  output is intent, not a package.
+  for. It holds **no tools at all**: it is handed a briefing (the story so
+  far, the player's experience, the relevant lore, the standing plans and
+  mandates, the Planner's objections) and returns a plan. It never reads
+  the world itself and never writes it; the Planner fetches what it asks
+  for and cites it back. Its output is intent, not a package.
 - **A creativity dial, per story and named.** From holding to a target the
   player stated (a mandate the room was given) to wildly inventive. The
   dial is a setting the user turns, not a property of the agent.
