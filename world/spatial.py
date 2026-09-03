@@ -86,7 +86,7 @@ from world.spatial_containment import (
     _innermost_hiding_holder, _MAX_CONTAINED, _MAX_SCALE, _MAX_SCALES,
     _MIN_SCALE, _NEVER_STATIONED_KINDS, _OPEN_CONTAINMENT_MODES,
     _SCALE_CONTACT_BREAK, _scale_phrase, _shares_enclosure, _SIZE_TIERS,
-    carrier_chain, clamp_scale, container_of,
+    carrier_chain, carrier_lookup, clamp_scale, container_of,
     containment_broken_by_scale_change, containment_conceals,
     containment_facts, containment_hides, CONTAINMENT_MODES, contents_of,
     derive_containment_from_contacts,

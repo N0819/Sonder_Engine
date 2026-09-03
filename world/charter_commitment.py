@@ -74,11 +74,22 @@ def _frame_terms(frame):
 
 
 def observe_public_commitments(commitments, evidence_rows, recipients,
-                               *, at_hours=0.0):
+                               *, at_hours=0.0, targets=None):
     """Open/recognise commitments from grounded public speech.
 
     ``recipients`` maps source id to the body keys that actually heard it in
     full.  A source heard by nobody creates no locally recognised record.
+
+    ``targets`` maps source id to the BODY KEY the utterance was aimed at,
+    where the caller could resolve one. The Director writes ``target`` in
+    whatever spelling the prose reached for -- an entity id, a role noun, a
+    display name -- and a record keyed on that spelling names a party no
+    Charter reader can find: `charter_practice._open_between` licenses a
+    record to its parties BY KEY, so the promise a player made to "the
+    clerk" was recognised by the clerk and owed to nobody. Resolved here,
+    once, at the door every commitment enters by, so the act path
+    (`charter_author`) and the evidence path mint the same id for the same
+    undertaking and answer each other instead of duplicating.
     """
     out = normalize_commitments(commitments)
     opened = accepted = refused = changed = 0
@@ -90,7 +101,8 @@ def observe_public_commitments(commitments, evidence_rows, recipients,
         if not heard:
             continue
         actor = str(evidence.get("actor") or "")
-        target = str(evidence.get("target") or "")
+        target = str((targets or {}).get(source_id)
+                     or evidence.get("target") or "")
         frames = [f for f in evidence.get("speech_acts") or ()
                   if isinstance(f, dict)]
         for frame in frames:
@@ -210,8 +222,71 @@ def commitment_view(commitments, holder, *, parties=(), cap=6):
     return rows[:max(0, int(cap))]
 
 
+def open_commitment(commitments, *, source_id, kind, promisor, beneficiary,
+                    terms, state="proposed", at_hours=0.0, recognized_by=(),
+                    condition="", note=""):
+    """Open one undertaking, or recognise it again if it already stands.
+
+    Keyed by `commitment_id` on the same four facts the evidence path keys
+    on, so an act that arrives through `charter_author` and the utterance
+    that carried it make ONE record. Returns ``(commitments, id, opened)``;
+    an existing record is widened by ``recognized_by`` and otherwise left
+    as it was -- its state is its own history, not this call's to reset.
+    """
+    out = normalize_commitments(commitments)
+    promisor, beneficiary = str(promisor or ""), str(beneficiary or "")
+    terms = " ".join(str(terms or "").split())[:320]
+    if not promisor or not beneficiary or promisor == beneficiary:
+        return out, "", False
+    cid = commitment_id(source_id, promisor, beneficiary, terms)
+    heard = sorted({str(x) for x in recognized_by if str(x)})
+    if cid in out:
+        out[cid]["recognized_by"] = sorted(
+            set(out[cid]["recognized_by"]) | set(heard))
+        return normalize_commitments(out), cid, False
+    state = str(state or "proposed")
+    if state not in OPEN_STATES | TERMINAL_STATES:
+        state = "proposed"
+    out[cid] = {
+        "id": cid, "kind": str(kind or "promise"), "promisor": promisor,
+        "beneficiary": beneficiary, "terms": terms,
+        "condition": str(condition or "")[:240], "state": state,
+        "opened_at_hours": round(float(at_hours), 6),
+        "source_id": str(source_id or ""), "recognized_by": heard,
+        "lifecycle": [{
+            "kind": state, "at_hours": round(float(at_hours), 6),
+            "evidence_id": str(source_id or ""), "by": promisor,
+            "to": beneficiary, "note": (note or terms)[:240]}],
+    }
+    return normalize_commitments(out), cid, True
+
+
+def answer_commitment(commitments, cid, *, accepted, by, at_hours=0.0,
+                      note="", evidence_id=""):
+    """A party's answer to an undertaking still open: taken up or refused.
+
+    The same two transitions `observe_public_commitments` applies for an
+    ``agreement`` or ``refusal`` frame, exposed for a body whose answer is
+    DECIDED rather than overheard -- `charter_author`'s order, request and
+    bargain acts. Acceptance is only ever of a proposal; a refusal ends any
+    open record. Returns ``(commitments, changed)``.
+    """
+    out = normalize_commitments(commitments)
+    record = out.get(str(cid or ""))
+    if record is None or record["state"] not in OPEN_STATES:
+        return out, False
+    if accepted and record["state"] != "proposed":
+        return out, False
+    record["state"] = "accepted" if accepted else "repudiated"
+    record["lifecycle"].append({
+        "kind": record["state"], "at_hours": round(float(at_hours), 6),
+        "evidence_id": str(evidence_id or ""), "by": str(by or ""),
+        "to": "", "note": str(note or "")[:240]})
+    return normalize_commitments(out), True
+
+
 __all__ = [
     "OPEN_STATES", "TERMINAL_STATES", "advance_commitments",
-    "commitment_id", "commitment_view", "normalize_commitments",
-    "observe_public_commitments",
+    "answer_commitment", "commitment_id", "commitment_view",
+    "normalize_commitments", "observe_public_commitments", "open_commitment",
 ]

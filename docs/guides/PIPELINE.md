@@ -223,6 +223,17 @@ it (`charter_runtime.sight_figures_in_scene`), keys the figure by its canonical
 name with the witnesses' stranger label as the surface, and warns when the
 scene places an actor nowhere.
 
+The same domain lands the beat's FIGURE ACTS in the same registry write, after
+the evidence: an order, a request, a bargain, a promise (from the grounded
+speech-act kinds) or a gift (from an `inventory_ops` transfer whose giver is a
+figure) aimed at one resolvable unpromoted body in the actor's room. Each is
+answered from that body's own ledgers by `charter_author.authored` -- a
+commitment accepted or repudiated, a price quoted and a deal recorded, an
+`aided` mark -- and the answer is previewed to the body's voice in
+`background_react` by the identical plan on a throwaway copy
+(`presence_view` -> `answers`), so the voice cannot say yes where the ledger
+will say no. Refusals surface as warnings naming the act and the reason.
+
 ## Normal turn
 
 The plan is built dynamically from `director_interpret.flow`.

@@ -340,6 +340,11 @@ directly to the user-interface, rather than to the Decision Maker."* One
 affordance set; either the utility selector picks from it or something else
 does; the machinery underneath cannot tell which, and must not be able to.
 
+*Landed 2026-09-03: the FIGURE half of the seam grew the dealings a player
+actually attempts -- order, request, bargain, promise, trade, give -- each
+answered from the body's own ledgers (commitments, economy, marks) rather
+than by the voice alone; `charter_author.FIGURE_ACTS`, `tests/test_figure_acts.py`.*
+
 **What it requires.**
 
 1. **Affordances are the shared vocabulary of conduct.** `charter_practice`
