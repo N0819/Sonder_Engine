@@ -83,7 +83,8 @@ from world.background_claims import (
 from story.scene import persona_of
 
 from .common import (_agent_json, _unknown_actor_label, character_room,
-                     communication_surface, observable_action_text)
+                     communication_surface, observable_action_text,
+                     scene_figures)
 
 _log = logging.getLogger(__name__)
 
@@ -1502,11 +1503,36 @@ def _react_one(ctx, dr, name, present_others, roster, sc, rec, nonce,
     if here:
         try:
             from world.charter_runtime import presence_view
+            # The figures standing here, keyed by the name the body's mind
+            # keys its claims by and labelled as THIS presence renders them
+            # -- the same recognition gate `present_others` passes through,
+            # so the slice can say "met before" about a person whose name
+            # it still cannot use.
+            figures = [
+                {"key": f["key"], "label": f["label"]}
+                for f in scene_figures(
+                    ctx.chat, ctx.cast, sc, _presence_recognizes(ctx, name))
+                if f.get("place") == here and f["key"] != name
+                and f["label"] != name]
             institutional_context = presence_view(
                 ctx.chat.id, here, name, frame_id=ctx.turn.frame_id,
-                figures=[p for p in present_others if p != name])
+                figures=figures)
         except Exception as exc:
             ctx.add_warning(f"charter presence context skipped: {exc}")
+    # Engine-authored allowlist paired with the model echo. It never enters
+    # narration, only the commit-side exact-match gate -- and a row aimed at
+    # a figure carries that figure's canonical `key` for the gate to resolve
+    # the echoed label by. The key is the one string in the slice the mind
+    # was not told, so the model is handed the rows WITHOUT it.
+    charter_offers = [
+        offer for context in institutional_context
+        for offer in (context.get("action_instances") or ())
+    ]
+    shown_context = [
+        dict(context, action_instances=[
+            {k: v for k, v in row.items() if k != "key"}
+            for row in (context.get("action_instances") or ())])
+        for context in institutional_context]
 
     payload = {
         # The per-presence path carried NO place block whatever -- not the
@@ -1541,8 +1567,8 @@ def _react_one(ctx, dr, name, present_others, roster, sc, rec, nonce,
         # A bounded earned past for this body only: own condition, duties,
         # acquaintances and news. The institution's register and every other
         # body's interior are structurally absent.
-        **({"institutional_context": institutional_context}
-           if institutional_context else {}),
+        **({"institutional_context": shown_context}
+           if shown_context else {}),
         "variant_seed": nonce,
     }
 
@@ -1571,14 +1597,8 @@ def _react_one(ctx, dr, name, present_others, roster, sc, rec, nonce,
     action = str(out.get("action") or "").strip()
     if entry is None and not action:
         return None
-    charter_offers = [
-        offer for context in institutional_context
-        for offer in (context.get("action_instances") or ())
-    ]
     return {"name": name, "dialogue_log_entry": entry,
             "action": action, "room": here or "",
             "heard_address": addressed_by,
             "charter_act": out.get("charter_act"),
-            # Engine-authored allowlist paired with the model echo. It never
-            # enters narration, only the commit-side exact-match gate.
             "charter_offers": charter_offers}

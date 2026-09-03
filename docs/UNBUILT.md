@@ -5322,6 +5322,36 @@ because the turn-3 transfer never committed (`D-A`). Director, perception and
 narrator all carried it faithfully. Fixing it in the narrator would have
 buried the commit defect.
 
+### 1.102 What reaches a charter voice: what the 2026-09-03 fix reached, and what it did not
+
+Landed: `commit_charter_observations` receives the scene (it received the
+prepared-commit envelope and every actor was unplaced -- `acquired: 0` on all
+forty Harrowmere turns), co-presence sighting runs live
+(`charter_runtime.sight_figures_in_scene`), a figure is one subject keyed by
+the canonical name and rendered per observer, carrier news is stamped on the
+charter's own clock, and `own_state` reaches the per-presence voice.
+`tests/test_charter_voice_context.py`. Left open:
+
+- **The scene-manager path carries no charter slice.** `background.scene_life`
+  (`scene_life: ambient|full`) builds its populace from presence records and
+  never calls `presence_view`, so under the manager a body has no news, no
+  acquaintances and no `own_state`; only the per-presence `background_react`
+  path hands the slice over. The manager voices several bodies in one payload,
+  and one slice per body in a shared context is the cross-contamination §3.2
+  forbids, so this needs a per-body scoping decision, not a copy of the call.
+- **Charter-native events still cross to `world_events` in charter hours.**
+  `charter_hours_of` converts the carrier rail's seconds INTO a mind;
+  `land_presim` already converts presim events OUT by the horizon; the live
+  `advance_snapshot` path that mints `world_events` rows from window events
+  was not audited for the same unit.
+- **A name a charter body has learned is not yet rendered as the name.**
+  `presence_view` renders a figure in whatever label the caller hands it, and
+  `background._react_one` hands the name only where the presence's `known`
+  entry carries it -- which `seed_mutual_recognition` writes for cast
+  memberships and nothing writes for an unpromoted body told a name aloud.
+  The slice is right and safe (the stranger label); it is merely never the
+  name.
+
 ## 2. Roadmap
 
 Features the architecture intends and has not built. Ordered by value per unit

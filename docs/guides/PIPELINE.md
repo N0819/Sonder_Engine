@@ -216,7 +216,12 @@ or empty semantic classification keeps the factual source, while a retelling
 drops the pristine quote and retains only coarse speech-act direction. Scene
 Life reads the structured evidence through that body's capped `can_bring_up`;
 no narrator prose, raw player input, objective state diff or other body's mind
-enters this path.
+enters this path. The domain unwraps the prepared-commit envelope to the scene
+first (it passed the envelope itself until 2026-09-03, so no actor ever had a
+room), lets every unbound body standing where a scene-owned figure stands see
+it (`charter_runtime.sight_figures_in_scene`), keys the figure by its canonical
+name with the witnesses' stranger label as the surface, and warns when the
+scene places an actor nowhere.
 
 ## Normal turn
 

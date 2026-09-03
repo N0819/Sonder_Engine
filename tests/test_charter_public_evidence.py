@@ -217,7 +217,8 @@ def test_runtime_lands_all_witnesses_with_one_registry_write(temp_db,
     held = charter_runtime.registry_for(cid)["items"]["town"]["state"][
         "minds"]["reeve"]
     view = charter_runtime.presence_view(cid, "hall", "Reeve Ysra")
-    assert result == {"sources": 1, "opportunities": 2, "acquired": 1}
+    assert result == {"sources": 1, "opportunities": 2, "acquired": 1,
+                      "unplaced": []}
     assert sum(1 for claim in held.values() if claim.get("kind") == "news") == 1
     recalled = view[0]["presence"]["can_bring_up"][0]
     assert recalled["public_evidence"]["speech_acts"][0]["kind"] == "request"
@@ -267,7 +268,8 @@ def test_a_beat_nobody_receives_costs_no_private_parse_and_no_fetch(
                       conceal_from=["Ysra", "Oren"])],
         _scene(), turn_id=12)
 
-    assert result == {"sources": 1, "opportunities": 2, "acquired": 0}
+    assert result == {"sources": 1, "opportunities": 2, "acquired": 0,
+                      "unplaced": []}
     assert fetches == []
     assert private == []
     assert writes == []
@@ -300,7 +302,8 @@ def test_a_beat_that_lands_still_pays_the_private_parse_once(
     result = charter_runtime.ingest_public_evidence(
         cid, [_speech()], _scene(), turn_id=12)
 
-    assert result == {"sources": 1, "opportunities": 2, "acquired": 1}
+    assert result == {"sources": 1, "opportunities": 2, "acquired": 1,
+                      "unplaced": []}
     assert len(private) == 1
     assert len(writes) == 1
     # The appraisal read the shared object and mutated nothing in it.
