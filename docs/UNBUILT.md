@@ -6508,6 +6508,43 @@ here), and the mapping stage's own `planned_context` path still exists
 beside it — two seeds for one room until the mapping agent's creative half
 moves (§2.26's Phase B).
 
+### 2.28 The day cycle's residuals
+
+Landed 2026-09-03 (`world/day_cycle.py`, `Design.md` "The day moves with the
+clock"). What it deliberately does not do:
+
+- **The derived label is a phase word, never a clock reading.** A story that
+  opened at "08:42" reads "midday" three hours later, not "11:42". The hour
+  is on the clock record (`simulation_clock.hour_of_day`) for the Director,
+  and a fiction that measures time in minutes can keep declaring readings --
+  each one re-anchors exactly. Rendering the derived hour in the opening's
+  own style (24h, 12h, stardate) would need a format the engine does not
+  have, and a minute-precise label asserts a precision most fictions do not.
+- **`sheltered` is treated as daylight.** A porch, an overhang, a covered
+  market get the sun's light one step down only under fog or cloud, not for
+  the roof. `room_exposure`'s keyword fallback reads an unrecognised room as
+  `enclosed`, so a room the reader cannot place keeps its declared light --
+  the failure direction is "a square that should have gone dark stayed lit",
+  never the reverse.
+- **Evening is dark.** 19:30-22:00 on a 24-hour day reads `dark` outdoors,
+  which is right for a town with no street lamps and wrong for a summer
+  latitude; seasons and latitude are not modelled, and a lamp is an entity
+  with `light_source`, which is the intended way to light a square at night.
+- **Charter posts do not know about night.** A post is a continuous watch
+  and stays manned around the clock; only the OFF-duty half of the town
+  responds (no errands while resting, commons only in the social phases).
+  A day/night shift concept on posts, and sleep as a need the resting phases
+  restore, are the two obvious next steps and neither was asked for.
+- **Presim gets a day only when generated inside a story that has one.** The
+  anchor comes from the story clock at generation; a charter generated before
+  the opening turn is anchored on the greeting-seeded display label if it
+  reads, else runs its prehistory unanchored as before.
+- **The label-to-phase table is a word table** (`day_cycle._PHASE_WORDS`),
+  the same kind `dressing.backdrops._TIME_BUCKETS` already was, and subject
+  to the same rule: it is what the cycle can READ, and a label outside it is
+  left standing rather than misread. Expect it to be widened; a widening
+  changes which stories get a cycle, never what the cycle does.
+
 ## 3. Information-pipeline leaks still open
 
 Ids are the erased pipeline sweep's own. Severity vocabulary: **leak** (a mind
