@@ -199,7 +199,8 @@ not a better regex.
 
 ### 1.10 An entity's free-text `state` never ages, and a mind reads its own stale copy (S3-A8)
 
-*(Absorbs §1.24's byte-identical bullet and §3.9's ageing bullet, 2026-08-19.
+*(Absorbs §1.24's byte-identical bullet and the alpha 6.3 physical-ledger
+residuals' ageing bullet, 2026-08-19.
 It was one defect written three times in three sections, which is most of why
 it read as three small things.)*
 
@@ -445,56 +446,6 @@ Separately open: whether a cast member the scene places nowhere is a PACING
 defect at all, or a COMMIT defect — the narrowing drops them from the beat;
 having commit place every active cast member is the other half and is not in
 this cluster.
-
-### 1.11i The engine spoke for a silent player — FIXED, alpha 6.9.2
-
-Every player-authority check compares the Director's output against what the
-player declared. With an EMPTY input there is nothing to compare against, and
-nothing guarded that direction.
-
-Live, chat 59 t154. Input empty; `director_interpret` emitted speech "Kaa Sama
-Kaa Sama! You're cooking is simply to good to not indulge in." and action
-"steps inside the shrine and looks around at the familiar sight of home" —
-both the player's turn-150 declaration, verbatim, four beats stale. Tamamo
-thanked her for praise she had not given.
-
-Corpus: 10 turns carry an empty player input, 2 invented player speech (the
-other newly, "something reassuring"). Small sample, but the failure mode is the
-one the architecture exists to prevent.
-
-Now deterministic: an empty input clears `sequence`, `speech`, `action` and
-`actions` before anything reads them, warns, and tells the Director on the next
-beat that silence is the whole declaration. Silence still reaches characters
-through `_player_silence_note`; what no longer reaches them is words.
-
-### 1.11j A repeated question hid inside a different beat — FIXED, alpha 6.9.2
-
-`_recent_self_moves` records the SELECTED MOVE, which is what the beat was busy
-with. A character who asks something while cooking writes the cooking there, so
-a repeated question hides inside three different-sounding moves and neither
-guard sees it.
-
-Live, chat 59 t152–t154. Tamamo asked the Doctor for his impression of the hall
-on three consecutive beats, after Hinami had already asked and he had already
-answered. Her ledger held all three lines with `expected_answer: True` on each.
-`_first_repeated_move` returned None — it compared "continue preparing the meal
-at the hearth" against "lightly reassure Hinami and acknowledge the home
-compliment" — and the exact-line guard found nothing, because the three are
-lexical paraphrases sharing almost no wording.
-
-The ledger now projects `asked` apart from `said`, and the repeat check
-compares question against question at a lower threshold than the move
-comparison (two prose summaries share incidental vocabulary; two restatements
-of one request often share none).
-
-**Measured, and honestly imperfect.** Swept over the corpus: 594 beats where a
-character asked something, 47 flagged (7.9%), roughly half of them genuine
-re-asks by inspection — including the documented Saturn/dragons loop at 1.00.
-The rest share a question skeleton without sharing a subject. Left at 0.5
-because this opens a bounded contextual review rather than vetoing a line, so a
-false positive costs a paragraph and a miss costs the failure. 0.6 would halve
-the flags and still catch the live case, but only just — it scores 0.600
-exactly. That is the next stop if the reviews read as churn.
 
 ### 1.12 Watch items
 
@@ -1136,8 +1087,8 @@ investigation found and did not close.
   `state`, where nothing ages it (§1.10): `_drop_contradicted_state` retires
   such a key only where a standing contact already speaks for that part, so a
   genuine hover with no contact survives unaged. A near-contact tier — or a
-  `manner` that means "not quite" — would cover it. *(Moved from §3.9,
-  2026-08-19.)*
+  `manner` that means "not quite" — would cover it. *(Moved from the alpha 6.3
+  physical-ledger residuals, 2026-08-19.)*
 - **A contact ledger whose only clock ticks on beats that MENTION contact
   cannot retire what the story stopped mentioning.** Ageing lives inside
   `spatial.apply_contact_ops` behind two gates: `_contact_ops_are_evidence`,
@@ -1198,8 +1149,8 @@ investigation found and did not close.
   contact, its qualifier is discarded instead of merged into that contact's
   `detail`. Folding it was rejected for now: matching the right contact by part
   name is the same guesswork the whole change exists to remove, and a wrong
-  `detail` is a sentence the narrator will repeat. *(Moved from §3.9,
-  2026-08-19.)*
+  `detail` is a sentence the narrator will repeat. *(Moved from the alpha 6.3
+  physical-ledger residuals, 2026-08-19.)*
 
 *(Bullet 1 — "`contacts` accepts a part slot that does not name a body" — was
 struck 2026-08-19: `world/spatial_contacts.py` now refuses a non-anatomical
@@ -1844,79 +1795,6 @@ hardening items are closed.
   cast member's survives. A presence that matters enough to be renamed
   probably matters enough to promote.
 
-### 1.52 The monolith-split audit: what is still open
-
-The 2026-08-18 split of `world/spatial.py`, `persist/commit.py` and
-`agents/director.py` required somebody to read all 24,783 lines once. Nothing
-else in this project does. Everything that reading turned up was written down
-and NOT repaired — a fix inside a move commit destroys the property that made
-the move reviewable, which is that `git diff -M` reads as pure renames. Full
-detail, each finding carrying `file:line` as of `418ab5b`:
-[`experiments/AUDIT_SPATIAL.md`](experiments/AUDIT_SPATIAL.md) (F1–F16),
-[`experiments/AUDIT_COMMIT.md`](experiments/AUDIT_COMMIT.md) (14),
-[`experiments/AUDIT_DIRECTOR.md`](experiments/AUDIT_DIRECTOR.md) (D1–D13); repair
-plan in [`design/AUDIT_REPAIR_PLAN.md`](design/AUDIT_REPAIR_PLAN.md). Each landed
-row was deleted in the commit that landed it, which is why the shipped list is
-in `CHANGELOG.md` and not here.
-
-**One row is open, re-verified 2026-08-19.**
-
-- **COMMIT-10** — `prepare_mapping_commit`'s `proposed_specifics` is a
-  permanently empty payload field that teaches every mapping call about an input
-  that cannot occur. `persist/commit_mapping.py` sets `specifics = []`, never
-  mutates it, and sends it. No pack card mentions it, so this is a code-only
-  change. **Blocked on an owner decision**: removing it changes what every
-  mapping call is taught it may be handed, and a field a model is told it can
-  fill is a different instruction from one it is not.
-
-*(DIRECTOR D11 — a test asserting on `director.py`'s source layout — was struck
-2026-08-19: `tests/test_style_guide.py` contains no `open(` at all; it reads
-payloads through `_payloads_sent`. The class it warned about survives and is
-now stated in [`guides/TESTING.md`](guides/TESTING.md) § Assertions that read
-source instead of running it.)*
-
-**Not a defect, but the honest ceiling on what the split bought.** The
-functions that made these files unreadable did not get smaller — re-measured
-2026-08-19 over the twelve engine roots, so this is the whole population and
-not a sample:
-
-| function | lines | file |
-|---|---|---|
-| `director_resolve` | 1,519 | `agents/director.py` |
-| `prepare_memory_commit` | 1,270 | `persist/commit_memory.py` |
-| **`character_step`** | **1,001** | `agents/character.py` |
-| `interaction_loop` | 558 | `agents/loops.py` |
-| `import_chat` | 541 | `persist/chat_archive.py` |
-| `director_interpret` | 538 | `agents/director.py` |
-| `prepare_scene_commit` | 510 | `persist/commit_scene_state.py` |
-
-Seven functions over 500 lines, and `character_step` is the one this entry did
-not previously name — the earlier version of this paragraph listed
-`director_resolve`, `prepare_memory_commit` and `merge_scene_with_diff` (322
-lines, reaching into nine modules). Splitting files does not split functions.
-
-**The file-level census, recorded so it stops being rediscovered.** Measured
-the same day, `engine_python_paths()` as the denominator: **116 engine modules,
-8 over 3,000 lines, 21 over 1,500** — `agents/common.py` 6,838, `web/app.py`
-6,206, `mind/memory.py` 5,676, `llm/schemas.py` 5,358, `agents/director.py`
-3,767, `agents/perception.py` 3,637, `agents/character.py` 3,560,
-`llm/providers.py` 3,283. (Counts drift by tens of lines between commits;
-the shape is the point.)
-
-This is a MEASUREMENT, not a proposal, and specifically not a proposal for a
-per-file line budget. A 1,500/3,000 gate would fire on 21 of 116 files on the
-day it shipped, so it would ship with a 21-entry exception list — the shape of
-gate that gets waived rather than obeyed. And three of the eight largest are
-already spoken for by decisions recorded elsewhere: `agents/director.py`'s
-residual is Phase 2 by design
-([`design/DESIGN_MODULE_LAYOUT.md`](design/DESIGN_MODULE_LAYOUT.md)),
-`agents/character.py` decomposition is declined by name in §2.19, and
-`web/app.py` and `mind/memory.py` are named in `CLAUDE.md` as orchestration
-seams not to be broadly rewritten. The number that is actionable is the
-function column above; the file column exists so the next reader does not
-spend an afternoon re-deriving it and conclude it is news.
-
-
 ### 1.56 The project tier's occasion now arrives, and is declined
 
 v4 made the review beat reachable (`Design.md`'s project row has the diagnosis:
@@ -2453,81 +2331,6 @@ each append) and re-measuring with `tools/memory_probe_harness.py`.
 
 
 
-
-### 1.74 A memory import carries the other story's persona verbatim
-
-Found 2026-08-19 while theorizing the pre-story tier
-([`design/DESIGN_PRESTORY_MEMORY.md`](design/DESIGN_PRESTORY_MEMORY.md)).
-`import_character_memories` (`mind/memory_snapshot.py:374`) is the additive
-path behind `POST /api/chats/{cid}/characters/{ch}/memories/import`, and it
-copies `content` from the export straight into the new chat's bank. Every other
-cross-story read scrubs the previous story's player handle through
-`player_handle_for`; this one does not, so importing a bank moves one player's
-persona name into another player's story as fact a mind can recall. That is the
-plain shape of a firewall leak: a mind acquires a name it has no channel to.
-
-Two smaller faults in the same function. `archived` is not in the prepared
-dict, so retired memories come back alive on import. `frame_id` is never set,
-so it falls through to whatever the ambient contextvar happens to hold at
-import time rather than to the frame the host is importing into -- the same
-class as the B5 thread-pool defect in
-`tests/test_fable_audit_memory_consolidation.py`, which was fixed by passing
-the value explicitly instead of trusting the ambient default.
-
-Dropping `turn_id`/`turn_idx` is NOT a fault -- the docstring argues for it and
-the argument holds. It is what makes this function the engine's existing,
-unlabelled `inherit` mode for memory, which is why §2.20 begins from it rather
-than from a blank page.
-
-### 1.75 A batch refused for being too large degrades instead of splitting
-
-Found 2026-08-19 while building the LongMemEval converter, which hit it twice
-before it was understood.
-
-`_embed_with_retry` (`llm/providers.py:3236`) sends whatever list it is handed
-and, on any exception, replaces the WHOLE batch with crc32 hashes stamped
-`cheap:crc32:256`. Nothing anywhere chunks by request size. The embeddings
-provider caps a request at 120,000 tokens, and that cap is nowhere in this
-codebase.
-
-The retry makes it worse rather than better. A 400 for oversized input is
-DETERMINISTIC -- it fails identically on every attempt -- so the retry ladder
-spends its budget proving a fact it already had, and then degrades, when the
-remedy was available from the first failure. The distinction the engine is
-missing: **a request refused for being too large is a batching failure, not a
-provider failure, and the answer is to split it, not to hash it.** A rate limit
-or a dropped connection genuinely warrants degrade-after-retry; this does not.
-
-`rebuild_embeddings` is safe by accident and by design: `_REBUILD_BATCH = 32`
-keeps requests small, and it explicitly refuses to write a fallback over a real
-vector. `prepare_memories_batch`/`add_memories_batch` (`mind/memory_write.py`)
-have neither guard -- one `embed_texts_meta` call for the entire list, and the
-write proceeds on whatever comes back.
-
-That puts the exposure on `import_character_memories`, whose list size is
-whatever the host's export file holds. Measured against the live corpus at
-1.5x content length over four characters per token, which is a floor rather
-than an inflation because the cue text is shorter than the document:
-
-| bank | rows | content chars | est. request tokens | over the cap |
-|---|---|---|---|---|
-| 63/35 | 657 | 340,595 | 127,723 | YES |
-| 64/35 | 657 | 340,012 | 127,504 | YES |
-| 59/35 | 654 | 339,843 | 127,441 | YES |
-| 38/35 | 572 | 285,306 | 106,989 | no |
-
-So exporting the largest character in the corpus and importing him into a new
-story returns `{"ok": true}` and produces a bank that is keyword-only --
-`cheap:crc32:256` measures 0% paraphrase recall (MEMORY.md section 4). The
-failure is one WARNING line in a log nobody reads during an import, and the
-symptom arrives later as a character who cannot recall anything unless the
-words match. This is the same function 1.74 is already filed against, and it is
-the path 2.20 would build on.
-
-Two fixes, and the first is not optional if the second lands: split on a token
-budget before the request rather than after the refusal, and refuse to WRITE a
-fallback batch nobody asked for -- the rule `rebuild_embeddings` already
-states in its own docstring, applied to the batch writer that lacks it.
 
 ### 1.76 `recall_confidence` measures distribution shape, and absence has the same shape as presence
 
@@ -3958,36 +3761,6 @@ re-derivable for any chat whose history survives.
 Not urgent: the fallback is a phrase rather than a wrong number, which is the
 posture this whole change insists on. Worth doing when something wants to date
 a window whose memories are gone -- long-bank archival is the likely trigger.
-
-### 1.86 The time of day is set and never advances on its own
-
-**Found:** 2026-08-26, landing the `scene.time`/`scene.time_of_day` split.
-
-`scene.time_of_day` now holds one kind of statement and has exactly two
-writers: the opening (`director_establish`, through
-`commit_scene_state._establish_time_of_day`) and a beat that explicitly
-declares a new one (the bare-string `state_diff.time` channel). Nothing
-advances it from the clock. A story can spend 29,145 story-seconds -- the
-author's chat 40, measured -- standing at the "Late night, 2026" its opening
-named, because the only thing that could say the sun came up is a beat
-choosing to say so.
-
-The missing writer is a BOUNDARY CROSSING: `elapsed_seconds` moved past the
-hour where evening becomes night, so the label changes. It was deliberately
-not built with the split, and the reason is that there is no anchor to
-compute it from. `elapsed_seconds` is seconds since the story began, and the
-story began at a time named in free text -- "dusk", "Stardate 46357.4, 14:32
-hours", "Late autumn afternoon". Deriving an hour-of-day from that pair needs
-either a parsed absolute start (which `dressing.backdrops.time_bucket`'s
-numeric branch can now do for 78 of 80 corpus openings, but only to a coarse
-bucket) or a second authored field saying what time the clock's zero was.
-Both are real designs; neither is a line of code. Until one lands, the field
-is honest about what it is: what the story last SAID the time was.
-
-What is not affected: the numeric clock, which advances every beat including
-silent ones (`UNCLAIMED_BEAT_SECONDS`), and every windowed mechanism that
-reads it.
-
 
 ### 1.88 A restored checkpoint is as old as the beat it snapshot
 
@@ -5536,16 +5309,16 @@ is the point: a silent retcon is the failure mode. Verified absent.
 
 ### 2.7 Reactivation negotiation
 
-The largest unbuilt subsystem, and the one that makes a large cast feel alive
-rather than merely stored. Argument:
+**The roadmap half of this entry was retired 2026-09-04**, with the tier split
+that made charter the answer for bodies off screen and playerless causality
+bubbles the answer for a major character's off-screen cognition. What went was
+the build order: a reactivation proposal, and a negotiation protocol with
+refusal budgets, integrity-only refusals, and the last proposal becoming canon
+on exhaustion. Its proposer was the mapping agent, which is itself retired.
+Argument, for the record:
 [`OFFSCREEN_LIFE_DESIGN.md`](design/OFFSCREEN_LIFE_DESIGN.md).
 
-It decomposes: gap-history plus delta-summary is the valuable 80% and is the
-same generator as §2.8; the negotiation protocol is the hard, novel half and can
-trail behind it. Mapping proposes the gap; the character may refuse on integrity
-grounds only; refusals are capped and tagged (identity-violation counts half,
-preference counts full); on exhaustion the last proposal becomes canon.
-*Conservative defaults, costly exceptions.*
+Two things are kept here because nothing else records them.
 
 **Steps 1–5 of the build order landed** (bg-life work, 2026-08): `gaps.gap_for`
 plus the `subject_last_seen` ledger, the chat-level `offscreen_life` ceiling,
@@ -5558,12 +5331,9 @@ and one vocabulary answering both is the `flow.reactors` defect re-minted. The
 rung opt-in that step 4 wanted now exists as `simulation.offscreen_agent`
 (`world/offscreen.py`), so that residual is closed too.
 
-**Steps 6 and 7 are what is left, and they are absent entirely.** Verified
-2026-08-19: `reactivation`, `negotiat` and `refusal_budget` return **zero** hits
-across every non-test module.
-
-- **6. Reactivation proposal.**
-- **7. Negotiation** — refusal budgets, tagging, stalemate-eats-canon.
+**The negative result.** Verified 2026-08-19 and re-verified 2026-09-04:
+`reactivation`, `negotiat` and `refusal_budget` return **zero** hits across
+every non-test module. Nothing was ever built, so nothing has to be unbuilt.
 
 Precedent that did not exist when the note was written: `world/background_claims.py`
 is exactly the "commit invention as claims, not facts" mechanism its decision 3
@@ -5573,10 +5343,10 @@ asks for, built for background presences.
 ### 2.8 Richer off-screen life
 
 Deterministic scheduling exists; what is missing is the world visibly having
-moved while you were away. Most of the cast needs no tick at all — the gap is
-generated at re-contact, so cost stays `O(re-contact)`. The exception is the
-character advancing a plan whose consequences the player meets *before* meeting
-them: you cannot lose a race that was never run.
+moved while you were away. The costing argument this entry opened with — that
+most of the cast needs no tick because the gap is generated at re-contact — was
+retired 2026-09-04: charter moves an unwatched population continuously, so the
+question is no longer whether to tick but what the ticks may know.
 
 **Almost all of it has landed** and the record is in `CHANGELOG.md` and
 `Design.md`: the `offscreen_life` ladder as a chat-level ceiling, a model-free
@@ -5591,9 +5361,7 @@ declared basis. `character_agent` is marked built in the UI.
 - **The stored `offscreen_log` history is still mixed** across four legacy
   shapes (`{actor, tick}`, `{event}`, `{who, event}`, `{description}` all appear
   in the same field across eight live chats) plus the new record shape.
-  `commit_mapping.normalize_offscreen_events` coerces on the WRITE path only
-  (`persist/commit_mapping.py`, called once at the mapping commit); nothing
-  migrates what is already stored, and every reader coerces for itself. Cheap
+  Nothing migrates what is already stored, and every reader coerces for itself. Cheap
   while nothing computes over the history, and a trap for the first thing that
   does.
 
@@ -5779,8 +5547,8 @@ crossed over two beats is perceived as two rooms in sequence rather than as a
 passage between them. Truthful, and thin, which is what this entry was raised
 about.
 
-**Related, from the alpha 6.3 physical-ledger work (moved from §3.9,
-2026-08-19):** nothing derives a station from within-room movement INTENT ("she
+**Related, from the alpha 6.3 physical-ledger work (its residual list was
+dissolved 2026-08-19 and deleted 2026-09-04):** nothing derives a station from within-room movement INTENT ("she
 crosses to the hearth"), because there is no within-room approach concept for it
 to read — room-level `scene.approach` is the only staged-movement memory there
 is.
@@ -6087,8 +5855,9 @@ penalty-free by construction. Twenty seeded episodes would clear the contrast
 gate at turn 0 and BE the character's entire recall for the opening beats. A
 thick authored childhood does not read as depth; it reads as haunting.
 
-Related and separately actionable: §1.74 (the import path already performs an
-unlabelled `inherit`, with a live persona leak), and the fact that
+Related and separately actionable: the import path already performs an
+unlabelled `inherit` (its persona leak was closed 2026-09-04 by
+`memory_snapshot`'s foreign-persona refusal), and the fact that
 `recall_confidence` cannot fire below 40 rows -- which the median bank does not
 reach until turn 10, precisely the window this entry is about.
 
@@ -6167,108 +5936,11 @@ The itinerary ledger is built for greeting launch and Story Quick Start but
 still needs stronger
 claim-level canon verification, obligation/carrier projection, explicit
 arrival intersections, reuse outside story start, and measurement over an
-adversarial corpus. Imported continuity still needs the identity-safe repair
-in §1.74. The hand-built-from-scratch path still needs cast selection before it
+adversarial corpus. Imported continuity's identity-safe repair has landed
+(`mind/memory_snapshot.py` refuses an import naming a persona who is not this
+story's player, and stamps `frame_id`). The hand-built-from-scratch path still needs cast selection before it
 can offer per-character routes. A traveler must continue to arrive with
 itinerary and authored continuity, never an inferred local career.
-
-### 2.21 An install with no embeddings provider retrieves worse than one with no vectors
-
-Measured 2026-08-19/20, [`experiments/CRC32_CONTROL.md`](experiments/CRC32_CONTROL.md).
-Roadmap rather than defect: nothing is broken for an install that HAS an
-embeddings provider, and the population this affects is the one that has never
-configured one -- which is every install on its first run.
-
-Six arms over the same 10,960-row LongMemEval bank, 470 independent probes:
-
-| arm | hits / 470 |
-|---|---|
-| real embeddings, 2560d | 399 |
-| crc32 16384 | 337 |
-| **no vector channel at all** (BM25 + exact cue) | **338** |
-| crc32 4096 | 336 |
-| crc32 1024 | 323 |
-| **crc32 256, the shipped fallback** | **289** |
-
-**The fallback scores 49 probes BELOW switching the vector rankings off.** It
-carries 2.15 of the 4.5 RRF weight while correlating with real similarity at
-r = 0.028 over 7,998,000 row pairs, so its noise displaces genuine keyword
-candidates out of the payload. Widening does not rescue it: the width curve
-saturates exactly at the no-vector line, because there is no signal to sharpen.
-A character n-gram sketch is a near-duplicate detector -- it answers "is this
-the same text", and it was standing in for "does this mean the same thing".
-
-**Scope, which is easy to get wrong and was got wrong once already.** When a
-real provider IS configured, a fallback row is already excluded from both
-vector rankings by the compatibility check at `memory_retrieval.py:440`
-(`sem = 0.0`, `cue = 0.0`, counted as stranded), AND queued for the background
-repair thread, AND caught by `rebuild_embeddings` afterwards. That path is
-correct and needs nothing. The harm lands only where crc32 IS the configured
-model, because then the keys match and the hash participates fully.
-
-**The change**: on an unresolvable embeddings role, contribute no vector
-ranking rather than a hash one. `search_memories` already drops empty rank
-lists, so BM25 and exact-cue carry the query at 338 instead of 289, with no
-migration.
-
-**What must NOT be done, and why the obvious version of this is wrong**: do not
-remove the `cheap:crc32:256` stamp. `embedding_bank_status`,
-`_warn_stranded_embeddings`, the repair queue (`note_failed_embedding_write`
-selects on it) and `rebuild_embeddings`' `want_fallback` all key on that stamp
-existing. The stamp is the marker that says "this engine failed a write and
-may finish it later"; deleting it strands exactly the rows the repair thread
-is for. Keep the stamp, change what retrieval does with it.
-
-Keep the sketch itself. It is correct for the two jobs it is actually good at:
-offline/test operation without a provider, and near-duplicate detection --
-measured 99.1% precise against real cosine 0.95, which is a genuinely useful
-tool for finding the forty near-identical descriptions of one room in a bank.
-
-**BUILT 2026-08-20**, and the shipped arm scores higher than the one this
-entry proposed. `search_memories` now contributes no vector ranking on a
-fallback batch -- one flag, `rank_by_vector`, gating the semantic, cue-vector
-and aspect rankings, using the same `embedded.fallback` test
-`recall_confidence` has always made. `contrast_memory` makes the same refusal
-for a sharper reason: that axis REWARDS distance, so a hash there would not
-merely fail to find the true contrast, it would nominate rows for unbidden
-recall by coin flip while reporting a semantic reason. (Its own docstring
-already recorded that the semantic half was deliberately absent until real
-vectors existed; this restores that.)
-
-Measured on the same bank, probes and k
-([`experiments/CRC32_CONTROL.md`](experiments/CRC32_CONTROL.md) §8):
-**289 -> 346**, against the 338 this entry expected. Both control arms
-reproduced their recorded numbers EXACTLY -- 289 for ranking on the hash, 338
-for dropping the vector channel entirely -- which is what makes the third arm
-a comparison rather than a coincidence.
-
-The extra eight probes are the confound `CRC32_CONTROL.md` §2 could not
-remove, resolved in the sketch's favour. The 338 arm dropped the vectors
-entirely, so MMR redundancy fell back to Jaccard. The shipped change keeps
-`_vector` populated -- the hash is refused as a memory-versus-QUERY relevance
-signal and kept as a memory-versus-MEMORY near-duplicate signal, which is the
-one job §6 measured it to be near-exact at and then declined to propose
-without an end-to-end number. This is that number.
-
-**And `search_memory_summaries` deliberately does NOT make the refusal.**
-There the hash competes against nothing: refusing it returns no windows at
-all, where refusing it in `search_memories` just lets BM25 and exact-cue carry
-the query. What it costs in the window lane is the ORDER of a set of the
-character's own summaries, each carrying its own turn range -- arbitrary
-selection of real autobiography, rather than real material displaced by noise.
-The asymmetry is stated at the call site so it reads as a decision rather than
-an omission.
-
-`tests/test_no_provider_retrieval.py` (8 tests) pins all three boundaries: the
-stamp survives, the sketch keeps the near-duplicate job, and an install with a
-real provider is untouched. Three of them fail if `rank_by_vector` is forced
-back to True.
-
-*Found while landing this*: three tests in `test_embedding_rebuild.py` had been
-asserting that `"semantic match"` fires, on a bank with no embeddings provider
--- so a rebuild's "restored semantic reach" and an aspect's own rank list were
-both being demonstrated on crc32 noise. The properties are real; they now run
-against a stubbed provider that reports `fallback=False`.
 
 ### 2.22 Exact-cue matching scans the whole bank, and an index is what it wants
 
@@ -7303,17 +6975,6 @@ with the other deliberate keeps.)*
   safe. Legacy path only.
 - **P5 / P8** are defects, filed at §1.8 and §1.9.
 
-### 3.6 Deliberately kept
-
-Moved to [`AGENTS.md`](../AGENTS.md) § Information boundaries on 2026-08-19. It
-is a keep-list by construction — each item pinned by a test asserting the
-current behaviour — which makes it an INVARIANT rather than unfinished work, and
-an invariant belongs where somebody about to change the code will read it. A7
-and E3 were dropped in the move as overtaken: per-observer payloads mean the
-perceiver set in `_state_reaches_anyone` is one name, and outcome extras'
-hardcoded `knows_identity` is advisory against a field nothing reads (§1.45).
-
-
 ### 3.7 Test gaps
 
 `tests/test_pipeline_audit_leak_gaps.py` covers D1, D2, B3, B5, X14, F1, F2/P1,
@@ -7328,22 +6989,6 @@ family), so a test there would pin a dead path.
 `hear_level` and `_in_plain_view` directly, while `agents/loops.py` routes
 everything through `_delivery_ok`. Two families of delivery gate now exist and
 can drift apart. Consolidating them is the cheap insurance.
-
-### 3.9 Residuals of the alpha 6.3 physical-ledger work
-
-Dissolved 2026-08-19 — every bullet had a better home and two of them were being
-written twice:
-
-- entity `state` has no ageing of any kind → **§1.10**, which is the same finding
-  and now carries the measurement;
-- a hover is not a contact, and an orphaned relational value is dropped rather
-  than folded → **§1.28**, beside the rest of the contact-sensation residuals;
-- a garment moving between bodies keeps no identity →
-  [`design_notes/17-garment-displacement.md`](../design_notes/17-garment-displacement.md)
-  § Left open;
-- nothing derives a station from within-room movement INTENT → **§2.15**, which
-  is where the within-room approach concept would have to come from.
-
 
 ## 4. Architecture gaps
 
@@ -7613,11 +7258,16 @@ argument; only the gap is listed here.
 
 ### 6.1 Background life — [`BACKGROUND_LIFE_DESIGN.md`](design/BACKGROUND_LIFE_DESIGN.md)
 
-Most of §3 shipped in alpha 4.0. What did not:
+**The digest lifecycle (§3.5) was retired 2026-09-04** with the tier split. It
+was a bespoke compaction of what an unwatched presence had been doing —
+`digest`, compaction, freeze-while-unobserved, prune, `last_seen_clock` — and
+charter now moves an unwatched population outright while the planned playerless
+bubbles will give a major character the ordinary memory path. Only the raw
+`recent` ring buffer was ever built (`BACKGROUND_RECENT_TAIL = 4`), and that
+stays: it is what a presence's own reaction reads.
 
-- **The digest lifecycle (§3.5)** — the largest piece. Only the raw `recent` ring
-  buffer exists (`BACKGROUND_RECENT_TAIL = 4`). No `digest`, no compaction, no
-  freeze-while-unobserved, no prune, no `last_seen_clock`.
+Most of the rest of §3 shipped in alpha 4.0. What did not:
+
 - **Promotion conversion (§3.6)** — `importers.draft_promoted_character` reads
   the `events` table's `dialogue_log` and event text through
   `_promotion_evidence`, never `blurb` or `recent`, so a promoted presence

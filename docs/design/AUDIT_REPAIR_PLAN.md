@@ -1,14 +1,16 @@
 # Repair-and-re-audit plan
 
-Status: PHASE 1 ESSENTIALLY LANDED — one row open. Written 2026-08-18 as a
+Status: PHASE 1 LANDED — every row closed 2026-09-04. Written 2026-08-18 as a
 handoff, so the work survives a context compaction. Three phases, in order. Do
 not merge them.
 
-**This document is the ARGUMENT, not the status.** The single register is
-[`../UNBUILT.md`](../UNBUILT.md) §1.52, which as of 2026-08-19 records **one**
-of the 43 findings still open (COMMIT-10, blocked on an owner decision). Read
-the register for what remains; read the phases below for how the work was meant
-to be sequenced. The snapshot this section used to open with — a commit count,
+**This document is the ARGUMENT, not the status.** All 43 findings are now
+closed, and the register entry that indexed them
+(`../UNBUILT.md` §1.52) was deleted on 2026-09-04 with the last of them:
+COMMIT-10's `proposed_specifics` went with the mapping model itself, so the
+owner decision it was blocked on became moot rather than answered. The index it
+carried is the three audit documents listed below. Read the phases here for how
+the work was meant to be sequenced. The snapshot this section used to open with — a commit count,
 a test count and a working-tree state, all from the day it was written — has
 been deleted rather than re-synced: a status line in an argument document is a
 second register, and the one thing this repository has repeatedly proved is
@@ -30,10 +32,9 @@ revised — verify before acting, per `AGENTS.md` on `docs/design/`):
 - [`SPLIT_SPATIAL.md`](SPLIT_SPATIAL.md) / [`SPLIT_COMMIT.md`](SPLIT_COMMIT.md)
   / [`SPLIT_DIRECTOR.md`](SPLIT_DIRECTOR.md) — the executed plans. `SPLIT_DIRECTOR`
   still carries an unstarted **Phase 2**, which is a separate decision.
-- [`../UNBUILT.md`](../UNBUILT.md) §1.52 — the register entry indexing all 43
-  findings, and the **authority** on which of them are still open. A landed row
-  is deleted there in the commit that lands it, so the shipped list lives in
-  `CHANGELOG.md`.
+- The 43 findings themselves, in the three audit documents below. Each landed
+  row was deleted from `../UNBUILT.md` in the commit that landed it, so the
+  shipped list lives in `CHANGELOG.md`. Nothing is open.
 - `docs/experiments/AUDIT_{SPATIAL,COMMIT,DIRECTOR}.md` — full detail, each
   finding carrying `file:line` **as of `418ab5b`** plus the commit that moved
   the code. Line numbers have all changed since; resolve by symbol name.
