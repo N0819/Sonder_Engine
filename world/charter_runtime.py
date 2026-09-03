@@ -1984,15 +1984,42 @@ def advance_snapshot(registry, *, elapsed_seconds, epoch_id, base_turn,
             # Registered-character movement is authoritative.  A bound body
             # remains in Charter only as an institutional projection, and its
             # place follows the scene instead of being advanced here.
-            try:
-                from world.spatial import room_of
-                for body_key, binding in (state.get("bindings") or {}).items():
+            #
+            # THE ONE BRIDGE BETWEEN TWO NAMESPACES, and it used to sit in a
+            # bare `except Exception: pass`. It is the only line anywhere
+            # that asserts a charter `place` and a scene room id are the same
+            # vocabulary; with bodies walking the room graph that assertion
+            # is load-bearing, so a failure here is logged with its cause,
+            # and a room the charter's own graph does not contain is said
+            # out loud rather than written into `place` for the mover to
+            # fail on silently next window. The catch-up still proceeds:
+            # one body's stale place is not a reason to freeze the town.
+            from world.spatial import room_of
+            charter_rooms = set((state["scene"] or {}).get("rooms") or {})
+            for body_key, binding in (state.get("bindings") or {}).items():
+                try:
                     room = (room_of(scene, binding.get("name"))
                             or room_of(scene, binding.get("entity_id")))
-                    if room and body_key in state["bodies"]:
-                        state["bodies"][body_key]["place"] = str(room)
-            except Exception:
-                pass
+                except Exception as exc:
+                    logger.warning(
+                        "charter %s: bound body %s could not be located in "
+                        "the scene (%s: %s); its place is not advanced",
+                        key, body_key, type(exc).__name__, exc)
+                    continue
+                if not room or body_key not in state["bodies"]:
+                    continue
+                if charter_rooms and str(room) not in charter_rooms:
+                    logger.warning(
+                        "charter %s: bound body %s stands in scene room %r, "
+                        "which the charter's graph does not contain; its "
+                        "place is left at %r",
+                        key, body_key, str(room),
+                        state["bodies"][body_key].get("place"))
+                    continue
+                state["bodies"][body_key]["place"] = str(room)
+                # A registered character walks under its own movement, so
+                # whatever route Charter had it on is over.
+                state["bodies"][body_key].pop("walk", None)
         before_hours = float(state.get("clock_hours") or 0.0)
         state, events = run(
             state, hours=advanced_hours,
@@ -2968,8 +2995,15 @@ def _charter_events(cid, charter_key, frame_id=None):
     return out
 
 
-def promotion_bundle(cid, name, *, record=None, frame_id=None):
-    """The one Charter life this tracked presence can legitimately carry."""
+def promotion_bundle(cid, name, *, record=None, frame_id=None,
+                     promoted_turn=None):
+    """The one Charter life this tracked presence can legitimately carry.
+
+    ``promoted_turn`` stamps the inherited place graph: every node the town
+    hands over is "last seen" at the turn the character was minted, which is
+    what `commit_place_graph`'s eviction order needs to forget the streets
+    never walked before the ones that were.
+    """
     registry = registry_for(cid, frame_id)
     refs = (record or {}).get("charter_refs") or ()
     matches = _body_refs(registry, name=name, refs=refs)
@@ -2994,8 +3028,15 @@ def promotion_bundle(cid, name, *, record=None, frame_id=None):
         social_names[key] = str(surface.get("name") or surface.get("label")
                                 or key)
     from world.charter_identity import identity_seed
+    from world.charter_promote import inherited_place_graph
     return {"charter": charter_key, "body": body_key,
             "place": str(body.get("place") or ""), "handoff": handoff,
+            # The town's public graph plus the routes this body walked, in
+            # `chat_chars.state.place_graph`'s own shape. Empty when the
+            # institution has no scene: there is no graph to inherit, and
+            # the promoted mind learns its map by walking as any other does.
+            "place_graph": inherited_place_graph(
+                state, body_key, turn_idx=promoted_turn),
             "social_names": social_names,
             "dialogue_color": str(body.get("dialogue_color") or ""),
             "dialogue_color_seed": identity_seed(charter_key, body_key)}

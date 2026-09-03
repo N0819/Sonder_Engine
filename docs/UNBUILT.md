@@ -340,6 +340,32 @@ scene has never contained a place its 37 bodies live in.
 Cheapest first step is a diagnostic, not a fix: a non-empty charter registry
 and a scene sharing zero ids is an unambiguous dead bridge and can be said so.
 
+**PROTOTYPED ON A BRANCH, 2026-09-02, not on main.** The worktree branch
+carrying `tests/test_charter_traversal.py` answers the second half of this
+entry -- the route half -- on a charter that HAS a graph, and leaves the
+first half (no live charter world has one) exactly where it was. On the
+branch: a charter body carries the courier's shape between windows
+(`world/charter_move.py`: a route planned once over the shared pathfinder, a
+leg, `place` always the current leg's room), a window buys
+`WALK_ROOMS_PER_HOUR` rooms per hour (the courier's own walking pace, 6), a
+shut door holds a body where it stands with no re-plan, every edge walked is
+recorded per body in room-id vocabulary (`charter["walked"]`), and
+`charter_promote.inherited_place_graph` seeds a promoted body's
+`chat_chars.state.place_graph` with the town's PUBLIC rooms (every room that
+is not somebody else's berth, basis `told`) plus the rooms it walked (basis
+`walked`, visits counted). Measured on `charter_worlds.big_town`: the same
+64,035 rooms crossed in both arms, 53.0s before against 52.8s after on 300
+bodies over 720 hours, once the walked record stopped being deep-copied
+per window (77s before that fix). What the prototype does NOT do, and what
+argues against merging it as it stands: the dispatch pace (24 rooms per
+four-hour window) means nearly every walk on a settlement-sized map finishes
+inside the window it began, so the transit state is exercised only by a short
+window or a long road; `REACH_LIMIT` still decides reachability by count
+rather than by the pace; "public" reads a private interior nobody berths in
+as public; inherited nodes carry no bearing; and no live charter world has a
+scene for any of it to run on, which is the configuration question above and
+is still open.
+
 ### 1.11 `ctx.warnings` reaches the pipeline drawer but not the story reader
 
 **Landed, alpha 6.9**, except for an aggregate reader. Every warning is tagged

@@ -234,6 +234,22 @@ def normalize_body(key, entry):
         value = str(entry.get(field) or "").strip()
         if value:
             body[field] = value
+    # A walk in progress: the courier's shape (`charter_move`), carried only
+    # while the body is between its origin and its target. Dropped on arrival
+    # by the mover, and dropped here if it is not a route at all -- a body
+    # whose record cannot be walked stands where its `place` says.
+    rec = entry.get("walk")
+    if isinstance(rec, dict):
+        route = [str(r) for r in (rec.get("route") or ()) if str(r)]
+        leg = integer(rec.get("leg"), 0)
+        if len(route) > 1 and 0 <= leg < len(route) - 1 \
+                and route[leg] == body["place"]:
+            body["walk"] = {
+                "target": str(rec.get("target") or route[-1]),
+                "route": route, "leg": leg,
+                "credit": max(0.0, number(rec.get("credit"), 0.0)),
+                "held": bool(rec.get("held", False)),
+            }
     return body
 
 
@@ -591,6 +607,19 @@ def normalize_charter(stored, reservation=None):
             stored.get("window_acts"), bodies),
         "travelled": {str(k): int(v)
                       for k, v in (stored.get("travelled") or {}).items()},
+        # Every edge every body has walked, ``{body: {from: {to: n}}}`` in
+        # room-id vocabulary. Bounded by the graph rather than by time (a
+        # crossing counts up, it does not append), and kept because it is
+        # the one record a promotion can hand over as EARNED routes rather
+        # than the institution's map (`charter_promote.inherited_place_graph`).
+        "walked": {
+            str(body): {
+                str(origin): {str(end): int(n) for end, n in ends.items()
+                              if int(n or 0) > 0}
+                for origin, ends in (routes or {}).items()
+                if isinstance(ends, dict)}
+            for body, routes in (stored.get("walked") or {}).items()
+            if isinstance(routes, dict) and str(body) in bodies},
     }
 
 

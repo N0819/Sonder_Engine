@@ -108,7 +108,8 @@ from .charter_mark import (
     normalize_marks,
 )
 from .charter_move import (
-    ERRAND_RATE, errands, furthest_travelled, homecomings, relocate, walk)
+    ERRAND_RATE, WALK_ROOMS_PER_HOUR, continue_walks, en_route, errands,
+    furthest_travelled, homecomings, relocate, walk, walked_edges)
 from .charter_temper import (
     SPREAD,
     TRAITS,
@@ -315,9 +316,13 @@ __all__ = [
     "stock_band", "trade", "update_judgments_from_minds", "apply_due",
     "intervention_warnings", "normalize_interventions",
     "ERRAND_RATE",
+    "WALK_ROOMS_PER_HOUR",
+    "continue_walks",
+    "en_route",
     "errands",
     "homecomings",
     "walk",
+    "walked_edges",
     "FIGURE_ACTS",
     "address_components",
     "components_repeat",
