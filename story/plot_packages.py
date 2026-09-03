@@ -34,7 +34,12 @@ seam -- planned rooms through `structure.plant_structure`, plans through
 `authored_events.mint_authored_events`, lore through
 `canon_provenance.promote` and `add_lore`, planning needs through
 `planning_needs.fill_planning_need`/`close_planning_need`, locations through
-`charter_runtime.generate_lived_location`. There is no operation that
+`charter_runtime.generate_lived_location`, every nudge to an institution
+through `charter_runtime.author_surgery` (a fact the institution keeps,
+recorded as the author's; a claim lands as something a body was TOLD by a
+named teller, through the mind's one uptake door), a change over a region
+through `world.region_events.apply_wave` (hazard, ruin, shocks, harm by the
+harm model, displacement, evidence, news). There is no operation that
 writes `chat_chars.state`, a memory row, a perception view, a relationship
 or a character's knowledge, and an operation kind outside the table is
 refused at DRAFT time, so a package cannot even carry one. What a package
@@ -89,6 +94,11 @@ PLAN_ROOMS_CAP = 200
 EVENT_DUE_CAP = 200
 #: Story hours one `presimulate` may ask for at once.
 PRESIM_HOURS_CAP = 24.0 * 30
+#: Turns ahead a local-drama operation's own due may reach when it names no
+#: package clock (the seam re-queues past it, as for `schedule_event`).
+DRAMA_DUE_TURNS_CAP = EVENT_DUE_CAP
+#: Story seconds in a story hour, for a clock due in `due_story_hours`.
+STORY_HOUR_SECONDS = 3600.0
 
 #: Prose field names on a package, each a text capped at TEXT_CHARS.
 _TEXT_FIELDS = ("title", "premise")
@@ -211,6 +221,7 @@ def normalize_package(entry):
             "history": history,
         },
         "published_turn": entry.get("published_turn"),
+        "published_elapsed": entry.get("published_elapsed"),
         "activated_turn": entry.get("activated_turn"),
     }
     for field, prefix in _LIST_FIELDS.items():
@@ -422,8 +433,8 @@ def draft_operation(cid, uid, op, *, frame_id=None):
         raise ValueError("a package carries at most %d operations" % OPS_CAP)
     shaped = OPERATIONS[kind]["shape"](op)
     shaped["op"] = kind
-    shaped.pop("applied", None)
-    shaped.pop("prepared", None)
+    for mark in ("applied", "prepared", "deferred", "refused", "waves"):
+        shaped.pop(mark, None)
     pkg["operations"].append(shaped)
     _bump(pkg, "operation_drafted", kind, _latest_turn_idx(cid, frame_id))
     stored[pkg["uid"]] = pkg
@@ -503,7 +514,23 @@ def _world_snapshot(cid, frame_id=None):
         "plans": plans,
         "needs": {n["uid"]: n for n in open_planning_needs(cid, frame_id)},
         "registry": registry,
+        # THE INSIDE OF A BODY IS NOT A PLACE A PLAN CAN HOLD. A room whose
+        # record carries `parent_entity` is where the world put a body --
+        # the Director's, minted on the fly and living only while the
+        # containment does -- so no plan exits to it, from it, or plants it,
+        # and no footprint covers it (owner ruling, 2026-09-03).
+        "containment": {str(r): str(room.get("parent_entity"))
+                        for r, room in rooms.items()
+                        if isinstance(room, dict) and room.get("parent_entity")},
+        "elapsed": _elapsed_seconds(cid, frame_id),
     }
+
+
+def _elapsed_seconds(cid, frame_id=None):
+    """Where the story clock stands, in simulation seconds."""
+    from core.db import wget_for_frame
+    from world.mechanics import clock_elapsed
+    return clock_elapsed(wget_for_frame(cid, "simulation_clock", frame_id, {}) or {})
 
 
 def _room_known(world, room):
@@ -541,14 +568,27 @@ def _shape_plan_rooms(op):
 def _preview_plan_rooms(cid, frame_id, op, world):
     errors, warnings, changes = [], [], []
     rooms = op["rooms"]
+    contained = world.get("containment") or {}
     for uid, room in rooms.items():
+        if uid in contained:
+            errors.append(
+                "room %r is the inside of a body (%s); the inside of a body "
+                "is not a place a plan can hold -- where the world puts a "
+                "body is the Director's, and it is transient"
+                % (uid, contained[uid]))
+            continue
         if uid in world["described_rooms"]:
             errors.append(
                 "room %r is already described in the scene; a room the "
                 "story has seen is a retcon, not a plan" % uid)
         for edge in room["adjacent"]:
             to = str(edge.get("to"))
-            if to not in rooms and not _room_known(world, to):
+            if to in contained:
+                errors.append(
+                    "room %r exits to %r, the inside of a body (%s); the "
+                    "inside of a body is not a place a plan can hold"
+                    % (uid, to, contained[to]))
+            elif to not in rooms and not _room_known(world, to):
                 errors.append("room %r exits to %r, which exists nowhere"
                               % (uid, to))
     changes.append({"kind": "rooms_planted", "structure": op["structure"]["key"],
@@ -640,7 +680,11 @@ def _shape_post_artifact(op):
     return {"room": _text(op.get("room"), 120),
             "description": _text(op.get("description"), 80),
             "report": dict(op["report"]) if isinstance(op.get("report"), dict) else {},
-            "text": _text(op.get("text"), 600)}
+            "text": _text(op.get("text"), 600),
+            # A PLACED artifact -- a letter under the door, a mark on a wall
+            # -- is the same seam as a posted bill, so it is the same kind,
+            # left when the package's clock fires rather than at publish.
+            **_clock_field(op)}
 
 
 def _preview_post_artifact(cid, frame_id, op, world):
@@ -937,6 +981,468 @@ def _prepare_presimulate(cid, frame_id, op):
 
 #: THE CLOSED TABLE. Every way a package can touch the world, each over one
 #: existing seam. A kind absent here is refused at draft time.
+
+# ---------------------------------------------------------------------------
+# Local drama, the nudge toolkit, region events
+# ---------------------------------------------------------------------------
+#
+# Every kind below authors a CIRCUMSTANCE THAT ARRIVES (plan § 5 Phase C):
+# a body comes to a room, is sent somewhere, is told something, an
+# institution's numbers move, a place is damaged. The Director rules what
+# happens when the player meets it, and no kind writes the player's conduct
+# or a major character's mind. Each may ride a PACKAGE CLOCK (``clock`` names
+# a clock id in the package): then it lands when `fire_due_clocks` sees the
+# clock due, not at publish, and is refused at that hour if the world has
+# moved under it (a body that has died cannot arrive).
+
+def _clock_field(op):
+    clock = _text(op.get("clock"), 120)
+    return {"clock": clock} if clock else {}
+
+
+def _due_turns(op, field="due_in_turns", default=1):
+    try:
+        due = int(op.get(field) if op.get(field) is not None else default)
+    except (TypeError, ValueError):
+        raise ValueError("%s is a number of turns" % field)
+    if due < 1 or due > DRAMA_DUE_TURNS_CAP:
+        raise ValueError("%s is 1..%d turns ahead" % (field, DRAMA_DUE_TURNS_CAP))
+    return due
+
+
+def _who(raw):
+    """Whom an arrival concerns: a plan by uid or name, or a charter body
+    as ``{charter, body}`` / ``"charter/body"``."""
+    if isinstance(raw, str):
+        text = _text(raw, 160)
+        if "/" in text and not text.startswith("plan:"):
+            charter, body = text.split("/", 1)
+            return {"charter": charter.strip(), "body": body.strip()}
+        return {"plan": text} if text.startswith("plan:") else {"name": text}
+    raw = raw if isinstance(raw, dict) else {}
+    out = {}
+    for key in ("plan", "name", "charter", "body"):
+        if _text(raw.get(key), 160):
+            out[key] = _text(raw.get(key), 160)
+    return out
+
+
+def _resolve_who(world, who):
+    """``("plan", plan)``, ``("body", charter_key, body_key, body)`` or
+    ``None`` -- against the snapshot the preview reads."""
+    plans = world.get("plans") or {}
+    if who.get("plan") and who["plan"] in plans:
+        return ("plan", plans[who["plan"]])
+    if who.get("name"):
+        wanted = who["name"].casefold()
+        for plan in plans.values():
+            if plan["name"].casefold() == wanted or wanted in {
+                    a.casefold() for a in plan.get("aliases") or ()}:
+                return ("plan", plan)
+        for key, item in ((world.get("registry") or {}).get("items") or {}).items():
+            for bkey, body in ((item.get("state") or {}).get("bodies") or {}).items():
+                if str(body.get("name") or "").casefold() == wanted:
+                    return ("body", str(key), str(bkey), body)
+    if who.get("charter") and who.get("body"):
+        item = ((world.get("registry") or {}).get("items") or {}).get(who["charter"])
+        body = ((item or {}).get("state") or {}).get("bodies", {}).get(who["body"])
+        if body is not None:
+            return ("body", who["charter"], who["body"], body)
+    return None
+
+
+def _surgery_preview(world, surgery):
+    """Dry-run one surgery on a copy of the snapshot's registry; the
+    module's own refusal is the preview's error. A thousand-body town is
+    copied once per surgery previewed, which is a room action and rare."""
+    from world.charter_surgery import apply_surgery
+    registry = copy.deepcopy(world.get("registry") or {"items": {}})
+    try:
+        return apply_surgery(registry, surgery, by="preview"), None
+    except ValueError as exc:
+        return None, str(exc)
+
+
+def _apply_surgery(cid, frame_id, surgery, *, turn_idx, by):
+    from world.charter_runtime import author_surgery
+    return author_surgery(cid, frame_id, surgery, by=by, turn_idx=turn_idx)
+
+
+def _mint_notice(cid, turn_idx, summary, *, by):
+    """A circumstance the Director renders next beat where the player is:
+    an authored event due in one turn, as `schedule_event` mints them."""
+    from story.authored_events import mint_authored_events
+    return mint_authored_events(cid, int(turn_idx or 0),
+                                [{"summary": summary, "due_in_turns": 1}],
+                                source=by)
+
+
+# -- arrival ------------------------------------------------------------------
+
+def _shape_arrival(op):
+    who = _who(op.get("who"))
+    if not who:
+        raise ValueError("arrival names who arrives: a plan, a name, or a "
+                         "charter body")
+    room = _text(op.get("room"), 120)
+    if not room:
+        raise ValueError("arrival names the room they reach")
+    return {"who": who, "room": room, "carrying": _text(op.get("carrying"), 300),
+            "manner": _text(op.get("manner"), 200), **_clock_field(op)}
+
+
+def _preview_arrival(cid, frame_id, op, world):
+    errors, changes = [], []
+    if not _room_known(world, op["room"]):
+        errors.append("arrival at %r, which exists nowhere" % op["room"])
+    if op["room"] in (world.get("containment") or {}):
+        errors.append("arrival at %r, the inside of a body; where the world "
+                      "puts a body is the Director's" % op["room"])
+    found = _resolve_who(world, op["who"])
+    if found is None:
+        errors.append("nobody the world holds matches %r; plan them first or "
+                      "name a charter body" % op["who"])
+    else:
+        if found[0] == "body":
+            # Dry-run the move: a body that has died cannot arrive.
+            _r, refused = _surgery_preview(world, {
+                "op": "move_body", "charter": found[1], "body": found[2],
+                "room": op["room"]})
+            if refused:
+                errors.append("arrival: " + refused)
+        changes.append({"kind": "arrival", "who": op["who"], "room": op["room"],
+                        "as": found[0]})
+    return {"changes": changes, "errors": errors, "warnings": []}
+
+
+def _apply_arrival(cid, frame_id, op, turn_idx, *, by):
+    world = _world_snapshot(cid, frame_id)
+    found = _resolve_who(world, op["who"])
+    if found is None:
+        raise ValueError("nobody the world holds matches %r" % op["who"])
+    if found[0] == "plan":
+        from world.planned_entities import add_planned_entity
+        plan = dict(found[1])
+        plan["brief"] = dict(plan.get("brief") or {}, where=op["room"])
+        add_planned_entity(cid, plan, frame_id=frame_id, turn_idx=turn_idx)
+        label = plan["name"]
+        moved = {"plan": plan["uid"]}
+    else:
+        _kind, charter, body, record = found
+        moved = _apply_surgery(cid, frame_id, {
+            "op": "move_body", "charter": charter, "body": body,
+            "room": op["room"]}, turn_idx=turn_idx, by=by)
+        label = str(record.get("name") or body)
+    summary = "%s arrives at %s%s%s" % (
+        label, op["room"],
+        (", " + op["manner"]) if op["manner"] else "",
+        (", carrying " + op["carrying"]) if op["carrying"] else "")
+    return {"moved": moved, "notice": _mint_notice(cid, turn_idx, summary, by=by)}
+
+
+# -- errand -------------------------------------------------------------------
+
+def _shape_errand(op):
+    charter, body = _text(op.get("charter"), 120), _text(op.get("body"), 120)
+    if not charter or not body:
+        raise ValueError("errand names the charter and the body it sends")
+    to = _text(op.get("to"), 120)
+    if not to:
+        raise ValueError("errand names where the body is sent")
+    return {"charter": charter, "body": body, "to": to,
+            "purpose": _text(op.get("purpose"), 200), **_clock_field(op)}
+
+
+def _preview_errand(cid, frame_id, op, world):
+    errors = []
+    if not _room_known(world, op["to"]):
+        errors.append("errand to %r, which exists nowhere" % op["to"])
+    _result, refused = _surgery_preview(world, {
+        "op": "send_errand", "charter": op["charter"], "body": op["body"],
+        "to": op["to"], "purpose": op["purpose"], "scene": world["scene"]})
+    if refused:
+        errors.append("errand: " + refused)
+    return {"changes": [{"kind": "errand", "charter": op["charter"],
+                         "body": op["body"], "to": op["to"]}],
+            "errors": errors, "warnings": []}
+
+
+def _apply_errand(cid, frame_id, op, turn_idx, *, by):
+    from story.scene import get_scene
+    scene = get_scene(cid, _chat_row(cid)) or {}
+    return _apply_surgery(cid, frame_id, {
+        "op": "send_errand", "charter": op["charter"], "body": op["body"],
+        "to": op["to"], "purpose": op["purpose"], "scene": scene},
+        turn_idx=turn_idx, by=by)
+
+
+# -- incident -----------------------------------------------------------------
+
+def _shape_incident(op):
+    room = _text(op.get("room"), 120)
+    summary = _text(op.get("summary"), 400)
+    if not room or not summary:
+        raise ValueError("incident names the room and says what happens there")
+    try:
+        shock = float(op.get("shock") if op.get("shock") is not None else 0.3)
+    except (TypeError, ValueError):
+        raise ValueError("incident shock is a number 0..1")
+    if shock < 0.0 or shock > 1.0:
+        raise ValueError("incident shock is a number 0..1")
+    harms = []
+    for raw in (op.get("harms") or ()) if isinstance(op.get("harms"), list) else ():
+        raw = raw if isinstance(raw, dict) else {}
+        if _text(raw.get("charter"), 120) and _text(raw.get("body"), 120):
+            harms.append({"charter": _text(raw.get("charter"), 120),
+                          "body": _text(raw.get("body"), 120),
+                          "outcome": _text(raw.get("outcome"), 20) or "hurt"})
+    return {"room": room, "summary": summary, "shock": shock, "harms": harms,
+            **_clock_field(op)}
+
+
+def _incident_shocks(world, op):
+    """Every upkeep served at the incident's room, per charter."""
+    out = []
+    for key, item in ((world.get("registry") or {}).get("items") or {}).items():
+        state = item.get("state") or {}
+        for ukey, upkeep in (state.get("upkeeps") or {}).items():
+            if str(upkeep.get("place") or "") == op["room"]:
+                out.append((str(key), str(ukey)))
+    return out
+
+
+def _preview_incident(cid, frame_id, op, world):
+    errors, warnings = [], []
+    if not _room_known(world, op["room"]):
+        errors.append("incident at %r, which exists nowhere" % op["room"])
+    shocks = _incident_shocks(world, op) if op["shock"] > 0 else []
+    if op["shock"] > 0 and not shocks:
+        warnings.append("no institution serves anything at %r; the incident "
+                        "shocks nobody and is only a notice" % op["room"])
+    for harm in op["harms"]:
+        _r, refused = _surgery_preview(world, {
+            "op": "harm_body", "charter": harm["charter"], "body": harm["body"],
+            "outcome": harm["outcome"]})
+        if refused:
+            errors.append("incident harm: " + refused)
+    return {"changes": [{"kind": "incident", "room": op["room"],
+                         "shocks": ["%s/%s" % s for s in shocks],
+                         "harms": len(op["harms"])}],
+            "errors": errors, "warnings": warnings}
+
+
+def _apply_incident(cid, frame_id, op, turn_idx, *, by):
+    world = _world_snapshot(cid, frame_id)
+    shocked, harmed = [], []
+    for charter, upkeep in (_incident_shocks(world, op) if op["shock"] > 0 else []):
+        _apply_surgery(cid, frame_id, {
+            "op": "charter_shock", "charter": charter, "intervention": {
+                "op": "upkeep_shock", "upkeep": upkeep, "delta": -op["shock"],
+                "place": op["room"], "surface": op["summary"],
+                "cause": "incident: " + op["summary"][:80]}},
+            turn_idx=turn_idx, by=by)
+        shocked.append("%s/%s" % (charter, upkeep))
+    for harm in op["harms"]:
+        _apply_surgery(cid, frame_id, {
+            "op": "harm_body", "charter": harm["charter"], "body": harm["body"],
+            "outcome": harm["outcome"], "cause": op["summary"][:120], "by": by},
+            turn_idx=turn_idx, by=by)
+        harmed.append("%s/%s" % (harm["charter"], harm["body"]))
+    return {"shocked": shocked, "harmed": harmed,
+            "notice": _mint_notice(cid, turn_idx, op["summary"], by=by)}
+
+
+# -- summons ------------------------------------------------------------------
+
+def _shape_summons(op):
+    charter, post = _text(op.get("charter"), 120), _text(op.get("post"), 120)
+    target = _text(op.get("target"), 120)
+    if not charter or not post or not target:
+        raise ValueError("summons names the charter, the post that calls, and "
+                         "whom it calls")
+    return {"charter": charter, "post": post, "target": target,
+            "place": _text(op.get("place"), 120), "terms": _text(op.get("terms"), 320),
+            **_clock_field(op)}
+
+
+def _preview_summons(cid, frame_id, op, world):
+    errors = []
+    if op["place"] and not _room_known(world, op["place"]):
+        errors.append("summons to %r, which exists nowhere" % op["place"])
+    if op["target"].casefold() not in world["reserved_names"]:
+        errors.append("summons calls %r, whom the world does not hold; a summons "
+                      "is toward somebody" % op["target"])
+    _r, refused = _surgery_preview(world, {
+        "op": "open_summons", "charter": op["charter"], "post": op["post"],
+        "target": op["target"], "place": op["place"], "terms": op["terms"]})
+    if refused:
+        errors.append("summons: " + refused)
+    return {"changes": [{"kind": "summons", "charter": op["charter"],
+                         "post": op["post"], "target": op["target"]}],
+            "errors": errors, "warnings": []}
+
+
+def _apply_summons(cid, frame_id, op, turn_idx, *, by):
+    out = _apply_surgery(cid, frame_id, {
+        "op": "open_summons", "charter": op["charter"], "post": op["post"],
+        "target": op["target"], "place": op["place"], "terms": op["terms"],
+        "source_id": by}, turn_idx=turn_idx, by=by)
+    where = out["result"].get("place") or op["place"]
+    summary = "%s is summoned to %s by the %s%s" % (
+        op["target"], where, op["post"], (": " + op["terms"]) if op["terms"] else "")
+    out["notice"] = _mint_notice(cid, turn_idx, summary, by=by)
+    return out
+
+
+# -- scheduled_consequence ----------------------------------------------------
+
+def _shape_scheduled_consequence(op):
+    summary = _text(op.get("summary"), 400)
+    if not summary:
+        raise ValueError("scheduled_consequence says what happens when the "
+                         "clock is due")
+    clock = _clock_field(op)
+    if not clock:
+        raise ValueError("scheduled_consequence names the package clock it "
+                         "fires on")
+    return {"summary": summary, "room": _text(op.get("room"), 120), **clock}
+
+
+def _preview_scheduled_consequence(cid, frame_id, op, world):
+    errors = []
+    if op["room"] and not _room_known(world, op["room"]):
+        errors.append("consequence at %r, which exists nowhere" % op["room"])
+    return {"changes": [{"kind": "consequence_scheduled", "clock": op["clock"],
+                         "summary": op["summary"]}],
+            "errors": errors, "warnings": []}
+
+
+def _apply_scheduled_consequence(cid, frame_id, op, turn_idx, *, by):
+    summary = op["summary"] + ((" (at %s)" % op["room"]) if op["room"] else "")
+    return {"notice": _mint_notice(cid, turn_idx, summary, by=by)}
+
+
+# -- the nudge toolkit: surgeries as kinds -------------------------------------
+
+def _surgery_shape(kind, fields):
+    def shape(op):
+        charter = _text(op.get("charter"), 120)
+        if not charter:
+            raise ValueError("%s names the charter" % kind)
+        out = {"charter": charter, **_clock_field(op)}
+        for field in fields:
+            value = op.get(field)
+            if isinstance(value, dict):
+                out[field] = copy.deepcopy(value)
+            elif value is not None:
+                out[field] = _text(value, 320) if isinstance(value, str) else value
+        return out
+    return shape
+
+
+def _surgery_preview_for(kind):
+    def preview(cid, frame_id, op, world):
+        surgery = {"op": kind, **{k: v for k, v in op.items()
+                                  if k not in ("op", "clock", "applied",
+                                               "deferred", "refused")}}
+        result, refused = _surgery_preview(world, surgery)
+        return {"changes": [{"kind": kind, "charter": op["charter"],
+                             "result": result}],
+                "errors": ["%s: %s" % (kind, refused)] if refused else [],
+                "warnings": []}
+    return preview
+
+
+def _surgery_apply_for(kind):
+    def apply(cid, frame_id, op, turn_idx, *, by):
+        surgery = {"op": kind, **{k: v for k, v in op.items()
+                                  if k not in ("op", "clock", "applied",
+                                               "deferred", "refused")}}
+        return _apply_surgery(cid, frame_id, surgery, turn_idx=turn_idx, by=by)
+    return apply
+
+
+SURGERY_FIELDS = {
+    "move_body": ("body", "room", "berth"),
+    "assign_post": ("body", "post"),
+    "plant_claim": ("body", "text", "told_by", "about", "place", "strength"),
+    "adjust_stock": ("holder", "good", "delta"),
+    "arm_trigger": ("rule",),
+    "charter_shock": ("intervention",),
+}
+
+
+# -- region_event -------------------------------------------------------------
+
+def _shape_region_event(op):
+    from world.region_events import normalize_region_event
+    return {**normalize_region_event(op), **_clock_field(op)}
+
+
+def _preview_region_event(cid, frame_id, op, world):
+    from world.region_events import harms_a_body, plan_waves, resolve_footprint
+    errors, warnings = [], []
+    ordered, unknown = resolve_footprint(cid, world["scene"], op["footprint"],
+                                         known=world["rooms"])
+    for name in unknown:
+        errors.append("region_event footprint names %r, which exists nowhere" % name)
+    if not ordered and not unknown:
+        errors.append("region_event's footprint covers no room")
+    waves = plan_waves(op, ordered, world.get("elapsed") or 0.0)
+    if not op["effects"].get("harm") and op["effects"].get("destroy"):
+        warnings.append("ruin harms whoever stands in a ruined room at the "
+                        "event's intensity; name `harm` to say how")
+    return {"changes": [{"kind": "region_event", "label": op["label"],
+                         "rooms": [r for r, _h in ordered], "waves": len(waves),
+                         "harms": harms_a_body(op)}],
+            "errors": errors, "warnings": warnings}
+
+
+def _apply_region_event(cid, frame_id, op, turn_idx, *, by, elapsed, turn_id):
+    """The first wave lands now; the rest ride the op as ``waves`` until
+    `fire_due_clocks` sees each due."""
+    from story.scene import get_scene
+    from world.region_events import apply_wave, plan_waves, resolve_footprint
+    scene = get_scene(cid, _chat_row(cid)) or {}
+    ordered, _unknown = resolve_footprint(cid, scene, op["footprint"])
+    waves = plan_waves(op, ordered, elapsed)
+    done, pending = [], []
+    for wave in waves:
+        if float(wave["due_elapsed"]) <= float(elapsed or 0.0) + 1e-6 and not done:
+            done.append(apply_wave(cid, frame_id, op, wave, turn_idx=turn_idx,
+                                   turn_id=turn_id, elapsed=elapsed, by=by))
+        elif float(wave["due_elapsed"]) <= float(elapsed or 0.0) + 1e-6:
+            done.append(apply_wave(cid, frame_id, op, wave, turn_idx=turn_idx,
+                                   turn_id=turn_id, elapsed=elapsed, by=by))
+        else:
+            pending.append(wave)
+    op["waves"] = pending
+    return {"label": op["label"], "waves_done": len(done),
+            "waves_pending": len(pending),
+            "rooms": [r for r, _h in ordered], "first": done[0] if done else None}
+
+
+def advance_region_waves(cid, frame_id, pkg, *, turn_idx, elapsed, turn_id):
+    """Land every pending wave of the package's region events that is due.
+    Returns the number landed."""
+    from world.region_events import apply_wave
+    landed = 0
+    by = "writers_room:" + pkg["uid"]
+    for op in pkg["operations"]:
+        if op["op"] != "region_event" or not op.get("waves"):
+            continue
+        still = []
+        for wave in op["waves"]:
+            if float(wave.get("due_elapsed") or 0.0) <= float(elapsed or 0.0) + 1e-6:
+                apply_wave(cid, frame_id, op, wave, turn_idx=turn_idx,
+                           turn_id=turn_id, elapsed=elapsed, by=by)
+                landed += 1
+            else:
+                still.append(wave)
+        op["waves"] = still
+    return landed
+
+
 OPERATIONS = {
     "plan_rooms": {"shape": _shape_plan_rooms, "preview": _preview_plan_rooms,
                    "apply": _apply_plan_rooms, "long": False,
@@ -968,7 +1474,40 @@ OPERATIONS = {
     "presimulate": {"shape": _shape_presimulate, "preview": _preview_presimulate,
                     "prepare": _prepare_presimulate, "long": True,
                     "seam": "world.charter_runtime.presim_registry + land_presim"},
+    # Local drama (plan § 5 Phase C): circumstances that arrive.
+    "arrival": {"shape": _shape_arrival, "preview": _preview_arrival,
+                "apply": _apply_arrival, "long": False,
+                "seam": "charter_runtime.author_surgery(move_body) | "
+                        "planned_entities.add_planned_entity + authored_events"},
+    "errand": {"shape": _shape_errand, "preview": _preview_errand,
+               "apply": _apply_errand, "long": False,
+               "seam": "charter_runtime.author_surgery(send_errand)"},
+    "incident": {"shape": _shape_incident, "preview": _preview_incident,
+                 "apply": _apply_incident, "long": False,
+                 "seam": "charter_runtime.author_surgery(charter_shock | harm_body) "
+                         "+ authored_events"},
+    "summons": {"shape": _shape_summons, "preview": _preview_summons,
+                "apply": _apply_summons, "long": False,
+                "seam": "charter_runtime.author_surgery(open_summons) + authored_events"},
+    "scheduled_consequence": {"shape": _shape_scheduled_consequence,
+                              "preview": _preview_scheduled_consequence,
+                              "apply": _apply_scheduled_consequence, "long": False,
+                              "seam": "authored_events.mint_authored_events at clock"},
+    # The nudge toolkit: author surgery on an institution (v2 § 9.1).
+    **{kind: {"shape": _surgery_shape(kind, fields),
+              "preview": _surgery_preview_for(kind),
+              "apply": _surgery_apply_for(kind), "long": False,
+              "seam": "charter_runtime.author_surgery(%s)" % kind}
+       for kind, fields in SURGERY_FIELDS.items()},
+    # A change over a region of the map (plan § 5 Phase C, region events).
+    "region_event": {"shape": _shape_region_event, "preview": _preview_region_event,
+                     "apply": _apply_region_event, "long": False,
+                     "seam": "world.region_events.apply_wave"},
 }
+
+#: Kinds that are a DEFERRED circumstance by nature and never apply at
+#: publish without a clock.
+CLOCK_ONLY_KINDS = ("scheduled_consequence",)
 
 
 #: THE FIELDS OF EACH KIND, as the model is told them (the draft_operation
@@ -999,6 +1538,41 @@ OPERATION_FIELDS = {
     "close_need": {"need_uid": "an open need", "reason": "why it closes unanswered"},
     "request_location": {"request": "{name | brief, ...as the Charter Planner returned it}"},
     "presimulate": {"hours": "0 < hours <= PRESIM_HOURS_CAP", "charters?": "[charter keys]"},
+    "arrival": {"who": "a plan uid, a name the world holds, or {charter, body}",
+                "room": "<room_id> they reach", "carrying?": "what they bring",
+                "manner?": "how they arrive", "clock?": "a package clock id (lands when due)"},
+    "errand": {"charter": "charter key", "body": "body key", "to": "<room_id>",
+               "purpose?": "what for", "clock?": "package clock id"},
+    "incident": {"room": "<room_id>", "summary": "what happens there",
+                 "shock?": "0..1 drop to every upkeep served there (default 0.3)",
+                 "harms?": "[{charter, body, outcome: hurt|dead|missing}] (needs schedule_harm)",
+                 "clock?": "package clock id"},
+    "summons": {"charter": "charter key", "post": "the post that calls",
+                "target": "a name the world holds", "place?": "<room_id>",
+                "terms?": "what is asked", "clock?": "package clock id"},
+    "scheduled_consequence": {"clock": "the package clock it fires on",
+                              "summary": "what happens when due", "room?": "<room_id>"},
+    "move_body": {"charter": "charter key", "body": "body key", "room": "<room_id>",
+                  "berth?": "true to make it their home too", "clock?": ""},
+    "assign_post": {"charter": "charter key", "body": "body key", "post": "post key",
+                    "clock?": ""},
+    "plant_claim": {"charter": "charter key", "body": "who hears it",
+                    "text": "what they are told", "told_by": "who told them (a name)",
+                    "about?": "", "place?": "", "strength?": "0..PLANT_STRENGTH_CAP",
+                    "clock?": ""},
+    "adjust_stock": {"charter": "charter key", "holder": "stock holder",
+                     "good": "a good the charter knows", "delta": "lots (+/-)", "clock?": ""},
+    "arm_trigger": {"charter": "charter key",
+                    "rule": "{id?, on: <change kind>, where?, odds?, then: [...]} (charter_trigger)",
+                    "clock?": ""},
+    "charter_shock": {"charter": "charter key",
+                      "intervention": "{op: drift_dial|need_shock|upkeep_shock|relocate|creature_dial|watch_shock|watch_stand_down, ...}",
+                      "clock?": ""},
+    "region_event": {"label": "what kind of change (in your words)",
+                     "footprint": "{rooms?: [<room_id>], structures?: [key], epicentre?: <room_id>, radius_hops?: 0..REGION_RADIUS_CAP}",
+                     "profile": "{mode: at_once|front|decay, intensity: 0..1, ramp_hours?: 0..REGION_RAMP_HOURS_CAP, rate_rooms_per_hour?}",
+                     "effects?": "{damage?: state label, destroy?: bool, shock?: 0..1, harm?: {outcome, fraction}, displace?: bool, artifacts?: [..], news?: ..}",
+                     "clock?": "package clock id (the fuse)"},
 }
 
 
@@ -1037,19 +1611,34 @@ def package_requirements(pkg):
     needed = []
     ops = list(pkg.get("operations") or ())
     for op in ops:
-        if op["op"] not in needed:
-            needed.append(op["op"])
+        cap = "region_events" if op["op"] == "region_event" else op["op"]
+        if cap not in needed:
+            needed.append(cap)
     if any(op["op"] == "request_location"
            or (op["op"] == "plan_entity" and op.get("kind") == "person")
            for op in ops):
         needed.append(AUTHORITY_CAPABILITY["may_create_people"])
     if any(op["op"] == "presimulate" for op in ops):
         needed.append(AUTHORITY_CAPABILITY["may_author_prehistory"])
-    if (pkg.get("authority") or {}).get("may_schedule_harm"):
+    # HARM IS AN ACT, NOT A FLAG. Anything that can hurt a body asks for
+    # `schedule_harm`: a region event that harms or ruins, an incident that
+    # names victims. The player grants it in words or it does not happen.
+    if (pkg.get("authority") or {}).get("may_schedule_harm") \
+            or any(operation_harms(op) for op in ops):
         needed.append(AUTHORITY_CAPABILITY["may_schedule_harm"])
     if pkg.get("spoiler_policy") == "sealed":
         needed.append("surprise")
     return needed
+
+
+def operation_harms(op):
+    """Whether one operation can hurt a body."""
+    if op.get("op") == "region_event":
+        from world.region_events import harms_a_body
+        return harms_a_body(op)
+    if op.get("op") == "incident":
+        return bool(op.get("harms"))
+    return False
 
 
 def authority_errors(cid, frame_id, pkg):
@@ -1124,6 +1713,17 @@ def _package_checks(pkg, world):
         if clock.get("due_story_hours") is None and clock.get("due_turns") is None:
             errors.append("clock %s has no due (due_story_hours or due_turns)"
                           % clock["id"])
+    clock_ids = {c["id"] for c in pkg["clocks"]}
+    for i, op in enumerate(pkg["operations"]):
+        if op.get("clock") and op["clock"] not in clock_ids:
+            errors.append("op %d (%s) rides clock %r, which is no clock of this "
+                          "package" % (i, op["op"], op["clock"]))
+    if not pkg["authority"]["may_schedule_harm"]:
+        for i, op in enumerate(pkg["operations"]):
+            if operation_harms(op):
+                errors.append("the package's authority does not permit "
+                              "scheduling harm, and op %d (%s) can hurt a body"
+                              % (i, op["op"]))
     for part in pkg["participants"]:
         name = _text(part.get("name") or part.get("text"), 120)
         if name and name.casefold() not in world["reserved_names"]:
@@ -1296,6 +1896,7 @@ def publish_package(cid, uid, *, expected_revision=None, frame_id=None):
         pkg["base"] = {"turn_idx": turn_idx, "registry_revision": revision_now,
                        "pinned_at": time.time()}
     applied = []
+    elapsed = _elapsed_seconds(cid, frame_id)
     with transaction():
         for i, op in enumerate(pkg["operations"]):
             spec = OPERATIONS[op["op"]]
@@ -1303,20 +1904,144 @@ def publish_package(cid, uid, *, expected_revision=None, frame_id=None):
                 applied.append({"index": i, "op": op["op"],
                                 "result": op.get("prepared")})
                 continue
-            if op["op"] == "file_lore":
-                result = spec["apply"](cid, frame_id, op, turn_idx, pkg["uid"])
-            else:
-                result = spec["apply"](cid, frame_id, op, turn_idx)
+            if op.get("clock"):
+                # A circumstance on a fuse: it lands when `fire_due_clocks`
+                # sees the clock due, never at publish.
+                op["deferred"] = True
+                applied.append({"index": i, "op": op["op"],
+                                "result": {"deferred": op["clock"]}})
+                continue
+            result = _apply_operation(cid, frame_id, pkg, op, turn_idx,
+                                      elapsed=elapsed, turn_id=None)
             op["applied"] = result
             applied.append({"index": i, "op": op["op"], "result": result})
         pkg["status"] = "published"
         pkg["published_turn"] = turn_idx
+        pkg["published_elapsed"] = elapsed
         _note(pkg, "published", "%d operation(s)" % len(applied), turn_idx)
         stored[pkg["uid"]] = pkg
         save_packages(cid, stored, frame_id)
     return {"uid": pkg["uid"], "revision": pkg["revision"],
             "published_turn": turn_idx, "visible_from_turn": turn_idx + 1,
             "applied": applied}
+
+
+def _apply_operation(cid, frame_id, pkg, op, turn_idx, *, elapsed, turn_id):
+    """One dispatcher for publish and for a firing clock, so the two cannot
+    disagree about how a kind lands."""
+    spec = OPERATIONS[op["op"]]
+    by = "writers_room:" + pkg["uid"]
+    if op["op"] == "file_lore":
+        return spec["apply"](cid, frame_id, op, turn_idx, pkg["uid"])
+    if op["op"] == "region_event":
+        return spec["apply"](cid, frame_id, op, turn_idx, by=by, elapsed=elapsed,
+                             turn_id=turn_id)
+    if op["op"] in ("arrival", "errand", "incident", "summons",
+                    "scheduled_consequence") or op["op"] in SURGERY_FIELDS:
+        return spec["apply"](cid, frame_id, op, turn_idx, by=by)
+    return spec["apply"](cid, frame_id, op, turn_idx)
+
+
+def _clock_due(pkg, clock, turn_idx, elapsed):
+    if clock.get("fired_turn") is not None or clock.get("refused_turn") is not None:
+        return False
+    since_turn = pkg.get("published_turn")
+    if since_turn is None:
+        return False
+    if clock.get("due_turns") is not None:
+        try:
+            if int(since_turn) + int(clock["due_turns"]) <= int(turn_idx):
+                return True
+        except (TypeError, ValueError):
+            pass
+    if clock.get("due_story_hours") is not None and pkg.get("published_elapsed") is not None:
+        try:
+            due_at = float(pkg["published_elapsed"]) + float(
+                clock["due_story_hours"]) * STORY_HOUR_SECONDS
+            if due_at <= float(elapsed or 0.0) + 1e-6:
+                return True
+        except (TypeError, ValueError):
+            pass
+    return False
+
+
+def fire_due_clocks(cid, turn_idx, *, elapsed=None, frame_id=None, turn_id=None):
+    """A due clock CREATES the circumstance it scheduled (v2 § 5.4): every
+    deferred operation riding it lands now through its seam, under the
+    package's mandate re-checked at this hour, and refused -- recorded on
+    the operation, never guessed at -- if the world moved under it. The
+    fire is written into the package's history. Pending region waves land
+    the same way. Called from the commit's out-of-band tail every beat.
+
+    UN-FIRING IS BY CONSTRUCTION. The package store, the registry, the
+    artifacts, the scene and the scheduled-event rows all ride the frame's
+    world row or the checkpoint snapshot, so a rewind past the fire restores
+    the clock unfired and the world unaffected, and the clock fires again
+    when it is due. What cannot be undone is not done here: no seam this
+    reaches deletes anything.
+    """
+    stored = packages(cid, frame_id)
+    if elapsed is None:
+        elapsed = _elapsed_seconds(cid, frame_id)
+    fired, landed_waves, dirty = [], 0, False
+    for pkg in stored.values():
+        if pkg["status"] not in ("published", "active"):
+            continue
+        changed = False
+        for clock in pkg["clocks"]:
+            if not _clock_due(pkg, clock, turn_idx, elapsed):
+                continue
+            changed = True
+            refused = authority_errors(cid, frame_id, pkg)
+            if refused:
+                clock["refused_turn"] = int(turn_idx)
+                _note(pkg, "clock_refused", "%s: %s" % (clock["id"], "; ".join(refused)[:300]),
+                      turn_idx)
+                continue
+            world = None
+            for i, op in enumerate(pkg["operations"]):
+                if op.get("clock") != clock["id"] or op.get("applied") is not None:
+                    continue
+                world = world or _world_snapshot(cid, frame_id)
+                spec = OPERATIONS[op["op"]]
+                verdict = spec["preview"](cid, frame_id, op, world)
+                if verdict["errors"]:
+                    # The world moved under the fuse: a body that died cannot
+                    # arrive, a room that is gone cannot be shocked.
+                    op["refused"] = {"turn_idx": int(turn_idx), "errors": verdict["errors"]}
+                    _note(pkg, "operation_refused", "op %d (%s): %s"
+                          % (i, op["op"], "; ".join(verdict["errors"])[:200]), turn_idx)
+                    continue
+                try:
+                    op["applied"] = _apply_operation(
+                        cid, frame_id, pkg, op, turn_idx, elapsed=elapsed,
+                        turn_id=turn_id)
+                except ValueError as exc:
+                    # A seam refused at the hour: the same class as a preview
+                    # error, recorded the same way.
+                    op["refused"] = {"turn_idx": int(turn_idx), "errors": [str(exc)[:400]]}
+                    _note(pkg, "operation_refused", "op %d (%s): %s"
+                          % (i, op["op"], str(exc)[:200]), turn_idx)
+                    continue
+                op.pop("deferred", None)
+            clock["fired_turn"] = int(turn_idx)
+            clock["fired_elapsed"] = float(elapsed or 0.0)
+            _note(pkg, "clock_fired", clock["id"], turn_idx)
+            fired.append((pkg["uid"], clock["id"]))
+        waves = advance_region_waves(cid, frame_id, pkg, turn_idx=turn_idx,
+                                     elapsed=elapsed, turn_id=turn_id)
+        if waves:
+            landed_waves += waves
+            _note(pkg, "region_waves", "%d wave(s)" % waves, turn_idx)
+            changed = True
+        if changed:
+            stored[pkg["uid"]] = pkg
+            dirty = True
+    if dirty:
+        # A refusal is a change too: the clock that could not fire says so
+        # on the record, or the next beat would ask the same question.
+        save_packages(cid, stored, frame_id)
+    return {"fired": fired, "waves": landed_waves}
 
 
 def visible_packages(cid, turn_idx, *, frame_id=None):
@@ -1395,7 +2120,8 @@ def package_projection(pkg):
         "operations": [op["op"] for op in pkg["operations"]],
         "clocks": [{"id": c["id"], "label": _text(c.get("label"), 80),
                     "due_story_hours": c.get("due_story_hours"),
-                    "due_turns": c.get("due_turns")} for c in pkg["clocks"]],
+                    "due_turns": c.get("due_turns"),
+                    "fired_turn": c.get("fired_turn")} for c in pkg["clocks"]],
         "validation": {"ok": pkg["validation"]["ok"],
                        "errors": len(pkg["validation"]["errors"]),
                        "warnings": len(pkg["validation"]["warnings"]),
