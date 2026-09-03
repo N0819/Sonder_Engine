@@ -39,11 +39,38 @@ def normalize_light(value) -> str:
 
 
 def room_light(scene: dict, room_id: str) -> str:
-    """The light a room has of its own, before anything spills into it."""
+    """The light a room has of its own, before anything spills into it.
+
+    OUTDOORS, THE SKY IS THE CEILING. A room the weather reaches (its
+    exposure is `open` or `sheltered`, `world/weather.room_exposure`) has
+    the sun for its ambient light once the scene knows what phase of the day
+    it is (`scene.day_phase`, written by the scene commit from the clock --
+    `world/day_cycle`): dark through the night, dim at dawn and dusk, lit by
+    day, one step dimmer under fog or cloud. A declared `light` on such a
+    room may only DARKEN that -- a shadowed alley at noon is dim -- never
+    brighten it, because a lamp is a light SOURCE and lives on an entity,
+    where `source_light` counts it, not on the room. Which is the rule that
+    makes a square go dark at night without anyone re-declaring it, and a
+    torch in that square light it again without anyone re-declaring that.
+
+    Indoors -- or in a scene that has never said what time it is, or a room
+    the exposure reader cannot place, which it reads as indoors -- the
+    declared light stands exactly as it always has.
+    """
     room = ((scene or {}).get("rooms") or {}).get(room_id)
     if not isinstance(room, dict):
         return "lit"
-    return normalize_light(room.get("light"))
+    declared = normalize_light(room.get("light"))
+    phase = str((scene or {}).get("day_phase") or "").strip()
+    if not phase:
+        return declared
+    from world.weather import room_exposure
+    if room_exposure(scene, room_id) == "enclosed":
+        return declared
+    from world.day_cycle import sun_light
+    weather = (scene or {}).get("weather")
+    sky = weather.get("sky") if isinstance(weather, dict) else None
+    return _darker(sun_light(phase, sky), declared)
 
 
 _LIGHT_ORDER = {"dark": 0, "dim": 1, "lit": 2, "bright": 3}
@@ -51,6 +78,10 @@ _LIGHT_ORDER = {"dark": 0, "dim": 1, "lit": 2, "bright": 3}
 
 def _brighter(a, b):
     return a if _LIGHT_ORDER.get(a, 2) >= _LIGHT_ORDER.get(b, 2) else b
+
+
+def _darker(a, b):
+    return a if _LIGHT_ORDER.get(a, 2) <= _LIGHT_ORDER.get(b, 2) else b
 
 
 def source_light(scene: dict, room_id: str, *, filling_only=False) -> str:

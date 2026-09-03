@@ -122,6 +122,16 @@ $("#b-style").onclick = async () => {
   const selfBtn = el("button", {
     onclick: () => { genre.value = ""; toast("Genre left to the engine.", "ok"); },
   }, "Self-determine");
+  // The day. Two numbers the clock does arithmetic on (world/day_cycle.py):
+  // how long this world's day is, and -- only when the opening names no
+  // readable time -- where on that day the story opens. Blank is the Terran
+  // 24 and "let the opening say", which is what every story had.
+  const dayLength = el("input", { type: "number", min: "0.01", step: "0.5",
+    style: "width:90px", value: g.day_length_hours != null ? String(g.day_length_hours) : "",
+    placeholder: "24" });
+  const openingHour = el("input", { type: "number", min: "0", step: "0.25",
+    style: "width:90px", value: g.opening_hour != null ? String(g.opening_hour) : "",
+    placeholder: "from the opening" });
 
   const tone = el("input", { style: "flex:1", value: g.tone || "",
     placeholder: "e.g. cold, clinical, understated" });
@@ -202,6 +212,17 @@ $("#b-style").onclick = async () => {
       + "there when the sky clears — the room sounds and looks like it. "
       + "Catastrophic is the only setting that lets weather hurt anyone or "
       + "break anything, and nothing reaches for it unless you do."),
+    el("div", { class: "row", style: "margin-top:6px" },
+      el("span", { class: "small", style: "width:70px" }, "Day"),
+      dayLength, el("span", { class: "small dim" }, "hours long, opening at hour"), openingHour),
+    el("div", { class: "small dim", style: "margin-top:4px" },
+      "The clock derives the hour of the day from how much story time has "
+      + "passed, and the time of day everyone reads — the Director, a voice "
+      + "in the street, the light outdoors, when the town goes home — "
+      + "follows it. Leave the length blank for a 24-hour day; set it for a "
+      + "world whose sun keeps other hours, and every phase scales with it. "
+      + "The opening hour is read from the opening's own time when it names "
+      + "one (“dusk”, “08:42”) and is only used when it does not."),
     el("div", { class: "row", style: "margin-top:10px" },
       el("span", { class: "small", style: "width:70px" }, "Authority"), authority),
     el("div", { class: "small dim", style: "margin-top:4px" },
@@ -245,6 +266,9 @@ $("#b-style").onclick = async () => {
             // omitted here is a field silently deleted -- the reason this
             // control had to ship with the setting rather than after it.
             narration_tense: tense.value,
+            // Blank normalizes away to an absent key, like the tense above.
+            day_length_hours: dayLength.value,
+            opening_hour: openingHour.value,
           },
         });
         if (authority.value !== authorityState.mode) {
