@@ -36,6 +36,18 @@ generation_event_sink = contextvars.ContextVar(
     "generation_event_sink",
     default=None,
 )
+#: Where a thinking model's TRACE should go as it arrives, or None.
+#:
+#: Deliberately separate from `token_sink`, and the comment in `_sse_openai`
+#: says why the trace was never put on that one: the token sink is
+#: player-facing prose, and a model's private thinking is not that. The
+#: Writers' Room is the case that is not covered by that rule -- its reader is
+#: the AUTHOR, who is the host, and showing an author the room's working is
+#: the ordinary thing an assistant does. So it gets its own channel rather
+#: than a relaxation of the other one, and every existing caller, which arms
+#: neither, is unchanged.
+reasoning_sink = contextvars.ContextVar("reasoning_sink", default=None)
+
 cancel_event = contextvars.ContextVar("cancel_event", default=None)
 
 # Where one finished provider call's ledger entry should land: a callable
@@ -2091,6 +2103,10 @@ def _sse_openai(url, headers, body, sink, role=None, model=None):
     # pipeline runs (token_sink is set for the live "stream agents" UI).
     body["stream_options"] = {"include_usage": True}
     text, reasoning = "", ""
+    # Read ONCE per call rather than per delta: a contextvar lookup in the
+    # hot loop is the same shape as the guard's own re-scan, and the sink a
+    # response streams into cannot legitimately change mid-response.
+    _think_sink = reasoning_sink.get()
     usage = None
     served = ""
     t0 = time.time()
@@ -2150,6 +2166,8 @@ def _sse_openai(url, headers, body, sink, role=None, model=None):
             _r = _delta.get("reasoning") or _delta.get("reasoning_content")
             if isinstance(_r, str) and _r:
                 reasoning += _r
+                if _think_sink:
+                    _think_sink(_r)
             d = _delta.get("content")
             if d:
                 text += d
@@ -3057,6 +3075,10 @@ async def _sse_openai_async(url, headers, body, sink, client, role=None, model=N
     # the matching comment in _sse_openai.
     body["stream_options"] = {"include_usage": True}
     text, reasoning = "", ""
+    # Read ONCE per call rather than per delta: a contextvar lookup in the
+    # hot loop is the same shape as the guard's own re-scan, and the sink a
+    # response streams into cannot legitimately change mid-response.
+    _think_sink = reasoning_sink.get()
     usage = None
     served = ""
     t0 = time.time()
@@ -3102,6 +3124,8 @@ async def _sse_openai_async(url, headers, body, sink, client, role=None, model=N
             _r = _delta.get("reasoning") or _delta.get("reasoning_content")
             if isinstance(_r, str) and _r:
                 reasoning += _r
+                if _think_sink:
+                    _think_sink(_r)
             d = _delta.get("content")
             if d:
                 text += d

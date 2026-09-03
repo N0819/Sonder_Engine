@@ -2257,5 +2257,13 @@
   "allow off-screen cognition": "画面外での思考を許可する",
   "off-screen cognition is off, and this needs it": "画面外での思考がオフのため、この機能は動作しません",
   "What the world and cast may do while you are not watching. The world moves either way: institutions keep themselves running, things already on a clock still land, and a stage a character declared while present still fires. One question is yours.": "あなたが見ていない間に世界と登場人物が何をできるか。世界はどちらの設定でも動きます。組織は自らを維持し、すでに時計仕掛けで進んでいる事柄は起こり、登場人物がその場で宣言した段階も発火します。あなたが決めるのは一つの問いだけです。",
-  "— nothing thinks while you are away. A dormant character is exactly where you left them, doing nothing you were not told about. Everything deterministic still runs: an institution keeps itself going, someone arrives when they said they would, food spoils, a consequence lands on the day it was set for, and a bounded stage a character declared out loud still fires on its trigger. No model call is ever spent off the turn.": "— あなたが離れている間、誰も思考しません。休眠中の登場人物は、あなたが残した場所にそのままいて、知らされていないことは何もしません。決定論的な処理はすべて動き続けます。組織は自らを維持し、約束どおりに誰かが到着し、食物は傷み、予定された結果はその日に訪れ、登場人物が声に出して宣言した限定的な段階もトリガーで発火します。ターン外でモデル呼び出しが使われることは一切ありません。"
+  "— nothing thinks while you are away. A dormant character is exactly where you left them, doing nothing you were not told about. Everything deterministic still runs: an institution keeps itself going, someone arrives when they said they would, food spoils, a consequence lands on the day it was set for, and a bounded stage a character declared out loud still fires on its trigger. No model call is ever spent off the turn.": "— あなたが離れている間、誰も思考しません。休眠中の登場人物は、あなたが残した場所にそのままいて、知らされていないことは何もしません。決定論的な処理はすべて動き続けます。組織は自らを維持し、約束どおりに誰かが到着し、食物は傷み、予定された結果はその日に訪れ、登場人物が声に出して宣言した限定的な段階もトリガーで発火します。ターン外でモデル呼び出しが使われることは一切ありません。",
+  "Hide working": "思考を隠す",
+  "Show working": "思考を表示",
+  "Thinking…": "考えています…",
+  "Step {n}": "ステップ {n}",
+  "Read {tool}": "{tool} を読みました",
+  "{tool} failed": "{tool} が失敗しました",
+  "{tool} refused": "{tool} は拒否されました",
+  "The room could not be reached ({status})": "ルームに接続できませんでした（{status}）"
 }

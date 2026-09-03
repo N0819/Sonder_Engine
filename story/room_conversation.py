@@ -277,7 +277,7 @@ def status(cid, frame_id=None):
 # The Planner seam
 # ---------------------------------------------------------------------------
 
-def unseated_planner(cid, frame_id, text):
+def unseated_planner(cid, frame_id, text, *, on_event=None):
     """The placeholder. It plans nothing, grants nothing, and says so."""
     return {"reply": UNSEATED_LINE, "dramaturge": None,
             "mandates": mandates(cid, frame_id), "status": status(cid, frame_id)}
@@ -322,6 +322,114 @@ def converse(cid, frame_id, text):
         replies.append(add_message(cid, frame_id, "dramaturge",
                                    answer["dramaturge"], turn_idx=turn_idx))
     return {
+        "message": player,
+        "replies": replies,
+        "error": answer.get("error"),
+        "mandates": (answer.get("mandates")
+                     if isinstance(answer.get("mandates"), list)
+                     else mandates(cid, frame_id)),
+        "status": (answer.get("status")
+                   if isinstance(answer.get("status"), dict)
+                   else status(cid, frame_id)),
+        "seated": planner_seated(),
+    }
+
+
+#: How long a drained queue waits before checking whether the work is done.
+#: Small enough that the last token is not visibly late, large enough that an
+#: idle wait is not a spin.
+STREAM_TICK_SECONDS = 0.05
+
+#: The wall the STREAM will wait for a reply that never comes. The Planner has
+#: its own (`REPLY_WALL_SECONDS`) and stops itself; this is the outer one, for
+#: a seam that hangs below that -- a provider that accepted the connection and
+#: then said nothing, which the room would otherwise show as a cursor that
+#: blinks forever. Generous, because a legitimate reply with a full tool budget
+#: genuinely takes a while, and the room says what happened when it fires.
+STREAM_WALL_SECONDS = 900.0
+
+
+def converse_stream(cid, frame_id, text):
+    """`converse`, as events, so the panel can show the room working.
+
+    Yields dicts: the stored player line, then `token` deltas as the reply is
+    written, `reasoning` deltas when the model exposes a trace, `room_step`
+    and `room_tool` as the loop runs, and finally the stored rows. Same
+    writes, same order, same failure handling as `converse` -- a Planner that
+    raises leaves the player's line stored and reports through the envelope
+    rather than a 500 -- so a client that cannot stream loses nothing but the
+    watching.
+
+    THE WORK RUNS IN A THREAD and the sinks are armed INSIDE it. A contextvar
+    set in this generator would not be visible to the worker, and one set in
+    the worker cannot leak back: that is the same discipline `core/jobs.py`
+    keeps, and the reason the pipeline's own streaming does it this way.
+    """
+    import queue
+    import threading
+
+    from llm.providers import reasoning_sink, token_sink
+
+    text = _clean(text)
+    if not text:
+        raise ValueError("an empty line is not a message")
+    turn_idx = current_turn_idx(cid)
+    player = add_message(cid, frame_id, "player", text, turn_idx=turn_idx)
+    yield {"type": "room_message", "message": player}
+
+    events = queue.Queue()
+    holder = {}
+    DONE = object()
+
+    def work():
+        token_sink.set(lambda delta: events.put(
+            {"type": "token", "delta": str(delta or "")}))
+        reasoning_sink.set(lambda delta: events.put(
+            {"type": "reasoning", "delta": str(delta or "")}))
+        try:
+            holder["answer"] = PLANNER(
+                cid, frame_id, text, on_event=events.put) or {}
+        except TypeError:
+            # A seam seated before `on_event` existed, or a test double: the
+            # watcher is advisory, so a seam that cannot take one still runs.
+            try:
+                holder["answer"] = PLANNER(cid, frame_id, text) or {}
+            except Exception as exc:
+                holder["answer"] = {"reply": None, "error": str(exc)[:400]}
+        except Exception as exc:  # the seam is a boundary; report, never 500
+            holder["answer"] = {"reply": None, "error": str(exc)[:400]}
+        finally:
+            events.put(DONE)
+
+    worker = threading.Thread(target=work, daemon=True)
+    worker.start()
+    deadline = time.time() + STREAM_WALL_SECONDS
+    while True:
+        try:
+            item = events.get(timeout=STREAM_TICK_SECONDS)
+        except queue.Empty:
+            if time.time() > deadline:
+                holder.setdefault("answer", {
+                    "reply": None,
+                    "error": "the room did not answer within %d seconds"
+                             % int(STREAM_WALL_SECONDS)})
+                break
+            continue
+        if item is DONE:
+            break
+        yield item
+
+    answer = holder.get("answer") or {}
+    replies = []
+    if answer.get("reply"):
+        role = "room" if not planner_seated() else "planner"
+        replies.append(add_message(cid, frame_id, role, answer["reply"],
+                                   turn_idx=turn_idx))
+    if answer.get("dramaturge"):
+        replies.append(add_message(cid, frame_id, "dramaturge",
+                                   answer["dramaturge"], turn_idx=turn_idx))
+    yield {
+        "type": "room_done",
         "message": player,
         "replies": replies,
         "error": answer.get("error"),

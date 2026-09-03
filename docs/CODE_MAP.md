@@ -28,11 +28,11 @@
 | `agents/perception.py` | 4733 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `mind`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
 | `agents/runtime.py` | 1382 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `core.db`, `core.pipeline_context`, `llm.providers`, `persist.checkpoints`, `persist.commit`, `story.character_schema`, `story.scene` |
 | `agents/storage.py` | 123 | Step and active-variant persistence helpers. | `core.db` |
-| `agents/story_planner.py` | 911 |  | `core.logging_utils` |
+| `agents/story_planner.py` | 938 |  | `core.logging_utils` |
 | `core/__init__.py` | 6 |  | — |
 | `core/db.py` | 2587 | SQLite schema, migrations, connection management, transactions, and key/value world access. | `core.paths` |
 | `core/frames.py` | 220 |  | `core.db` |
-| `core/jobs.py` | 312 |  | `core.logging_utils` |
+| `core/jobs.py` | 317 |  | `core.logging_utils` |
 | `core/logging_utils.py` | 122 | Structured timing and observability helpers. | — |
 | `core/outofband.py` | 392 |  | `core.logging_utils` |
 | `core/paths.py` | 32 |  | — |
@@ -45,7 +45,7 @@
 | `llm/llm_quality.py` | 813 | Strict JSON parsing, schema validation, and model-assisted repair. | `core.pipeline_context`, `llm.prompts`, `llm.providers`, `llm.schemas` |
 | `llm/prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `llm.providers` |
 | `llm/prompts.py` | 516 | Default system prompts and prompt preset access. | `core.db` |
-| `llm/providers.py` | 3816 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `core.db`, `core.logging_utils` |
+| `llm/providers.py` | 3840 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `core.db`, `core.logging_utils` |
 | `llm/research_providers.py` | 247 |  | `core.db` |
 | `llm/schemas.py` | 5451 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `mind/__init__.py` | 6 |  | — |
@@ -107,7 +107,7 @@
 | `story/plot_packages.py` | 2163 |  | — |
 | `story/provenance_text.py` | 132 |  | — |
 | `story/room_bible.py` | 421 |  | `core.db` |
-| `story/room_conversation.py` | 377 |  | `core.db` |
+| `story/room_conversation.py` | 485 |  | `core.db` |
 | `story/room_frontier.py` | 217 |  | `core.db` |
 | `story/room_proposals.py` | 264 |  | `core.db` |
 | `story/room_research.py` | 371 |  | `core.db` |
@@ -117,7 +117,7 @@
 | `web/app.py` | 6813 | FastAPI application assembly, resource CRUD, turn control, and streaming endpoints. | `agents`, `agents.story_planner`, `core`, `core.db`, `core.frames`, `core.paths`, `dressing.ambience`, `dressing.backdrops`, `llm`, `llm.prompts`, `llm.providers`, `mind.memory`, `persist.chat_archive`, `persist.chat_delete`, `persist.checkpoints`, `persist.commit`, `story`, `story.character_schema`, `story.dialogue_colors`, `story.importers`, `story.scene`, `web`, `web.auth_routes`, `web.room_routes`, `world`, `world.survival` |
 | `web/auth_routes.py` | 279 | Typed host-authentication HTTP routes and cookie transport. | `web` |
 | `web/guest_access.py` | 554 |  | `core.db` |
-| `web/room_routes.py` | 86 |  | `core.db`, `story` |
+| `web/room_routes.py` | 119 |  | `core.db`, `story` |
 | `web/story_view.py` | 1023 |  | `core.db`, `world.charter_runtime`, `world.living_world` |
 | `world/__init__.py` | 6 |  | — |
 | `world/background_claims.py` | 598 |  | `core.db` |
@@ -469,14 +469,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `run_planner()` | 427 | 163 lines |
-| `deliberate()` | 675 | 91 lines |
-| `schedule_room_work()` | 857 | 55 lines |
+| `run_planner()` | 427 | 189 lines |
+| `deliberate()` | 702 | 91 lines |
+| `schedule_room_work()` | 884 | 55 lines |
 | `_payload()` | 235 | 52 lines |
-| `run_dramaturge_pass()` | 768 | 40 lines |
-| `_run_task()` | 592 | 32 lines |
+| `run_dramaturge_pass()` | 795 | 40 lines |
+| `_run_task()` | 618 | 32 lines |
 | `charter_planner()` | 360 | 30 lines |
-| `run_fill()` | 828 | 27 lines |
+| `planner_reply()` | 652 | 27 lines |
 
 ### `core/db.py`
 
@@ -506,14 +506,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
+| `_clear_turn_scoped_context()` | 119 | 36 lines |
 | `submit()` | 71 | 35 lines |
-| `_clear_turn_scoped_context()` | 119 | 31 lines |
-| `_run()` | 152 | 23 lines |
-| `story_rewound_past()` | 275 | 20 lines |
-| `_finish()` | 177 | 17 lines |
-| `drain()` | 233 | 17 lines |
-| `reset()` | 297 | 16 lines |
-| `cancel()` | 196 | 13 lines |
+| `_run()` | 157 | 23 lines |
+| `story_rewound_past()` | 280 | 20 lines |
+| `_finish()` | 182 | 17 lines |
+| `drain()` | 238 | 17 lines |
+| `reset()` | 302 | 16 lines |
+| `cancel()` | 201 | 13 lines |
 
 ### `core/logging_utils.py`
 
@@ -617,14 +617,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_chat_complete_once()` | 2496 | 321 lines |
-| `chat_complete()` | 2229 | 119 lines |
-| `async _chat_complete_async_once()` | 2938 | 115 lines |
-| `async chat_complete_async()` | 2847 | 90 lines |
-| `_sse_openai()` | 2085 | 80 lines |
-| `async _sse_openai_async()` | 3054 | 64 lines |
-| `_sse_anthropic()` | 2166 | 62 lines |
-| `_embed_request()` | 3376 | 59 lines |
+| `_chat_complete_once()` | 2514 | 321 lines |
+| `chat_complete()` | 2247 | 119 lines |
+| `async _chat_complete_async_once()` | 2956 | 115 lines |
+| `async chat_complete_async()` | 2865 | 90 lines |
+| `_sse_openai()` | 2097 | 86 lines |
+| `async _sse_openai_async()` | 3072 | 70 lines |
+| `_sse_anthropic()` | 2184 | 62 lines |
+| `_embed_request()` | 3400 | 59 lines |
 
 ### `llm/research_providers.py`
 
@@ -1318,14 +1318,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
+| `converse_stream()` | 352 | 92 lines |
 | `converse()` | 301 | 35 lines |
-| `restore_room_messages()` | 348 | 30 lines |
+| `restore_room_messages()` | 456 | 30 lines |
 | `status()` | 250 | 24 lines |
 | `add_message()` | 164 | 23 lines |
 | `normalize_mandate()` | 198 | 21 lines |
 | `revoke_mandate()` | 231 | 17 lines |
 | `messages()` | 148 | 14 lines |
-| `mandates()` | 221 | 8 lines |
 
 ### `story/room_frontier.py`
 
@@ -1435,11 +1435,12 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `room_thread()` | 49 | 10 lines |
-| `room_say()` | 62 | 10 lines |
-| `room_revoke()` | 75 | 6 lines |
-| `_chat_and_frame()` | 41 | 5 lines |
-| `room_status()` | 84 | 3 lines |
+| `room_say_stream()` | 78 | 27 lines |
+| `room_thread()` | 52 | 10 lines |
+| `room_say()` | 65 | 10 lines |
+| `room_revoke()` | 108 | 6 lines |
+| `_chat_and_frame()` | 44 | 5 lines |
+| `room_status()` | 117 | 3 lines |
 
 ### `web/story_view.py`
 
@@ -2506,10 +2507,11 @@
 | GET | `/api/chats/{cid}/promotable` | `list_promotable_presences()` | `web/app.py:3937` |
 | POST | `/api/chats/{cid}/promotions/confirm` | `confirm_promotion()` | `web/app.py:3966` |
 | POST | `/api/chats/{cid}/promotions/draft` | `draft_promotion()` | `web/app.py:3949` |
-| GET | `/api/chats/{cid}/room` | `room_thread()` | `web/room_routes.py:49` |
-| POST | `/api/chats/{cid}/room/mandates/{uid}/revoke` | `room_revoke()` | `web/room_routes.py:75` |
-| POST | `/api/chats/{cid}/room/messages` | `room_say()` | `web/room_routes.py:62` |
-| GET | `/api/chats/{cid}/room/status` | `room_status()` | `web/room_routes.py:84` |
+| GET | `/api/chats/{cid}/room` | `room_thread()` | `web/room_routes.py:52` |
+| POST | `/api/chats/{cid}/room/mandates/{uid}/revoke` | `room_revoke()` | `web/room_routes.py:108` |
+| POST | `/api/chats/{cid}/room/messages` | `room_say()` | `web/room_routes.py:65` |
+| POST | `/api/chats/{cid}/room/messages/stream` | `room_say_stream()` | `web/room_routes.py:78` |
+| GET | `/api/chats/{cid}/room/status` | `room_status()` | `web/room_routes.py:117` |
 | GET | `/api/chats/{cid}/story_view` | `story_view_get()` | `web/app.py:5104` |
 | GET | `/api/chats/{cid}/style_guide` | `style_guide_get()` | `web/app.py:4771` |
 | PUT | `/api/chats/{cid}/style_guide` | `style_guide_put()` | `web/app.py:4777` |
@@ -2759,8 +2761,8 @@ Sections: Weather effects (`:2`); the tile (`:178`); the layers (`:251`); lifecy
 
 Declared functions: `weatherFxReduced()`, `weatherFxEffectsOff()`, `weatherFxSupported()`, `weatherFxHost()`, `weatherFxRandom()`, `weatherFxTile()`, `weatherFxReach()`, `weatherFxBuild()`, `weatherFxClearLayers()`, `weatherFxStop()`, `weatherFxVisible()`, `weatherFxApply()`, `weatherFxStormy()`, `weatherFxScheduleFlash()`, `weatherFxFlash()`, `weatherFxOpenSky()`, `weatherFxBolt()`, `weatherFxThunder()`, `weatherFxForTurn()`.
 
-### `static/js/writers_room.js` (542 lines)
+### `static/js/writers_room.js` (638 lines)
 
-Sections: The Writers' Room panel (`:3`); bd-panel for this element alone. (`:20`); Named limits (`:33`); Shape: docked / floating / closed (`:133`); Loading (`:190`); Sending (`:255`); Rendering (`:305`); Building the panel (`:418`); Boot (`:531`).
+Sections: The Writers' Room panel (`:3`); bd-panel for this element alone. (`:20`); Named limits (`:33`); Shape: docked / floating / closed (`:143`); Loading (`:200`); Sending (`:265`); The stream (`:296`); Rendering (`:370`); Building the panel (`:514`); Boot (`:627`).
 
-Declared functions: `roomCls()`, `roomStoreGet()`, `roomStoreSet()`, `roomRestorePrefs()`, `roomClampWidth()`, `roomClampOpacity()`, `roomClampGeometry()`, `roomApplyShape()`, `roomOpen()`, `roomSetMode()`, `roomKey()`, `roomFrameQuery()`, `roomLoad()`, `roomLoadEarlier()`, `roomStartWatch()`, `roomStopWatch()`, `roomSend()`, `roomRevoke()`, `roomRender()`, `roomRenderStatus()`, `roomRenderMandates()`, `roomRenderThread()`, `roomBuild()`, `roomWireDrag()`, `track()`.
+Declared functions: `roomCls()`, `roomStoreGet()`, `roomStoreSet()`, `roomRestorePrefs()`, `roomClampWidth()`, `roomClampOpacity()`, `roomClampGeometry()`, `roomApplyShape()`, `roomOpen()`, `roomSetMode()`, `roomKey()`, `roomFrameQuery()`, `roomLoad()`, `roomLoadEarlier()`, `roomStartWatch()`, `roomStopWatch()`, `roomSend()`, `roomStream()`, `roomEvent()`, `roomRevoke()`, `roomRender()`, `roomRenderStatus()`, `roomRenderMandates()`, `roomRenderThread()`, `roomLiveNode()`, `roomBuild()`, `roomWireDrag()`, `track()`.
