@@ -6654,6 +6654,13 @@ for what follows. Residuals of this entry rather than a section of their own:
   empty package validating clean and being reported as prepared), each fixed
   at its class; the third published a three-room, two-person package in five
   steps and eleven calls.
+  On GLM 5.2 (Fireworks, the same grant): 66s and 32s failing -- a step
+  drafting a whole package ran past the token ceiling and its truncated JSON
+  read as "done"; six steps were the bare floor and the model spent three
+  reading -- then 51s, nine steps, eighteen calls, previewed, validated and
+  published. Ceilings after the runs: 10 steps, 40 calls, 8000 tokens per
+  step, 180s. Prompt caching held on Fireworks (5-7k cached tokens per step)
+  and read 0 on Gemini through OpenRouter.
 - **No operation for author surgery on a charter** (v2 § 9.1's "explicit
   author surgery" on carried state): a package can generate a location and
   presimulate, and cannot move a body, change a post or edit a claim. The

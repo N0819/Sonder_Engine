@@ -45,15 +45,20 @@ PLANNER_ROLE = "story_planner"
 PLANNER_ACTOR = "story_planner"
 
 #: Model calls per reply. Each step may call tools and be asked again.
-PLANNER_STEPS_PER_REPLY = 6
+#: Six was the bare floor -- read, open, draft, validate, publish, reply --
+#: and GLM 5.2 spent three of them reading (chat 111, 2026-09-03), so it ran
+#: out before validating. The wall clock is the cap that matters.
+PLANNER_STEPS_PER_REPLY = 10
 #: Tool calls one step may make, and the ceiling across a whole reply.
 PLANNER_TOOL_CALLS_PER_STEP = 6
-PLANNER_TOOL_CALLS_PER_REPLY = 24
+PLANNER_TOOL_CALLS_PER_REPLY = 40
 #: Wall clock for one reply, the fill job included; past it the loop ends
 #: with what it has.
 PLANNER_WALL_SECONDS = 180.0
 #: Output budget per model call.
-PLANNER_MAX_TOKENS = 4000
+#: Measured on GLM 5.2 (chat 111, 2026-09-03): one step drafting a whole
+#: package ran past 4000 tokens and its truncated JSON parsed as nothing.
+PLANNER_MAX_TOKENS = 8000
 #: Conversation lines shown to the model, newest last.
 PLANNER_HISTORY_MESSAGES = 30
 #: The reply stored in the thread (the thread's own cap is larger).
@@ -74,6 +79,14 @@ STATUS_QUESTIONS_CAP = 6
 
 #: Fixed lines. English is the message id: the panel renders through the
 #: UI catalog, so each is in both `ui.json` packs.
+#: The keys an answer may carry. An output carrying none of them is not an
+#: answer -- almost always one cut off at the token ceiling -- and is told so.
+ANSWER_KEYS = ("calls", "reply", "grants", "questions", "status_line")
+CUT_OFF_NOTE = ("your last output was not one JSON object with the known keys "
+                "-- most likely cut off at the token ceiling; nothing in it "
+                "ran. Take smaller steps: one operation per call, a few calls "
+                "per step.")
+
 BOUNDED_LINE = ("The room stopped at its budget for this reply; what it "
                 "settled stands, and it can go on when asked.")
 NO_STATUS_LINE = "The room has nothing in motion."
@@ -330,6 +343,14 @@ def run_planner(cid, frame_id, *, text=None, task=None, base_turn=None):
             step=step, calls_left=PLANNER_TOOL_CALLS_PER_REPLY - calls_made,
             seconds_left=seconds_left, turn_idx=turn_idx),
             max_tokens=PLANNER_MAX_TOKENS)
+        if not any(k in out for k in ANSWER_KEYS):
+            # A truncated or shapeless output is reported, not read as "done":
+            # the loop used to fall through to BOUNDED_LINE, telling the
+            # player the room had stopped at its budget when the model had
+            # stopped mid-sentence.
+            transcript.append({"tool": None, "args": None,
+                               "result": {"error": CUT_OFF_NOTE}})
+            continue
         if text is not None and out.get("grants"):
             _rows, grant_notes = _apply_grants(cid, frame_id, out["grants"], turn_idx)
             notes.extend(grant_notes)
@@ -359,7 +380,12 @@ def run_planner(cid, frame_id, *, text=None, task=None, base_turn=None):
                 transcript.append({"tool": None, "args": call, "result": {
                     "error": "a call names its tool under `tool`"}})
                 continue
-            args = call.get("args") if isinstance(call.get("args"), dict) else {}
+            if isinstance(call.get("args"), dict):
+                args = call["args"]
+            else:
+                # Arguments written beside the tool name instead of under
+                # `args` (GLM 5.2, live) are the arguments.
+                args = {k: v for k, v in call.items() if k not in ("tool", "name", "args")}
             calls_made += 1
             if base_turn is not None and _is_write(name) \
                     and story_rewound_past(base_turn, room.current_turn_idx(cid)):
