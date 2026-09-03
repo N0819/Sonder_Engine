@@ -159,6 +159,12 @@ authors read the seam and not the design:
   cover, sightlines not persisted — unmeasured).
 - **The dispatch-keyed Director** — a hand runs when the ruling reaches it;
   replay: 17 → 8 model calls per turn, unique roles per turn 8.7 → 5.3.
+- **The plot package and the facade** (Phase B.1–B.2, 2026-09-04) —
+  `story/plot_packages.py` (the store and lifecycle; `OPERATIONS`, the
+  closed table that IS the author layer) and `story/room_tools.py` (the
+  tool table the Story Planner will be handed; `tool_manifest`,
+  `run_tool`). A package lands only through existing seams and is visible
+  from the next turn.
 
 ## 4. In flight (2026-09-03), and how the room will author them
 

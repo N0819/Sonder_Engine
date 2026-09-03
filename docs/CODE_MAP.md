@@ -28,7 +28,7 @@
 | `agents/runtime.py` | 1382 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `core.db`, `core.pipeline_context`, `llm.providers`, `persist.checkpoints`, `persist.commit`, `story.character_schema`, `story.scene` |
 | `agents/storage.py` | 123 | Step and active-variant persistence helpers. | `core.db` |
 | `core/__init__.py` | 6 |  | — |
-| `core/db.py` | 2367 | SQLite schema, migrations, connection management, transactions, and key/value world access. | `core.paths` |
+| `core/db.py` | 2374 | SQLite schema, migrations, connection management, transactions, and key/value world access. | `core.paths` |
 | `core/frames.py` | 220 |  | `core.db` |
 | `core/jobs.py` | 312 |  | `core.logging_utils` |
 | `core/logging_utils.py` | 122 | Structured timing and observability helpers. | — |
@@ -69,7 +69,7 @@
 | `persist/chat_archive.py` | 1195 | Typed, atomic chat archive export/import service and HTTP routes. | `core.db`, `llm.schemas`, `mind.memory`, `persist.checkpoints`, `story.character_schema` |
 | `persist/chat_delete.py` | 42 |  | `core.db` |
 | `persist/checkpoints.py` | 1350 | Whole-chat snapshots and checkpoint restore orchestration. | `core.db`, `mind.memory` |
-| `persist/commit.py` | 731 | Atomic commit orchestrator, per-turn lock, thin tail domains, and the facade re-exporting every commit_* name. | `core.db`, `core.frames`, `llm.prompts`, `llm.providers`, `mind`, `mind.memory`, `mind.theory_of_mind`, `persist.commit_attire`, `persist.commit_background`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_entities`, `persist.commit_ledgers`, `persist.commit_mapping`, `persist.commit_mechanics`, `persist.commit_memory`, `persist.commit_memory_write`, `persist.commit_place_graph`, `persist.commit_room_registry`, `persist.commit_scene_state`, `story`, `story.character_schema`, `story.scene`, `world.comfort`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.spatial_frames`, `world.survival`, `world.weather` |
+| `persist/commit.py` | 744 | Atomic commit orchestrator, per-turn lock, thin tail domains, and the facade re-exporting every commit_* name. | `core.db`, `core.frames`, `llm.prompts`, `llm.providers`, `mind`, `mind.memory`, `mind.theory_of_mind`, `persist.commit_attire`, `persist.commit_background`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_entities`, `persist.commit_ledgers`, `persist.commit_mapping`, `persist.commit_mechanics`, `persist.commit_memory`, `persist.commit_memory_write`, `persist.commit_place_graph`, `persist.commit_room_registry`, `persist.commit_scene_state`, `story`, `story.character_schema`, `story.scene`, `world.comfort`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.spatial_frames`, `world.survival`, `world.weather` |
 | `persist/commit_attire.py` | 1458 | The mutable clothing ledger: attire notes, shed/worn garment entities, the validated attire diff. | `persist.commit_common`, `story`, `story.attire` |
 | `persist/commit_background.py` | 3869 | Background presences: tracking, identity folding, the reactor gate, promotion to cast. | `core.db`, `mind.memory`, `persist.commit_common`, `story.character_schema`, `story.scene`, `world.spatial` |
 | `persist/commit_common.py` | 595 | Leaf helpers shared across commit domains: scalar utilities, name/address roster, entity-id canonicalisation. | `core.db`, `mind.memory`, `story.character_schema`, `world.mechanics`, `world.spatial` |
@@ -88,7 +88,7 @@
 | `story/__init__.py` | 6 |  | — |
 | `story/artifacts.py` | 649 |  | `llm.prompts` |
 | `story/attire.py` | 3358 |  | — |
-| `story/authored_events.py` | 224 |  | `core.db` |
+| `story/authored_events.py` | 225 |  | `core.db` |
 | `story/carriers.py` | 788 |  | `core.db`, `story.character_schema`, `story.scene`, `world`, `world.spatial` |
 | `story/character_schema.py` | 2306 | Versioned character/persona defaults, normalization, accessors, and export payloads. | `llm.schemas`, `story` |
 | `story/couriers.py` | 1122 |  | `story.carriers`, `world` |
@@ -99,7 +99,9 @@
 | `story/journey_history.py` | 431 |  | — |
 | `story/lore_structure.py` | 248 |  | — |
 | `story/naming.py` | 555 |  | `core.db`, `world.charter_identity` |
+| `story/plot_packages.py` | 1300 |  | — |
 | `story/provenance_text.py` | 132 |  | — |
+| `story/room_tools.py` | 696 |  | — |
 | `story/scene.py` | 2648 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `core.db`, `story`, `story.attire`, `story.character_schema`, `world.day_cycle`, `world.spatial` |
 | `web/__init__.py` | 6 |  | — |
 | `web/app.py` | 6612 | FastAPI application assembly, resource CRUD, turn control, and streaming endpoints. | `agents`, `core`, `core.db`, `core.frames`, `core.paths`, `dressing.ambience`, `dressing.backdrops`, `llm`, `llm.prompts`, `llm.providers`, `mind.memory`, `persist.chat_archive`, `persist.chat_delete`, `persist.checkpoints`, `persist.commit`, `story`, `story.character_schema`, `story.dialogue_colors`, `story.importers`, `story.scene`, `web`, `web.auth_routes`, `world`, `world.survival` |
@@ -440,14 +442,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `init()` | 2160 | 109 lines |
-| `_recover_scene_time_of_day()` | 2090 | 59 lines |
-| `transaction()` | 1829 | 43 lines |
-| `conn()` | 1789 | 38 lines |
-| `_opening_time_of_day()` | 2034 | 30 lines |
-| `_establish_time_of_day_from_variant()` | 2004 | 28 lines |
-| `wset()` | 2325 | 23 lines |
-| `_stamp_clock_display()` | 2066 | 22 lines |
+| `init()` | 2167 | 109 lines |
+| `_recover_scene_time_of_day()` | 2097 | 59 lines |
+| `transaction()` | 1836 | 43 lines |
+| `conn()` | 1796 | 38 lines |
+| `_opening_time_of_day()` | 2041 | 30 lines |
+| `_establish_time_of_day_from_variant()` | 2011 | 28 lines |
+| `wset()` | 2332 | 23 lines |
+| `_stamp_clock_display()` | 2073 | 22 lines |
 
 ### `core/frames.py`
 
@@ -851,7 +853,7 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_commit_all_locked()` | 453 | 279 lines |
+| `_commit_all_locked()` | 453 | 292 lines |
 | `commit_crowds()` | 266 | 149 lines |
 | `commit_authored_events()` | 212 | 30 lines |
 | `commit_narration_person()` | 180 | 29 lines |
@@ -1068,11 +1070,11 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `resolve_authored_events()` | 173 | 52 lines |
-| `mint_authored_events()` | 107 | 46 lines |
+| `resolve_authored_events()` | 174 | 52 lines |
+| `mint_authored_events()` | 107 | 47 lines |
 | `_retired_text()` | 52 | 34 lines |
 | `_event_id()` | 89 | 16 lines |
-| `due_authored_events()` | 155 | 16 lines |
+| `due_authored_events()` | 156 | 16 lines |
 
 ### `story/carriers.py`
 
@@ -1200,6 +1202,19 @@
 | `_name_tokens()` | 133 | 26 lines |
 | `_charter_naming_lanes()` | 108 | 23 lines |
 
+### `story/plot_packages.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `normalize_package()` | 156 | 73 lines |
+| `publish_package()` | 1123 | 71 lines |
+| `_package_checks()` | 971 | 61 lines |
+| `edit_package()` | 339 | 57 lines |
+| `_world_snapshot()` | 457 | 43 lines |
+| `prepare_package()` | 1087 | 34 lines |
+| `new_package()` | 308 | 29 lines |
+| `draft_operation()` | 398 | 27 lines |
+
 ### `story/provenance_text.py`
 
 | Function | Start | Size |
@@ -1207,6 +1222,19 @@
 | `split_engine_provenance()` | 86 | 42 lines |
 | `looks_like_engine_provenance()` | 81 | 3 lines |
 | `strip_engine_provenance()` | 130 | 3 lines |
+
+### `story/room_tools.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `_t_inspect_contradictions()` | 371 | 68 lines |
+| `_t_inspect_route()` | 211 | 37 lines |
+| `_t_inspect_rooms()` | 174 | 35 lines |
+| `_t_scan_lore()` | 122 | 33 lines |
+| `_t_inspect_charters()` | 288 | 30 lines |
+| `_t_inspect_reserved_identities()` | 253 | 26 lines |
+| `_t_inspect_events()` | 320 | 25 lines |
+| `run_tool()` | 672 | 25 lines |
 
 ### `story/scene.py`
 
