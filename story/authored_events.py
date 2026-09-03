@@ -104,7 +104,8 @@ def _event_id(cid, summary):
     return f"authored:{digest}"
 
 
-def mint_authored_events(cid, turn_idx, scheduled_assertions):
+def mint_authored_events(cid, turn_idx, scheduled_assertions, *,
+                         source="player"):
     """Persist flow.scheduled_assertions as pending authored_event rows.
     due_at = turn_idx + max(1, due_in_turns). Ids are keyed by ASSERTION, not
     by beat, and a row already pending under that id is left exactly as it
@@ -140,7 +141,7 @@ def mint_authored_events(cid, turn_idx, scheduled_assertions):
         if live and str(live["status"] or "") == "pending":
             continue
         payload = json.dumps({
-            "summary": summary, "source": "player",
+            "summary": summary, "source": str(source or "player"),
             "minted_turn_idx": int(turn_idx), "requeues": 0,
         }, ensure_ascii=False)
         qi("INSERT OR REPLACE INTO scheduled_events"

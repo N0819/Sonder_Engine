@@ -46,6 +46,13 @@ FRAME_SCOPED_WORLD_KEYS = {
     # Per-era like the scene the door was opened in: a branch that never
     # walked through it has nothing to plan.
     "planning_needs",
+    # -- Plot package store (story/plot_packages.py) --------------------
+    # The Writers' Room's packages: drafts, what was published and when.
+    # Per-era like the scene: a branch that never published a package
+    # holds no package, and a rewind past a publish takes it back with
+    # what it placed.
+    "plot_packages",
+    # -- end plot package store ------------------------------------------
     # The PLAYER's carrier envelope (`carriers.PERSONA_STATE_KEY`). Per-era
     # for exactly the reason the three keys above it are, and it was the one
     # carrier home that was not: a cast member's reports ride the frame-scoped
