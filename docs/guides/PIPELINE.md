@@ -112,9 +112,13 @@ reach authorised officeholders, orders descend one staffed reporting edge,
 and typed executors create real consequences. Public shortage/order events are
 witnessed into individual minds; local judgments and commitment knowledge are
 derived only from those held claims. Generation is an authoring path, not a
-turn stage: `/charters/generate` closes one qualitative lore-grounded plan,
-plants prose-free planned rooms, runs coarse-plus-recent presim, and optionally
-stores a historian summary whose turning points cite actual presim event ids.
+turn stage: `/charters/generate` closes one qualitative lore-grounded plan
+under the closer's invariants (a requested `population`, one holder per head
+post, a crew for every other, no berth over its ceiling), plants prose-free
+planned rooms, runs coarse-plus-recent presim over that planted skeleton, and
+optionally stores a historian summary whose turning points cite actual presim
+event ids. The opening commit merges onto the seeded skeleton, so every
+planned room and exit is in the committed scene from turn 0.
 The same operation is available during ordinary story creation and greeting
 quick-start; greeting launch lands it before establishment runs turn 0. During
 play it reads the explicitly selected lorebook subtree, preserves existing

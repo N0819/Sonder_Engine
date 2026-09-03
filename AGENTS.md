@@ -119,9 +119,19 @@ or events. Markets use abstract lots and physical caravans; no broadcast trade
 or coin simulation. Leaders read only news in their own minds, and typed orders
 move down staffed co-present reporting edges. Planned-town generation lives in
 `world/charter_generate.py`/`world/structure.py`: model output is qualitative,
-closure is deterministic, planned rooms remain prose-free, prehistory may
-author circumstance but never minds, and historian claims must cite actual
-presim event ids. `world/charter_runtime.generate_lived_location` is the one
+closure is deterministic and enforces what a brief can only hope for -- a
+requested `population` within `POPULATION_TOLERANCE`, one holder for a head
+post (`HEAD_SEATS`; a post nobody reports past and somebody reports to), a
+`CREW_SIZE` rotation for every other, no berth over `BERTH_CEILING` (a
+dwelling splits into siblings, a workplace overflows into annexes), every
+assembled name a proper noun -- planned rooms remain prose-free, prehistory
+walks the planted skeleton (`presim_registry(scene=skeleton_scene(rooms))`)
+and may author circumstance but never minds, historian claims must cite
+actual presim event ids under a budget that scales with the residents it is
+handed (`historian_budget`), and the opening commit merges onto the SEEDED
+plan (`story/scene.seed_scene_from_plan`), whose adjacency is authority: a
+beat may add an exit to a planned room and never lose one, and mapping may
+not remove a planned room. `world/charter_runtime.generate_lived_location` is the one
 production operation used by greeting launch, both new-story paths, Dialogue
 Config and the lorebook workspace. It scopes lore to the selected book subtree
 (even when legacy attachment copied only its root) while grounding rooms in the
