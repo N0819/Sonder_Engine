@@ -667,8 +667,11 @@ legitimately perceive, learn, remember or infer.
   chat with the Story Planner beside the story: dock it as a column or float
   it over the prose with its own opacity. The thread is kept per story and
   era; the standing mandates you have granted and a spoiler-safe line of what
-  is in motion sit beside it. The Planner itself is not seated yet, so for now
-  the room keeps your notes and says so.
+  is in motion sit beside it. The Story Planner answers: it reads the world
+  through its tools, drafts what you ask for as a plot package, and acts only
+  under what you have granted it in words -- a grant becomes a standing
+  mandate you can read and withdraw. No proposal card yet: an actionable
+  reply is prose plus the standing list.
 
 ## Your data
 
