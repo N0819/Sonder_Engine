@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import time
 
-from persist.commit import normalize_offscreen_events
 from story.scene import (
     OFFSCREEN_LIFE_DESCRIPTIONS, OFFSCREEN_LIFE_LADDER, dialogue_config,
     normalize_offscreen_life, offscreen_life_allows,
@@ -110,33 +109,6 @@ class TestOneShapeForATick:
     model, so the model invented a shape per call. All four below are verbatim
     from the live logs of eight different chats, in the same field."""
 
-    def test_every_live_shape_normalizes(self):
-        events = normalize_offscreen_events([
-            {"actor": "reyet_solan", "tick": "In sickbay, Reyet Solan rests."},
-            {"event": "Tamamo, far away at the shrine, feels a faint tug."},
-            {"who": "Tamamo", "event": "Tamamo senses a distant shift."},
-            {"description": "Picard reviews mission logs in his ready room."},
-        ])
-        assert [e["actor"] for e in events] == ["reyet_solan", "", "Tamamo", ""]
-        assert all(e["tick"] for e in events)
-        assert all(set(e) == {"actor", "tick"} for e in events)
-
-    def test_an_actorless_tick_keeps_an_empty_actor(self):
-        """Inventing one would be worse than admitting the tick is about the
-        world rather than about a person."""
-        events = normalize_offscreen_events([{"event": "The tide goes out."}])
-        assert events == [{"actor": "", "tick": "The tide goes out."}]
-
-    def test_junk_is_dropped_rather_than_stored(self):
-        assert normalize_offscreen_events([{}, None, 7, {"actor": "X"}]) == []
-        assert normalize_offscreen_events("not a list") == []
-        assert normalize_offscreen_events(None) == []
-
-    def test_a_tick_is_bounded(self):
-        long = normalize_offscreen_events([{"event": "x " * 900}])
-        assert len(long[0]["tick"]) <= 600
-
-
 class TestTheModelIsOutOfTheTickBusiness:
     """Step 4 of docs/archive/PROPOSAL_2026-08-06.md section 1.2: the shipped
     stochastic rung cost a model call (ticks rode the mapping_commit payload
@@ -156,38 +128,6 @@ class TestTheModelIsOutOfTheTickBusiness:
         src = inspect.getsource(commit.prepare_mapping_commit)
         assert "dormant_actors" not in src
         assert "tick_seed" not in src
-
-    def test_the_prompt_no_longer_asks_for_ticks(self):
-        """A prompt clause that survives its wiring is an instruction the
-        model can still obey into a field nobody reads — or worse, one
-        somebody still writes."""
-        from llm.prompts import get_prompt
-
-        text = get_prompt("mapping_commit")
-        assert "OFF-SCREEN LIFE" not in text
-        assert "offscreen_events" not in text
-
-    def test_scene_changed_still_reports_the_scene(self):
-        """Overloading it to gate off-screen life would have made a payload lie
-        about the world to enforce a setting."""
-        import inspect
-
-        from persist import commit
-
-        src = inspect.getsource(commit.prepare_mapping_commit)
-        assert '"scene_changed": bool(ctx.director_establish),' in src
-
-    def test_a_volunteered_tick_is_refused_on_the_write_path(self):
-        """The model can volunteer a field nobody asked for; the write path
-        must refuse it at EVERY level, because a model-authored tick is an
-        unadjudicated authoring channel whatever the setting says."""
-        import inspect
-
-        from persist import commit
-
-        src = inspect.getsource(commit.commit_mapping)
-        assert "normalize_offscreen_events" in src
-        assert "model-volunteered" in src
 
     def test_the_seeded_draw_is_gated_on_the_same_rung(self):
         """The ladder still governs; only the mechanism changed. An author

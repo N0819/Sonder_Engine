@@ -70,7 +70,9 @@ def _make_ctx(temp_db, scene, mapping_patch, state_diff=None):
         "resolved_event": "Time passes.", "dialogue_log": [],
         "state_diff": state_diff or {},
     }
-    ctx.mapping_stage = {"scene_patch": mapping_patch}
+    # A retired `mapping_stage` step hydrated from an old turn: read
+    # through `ctx.world_context()`, which is the compatibility path.
+    ctx["mapping_stage"] = {"scene_patch": mapping_patch}
     return ctx
 
 

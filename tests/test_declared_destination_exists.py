@@ -46,7 +46,10 @@ def _ctx(temp_db, to_room, *, staged_layout=None, start="alley_room"):
                                            "arrives": True}}
     ctx.director_resolve = {"state_diff": {}}
     if staged_layout:
-        ctx.mapping_stage = {"staged_lore": [
+        # A beat stored before the world-context compiler: the retired
+        # `mapping_stage` step hydrates into `_extra` and is read through
+        # `ctx.world_context()`, so an old turn reruns against what it had.
+        ctx["mapping_stage"] = {"staged_lore": [
             {"category": "layout", "content": staged_layout}]}
     return ctx
 

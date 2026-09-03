@@ -87,7 +87,7 @@ class TestProactiveStaleMarking:
 
         plan = [
             ("director_interpret", "Director · interpret"),
-            ("mapping_quick", "Mapping"),
+            ("compile_world_context", "Mapping"),
             ("perception_act", "Perception"),
             ("director_resolve", "Director · resolve"),
             ("perception_outcome", "Perception · outcome"),
@@ -105,7 +105,7 @@ class TestProactiveStaleMarking:
         mark_steps_stale(turn_id, keys[1:])
         save_step(turn_id, "director_interpret", "Director · interpret", 0,
                    {"flow": {"needs_mapping": False, "reactors": []}})
-        save_step(turn_id, "mapping_quick", "Mapping", 1, {"relevant_lore": []})
+        save_step(turn_id, "compile_world_context", "Mapping", 1, {"relevant_lore": []})
 
         resume_key = resume_key_for_turn(turn_id, chat_id)
         assert resume_key == "perception_act"
@@ -122,7 +122,7 @@ class TestReplanPreservesEditedSteps:
 
         stubs = {
             "director_interpret": fake_director_interpret,
-            "mapping_quick": lambda ctx, nonce: {"relevant_lore": []},
+            "compile_world_context": lambda ctx, nonce: {"relevant_lore": []},
             "perception_act": lambda ctx, nonce: {"view": ""},
             "director_resolve": lambda ctx, nonce: {"dialogue_log": [], "state_diff": {}},
             "perception_outcome": lambda ctx, nonce: {"view": ""},
@@ -167,7 +167,7 @@ class TestReplanPreservesEditedSteps:
         assert all(not r["stale"] for r in rows)
         keys = {r["key"] for r in rows}
         assert keys == {
-            "director_interpret", "mapping_quick", "perception_act",
+            "director_interpret", "compile_world_context", "perception_act",
             "director_resolve", "background_react", "perception_outcome",
             "narrator", "commit",
         }
@@ -184,12 +184,12 @@ class TestStaleStepIsRefusedNotLaundered:
 
         plan = [
             ("director_interpret", "Director · interpret"),
-            ("mapping_quick", "Mapping"),
+            ("compile_world_context", "Mapping"),
         ]
         for i, (key, label) in enumerate(plan):
             save_step(turn_id, key, label, i, {"flow": {"needs_mapping": False, "reactors": []}})
-        mark_steps_stale(turn_id, ["mapping_quick"])
-        assert step_is_stale(turn_id, "mapping_quick")
+        mark_steps_stale(turn_id, ["compile_world_context"])
+        assert step_is_stale(turn_id, "compile_world_context")
 
         from agents.runtime import StaleStepError
 

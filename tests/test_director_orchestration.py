@@ -1519,7 +1519,7 @@ PROSE_DUTY_HEADINGS = {
     "other_players": "OTHER PLAYERS' DECLARATIONS",
     "comm": "MEDIUM — COMM CHANNELS",
     "transit": "MOVING ROOMS",
-    "mapping_proposal": "MAPPING SCENE PROPOSAL",
+    "planning_need": "A PLACE NOBODY PLANNED",
     "hearsay": "- HEARSAY:",
     "road": "- THE ROAD:",
     "approach": "APPROACHING IS NOT ARRIVING",
@@ -1597,7 +1597,7 @@ def test_prose_scope_gates_out_duties_whose_subject_is_absent(temp_db,
 
     sheet = _resolve_sheet(calls)
     for name in ("voices", "obligations", "other_players", "transit",
-                 "mapping_proposal", "hearsay", "road", "due_events",
+                 "planning_need", "hearsay", "road", "due_events",
                  "world_pressure", "residue", "light"):
         assert PROSE_DUTY_HEADINGS[name] not in sheet, name
     # A physical beat can move, split rooms, and change sizes: those duties

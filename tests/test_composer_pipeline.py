@@ -378,12 +378,15 @@ def test_the_no_model_guard_can_actually_fire(monkeypatch):
     nothing reads was installed. This proves the net reaches a module that
     really does call the seam, and that calling it raises.
     """
-    import agents.mapping as mapping
+    import agents.background as background
 
     patched = forbid_model_calls(monkeypatch)
-    assert ("agents.mapping", "_agent_json") in patched
+    # `agents.mapping` is no longer in the net: the world-context compiler
+    # imports no model seam at all (it is deterministic, like perception).
+    assert ("agents.mapping", "_agent_json") not in patched
+    assert ("agents.background", "_agent_json") in patched
     with pytest.raises(AssertionError):
-        mapping._agent_json("mapping", "mapping_stage", "", {})
+        background._agent_json("character_bg", "background_react", "", {})
 
 
 def test_room_content_reaches_the_view_it_was_read_for():

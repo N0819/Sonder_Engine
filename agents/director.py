@@ -314,7 +314,7 @@ from .director_reconcile import (
 def director_establish(ctx, nonce):
     chat = ctx.chat
     pers = persona_of(chat)
-    mapping = ctx.mapping_stage or ctx.mapping_quick or {}
+    world = ctx.world_context()
     fm = fiction_model(chat.id)
 
     cast = cast_scene_context(ctx.cast)
@@ -344,7 +344,10 @@ def director_establish(ctx, nonce):
         },
         "present_characters": cast,
         "relevant_lore": lore_for(ctx),
-        "mapping_scene_proposal": _normalize_scene_patch(mapping.get("scene_patch")),
+        # What the opening reached for that no plan holds (the compiler's
+        # needs): the author renders the surface and files nothing more.
+        **({"planning_needs": world.get("planning_needs")}
+           if world.get("planning_needs") else {}),
         "fiction_model": fm,
         "player_seed": ctx.get("input") or "",
         "variant_seed": nonce,
@@ -960,7 +963,7 @@ def director_interpret(ctx, nonce):
             "notices": _artifacts_view(chat["id"], sc),
             "movement": out.get("movement"),
             "movers": {p_name: {"exits": _egocentric_exits(sc, p_name)}},
-            "proposal": None,
+            "planning_needs": [],
             "sightlines": _sightlines_view(sc, ctx, p_name),
             "crowds": _icrowds,
             "couriers": _couriers_view(chat["id"], sc),
@@ -2159,7 +2162,7 @@ _PROSE_DUTY_GATES = {
     # beats -- so this is one of the few duties that genuinely costs nothing
     # when it is not needed.
     "travel": lambda f: f["travel_in_flight"],
-    "mapping_proposal": lambda f: f["proposal_present"],
+    "planning_need": lambda f: f["planning_needs_present"],
     "hearsay": lambda f: f["unratified_claims_present"],
     "road": lambda f: f["road_subjects_present"],
     "approach": lambda f: f["physical_beat"],
@@ -2230,14 +2233,10 @@ def _prose_gate_facts(ctx, sc, payload, facts, p_name):
                 return True
         return False
 
-    def proposal_content():
-        # _normalize_scene_patch always yields the container keys, so an
-        # empty proposal is a dict of empty containers -- content, not
-        # truthiness, is the exact fact.
-        proposal = payload.get("mapping_scene_proposal")
-        if not isinstance(proposal, dict):
-            return proposal
-        return any(bool(value) for value in proposal.values())
+    def planning_needs_content():
+        # Exact presence: the compiler either raised a need this beat or it
+        # did not, and it is empty on the great majority of beats.
+        return bool(payload.get("planning_needs"))
 
     def not_fully_lit():
         # The engine's own sight semantics (spatial.effective_light: absent
@@ -2286,7 +2285,7 @@ def _prose_gate_facts(ctx, sc, payload, facts, p_name):
         "transit_capable": _true_on_error(transit_capable),
         "travel_in_flight": _true_on_error(
             lambda: payload.get("travel_in_flight")),
-        "proposal_present": _true_on_error(proposal_content),
+        "planning_needs_present": _true_on_error(planning_needs_content),
         "due_events_present": _true_on_error(
             lambda: payload.get("due_authored_events")),
         "pressure_ledger_open": _true_on_error(
@@ -2760,7 +2759,7 @@ def director_resolve(ctx, nonce, _corrections=None):
     turn = ctx.turn
     pers = persona_of(chat)
     p_name = pers.get("name") or persona_name(pers)
-    mapping = ctx.mapping_stage or ctx.mapping_quick or {}
+    world = ctx.world_context()
     fm = fiction_model(chat["id"])
     clock = simulation_clock(chat["id"])
 
@@ -3160,7 +3159,11 @@ def director_resolve(ctx, nonce, _corrections=None):
         "paradox": paradox_visible_to(chat["id"], ctx.turn.frame_id),
         "fiction_model": fm,
         "fiction_frame": _dict(flow.get("fiction_frame")),
-        "mapping_scene_proposal": _normalize_scene_patch(mapping.get("scene_patch")),
+        # The doors this beat reached for that no plan holds, as the
+        # world-context compiler recorded them. Render the surface a body
+        # perceives and no more; the plan behind it is the room's to write.
+        **({"planning_needs": world.get("planning_needs")}
+           if world.get("planning_needs") else {}),
         # Walks already under way that this beat did not mention. Handed to
         # the author BEFORE the prose is written so the scenery changes on
         # the page, in the same breath as everything else the beat does --
@@ -3698,7 +3701,7 @@ def director_resolve(ctx, nonce, _corrections=None):
             }
             for d in decls if d.get("name")
         },
-        "proposal": payload.get("mapping_scene_proposal"),
+        "planning_needs": payload.get("planning_needs") or [],
         "present_figures": _present_figures,
         "sightlines": payload.get("sightlines"),
         "planned_rooms": payload.get("planned_rooms"),
@@ -3772,8 +3775,9 @@ def director_resolve(ctx, nonce, _corrections=None):
     # than arriving after them as an unexamined teleport.
     _travel_continues(ctx, out, sc, sd, interp, p_name)
 
-    staged = ((ctx.get("mapping_stage") or {}).get("staged_lore") or []) + \
-             ((ctx.get("mapping_quick") or {}).get("staged_lore") or [])
+    # The compiler stages nothing, so this loop materialises a room only on
+    # a beat stored before it existed (a rerun from an old mapping step).
+    staged = ctx.world_context().get("staged_lore") or []
     mv = interp.get("movement")
     target_room = mv.get("to_room") if isinstance(mv, dict) else None
 
