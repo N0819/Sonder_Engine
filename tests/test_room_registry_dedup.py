@@ -294,3 +294,40 @@ def test_dedup_reads_the_registry_table(temp_db):
         ctx.chat.id, temp_db.wget(ctx.chat.id, "scene", {}),
         json.loads(json.dumps(diff)))
     assert renames == {}
+
+
+def test_a_minted_room_the_plan_already_holds_is_redirected_onto_the_plan(temp_db):
+    """The spatial hand wrote "lantern_path" for a room the plan keys
+    "coastal_lane" (bench, chat 114, 2026-09-03): the mint is the plan's
+    room and lands under its id, positions following; a name two plans
+    share names neither and the mint stands."""
+    from persist.commit import dedup_minted_rooms
+    from world.structure import plant_structure
+    cid = temp_db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+                     ("Planned", "", time.time()))
+    plant_structure(cid, {"key": "coast", "max_planned": 20, "grammar": []}, {
+        "terrace": {"name": "Coastal Terrace", "purpose": "sitting", "access": "public",
+                    "adjacent": [{"to": "coastal_lane", "barrier": "open"}], "frontier": []},
+        "coastal_lane": {"name": "Lantern Path", "purpose": "a lit path", "access": "public",
+                         "adjacent": [{"to": "terrace", "barrier": "open"}], "frontier": []},
+        "hut_a": {"name": "Net Hut", "purpose": "nets", "access": "public",
+                  "adjacent": [], "frontier": []},
+        "hut_b": {"name": "Net Hut", "purpose": "nets", "access": "public",
+                  "adjacent": [], "frontier": []},
+    })
+    prev = {"rooms": {"beach": {"name": "Moonlit Shore", "adjacent": []}},
+            "positions": {"Hinami": "beach"}}
+    diff = {"rooms": {"lantern_path": {"name": "Lantern Path", "desc": "Lanterns.",
+                                       "adjacent": [{"to": "beach", "barrier": "open"}]},
+                      "net_hut": {"name": "Net Hut", "desc": "Nets.", "adjacent": []}},
+            "positions": {"Hinami": "lantern_path", "The Doctor": "lantern_path"}}
+    warnings = []
+    renames = dedup_minted_rooms(cid, prev, diff, add_warning=warnings.append)
+    assert renames == {"lantern_path": "coastal_lane"}
+    assert set(diff["rooms"]) == {"coastal_lane", "net_hut"}
+    assert diff["positions"] == {"Hinami": "coastal_lane", "The Doctor": "coastal_lane"}
+    assert any("two plans share" in w for w in warnings)
+    # A plan already standing in the scene is the ordinary scene-name case.
+    prev["rooms"]["coastal_lane"] = {"name": "Lantern Path", "adjacent": []}
+    diff2 = {"rooms": {"lantern_path": {"name": "Lantern Path", "desc": "x", "adjacent": []}}}
+    assert dedup_minted_rooms(cid, prev, diff2) == {"lantern_path": "coastal_lane"}

@@ -117,6 +117,33 @@ def _planned_rooms_view(sc, ctx, focus_room, *extra):
         return None
 
 
+def movement_for_resolve(ctx, interp):
+    """The beat's declared movement with its destination spelled as the
+    world spells it. The compiler (`agents/mapping.classify_movement`)
+    resolved the Director's spelling against the plan and put the plan's id
+    on its step; every resolve-side reader of the destination -- the
+    planned-room brief, the residue, the figures in view, the hands'
+    payloads -- takes it from here, so a planned room is furnished under
+    its own id rather than minted again beside itself. Unchanged when the
+    compiler classified nothing or agreed with the spelling."""
+    mv = interp.get("movement") if isinstance(interp, dict) else None
+    if not isinstance(mv, dict) or not mv.get("to_room"):
+        return mv
+    try:
+        compiled = (ctx.world_context() or {}).get("movement")
+    except Exception:
+        compiled = None
+    if not isinstance(compiled, dict) or compiled.get("status") != "planned":
+        return mv
+    canonical = str(compiled.get("to_room") or "")
+    if not canonical or canonical == str(mv.get("to_room")):
+        return mv
+    out = dict(mv)
+    out["declared_as"] = str(mv["to_room"])
+    out["to_room"] = canonical
+    return out
+
+
 def _ci_mapping_key(mapping, name):
     """Return the existing key in ``mapping`` that names ``name``.
 

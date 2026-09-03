@@ -168,6 +168,7 @@ from .director_views import (
 from .director_movement import (
     _egocentric_exits,
     _planned_rooms_view,
+    movement_for_resolve,
     _sightlines_view,
     _ci_mapping_key,
     _reconcile_near_group_positions,
@@ -2995,7 +2996,7 @@ def director_resolve(ctx, nonce, _corrections=None):
     # on and the flag commit warns on can never disagree. world_pressure_view
     # rides the same convention (F5).
     from persist.commit import pending_obligation_view, world_pressure_view
-    _mv_for_context = interp.get("movement")
+    _mv_for_context = movement_for_resolve(ctx, interp)
     _mv_target = _mv_for_context.get("to_room") if isinstance(_mv_for_context, dict) else None
 
     # Living world, approach A: when this beat moves the party into a room
@@ -3244,7 +3245,7 @@ def director_resolve(ctx, nonce, _corrections=None):
             "speech": interp.get("speech"),
             "speech_volume": interp.get("speech_volume", "normal"),
             "action": interp.get("action"),
-            "movement": interp.get("movement"),
+            "movement": _mv_for_context,
             "follow_op": interp.get("follow_op"),
             "contact_assertions": onset_contacts,
             "abilities": persona_abilities(pers),
@@ -3747,7 +3748,7 @@ def director_resolve(ctx, nonce, _corrections=None):
         "contact_endings": character_contact_endings,
         "material_effects": character_material_effects,
         "notices": payload.get("notices") or [],
-        "movement": interp.get("movement"),
+        "movement": _mv_for_context,
         "movers": {
             str(d.get("name")): {
                 "exits": d.get("exits"),
