@@ -2767,6 +2767,21 @@ def plan_figure_acts(registry, evidence_rows, inventory_ops, scene,
                 item["state"], row["target"], place=room, scene=scene)
             if body_key:
                 found.append((charter_key, body_key))
+        if len(found) > 1:
+            # A BODY HOLDING A POST OUTRANKS A BODY HOLDING NONE. The
+            # ambient charter keeps a body for every person the Director
+            # named that no generator minted, and its stored name is the
+            # Director's own spelling -- so "The Miller" matched it EXACTLY
+            # while the mill's miller matched by role, and two matches
+            # meant nobody (Harrowmere replay t15, 2026-09-03). The
+            # post-holder is the person the town stands in that room; the
+            # shadow is a name in a dict.
+            posted = [
+                (ck, bk) for ck, bk in found
+                if bk in {str(v) for v in
+                          (items[ck]["state"].get("watch") or {}).values()}]
+            if len(posted) == 1:
+                found = posted
         if len(found) != 1:
             continue
         charter_key, body_key = found[0]
@@ -2783,6 +2798,63 @@ def plan_figure_acts(registry, evidence_rows, inventory_ops, scene,
             "target": row["target"],
         })
     return plans
+
+
+#: The dealings a body's ledgers can answer before any act is named: what
+#: its post's standing, its needs and its regard say to an order, a favour
+#: and a bargain from the asker. Trade is left out -- it needs a good.
+PREVIEWED_DEALINGS = ("order", "request", "bargain")
+
+
+def figure_answers(cid, figures, actor, frame_id=None):
+    """What each present figure's ledgers would answer the actor, read-only.
+
+    ``{display name: ["order: ...", "request: ...", "bargain: ..."]}`` for
+    the rows `agents.common.present_charter_figures` returns, computed by
+    the decision `apply_figure_acts` will apply
+    (`charter_author.preview_dealings` -> `dealing_answer`) so the
+    Director's ruling and the ledger's record cannot say different things.
+    Harrowmere replay t26 (2026-09-03): the prose author had the reeve
+    grant the request and the narrator rendered it, while the same beat's
+    act landed `declined (pressed)` -- the voice had this preview
+    (`presence_view` -> ``answers``) and the Director did not. One line per
+    act; the asker is not named in the line, because the addressed-by
+    block already carries whatever the ruling may call them. A figure
+    whose charter the registry no longer holds gets no lines.
+    """
+    from world.charter_author import preview_dealings
+
+    rows_by_charter = {}
+    for row in figures or ():
+        if not isinstance(row, dict) or not row.get("body"):
+            continue
+        rows_by_charter.setdefault(str(row.get("charter") or ""), []).append(row)
+    if not rows_by_charter:
+        return {}
+    registry = registry_for(cid, frame_id)
+    out = {}
+    for charter_key, rows in rows_by_charter.items():
+        item = (registry.get("items") or {}).get(charter_key)
+        if not item:
+            continue
+        previews = preview_dealings(
+            item["state"], actor, [str(r["body"]) for r in rows],
+            PREVIEWED_DEALINGS)
+        for row in rows:
+            lines = []
+            for entry in previews.get(str(row["body"])) or ():
+                if not entry.get("answer"):
+                    continue
+                line = "%s: %s" % (entry["act"], entry["answer"])
+                if entry.get("answered_as"):
+                    line = "%s: answered as a %s, %s" % (
+                        entry["act"], entry["answered_as"], entry["answer"])
+                if entry.get("reason"):
+                    line += " (%s)" % entry["reason"]
+                lines.append(line)
+            if lines:
+                out[str(row.get("name") or row["body"])] = lines
+    return out
 
 
 def apply_figure_acts(state, plans, charter_key):

@@ -2521,8 +2521,38 @@ _PUBLIC_SPEECH_ACTS = frozenset({
 })
 
 
+_SPEECH_ACT_KIND_WORD = re.compile(r"[a-z]+")
+
+
+def _speech_act_kinds(raw):
+    """Every kind of `_PUBLIC_SPEECH_ACTS` a frame's ``kind`` names, in order.
+
+    A COMPOUND KIND CARRIES EVERY KIND IT NAMES. The specialist writes the
+    field as it heard the line -- "claim and request" (Harrowmere replay
+    t24, 2026-09-03) -- and a reader that compared the whole string against
+    the vocabulary read it as ``other``, so the request inside it reached
+    no ledger and `has_standing` was never consulted. Read word by word
+    against the closed set, so "claim and request" is a request and a
+    frame naming two kinds becomes two frames. A string naming no kind at
+    all is the empty list; what the caller does with that depends on
+    whose string it was (the social hand's is ``other`` and warned, the
+    interpreter's communication verb is kept as written).
+    """
+    text = str(raw or "").strip().casefold()
+    kinds = []
+    for token in _SPEECH_ACT_KIND_WORD.findall(text):
+        if token in _PUBLIC_SPEECH_ACTS and token not in kinds:
+            kinds.append(token)
+    return kinds
+
+
 def _ground_public_evidence(out, view):
     """Make the social specialist's semantic labels evidence, not authority.
+
+    Returns the social specialist's frame kinds outside the vocabulary that
+    were read as ``other``, so the caller can say so instead of coercing in
+    silence. (A communication row's kind is the interpreter's own verb and
+    is not this vocabulary's to judge; see the branch below.)
 
     Actor, target, quote/action surface, volume and concealment come back from
     the engine-authored source list.  A speech-frame's free text must be an
@@ -2557,6 +2587,7 @@ def _ground_public_evidence(out, view):
         final_lines.setdefault(key, line)
 
     grounded = []
+    unread = []
     for source_id, source in sources.items():
         if source.get("kind") == "speech":
             key = (str(source.get("actor") or "").strip().casefold(),
@@ -2574,28 +2605,48 @@ def _ground_public_evidence(out, view):
                         final.get(field, default)
 
         semantic = annotated.get(source_id) or {}
-        frames = list(source.get("speech_acts") or []) \
-            if source.get("kind") == "communication" else []
+        frames = []
+        if source.get("kind") == "communication":
+            # A communication row's frame is the interpreter's own typed
+            # act ("ask", "explain", "warn": the verb `communication_surface`
+            # renders, an author vocabulary that is not this one) and it
+            # stays VERBATIM -- the claim a witness keeps reads the
+            # surface, not the kind. What was missed until 2026-09-03 is
+            # the public kinds such an act NAMES: "claim and request"
+            # (Harrowmere replay t24) was copied whole, matched nothing
+            # downstream, and the request inside it reached no ledger.
+            # Where the act names kinds of this vocabulary, those are the
+            # frames; where it names none, the act is kept as written.
+            for raw in source.get("speech_acts") or []:
+                if not isinstance(raw, dict):
+                    continue
+                kinds = _speech_act_kinds(raw.get("kind")) \
+                    or [str(raw.get("kind") or "other")]
+                for kind in kinds:
+                    frames.append({**raw, "kind": kind})
         quote = _quote_body(source.get("exact_quote") or "")
         folded_quote = quote.casefold()
         if source.get("kind") == "speech":
             for raw in (semantic.get("speech_acts") or [])[:4]:
                 if not isinstance(raw, dict):
                     continue
-                kind = str(raw.get("kind") or "other").strip().casefold()
-                if kind not in _PUBLIC_SPEECH_ACTS:
-                    kind = "other"
-                frame = {"kind": kind}
+                kinds = _speech_act_kinds(raw.get("kind"))
+                if not kinds:
+                    unread.append(str(raw.get("kind") or ""))
+                    kinds = ["other"]
+                grounded_fields = {}
                 for field in ("content", "about", "condition"):
                     value = " ".join(str(raw.get(field) or "").split())[:240]
                     # Exact-span grounding: semantic DIRECTION may come from
                     # the model; semantic CONTENT must already be audible.
                     if value and value.casefold() in folded_quote:
-                        frame[field] = value
-                if frame.get("content") or kind in {
-                        "greeting", "apology", "thanks", "agreement",
-                        "refusal", "denial"}:
-                    frames.append(frame)
+                        grounded_fields[field] = value
+                for kind in kinds:
+                    frame = {"kind": kind, **grounded_fields}
+                    if frame.get("content") or kind in {
+                            "greeting", "apology", "thanks", "agreement",
+                            "refusal", "denial"}:
+                        frames.append(frame)
 
         try:
             salience = max(0.0, min(1.0, float(
@@ -2606,6 +2657,7 @@ def _ground_public_evidence(out, view):
                          "speech_acts": frames, "salience": salience})
 
     out["public_evidence"] = grounded[:12]
+    return [k for k in dict.fromkeys(unread) if k]
 
 
 class CampaignInvariantError(RuntimeError):
@@ -2894,6 +2946,7 @@ def director_resolve(ctx, nonce, _corrections=None):
     # read the SAME list, so a mint the prose author makes against a name it
     # was shown binds to exactly the body it was shown.
     _present_figures = []
+    _figure_answers = {}
     _dwellings = []
     try:
         from .common import present_charter_figures
@@ -2907,6 +2960,14 @@ def director_resolve(ctx, nonce, _corrections=None):
             _fig_rooms.add(str(_mv_target))
         _present_figures = present_charter_figures(
             chat["id"], sc, _fig_rooms, frame_id=ctx.turn.frame_id)
+        # What each of them would answer the player's order, request or
+        # bargain, by the judgment the commit applies -- so the ruling
+        # cannot grant what the ledger declines (Harrowmere replay t26).
+        if _present_figures:
+            from world.charter_runtime import figure_answers
+            _figure_answers = figure_answers(
+                chat["id"], _present_figures, p_name,
+                frame_id=ctx.turn.frame_id)
         # The rooms in the same reach that are somebody's HOME, and whose:
         # the player's room, its scope and the declared target. Read by
         # the prose author's threshold clause (prose_author_sheet/17).
@@ -3166,7 +3227,14 @@ def director_resolve(ctx, nonce, _corrections=None):
         # mint to its body regardless; this is the payload half, so the
         # model has no reason to mint. Absent when nobody is here.
         **({"present_figures": [
-                {"name": _f["name"], "role": _f["role"], "room": _f["room"]}
+                {"name": _f["name"], "role": _f["role"], "room": _f["room"],
+                 # WHAT THIS PERSON'S OWN LEDGERS ANSWER the player's order,
+                 # request or bargain -- the same judgment the commit will
+                 # record (`charter_runtime.figure_answers`). Present only
+                 # where the registry answered, so a figure with no
+                 # dealings to preview is byte-identical to before.
+                 **({"answers": _figure_answers[_f["name"]]}
+                    if _f["name"] in _figure_answers else {})}
                 for _f in _present_figures[:24]]}
            if _present_figures else {}),
         # A ROOM SOMEONE SLEEPS IN IS THEIRS: the homes within reach, who
@@ -4253,7 +4321,10 @@ def director_resolve(ctx, nonce, _corrections=None):
         deduped.append(d)
 
     out["dialogue_log"] = deduped
-    _ground_public_evidence(out, _orch_view)
+    for _kind in _ground_public_evidence(out, _orch_view):
+        ctx.add_warning(
+            "speech act kind %r is outside the vocabulary and was read as "
+            "'other'; no ledger answers it" % _kind)
 
     tracked_names = [
         character_name_from_text(c["sheet"]) for c in ctx.cast

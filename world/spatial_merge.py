@@ -24,6 +24,7 @@ from world.spatial_containment import (
     containment_broken_by_scale_change,
     derive_containment_from_contacts,
     derive_contained_positions,
+    derive_worn_containment,
     derive_inventory_placements,
     mint_transferred_objects,
     derive_minted_entity_placements,
@@ -1499,7 +1500,17 @@ def merge_scene_with_diff(
         inventory_ops=diff.get("inventory_ops"),
         declared=(set(incoming_positions or {})
                   | set(diff.get("containment") or {})))
-    normalize_scene_containment(merged)
+    # WHERE A WORN THING IS, IS ITS WEARER'S: a garment the wardrobe ledger
+    # puts on a body and the scene also holds as an entity is carried by
+    # that body, without any hand writing an op or a record for it. Runs
+    # after every declared containment above (which it yields to) and
+    # before hygiene, so the record it writes satisfies the same rules.
+    derive_worn_containment(merged)
+    # A holder the town stands is a holder the scene may keep a record
+    # against, whichever door the record came through: the op path vouches
+    # its destination inside `derive_inventory_placements`, and this vouches
+    # a containment record the contact hand wrote against the same body.
+    normalize_scene_containment(merged, carriers=carriers)
     # ...and a body that has taken another one inside HAS an inside, whether or
     # not any model remembered to author it. The floor mints one room from the
     # record itself; the holder's card mints the stations it declares. Runs
@@ -1570,7 +1581,7 @@ def merge_scene_with_diff(
         # Re-run the hygiene the new records have to satisfy (a container that
         # has left the scene, a cycle), then put the enclosed body where its
         # container is -- both already ran, above, before these existed.
-        normalize_scene_containment(merged)
+        normalize_scene_containment(merged, carriers=carriers)
         # NOT OPTIONAL, and the measurement is why. A scene whose only
         # enclosure evidence is a standing interior CONTACT stores
         # `contained: {}` and mints its record right here -- chats 86 and 87,
