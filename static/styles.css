@@ -11,7 +11,8 @@ color:var(--fg);height:100vh;height:100dvh;overflow:hidden;position:relative}
 
 /* OPAQUE CHROME (an invariant, enforced rule by rule below): every surface
    that sits DIRECTLY over the page background -- #side, #top, #composer,
-   #drawer, #turnstatus, #activity, .toast, the #modal scrim -- is opaque.
+   #drawer, #room (docked), #room-tab, #turnstatus, #activity, .toast, the
+   #modal scrim -- is opaque.
    They were all ~.9 alpha over a backdrop-filter blur, which is exactly what
    let an ambient colour meant for the STORY wash the sidebar, the header,
    open panels and modal frames: interface chrome changing hue because a scene
@@ -88,7 +89,12 @@ radial-gradient(ellipse 70% 65% at 50% 45%,transparent,rgba(6,8,13,.55) 100%)}
    `minmax(0,68ch)` grid track. Owner's call, twice reported and then decided
    explicitly: a fixed inset, not a measure. Do not reintroduce a measure
    without asking; it is a deliberate choice, not an oversight. */
-body.has-backdrop .prose{background:rgba(9,12,19,var(--bd-panel,.42));
+/* `#room.floating` earns this rule too: the floating Writers' Room sits over
+   the story column the way the prose does, so it is the prose plate, not a
+   third look; its opacity slider sets --bd-panel on the element alone (see
+   the WRITERS' ROOM section below). */
+body.has-backdrop .prose,
+body.has-backdrop #room.floating{background:rgba(9,12,19,var(--bd-panel,.42));
 border:1px solid rgba(255,255,255,.055);border-radius:12px;
 backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);
 box-shadow:0 12px 34px rgba(0,0,0,.26);
@@ -110,7 +116,8 @@ text-shadow:
    these panels during weather is exactly the thing changing every frame. The
    translucent plate alone keeps the words readable; a 3px blur of moving
    streaks is not a legible difference. */
-body.has-weather-fx .prose{backdrop-filter:none!important;
+body.has-weather-fx .prose,
+body.has-weather-fx #room.floating{backdrop-filter:none!important;
 -webkit-backdrop-filter:none!important}
 @media(prefers-reduced-motion:reduce){
   #scene-backdrop,.bd-layer,.bd-veil{transition:none}
@@ -785,6 +792,9 @@ border-radius:10px;background:rgba(25,32,46,.42)}
 @media(max-width:900px){
   #side{width:230px}
   #drawer{position:fixed;right:0;top:0;bottom:0;width:min(520px,92vw);z-index:20}
+  /* The docked room overlays the story the way the drawer does here: a
+     column this narrow cannot spare a second one. */
+  #room.docked{position:fixed;right:0;top:0;bottom:0;max-width:92vw;z-index:20}
   .memory-layout{grid-template-columns:1fr}
   .memory-sidebar-sticky{position:static}
   /* Sidebar 230px + header content ~520px overflows with nowhere to go
@@ -912,3 +922,70 @@ transition:width .3s ease}
   background: var(--bg, #14161a);
   color: var(--fg, #e8e8ea);
 }
+
+/* ---- WRITERS' ROOM (writers_room.js) ----
+   The player's conversation with the Story Planner, beside the story it is
+   about. Two shapes, and each takes a look the page already has:
+   DOCKED, it is the last column of #app and sits directly over the page
+   background, so it is opaque chrome (the invariant's list above names it).
+   FLOATING, it sits over the story column like the prose, so
+   `body.has-backdrop .prose` and its weather gate are extended to
+   `#room.floating` up in the backdrop block; the slider sets --bd-panel on
+   #room alone. Without a backdrop the float is chrome like everything else
+   over the page, which is exactly the prose's own behaviour. */
+#room-tab{position:fixed;right:0;top:50%;transform:translateY(-50%) rotate(180deg);
+writing-mode:vertical-rl;z-index:21;padding:10px 6px;border:1px solid var(--bd);
+border-right:0;border-radius:0 8px 8px 0;background:var(--bg2);color:var(--dim);
+font-size:12px;letter-spacing:.04em;cursor:pointer;box-shadow:-6px 0 18px rgba(0,0,0,.18)}
+#room-tab:hover,#room-tab.on{color:var(--fg);background:var(--bg3)}
+#room{display:flex;flex-direction:column;min-width:0;position:relative;
+border-left:1px solid var(--bd);background:var(--bg2);
+box-shadow:-14px 0 36px rgba(0,0,0,.2)}
+#room.hidden{display:none}
+#room.floating{position:fixed;z-index:22;border:1px solid var(--bd);
+border-radius:12px;box-shadow:var(--shadow);overflow:hidden}
+/* The plate's text outline is for prose on a picture; controls keep flat text. */
+#room.floating textarea,#room.floating input,#room.floating select,
+#room.floating button{text-shadow:none}
+.room-head{display:flex;align-items:center;gap:6px;padding:8px 10px;
+border-bottom:1px solid var(--bd);flex:0 0 auto}
+.room-head.draggable{cursor:move;user-select:none}
+.room-title{font-size:13px}
+.room-opacity input{width:90px;vertical-align:middle}
+.room-dramaturge{font-size:11px;max-width:150px}
+.room-seated{padding:6px 10px;border-bottom:1px dashed var(--bd)}
+.room-status{padding:8px 10px;border-bottom:1px solid var(--bd);flex:0 0 auto}
+.room-status-line{font-size:13px}
+.room-motion{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.room-questions{margin-top:6px;font-size:12px}
+.room-questions ul{margin:2px 0 0;padding-left:18px}
+.room-mandates{padding:8px 10px;border-bottom:1px solid var(--bd);flex:0 0 auto;
+max-height:32%;overflow:auto}
+.room-section-title{font-size:11px;text-transform:uppercase;letter-spacing:.06em;
+color:var(--dim);margin-bottom:4px}
+.room-mandate{border:1px solid var(--bd);border-radius:8px;padding:6px 8px;margin:4px 0}
+.room-mandate-text{font-size:13px}
+.room-mandate.spent{border:0;padding:2px 0;margin:0}
+.room-thread{flex:1 1 auto;overflow:auto;padding:8px 10px;display:flex;
+flex-direction:column;gap:8px}
+.room-msg{border-radius:10px;padding:6px 10px;max-width:92%;font-size:13px;
+white-space:pre-wrap}
+.room-msg.player{align-self:flex-end;background:color-mix(in srgb,var(--acc) 18%,var(--bg3))}
+.room-msg.planner{align-self:flex-start;background:var(--bg3)}
+.room-msg.dramaturge{align-self:flex-start;background:color-mix(in srgb,var(--acc2) 16%,var(--bg3));
+border-left:2px solid var(--acc2)}
+.room-msg.room{align-self:center;background:transparent;border:1px dashed var(--bd);
+color:var(--dim)}
+.room-who{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);
+margin-bottom:2px}
+.room-earlier{align-self:center}
+.room-compose{display:flex;gap:6px;padding:8px 10px;border-top:1px solid var(--bd);
+flex:0 0 auto}
+.room-compose textarea{flex:1;min-width:0;resize:none;font:inherit}
+.room-compose button{align-self:flex-end}
+/* Resize affordances: the docked column's left edge, the float's corner. */
+.room-edge{position:absolute;left:-3px;top:0;bottom:0;width:6px;cursor:col-resize;z-index:1}
+#room.floating .room-edge{display:none}
+.room-corner{position:absolute;right:0;bottom:0;width:16px;height:16px;cursor:nwse-resize;
+display:none;background:linear-gradient(135deg,transparent 50%,var(--bd) 50%)}
+#room.floating .room-corner{display:block}

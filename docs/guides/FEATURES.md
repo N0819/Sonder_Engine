@@ -663,6 +663,12 @@ legitimately perceive, learn, remember or infer.
   what everyone is wearing, for hand-correcting something that has drifted.
 - **Cast panel** — Cast, attached lorebooks, everyone's condition, host-only
   insights, multiplayer and frames in one place.
+- **Writers' Room panel** (partial) — A tab on the right edge opens a simple
+  chat with the Story Planner beside the story: dock it as a column or float
+  it over the prose with its own opacity. The thread is kept per story and
+  era; the standing mandates you have granted and a spoiler-safe line of what
+  is in motion sit beside it. The Planner itself is not seated yet, so for now
+  the room keeps your notes and says so.
 
 ## Your data
 
