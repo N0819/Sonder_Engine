@@ -1424,6 +1424,11 @@ def _presence_bodies(ctx, sc, rooms, chatter):
                 # description whole (`common._unknown_actor_label`).
                 "role": row.get("role") or "",
                 "aliases": [],
+                # Its dealt surface, when the registry has one, so the
+                # display map can compose a silhouette at dim light and a
+                # face at full (`composer.observer_display_map`).
+                **({"surface": row["surface"]}
+                   if isinstance(row.get("surface"), dict) else {}),
                 # An unregistered body wears no disguise ledger: there is no
                 # card to conceal and no `known_to` list to consult, so both
                 # halves are stated rather than left absent (an absent

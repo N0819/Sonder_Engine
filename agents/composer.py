@@ -244,14 +244,23 @@ def _subject_prefix(dedupe_key):
 _LABEL_DANGLING = frozenset(_ENGLISH_COMPOSITOR["label_dangling"])
 
 
-def _descriptor_words(name, appearance, aliases=None, role=""):
+def _descriptor_words(name, appearance, aliases=None, role="", *,
+                      surface=None):
     """The full name-stripped content word list of an appearance summary --
     the raw material a stranger label is cut from.
 
     `role` is exempt from the strip for the reason `_unknown_actor_label`
     gives at length: a rank or duty carried inside a minted display name is
     a public noun, not an identity token, and subtracting it deletes the
-    description of a body the observer can plainly see."""
+    description of a body the observer can plainly see.
+
+    A structured `surface` supplies its own words in widening order
+    (`charter_surface.surface_words`); nothing in them is a name."""
+    if surface:
+        from world.charter_surface import surface_words
+        words = surface_words(surface, "full")
+        if words:
+            return words
     text = _appearance_as_prose(appearance)
     if not text:
         return []
@@ -384,13 +393,16 @@ def assign_stranger_labels(bodies):
     observer who can see two ensigns and tell them apart no other way has
     exactly that.
     """
-    rows = [tuple(body) + ("",) * (4 - len(tuple(body))) for body in bodies]
+    rows = [tuple(body) + (None,) * (5 - len(tuple(body))) for body in bodies]
+    rows = [(name, appearance, aliases, role or "", surface)
+            for name, appearance, aliases, role, surface in rows]
     labels = {}
-    for name, appearance, aliases, role in rows:
+    for name, appearance, aliases, role, surface in rows:
         labels[str(name)] = _unknown_actor_label(
-            name, appearance, aliases, role=role)
-    words = {str(name): _descriptor_words(name, appearance, aliases, role)
-             for name, appearance, aliases, role in rows}
+            name, appearance, aliases, role=role, surface=surface)
+    words = {str(name): _descriptor_words(name, appearance, aliases, role,
+                                          surface=surface)
+             for name, appearance, aliases, role, surface in rows}
     for cap in (6, 8, 10, 14):
         collided = _collided_names(labels)
         if not collided:
@@ -455,6 +467,14 @@ def observer_display_map(scene, observer_name, co_present, known,
       silhouettes deliberately COLLIDE on it: an observer who cannot tell
       them apart must not be handed a view that can, and the label is one of
       `generic_labels`, which is what keeps it out of memory as an entity.
+      A body carrying a STRUCTURED surface (`world.charter_surface`) is the
+      exception the structure earns: its silhouette tier -- stature, build,
+      the outline of what is worn -- is what a silhouette genuinely shows,
+      so the label is composed from that tier and nothing else, and two
+      bodies whose silhouettes read the same still collide onto the fixed
+      label. An appearance SUMMARY stays at the fixed label at this level,
+      because unsorted prose cannot say which of its facts a silhouette
+      carries.
     * `none` -- no visual channel at all, so not even a figure. The body is
       here through some other channel (a smell, a voice) and gets the
       appearance-free fallback the standing-percept builder already uses in
@@ -466,7 +486,7 @@ def observer_display_map(scene, observer_name, co_present, known,
     reopens one card down.
     """
     recognized = set((known or {}).get(observer_name) or [])
-    strangers = []
+    strangers, silhouettes = [], []
     out = {}
     for body in co_present or []:
         name = str(body.get("name") or "")
@@ -486,13 +506,33 @@ def observer_display_map(scene, observer_name, co_present, known,
         if level == "full":
             strangers.append(
                 (name, body.get("appearance"), body.get("aliases") or [],
-                 str(body.get("role") or "")))
+                 str(body.get("role") or ""), body.get("surface")))
         elif level == "none":
             out[name] = _unfamiliar_person()
         else:
-            out[name] = _dim_figure()
+            silhouettes.append((name, body.get("surface"), level))
     out.update(assign_stranger_labels(strangers))
+    out.update(_silhouette_labels(silhouettes))
     return out
+
+
+def _silhouette_labels(silhouettes):
+    """name -> label for the bodies seen short of full sight. A structured
+    surface yields its silhouette tier (`charter_surface.surface_label`);
+    anything else, and any two silhouettes that read the same, is the fixed
+    dim-figure label -- the honest rendering of "cannot tell them apart"."""
+    from language_runtime import compositor_text
+    from world.charter_surface import surface_label
+
+    labels = {}
+    for name, surface, level in silhouettes:
+        described = surface_label(surface, level) if surface else ""
+        labels[name] = (str(compositor_text("unknown_actor",
+                                            description=described))
+                        if described else _dim_figure())
+    for name in _collided_names(labels):
+        labels[name] = _dim_figure()
+    return labels
 
 
 # --------------------------------------------------------------------------
@@ -828,7 +868,11 @@ def presence_percepts(scene, observer_name, co_present, display_map,
         if level == "full":
             label = display or _unfamiliar_person()
         else:
-            label = display if display == name else _dim_figure()
+            # The map already answers the degraded case by construction:
+            # the name for a recognised body, a silhouette-tier descriptor
+            # for a stranger with a structured surface, the fixed label
+            # for everyone else (`observer_display_map`).
+            label = display or _dim_figure()
         side = entity_side(scene, observer_name, name) or (
             fov.get("side") if fov.get("basis") == "line" else None)
         # `body` is the opaque per-body ledger key, carried so the
