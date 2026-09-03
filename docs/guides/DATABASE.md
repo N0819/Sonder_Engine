@@ -163,8 +163,8 @@ turn check catches rollback behind the producer, while the epoch check catches
 a restore/branch at the same numeric turn but on a different world edge. Stable
 epoch+rung batch identity makes landing idempotent.
 
-`planned_entities` and `planning_needs` (`world/planned_entities.py`) are
-frame-scoped world keys beside `charters`: the authored plans no charter
+`planned_entities` (`world/planned_entities.py`) and `planning_needs`
+(`world/planning_needs.py`) are frame-scoped world keys beside `charters`: the authored plans no charter
 simulates (`{uid: {kind, name, aliases, role, brief:{purpose, truths, where},
 surface?, rendered?}}`) and the typed needs a surface-only Director mint files
 (`[{uid, kind: person|thing|room, status: open|filled|closed, surface:{name,
@@ -173,6 +173,19 @@ checkpoint/archive/branch path with no handling of their own; a charter body
 enrolled to answer a need lives in `charters` like any other body, with
 `guest`, `guest_until` and `departed` as the only fields enrolment adds to a
 body's shape.
+
+`plot_packages` (`story/plot_packages.py`) is the Writers' Room's package
+store, a frame-scoped world key like the two above: `{uid: {title, premise,
+status, revision, spoiler_policy, scope, authority, base:{turn_idx,
+registry_revision}, truths[], questions[], participants[], evidence[],
+pressures[], clocks[], opportunities[], constraints[], planner_requests[],
+operations[], validation, provenance:{history[]}, published_turn?,
+activated_turn?}}`. It rides the whole-`world` path with no handling of its
+own; what a published package PLACED (planned rooms in `room_registry`,
+plans in `planned_entities`, bills in `artifacts`, rows in
+`scheduled_events` and `lore_entries`) lives in those ledgers and is
+restored with them, so a checkpoint restore past a publish takes back both
+the package's status and what it placed.
 
 `charters` stores `{version, items}`. Each item separates its
 normalized pure `state` from runtime markers (`last_elapsed_seconds`,
