@@ -79,6 +79,16 @@ Consequences the owner accepted with the split:
   and give him no scar. Nothing about *who* the guard is was ever the
   Director's to decide; nothing about what he *looked like* was ever the
   room's to contradict.
+  **Carve-out (owner, 2026-09-03): the Director still mints CONTAINMENT
+  rooms on the fly.** A body the beat puts another body inside is a place
+  the moment it happens — the spatial hand's `state_diff.rooms` with
+  `parent_entity` — and no plan can hold it in advance, because it exists
+  only while the containment does. It is not a plan gap: the compiler
+  classifies a destination that is a scene entity or its interior as
+  `contained`, never `unplanned`, and a room whose committed record carries
+  `parent_entity` files no planning need. The rule is the one the engine
+  already has: where a body walks is its own; where the world puts it is
+  the Director's.
 - **A body the town says is at the forge cannot be rendered at the inn.**
   Charter's position ledger is part of the plan the Director receives. If
   the story needs the smith at the inn, that is a planning revision through
