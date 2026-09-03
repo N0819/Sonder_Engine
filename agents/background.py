@@ -309,7 +309,106 @@ def _merge_stage_results(manager, backstop):
     return merged
 
 
+def _voice_call(ctx, step_key, who, call):
+    """Run one voice call, and let it fail as SILENCE.
+
+    A VOICE STAGE DEGRADES; ONLY A CAUSAL STAGE ABORTS. The runtime raises
+    on any step failure (`agents/runtime.py` re-raises the worker's
+    exception), which is the right contract for the stages that decide
+    what happened -- an unresolved beat cannot be committed. This stage
+    decides what an extra SAYS about a beat already resolved, so its
+    failure costs a line and nothing else. Measured, Harrowmere turn 21: a
+    provider 503 on one `background_react` call aborted the whole turn
+    after the Director had resolved it, and the beat had to be resumed by
+    hand from this stage. Cancellation is not a failure and still
+    propagates.
+    """
+    try:
+        return call()
+    except Exception as exc:
+        from llm.providers import Aborted
+        if isinstance(exc, Aborted):
+            raise
+        ctx.add_warning(
+            "%s: voice call for %s failed and the presence stays silent "
+            "this beat (%s)" % (step_key, who, str(exc)[:200]))
+        return None
+
+
+def _one_answer_per_line(ctx, result):
+    """A LINE AIMED AT ONE PERSON IS ANSWERED BY ONE PERSON.
+
+    Each fired reaction carries `heard_address`, the authored line it is
+    answering (`_react_one`). Two reactions answering the SAME line are two
+    people replying as the addressee of one question, and the narrator
+    then either merges them into one speaker or renders a contradiction
+    the fiction never settled. Measured, Harrowmere turn 5: the player put
+    one question to Reeve Nookfeller by name, both reeves answered it, and
+    the narrator rendered the two answers as one man's.
+
+    The first in pick order keeps the answer -- the gate ranks the precise
+    addressee first, forced (`pick_voice_demand`). Every later answer to
+    that line is DEMOTED, never deleted: the words become a background
+    CLAIM (`world/background_claims`) that the Director may ratify,
+    contradict or let expire, the action stands, and a warning says whose
+    line went where. Reactions that answer nothing (an owed reply from an
+    earlier beat, an act, an emergence, a manager entry) are untouched.
+    """
+    reactions = list((result or {}).get("reactions") or [])
+    if len(reactions) < 2:
+        return result
+    answered = {}
+    kept = []
+    demoted = []
+    for reaction in reactions:
+        heard = (reaction or {}).get("heard_address") or {}
+        quote = " ".join(str(heard.get("exact_quote") or "").split())
+        entry = (reaction or {}).get("dialogue_log_entry") or {}
+        if (not quote or heard.get("beats_ago")
+                or not str(entry.get("exact_quote") or "").strip()):
+            kept.append(reaction)
+            continue
+        key = quote.casefold()
+        if key not in answered:
+            answered[key] = str(reaction.get("name") or "")
+            kept.append(reaction)
+            continue
+        stripped = dict(reaction)
+        stripped["dialogue_log_entry"] = None
+        stripped["demoted_line"] = entry.get("exact_quote")
+        kept.append(stripped)
+        demoted.append((str(reaction.get("name") or ""),
+                        str(entry.get("exact_quote") or ""),
+                        answered[key]))
+    if not demoted:
+        return result
+    claims = list(result.get("claims") or [])
+    for name, quote, answerer in demoted:
+        claims.append({"claimant": name, "text": quote, "refs": [],
+                       "credence": "ordinary"})
+        ctx.add_warning(
+            "background_react: %s also answered the line %s answered; one "
+            "line has one answerer, so %s's words are recorded as a claim "
+            "rather than delivered." % (name, answerer, name))
+    out = dict(result)
+    out["reactions"] = kept
+    # The legacy single-entry keys mirror reactions[0]; rebuild them from
+    # the kept list in case the demoted one was first.
+    first = kept[0] if kept else {}
+    out["fired"] = bool(kept)
+    out["name"] = first.get("name") or out.get("name")
+    out["dialogue_log_entry"] = first.get("dialogue_log_entry")
+    out["action"] = first.get("action", "")
+    out["room"] = first.get("room", "")
+    out["claims"] = claims
+    return out
+
+
 def background_react(ctx, nonce):
+    return _one_answer_per_line(ctx, _background_react(ctx, nonce))
+
+
+def _background_react(ctx, nonce):
     dr = ctx.get("director_resolve") or {}
     manager = None
     try:
@@ -738,7 +837,7 @@ def _demanded_presences(ctx, dr, managed, ceiling):
     roster |= {(e.get("name") or "").casefold()
                for e in (ctx.extra_players or [])}
     player_input = overt_declaration_text(ctx)
-    addressed_refs = _flow_addressed_refs(ctx)
+    addressed_refs = _flow_addressed_refs(ctx, dr)
     emerged = emerged_this_beat(ctx, dr, sc)
     turn_idx = ctx.turn.idx
     authored_rooms = authored_mind_rooms(sc, roster)
@@ -753,10 +852,8 @@ def _demanded_presences(ctx, dr, managed, ceiling):
         # record sharing a word (see `_background_name_named_exactly`).
         flow_hit = _presence_in_addressed_refs(name, addressed_refs)
         aimed = bool(_character_address_of(dr, name, roster, sc, room))
-        precise = bool(
-            flow_hit
-            or _background_name_named_exactly(name, player_input)
-            or aimed)
+        named_exactly = _background_name_named_exactly(name, player_input)
+        precise = bool(flow_hit or named_exactly or aimed)
         addressed_any = precise or _background_name_mentioned(
             name, player_input)
         owed = bool(_valid_pending_reply(rec, turn_idx))
@@ -769,21 +866,30 @@ def _demanded_presences(ctx, dr, managed, ceiling):
         # Director's own judgment for this beat (a flow address, an emerge)
         # and an aimed line that already passed the same hearing bar are
         # exempt; the player's raw words and the two carried debts must
-        # reach where the presence stands. `managed_presences` scopes this
-        # populace to the player's AMBIENT scope, which is a different
-        # question with a different answer -- on a vessel it resolved to
-        # every room aboard (chat 98).
+        # reach where the presence stands -- and an owed reply, aimed by
+        # nobody now, needs one room while the rest may cross a doorway.
+        # `managed_presences` scopes this populace to the player's AMBIENT
+        # scope, which is a different question with a different answer --
+        # on a vessel it resolved to every room aboard (chat 98).
         if not (flow_hit or emerged_hit or aimed):
-            if not demand_reaches(sc, room, authored_rooms):
+            if not demand_reaches(sc, room, authored_rooms,
+                                  aimed=bool(addressed_any or acting)):
                 continue
         if precise:
             addressees += 1
+        loose_only = bool(addressed_any and not precise
+                          and not (owed or acting or emerged_hit))
         ranked.append(((2 if precise else (1 if addressed_any else 0),
                         owed, acting, emerged_hit,
-                        last_turn or -1, name), tup))
+                        last_turn or -1, name), tup, loose_only))
+    # The demand gate's subject rule (`pick_voice_demand`): once this beat
+    # has a precise addressee, a presence that qualified on the loose
+    # word-match alone was talked ABOUT, not to, and is not voiced.
+    if addressees:
+        ranked = [row for row in ranked if not row[2]]
     ranked.sort(key=lambda row: row[0], reverse=True)
     slots = max(addressees, max(1, int(ceiling or 1)))
-    return [tup for _key, tup in ranked[:slots]]
+    return [tup for _key, tup, _loose in ranked[:slots]]
 
 
 def _audience_map(sc, entry, managed, level):
@@ -923,9 +1029,17 @@ def scene_life(ctx, nonce, level, cfg):
         "variant_seed": nonce,
     }
 
-    out = _agent_json("character_bg", "scene_life",
-                      get_prompt("scene_life", ctx.language),
-                      payload, temperature=0.85)
+    out = _voice_call(
+        ctx, "scene_life", ", ".join(names),
+        lambda: _agent_json("character_bg", "scene_life",
+                            get_prompt("scene_life", ctx.language),
+                            payload, temperature=0.85))
+    if out is None:
+        res = _result(names, [], mode="scene_life:%s" % level,
+                      agent_calls=(["blurb_mint"] if minted else []))
+        if minted:
+            res["blurbs"] = minted
+        return res
     out, warnings = validate_llm_output("scene_life", out)
     ctx.warnings.extend(warnings)
 
@@ -1432,11 +1546,15 @@ def _react_one(ctx, dr, name, present_others, roster, sc, rec, nonce,
         "variant_seed": nonce,
     }
 
-    out = _agent_json(
-        "character_bg", "background_react",
-        get_prompt("background_react", ctx.language),
-        payload, temperature=0.7,
-    )
+    out = _voice_call(
+        ctx, "background_react", name,
+        lambda: _agent_json(
+            "character_bg", "background_react",
+            get_prompt("background_react", ctx.language),
+            payload, temperature=0.7,
+        ))
+    if out is None:
+        return None
     # Warning-only re-normalization; strict schema validation (with
     # repair/fallback/raise) already ran inside _agent_json.
     out, warnings = validate_llm_output("background_react", out)
