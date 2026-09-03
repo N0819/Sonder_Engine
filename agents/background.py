@@ -250,11 +250,16 @@ def _beat_for_presence(dr, sc, station_room, name, beat_room=None):
     return re.sub(r"\s{2,}", " ", resolved).strip()
 
 
-def _result(selected, reactions, mode="background_react", agent_calls=None):
+def _result(selected, reactions, mode="background_react", agent_calls=None,
+            why=None):
     """Uniform stage output. `selected` is every presence the gate picked this
     beat (so commit can discharge their owed replies even if they stayed
     silent); `reactions` is the subset that actually spoke/acted. The legacy
-    single-entry keys mirror reactions[0] for callers that predate the list."""
+    single-entry keys mirror reactions[0] for callers that predate the list.
+    ``why`` is the gate's working per selected name -- the triggers that
+    qualified the pick and the channel that carried it -- so the step says
+    why a body was asked to speak (Harrowmere replay 2026-09-03 turn 23:
+    a pick from another room, and no reason on the step)."""
     first = reactions[0] if reactions else {}
     return {
         "fired": bool(reactions),
@@ -264,6 +269,8 @@ def _result(selected, reactions, mode="background_react", agent_calls=None):
         "room": first.get("room", ""),
         "reactions": reactions,
         "selected": selected,
+        "selected_why": {str(k): list(v or []) for k, v in (why or {}).items()
+                         if str(k or "")},
         # Provenance for the pipeline UI: which path ran and which sub-agents
         # it actually spent. The scene manager and the per-presence backstop
         # share a step key, so without this the technical log cannot tell a
@@ -303,7 +310,9 @@ def _merge_stage_results(manager, backstop):
         mode="+".join(m for m in (manager.get("mode"), backstop.get("mode"))
                       if m),
         agent_calls=[*(manager.get("agent_calls") or []),
-                     *(backstop.get("agent_calls") or [])])
+                     *(backstop.get("agent_calls") or [])],
+        why={**(manager.get("selected_why") or {}),
+             **(backstop.get("selected_why") or {})})
     for key in ("blurbs", "claims"):
         if manager.get(key):
             merged[key] = manager[key]
@@ -583,7 +592,8 @@ def _background_react(ctx, nonce):
     return _merge_stage_results(
         manager,
         _result(names, reactions, mode="background_react",
-                agent_calls=agent_calls))
+                agent_calls=agent_calls,
+                why={n: (_meta.get(n) or {}).get("why") for n in names}))
 
 
 # ---------------------------------------------------------------------------
@@ -830,11 +840,19 @@ def _demanded_presences(ctx, dr, managed, ceiling):
                                 _character_address_of, _flow_addressed_refs,
                                 _presence_in_addressed_refs,
                                 _shared_name_words,
-                                _valid_pending_reply, authored_mind_rooms,
+                                _valid_pending_reply, addressed_rooms,
+                                authored_mind_rooms,
                                 demand_reaches, emerged_this_beat,
-                                overt_declaration_text)
+                                overt_declaration_text,
+                                _player_name_or_none)
 
     sc = wget(ctx.chat.id, "scene", {}) or {}
+    # The rooms the player's lines are aimed INTO (`addressed_rooms`), for
+    # the place-addressed trigger -- the same rule the per-presence gate
+    # applies (`pick_voice_demand`).
+    _pname = _player_name_or_none(ctx)
+    aimed_rooms = addressed_rooms(
+        ctx, dr, sc, _room_of(sc, _pname) if _pname else "")
     # The words the managed names hold in common are this story's titles,
     # and a title names nobody in particular (`_shared_name_words`).
     shared_words = _shared_name_words(str(t[1]) for t in managed)
@@ -859,13 +877,22 @@ def _demanded_presences(ctx, dr, managed, ceiling):
         aimed = bool(_character_address_of(dr, name, roster, sc, room))
         named_exactly = _background_name_named_exactly(name, player_input)
         precise = bool(flow_hit or named_exactly or aimed)
-        addressed_any = precise or _background_name_mentioned(
+        mentioned = _background_name_mentioned(
             name, player_input, shared=shared_words)
+        place_hit = bool(room) and str(room) in aimed_rooms
+        addressed_any = precise or mentioned or place_hit
         owed = bool(_valid_pending_reply(rec, turn_idx))
         acting = (turn_idx - 1) in (rec.get("engaged_turns") or ())
         emerged_hit = name in emerged
         if not (addressed_any or owed or acting or emerged_hit):
             continue
+        why = [w for w, hit in (
+            ("flow_addressed", flow_hit), ("named_exactly", named_exactly),
+            ("character_address", aimed),
+            ("mentioned", mentioned and not named_exactly),
+            ("place_addressed:%s" % room, place_hit),
+            ("owed", owed), ("acting", acting), ("emerged", emerged_hit),
+        ) if hit]
         # The demand gate's channel test, in the same words (`demand_reaches`):
         # a trigger says a demand was RAISED, not that it arrived. The
         # Director's own judgment for this beat (a flow address, an emerge)
@@ -877,16 +904,22 @@ def _demanded_presences(ctx, dr, managed, ceiling):
         # scope, which is a different question with a different answer --
         # on a vessel it resolved to every room aboard (chat 98).
         if not (flow_hit or emerged_hit or aimed):
-            if not demand_reaches(sc, room, authored_rooms,
-                                  aimed=bool(addressed_any or acting)):
+            _aimed = bool(addressed_any or acting)
+            if not demand_reaches(sc, room, authored_rooms, aimed=_aimed):
                 continue
+            why.append("channel:%s" % (
+                "unplaced" if not room or not authored_rooms
+                else ("hearing" if _aimed else "same_room")))
+        else:
+            why.append("channel:exempt")
         if precise:
             addressees += 1
-        loose_only = bool(addressed_any and not precise
+        loose_only = bool(addressed_any and not precise and not place_hit
                           and not (owed or acting or emerged_hit))
-        ranked.append(((2 if precise else (1 if addressed_any else 0),
+        ranked.append(((3 if precise
+                        else (2 if place_hit else (1 if addressed_any else 0)),
                         owed, acting, emerged_hit,
-                        last_turn or -1, name), tup, loose_only))
+                        last_turn or -1, name), tup, loose_only, why))
     # The demand gate's subject rule (`pick_voice_demand`): once this beat
     # has a precise addressee, a presence that qualified on the loose
     # word-match alone was talked ABOUT, not to, and is not voiced.
@@ -894,7 +927,10 @@ def _demanded_presences(ctx, dr, managed, ceiling):
         ranked = [row for row in ranked if not row[2]]
     ranked.sort(key=lambda row: row[0], reverse=True)
     slots = max(addressees, max(1, int(ceiling or 1)))
-    return [tup for _key, tup, _loose in ranked[:slots]]
+    # The working, for the manager's own result (`_result(why=)`).
+    ctx["_manager_demand_why"] = {
+        str(tup[1]): list(why) for _key, tup, _loose, why in ranked[:slots]}
+    return [tup for _key, tup, _loose, _why in ranked[:slots]]
 
 
 def _audience_map(sc, entry, managed, level):
@@ -1041,7 +1077,8 @@ def scene_life(ctx, nonce, level, cfg):
                             payload, temperature=0.85))
     if out is None:
         res = _result(names, [], mode="scene_life:%s" % level,
-                      agent_calls=(["blurb_mint"] if minted else []))
+                      agent_calls=(["blurb_mint"] if minted else []),
+                      why=ctx.get("_manager_demand_why"))
         if minted:
             res["blurbs"] = minted
         return res
@@ -1113,7 +1150,7 @@ def scene_life(ctx, nonce, level, cfg):
     if minted:
         calls.insert(0, "blurb_mint")
     res = _result(names, reactions, mode="scene_life:%s" % level,
-                  agent_calls=calls)
+                  agent_calls=calls, why=ctx.get("_manager_demand_why"))
     if minted:
         res["blurbs"] = minted  # persisted by commit.track_background_presences
     if claims:

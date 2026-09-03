@@ -2118,12 +2118,17 @@ def chatter_for_room(cid, sc, room_id, inputs=None):
         rows, notable=notable, density=density, seed_material=seed_material)
     if picked is not None:
         charter = picked["charter"]
-        speaker, _ = charter_chatter.participant_label(
+        # Both forms per participant, the ANONYMOUS one as the label this
+        # room-level entry carries: the fragment is memoized per room and
+        # read by every mind in it, and a name is licensed per observer
+        # (`charter_chatter.participant_forms`, and `relabel_fragment` where
+        # the observer is). A reader that never relabels reads a stranger.
+        speaker = charter_chatter.participant_forms(
             picked.get("actor"), place=room, bodies=charter["bodies"],
             watch=charter["watch"], posts=charter["posts"],
             naming=charter["naming"], figures=charter["figures"],
             known_bodies=charter["known_bodies"])
-        other, _ = charter_chatter.participant_label(
+        other = charter_chatter.participant_forms(
             picked.get("other"), place=room, bodies=charter["bodies"],
             watch=charter["watch"], posts=charter["posts"],
             naming=charter["naming"], figures=charter["figures"],
@@ -2131,8 +2136,11 @@ def chatter_for_room(cid, sc, room_id, inputs=None):
         subject = charter_chatter.subject_label(
             picked.get("subject"), bodies=charter["bodies"],
             figures=charter["figures"], naming=charter["naming"])
-        fragment = {"speaker_label": speaker, "act": picked.get("act"),
-                    "other_label": other, "subject_label": subject}
+        fragment = {"speaker_label": speaker["anon"], "act": picked.get("act"),
+                    "other_label": other["anon"], "subject_label": subject,
+                    "speaker_name": speaker["name"],
+                    "speaker_anon": speaker["anon"],
+                    "other_name": other["name"], "other_anon": other["anon"]}
         out.append({"kind": "fragment",
                     "uid": charter_chatter.fragment_key(picked),
                     "what": charter_chatter.fragment_phrase(fragment),
@@ -6694,7 +6702,19 @@ def _observable_predicate(display, surface):
     first = stripped.split(maxsplit=1)[0]
     # Independent subject clause (starts with a capitalized non-actor word that
     # isn't a normal sentence-initial cap): render as its own sentence.
-    independent = first[:1].isupper() and first.casefold() not in disp_tokens
+    #
+    # A CAPITAL LETTER IS NOT A SUBJECT. A surface that opens with a verb in
+    # the third-person-singular ("Wipes his hands on his apron...") is a
+    # predicate whatever its case -- the background stage capitalises the
+    # first word of an action as a matter of style -- and reading it as an
+    # independent clause published it with no subject at all: the view read
+    # "Wipes his hands..." and the narrator, handed a subjectless act beside
+    # a stranger, supplied one from an earlier beat (Harrowmere replay
+    # 2026-09-03 turn 24, the smith rendered as "the miller"). The same
+    # verb test the episode renderer already applies to its first word.
+    independent = (first[:1].isupper()
+                   and first.casefold() not in disp_tokens
+                   and _base_from_third_person_s(first) is None)
     if independent:
         return stripped if stripped.endswith((".", "!", "?")) else stripped + "."
     body = stripped[0].lower() + stripped[1:]

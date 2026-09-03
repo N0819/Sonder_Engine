@@ -316,6 +316,55 @@ def fragment_phrase(fragment):
     return "Close by, %s can be overheard %s" % (speaker, doing)
 
 
+def participant_forms(key, *, place, bodies=None, watch=None, posts=None,
+                      naming=None, figures=None, known_bodies=frozenset()):
+    """Both things a bystander could call one participant, kept apart.
+
+    ``name`` is the participant's own name -- a figure's (someone the scene
+    itself presents: the player, cast, an emerged presence) or a body's the
+    story has met individually (``known_bodies``, live presence records by
+    body key) -- and ``anon`` is what a stranger sees: the role noun of a
+    watch post held IN THIS ROOM (engine vocabulary by construction, because
+    posts are authored per charter), else empty for the anonymous register.
+
+    WHY TWO. A fragment is composed once per room and read by every mind
+    standing in it, and "the story has met this person" is not "THIS
+    observer has". Measured, Harrowmere replay 2026-09-03 turn 32: the
+    market trader had a presence record since turn 2, so `known_bodies`
+    licensed the name, the room's chatter named the trader to a player
+    whose `known` ledger was empty, and the composer's tripwire had to
+    scrub it -- a name reaching a mind through eavesdropping on people who
+    were not saying it. The name is still licensed for the observer who
+    recognises it; the per-observer choice is made where the observer is
+    (`agents/perception` -> `relabel_fragment`), and everything below it
+    carries the anonymous form by default so a reader that forgets to
+    choose fails closed.
+    """
+    key = str(key or "")
+    if not key:
+        return {"name": "", "anon": ""}
+    if key in (figures or {}):
+        return {"name": key, "anon": ""}
+    body = (bodies or {}).get(key)
+    if body is None:
+        return {"name": "", "anon": ""}
+    from .charter_identity import display_name, title_for
+    roles = sorted(post for post, holder in (watch or {}).items()
+                   if str(holder) == key)
+    name = display_name(body, roles, naming) if key in (known_bodies or ()) \
+        else ""
+    here = [post for post in roles
+            if str(((posts or {}).get(post) or {}).get("place") or "")
+            == str(place or "")]
+    anon = ""
+    if here:
+        title = title_for(body, here, naming)
+        noun = (title or here[0].replace("_", " ")).strip()
+        if noun:
+            anon = "the %s" % noun.casefold()
+    return {"name": str(name or ""), "anon": anon}
+
+
 def participant_label(key, *, place, bodies=None, watch=None, posts=None,
                       naming=None, figures=None, known_bodies=frozenset()):
     """What a bystander may call one participant. NEVER an unearned name.
@@ -327,29 +376,52 @@ def participant_label(key, *, place, bodies=None, watch=None, posts=None,
     role noun, engine vocabulary by construction because posts are authored
     per charter; everyone else is empty, and the caller renders the
     anonymous register. Returns ``(label, recognized)``.
+
+    The story-level answer; `participant_forms` is the split a per-observer
+    reader needs, and the reason it exists is in its docstring.
     """
-    key = str(key or "")
-    if not key:
-        return "", False
-    if key in (figures or {}):
-        return key, True
-    body = (bodies or {}).get(key)
-    if body is None:
-        return "", False
-    from .charter_identity import display_name, title_for
-    roles = sorted(post for post, holder in (watch or {}).items()
-                   if str(holder) == key)
-    if key in (known_bodies or ()):
-        return display_name(body, roles, naming), True
-    here = [post for post in roles
-            if str(((posts or {}).get(post) or {}).get("place") or "")
-            == str(place or "")]
-    if here:
-        title = title_for(body, here, naming)
-        noun = (title or here[0].replace("_", " ")).strip()
-        if noun:
-            return "the %s" % noun.casefold(), True
+    forms = participant_forms(
+        key, place=place, bodies=bodies, watch=watch, posts=posts,
+        naming=naming, figures=figures, known_bodies=known_bodies)
+    if forms["name"]:
+        return forms["name"], True
+    if forms["anon"]:
+        return forms["anon"], True
     return "", False
+
+
+def relabel_fragment(fragment, *, recognizes, display_for=None):
+    """One observer's rendering of a room's fragment.
+
+    ATTRIBUTION FOLLOWS THE OBSERVER'S RECOGNITION, NOT THE STORY'S. For each
+    participant the fragment carries a ``<role>_name`` (the name the story
+    could use) and a ``<role>_anon`` (what a stranger sees); the label this
+    observer reads is the name when ``recognizes(name)`` says they know it,
+    else what they already call that body in this beat (``display_for``,
+    the observer's display map -- a stranger descriptor for a body they can
+    see), else the anonymous form. The clause is re-composed from the
+    chosen labels. The input is not mutated; a fragment carrying no names
+    comes back equal to itself.
+    """
+    if not isinstance(fragment, dict):
+        return fragment
+    out = dict(fragment)
+    changed = False
+    for role in ("speaker", "other"):
+        name = str(out.get(f"{role}_name") or "")
+        if not name:
+            continue
+        if recognizes(name):
+            label = name
+        else:
+            label = str((display_for(name) if display_for else "") or "") \
+                or str(out.get(f"{role}_anon") or "")
+        if label != str(out.get(f"{role}_label") or ""):
+            out[f"{role}_label"] = label
+            changed = True
+    if changed:
+        out["what"] = fragment_phrase(out)
+    return out
 
 
 def subject_label(key, *, bodies=None, figures=None, naming=None):
