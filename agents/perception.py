@@ -69,6 +69,7 @@ from world.spatial import (
     hear_level,
     measured_proximity_rel,
     merge_scene_with_diff,
+    neighbour_feature_visibility,
     normalize_barrier,
     normalize_bearing,
     proximity_rel,
@@ -3464,6 +3465,116 @@ def _visible_features(sc, name, room, *, sweep=False):
     ]
 
 
+#: Barriers sight crosses. Kept as a local read of the one definition in
+#: `world.spatial_barriers` rather than a second list -- a bearing-less
+#: doorway must still admit sight, and only the barrier decides that.
+def _sight_crosses(barrier):
+    from world.spatial import _SIGHT_BARRIERS
+    return normalize_barrier(barrier) in _SIGHT_BARRIERS
+
+
+def _is_dark(level):
+    return str(level or "").casefold() in (
+        "dark", "none", "pitch_black", "black")
+
+
+def _visible_openings(sc, name, room, *, sweep=False, gate=None):
+    """The boundaries of `room` this observer can see, and what sight reaches
+    past each -- or [] when the room has none it can offer.
+
+    Rows of {desc, room_name, room_notes, dark, features}. THE GRAIN IS
+    EXACTLY WHAT STANDING IN THE FAR ROOM WOULD GIVE, MINUS WHAT THE DOORWAY
+    TAKES: name, notes, light and cone-capped furniture -- the same four the
+    environment percept delivers for the room a body is actually in, and not
+    one field more. A glance through a door must never out-resolve walking
+    through it.
+
+    Three grades, each falling back on what the world can actually support:
+
+      * sight does not cross (a shut door, a curtain) -> the boundary alone,
+        NAMING NOTHING BEYOND IT. What room lies behind a closed door is not
+        a fact the observer holds, and putting the name in the view would
+        hand it over for free;
+      * sight crosses to an unlit room -> the boundary and darkness, because
+        you see what is lit and no light means no room;
+      * sight crosses to a lit room -> its name and notes, plus its furniture
+        when the geometry can place it (`neighbour_feature_visibility`). A
+        window or a grille never places -- you cannot walk a grid through
+        glass -- and an edge whose bearing the world does not hold cannot be
+        laid out either, so both degrade to name and notes rather than
+        failing. That is why this does not require a bearing to run: 107 of
+        the 185 multi-edge rooms in the live corpus carry none at all, and a
+        layer that needed one would have been dark for most of them.
+
+    WHICH BOUNDARIES THE OBSERVER CAN SEE is not re-decided here. Every edge
+    already has a door pseudo-anchor placed in the room's geometry, so
+    `feature_visibility` has graded it against this observer's cone and line
+    along with the furniture; a door it marks unseen is simply absent. Where
+    the room has no authored geometry there is nothing to grade against and
+    every boundary is offered, which is the same "answers only on evidence it
+    has" rule the FOV layer applies to bodies.
+    """
+    rooms = (sc or {}).get("rooms") or {}
+    if not room or room not in rooms:
+        return []
+    here_light = effective_light(sc, room)
+    from world.spatial import _BARRIER_ANCHOR_DESC, door_anchor_id
+
+    seen_doors = None
+    if room_has_geometry(sc, room):
+        seen_doors = {r["anchor"] for r in feature_visibility(
+            sc, name, sweep=bool(sweep)) if r.get("implicit") and r["visible"]}
+    out = []
+    for edge in effective_adjacent(sc, room) or ():
+        if not isinstance(edge, dict) or not edge.get("to"):
+            continue
+        barrier = normalize_barrier(edge.get("barrier"))
+        if barrier == "wall":
+            continue
+        to_room = str(edge["to"])
+        if seen_doors is not None and door_anchor_id(to_room) not in seen_doors:
+            continue
+        # The edge's own authored name is the specific thing ("the open blue
+        # police box doors"); the barrier's generic phrasing is the floor.
+        desc = " ".join(str(edge.get("name") or "").split())
+        if not desc:
+            desc = _BARRIER_ANCHOR_DESC.get(barrier) or "the way through"
+        row = {"desc": desc}
+        far = rooms.get(to_room)
+        if not _sight_crosses(barrier):
+            row["state"] = "blind"
+            out.append(row)
+            continue
+        if not isinstance(far, dict):
+            row["state"] = "bare"
+            out.append(row)
+            continue
+        if _is_dark(effective_light(sc, to_room)):
+            # DARKNESS IS ONLY WORTH SAYING WHERE IT IS A CONTRAST. A lit room
+            # with an unlit way out of it has a black doorway in it, and that
+            # is a thing a body sees. Standing in the dark yourself, every
+            # exit is dark and saying so about each of them is noise about
+            # the night rather than news about the room -- so the boundary is
+            # delivered as itself and the darkness goes unremarked.
+            row["state"] = "dark" if not _is_dark(here_light) else "bare"
+            out.append(row)
+            continue
+        far_name = str(far.get("name") or "").strip()
+        if not far_name:
+            row["state"] = "bare"
+            out.append(row)
+            continue
+        row["state"] = "seen"
+        notes = far.get("notes")
+        row["room_name"] = far_name
+        row["room_notes"] = gate(notes) if gate is not None else notes
+        rows = neighbour_feature_visibility(sc, name, to_room, sweep=bool(sweep))
+        if rows:
+            row["features"] = rows
+        out.append(row)
+    return out
+
+
 def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
                                 entity_state=None, appearance_changed=(),
                                 appearance_deltas=None, prev_seen=None,
@@ -3490,7 +3601,9 @@ def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
     env = composer.environment_percept(
         room, p.get("room_name"), room_notes,
         effective_light(sc, room) if room else "",
-        features=_visible_features(sc, name, room, sweep=p.get("sweep")))
+        features=_visible_features(sc, name, room, sweep=p.get("sweep")),
+        openings=_visible_openings(sc, name, room, sweep=p.get("sweep"),
+                                   gate=gate))
     if env:
         percepts.append(env)
     # Crowds, couriers and posted notices: three built subsystems whose whole

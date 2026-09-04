@@ -733,6 +733,72 @@ def feature_visibility(scene: dict, observer: str, *, sweep=False) -> list:
     return rows
 
 
+def neighbour_feature_visibility(scene: dict, observer: str, to_room,
+                                 *, sweep=False):
+    """What the observer's eyes reach of a NEIGHBOUR room's furniture, or None
+    when that room is not placeable in this observer's field.
+
+    Same row shape as `feature_visibility`, over `field.anchors[to_room]`
+    instead of the observer's own room. `observer_field` has already laid the
+    neighbour out beyond a one-cell wall band with the two door cells aligned,
+    so the doorway IS the aperture: `_occluders_on` returns `__wall__` for any
+    cell outside `field.inside`, and every line from here into there that does
+    not thread the doorway dies on that wall. The cone cap is therefore
+    geometric rather than a second rule -- nothing here re-decides what an
+    opening admits.
+
+    ONE DELIBERATE DIFFERENCE FROM THE WITHIN-ROOM FORM: the occlusion walk
+    always runs, where `feature_visibility` runs it only for an observer at a
+    measured station. Within a room that gate is right -- with no measured
+    cell there is no line to test and the honest answer is to leave every
+    verdict alone. Across a threshold it would be exactly wrong: skipping the
+    walk does not withhold a subtraction, it grants the whole of the next room
+    to somebody who has not been placed anywhere, which is the one thing a
+    doorway must never do. Unmeasured, the walk runs from the room's centre --
+    an approximation of where the observer stands, never of whether the wall
+    is there.
+
+    The neighbour's OWN doorways (implicit anchors) are left out: a way
+    onward from a room you are only glancing into is not something a glance
+    delivers, and the opening the observer is looking through is already the
+    percept this list hangs on.
+    """
+    field = observer_field(scene, observer)
+    if field is None or to_room not in field.offsets:
+        return None
+    room_id = room_of(scene, observer)
+    if not room_id or str(to_room) == str(room_id):
+        return None
+    origin, _how = _observer_cell(scene, observer)
+    facing = None if sweep else effective_facing(scene, observer)
+    eye = eye_rank(scene, observer)
+    ox, oy = field.offsets[to_room]
+    rows = []
+    for aid, rec in (field.anchors.get(to_room) or {}).items():
+        if rec["implicit"] or not rec["cells"]:
+            continue
+        cells = [(x + ox, y + oy) for x, y in rec["cells"]]
+        target = min(cells, key=lambda c: (c[0] - origin[0]) ** 2
+                     + (c[1] - origin[1]) ** 2)
+        dist = math.hypot(target[0] - origin[0], target[1] - origin[1])
+        sector = _cone_sector(facing, origin, target) if facing else None
+        if facing and _sector_verdict(sector) == "rear":
+            continue
+        blocker, _t, _tid = _occluders_on(
+            field, origin, target, eye, max(height_rank(rec["height"]), 0.5))
+        if blocker and blocker != aid:
+            continue
+        rows.append({
+            "anchor": aid, "desc": rec["desc"], "implicit": False,
+            "visible": True, "sector": sector,
+            "peripheral": bool(facing) and _sector_verdict(sector) == "side",
+            "side": _side_label(sector), "tier": "across",
+            "occluded_by": None, "basis": "line", "distance": dist,
+        })
+    rows.sort(key=lambda r: (r["distance"], r["anchor"]))
+    return rows
+
+
 def body_visibility(scene: dict, observer: str, target: str) -> dict:
     """How one body's line reaches another, or does not.
 

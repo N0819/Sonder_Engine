@@ -350,7 +350,12 @@
     "surface_with": "{label} with {feature}",
     "surface_in": "{label} in {worn}",
     "surface_summary_with": "{text}, with {items}",
-    "surface_summary_wearing": "{text}, wearing {items}"
+    "surface_summary_wearing": "{text}, wearing {items}",
+    "opening_seen": "Through {opening} is {room}.",
+    "opening_features": "Beyond, you can see {items}.",
+    "opening_closed": "{opening} is shut.",
+    "opening_dark": "Through {opening}, only darkness.",
+    "opening_bare": "There is {opening}."
   },
   "muffle_ellipsis": "...",
   "muffle_join": "... ",

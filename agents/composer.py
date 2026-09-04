@@ -669,7 +669,7 @@ def _surface_suddenness(surface):
 # --------------------------------------------------------------------------
 
 def environment_percept(room_id, room_name, room_notes="", light="",
-                        features=None):
+                        features=None, openings=None):
     """The room as standing state -- or None when the observer has no
     resolvable room. A mind in unloaded space perceives NOTHING here; the
     old path fabricated "You are in an unspecified area." for it, which
@@ -681,6 +681,16 @@ def environment_percept(room_id, room_name, room_notes="", light="",
     line): rows of {desc, tier, side, peripheral}, near to far. Absent or
     empty, the percept is byte-identical to the one it always was -- a room
     with no geometry authored on its anchors composes exactly as before.
+
+    `openings` is the room's BOUNDARY, on the same terms: rows of
+    {desc, room_name, room_notes, dark, features} for every way out this
+    observer can see, each carrying what sight reaches past it and nothing
+    more (`_render_openings`, and `perception._visible_openings` for the
+    admission). A boundary belongs to the room's standing state exactly as
+    its furniture does, which is why it rides this percept rather than
+    becoming a kind of its own -- and why it joins the dedupe signature
+    below, so a door that opens is a room that CHANGED for this observer and
+    a door that stays shut is furniture.
     """
     if not room_id or not str(room_name or "").strip() \
             or str(room_name).strip().casefold() == "an unspecified area":
@@ -707,16 +717,35 @@ def environment_percept(room_id, room_name, room_notes="", light="",
     # the render and `observations_from_render` cannot disagree about it.
     room_notes = strip_engine_provenance(room_notes)
     light = str(light or "")
+    # Provenance stripped on the far side of a threshold for the same reason
+    # it is stripped for the room underfoot, and in the same place: a
+    # synthesised description can carry the reason it was synthesised, and
+    # that reason is bookkeeping rather than a property of the room.
+    ways = []
+    for way in openings or ():
+        if not isinstance(way, dict) or not str(way.get("desc") or "").strip():
+            continue
+        way = dict(way)
+        way["room_notes"] = strip_engine_provenance(way.get("room_notes"))
+        ways.append(way)
     data = {"room_id": room_id, "room_name": room_name,
             "room_notes": room_notes or "", "light": light}
     if rows:
         data["features"] = rows
+    if ways:
+        data["openings"] = ways
     # The visible set is part of the CONTENT: turning to face the hearth
     # changes what this observer has of the room, and the ledger must read
     # that as the room changed for them, not as the same fact said again.
     feature_sig = "|".join(
         f"{r['desc']}:{r['tier']}:{r['side'] or ''}:{int(r['peripheral'])}"
         for r in rows)
+    opening_sig = "|".join(
+        "%s>%s:%d:%s" % (w["desc"], w.get("room_name") or "",
+                         int(bool(w.get("dark"))),
+                         ",".join(str((f or {}).get("desc") or "")
+                                  for f in (w.get("features") or ())))
+        for w in ways)
     return Percept(
         kind="environment", channel="sight",
         data=data,
@@ -724,7 +753,8 @@ def environment_percept(room_id, room_name, room_notes="", light="",
         dedupe_key=standing_key(
             "env", (room_id,),
             (room_name, room_notes, light)
-            + ((feature_sig,) if rows else ())),
+            + ((feature_sig,) if rows else ())
+            + ((opening_sig,) if ways else ())),
     )
 
 
@@ -2571,16 +2601,24 @@ _POSE_BARE_DETERMINERS = frozenset(
     _ENGLISH_COMPOSITOR.get("pose_bare_determiners") or ())
 
 
-def _render_features(rows):
-    """The furniture this observer's eyes reach, as one sentence a person
-    would say -- near to far, each thing by where it lies. NEVER the grid:
-    no cell, no fraction, no degree, no sector name reaches the page; a
-    thing is close by, across the room, on your left, or at the edge of
-    sight, which is the whole vocabulary a body has for it."""
+def _feature_items(rows, *, placed=True):
+    """The furniture rows as rendered noun phrases, near to far.
+
+    `placed` is False for furniture in ANOTHER room, seen through an opening.
+    The whole distance vocabulary here -- close by, across the room, at the
+    edge of sight -- is measured WITHIN one room, so spending it on the far
+    side of a threshold states a distance nobody measured: "across the room"
+    about a thing that is across a different room. The things are named and
+    the distance is simply not claimed, which is what the observer actually
+    has.
+    """
     items = []
     for row in rows or ():
         desc = str((row or {}).get("desc") or "").strip()
         if not desc:
+            continue
+        if not placed:
+            items.append(desc)
             continue
         if row.get("peripheral"):
             items.append(_en("feature_glimpse", desc=desc))
@@ -2591,9 +2629,69 @@ def _render_features(rows):
             else ""
         place = " ".join(part for part in (tier, where) if part)
         items.append(_en("feature_item", desc=desc, place=place).strip())
+    return items
+
+
+def _render_features(rows):
+    """The furniture this observer's eyes reach, as one sentence a person
+    would say -- near to far, each thing by where it lies. NEVER the grid:
+    no cell, no fraction, no degree, no sector name reaches the page; a
+    thing is close by, across the room, on your left, or at the edge of
+    sight, which is the whole vocabulary a body has for it."""
+    items = _feature_items(rows)
     if not items:
         return ""
     return _en("features", items=_join_clauses(items))
+
+
+def _render_openings(openings):
+    """Every boundary of this room the observer can see, and what sight
+    reaches past it.
+
+    THE CLASS: a way out is a fact about the room, and what an opening
+    admits is a fact about the opening. The engine had neither. Door
+    pseudo-anchors are minted for every edge (`spatial_geometry`) and then
+    dropped from the furniture list as `implicit` on the stated grounds that
+    "the exits digest already carries them" -- but that digest
+    (`director._egocentric_exits`) is built for the Director and reaches no
+    observer, so the doorway was minted and discarded and no view in this
+    engine had ever named one. `presence_percepts` meanwhile grew a
+    cross-room tier for BODIES, because an interviewer was receiving the cell
+    and not the woman in it; the same subtraction was never lifted for the
+    PLACE, so a mind could see a person through a door and never the room
+    they stood in.
+
+    SUBTRACTS IN THREE PLACES, and the order matters. A boundary the
+    observer's own cone or line does not reach never arrives at all. A
+    boundary sight does not cross (a shut door, a wall) arrives as itself and
+    NAMES NOTHING BEYOND IT -- naming the room behind a closed door would be
+    the leak this whole layer has to avoid. And a room beyond that is dark
+    arrives as darkness, because you see what is lit.
+    """
+    parts = []
+    for opening in openings or ():
+        desc = str((opening or {}).get("desc") or "").strip()
+        if not desc:
+            continue
+        state = str(opening.get("state") or "")
+        room = str(opening.get("room_name") or "").strip()
+        if state == "blind":
+            parts.append(_cap(_en("opening_closed", opening=desc)))
+            continue
+        if state == "dark":
+            parts.append(_cap(_en("opening_dark", opening=desc)))
+            continue
+        if state != "seen" or not room:
+            parts.append(_cap(_en("opening_bare", opening=desc)))
+            continue
+        parts.append(_cap(_en("opening_seen", opening=desc, room=room)))
+        notes = str(opening.get("room_notes") or "").strip()
+        if notes:
+            parts.append(notes if notes[-1:] in ".!?" else notes + ".")
+        items = _feature_items(opening.get("features"), placed=False)
+        if items:
+            parts.append(_en("opening_features", items=_join_clauses(items)))
+    return " ".join(parts)
 
 
 def _render_standing(p):
@@ -2609,6 +2707,9 @@ def _render_standing(p):
         sentence = _render_features(p.data.get("features"))
         if sentence:
             parts.append(sentence)
+        ways = _render_openings(p.data.get("openings"))
+        if ways:
+            parts.append(ways)
         light = str(p.data.get("light") or "").casefold()
         if light in ("dim", "low"):
             parts.append(_en("light_dim"))
