@@ -146,6 +146,11 @@ they answer different questions about it:
   decides whether a value is authored or configured, why a package operation
   writing the world key cannot work, and the overlay this codebase already
   reaches for whenever two authors share one value.
+- [`DESIGN_ROOM_REGIONS.md`](design/DESIGN_ROOM_REGIONS.md) — reading the world
+  by region rather than by room (2026-09-04): where the Planner's ingest cost
+  actually is (the planned set, not the live scene), why the grouping already
+  exists in `room_registry`, and the computed/authored split that keeps it from
+  becoming a second ledger.
 - [`DESIGN_STORY_PLANNER_AND_DRAMATURGE.md`](design/DESIGN_STORY_PLANNER_AND_DRAMATURGE.md)
   — design draft for one cross-system Writers' Room agent set: the Story
   Planner and Dramaturge share broad authorial sway, while a narrow Charter
