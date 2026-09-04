@@ -6350,16 +6350,38 @@ And by how old the disputed row was: 34 of 41 were disputed within 2 beats of
 being formed. Even the seven long-gap cases -- +11, +21, +43, +86 beats --
 fire on `current:` events. So what produces a dispute in play is A PRESENT
 PERCEPTION CONTRADICTING A HELD BELIEF, not two memory rows arriving together.
-The co-presence reading was measured on synthetic banks and is not what the
-live corpus shows doing the work.
+That is a statement about which occasions have ARRIVED, not about which
+mechanism works: the first open item below is why the corpus cannot yet offer
+the other one.
 
-- **The co-presence occasion is built and effectively unexercised.**
-  `schedule_memory_tension_pass` and `resurfaced_without_asking` shipped, and
-  the grounding was widened specifically to admit "the later memory that
-  overturned the belief" because characters cited one 15 times in 18 on the
-  synthetic bank. Live, that lane accounts for 1 dispute in 41. Whether it is
-  mistuned, rarely triggered, or simply redundant against the present-beat
-  route is unmeasured, and worth knowing before anything else is built on it.
+And the rate itself is right, not low. On the denominator that has
+opportunities -- character results that could have carried one --
+`memory_disputes` fires **1.81% (36/1987)**, against the `0 of 178` this entry
+was written on. A mind that re-read its own memories often would be unstable
+rather than perceptive; rare is the correct shape for this, and what matters
+is that it is no longer zero.
+
+- **The co-presence occasion has had almost no chances, and 1-in-41 is the
+  wrong denominator for it.** `schedule_memory_tension_pass` and
+  `resurfaced_without_asking` shipped, and the grounding was widened to admit
+  "the later memory that overturned the belief" because characters cited one
+  15 times in 18 on the synthetic bank -- where a belief was planted and its
+  correction arrived **60 to 400 beats later**. The corpus does not reach
+  that. Median story is **26 turns**; the longest ever played is 171; **none
+  has reached 200**. Since the 2026-08-20 landing there are 1,539 turns across
+  36 chats and the longest single horizon is 120. The upper half of the range
+  this lane was designed for has never occurred once.
+
+  So measuring it against all disputes is exactly the mistake `fire_rates.py`
+  exists to prevent (`Design.md`, "Which mechanisms actually fire"): a
+  mechanism with no opportunities reports `no chances`, never 0%. What the
+  present-beat route being 39 of 41 shows is that the SHORT-horizon
+  contradiction is common and the long-horizon one is not yet reachable --
+  not that the built lane is mistuned. Nothing should be enriched or removed
+  here until a story runs long enough to give it chances.
+
+  Two things would settle it, and neither is code: a story past ~200 beats,
+  and the same fire-rate read taken again afterwards.
 - **A mind has no record of HAVING pondered.** `memory_ponder` is popped when
   consumed and no row is minted, so a character that has asked itself the same
   question five times cannot notice. Deliberately not built: a row per ponder
