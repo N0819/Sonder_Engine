@@ -1846,6 +1846,38 @@ def track_background_presences(ctx, nonce, *, prepared=None):
             ctx.add_warning(f"rendered surface not settled: {exc}")
     # ...and onto an AUTHORED plan the floor bound (`world.planned_entities.
     # settle_rendered_plans`), by the same once-only rule.
+    #
+    # A PLAN IS NOT ALWAYS A PERSON. `PLAN_KINDS` is (person, thing, creature),
+    # but every row above was gathered inside the background-PRESENCE loop,
+    # which `continue`s on `_is_inert_presence_candidate` -- and "vehicle",
+    # "object", "item" and thirty more are inert by definition there, rightly:
+    # a shed utility sash once got three turns of dialogue as a housekeeper.
+    # The consequence was that two thirds of the plan kinds could never settle
+    # at all. A thing bound to a plan stayed `rendered: False` for the life of
+    # the story, so `plans_in_view` went on offering it to the Director every
+    # time anyone entered the room the plan named -- an invitation to mint a
+    # SECOND one beside the first. Measured live (chat 114): the TARDIS was
+    # planned for the hibiscus garden, rendered onto the beach with `plan_ref`
+    # bound at beat 9, and the plan still read `where: garden`, unrendered,
+    # with a look describing the coral-stone garden wall it is not standing
+    # against.
+    #
+    # Gathered from the beat's own entity diff rather than from the presence
+    # sketches, because the binding lives on the entity and has nothing to do
+    # with whether the thing could speak.
+    _settled_plans = {r["plan"] for r in plan_renders}
+    for _entities, _ in entity_sources:
+        for _eid, _edef in _entities.items():
+            if not isinstance(_edef, dict):
+                continue
+            _ref = _edef.get("plan_ref")
+            _uid = str(_ref.get("uid") or "") if isinstance(_ref, dict) else ""
+            _desc = str(_edef.get("description") or "").strip()
+            if not _uid or not _desc or _uid in _settled_plans:
+                continue
+            _settled_plans.add(_uid)
+            plan_renders.append({"plan": _uid, "entity_id": str(_eid),
+                                 "render": _desc, "turn": turn_idx})
     if plan_renders:
         try:
             from world.planned_entities import settle_rendered_plans
