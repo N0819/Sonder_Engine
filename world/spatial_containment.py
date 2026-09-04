@@ -473,6 +473,26 @@ def containment_hides(mode) -> bool:
     return str(mode or "").strip().casefold() not in _OPEN_CONTAINMENT_MODES
 
 
+def _interior_is_open_to_sight(scene: dict, room_id) -> bool:
+    """Does any way out of this interior let sight through.
+
+    `membrane` and `closed_door` do not; `open`, `open_door`, a window or a
+    grille do. An enclosure you can be plainly seen through is not hiding
+    anybody, whatever it is made of.
+    """
+    from world.spatial_barriers import _SIGHT_BARRIERS
+
+    room = ((scene or {}).get("rooms") or {}).get(room_id)
+    if not isinstance(room, dict):
+        return False
+    for edge in room.get("adjacent") or ():
+        if not isinstance(edge, dict) or not edge.get("to"):
+            continue
+        if normalize_barrier(edge.get("barrier")) in _SIGHT_BARRIERS:
+            return True
+    return False
+
+
 def _body_interior_holder(scene: dict, name: str):
     """The body whose INSIDE `name` is currently standing in, if any.
 
@@ -575,6 +595,32 @@ def _hiding_holders(scene: dict, name: str) -> list:
             holder = record.get("in")
         else:
             holder = _body_interior_holder(scene, current)
+            # THE ROOM FORM'S EQUIVALENT OF `containment_hides(mode)`. Being
+            # inside something and being HIDDEN by it are two facts, and only
+            # the first is structural: `parent_entity` says where you are, the
+            # barrier says whether you can be seen. A body's interior is joined
+            # to the world by `membrane` and hides; a lift car standing with its
+            # doors open is joined by `open_door` and hides nobody. Walk on
+            # through it either way, exactly as a non-hiding carry mode does --
+            # its own holder may still be an enclosure.
+            #
+            # Both halves matter and were confused once each. Treating every
+            # parented room as hiding sealed an ordinary personnel elevator
+            # (chat 115 t1: two people one open door apart, neither able to see
+            # the other, a shout delivered over the site PA). Treating a room
+            # you can see out of as no interior AT ALL would undo the other
+            # half -- an occupant of a TARDIS with its doors open is still
+            # inside it, and must still not be shown the police box's own
+            # exterior (chat 58 t38, `test_interior_hides_its_own_exterior`).
+            if holder and _interior_is_open_to_sight(
+                    scene, _ci_get((scene or {}).get("positions") or {},
+                                   current)):
+                key = str(holder).strip().casefold()
+                if key in seen:
+                    break
+                seen.add(key)
+                current = holder
+                continue
         if not holder:
             break
         key = str(holder).strip().casefold()

@@ -320,8 +320,27 @@ def comms_link(scene, speaker_room, observer_room, *,
         # people in one room hear each other directly, and saying they heard it
         # "over the radio" would put a device between them that the beat does
         # not need -- and would tell a mind its neighbour was elsewhere.
-        if speaker_room and observer_room and speaker_room == observer_room:
-            continue
+        #
+        # THE SAME IS TRUE THROUGH AN OPEN DOOR, and the rule was written for
+        # one room when it is really about audibility. Measured live (chat 115
+        # turn 1): a site PA covered a corridor and the lift car opening off
+        # it, and a shout from the car -- plainly audible across the threshold
+        # -- was delivered to the listener four feet away as "over Site-17
+        # Emergency PA". The engine already answers "does the voice get there
+        # by itself": ask it, rather than asking the narrower question of
+        # whether the two rooms are one.
+        #
+        # `normal` is the reference volume on purpose. A channel that is
+        # genuinely carrying (a held handset, a broadcast into a sealed room)
+        # is one the barrier rules score below `full` anyway, so this only
+        # ever suppresses the case where an ordinary speaking voice already
+        # arrives whole.
+        if speaker_room and observer_room:
+            if speaker_room == observer_room:
+                continue
+            if hear_level(spatial_rel(scene, observer_room, speaker_room),
+                          "normal") == "full":
+                continue
         return {"id": str(channel_id), **channel}
     return None
 
