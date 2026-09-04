@@ -3,6 +3,21 @@
 **Status:** argument, not built. Written 2026-09-04, after measuring what the
 Story Planner actually pays to look at a world.
 
+*Update, 2026-09-04, later the same day.* The two-tier read landed, but keyed
+by DISTANCE rather than by region: `story/room_slice.py` gives `inspect_rooms`
+an index of every room the story knows (live, planned, retired; holder; hops
+from the cast) plus the full slice of every room within `FRONTIER_DEPTH_HOPS`,
+and `room_ids` opens any room by id. Measured on the same chat 114: 12,109
+characters flat (13,076 after the old cap) became 7,815 -- 5,474 of index for
+51 rows and 2,284 of neighbourhood for 3 rooms -- under the cap with nothing
+dropped. What this note argues for and is still unbuilt is the grouping BY
+STRUCTURE: the index is O(rooms) at ~107 characters a row, so a story with
+several hundred planned rooms will start losing the farthest index rows to the
+cap, which is the point at which `inspect_regions` (O(regions)) earns its place
+on top of the index rather than instead of it. §7's build order stands; item 3
+becomes "a `region` argument on `inspect_rooms`, filtering the index and the
+slices alike".
+
 ## 1. Where the cost actually is
 
 Measured against the owner's database, not estimated:

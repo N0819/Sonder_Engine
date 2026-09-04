@@ -32,9 +32,12 @@ import json
 
 from story.plot_packages import operation_shape_text
 from story.room_research import tool_entries as _research_tool_entries
+from story.room_slice import containment as _containment
+from story.room_slice import read_scene as _scene
 
-#: Result ceiling, in characters of JSON; past it the result is truncated
-#: with a `truncated` marker rather than a model being handed a transcript.
+#: Result ceiling, in characters of JSON; past it trailing items are
+#: dropped until the result fits (`fit_result`), and the result says how many
+#: -- valid JSON, never a transcript, never longer than what it cut.
 TOOL_RESULT_CHARS = 12_000
 #: `search_lore` k ceiling; the default is the engine's own.
 SEARCH_K_CAP = 12
@@ -163,22 +166,6 @@ def _t_scan_lore(cid, frame_id, *, book_id=None, category=None, cursor=0,
             "next_cursor": cursor + page if len(rows) > page else None}
 
 
-def _scene(cid):
-    from core.db import q
-    from story.scene import get_scene
-    chat = q("SELECT * FROM chats WHERE id=?", (cid,), one=True)
-    return get_scene(cid, chat) or {}
-
-
-def _containment(scene):
-    """``{room_id: holder}`` for every room that is the inside of a body
-    (`parent_entity`). Such a room is a fact about the holder, never a
-    place the Planner plans, routes through, or reads as a gap."""
-    return {str(r): str(room.get("parent_entity"))
-            for r, room in ((scene or {}).get("rooms") or {}).items()
-            if isinstance(room, dict) and room.get("parent_entity")}
-
-
 def _t_inspect_structures(cid, frame_id):
     from core.db import wget_for_frame
     from world.structure import STRUCTURES_KEY, normalize_structures, planned_room_ids
@@ -189,108 +176,55 @@ def _t_inspect_structures(cid, frame_id):
     return {"structures": stored["items"], "planned_rooms": planned}
 
 
-def _t_inspect_rooms(cid, frame_id, *, room_ids=None, include_planned=True):
-    from world.structure import planned_context, planned_room_ids
+def _t_inspect_rooms(cid, frame_id, *, room_ids=None):
+    """The map and the neighbourhood, from ONE reader (`story/room_slice.py`).
+
+    With no ``room_ids``: ``index`` is every room the story knows -- live,
+    planned or retired, with its holder and its distance in hops from the
+    cast -- and ``rooms`` is the slice of every room within
+    `room_frontier.FRONTIER_DEPTH_HOPS` of the cast, planned stubs included.
+    Everything farther is index-only and opened by id. With ``room_ids``:
+    the slices of exactly those rooms, whatever their status.
+
+    Why the split, measured on chat 114 (49 planned rooms): the flat read
+    was 12,109 characters, over the cap, and the wrapper then handed back
+    13,076 characters of cut JSON encoded as a string. And why one reader:
+    this tool used to file a room carrying `parent_entity` under
+    `containment` while the frontier reported the player standing in it
+    (chat 115, `room_elevator_interior`), and the Planner planned a second
+    lift car beside the one the cast was riding. The room a body stands in
+    is a room whatever holds it; the index says who holds it and counts its
+    hops through the holder's room.
+    """
+    from story.room_frontier import FRONTIER_DEPTH_HOPS
+    from story.room_slice import attire_summary, room_index, room_slices
+
+    def slices(ids):
+        # The slice carries each occupant's attire ledger whole, for a
+        # reader that renders a body; the tool carries the ledger's own
+        # summary (`attire_summary`), because the ledger alone put five
+        # rooms over the result cap.
+        rows = room_slices(cid, frame_id, ids, scene)
+        for row in rows:
+            for who in row["occupants"]:
+                who["attire"] = attire_summary(who["attire"])
+        return rows
+
     scene = _scene(cid)
-    rooms = scene.get("rooms") or {}
-    positions = scene.get("positions") or {}
-    occupants = {}
-    for who, room in positions.items():
-        occupants.setdefault(str(room), []).append(str(who))
-    # WHAT IS STANDING IN THE ROOM, not only WHO. `occupants` has always come
-    # from `positions`, which keys bodies; the scene's things were in no read
-    # this Room has -- no tool returned them and the reply payload carries no
-    # scene at all. So the Room could file a plan for a thing and then never
-    # see it again: it could not tell that one already stood somewhere, nor
-    # where the story had since moved it. Measured live (chat 114): asked to
-    # put the TARDIS somewhere, the Room placed it in the hibiscus garden at
-    # beat 6 -- correctly, on what it could see -- the Director stood the box
-    # on the beach at beat 9, and nothing here could ever report the
-    # divergence.
-    #
-    # A plan reference rides each row where the Director's identity floor
-    # bound one, because "is this the thing I planned, or another one?" is the
-    # question this read exists to answer.
-    # A thing is placed one of two ways and BOTH have to be read. `positions`
-    # keys some entities by id; a fixture or a landmark is instead an ANCHOR of
-    # the room it stands in, which is how the live TARDIS is placed -- entity
-    # `tardis` in `entities`, anchor `tardis` on the beach, and no position row
-    # at all. Reading only positions would have reported an empty shore.
-    from world.spatial import room_of
-
-    anchored = {}
-    for rid, room in rooms.items():
-        if not isinstance(room, dict):
-            continue
-        for aid in (room.get("anchors") or {}):
-            anchored.setdefault(str(aid), str(rid))
-    from llm.schemas import _ANIMATE_ENTITY_KINDS
-
-    things = {}
-    for eid, ent in (scene.get("entities") or {}).items():
-        if not isinstance(ent, dict):
-            continue
-        where = room_of(scene, str(eid)) or anchored.get(str(eid)) or ""
-        if not where:
-            continue
-        # A body is an occupant, not a thing, and a cast member routinely has
-        # BOTH a position row and a scene entity carrying the same display
-        # name -- reported in both lists it reads as two beings in one room.
-        label = str(ent.get("name") or eid).strip()
-        if str(ent.get("kind") or "").strip().casefold() in _ANIMATE_ENTITY_KINDS:
-            continue
-        if any(label.casefold() == str(who).strip().casefold()
-               for who in occupants.get(where, ())):
-            continue
-        row = {"id": str(eid), "name": label,
-               "kind": ent.get("kind") or ""}
-        plan = ent.get("plan_ref")
-        if isinstance(plan, dict) and plan.get("uid"):
-            row["plan_ref"] = str(plan["uid"])
-        things.setdefault(where, []).append(row)
-
-    wanted = {str(r) for r in (room_ids or ())}
-    out, containment = [], []
-    for rid, room in rooms.items():
-        if wanted and str(rid) not in wanted:
-            continue
-        room = room if isinstance(room, dict) else {}
-        if room.get("parent_entity"):
-            # THE INSIDE OF A BODY IS NOT A ROOM TO PLAN. The Planner may
-            # know somebody is contained -- that is a fact about the world
-            # -- but a room whose record carries `parent_entity` is where
-            # the world put a body, minted by the Director and living only
-            # while the containment does. Reported as containment on its
-            # holder, never as a room with exits (owner ruling, 2026-09-03).
-            holder = str(room["parent_entity"])
-            containment.append({
-                "inside": holder, "who": occupants.get(str(rid), []),
-                "holder_room": str(positions.get(holder) or ""),
-                "room_id": str(rid)})
-            continue
-        out.append({
-            "id": str(rid), "name": room.get("name"),
-            "description": _excerpt(room.get("desc") or room.get("description")),
-            "exits": [{"to": e.get("to"), "barrier": e.get("barrier")}
-                      for e in (room.get("adjacent") or []) if isinstance(e, dict)],
-            "occupants": occupants.get(str(rid), []),
-            "things": things.get(str(rid), []),
-            "planned_stub": bool(room.get("planned")),
-        })
-    planned = []
-    if include_planned:
-        for rid in sorted(planned_room_ids(cid)):
-            if wanted and rid not in wanted:
-                continue
-            if rid in rooms:
-                continue
-            brief = planned_context(cid, rid) or {}
-            planned.append({"id": rid, "name": brief.get("name"),
-                            "purpose": brief.get("purpose"),
-                            "exits": brief.get("adjacent") or []})
-    return {"location": scene.get("location"), "rooms": out,
-            "planned_only": planned,
-            **({"containment": containment} if containment else {})}
+    if room_ids:
+        wanted = [str(r) for r in room_ids]
+        rows = slices(wanted)
+        known = {r["id"] for r in rows}
+        out = {"location": scene.get("location"), "rooms": rows}
+        unknown = [r for r in wanted if r not in known]
+        if unknown:
+            out["unknown"] = unknown
+        return out
+    index = room_index(cid, frame_id, scene)
+    near = [row["id"] for row in index
+            if row["hops"] is not None and row["hops"] <= FRONTIER_DEPTH_HOPS]
+    return {"location": scene.get("location"), "index": index,
+            "rooms": slices(near)}
 
 
 def _t_inspect_route(cid, frame_id, *, from_room, to_room):
@@ -308,14 +242,29 @@ def _t_inspect_route(cid, frame_id, *, from_room, to_room):
         for other in others:
             graph.setdefault(rid, set()).add(other)
             graph.setdefault(other, set()).add(rid)
-    start, goal = str(from_room), str(to_room)
-    for end in (start, goal):
-        if end in contained:
-            raise ToolError("%r is the inside of %s, not a place a route "
-                            "reaches; where the world puts a body is the "
-                            "Director's" % (end, contained[end]))
+    origin, goal = str(from_room), str(to_room)
+    if goal in contained:
+        raise ToolError("%r is the inside of %s, not a place a route "
+                        "reaches; where the world puts a body is the "
+                        "Director's" % (goal, contained[goal]))
+    # A route may START inside a body -- the player riding a lift car is
+    # standing in a room whatever holds it -- and its first step is out,
+    # into the room the holder stands in (`room_slice.room_graph`). It may
+    # not pass through one or end in one.
+    prefix = []
+    start = origin
+    if origin in contained:
+        from story.room_slice import holder_room
+        start = holder_room(scene, contained[origin])
+        if not start:
+            raise ToolError("%r is the inside of %s, which the story places "
+                            "nowhere" % (origin, contained[origin]))
+        prefix = [origin]
     if start not in graph and start not in (scene.get("rooms") or {}):
         raise ToolError("room %r exists nowhere" % start)
+    if start == goal:
+        return {"from": origin, "to": goal, "hops": len(prefix),
+                "path": prefix + [goal]}
     frontier, seen, parent = [start], {start}, {}
     hops = 0
     while frontier and hops < ROUTE_HOPS_CAP:
@@ -330,12 +279,13 @@ def _t_inspect_route(cid, frame_id, *, from_room, to_room):
                     path = [goal]
                     while path[-1] != start:
                         path.append(parent[path[-1]])
-                    return {"from": start, "to": goal, "hops": len(path) - 1,
-                            "path": list(reversed(path))}
+                    path = prefix + list(reversed(path))
+                    return {"from": origin, "to": goal, "hops": len(path) - 1,
+                            "path": path}
                 nxt.append(other)
         frontier = nxt
         hops += 1
-    return {"from": start, "to": goal, "hops": None, "path": [],
+    return {"from": origin, "to": goal, "hops": None, "path": [],
             "reachable": sorted(seen)[:LIST_CAP_ROUTE]}
 
 
@@ -773,8 +723,8 @@ TOOLS = [
      "description": "The planted structures (settlements, buildings) and every planned room id the registry holds -- the town's own topology, which a beat may furnish and may not delete.",
      "args": _schema({}), "handler": _t_inspect_structures},
     {"name": "inspect_rooms",
-     "description": "The scene's live rooms (name, description excerpt, exits with barriers, who stands there) and the planned stubs nobody has entered yet. Pass room_ids to narrow.",
-     "args": _schema({"room_ids": _SL, "include_planned": _B}),
+     "description": "The map and the neighbourhood. With no arguments: `index` is every room the story knows -- live, planned (a stub nobody has entered) or retired (an id that is spent) -- with its holder when it is the inside of a body and its distance in hops from the cast; `rooms` is the full slice of every room within two hops (description, exits with barriers, who stands there and in what, what stands there, the plan's brief for a stub, and what the author layer already claims for it: planned entities, open needs, package operations). Everything farther is index-only: pass room_ids to open any rooms by id, whatever their status. The room a body stands in is a room whatever holds it.",
+     "args": _schema({"room_ids": _SL}),
      "handler": _t_inspect_rooms},
     {"name": "inspect_route",
      "description": "Whether one room can be walked to from another over passable edges and the plan's topology, and the shortest path if so. When unreachable, lists what IS reachable from the start.",
@@ -934,8 +884,45 @@ def run_tool(cid, name, args=None, *, frame_id=None, host=False,
         raise
     except ValueError as exc:
         return {"refused": str(exc)}
-    encoded = json.dumps(result, ensure_ascii=False, default=str)
-    if len(encoded) > TOOL_RESULT_CHARS:
-        return {"truncated": True, "chars": len(encoded),
-                "text": encoded[:TOOL_RESULT_CHARS]}
-    return result
+    return fit_result(result, TOOL_RESULT_CHARS)
+
+
+def _encoded_length(value):
+    return len(json.dumps(value, ensure_ascii=False, default=str))
+
+
+def fit_result(result, cap):
+    """The result under ``cap`` characters of JSON, as JSON.
+
+    Past the cap, trailing items are dropped from the result's top-level
+    lists -- the longest (by encoded size) first, one item at a time -- and
+    when no list has an item left, whole top-level keys, largest first. The
+    returned value carries ``truncated: true`` and ``dropped: <count>`` and
+    is never longer than the original. The old wrapper re-encoded the cut
+    JSON AS A STRING, so what it returned was both larger than the result it
+    was cutting (12,109 -> 13,076 characters on chat 114's room read) and
+    unparseable by the model it was cut for. A tool that orders its lists
+    nearest-first (`inspect_rooms`) therefore loses the farthest rooms.
+    """
+    if not isinstance(result, dict):
+        return result
+    original = _encoded_length(result)
+    if original <= cap:
+        return result
+    out = json.loads(json.dumps(result, ensure_ascii=False, default=str))
+    out["truncated"] = True
+    out["dropped"] = 0
+    while _encoded_length(out) > cap:
+        lists = [(k, _encoded_length(v)) for k, v in out.items()
+                 if isinstance(v, list) and v]
+        if lists:
+            key = max(lists, key=lambda kv: kv[1])[0]
+            out[key].pop()
+        else:
+            keys = [(k, _encoded_length(v)) for k, v in out.items()
+                    if k not in ("truncated", "dropped")]
+            if not keys:
+                break
+            out.pop(max(keys, key=lambda kv: kv[1])[0])
+        out["dropped"] += 1
+    return out
