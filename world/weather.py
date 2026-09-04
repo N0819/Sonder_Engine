@@ -303,6 +303,19 @@ def room_exposure(scene, room_id):
     rather than in places it should not.
     """
     room = (((scene or {}).get("rooms") or {}).get(room_id) or {})
+    # AN INSIDE IS ENCLOSED, AND THAT IS NOT THE AUTHOR'S CALL. A room whose
+    # record carries `parent_entity` is the inside of a body or a vehicle
+    # (`world/spatial_transit.py`), and the sky is not its ceiling however the
+    # field was filled in. This outranks the declared value because it is
+    # structural rather than descriptive: the weather cannot reach inside a
+    # thing, so there is nothing for an author to be right about. Measured
+    # live (chat 114): a TARDIS console room minted `exposure: "sheltered"`
+    # took the night sky for its ambient light, and `room_light` then darkened
+    # its declared `lit` to `dark` -- the inside of a lamplit time machine
+    # reading as pitch black at 1am because the field said the rain could
+    # half-reach it.
+    if str(room.get("parent_entity") or "").strip():
+        return "enclosed"
     declared = _pick(room.get("exposure"), EXPOSURES, "")
     if declared:
         return declared

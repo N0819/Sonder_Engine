@@ -369,6 +369,22 @@ class PipelineContext:
         declared = interp.get("movement") if isinstance(interp, dict) else None
         return canonical_movement(declared, self.world_context().get("movement"))
 
+    def movement_status(self):
+        """How the COMPILER classified this beat's destination: "known",
+        "planned", "contained", "unplanned", or "" when the beat declares
+        none (`agents.mapping.classify_movement`).
+
+        A second named reader beside `declared_movement` rather than a raw
+        row read at the call site, for the reason that one exists: the
+        destination is one fact and every stage must get it from one place.
+        `declared_movement` answers WHERE, this answers WHAT THE WORLD HAD --
+        and the two are asked together, by commit, when a room minted for an
+        inside has to be marked as one."""
+        compiled = self.world_context().get("movement")
+        if not isinstance(compiled, dict):
+            return ""
+        return str(compiled.get("status") or "")
+
     def get(self, key: str, default=None):
         if hasattr(self, key):
             val = getattr(self, key)

@@ -108,22 +108,51 @@ def is_contained_destination(target, scene):
     folded = normalize_room_id(str(target or ""))
     if not folded:
         return False
+    if contained_interior_holder(target, scene):
+        return True
+    # ...or the entity itself. `contained_interior_holder` answers "" here on
+    # purpose -- a body is not a room and has no parentage to stamp -- but the
+    # ROUTING answer is unchanged: a destination that is an entity is the
+    # Director's to mint, never a door the plan forgot.
+    for eid, entity in ((scene or {}).get("entities") or {}).items():
+        entity = entity if isinstance(entity, dict) else {}
+        if folded in ({normalize_room_id(str(eid)),
+                       normalize_room_id(str(entity.get("name") or ""))}
+                      - {""}):
+            return True
+    return False
+
+
+def contained_interior_holder(target, scene):
+    """The scene entity whose INSIDE ``target`` names, as an entity id, or "".
+
+    The same predicate `is_contained_destination` is the boolean of, kept as
+    one function so the routing decision and the room's parentage can never
+    disagree about which entity a destination belongs to. Returns "" when the
+    target names an entity itself rather than its inside: standing at a body
+    is not standing in one, and a room is what this answers about.
+    """
+    folded = normalize_room_id(str(target or ""))
+    if not folded:
+        return ""
     rooms = (scene or {}).get("rooms") or {}
     room = rooms.get(str(target))
     if isinstance(room, dict) and str(room.get("parent_entity") or "").strip():
-        return True
+        return str(room["parent_entity"]).strip()
+    holder = ""
     for eid, entity in ((scene or {}).get("entities") or {}).items():
         entity = entity if isinstance(entity, dict) else {}
         spellings = {normalize_room_id(str(eid)),
                      normalize_room_id(str(entity.get("name") or ""))} - {""}
         if folded in spellings:
-            return True
+            # The entity itself, not a place inside it.
+            return ""
         if any(folded.startswith(sp + "_") for sp in spellings):
-            return True
+            holder = holder or str(eid)
         for rid in entity.get("interior_rooms") or ():
             if normalize_room_id(str(rid)) == folded:
-                return True
-    return False
+                return str(eid)
+    return holder
 
 
 def classify_movement(interp, scene, *, planned_for):
