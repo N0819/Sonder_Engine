@@ -929,38 +929,6 @@ investigation found and did not close.
   story that already stands in this shape, where a surface contact between a
   body and the body it is inside now survives room hygiene instead of being
   severed. The follow-ons below are what that landing did not close.
-- **The two spellings of "this room is that entity's interior" agree only for
-  bodies.** `sync_entity_interior_rooms` derives `entities[eid].interior_rooms`
-  from `rooms[rid].parent_entity`, and is scoped to bodies on purpose. The
-  index is not only an index: `agents/director_scopes.py` gates the destruction
-  specialist on it and `persist/commit_scene_state.py` folds it into the set of
-  rooms the mapping stage may not prune. Measured read-only against the live
-  corpus while the landing was being repaired: 53 rooms carry `parent_entity`,
-  15 of them across 13 chats are NOT indexed on their entity, and every one of
-  those 15 belongs to a non-body -- lift cars, turbolifts, a ship, a police
-  box. Deriving them would switch a Director specialist on in five stories and
-  make six stories' interiors permanently un-prunable, untested and unasked
-  for. The two spellings still ought to agree everywhere; making them agree is
-  a change with a blast radius, and it needs its own landing with those two
-  readers tested rather than a free ride on a body-interior fix. WIDENED
-  2026-09-04: commit now stamps `parent_entity` on a room minted for a
-  destination the compiler classified `contained` (`commit_scene_state`;
-  chat 114's TARDIS console room was minted furnished and unparented, so
-  `rewrite_dock_edges` could never move its doorway). The population of
-  non-body interiors carrying the field therefore grows while the index they
-  are still missing from does not.
-- **`planned_context` answers None whenever a query matches two rows, and
-  its match is a SUBSTRING test.** It compares the folded query against every
-  live planned room's uid and name with `name_key not in folded and uid_key
-  not in folded`, then returns `rows[0] if len(rows) == 1 else None` -- so a
-  room called `parking` makes `guest_parking_lot` ambiguous and both resolve
-  to nothing. Measured on the live chat 114 register: 30-odd rooms of the
-  Maedomari district return None, which is the brief the Director is handed
-  when the beat walks into one. `planned_topology` returns the same rows by
-  id and is unaffected; `inspect_contradictions` was moved onto it (2026-09-04)
-  and no longer depends on this, but the Director's own entry brief still
-  does. The fix is an exact-match tier before the substring tier, plus an
-  ambiguity that prefers a uid hit over a name hit rather than refusing both.
 - **A composed view carries a room's NAME and NOTES but never its `desc`.**
   `composer.environment_percept` takes `room_notes` and no description, so
   the authored sentence that says what a place looks like reaches the
