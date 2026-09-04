@@ -51,51 +51,49 @@ def _save(cid, frame_id, row):
 
 
 def _player_room(cid, scene):
+    """The room the player STANDS IN -- whatever holds it. A room carrying
+    `parent_entity` is where the world put the player's body, and it is the
+    same room `room_slice.room_index` lists with its holder; the two reads
+    must name one room or the Planner plans against a phantom (chat 115:
+    the frontier said `room_elevator_interior`, the room tool listed no
+    such room, and a second lift car was planned beside the one the cast
+    was riding)."""
     from core.db import q
     from story.character_schema import persona_name
     from story.scene import persona_of
+    from world.spatial import room_of
     chat = q("SELECT * FROM chats WHERE id=?", (cid,), one=True)
     if not chat:
         return None
     name = persona_name(persona_of(dict(chat)))
     positions = scene.get("positions") or {}
-    room = positions.get(name)
+    room = positions.get(name) or room_of(scene, name)
     return str(room) if room else None
 
 
 def rooms_ahead(cid, scene, start, depth=FRONTIER_DEPTH_HOPS):
     """Room ids within ``depth`` hops of ``start`` over passable edges plus
     the plan's topology, and which of them are still the plan's unfurnished
-    stubs. Returns ``(reachable, stubs)``."""
-    from world.spatial import passable_neighbors
+    stubs. Returns ``(reachable, stubs)``.
+
+    The graph and the count are `room_slice.room_hops`, the same ones the
+    room index reports, so the frontier and the tool agree hop for hop. A
+    start that is the inside of a body counts OUT through the room its
+    holder stands in (one hop); no other inside is ahead of the player or a
+    frontier gap, because where the world puts a body is the Director's and
+    transient (owner ruling, 2026-09-03) -- so contained rooms are counted
+    through and never listed."""
+    from story.room_slice import containment, room_hops
     from world.structure import is_planned_stub, planned_topology
 
-    graph = {str(k): {str(v) for v in vs}
-             for k, vs in passable_neighbors(scene).items()}
-    topology = planned_topology(cid)
-    planned = set(topology)
-    for rid, others in topology.items():
-        for other in others:
-            graph.setdefault(rid, set()).add(other)
-            graph.setdefault(other, set()).add(rid)
     if not start:
         return [], []
-    seen, frontier = {start}, [start]
-    for _hop in range(max(0, int(depth))):
-        nxt = []
-        for node in frontier:
-            for other in sorted(graph.get(node, ())):
-                if other not in seen:
-                    seen.add(other)
-                    nxt.append(other)
-        frontier = nxt
+    hops = room_hops(cid, scene, [str(start)])
     rooms = scene.get("rooms") or {}
-    # The inside of a body (`parent_entity`) is not a place ahead of the
-    # player and never a frontier gap: where the world puts a body is the
-    # Director's, and it is transient (owner ruling, 2026-09-03).
-    contained = {str(r) for r, room in rooms.items()
-                 if isinstance(room, dict) and room.get("parent_entity")}
-    reachable = sorted((seen - {start}) - contained)
+    contained = set(containment(scene))
+    planned = set(planned_topology(cid))
+    reachable = sorted(rid for rid, n in hops.items()
+                       if 0 < n <= max(0, int(depth)) and rid not in contained)
     stubs = [rid for rid in reachable
              if (rid in rooms and is_planned_stub(scene, rid))
              or (rid not in rooms and rid in planned)]
@@ -114,6 +112,8 @@ def frontier_report(cid, frame_id=None, scene=None):
         scene = (get_scene(cid, chat) if chat else {}) or {}
     start = _player_room(cid, scene)
     reachable, stubs = rooms_ahead(cid, scene, start)
+    from story.room_slice import containment
+    holder = containment(scene).get(start) if start else None
     plans = [p for p in planned_entities(cid, frame_id).values()
              if not p.get("rendered") and p.get("name")]
     identities = [p["name"] for p in plans if p["kind"] == "person"]
@@ -134,6 +134,9 @@ def frontier_report(cid, frame_id=None, scene=None):
         by_kind[need["kind"]] = by_kind.get(need["kind"], 0) + 1
     return {
         "player_room": start,
+        # The body the player's room is the inside of, when it is one: the
+        # room stays the room they stand in, and this says what holds it.
+        "player_holder": holder,
         "depth_hops": FRONTIER_DEPTH_HOPS,
         "reachable": reachable,
         "rooms_ahead": stubs,

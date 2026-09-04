@@ -108,10 +108,11 @@
 | `story/provenance_text.py` | 132 |  | — |
 | `story/room_bible.py` | 421 |  | `core.db` |
 | `story/room_conversation.py` | 485 |  | `core.db` |
-| `story/room_frontier.py` | 230 |  | `core.db` |
+| `story/room_frontier.py` | 233 |  | `core.db` |
 | `story/room_proposals.py` | 264 |  | `core.db` |
 | `story/room_research.py` | 371 |  | `core.db` |
-| `story/room_tools.py` | 921 |  | `story.plot_packages`, `story.room_research` |
+| `story/room_slice.py` | 448 |  | — |
+| `story/room_tools.py` | 908 |  | `story.plot_packages`, `story.room_research`, `story.room_slice` |
 | `story/scene.py` | 2746 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `core.db`, `story`, `story.attire`, `story.character_schema`, `world.day_cycle`, `world.spatial` |
 | `web/__init__.py` | 6 |  | — |
 | `web/app.py` | 6813 | FastAPI application assembly, resource CRUD, turn control, and streaming endpoints. | `agents`, `agents.story_planner`, `core`, `core.db`, `core.frames`, `core.paths`, `dressing.ambience`, `dressing.backdrops`, `llm`, `llm.prompts`, `llm.providers`, `mind.memory`, `persist.chat_archive`, `persist.chat_delete`, `persist.checkpoints`, `persist.commit`, `story`, `story.character_schema`, `story.dialogue_colors`, `story.importers`, `story.scene`, `web`, `web.auth_routes`, `web.room_routes`, `world`, `world.survival` |
@@ -1331,14 +1332,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `frontier_report()` | 105 | 42 lines |
-| `rooms_ahead()` | 66 | 37 lines |
-| `record_spend()` | 186 | 14 lines |
-| `fills_this_hour()` | 217 | 14 lines |
-| `spend_this_hour()` | 202 | 13 lines |
-| `_player_room()` | 53 | 11 lines |
-| `record_fill()` | 168 | 11 lines |
-| `record_measure()` | 149 | 8 lines |
+| `frontier_report()` | 103 | 47 lines |
+| `rooms_ahead()` | 74 | 27 lines |
+| `_player_room()` | 53 | 19 lines |
+| `record_spend()` | 189 | 14 lines |
+| `fills_this_hour()` | 220 | 14 lines |
+| `spend_this_hour()` | 205 | 13 lines |
+| `record_fill()` | 171 | 11 lines |
+| `record_measure()` | 152 | 8 lines |
 
 ### `story/room_proposals.py`
 
@@ -1366,18 +1367,31 @@
 | `_load()` | 108 | 8 lines |
 | `_with_templates()` | 330 | 8 lines |
 
+### `story/room_slice.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `room_slices()` | 365 | 63 lines |
+| `_plan_here()` | 330 | 33 lines |
+| `room_graph()` | 180 | 32 lines |
+| `_things_by_room()` | 284 | 26 lines |
+| `room_index()` | 255 | 23 lines |
+| `_registry()` | 145 | 19 lines |
+| `cast_rooms()` | 234 | 19 lines |
+| `room_hops()` | 214 | 18 lines |
+
 ### `story/room_tools.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_t_inspect_contradictions()` | 526 | 122 lines |
-| `_t_inspect_rooms()` | 186 | 102 lines |
-| `_t_inspect_config()` | 452 | 67 lines |
-| `_t_inspect_route()` | 290 | 44 lines |
-| `_t_scan_lore()` | 125 | 33 lines |
-| `_t_inspect_charters()` | 374 | 30 lines |
-| `run_tool()` | 892 | 30 lines |
-| `_t_inspect_reserved_identities()` | 339 | 26 lines |
+| `_t_inspect_contradictions()` | 476 | 122 lines |
+| `_t_inspect_config()` | 402 | 67 lines |
+| `_t_inspect_route()` | 224 | 60 lines |
+| `_t_inspect_rooms()` | 173 | 49 lines |
+| `fit_result()` | 874 | 35 lines |
+| `_t_scan_lore()` | 128 | 33 lines |
+| `_t_inspect_charters()` | 324 | 30 lines |
+| `_t_inspect_reserved_identities()` | 289 | 26 lines |
 
 ### `story/scene.py`
 
