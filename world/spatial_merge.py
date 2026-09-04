@@ -715,6 +715,25 @@ def _shield_standing_bearings(prior_rooms, incoming_rooms):
                 return normalize_bearing(e.get("dir"))
         return None
 
+    def _standing_siblings(room_id, to_id):
+        """{bearing: neighbour} for this room's OTHER edges whose bearing is
+        already settled -- present on both sides and opposite-consistent."""
+        room = prior_rooms.get(room_id)
+        if not isinstance(room, dict):
+            return {}
+        out = {}
+        for e in room.get("adjacent") or []:
+            if not isinstance(e, dict) or not e.get("to"):
+                continue
+            other = str(e["to"])
+            if other == str(to_id):
+                continue
+            fwd = normalize_bearing(e.get("dir"))
+            back = _edge_dir(prior_rooms, other, room_id)
+            if fwd and back and opposite_bearing(fwd) == back:
+                out[fwd] = other
+        return out
+
     out = {}
     for room_id, room in incoming_rooms.items():
         if not isinstance(room, dict) or not room.get("adjacent"):
@@ -736,6 +755,33 @@ def _shield_standing_bearings(prior_rooms, incoming_rooms):
                 if standing and new_dir != fwd:
                     recip = _edge_dir(incoming_rooms, to_id, room_id)
                     if recip != opposite_bearing(new_dir):
+                        edge = {k: v for k, v in edge.items() if k != "dir"}
+                        touched = True
+                elif not standing:
+                    # ...AND THE SAME HARM FROM A SIBLING, WHICH COSTS MORE.
+                    # `normalize_scene_bearings` resolves a same-bearing
+                    # collision by dropping `dir` from EVERY edge in it --
+                    # "dropped rather than guessed", which is right when both
+                    # claims arrive together and nothing chooses between them.
+                    # It is wrong when one of them was already settled: there
+                    # IS something to choose between them, and the newcomer
+                    # loses. Otherwise a room minted this beat annihilates the
+                    # geometry of a doorway that has been standing for the
+                    # whole story. Measured live (chat 114 turn 10): the
+                    # Director minted `tardis_console_room` off the beach as
+                    # `w` while the settled beach->terrace edge was also `w`,
+                    # and the collision rule took BOTH -- leaving a room whose
+                    # every edge was bearingless, which `_sight_neighbours`
+                    # then cannot place at all.
+                    #
+                    # A deliberate re-plan still gets through: the incumbent
+                    # is only defended while THIS diff leaves it alone. Move
+                    # the terrace in the same breath and the collision is
+                    # between two live claims again, which is the case the
+                    # drop rule was written for.
+                    held = _standing_siblings(room_id, to_id).get(new_dir)
+                    if held and _edge_dir(incoming_rooms, room_id, held) in (
+                            None, new_dir):
                         edge = {k: v for k, v in edge.items() if k != "dir"}
                         touched = True
             edges.append(edge)
