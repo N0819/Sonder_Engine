@@ -942,7 +942,38 @@ investigation found and did not close.
   make six stories' interiors permanently un-prunable, untested and unasked
   for. The two spellings still ought to agree everywhere; making them agree is
   a change with a blast radius, and it needs its own landing with those two
-  readers tested rather than a free ride on a body-interior fix.
+  readers tested rather than a free ride on a body-interior fix. WIDENED
+  2026-09-04: commit now stamps `parent_entity` on a room minted for a
+  destination the compiler classified `contained` (`commit_scene_state`;
+  chat 114's TARDIS console room was minted furnished and unparented, so
+  `rewrite_dock_edges` could never move its doorway). The population of
+  non-body interiors carrying the field therefore grows while the index they
+  are still missing from does not.
+- **`planned_context` answers None whenever a query matches two rows, and
+  its match is a SUBSTRING test.** It compares the folded query against every
+  live planned room's uid and name with `name_key not in folded and uid_key
+  not in folded`, then returns `rows[0] if len(rows) == 1 else None` -- so a
+  room called `parking` makes `guest_parking_lot` ambiguous and both resolve
+  to nothing. Measured on the live chat 114 register: 30-odd rooms of the
+  Maedomari district return None, which is the brief the Director is handed
+  when the beat walks into one. `planned_topology` returns the same rows by
+  id and is unaffected; `inspect_contradictions` was moved onto it (2026-09-04)
+  and no longer depends on this, but the Director's own entry brief still
+  does. The fix is an exact-match tier before the substring tier, plus an
+  ambiguity that prefers a uid hit over a name hit rather than refusing both.
+- **A composed view carries a room's NAME and NOTES but never its `desc`.**
+  `composer.environment_percept` takes `room_notes` and no description, so
+  the authored sentence that says what a place looks like reaches the
+  narrator (which reads the scene directly) and never a character agent.
+  Mostly invisible while a view only ever described the room underfoot --
+  the notes carry the orientation and the furniture layer carries the
+  things. It became visible with the opening percept (2026-09-04): a glance
+  through a doorway delivers the far room's name, notes, light and
+  cone-capped furniture, and the one field that would carry "impossibly
+  larger on the inside" is the one no view has. Whether `desc` should be
+  delivered at all is a real question -- it is authored prose about a place,
+  not a percept -- but it should be answered rather than left as an accident
+  of which fields the percept happens to take.
 - **A non-body inside a place-form interior is in no view.** `contents_of`
   answers the carry ledger for anything; `interior_occupants` answers the place
   form for BODIES only, because it feeds prose that says an occupant "goes
