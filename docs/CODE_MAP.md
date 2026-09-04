@@ -191,9 +191,9 @@
 | `world/spatial_routing.py` | 1098 |  | `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_light`, `world.spatial_orientation` |
 | `world/spatial_senses.py` | 1281 |  | `world.spatial_barriers`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_orientation`, `world.spatial_routing` |
 | `world/spatial_substance.py` | 1128 |  | `world.spatial_contacts`, `world.spatial_identity` |
-| `world/spatial_transit.py` | 517 |  | `world.spatial_barriers`, `world.spatial_identity` |
+| `world/spatial_transit.py` | 522 |  | `world.spatial_barriers`, `world.spatial_identity` |
 | `world/stimulation.py` | 239 |  | `story`, `world.spatial` |
-| `world/structure.py` | 723 |  | `world.charter_model`, `world.spatial` |
+| `world/structure.py` | 748 |  | `world.charter_model`, `world.spatial` |
 | `world/subjects.py` | 500 |  | `core.db`, `mind.canon_provenance`, `world.spatial` |
 | `world/survival.py` | 354 |  | `core.db` |
 | `world/weather.py` | 853 |  | `world.spatial` |
@@ -2324,13 +2324,13 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `apply_transit_dock_edges()` | 285 | 170 lines |
-| `sync_entity_interior_rooms()` | 108 | 60 lines |
-| `ambient_scope()` | 489 | 29 lines |
-| `infer_body_enclosures()` | 197 | 27 lines |
+| `apply_transit_dock_edges()` | 290 | 170 lines |
+| `sync_entity_interior_rooms()` | 108 | 65 lines |
+| `ambient_scope()` | 494 | 29 lines |
+| `infer_body_enclosures()` | 202 | 27 lines |
 | `_is_body_entity()` | 62 | 26 lines |
-| `_interior_entry_room()` | 170 | 25 lines |
-| `containment_chain()` | 469 | 19 lines |
+| `_interior_entry_room()` | 175 | 25 lines |
+| `containment_chain()` | 474 | 19 lines |
 | `_interior_rooms_of()` | 90 | 16 lines |
 
 ### `world/stimulation.py`
@@ -2346,14 +2346,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `prepare_frontier_expansion()` | 545 | 111 lines |
+| `prepare_frontier_expansion()` | 570 | 111 lines |
 | `mint_frontier()` | 133 | 64 lines |
+| `planned_context()` | 510 | 58 lines |
 | `planned_room_brief()` | 366 | 54 lines |
 | `materialize_planned_fringe()` | 240 | 45 lines |
 | `plant_structure()` | 199 | 39 lines |
-| `structure_warnings()` | 678 | 37 lines |
+| `structure_warnings()` | 703 | 37 lines |
 | `protect_planned_edges()` | 455 | 33 lines |
-| `planned_context()` | 510 | 33 lines |
 
 ### `world/subjects.py`
 
