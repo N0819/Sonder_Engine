@@ -755,7 +755,7 @@ def prepare_scene_commit(ctx):
     # the compiler classified `tardis_console_room` contained, the spatial
     # specialist minted a fully furnished room for it, and nothing wrote the
     # parentage -- so the inside of a vehicle committed as an ordinary room
-    # beside the beach. `spatial_transit.rewrite_dock_edges` indexes
+    # beside the beach. `spatial_transit.apply_transit_dock_edges` indexes
     # interiors by `parent_entity` alone, so that room's doorway could never
     # follow its holder: the box can fly anywhere and its doors still open
     # onto the same sand.

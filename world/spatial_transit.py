@@ -120,28 +120,35 @@ def sync_entity_interior_rooms(scene: dict) -> bool:
     interior nobody indexed therefore kept a see-through doorway, which is a
     leak outward: the room outside looked straight into the enclosure.
 
-    ADD-ONLY. A stale id in `interior_rooms` names a room that may simply be
-    absent this beat (retired, sealed away, not yet minted), and that list is
-    read as a protection set at commit -- pruning here would let one merge
-    unprotect a room another pass is about to restore. Idempotent; mutates.
+    EVERY HOLDER, since 2026-09-04. This was scoped to bodies for a month,
+    because a body's interior is the one that LEAKS when the index is missed
+    -- the enclosure default that makes flesh opaque reads this list and is
+    itself body-scoped -- while widening it was a behaviour change nobody had
+    asked for. Somebody has now asked, and the two readers that made it a
+    behaviour change were measured rather than feared:
 
-    SCOPED TO BODIES, which is the class the missing index actually harmed.
-    `interior_rooms` is not only an index: `agents/director_scopes` gates a
-    Director specialist on it and `persist/commit_scene_state` folds it into
-    the set of rooms the mapping stage may not prune. Filling it for an
-    entity whose interior nobody had indexed is therefore a behaviour change,
-    not a repair, and it must be one somebody asked for. Measured read-only
-    against the author's live corpus: 53 rooms carry `parent_entity`, 15 of
-    them across 13 chats were unindexed, and all 15 belong to non-bodies --
-    lift cars, turbolifts, a ship, a police box. Indexing those would have
-    switched a Director specialist on in five stories and made six stories'
-    interiors permanently un-prunable, silently. A body's interior is the one
-    that leaks when it is missed, because the enclosure default that makes
-    flesh opaque reads this list and is itself body-scoped; so this derives
-    exactly as far as that leak reaches, and every scene already on disk is
-    left byte-identical. The wider "both spellings of one fact should agree
-    for every entity" pass is a separate change with its own consequences
-    (docs/UNBUILT.md).
+    * `agents/director_scopes` gates the destruction specialist on this list
+      OR on a `kind` already in (vehicle, building, structure, ship, boat).
+      So every holder the widening reaches whose kind names it is ALREADY
+      through that gate and changes not at all; the delta is holders tagged
+      `object`. Re-measured on the live corpus: 15 rooms across 14 chats gain
+      an index, and the specialist newly switches on in exactly five stories
+      (23-27), all of them the same shelter elevator tagged `object`. The
+      original measurement predicted five and was right.
+    * `persist/commit_scene_state` folds the list into the rooms mapping may
+      not prune. That is the behaviour an interior WANTS: a room inside a
+      holder is not a stray the map should reclaim while the holder stands.
+
+    What the month of body-scoping cost is now visible: nothing indexes an
+    interior for a holder that is not flesh, so `apply_transit_dock_edges` could
+    move a body's inside and not a vehicle's. Chat 114's TARDIS console room
+    was minted with neither spelling and its doorway was welded to the beach.
+
+    ADD-ONLY still. A stale id in `interior_rooms` names a room that may
+    simply be absent this beat (retired, sealed away, not yet minted), and
+    that list is read as a protection set at commit -- pruning here would let
+    one merge unprotect a room another pass is about to restore. Idempotent;
+    mutates.
     """
     rooms = (scene or {}).get("rooms") or {}
     entities = (scene or {}).get("entities") or {}
@@ -153,8 +160,6 @@ def sync_entity_interior_rooms(scene: dict) -> bool:
             continue
         owned = _interior_rooms_of(scene, eid)
         if not owned:
-            continue
-        if not _is_body_entity(scene, eid, ent):
             continue
         listed = ent.get("interior_rooms")
         if not isinstance(listed, list):
