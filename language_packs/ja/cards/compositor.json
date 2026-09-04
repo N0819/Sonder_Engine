@@ -266,7 +266,12 @@
     "surface_with": "{feature}のある{label}",
     "surface_in": "{worn}をまとった{label}",
     "surface_summary_with": "{text}、{items}",
-    "surface_summary_wearing": "{text}、{items}を身につけている"
+    "surface_summary_wearing": "{text}、{items}を身につけている",
+    "opening_seen": "{opening}の向こうは{room}。",
+    "opening_features": "その奥に{items}が見える。",
+    "opening_closed": "{opening}は閉ざされている。",
+    "opening_dark": "{opening}の向こうは暗闇だけ。",
+    "opening_bare": "{opening}がある。"
   },
   "count_generic": {
     "1": "",
