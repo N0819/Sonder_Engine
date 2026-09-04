@@ -175,12 +175,12 @@
 | `world/planning_needs.py` | 346 |  | — |
 | `world/region_events.py` | 420 |  | — |
 | `world/routines.py` | 208 |  | — |
-| `world/spatial.py` | 242 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `llm.schemas`, `world.spatial_barriers`, `world.spatial_contact_migration`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_merge`, `world.spatial_orientation`, `world.spatial_prose`, `world.spatial_routing`, `world.spatial_senses`, `world.spatial_substance`, `world.spatial_transit` |
+| `world/spatial.py` | 243 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `llm.schemas`, `world.spatial_barriers`, `world.spatial_contact_migration`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_merge`, `world.spatial_orientation`, `world.spatial_prose`, `world.spatial_routing`, `world.spatial_senses`, `world.spatial_substance`, `world.spatial_transit` |
 | `world/spatial_barriers.py` | 666 |  | `world.spatial_orientation` |
 | `world/spatial_contact_migration.py` | 331 |  | `world.spatial_contacts`, `world.spatial_identity` |
 | `world/spatial_contacts.py` | 1864 |  | `world.spatial_containment`, `world.spatial_identity`, `world.spatial_transit` |
 | `world/spatial_containment.py` | 3026 |  | `world.spatial_barriers`, `world.spatial_identity`, `world.spatial_transit` |
-| `world/spatial_fov.py` | 949 |  | `world.spatial_barriers`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_orientation` |
+| `world/spatial_fov.py` | 1028 |  | `world.spatial_barriers`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_orientation` |
 | `world/spatial_frames.py` | 1087 |  | `core.db`, `core.frames`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial` |
 | `world/spatial_geometry.py` | 1491 |  | `world.spatial_barriers`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_identity`, `world.spatial_orientation` |
 | `world/spatial_identity.py` | 498 |  | — |
@@ -2185,14 +2185,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `neighbour_feature_visibility()` | 736 | 90 lines |
-| `body_visibility()` | 828 | 70 lines |
-| `body_cell()` | 344 | 58 lines |
-| `feature_visibility()` | 677 | 57 lines |
-| `_place_anchors()` | 275 | 48 lines |
-| `shadowcast()` | 467 | 47 lines |
-| `sight_digest()` | 907 | 43 lines |
-| `_line()` | 435 | 30 lines |
+| `body_visibility()` | 907 | 70 lines |
+| `neighbour_feature_visibility()` | 836 | 69 lines |
+| `body_cell()` | 347 | 58 lines |
+| `feature_visibility()` | 777 | 57 lines |
+| `_line()` | 438 | 52 lines |
+| `_place_anchors()` | 278 | 48 lines |
+| `shadowcast()` | 492 | 47 lines |
+| `observer_field()` | 619 | 44 lines |
 
 ### `world/spatial_frames.py`
 
