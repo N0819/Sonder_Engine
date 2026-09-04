@@ -6579,9 +6579,12 @@ for what follows. Residuals of this entry rather than a section of their own:
     story; the card's sentence may want the complement stated (what the
     world can make true) rather than the prohibition alone.
   - **The Planner names room ids to the player** (`coastal_lane` in
-    backticks) against its card, and called `inspect_clock` five times per
-    reply though the clock cannot move within one. Unmeasured cost, a
-    prompt question.
+    backticks) against its card. A prompt question. (It also called
+    `inspect_clock` five times per reply though the clock cannot move
+    within one; since 2026-09-04 that call, and `inspect_packages`, echo
+    the payload key they already ride under, and an identical call whose
+    answer is still in view echoes the step to look at, so the repeat
+    costs a call and no characters.)
   - **A walk into a room no edge reaches was accepted as a step** (run 1:
     beach to a room planned off the terrace); the hand invented the edge.
     The bench now reports `walk_adjacent`; whether the Director should

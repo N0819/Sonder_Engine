@@ -44,9 +44,15 @@ SCAN_PAGE = 40
 #: Characters of an entry's content shown in a listing (the full text is
 #: `read_lore`).
 EXCERPT_CHARS = 280
-#: Recent events served by `inspect_events`.
+#: LIMITS THE OWNER SHOULD KNOW ABOUT. Recent events served by
+#: `inspect_events` and the excerpt each is cut to: the ceiling, the default
+#: when the caller names no `n`, and the excerpt (`full: true` lifts it).
+#: Measured 2026-09-04 on chat 114: at 12 events of 600 characters the
+#: result was a constant 7.8k wherever twelve events existed, on a tool the
+#: Planner reads to orient, not to quote.
 EVENTS_CAP = 40
-EVENTS_DEFAULT = 12
+EVENTS_DEFAULT = 6
+EVENT_EXCERPT_CHARS = 240
 #: Route length `inspect_route` will search (hops).
 ROUTE_HOPS_CAP = 64
 #: Bodies listed per charter by `inspect_charters` before the caller must
@@ -338,10 +344,16 @@ LIST_CAP_ROUTE = 60
 
 def _t_inspect_reserved_identities(cid, frame_id):
     """Every name the room may not reuse: registered characters, charter
-    bodies, authored plans and their aliases."""
+    bodies, authored plans and their aliases. A charter body is its NAME
+    here, under its charter: this tool answers "is the name taken", and a
+    body's place, availability and post are `inspect_charters`' answer
+    (measured 2026-09-04, chat 114: 9,137 of 9,677 characters were the
+    same 66 bodies' place and availability that `inspect_charters` lists)."""
     from core.db import q
     from world.planned_entities import planned_entities
-    out = {"characters": [], "charter_bodies": [], "plans": []}
+    out = {"characters": [], "charter_bodies": {}, "plans": [],
+           "charter_bodies_note": "names under their charter; a body's place "
+                                  "and availability are inspect_charters'"}
     for row in q("SELECT c.id, c.name, cc.status FROM chat_chars cc "
                  "JOIN characters c ON c.id=cc.char_id WHERE cc.chat_id=?", (cid,)):
         out["characters"].append({"id": row["id"], "name": row["name"],
@@ -350,11 +362,10 @@ def _t_inspect_reserved_identities(cid, frame_id):
         from world.charter_runtime import registry_for
         registry = registry_for(cid, frame_id)
         for key, item in sorted((registry.get("items") or {}).items()):
-            for bkey, body in sorted(
-                    ((item.get("state") or {}).get("bodies") or {}).items()):
-                out["charter_bodies"].append({
-                    "charter": key, "body": bkey, "name": body.get("name"),
-                    "place": body.get("place"), "available": body.get("available")})
+            names = [str(body.get("name") or bkey) for bkey, body in sorted(
+                ((item.get("state") or {}).get("bodies") or {}).items())]
+            if names:
+                out["charter_bodies"][key] = names
     except Exception as exc:
         out["charter_bodies_error"] = str(exc)
     for plan in planned_entities(cid, frame_id).values():
@@ -403,15 +414,18 @@ def _t_inspect_charters(cid, frame_id, *, charter=None, body=None):
     return out
 
 
-def _t_inspect_events(cid, frame_id, *, n=None):
+def _t_inspect_events(cid, frame_id, *, n=None, full=False):
     """Recent objective beats (the omniscient row -- the room is an author)
-    and every pending scheduled event."""
+    and every pending scheduled event. ``n`` beats, `EVENTS_DEFAULT` unless
+    asked; each an `EVENT_EXCERPT_CHARS` excerpt unless ``full``."""
     from core.db import q
     count = _cap(n, EVENTS_CAP, EVENTS_DEFAULT)
     rows = q("SELECT e.id, e.content, t.idx AS turn_idx FROM events e "
              "LEFT JOIN turns t ON t.id=e.turn_id WHERE e.chat_id=? "
              "ORDER BY e.id DESC LIMIT ?", (cid, count))
-    recent = [{"turn_idx": r["turn_idx"], "content": _excerpt(r["content"], 600)}
+    recent = [{"turn_idx": r["turn_idx"],
+               "content": (" ".join(str(r["content"] or "").split()) if full
+                           else _excerpt(r["content"], EVENT_EXCERPT_CHARS))}
               for r in reversed(list(rows))]
     pending = []
     for r in q("SELECT event_id, due_at, kind, location_id, payload FROM "
@@ -767,7 +781,7 @@ TOOLS = [
      "args": _schema({"from_room": _S, "to_room": _S}, ["from_room", "to_room"]),
      "handler": _t_inspect_route},
     {"name": "inspect_reserved_identities",
-     "description": "Every name the room may not reuse: the registered characters, every charter body with its place, and every authored plan with its aliases. A new person must not collide with any of these.",
+     "description": "Every name the room may not reuse: the registered characters, every charter body's name under its charter, and every authored plan with its aliases. A new person must not collide with any of these. Names only: a body's place, availability and post are inspect_charters' answer.",
      "args": _schema({}), "handler": _t_inspect_reserved_identities},
     {"name": "inspect_plans",
      "description": "The authored plans for people, things and creatures: what each is for, what is true of it, where the clock has put it, and whether the Director has rendered it yet.",
@@ -776,11 +790,11 @@ TOOLS = [
      "description": "The institutions the town simulates: posts, upkeeps, places and bodies. Name a charter for its full author-only diagnostics (beliefs, judgments, commitments, economy, refused interventions), and a body within it for that body's life.",
      "args": _schema({"charter": _S, "body": _S}), "handler": _t_inspect_charters},
     {"name": "inspect_events",
-     "description": "The most recent objective beats as the engine recorded them, and every scheduled event still pending (authored events, charter events, couriers) with its due time.",
-     "args": _schema({"n": _I}), "handler": _t_inspect_events},
+     "description": "The most recent objective beats as the engine recorded them (the last few, each as a short excerpt; pass n for more and full=true for the whole record of each), and every scheduled event still pending (authored events, charter events, couriers) with its due time.",
+     "args": _schema({"n": _I, "full": _B}), "handler": _t_inspect_events},
     {"name": "inspect_clock",
-     "description": "Where the story stands in time: the latest turn index, elapsed story seconds, the hour of the day, the day phase, and the scene's declared time of day.",
-     "args": _schema({}), "handler": _t_inspect_clock},
+     "description": "Where the story stands in time: the latest turn index, elapsed story seconds, the hour of the day, the day phase, and the scene's declared time of day. Your payload already carries this under `clock`, rebuilt every step; a call is answered with that key, not a copy.",
+     "args": _schema({}), "handler": _t_inspect_clock, "payload_key": "clock"},
     {"name": "inspect_config",
      "description": "The dials this story runs under, which the host owns and the room only reads: house style (genre, tone, what to avoid, weather, tense, day length), the scene's pacing and call budget, how many of the populace may speak in a beat and what earns a promotion, and whether minds may think off screen. Read it before proposing anything that leans on one, and when asked whether a change would land.",
      "args": _schema({}), "handler": _t_inspect_config},
@@ -791,8 +805,9 @@ TOOLS = [
      "description": "What the world holds that does not agree with itself: charter registry warnings, structure warnings, and dangling references (a planned exit to nowhere, a plan in no room, a bill in a vanished room, a need for a vanished room, a package participant nobody holds).",
      "args": _schema({}), "handler": _t_inspect_contradictions},
     {"name": "inspect_packages",
-     "description": "The plot packages in this frame as spoiler-safe projections: status, revision, counts, clocks, operation kinds, validation verdict. Filter by status.",
-     "args": _schema({"status": _S}), "handler": _t_inspect_packages},
+     "description": "The plot packages in this frame as spoiler-safe projections: status, revision, counts, clocks, operation kinds, validation verdict. Filter by status. Your payload already carries every package under `packages`, rebuilt every step; a call is answered with that key, not a copy.",
+     "args": _schema({"status": _S}), "handler": _t_inspect_packages,
+     "payload_key": "packages"},
     {"name": "read_package",
      "description": "One package in full when it is open, or its projection when sealed. reveal=true returns a sealed package's hidden text and is a host action.",
      "args": _schema({"uid": _S, "reveal": _B}, ["uid"]),
@@ -847,7 +862,10 @@ TOOL_INDEX = {tool["name"]: tool for tool in TOOLS}
 
 def tool_manifest(*, include_host_only=False):
     """The model-facing table: name, description, argument schema, and the
-    `long` / `host_only` marks. What the Story Planner is handed."""
+    `long` / `host_only` / `payload_key` marks. What the Story Planner is
+    handed. `payload_key` names the key of the Planner's per-step payload
+    that already carries the tool's answer; the loop echoes the key instead
+    of a second copy (`agents/story_planner.run_planner`)."""
     out = []
     for tool in TOOLS:
         if tool.get("host_only") and not include_host_only:
@@ -856,6 +874,8 @@ def tool_manifest(*, include_host_only=False):
                  "args": tool["args"]}
         if tool.get("long"):
             entry["long"] = True
+        if tool.get("payload_key"):
+            entry["payload_key"] = tool["payload_key"]
         if tool.get("host_only"):
             entry["host_only"] = True
         if tool.get("host_only_args"):

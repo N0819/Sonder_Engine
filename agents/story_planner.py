@@ -47,6 +47,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import time
 
 from core.logging_utils import logger
@@ -90,13 +91,33 @@ PLANNER_MAX_TOKENS = 20_000
 #: (`story/room_bible.py`), up to the hard cap.
 PLANNER_HISTORY_MESSAGES = 30
 PLANNER_HISTORY_HARD_CAP = 60
+#: LIMITS THE OWNER SHOULD KNOW ABOUT (2026-09-04). The conversation key's
+#: ceiling in characters, beside the line window: past it the OLDEST lines
+#: fall off whole, never cut. Measured on chat 114 with an empty transcript,
+#: the thread was 22.2k of a 28.9k first-step payload and 20.2k of that was
+#: the Planner's own prior replies, shown whole on every step of every
+#: reply. The bible is the memory that folds them (`story/room_bible.py`),
+#: so an older room line rides as its first sentence plus a `folded_chars`
+#: count; the player's lines and the newest line in each of the room's
+#: voices stay whole (a follow-up question needs its referent).
+PLANNER_HISTORY_CHARS = 12_000
+#: A folded line's head: its first sentence, held to this many characters
+#: so a sentence-less paragraph is a head and not the paragraph.
+PLANNER_FOLDED_LINE_CHARS = 240
 #: The reply stored in the thread. Raised with the response cap on 2026-09-04:
 #: a 20k-token budget the reply was then cut to 2,400 characters is a cap that
 #: hides its own effect, which is the class this codebase keeps finding. Held
 #: to the thread's own room-reply ceiling so neither is the silent one.
 PLANNER_REPLY_CHARS = 80_000
-#: Tool results shown back to the model; oldest fall off past it.
+#: Tool results shown back to the model. Past it, the largest result the
+#: model has ALREADY READ is cut to `PLANNER_TRIM_HEAD_CHARS` of head plus a
+#: `trimmed` count, then the newest step's largest, and only when every
+#: result is a head are whole entries evicted, oldest first. Measured on
+#: chat 114 (2026-09-04): a 13k `inspect_rooms` echo at step 4 evicted seven
+#: smaller results at step 5 -- the packages and plans the Planner had just
+#: read -- under the old rule of whole entries newest-first.
 PLANNER_TRANSCRIPT_CHARS = 24_000
+PLANNER_TRIM_HEAD_CHARS = 1_500
 #: Charter Planner delegations per reply and their output budget.
 CHARTER_PLANNER_CALLS_PER_REPLY = 1
 CHARTER_PLANNER_MAX_TOKENS = 20_000
@@ -173,18 +194,48 @@ def _story(cid):
     return {"name": row["name"], "scenario": row["scenario"]} if row else {}
 
 
+_SENTENCE_END = re.compile(r"[.!?](?=[\"'”’)]*(?:\s|$))")
+
+
+def _first_sentence(text, limit=PLANNER_FOLDED_LINE_CHARS):
+    """The head of a line: through its first sentence end, within `limit`."""
+    text = str(text or "").strip()
+    match = _SENTENCE_END.search(text)
+    head = text[:match.end()] if match else text
+    return head if len(head) <= limit else head[:limit - 1] + "…"
+
+
 def _conversation(cid, frame_id):
     """The window, plus every older line the bible has not folded yet, up
     to the hard cap: a line leaves the Planner's context only after the
-    fold has read it."""
+    fold has read it. The PLAYER's lines ride whole -- they are the brief.
+    The room's own prior lines ride as their first sentence with the count
+    of characters folded, because the bible is the memory designated to
+    hold what they settled; the newest line in each of the room's voices
+    stays whole so a follow-up has its referent. Past
+    `PLANNER_HISTORY_CHARS` the oldest lines fall off whole."""
     from story import room_conversation as room
     from story.room_bible import bible
     folded_through = bible(cid, frame_id)["folded_through"]
     rows = room.messages(cid, frame_id, limit=PLANNER_HISTORY_HARD_CAP)
     window = rows[-PLANNER_HISTORY_MESSAGES:]
     older = [m for m in rows[:-PLANNER_HISTORY_MESSAGES] if m["id"] > folded_through]
-    return [{"id": m["id"], "role": m["role"], "text": m["text"]}
-            for m in older + window]
+    lines = older + window
+    newest_in_voice = {m["role"]: m["id"] for m in lines if m["role"] != "player"}
+    out = []
+    for m in lines:
+        text = str(m["text"] or "").strip()
+        entry = {"id": m["id"], "role": m["role"], "text": text}
+        if m["role"] != "player" and newest_in_voice.get(m["role"]) != m["id"]:
+            head = _first_sentence(text)
+            if len(head) < len(text):
+                entry["text"] = head
+                entry["folded_chars"] = len(text) - len(head)
+        out.append(entry)
+    size = len(json.dumps(out, ensure_ascii=False))
+    while len(out) > 1 and size > PLANNER_HISTORY_CHARS:
+        size -= len(json.dumps(out.pop(0), ensure_ascii=False)) + 2
+    return out
 
 
 def _manifest():
@@ -208,8 +259,11 @@ def _manifest():
 
 def _tools_block():
     """The tool table as a system-block suffix. It is the largest and the
-    most stable thing the Planner reads (10.3k of a 13k-character payload
-    on the first live run, identical on every step), so it rides the system
+    most stable thing the Planner reads (measured 2026-09-04 on chat 114:
+    15.6k characters, beside an 8.6k prompt and a bible of at most
+    `BIBLE_CHARS_SHOWN` = 6k, identical on every step -- it was 10.3k of a
+    13k per-step payload on the first live run, before the research tools
+    and the operation shapes joined the table), so it rides the system
     block, which `providers.chat_complete` marks cacheable, and not the
     per-step user message."""
     return ("\n\nTOOLS. The room's table; the player never hears these "
@@ -232,6 +286,62 @@ def system_block(cid, frame_id):
     return get_prompt("story_planner") + _tools_block() + _bible_block(cid, frame_id)
 
 
+def _encoded(value):
+    return json.dumps(value, ensure_ascii=False, default=str)
+
+
+def _shown_transcript(transcript, cap=None):
+    """What the model is shown of its own tool results, within ``cap``
+    characters. Returns ``(shown, whole)``: the entries in order, and the
+    set of indices INTO ``shown`` whose result is untrimmed.
+
+    THE ORDER OF SACRIFICE. A result the model has already read is worth
+    less than one it has not, and a head is worth more than an absence, so:
+    (1) the largest result from a step the model has read is cut to a head
+    of `PLANNER_TRIM_HEAD_CHARS` plus a `trimmed` count; (2) then the
+    heads it has already read go, oldest first (measured on chat 114 after
+    the first cut: seven read heads still crowded out the dump the model
+    had just asked for); (3) then the largest of the newest step, which the
+    model has not read yet -- only when that step alone outgrows the cap;
+    (4) only then are whole entries evicted, oldest first. Under the old
+    rule (whole entries, newest first) one dump evicted every neighbour it
+    had just read (chat 114 step 5, 2026-09-04)."""
+    cap = PLANNER_TRANSCRIPT_CHARS if cap is None else cap
+    entries = [dict(e) for e in transcript]
+    sizes = [len(_encoded(e)) for e in entries]
+    kept = list(range(len(entries)))
+    trimmed = set()
+    latest = max((int(e.get("step") or 0) for e in entries), default=0)
+
+    def _read(i):
+        return int(entries[i].get("step") or 0) < latest
+
+    def _trim(i):
+        encoded = _encoded(entries[i].get("result"))
+        entries[i]["result"] = {"head": encoded[:PLANNER_TRIM_HEAD_CHARS],
+                                "trimmed": len(encoded) - PLANNER_TRIM_HEAD_CHARS}
+        sizes[i] = len(_encoded(entries[i]))
+        trimmed.add(i)
+
+    while kept and sum(sizes[i] for i in kept) > cap:
+        # A result is a trim candidate while a head would actually be smaller.
+        candidates = [i for i in kept if i not in trimmed
+                      and len(_encoded(entries[i].get("result"))) > PLANNER_TRIM_HEAD_CHARS]
+        read = [i for i in candidates if _read(i)]
+        read_heads = [i for i in kept if i in trimmed and _read(i)]
+        if read:
+            _trim(max(read, key=lambda k: sizes[k]))
+        elif read_heads:
+            kept.remove(read_heads[0])
+        elif candidates:
+            _trim(max(candidates, key=lambda k: sizes[k]))
+        else:
+            kept.pop(0)
+    shown = [entries[i] for i in kept]
+    whole = {n for n, i in enumerate(kept) if i not in trimmed}
+    return shown, whole
+
+
 def _payload(cid, frame_id, *, text, task, transcript, step, calls_left,
              seconds_left, turn_idx, spend=None, regime="reply"):
     from story import room_conversation as room
@@ -241,14 +351,7 @@ def _payload(cid, frame_id, *, text, task, transcript, step, calls_left,
     from story.room_frontier import frontier_report
     from story.room_proposals import pending_proposals
     from story.room_tools import run_tool
-    shown, size = [], 0
-    for entry in reversed(transcript):
-        encoded = json.dumps(entry, ensure_ascii=False, default=str)
-        if size + len(encoded) > PLANNER_TRANSCRIPT_CHARS and shown:
-            break
-        shown.append(entry)
-        size += len(encoded)
-    shown.reverse()
+    shown, _whole = _shown_transcript(transcript)
     try:
         clock = run_tool(cid, "inspect_clock", frame_id=frame_id)
     except Exception:
@@ -452,7 +555,11 @@ def run_planner(cid, frame_id, *, text=None, task=None, base_turn=None,
     from story import room_conversation as room
     from story.mandates import expire_mandates, spend_citation, spend_limits
     from story.room_frontier import record_spend, spend_this_hour
-    from story.room_tools import ToolError, run_tool
+    from story.room_tools import TOOL_INDEX, ToolError, run_tool
+
+    def _call_key(name, args):
+        return name + "\x00" + json.dumps(args, sort_keys=True, ensure_ascii=False,
+                                          default=str)
 
     regime = regime or ("task" if task is not None and text is None else "reply")
     wall = REPLY_WALL_SECONDS if regime == "reply" else TASK_PASS_SECONDS
@@ -468,6 +575,12 @@ def run_planner(cid, frame_id, *, text=None, task=None, base_turn=None,
     calls_made, delegations, steps = 0, 0, 0
     reply, status_line, questions, ask_dramaturge = "", "", [], None
     stopped = None
+    # THE ECHO POLICY. `answered` maps a call (tool + arguments) to the index
+    # of the transcript entry that last showed its result in full; a repeat
+    # whose answer is unchanged and still in the model's view is echoed as
+    # the step to look at, never a second copy. `in_view` is what the model
+    # saw whole in the payload it just read, plus what this step appended.
+    answered, in_view = {}, set()
     if hour_left <= 0:
         stopped = "spend_hour"
     for step in range(1, PLANNER_STEPS_PER_REPLY + 1):
@@ -487,13 +600,16 @@ def run_planner(cid, frame_id, *, text=None, task=None, base_turn=None,
             turn_idx=turn_idx, regime=regime,
             spend={"calls_per_reply": reply_cap, "calls_per_hour_left": hour_left}),
             max_tokens=PLANNER_MAX_TOKENS)
+        shown, whole = _shown_transcript(transcript)
+        first_shown = len(transcript) - len(shown)
+        in_view = {first_shown + n for n in whole}
         if not any(k in out for k in ANSWER_KEYS):
             # A truncated or shapeless output is reported, not read as "done":
             # the loop used to fall through to BOUNDED_LINE, telling the
             # player the room had stopped at its budget when the model had
             # stopped mid-sentence.
             transcript.append({"tool": None, "args": None,
-                               "result": {"error": CUT_OFF_NOTE}})
+                               "result": {"error": CUT_OFF_NOTE}, "step": step})
             continue
         if text is not None and out.get("grants"):
             _rows, grant_notes = _apply_grants(cid, frame_id, out["grants"], turn_idx)
@@ -532,12 +648,13 @@ def run_planner(cid, frame_id, *, text=None, task=None, base_turn=None,
             # repeated itself into an empty transcript for 27 seconds.
             if not isinstance(call, dict):
                 transcript.append({"tool": None, "args": call, "result": {
-                    "error": "a call is an object with `tool` and `args`"}})
+                    "error": "a call is an object with `tool` and `args`"},
+                    "step": step})
                 continue
             name = str(call.get("tool") or call.get("name") or "")
             if not name:
                 transcript.append({"tool": None, "args": call, "result": {
-                    "error": "a call names its tool under `tool`"}})
+                    "error": "a call names its tool under `tool`"}, "step": step})
                 continue
             if isinstance(call.get("args"), dict):
                 args = call["args"]
@@ -549,7 +666,7 @@ def run_planner(cid, frame_id, *, text=None, task=None, base_turn=None,
             if base_turn is not None and _is_write(name) \
                     and story_rewound_past(base_turn, room.current_turn_idx(cid)):
                 transcript.append({"tool": name, "args": args,
-                                   "result": {"refused": REWOUND_LINE}})
+                                   "result": {"refused": REWOUND_LINE}, "step": step})
                 stopped = "rewound"
                 break
             if name == CHARTER_PLANNER_TOOL:
@@ -576,7 +693,25 @@ def run_planner(cid, frame_id, *, text=None, task=None, base_turn=None,
                     published.append(str(result.get("uid") or args.get("uid") or ""))
                 if name in ("publish_package", "resolve_package"):
                     _note_bible(cid, frame_id, name, args, result, turn_idx)
-            transcript.append({"tool": name, "args": args, "result": result})
+            echo = result
+            answered_ok = isinstance(result, dict) and not (
+                "error" in result or "refused" in result)
+            payload_key = (TOOL_INDEX.get(name) or {}).get("payload_key")
+            if payload_key and answered_ok:
+                # The payload already carries this, rebuilt every step: the
+                # echo is the key to read (chat 114 called `inspect_clock`
+                # five times per reply, each a full copy).
+                echo = {"in_payload": payload_key}
+            elif answered_ok:
+                key = _call_key(name, args)
+                earlier = answered.get(key)
+                if earlier is not None and earlier in in_view \
+                        and transcript[earlier]["result"] == result:
+                    echo = {"see_step": transcript[earlier]["step"]}
+                else:
+                    answered[key] = len(transcript)
+                    in_view.add(len(transcript))
+            transcript.append({"tool": name, "args": args, "result": echo, "step": step})
             # What the room DID, not what it meant to do: a refusal and an
             # error are the two the watcher most needs, and they are exactly
             # what a spinner hides (see REPORT WHAT LANDED on the card).
