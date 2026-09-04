@@ -48,7 +48,10 @@ LANGUAGES = ("en", "ja")
 #: BOTH lost the same file. It moves when a prompt or fragment is added, and
 #: the move belongs in the same commit as the addition.
 #: 111 at the split (2026-08-29); 112 since `card_person_note` (2026-08-30).
-PART_COUNT = 113   # +1 (2026-09-01): director_note.txt, the specialists' one
+PART_COUNT = 114   # +1 (2026-09-04): 27_author_notes.txt, the prose author's
+                   # duty chunk for the Writers' Room's `author_notes` (the
+                   # output shape moved to 28.txt);
+                   # +1 (2026-09-01): director_note.txt, the specialists' one
                    # statement about the Director's ruling channel;
                    # -2 (2026-09-04): mapping_stage and mapping_commit,
                    # retired with the mapping model; -2 (2026-09-04): the
@@ -148,7 +151,7 @@ def test_the_card_still_loads_and_publishes_every_prompt(language):
     card = pack.card(CARD)
     assert len(card["prompts"]) == 38
     assert len(card["specialists"]) == 5
-    assert len(card["prose_author_sheet"]) == 28
+    assert len(card["prose_author_sheet"]) == 29
     # Fragments resolve AFTER assembly, so the loaded card must carry none.
     # (The loaded card is deeply frozen, so walk it rather than serialize it.)
     unresolved = [_dotted(path) for path, value in _leaves(card)
@@ -254,7 +257,7 @@ def test_en_and_ja_declare_the_same_part_paths():
     """Closes a blind spot the loader structurally cannot see.
 
     `_leaf_paths` treats `prose_author_sheet` as ONE path, so a pack shipping
-    27 segments instead of 28 passes the loader's card-parity comparison
+    28 segments instead of 29 passes the loader's card-parity comparison
     today. The file layer sees every part, and a missing segment there is
     a missing paragraph in an assembled sheet.
     """
@@ -289,7 +292,7 @@ def test_no_assembled_sheet_id_has_a_part_file(language):
 
 
 def test_the_duplicated_prose_author_tail_stays_duplicated():
-    """`prose_author_sheet[27][1]` is byte-identical to
+    """`prose_author_sheet[28][1]` is byte-identical to
     `prose_author_output_shape`, and they get two files.
 
     Deduping them behind a shared reference is a behaviour change wearing a
@@ -298,7 +301,7 @@ def test_the_duplicated_prose_author_tail_stays_duplicated():
     so that a future divergence is a decision somebody made, not a surprise.
     """
     card = raw_card("en")
-    assert card["prose_author_sheet"][27][1] == card["prose_author_output_shape"]
+    assert card["prose_author_sheet"][28][1] == card["prose_author_output_shape"]
 
 
 def test_a_missing_part_file_fails_the_load_rather_than_shortening_a_prompt(
@@ -398,7 +401,7 @@ def test_canonical_part_path_covers_exactly_the_five_prose_shapes():
 
 
 def test_the_sheet_is_named_index_first_because_the_index_is_the_identity():
-    """`planning_need` is the gate name at BOTH 11 and 15, and 12 of the 28
+    """`planning_need` is the gate name at BOTH 11 and 15, and 12 of the 29
     segments have no name at all. Naming key-first would collide and would
     not sort into assembly order."""
     card = raw_card("en")
@@ -408,4 +411,4 @@ def test_the_sheet_is_named_index_first_because_the_index_is_the_identity():
     names = [rel for leaf, rel, _text in part_plan(card)
              if leaf[0] == "prose_author_sheet"]
     assert names == sorted(names), "the sheet's files must sort into join order"
-    assert len(set(names)) == 28
+    assert len(set(names)) == 29

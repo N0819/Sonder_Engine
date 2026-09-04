@@ -501,9 +501,15 @@
       }
     ],
     [
+      "author_notes",
+      {
+        "$text": "prose_author_sheet/27_author_notes.txt"
+      }
+    ],
+    [
       null,
       {
-        "$text": "prose_author_sheet/27.txt"
+        "$text": "prose_author_sheet/28.txt"
       }
     ]
   ],

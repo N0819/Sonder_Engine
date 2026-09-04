@@ -151,9 +151,9 @@ def canonical_part_path(leaf_path: tuple, sheet_key: Any = None) -> str:
 
     `sheet_key` supplies `prose_author_sheet[i][0]`, which is the only shape
     whose file name is not derivable from the leaf path alone. The sheet is
-    named index-FIRST, key-second (`00_voices.txt` ... `27.txt`) because the
-    index is the identity and the key is a reading aid: `mapping_proposal`
-    appears at both 11 and 15, and 12 of the 28 entries have no key at all.
+    named index-FIRST, key-second (`00_voices.txt` ... `28.txt`) because the
+    index is the identity and the key is a reading aid: `planning_need`
+    appears at both 11 and 15, and 12 of the 29 entries have no key at all.
     Index-first also makes the files sort into assembly order in any listing,
     which is what makes the `"".join` that builds the sheet legible.
     """
