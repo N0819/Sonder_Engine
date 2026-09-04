@@ -223,7 +223,8 @@ from world.spatial_prose import (
 
 from world.spatial_fov import (
     DEFAULT_FOOTPRINT, DEFAULT_HEIGHT, DEFAULT_OPACITY, FOOTPRINTS,
-    GRID_SIDE, HEIGHTS, OPACITIES, anchor_cells, anchor_geometry,
+    GRID_SIDE, HEIGHTS, OPACITIES, _door_cells, _line, _occluders_on,
+    _wall_verdict, anchor_cells, anchor_geometry,
     bearing_between, body_cell, body_visibility, cover_between, eye_rank,
     feature_visibility, grid_side, height_rank,
     neighbour_feature_visibility, normalize_footprint,

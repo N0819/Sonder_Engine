@@ -239,17 +239,13 @@ class TestStandingInTheDarkLookingIntoTheLight:
     what is in it. Owner's ruling, 2026-09-04.
 
     The name and notes always arrived; the CONTENTS did not, and the cause was
-    the rasteriser rather than the light. `_line` is a supercover -- every cell
-    the segment touches, so sight cannot slip between two occluders meeting at
-    a corner, which is a property worth keeping. But a doorway is one open cell
-    in a wall, and its neighbours in that supercover ARE the wall, so any
-    off-axis glance through a door reported `__wall__` and the far room's
-    furniture vanished. Only a line dead through the centre survived.
-
-    Looking through a door is two questions -- can I see the doorway, and can
-    the doorway see the thing -- so `neighbour_feature_visibility` asks them
-    separately against the same strict rasteriser. Within-room occlusion is
-    untouched, because within a room there is no doorway to route through.
+    the geometry rather than the light: the wall was a cell thick and the
+    rasteriser over-covered it, so an off-axis glance through a one-cell
+    doorway struck the wall beside it and only a line dead through the centre
+    survived. The wall is now a line and the doorway a gap in it
+    (`spatial_fov._wall_verdict`), so a straight line that threads the gap
+    gets through at any angle; `tests/test_wall_is_a_line.py` pins the
+    geometry itself, and this class pins what the view does with it.
     """
 
     def _cellar(self, far_light="lit", barrier="open_door", anchors=None):

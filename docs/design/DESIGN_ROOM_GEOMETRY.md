@@ -87,11 +87,25 @@ direction that subtracts least.
                   body; nothing: unmeasured. NEVER stored.
     sight         recursive shadowcasting from the observer's cell; a cell
                   cuts the line when its height is level with the eye or
-                  with the target's top; a supercover walk names what cut
-                  it, or the tallest thing the line cleared (the "waist up")
+                  with the target's top; an exact supercover walk (every
+                  cell the segment touches, both at a corner it passes
+                  through) names what cut it, or the tallest thing the line
+                  cleared (the "waist up")
     doorway       an open edge with a bearing casts into the neighbour's
-                  grid, placed beyond a one-cell wall band with the two door
-                  cells aligned; what stands in the neighbour occludes
+                  grid, placed beyond a one-cell band with the two door
+                  cells aligned. The wall is the band's MIDLINE, a line of
+                  no thickness, and the doorway is a gap in it as wide as
+                  the door anchor (one pace for the implicit door an edge
+                  contributes; author `door:<to>` with a footprint for a
+                  wider opening). A line into the neighbour is judged where
+                  it crosses that line -- through the gap or into the wall
+                  -- so a doorway admits any straight line that threads it,
+                  at any angle; what stands in either room then occludes.
+                  Until 2026-09-04 the band was a cell-thick wall and the
+                  walk over-covered it, so a one-pace doorway admitted a
+                  third of what it should (9.7% of cell pairs across a
+                  centred door on two medium rooms, against 29.5% by the
+                  line; 0 within-room verdicts changed on 104 live scenes)
     cone          relative_bearing's eight sectors over the cell vector:
                   front full, sides an impression, rear nothing -- only when
                   a facing is known; a deliberate look around is a sweep

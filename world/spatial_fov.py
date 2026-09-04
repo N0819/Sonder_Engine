@@ -7,7 +7,10 @@ later anchor never moves an earlier one. A body's cell is derived from its
 station (`at` an anchor, `near` another body) and is never written anywhere.
 From those two derivations a recursive shadowcast answers, per observer, which
 features and bodies a line of sight reaches, at what egocentric sector, at
-what within-room tier, and behind what.
+what within-room tier, and behind what. An open doorway with a bearing lays
+the neighbour's grid beyond this one; the wall between them is a LINE, and the
+doorway a gap in it, so a line into the next room is judged where it crosses
+the wall rather than by which cells it touches there (`_wall_verdict`).
 
 Pure, total, no I/O, no model -- the same shape as `agents/perception`, and
 for the same reason: the Director cannot argue with a line, and a mind cannot
@@ -433,32 +436,54 @@ def _blocks(cell_height: float, eye: float, top: float) -> bool:
 
 
 def _line(a: tuple, b: tuple) -> list:
-    """Supercover cells strictly between a and b: every cell the straight
-    segment touches, so a line cannot slip between two occluders that meet
-    at a corner (a plain Bresenham walk does exactly that)."""
+    """The supercover of the segment between two cell centres: every cell
+    the straight segment touches, strictly between a and b, in order.
+
+    Cells are unit squares centred on integer coordinates, so the segment
+    crosses an x-boundary at parameter (2i+1)/(2|dx|) and a y-boundary at
+    (2j+1)/(2|dy|); the walk steps whichever comes first and, when the two
+    coincide EXACTLY -- the segment passes through a corner -- takes both
+    cells that meet there before the diagonal one. That corner rule is what
+    stops sight slipping between two occluders that touch at a corner, and
+    it is the whole of what a supercover adds to a plain Bresenham walk.
+
+    The comparison is in integers, so "exactly" means exactly. The previous
+    rasteriser here stepped diagonally whenever Bresenham did and then added
+    BOTH corner cells every time, which is not a supercover but a superset
+    of one: for a shallow line nearly every row change added a cell the
+    segment never touched. Within a room that only ever over-blocked; at a
+    doorway, one open cell in a wall, it put the wall into almost every
+    off-axis line (2026-09-04, the cellar-and-stove case).
+    """
     x0, y0 = a
     x1, y1 = b
     dx, dy = abs(x1 - x0), abs(y1 - y0)
+    if not dx and not dy:
+        return []
     sx = 1 if x1 > x0 else -1
     sy = 1 if y1 > y0 else -1
-    err = dx - dy
     x, y = x0, y0
+    i = j = 0                 # boundaries crossed on each axis so far
     out = []
     while (x, y) != (x1, y1):
-        e2 = 2 * err
-        moved_x = moved_y = False
-        if e2 > -dy:
-            err -= dy
+        # next x-crossing at (2i+1)/(2dx), next y-crossing at (2j+1)/(2dy);
+        # cross-multiplied so the tie is exact.
+        tx = (2 * i + 1) * dy if dx else None
+        ty = (2 * j + 1) * dx if dy else None
+        if tx is not None and (ty is None or tx < ty):
             x += sx
-            moved_x = True
-        if e2 < dx:
-            err += dx
+            i += 1
+        elif ty is not None and (tx is None or ty < tx):
             y += sy
-            moved_y = True
-        if moved_x and moved_y:
-            for corner in ((x - sx, y), (x, y - sy)):
+            j += 1
+        else:
+            for corner in ((x + sx, y), (x, y + sy)):
                 if corner not in (a, b) and corner not in out:
                     out.append(corner)
+            x += sx
+            y += sy
+            i += 1
+            j += 1
         if (x, y) != (x1, y1):
             out.append((x, y))
     return out
@@ -527,6 +552,13 @@ class _Field:
         self.occluder = {}      # (x, y) -> anchor id of the tallest opaque
         self.offsets = {}       # room_id -> (ox, oy)
         self.anchors = {}       # room_id -> anchor_cells()
+        # THE WALLS BETWEEN PLACED ROOMS, AS LINES. Each: {axis, coord,
+        # extent, aperture, to}. The wall between this room and a neighbour
+        # is the line `axis == coord` (axis 1 is a row, so a north or south
+        # wall; axis 0 a column) over `extent`, the union of both rooms'
+        # reach along it; `aperture` is the doorway's span on that line.
+        # See `_wall_verdict`.
+        self.walls = []
 
     def add_room(self, scene, room_id, offset):
         ox, oy = offset
@@ -552,12 +584,16 @@ class _Field:
         return (cell[0] + ox, cell[1] + oy)
 
 
-def _door_cell(scene, room_id, neighbour_id):
+def _door_cells(scene, room_id, neighbour_id):
+    """(cells, bearing) of the room's doorway onto `neighbour_id`, or
+    (None, None) when the door has no bearing to place it by. The cells are
+    the door anchor's whole extent along its wall: the aperture is as wide
+    as the doorway, one cell for the implicit door an edge contributes."""
     from world.spatial_geometry import door_anchor_id
     placed = anchor_cells(scene, room_id).get(door_anchor_id(neighbour_id))
     if not placed or not placed["cells"] or not placed.get("dir"):
         return None, None
-    return placed["cells"][0], placed["dir"]
+    return list(placed["cells"]), placed["dir"]
 
 
 def _sight_neighbours(scene, room_id):
@@ -589,24 +625,40 @@ def observer_field(scene: dict, observer: str) -> Optional[_Field]:
         return None
     field = _Field()
     field.add_room(scene, room_id, (0, 0))
-    field.doors = {}
+    side = grid_side(scene, room_id)
     for other, bearing in _sight_neighbours(scene, room_id):
-        d1, b1 = _door_cell(scene, room_id, other)
-        d2, _b2 = _door_cell(scene, other, room_id)
-        if not d1 or not d2:
+        d1s, b1 = _door_cells(scene, room_id, other)
+        d2s, _b2 = _door_cells(scene, other, room_id)
+        if not d1s or not d2s:
             continue
+        d1, d2 = d1s[0], d2s[0]
         ux, uy = _UNIT[b1]
         band = (d1[0] + ux, d1[1] + uy)
         anchor_far = (band[0] + ux, band[1] + uy)
         offset = (anchor_far[0] - d2[0], anchor_far[1] - d2[1])
+        far_side = grid_side(scene, other)
         if any(cell in field.inside for cell in (
                 (x + offset[0], y + offset[1])
-                for x in range(grid_side(scene, other))
-                for y in range(grid_side(scene, other)))):
+                for x in range(far_side) for y in range(far_side))):
             continue                        # two doorways on one wall overlap
         field.add_room(scene, other, offset)
-        field.inside[band] = room_id        # the doorway itself
-        field.doors[other] = band
+        # THE WALL IS A LINE AND THE DOORWAY IS A GAP IN IT. The band of
+        # cells between the two grids is where the wall stands; its midline
+        # is the wall, of no thickness, and the doorway's cells give the gap
+        # its width. A diagonal bearing puts the neighbour corner to corner,
+        # so the doorway is a gap in both of the lines that meet there.
+        aperture_cells = [(x + ux, y + uy) for x, y in d1s]
+        for axis in ((1,) if b1 in ("n", "s") else
+                     (0,) if b1 in ("e", "w") else (0, 1)):
+            along = 1 - axis
+            lo = min(0, offset[along]) - 0.5
+            hi = max(side, offset[along] + far_side) - 0.5
+            field.walls.append({
+                "axis": axis, "coord": band[axis], "extent": (lo, hi),
+                "aperture": (min(c[along] for c in aperture_cells) - 0.5,
+                             max(c[along] for c in aperture_cells) + 0.5),
+                "to": other,
+            })
     return field
 
 
@@ -646,19 +698,67 @@ def _visible_set(field, origin, eye, top):
 
     def blocked(x, y):
         if (x, y) not in field.inside:
-            return True
+            # A cell on a wall line is the wall's business (`_wall_verdict`
+            # on the straight line), not a solid the cast stops at: a fan
+            # cast through a one-cell hole in a one-cell-thick wall admits
+            # a narrower cone than any real doorway does.
+            return not _on_wall_line(field, (x, y))
         h = field.height.get((x, y))
         return h is not None and _blocks(h, eye, top)
     return shadowcast(origin, side_max + 1, blocked)
 
 
+def _on_wall_line(field, cell) -> bool:
+    """Is this (non-interior) cell part of a wall between two placed rooms?"""
+    for wall in field.walls:
+        if cell[wall["axis"]] == wall["coord"] \
+                and wall["extent"][0] <= cell[1 - wall["axis"]] \
+                <= wall["extent"][1]:
+            return True
+    return False
+
+
+def _wall_verdict(field, origin, target) -> bool:
+    """Does the straight segment between two cell centres pass through
+    every wall that stands between them? Real geometry, not a cell walk:
+    the segment crosses the wall's line at one point, and it is through the
+    wall if that point lies in the doorway's span and into it otherwise.
+
+    So a doorway one cell wide admits a line at ANY angle that threads it,
+    which is what a doorway does -- a real wall is a fraction of a pace
+    thick and a jamb subtracts a few degrees at the extremes, not the
+    forty-five a cell-thick wall did. A wall crossed outside its extent is
+    no verdict: that is the corner of the room, and the cells beyond it
+    are outside `field.inside` and fail on their own.
+    """
+    for wall in field.walls:
+        axis = wall["axis"]
+        o, t = origin[axis], target[axis]
+        c = wall["coord"]
+        if (o - c) * (t - c) >= 0:
+            continue                        # both on one side, or on it
+        k = (c - o) / float(t - o)
+        along = origin[1 - axis] + k * (target[1 - axis] - origin[1 - axis])
+        if not (wall["extent"][0] <= along <= wall["extent"][1]):
+            continue
+        if not (wall["aperture"][0] <= along <= wall["aperture"][1]):
+            return False
+    return True
+
+
 def _occluders_on(field, origin, target, eye, top):
     """(blocking anchor id or None, tallest non-blocking anchor height rank)
-    along the straight line between two cells."""
+    along the straight line between two cells. `__wall__` names a wall,
+    whether the line struck one between two rooms (`_wall_verdict`) or ran
+    out of the field altogether."""
     tallest = -1.0
     tallest_id = None
+    if not _wall_verdict(field, origin, target):
+        return "__wall__", tallest, tallest_id
     for cell in _line(origin, target):
         if cell not in field.inside:
+            if _on_wall_line(field, cell):
+                continue                    # the wall itself, judged above
             return "__wall__", tallest, tallest_id
         h = field.height.get(cell)
         if h is None:
@@ -740,12 +840,17 @@ def neighbour_feature_visibility(scene: dict, observer: str, to_room,
 
     Same row shape as `feature_visibility`, over `field.anchors[to_room]`
     instead of the observer's own room. `observer_field` has already laid the
-    neighbour out beyond a one-cell wall band with the two door cells aligned,
-    so the doorway IS the aperture: `_occluders_on` returns `__wall__` for any
-    cell outside `field.inside`, and every line from here into there that does
-    not thread the doorway dies on that wall. The cone cap is therefore
+    neighbour out beyond the wall with the two door cells aligned and recorded
+    that wall as a line with the doorway as a gap in it (`field.walls`), so
+    the doorway IS the aperture: one straight line from the observer to the
+    thing, and `_occluders_on` answers `__wall__` when that line crosses the
+    wall anywhere but through the gap (`_wall_verdict`), and names the
+    furniture on either side of it otherwise. The cone cap is therefore
     geometric rather than a second rule -- nothing here re-decides what an
-    opening admits.
+    opening admits, and nothing routes the line through the door in legs
+    (the 2026-09-04 form did, and let an observer beside the doorframe see
+    round the corner to a thing on the far diagonal, which no straight line
+    reaches).
 
     ONE DELIBERATE DIFFERENCE FROM THE WITHIN-ROOM FORM: the occlusion walk
     always runs, where `feature_visibility` runs it only for an observer at a
@@ -784,35 +889,9 @@ def neighbour_feature_visibility(scene: dict, observer: str, to_room,
         sector = _cone_sector(facing, origin, target) if facing else None
         if facing and _sector_verdict(sector) == "rear":
             continue
-        # THROUGH THE DOORWAY, IN TWO SEGMENTS. A single ray from here to a
-        # thing in the next room is rasterised by `_line` as a SUPERCOVER --
-        # every cell the segment touches, so sight cannot slip between two
-        # occluders meeting at a corner. That property is wanted and must not
-        # be relaxed (a body behind a long bar stays behind it). But an
-        # aperture is one open cell in a wall, and its neighbours in the
-        # supercover are that wall, so any off-axis glance through a door hit
-        # masonry: measured, a body one pace back from an open door could not
-        # see a stove almost straight through it, and only a line dead through
-        # the centre survived.
-        #
-        # Looking through a door is two questions, not one -- can I see the
-        # doorway, and can the doorway see the thing -- so ask them
-        # separately, against the same strict rasteriser. Nothing about
-        # within-room occlusion changes, because within a room there is no
-        # doorway to route through.
-        door = (getattr(field, "doors", None) or {}).get(to_room)
-        legs = ((origin, door), (door, target)) if door \
-            else ((origin, target),)
         top = max(height_rank(rec["height"]), 0.5)
-        blocked = False
-        for _from, _to in legs:
-            if _from == _to:
-                continue
-            blocker, _t, _tid = _occluders_on(field, _from, _to, eye, top)
-            if blocker and blocker != aid:
-                blocked = True
-                break
-        if blocked:
+        blocker, _t, _tid = _occluders_on(field, origin, target, eye, top)
+        if blocker and blocker != aid:
             continue
         rows.append({
             "anchor": aid, "desc": rec["desc"], "implicit": False,
