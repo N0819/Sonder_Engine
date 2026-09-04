@@ -41,6 +41,22 @@ Deterministic (`agents/mapping.py`; no model role). Routes attached lorebooks, r
 
 Creates the initial objective scene and actor state. This is privileged objective setup, not player-facing prose.
 
+The opening is handed the PLAN when the story has one: `planned_rooms` is the
+brief (`world.structure.planned_room_brief`) for EVERY planned room, uncapped
+(measured 63,544 bytes for chat 114's 49 rooms), under the same key interpret
+and resolve use for the rooms in reach -- the prompt's ROOMS THE PLAN ALREADY
+HOLDS clause has the opening place bodies in the plan's room by id and furnish
+it rather than mint a like room beside it. `author_notes` carries the Writers'
+Room's `director_note` texts in scope (`plot_packages.active_director_notes`:
+landed notes of visible packages whose rooms, if any, meet the rooms the
+scenario names and their planned neighbours). Both keys are ABSENT when there
+is nothing to carry, so a story with no plan produces the payload it always
+did. The same two keys, scoped to where the cast stands or is beside, ride
+`director_interpret` and `director_resolve`, and `author_notes` is forwarded
+to the objects and spatial hands (`agents/director_fanout.py`) and gates the
+prose author's `author_notes` duty chunk. Author knowledge only: no mind and no
+narrator receives either.
+
 Character and persona cards expose only their public `initial_outfit`
 projection to establishment. A non-empty outfit is authoritative and is copied
 into objective attire after model output; private history and psychology are

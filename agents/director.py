@@ -352,7 +352,19 @@ def director_establish(ctx, nonce):
         # when nobody is, so an opening with no town is byte-identical.
         **({"present_figures": _present_figure_rows(_opening_figures)}
            if (_opening_figures := _figures_in_view(
-               ctx, _opening_rooms(ctx))) else {}),
+               ctx, (_opening := _opening_rooms(ctx)))) else {}),
+        # EVERY room the plan holds, uncapped (`_opening_planned_rooms`):
+        # the opening places bodies in the plan's rooms by id and furnishes
+        # them rather than minting like rooms beside them. Absent when the
+        # story has no plan, so that opening's payload is unchanged.
+        **({"planned_rooms": _planned}
+           if (_planned := _opening_planned_rooms(ctx)) else {}),
+        # The room's notes on what its plan MEANS, scoped to the rooms the
+        # scenario names and their planned neighbours (`_author_notes_view`);
+        # absent when there are none.
+        **({"author_notes": _notes}
+           if (_notes := _author_notes_view(
+               ctx, _rooms_beside(ctx, {}, *_opening))) else {}),
         # What the opening reached for that no plan holds (the compiler's
         # needs): the author renders the surface and files nothing more.
         **({"planning_needs": world.get("planning_needs")}
@@ -482,6 +494,89 @@ def _opening_rooms(ctx):
             ctx.chat["id"], str(ctx.chat.get("scenario") or ""))
     except Exception:
         return []
+
+
+def _opening_planned_rooms(ctx):
+    """The plan's brief for EVERY planned room (`planned_room_brief`), for
+    the one beat that has no scene to scope by -- the opening. Interpret and
+    resolve scope the same brief to the rooms in reach (`_planned_rooms_view`);
+    an opening has no reach yet, and the room the scenario describes may be
+    any of them, so the Director is handed the whole plan and told to place
+    the opening IN it rather than mint a like room beside it (`director_
+    establish` prompt, ROOMS THE PLAN ALREADY HOLDS). DELIBERATELY UNCAPPED
+    (owner ruling: a cap is named to the owner, never buried). Measured on
+    chat 114, the largest plan in the owner's database, 2026-09-04: 49
+    planned rooms, 63,544 bytes of payload JSON on an empty scene. None when
+    the story has no plan, so that opening's payload is unchanged."""
+    try:
+        from world.structure import planned_room_brief, planned_room_ids
+        ids = sorted(planned_room_ids(ctx.chat["id"]))
+        if not ids:
+            return None
+        return planned_room_brief(ctx.chat["id"], {}, ids) or None
+    except Exception:
+        return None
+
+
+def _rooms_beside(ctx, sc, *extra):
+    """The rooms the cast stands in or beside: every cast member's room and
+    the ``extra`` rooms the caller names (the player's, a declared
+    destination, the opening's), plus ONE hop over the scene's adjacency
+    (`agents.common._contextual_rooms`, the payload's own room window) and
+    over the plan's topology -- so a room planned beside the one the story
+    stands in is beside it before any beat has drawn the door. The scope an
+    author's note is judged against; empty when nobody stands anywhere."""
+    centers = {str(r) for r in extra if str(r or "")}
+    try:
+        from .common import character_name, room_of
+        for row in ctx.cast or []:
+            try:
+                sheet = row["sheet"]
+                sheet = json.loads(sheet) if isinstance(sheet, str) else sheet
+                room = room_of(sc or {}, character_name(sheet))
+            except Exception:
+                continue
+            if room:
+                centers.add(str(room))
+    except Exception:
+        pass
+    if not centers:
+        return set()
+    reach = set(centers)
+    try:
+        reach.update(str(r) for r in _contextual_rooms(
+            sc or {}, [], *sorted(centers)))
+    except Exception:
+        pass
+    try:
+        from world.structure import planned_topology
+        for rid, others in planned_topology(ctx.chat["id"]).items():
+            others = {str(o) for o in others}
+            if rid in centers:
+                reach.update(others)
+            if others & centers:
+                reach.add(str(rid))
+    except Exception:
+        pass
+    return reach
+
+
+def _author_notes_view(ctx, rooms_in_reach):
+    """The Writers' Room's notes to the Director in scope this beat
+    (`plot_packages.active_director_notes`), or None when there are none --
+    so every payload of a story with no note is byte-identical. What a
+    package MEANS: which planned thing is which live thing, what a scheduled
+    consequence is for. Author knowledge for the Director's stages and the
+    hands that place things, never for a mind or the narrator. Fail-open: a
+    store that cannot be read carries no note."""
+    try:
+        from story.plot_packages import active_director_notes
+        notes = active_director_notes(
+            ctx.chat["id"], getattr(ctx.turn, "frame_id", None),
+            ctx.turn.idx, rooms_in_reach)
+        return list(notes) or None
+    except Exception:
+        return None
 
 
 def _figures_in_view(ctx, rooms, reserved=False):
@@ -770,6 +865,11 @@ def director_interpret(ctx, nonce):
         # when no planned room is in reach (see `_planned_rooms_view`).
         **({"planned_rooms": _planned} if (
             _planned := _planned_rooms_view(sc, ctx, p_room)) else {}),
+        # The room's notes on what its plan MEANS, in scope where the cast
+        # stands or beside it (`_author_notes_view`); absent when none.
+        **({"author_notes": _notes} if (
+            _notes := _author_notes_view(
+                ctx, _rooms_beside(ctx, sc, p_room))) else {}),
         "present_characters": cast_info,
         # Named figures with no character id. `flow.addressed_to` accepts a
         # NAME STRING for exactly these (schemas.py: "the only way the director
@@ -1021,6 +1121,7 @@ def director_interpret(ctx, nonce):
             "movement": out.get("movement"),
             "movers": {p_name: {"exits": _egocentric_exits(sc, p_name)}},
             "planning_needs": [],
+            "author_notes": payload.get("author_notes"),
             "sightlines": _sightlines_view(sc, ctx, p_name),
             "crowds": _icrowds,
             "couriers": _couriers_view(chat["id"], sc),
@@ -2219,6 +2320,9 @@ _PROSE_DUTY_GATES = {
     # when it is not needed.
     "travel": lambda f: f["travel_in_flight"],
     "planning_need": lambda f: f["planning_needs_present"],
+    # Exact presence, like planning_need: the payload either carries the
+    # room's notes or it does not, and it does not on most beats.
+    "author_notes": lambda f: f["author_notes_present"],
     "hearsay": lambda f: f["unratified_claims_present"],
     "road": lambda f: f["road_subjects_present"],
     "approach": lambda f: f["physical_beat"],
@@ -2342,6 +2446,8 @@ def _prose_gate_facts(ctx, sc, payload, facts, p_name):
         "travel_in_flight": _true_on_error(
             lambda: payload.get("travel_in_flight")),
         "planning_needs_present": _true_on_error(planning_needs_content),
+        "author_notes_present": _true_on_error(
+            lambda: payload.get("author_notes")),
         "due_events_present": _true_on_error(
             lambda: payload.get("due_authored_events")),
         "pressure_ledger_open": _true_on_error(
@@ -3239,6 +3345,13 @@ def director_resolve(ctx, nonce, _corrections=None):
         **({"planned_rooms": _planned} if (
             _planned := _planned_rooms_view(
                 sc, ctx, ctx.get("_player_room"), _mv_target)) else {}),
+        # The room's notes on what its plan MEANS, in scope where the cast
+        # stands, moves into or beside (`_author_notes_view`); absent when
+        # none.
+        **({"author_notes": _notes} if (
+            _notes := _author_notes_view(
+                ctx, _rooms_beside(
+                    ctx, sc, ctx.get("_player_room"), _mv_target))) else {}),
         "player_declaration": {
             "ABSOLUTE": True,
             "sequence": interp.get("sequence") or [],
@@ -3760,6 +3873,7 @@ def director_resolve(ctx, nonce, _corrections=None):
         "present_figures": _present_figures,
         "sightlines": payload.get("sightlines"),
         "planned_rooms": payload.get("planned_rooms"),
+        "author_notes": payload.get("author_notes"),
         "crowds": payload.get("crowds") or [],
         "couriers": payload.get("couriers") or [],
         "carried_reports": payload.get("carried_reports") or [],
