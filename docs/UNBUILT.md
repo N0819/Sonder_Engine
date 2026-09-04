@@ -6318,16 +6318,48 @@ Zero tensions invented from nothing across 36 cases. The gap of +65 compares
 with glm-5p2-fast +46, grok-4.3 +1, deepseek-v4-pro -20 as CHARACTERS on the
 same axis. The framing does the work, not the weights.
 
-**What is still open.**
+**THE LANE IS CONFIRMED WORKING IN LIVE PLAY, 2026-09-04, and the rate item
+this entry left open is answered.** Read off the author's corpus, split at the
+build date:
 
-- **The unaimed case is bounded but not closed.** Every dispute arm keeps the
-  ponder query in the payload, and that query is itself a pointer. The
-  genuinely unaimed case -- both rows present through ordinary recall alone --
-  could not be arranged, because it happens 0 times in 18. That is evidence
-  for the finding rather than a hole in it, but it is not the same as having
-  measured it.
-- **Whether the shipped retrieval raises the live rate.** 1 in 9,608 is the
-  number to beat and it can only be read off a real corpus over many beats.
+| | memories | disputes | rate |
+|---|---|---|---|
+| before 2026-08-20 | 9,361 | 1 | 1 in 9,361 |
+| after 2026-08-20 | 5,638 | 40 | **1 in 141** |
+
+A 66x increase, and the "before" column reproduces this entry's own 1-in-9,608
+independently. 41 rows across 25 chats; 3 have been re-read more than once, so
+the addendum history is exercised too. One dispute was traced end to end
+(chat 114 turn 8, the Doctor on Hinami): `disputed` written with the
+re-reading, importance raised to 0.815, the superseded hypothesis gone from
+`mind_models` and replaced by the corrected one at the top of 18, and recall
+delivering the row with `i_now_read_this_differently`. Confidence landed at
+0.3025, which is `_abandoned_confidence` exactly (mint 0.55 x 0.55) -- so the
+belief was genuinely dropped rather than merely annotated.
+
+**But the mechanism that fixed it is not the one this entry predicted, and
+that part is still open.** The re-readings were sorted by what they cite:
+
+| | |
+|---|---|
+| cited the present beat only | **39 / 41** |
+| cited own memory (the 2026-08-20 grounding widening) | **1 / 41** |
+| cited nothing | 1 / 41 |
+
+And by how old the disputed row was: 34 of 41 were disputed within 2 beats of
+being formed. Even the seven long-gap cases -- +11, +21, +43, +86 beats --
+fire on `current:` events. So what produces a dispute in play is A PRESENT
+PERCEPTION CONTRADICTING A HELD BELIEF, not two memory rows arriving together.
+The co-presence reading was measured on synthetic banks and is not what the
+live corpus shows doing the work.
+
+- **The co-presence occasion is built and effectively unexercised.**
+  `schedule_memory_tension_pass` and `resurfaced_without_asking` shipped, and
+  the grounding was widened specifically to admit "the later memory that
+  overturned the belief" because characters cited one 15 times in 18 on the
+  synthetic bank. Live, that lane accounts for 1 dispute in 41. Whether it is
+  mistuned, rarely triggered, or simply redundant against the present-beat
+  route is unmeasured, and worth knowing before anything else is built on it.
 - **A mind has no record of HAVING pondered.** `memory_ponder` is popped when
   consumed and no row is minted, so a character that has asked itself the same
   question five times cannot notice. Deliberately not built: a row per ponder
