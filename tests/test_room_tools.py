@@ -196,7 +196,7 @@ class TestReadTools:
         ids = run_tool(cid, "inspect_reserved_identities")
         assert [c["name"] for c in ids["characters"]] == ["Mara Quill"]
         assert ids["plans"][0]["aliases"] == ["the netmender"]
-        assert ids["charter_bodies"] == []
+        assert ids["charter_bodies"] == {} and "inspect_charters" in ids["charter_bodies_note"]
         assert run_tool(cid, "inspect_plans", {"kind": "thing"})["plans"] == []
         assert run_tool(cid, "inspect_plans")["plans"][0]["name"] == "Old Sel"
         needs = run_tool(cid, "inspect_needs")["needs"]
@@ -268,3 +268,53 @@ def test_the_room_authors_a_package_through_the_facade_alone(temp_db):
     assert [p["name"] for p in planned_entities(cid).values()] == ["Verger Hale"]
     assert run_tool(cid, "read_package", {"uid": uid})["status"] == "published"
     assert run_tool(cid, "resolve_package", {"uid": uid, "note": "done"})["status"] == "resolved"
+
+
+# ---------------------------------------------------------------------------
+# What the read tools weigh (measured 2026-09-04, chat 114)
+# ---------------------------------------------------------------------------
+
+def test_events_are_a_few_short_excerpts_unless_more_is_asked(temp_db):
+    """`inspect_events` was a constant 7.8k wherever twelve beats existed
+    (12 x 600-character excerpts). The default is a handful of short
+    excerpts; `n` and `full` are there for the reply that needs them."""
+    from story.room_tools import EVENT_EXCERPT_CHARS, EVENTS_CAP, EVENTS_DEFAULT
+    cid, _ = _story(temp_db)
+    for i in range(EVENTS_DEFAULT + 4):
+        temp_db.qi("INSERT INTO events(chat_id,turn_id,content) VALUES(?,?,?)",
+                   (cid, None, "Beat %d. " % i + "The tide came in over the stones. " * 20))
+    out = run_tool(cid, "inspect_events")
+    assert len(out["recent"]) == EVENTS_DEFAULT
+    assert all(len(e["content"]) <= EVENT_EXCERPT_CHARS for e in out["recent"])
+    assert out["recent"][-1]["content"].startswith("Beat %d." % (EVENTS_DEFAULT + 3))
+    more = run_tool(cid, "inspect_events", {"n": EVENTS_DEFAULT + 2, "full": True})
+    assert len(more["recent"]) == EVENTS_DEFAULT + 2
+    assert all(len(e["content"]) > EVENT_EXCERPT_CHARS for e in more["recent"])
+    assert len(run_tool(cid, "inspect_events", {"n": 10_000})["recent"]) <= EVENTS_CAP
+    assert EVENTS_DEFAULT < 12 and EVENT_EXCERPT_CHARS < 600
+
+
+def test_reserved_identities_carry_charter_bodies_as_names_under_their_charter(
+        temp_db, monkeypatch):
+    """Nine tenths of the result on chat 114 was the place and availability
+    of the same 66 bodies `inspect_charters` lists. This tool answers
+    whether a name is taken; the rest is the charter's to tell."""
+    from world import charter_runtime
+    cid, _ = _story(temp_db)
+    registry = {"items": {"harbour_office": {"state": {"bodies": {
+        "b1": {"name": "Tamsin Rook", "place": "office", "available": True},
+        "b2": {"name": "Odo Pell", "place": "quay", "available": False}}}},
+        "chapel": {"state": {"bodies": {}}}}}
+    monkeypatch.setattr(charter_runtime, "registry_for", lambda cid_, frame_id: registry)
+    out = run_tool(cid, "inspect_reserved_identities")
+    assert out["charter_bodies"] == {"harbour_office": ["Tamsin Rook", "Odo Pell"]}
+    assert "place" not in json.dumps(out["charter_bodies"])
+    assert "inspect_charters" in out["charter_bodies_note"]
+    assert "inspect_charters" in TOOL_INDEX["inspect_reserved_identities"]["description"]
+
+
+def test_the_manifest_marks_the_tools_the_planner_payload_already_answers():
+    keyed = {t["name"]: t["payload_key"] for t in tool_manifest() if "payload_key" in t}
+    assert keyed == {"inspect_clock": "clock", "inspect_packages": "packages"}
+    for name, key in keyed.items():
+        assert "`%s`" % key in TOOL_INDEX[name]["description"]

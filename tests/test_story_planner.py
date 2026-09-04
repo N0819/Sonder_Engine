@@ -130,7 +130,8 @@ def test_a_reply_runs_tools_then_answers_and_writes_status(temp_db, scripted):
     assert out["reply"] == "The port stands at turn two."
     assert out["calls"] == 1 and out["steps"] == 2 and out["stopped"] is None
     shown = script.payloads[1]["transcript"]
-    assert shown[0]["tool"] == "inspect_clock" and shown[0]["result"]["turn_idx"] == 2
+    assert shown[0]["tool"] == "inspect_clock" and shown[0]["result"] == {"in_payload": "clock"}
+    assert script.payloads[1]["clock"]["turn_idx"] == 2
     assert script.payloads[0]["player_says"] == "What time is it?"
     assert script.payloads[0]["budget"]["steps"] == sp.PLANNER_STEPS_PER_REPLY
     status = room.status(cid, None)
@@ -715,3 +716,211 @@ def test_a_round_that_judged_and_said_nothing_did_not_stop_at_a_budget(
     assert out["stopped"] is None
     assert out["reply"] == sp.SILENT_LINE
     assert sp.BOUNDED_LINE not in out["reply"]
+
+
+# ---------------------------------------------------------------------------
+# What balloons: the thread and the transcript (measured 2026-09-04, chat 114)
+# ---------------------------------------------------------------------------
+
+def _big(chars, tag):
+    return {"tag": tag, "rows": ["x" * 100] * (chars // 104)}
+
+
+def test_a_dump_trims_the_largest_read_result_before_evicting_the_neighbours(
+        temp_db, monkeypatch):
+    """Chat 114, step 5 (2026-09-04): a 13k `inspect_rooms` echo at step 4 (11k here, under the tool cap)
+    evicted seven smaller results from steps 1-3 -- the packages and plans
+    the Planner had just read -- because the transcript fell off whole
+    entries newest-first. Now the largest ALREADY-READ result is cut to a
+    head before any entry is evicted; the newest step, which the model has
+    not read yet, stays whole."""
+    from story.room_tools import TOOL_INDEX
+    small = ["inspect_packages", "inspect_plans", "inspect_charters", "inspect_events",
+             "inspect_needs", "inspect_structures", "inspect_contradictions"]
+    for name in small:
+        monkeypatch.setitem(TOOL_INDEX[name], "handler",
+                            lambda cid_, frame_id, _t=name, **kw: _big(3000, _t))
+    monkeypatch.setitem(TOOL_INDEX["inspect_rooms"], "handler",
+                        lambda cid_, frame_id, **kw: _big(11000, "rooms"))
+    seen = []
+    answers = iter([
+        {"calls": [{"tool": n, "args": {}} for n in small[:3]]},
+        {"calls": [{"tool": n, "args": {}} for n in small[3:5]]},
+        {"calls": [{"tool": n, "args": {}} for n in small[5:]]},
+        {"calls": [{"tool": "inspect_rooms", "args": {}}]},
+        {"reply": "done"},
+    ])
+
+    def script(role, system, user, **kw):
+        seen.append(json.loads(user))
+        return json.dumps(next(answers))
+    monkeypatch.setattr(providers, "chat_complete", script)
+    cid, _ = _story(temp_db)
+    sp.run_planner(cid, None, text="Plan the tenement.")
+    shown = seen[4]["transcript"]
+    assert len(json.dumps(shown, ensure_ascii=False)) <= sp.PLANNER_TRANSCRIPT_CHARS
+    # Every neighbour is still there, in order, with its call intact.
+    assert [e["tool"] for e in shown] == small + ["inspect_rooms"]
+    # The dump the model has not read yet is whole; what it trimmed is the
+    # largest of what the model already read, cut to a head that says how
+    # much is gone.
+    assert shown[-1]["result"]["tag"] == "rooms"
+    trimmed = [e for e in shown if "trimmed" in e["result"]]
+    assert trimmed and all(e["tool"] in small for e in trimmed)
+    for e in trimmed:
+        assert len(e["result"]["head"]) == sp.PLANNER_TRIM_HEAD_CHARS
+        assert e["result"]["trimmed"] > 0
+    # Not every neighbour had to go: the trim stops when the transcript fits.
+    assert any("trimmed" not in e["result"] for e in shown[:-1])
+
+
+def test_the_trim_reaches_the_newest_step_only_when_nothing_older_is_left():
+    """One step that alone outgrows the transcript is trimmed too, largest
+    first; eviction is the last resort and takes the oldest."""
+    transcript = [{"tool": "a", "args": {}, "result": _big(9000, "a"), "step": 1},
+                  {"tool": "b", "args": {}, "result": _big(9000, "b"), "step": 1},
+                  {"tool": "c", "args": {}, "result": _big(9000, "c"), "step": 1}]
+    shown, whole = sp._shown_transcript(transcript, cap=20_000)
+    assert [e["tool"] for e in shown] == ["a", "b", "c"]
+    assert sum("trimmed" in e["result"] for e in shown) == 1
+    assert whole == {i for i, e in enumerate(shown) if "trimmed" not in e["result"]}
+    # A cap no head fits under evicts, oldest first.
+    shown, whole = sp._shown_transcript(transcript, cap=sp.PLANNER_TRIM_HEAD_CHARS * 2)
+    assert [e["tool"] for e in shown] == ["c"]
+
+
+def test_an_identical_call_is_a_pointer_while_its_answer_is_still_in_view(
+        temp_db, monkeypatch):
+    """Chat 114 called `inspect_clock` five times per reply and `inspect_rooms`
+    three; each echo was a full copy. A repeat of a call whose answer is
+    unchanged and still shown is answered with the step to look at; a repeat
+    whose answer moved, or whose earlier copy fell out of view, is shown
+    again in full."""
+    from story.room_tools import TOOL_INDEX
+    state = {"n": 0}
+
+    def needs(cid_, frame_id, **kw):
+        return {"needs": ["rope"] * state["n"]}
+    monkeypatch.setitem(TOOL_INDEX["inspect_needs"], "handler", needs)
+    monkeypatch.setitem(TOOL_INDEX["inspect_rooms"], "handler",
+                        lambda cid_, frame_id, **kw: _big(11000, "rooms"))
+    seen = []
+    answers = iter([
+        {"calls": [{"tool": "inspect_needs", "args": {}},
+                   {"tool": "inspect_needs", "args": {"kind": "room"}}]},
+        {"calls": [{"tool": "inspect_needs", "args": {}}]},          # same -> pointer
+        lambda p: state.update(n=1) or {"calls": [{"tool": "inspect_needs", "args": {}}]},  # moved
+        {"calls": [{"tool": "inspect_rooms", "args": {}}] * 2},        # twice in one step
+        {"reply": "done"},
+    ])
+
+    def script(role, system, user, **kw):
+        payload = json.loads(user)
+        seen.append(payload)
+        step = next(answers)
+        return json.dumps(step(payload) if callable(step) else step)
+    monkeypatch.setattr(providers, "chat_complete", script)
+    cid, _ = _story(temp_db)
+    sp.run_planner(cid, None, text="hi")
+    t = seen[4]["transcript"]
+    assert [e["tool"] for e in t] == ["inspect_needs"] * 4 + ["inspect_rooms"] * 2
+    assert t[0]["result"] == {"needs": []} and t[1]["result"] == {"needs": []}
+    assert t[2]["result"] == {"see_step": 1}
+    assert t[3]["result"] == {"needs": ["rope"]}
+    assert t[4]["result"]["tag"] == "rooms" and t[5]["result"] == {"see_step": 4}
+
+
+def test_a_repeat_of_a_call_that_fell_out_of_view_is_shown_again(temp_db, monkeypatch):
+    """The pointer is only offered when the referent is still shown whole:
+    a re-read of a trimmed or evicted result is a fair request."""
+    from story.room_tools import TOOL_INDEX
+    monkeypatch.setitem(TOOL_INDEX["inspect_rooms"], "handler",
+                        lambda cid_, frame_id, **kw: _big(11000, "rooms"))
+    monkeypatch.setitem(TOOL_INDEX["inspect_charters"], "handler",
+                        lambda cid_, frame_id, **kw: _big(11000, "charters"))
+    monkeypatch.setattr(sp, "PLANNER_TRANSCRIPT_CHARS", 15_000)
+    seen = []
+    answers = iter([
+        {"calls": [{"tool": "inspect_rooms", "args": {}}]},
+        {"calls": [{"tool": "inspect_charters", "args": {}}]},   # rooms is trimmed now
+        {"calls": [{"tool": "inspect_rooms", "args": {}}]},      # so this is a re-read
+        {"reply": "done"},
+    ])
+
+    def script(role, system, user, **kw):
+        seen.append(json.loads(user))
+        return json.dumps(next(answers))
+    monkeypatch.setattr(providers, "chat_complete", script)
+    cid, _ = _story(temp_db)
+    sp.run_planner(cid, None, text="hi")
+    assert "trimmed" in seen[2]["transcript"][0]["result"]
+    last = seen[3]["transcript"][-1]
+    assert last["tool"] == "inspect_rooms" and "see_step" not in last["result"]
+
+
+def test_the_payload_keyed_tools_answer_with_a_pointer_not_a_copy(temp_db, scripted):
+    """`inspect_clock` and `inspect_packages` return what every payload
+    already carries under `clock` and `packages`, rebuilt each step; the
+    echo is the key to read, and a refusal is still a refusal."""
+    cid, _ = _story(temp_db)
+    script = scripted(
+        {"calls": [{"tool": "inspect_clock", "args": {}},
+                   {"tool": "new_package", "args": {"title": "Bell"}},
+                   {"tool": "inspect_packages", "args": {"status": "draft"}},
+                   {"tool": "inspect_packages", "args": {"junk": 1}}]},
+        {"reply": "done"})
+    sp.run_planner(cid, None, text="hi")
+    t = script.payloads[1]["transcript"]
+    assert t[0]["result"] == {"in_payload": "clock"}
+    assert script.payloads[1]["clock"]["turn_idx"] == 2
+    assert t[2]["result"] == {"in_payload": "packages"}
+    assert script.payloads[1]["packages"][0]["title"] == "Bell"
+    assert "error" in t[3]["result"]
+    from story.room_tools import tool_manifest
+    keyed = {t["name"]: t.get("payload_key") for t in tool_manifest()}
+    assert keyed["inspect_clock"] == "clock" and keyed["inspect_packages"] == "packages"
+    assert keyed["inspect_rooms"] is None
+
+
+def test_the_thread_shows_the_players_words_whole_and_the_rooms_older_lines_folded(
+        temp_db, scripted, monkeypatch):
+    """Chat 114 (2026-09-04): 20.2k of a 22.2k `conversation` key was the
+    Planner's own prior replies, shown whole on every step. The bible is the
+    memory that folds them; the thread carries each older room line as its
+    first sentence, the newest line in each voice whole (a follow-up needs
+    its referent), and the player's every word."""
+    cid, _ = _story(temp_db)
+    long_reply = ("The room planned the harbour. " + "It spread the wharf over "
+                  "three rooms and seated a clerk. " * 40)
+    first_id = room.add_message(cid, None, "player", "Plan a harbour for me.")["id"]
+    room.add_message(cid, None, "planner", long_reply)
+    room.add_message(cid, None, "player", "Now the tenement? A poor one.")
+    room.add_message(cid, None, "planner", "A tenement it is! Four floors. Nine doors.")
+    room.add_message(cid, None, "dramaturge", "Proposed: a fire on the third floor. Why now.")
+    room.add_message(cid, None, "planner", "The fire is refused; the floor is stone.")
+    script = scripted({"reply": "ok"})
+    sp.run_planner(cid, None, text="hi")
+    conv = script.payloads[0]["conversation"]
+    texts = [m["text"] for m in conv]
+    assert texts[0] == "Plan a harbour for me." and texts[2] == "Now the tenement? A poor one."
+    assert texts[1] == "The room planned the harbour."
+    assert conv[1]["folded_chars"] == len(long_reply.strip()) - len(texts[1])
+    assert texts[3] == "A tenement it is!" and conv[3]["folded_chars"] > 0
+    # The newest line in each voice is whole.
+    assert texts[4] == "Proposed: a fire on the third floor. Why now."
+    assert texts[5] == "The fire is refused; the floor is stone." and "folded_chars" not in conv[5]
+    assert all("folded_chars" not in m for m in conv if m["role"] == "player")
+    # A sentence-less line folds to the head cap.
+    room.add_message(cid, None, "planner", "x" * 2000)
+    room.add_message(cid, None, "planner", "Last word.")
+    script = scripted({"reply": "ok"})
+    sp.run_planner(cid, None, text="hi")
+    conv = script.payloads[0]["conversation"]
+    assert len(conv[-2]["text"]) == sp.PLANNER_FOLDED_LINE_CHARS
+    # The chars cap evicts the OLDEST lines whole, beside the line window.
+    monkeypatch.setattr(sp, "PLANNER_HISTORY_CHARS", 300)
+    script = scripted({"reply": "ok"})
+    sp.run_planner(cid, None, text="hi")
+    conv = script.payloads[0]["conversation"]
+    assert len(json.dumps(conv, ensure_ascii=False)) <= 300
+    assert conv[-1]["text"] == "Last word." and conv[0]["id"] > first_id
