@@ -527,10 +527,11 @@ def planned_context(cid, query):
             continue
         uid, name = str(row["room_uid"]), str(row["name"] or row["room_uid"])
         uid_key, name_key = normalize_room_id(uid), normalize_room_id(name)
-        if folded not in {uid_key, name_key} \
-                and name_key not in folded and uid_key not in folded:
+        exact = folded in {uid_key, name_key}
+        if not exact and name_key not in folded and uid_key not in folded:
             continue
         rows.append({
+            "_exact": exact,
             "room_uid": uid, "name": name,
             "purpose": str(spec.get("purpose") or ""),
             "structure": str(spec.get("structure") or ""),
@@ -539,6 +540,30 @@ def planned_context(cid, query):
                          for edge in spec.get("adjacent") or ()
                          if isinstance(edge, dict) and edge.get("to")],
         })
+    # AN EXACT MATCH IS NOT AMBIGUOUS, and the substring tier is what made it
+    # look like one. The match above is deliberately loose -- the Director
+    # writes a destination as a description ("Reeve's Hall interior and
+    # occupants"), so a room answers when its spelling SITS INSIDE the query
+    # -- but a room id also sits inside another room id. Measured on the live
+    # chat 114 register: a room called `parking` is a substring of
+    # `guest_parking_lot`, so both matched, `len(rows) != 1`, and the query
+    # resolved to None; 30-odd rooms of that story's district answered nothing
+    # at all, which is the brief the Director is handed walking into one.
+    #
+    # So the tiers are ranked rather than pooled. A query that names a room
+    # exactly is answered by that room however many others it also brushes;
+    # only when nothing matches exactly does the loose tier decide, and there
+    # an ambiguity is still refused, because two descriptions matching one
+    # query really is two candidates. Two EXACT hits stay refused too: one
+    # room's uid equalling another's name is a genuine collision this cannot
+    # break by guessing.
+    exact = [r for r in rows if r.pop("_exact")]
+    for row in rows:
+        row.pop("_exact", None)
+    if len(exact) == 1:
+        return exact[0]
+    if exact:
+        return None
     return rows[0] if len(rows) == 1 else None
 
 
