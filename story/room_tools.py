@@ -191,6 +191,58 @@ def _t_inspect_rooms(cid, frame_id, *, room_ids=None, include_planned=True):
     occupants = {}
     for who, room in positions.items():
         occupants.setdefault(str(room), []).append(str(who))
+    # WHAT IS STANDING IN THE ROOM, not only WHO. `occupants` has always come
+    # from `positions`, which keys bodies; the scene's things were in no read
+    # this Room has -- no tool returned them and the reply payload carries no
+    # scene at all. So the Room could file a plan for a thing and then never
+    # see it again: it could not tell that one already stood somewhere, nor
+    # where the story had since moved it. Measured live (chat 114): asked to
+    # put the TARDIS somewhere, the Room placed it in the hibiscus garden at
+    # beat 6 -- correctly, on what it could see -- the Director stood the box
+    # on the beach at beat 9, and nothing here could ever report the
+    # divergence.
+    #
+    # A plan reference rides each row where the Director's identity floor
+    # bound one, because "is this the thing I planned, or another one?" is the
+    # question this read exists to answer.
+    # A thing is placed one of two ways and BOTH have to be read. `positions`
+    # keys some entities by id; a fixture or a landmark is instead an ANCHOR of
+    # the room it stands in, which is how the live TARDIS is placed -- entity
+    # `tardis` in `entities`, anchor `tardis` on the beach, and no position row
+    # at all. Reading only positions would have reported an empty shore.
+    from world.spatial import room_of
+
+    anchored = {}
+    for rid, room in rooms.items():
+        if not isinstance(room, dict):
+            continue
+        for aid in (room.get("anchors") or {}):
+            anchored.setdefault(str(aid), str(rid))
+    from llm.schemas import _ANIMATE_ENTITY_KINDS
+
+    things = {}
+    for eid, ent in (scene.get("entities") or {}).items():
+        if not isinstance(ent, dict):
+            continue
+        where = room_of(scene, str(eid)) or anchored.get(str(eid)) or ""
+        if not where:
+            continue
+        # A body is an occupant, not a thing, and a cast member routinely has
+        # BOTH a position row and a scene entity carrying the same display
+        # name -- reported in both lists it reads as two beings in one room.
+        label = str(ent.get("name") or eid).strip()
+        if str(ent.get("kind") or "").strip().casefold() in _ANIMATE_ENTITY_KINDS:
+            continue
+        if any(label.casefold() == str(who).strip().casefold()
+               for who in occupants.get(where, ())):
+            continue
+        row = {"id": str(eid), "name": label,
+               "kind": ent.get("kind") or ""}
+        plan = ent.get("plan_ref")
+        if isinstance(plan, dict) and plan.get("uid"):
+            row["plan_ref"] = str(plan["uid"])
+        things.setdefault(where, []).append(row)
+
     wanted = {str(r) for r in (room_ids or ())}
     out, containment = [], []
     for rid, room in rooms.items():
@@ -216,6 +268,7 @@ def _t_inspect_rooms(cid, frame_id, *, room_ids=None, include_planned=True):
             "exits": [{"to": e.get("to"), "barrier": e.get("barrier")}
                       for e in (room.get("adjacent") or []) if isinstance(e, dict)],
             "occupants": occupants.get(str(rid), []),
+            "things": things.get(str(rid), []),
             "planned_stub": bool(room.get("planned")),
         })
     planned = []
@@ -506,19 +559,70 @@ def _t_inspect_contradictions(cid, frame_id):
                 out["structure"].append("%s: %s" % (key, w))
     except Exception as exc:
         out["structure"] = ["structures unreadable: %s" % exc]
-    for rid in sorted(planned):
-        brief = planned_context(cid, rid) or {}
-        for other in brief.get("adjacent") or ():
-            if str(other) not in known and not any(
-                    str(other) == (scene.get("rooms") or {}).get(r, {}).get("name")
-                    for r in rooms):
-                out["dangling"].append(
-                    {"kind": "planned_exit_to_nowhere", "room": rid, "to": other})
+    # ASK THE TOPOLOGY, NOT THE RENDERING. `planned_context` exists to brief a
+    # reader and renders each edge as the neighbour's DISPLAY NAME
+    # (`names.get(uid, uid)`); this check then compared those names against a
+    # set of room IDS, so every planned edge whose target had a display name
+    # read as an exit to nowhere. Measured on the live chat 114 register: 83
+    # dangling rows, 65 of them pure rendering artefact, for a plan that is
+    # coherent. `planned_topology` returns the same edges as the ids they are
+    # stored as, which is what a reachability question wants and removes the
+    # mismatch at its source rather than translating back.
+    #
+    # It also stops depending on `planned_context` returning anything at all:
+    # that function answers None whenever a query matches two rows, and its
+    # match is a SUBSTRING test, so `guest_parking_lot` is ambiguous against a
+    # room called `parking` and 30-odd rooms of this story's district resolve
+    # to nothing. That is its own defect and is not repaired here.
+    from world.structure import planned_topology
+
+    for rid, edges in sorted(planned_topology(cid).items()):
+        for other in edges:
+            if str(other) in known:
+                continue
+            out["dangling"].append(
+                {"kind": "planned_exit_to_nowhere", "room": rid, "to": other})
+    # WHERE THE SCENE HAS ALREADY PUT WHAT THE PLAN IS STILL PROMISING.
+    # A plan and a scene entity carrying its uid are the same thing written
+    # twice, and the Director binds the second to the first through the
+    # identity floor -- so once a mint carries `plan_ref`, the plan's `where`
+    # is a claim about a thing the world has already placed. Measured live
+    # (chat 114): the Room filed the TARDIS for the hibiscus garden at beat 6,
+    # the Director stood it on the beach at beat 9 with `plan_ref` bound, and
+    # `plan_in_no_room` passed the pair clean because `garden` is a perfectly
+    # real planned room. Nothing anywhere compared the two, so the plan went
+    # on offering a police box to a garden that already had none.
+    rendered_at = {}
+    for eid, ent in (scene.get("entities") or {}).items():
+        if not isinstance(ent, dict):
+            continue
+        ref = ent.get("plan_ref")
+        uid = str(ref.get("uid") or "") if isinstance(ref, dict) else ""
+        if not uid:
+            continue
+        # Placed by a position row OR by being an anchor of the room it
+        # stands in -- the live TARDIS is the second shape and has no
+        # position at all, so reading only `room_of` compared nothing.
+        from world.spatial import room_of
+        where = room_of(scene, str(eid))
+        if not where:
+            for _rid, _room in (scene.get("rooms") or {}).items():
+                if isinstance(_room, dict) and str(eid) in (
+                        _room.get("anchors") or {}):
+                    where = str(_rid)
+                    break
+        rendered_at[uid] = (str(eid), where or "")
     for plan in planned_entities(cid, frame_id).values():
         where = plan["brief"].get("where")
         if where and where not in known:
             out["dangling"].append({"kind": "plan_in_no_room", "uid": plan["uid"],
                                     "where": where})
+        standing = rendered_at.get(plan["uid"])
+        if standing and where and standing[1] and standing[1] != where:
+            out["dangling"].append({
+                "kind": "plan_rendered_elsewhere", "uid": plan["uid"],
+                "name": plan.get("name") or "", "plan_says": where,
+                "entity": standing[0], "actually_in": standing[1]})
     for artifact in standing_artifacts(cid):
         if artifact.get("status") == POSTED and str(artifact.get("room")) not in known:
             out["dangling"].append({"kind": "artifact_in_no_room",

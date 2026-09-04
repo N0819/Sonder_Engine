@@ -114,8 +114,20 @@ def frontier_report(cid, frame_id=None, scene=None):
         scene = (get_scene(cid, chat) if chat else {}) or {}
     start = _player_room(cid, scene)
     reachable, stubs = rooms_ahead(cid, scene, start)
-    identities = [p["name"] for p in planned_entities(cid, frame_id).values()
-                  if p["kind"] == "person" and not p.get("rendered") and p.get("name")]
+    plans = [p for p in planned_entities(cid, frame_id).values()
+             if not p.get("rendered") and p.get("name")]
+    identities = [p["name"] for p in plans if p["kind"] == "person"]
+    # THE OTHER TWO THIRDS OF `PLAN_KINDS`. `identities_ahead` measures whether
+    # enough PEOPLE stand ahead of the story, and that is the right measure --
+    # `identities_short` is unchanged and still counts only persons. But the
+    # report was also the one standing place an unrendered plan surfaced at
+    # all, so a thing or a creature the Room had filed was in no read it has:
+    # not here, not in `inspect_rooms` (which listed bodies only), and not in
+    # the reply payload, which carries no scene. Reported beside the count
+    # rather than inside it -- a filed prop is not a populated frontier.
+    things = [{"uid": p["uid"], "name": p["name"], "kind": p["kind"],
+               "where": (p.get("brief") or {}).get("where") or ""}
+              for p in plans if p["kind"] != "person"]
     needs = open_planning_needs(cid, frame_id)
     by_kind = {}
     for need in needs:
@@ -128,6 +140,7 @@ def frontier_report(cid, frame_id=None, scene=None):
         "rooms_short": max(0, FRONTIER_ROOMS_MIN - len(stubs)),
         "identities_ahead": identities,
         "identities_short": max(0, FRONTIER_IDENTITIES_MIN - len(identities)),
+        "things_ahead": things,
         "open_needs": by_kind,
         "open_need_uids": [n["uid"] for n in needs],
     }
