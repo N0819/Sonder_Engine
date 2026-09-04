@@ -6520,6 +6520,14 @@ for what follows. Residuals of this entry rather than a section of their own:
   (exits, declared destinations, projects that name places) is not read;
   the measure is planned stubs within `FRONTIER_DEPTH_HOPS` and unrendered
   person plans anywhere, and the Planner is told what is short.
+- **The room index is ordered by distance, not grouped by structure.**
+  `story/room_slice.py` (2026-09-04) gives `inspect_rooms` an index of every
+  room -- live, planned, retired, with holder and hops -- plus the slices
+  within `FRONTIER_DEPTH_HOPS`, and the frontier counts over the same graph
+  (the chat 115 second-lift-car defect). The index costs ~107 characters a
+  row, so a story with several hundred planned rooms loses its farthest rows
+  to the 12,000-character cap; the region tier that answers that is
+  `design/DESIGN_ROOM_REGIONS.md` and is not built.
 - **The fill job is queued from the commit tail, not from a threshold
   crossing.** Every commit with an open need or a short frontier and a
   grant submits one job (deduped per chat, capped per story hour); there

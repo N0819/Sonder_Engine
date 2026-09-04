@@ -76,7 +76,7 @@ class TestARoomReportsWhatStandsInIt:
         cid = _chat(temp_db)
         _scene(temp_db, cid, _SHORE)
         rooms = {r["id"]: r for r in _t_inspect_rooms(cid, None)["rooms"]}
-        assert rooms["beach"]["occupants"] == ["Hinami"]
+        assert [o["name"] for o in rooms["beach"]["occupants"]] == ["Hinami"]
         assert "Hinami" not in [t["name"] for t in rooms["beach"]["things"]]
 
     def test_a_thing_placed_by_a_position_row_is_reported_too(self, temp_db):

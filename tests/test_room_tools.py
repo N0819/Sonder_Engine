@@ -110,13 +110,15 @@ class TestRunTool:
                                                  "expected_revision": 1})
         assert out == {"refused": "no package 'plot:nobody'"}
 
-    def test_a_result_past_the_ceiling_is_truncated(self, temp_db, monkeypatch):
+    def test_a_result_past_the_ceiling_is_cut_to_valid_json(self, temp_db, monkeypatch):
         cid, _ = _story(temp_db)
         big = {"rows": ["x" * 100] * (TOOL_RESULT_CHARS // 50)}
         monkeypatch.setitem(TOOL_INDEX["inspect_clock"], "handler",
                             lambda cid_, frame_id: big)
         out = run_tool(cid, "inspect_clock")
-        assert out["truncated"] and len(out["text"]) == TOOL_RESULT_CHARS
+        assert out["truncated"] and out["dropped"] > 0
+        assert len(json.dumps(out)) <= TOOL_RESULT_CHARS
+        assert out["rows"] and out["rows"] == ["x" * 100] * len(out["rows"])
 
 
 # ---------------------------------------------------------------------------
@@ -162,10 +164,18 @@ class TestReadTools:
         plant_structure(cid, {"key": "chapel", "name": "Chapel"}, {
             "chapel_nave": {"name": "Nave", "adjacent": [{"to": "loft", "barrier": "open"}]}})
         rooms = run_tool(cid, "inspect_rooms")
-        assert {r["id"] for r in rooms["rooms"]} == {"quay", "warehouse", "loft"}
+        # The index is the map; the slices are the neighbourhood. The loft
+        # is behind a locked door, which is not walked, so it and the chapel
+        # planned beyond it are unreachable (hops None, listed last) and
+        # index-only -- exactly what `inspect_route` says of the same door.
+        assert [(r["id"], r["status"], r["hops"]) for r in rooms["index"]] == [
+            ("quay", "live", 0), ("warehouse", "live", 1),
+            ("chapel_nave", "planned", None), ("loft", "live", None)]
+        assert {r["id"] for r in rooms["rooms"]} == {"quay", "warehouse"}
         quay = next(r for r in rooms["rooms"] if r["id"] == "quay")
-        assert quay["occupants"] == [PLAYER]
-        assert [p["id"] for p in rooms["planned_only"]] == ["chapel_nave"]
+        assert [o["name"] for o in quay["occupants"]] == [PLAYER]
+        opened = run_tool(cid, "inspect_rooms", {"room_ids": ["chapel_nave"]})
+        assert [(r["id"], r["status"]) for r in opened["rooms"]] == [("chapel_nave", "planned")]
         route = run_tool(cid, "inspect_route", {"from_room": "quay", "to_room": "warehouse"})
         assert route["path"] == ["quay", "warehouse"] and route["hops"] == 1
         # A locked door is not walked; the plan's edge is.
