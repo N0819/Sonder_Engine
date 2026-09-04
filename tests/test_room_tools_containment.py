@@ -40,18 +40,32 @@ def _story(db):
     return cid
 
 
-def test_inspect_rooms_reports_containment_on_the_holder(temp_db):
+def test_inspect_rooms_reports_an_inside_as_a_room_with_its_holder(temp_db):
+    """Superseding the 2026-09-03 shape, which filed the inside under
+    `containment` and NOT as a room: the frontier reported the player
+    standing in exactly such a room (chat 115, `room_elevator_interior`),
+    the tool listed no such room, and the Planner planned a second lift car
+    beside the one the cast was riding. The room a body stands in is a room
+    whatever holds it; what the ruling protects -- never a place to plan,
+    route through, or read as a gap -- is carried by `holder` and by the
+    graph, which joins an inside to its holder's room and to nothing else."""
     cid = _story(temp_db)
     out = run_tool(cid, "inspect_rooms")
-    assert "inside_mara" not in {r["id"] for r in out["rooms"]}
-    assert out["containment"] == [{"inside": "Mara", "who": ["Pip"],
-                                   "holder_room": "quay", "room_id": "inside_mara"}]
+    inside = next(r for r in out["index"] if r["id"] == "inside_mara")
+    assert inside["holder"] == "Mara" and inside["hops"] == 0  # Pip stands there
+    slice_ = next(r for r in out["rooms"] if r["id"] == "inside_mara")
+    assert slice_["holder"] == "Mara"
+    assert [o["name"] for o in slice_["occupants"]] == ["Pip"]
+    assert "containment" not in out
 
 
 def test_inspect_route_never_reaches_an_inside(temp_db):
     cid = _story(temp_db)
     with pytest.raises(ToolError, match="inside of Mara"):
         run_tool(cid, "inspect_route", {"from_room": "quay", "to_room": "inside_mara"})
+    # A route may START inside: its first step is out, into the holder's room.
+    out = run_tool(cid, "inspect_route", {"from_room": "inside_mara", "to_room": "loft"})
+    assert out["path"] == ["inside_mara", "quay", "warehouse", "loft"] and out["hops"] == 3
     out = run_tool(cid, "inspect_route", {"from_room": "quay", "to_room": "loft"})
     assert out["path"] == ["quay", "warehouse", "loft"]
     far = run_tool(cid, "inspect_route", {"from_room": "quay", "to_room": "nowhere_at_all"})
