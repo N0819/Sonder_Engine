@@ -754,6 +754,25 @@ _POSE_FIELDS = ("posture", "support", "relative_to", "relation",
                 "constraint", "detail")
 
 
+#: How a model writes "this field does not apply" when the field wants prose.
+#: An ABSENT constraint and a constraint of "none" are the same fact, and only
+#: one of them renders -- the pose composer prints `constraint` as a clause, so
+#: the string reached the page as "You are running, none -- lunging forward in
+#: mid-stride" (chat 115 turn 1; chat 69 carries the same shape). This is a
+#: closed set of JSON idioms rather than a guess at English: it is how a model
+#: spells emptiness, not how fiction describes a body. Applied only to the pose
+#: prose fields, never to an enum where "none" is a real value (`agency`,
+#: `lesson`, weather's `precipitation`).
+_POSE_NULL_TOKENS = frozenset({
+    "none", "null", "nil", "n/a", "na", "nothing", "undefined", "-", "--",
+})
+
+
+def _pose_value(raw):
+    text = " ".join(str(raw or "").split())[:240]
+    return "" if text.strip().casefold() in _POSE_NULL_TOKENS else text
+
+
 def _clean_pose(raw):
     """One body's complete current pose snapshot, or None when empty.
 
@@ -765,7 +784,7 @@ def _clean_pose(raw):
     if not isinstance(raw, dict):
         return None
     pose = {
-        field: " ".join(str(raw.get(field) or "").split())[:240]
+        field: _pose_value(raw.get(field))
         for field in _POSE_FIELDS
     }
     return pose if any(pose.values()) else None
