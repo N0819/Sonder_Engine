@@ -347,25 +347,36 @@ class TestTheIndexAndTheOpacity:
                 if e.get("to") == "hall"]
         assert edge and edge[0]["barrier"] == "membrane"
 
-    def test_a_non_body_parented_room_is_not_indexed(self):
-        """SCOPED, and the scope is the migration story. The index this pass
-        maintains is read by `infer_body_enclosures` -- which is body-scoped
-        already -- and by two things that are not: the Director's destruction
-        specialist gate and the commit-side room-removal protection set.
-        Measured read-only against the author's live corpus while this landing
-        was being repaired: 53 rooms carry `parent_entity`, 15 of them across
-        13 chats were NOT indexed on their entity, and every one of those 15
-        belongs to a NON-body -- lift cars, turbolifts, a ship, a police box.
-        Indexing them would have flipped a Director specialist on in five
-        stories and made six stories' interiors un-prunable, with nothing
-        asking for either. So the derivation serves the class that needs it,
-        and the corpus is left exactly as it was."""
+    def test_a_non_body_parented_room_is_indexed_too(self):
+        """WIDENED 2026-09-04, and the scoping story is why it took a month.
+
+        The index is read by `infer_body_enclosures` -- body-scoped already --
+        and by two things that are not: the Director's destruction specialist
+        gate and the commit-side room-removal protection set. Indexing every
+        holder was a behaviour change nobody had asked for, so the derivation
+        served only the class that LEAKS without it (flesh, whose opacity
+        default reads this list) and the corpus was left byte-identical.
+
+        Asked for now, and both readers measured rather than feared. The
+        destruction gate already fires on a `kind` in (vehicle, building,
+        structure, ship, boat), so every holder whose kind names it was
+        already through and changes not at all; re-measured on the live
+        corpus, 15 rooms across 14 chats gain an index and the specialist
+        newly switches on in exactly five stories, all the same shelter
+        elevator tagged `object`. The protection set is the behaviour an
+        interior wants: a room inside a holder is not a stray for the map to
+        reclaim while the holder stands.
+
+        What the scoping cost, measured: nothing indexed an interior for a
+        holder that is not flesh, so `apply_transit_dock_edges` could move a body's
+        inside and never a vehicle's."""
         scene = _scene()
         scene["attire"].pop(HOLDER)
         scene["entities"][HOLDER_ID]["kind"] = "vehicle"
         scene["entities"][HOLDER_ID]["interior_rooms"] = []
         merged = merge_scene_with_diff(scene, {})
-        assert merged["entities"][HOLDER_ID]["interior_rooms"] == []
+        assert set(merged["entities"][HOLDER_ID]["interior_rooms"]) == {
+            "vessel_antechamber", "vessel_core"}
 
     def test_a_vehicle_interior_keeps_its_see_through_doorway(self):
         """Scoped to bodies. A lift car is not a mass and its open hatch is

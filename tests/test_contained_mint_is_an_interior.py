@@ -8,7 +8,7 @@ contained, the spatial specialist minted a fully furnished room for it -- vast,
 coral-pillared, `light: lit` -- and nothing wrote the parentage. Two things
 followed, both silent:
 
-  * `spatial_transit.rewrite_dock_edges` indexes interiors by `parent_entity`
+  * `spatial_transit.apply_transit_dock_edges` indexes interiors by `parent_entity`
     alone, so the console room's doorway could never follow its holder. The
     box can fly anywhere and its doors still open onto the same sand.
   * the room was authored `exposure: "sheltered"`, which the weather reaches,
@@ -117,11 +117,15 @@ class TestTheParentageSurvivesTheMerge:
         assert merged["rooms"]["tardis_console_room"]["parent_entity"] \
             == "tardis"
 
-    def test_interior_rooms_is_deliberately_left_alone(self):
-        """The wider index has two readers that gate behaviour and is not
-        this change's to fill."""
+    def test_the_holder_indexes_the_room_it_now_owns(self):
+        """`parent_entity` and `entities[eid].interior_rooms` are one fact
+        written twice, and `sync_entity_interior_rooms` derives the second
+        from the first for every holder since 2026-09-04. Stamping the first
+        without the second would have left the TARDIS an interior to half the
+        engine and not to the other half."""
         diff = {"rooms": {"tardis_console_room": {
             "name": "Console Room", "parent_entity": "tardis",
             "adjacent": [{"to": "beach", "barrier": "open_door"}]}}}
         merged = merge_scene_with_diff(_scene(), diff)
-        assert merged["entities"]["tardis"]["interior_rooms"] == []
+        assert merged["entities"]["tardis"]["interior_rooms"] \
+            == ["tardis_console_room"]
