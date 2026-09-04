@@ -784,9 +784,35 @@ def neighbour_feature_visibility(scene: dict, observer: str, to_room,
         sector = _cone_sector(facing, origin, target) if facing else None
         if facing and _sector_verdict(sector) == "rear":
             continue
-        blocker, _t, _tid = _occluders_on(
-            field, origin, target, eye, max(height_rank(rec["height"]), 0.5))
-        if blocker and blocker != aid:
+        # THROUGH THE DOORWAY, IN TWO SEGMENTS. A single ray from here to a
+        # thing in the next room is rasterised by `_line` as a SUPERCOVER --
+        # every cell the segment touches, so sight cannot slip between two
+        # occluders meeting at a corner. That property is wanted and must not
+        # be relaxed (a body behind a long bar stays behind it). But an
+        # aperture is one open cell in a wall, and its neighbours in the
+        # supercover are that wall, so any off-axis glance through a door hit
+        # masonry: measured, a body one pace back from an open door could not
+        # see a stove almost straight through it, and only a line dead through
+        # the centre survived.
+        #
+        # Looking through a door is two questions, not one -- can I see the
+        # doorway, and can the doorway see the thing -- so ask them
+        # separately, against the same strict rasteriser. Nothing about
+        # within-room occlusion changes, because within a room there is no
+        # doorway to route through.
+        door = (getattr(field, "doors", None) or {}).get(to_room)
+        legs = ((origin, door), (door, target)) if door \
+            else ((origin, target),)
+        top = max(height_rank(rec["height"]), 0.5)
+        blocked = False
+        for _from, _to in legs:
+            if _from == _to:
+                continue
+            blocker, _t, _tid = _occluders_on(field, _from, _to, eye, top)
+            if blocker and blocker != aid:
+                blocked = True
+                break
+        if blocked:
             continue
         rows.append({
             "anchor": aid, "desc": rec["desc"], "implicit": False,

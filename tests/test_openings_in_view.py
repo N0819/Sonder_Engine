@@ -232,3 +232,71 @@ class TestTheBoundaryRidesTheRoomsStandingState:
             "hall", "Hall", "", "lit",
             openings=_visible_openings(_pair(), "Ada", "hall"))
         assert "Vault" in composer._render_standing(percept)
+
+
+class TestStandingInTheDarkLookingIntoTheLight:
+    """A dark room with an open door onto a lit one shows you the lit room AND
+    what is in it. Owner's ruling, 2026-09-04.
+
+    The name and notes always arrived; the CONTENTS did not, and the cause was
+    the rasteriser rather than the light. `_line` is a supercover -- every cell
+    the segment touches, so sight cannot slip between two occluders meeting at
+    a corner, which is a property worth keeping. But a doorway is one open cell
+    in a wall, and its neighbours in that supercover ARE the wall, so any
+    off-axis glance through a door reported `__wall__` and the far room's
+    furniture vanished. Only a line dead through the centre survived.
+
+    Looking through a door is two questions -- can I see the doorway, and can
+    the doorway see the thing -- so `neighbour_feature_visibility` asks them
+    separately against the same strict rasteriser. Within-room occlusion is
+    untouched, because within a room there is no doorway to route through.
+    """
+
+    def _cellar(self, far_light="lit", barrier="open_door", anchors=None):
+        return _scene({
+            "cellar": {"name": "Cellar", "light": "dark", "notes": "",
+                       "adjacent": [{"to": "kitchen", "barrier": barrier,
+                                     "name": "the cellar door", "dir": "e"}]},
+            "kitchen": {"name": "Kitchen", "light": far_light, "notes": "",
+                        "adjacent": [{"to": "cellar", "barrier": barrier,
+                                      "name": "the cellar door", "dir": "w"}],
+                        "anchors": anchors if anchors is not None else {
+                            "stove": {"desc": "a black iron stove", "dir": "c",
+                                      "height": "waist", "opacity": "opaque"}}},
+        }, {"Ada": "cellar"})
+
+    def _rows(self, sc):
+        sc["stations"] = {"Ada": {"at": "door:kitchen"}}
+        return _visible_openings(sc, "Ada", "cellar", sweep=True)
+
+    def test_the_lit_rooms_contents_arrive(self):
+        rows = self._rows(self._cellar())
+        assert [f["desc"] for f in rows[0].get("features") or ()] \
+            == ["a black iron stove"]
+        assert "a black iron stove" in composer._render_openings(rows)
+
+    def test_the_room_itself_is_named(self):
+        assert self._rows(self._cellar())[0]["room_name"] == "Kitchen"
+
+    def test_an_unlit_room_beyond_still_yields_nothing(self):
+        """The dark rule is about the FAR room, and it is not weakened by the
+        observer standing in the dark themselves."""
+        rows = self._rows(self._cellar(far_light="dark"))
+        assert "room_name" not in rows[0] and "features" not in rows[0]
+
+    def test_a_shut_door_still_yields_nothing(self):
+        rows = self._rows(self._cellar(barrier="closed_door"))
+        assert rows[0]["state"] == "blind"
+        assert "Kitchen" not in composer._render_openings(rows)
+
+    def test_furniture_beyond_can_still_hide_furniture_beyond(self):
+        """The far room's own geometry keeps working: a full-height dresser
+        between the door and the stove hides the stove."""
+        rows = self._rows(self._cellar(anchors={
+            "dresser": {"desc": "a tall pine dresser", "dir": "n",
+                        "height": "full", "opacity": "opaque"},
+            "stove": {"desc": "a black iron stove", "dir": "c",
+                      "height": "waist", "opacity": "opaque"}}))
+        seen = [f["desc"] for f in rows[0].get("features") or ()]
+        assert "a tall pine dresser" in seen
+        assert "a black iron stove" not in seen
