@@ -209,3 +209,101 @@ class TestBearinglessDoorwaysStillRun:
         offers = sprint_reach({"rooms": self._corridor(None)}, "start",
                               known_rooms={"a", "b", "end"})
         assert offers[0]["path"] == ["a", "b", "end"]
+
+
+class TestASiblingCollisionSparesTheIncumbent:
+    """The third mechanism above, one case wider than the maze arm found it.
+
+    `normalize_scene_bearings` resolves a same-bearing collision by dropping
+    `dir` from every edge in it. That is right when both claims arrive
+    together -- nothing chooses between them. It is wrong when one of them
+    was already settled, because then something does.
+
+    Measured live (chat 114 turn 10): the Director minted `tardis_console_room`
+    off the beach carrying `dir: w`, while the beach's standing edge to the
+    terrace was also `w`. The collision rule took BOTH, leaving a room whose
+    every edge was bearingless -- and `spatial_fov._sight_neighbours` skips an
+    edge with no bearing, so nothing could place either neighbour in the
+    observer's field at all. One newly minted room cost the story the geometry
+    of a doorway that had stood since its first beat.
+    """
+
+    def test_a_new_edge_does_not_take_a_settled_bearing_down_with_it(self):
+        scene = _scene(_pair("beach", "terrace", "w", "e"))
+        diff = {"rooms": {
+            "beach": {"adjacent": [
+                {"to": "terrace", "barrier": "open", "dir": "w"},
+                {"to": "tardis", "barrier": "open_door", "dir": "w"}]},
+            "tardis": {"name": "tardis", "adjacent": [
+                {"to": "beach", "barrier": "open_door"}]}}}
+        merged = merge_scene_with_diff(scene, diff)
+        edges = {e["to"]: e.get("dir")
+                 for e in merged["rooms"]["beach"]["adjacent"]}
+        assert edges["terrace"] == "w", "the incumbent must survive"
+        assert edges["tardis"] is None, "the newcomer is dropped, not guessed"
+        assert merged["rooms"]["terrace"]["adjacent"][0]["dir"] == "e"
+
+    def test_a_non_colliding_mint_keeps_its_bearing(self):
+        """The guard is scoped to the collision: an honest bearing lands, and
+        its reciprocal is still inferred."""
+        scene = _scene(_pair("beach", "terrace", "w", "e"))
+        diff = {"rooms": {
+            "beach": {"adjacent": [
+                {"to": "terrace", "barrier": "open", "dir": "w"},
+                {"to": "tardis", "barrier": "open_door", "dir": "n"}]},
+            "tardis": {"name": "tardis", "adjacent": [
+                {"to": "beach", "barrier": "open_door"}]}}}
+        merged = merge_scene_with_diff(scene, diff)
+        edges = {e["to"]: e.get("dir")
+                 for e in merged["rooms"]["beach"]["adjacent"]}
+        assert edges == {"terrace": "w", "tardis": "n"}
+        assert merged["rooms"]["tardis"]["adjacent"][0]["dir"] == "s"
+
+    def test_two_fresh_claims_still_both_drop(self):
+        """Unchanged where the drop rule was right: neither bearing was
+        standing, so nothing chooses between them and neither is guessed."""
+        scene = _scene({"hall": {"name": "hall", "adjacent": []}})
+        diff = {"rooms": {
+            "hall": {"adjacent": [
+                {"to": "vault", "barrier": "open", "dir": "e"},
+                {"to": "cellar", "barrier": "open", "dir": "e"}]},
+            "vault": {"name": "vault", "adjacent": [
+                {"to": "hall", "barrier": "open"}]},
+            "cellar": {"name": "cellar", "adjacent": [
+                {"to": "hall", "barrier": "open"}]}}}
+        merged = merge_scene_with_diff(scene, diff)
+        assert all(e.get("dir") is None
+                   for e in merged["rooms"]["hall"]["adjacent"])
+
+    def test_a_two_sided_replan_still_moves_the_incumbent(self):
+        """The incumbent is defended only while the diff leaves it alone.
+        Re-declare it in the same breath and both claims are live again --
+        the case the drop rule exists for."""
+        scene = _scene(_pair("beach", "terrace", "w", "e"))
+        diff = {"rooms": {
+            "beach": {"adjacent": [
+                {"to": "terrace", "barrier": "open", "dir": "n"},
+                {"to": "tardis", "barrier": "open_door", "dir": "w"}]},
+            "terrace": {"adjacent": [
+                {"to": "beach", "barrier": "open", "dir": "s"}]},
+            "tardis": {"name": "tardis", "adjacent": [
+                {"to": "beach", "barrier": "open_door"}]}}}
+        merged = merge_scene_with_diff(scene, diff)
+        edges = {e["to"]: e.get("dir")
+                 for e in merged["rooms"]["beach"]["adjacent"]}
+        assert edges == {"terrace": "n", "tardis": "w"}
+
+    def test_the_doorway_itself_is_never_the_casualty(self):
+        """Whatever happens to the compass, the way through survives -- the
+        invariant every rule in this module is written under."""
+        scene = _scene(_pair("beach", "terrace", "w", "e"))
+        diff = {"rooms": {
+            "beach": {"adjacent": [
+                {"to": "terrace", "barrier": "open", "dir": "w"},
+                {"to": "tardis", "barrier": "open_door", "dir": "w"}]},
+            "tardis": {"name": "tardis", "adjacent": [
+                {"to": "beach", "barrier": "open_door"}]}}}
+        merged = merge_scene_with_diff(scene, diff)
+        assert {e["to"] for e in merged["rooms"]["beach"]["adjacent"]} == {
+            "terrace", "tardis"}
+        assert merged["rooms"]["beach"]["adjacent"][1]["barrier"] == "open_door"
