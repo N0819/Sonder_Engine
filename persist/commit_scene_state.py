@@ -747,6 +747,36 @@ def prepare_scene_commit(ctx):
         stamp_authored_interiors(
             _scope, ctx.cast, player_name=_player_name_or_none(ctx))
 
+    # THE ROOM THE ENGINE ALREADY DECIDED WAS AN INSIDE, MARKED AS ONE.
+    # `mapping.classify_movement` answers `contained` for a destination that
+    # is an entity's inside, and `mapping.py`'s own docstring says what
+    # follows from that: "the spatial hand mints the room with
+    # `parent_entity`". It does not always. Measured live (chat 114 turn 10):
+    # the compiler classified `tardis_console_room` contained, the spatial
+    # specialist minted a fully furnished room for it, and nothing wrote the
+    # parentage -- so the inside of a vehicle committed as an ordinary room
+    # beside the beach. `spatial_transit.rewrite_dock_edges` indexes
+    # interiors by `parent_entity` alone, so that room's doorway could never
+    # follow its holder: the box can fly anywhere and its doors still open
+    # onto the same sand.
+    #
+    # SCOPED TO THIS TURN'S OWN CLASSIFICATION, deliberately. The structural
+    # predicate would stamp every room whose id happens to be spelled like an
+    # entity's inside, across every scene on disk; this stamps only where the
+    # compiler routed the beat there THIS beat, which is the narrowest form
+    # of the fact and the one the engine is already acting on. Filling
+    # `entities[eid].interior_rooms` is a different and wider change with its
+    # own two readers to test (docs/UNBUILT.md) and is NOT done here.
+    if ctx.movement_status() == "contained":
+        _target = str((ctx.declared_movement() or {}).get("to_room") or "")
+        _minted = (diff.get("rooms") or {}).get(_target)
+        if isinstance(_minted, dict) and not str(
+                _minted.get("parent_entity") or "").strip():
+            from agents.mapping import contained_interior_holder
+            _holder = contained_interior_holder(_target, prev_scene)
+            if _holder:
+                _minted["parent_entity"] = _holder
+
     _contact_report = []
     _substance_report = []
     # What a passage did to the bodies crossing it, and what it could not do.
