@@ -90,6 +90,20 @@ Three optional fields on the room record, beside `size`:
                            north-most cell of the part, the `cell` convention
                            stations and anchors use (2026-09-05)
 
+**Who may author it (2026-09-05).** The Director writes extents on a live
+room; the WRITERS' ROOM writes them on a planned one. `plan_rooms` takes
+`extent`, `shape` and `exposure` (not `parts`: a composite room is the map
+editor's, and a plan that could draw one could draw an unreachable one),
+each read through the normalizer above and each FAIL-OPEN -- a word the
+world cannot read is no value, so an "oval" room is not silently squared and
+a half-written extent is not guessed at. The measure: 0 of 589 live rooms
+carried an extent, and until this the only author asked for rooms beyond the
+frontier had to write "four paces wide and twenty long" into `purpose`
+prose. That prose path did sometimes work -- the road run's spatial hand
+read the sentence and wrote `{w: 15, d: 20}, round` from it -- which is the
+argument FOR the field rather than against it: a plan that means fifteen by
+twenty should say so, not hope.
+
 **Composite (2026-09-05).** The owner, trying the map: "the room editor
 doesn't cover the multi room shape design." `l` was two corner parts, so a
 T, a U, a cross or a room with a bay had no spelling. The class, stated once:
@@ -337,6 +351,18 @@ room through the PATCH. Archive, checkpoint and branch carry `passages`
 because the scene is one blob; the registry projection is untouched because
 a passage is not a room. What is deliberately NOT done: no reader consults
 `state`, and the passage does not carry `offset`.
+
+**A PLAN may say `vertical` too** (2026-09-05). `plan_rooms.adjacent` takes
+the same `up`/`down` the scene does, through the same normalizer, and a
+vertical word arriving in `dir` or `bearing` is MOVED to it -- up is not a
+bearing, and a field that holds a compass point cannot also hold a storey.
+The measured case (PA7, the lighthouse): a loft planned above the watch room
+came back as `{"to": "watch_room", "barrier": "wall", "bearing": "up"}`, the
+one word that said what was meant sitting in a field the mint discards
+beside a barrier the mint takes literally, so the only way into the room was
+sealed and the Room could see it and had no tool to mend it. A plan does not
+author a PASSAGE -- the record is minted from the edges as it is for anyone
+else -- so nothing about who owns a doorway changes.
 
 ## 6. Constants the owner sets
 

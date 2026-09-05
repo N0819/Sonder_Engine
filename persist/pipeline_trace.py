@@ -440,6 +440,15 @@ def export_turn_debug(turn_id: int, *, include_content: bool = True) -> dict:
     Ordered by wall clock, because the Director fans out: the six specialists
     run concurrently and finish out of order, so the order they were STARTED
     in is the only one that describes the turn.
+
+    THE WRITERS' ROOM IS IN THIS TIMELINE TOO, and marked `origin: "room"`
+    with the phase it ran in (`room_phase`: planner, dramaturge, bible,
+    deliberate). A room call is not a stage of the turn -- the player opens
+    the panel between beats -- so it is filed against the turn IN PLAY and
+    sorts after that turn's stages on the shared clock, which is where it
+    belongs: this beat happened, then the room said this about it. Before
+    2026-09-05 it was in no export at all, and all five play runs of that
+    day named it the thing they most wanted and could not have.
     """
     turn = q("SELECT id,chat_id,idx,player_input,created FROM turns WHERE id=?",
              (turn_id,), one=True)
@@ -448,7 +457,8 @@ def export_turn_debug(turn_id: int, *, include_content: bool = True) -> dict:
 
     events: list[dict] = []
 
-    from persist.llm_capture import exchanges_for_turn
+    from persist.llm_capture import (exchanges_for_turn, is_room_step,
+                                     room_phase)
     for row in exchanges_for_turn(turn_id, include_bodies=include_content):
         payload = row.get("payload") if include_content else None
         if isinstance(payload, dict):
@@ -468,11 +478,18 @@ def export_turn_debug(turn_id: int, *, include_content: bool = True) -> dict:
                 response = json.loads(response)
             except Exception:
                 pass
+        step_key = row.get("step_key") or ""
         events.append({
             "at": float(row.get("started") or 0.0),
             "kind": "call",
+            # Which agent made it. A room call and a stage call are the same
+            # KIND of event -- one provider exchange -- and belong in one
+            # ordered reading; what differs is whose work it was, so that is
+            # a field on the event rather than a second timeline.
+            "origin": "room" if is_room_step(step_key) else "pipeline",
+            "room_phase": room_phase(step_key),
             "capture_id": int(row.get("seq") or 0),
-            "step": row.get("step_key") or "",
+            "step": step_key,
             "role": row.get("role") or "",
             "model": row.get("requested") or "",
             "duration": float(row.get("duration") or 0.0),
@@ -529,6 +546,8 @@ def export_turn_debug(turn_id: int, *, include_content: bool = True) -> dict:
             event["seq"] = position
 
     captured = sum(1 for e in events if e["kind"] == "call")
+    room_captured = sum(1 for e in events
+                        if e["kind"] == "call" and e.get("origin") == "room")
     return {
         "format": TURN_DEBUG_FORMAT,
         "version": TURN_DEBUG_VERSION,
@@ -544,6 +563,9 @@ def export_turn_debug(turn_id: int, *, include_content: bool = True) -> dict:
         # Says so rather than looking complete: with capture off, every `call`
         # event is absent and the artifact holds only what the steps recorded.
         "calls_captured": captured,
+        # Counted separately because they answer a separate question: how
+        # much of this beat was the room's own work, and is any of it here.
+        "room_calls_captured": room_captured,
         "capture_was_on": captured > 0,
         "timeline": events,
     }

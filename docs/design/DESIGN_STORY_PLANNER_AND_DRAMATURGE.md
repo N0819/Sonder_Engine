@@ -576,6 +576,26 @@ expiration and revocation. Silence is never permission. A broad request such
 as “invent an overarching mystery and surprise me” is valid authorization, but
 its boundaries must still be materialized before hidden work begins.
 
+**A grant is scoped to the request that earned it, and lapses with it**
+(built 2026-09-05, `story/mandates.py`). A mandate may name the ask it
+answers, and when that ask ends the licence ends: the package retired or
+resolved, the question off the room's status row, or the request closed
+outright. Renewal is an explicit act and a new row, because a licence that
+renews itself is a licence nobody granted twice. A grant naming no request
+is standing, which is what every grant was before this. The measured case
+(flat run, PE14): a grant for a courier survived the player withdrawing the
+courier in words, because a grant is state and a retraction in words is not.
+
+**A total grant means every kind, resolved when it is used.** “Full
+authority” must not be written down as the list of kinds that existed on the
+turn it was said; a list cannot know about tomorrow's kind, and chat 114's
+turn-5 grant refused an operation kind added afterwards until the player
+happened to say the word again (F11/F15). The total grant is therefore one
+MEMBER of the capability vocabulary, resolved against the capability being
+asked for at the moment it is asked. An enumerated grant still covers
+exactly what it enumerated: the fix is about what “everything” means, not
+about widening ordinary grants.
+
 ---
 
 ## 7. Sealed scenarios and spoilers
@@ -798,6 +818,25 @@ The agents retain durable author-side conversation and accepted constraints,
 but every new proposal re-anchors on current canonical state. Conversation
 history is not authority and cannot override a later branch, restore or host
 edit.
+
+**A summary states what the ledgers say and cites the rows it read** (built
+2026-09-05, `story/room_citations.py`). A recap is the room's most useful
+reply and its most dangerous one, because it reads as the engine talking:
+measured, one said a character was “feigning sleep”, one that an errand had
+been dispatched that never was, one that an offer had been declined where
+the ledger holds only a contact and a transfer. The class is not lying — the
+room reads ledgers and renders them as motives, and nothing between the
+reading and the rendering asked which row said so.
+
+So a claim carries the rows it came from, and the engine checks them against
+the ledger of what that reply actually read. The two consequences are the
+point. A PROPOSAL IS NOT AN ASSERTION: the room stays entirely free to
+suggest, invent and speculate, and none of that needs a row — what it may
+not do is let the two wear the same clothes. And AN UNCITED CLAIM IS
+DEMOTED, NOT DELETED: it keeps its sentence and loses the authority it was
+borrowing. Nothing here reads the room's English; the room enumerates its
+own claims and the check is a set membership test over ids the engine
+itself served.
 
 ### 11.3 Roleplay versus drafting posture
 

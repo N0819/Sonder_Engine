@@ -29,6 +29,8 @@ bodies while still giving a complete, ordered skeleton of the turn.
 
 from __future__ import annotations
 
+import contextlib
+import contextvars
 import hashlib
 import json
 import time
@@ -227,3 +229,155 @@ def vacuum_blobs() -> int:
         return int(before) - int(after)
     except Exception:
         return 0
+
+
+# ---------------------------------------------------------------------------
+# The Writers' Room's own calls
+# ---------------------------------------------------------------------------
+
+#: The step key prefix a Room call is filed under: `room:planner`,
+#: `room:dramaturge`, `room:bible`, `room:deliberate`. The prefix is what
+#: `persist/pipeline_trace.py` reads to tell a Room call from a pipeline
+#: stage, and it is the only thing that distinguishes them in the store --
+#: deliberately, because they belong in ONE ordered reading.
+ROOM_STEP_PREFIX = "room:"
+
+#: The phase a Room call is filed under when its caller names none.
+ROOM_PHASE_DEFAULT = "planner"
+
+#: The scope one Room reply runs in: `{"chat_id", "phase", "turn_id"}`, or
+#: None outside one. A ContextVar rather than an argument because the calls
+#: it covers are made several frames below the seam that knows which chat is
+#: being planned -- the Planner's tool loop, the Dramaturge's pass, a bible
+#: fold -- and none of them should have to be handed a chat id to be
+#: readable.
+#:
+#: It is INHERITED by a background job on purpose. `core/jobs.py` clears the
+#: turn-scoped vars because a job outlives the turn that started it; a job
+#: the room started (the identity fill, a Dramaturge pass) is still the
+#: room's own work, and filing its calls anywhere else would split one
+#: session's record in two.
+_room_scope: contextvars.ContextVar = contextvars.ContextVar(
+    "llm_capture_room_scope", default=None)
+
+
+def room_scope():
+    """The Room capture scope in force, or None."""
+    return _room_scope.get()
+
+
+def latest_turn_id(chat_id):
+    """The turn a Room call is filed against: the chat's most recent one.
+
+    WHY A ROOM CALL IS KEYED TO A TURN AT ALL. A pipeline stage belongs to
+    the beat it runs in; a Room call does not -- the player opens the panel
+    between beats and plans forward. But the store is per-turn
+    (`llm_capture.turn_id` is a foreign key into `turns`), and more
+    importantly a reader wants ONE ordered account: this beat happened, then
+    the room said this about it. So a Room call is filed against THE TURN IN
+    PLAY -- the beat the room was looking at when it ran -- and sorts after
+    that turn's stages by wall clock, which is the order the two actually
+    happened in.
+
+    A chat with no turn at all records nothing: there is no beat to file the
+    call under and no export it could appear in. In practice a chat has a
+    turn from its greeting on (`story/greetings.py`), so that is the empty
+    case rather than the planning case.
+    """
+    try:
+        row = q("SELECT id FROM turns WHERE chat_id=? ORDER BY idx DESC "
+                "LIMIT 1", (int(chat_id),), one=True)
+    except Exception:
+        return None
+    return int(row["id"]) if row else None
+
+
+@contextlib.contextmanager
+def room_capture(chat_id, phase: str = ROOM_PHASE_DEFAULT):
+    """Arm Room capture for one reply, pass or fold.
+
+    Everything inside records under `room:<phase>` against the turn in play,
+    and nothing outside does. Costs one ContextVar set when capture is off,
+    which is the default -- the turn id is not resolved until a call is
+    actually recorded.
+    """
+    token = _room_scope.set({"chat_id": int(chat_id),
+                             "phase": str(phase or "") or ROOM_PHASE_DEFAULT,
+                             "turn_id": None})
+    try:
+        yield
+    finally:
+        _room_scope.reset(token)
+
+
+def record_room_exchange(*, role: str, system: str = "", payload: Any = None,
+                         response: Any = None, reasoning: str = "",
+                         started: float = 0.0, duration: float = 0.0,
+                         ok: bool = True, error: str = "",
+                         phase: str = "", chat_id=None,
+                         requested: str = "", served: str = "") -> None:
+    """Record one Writers' Room provider call.
+
+    The same recorder, the same content-addressed blobs and the same
+    off-by-default rule as a pipeline stage's. The dedup earns more here
+    than anywhere: the Room's system sheet is the most stable large blob in
+    the engine -- its tool table alone measured 15.6k characters on
+    2026-09-04, byte-identical on every step of every reply -- so hashing
+    stores it once per prompt edit rather than once per step.
+
+    Why this was needed at all: `record_exchange` was called from
+    `agents/runtime.py` and nowhere else, so every pipeline stage and every
+    Director specialist was readable and the two agents the host most wants
+    to read were not. All five play runs of 2026-09-05 said so; the
+    caravanserai run put a number on it ("24 model calls of author-facing
+    work left no payload to read").
+
+    No-op outside a `room_capture` scope, and no-op when capture is off.
+    A diagnostic must never fail the call it is describing, so everything
+    here is swallowed.
+    """
+    scope = _room_scope.get()
+    if scope is None and chat_id is None:
+        return
+    if not capture_enabled():
+        return
+    try:
+        cid = int(chat_id if chat_id is not None else scope["chat_id"])
+        turn_id = (scope.get("turn_id") if scope else None) or latest_turn_id(cid)
+        if not turn_id:
+            return
+        if scope is not None:
+            scope["turn_id"] = turn_id
+        step = str(phase or (scope or {}).get("phase") or ROOM_PHASE_DEFAULT)
+        record_exchange(turn_id=turn_id, step_key=ROOM_STEP_PREFIX + step,
+                        role=role, requested=requested, served=served,
+                        system=system, payload=payload, response=response,
+                        reasoning=reasoning, started=started,
+                        duration=duration, ok=ok, error=error)
+    except Exception:
+        return
+
+
+def is_room_step(step_key) -> bool:
+    """Whether a captured row is a Room call rather than a pipeline stage."""
+    return str(step_key or "").startswith(ROOM_STEP_PREFIX)
+
+
+def room_phase(step_key) -> str:
+    """The phase of a Room call's step key (`room:planner` -> `planner`)."""
+    key = str(step_key or "")
+    return key[len(ROOM_STEP_PREFIX):] if is_room_step(key) else ""
+
+
+def enter_room_capture(chat_id, phase: str = ROOM_PHASE_DEFAULT) -> None:
+    """Arm Room capture for the REST OF THIS CONTEXT, with no reset.
+
+    The pair to `room_capture` for a worker thread: the room's streamed
+    reply arms its token and reasoning sinks inside the thread that makes
+    the calls, because a ContextVar set in the generator would not be
+    visible there and one set in the worker cannot leak back. Capture is
+    armed the same way, beside them, for the same reason.
+    """
+    _room_scope.set({"chat_id": int(chat_id),
+                     "phase": str(phase or "") or ROOM_PHASE_DEFAULT,
+                     "turn_id": None})

@@ -169,7 +169,13 @@ authors read the seam and not the design:
 - **Room geometry** — `world/spatial_fov.py` (footprints, heights, opacity,
   shadowcast, `sightlines` payload), prototype; extend only after the
   replay's station/cover write rate is measured (34/40 stations, 0/40
-  cover, sightlines not persisted — unmeasured).
+  cover, sightlines not persisted — unmeasured). Since 2026-09-05 the ROOM
+  is one of its authors: `plan_rooms` takes `extent {w, d}`, `shape`,
+  `exposure` and a `vertical` on an edge, in the world's own vocabularies
+  and fail-open (`docs/design/DESIGN_ROOM_FIDELITY.md` § 2, § 5). The
+  measure that motivated it: 0 of 589 live rooms carried an extent, and the
+  one author asked for rooms beyond the frontier could not say how big they
+  were.
 - **The dispatch-keyed Director** — a hand runs when the ruling reaches it;
   replay: 17 → 8 model calls per turn, unique roles per turn 8.7 → 5.3.
 - **The plot package and the facade** (Phase B.1–B.2, 2026-09-04) —
@@ -542,6 +548,21 @@ first-person inputs:
 | charter observations acquired | 0 | 213 claims / 27 turns | hold |
 | stranger descriptors that are the fallback | all | all | 0 at full light (look law) |
 | offscreen hand calls | 38 turns | 1 turn | 0 (retired) |
+| Room model calls readable in an export | 0 of all | 0 of 24 (caravanserai) | all (see below) |
+
+**Reading the room, and why it is a measure.** Every pipeline stage and
+every Director specialist has been readable since debug capture landed, and
+the room's own two agents were the only ones that were not: `record_exchange`
+was called from `agents/runtime.py` and nowhere else. All five play runs of
+2026-09-05 said so and none could answer its own question about the room's
+payload design. Since 2026-09-05 a Room model call goes through
+`story/room_calls.room_call` and records into the same content-addressed
+store under `room:<phase>`, filed against the turn in play so one export
+reads in order — this beat happened, then the room said this about it
+(`export_turn_debug`, `origin: "room"`). Off by default, hash-only once on,
+like everything else in `persist/llm_capture.py`. A measure rather than a
+convenience: a room whose payloads cannot be read cannot be tuned, and four
+of the five runs' § 6 proposals stop exactly where the room begins.
 
 ## 8. What not to do
 
