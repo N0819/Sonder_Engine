@@ -275,6 +275,63 @@ def _comms_transmits(scene, channel, room, name):
         name and source.casefold() == str(name).casefold())
 
 
+def comms_reachable_rooms(scene, room=None, name=None, *, cap=None):
+    """Rooms a live TWO-WAY channel connects to this one, nearest first.
+
+    A CHANNEL IS A CHANNEL, AND THE PIPELINE HAS TO ATTEND TO BOTH ITS ENDS.
+    `comms_link` answers whether a voice arrives, which is enough for the
+    person hearing it and not enough for the person ANSWERING: a body at the
+    far end of a radio gets no view, no reply debt and no reactor slot,
+    because every gate that decides those things reads the ordinary hearing
+    model and a room across a channel is not a room across a doorway. So a
+    call to somebody out of earshot goes out and nothing comes back -- and a
+    charter presence, which has no cast row to be named a reactor by, can
+    never be reached at all.
+
+    TWO-WAY, asked in both directions, because that is the whole of what
+    makes a room answerable: a broadcast reaches its receivers and hears
+    nothing back (`comms_link` is directional and says so), so a public
+    address promotes nobody -- there is nobody on the other end who can
+    reply. A handset, an intercom and a field radio all pass.
+
+    The rooms this returns are attended to, NOT disclosed: the channel
+    carries the voice and nothing else, exactly as `line_hear_level`'s comm
+    path does. What the far end perceives is theirs, and only what they say
+    comes back.
+
+    `cap` bounds how many rooms one beat takes on; None means the caller's
+    default (`COMMS_ATTENDED_ROOMS`).
+    """
+    channels = (scene or {}).get("comms")
+    if not isinstance(channels, dict) or not channels:
+        return []
+    here = str(room) if room else None
+    limit = COMMS_ATTENDED_ROOMS if cap is None else int(cap)
+    if limit <= 0:
+        return []
+    out = []
+    for channel in channels.values():
+        if not isinstance(channel, dict) or not channel.get("live"):
+            continue
+        far = list(channel.get("rooms") or [])
+        for carrier in (channel.get("carriers") or []):
+            carrier_room = _comms_carrier_room(scene, carrier)
+            if carrier_room:
+                far.append(carrier_room)
+        for other in far:
+            other = str(other or "")
+            if not other or other == here or other in out:
+                continue
+            if comms_link(scene, here, other, speaker_name=name) is None:
+                continue
+            if comms_link(scene, other, here, observer_name=name) is None:
+                continue
+            out.append(other)
+            if len(out) >= limit:
+                return out
+    return out
+
+
 def _comms_delivers(scene, channel, room, name):
     """Does this observer hear what comes OFF the channel.
 
@@ -292,6 +349,15 @@ def _comms_delivers(scene, channel, room, name):
         return True
     return bool(room) and any(
         _comms_carrier_room(scene, carrier) == room for carrier in carriers)
+
+
+#: How many rooms one beat takes under the pipeline's attention because a
+#: live two-way channel reaches them. A channel usually has one far end; two
+#: covers a conference and a relay. The COST is the reason there is a number:
+#: an attended room is a room the payload carries and whose bodies may answer,
+#: and a registered character answering is a full character call on every beat
+#: the channel stays live. Raise it if a story wants a room full of handsets.
+COMMS_ATTENDED_ROOMS = 2
 
 
 def comms_link(scene, speaker_room, observer_room, *,

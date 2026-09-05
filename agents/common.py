@@ -1119,6 +1119,22 @@ def _contextual_rooms(sc, cast, *extra_room_ids, hops=1):
     for extra in extra_room_ids:
         if extra:
             centers.add(extra)
+    # A LIVE CHANNEL'S FAR END IS A ROOM THIS BEAT ATTENDS TO. Everything
+    # that decides who may act reads where bodies STAND, so a person on the
+    # other end of a radio was outside every payload: the Director could not
+    # see the room, could not address anybody in it, and a call went out with
+    # nothing able to come back. Attending is not disclosing -- the channel
+    # carries the voice and nothing else, exactly as `line_hear_level`'s comm
+    # path does, and what the far end perceives stays theirs.
+    #
+    # Two-way only, and capped: `comms_reachable_rooms` states both rules and
+    # names the cap (`COMMS_ATTENDED_ROOMS`).
+    try:
+        from world.spatial import comms_reachable_rooms
+        for here in list(centers):
+            centers.update(comms_reachable_rooms(sc, here))
+    except Exception:
+        pass
     return nearby_rooms(sc, centers, hops=hops)
 
 # Entity fields that exist so CODE can resolve a reference, not because an

@@ -1280,7 +1280,32 @@ def demand_reaches(scene, here, authored_rooms, *, aimed=False):
             return True
         if hear_level(spatial_rel(scene, here, room), "normal") == "full":
             return True
-    return False
+    return _a_live_channel_joins(scene, here, authored_rooms)
+
+
+def _a_live_channel_joins(scene, here, rooms) -> bool:
+    """Is a live TWO-WAY channel the channel between these rooms?
+
+    A CHANNEL IS A CHANNEL. Both gates above read the ordinary hearing model,
+    and a room across a radio is not a room across a doorway -- so a body
+    called on the radio was refused a reactor slot and a reply debt, and a
+    call went out with nothing able to come back. It matters most for a
+    CHARTER presence, which has no cast row to be named a reactor by and so
+    has no other way to be reached at all.
+
+    Two-way, for the reason `comms_reachable_rooms` gives: a broadcast
+    reaches its receivers and hears nothing back, and a body that cannot
+    answer is not a body to pick for answering.
+    """
+    try:
+        from world.spatial import comms_reachable_rooms
+    except Exception:
+        return False
+    try:
+        reached = set(comms_reachable_rooms(scene, str(here)))
+    except Exception:
+        return False
+    return any(str(room) in reached for room in rooms if room)
 
 
 def spoken_volumes(ctx, dr_output=None):
@@ -1391,7 +1416,10 @@ def address_reaches(scene, listener, listener_room, speaker, speaker_rooms,
                     return True
     except Exception:
         return True
-    return False
+    # ...and a live two-way channel is a channel (`_a_live_channel_joins`).
+    # A voice on a handset is not crossing this room's air, so the rooms say
+    # nothing about it; the channel does.
+    return _a_live_channel_joins(scene, listener_room, rooms)
 
 
 def _valid_pending_reply(record, turn_idx):
