@@ -5348,6 +5348,50 @@ never a fragment of itself — and then to decide whether tier (c)'s uniqueness
 test is enough protection for a three-letter name like `tie`, which is what
 the floor is currently standing in for.
 
+### 1.114 The ledger can say what a garment replaced; nothing says it yet
+
+**Found by playing 2026-09-05** (flat run PE4, turn 11): out of the shower,
+the body specialist wrote `attire: {"Noor Haddad": {"add": ["big blue bath
+towel"], "remove": []}}` and the committed ledger read `scrubs top, lanyard,
+jumper, towel, scrubs trousers, socks` — a woman who had just showered, in a
+towel over a jumper over scrubs. No warning fired at any stage.
+
+**The ledger half landed in the same commit** (`story/attire.py`:
+`displaced_by`, `_place_held`, `apply_flat_change(displaces=...)`;
+`tests/test_attire_region_displacement.py`). A garment put on in another's
+place turns it out, and the displaced garment reaches `removed` like any other
+departure, so `newly_removed` reports it and it becomes a thing in the room
+rather than disappearing from the ledger. Layering stays the default: the
+ledger cannot tell a coat over a jumper from a towel instead of one, so it
+honours a declared replacement and never infers one.
+
+Two halves are outstanding, and neither is the ledger's to build:
+
+- **The body hand's attire clause** (`llm/prompts.py`, the body specialist's
+  attire block, plus `language_packs/*/cards/system_prompts/`). State the
+  class, not the case: *a garment put on in place of what was worn names what
+  came off in `remove`; adding alone means adding a layer over what is
+  there.* This is the whole fix for the live beat — the engine has always
+  handled a `remove` correctly — and it is one sentence read by every story.
+  Watch the next few beats for what it licenses (a hand that now removes too
+  eagerly is the failure to look for).
+- **The commit seam** (`persist/commit_attire.py`, `apply_attire_diff`), which
+  builds `wanted` as previous + `add` − `remove` and calls
+  `attire.apply_flat_change`. To let a replacement be stated rather than
+  inferred it would pass `displaces=` for the garments the beat says arrived
+  in another's stead. That needs a channel to carry the statement: either the
+  body specialist's attire diff gains an optional
+  `in_place_of: {garment: [garment, ...]}` (`llm/schemas.py`, and
+  `attire.coerce_diff_shape`'s `_DIFF_KNOWN_KEYS` already reserves the shape
+  of such a key), or — cheaper and probably enough — the clause above lands
+  and nothing else is built. **Do the clause first and measure.** A
+  deterministic trigger here would have to guess which of the two a beat
+  meant, which is exactly the guess the ledger refuses to make.
+
+A third option was considered and rejected: warning whenever an `add` lands
+on an already-covered region. It fires on every legitimate layer — a coat, an
+apron, a robe over nightwear — which is PE20's disease one module over.
+
 ## 2. Roadmap
 
 Features the architecture intends and has not built. Ordered by value per unit

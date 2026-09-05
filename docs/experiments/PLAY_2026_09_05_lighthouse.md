@@ -427,6 +427,14 @@ information sits, correctly keyed, in `appraisal.present_evidence`. Either
 the floor reads the wrong field or the contract asks for the same thing
 twice. A warning at 18/19 is noise that will hide the real one.
 
+**LANDED 2026-09-05** with PE20 (flat run), which measured the same line at 45
+of 116 warnings; the manor run counted it 44 times and the road run on 17 of
+20 beats. Both halves were wrong at once: the guard read a lane that is no
+longer requested, and it fired regardless of whether any present lane had been
+asked for. It now reads the lanes the advertised schema offers and accepts a
+citation from whichever lane the answer used. See the flat run's PE20 for the
+before/after measurement.
+
 ### PA12. F28 recurs: "approach is not arrival" refuses a declared step into the next room
 *Turns 4 and 15. Severity: wrong-but-recoverable; registered as F28.* Both
 times the interpret wrote `movement {arrives: false}` for a step the player
