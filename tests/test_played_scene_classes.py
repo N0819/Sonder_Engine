@@ -975,6 +975,77 @@ def test_a_refusal_holds_back_only_the_bodies_it_names():
         "positions": {"Ada": "hall", "Penrose": "hall"}})
     assert merged["positions"] == {"Ada": "study", "Penrose": "hall"}
 
+
+def test_the_backstop_records_every_body_it_holds_back():
+    """The producer half of PC7: the consumer above can only subtract what
+    the backstop names, and until 2026-09-05 the backstop named nobody.
+
+    Manor run, turn 8: the declared walk into the gallery was refused at a
+    wall, the position was popped, and the pose written for the arrival
+    survived -- so the ledger held a body posed in a room she had never
+    entered. `_refuse_movement` writes one record per body at the moment
+    its position is popped: the declarer, and each companion the same beat
+    sent to the same destination.
+    """
+    from agents.director import _refuse_movement
+
+    sd = {"positions": {}}
+    _refuse_movement(sd, "Ada", "long_gallery")
+    _refuse_movement(sd, "Penrose", "long_gallery")
+    assert sd["movement_refused"] == [
+        {"subject": "Ada", "to_room": "long_gallery"},
+        {"subject": "Penrose", "to_room": "long_gallery"}]
+
+    # The mover is reachable from both the declarer branch and the stranded
+    # sweep; a body refused twice was still refused once.
+    _refuse_movement(sd, "Ada", "long_gallery")
+    assert len(sd["movement_refused"]) == 2
+
+    # A refusal to a DIFFERENT destination is a different refusal.
+    _refuse_movement(sd, "Ada", "terrace")
+    assert sd["movement_refused"][-1] == {"subject": "Ada",
+                                          "to_room": "terrace"}
+
+    # A nameless subject is no record: the merge matches on identity, and a
+    # blank would refuse nothing while looking like it refused something.
+    _refuse_movement(sd, "  ", "terrace")
+    assert len(sd["movement_refused"]) == 3
+
+
+def test_a_blocked_walk_leaves_no_trace_of_the_arrival(monkeypatch):
+    """End to end over the two halves: what the backstop pops, the merge
+    subtracts, so a refused walk leaves room, station and pose untouched."""
+    from agents.director import _refuse_movement
+    from world.spatial import merge_scene_with_diff
+
+    scene = {
+        "rooms": {
+            "hall": {"name": "Hall",
+                     "adjacent": [{"to": "long_gallery", "barrier": "wall"}]},
+            "long_gallery": {"name": "Long Gallery", "anchors": {}},
+        },
+        "positions": {"Ada": "hall"},
+        "stations": {"Ada": {"at": "", "near": [], "cell": [1, 1]}},
+        "poses": {"Ada": {"posture": "standing", "support": "",
+                          "relative_to": "", "relation": "",
+                          "constraint": "", "detail": "just inside the hall"}},
+        "entities": {},
+    }
+    keys = ("positions", "stations", "poses")
+    before = json.dumps({k: scene[k] for k in keys}, sort_keys=True)
+
+    # What the resolve wrote for a walk through a wall, and what the
+    # backstop does about it.
+    sd = {"positions": {"Ada": "long_gallery"},
+          "stations": {"Ada": {"at": "archway", "cell": [7, 1]}},
+          "poses": {"Ada": {"posture": "seated",
+                            "detail": "on the gallery window seat"}}}
+    sd["positions"].pop("Ada")
+    _refuse_movement(sd, "Ada", "long_gallery")
+
+    merged = merge_scene_with_diff(scene, sd)
+    assert json.dumps({k: merged[k] for k in keys}, sort_keys=True) == before
+
 # PA1: a body that crosses rooms performs one act per room it is in
 # ---------------------------------------------------------------------------
 #
