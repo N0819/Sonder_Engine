@@ -6812,20 +6812,32 @@ vocabulary; flicker and failure are seeded on (turn, source) so a reroll
 sees the same light. Nothing is built, nothing is measured; the note's § 9
 lists what to measure first and its § 6 the constants the owner sets.
 
-### 2.36 The sound field — DESIGN, not built
+### 2.36 The sound field — PROTOTYPE, on a branch
 
-Agreed 2026-09-04, queued after the light field:
-[`design/DESIGN_SOUND_FIELD.md`](design/DESIGN_SOUND_FIELD.md). Loudness as a
-scalar on the sight grid, spread by shortest acoustic PATH (a flood, not a
-raycast -- sound goes round a counter and through a doorway, light does not),
-attenuated per aperture by the barrier and its material, decayed by path
-length, summed into a signal and a noise floor (other sources, the room's
-ambient and weather, the listener's own machine), and quantised LAST to the
-existing `none | fragment | full` by signal against noise. Sources are a class
-(`sound_source`, `steadiness` shared with light, `state.running`), speech keeps
-its volume word, containment and comms keep their present rules, and a scene
-without geometry composes byte-identically. Nothing built or measured; § 6
-holds the constants the owner sets and § 9 what to measure first.
+Designed and built 2026-09-04
+([`design/DESIGN_SOUND_FIELD.md`](design/DESIGN_SOUND_FIELD.md),
+`world/spatial_sound_field.py`, `tests/test_sound_field.py`, 25 tests).
+Loudness is a scalar on the sight grid, spread by shortest acoustic PATH,
+attenuated per aperture by barrier and material, decayed by path length,
+summed into a signal and a noise floor, and quantised LAST to `none |
+fragment | full`; `spatial_rel_between` stamps `signal`/`noise` where the
+listener's room carries geometry and `hear_level` reads them; entities carry
+`sound_source`, `steadiness`, `state.running`; a failing source files an
+engine notice; a scene without geometry composes byte-identically (pinned).
+Measured: 2 of 589 live rooms carry geometry, 2 speaker-listener pairs on a
+field, whisper and mutter the only words that moved. Left, each in the note's
+§ 10 and each an owner decision: the constants (§ 6a set them off the § 6
+proposal, with the reason); whether a crowd's `mood` should raise its level
+(built on its band, a closed set); which lines of a beat are simultaneous
+(the reader grades one line at a time; simultaneous masking exists only
+through the module API); whether a failing source should switch itself off at
+commit; the composer's sound-shape sentence (not built: it needs a percept
+kind and templates); whether a fragment should thin with the ratio; and the
+live run, which needs a copy of the owner's database there was no room for.
+The `STEADINESS`/`FLICKER_RATE`/`FAIL_RATE` definitions must be unified with
+the light field's at merge, and `_acoustic_grid`'s neighbour placement (a
+copy of `observer_field`'s, for the wider predicate) may fold into `_Field`
+under the room-shapes work.
 
 ### 2.35 What the 2026-09-04 debug runs left open
 
