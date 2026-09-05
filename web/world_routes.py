@@ -40,6 +40,38 @@ present, else a frame row of this chat, 404 otherwise -- the same contract
   card field it concerns) and ``text`` (`layout_warning`)); 404 when no
   room of that id is known to the story. Index rows carry ``lint`` as the
   COUNT of rows naming the room, so the tree can mark it.
+* ``GET  /{room_id}/grid?frame_id=`` -> the room's field AS THE ENGINE
+  COMPUTES IT, for the map editor (`grid_view`; pure over the same functions
+  sight and light run over -- `room_grid`, `anchor_cells`, `body_cell`,
+  `room_field` -- so there is no second geometry): ``room`` ``{id, name, w,
+  d, shape, measured, cells}``, ``rims`` ``{n, e, s, w: [cells]}`` (the
+  cells that ARE each wall, in `RoomGrid.rim`'s order -- the order `offset`
+  counts along), ``anchors`` ``{id: {cells, dir, height, footprint,
+  opacity, desc, offset}}`` (authored anchors), ``doorways`` ``[{id, to,
+  name, dir, cells, barrier, offset, status}]`` (the implicit door anchors,
+  ``cells`` empty when the edge has no bearing to place it by), ``bodies``
+  ``{name: {cell, facing, kind, at, near, measured}}`` (``cell`` None and
+  ``measured`` false for a body with no station -- somewhere in the room),
+  ``things`` ``[{id, name, kind, cell, anchor, placed}]``, ``walls`` (the
+  field's wall lines, each ``{axis, coord, extent, aperture, to, name}``),
+  ``neighbours`` ``[{id, name, offset, w, d, shape, cells, anchors}]``
+  (every room `room_field` lays beyond a doorway, at the offset it lays it,
+  its cells in ITS OWN frame), ``lint`` (the rows naming the room, as the
+  slice carries them) and ``overlays`` -- ``{}`` today; the slot a sibling
+  fills with ``{name: {"x,y": word}}`` per-cell readings (light, sound),
+  which the map paints with a legend and this module never computes.
+  404 when the room is not in the frame's scene (a planned room has no
+  grid).
+* ``GET /api/chats/{cid}/map?frame_id=`` -> the whole scene's rooms placed
+  by bearing (`map_view` over `world.spatial.layout_rooms`, the lint's own
+  embedding): ``components`` ``[{start, rooms: [{id, name, offset, w, d,
+  shape, measured, cells, exits: [{to, name, dir, barrier, placed}],
+  occupants, lint, holder, collided, onto, via}], collisions: [{room,
+  onto, via}]}]``, one component per connected set of beared, non-wall
+  edges, laid out from its smallest id. A room the bearings land on another
+  is DRAWN at the offset it would have had (``collided`` true, ``onto`` the
+  room it lands on, ``via`` the doorway it was reached through), never
+  hidden.
 
 Writes, each host-only and era-scoped exactly like the reads, each refused
 with 409 while any pipeline of the chat runs (the same guard `world_put`
@@ -67,19 +99,24 @@ tail), writing it through `wset` as `attire_put` does, and reconciling the
   ``{w, d, at}`` for an `l`, ``at`` refused outside `ROOM_CORNERS`, run
   through `normalize_parts`; ``exits`` and ``anchors`` are FULL replacement
   lists for this room. An
-  exit is ``{to, barrier, dir?}``; a doorway is one object, so the far
-  room's reciprocal edge is written too -- created when missing, its
+  exit is ``{to, barrier, dir?, offset?}``; a doorway is one object, so the
+  far room's reciprocal edge is written too -- created when missing, its
   barrier set when it stands (every barrier but `one_way_window`, which is
-  asymmetric by design), its ``dir`` the opposite bearing, and REMOVED when
-  the exit is (`_mirror_symmetric_barriers` in `world/spatial_merge.py` is
-  the merge's statement of the same rule; `Design.md`'s "One doorway, one
-  barrier"). Fields an edge carried that the browser does not edit
-  (`distance`, `passage_from`, ...) survive on the edge that keeps its
-  ``to``. Anchors are ``{anchor_id: {desc, dir?, height?, footprint?,
-  opacity?}}``; an anchor without an id is keyed by its folded desc; the
-  geometry words are refused outside `HEIGHTS` / `FOOTPRINTS` / `OPACITIES`.
-  Returns the fresh slice (as the GET shapes it) so the card re-renders
-  without a second fetch.
+  asymmetric by design), its ``dir`` the opposite bearing, its ``offset``
+  the same fraction (a wall's start is the same end from either room), and
+  REMOVED when the exit is (`_mirror_symmetric_barriers` in
+  `world/spatial_merge.py` is the merge's statement of the same rule;
+  `Design.md`'s "One doorway, one barrier"). Fields an edge carried that the
+  browser does not edit (`distance`, `passage_from`, ...) survive on the
+  edge that keeps its ``to``. Anchors are ``{anchor_id: {desc, dir?,
+  height?, footprint?, opacity?, offset?}}``; an anchor without an id is
+  keyed by its folded desc; the geometry words are refused outside
+  `HEIGHTS` / `FOOTPRINTS` / `OPACITIES`. ``offset`` -- on an anchor or an
+  exit -- is where along its wall the thing stands, a number in [0, 1] from
+  the wall's start (`world.spatial.normalize_offset`; the map editor's
+  drag writes it), refused outside the range naming it, null or '' clearing
+  it back to the seeded placement. Returns the fresh slice (as the GET
+  shapes it) so the card re-renders without a second fetch.
 * ``PATCH /{room_id}/entities/{entity_id}`` for a thing standing in the
   room: ``kind``, ``description`` (text), ``portable`` (bool),
   ``light_source`` (a `LIGHT_LEVELS` word, empty clearing it), ``lit`` (bool
@@ -121,13 +158,15 @@ from story.attire import GARMENT_STATES, REGIONS as ATTIRE_REGIONS
 from story.character_schema import character_name, persona_name
 from story.scene import get_scene, persona_of
 from world.spatial import (
-    _BEARINGS, _VALID_BARRIERS, EXTENT_MAX_PACES, EXTENT_MIN_PACES, FOOTPRINTS,
-    HEIGHTS, LAYOUT_LINT_KINDS, LIGHT_LEVELS, OPACITIES, ROOM_CORNERS,
-    ROOM_SIZES, SHAPES, effective_anchors, layout_warning, normalize_bearing,
-    normalize_extent, normalize_parts, normalize_room_id,
-    normalize_scene_barriers, normalize_scene_bearings,
-    normalize_scene_stations, normalize_shape, opposite_bearing, room_grid,
-    room_layout_lint, room_of, size_from_extent,
+    _BEARINGS, _DOOR_ANCHOR_PREFIX, _VALID_BARRIERS, EXTENT_MAX_PACES,
+    EXTENT_MIN_PACES, FOOTPRINTS, HEIGHTS, LAYOUT_LINT_KINDS, LIGHT_LEVELS,
+    OPACITIES, ROOM_CORNERS, ROOM_SIZES, SHAPES, anchor_cells, body_cell,
+    effective_adjacent, effective_anchors, effective_facing,
+    effective_station, layout_rooms, layout_warning, normalize_barrier,
+    normalize_bearing, normalize_extent, normalize_offset, normalize_parts,
+    normalize_room_id, normalize_scene_barriers, normalize_scene_bearings,
+    normalize_scene_stations, normalize_shape, opposite_bearing, room_field,
+    room_grid, room_layout_lint, room_of, size_from_extent,
 )
 from world.weather import EXPOSURES
 
@@ -257,21 +296,38 @@ def _room_lint(rows, room_id):
     return [dict(r) for r in rows if str(room_id) in (r.get("rooms") or [])]
 
 
+def _occupants(scene):
+    """``{room_id: [names]}`` -- the BODIES each room holds, by the rule
+    `cast_rooms` counts the cast with: a position row keyed by a scene entity
+    of an inanimate kind places a thing (the slice lists it under `things`),
+    and a row with no entity record behind it, or an animate one, is a body.
+    Read by the tree's rows and the structure map alike."""
+    occupants = {}
+    for who, room in (scene.get("positions") or {}).items():
+        if not str(room or "") or not _is_body(scene, who):
+            continue
+        occupants.setdefault(str(room), []).append(str(who))
+    return occupants
+
+
+def _body_kind(name, player, cast):
+    """player | cast | presence: the player by the persona's name, the cast
+    by the registered sheets (`_cast_ids`), anyone else a presence."""
+    key = str(name).strip().casefold()
+    if key == str(player or "").strip().casefold():
+        return "player"
+    if key in (cast or {}):
+        return "cast"
+    return "presence"
+
+
 def group_rows(index_rows, scene, lint_rows=None):
     """Sort index rows into the four display groups, each keeping the
     index's order, and decorate every row for display. Pure over its inputs
     so the grouping is testable without a request. `lint_rows` (the shape
     `_lint_rows` returns) puts the count of layout rows naming each room on
     its row as `lint`, so the tree can mark it."""
-    # The names beside a cast room are BODIES, by the rule `cast_rooms` counts
-    # the cast with: a position row keyed by a scene entity of an inanimate
-    # kind places a thing (the slice lists it under `things`), and a row with
-    # no entity record behind it, or an animate one, is a body.
-    occupants = {}
-    for who, room in (scene.get("positions") or {}).items():
-        if not str(room or "") or not _is_body(scene, who):
-            continue
-        occupants.setdefault(str(room), []).append(str(who))
+    occupants = _occupants(scene)
     groups = {key: [] for key in GROUPS}
     for row in index_rows:
         row = dict(row)
@@ -370,15 +426,9 @@ def body_rows(cid, chat, scene):
         key = name.strip().casefold()
         room = room_of(scene, name)
         room_def = rooms_.get(room) if room else None
-        if key == player.casefold():
-            kind = "player"
-        elif key in cast:
-            kind = "cast"
-        else:
-            kind = "presence"
         out.append({
             "name": name,
-            "kind": kind,
+            "kind": _body_kind(name, player, cast),
             "char_id": cast.get(key),
             "room": room or None,
             "room_name": (str(room_def.get("name") or room)
@@ -520,6 +570,229 @@ def rooms_slice(cid: int, room_id: str, frame_id: int | None = None):
 
 
 # ---------------------------------------------------------------------------
+# The map editor's two reads: one room's grid, and the scene placed by bearing
+# ---------------------------------------------------------------------------
+
+def _cells(cells):
+    """Cells as JSON lists, in one order, so two reads of one room agree."""
+    return [[int(x), int(y)] for x, y in sorted(cells)]
+
+
+def _room_name(scene, room_id):
+    room = (scene.get("rooms") or {}).get(room_id)
+    if isinstance(room, dict) and str(room.get("name") or "").strip():
+        return str(room["name"]).strip()
+    return str(room_id)
+
+
+def grid_view(scene, room_id, lint_rows, *, player="", cast=None, things=()):
+    """One room's field exactly as the engine computes it -- the module
+    docstring gives the shape. Pure over the scene and the same functions
+    sight and light read (`room_grid`, `anchor_cells`, `body_cell`,
+    `room_field`), so the map cannot show a wall the cast is not judged by.
+    `things` is the slice's list for the room (`story.room_slice`), so a
+    thing is filed the one way it is filed everywhere. None when the room is
+    not in the scene."""
+    rooms_ = scene.get("rooms") or {}
+    if not isinstance(rooms_.get(room_id), dict):
+        return None
+    grid = room_grid(scene, room_id)
+    placed = anchor_cells(scene, room_id)
+    field = room_field(scene, room_id)
+    edges = {str(e.get("to")): e for e in effective_adjacent(scene, room_id)
+             if isinstance(e, dict) and e.get("to")}
+
+    anchors, doorways = {}, []
+    for aid, rec in placed.items():
+        if rec["implicit"] and str(aid).startswith(_DOOR_ANCHOR_PREFIX):
+            to = str(aid)[len(_DOOR_ANCHOR_PREFIX):]
+            edge = edges.get(to) or {}
+            doorways.append({
+                "id": str(aid), "to": to, "name": _room_name(scene, to),
+                "dir": rec["dir"],
+                # A doorway with no bearing has no wall to stand in; the
+                # seeded interior cell `_place_anchors` gave it means
+                # nothing here, so it is listed and not drawn.
+                "cells": _cells(rec["cells"]) if rec["dir"] else [],
+                "barrier": normalize_barrier(edge.get("barrier")),
+                "offset": rec.get("offset"),
+                "status": "live" if to in rooms_ else None,
+            })
+            continue
+        anchors[str(aid)] = {
+            "cells": _cells(rec["cells"]), "dir": rec["dir"],
+            "height": rec["height"], "footprint": rec["footprint"],
+            "opacity": rec["opacity"], "desc": rec["desc"],
+            "implicit": bool(rec["implicit"]), "offset": rec.get("offset"),
+        }
+    doorways.sort(key=lambda d: d["to"])
+
+    bodies = {}
+    for who, where in (scene.get("positions") or {}).items():
+        if str(where or "") != str(room_id) or not _is_body(scene, who):
+            continue
+        cell = body_cell(scene, who)
+        station = effective_station(scene, who)
+        bodies[str(who)] = {
+            "cell": [int(cell[0]), int(cell[1])] if cell else None,
+            "facing": effective_facing(scene, who),
+            "kind": _body_kind(who, player, cast),
+            "at": station.get("at") or None,
+            "near": [str(n) for n in (station.get("near") or [])],
+            "measured": cell is not None,
+        }
+
+    things_out = []
+    for thing in things or ():
+        tid = str(thing.get("id") or "")
+        if not tid:
+            continue
+        if tid in placed:
+            cell, anchor, how = None, tid, "anchor"
+        else:
+            placed_cell = body_cell(scene, tid)
+            cell = [int(placed_cell[0]), int(placed_cell[1])] if placed_cell else None
+            anchor, how = None, "position"
+        things_out.append({"id": tid, "name": str(thing.get("name") or tid),
+                           "kind": str(thing.get("kind") or ""),
+                           "cell": cell, "anchor": anchor, "placed": how})
+
+    neighbours = []
+    for other, offset in (field.offsets if field else {}).items():
+        if str(other) == str(room_id):
+            continue
+        far = room_grid(scene, other)
+        neighbours.append({
+            "id": str(other), "name": _room_name(scene, other),
+            "offset": [int(offset[0]), int(offset[1])],
+            "w": far.w, "d": far.d, "shape": far.shape,
+            "cells": _cells(far.cells),
+            "anchors": {str(aid): {"cells": _cells(rec["cells"]),
+                                   "desc": rec["desc"],
+                                   "implicit": bool(rec["implicit"])}
+                        for aid, rec in (field.anchors.get(other) or {}).items()},
+        })
+    walls = [{"axis": int(w["axis"]), "coord": int(w["coord"]),
+              "extent": [float(w["extent"][0]), float(w["extent"][1])],
+              "aperture": [float(w["aperture"][0]), float(w["aperture"][1])],
+              "to": str(w["to"]), "name": _room_name(scene, w["to"])}
+             for w in (field.walls if field else [])]
+    return {
+        "room": {"id": str(room_id), "name": _room_name(scene, room_id),
+                 "w": grid.w, "d": grid.d, "shape": grid.shape,
+                 "measured": bool(grid.measured), "cells": _cells(grid.cells)},
+        # In the rim's OWN order (along the wall from its start), not sorted:
+        # it is the order `offset` counts in, and on a round room's arc the
+        # two differ.
+        "rims": {wall: [[int(x), int(y)] for x, y in grid.rim(wall)]
+                 for wall in WALLS},
+        "anchors": anchors,
+        "doorways": doorways,
+        "bodies": bodies,
+        "things": things_out,
+        "walls": walls,
+        "neighbours": neighbours,
+        "lint": _room_lint(lint_rows, room_id),
+        # THE OVERLAYS SLOT. `{name: {"x,y": word}}` per-cell readings the
+        # map paints with a legend; this module computes none of them. The
+        # light field (`world/spatial_light_field.py`) and the sound field
+        # are the readers that fill it, from the composite `room_field`
+        # returns -- the same field the cells above came from.
+        "overlays": {},
+    }
+
+
+def map_view(scene, lint_rows):
+    """Every live room placed by bearing, as the lint's embedding places
+    them (`layout_rooms`, one component per connected set of beared,
+    non-wall edges, from its smallest id), each with its box and shape, its
+    exits by wall, who stands in it and how many lint rows name it. A room
+    the bearings land on another is DRAWN at the offset the rule gave it,
+    flagged `collided` with the room it lands on and the doorway it was
+    reached through -- the contradiction is the thing to look at, so it is
+    never hidden. The module docstring gives the shape."""
+    rooms_ = {str(rid): room for rid, room in (scene.get("rooms") or {}).items()
+              if isinstance(room, dict)}
+    occupants = _occupants(scene)
+    components = []
+    placed = set()
+    for start in sorted(rooms_):
+        if start in placed:
+            continue
+        layout = layout_rooms(scene, start)
+        offsets = dict(layout.get("offsets") or {})
+        collided = dict(layout.get("collided") or {})
+        placed.update(offsets)
+        placed.update(collided)
+        landed = {other: (onto, via) for other, onto, via in layout["collisions"]}
+        rows = []
+        for rid in list(offsets) + [r for r in collided if r not in offsets]:
+            grid = room_grid(scene, rid)
+            offset = offsets.get(rid, collided.get(rid))
+            exits = []
+            for edge in effective_adjacent(scene, rid):
+                if not isinstance(edge, dict) or not edge.get("to"):
+                    continue
+                to = str(edge["to"])
+                exits.append({"to": to, "name": _room_name(scene, to),
+                              "dir": normalize_bearing(edge.get("dir")),
+                              "barrier": normalize_barrier(edge.get("barrier")),
+                              "placed": to in offsets or to in collided})
+            exits.sort(key=lambda e: e["to"])
+            onto, via = landed.get(rid, (None, None))
+            rows.append({
+                "id": rid, "name": _room_name(scene, rid),
+                "offset": [int(offset[0]), int(offset[1])],
+                "w": grid.w, "d": grid.d, "shape": grid.shape,
+                "measured": bool(grid.measured), "cells": _cells(grid.cells),
+                "exits": exits,
+                "occupants": list(occupants.get(rid, [])),
+                "lint": len(_room_lint(lint_rows, rid)),
+                "holder": rooms_[rid].get("parent_entity") or None,
+                "collided": rid in collided and rid not in offsets,
+                "onto": onto, "via": via,
+            })
+        components.append({
+            "start": start, "rooms": rows,
+            "collisions": [{"room": a, "onto": b, "via": c}
+                           for a, b, c in layout["collisions"]],
+        })
+    return {"components": components}
+
+
+@router.get("/{room_id}/grid")
+def rooms_grid(cid: int, room_id: str, frame_id: int | None = None):
+    chat = _chat_or_404(cid)
+    with _era(cid, frame_id):
+        scene = rooms.read_scene(cid)
+        if not isinstance((scene.get("rooms") or {}).get(room_id), dict):
+            raise HTTPException(
+                404, f"No room '{room_id}' in this scene -- a planned room "
+                     "has no grid until a beat furnishes it")
+        slice_ = rooms.room_slice(cid, frame_id, room_id, scene) or {}
+        view = grid_view(
+            scene, room_id, _lint_rows(scene),
+            player=str(persona_name(persona_of(chat)) or "").strip(),
+            cast=_cast_ids(cid), things=slice_.get("things") or ())
+    view["frame_id"] = frame_id
+    return view
+
+
+map_router = APIRouter(prefix="/api/chats/{cid}/map", tags=["world-browser"])
+
+
+@map_router.get("")
+def map_index(cid: int, frame_id: int | None = None):
+    _chat_or_404(cid)
+    with _era(cid, frame_id):
+        scene = rooms.read_scene(cid)
+        view = map_view(scene, _lint_rows(scene))
+    view["frame_id"] = frame_id
+    view["location"] = str(scene.get("location") or "")
+    return view
+
+
+# ---------------------------------------------------------------------------
 # Writes
 # ---------------------------------------------------------------------------
 
@@ -593,6 +866,12 @@ def _apply_exits(scene, room_id, room, exits):
             edge["dir"] = direction
         else:
             edge.pop("dir", None)
+        if "offset" in raw:
+            placed_at = _offset_or_400("an exit's offset", raw.get("offset"))
+            if placed_at is None:
+                edge.pop("offset", None)
+            else:
+                edge["offset"] = placed_at
         fresh.append(edge)
     room["adjacent"] = fresh
 
@@ -622,6 +901,14 @@ def _apply_exits(scene, room_id, room, exits):
             back["dir"] = opposite_bearing(edge["dir"])
         else:
             back.pop("dir", None)
+        # The doorway stands at one place along the wall from either side:
+        # a wall's start is the same end seen from both rooms (west for a
+        # north or south wall, north for an east or west one), so the
+        # fraction is copied, not mirrored.
+        if edge.get("offset") is not None:
+            back["offset"] = edge["offset"]
+        else:
+            back.pop("offset", None)
 
 
 def _apply_anchors(room, anchors):
@@ -652,9 +939,13 @@ def _apply_anchors(room, anchors):
             value = _enum_value(field, raw.get(field), allowed)
             if value:
                 anchor[field] = value
+        placed_at = _offset_or_400(f"anchor '{key}' offset", raw.get("offset"))
+        if placed_at is not None:
+            anchor["offset"] = placed_at
         # Whatever else the engine wrote on the anchor rides through.
         for field, value in raw.items():
-            if field not in ("id", "desc", "dir", *ANCHOR_ENUMS) and value is not None:
+            if field not in ("id", "desc", "dir", "offset", *ANCHOR_ENUMS) \
+                    and value is not None:
                 anchor.setdefault(field, value)
         out[key] = anchor
     room["anchors"] = out
@@ -671,6 +962,28 @@ def _paces_or_400(field, raw):
             400, f"{field} must be {{w, d}} in whole paces, each between "
                  f"{EXTENT_MIN_PACES} and {EXTENT_MAX_PACES} (got {raw!r})")
     return extent
+
+
+def _offset_or_400(field, raw):
+    """Where along its wall a thing stands, as `normalize_offset` reads it,
+    or None to clear (null, ''), or a 400 naming the range. A numeric
+    string is read as its number -- a form field is text -- and everything
+    else that is not a number in [0, 1] is refused, never clamped: a host
+    who typed 1.5 meant something the wall does not have."""
+    if raw is None or raw == "":
+        return None
+    value = raw
+    if isinstance(raw, str):
+        try:
+            value = float(raw.strip())
+        except ValueError:
+            value = raw
+    placed_at = normalize_offset(value)
+    if placed_at is None:
+        raise HTTPException(
+            400, f"{field} must be a number between 0 and 1 -- how far along "
+                 f"the wall from its start (got {raw!r})")
+    return placed_at
 
 
 def _apply_extent(room, raw):

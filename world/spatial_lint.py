@@ -222,11 +222,18 @@ def layout_rooms(scene, start) -> dict:
     same rooms out the same way and names the same pair. A room whose door
     onto a neighbour has no placeable cell (no bearing on either side) is not
     reached through that door.
+
+    ``collided`` (added 2026-09-04 for the World Browser's structure map) is
+    where each colliding room WOULD have landed -- the offset the rule gave
+    it before the collision refused it -- so a map can draw the two rooms on
+    one another rather than hide the one that lost. It is never an entry of
+    ``offsets`` and places nothing.
     """
     rooms = _rooms(scene)
     if str(start) not in rooms:
-        return {"offsets": {}, "collisions": []}
+        return {"offsets": {}, "collisions": [], "collided": {}}
     offsets = {str(start): (0, 0)}
+    collided = {}
     occupied = {}
     for x, y in room_grid(scene, start).cells:
         occupied[(x, y)] = str(start)
@@ -252,13 +259,14 @@ def layout_rooms(scene, start) -> dict:
                 hit = sorted({occupied[c] for c in cells if c in occupied})
                 if hit:
                     collisions.append((other, hit[0], room_id))
+                    collided.setdefault(other, offset)
                     continue
                 offsets[other] = offset
                 for c in cells:
                     occupied[c] = other
                 nxt.append(other)
         frontier = sorted(nxt)
-    return {"offsets": offsets, "collisions": collisions}
+    return {"offsets": offsets, "collisions": collisions, "collided": collided}
 
 
 def _embedding_rows(scene, rooms, disagreeing=frozenset()):

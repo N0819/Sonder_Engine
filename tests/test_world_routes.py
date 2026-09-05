@@ -922,3 +922,421 @@ class TestWriteScoping:
         monkeypatch.setitem(runtime.ABORTS, (cid, None), object())
         assert client.patch(f"/api/chats/{cid}/rooms/kitchen",
                             json={"light": "dark"}).status_code == 409
+
+
+# ---- the map editor's reads, and `offset` -----------------------------------
+
+def _seeded(*parts):
+    """`spatial_fov._seed`, copied so the pin below is against the formula
+    the geometry note wrote rather than against the code under test."""
+    import hashlib
+    joined = "\x1f".join(str(p) for p in parts)
+    return int(hashlib.sha1(joined.encode("utf-8")).hexdigest()[:8], 16)
+
+
+def _lay_out(temp_db, cid, shape=None, parts=None):
+    """The manor with geometry: the kitchen measured 8x4 with a hearth on
+    its west wall and the oak table standing free, the hallway east of it
+    through a doorway beared from both sides, the study north of the
+    hallway behind a closed door; Alice at the hearth, facing east."""
+    scene = _scene(temp_db, cid)
+    kitchen = scene["rooms"]["kitchen"]
+    kitchen["extent"] = {"w": 8, "d": 4}
+    if shape:
+        kitchen["shape"] = shape
+    if parts:
+        kitchen["parts"] = parts
+    kitchen["anchors"] = {
+        "hearth": {"desc": "the hearth", "dir": "w", "height": "waist"},
+        "oak_table": {"desc": "the oak table", "footprint": "large",
+                      "height": "waist"},
+    }
+    bearings = {("kitchen", "hallway"): "e", ("hallway", "kitchen"): "w",
+                ("hallway", "study"): "n", ("study", "hallway"): "s"}
+    for rid, room in scene["rooms"].items():
+        for edge in room.get("adjacent") or []:
+            if (rid, edge["to"]) in bearings:
+                edge["dir"] = bearings[(rid, edge["to"])]
+    scene["stations"] = {"Alice": {"at": "hearth", "near": []}}
+    scene["orientation"] = {"Alice": {"facing": "e"}}
+    temp_db.wset(cid, "scene", scene)
+    return scene
+
+
+class TestTheGridAndTheMap:
+    def test_the_grid_is_the_engines_own_for_a_rectangle(self, client, story, temp_db):
+        from world.spatial import anchor_cells, body_cell, room_field
+        cid = story["chat_id"]
+        scene = _lay_out(temp_db, cid)
+        r = client.get(f"/api/chats/{cid}/rooms/kitchen/grid")
+        assert r.status_code == 200, r.text
+        view = r.json()
+        assert view["frame_id"] is None
+        assert view["room"] == {
+            "id": "kitchen", "name": "Kitchen", "w": 8, "d": 4,
+            "shape": "rectangle", "measured": True,
+            "cells": [[x, y] for x in range(8) for y in range(4)]}
+        # The rims in `RoomGrid.rim`'s order -- the order `offset` counts in.
+        assert view["rims"]["n"] == [[x, 0] for x in range(8)]
+        assert view["rims"]["e"] == [[7, y] for y in range(4)]
+        # Anchors exactly where `anchor_cells` puts them; the doorways are
+        # not anchors here but a list of their own.
+        placed = anchor_cells(scene, "kitchen")
+        hearth = view["anchors"]["hearth"]
+        assert hearth["cells"] == [list(c) for c in placed["hearth"]["cells"]]
+        assert hearth["dir"] == "w" and hearth["height"] == "waist"
+        assert hearth["footprint"] == "point" and hearth["opacity"] == "opaque"
+        assert hearth["offset"] is None and hearth["implicit"] is False
+        assert set(view["anchors"]) == {"hearth", "oak_table"}
+        doors = {d["to"]: d for d in view["doorways"]}
+        assert doors["hallway"]["dir"] == "e"
+        assert doors["hallway"]["cells"] == [list(c) for c in placed["door:hallway"]["cells"]]
+        assert doors["hallway"]["barrier"] == "open"
+        assert doors["hallway"]["status"] == "live" and doors["hallway"]["name"] == "Hallway"
+        # A doorway with no bearing has no wall to stand in: listed, no cells.
+        assert doors["cellar"]["dir"] is None and doors["cellar"]["cells"] == []
+        assert doors["cellar"]["barrier"] == "closed_door"
+        # Bodies: the one standing here, at the cell `body_cell` derives,
+        # with its facing, kind and station.
+        assert set(view["bodies"]) == {"Alice"}
+        alice = view["bodies"]["Alice"]
+        assert alice["cell"] == list(body_cell(scene, "Alice"))
+        assert alice["measured"] is True and alice["facing"] == "e"
+        assert alice["kind"] == "cast" and alice["at"] == "hearth" and alice["near"] == []
+        # The oak table is an entity AND an anchor of the room: filed as the
+        # anchor, so the map draws it once.
+        (table,) = view["things"]
+        assert table["id"] == "oak_table" and table["placed"] == "anchor"
+        assert table["anchor"] == "oak_table" and table["cell"] is None
+        # The hallway placed exactly as `room_field` places it, its cells in
+        # its own frame, its anchors along (the study is behind a closed door
+        # and casts nothing here).
+        field = room_field(scene, "kitchen")
+        (hall,) = view["neighbours"]
+        assert hall["id"] == "hallway" and hall["name"] == "Hallway"
+        assert hall["offset"] == list(field.offsets["hallway"])
+        assert hall["cells"] == [[x, y] for x in range(6) for y in range(6)]
+        assert "door:kitchen" in hall["anchors"]
+        # The wall between them as a line: the column past the east wall,
+        # its aperture one cell wide, the neighbour named.
+        (wall,) = view["walls"]
+        assert wall["to"] == "hallway" and wall["name"] == "Hallway"
+        assert wall["axis"] == 0 and wall["coord"] == 8
+        assert wall["aperture"][1] - wall["aperture"][0] == 1.0
+        assert view["lint"] == []
+        assert view["overlays"] == {}
+
+    @pytest.mark.parametrize("shape, parts", [
+        ("round", None),
+        ("l", [{"w": 8, "d": 2, "at": "nw"}, {"w": 3, "d": 4, "at": "ne"}]),
+    ])
+    def test_a_shaped_room_reports_the_shapes_cells_and_rims(
+            self, client, story, temp_db, shape, parts):
+        from world.spatial import room_grid
+        cid = story["chat_id"]
+        scene = _lay_out(temp_db, cid, shape=shape, parts=parts)
+        view = client.get(f"/api/chats/{cid}/rooms/kitchen/grid").json()
+        grid = room_grid(scene, "kitchen")
+        assert view["room"]["shape"] == shape
+        assert view["room"]["cells"] == [list(c) for c in sorted(grid.cells)]
+        assert 0 < len(view["room"]["cells"]) < 32          # not the box
+        for wall in ("n", "e", "s", "w"):
+            assert view["rims"][wall] == [list(c) for c in grid.rim(wall)]
+        # Everything placed stands on a cell of the shape.
+        cells = {tuple(c) for c in view["room"]["cells"]}
+        for anchor in view["anchors"].values():
+            assert anchor["cells"] and all(tuple(c) in cells for c in anchor["cells"])
+        for door in view["doorways"]:
+            assert all(tuple(c) in cells for c in door["cells"])
+        assert tuple(view["bodies"]["Alice"]["cell"]) in cells
+
+    def test_the_grid_of_a_room_with_no_geometry_is_the_tiers_square(
+            self, client, story):
+        cid = story["chat_id"]
+        view = client.get(f"/api/chats/{cid}/rooms/garden/grid").json()
+        assert view["room"]["measured"] is False
+        assert (view["room"]["w"], view["room"]["d"]) == (6, 6)
+        assert view["anchors"] == {} and view["doorways"] == []
+        assert view["bodies"] == {} and view["neighbours"] == [] and view["walls"] == []
+
+    def test_an_unmeasured_body_has_no_cell(self, client, story, temp_db):
+        cid = story["chat_id"]
+        _lay_out(temp_db, cid)
+        view = client.get(f"/api/chats/{cid}/rooms/hallway/grid").json()
+        bob = view["bodies"]["Bob"]
+        assert bob["cell"] is None and bob["measured"] is False
+        assert bob["at"] is None and bob["kind"] == "cast"
+        # The player is a body too, by kind.
+        view = client.get(f"/api/chats/{cid}/rooms/study/grid").json()
+        assert view["bodies"]["Nathan"]["kind"] == "player"
+        # The vehicle standing in the study is a thing placed by position,
+        # not a body; with no station it has no cell either.
+        (tardis,) = view["things"]
+        assert tardis["id"] == "tardis" and tardis["placed"] == "position"
+        assert tardis["cell"] is None and tardis["anchor"] is None
+
+    def test_the_map_places_the_rooms_by_bearing_and_draws_an_overlap(
+            self, client, story, temp_db):
+        from world.spatial import layout_rooms
+        cid = story["chat_id"]
+        scene = _lay_out(temp_db, cid)
+        r = client.get(f"/api/chats/{cid}/map")
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data["location"] == "Old Manor" and data["frame_id"] is None
+        comps = {c["start"]: c for c in data["components"]}
+        # One component per connected set of beared edges, from its
+        # smallest id; a room with no beared edge is a component of one.
+        assert set(comps) == {"cellar", "console_room", "garden", "hallway"}
+        comp = comps["hallway"]
+        rows = {row["id"]: row for row in comp["rooms"]}
+        assert set(rows) == {"hallway", "kitchen", "study"}
+        layout = layout_rooms(scene, "hallway")
+        for rid, offset in layout["offsets"].items():
+            assert rows[rid]["offset"] == list(offset)
+        assert rows["hallway"]["offset"] == [0, 0]
+        assert (rows["kitchen"]["w"], rows["kitchen"]["d"]) == (8, 4)
+        assert rows["kitchen"]["measured"] is True and rows["hallway"]["measured"] is False
+        assert rows["kitchen"]["cells"] == [[x, y] for x in range(8) for y in range(4)]
+        exits = {e["to"]: e for e in rows["kitchen"]["exits"]}
+        assert exits["hallway"] == {"to": "hallway", "name": "Hallway", "dir": "e",
+                                    "barrier": "open", "placed": True}
+        assert exits["cellar"]["dir"] is None and exits["cellar"]["placed"] is False
+        assert rows["kitchen"]["occupants"] == ["Alice"]
+        assert rows["study"]["occupants"] == ["Nathan"]
+        assert all(row["lint"] == 0 and row["collided"] is False for row in rows.values())
+        assert comp["collisions"] == []
+        assert comps["console_room"]["rooms"][0]["holder"] == "tardis"
+        assert comps["garden"]["rooms"][0]["offset"] == [0, 0]
+
+        # An overlap: a pantry hung off the hallway's west wall, where the
+        # kitchen already is. The doorways are pinned by `offset` so the two
+        # rooms meet whatever the seeds say: the kitchen's at the north end
+        # of the wall, the pantry's at the south end, four paces deep each.
+        for edge in scene["rooms"]["kitchen"]["adjacent"]:
+            if edge["to"] == "hallway":
+                edge["offset"] = 0.0
+        for edge in scene["rooms"]["hallway"]["adjacent"]:
+            if edge["to"] == "kitchen":
+                edge["offset"] = 0.0
+        scene["rooms"]["pantry"] = {
+            "name": "Pantry", "size": "small",
+            "adjacent": [{"to": "hallway", "barrier": "open", "dir": "e", "offset": 1.0}]}
+        scene["rooms"]["hallway"]["adjacent"].append(
+            {"to": "pantry", "barrier": "open", "dir": "w", "offset": 1.0})
+        temp_db.wset(cid, "scene", scene)
+        data = client.get(f"/api/chats/{cid}/map").json()
+        comp = {c["start"]: c for c in data["components"]}["hallway"]
+        rows = {row["id"]: row for row in comp["rooms"]}
+        pantry = rows["pantry"]
+        # Drawn, never hidden: at the offset the rule gave it, flagged with
+        # the room it lands on and the doorway it was reached through.
+        assert pantry["collided"] is True
+        assert pantry["onto"] == "kitchen" and pantry["via"] == "hallway"
+        assert comp["collisions"] == [{"room": "pantry", "onto": "kitchen", "via": "hallway"}]
+        layout = layout_rooms(scene, "hallway")
+        assert "pantry" not in layout["offsets"]
+        assert pantry["offset"] == list(layout["collided"]["pantry"])
+        kitchen_cells = {(x + rows["kitchen"]["offset"][0], y + rows["kitchen"]["offset"][1])
+                         for x, y in rows["kitchen"]["cells"]}
+        pantry_cells = {(x + pantry["offset"][0], y + pantry["offset"][1])
+                        for x, y in pantry["cells"]}
+        assert kitchen_cells & pantry_cells
+        # The lint names the pair, and each room's row counts it.
+        assert pantry["lint"] >= 1 and rows["kitchen"]["lint"] >= 1
+
+    def test_the_reads_are_host_only_frame_scoped_and_404_off_the_scene(
+            self, client, story):
+        from web.auth_routes import GUEST_ALLOWED_API_PATHS
+        cid = story["chat_id"]
+        # A planned room has no grid; a frame of another story is a 404.
+        r = client.get(f"/api/chats/{cid}/rooms/attic/grid")
+        assert r.status_code == 404 and "planned" in r.json()["detail"]
+        assert client.get(f"/api/chats/{cid}/rooms/nowhere/grid").status_code == 404
+        assert client.get(f"/api/chats/{cid}/rooms/kitchen/grid?frame_id=424242").status_code == 404
+        assert client.get(f"/api/chats/{cid}/map?frame_id=424242").status_code == 404
+        assert client.get("/api/chats/424242/map").status_code == 404
+        for path in (f"/api/chats/{cid}/rooms/kitchen/grid", f"/api/chats/{cid}/map"):
+            assert path not in GUEST_ALLOWED_API_PATHS
+            anonymous = TestClient(app_module.app)
+            assert anonymous.get(path).status_code in (401, 403)
+
+
+class TestOffset:
+    def test_an_anchor_offset_lands_and_moves_the_anchor_along_its_wall(
+            self, client, story, temp_db):
+        from world.spatial import anchor_cells
+        cid = story["chat_id"]
+        client.patch(f"/api/chats/{cid}/rooms/kitchen", json={"extent": {"w": 8, "d": 4}})
+        hearth = {"desc": "the hearth", "dir": "n"}
+        grid_of = lambda: client.get(f"/api/chats/{cid}/rooms/kitchen/grid").json()
+        # 0 is the wall's start: the west end of the north wall.
+        r = client.patch(f"/api/chats/{cid}/rooms/kitchen",
+                         json={"anchors": {"hearth": {**hearth, "offset": 0}}})
+        assert r.status_code == 200, r.text
+        assert _scene(temp_db, cid)["rooms"]["kitchen"]["anchors"]["hearth"]["offset"] == 0.0
+        assert r.json()["record"]["anchors"]["hearth"]["offset"] == 0.0
+        view = grid_of()
+        assert view["anchors"]["hearth"]["cells"] == [[0, 0]]
+        assert view["anchors"]["hearth"]["offset"] == 0.0
+        # 1 is its far end; 0.5 the middle. A numeric string is a number.
+        client.patch(f"/api/chats/{cid}/rooms/kitchen",
+                     json={"anchors": {"hearth": {**hearth, "offset": 1}}})
+        assert grid_of()["anchors"]["hearth"]["cells"] == [[7, 0]]
+        client.patch(f"/api/chats/{cid}/rooms/kitchen",
+                     json={"anchors": {"hearth": {**hearth, "offset": "0.5"}}})
+        assert grid_of()["anchors"]["hearth"]["cells"] == [[4, 0]]
+        # A run counts its offset over the positions its length leaves, and
+        # a standing thing keeps its one pace off the wall.
+        client.patch(f"/api/chats/{cid}/rooms/kitchen", json={"anchors": {
+            "hearth": {**hearth, "offset": 1, "footprint": "run", "height": "waist"}}})
+        assert grid_of()["anchors"]["hearth"]["cells"] == [[x, 1] for x in range(2, 8)]
+        # Refused outside the range, naming it; never clamped.
+        for bad in (1.5, -0.2, "far", [0.5], True):
+            r = client.patch(f"/api/chats/{cid}/rooms/kitchen",
+                             json={"anchors": {"hearth": {**hearth, "offset": bad}}})
+            assert r.status_code == 400, bad
+            assert "between 0 and 1" in r.json()["detail"] and "hearth" in r.json()["detail"]
+        assert _scene(temp_db, cid)["rooms"]["kitchen"]["anchors"]["hearth"]["offset"] == 1.0
+        # Absent or null clears it, and the anchor is back where the seed
+        # put it -- exactly what `anchor_cells` says of a room with no offset.
+        for cleared in ({**hearth}, {**hearth, "offset": None}, {**hearth, "offset": ""}):
+            r = client.patch(f"/api/chats/{cid}/rooms/kitchen",
+                             json={"anchors": {"hearth": cleared}})
+            assert r.status_code == 200, r.text
+            stored = _scene(temp_db, cid)["rooms"]["kitchen"]["anchors"]["hearth"]
+            assert "offset" not in stored
+        scene = _scene(temp_db, cid)
+        seeded = anchor_cells(scene, "kitchen")["hearth"]["cells"]
+        assert grid_of()["anchors"]["hearth"]["cells"] == [list(c) for c in seeded]
+        start = 1 + _seeded("kitchen", "hearth") % 6
+        assert seeded == [(start, 0)]
+        # A corner anchor has no wall to run along: the offset is kept on the
+        # record and moves nothing.
+        client.patch(f"/api/chats/{cid}/rooms/kitchen",
+                     json={"anchors": {"hearth": {"desc": "the hearth", "dir": "ne", "offset": 0}}})
+        assert grid_of()["anchors"]["hearth"]["cells"] == [[7, 0]]
+
+    def test_a_doorways_offset_is_written_on_both_edges_and_places_the_door(
+            self, client, story, temp_db):
+        cid = story["chat_id"]
+        r = client.patch(f"/api/chats/{cid}/rooms/kitchen", json={
+            "extent": {"w": 8, "d": 4},
+            "exits": [{"to": "hallway", "barrier": "open", "dir": "e", "offset": 1.0},
+                      {"to": "cellar", "barrier": "closed_door"}]})
+        assert r.status_code == 200, r.text
+        scene = _scene(temp_db, cid)
+        (mine,) = [e for e in scene["rooms"]["kitchen"]["adjacent"] if e["to"] == "hallway"]
+        (theirs,) = [e for e in scene["rooms"]["hallway"]["adjacent"] if e["to"] == "kitchen"]
+        # One doorway, one place along the wall: the same fraction from
+        # either side, since a wall's start is the same end from both rooms.
+        assert mine["offset"] == 1.0 and mine["dir"] == "e"
+        assert theirs["offset"] == 1.0 and theirs["dir"] == "w"
+        doors = {d["to"]: d for d in
+                 client.get(f"/api/chats/{cid}/rooms/kitchen/grid").json()["doorways"]}
+        assert doors["hallway"]["cells"] == [[7, 3]] and doors["hallway"]["offset"] == 1.0
+        far = {d["to"]: d for d in
+               client.get(f"/api/chats/{cid}/rooms/hallway/grid").json()["doorways"]}
+        assert far["kitchen"]["cells"] == [[0, 5]]
+        # Refused outside the range.
+        r = client.patch(f"/api/chats/{cid}/rooms/kitchen", json={"exits": [
+            {"to": "hallway", "barrier": "open", "dir": "e", "offset": 2}]})
+        assert r.status_code == 400 and "between 0 and 1" in r.json()["detail"]
+        # An exit list that says nothing about the offset keeps it on both
+        # sides (the card's ordinary barrier edit); null clears both.
+        client.patch(f"/api/chats/{cid}/rooms/kitchen", json={"exits": [
+            {"to": "hallway", "barrier": "open_door", "dir": "e"}]})
+        scene = _scene(temp_db, cid)
+        (mine,) = [e for e in scene["rooms"]["kitchen"]["adjacent"] if e["to"] == "hallway"]
+        (theirs,) = [e for e in scene["rooms"]["hallway"]["adjacent"] if e["to"] == "kitchen"]
+        assert mine["offset"] == 1.0 and theirs["offset"] == 1.0
+        assert mine["barrier"] == "open_door" and theirs["barrier"] == "open_door"
+        client.patch(f"/api/chats/{cid}/rooms/kitchen", json={"exits": [
+            {"to": "hallway", "barrier": "open_door", "dir": "e", "offset": None}]})
+        scene = _scene(temp_db, cid)
+        (mine,) = [e for e in scene["rooms"]["kitchen"]["adjacent"] if e["to"] == "hallway"]
+        (theirs,) = [e for e in scene["rooms"]["hallway"]["adjacent"] if e["to"] == "kitchen"]
+        assert "offset" not in mine and "offset" not in theirs
+
+    def test_placement_without_an_offset_is_the_seeded_placement_byte_for_byte(self):
+        """THE FAIL-OPEN PIN for `offset`. A room whose anchors and edges
+        carry no offset -- every room in every existing scene -- is placed
+        by the seeded formula the geometry note wrote, on every shape; and
+        an offset that reads as nothing (null, prose, a boolean, a number
+        outside [0, 1]) is the same as none. The reference formula is
+        copied here, not imported, so a drift is a failing test."""
+        import copy
+        from world.spatial import anchor_cells, room_grid
+        anchors = {
+            "bar": {"desc": "the long bar", "dir": "n", "footprint": "run",
+                    "height": "waist"},
+            "hearth": {"desc": "the hearth", "dir": "s"},
+            "door": {"desc": "the front door", "dir": "w"},
+            "rack": {"desc": "a rack", "dir": "e", "footprint": "small"},
+            "keg": {"desc": "a keg", "dir": "e", "footprint": "large"},
+            "urn": {"desc": "an urn", "dir": "ne", "height": "waist"},
+            "stool": {"desc": "a stool"},
+        }
+        shapes = (
+            {"size": "large"},
+            {"extent": {"w": 12, "d": 4}},
+            {"extent": {"w": 8, "d": 8}, "shape": "round"},
+            {"extent": {"w": 8, "d": 8}, "shape": "l",
+             "parts": [{"w": 8, "d": 3, "at": "nw"}, {"w": 3, "d": 8, "at": "ne"}]},
+        )
+        for room in shapes:
+            sc = {"rooms": {"r": {"name": "R", **room, "anchors": dict(anchors),
+                                  "adjacent": [{"to": "q", "barrier": "open", "dir": "n"}]},
+                            "q": {"name": "Q", "size": "small"}},
+                  "positions": {}, "stations": {}, "entities": {}}
+            bare = anchor_cells(sc, "r")
+            assert "door:q" in bare
+            assert all(rec["offset"] is None for rec in bare.values())
+            for junk in (None, "half", True, 1.5, -0.1, [0.5], {"along": 0.5}):
+                sc2 = copy.deepcopy(sc)
+                for anchor in sc2["rooms"]["r"]["anchors"].values():
+                    anchor["offset"] = junk
+                sc2["rooms"]["r"]["adjacent"][0]["offset"] = junk
+                assert {aid: rec["cells"] for aid, rec in anchor_cells(sc2, "r").items()} \
+                    == {aid: rec["cells"] for aid, rec in bare.items()}, junk
+            # The seeded index along the wall's own rim, as the note wrote it.
+            grid = room_grid(sc, "r")
+            for aid, rec in bare.items():
+                if rec["dir"] not in ("n", "e", "s", "w"):
+                    continue
+                rim = grid.rim(rec["dir"])
+                along = len(rim)
+                length = {"point": 1, "small": 2, "large": 2,
+                          "run": max(2, along - 2)}[rec["footprint"]]
+                start = 1 + _seeded("r", aid) % max(1, along - 2 - (length - 1)) \
+                    if along > 2 else 0
+                expected = [rim[(start + i) % along] for i in range(length)]
+                axis = 0 if rec["dir"] in ("n", "s") else 1
+                got = {c[axis] for c in rec["cells"]}
+                assert got and got <= {c[axis] for c in expected}, (room, aid)
+
+    def test_the_merge_keeps_an_anchors_offset_a_re_echo_left_out(self):
+        from world.spatial import _merge_room
+        existing = {"name": "R",
+                    "adjacent": [{"to": "q", "barrier": "open", "dir": "n", "offset": 0.25}],
+                    "anchors": {"bar": {"desc": "the bar", "dir": "n", "height": "waist",
+                                        "offset": 0.75}}}
+        merged = _merge_room(existing, {
+            "name": "R", "adjacent": [{"to": "q", "barrier": "open_door"}],
+            "anchors": {"bar": {"desc": "the long bar", "dir": "n", "height": ""}}}, "r")
+        # Silence keeps the offset and the height; a value lands.
+        assert merged["anchors"]["bar"] == {"desc": "the long bar", "dir": "n",
+                                            "height": "waist", "offset": 0.75}
+        assert merged["adjacent"] == [{"to": "q", "barrier": "open_door", "dir": "n",
+                                       "offset": 0.25}]
+        merged = _merge_room(existing, {"anchors": {
+            "bar": {"desc": "the bar", "offset": 0.1}, "keg": {"desc": "a keg"}}}, "r")
+        assert merged["anchors"]["bar"]["offset"] == 0.1
+        assert merged["anchors"]["bar"]["height"] == "waist"
+        assert merged["anchors"]["keg"] == {"desc": "a keg"}
+        # An anchor the map does not name is still dropped: the map is
+        # written whole, and `{}` alone is silence.
+        merged = _merge_room(existing, {"anchors": {"keg": {"desc": "a keg"}}}, "r")
+        assert "bar" not in merged["anchors"]
+        merged = _merge_room(existing, {"anchors": {}}, "r")
+        assert merged["anchors"]["bar"]["offset"] == 0.75

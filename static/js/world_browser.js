@@ -5,8 +5,13 @@
 // The room-centred view of the world state behind the 🌍 and 👕 buttons,
 // and since 2026-09-04 its EDITOR: three tabs in one dialog.
 //
-//   Rooms   -- a tree of every room the story knows on the left, the selected
-//              room on the right. Every field the card shows is edited where
+//   Rooms   -- since the owner's ruling later on 2026-09-04, a MAP EDITOR on
+//              the left (the selected room's grid, zoomable out to every room
+//              placed by bearing -- see "The map editor" below; clicking a
+//              thing on it opens that thing's editor row on the card, dragging
+//              places it) with the tree of every room the story knows folded
+//              open beneath it, and the selected room's card on the right.
+//              Every field the card shows is edited where
 //              it is shown: name, description, notes, light / size / exposure
 //              (selects over the engine's own sets), the room's MEASUREMENT
 //              (extent in paces, shape, and an L's parts -- size is shown as
@@ -496,7 +501,7 @@ function wbExits(slice, ctx) {
       const mine = stored.map(asExit);
       const update = (changes) => patchExits(
         mine.map(x => x.to === edge.to ? { ...x, ...changes } : x));
-      rows.push(el("div", { class: "wb-exit" },
+      rows.push(el("div", { class: "wb-exit", "data-exit": edge.to },
         el("button", { class: "wb-link", translate: "no",
                        onclick: () => ctx.select(edge.to) }, txt(far.name || edge.to)),
         wbStatusBadge(far.status),
@@ -678,7 +683,7 @@ function wbOccupant(o, slice, ctx) {
   });
   const near = new Set(Array.isArray(station.near) ? station.near : []);
   const garments = o.attire && Array.isArray(o.attire.wearing) ? o.attire.wearing.length : null;
-  return el("div", { class: "wb-body" },
+  return el("div", { class: "wb-body", "data-body": o.name },
     el("div", { class: "row wb-body-head" },
       el("b", { translate: "no" }, txt(o.name)),
       garments != null ? el("span", { class: "small dim" }, `Garments: ${garments}`) : null,
@@ -718,7 +723,7 @@ function wbThing(th, slice, ctx) {
   const liveRooms = wbIndexRows(ctx.index).filter(r => r.status === "live" && r.id !== slice.id);
   const moveTo = el("select", { class: "wb-select", title: "Move this thing to another room" },
     ...liveRooms.map(r => el("option", { value: r.id, translate: "no" }, txt(wbRoomLabel(r)))));
-  return el("div", { class: "wb-thing" },
+  return el("div", { class: "wb-thing", "data-thing": th.id },
     el("div", { class: "wb-exit" },
       el("b", { translate: "no" }, txt(th.name)),
       th.plan_ref ? el("span", { class: "badge", title: th.plan_ref }, "From the plan") : null,
@@ -1093,6 +1098,662 @@ function wbRenderRaw(host, chatId, kind, cache) {
   });
 }
 
+// ---- The map editor ---------------------------------------------------------------
+//
+// The Rooms tab's left pane, since the owner's ruling of 2026-09-04: THE GRID
+// IS THE SURFACE, AND CLICKING OPENS THE FIELDS. Two zoom levels over two
+// read-only routes that are pure over the engine's own geometry
+// (`web/world_routes.py`: `GET /rooms/{id}/grid` and `GET /map`), so the map
+// cannot draw a wall the cast is not judged by:
+//
+//   the room   -- its cells to scale with the shape's boundary; anchors as
+//                 their footprint cells labelled by id with a height mark;
+//                 bodies as marked cells with a facing tick (a body with no
+//                 station stands in the lane below the room -- "somewhere in
+//                 the room" is not a cell); doorways as gaps in the wall line
+//                 with the neighbour's name beyond; the neighbours' cells
+//                 faintly beyond their doors, exactly where `room_field` lays
+//                 them; the layout lint's rows drawn AT the thing they concern.
+//   the scene  -- every room as its box placed by bearing (`layout_rooms`,
+//                 the lint's own embedding), exits as ticks on the wall they
+//                 open in, a room the bearings land on another drawn on it
+//                 and flagged, never hidden. Click a room to zoom in.
+//
+// Click opens the fields: an anchor focuses its editor row on the card, a
+// doorway its exit row, a body its station row, a thing its entity row, a
+// lint marker the row's sentence beside its field. The card is the panel;
+// nothing here duplicates an editor.
+//
+// Drag places: an anchor dragged to a wall gets that wall's bearing and an
+// `offset` along it (a fraction from the wall's start -- west for a north or
+// south wall, north for an east or west one; the engine's
+// `normalize_offset`); dragged into the room it loses its bearing and is
+// placed by seed again. A doorway dragged along its wall sets the exit's
+// `offset`, on both rooms' edges, since a doorway is one object. A body
+// dropped on a cell is re-stationed: at the anchor whose cell it is, or free
+// in the room; dropped in a neighbour's cells it MOVES there (the cast
+// editor's position route, then its station). An authored fact, like every
+// edit here: no Director call, no memory of a step.
+//
+// Overlays: the grid route's `overlays` slot (`{name: {"x,y": word}}`) is
+// painted as a tint per cell with a legend whenever a sibling fills it --
+// light, sound; this file computes none of them and knows no word in advance.
+//
+// SVG, no library; every colour a page token, so the theme carries it. The
+// tree the tab used to be is kept under the map, folded open, so a planned or
+// a retired room -- which has no grid -- is still a click away.
+
+const WB_CELL = 24;        // one pace, in SVG units, on the room map
+const WB_MINI = 10;        // one pace on the structure map
+const WB_SVG_NS = "http://www.w3.org/2000/svg";
+// Compass geometry, not a vocabulary: the unit step each bearing names.
+const WB_UNIT = { n: [0, -1], ne: [1, -1], e: [1, 0], se: [1, 1],
+                  s: [0, 1], sw: [-1, 1], w: [-1, 0], nw: [-1, -1] };
+
+// An SVG-namespace sibling of `el()`. Text children are NOT translated (they
+// are ids and names); a label that is English goes through `t()` by hand.
+function wbSvg(tag, attrs = {}, ...kids) {
+  const node = document.createElementNS(WB_SVG_NS, tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (v == null || v === false) continue;
+    if (k.startsWith("on")) node.addEventListener(k.slice(2), v);
+    else node.setAttribute(k, String(v));
+  }
+  for (const kid of kids.flat()) {
+    if (kid == null || kid === false) continue;
+    node.append(kid.nodeType ? kid : document.createTextNode(String(kid)));
+  }
+  return node;
+}
+
+function wbSvgPoint(svg, event) {
+  const ctm = svg.getScreenCTM();
+  const point = new DOMPoint(event.clientX, event.clientY);
+  return ctm ? point.matrixTransform(ctm.inverse()) : point;
+}
+
+// Pointer drag on an SVG node. A press that never moved a third of a cell is
+// a click (`onClick`); one that did ends in `onDrop(point)`. Enter or Space
+// on the focused node is the click, so the keyboard reaches every editor.
+function wbDraggable(svg, node, { onDrop, onClick }) {
+  node.addEventListener("pointerdown", event => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const start = wbSvgPoint(svg, event);
+    let moved = false;
+    const move = ev => {
+      const p = wbSvgPoint(svg, ev);
+      if (!moved && Math.hypot(p.x - start.x, p.y - start.y) < WB_CELL / 3) return;
+      moved = true;
+      node.classList.add("dragging");
+    };
+    const up = ev => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+      node.classList.remove("dragging");
+      if (ev.type === "pointercancel") return;
+      if (moved) onDrop(wbSvgPoint(svg, ev)); else onClick();
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
+  });
+  node.addEventListener("keydown", event => {
+    if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onClick(); }
+  });
+}
+
+function wbActivatable(node, onClick) {
+  node.addEventListener("click", event => { event.stopPropagation(); onClick(); });
+  node.addEventListener("keydown", event => {
+    if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onClick(); }
+  });
+}
+
+// The boundary of a cell set: one segment per cell edge whose neighbour is
+// outside, as [x1, y1, x2, y2, side, cell] in cell units. A round room's arc
+// and an L's notch fall out of this without a special case.
+function wbBoundary(cells) {
+  const has = new Set(cells.map(c => c[0] + "," + c[1]));
+  const out = [];
+  for (const [x, y] of cells) {
+    if (!has.has(x + "," + (y - 1))) out.push([x, y, x + 1, y, "n", [x, y]]);
+    if (!has.has((x + 1) + "," + y)) out.push([x + 1, y, x + 1, y + 1, "e", [x, y]]);
+    if (!has.has(x + "," + (y + 1))) out.push([x, y + 1, x + 1, y + 1, "s", [x, y]]);
+    if (!has.has((x - 1) + "," + y)) out.push([x, y, x, y + 1, "w", [x, y]]);
+  }
+  return out;
+}
+
+// Scroll the card to one editor row and put the focus in it: the click on
+// the map is the click on the field.
+function wbFocusRow(card, selector) {
+  const row = card.querySelector(selector);
+  if (!row) return false;
+  row.scrollIntoView({ block: "center", behavior: "smooth" });
+  row.classList.add("wb-focus");
+  setTimeout(() => row.classList.remove("wb-focus"), 1800);
+  const control = row.querySelector("input, select, textarea, button");
+  if (control) control.focus({ preventScroll: true });
+  return true;
+}
+
+// How many cells an anchor of this footprint takes along a wall of `along`
+// cells -- the engine's table (`spatial_fov._place_anchors`), so a dropped
+// anchor's FIRST cell is the cell it was dropped on.
+function wbFootprintLength(footprint, along) {
+  if (footprint === "run") return Math.max(2, along - 2);
+  if (footprint === "small" || footprint === "large") return 2;
+  return 1;
+}
+
+// The room map: one room's field as `GET /rooms/{id}/grid` returns it.
+function wbRenderRoomMap(host, view, ctx, { overlay = null } = {}) {
+  host.innerHTML = "";
+  const S = WB_CELL;
+  const room = view.room;
+  const cells = room.cells || [];
+  const cellSet = new Set(cells.map(c => c.join(",")));
+  const far = view.neighbours || [];
+  const bodies = Object.entries(view.bodies || {});
+  const unplaced = bodies.filter(([, b]) => !b.cell);
+  const laneY = room.d + 1;
+
+  // Bounds over everything drawn, in cells, then a margin for the names.
+  let minX = 0, minY = 0, maxX = room.w, maxY = room.d;
+  for (const n of far) {
+    for (const [x, y] of n.cells) {
+      minX = Math.min(minX, x + n.offset[0]); minY = Math.min(minY, y + n.offset[1]);
+      maxX = Math.max(maxX, x + n.offset[0] + 1); maxY = Math.max(maxY, y + n.offset[1] + 1);
+    }
+  }
+  for (const d of view.doorways || []) {
+    const u = WB_UNIT[d.dir];
+    if (!u) continue;
+    for (const [x, y] of d.cells) {
+      minX = Math.min(minX, x + u[0] * 2); minY = Math.min(minY, y + u[1] * 2);
+      maxX = Math.max(maxX, x + u[0] * 2 + 1); maxY = Math.max(maxY, y + u[1] * 2 + 1);
+    }
+  }
+  if (unplaced.length) { maxY = Math.max(maxY, laneY + 1); maxX = Math.max(maxX, unplaced.length); }
+  minX -= 1.5; minY -= 1.5; maxX += 1.5; maxY += 1.5;
+
+  const svg = wbSvg("svg", {
+    class: "wb-map-svg wb-room-map", role: "group",
+    "aria-label": t(`Map of ${room.name}`),
+    viewBox: [minX * S, minY * S, (maxX - minX) * S, (maxY - minY) * S].join(" "),
+  });
+  const layer = name => { const g = wbSvg("g", { class: name }); svg.append(g); return g; };
+  const gFar = layer("wb-m-far"), gCells = layer("wb-m-cells"), gTint = layer("wb-m-tints"),
+        gWalls = layer("wb-m-walls"), gAnchors = layer("wb-m-anchors"), gThings = layer("wb-m-things"),
+        gBodies = layer("wb-m-bodies"), gLint = layer("wb-m-lint"), gLabels = layer("wb-m-labels");
+
+  const cellOf = p => [Math.floor(p.x / S), Math.floor(p.y / S)];
+  const inRoom = c => cellSet.has(c.join(","));
+  const same = (a, b) => a[0] === b[0] && a[1] === b[1];
+
+  // Which wall a cell of the room is part of (it may be two, at a corner):
+  // the rims the server sent, the nearer box side breaking the tie.
+  const wallOf = (c, p) => {
+    const found = [];
+    for (const wall of ctx.vocab.walls || []) {
+      const rim = view.rims[wall] || [];
+      const idx = rim.findIndex(r => same(r, c));
+      if (idx < 0) continue;
+      const dist = wall === "n" ? p.y : wall === "s" ? room.d * S - p.y
+        : wall === "w" ? p.x : room.w * S - p.x;
+      found.push({ wall, idx, len: rim.length, dist });
+    }
+    found.sort((a, b) => a.dist - b.dist);
+    return found[0] || null;
+  };
+
+  // The hints, translated once each; the titles below join them to names
+  // with punctuation only, so the catalog carries the words and not the
+  // joins.
+  const openHint = t("open this room");
+  const anchorHint = t("click to edit, drag to a wall to move");
+  const doorwayTo = t("Doorway to");
+  const doorHint = t("click for the exit, drag along the wall to move it");
+  const thingHint = t("click to edit");
+  const bodyHint = t("click for the station, drag onto a cell to place");
+  const atWord = t("at");
+
+  // -- the neighbours, faintly, where the field lays them ------------------
+  for (const n of far) {
+    const g = wbSvg("g", { class: "wb-m-neighbour", "data-room": n.id, tabindex: "0", role: "button" },
+      wbSvg("title", {}, `${n.name} — ${openHint}`));
+    for (const [x, y] of n.cells) {
+      g.append(wbSvg("rect", { x: (x + n.offset[0]) * S, y: (y + n.offset[1]) * S,
+                               width: S, height: S, class: "wb-m-far-cell" }));
+    }
+    for (const seg of wbBoundary(n.cells)) {
+      g.append(wbSvg("line", { x1: (seg[0] + n.offset[0]) * S, y1: (seg[1] + n.offset[1]) * S,
+                               x2: (seg[2] + n.offset[0]) * S, y2: (seg[3] + n.offset[1]) * S,
+                               class: "wb-m-far-edge" }));
+    }
+    for (const [aid, a] of Object.entries(n.anchors || {})) {
+      if (a.implicit) continue;
+      for (const [x, y] of a.cells) {
+        g.append(wbSvg("rect", { x: (x + n.offset[0]) * S + 2, y: (y + n.offset[1]) * S + 2,
+                                 width: S - 4, height: S - 4, rx: 3, class: "wb-m-far-anchor" },
+          wbSvg("title", {}, `${a.desc} (${aid})`)));
+      }
+    }
+    if (n.cells.length) {
+      const cx = n.cells.reduce((s, c) => s + c[0], 0) / n.cells.length + n.offset[0] + 0.5;
+      const cy = n.cells.reduce((s, c) => s + c[1], 0) / n.cells.length + n.offset[1] + 0.5;
+      g.append(wbSvg("text", { x: cx * S, y: cy * S + 3, "text-anchor": "middle",
+                               class: "wb-m-far-name" }, n.name));
+    }
+    wbActivatable(g, () => ctx.select(n.id));
+    gFar.append(g);
+  }
+
+  // -- the room's cells, and the overlay's tint over them ----------------
+  for (const [x, y] of cells) {
+    gCells.append(wbSvg("rect", { x: x * S, y: y * S, width: S, height: S, class: "wb-m-cell" }));
+  }
+  const readings = overlay && view.overlays && view.overlays[overlay];
+  if (readings && typeof readings === "object") {
+    const words = [];
+    for (const word of Object.values(readings)) if (!words.includes(word)) words.push(word);
+    for (const [key, word] of Object.entries(readings)) {
+      const [x, y] = key.split(",").map(Number);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      const i = words.indexOf(word);
+      const pct = words.length > 1 ? 12 + 70 * (i / (words.length - 1)) : 45;
+      gTint.append(wbSvg("rect", { x: x * S, y: y * S, width: S, height: S, class: "wb-m-tint",
+                                   style: `fill:color-mix(in srgb,var(--acc) ${pct}%,transparent)` },
+        wbSvg("title", {}, `${overlay}: ${word}`)));
+    }
+  }
+
+  // -- the boundary as a line, with each doorway a gap in it -------------
+  const doorAt = new Map();
+  for (const d of view.doorways || []) {
+    for (const c of d.cells) doorAt.set(`${c[0]},${c[1]}|${d.dir}`, d);
+  }
+  for (const seg of wbBoundary(cells)) {
+    if (doorAt.has(`${seg[5][0]},${seg[5][1]}|${seg[4]}`)) continue;
+    gWalls.append(wbSvg("line", { x1: seg[0] * S, y1: seg[1] * S, x2: seg[2] * S, y2: seg[3] * S,
+                                  class: "wb-m-edge" }));
+  }
+  const placedFar = new Set(far.map(n => n.id));
+  for (const d of view.doorways || []) {
+    if (!d.cells.length || !WB_UNIT[d.dir]) continue;
+    const u = WB_UNIT[d.dir];
+    const g = wbSvg("g", { class: "wb-m-doorway", "data-exit": d.to, tabindex: "0", role: "button" },
+      wbSvg("title", {}, `${doorwayTo} ${d.name} (${d.barrier}) — ${doorHint}`));
+    for (const [x, y] of d.cells) {
+      if (u[0] && u[1]) {
+        g.append(wbSvg("circle", { cx: (x + 0.5 + u[0] * 0.5) * S, cy: (y + 0.5 + u[1] * 0.5) * S,
+                                   r: S * 0.22, class: "wb-m-door-corner" }));
+        continue;
+      }
+      const x1 = u[0] === 1 ? x + 1 : x, x2 = u[0] === -1 ? x : x + 1;
+      const y1 = u[1] === 1 ? y + 1 : y, y2 = u[1] === -1 ? y : y + 1;
+      g.append(wbSvg("line", { x1: (u[0] ? x1 : x) * S, y1: (u[1] ? y1 : y) * S,
+                               x2: (u[0] ? x1 : x2) * S, y2: (u[1] ? y1 : y2) * S,
+                               class: "wb-m-door" }));
+      // A line has no area to press on; the hit rect straddling it does.
+      g.append(wbSvg("rect", {
+        x: u[0] ? x1 * S - 5 : x * S, y: u[1] ? y1 * S - 5 : y * S,
+        width: u[0] ? 10 : S, height: u[1] ? 10 : S, class: "wb-m-door-hit" }));
+    }
+    // The neighbour's name beyond the door, when its cells are not drawn
+    // there already (its own label says it then).
+    if (!placedFar.has(d.to)) {
+      const [x, y] = d.cells[0];
+      g.append(wbSvg("text", { x: (x + 0.5 + u[0] * 1.6) * S, y: (y + 0.5 + u[1] * 1.6) * S + 3,
+                               "text-anchor": "middle", class: "wb-m-far-name" }, d.name));
+    }
+    wbDraggable(svg, g, {
+      onClick: () => ctx.focusRow(`.wb-exit[data-exit="${CSS.escape(d.to)}"]`),
+      onDrop: p => dropDoorway(d, p),
+    });
+    gWalls.append(g);
+  }
+
+  // -- anchors: footprint cells, the id, a height mark -------------------
+  // The heights in the engine's order give the mark its rank; the first
+  // opacity word is the engine's default (the one that blocks sight), so an
+  // anchor carrying any other is drawn as one a line passes through. Both
+  // read from `vocab`; no word is typed here.
+  const heights = ctx.vocab.heights || [];
+  const opaque = (ctx.vocab.opacities || [])[0];
+  for (const [aid, a] of Object.entries(view.anchors || {})) {
+    if (!a.cells.length) continue;
+    const g = wbSvg("g", { class: "wb-m-anchor", "data-anchor": aid, tabindex: "0", role: "button" },
+      wbSvg("title", {}, `${a.desc} (${aid}) — ${anchorHint}`));
+    const passes = opaque && a.opacity && a.opacity !== opaque;
+    for (const [x, y] of a.cells) {
+      g.append(wbSvg("rect", { x: x * S + 1, y: y * S + 1, width: S - 2, height: S - 2, rx: 3,
+                               class: "wb-m-anchor-cell" + (passes ? " see-through" : "") }));
+    }
+    const [x0, y0] = a.cells[0];
+    const rank = Math.max(0, heights.indexOf(a.height));
+    const top = Math.max(1, heights.length - 1);
+    if (rank > 0) {
+      const h = (S - 6) * rank / top;
+      g.append(wbSvg("rect", { x: x0 * S + S - 6, y: y0 * S + S - 3 - h, width: 3, height: h,
+                               class: "wb-m-height" }, wbSvg("title", {}, a.height)));
+    }
+    g.append(wbSvg("text", { x: x0 * S + 3, y: y0 * S + 10, class: "wb-m-label" },
+      aid.length > 9 ? aid.slice(0, 8) + "…" : aid));
+    wbDraggable(svg, g, {
+      onClick: () => ctx.focusRow(`.wb-anchor[data-anchor="${CSS.escape(aid)}"]`),
+      onDrop: p => dropAnchor(aid, a, p),
+    });
+    gAnchors.append(g);
+  }
+
+  // -- things placed by a position and a station ---------------------------
+  for (const th of view.things || []) {
+    if (!th.cell) continue;
+    const cx = (th.cell[0] + 0.5) * S, cy = (th.cell[1] + 0.5) * S, r = S * 0.3;
+    const g = wbSvg("g", { class: "wb-m-thing", "data-thing": th.id, tabindex: "0", role: "button" },
+      wbSvg("title", {}, `${th.name}${th.kind ? " (" + th.kind + ")" : ""} — ${thingHint}`),
+      wbSvg("polygon", { points: [[cx, cy - r], [cx + r, cy], [cx, cy + r], [cx - r, cy]]
+                                    .map(pt => pt.join(",")).join(" ") }),
+      wbSvg("text", { x: cx, y: cy + r + 9, "text-anchor": "middle", class: "wb-m-name" }, th.name));
+    wbActivatable(g, () => ctx.focusRow(`.wb-thing[data-thing="${CSS.escape(th.id)}"]`));
+    gThings.append(g);
+  }
+
+  // -- bodies: a marked cell with a facing tick; the unstationed in a lane --
+  let lane = 0;
+  for (const [name, b] of bodies) {
+    const cell = b.cell || [lane++, laneY];
+    const cx = (cell[0] + 0.5) * S, cy = (cell[1] + 0.5) * S;
+    const where = b.cell
+      ? (b.at ? `${atWord} ${b.at}` : t("free in the room"))
+      : t("somewhere in the room — no station");
+    const g = wbSvg("g", { class: "wb-m-body " + b.kind + (b.cell ? "" : " unplaced"),
+                           "data-body": name, tabindex: "0", role: "button" },
+      wbSvg("title", {}, `${name} — ${where} — ${bodyHint}`),
+      wbSvg("circle", { cx, cy, r: S * 0.34, class: "wb-m-body-dot" }));
+    const u = WB_UNIT[b.facing];
+    if (u) {
+      const len = Math.hypot(u[0], u[1]);
+      g.append(wbSvg("line", { x1: cx, y1: cy, x2: cx + u[0] / len * S * 0.48, y2: cy + u[1] / len * S * 0.48,
+                               class: "wb-m-facing" }));
+    }
+    g.append(wbSvg("text", { x: cx, y: cy + S * 0.34 + 9, "text-anchor": "middle", class: "wb-m-name" }, name));
+    wbDraggable(svg, g, {
+      onClick: () => ctx.focusRow(`.wb-body[data-body="${CSS.escape(name)}"]`),
+      onDrop: p => dropBody(name, b, p),
+    });
+    gBodies.append(g);
+  }
+  if (unplaced.length) {
+    gLabels.append(wbSvg("text", { x: 0, y: laneY * S - 5, class: "wb-m-lane" },
+      t("No station — somewhere in the room:")));
+  }
+
+  // -- the lint, drawn at the thing each row concerns ---------------------
+  let slot = 0;
+  const mark = (x, y, row) => {
+    const g = wbSvg("g", { class: "wb-m-lint-mark", "data-kind": row.kind, tabindex: "0", role: "button" },
+      wbSvg("title", {}, row.text),
+      wbSvg("circle", { cx: x, cy: y, r: 7 }),
+      wbSvg("text", { x, y: y + 3.5, "text-anchor": "middle" }, "!"));
+    wbActivatable(g, () => ctx.focusRow(`.wb-lint[data-kind="${CSS.escape(row.kind)}"]`));
+    gLint.append(g);
+  };
+  const cornerMark = row => { mark((0.5 + slot++) * S, -S * 0.5, row); };
+  // Where a row is drawn follows what the row NAMES -- `openings` (anchor
+  // ids), `wall`, a `rooms` pair -- never its kind by name: the kinds are the
+  // lint's own closed set and this file types none of them.
+  for (const row of view.lint || []) {
+    const rim = row.wall ? view.rims[row.wall] || [] : [];
+    if (Array.isArray(row.openings) && row.openings.length) {
+      let drawn = false;
+      for (const id of row.openings) {
+        const d = (view.doorways || []).find(x => x.id === id);
+        if (!d || !d.cells.length) continue;
+        const u = WB_UNIT[d.dir] || [0, 0];
+        mark((d.cells[0][0] + 0.5 + u[0] * 0.8) * S, (d.cells[0][1] + 0.5 + u[1] * 0.8) * S, row);
+        drawn = true;
+      }
+      if (!drawn) cornerMark(row);
+    } else if (rim.length) {
+      const u = WB_UNIT[row.wall];
+      for (const [x, y] of rim) {
+        const x1 = u[0] === 1 ? x + 1 : x, x2 = u[0] === -1 ? x : x + 1;
+        const y1 = u[1] === 1 ? y + 1 : y, y2 = u[1] === -1 ? y : y + 1;
+        gLint.append(wbSvg("line", { x1: (u[0] ? x1 : x) * S, y1: (u[1] ? y1 : y) * S,
+                                     x2: (u[0] ? x1 : x2) * S, y2: (u[1] ? y1 : y2) * S,
+                                     class: "wb-m-lint-wall" }, wbSvg("title", {}, row.text)));
+      }
+      const mid = rim[Math.floor(rim.length / 2)];
+      mark((mid[0] + 0.5 + u[0] * 0.5) * S, (mid[1] + 0.5 + u[1] * 0.5) * S, row);
+    } else if (Array.isArray(row.rooms) && row.rooms.length > 1) {
+      const other = row.rooms.find(r => r !== room.id);
+      const n = far.find(x => x.id === other);
+      const d = (view.doorways || []).find(x => x.to === other);
+      if (n && n.cells.length) {
+        const cx = n.cells.reduce((s, c) => s + c[0], 0) / n.cells.length + n.offset[0] + 0.5;
+        const cy = n.cells.reduce((s, c) => s + c[1], 0) / n.cells.length + n.offset[1] + 0.5;
+        mark(cx * S, cy * S - 12, row);
+      } else if (d && d.cells.length) {
+        const u = WB_UNIT[d.dir] || [0, 0];
+        mark((d.cells[0][0] + 0.5 + u[0] * 0.8) * S, (d.cells[0][1] + 0.5 + u[1] * 0.8) * S, row);
+      } else {
+        cornerMark(row);
+      }
+    } else {
+      cornerMark(row);
+    }
+  }
+
+  // -- the drops --------------------------------------------------------------
+  async function dropAnchor(aid, a, p) {
+    const slice = ctx.currentSlice();
+    if (!slice || !slice.record || !slice.record.anchors || !slice.record.anchors[aid]) return;
+    const c = cellOf(p);
+    if (!inRoom(c)) return toast(t("Drop the anchor on a wall of this room, or inside it."), "warn");
+    const anchors = {};
+    for (const [id, rec] of Object.entries(slice.record.anchors)) anchors[id] = { ...rec };
+    const wall = wallOf(c, p);
+    if (wall) {
+      const length = wbFootprintLength(a.footprint, wall.len);
+      const offset = Math.min(1, Math.max(0, wall.idx / Math.max(1, wall.len - length)));
+      anchors[aid] = { ...anchors[aid], dir: wall.wall, offset };
+    } else {
+      anchors[aid] = { ...anchors[aid], dir: "", offset: null };
+    }
+    await ctx.patchRoom({ anchors });
+  }
+
+  async function dropDoorway(d, p) {
+    const slice = ctx.currentSlice();
+    if (!slice || !slice.record) return;
+    const stored = slice.record.adjacent || [];
+    if (!stored.some(e => e.to === d.to)) {
+      return toast(t("This doorway is declared from the far room; open that room to move it."), "warn", 6000);
+    }
+    const rim = view.rims[d.dir] || [];
+    if (rim.length < 2) return;
+    const axis = d.dir === "n" || d.dir === "s" ? 0 : 1;
+    const c = cellOf(p);
+    let idx = rim.findIndex(r => r[axis] === c[axis]);
+    if (idx < 0) idx = c[axis] < rim[0][axis] ? 0 : rim.length - 1;
+    const width = Math.max(1, d.cells.length);
+    const offset = Math.min(1, Math.max(0, idx / Math.max(1, rim.length - width)));
+    await ctx.patchRoom({ exits: stored.map(e => ({
+      to: e.to, barrier: e.barrier || "", dir: e.dir || "",
+      ...(e.to === d.to ? { offset } : {}) })) });
+  }
+
+  async function dropBody(name, b, p) {
+    const c = cellOf(p);
+    if (inRoom(c)) {
+      const anchor = Object.entries(view.anchors || {}).find(([, a]) => a.cells.some(k => same(k, c)));
+      const door = (view.doorways || []).find(d => d.cells.some(k => same(k, c)));
+      await ctx.putStation(name, { at: anchor ? anchor[0] : door ? door.id : null, near: b.near || [] });
+      return;
+    }
+    const n = far.find(nb => nb.cells.some(k => same([k[0] + nb.offset[0], k[1] + nb.offset[1]], c)));
+    if (!n) return toast(t("Drop the body on a cell of this room, or of a neighbour to move it there."), "warn", 6000);
+    const anchor = Object.entries(n.anchors || {}).find(([, a]) =>
+      a.cells.some(k => same([k[0] + n.offset[0], k[1] + n.offset[1]], c)));
+    await ctx.moveBody(name, n, anchor ? anchor[0] : null);
+  }
+
+  host.append(svg);
+  return svg;
+}
+
+// The structure map: every room as its box placed by bearing, as `GET /map`
+// returns it; one connected component after another, left to right.
+function wbRenderStructureMap(host, data, ctx, selectedId) {
+  host.innerHTML = "";
+  const S = WB_MINI;
+  const laid = [];
+  let cursor = 0, tallest = 0;
+  for (const comp of data.components || []) {
+    if (!comp.rooms.length) continue;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const r of comp.rooms) {
+      minX = Math.min(minX, r.offset[0]); minY = Math.min(minY, r.offset[1]);
+      maxX = Math.max(maxX, r.offset[0] + r.w); maxY = Math.max(maxY, r.offset[1] + r.d);
+    }
+    laid.push({ comp, dx: cursor - minX, dy: -minY });
+    cursor += maxX - minX + 3;
+    tallest = Math.max(tallest, maxY - minY);
+  }
+  if (!laid.length) {
+    host.append(el("div", { class: "small dim" }, "No rooms yet — the scene has not been laid out."));
+    return null;
+  }
+  const svg = wbSvg("svg", {
+    class: "wb-map-svg wb-structure-map", role: "group",
+    "aria-label": t("Every room, placed by bearing"),
+    viewBox: [-S, -S, (cursor - 1) * S, (tallest + 2) * S].join(" "),
+  });
+  const onTopOf = t("placed on top of");
+  const reachedThrough = t("reached through");
+  const toWord = t("to");
+  const noBearing = t("Exits with no bearing:");
+  const openGrid = t("click to open its grid");
+  for (const { comp, dx, dy } of laid) {
+    for (const r of comp.rooms) {
+      const ox = (r.offset[0] + dx) * S, oy = (r.offset[1] + dy) * S;
+      const w = r.w * S, d = r.d * S;
+      const notes = [r.name];
+      if (r.collided) notes.push(`${onTopOf} ${r.onto} (${reachedThrough} ${r.via})`);
+      if (r.lint) notes.push(t(`${r.lint} layout rows`));
+      const g = wbSvg("g", {
+        class: "wb-sm-room" + (r.collided ? " collided" : "") + (r.occupants.length ? " occupied" : "")
+          + (r.id === selectedId ? " on" : ""),
+        "data-room": r.id, tabindex: "0", role: "button",
+      }, wbSvg("title", {}, notes.join(" — ") + " — " + openGrid));
+      // A room whose cells fill its box is one rectangle; any other shape is
+      // its cells with their boundary (no shape word is typed here).
+      if (!r.cells || !r.cells.length || r.cells.length === r.w * r.d) {
+        g.append(wbSvg("rect", { x: ox, y: oy, width: w, height: d, class: "wb-sm-box" }));
+      } else {
+        for (const [x, y] of r.cells) {
+          g.append(wbSvg("rect", { x: ox + x * S, y: oy + y * S, width: S, height: S, class: "wb-sm-box-cell" }));
+        }
+        for (const seg of wbBoundary(r.cells)) {
+          g.append(wbSvg("line", { x1: ox + seg[0] * S, y1: oy + seg[1] * S,
+                                   x2: ox + seg[2] * S, y2: oy + seg[3] * S, class: "wb-sm-edge" }));
+        }
+      }
+      // Exits as ticks on the wall they open in; the unbeared counted.
+      let unbeared = [];
+      for (const x of r.exits || []) {
+        const u = WB_UNIT[x.dir];
+        if (!u) { unbeared.push(x.name); continue; }
+        const mx = ox + w / 2 + u[0] * w / 2, my = oy + d / 2 + u[1] * d / 2;
+        const title = wbSvg("title", {}, `${toWord} ${x.name} (${x.barrier})`);
+        if (u[0] && u[1]) {
+          g.append(wbSvg("circle", { cx: mx, cy: my, r: S * 0.3, class: "wb-sm-exit" + (x.placed ? "" : " far-unplaced") }, title));
+        } else {
+          const half = S * 0.6;
+          g.append(wbSvg("line", {
+            x1: u[0] ? mx : mx - half, y1: u[1] ? my : my - half,
+            x2: u[0] ? mx : mx + half, y2: u[1] ? my : my + half,
+            class: "wb-sm-exit" + (x.placed ? "" : " far-unplaced") }, title));
+        }
+      }
+      g.append(wbSvg("text", { x: ox + w / 2, y: oy + d / 2 + (r.occupants.length ? 0 : 3),
+                               "text-anchor": "middle", class: "wb-sm-name" },
+        r.name.length > Math.max(6, r.w * 1.6) ? r.name.slice(0, Math.max(5, Math.floor(r.w * 1.6)) - 1) + "…" : r.name));
+      if (r.occupants.length) {
+        const who = r.occupants.join(", ");
+        g.append(wbSvg("text", { x: ox + w / 2, y: oy + d / 2 + 8, "text-anchor": "middle", class: "wb-sm-who" },
+          who.length > Math.max(8, r.w * 2.2) ? who.slice(0, Math.max(7, Math.floor(r.w * 2.2)) - 1) + "…" : who));
+      }
+      if (unbeared.length) {
+        g.append(wbSvg("g", {}, wbSvg("title", {}, `${noBearing} ${unbeared.join(", ")}`),
+          wbSvg("text", { x: ox + w - 2, y: oy + d - 2, "text-anchor": "end", class: "wb-sm-unbeared" },
+            "?" + unbeared.length)));
+      }
+      if (r.lint) {
+        g.append(wbSvg("circle", { cx: ox + w - 4, cy: oy + 4, r: 3.5, class: "wb-sm-lint" },
+          wbSvg("title", {}, t(`${r.lint} layout rows`))));
+      }
+      wbActivatable(g, () => ctx.select(r.id));
+      svg.append(g);
+    }
+  }
+  host.append(svg);
+  return svg;
+}
+
+// The pane: the map's bar, the canvas, the overlay legend, the notes, and
+// the tree folded open beneath.
+function wbMapPane() {
+  const bar = el("div", { class: "wb-map-bar" });
+  const canvas = el("div", { class: "wb-map" });
+  const legend = el("div", { class: "wb-map-legend small" });
+  const notes = el("div", { class: "wb-map-notes small dim" });
+  const tree = el("div", { class: "wb-tree" });
+  const pane = el("div", { class: "wb-map-pane" }, bar, canvas, legend, notes,
+    el("details", { class: "wb-list", open: "" },
+      el("summary", { class: "wb-group" }, "Every room as a list"), tree));
+  return { pane, bar, canvas, legend, notes, tree };
+}
+
+// What the room map cannot draw, said in words under it: a doorway with no
+// bearing, a thing standing here with no station.
+function wbMapNotes(host, view) {
+  host.innerHTML = "";
+  const rows = [];
+  for (const d of view.doorways || []) {
+    if (!d.cells.length) {
+      rows.push(el("div", {}, "Doorway to", " ", el("b", { translate: "no" }, txt(d.name)),
+        " ", "has no bearing, so no wall to stand in."));
+    }
+  }
+  const loose = (view.things || []).filter(th => th.placed === "position" && !th.cell).map(th => th.name);
+  if (loose.length) {
+    rows.push(el("div", {}, "Here with no station:", " ", el("span", { translate: "no" }, txt(loose.join(", ")))));
+  }
+  host.append(...rows);
+}
+
+// The overlay legend: one swatch per word, in the order the readings came.
+function wbMapLegend(host, view, overlay) {
+  host.innerHTML = "";
+  const readings = overlay && view.overlays && view.overlays[overlay];
+  if (!readings || typeof readings !== "object") return;
+  const words = [];
+  for (const word of Object.values(readings)) if (!words.includes(word)) words.push(word);
+  host.append(el("span", { class: "dim", translate: "no" }, txt(overlay + ":")));
+  words.forEach((word, i) => {
+    const pct = words.length > 1 ? 12 + 70 * (i / (words.length - 1)) : 45;
+    host.append(el("span", { translate: "no" },
+      el("span", { class: "wb-swatch", style: `background:color-mix(in srgb,var(--acc) ${pct}%,transparent)` }),
+      txt(word)));
+  });
+}
+
 // ---- The dialog -------------------------------------------------------------
 
 async function openWorldBrowser(opts = {}) {
@@ -1121,6 +1782,12 @@ async function openWorldBrowser(opts = {}) {
     selected: opts.room || positions?.persona?.room || firstRoom(index),
     tab: tabs.some(([id]) => id === opts.tab) ? opts.tab : "rooms",
     cache: {},
+    // The map's zoom: "room" (the selected room's grid) or "map" (every
+    // room placed by bearing); the grid last drawn; the overlay chosen.
+    zoom: "room",
+    slice: null,
+    grid: null,
+    overlay: null,
   };
 
   modal(rawKind === "attire" ? "Attire" : "World state", b => {
@@ -1128,10 +1795,11 @@ async function openWorldBrowser(opts = {}) {
     const tabBar = el("div", { class: "lore-inspector-tabs" });
     const content = el("div", { class: "lore-inspector-content" });
 
-    const tree = el("div", { class: "wb-tree" });
+    const map = wbMapPane();
+    const tree = map.tree;
     const card = el("div", { class: "wb-card" });
     const location = el("div", { class: "small dim", style: "margin-bottom:6px", translate: "no" });
-    const browse = el("div", {}, location, el("div", { class: "wb" }, tree, card));
+    const browse = el("div", {}, location, el("div", { class: "wb" }, map.pane, card));
     const bodies = el("div", { class: "wb-bodies" });
 
     const ctx = {
@@ -1145,20 +1813,139 @@ async function openWorldBrowser(opts = {}) {
       select: id => loadRoom(id),
       showRoom: id => { state.selected = id; selectTab("rooms"); },
       showBody: name => { ctx.openBodies.add(name); selectTab("bodies"); },
-      // The card rebuilt from a write's fresh slice; the tree re-read, since
-      // a rename or an exit changes it too.
+      // The card rebuilt from a write's fresh slice, the grid re-read (an
+      // anchor moved is a cell moved), the tree re-read, since a rename or
+      // an exit changes it too.
       replaceCard: async fresh => {
         if (!alive() || S.chatId !== chatId) return;
-        if (fresh && fresh.id === state.selected) wbRenderCard(card, fresh, ctx);
-        await refreshIndex();
+        if (fresh && fresh.id === state.selected) {
+          state.slice = fresh;
+          wbRenderCard(card, fresh, ctx);
+        }
+        await Promise.all([refreshIndex(), loadGrid(state.selected)]);
       },
       refresh: async () => {
         await refreshIndex();
         if (!alive() || S.chatId !== chatId) return;
-        if (state.tab === "rooms") await loadRoom(state.selected);
-        else if (state.tab === "bodies") wbRenderBodies(bodies, ctx);
+        if (state.tab === "rooms") {
+          if (state.zoom === "map") await Promise.all([showStructure(), loadCard(state.selected)]);
+          else await loadRoom(state.selected);
+        } else if (state.tab === "bodies") {
+          wbRenderBodies(bodies, ctx);
+        }
+      },
+      // What the map needs of the card and the routes: the slice it edits
+      // from, the row a click lands on, and the three writes a drop makes.
+      currentSlice: () => state.slice,
+      focusRow: selector => wbFocusRow(card, selector),
+      patchRoom: fields => wbWrite(ctx, async () => {
+        const fresh = await api("PATCH",
+          `/api/chats/${chatId}/rooms/${encodeURIComponent(state.selected)}${frameQuery()}`, fields);
+        await ctx.replaceCard(fresh);
+        return fresh;
+      }),
+      putStation: (name, body) => wbWrite(ctx, async () => {
+        await api("PUT",
+          `/api/chats/${chatId}/bodies/${encodeURIComponent(name)}/station${frameQuery()}`, body);
+        await ctx.refresh();
+        return true;
+      }),
+      // A body dropped in a neighbour's cells: the cast editor's relocation
+      // (only the registered cast has a position route -- the player's
+      // place is the story's business, as that editor also holds), then its
+      // station there, so nothing stale from the old room survives.
+      moveBody: async (name, neighbour, at) => {
+        const who = (state.positions?.characters || []).find(c => c.name === name);
+        if (!who) {
+          toast(t("Only a registered cast member can be moved between rooms here; the player's place is the story's business."), "warn", 7000);
+          return;
+        }
+        const done = await wbWrite(ctx, async () => {
+          await api("PUT", `/api/chats/${chatId}/characters/${who.id}/position${frameQuery()}`,
+            { room: neighbour.id });
+          await api("PUT",
+            `/api/chats/${chatId}/bodies/${encodeURIComponent(name)}/station${frameQuery()}`,
+            { at, near: [] });
+          return true;
+        }, { quiet: true });
+        if (done) {
+          toast(`Moved ${name} to ${neighbour.name}.`, "ok");
+          await ctx.refresh();
+        }
       },
     };
+
+    // The bar over the map: where the zoom stands, the way up, the overlay.
+    function renderMapBar() {
+      map.bar.innerHTML = "";
+      if (state.zoom === "map") {
+        map.bar.append(el("b", {}, "Every room, placed by bearing"),
+          el("span", { class: "dim" }, "— click a room to open its grid"));
+        return;
+      }
+      const name = state.grid && state.grid.room ? state.grid.room.name
+        : (state.slice ? state.slice.name : state.selected || "");
+      map.bar.append(
+        el("button", { class: "wb-link wb-map-up", onclick: () => showStructure() }, "All rooms"),
+        el("span", { class: "dim" }, "›"),
+        el("b", { translate: "no" }, txt(name)));
+      const overlays = Object.keys((state.grid && state.grid.overlays) || {});
+      if (overlays.length) {
+        map.bar.append(wbSelect(overlays, state.overlay || "", {
+          blank: "No overlay", title: "Paint a per-cell reading over the grid",
+          onchange: v => { state.overlay = v || null; if (state.grid) drawGrid(); } }));
+      }
+      map.bar.append(el("span", { class: "dim wb-map-hint" }, "Click a thing to edit it; drag to place it."));
+    }
+
+    function drawGrid() {
+      const view = state.grid;
+      if (!view || view.error) return;
+      wbRenderRoomMap(map.canvas, view, ctx, { overlay: state.overlay });
+      wbMapLegend(map.legend, view, state.overlay);
+      wbMapNotes(map.notes, view);
+    }
+
+    async function loadGrid(id) {
+      if (!id || state.zoom !== "room") return;
+      let view;
+      try {
+        view = await api("GET", `/api/chats/${chatId}/rooms/${encodeURIComponent(id)}/grid${frameQuery()}`);
+      } catch (error) {
+        view = { error: error?.message || String(error) };
+      }
+      if (!alive() || S.chatId !== chatId || state.selected !== id || state.zoom !== "room") return;
+      state.grid = view;
+      renderMapBar();
+      if (view.error) {
+        map.canvas.innerHTML = "";
+        map.canvas.append(el("div", { class: "small dim" }, txt(view.error)));
+        map.legend.innerHTML = "";
+        map.notes.innerHTML = "";
+        return;
+      }
+      drawGrid();
+    }
+
+    async function showStructure() {
+      state.zoom = "map";
+      renderMapBar();
+      map.canvas.innerHTML = "";
+      map.canvas.append(el("div", { class: "small dim" }, "Loading…"));
+      map.legend.innerHTML = "";
+      map.notes.innerHTML = "";
+      let data;
+      try {
+        data = await api("GET", `/api/chats/${chatId}/map${frameQuery()}`);
+      } catch (error) {
+        if (!alive() || S.chatId !== chatId) return;
+        map.canvas.innerHTML = "";
+        map.canvas.append(el("div", { class: "err small" }, txt(error?.message || String(error))));
+        return;
+      }
+      if (!alive() || S.chatId !== chatId || state.zoom !== "map") return;
+      wbRenderStructureMap(map.canvas, data, ctx, state.selected);
+    }
 
     async function refreshIndex() {
       const [idx, pos] = await Promise.all([
@@ -1176,11 +1963,7 @@ async function openWorldBrowser(opts = {}) {
       wbRenderTree(tree, state.index, state.selected, loadRoom);
     }
 
-    async function loadRoom(id) {
-      state.selected = id;
-      for (const button of tree.querySelectorAll(".wb-room")) {
-        button.classList.toggle("on", button.dataset.room === id);
-      }
+    async function loadCard(id) {
       if (!id) return wbRenderCard(card, null, ctx);
       card.innerHTML = "";
       card.append(el("div", { class: "small dim" }, "Loading…"));
@@ -1195,7 +1978,27 @@ async function openWorldBrowser(opts = {}) {
         return;
       }
       if (!alive() || S.chatId !== chatId || state.selected !== id) return;
+      state.slice = slice;
       wbRenderCard(card, slice, ctx);
+    }
+
+    // Selecting a room: the card on the right, and the map zoomed to its
+    // grid on the left, both from the server.
+    async function loadRoom(id) {
+      state.selected = id;
+      state.zoom = "room";
+      state.grid = null;
+      for (const button of tree.querySelectorAll(".wb-room")) {
+        button.classList.toggle("on", button.dataset.room === id);
+      }
+      renderMapBar();
+      if (!id) {
+        map.canvas.innerHTML = "";
+        map.legend.innerHTML = "";
+        map.notes.innerHTML = "";
+        return wbRenderCard(card, null, ctx);
+      }
+      await Promise.all([loadCard(id), loadGrid(id)]);
     }
 
     function selectTab(tabId) {
