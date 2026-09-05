@@ -99,6 +99,13 @@ PRESIM_HOURS_CAP = 24.0 * 30
 DRAMA_DUE_TURNS_CAP = EVENT_DUE_CAP
 #: Story seconds in a story hour, for a clock due in `due_story_hours`.
 STORY_HOUR_SECONDS = 3600.0
+#: Characters one `director_note` may carry. A LIMIT THE OWNER SHOULD KNOW
+#: ABOUT: every active note in scope rides every Director payload (all three
+#: stages, the prose author's sheet and the two hands that place things) on
+#: every beat it is in scope, so this is what one package may add to each of
+#: those calls. A note over it is refused at draft, not truncated -- a note
+#: cut mid-sentence says something its author did not.
+DIRECTOR_NOTE_CHARS = 600
 
 #: Prose field names on a package, each a text capped at TEXT_CHARS.
 _TEXT_FIELDS = ("title", "premise")
@@ -290,7 +297,12 @@ def _latest_turn_idx(cid, frame_id=None):
 
     row = q("SELECT MAX(idx) AS idx FROM turns WHERE chat_id=?", (cid,),
             one=True)
-    return int(row["idx"]) if row and row["idx"] is not None else 0
+    # A story with no turn yet stands BEFORE its opening: a package published
+    # now is published at turn -1, so the opening (turn 0) is the next turn
+    # and sees it (`visible_packages`). Reading it as turn 0 made a plan the
+    # room prepared before the first beat invisible to the one beat that
+    # places the opening in it.
+    return int(row["idx"]) if row and row["idx"] is not None else -1
 
 
 def _registry_revision(cid, frame_id=None):
@@ -484,10 +496,20 @@ def _world_snapshot(cid, frame_id=None):
     rooms = scene.get("rooms") or {}
     specs = planned_room_ids(cid)
     names = set()
+    cast_names = []
     for row in q("SELECT c.name FROM chat_chars cc JOIN characters c "
                  "ON c.id=cc.char_id WHERE cc.chat_id=?", (cid,)):
         if row["name"]:
             names.add(str(row["name"]).casefold())
+            cast_names.append(str(row["name"]))
+    try:
+        from story.character_schema import persona_name
+        from story.scene import persona_of
+        player = persona_name(persona_of(dict(chat))) if chat else ""
+    except Exception:
+        player = ""
+    if player:
+        cast_names.append(str(player))
     try:
         from world.charter_runtime import registry_for
         registry = registry_for(cid, frame_id)
@@ -522,8 +544,24 @@ def _world_snapshot(cid, frame_id=None):
         "containment": {str(r): str(room.get("parent_entity"))
                         for r, room in rooms.items()
                         if isinstance(room, dict) and room.get("parent_entity")},
+        # WHERE THE STORY STANDS: the rooms the player and the attached cast
+        # occupy, for the reach check (`_reach_warning`). Positions are
+        # keyed by display name; matched exactly, then case-folded.
+        "occupied": _occupied_rooms(scene, cast_names),
         "elapsed": _elapsed_seconds(cid, frame_id),
     }
+
+
+def _occupied_rooms(scene, names):
+    positions = (scene or {}).get("positions") or {}
+    folded = {str(k).strip().casefold(): str(v) for k, v in positions.items()
+              if v}
+    out = set()
+    for name in names or ():
+        room = positions.get(name) or folded.get(str(name).strip().casefold())
+        if room:
+            out.add(str(room))
+    return out
 
 
 def _elapsed_seconds(cid, frame_id=None):
@@ -1333,6 +1371,54 @@ def _apply_scheduled_consequence(cid, frame_id, op, turn_idx, *, by):
     return {"notice": _mint_notice(cid, turn_idx, summary, by=by)}
 
 
+# -- director_note ------------------------------------------------------------
+#
+# A PACKAGE REACHES THE DIRECTOR ONLY THROUGH SEAMS -- planned rooms, figures,
+# due events -- never as MEANING. Chat 115 (2026-09-04): the room planned a
+# lift car beside the Director-minted lift the cast already stood in, pointed
+# a scheduled consequence at the planned one, and nothing said the two were
+# one lift. A note is the room saying what its plan means, addressed to the
+# Director's channels alone: which planned thing is which live thing, what a
+# consequence is for. It writes nothing -- it lives on the package and is
+# READ into the Director payload (`active_director_notes`), so no mind and no
+# narrator ever holds it as text.
+
+def _shape_director_note(op):
+    text = " ".join(str(op.get("text") or "").split())
+    if not text:
+        raise ValueError("director_note says what the plan means, in prose")
+    if len(text) > DIRECTOR_NOTE_CHARS:
+        raise ValueError("a director_note is at most %d characters; this one "
+                         "is %d" % (DIRECTOR_NOTE_CHARS, len(text)))
+    rooms = op.get("rooms")
+    if isinstance(rooms, str):
+        rooms = [rooms]
+    clean = []
+    for room in rooms if isinstance(rooms, (list, tuple)) else ():
+        room = _text(room, 120)
+        if room and room not in clean:
+            clean.append(room)
+    return {"text": text, "rooms": clean, **_clock_field(op)}
+
+
+def _preview_director_note(cid, frame_id, op, world):
+    errors = []
+    for room in op["rooms"]:
+        if not _room_known(world, room):
+            errors.append("note scoped to %r, which exists nowhere" % room)
+    return {"changes": [{"kind": "director_noted", "rooms": list(op["rooms"]),
+                         "chars": len(op["text"]),
+                         **({"clock": op["clock"]} if op.get("clock") else {})}],
+            "errors": errors, "warnings": []}
+
+
+def _apply_director_note(cid, frame_id, op, turn_idx):
+    """Nothing lands: the note is read off the package from the turn after
+    this one (`visible_packages`), and `applied` being set is what marks a
+    clocked note as due."""
+    return {"delivered_from_turn": int(turn_idx or 0) + 1}
+
+
 # -- the nudge toolkit: surgeries as kinds -------------------------------------
 
 def _surgery_shape(kind, fields):
@@ -1504,6 +1590,13 @@ OPERATIONS = {
                               "preview": _preview_scheduled_consequence,
                               "apply": _apply_scheduled_consequence, "long": False,
                               "seam": "authored_events.mint_authored_events at clock"},
+    # The room's note to the Director: what the plan MEANS. Read into the
+    # Director payload (`active_director_notes`), written into no ledger.
+    "director_note": {"shape": _shape_director_note,
+                      "preview": _preview_director_note,
+                      "apply": _apply_director_note, "long": False,
+                      "seam": "agents.director payload author_notes "
+                              "(read by the Director's stages and hands)"},
     # The nudge toolkit: author surgery on an institution (v2 § 9.1).
     **{kind: {"shape": _surgery_shape(kind, fields),
               "preview": _surgery_preview_for(kind),
@@ -1563,6 +1656,9 @@ OPERATION_FIELDS = {
                 "terms?": "what is asked", "clock?": "package clock id"},
     "scheduled_consequence": {"clock": "the package clock it fires on",
                               "summary": "what happens when due", "room?": "<room_id>"},
+    "director_note": {"text": "what the plan MEANS, for the Director alone (prose, at most DIRECTOR_NOTE_CHARS characters)",
+                      "rooms?": "[<room_id>] -- applies while a cast member is in or beside one of them; absent = everywhere",
+                      "clock?": "package clock id (applies once due)"},
     "move_body": {"charter": "charter key", "body": "body key", "room": "<room_id>",
                   "berth?": "true to make it their home too", "clock?": ""},
     "assign_post": {"charter": "charter key", "body": "body key", "post": "post key",
@@ -1761,6 +1857,97 @@ def _package_checks(pkg, world):
     return errors, warnings
 
 
+def _rooms_named_by(op):
+    """Every room an operation places something in or at: the rooms a
+    `plan_rooms` plants and the room-valued fields of the other kinds (a
+    consequence's `room`, an errand's `to`, a summons' `place`, a plan's
+    `brief.where`, a region event's footprint). Ids, never names."""
+    out = set()
+    if op.get("op") == "plan_rooms":
+        out.update(str(r) for r in (op.get("rooms") or {}))
+    for key in ("room", "where", "to", "place"):
+        if _text(op.get(key), 120):
+            out.add(_text(op.get(key), 120))
+    brief = op.get("brief") if isinstance(op.get("brief"), dict) else {}
+    if _text(brief.get("where"), 120):
+        out.add(_text(brief.get("where"), 120))
+    footprint = op.get("footprint") if isinstance(op.get("footprint"), dict) else {}
+    out.update(str(r) for r in footprint.get("rooms") or () if str(r or ""))
+    if _text(footprint.get("epicentre"), 120):
+        out.add(_text(footprint.get("epicentre"), 120))
+    return out
+
+
+def _reach_warning(cid, world, pkg):
+    """THE STORY CANNOT REACH THIS FROM WHERE IT STANDS. When a package
+    plants or names rooms and NONE of them is within
+    `room_frontier.FRONTIER_DEPTH_HOPS` of a room a cast member occupies --
+    hops over passable edges (`spatial.passable_neighbors`) joined with the
+    plan's topology (`structure.planned_topology`) and the package's own
+    planted adjacency, graph distance only, no name matching -- the preview
+    says so, naming the nearest occupied room and the hop count. A warning,
+    never an error: a room planted far away may be the point.
+
+    Measured on chat 115 (2026-09-04): the cast stood in
+    `room_elevator_interior`, whose one exit is `corridor_sublevel_f`, which
+    exits to the planned `auxiliary_lift_car` -- 2 hops, exactly the
+    frontier depth, so the consequence pointed there would NOT have been
+    warned; the `condemned_shelter_lobby` the same package posted a bill in
+    stands 4 hops out over the plan's topology and would have been."""
+    from story.room_frontier import FRONTIER_DEPTH_HOPS
+    from world.spatial import passable_neighbors
+    from world.structure import planned_topology
+
+    occupied = {str(r) for r in world.get("occupied") or () if str(r or "")}
+    named = set()
+    graph = {}
+
+    def join(a, b):
+        graph.setdefault(a, set()).add(b)
+        graph.setdefault(b, set()).add(a)
+
+    for op in pkg.get("operations") or ():
+        named |= _rooms_named_by(op)
+        if op.get("op") == "plan_rooms":
+            for rid, room in (op.get("rooms") or {}).items():
+                for edge in room.get("adjacent") or ():
+                    if isinstance(edge, dict) and edge.get("to"):
+                        join(str(rid), str(edge["to"]))
+    if not named or not occupied:
+        return None
+    for rid, others in passable_neighbors(world.get("scene") or {}).items():
+        for other in others:
+            join(str(rid), str(other))
+    for rid, others in planned_topology(cid).items():
+        for other in others:
+            join(str(rid), str(other))
+    # Multi-source walk from every occupied room, remembering which one
+    # each node was reached from.
+    dist = {r: (0, r) for r in occupied}
+    frontier = sorted(occupied)
+    while frontier:
+        nxt = []
+        for node in frontier:
+            hops, source = dist[node]
+            for other in sorted(graph.get(node, ())):
+                if other not in dist:
+                    dist[other] = (hops + 1, source)
+                    nxt.append(other)
+        frontier = nxt
+    reached = sorted((dist[r][0], dist[r][1], r) for r in named if r in dist)
+    if reached and reached[0][0] <= FRONTIER_DEPTH_HOPS:
+        return None
+    if not reached:
+        return ("the story cannot reach this from where it stands: no route "
+                "joins %s to any room a cast member occupies (%s)"
+                % (", ".join(sorted(named)), ", ".join(sorted(occupied))))
+    hops, source, room = reached[0]
+    return ("the story cannot reach this from where it stands: the nearest "
+            "room it names, %r, is %d hops from %r, the closest room a cast "
+            "member occupies, and the story's frontier reaches %d"
+            % (room, hops, source, FRONTIER_DEPTH_HOPS))
+
+
 def preview_package(cid, uid, *, frame_id=None):
     """The cross-system diff of a draft: what each operation would change,
     with the errors that would refuse it. Pure read."""
@@ -1779,6 +1966,14 @@ def preview_package(cid, uid, *, frame_id=None):
         warnings.extend("op %d (%s): %s" % (i, op["op"], w) for w in result["warnings"])
     p_errors, p_warnings = _package_checks(pkg, world)
     p_errors += authority_errors(cid, frame_id, pkg)
+    try:
+        reach = _reach_warning(cid, world, pkg)
+    except Exception as exc:
+        # Fail open: a graph that cannot be read costs the warning, never
+        # the preview.
+        reach = "reach check unavailable: %s" % str(exc)[:200]
+    if reach:
+        p_warnings.append(reach)
     return {"uid": pkg["uid"], "revision": pkg["revision"],
             "changes": changes, "errors": errors + p_errors,
             "warnings": warnings + p_warnings,
@@ -2062,6 +2257,28 @@ def visible_packages(cid, turn_idx, *, frame_id=None):
             if p["status"] in ("published", "active")
             and p.get("published_turn") is not None
             and int(p["published_turn"]) < int(turn_idx)]
+
+
+def active_director_notes(cid, frame_id, turn_idx, rooms_in_reach=None):
+    """The texts of every landed `director_note` in scope for this turn, in
+    package order: from the packages the turn may see (`visible_packages`),
+    the notes that have landed (applied at publish, or fired by their clock)
+    and whose `rooms`, when they name any, meet ``rooms_in_reach`` -- the
+    rooms the cast stands in or beside, as the caller computes them. A note
+    naming no room applies everywhere. Author knowledge for the Director
+    payload alone (`agents/director.py`, key `author_notes`)."""
+    reach = {str(r) for r in (rooms_in_reach or ()) if str(r or "")}
+    out = []
+    for pkg in visible_packages(cid, turn_idx, frame_id=frame_id):
+        for op in pkg.get("operations") or ():
+            if op.get("op") != "director_note" or op.get("applied") is None:
+                continue
+            rooms = {str(r) for r in op.get("rooms") or ()}
+            if rooms and not (rooms & reach):
+                continue
+            if op.get("text"):
+                out.append(str(op["text"]))
+    return out
 
 
 def activate_due_packages(cid, turn_idx, *, frame_id=None):

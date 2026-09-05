@@ -11,10 +11,10 @@
 | `agents/character.py` | 4160 | Private character decision agent. | `agents.common`, `core.db`, `core.frames`, `llm.prompts`, `llm.schemas`, `mind`, `mind.affect`, `mind.memory`, `mind.memory_judge`, `mind.psychology_runtime`, `mind.theory_of_mind`, `story.character_schema`, `story.scene`, `world.gaps`, `world.place_purpose`, `world.spatial`, `world.survival` |
 | `agents/common.py` | 9284 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
 | `agents/composer.py` | 3551 |  | `agents.common`, `core.pipeline_context`, `story.provenance_text`, `story.scene`, `world.spatial` |
-| `agents/director.py` | 4632 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial`, `world.survival` |
+| `agents/director.py` | 4746 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial`, `world.survival` |
 | `agents/director_contact.py` | 457 |  | `story.character_schema`, `world.spatial` |
 | `agents/director_evidence.py` | 1187 |  | `agents.common`, `agents.director_lingua`, `llm`, `world.spatial` |
-| `agents/director_fanout.py` | 830 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
+| `agents/director_fanout.py` | 840 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
 | `agents/director_floors.py` | 1586 |  | `agents.common`, `agents.director_lingua`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
 | `agents/director_lingua.py` | 29 |  | — |
 | `agents/director_movement.py` | 1028 |  | `agents.director_lingua`, `story.character_schema`, `world.spatial` |
@@ -102,9 +102,9 @@
 | `story/importers.py` | 3124 | Native and AI-assisted character, persona, and lorebook import/generation. | `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.memory`, `story.character_schema`, `story.scene` |
 | `story/journey_history.py` | 431 |  | — |
 | `story/lore_structure.py` | 248 |  | — |
-| `story/mandates.py` | 369 |  | `core.db` |
+| `story/mandates.py` | 376 |  | `core.db` |
 | `story/naming.py` | 555 |  | `core.db`, `world.charter_identity` |
-| `story/plot_packages.py` | 2163 |  | — |
+| `story/plot_packages.py` | 2380 |  | — |
 | `story/provenance_text.py` | 132 |  | — |
 | `story/room_bible.py` | 421 |  | `core.db` |
 | `story/room_conversation.py` | 485 |  | `core.db` |
@@ -257,14 +257,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `director_resolve()` | 2810 | 1789 lines |
-| `director_interpret()` | 650 | 630 lines |
-| `_reconcile_resolution()` | 1656 | 522 lines |
-| `_run_specialists()` | 2380 | 263 lines |
-| `director_establish()` | 315 | 159 lines |
-| `_reconcile_interpretation()` | 1282 | 139 lines |
-| `_specialist_repairs()` | 1483 | 119 lines |
-| `_ground_public_evidence()` | 2685 | 112 lines |
+| `director_resolve()` | 2916 | 1797 lines |
+| `director_interpret()` | 745 | 636 lines |
+| `_reconcile_resolution()` | 1757 | 522 lines |
+| `_run_specialists()` | 2486 | 263 lines |
+| `director_establish()` | 315 | 171 lines |
+| `_reconcile_interpretation()` | 1383 | 139 lines |
+| `_specialist_repairs()` | 1584 | 119 lines |
+| `_ground_public_evidence()` | 2791 | 112 lines |
 
 ### `agents/director_contact.py`
 
@@ -296,12 +296,12 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_specialist_payload()` | 285 | 269 lines |
-| `_orchestration_scope_backstop()` | 680 | 151 lines |
+| `_specialist_payload()` | 285 | 279 lines |
+| `_orchestration_scope_backstop()` | 690 | 151 lines |
 | `_resolve_beat_view()` | 73 | 127 lines |
 | `_interpret_beat_view()` | 202 | 40 lines |
-| `_resolved_event_verdicts()` | 590 | 30 lines |
-| `_author_emitted_channels()` | 642 | 25 lines |
+| `_resolved_event_verdicts()` | 600 | 30 lines |
+| `_author_emitted_channels()` | 652 | 25 lines |
 | `_note_for()` | 260 | 24 lines |
 | `fanout_is_parallel()` | 35 | 20 lines |
 
@@ -1259,14 +1259,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `grant_mandate()` | 147 | 73 lines |
-| `coverage()` | 243 | 16 lines |
-| `_most_permissive()` | 287 | 15 lines |
-| `expire_mandates()` | 222 | 14 lines |
-| `fill_limit()` | 272 | 13 lines |
-| `surprise_dial()` | 331 | 13 lines |
-| `spend_limits()` | 304 | 12 lines |
-| `beats_per_proposal()` | 346 | 12 lines |
+| `grant_mandate()` | 154 | 73 lines |
+| `coverage()` | 250 | 16 lines |
+| `_most_permissive()` | 294 | 15 lines |
+| `expire_mandates()` | 229 | 14 lines |
+| `fill_limit()` | 279 | 13 lines |
+| `surprise_dial()` | 338 | 13 lines |
+| `spend_limits()` | 311 | 12 lines |
+| `beats_per_proposal()` | 353 | 12 lines |
 
 ### `story/naming.py`
 
@@ -1285,14 +1285,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `publish_package()` | 1854 | 84 lines |
-| `_package_checks()` | 1684 | 78 lines |
-| `fire_due_clocks()` | 1979 | 77 lines |
-| `normalize_package()` | 166 | 74 lines |
-| `edit_package()` | 350 | 57 lines |
-| `_world_snapshot()` | 475 | 52 lines |
-| `draft_operation()` | 409 | 34 lines |
-| `prepare_package()` | 1818 | 34 lines |
+| `publish_package()` | 2049 | 84 lines |
+| `_package_checks()` | 1780 | 78 lines |
+| `fire_due_clocks()` | 2174 | 77 lines |
+| `normalize_package()` | 173 | 74 lines |
+| `_reach_warning()` | 1881 | 68 lines |
+| `_world_snapshot()` | 487 | 66 lines |
+| `edit_package()` | 362 | 57 lines |
+| `draft_operation()` | 421 | 34 lines |
 
 ### `story/provenance_text.py`
 

@@ -33,9 +33,12 @@ import time
 from core.db import wset_for_frame
 
 #: THE CLOSED VOCABULARY of what a grant can permit. The first nine are the
-#: package operation kinds (`plot_packages.OPERATIONS`), one capability each;
-#: then the three authority flags a package may carry; then the two kinds of
-#: standing work the Planner does unasked once permitted.
+#: authoring package operation kinds (`plot_packages.OPERATIONS`), one
+#: capability each; then the three authority flags a package may carry; then
+#: the standing work the Planner does unasked once permitted; then the local
+#: drama kinds, the Director note, the nudge kinds and region events -- every
+#: other operation kind, one capability each (`region_event` is granted as
+#: `region_events`).
 MANDATE_CAPABILITIES = (
     "plan_rooms", "plan_entity", "post_artifact", "schedule_event",
     "file_lore", "answer_need", "close_need", "request_location",
@@ -52,6 +55,10 @@ MANDATE_CAPABILITIES = (
     # Local drama (plan § 5 Phase C): circumstances that arrive where the
     # player is, each its own grant because each is its own kind of hand.
     "arrival", "errand", "incident", "summons", "scheduled_consequence",
+    # A note to the Director saying what a package MEANS (which planned thing
+    # is which live thing, what a consequence is for); read into the
+    # Director payload alone, never a mind's.
+    "director_note",
     # The nudge toolkit: author surgery on an institution (v2 § 9.1).
     "move_body", "assign_post", "plant_claim", "adjust_stock", "arm_trigger",
     "charter_shock",

@@ -6636,6 +6636,22 @@ for what follows. Residuals of this entry rather than a section of their own:
     message.
   - **Fired operations are not undone by anything but a rewind.** A retire
     after a fire keeps what landed, as retire has always done.
+- **The Director note and the opening's plan landed 2026-09-04**
+  (`plot_packages.director_note` / `active_director_notes`, the preview's
+  reach warning, `director._opening_planned_rooms`; `tests/test_director_
+  notes.py`). Residuals:
+  - **A note's scope is adjacency, not sight.** "In or beside" is one hop
+    over the scene's adjacency and the plan's topology; a note about a room
+    two hops out (chat 115's planned lift car, from inside the live lift)
+    applies only if the Planner names the live room too or names none. The
+    Planner prompt says when to write one, not how wide to scope it.
+  - **The reach warning is a preview line the Planner reads, not a gate.**
+    Nothing stops a publish past it, by design; whether a live Planner
+    reads the hop count and re-plans has not been measured.
+  - **Not measured live:** whether an opening handed `planned_rooms` places
+    itself in the planned room by id rather than minting a like room (chat
+    114's 49-room brief is 63,544 bytes on an empty scene; the cost is
+    known, the behaviour is not).
 - **Lore filed by the room carries the `model` basis** because
   `canon_provenance` admits `deterministic|model|unavailable` and the room's
   entries are author claims through a model role; an `authored` basis is an

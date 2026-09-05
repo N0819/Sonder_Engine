@@ -677,7 +677,7 @@ def check_prompt_card_parts(errors: list[str]) -> None:
 
     Also en-vs-ja part-path parity, which the pack loader structurally cannot
     see: `_leaf_paths` treats `prose_author_sheet` as ONE path, so a pack
-    shipping 27 segments instead of 28 passes its card-parity comparison.
+    shipping 28 segments instead of 29 passes its card-parity comparison.
     """
     sys.path.insert(0, str(ROOT))
     from language_runtime.card_source import (
