@@ -24,6 +24,12 @@ Design: `docs/design/DESIGN_ROOM_FIDELITY.md` §10, `DESIGN_ROOM_GEOMETRY.md`
   * a body that CHANGES ROOM loses its cell in the merge -- a cell in
     another room's coordinates means nothing -- and a re-echo that leaves
     the field out keeps it;
+  * a cell is the precise place of the STATION it was pinned with, so an
+    incoming `at` naming another anchor takes it down and a re-echo of the
+    same anchor, a station that names no `at`, and an `at` cleared to
+    nothing all keep it (the owner's ruling of 2026-09-05, F39, reversing
+    the half of the 2026-09-04 ruling that let a pin outrank a Director
+    `at` that named somewhere else);
   * proximity reads cell distance ONLY when a pin is involved, so every
     anchor-tier answer stands.
 """
@@ -342,9 +348,69 @@ def test_anchor_hygiene_keeps_a_cell_and_drops_junk():
 
 
 def test_the_merge_keeps_a_station_cell_a_re_echo_left_out():
+    """A re-echo of the SAME anchor keeps the pin, and so does silence.
+
+    This is the half of the 2026-09-04 ruling that survives: the Director
+    hands back a station it never thought about (`_coerce_station_table`
+    keeps only `at`/`near`, so it can never write a cell), and a host's
+    "at the bar, this end of it" must not be flattened by it.
+    """
+    sc = scene(SHAPES["large"], {"P": {"at": "bar", "near": [], "cell": [3, 2]}})
+    merged = merge_scene_with_diff(sc, {"stations": {"P": {"at": "bar"}}})
+    assert merged["stations"]["P"] == {"at": "bar", "near": [], "cell": [3, 2]}
+    assert body_cell(merged, "P") == (3, 2)
+    # Silence about the anchor is not a statement about where the body
+    # stands: a diff touching only `near` leaves the pin alone.
+    merged = merge_scene_with_diff(sc, {"stations": {"P": {"near": ["Q"]}}})
+    assert merged["stations"]["P"]["cell"] == [3, 2]
+    assert body_cell(merged, "P") == (3, 2)
+
+
+def test_the_merge_drops_a_station_cell_when_the_at_names_another_anchor():
+    """A cell is the precise place of the station it was pinned with, so a
+    changed `at` takes it down (the owner's ruling of 2026-09-05, F39 of
+    `docs/experiments/DEBUG_RUN_2026_09_05.md`, reversing the 2026-09-04
+    ruling that the map's pin outranked a Director `at` on exactly this
+    shape).
+
+    Chat 115, turn 4: the resolve moved a body from the north control panel
+    to the east threshold, the merge kept the map's `cell: [0, 1]` on the
+    west wall, and `body_cell` reads the cell FIRST -- so every field drew
+    her at the west wall while every ledger said the east sill, and turn 6
+    moved her again with the pin still on her. A changed `at` is all the
+    Director can say, and a body drawn where no record puts her is worse
+    than a host having to pin again.
+    """
     sc = scene(SHAPES["large"], {"P": {"at": "bar", "near": [], "cell": [3, 2]}})
     merged = merge_scene_with_diff(sc, {"stations": {"P": {"at": "hearth"}}})
-    assert merged["stations"]["P"] == {"at": "hearth", "near": [], "cell": [3, 2]}
+    assert merged["stations"]["P"] == {"at": "hearth", "near": []}
+    assert body_cell(merged, "P") == tuple(FROZEN["large"]["at"]["hearth"])
+    # The same in the other direction: an anchor named over a FREE pin (a
+    # cell with no `at`, what the map writes for a body dropped on open
+    # floor) is the story putting the body somewhere, and it wins too.
+    free = scene(SHAPES["large"], {"P": {"at": None, "near": [], "cell": [3, 2]}})
+    merged = merge_scene_with_diff(free, {"stations": {"P": {"at": "bar"}}})
+    assert "cell" not in merged["stations"]["P"]
+    # A cell the diff itself carries is written with the new anchor, so it
+    # lands rather than being taken down with the old one.
+    merged = merge_scene_with_diff(
+        sc, {"stations": {"P": {"at": "hearth", "cell": [5, 5]}}})
+    assert merged["stations"]["P"]["cell"] == [5, 5]
+
+
+def test_an_at_cleared_to_nothing_is_not_a_move_and_keeps_the_cell():
+    """The adjacent case, decided with F39 (2026-09-05): leaving an anchor
+    is not arriving anywhere.
+
+    `at: null` says the body no longer stands AT the thing; it names no
+    other place, so nothing contradicts the pin and the body stands where
+    it stood. A cell with no `at` is a supported record everywhere else --
+    it is what a drop on open floor writes -- so keeping it invents no
+    state, where dropping it would move a body nothing asked to move.
+    """
+    sc = scene(SHAPES["large"], {"P": {"at": "bar", "near": [], "cell": [3, 2]}})
+    merged = merge_scene_with_diff(sc, {"stations": {"P": {"at": None}}})
+    assert merged["stations"]["P"] == {"at": None, "near": [], "cell": [3, 2]}
     assert body_cell(merged, "P") == (3, 2)
 
 
