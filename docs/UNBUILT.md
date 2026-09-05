@@ -5818,6 +5818,14 @@ whether being named across a barrier should survive distance as well, since
 three rooms up a stone tower is not one closed door. Decide it on the next
 run's record.
 
+**The next run answered it, twice** (2026-09-05, campaign 3): masque § PX6, a
+line from two closed doors and a room away delivered complete and attributed
+in a view whose two unaddressed voices were correctly fragments; rush § PR5, a
+verbatim shout from two rooms and two vertical hops below to a listener whose
+card says hearing acuity "poor". The bound, and a second defect the same
+reading exposed (the rescue outranks the senses gate), are written out as a
+patch in § 1.128.
+
 ### 1.122 What the 2026-09-05 presentation and plan fixes left open
 
 **Five classes from the play runs landed 2026-09-05** and are pinned in
@@ -6185,6 +6193,149 @@ The index gives the Director the material to make that judgement and does not
 make it; whether a fuzzy match belongs in `planned_context` is a separate
 question, and the deterministic matcher is deliberately exact
 (§ *An exact match is not ambiguous*).
+
+### 1.128 The perception-admission lane of the campaign-3 runs: what landed, and the seven answers that live in other files
+
+**Worked 2026-09-05** over `PR1`, `PM5`, `PS13`, `PX5`, `PX6`, `PR5`, `PR8`.
+Three landed. The other seven answers are written out here rather than
+applied, because each belongs in a file this work did not own -- stated with
+its live case and its exact condition, so the next hand applies it without
+re-deriving the evidence.
+
+**Landed.**
+
+* **PX5 (firewall).** An actor's `observable` is free text describing the
+  ACTOR, and the act channel admitted the whole string on the actor's
+  channel alone -- so any OTHER body it named arrived as an unadmitted
+  percept about that body. Live (masque t6): "looks leisurely over Ivo's
+  uncovered face, then lifts his wine glass…" was delivered verbatim to a
+  body two edges away and to a body whose own view in the same beat read
+  "Through the glazed terrace door, only darkness". The identity scrub could
+  not see it, because it asks whether an observer has earned a NAME and the
+  leak was the STATE beside it. `perception._act_surface_admission` now cuts
+  the span that names a body this observer's own eyes did not reach, on both
+  delivery floors, and refuses the percept where no span survives. The rule:
+  *what a body is seen doing is admissible; what it is seen doing it TO is
+  admissible only where the target is.*
+* **PR5, the half that was one line graded by two floors.** `perception_act`
+  passed the RAW proximity tier into `speech_percept` while
+  `perception_outcome` passed the measured one, against
+  `line_hear_level`'s own stated contract -- and "near" is the fallback for
+  the 93% of bodies with no station, so a quiet line was a fragment on the
+  way in and whole on the way out.
+* **PM5, isolated.** The branch the report could not find is
+  `spatial.entity_arc` -- the within-room blind spot, consulted three times
+  per observer and DROPPING each time. It follows FACING, which is why it did
+  not follow station: the three factors who received nothing were turned
+  north while the doors were south. Pinned in
+  `tests/test_perception_act_reaches_the_room.py`.
+
+**PX5's THIRD floor, in `agents/loops.py`.** The interaction micro-loop
+delivers `observable_action_text(event)` straight into an observer's additions
+(`deterministic_micro_perception`, the `type == "action"` branch) with no
+third-body admission at all, so the same leak is live on the micro-round path
+that the two perception passes are now closed on. It needs the same call. The
+helper is `agents.perception._act_surface_admission` today and `loops.py`
+importing `perception` would be a new role-module cross-import (already
+discouraged, already real for `loops -> character`); moving it to
+`agents/common.py` -- which both already import -- is the clean placement, and
+it needs the observer's seen-set, which the micro-loop computes as
+`_delivery_ok` per body rather than as a set.
+
+**PM5's remaining half, in `agents/composer.py`.** `entity_arc` promises "no
+new visual detail … though sound still carries" and neither half holds.
+(a) `presence_percepts` (composer.py:1021) drops a rear-arc body outright, so
+a woman who has stood in the room for eight beats is not in the room at all
+for whoever happens to be turned away -- a body already present is not new
+detail. (b) `act_percept` refuses on the arc with no substitute, and nothing
+carries the sound: an act reaches an observer on the sight channel alone
+(§ 1.117 is the same gap from the other side). Until an act has a hearing
+channel, a rear-arc observer of an overt act receives nothing at all, and the
+run's most visible nonsense followed -- the chair ordered doors unbolted that
+the player had just heaved open in front of her.
+
+**PX6 / PR5's second half, in `composer.line_hear_level`.** Two independent
+runs now answer § 1.121's open question the same way, and the record
+`speech_percept` gained on 2026-09-05 is what makes it answerable. The
+addressed rescue must be bounded by DISTANCE as well as by the barrier, and
+must not outrank the senses gate:
+
+1. *Distance.* The rescue's premise is that a by-name exchange across a
+   barrier implies a device carrying it. One closed door is a barrier; two
+   closed doors and a room is a ROUTE, and a route implies nothing. Gate the
+   spoken-volume arm on the relation naming ONE DECLARED EDGE at
+   conversational range -- `rel["barrier"]` neither `"separated"` (no edge
+   between these rooms) nor `"unknown"` (no room known), and
+   `rel["distance"]` not in `("far", "remote")`. The load-bearing case § 1.126
+   pinned -- an ordinary named call through one closed door -- is adjacent,
+   `closed_door`, `near`, and survives untouched. The explicit
+   `medium == "comm"` arm is a real transmission and keeps crossing anything.
+   Live: masque t16, a line from `music_room` through two closed doors and a
+   room arrived complete and attributed while two unaddressed voices in the
+   same view were correctly fragments; lighthouse § PA4, a shout three rooms
+   up a stone tower, four beats running.
+2. *Senses.* The rescue returns `"full"` AFTER `base = _sense_graded(…)` has
+   run, so it is the one grade a card cannot dull. Live (rush): Mirela's card
+   says hearing acuity "poor" (-1), and one view carried both "Vesna Kolar
+   says something you cannot make out: …gospođa… carrying… nothing…" from a
+   woman leaning into her good ear AND, on turn 12, a verbatim shout from two
+   rooms and two vertical hops below. Grade the rescue's answer through
+   `_sense_graded` like every other.
+
+**PR5's third half, in `world.spatial_senses.sense_adjusted`.** There is no
+rung above `full`, so a -1 offset makes `full`->`fragment` unconditional: a
+dulled ear is total deafness for CONTENT at every volume and every distance,
+and a speaker has no way to compensate. The design's own words are
+"fragment->full is an ear pressed to the door". The rule: *a shift that would
+silence content the channel is delivering at its own ceiling yields to a
+measured intimacy or a raised voice* -- the exception `_measured_intimacy`
+(spatial_senses.py:731) already makes for dim sight, applied to hearing.
+
+**PR8, in `world.spatial_senses._opening_view_cap`.** A body stationed at a
+hand-authored anchor that IS a doorway is invisible from the next room. The
+function exempts only the implicit `door_anchor_id(other_room)` pseudo-anchor;
+an establish-minted anchor `doorframe` ("The wooden frame of the front
+entrance door", `dir: w`) on the same bearing as the edge lands 4 sectors from
+`away` and caps to `none`. Live (rush t1-2): `body_visibility` answered
+`{visible: True, basis: "line"}` and `visual_level_between` answered `"none"`
+for the same pair in the same beat; the composed view named the frame the
+woman was gripping and not the woman. F58 proposes the fix and this is the
+argument for it: fold an anchor whose description names an exit onto that
+exit's implicit door anchor. (The alternative that reads no prose -- letting
+an anchor record which edge it sits on -- needs a field the scene does not
+carry.)
+
+**PR1, in `world.spatial.invalidate_moved_body_place_details`.** Reproduced:
+a body whose pose `detail` names a place in the room it LEFT keeps that
+detail through the merge, and the outcome pass delivers it to every other
+observer -- so one perception pass composes a view saying the body is here and
+a view saying it is still over there. The retirement exists and is correct;
+its PLACE VOCABULARY is "every room id and name, plus the id/desc of every
+anchor of the room left", and a world whose establish minted no anchors (PX7)
+has an empty vocabulary, so nothing matches and nothing is retired. Live
+(rush t19): both bodies moved to `roof_16` and the player's view read "Tomo
+Lisak remains prone and motionless against the tar paper beside the hatch",
+which the narrator sited across an eighteen-inch gap. The rule that needs no
+vocabulary at all: *a mover's own pose detail is spent on a room change
+unless this beat's own diff wrote it* -- which is the `stated` exemption the
+function already has, with the phrase test dropped. It subtracts strictly
+more than today and depends on nothing the establish may have failed to mint.
+
+**PS13, in two places, neither of them perception.** A world with nobody in
+it had a live and permanently empty hearing channel across twenty beats, and
+a dressed-stone barrel vault returned no echo to a player-asserted acoustic
+fact. The delivery is built and reached -- `_composer_standing_percepts`
+calls `composer.soundscape_percept(sound_shape(...))` for every observer --
+and it has nothing to say because nothing gives an empty room an acoustic
+character: a room already carries `exposure`, `extent` and anchor `opacity`,
+and a room-level acoustic property derived from them is the fix, in the sound
+field. The other half is the Director's: turn 5 raised
+`claim:4:event ('her own voice comes back at her off the ceiling')`, the
+resolve returned no `fact_adjudications` verdict, and the narrator was then
+free to write "No answer comes back from the stone" and, thirteen beats
+later, "the barrel vault swallowed the sound without an echo". Adjudicating
+the claim is the minimum; a dropped claim is a licence to assert its
+opposite.
 
 ## 2. Roadmap
 
