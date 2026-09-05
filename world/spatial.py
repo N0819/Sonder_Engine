@@ -175,6 +175,7 @@ from world.spatial_geometry import (
     _detail_names_subject,
     CELL_NEAR_DIVISOR, CELL_REACH_PACES, _cell_proximity,
     invalidate_moved_body_cells,
+    invalidate_moved_body_place_details,
     invalidate_moved_body_pose_details,
     invalidate_transferred_pose_details,
     normalize_cell, normalize_scene_anchor_cells,

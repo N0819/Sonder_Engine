@@ -77,13 +77,31 @@ class TestWhatItLeavesAlone:
                       {"positions": {"Hinami": "throat"}})
         assert pose["detail"] == "one hand flat on the silk, shoulders loose"
 
-    def test_the_movers_own_pose_is_their_own_business(self):
+    def test_the_movers_own_posture_is_their_own_business(self):
+        """This twin still touches only OTHER bodies' prose about the mover.
+        Their own prose is answerable to a different rule, one room over --
+        `invalidate_moved_body_place_details`, which retires a detail that
+        names a PLACE and leaves one that names only the body."""
+        scene = _scene("still")
+        scene["poses"]["Hinami"] = {"posture": "prone",
+                                    "detail": "curled tight, eyes shut"}
+        out = merge_scene_with_diff(scene, {"positions": {"Hinami": "throat"}})
+        assert out["poses"]["Hinami"]["detail"] == "curled tight, eyes shut"
+        assert out["poses"]["Hinami"]["posture"] == "prone"
+
+    def test_the_movers_own_pose_no_longer_holds_the_room_it_left(self):
+        """NARROWED 2026-09-05 (F49, PB7). "Their prose is about themselves"
+        is right about a posture and wrong about a place: this detail said she
+        was at the back of the MOUTH, and she had just been swallowed into the
+        throat. Measured twice more on the player's own body -- the corridor's
+        coat-stand carried into the parlour, and "head tipped back toward the
+        upper gallery above" read out in the upper gallery."""
         scene = _scene("still")
         scene["poses"]["Hinami"] = {"posture": "prone",
                                     "detail": "held at the back of the mouth"}
         out = merge_scene_with_diff(scene, {"positions": {"Hinami": "throat"}})
-        assert out["poses"]["Hinami"]["detail"] == \
-            "held at the back of the mouth"
+        assert out["poses"]["Hinami"]["detail"] == ""
+        assert out["poses"]["Hinami"]["posture"] == "prone"
 
     def test_a_newly_placed_body_has_not_moved(self):
         """Absent from the previous map means newly placed, not relocated."""

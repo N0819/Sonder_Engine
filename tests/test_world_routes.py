@@ -1365,12 +1365,21 @@ class TestOffset:
         assert merged["anchors"]["bar"]["offset"] == 0.1
         assert merged["anchors"]["bar"]["height"] == "waist"
         assert merged["anchors"]["keg"] == {"desc": "a keg"}
-        # An anchor the map does not name is still dropped: the map is
-        # written whole, and `{}` alone is silence.
+        # An anchor the map does not name SURVIVES (2026-09-05): the map is
+        # added to, not written whole -- the Director never sees the whole map,
+        # and a diff recording one opened door was taking the room's furniture,
+        # its occluders, a cast station and two charter posts with it (PB3/PA6,
+        # F60). A fixture leaves through `remove_anchors`, and this route's own
+        # PATCH still replaces the map whole (`_apply_anchors`), because its
+        # editor WAS shown the whole map.
         merged = _merge_room(existing, {"anchors": {"keg": {"desc": "a keg"}}}, "r")
-        assert "bar" not in merged["anchors"]
+        assert merged["anchors"]["bar"]["offset"] == 0.75
+        assert merged["anchors"]["keg"] == {"desc": "a keg"}
         merged = _merge_room(existing, {"anchors": {}}, "r")
         assert merged["anchors"]["bar"]["offset"] == 0.75
+        merged = _merge_room(existing, {"anchors": {"keg": {"desc": "a keg"}},
+                                        "remove_anchors": ["bar"]}, "r")
+        assert "bar" not in merged["anchors"] and "keg" in merged["anchors"]
 
 
 class TestCells:

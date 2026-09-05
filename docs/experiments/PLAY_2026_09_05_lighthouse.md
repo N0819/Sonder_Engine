@@ -297,6 +297,11 @@ Test: a `deafening` source beside the listener drops a shout from the next
 room by at least one grade.
 
 ### PA6. F60 recurs three times, and the World Browser cannot outrun it
+**RESOLVED 2026-09-05.** Incoming anchors ADD; removal is the room's own
+`remove_anchors` channel. The host's `PATCH /rooms/{id}` still replaces the
+map whole — it writes the room record directly and its editor was shown the
+whole map — so the restore this finding measured now survives the next beat.
+
 *Stage of origin: `world/spatial_merge._merge_anchor_fields`. Severity:
 wrong-but-recoverable. Registered as F60.*
 

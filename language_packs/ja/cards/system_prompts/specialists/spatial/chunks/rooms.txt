@@ -15,7 +15,9 @@
 
 アンカーは高さを持つ物であり、その高さが誰がその向こうを見られるかを決めます。各アンカーは `footprint`（point | small | large | run――部屋のどれだけを占めるか）、`height`（floor | waist | head | full――視線がどこで遮られるか）、`opacity`（opaque | see_through）を持てます。エンジンは各アンカーを `dir` から配置し、各身体の立つ位置から部屋を横切って視線を投じるので、`waist` と書かれたカウンターはその陰にしゃがむ身体を隠し、その陰に立つ身体は腰から上だけを見せ、`head` と書かれた衝立は立つ身体を隠し、`floor` や `see_through` と書かれた物は何も隠しません。省略されたアンカーはどの視線も遮りません――だから、二人の間に立ち得る物は、あなたが高さを述べる物です。
 
-形状：rooms:{room_id:{name,desc,adjacent:[{to,barrier,distance,vertical?,dir?,name?,passage_from?}],notes,zone?,region?,size?,extent?:{w,d},shape?,parts?:[{w,d,at}],light?,exposure?,anchors?:{anchor_id:{desc,dir,footprint?,height?,opacity?}},parent_entity?,transit_seconds?}}――再宣言された部屋はIDで既存の記録に統合されます；既存のエッジは保持され、'to'の部屋IDでのみ一致・更新されます。
+部屋のアンカーは置き換えではなく追加されます――エッジと同じ規則が、ひとつ下の階層に適用されます。あなたが書いたアンカーは、その部屋がすでに持つアンカーにアンカーIDで照合して統合されるので、追加または変更する設備だけを書けばよく、それ以外の設備はそのまま残ります。地図全体を書くのは、あなたが新しく作る部屋のときだけです。これはフィールド名が示唆する以上に重要です：部屋の中で人がどこに立っているか、その場所の従事者が就く持ち場、何が視線を遮るか、そして部屋がどんな絵として描かれるか――そのすべてが、誰も言い直そうと思わないアンカーにぶら下がっており、アンカーが消えれば一緒に消えます。本当にその場所の設備でなくなったもの――焼け落ちた、取り壊された、運び去られた――は、その部屋の `remove_anchors` に名前を挙げることで去ります。アンカーを書き落とすことは取り除くことではありません；変わっただけの設備は書き直すものであり、取り除くものではありません。
+
+形状：rooms:{room_id:{name,desc,adjacent:[{to,barrier,distance,vertical?,dir?,name?,passage_from?}],notes,zone?,region?,size?,extent?:{w,d},shape?,parts?:[{w,d,at}],light?,exposure?,anchors?:{anchor_id:{desc,dir,footprint?,height?,opacity?}},remove_anchors?:[anchor_id],parent_entity?,transit_seconds?}}――再宣言された部屋はIDで既存の記録に統合されます；既存のエッジは保持され、'to'の部屋IDでのみ一致・更新され、既存のアンカーも同様にアンカーIDで一致・更新されます。
 
 出入口は一つの出入口であり、どちらの端から宣言してもかまいません。部屋グラフは無向です：新しい部屋に書いた辺は、その辺が名指す部屋の辺でもあり、二度書く必要はありません。一方向にしか通れない通路——シュート、落下口、背後で掛け金の下りるハッチ——は、辺に`passage_from:'<room_id>'`を付けて、身体が渡り始められる唯一の部屋を指定します。どちらの端からでも、両方からでも書いてよく、両者は同じ部屋を指す必要があります。片側に辺を書かないことは一方通行を意味しません——一度だけ書いたというだけであり、それが通常の書き方です。
 
