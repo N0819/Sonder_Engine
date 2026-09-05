@@ -61,6 +61,29 @@ ROUTE_HOPS_CAP = 64
 #: Bodies listed per charter by `inspect_charters` before the caller must
 #: ask for one charter.
 BODIES_PER_CHARTER = 24
+#: LIMITS THE OWNER SHOULD KNOW ABOUT (`inspect_minds`). The room reads a
+#: mind as AUTHOR knowledge -- what a character wants and believes, so the
+#: world it places can invite it -- not as the character's own payload, so
+#: each ledger is cut to what planning needs and the rest is a count:
+#: beliefs per mind (highest credence first), intentions per mind (active
+#: first, then by priority), former projects and former drives kept, the
+#: other people a mind holds models of (one leading claim per kind), and the
+#: characters of any one prose field. Measured 2026-09-04 on chat 114 (one
+#: cast member, seven beliefs, four intentions, no project, one other
+#: person modelled under five kinds): 4,329 characters whole under these
+#: caps, nothing cut, against the 12,000-character result cap -- so a cast
+#: of three fits whole and the caps, not `fit_result`, decide what a larger
+#: cast loses.
+MIND_BELIEFS_CAP = 12
+MIND_INTENTIONS_CAP = 6
+MIND_FORMER_CAP = 3
+MIND_OTHERS_CAP = 6
+MIND_TEXT_CHARS = 240
+#: Characters of the drive essence and each project aim in the one-line-per-
+#: cast-member summary the Planner payload carries under `minds`
+#: (`cast_minds_summary`), so the Planner knows to reach for the tool.
+#: Measured 2026-09-04 on chat 114: 136 characters for the one cast member.
+MIND_LINE_CHARS = 120
 
 
 class ToolError(ValueError):
@@ -611,6 +634,208 @@ def _t_inspect_contradictions(cid, frame_id):
     return out
 
 
+def _cut(text, limit=MIND_TEXT_CHARS):
+    return _excerpt(text, limit)
+
+
+def _mind_intentions(sheet, interior):
+    """The intentions a character holds: the live ledger, plus any authored
+    standing intention the ledger has not restated -- the same rule the
+    character payload applies (`agents.character._merge_standing_intentions`),
+    because an authored goal is always present and a live copy that restates
+    it carries the progress."""
+    from story.character_schema import character_standing_intentions
+    live = [i for i in (interior.get("intentions") or []) if isinstance(i, dict)]
+    seen = {str(i.get("intent") or "").strip().casefold() for i in live}
+    authored = [a for a in character_standing_intentions(sheet)
+                if str(a.get("intent") or "").strip().casefold() not in seen]
+    return authored + live
+
+
+def _mind_projects(sheet, interior):
+    """Held projects: the live ledger once commit has seeded it, the authored
+    card list only before any live or former project exists -- the character
+    payload's own rule, so a project given up out loud never reads as held."""
+    from story.character_schema import character_projects
+    if interior.get("projects") or interior.get("former_projects"):
+        return [p for p in (interior.get("projects") or []) if isinstance(p, dict)]
+    return character_projects(sheet)
+
+
+def _loads(text):
+    try:
+        value = json.loads(text or "{}")
+    except (TypeError, ValueError):
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def _mind_of(row, turn_idx):
+    """One cast member's mind, read through the engine's own readers and cut
+    to author knowledge. Nothing here is derived from raw rows that a reader
+    does not already derive: the drive is `effective_drive` (the rupture-
+    shifted one when there is one), the ledgers are the interior commit
+    writes (`persist/commit_memory.py`), stress is the resolved row
+    (`psychology_runtime.resolve_stress`), and what this mind holds of other
+    people is `theory_of_mind.mind_models_for_payload` with no competitors."""
+    from mind.affect import CRISIS_STRAIN_MIN, RUPTURE_STRAIN_MIN
+    from mind.theory_of_mind import mind_models_for_payload
+    from story.character_schema import character_psychology, effective_drive
+    sheet = _loads(row["sheet"])
+    state = _loads(row["cstate"])
+    interior = state.get("interior") if isinstance(state.get("interior"), dict) else {}
+    active = state.get("active_state") if isinstance(state.get("active_state"), dict) else {}
+
+    drive = effective_drive(character_psychology(sheet), interior)
+    out_drive = {k: _cut(drive.get(k)) for k in ("essence", "expression", "taboo")}
+    override = interior.get("drive_override")
+    if isinstance(override, dict) and str(override.get("essence") or "").strip():
+        out_drive["shifted"] = {"since_turn": override.get("since_turn"),
+                                "by_event": _cut(override.get("by_event"))}
+    former_drives = [{"essence": _cut(d.get("essence")),
+                      "ended_turn": d.get("ended_turn"),
+                      "by_event": _cut(d.get("by_event"))}
+                     for d in (interior.get("former_drives") or [])
+                     if isinstance(d, dict)][-MIND_FORMER_CAP:]
+
+    try:
+        strain = float(interior.get("drive_strain") or 0.0)
+    except (TypeError, ValueError):
+        strain = 0.0
+    rupture = interior.get("drive_rupture")
+    log = [e for e in (interior.get("strain_log") or []) if isinstance(e, dict)]
+    out_strain = {
+        "drive_strain": round(strain, 3),
+        "at_rupture_level": strain >= RUPTURE_STRAIN_MIN,
+        "crisis": strain >= CRISIS_STRAIN_MIN,
+        "rupture_window": ({"direction": rupture.get("direction"),
+                            "why": _cut(rupture.get("why")),
+                            "window_expires": rupture.get("window_expires")}
+                           if isinstance(rupture, dict) else None),
+        "last_moved_by": ({"source": log[-1].get("source"),
+                           "delta": log[-1].get("delta"), "turn": log[-1].get("turn"),
+                           "why": _cut(log[-1].get("why"))} if log else None),
+    }
+    stress = active.get("stress") if isinstance(active.get("stress"), dict) else {}
+    out_stress = {k: stress.get(k) for k in
+                  ("activation", "strain", "load", "overloaded", "coping_mode")
+                  if k in stress}
+
+    projects = []
+    for p in _mind_projects(sheet, interior):
+        entry = {"id": p.get("id"), "aim": _cut(p.get("project")),
+                 "about": p.get("about") or "",
+                 "satisfied_when": _cut(p.get("satisfied_when")),
+                 "status": "probation" if p.get("probation") else "established",
+                 "adopted_turn": p.get("adopted_turn"),
+                 "last_served_turn": p.get("last_served_turn")}
+        if isinstance(turn_idx, int) and isinstance(p.get("last_served_turn"), int):
+            entry["unserved_beats"] = max(0, turn_idx - int(p["last_served_turn"]))
+        projects.append(entry)
+    former_projects = [{"id": p.get("id"), "aim": _cut(p.get("project")),
+                        "end": p.get("end"), "why": _cut(p.get("why")),
+                        "turn": p.get("turn")}
+                       for p in (interior.get("former_projects") or [])
+                       if isinstance(p, dict)][-MIND_FORMER_CAP:]
+    review = interior.get("project_review")
+
+    ranked = sorted(_mind_intentions(sheet, interior),
+                    key=lambda i: (0 if (i.get("status") or "active") == "active" else 1,
+                                   -float(i.get("priority") or 0.0)))
+    intentions = []
+    for i in ranked[:MIND_INTENTIONS_CAP]:
+        entry = {"id": i.get("id"), "intent": _cut(i.get("intent")),
+                 "status": i.get("status") or "active",
+                 "progress": i.get("progress"), "priority": i.get("priority"),
+                 "authored": bool(i.get("authored"))}
+        if isinstance(turn_idx, int) and isinstance(i.get("last_progress_turn"), int):
+            entry["idle_beats"] = max(0, turn_idx - int(i["last_progress_turn"]))
+        intentions.append(entry)
+
+    beliefs = sorted((b for b in (interior.get("beliefs") or []) if isinstance(b, dict)),
+                     key=lambda b: -float(b.get("confidence") or 0.0))
+    out_beliefs = [{"belief": _cut(b.get("belief")),
+                    "confidence": b.get("confidence"),
+                    "protected": bool(b.get("protected")),
+                    "authored": bool(b.get("authored"))}
+                   for b in beliefs[:MIND_BELIEFS_CAP]]
+
+    models = mind_models_for_payload(state.get("mind_models"), turn_idx,
+                                     max_competitors=0)
+    others = {}
+    for about, kinds in list(models.items())[:MIND_OTHERS_CAP]:
+        others[about] = {kind: {"claim": _cut(v["leading"].get("claim")),
+                                "confidence": v["leading"].get("confidence")}
+                         for kind, v in kinds.items() if isinstance(v, dict)}
+
+    mind = {
+        "id": row["id"], "name": row["name"],
+        "drive": out_drive,
+        "former_drives": former_drives,
+        "strain": out_strain,
+        "stress": out_stress,
+        "goal": _cut(active.get("goal")),
+        "projects": projects,
+        "former_projects": former_projects,
+        "intentions": intentions,
+        "beliefs": out_beliefs,
+        "about_others": others,
+        "counts": {"beliefs": len(beliefs), "intentions": len(ranked),
+                   "former_projects": len(interior.get("former_projects") or []),
+                   "former_drives": len(interior.get("former_drives") or []),
+                   "others_modelled": len(models)},
+    }
+    if isinstance(review, dict):
+        mind["project_review"] = {"why": _cut(review.get("why")),
+                                  "turn": review.get("turn")}
+    return mind
+
+
+def _t_inspect_minds(cid, frame_id, *, name=None):
+    """What each attached cast member wants and believes, as AUTHOR knowledge
+    (the module docstring: the room may read what no mind may, and reading
+    puts nothing in anyone's head). READ-ONLY by construction -- it opens
+    the rows `scene.active_cast` resolves (the per-story card over the
+    reusable one; the frame's state over the base row) and writes nothing;
+    its handler is reachable only through `run_tool`, and no pipeline stage
+    imports this module (`tests/test_room_minds.py`)."""
+    from core.db import q
+    from story.scene import active_cast
+    row = q("SELECT MAX(idx) AS idx FROM turns WHERE chat_id=?", (cid,), one=True)
+    turn_idx = row["idx"] if row and row["idx"] is not None else None
+    cast = active_cast(cid, frame_id)
+    if name is not None:
+        wanted = str(name).strip().casefold()
+        cast = [r for r in cast if str(r["name"] or "").strip().casefold() == wanted]
+        if not cast:
+            raise ToolError("no attached cast member named %r" % name)
+    return {"turn_idx": turn_idx,
+            "minds": [_mind_of(r, turn_idx) for r in cast],
+            "note": "author knowledge: what each wants and believes, so the "
+                    "world you place can invite it; nothing here is a thing "
+                    "you can place"}
+
+
+def cast_minds_summary(cid, frame_id):
+    """One line per attached cast member -- the drive's essence and the aim
+    of each held project -- for the Planner payload's `minds` key, so the
+    Planner knows what `inspect_minds` would answer before it reaches. Each
+    prose field is cut to `MIND_LINE_CHARS`. An empty list with no cast."""
+    from story.character_schema import character_psychology, effective_drive
+    from story.scene import active_cast
+    out = []
+    for row in active_cast(cid, frame_id):
+        sheet = _loads(row["sheet"])
+        state = _loads(row["cstate"])
+        interior = state.get("interior") if isinstance(state.get("interior"), dict) else {}
+        drive = effective_drive(character_psychology(sheet), interior)
+        out.append({"name": row["name"],
+                    "drive": _cut(drive.get("essence"), MIND_LINE_CHARS),
+                    "projects": [_cut(p.get("project"), MIND_LINE_CHARS)
+                                 for p in _mind_projects(sheet, interior)]})
+    return out
+
+
 def _t_inspect_packages(cid, frame_id, *, status=None):
     from story.plot_packages import list_packages
     return {"packages": list_packages(cid, status=status, frame_id=frame_id)}
@@ -754,6 +979,9 @@ TOOLS = [
     {"name": "inspect_contradictions",
      "description": "What the world holds that does not agree with itself: charter registry warnings, structure warnings, and dangling references (a planned exit to nowhere, a plan in no room, a bill in a vanished room, a need for a vanished room, a package participant nobody holds).",
      "args": _schema({}), "handler": _t_inspect_contradictions},
+    {"name": "inspect_minds",
+     "description": "What a character wants and believes, so the world you place can invite it; you cannot place a want or a belief. For each attached cast member (or the one named): the drive that survives every goal (its essence, how it shows, what it will not do; whether a rupture shifted it and what it was before), how strained that drive is and whether a rupture window is open, the resolved stress, the current beat goal, the held projects (aim, criterion, probation, how long unserved) and the ones given up with the stated reason, the standing and formed intentions with their progress, the beliefs by credence, and the leading claim this mind holds about each other person. Author knowledge, read the way the pipeline drawer reads it: nothing here reaches a mind by being read, and nothing you place may name what a character will conclude from it.",
+     "args": _schema({"name": _S}), "handler": _t_inspect_minds},
     {"name": "inspect_packages",
      "description": "The plot packages in this frame as spoiler-safe projections: status, revision, counts, clocks, operation kinds, validation verdict. Filter by status. Your payload already carries every package under `packages`, rebuilt every step; a call is answered with that key, not a copy.",
      "args": _schema({"status": _S}), "handler": _t_inspect_packages,

@@ -6528,6 +6528,28 @@ for what follows. Residuals of this entry rather than a section of their own:
   row, so a story with several hundred planned rooms loses its farthest rows
   to the 12,000-character cap; the region tier that answers that is
   `design/DESIGN_ROOM_REGIONS.md` and is not built.
+- **The naturalness guard is a clause plus the structural floor, not a
+  refusal over prose** (2026-09-04). The owner's phrasing was "refuse ops or
+  notes naming what a character will think, feel or decide". What is built:
+  the floor -- no kind in `plot_packages.OPERATIONS` writes a mind, a memory,
+  a relationship or a view, and `director_note` writes nothing
+  (`tests/test_room_minds.py`, `tests/test_plot_drama.py`) -- and ONE clause
+  in both packs' `story_planner` cards plus the `director_note` field text:
+  the room places what a character MEETS, never what a character CONCLUDES,
+  and a note says what a placed thing is and is for, never how a character
+  will take it. No regex or keyword check reads `director_note.text` or any
+  prose field, by the repo rule that a guard over free prose fails in
+  whichever direction its missing word points (`CLAUDE.md`, 2026-08-29's
+  four). Whether a deterministic refusal is wanted on top is the owner's
+  call after watching a few beats of the Planner under the clause; the seam
+  it would sit on is `_shape_director_note` and the `shape` step of each
+  kind, and it would need a vocabulary the engine owns, which it does not
+  have for "what a character will think".
+- **`inspect_minds` reads the present cast only.** `scene.active_cast`
+  returns the members in the live scene; a dormant (away) member's mind is
+  as legible and is not listed, so a plan that would invite an absent
+  character's drive has to wait for their return to read it. Widening the
+  read to the away roster is one argument.
 - **The fill job is queued from the commit tail, not from a threshold
   crossing.** Every commit with an open need or a short frontier and a
   grant submits one job (deduped per chat, capped per story hour); there
