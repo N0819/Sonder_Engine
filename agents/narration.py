@@ -76,6 +76,7 @@ from story.character_schema import (
     character_appearance,
     character_name,
     persona_appearance,
+    persona_voice_setting,
 )
 
 from . import composer
@@ -92,6 +93,9 @@ from .common import (
     _check_narrator_fidelity,
     _dedupe_view_sentences,
     _narration_person_counts,
+    _narration_tense_counts,
+    _TENSE_DRIFT_RATIO,
+    _TENSE_MIN_EVIDENCE,
     _protected_view_quotes,
     _dialogue_tokens,
     _quote_body,
@@ -113,8 +117,50 @@ from .common import (
     sequence_event_allowed,
 )
 
+def _authored_narration_person(voice_setting, scenario, player_name,
+                               player_pronouns):
+    """The person the AUTHOR asked for, or None. Two sources, in order.
+
+    THE BEAT WITH NOTHING TO DETECT FROM IS THE OPENING ONE, and it is the
+    worst place in the story to guess. `narration_person` is inferred from
+    how the player wrote their turn, and turn 0 has no player turn: with
+    `raw_input` empty the counts are all zero, nothing is stored, and the
+    resolver returned the literal "second". Measured (quiet, 2026-09-05,
+    PQ9): `second` on turn 0 and `third` on all twenty turns after it, so a
+    reader met the switch in the first two paragraphs -- while the persona
+    card said, in as many words, "close third person, restrained, exact
+    about small things", and nothing read it.
+
+    1. The persona's own `narration.voice_setting`, read for the ENGINE'S OWN
+       three words. This is not a matcher hunting a meaning in free prose:
+       `first`/`second`/`third person` is the vocabulary this very field
+       names, in the pack's own spelling, and a guide that says two of them
+       has said nothing this can act on -- so an ambiguous guide declines.
+    2. The scenario prose, scored by the same detector the player's own turn
+       is scored by. An opening written as "You stand at the gate" and one
+       written as "Mireille stands at the gate" are the author answering the
+       question in the only other place they were asked it.
+
+    Neither is recorded. The evidence does not change between beats, so a
+    later turn with nothing to detect re-derives the same answer; the moment
+    the player's own writing carries a signal, detection takes over and
+    writes, exactly as before.
+    """
+    matched = [person for person, pattern in
+               (_ling("_VOICE_PERSON_RES") or {}).items()
+               if pattern.search(str(voice_setting or ""))]
+    if len(matched) == 1:
+        return matched[0]
+    counts = _narration_person_counts(
+        str(scenario or ""), player_name, player_pronouns)
+    best = max(counts, key=counts.get)
+    runner = max((v for k, v in counts.items() if k != best), default=0)
+    return best if (counts[best] > 0 and counts[best] > runner) else None
+
+
 def _resolve_narration_person(chat_id, raw_input, player_name, player_pronouns,
-                              key="narration_person", pending=None):
+                              key="narration_person", pending=None,
+                              voice_setting="", scenario=""):
     """Which grammatical person renders the player character this turn.
     Detection is per-turn (a player can switch style mid-campaign), but a
     turn with no clear signal -- pure dialogue with no narrative frame, e.g.
@@ -150,7 +196,11 @@ def _resolve_narration_person(chat_id, raw_input, player_name, player_pronouns,
     stored = wget(chat_id, key, None)
 
     if detected is None:
-        return stored or "second"
+        # An ESTABLISHED convention still wins: the author's guide seeds the
+        # beat that has nothing, it does not override what the player has
+        # since been writing. See `_authored_narration_person`.
+        return stored or _authored_narration_person(
+            voice_setting, scenario, player_name, player_pronouns) or "second"
     if stored is None or detected == stored:
         if detected != stored:
             _record(detected)
@@ -179,6 +229,51 @@ def _resolve_narration_person(chat_id, raw_input, player_name, player_pronouns,
         _record(detected)
         return detected
     return stored
+
+
+def _resolve_narration_tense(chat_id, recent_prose=()):
+    """Which tense this beat is written in: the AUTHOR's dial, else the
+    story's own.
+
+    The dial is authoritative and unchanged -- `narration_tense` is read per
+    turn so an edit lands on the next beat. What is new is the fallback. An
+    unset story used to send NO tense at all, on the reasoning that an
+    author who expressed no opinion should not be given one; the measured
+    consequence (solitude, 2026-09-05, PS20) is that the narrator wrote
+    seventeen beats in the present, turn 18 in the past ("No answer
+    came... swallowed... She stood") and turn 19 in the present again, and
+    the drift check had nothing to score against so it did not even report
+    it. Silence is not neutrality when a whole-draft property is being
+    chosen fresh every beat.
+
+    So: an author who said nothing gets the tense the STORY has been in,
+    read off its own recent narration by the same detector and the same two
+    numbers the drift check uses -- one question ("is this page past or
+    present") asked of two texts, so a story cannot be told one thing and
+    scored by another. Below the evidence floor, or without a clear lead,
+    this still returns "" and the payload still carries no tense: a story
+    with nothing written yet (the opening beat, every time) is exactly the
+    case that has no established tense to inherit.
+
+    Nothing is written back. The evidence is the story's own prose, so the
+    answer is recomputed from the page rather than remembered off it, and
+    an author who turns the dial mid-story overrides it immediately.
+    """
+    authored = narration_tense(chat_id)
+    if authored:
+        return authored
+    counts = {"past": 0, "present": 0}
+    for prose in recent_prose or ():
+        one = _narration_tense_counts(str(prose or ""))
+        counts["past"] += one["past"]
+        counts["present"] += one["present"]
+    if counts["past"] + counts["present"] < _TENSE_MIN_EVIDENCE:
+        return ""
+    lead = "past" if counts["past"] >= counts["present"] else "present"
+    other = "present" if lead == "past" else "past"
+    if counts[lead] < counts[other] * _TENSE_DRIFT_RATIO:
+        return ""
+    return lead
 
 # Only dropped/altered dialogue is worth the cost of an automatic rewrite --
 # it's an ABSOLUTE-tier violation (a player-visible line silently vanishing
@@ -238,13 +333,33 @@ def _authored_body_parts(ctx, persona, player_name):
             if p}
 
 
-def _cast_pronouns(cast):
+def _cast_pronouns(cast, label=None):
     """Authoritative pronouns per cast member, so the narrator renders each
     named character in third person with their GIVEN pronouns instead of
     guessing from the name (which flipped Vorne he/she across beats). W6.
     Also the reference the deterministic pronoun-fidelity check scores against
-    (agents/common.py's _check_pronoun_fidelity)."""
-    out = {}
+    (agents/common.py's _check_pronoun_fidelity).
+
+    KEYED BY WHAT THE VIEW CALLED THE BODY, never by the identity behind it.
+    A body the player's view LABELS rather than NAMES has no name in the
+    prose, and this map was the last narrator field still filed under the
+    canonical name -- so every beat handed the page a roster of the real
+    names of the strangers standing in the room. It is a door rather than a
+    push: measured (masque, 2026-09-05, PX2) the same payload produced
+    "Near the wall, Mattin Ruel stood flat-footed in his black steward's
+    coat" on turn 1 and "an unfamiliar voice carried from the reception
+    room" on turn 4, three beats before the player heard the name said
+    aloud. The firewall does not depend on which way the model goes.
+
+    `label` is the observer's own identity floor (`_speaker_display`, the
+    same one `present_scene`, `co_present_positions` and `event_order` are
+    built with), so there is one answer to "what may this page call that
+    body" rather than a second one that can drift. Two bodies the view
+    cannot tell apart collapse to one label; the entry is DROPPED rather
+    than resolved to either, and the narrator card already says a character
+    absent from `cast_pronouns` keeps whatever the view established.
+    """
+    out, collided = {}, set()
     for row in (cast or []):
         try:
             ident = (json.loads(row["sheet"]).get("identity") or {})
@@ -254,8 +369,14 @@ def _cast_pronouns(cast):
         pronouns = ident.get("pronouns") or {}
         clean = {k: pronouns[k] for k in ("subject", "object", "possessive")
                  if isinstance(pronouns, dict) and pronouns.get(k)}
-        if name and clean:
-            out[name] = clean
+        if not (name and clean):
+            continue
+        key = str(label(name) if label else name).strip() or name
+        if key in out and out[key] != clean:
+            collided.add(key)
+        out[key] = clean
+    for key in collided:
+        out.pop(key, None)
     return out
 
 
@@ -1227,6 +1348,62 @@ def _speech_weld(language=None):
     return str(pair[0]), str(pair[1])
 
 
+#: Sentence-terminal and clause marks, in both scripts the packs install.
+#: TYPOGRAPHY, not vocabulary: these are the marks a line ENDS with, a closed
+#: set the writing system fixes and the engine can enumerate, which is exactly
+#: the kind of table code is allowed to hold. Nothing here tries to anticipate
+#: how English will phrase anything.
+_TERMINAL_MARKS = ".,;:!?…。、！？"
+#: The two of them that a dialogue tag uses.
+_TAG_COMMAS = ",、"
+
+
+def _terminal_at_the_weld(body, outer):
+    """`(body, outer)` with the punctuation at a welded line's closing mark
+    reconciled. One mark ends a line, and the engine's is the one that counts.
+
+    THE ENGINE WELDS THE LINE'S OWN TERMINAL PUNCTUATION; a mark the model
+    typed immediately outside that weld is a second terminal for the same
+    line. Measured (masque, 2026-09-05, PX18): the model reads DIALOGUE
+    FIDELITY, writes `"{{L1}}",` for a delivered line that already ends in a
+    full stop, and the page ships `"...will be served in the half-hour.",
+    Lisenne Corvay said` -- four times in one beat, and a guard fired on it
+    every time and changed nothing.
+
+    This is a REPAIR rather than a warning, and it is the only one this stage
+    makes. The standing rule for narration is that every reading of the prose
+    detects and reports; the rule that rule was written for is a code-based
+    JUDGMENT that the model's prose is wrong, paid for with a whole extra
+    call. This is neither: the doubled mark is the engine's own weld meeting
+    the model's, no judgment about the writing is involved, and putting one
+    mark where the writing system allows one costs nothing. Anything that
+    needs an opinion about the prose -- a wrong speaker, a pronoun, an adverb
+    -- stays a warning.
+
+    Four cases, and everything else is left exactly as written:
+      * the same mark on both sides -- the outer one is a duplicate, and goes;
+      * a tag comma against a full stop -- the comma takes the stop's place,
+        which is what the convention asks for;
+      * a tag comma against a question or exclamation -- the mark that carries
+        meaning stays and the comma goes;
+      * a tag comma against a line that ends bare -- it belongs inside.
+    """
+    body = str(body or "")
+    outer = str(outer or "")
+    if not outer or not body:
+        return body, outer
+    last = body[-1]
+    if last == outer:
+        return body, ""
+    if outer in _TAG_COMMAS:
+        if last in ".。":
+            return body[:-1] + outer, ""
+        if last in _TERMINAL_MARKS:
+            return body, ""
+        return body + outer, ""
+    return body, outer
+
+
 def _substitute_dialogue_tokens(prose, lines, language=None):
     """Put the exact words where the model put the token, welded ONCE.
 
@@ -1256,11 +1433,17 @@ def _substitute_dialogue_tokens(prose, lines, language=None):
     marks = _quote_marks()
     open_mark, close_mark = _speech_weld(language)
     wrap = "[%s]*" % re.escape(marks) if marks else ""
+    tail_class = "[%s]?" % re.escape(_TERMINAL_MARKS)
     for index, line in enumerate(lines, 1):
-        pattern = re.compile(r"%s\{\{L%d\}\}%s" % (wrap, index, wrap))
+        pattern = re.compile(r"%s\{\{L%d\}\}%s(%s)"
+                             % (wrap, index, wrap, tail_class))
         body = str(line or "").strip().strip(marks).strip()
-        welded = open_mark + body + close_mark
-        text, hits = pattern.subn(lambda _m: welded, text)
+
+        def _weld(match, _body=body):
+            inner, outer = _terminal_at_the_weld(_body, match.group(1))
+            return open_mark + inner + close_mark + outer
+
+        text, hits = pattern.subn(_weld, text)
         if not hits:
             missing.append((index, line))
     # A token for a line that does not exist is the model inventing an index.
@@ -1492,7 +1675,10 @@ def narrator(ctx, nonce):
     pending_person_writes = {}
     narration_person = _resolve_narration_person(
         chat["id"], ctx.input or "", player_name, player_pronouns,
-        pending=pending_person_writes)
+        pending=pending_person_writes,
+        voice_setting=persona_voice_setting(pers) if isinstance(pers, dict)
+        else "",
+        scenario=chat.get("scenario") or "")
     # PERSON IS DETECTED, TENSE IS AUTHORED, and these two lines are where that
     # difference is visible. Person is inferred from how the player wrote this
     # turn and written back to the chat at commit; tense is read straight off
@@ -1503,9 +1689,34 @@ def narrator(ctx, nonce):
     # The opening turn takes this same path (`narrator` renders turn 0 too,
     # with `est` choosing only WHICH view it reads), so the dial reaches the
     # one beat that had nothing to inherit a tense from.
-    story_tense = narration_tense(chat["id"])
+    story_tense = _resolve_narration_tense(chat["id"], prev)
 
-    cast_pronouns = _cast_pronouns(ctx.cast)
+    # WHAT THIS PAGE MAY CALL EACH BODY, decided once and used by every
+    # narrator field that names one. `known` is perception's own ledger and
+    # `_speaker_display` is its floor, so the roster below cannot exceed the
+    # view standing beside it. Hoisted above the world-fields block (which
+    # rebuilt these same two structures) because `cast_pronouns` is built on
+    # the opening turn too, and an establish is exactly the beat on which
+    # nobody has been introduced yet.
+    known_map = wget(chat["id"], "known", {}) or {}
+    recognized = set(known_map.get(player_name) or [])
+    cast_info = {}
+    for _row in ctx.cast:
+        try:
+            _sh = json.loads(_row["sheet"])
+        except Exception:
+            continue
+        cast_info[character_name(_sh)] = {
+            "appearance": character_appearance(_sh),
+            "aliases": character_scene_keys(_sh)[1:],
+        }
+
+    def _view_label(name):
+        info = cast_info.get(str(name)) or {}
+        return _speaker_display(name, recognized, info.get("appearance"),
+                                info.get("aliases"))
+
+    cast_pronouns = _cast_pronouns(ctx.cast, label=_view_label)
 
     # Consciousness gate: when the player is non-awake, their `player_view` is
     # already the deterministic residue (perception_outcome). Do NOT also hand
@@ -1533,18 +1744,6 @@ def narrator(ctx, nonce):
     current_events = ""
     _world_fields, _fidelity_facts = {}, {}
     if not est and player_awareness not in NON_AWAKE_GATED:
-        known_map = wget(chat["id"], "known", {}) or {}
-        recognized = set(known_map.get(player_name) or [])
-        cast_info = {}
-        for _row in ctx.cast:
-            try:
-                _sh = json.loads(_row["sheet"])
-            except Exception:
-                continue
-            cast_info[character_name(_sh)] = {
-                "appearance": character_appearance(_sh),
-                "aliases": character_scene_keys(_sh)[1:],
-            }
         p_room = ctx.get("_player_room") or room_of(_scene_for_frame, player_name)
         # Everything that means "the player" in engine-written prose: their
         # own name forms, and the epithets minted for the minds that have not
@@ -1593,8 +1792,12 @@ def narrator(ctx, nonce):
         _attire_facts = attire_exposure_facts(_scene_for_frame, [
             (player_name, exposure_owner_refs(
                 narration_person, player_name, player_pronouns)),
+            # `f["name"]` on the pronoun side: the ledger is read by key and
+            # the pronouns are now filed under the DISPLAY, which is the same
+            # answer for a recognised body and the only available one for a
+            # body the view labels rather than names.
             *((f["key"], exposure_owner_refs(
-                None, f["name"], cast_pronouns.get(f["key"])))
+                None, f["name"], cast_pronouns.get(f["name"])))
               for f in pos_facts),
         ])
         # PERCEPTION'S OWN RECORD is what the model reads (see
@@ -1852,6 +2055,28 @@ def _report_prose_guards(prose, view, p_lines, raw_input, warnings):
     return text
 
 
+def _extra_view_label(chat_id, extra, cast):
+    """One extra seat's identity floor: `name -> what THIS player may call
+    them`, the same `_speaker_display` gate `narrator` builds for the
+    primary. A second human sits behind their own `known` row."""
+    recognized = set(
+        (wget(chat_id, "known", {}) or {}).get(extra.get("name")) or [])
+    info = {}
+    for row in (cast or []):
+        try:
+            sheet = json.loads(row["sheet"])
+        except Exception:
+            continue
+        info[character_name(sheet)] = (
+            character_appearance(sheet), character_scene_keys(sheet)[1:])
+
+    def label(name):
+        appearance, aliases = info.get(str(name), (None, None))
+        return _speaker_display(name, recognized, appearance, aliases)
+
+    return label
+
+
 def narrator_extra(ctx, nonce):
     """Renders one prose view per additional human player declaring in this
     beat (ctx.extra_players), mirroring narrator() above but keyed by
@@ -1866,7 +2091,13 @@ def narrator_extra(ctx, nonce):
 
     chat = ctx.chat
     est = ctx.turn["idx"] == 0          # see narrator() above
-    story_tense = narration_tense(chat["id"])   # chat-level -- see render_one
+    # ONE STORY, ONE TENSE -- see the payload note in render_one. The
+    # fallback is read off the PRIMARY seat's narration, which is the story's
+    # own page; resolving it per seat would give two humans two tenses on the
+    # beat where their own recent prose happened to disagree.
+    _, _primary_prev = _past_narration_block(
+        chat["id"], ctx.turn["idx"], ctx.turn["frame_id"], _PREV_PROSE_TURNS)
+    story_tense = _resolve_narration_tense(chat["id"], _primary_prev)
     outcome_views = (ctx.get("perception_outcome", {}) or {}).get("views") or {}
     establish_views = (ctx.get("perception_establish", {}) or {}).get("views") or {}
     di = ctx.get("director_interpret") or {}
@@ -1902,7 +2133,12 @@ def narrator_extra(ctx, nonce):
         narration_person = _resolve_narration_person(
             chat["id"], extra.get("input") or "", extra.get("name"),
             extra.get("pronouns") or {}, key=f"narration_person:extra:{pid}",
-            pending=pending_person_writes)
+            pending=pending_person_writes,
+            # THIS seat's own guide, and the story both seats are in. Person
+            # is per-seat because each human writes their own way, and the
+            # seed for a seat with nothing yet is that seat's author.
+            voice_setting=persona_voice_setting(extra.get("persona") or {}),
+            scenario=chat.get("scenario") or "")
 
         # THIS player's persona and THIS player's name. `player_name` was a
         # free variable here -- bound in `narrator`, never in `narrator_extra`
@@ -1938,7 +2174,12 @@ def narrator_extra(ctx, nonce):
             **({"narration_tense": story_tense} if story_tense else {}),
             "player_name": extra.get("name") or "Player",
             "player_pronouns": extra.get("pronouns") or {},
-            "cast_pronouns": _cast_pronouns(ctx.cast),
+            # Keyed by what THIS seat's view called each body, from this
+            # seat's own recognition ledger -- see `_cast_pronouns`. A
+            # second human is a second observer, not a second reader of the
+            # primary's gate.
+            "cast_pronouns": _cast_pronouns(
+                ctx.cast, label=_extra_view_label(chat["id"], extra, ctx.cast)),
             "scene_opening": bool(est),
             **({"authored_body_parts": _abp2} if _abp2 else {}),
             "player_declared": player_declared,

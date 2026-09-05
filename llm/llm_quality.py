@@ -123,6 +123,47 @@ def output_ran_out_of_room(raw: str) -> bool:
     return False
 
 
+def json_failure_diagnosis(raw: str, *, max_tokens=None) -> str:
+    """One sentence saying WHICH JSON failure this was, and what would help.
+
+    SAY WHICH FAILURE THIS IS, AND OFFER THE REMEDY THAT MATCHES IT. Three
+    things arrive at a caller as the same `JSONDecodeError` and only one of
+    them is fixed by asking for less:
+
+      * the object was CUT OFF -- `output_ran_out_of_room` above is the
+        authority, finish reason first, end-of-text second;
+      * the response is the model's own REASONING, with no object in it at
+        all -- a retry is the remedy and a smaller request is not;
+      * the object is there and MALFORMED -- neither more room nor fewer
+        fields changes that.
+
+    Measured (multitude, 2026-09-05, PM20): a location plan came back as
+    2,270 characters ending "...plus 2 featured = 14 total residents!", and
+    the refusal told the host the plan had outrun its 16,000-token budget and
+    to ask for fewer rooms. It had not, and shrinking the request could not
+    have helped -- the retry that did work asked for the same thing again.
+    A host following that advice narrows a story for no reason.
+
+    `max_tokens` is named in the sentence only for the case where the budget
+    is actually the answer, because a number that is not the cause is worse
+    than no number.
+    """
+    text = _strip_fences(raw)
+    if output_ran_out_of_room(raw):
+        budget = (" -- it outran its %d-token budget; ask for less"
+                  % int(max_tokens)) if max_tokens else " -- ask for less"
+        return "the response ends mid-structure%s" % budget
+    if not text:
+        return ("the response is empty -- the call produced no answer at "
+                "all, and the remedy is another attempt")
+    if _extract_balanced_object(text) is None and "{" not in text:
+        return ("the response carries no JSON object at all -- the text is "
+                "the model's own prose or reasoning, so the remedy is "
+                "another attempt, not a smaller request")
+    return ("the object is malformed rather than cut short -- a smaller "
+            "request will not change it")
+
+
 def strict_json_parse(text: str) -> dict:
     raw = _strip_fences(text)
 
