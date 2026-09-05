@@ -124,3 +124,61 @@ def test_observer_recognising_tamamo_keeps_tamamo_and_scrubs_hinami(temp_db):
     # Nothing was repaired on the way out: the name was never admitted.
     assert not [w for w in ctx.warnings if "COMPOSER TRIPWIRE" in w], (
         ctx.warnings)
+
+
+# ---------------------------------------------------------------------------
+# A name's own parts are spellings of the body it names
+# ---------------------------------------------------------------------------
+
+def test_a_bare_given_name_is_withheld_exactly_as_the_full_name_is():
+    """The forms were the full name and the authored aliases, so a Director
+    writing a bare given name in free text walked past this floor while the
+    same channel carrying the full name was caught and repaired.
+
+    Measured (the Cold Season Ball, 2026-09-05, PX1):
+    `poses["Verrin Sault"].detail` read "eyes fixed on Ivo through his white
+    silk mask", and that sentence reached two minds' composed views, their
+    observations and their stored episodes -- one episode's `entities` array
+    literally ends `"Verrin Sault", "Ivo"`. The control is in the same run:
+    turns 8, 9 and 15 carried "Ivo Sarn" through the same channel and every
+    one of them fired the tripwire. The only difference was the spelling.
+    """
+    from agents.common import _scrub_unknown_identities
+
+    unknown = [{"name": "Ivo Sarn", "appearance": "a slight man in a mask",
+                "aliases": []}]
+    for text in ("Verrin looks at Ivo Sarn.", "Verrin looks at Ivo.",
+                 "Verrin looks at Sarn."):
+        out, leaked = _scrub_unknown_identities(
+            text, allowed_forms=["Verrin"], unknown_sources=unknown)
+        assert "Ivo" not in out and "Sarn" not in out, (text, out)
+        assert leaked == ["Ivo Sarn"], (text, leaked)
+
+
+def test_a_part_the_name_shares_with_the_language_is_not_a_spelling():
+    """`The Stranger` is an engine label, not an identity: its parts are an
+    article and one of the engine's own label heads, and scrubbing them
+    would eat every article in the view. Both tables are the pack's."""
+    from agents.common import _scrub_unknown_identities
+
+    unknown = [{"name": "The Stranger", "appearance": "a person in grey",
+                "aliases": []}]
+    out, leaked = _scrub_unknown_identities(
+        "The Stranger raises the lantern in the Long Hall.",
+        allowed_forms=[], unknown_sources=unknown)
+    assert "The Stranger" not in out
+    assert "the lantern" in out and "the Long Hall" in out
+
+
+def test_a_part_the_observer_legitimately_commands_is_shielded():
+    """Recognition is per-body. An observer who knows one Sarn and not the
+    other keeps the one they know, whole."""
+    from agents.common import _scrub_unknown_identities
+
+    unknown = [{"name": "Ivo Sarn", "appearance": "a slight man in a mask",
+                "aliases": []}]
+    out, _leaked = _scrub_unknown_identities(
+        "Mira Sarn nods to Ivo Sarn.",
+        allowed_forms=["Mira Sarn"], unknown_sources=unknown)
+    assert "Mira Sarn" in out
+    assert "Ivo" not in out
