@@ -15,21 +15,39 @@ never the case:
   * a setting-fact need is named as one in the commit warning (F4);
   * an anchor is resolved in the body's own room before scene-wide (F27);
   * a leg walked toward a destination is an arrival in the room between (F28).
+
+Classes found by the five play runs of 2026-09-05 (the lighthouse, the road,
+the manor, the flat), each pinned the same way -- the rule, never the case:
+
+  * a body that crosses rooms performs one act per room it is in, and an
+    observer is entitled to the legs that happened where their channel stood
+    (PA1, and F36's sibling at the memory boundary);
+  * sight answers HOW MUCH is seen and the act channel delivers only as much
+    conduct as the grade admits, in every room including the observer's own
+    (PC1, PE9);
+  * a line degraded by distance or noise loses its WORDS, never its speaker,
+    when the observer can see who spoke (PD3);
+  * a line cannot be concealed from the person it is addressed to (PC2);
+  * one beat, one field: every relation a beat builds is graded by the same
+    sound field (PC3, half of it).
 """
 from __future__ import annotations
 
 import json
+import re
 import time
 import types
 
 import pytest
 
+from agents import composer, perception
 from agents.director import (
-    _guard_approach_is_not_arrival, _reconcile_near_group_positions)
+    _guard_approach_is_not_arrival, _reconcile_near_group_positions,
+    crossing_legs, strip_addressee_concealment)
 from persist.commit import prune_dangling_exits
 from story.plot_packages import OPERATION_FIELDS, _shape_plan_rooms
 from story.room_tools import MIND_AUTHORED_ITEMS, MIND_LINE_CHARS, run_tool
-from world.spatial import merge_scene_with_diff
+from world.spatial import merge_scene_with_diff, spatial_rel_between
 from world.structure import plant_structure, protect_planned_edges
 
 
@@ -950,3 +968,380 @@ def test_a_refusal_holds_back_only_the_bodies_it_names():
         "movement_refused": [{"subject": "Ada", "to_room": "hall"}],
         "positions": {"Ada": "hall", "Penrose": "hall"}})
     assert merged["positions"] == {"Ada": "study", "Penrose": "hall"}
+
+# PA1: a body that crosses rooms performs one act per room it is in
+# ---------------------------------------------------------------------------
+#
+# "The Lamp at Sorrow Point" turn 16. Wren left the watch room and walked
+# down three rooms; Ivo stayed behind and received, on the SIGHT channel,
+# "descends the spiral stair, passing through the store below and stepping
+# into the kitchen. ... drops it onto the floor beside the stove." He cited
+# it as present evidence and it became rows 69 and 77 of his `memories`. The
+# stair is dark and the last hop is through a door.
+#
+# The rule: a body that crosses rooms performs one act per room it is in, and
+# an observer is entitled to the legs that happened where their channel
+# stood. One boundary is not the class -- both its rooms are rooms the body
+# was in with those observers in them, and they are the two ends of one
+# doorway -- so only a walk PAST one boundary is judged here.
+
+def _stack(stair_light="dark"):
+    """Watch room over a dark stair over a kitchen, the last hop a door."""
+    return {
+        "rooms": {
+            "watch_room": {"name": "the watch room", "adjacent": [
+                {"to": "stair", "barrier": "open"}]},
+            "stair": {"name": "the spiral stair", "light": stair_light,
+                      "adjacent": [
+                          {"to": "watch_room", "barrier": "open"},
+                          {"to": "kitchen", "barrier": "open_door"}]},
+            "kitchen": {"name": "the kitchen", "adjacent": [
+                {"to": "stair", "barrier": "open_door"}]},
+        },
+        "positions": {"Wren": "kitchen", "Ivo": "watch_room",
+                      "Marrick": "kitchen"},
+        "entities": {}, "poses": {},
+    }
+
+
+_DESCENT = {
+    "event_id": "turn:1:player:0:action",
+    "observable": ("grips the cold rail and descends the spiral stair, "
+                   "passing through the store below and stepping into the "
+                   "kitchen"),
+    "visibility": "overt",
+}
+
+
+def test_a_walk_past_one_boundary_names_every_room_the_body_was_in():
+    sc = _stack()
+    assert crossing_legs(sc, "watch_room", "kitchen") == (
+        "watch_room", "stair", "kitchen")
+    # Nothing crossed, and one boundary crossed: one room and two rooms.
+    assert crossing_legs(sc, "kitchen", "kitchen") == ("kitchen",)
+    assert crossing_legs(sc, "watch_room", "stair") == ("watch_room", "stair")
+
+
+def test_a_door_shut_behind_the_walk_is_still_one_boundary():
+    """The outcome scene shows no passable route -- she opened it, crossed
+    and shut it -- and that walk is still one step through one doorway."""
+    sc = _stack()
+    for edge in (sc["rooms"]["stair"]["adjacent"]
+                 + sc["rooms"]["kitchen"]["adjacent"]):
+        if edge["to"] in ("kitchen", "stair"):
+            edge["barrier"] = "closed_door"
+    assert crossing_legs(sc, "stair", "kitchen") == ("stair", "kitchen")
+
+
+def test_a_move_with_no_walkable_route_names_the_rooms_between_as_unknown():
+    """Carried, a lift, a door shut behind them: the rooms between are real
+    and unnameable, and nobody has a channel to a room the engine cannot
+    name."""
+    sc = _stack()
+    sc["rooms"]["stair"]["adjacent"] = []
+    sc["rooms"]["watch_room"]["adjacent"] = []
+    sc["rooms"]["kitchen"]["adjacent"] = []
+    legs = crossing_legs(sc, "watch_room", "kitchen")
+    assert legs == ("watch_room", "", "kitchen")
+    assert not perception._channel_to_every_leg(
+        sc, None, "Ivo", "watch_room", legs)
+
+
+def test_the_observer_left_behind_is_entitled_to_the_room_they_stood_in():
+    sc = _stack()
+    legs = crossing_legs(sc, "watch_room", "kitchen")
+    assert perception._multi_room_legs(
+        sc, [("Wren", "watch_room", "kitchen")]) == {"Wren": legs}
+    # The room she left is his; the store below and the kitchen are not.
+    assert not perception._channel_to_every_leg(
+        sc, None, "Ivo", "watch_room", legs)
+    # And the observer in the room she arrived in is in exactly the same
+    # position from the other end: the rooms behind her are not his either.
+    assert not perception._channel_to_every_leg(
+        sc, None, "Marrick", "kitchen", legs)
+
+
+def test_a_channel_that_stood_in_every_room_keeps_the_whole_surface():
+    """The rule subtracts and only subtracts: an observer who could see the
+    whole walk is owed all of it."""
+    sc = _stack(stair_light="lit")
+    sc["rooms"]["watch_room"]["adjacent"].append(
+        {"to": "kitchen", "barrier": "open"})
+    sc["rooms"]["kitchen"]["adjacent"].append(
+        {"to": "watch_room", "barrier": "open"})
+    legs = crossing_legs(sc, "watch_room", "kitchen")
+    assert perception._channel_to_every_leg(
+        sc, None, "Ivo", "watch_room", legs)
+
+
+def test_one_boundary_is_left_exactly_as_it_was():
+    """The byte-identity freeze: where nothing crossed more than one
+    doorway, no act delivery consults this rule at all."""
+    sc = _stack()
+    assert perception._multi_room_legs(sc, []) == {}
+    assert perception._multi_room_legs(
+        sc, [("Wren", "watch_room", "stair")]) == {}
+    assert perception._multi_room_legs(
+        sc, [("Wren", "kitchen", "kitchen")]) == {}
+    assert perception._legs_of_actor(sc, {}, "Wren") == ()
+
+
+def test_the_room_the_walk_crossed_cannot_reach_the_episode():
+    """F36's sibling: F36 was an unearned NAME reaching the episode; this is
+    an unearned ROOM. The episode is minted from the delivered percepts
+    (`composer.render_episode`), so what delivery refuses memory never sees
+    -- which is the whole argument for gating delivery rather than the
+    memory writer."""
+    sc = _stack()
+    legs = crossing_legs(sc, "watch_room", "kitchen")
+    percepts = [
+        composer.environment_percept("watch_room", "the watch room"),
+        composer.crossing_percept("Wren", "Wren Calloway", "left"),
+    ]
+    if perception._channel_to_every_leg(
+            sc, None, "Ivo", "watch_room", legs):       # pragma: no cover
+        percepts.append(composer.act_percept(
+            sc, _DESCENT, "Ivo", "Wren", {"same_room": False},
+            display="Wren Calloway", can_see=True))
+    content, gist, _entities = composer.render_episode(percepts)
+    assert "watch room" in content
+    for unearned in ("stair", "store", "kitchen", "stove"):
+        assert unearned not in content.lower(), content
+        assert unearned not in gist.lower(), gist
+
+
+def test_the_same_surface_delivered_whole_is_unchanged_by_the_grade():
+    """The other half of the freeze: `act_percept`'s default is the sight
+    grade it always had."""
+    sc = _stack()
+    rel = {"same_room": True, "barrier": "open"}
+    plain = composer.act_percept(sc, _DESCENT, "Ivo", "Wren", rel,
+                                 display="Wren Calloway", can_see=True)
+    graded = composer.act_percept(sc, _DESCENT, "Ivo", "Wren", rel,
+                                  display="Wren Calloway", can_see=True,
+                                  sight="full")
+    assert plain == graded
+    assert composer._render_event(plain) == composer._render_event(graded)
+
+
+# ---------------------------------------------------------------------------
+# PC1 + PE9: sight is graded, and the act channel spends the grade
+# ---------------------------------------------------------------------------
+#
+# PC1, "The Long Gallery" turns 11-12: Ada and Mrs Penrose behind a locked
+# `closed_door`, and a crossing record floors sight at `shapes` for a beat.
+# `_in_plain_view` reduced that to a boolean and Lord Edmund read "opens a
+# black notebook on her knee" through the door, in the same beat the dialogue
+# gate honoured the same wall. PE9 is the same question never asked inside
+# one room: `same_room` short-circuits, so an occluder never subtracted.
+
+def _across_a_shut_door():
+    sc = {
+        "rooms": {
+            "great_hall": {"name": "the great hall", "adjacent": [
+                {"to": "study", "barrier": "closed_door"}]},
+            "study": {"name": "the study", "adjacent": [
+                {"to": "great_hall", "barrier": "closed_door"}]},
+        },
+        "positions": {"Edmund": "great_hall", "Ada": "study"},
+        "entities": {}, "poses": {},
+        "crossings": {"Ada": {"from": "great_hall", "to": "study",
+                              "beats": 1}},
+    }
+    return sc
+
+
+def _parlour(screen=True):
+    """One room, two chairs nine paces apart, a tall screen between them."""
+    anchors = {"west_chair": {"desc": "a chair", "cell": [0, 1]},
+               "east_chair": {"desc": "a chair", "cell": [8, 1]}}
+    anchors["between"] = ({"desc": "a tall screen", "cell": [4, 1],
+                           "height": "full", "opacity": "opaque"} if screen
+                          else {"desc": "a low stool", "cell": [4, 1],
+                                "height": "knee"})
+    return {
+        "rooms": {"parlour": {"name": "the parlour", "adjacent": [],
+                              "extent": {"w": 9, "d": 3},
+                              "anchors": anchors}},
+        "positions": {"Ada": "parlour", "Edmund": "parlour"},
+        "stations": {"Ada": {"at": "west_chair"},
+                     "Edmund": {"at": "east_chair"}},
+        "entities": {}, "poses": {},
+    }
+
+
+_NOTEBOOK = {"event_id": "turn:11:0:action", "visibility": "overt",
+             "observable": "opens a black notebook on her knee"}
+
+
+def test_a_crossing_through_a_shut_door_grades_shapes_not_full():
+    sc = _across_a_shut_door()
+    rel = spatial_rel_between(sc, "Edmund", "Ada",
+                              observer_room="great_hall", target_room="study")
+    assert rel.get("crossing") is True
+    assert perception._sight_detail(sc, "Edmund", "Ada", rel) == "shapes"
+
+
+def test_a_shapes_grade_admits_motion_and_no_conduct():
+    sc = _across_a_shut_door()
+    percept = composer.act_percept(
+        sc, _NOTEBOOK, "Edmund", "Ada", {"same_room": False},
+        display="Ada Quill", can_see=True, sight="shapes")
+    assert percept is not None and percept.fidelity == "shapes"
+    assert "notebook" not in str(percept.data)
+    line = composer._render_event(percept)
+    assert "Ada Quill" in line and "notebook" not in line
+    episode = composer._episode_sentence(percept)
+    assert "notebook" not in episode
+    # And `none` refuses outright.
+    assert composer.act_percept(
+        sc, _NOTEBOOK, "Edmund", "Ada", {"same_room": False},
+        display="Ada Quill", can_see=True, sight="none") is None
+
+
+def test_an_occluder_in_the_same_room_subtracts_from_the_act():
+    sc = _parlour()
+    rel = spatial_rel_between(sc, "Edmund", "Ada")
+    assert rel.get("same_room") is True
+    assert perception._sight_detail(sc, "Edmund", "Ada", rel) == "none"
+
+
+def test_an_open_line_in_the_same_room_is_unchanged():
+    """The freeze the owner asked for: with nothing between two bodies in a
+    room, the grade is what it always was."""
+    sc = _parlour(screen=False)
+    rel = spatial_rel_between(sc, "Edmund", "Ada")
+    assert perception._sight_detail(sc, "Edmund", "Ada", rel) == "full"
+    # And a scene with no geometry at all cannot be subtracted from.
+    plain = _stack()
+    assert perception._sight_detail(
+        plain, "Ivo", "Marrick", {"same_room": True}) == "full"
+
+
+# ---------------------------------------------------------------------------
+# PD3: a fragment loses its words, never its speaker
+# ---------------------------------------------------------------------------
+#
+# "The Ambry Road" turn 20: Sable's view rendered her own employer, three
+# paces in front of her in daylight and described in full by the same view,
+# as "A muffled voice: ...milestone... ferryman... business...". Her memory
+# row said the same, and the narrator sited the voice at a gatehouse nobody
+# was standing in.
+
+_LINE = {"speaker": "Corin", "text": "the milestone, the ferryman, business",
+         "volume": "normal"}
+_MUFFLING = {"same_room": False, "barrier": "closed_door", "distance": "near"}
+
+
+def test_a_fragment_from_a_visible_speaker_keeps_its_speaker():
+    percept = composer.speech_percept(
+        _LINE, _MUFFLING, "Sable", display="Corin", can_see=True)
+    assert percept.fidelity == "fragment"
+    assert percept.data.get("attributed") is True
+    assert "Corin" in composer._render_event(percept)
+    assert "Corin" in composer._episode_sentence(percept)
+    # The WORDS are still degraded: sight answers who, hearing answers what.
+    assert "ferryman" in composer._render_event(percept)
+    assert "the milestone, the ferryman, business" not in \
+        composer._render_event(percept)
+
+
+def test_a_fragment_from_a_speaker_the_observer_cannot_see_stays_anonymous():
+    percept = composer.speech_percept(
+        _LINE, _MUFFLING, "Sable", display="a voice", can_see=False)
+    assert percept.data.get("attributed") is False
+    assert "Corin" not in composer._render_event(percept)
+    assert "Corin" not in composer._episode_sentence(percept)
+
+
+# ---------------------------------------------------------------------------
+# PC2: a line cannot be concealed from the person it is addressed to
+# ---------------------------------------------------------------------------
+#
+# "The Long Gallery" turn 17: the player whispered to Edmund at arm's reach.
+# The schema floor repaired the one id the FLOW carried and left the other
+# exclusion standing -- the addressee -- and the line then appears in no view
+# at all, the player's own included.
+
+_CAST_BY_ID = {4: ["felix brand", "felix"], 7: ["lord edmund", "edmund"]}
+_CAST_BY_NAME = {"Felix Brand": ["felix brand", "felix"],
+                 "Lord Edmund": ["lord edmund", "edmund"]}
+
+
+def _whisper(conceal_from):
+    return [{"type": "speech", "visibility": "concealed",
+             "text": "You carried it out yourself.",
+             "targets": ["Lord Edmund"], "conceal_from": list(conceal_from)}]
+
+
+def test_a_line_is_not_concealed_from_the_person_it_is_addressed_to():
+    sequence = _whisper(["Lord Edmund", 4])
+    notes = strip_addressee_concealment(sequence, _CAST_BY_ID, _CAST_BY_NAME)
+    assert sequence[0]["conceal_from"] == [4]
+    assert sequence[0]["visibility"] == "concealed"
+    assert any("own addressee" in note for note in notes)
+
+
+def test_a_line_concealed_from_its_addressee_alone_stops_being_concealed():
+    """Emptying the list is not excluding nobody -- both readers treat an
+    empty `conceal_from` as hidden from everyone but the actor -- so the
+    concealment goes and audibility is left to volume and distance."""
+    sequence = _whisper(["edmund"])
+    notes = strip_addressee_concealment(sequence, _CAST_BY_ID, _CAST_BY_NAME)
+    assert sequence[0]["conceal_from"] == []
+    assert sequence[0]["visibility"] == "overt"
+    assert any("audibility left to volume" in note for note in notes)
+
+
+def test_a_line_concealed_from_everybody_is_reported_as_a_dropped_beat():
+    """A line concealed from every body the beat knows about is a
+    declaration the engine dropped, not a secret it kept, and it says so."""
+    sequence = _whisper(["Felix Brand", "Lord Edmund"])
+    sequence[0]["targets"] = []
+    sequence[0]["intended_target"] = "the man at the door"
+    notes = strip_addressee_concealment(sequence, _CAST_BY_ID, _CAST_BY_NAME)
+    assert sequence[0]["conceal_from"] == ["Felix Brand", "Lord Edmund"]
+    assert any("reaches nobody" in note for note in notes)
+
+
+def test_stripping_one_addressee_leaves_the_rest_of_the_exclusion_alone():
+    """The repair is the addressee and nothing else: Felix stays excluded and
+    the line still reaches the man it was said to."""
+    sequence = _whisper(["Felix Brand", "Lord Edmund"])
+    notes = strip_addressee_concealment(sequence, _CAST_BY_ID, _CAST_BY_NAME)
+    assert sequence[0]["conceal_from"] == ["Felix Brand"]
+    assert sequence[0]["visibility"] == "concealed"
+    assert not any("reaches nobody" in note for note in notes)
+
+
+def test_an_action_may_still_be_concealed_from_the_person_it_targets():
+    """Picking the pocket of somebody you are talking to is exactly that
+    shape, so actions are left alone."""
+    sequence = [{"type": "action", "visibility": "concealed",
+                 "observable": "lifts the key from his coat",
+                 "targets": ["Lord Edmund"], "conceal_from": ["Lord Edmund"]}]
+    assert strip_addressee_concealment(
+        sequence, _CAST_BY_ID, _CAST_BY_NAME) == []
+    assert sequence[0]["conceal_from"] == ["Lord Edmund"]
+
+
+# ---------------------------------------------------------------------------
+# PC3: one beat, one field
+# ---------------------------------------------------------------------------
+#
+# "The Long Gallery" turn 16: Ada shouted by name across one open archway and
+# the man she was summoning heard nothing in the act pass and the whole line
+# in the outcome pass, while a listener behind a shut door got a fragment in
+# both. Two floors answered one line, and which one answered depended on
+# whether the composite grid happened to place the speaker's room. Every
+# relation perception builds for a beat now carries the same field; the
+# field's own floor for a raised voice one passable edge away is
+# `world/spatial_sound_field.py`'s half and is not built here.
+
+def test_every_relation_perception_builds_for_a_beat_carries_the_field():
+    import inspect
+    for func in (perception._source_channels, perception._composer_outcome):
+        source = inspect.getsource(func)
+        for call in re.findall(r"spatial_rel_between\((?:[^()]|\([^()]*\))*\)",
+                               source):
+            assert "sound=" in call, call
