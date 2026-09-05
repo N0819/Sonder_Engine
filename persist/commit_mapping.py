@@ -31,7 +31,7 @@ the engine already held or was not the Director's to author:
     no plan can hold it in advance.
 """
 
-import json
+import json, re
 from core.db import q, qi, transaction, wget, wset
 from mind.memory import (search_lore, add_lore, update_lore, LORE_CATEGORIES,
                     LOREBOOK_TYPES, chat_lorebook_ids, chat_lorebook_weights,
@@ -43,7 +43,7 @@ from world.spatial import normalize_room_id
 from persist.commit_common import (_address_index, _canonical_anchor,
                            _entity_alias_map, _keys_str,
                            _normalized_fact, _registered_name_roster,
-                           _resolve_roster_name, _room_of,
+                           _player_name_or_none, _resolve_roster_name, _room_of,
                            charter_recognition_projection)
 # A stable, greppable stamp on the provenance column, the same shape
 # `world/background_claims.CANON_SOURCE_PREFIX` uses for a ratified claim. It
@@ -318,6 +318,151 @@ def _setting_fact_needs(ctx, res, world_facts, book_ids):
     return needs
 
 
+#: How many words a NAME runs to. A subject longer than this is a sentence,
+#: and a sentence is not the name of a thing anybody can plan.
+NEED_SUBJECT_WORDS = 12
+
+
+def _need_words(text):
+    """A subject's content words: what it is asking for, bare of the
+    determiners the charter's own reader already strips."""
+    from world.charter_observe import _determiners
+    skip = set(_determiners())
+    return [w for w in re.findall(r"[a-z0-9]+", str(text or "").casefold())
+            if w not in skip and len(w) > 2]
+
+
+def _reads_as_prose(subject):
+    """Is this subject a sentence rather than a name?
+
+    Two structural tells and no vocabulary: a name does not join clauses, so
+    punctuation that joins them says the text is prose; and a name is short.
+    Flat 4B turn 6 filed *"the beat reached for thing 'I say to nobody in
+    particular, I go back down the hall' no plan holds"* -- twelve words and a
+    comma, offered to the Writers' Room as an object to author.
+    """
+    text = " ".join(str(subject or "").split())
+    if not text:
+        return True
+    if re.search(r"[,;.!?](?=\s)", text) or "\n" in str(subject or ""):
+        return True
+    return len(text.split()) > NEED_SUBJECT_WORDS
+
+
+def _answering_bodies(cid, ctx, scene, rooms):
+    """What the beat was already holding, as (words, room) pairs: every thing
+    the scene places, and every body standing in the rooms the needs name --
+    the same `present_figures` rows the Director's payload carried."""
+    out = []
+    for eid, ent in (scene.get("entities") or {}).items():
+        if not isinstance(ent, dict):
+            continue
+        labels = " ".join(str(x or "") for x in
+                          (eid, ent.get("name"), *(ent.get("aliases") or [])))
+        out.append((set(_need_words(labels)),
+                    str(_room_of(scene, str(eid)) or "")))
+    try:
+        from agents.common import presence_figures_for_room
+    except Exception:
+        return out
+    for room in rooms:
+        try:
+            figures = presence_figures_for_room(
+                cid, scene, room,
+                turn_idx=getattr(getattr(ctx, "turn", None), "idx", None),
+                frame_id=getattr(getattr(ctx, "turn", None), "frame_id", None))
+        except Exception:
+            continue
+        for row in figures or []:
+            words = _need_words(" ".join(str(row.get(f) or "") for f in
+                                         ("name", "role", "appearance")))
+            out.append((set(words), str(row.get("room") or room)))
+    return out
+
+
+def _drop_needs_the_beat_answers(ctx, needs):
+    """A NEED IS WHAT NOBODY HAS PLANNED, AND WHAT THE BEAT WAS HOLDING IS
+    PLANNED.
+
+    Two live cases, one class. The caravanserai run's turn 3 filed *"the beat
+    reached for thing 'the woman with the keys at her belt' no plan holds"*
+    while the same beat's payload carried "Innkeeper Yusra Qadan ... wearing a
+    dark house-coat, a ring of keys at the belt", standing at the counter the
+    player had just addressed. Flat 4B's turn 2 filed a need for an "intercom
+    buzzer" while `door_buzzer` stood in that hallway, sounding. In both the
+    answer was already in front of the beat, and the ledger recorded it as
+    missing -- which costs twice, because the Writers' Room is then asked to
+    author a second one.
+
+    Answered by the beat means one of two things, both read off what the beat
+    COMMITTED rather than off any stage's prose:
+
+    * the scene already places a thing that answers to it -- the same folded
+      id/name/alias reading the merge uses, and where the need names a room,
+      a thing standing in that room the subject's head noun names;
+    * a body standing in the rooms the needs name answers to it: the
+      `present_figures` rows the payload itself carried, matched on the words
+      the subject and the body have in COMMON.
+
+    TWO words in common, not one, and that threshold is the whole of the
+    judgement's care. This reads free prose, which is the guard family that
+    has failed most often here (four in one day, 2026-08-29), so it fails
+    toward FILING: one shared word is a coincidence between any two nouns in
+    English, and a need wrongly filed is noise the Room can dismiss while a
+    need wrongly dropped is a body nobody plans. The single-word case is
+    admitted only where the room agrees as well -- a thing whose head noun a
+    subject names, standing in the very room the need points at.
+    """
+    if not needs:
+        return needs
+    cid = ctx.chat.id
+    kept, dropped = [], []
+    scene = wget(cid, "scene", {}) or {}
+    rooms = []
+    for need in needs:
+        room = str((need.get("surface") or {}).get("room") or "")
+        if room and room not in rooms:
+            rooms.append(room)
+    player = _player_name_or_none(ctx)
+    here = str(_room_of(scene, player) or "") if player else ""
+    if here and here not in rooms:
+        rooms.append(here)
+    held = None
+    for need in needs:
+        if need.get("kind") == "room" or need.get("reason") == "setting_fact":
+            kept.append(need)          # a place and a fact are not bodies
+            continue
+        subject = str(need.get("subject") or "")
+        if _reads_as_prose(subject):
+            dropped.append((need, "reads as a sentence rather than the name "
+                                  "of anything a plan could hold"))
+            continue
+        words = set(_need_words(subject))
+        if not words:
+            kept.append(need)
+            continue
+        head = _need_words(subject)[-1]
+        want_room = str((need.get("surface") or {}).get("room") or "")
+        if held is None:
+            held = _answering_bodies(cid, ctx, scene, rooms)
+        answer = ""
+        for cand_words, cand_room in held:
+            shared = words & cand_words
+            if len(shared) >= 2 or (
+                    head in cand_words and want_room and cand_room == want_room):
+                answer = " ".join(sorted(shared)) or head
+                break
+        if answer:
+            dropped.append((need, "the beat was already holding it (%s)" % answer))
+        else:
+            kept.append(need)
+    for need, why in dropped:
+        ctx.tell_director(
+            "No planning need was filed for %s: %s."
+            % (_describe_need(need), why))
+    return kept
+
+
 def _attach_committed_surface(ctx, needs):
     """A room need whose stub the beat rendered carries that stub's surface:
     the name and the exits the committed diff gave it, so the plan that
@@ -450,7 +595,9 @@ def commit_mapping(ctx, nonce, *, prepared=None):
     if needs:
         from world.planning_needs import record_planning_needs
         recorded = record_planning_needs(
-            cid, _attach_committed_surface(ctx, needs), frame_id=turn.frame_id)
+            cid, _attach_committed_surface(
+                ctx, _drop_needs_the_beat_answers(ctx, needs)),
+            frame_id=turn.frame_id)
         if recorded:
             ctx.add_warning(
                 "%d planning need(s) recorded: the beat reached for %s no "

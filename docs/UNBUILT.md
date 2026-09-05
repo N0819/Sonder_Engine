@@ -5568,6 +5568,47 @@ one action element per room, each describing only what happens there. The
 deterministic floor above does not depend on any of them and must stay
 whichever way that goes.
 
+### 1.117 A sound that HAPPENS has no channel, and `running` is the only word for it
+
+**Found 2026-09-05** by the lighthouse play run (PA2) and by the market turn 3
+of `DEBUG_RUN_2026_09_05.md` section 2.36, which measured the complementary
+half: a whistle blown on one beat reached nobody, because there is no
+`sensory_events` channel after establish. Seen from the other side, the same
+gap made a fog bell rung ONCE into a permanently running source, and nine
+beats of one story were rewritten by a noise floor of 20.5 against a
+whisper's 0.34.
+
+Both halves are now less damaging and neither is closed. The objects hand's
+card states the class (an emission is a state, a noise is an event, and the
+test is whether somebody would have to do something to make it stop) and
+points a one-off at `state.<x>_action`, which the merge expires with the beat
+that asserted it; `commit_scene_state._report_started_sources` tells the
+Director on the next beat about every `running` switch a beat threw. What is
+still missing is a channel a beat can write a sound INTO -- one that is heard
+where it happened, by whoever was there to hear it, and is then over. Until it
+exists a one-off sound is either a state that outlives it or nothing at all,
+and the clause is the only thing standing between those two.
+
+### 1.115 The needs filter reads free prose, and its threshold is a judgement
+
+**Built 2026-09-05** (`commit_mapping._drop_needs_the_beat_answers`, closing
+the person-and-thing half of the caravanserai run's PB11 and the flat run's
+PE10). A person- or thing-need answered by what the beat was already holding
+is no longer filed: a thing the scene places in the room the need names, or a
+`present_figures` body sharing two or more content words with the subject.
+
+Two things are registered rather than solved. **The threshold is a
+judgement**: a body and a subject are matched on words in common, which is
+exactly the guard family that failed four times on 2026-08-29, so it fails
+toward FILING -- one shared word is a coincidence between any two English
+nouns, and a need wrongly dropped is a body nobody plans. A structural answer
+exists in principle (`charter_surface.surface_of` is a per-axis store and
+`charter_crowd.member_noun` is what a body IS, so the subject could be matched
+against closed per-axis vocabularies rather than a bag of words) and was not
+built here. **And the `setting_fact` half of PB11 is untouched**: a fact the
+scenario text already states still files a need that reads as a missing
+object, which is F4's legibility class and is registered with it.
+
 ## 2. Roadmap
 
 Features the architecture intends and has not built. Ordered by value per unit

@@ -182,11 +182,25 @@ F36's sibling: the unearned ROOM cannot reach the episode.
 What is NOT fixed is the per-leg ELEMENT, which is what would give the
 observer at either end the prose of the leg they DID see. It needs
 `ActionElement.room`, `norm_sequence` carrying that key, and one interpret
-clause; registered in `docs/UNBUILT.md` s1.114.
+clause; registered in `docs/UNBUILT.md` s1.116.
 
 ### PA2. A sound that happens ONCE is stored as a source that runs for ever
 *Stage of origin: `director_resolve.state_diff.entities` (objects
 specialist), turn 11. Severity: **story-breaking**.*
+
+**RESOLVED 2026-09-05, in part.** The objects hand's card now states the
+class and its test -- an emission is a state, a noise is an event, and the
+question is whether somebody would have to do something to make it stop --
+and points a one-off at the spelling the merge already expires with the
+beat (`state.<x>_action`,
+`spatial_merge._is_transient_state_key`). Beside it,
+`commit_scene_state._report_started_sources` files an engine notice on the
+beat a `sound_source`'s `running` switch is thrown, so the Director learns
+on the NEXT beat -- the beat that can stop it -- rather than nine beats
+later. Nothing is cleared by the engine: a generator somebody switched on
+is a fact about the world, and turning it off after N beats would be
+guessing which kind of thing it was from a device list. The `sensory_events`
+channel this note asks for is still unbuilt (docs/UNBUILT.md).
 
 The player pulled the fog bell's cord once. The objects hand wrote
 `brass_fog_bell.state = {"status": "ringing", "running": true}` beside the
@@ -393,6 +407,17 @@ lit source names no features and still names its doorways as doorways.
 *Stage of origin: `persist/commit.py`'s domain order. Severity:
 **story-breaking**, and it is the reason PA3 could never self-correct.*
 
+**RESOLVED 2026-09-05.** `commit_common.add_engine_notice` is now the only
+way a commit domain files one, and `compose_engine_notices` is the only
+thing that writes the key. A notice is staged on the turn's context, which
+is what the sweep's rewrite composes, so a notice filed in prepare survives
+the rewrite by construction; one filed after it is appended to the key as
+well, and the composition dedupes so filing on both sides can never double
+a message. The sight-contradiction notice next door had the same defect --
+same function, same side of the lock -- and is closed by the same change.
+
+The rest of the audit the fix asked for is clean. Every other world key a commit domain writes whole (`known`, `background_presences`, `scene`, `lore_cache`, `pending_obligations`, `world_pressures`, the crowd ledger) either has one writer per beat or re-reads the key inside the lock; `known` is the same class and was already closed, in `commit_memory_write`, with a comment naming the hazard. ONE thing is left standing and is outside the commit: `world/region_events.apply_wave` appends to `engine_notices` from the plot-package path, so a wave applied before the sweep in the same beat still loses its notice. It is not a commit domain and was left unchanged; routing it through `add_engine_notice` is one line.
+
 `commit_scene_state._record_failed_sources` appends its notice to
 `engine_notices` -- but it runs inside `prepare_scene_commit`, which
 `persist/commit.py:434` calls BEFORE the write lock. Inside the lock the
@@ -489,6 +514,15 @@ arriving as an orphan. The warning is right and nothing acts on it; a mint
 with no placement could take the acting body's room the way
 `derive_minted_entity_placements` already does for a mint with contact
 evidence.
+
+**RESOLVED 2026-09-05.** `commit_scene_state._place_orphan_mints` gives a
+thing this beat minted and left nowhere the room the beat resolved the
+player into -- the answer the engine already gives a person mint it cannot
+place (`director._mint_fallback_room`) -- skipping the classes that have no
+room by construction and refusing to invent one where the beat cannot say
+where it is. Beside it, `_fold_duplicate_mints` folds a mint that answers to
+a name the scene already holds onto the record that exists, the floor
+`dedup_minted_rooms` has had for rooms since it was written.
 
 ### PA14. F59 recurs and widens: the Japanese pose sentence fuses English posture words
 *Turn 19. Severity: wrong-but-recoverable; registered as F59.* Ivo's view in

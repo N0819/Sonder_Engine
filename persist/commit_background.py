@@ -408,6 +408,61 @@ def presence_has_an_identity(scene, name, record=None):
     return bool((record or {}).get("dialogue_turns"))
 
 
+def presence_is_enrollable(scene, name, record=None):
+    """May this presence be made a MEMBER of an institution?
+
+    Enrolment is not the speech gate wearing another hat, and the difference
+    is what this exists to state. `_presence_speech_verdict` asks whether a
+    thing may hold a turn -- an animate noun is enough, because a wrong yes
+    costs one line nobody wanted. Enrolment writes a permanent body into a
+    charter, deals it a face out of a POPULATION's look law, gives it a berth
+    and a departure the town runs, and puts it in the player's `company` as a
+    figure. A wrong yes there is a person the story now has.
+
+    Measured, and the noun is exactly what did it: the caravanserai run's
+    opening (2026-09-05) minted `tamsin_mule`, kind `animal`, "a sturdy,
+    dust-caked grey pack mule". `animal` is on `schemas._ANIMATE_ENTITY_KINDS`
+    -- the list that answers "must this occupy a room" -- so the speech verdict
+    read "person", the fill enrolled the mule as a guest of the house, and it
+    was dealt a tall wiry ruddy young body with a black braid and a torn ear.
+
+    So enrolment is NEVER wider than the speech gate -- a thing that may not
+    hold a turn is certainly not a member -- and inside it asks for a SETTLED
+    answer rather than a graded guess. There are exactly three:
+
+    * `nature` -- the frozen answer `blurb_mint` gives when it visits a newly
+      tracked presence with its place, its description and the genre in front
+      of it (`schemas.PRESENCE_NATURES`). That is a judgement about this
+      presence in this story;
+    * no entity record at all -- the scene never placed this as a THING, so
+      its provenance is already person-shaped (a dialogue speaker, an
+      unregistered body);
+    * conduct -- it has taken a turn at speech, which is this engine's
+      standard of proof everywhere else and the one `presence_has_an_identity`
+      already falls back on.
+
+    A kind noun on a scene entity settles nothing and no longer counts. It
+    fails toward the OPEN NEED, which is the correct direction here: an
+    unenrolled person keeps a filed `rendered_unplanned` need that the drain
+    job and the Writers' Room answer, and enrols by conduct the first beat
+    they speak; an enrolled mule is a member of the house forever.
+
+    Residual, stated rather than papered over: `nature` is only asked under
+    `scene_life: ambient|full` (docs/UNBUILT.md 1.71), so in a story below
+    that setting a genuine person the scene ALSO placed as an entity waits
+    for their first line before the town takes them in.
+    """
+    if _presence_speech_verdict(scene, name, record) != "person":
+        return False        # never wider than the gate that lets it speak
+    nature = str((record or {}).get("nature") or "").strip().casefold()
+    if nature:
+        return nature == "person"
+    _eid, ent = _presence_scene_entity(scene, name, record)
+    if ent is None:
+        return True
+    return bool((record or {}).get("dialogue_turns"))
+
+
 def presence_personhood(scene, name, record=None):
     """What a tracked presence DENOTES: "person", "thing" or "undecided".
 
@@ -2121,12 +2176,11 @@ def track_background_presences(ctx, nonce, *, prepared=None):
             _name = presence_display_name(key, record)
             if not _name:
                 continue
-            # A BODY IS A PERSON. `_presence_speech_verdict` already answers
-            # this for the adjacent question -- may this presence hold a
-            # speaking turn -- and the answer is the same one: a ceiling-
-            # mounted suppression fixture is not somebody who can stand a
-            # watch, form an acquaintance or be promoted.
-            if _presence_speech_verdict(live_scene, _name, record) != "person":
+            # ENROLMENT IS MEMBERSHIP, AND MEMBERSHIP IS FOR PEOPLE. Not the
+            # speech gate: an animate NOUN is enough to hold a turn and is not
+            # enough to be written into a house with a dealt human face
+            # (`presence_is_enrollable`, and the pack mule that proved it).
+            if not presence_is_enrollable(live_scene, _name, record):
                 continue
             _room = str(presence_room(live_scene, _name, record) or "")
             _sk = record.get("sketch") or {}

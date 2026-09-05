@@ -21,7 +21,8 @@ from world.spatial_frames import (_cast_changes_leaving, infer_companion_carry,
                             infer_vehicle_zones,
                             infer_came_from, infer_focus, infer_facing,
                             infer_threshold_crossings)
-from persist.commit_common import _player_name_or_none
+from persist.commit_common import (_player_name_or_none, _room_of,
+                                   add_engine_notice)
 from persist.commit_destruction import (_apply_destruction,
                                 _finalize_destruction_news,
                                 _prepare_destruction)
@@ -628,7 +629,6 @@ def _record_failed_sources(ctx, cid, sc, turn_idx):
         failed.setdefault(eid, {"label": label, "senses": []})["senses"].append("running")
     if not failed:
         return []
-    notices = wget(cid, "engine_notices", []) or []
     filed = []
     for eid in sorted(failed):
         rec = failed[eid]
@@ -650,10 +650,238 @@ def _record_failed_sources(ctx, cid, sc, turn_idx):
                f"failing` and this is the beat it failed. Now {what}; "
                "relight or restart it, replace it, or let it stand.")
         ctx.warnings.append(msg)
-        notices.append(msg)
+        add_engine_notice(ctx, cid, msg)
         filed.append(msg)
-    wset(cid, "engine_notices", notices)
     return filed
+
+
+def _minted_this_beat(prev_scene, diff):
+    """The entity keys this beat brought into the world: named by the diff,
+    unknown to the scene the beat started in, and not removed again."""
+    incoming = (diff or {}).get("entities")
+    if not isinstance(incoming, dict) or not incoming:
+        return []
+    before = (prev_scene or {}).get("entities") or {}
+    removed = {str(e).strip().casefold()
+               for e in ((diff or {}).get("remove_entities") or [])}
+    return [str(eid) for eid, ent in incoming.items()
+            if isinstance(ent, dict) and str(eid) not in before
+            and str(eid).strip().casefold() not in removed]
+
+
+def _entity_labels(eid, ent):
+    """Everything one entity answers to, folded: its key, its display name
+    and its aliases."""
+    ent = ent if isinstance(ent, dict) else {}
+    out = {str(x or "").strip().casefold() for x in
+           (eid, ent.get("name"), *(ent.get("aliases") or []))}
+    out.discard("")
+    return out
+
+
+def _fold_duplicate_mints(ctx, cid, sc, prev_scene, diff):
+    """A MINT NAMING A THING THE SCENE ALREADY HOLDS IS THAT THING.
+
+    The room ledger has had this floor since `dedup_minted_rooms`: a beat that
+    mints a room the scene already carries under another key is redirected
+    onto the key that exists, because a second record of one place is two
+    places that then drift apart. An entity had no such floor, and the same
+    beat family produced the same defect -- Flat 4B, 2026-09-05 turn 2: a
+    `door_buzzer` with `sound_source: loud` was standing in the hallway and
+    sounding, and the beat minted `intercom_buzzer` beside it, so the room
+    held two buzzers and the world's own one went on being the one nobody
+    referred to.
+
+    Matched on what a thing ANSWERS TO -- its key, its display name, its
+    aliases, folded -- and never on a resemblance between two nouns: a second
+    lamp beside a lamp is a real second lamp, and only a thing calling itself
+    by the standing thing's own name is the standing thing. The mint's fields
+    are folded onto the record that exists (the merge's own rule: a value the
+    incoming record states wins, silence changes nothing), its key is dropped,
+    and any room it was given is given to the survivor if the survivor had
+    none. The Director is told, because a hand whose mint silently became an
+    update would go on minting.
+    """
+    minted = _minted_this_beat(prev_scene, diff)
+    if not minted:
+        return []
+    entities = sc.get("entities")
+    if not isinstance(entities, dict):
+        return []
+    before = (prev_scene or {}).get("entities") or {}
+    standing = {}
+    for eid, ent in before.items():
+        for label in _entity_labels(eid, ent):
+            standing.setdefault(label, str(eid))
+    positions = sc.get("positions") if isinstance(sc.get("positions"), dict) else {}
+    folded = []
+    for eid in minted:
+        ent = entities.get(eid)
+        if not isinstance(ent, dict):
+            continue
+        held = next((standing[label] for label in sorted(_entity_labels(eid, ent))
+                     if label in standing), "")
+        if not held or held == eid or held not in entities:
+            continue
+        keeper = entities[held]
+        if not isinstance(keeper, dict):
+            continue
+        for key, value in ent.items():
+            if key in ("name", "aliases"):
+                continue
+            if key == "state" and isinstance(value, dict):
+                state = keeper.get("state")
+                keeper["state"] = {**(state if isinstance(state, dict) else {}),
+                                   **value}
+                continue
+            if value not in (None, "", [], {}):
+                keeper[key] = value
+        room = positions.pop(eid, None)
+        if room and not positions.get(held):
+            positions[held] = room
+        entities.pop(eid, None)
+        folded.append((eid, held))
+    for eid, held in folded:
+        add_engine_notice(
+            ctx, cid,
+            "%r is %r, which the scene already holds; the mint was folded "
+            "onto the record that exists rather than making a second one. "
+            "Name the thing that is there instead of minting it again."
+            % (eid, held))
+    return folded
+
+
+def _place_orphan_mints(ctx, cid, sc, diff):
+    """A THING THIS BEAT BROUGHT INTO THE WORLD STANDS WHERE THE BEAT IS.
+
+    An entity with no room is excluded from co-presence by construction:
+    nothing can see it, reach it or act on it, so it exists and is nowhere.
+    The Director already MEASURES this (`_unplaced_minted_entities`) and can
+    only warn about it, because by the time it is measured the diff is
+    written; and a warning nothing acts on is what the lighthouse and Flat 4B
+    runs both recorded -- `watch_room_storm_pane` and `box_of_matches` on
+    2026-09-05 turns 14 and 18, `kitchen_sink_tap` minted unplaced twice in
+    twenty turns, once each beat, because nothing ever placed the first.
+
+    So the commit answers it, with the answer the engine already gives a
+    person mint it cannot place (`director._mint_fallback_room`): the room
+    the beat resolved the player into. Subtractive, and the classes that have
+    no room BY CONSTRUCTION are skipped rather than forced into one -- a
+    bodiless voice is nowhere, a portal spans two rooms, a thing in transit is
+    between them, a body is placed by its own machinery, and a carried thing
+    is where its carrier is. Where the beat cannot say where the player is,
+    nothing is placed and the Director's warning stands: inventing a room for
+    a thing is worse than leaving it nowhere.
+    """
+    minted = _minted_this_beat({}, diff)
+    minted = [eid for eid in minted if eid in (sc.get("entities") or {})]
+    if not minted:
+        return []
+    from world.spatial import _is_body_entity, room_of
+    player = _player_name_or_none(ctx)
+    here = str(_room_of(sc, player) or "") if player else ""
+    if not here:
+        # A story with no persona attached still has a beat somewhere: the
+        # rooms this beat MOVED bodies into, when they agree on one. Two
+        # rooms is the beat naming no single place, and then nothing is
+        # placed -- the same refusal as an unplaceable player.
+        moved = {str(r) for r in ((diff or {}).get("positions") or {}).values()
+                 if str(r or "").strip()}
+        here = str(next(iter(moved))) if len(moved) == 1 else ""
+    positions = sc.get("positions")
+    if not isinstance(positions, dict):
+        positions = sc["positions"] = {}
+    contained = sc.get("contained") if isinstance(sc.get("contained"), dict) else {}
+    carried = {str(k).strip().casefold() for k in contained}
+    placed = []
+    for eid in minted:
+        ent = (sc.get("entities") or {}).get(eid)
+        if not isinstance(ent, dict):
+            continue
+        if ent.get("ubiquitous") or ent.get("interior_rooms"):
+            continue
+        state = ent.get("state")
+        if isinstance(state, dict) and (state.get("link") or state.get("transit")):
+            continue
+        if _is_body_entity(sc, eid, ent):
+            continue
+        labels = _entity_labels(eid, ent)
+        if labels & carried:
+            continue
+        if any(room_of(sc, label) is not None for label in labels):
+            continue
+        if not here:
+            continue
+        positions[eid] = here
+        placed.append(eid)
+    for eid in placed:
+        add_engine_notice(
+            ctx, cid,
+            "%r was minted with no room, so it was put where the beat is (%s). "
+            "A thing in no room can be seen, reached and acted on by nobody; "
+            "write `state_diff.positions` for anything you mint."
+            % (eid, here))
+    return placed
+
+
+def _report_started_sources(ctx, cid, sc, diff, turn_idx):
+    """AN EVENT IS NOT A STATE, AND THE BEAT THAT THROWS A SWITCH IS TOLD SO.
+
+    `sound_source` is a STANDING emission and `state.running` is the switch
+    that holds it open: once thrown, it keeps emitting through every later
+    beat's silence, because silence is not erasure for a configuration key.
+    A thing that made a noise ONCE is not a thing that is making a noise, and
+    the engine already spells that difference -- a momentary key
+    (`spatial_merge._is_transient_state_key`: a `*_action`, a `*_motion`)
+    lives for exactly the beat that asserted it, while `running` does not.
+
+    Measured, and it rewrote nine beats of one story: the lighthouse run's
+    fog bell was pulled once on turn 11 and the objects hand wrote
+    `running: true` beside it. Nothing ever cleared it. Every view in the
+    watch room from turn 11 to turn 20 carried "the noise drowns everything",
+    the field measured noise 20.5 against a whisper's 0.34, and the player's
+    closing line -- spoken at the good ear of a half-deaf man at arm's reach
+    -- reached nobody. The engine was right and the ledger was wrong.
+
+    The clause that stops it being written is the objects hand's
+    (`specialists/objects/chunks/entities.txt`). This is the report that makes
+    it correctable when it is written anyway: the beat that starts an
+    emission is named on the NEXT beat's payload, which is the beat that can
+    stop it. Nothing is cleared here -- a generator somebody switched on is a
+    fact about the world, and an engine that turned it off after N beats would
+    be guessing which kind of thing it was from a device list.
+    """
+    incoming = (diff or {}).get("entities")
+    if not isinstance(incoming, dict) or not incoming:
+        return []
+    started = []
+    for eid, ent in incoming.items():
+        if not isinstance(ent, dict):
+            continue
+        state = ent.get("state")
+        if not isinstance(state, dict):
+            continue
+        running = state.get("running")
+        if isinstance(running, str):
+            running = running.strip().casefold() not in ("false", "off", "no", "0")
+        if not running:
+            continue
+        live = (sc.get("entities") or {}).get(str(eid))
+        emits = str((live if isinstance(live, dict) else ent).get(
+            "sound_source") or "").strip()
+        if not emits:
+            continue
+        started.append(str(eid))
+    for eid in started:
+        add_engine_notice(
+            ctx, cid,
+            "%r is now RUNNING and will go on sounding through every beat "
+            "that says nothing about it, drowning quieter voices in its room "
+            "and next door. If the noise was a single stroke rather than "
+            "something switched on, it was an event of that beat and not a "
+            "state of the thing: stop it with `state.running` false."
+            % eid)
+    return started
 
 
 def prepare_scene_commit(ctx):
@@ -1460,7 +1688,6 @@ def prepare_scene_commit(ctx):
     _contradictions = contradictory_sight_edges(
         sc, prev_scene if _told else None)
     if _contradictions:
-        _notices = wget(cid, "engine_notices", []) or []
         for _pair in _contradictions:
             _msg = (
                 f"{_pair['names'][0]!r} and {_pair['names'][1]!r} each declare "
@@ -1471,8 +1698,7 @@ def prepare_scene_commit(ctx):
                 "Redeclare the edge from the watching side only, with `wall` "
                 "on the blind side.")
             ctx.warnings.append(_msg)
-            _notices.append(_msg)
-        wset(cid, "engine_notices", _notices)
+            add_engine_notice(ctx, cid, _msg)
     if not _told:
         wset(cid, "sight_contradictions_told", True)
 
@@ -1495,6 +1721,9 @@ def prepare_scene_commit(ctx):
     _turn_idx = int(getattr(getattr(ctx, "turn", None), "idx", 0) or 0)
     from world.spatial import BEAT_KEY
     _record_failed_sources(ctx, cid, sc, _turn_idx)
+    _fold_duplicate_mints(ctx, cid, sc, prev_scene, diff)
+    _place_orphan_mints(ctx, cid, sc, diff)
+    _report_started_sources(ctx, cid, sc, diff, _turn_idx)
     sc[BEAT_KEY] = _turn_idx + 1
     # THE LAYOUT LINT, under the same once-on-appearance rule
     # (`world/spatial_lint.py`, DESIGN_ROOM_FIDELITY §3): a reciprocal bearing
