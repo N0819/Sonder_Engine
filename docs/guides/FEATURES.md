@@ -615,8 +615,12 @@ legitimately perceive, learn, remember or infer.
 ## Pictures and sound
 
 - **Scene backdrops** — A generated picture of the room behind the story, built
-  from the room's description alone so no character ever appears in one, and
-  cached so revisiting a place is free.
+  from the room's own record alone — its description, what stands on each
+  wall, what opens in each wall and whether it is open or shut, its proportion
+  and shape, and the look of its district — so no character ever appears in
+  one, and cached so revisiting a place is free. The picture is taken from the
+  room's main entrance looking in; moving a fixture or opening a door is a new
+  picture, and somebody walking in is not.
 - **Pay only when you stop** — Cached pictures always show; a new one is
   commissioned only once you have settled on that beat.
 - **Readability first** — The picture sits under a veil and the prose on its own

@@ -41,7 +41,13 @@ import re
 from core import outofband
 from core.db import q, wget_for_frame
 from core.logging_utils import logger
-from world.spatial import effective_light, light_at, normalize_light, room_of
+from world.spatial import (
+    _PASSABLE_BARRIERS, ROOM_SIZES, body_cell, effective_adjacent,
+    effective_facing, effective_light, effective_room_size, light_at,
+    normalize_barrier, normalize_bearing, normalize_footprint,
+    normalize_height, normalize_light, normalize_vertical, opposite_bearing,
+    room_grid, room_of,
+)
 from core.paths import INSTALL_ROOT
 from world.weather import weather_for_room, weather_words
 from world.day_cycle import CLOCK_READING, PM_MARKER, clock_reading_hour
@@ -172,12 +178,21 @@ def visual_style(style):
     return {key: style[key] for key in VISUAL_STYLE_KEYS if style.get(key)}
 
 
-def visual_signature(scene, room_id, style=None, viewer=None):
+def visual_signature(scene, room_id, style=None, viewer=None, *,
+                     regions=None, viewer_camera=False):
     """A stable hash of everything that changes how `room_id` LOOKS.
 
     Deliberately excludes people and speech: a room does not become a different
     picture because someone walked in. Including them would defeat the cache on
     almost every turn, which is the whole reason this feature is affordable.
+
+    The BRIEF is keyed too (`room_brief`: walls, openings, proportion, camera,
+    look), because it reaches the prompt: a fixture moved to another wall or a
+    door opened is a different picture, and a bystander is still not one. Until
+    2026-09-04 `exits` reached the prompt and NOT the key, against this
+    module's own rule that the key is a function of what reaches the image --
+    a door opening never redrew the room. Every key below is present only when
+    it has something to say, so a room with none of it hashes as it did.
     """
     scene = scene or {}
     room = ((scene.get("rooms") or {}).get(room_id) or {})
@@ -206,6 +221,8 @@ def visual_signature(scene, room_id, style=None, viewer=None):
         # see `visual_style`.
         "style": visual_style(style),
     }
+    material.update(room_brief(scene, room_id, viewer, regions=regions,
+                               viewer_camera=viewer_camera))
     for key in _VISUAL_STATE_KEYS:
         value = scene.get(key)
         if isinstance(value, dict):
@@ -563,16 +580,206 @@ def _light_radius_of(entity):
     return "spot" if (entity or {}).get("portable") else "room"
 
 
-def room_projection(scene, room_id, viewer=None):
+# --- the brief --------------------------------------------------------------
+#
+# The room record is minted once and rendered three ways -- prose by the
+# composer, sight by the geometry, a picture here -- so the picture is drawn
+# from the SAME fields the other two read (`docs/design/DESIGN_ROOM_FIDELITY.md`
+# §4): the anchors by the wall their bearing names, the exits by wall with
+# their barrier state, the proportion the extent gives, a camera at the main
+# entrance, and the region's look. Every one of them is derived from
+# `rooms[id]`, its edges and the region registry, and none has a concept of an
+# occupant, so the whitelist argument above still holds with nothing added.
+
+#: The walls, in the order a brief names them and a camera is chosen from.
+#: Compass order, then the corners, then what stands free of any wall.
+BRIEF_WALL_ORDER = ("n", "e", "s", "w", "ne", "se", "sw", "nw", "free")
+
+#: Which entrance is the room's MAIN one when several are passable: compass
+#: order, then the neighbour's id within a wall. Deterministic, so a reroll
+#: frames the same room the same way. Owner-visible.
+CAMERA_WALL_ORDER = ("n", "e", "s", "w")
+
+_WALL_WORD = {"n": "north", "e": "east", "s": "south", "w": "west",
+              "ne": "north-east", "se": "south-east", "sw": "south-west",
+              "nw": "north-west"}
+
+# How an anchor's geometry words read in a picture prompt -- the closed sets
+# `spatial_fov` owns, rendered.
+_HEIGHT_WORD = {"waist": "waist-high", "head": "head-high",
+                "full": "floor to ceiling"}
+_FOOTPRINT_WORD = {"small": "small", "large": "broad",
+                   "run": "running the length of the wall"}
+
+
+def _walls_of(scene, room_id):
+    """{wall: [{desc, height?, footprint?}]} -- the room's AUTHORED anchors
+    grouped by the wall their bearing names; `free` for one with no bearing.
+    Implicit door anchors are openings, not walls, and are not here. An
+    anchor whose description names a person is dropped whole, the way a room
+    sentence is (`_setting_only`), because the picture is of an empty room."""
+    room = ((scene or {}).get("rooms") or {}).get(room_id) or {}
+    anchors = room.get("anchors") if isinstance(room.get("anchors"), dict) else {}
+    out = {}
+    for aid in sorted(anchors):
+        anchor = anchors[aid]
+        if not isinstance(anchor, dict) or anchor.get("implicit"):
+            continue
+        desc = to_visual_register(_setting_only(str(anchor.get("desc") or aid)))
+        if not desc:
+            continue
+        rec = {"desc": desc}
+        if str(anchor.get("height") or "").strip():
+            rec["height"] = normalize_height(anchor.get("height"))
+        if str(anchor.get("footprint") or "").strip():
+            rec["footprint"] = normalize_footprint(anchor.get("footprint"))
+        out.setdefault(normalize_bearing(anchor.get("dir")) or "free", []).append(rec)
+    return out
+
+
+def _openings_of(scene, room_id):
+    """{wall: [{barrier, name?, vertical?}]} -- every doorway of the room,
+    declared from either side (`effective_adjacent`), by the wall it opens in;
+    `unplaced` for one with no bearing. Never `to`: where a door LEADS is
+    somebody's whereabouts, not the room's fabric. Sorted by the neighbour's
+    id before the id is dropped, so the order is deterministic."""
+    edges = [e for e in effective_adjacent(scene or {}, room_id)
+             if isinstance(e, dict) and e.get("to")]
+    out = {}
+    for edge in sorted(edges, key=lambda e: str(e["to"])):
+        barrier = normalize_barrier(edge.get("barrier"))
+        if barrier == "wall":
+            continue
+        rec = {"barrier": barrier}
+        name = to_visual_register(_setting_only(str(edge.get("name") or "")))
+        if name:
+            rec["name"] = name
+        vertical = normalize_vertical(edge.get("vertical"))
+        if vertical:
+            rec["vertical"] = vertical
+        out.setdefault(normalize_bearing(edge.get("dir")) or "unplaced",
+                       []).append(rec)
+    return out
+
+
+def _proportion_of(scene, room_id):
+    """One sentence for how much floor there is and how it is shaped, or ''
+    when nothing was measured or authored -- a tier the engine only guessed
+    is not asserted to the picture."""
+    room = ((scene or {}).get("rooms") or {}).get(room_id) or {}
+    grid = room_grid(scene or {}, room_id)
+    authored = str(room.get("size") or "").strip().casefold() in ROOM_SIZES
+    if not grid.measured and not authored:
+        return ""
+    size = effective_room_size(scene or {}, room_id)
+    shape = {"round": "round room", "l": "L-shaped room"}.get(grid.shape, "room")
+    if not grid.measured:
+        return "a %s %s" % (size, shape)
+    long_side, short_side = max(grid.w, grid.d), min(grid.w, grid.d)
+    ratio = long_side / float(short_side)
+    if ratio >= 2.0:
+        proportion = "long and narrow" if grid.d > grid.w else "wide and shallow"
+    elif ratio >= 4.0 / 3.0:
+        proportion = "deeper than it is wide" if grid.d > grid.w \
+            else "wider than it is deep"
+    else:
+        proportion = "roughly square"
+    return ("a %s %s, about %d paces east to west and %d north to south, %s"
+            % (size, shape, grid.w, grid.d, proportion))
+
+
+def _part_of_room(cell, grid):
+    """Where in the room a cell is, as a person would say it: thirds on each
+    axis -- "the north-west part", "the middle of the south side", "the
+    middle"."""
+    x, y = cell
+    col = "west" if x < grid.w / 3.0 else "east" if x >= 2 * grid.w / 3.0 else ""
+    row = "north" if y < grid.d / 3.0 else "south" if y >= 2 * grid.d / 3.0 else ""
+    if row and col:
+        return "the %s-%s part of the room" % (row, col)
+    if row or col:
+        return "the middle of the %s side" % (row or col)
+    return "the middle of the room"
+
+
+def _camera_of(scene, room_id, openings, viewer=None, viewer_camera=False):
+    """Where the picture is taken from: the room's MAIN ENTRANCE looking in
+    -- the first passable doorway in `CAMERA_WALL_ORDER` -- level and wide;
+    or, behind `backdrop_continuity` (`viewer_camera`), the viewer's own
+    measured cell and facing, so a room with continuity on is the same room
+    turned rather than a new one. None when no passable doorway has a wall
+    to be placed in: the prompt then says nothing about a camera.
+
+    The viewer camera COSTS pictures: one per (part of the room, facing) the
+    viewer stands in, up to nine parts by eight facings, where the entrance
+    camera is one picture per visible state. It is behind the setting for
+    exactly that reason (DESIGN_ROOM_FIDELITY §4).
+    """
+    if viewer_camera and viewer and room_of(scene or {}, viewer) == room_id:
+        cell = body_cell(scene or {}, viewer)
+        facing = effective_facing(scene or {}, viewer)
+        if cell and facing:
+            return {"from": _part_of_room(cell, room_grid(scene or {}, room_id)),
+                    "looking": _WALL_WORD.get(facing, facing),
+                    "framing": "eye level, wide"}
+    for wall in CAMERA_WALL_ORDER:
+        for opening in openings.get(wall) or []:
+            if opening.get("barrier") in _PASSABLE_BARRIERS:
+                return {"from": "the %s doorway" % _WALL_WORD[wall],
+                        "looking": _WALL_WORD[opposite_bearing(wall)],
+                        "framing": "level, wide"}
+    return None
+
+
+def room_brief(scene, room_id, viewer=None, *, regions=None,
+               viewer_camera=False):
+    """The structured brief: {walls, openings, proportion, camera, look},
+    each present only when it has something to say, so a room with none of
+    them projects and hashes exactly as it did before the brief existed.
+    `regions` is the frame's region registry (`world.regions.region_registry`),
+    read for the region's `look`; the projection stays pure over it."""
+    scene = scene or {}
+    out = {}
+    walls = _walls_of(scene, room_id)
+    if walls:
+        out["walls"] = walls
+    openings = _openings_of(scene, room_id)
+    if openings:
+        out["openings"] = openings
+    proportion = _proportion_of(scene, room_id)
+    if proportion:
+        out["proportion"] = proportion
+    camera = _camera_of(scene, room_id, openings, viewer, viewer_camera)
+    if camera:
+        out["camera"] = camera
+    if regions:
+        from world.regions import room_region
+        region = room_region(scene, room_id)
+        entry = regions.get(region) if region else None
+        look = to_visual_register(_setting_only(
+            str((entry or {}).get("look") or ""))) if isinstance(entry, dict) \
+            else ""
+        if look:
+            out["look"] = look
+    return out
+
+
+def room_projection(scene, room_id, viewer=None, *, regions=None,
+                    viewer_camera=False):
     """A whitelisted, occupant-free description of one room.
 
     Deliberately a whitelist rather than a filter: adding a new scene field
     cannot silently start leaking people into backdrops, because anything not
-    named here is simply absent.
+    named here is simply absent. The brief (`room_brief`) is part of the
+    whitelist: walls, openings, proportion, camera and look, each derived from
+    the room record and its edges alone. `lighting` is a RESERVED slot -- a
+    lighting sentence the light field may supply -- and is not computed here.
     """
     scene = scene or {}
     room = ((scene.get("rooms") or {}).get(room_id) or {})
     out = {k: room.get(k) for k in _PLACE_FIELDS if room.get(k)}
+    out.update(room_brief(scene, room_id, viewer, regions=regions,
+                          viewer_camera=viewer_camera))
     # What the room is ACTUALLY lit by, not just what it was built with: a
     # campfire, a lantern set down, a burning wreck. Without this a cellar lit
     # by a fire someone built still renders pitch black.
@@ -727,6 +934,16 @@ def _turn_frame(chat_id, turn_idx):
     return row["frame_id"] if row else None
 
 
+def _regions_for(chat_id, turn_idx):
+    """The frame's region registry for the brief's `look`, or {} when it
+    cannot be read -- a backdrop never fails for want of a district."""
+    try:
+        from world.regions import region_registry
+        return region_registry(chat_id, _turn_frame(chat_id, turn_idx)) or {}
+    except Exception:
+        return {}
+
+
 def scene_after_turn(chat_id, turn_idx):
     """The scene as it stood AFTER `turn_idx` resolved.
 
@@ -781,7 +998,12 @@ def build_backdrop_request(chat_id, turn_idx, player_name=None, style=None):
     room_id = _room_of_player(scene, player_name)
     if not room_id:
         return None
-    signature = visual_signature(scene, room_id, style, viewer=player_name)
+    # The region registry, for the brief's `look`; and whether the camera
+    # may follow the viewer (behind `backdrop_continuity`, see `_camera_of`).
+    regions = _regions_for(chat_id, turn_idx)
+    viewer_camera = _continuity_enabled()
+    signature = visual_signature(scene, room_id, style, viewer=player_name,
+                                 regions=regions, viewer_camera=viewer_camera)
     room = ((scene.get("rooms") or {}).get(room_id) or {})
     return {
         "room": room_id,
@@ -791,7 +1013,8 @@ def build_backdrop_request(chat_id, turn_idx, player_name=None, style=None):
         # Structured, occupant-free: this is what an image prompt is written
         # from. Rich (architecture, light, exits, damage) and safe by
         # construction (no entities, no positions, no people).
-        "place": room_projection(scene, room_id, viewer=player_name),
+        "place": room_projection(scene, room_id, viewer=player_name,
+                                 regions=regions, viewer_camera=viewer_camera),
         # `flavour` USED TO BE COMPUTED HERE, and it was by far the most
         # expensive thing this function did -- see `arrival_flavour`, which the
         # one caller that needs it now calls for itself. Nothing else may put
@@ -881,6 +1104,50 @@ def _source_lighting(place):
     return [fragment]
 
 
+def _wall_phrase(wall):
+    return "%s wall" % _WALL_WORD[wall] if wall in _WALL_WORD else \
+        ("standing free of the walls" if wall == "free" else "")
+
+
+def _brief_sentences(place):
+    """The walls and openings of a brief as prompt fragments, then the
+    camera. One fragment per wall that has anything on it or through it."""
+    walls = place.get("walls") or {}
+    openings = place.get("openings") or {}
+    out = []
+    for wall in BRIEF_WALL_ORDER + ("unplaced",):
+        items = []
+        for anchor in walls.get(wall) or []:
+            words = str(anchor.get("desc") or "")
+            qualifiers = [q for q in (_HEIGHT_WORD.get(anchor.get("height")),
+                                      _FOOTPRINT_WORD.get(anchor.get("footprint")))
+                          if q]
+            if qualifiers:
+                words += " (%s)" % ", ".join(qualifiers)
+            items.append(words)
+        for opening in openings.get(wall) or []:
+            barrier = opening.get("barrier")
+            what = opening.get("name") or {
+                "open": "an opening", "open_door": "an open doorway",
+                "closed_door": "a closed door", "window": "a window",
+                "bars": "a barred opening", "membrane": "a curtained way",
+                "one_way_window": "a dark pane"}.get(barrier, "a way through")
+            if opening.get("vertical"):
+                what += " leading %s" % opening["vertical"]
+            items.append(what)
+        if not items:
+            continue
+        where = _wall_phrase(wall)
+        out.append(("%s: %s" % (where, ", ".join(items))) if where
+                   else ", ".join(items))
+    camera = place.get("camera")
+    if camera:
+        out.append("seen from %s looking %s, %s, the middle of the floor empty"
+                   % (camera.get("from"), camera.get("looking"),
+                      camera.get("framing")))
+    return out
+
+
 def compose_prompt(place, style=None, flavour=""):
     """A deterministic image prompt from the whitelisted place projection.
 
@@ -891,8 +1158,17 @@ def compose_prompt(place, style=None, flavour=""):
     parts = []
     if place.get("name"):
         parts.append(str(place["name"]))
+    if place.get("proportion"):
+        parts.append(str(place["proportion"]))
     if place.get("desc"):
         parts.append(str(place["desc"]))
+    # FROM THE WALLS OUTWARD: what stands on each wall and what opens in it,
+    # then where the picture is taken from, with the middle of the floor
+    # left empty for the text. The brief is structured so the agent card can
+    # compose rather than guess (`backdrop_prompt.txt`).
+    parts.extend(_brief_sentences(place))
+    if place.get("look"):
+        parts.append("in the manner of the district: %s" % place["look"])
     if place.get("overlays"):
         parts.append(", ".join(str(o) for o in place["overlays"]))
     if place.get("weather"):
@@ -901,10 +1177,15 @@ def compose_prompt(place, style=None, flavour=""):
         parts.append("time: %s" % place["time"])
     # Lighting, in words an image model acts on. Omitted at "lit", which is the
     # default and needs no instruction -- saying "normally lit" would only
-    # compete with whatever the description already implies.
-    lighting = _LIGHT_PROMPT.get(normalize_light(place.get("light")))
-    if lighting:
-        parts.append(lighting)
+    # compete with whatever the description already implies. A `lighting`
+    # sentence in the brief (the light field's slot) is used in place of the
+    # level word when present; it is never computed here.
+    if place.get("lighting"):
+        parts.append(str(place["lighting"]))
+    else:
+        lighting = _LIGHT_PROMPT.get(normalize_light(place.get("light")))
+        if lighting:
+            parts.append(lighting)
     parts.extend(_source_lighting(place))
     if flavour:
         parts.append(flavour)
