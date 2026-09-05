@@ -88,7 +88,7 @@ class TestStaticFilesAreFoundFromAnyworkingDirectory:
     def test_the_spa_shell_revalidates_its_script_revision(self):
         response = app_module.index()
         assert response.headers["cache-control"] == "no-cache"
-        assert "?v=20260822-alpha98" in Path(response.path).read_text(
+        assert "?v=20260904-world" in Path(response.path).read_text(
             encoding="utf-8")
 
 

@@ -9,38 +9,11 @@ function frameQuery() {
   return S.currentFrameId != null ? `?frame_id=${S.currentFrameId}` : "";
 }
 
-$("#b-world").onclick = async () => {
-  if (!S.chatId) return;
-  const chatId = S.chatId;
-  const w = await api("GET", `/api/chats/${chatId}/world`);
-  if (S.chatId !== chatId) return;
-  const ta = el("textarea", { style: "width:100%;height:420px" }, JSON.stringify(w, null, 2));
-  modal("World state", b => b.append(
-    el("div", { class: "small dim", style: "margin-bottom:8px" },
-      "The raw internal record of the scene — rooms, positions, objects, standing facts — that every stage of "
-      + "a turn reads from and writes to. The story keeps this updated on its own; you don't need to touch it "
-      + "to play. Edit it only to hand-correct something that's drifted wrong (a character in the wrong room, "
-      + "a fact that should no longer be true)."),
-    ta,
-    el("div", { class: "row", style: "margin-top:8px" },
-      el("button", { class: "primary", onclick: async () => { let j; try { j = JSON.parse(ta.value) } catch (e) { return toast("Invalid JSON", "err") } await api("PUT", `/api/chats/${chatId}/world`, j); closeModal(); toast("World state saved.", "ok"); } }, "Save"))));
-};
-
-$("#b-attire").onclick = async () => {
-  if (!S.chatId) return;
-  const chatId = S.chatId;
-  const a = await api("GET", `/api/chats/${chatId}/attire${frameQuery()}`);
-  if (S.chatId !== chatId) return;
-  const ta = el("textarea", { style: "width:100%;height:340px" }, JSON.stringify(a, null, 2));
-  modal("Attire — {name:{wearing:[],state:[]}}", b => b.append(
-    el("div", { class: "small dim", style: "margin-bottom:8px" },
-      "What each character is currently wearing and any visible physical state (injuries, disguises, damage) "
-      + "the story should keep consistent going forward. Updates automatically as the story progresses; edit "
-      + "directly only to correct something or set up a scene's starting appearance by hand."),
-    ta,
-    el("div", { class: "row", style: "margin-top:8px" },
-      el("button", { class: "primary", onclick: async () => { let j; try { j = JSON.parse(ta.value) } catch (e) { return toast("Invalid JSON", "err") } await api("PUT", `/api/chats/${chatId}/attire${frameQuery()}`, j); closeModal(); toast("Attire saved.", "ok"); } }, "Save"))));
-};
+// `#b-world` and `#b-attire` are bound in world_browser.js (loaded BEFORE this
+// file): the World Browser's Browse tab is what a host sees first, and the two
+// raw JSON editors that used to be bound here are its Raw JSON tab, behaviour
+// unchanged. Nothing here may rebind them -- a second top-level `onclick`
+// assignment in a later-loading file silently wins.
 
 // Genre & style: the dials that GATE engine behaviour, plus the narrator's
 // register. The free-text standing instructions that used to live here --

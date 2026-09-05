@@ -711,8 +711,14 @@ the head; the rest load in a fixed order:
 
 ```
 utils.js → components.js → editors.js → lorebooks.js → backdrops.js
-        → chat.js → settings.js → themes.js → app.js
+        → ambience.js → weather-fx.js → chime.js → chat.js → writers_room.js
+        → world_browser.js → settings.js → themes.js → extensions.js → app.js
 ```
+
+`writers_room.js` and `world_browser.js` sit between `chat.js` and
+`settings.js` on purpose: each binds a control of its own (`#room-tab`;
+`#b-world` and `#b-attire`), and a later file's top-level `onclick`
+assignment silently wins, so `settings.js` must not rebind them.
 
 Renaming a shared function without grepping every file will break it silently.
 

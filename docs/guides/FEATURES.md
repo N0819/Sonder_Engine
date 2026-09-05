@@ -665,8 +665,18 @@ legitimately perceive, learn, remember or infer.
   private setup knowledge routed to their memory rather than shown to you.
 - **Persona editor and private histories** — Who you play, plus per-story
   secrets only certain people know.
-- **World state and attire editors** — Direct access to the scene record and to
-  what everyone is wearing, for hand-correcting something that has drifted.
+- **World Browser** — Behind 🌍 and 👕: the world as rooms. A tree of every
+  room the story knows (where the cast stands first, then what they can
+  reach, then the plan's rooms nobody can reach yet, retired ids folded
+  away; a room inside a body nested under its holder's), and the chosen
+  room's card — its description, exits you click to walk, who is here and
+  what they wear, what else is here, the plan's stub while it is still one,
+  and what the Writers' Room has planned for it. "Move here" relocates a
+  cast member the way the cast panel does. Attire is shown per body,
+  read-only.
+- **Raw JSON** — The same dialog's second tab: direct access to the scene
+  record (🌍) and to what everyone is wearing (👕), for hand-correcting
+  something that has drifted.
 - **Cast panel** — Cast, attached lorebooks, everyone's condition, host-only
   insights, multiplayer and frames in one place.
 - **Writers' Room panel** (partial) — A tab on the right edge opens a simple
