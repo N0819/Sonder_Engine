@@ -287,3 +287,83 @@ def test_a_regions_look_is_written_once_and_read_by_the_registry(temp_db):
     assert normalize_regions({"items": {"x": {"name": "X"}}})["items"]["x"] \
         == {"name": "X", "brief": ""}
     assert set_region_look(cid, None, "", "anything") is None
+
+
+# ---------------------------------------------------------------------------
+# PD12: a brief describes what the room IS
+#
+# `room_brief(scene, "bare_hilltop")` on the road run's committed scene --
+# `exposure: open`, overcast with rain, morning -- answered "a vast round
+# room, about 15 paces east to west and 20 north to south", bucketed the
+# scrub and turf under "walls", and put the camera at "the north doorway".
+# An image made from that brief is an interior, and none of exposure, weather
+# or day phase appeared in it at all.
+# ---------------------------------------------------------------------------
+
+def _hilltop():
+    return {
+        "time_of_day": "morning",
+        "weather": {"sky": "overcast", "precipitation": "rain",
+                    "intensity": "light", "wind": "breeze",
+                    "temperature": "cold"},
+        "rooms": {
+            "bare_hilltop": {
+                "name": "Bare Hilltop", "exposure": "open",
+                "shape": "round", "extent": {"w": 15, "d": 20},
+                "anchors": {
+                    "scrub": {"desc": "patches of low scrub and coarse turf",
+                              "dir": "n", "height": "waist",
+                              "footprint": "run"},
+                    "cairn": {"desc": "a heap of grey stones"},
+                },
+                "adjacent": [{"to": "north_slope", "dir": "n"},
+                             {"to": "south_slope", "dir": "s"}],
+            },
+            "north_slope": {"name": "North Slope", "exposure": "open"},
+            "south_slope": {"name": "South Slope", "exposure": "open"},
+        },
+        "positions": {}, "entities": {},
+    }
+
+
+def test_an_open_room_is_briefed_as_ground_and_horizon_and_not_as_a_room():
+    brief = room_brief(_hilltop(), "bare_hilltop")
+    blob = json.dumps(brief).casefold()
+    for interior in ("room", "wall", "doorway", "ceiling", "floor"):
+        assert interior not in blob, interior
+    assert set(brief["ground"]) == {"n", "free"}
+    assert set(brief["ways"]) == {"n", "s"}
+    assert "walls" not in brief and "openings" not in brief
+
+
+def test_an_open_rooms_brief_names_the_sky_the_hour_and_the_weather():
+    brief = room_brief(_hilltop(), "bare_hilltop")
+    assert brief["sky"]["exposure"] == "open"
+    assert brief["sky"]["time"] == "morning"
+    assert brief["sky"]["weather"]
+    assert brief["proportion"] == (
+        "a vast roughly circular stretch of open ground, about 15 paces east "
+        "to west and 20 north to south, deeper than it is wide")
+    assert brief["camera"]["from"] == "the north edge of the stretch of open ground"
+
+
+def test_the_open_draft_reads_as_outdoors():
+    place = room_projection(_hilltop(), "bare_hilltop")
+    draft = compose_prompt(place, None, "")
+    assert ("to the north: patches of low scrub and coarse turf (waist-high, "
+            "running right across the ground), the ground carries on") in draft
+    assert "standing out in the open: a heap of grey stones" in draft
+    assert "in the open air, the horizon past the edges of the ground" in draft
+    assert "the middle of the ground empty" in draft
+    assert "wall" not in draft and "doorway" not in draft
+
+
+def test_an_enclosed_room_is_briefed_and_hashed_exactly_as_it_was():
+    """Byte-identity where a scene carries none of this: an enclosed room's
+    brief keeps its keys, its text and its cache key."""
+    sc = _scene()
+    brief = room_brief(sc, "hall")
+    assert set(brief) == {"walls", "openings", "proportion", "camera"}
+    assert "sky" not in brief and "ground" not in brief and "ways" not in brief
+    assert brief["proportion"] == "a large room"
+    assert brief["camera"]["from"] == "the east doorway"

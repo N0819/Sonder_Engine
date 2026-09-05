@@ -90,8 +90,12 @@ def test_the_understood_vocabulary_is_unchanged():
         assert normalize_barrier(value) == value
     assert normalize_barrier("shoji door") == "closed_door"
     assert normalize_barrier("none") == "open"
-    assert normalize_barrier("") == "wall"
-    assert normalize_barrier(None) == "wall"
+    # SILENCE IS AN OPENING (PD5, 2026-09-05): an edge that says nothing about
+    # its barrier has said nothing about a surface either, and reading it as a
+    # wall sealed a five-room road the Writers' Room had just planned. An
+    # unread WORD is a different input and still seals -- see below.
+    assert normalize_barrier("") == "open"
+    assert normalize_barrier(None) == "open"
 
 
 def test_a_word_nothing_reads_is_reported_not_swallowed():

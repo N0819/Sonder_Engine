@@ -134,6 +134,66 @@ def _proper(name):
     return " ".join(part[:1].upper() + part[1:] for part in text.split(" "))
 
 
+#: The widest a place's NAME runs before it stops being a name and starts
+#: being a description of what is that way. Measured 2026-09-05 over every
+#: frontier two live plans wrote: the nine phrases that minted junk rooms ran
+#: 5 to 9 words ("the river flowing west upstream", "bare grassy slopes
+#: falling away to the east and west"), and every label that named a place ran
+#: 1 to 4 ("north", "far road", "west ridge path", "the fish wharves lane").
+#: Four is where the two populations part.
+FRONTIER_NAME_WORDS = 4
+
+
+def frontier_refusal(axis, *, allow_bearing=False):
+    """Why this frontier label cannot be minted as a room, or ``None``.
+
+    A FRONTIER NAMES A PLACE. It is the answer to "what lies that way", and
+    the way out is drawn to it by name -- so what cannot be a place's name
+    cannot be minted as one, and is reported instead of becoming a room whose
+    id is the sentence somebody wrote.
+
+    Two things are not a name, and both were measured:
+
+    * a bare BEARING (F3, chat 116): `frontier: ["west"]` minted a room called
+      West. A direction is where the way out points, not what is at the end of
+      it, and it belongs on `adjacent.bearing`.
+    * a DESCRIPTION (F63 / PD4, the market and the road runs, six junk rooms
+      of fifteen in one story): `frontier: ["the village street of Ambry
+      beyond the gate"]` minted
+      `the_village_street_of_ambry_beyond_the_gate` -- no extent, no light, no
+      exposure, rendered to the player as "Through the open doorway is The
+      Village Street Of Ambry Beyond The Gate", and reported by
+      `inspect_contradictions.structure` as an edge to an unknown room ever
+      after.
+
+    The distinction is stated as the class rather than as a vocabulary of
+    English: a name is short because it is a name (`FRONTIER_NAME_WORDS`), and
+    a bearing is a closed set the engine owns.
+
+    `allow_bearing` is for the MINT, and only there: the fringe has a grammar
+    to draw on, so a bearing off a square becomes "North Lane" -- a real name
+    for a real place -- and plans published before the authoring gate existed
+    still carry bearings that mint correctly. A description has no such
+    remedy: there is no name in it to draw.
+    """
+    from world.spatial import normalize_bearing
+
+    text = " ".join(str(axis or "").split())
+    if not text:
+        return None
+    word = text.casefold()
+    if not allow_bearing and (normalize_bearing(word) or word in ("up", "down")):
+        return ("frontier %r is a direction; a frontier names WHAT lies that "
+                "way (a lane, a yard, the town beyond), and a direction "
+                "belongs on adjacent.bearing" % text)
+    if len(text.split()) > FRONTIER_NAME_WORDS:
+        return ("frontier %r describes what lies that way instead of naming "
+                "it; a frontier is the NAME the place is reached by, because "
+                "the way out is drawn to it by that name -- say the name and "
+                "put the description in the room's purpose" % text)
+    return None
+
+
 def mint_frontier(structure, from_uid, axis, seed, existing=()):
     """Deterministically turn one structure-side frontier label into a room.
 
@@ -669,6 +729,13 @@ def prepare_frontier_expansion(cid, scene):
         frontiers = [str(x) for x in spec.get("frontier") or () if str(x)]
         retained = []
         for axis in frontiers:
+            # WHAT CANNOT BE A PLACE'S NAME IS NOT MINTED AS ONE. A phrase
+            # describing what lies that way is kept on the spec, where
+            # `structure_warnings` reports it, instead of becoming a registry
+            # room whose uid is the sentence (F63/PD4).
+            if frontier_refusal(axis, allow_bearing=True):
+                retained.append(axis)
+                continue
             # An axis that names a room the plan already has is not a stub
             # to mint but an edge to draw: "the lane continues to Market
             # Square" reaches the square, never a second one.
@@ -748,9 +815,25 @@ def apply_frontier_mutations(cid, turn_id, mutations):
         )
 
 
-def structure_warnings(structure, rooms):
+def structure_warnings(structure, rooms, known=()):
+    """What is wrong with this planned skeleton, in author-facing words.
+
+    `known` is every room that exists OUTSIDE the plan -- in practice the live
+    scene's ids. A PLAN MAY NAME A ROOM THAT ALREADY EXISTS: what this warning
+    is for is a plan that names a room nothing can be, and a live room is the
+    least unknown thing in the scene. It joins the plan too, so a skeleton
+    hanging off an existing room is connected rather than "disconnected".
+
+    Measured 2026-09-05 (PE8, Flat 4B): the Writers' Room planned
+    `stairwell_fourth_to_third` and `flat_4a_hallway`, each declaring
+    `adjacent: [{to: landing}]`; both landed, the landing carried both
+    reciprocals, the plan WORKED -- and `inspect_contradictions.structure`
+    reported three contradictions for it, so the tool that exists to show the
+    Room its errors showed it errors it had not made.
+    """
     structure = normalize_structure(structure)
     rooms = rooms if isinstance(rooms, dict) else {}
+    known = {str(x) for x in known or ()} - set(rooms)
     warnings = []
     if not rooms:
         return [f"{structure['key']}: structure has no planned rooms"]
@@ -760,18 +843,26 @@ def structure_warnings(structure, rooms):
         destinations = [str(e.get("to")) for e in room.get("adjacent") or ()
                         if isinstance(e, dict) and e.get("to")]
         for target in destinations:
-            if target not in rooms:
+            if target not in rooms and target not in known:
                 warnings.append(f"{uid}: planned edge targets unknown room {target}")
         if set(destinations) & set(str(x) for x in room.get("frontier") or ()):
             warnings.append(f"{uid}: frontier label collides with a real edge")
+        for axis in room.get("frontier") or ():
+            refusal = frontier_refusal(axis, allow_bearing=True)
+            if refusal:
+                warnings.append(f"{uid}: {refusal}")
     # Undirected reach is sufficient for author diagnostics; runtime pathing
     # will still enforce each authored barrier direction.
+    # A live room the plan hangs off is a NODE of the graph, not a hole in
+    # it: two planned rooms that both open onto the landing are joined
+    # through it.
+    nodes = set(rooms) | known
     start, seen = next(iter(rooms)), set()
     stack = [start]
     reverse = {}
     for uid, room in rooms.items():
         for edge in room.get("adjacent") or ():
-            if isinstance(edge, dict) and edge.get("to") in rooms:
+            if isinstance(edge, dict) and str(edge.get("to")) in nodes:
                 reverse.setdefault(str(edge["to"]), set()).add(str(uid))
     while stack:
         uid = stack.pop()
@@ -780,15 +871,16 @@ def structure_warnings(structure, rooms):
         seen.add(uid)
         room = rooms.get(uid) or {}
         stack.extend(str(e.get("to")) for e in room.get("adjacent") or ()
-                     if isinstance(e, dict) and e.get("to") in rooms)
+                     if isinstance(e, dict) and str(e.get("to")) in nodes)
         stack.extend(reverse.get(uid, ()))
-    if len(seen) != len(rooms):
+    if len(seen & set(rooms)) != len(rooms):
         warnings.append(f"{structure['key']}: planned skeleton is disconnected")
     return warnings
 
 
 __all__ = [
-    "STRUCTURES_KEY", "apply_frontier_mutations", "composed_scene",
+    "FRONTIER_NAME_WORDS", "STRUCTURES_KEY", "apply_frontier_mutations",
+    "composed_scene", "frontier_refusal",
     "materialize_planned_fringe", "prepare_frontier_expansion",
     "mint_frontier", "normalize_structure", "normalize_structures",
     "planned_context",

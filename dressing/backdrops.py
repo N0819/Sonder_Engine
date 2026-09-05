@@ -49,7 +49,7 @@ from world.spatial import (
     room_grid, room_of,
 )
 from core.paths import INSTALL_ROOT
-from world.weather import weather_for_room, weather_words
+from world.weather import room_exposure, weather_for_room, weather_words
 from world.day_cycle import CLOCK_READING, PM_MARKER, clock_reading_hour
 
 # Where generated images live. Deliberately NOT the database: engine.db is
@@ -611,6 +611,39 @@ _HEIGHT_WORD = {"waist": "waist-high", "head": "head-high",
 _FOOTPRINT_WORD = {"small": "small", "large": "broad",
                    "run": "running the length of the wall"}
 
+# A BRIEF DESCRIBES WHAT THE ROOM IS. An enclosed place has walls, a ceiling
+# and doorways; an open one has ground, a horizon and a sky, and the ways out
+# of it are where the ground goes on. The same records answer both -- anchors
+# by bearing, edges by bearing, an extent, a camera -- so the difference is
+# vocabulary and not structure, and `exposure` is the field that already knows
+# which one this room is.
+#
+# Measured 2026-09-05 (PD12, the road run): `room_brief` of `bare_hilltop`
+# -- `exposure: open`, under an overcast sky in the rain -- answered
+# "a vast round room, about 15 paces east to west and 20 north to south",
+# bucketed its scrub and turf under "walls", and put the camera at "the north
+# doorway". An image made from that brief is an interior, and none of
+# exposure, weather or day phase appeared in it at all.
+_OPEN_HEIGHT_WORD = {"waist": "waist-high", "head": "head-high",
+                     "full": "taller than a person"}
+_OPEN_FOOTPRINT_WORD = {"small": "small", "large": "broad",
+                        "run": "running right across the ground"}
+_OPEN_GROUND = "stretch of open ground"
+_OPEN_SHAPE = {"round": "roughly circular", "l": "L-shaped",
+               "composite": "irregularly shaped"}
+_OPEN_WAY_WORD = {
+    "open": "the ground carries on", "open_door": "an open gateway",
+    "closed_door": "a shut gateway", "window": "a window",
+    "bars": "a barred opening", "membrane": "a hanging way through",
+    "one_way_window": "a dark pane"}
+#: What being under the sky adds to a picture, by exposure. `enclosed` says
+#: nothing: a room with a roof and no sky in it is the case the brief already
+#: described correctly.
+_EXPOSURE_PHRASE = {
+    "open": "in the open air, the horizon past the edges of the ground",
+    "sheltered": "under cover, open to the air at the sides",
+}
+
 
 def _walls_of(scene, room_id):
     """{wall: [{desc, height?, footprint?}]} -- the room's AUTHORED anchors
@@ -662,10 +695,11 @@ def _openings_of(scene, room_id):
     return out
 
 
-def _proportion_of(scene, room_id):
+def _proportion_of(scene, room_id, outdoors=False):
     """One sentence for how much floor there is and how it is shaped, or ''
     when nothing was measured or authored -- a tier the engine only guessed
-    is not asserted to the picture."""
+    is not asserted to the picture. `outdoors` says the same measurements in
+    the vocabulary an open place has: ground, not floor and walls."""
     room = ((scene or {}).get("rooms") or {}).get(room_id) or {}
     grid = room_grid(scene or {}, room_id)
     authored = str(room.get("size") or "").strip().casefold() in ROOM_SIZES
@@ -675,8 +709,12 @@ def _proportion_of(scene, room_id):
     # `composite` is any union of rectangles that is not the two-part L: the
     # picture is told the floor is irregular and left to the walls sentence
     # for where it turns, since a shape word for every union does not exist.
-    shape = {"round": "round room", "l": "L-shaped room",
-             "composite": "irregularly shaped room"}.get(grid.shape, "room")
+    if outdoors:
+        shape = " ".join(
+            w for w in (_OPEN_SHAPE.get(grid.shape, ""), _OPEN_GROUND) if w)
+    else:
+        shape = {"round": "round room", "l": "L-shaped room",
+                 "composite": "irregularly shaped room"}.get(grid.shape, "room")
     if not grid.measured:
         return "a %s %s" % (size, shape)
     long_side, short_side = max(grid.w, grid.d), min(grid.w, grid.d)
@@ -692,21 +730,23 @@ def _proportion_of(scene, room_id):
             % (size, shape, grid.w, grid.d, proportion))
 
 
-def _part_of_room(cell, grid):
+def _part_of_room(cell, grid, outdoors=False):
     """Where in the room a cell is, as a person would say it: thirds on each
     axis -- "the north-west part", "the middle of the south side", "the
-    middle"."""
+    middle". Outdoors the same thirds are named against the ground."""
+    place = _OPEN_GROUND if outdoors else "room"
     x, y = cell
     col = "west" if x < grid.w / 3.0 else "east" if x >= 2 * grid.w / 3.0 else ""
     row = "north" if y < grid.d / 3.0 else "south" if y >= 2 * grid.d / 3.0 else ""
     if row and col:
-        return "the %s-%s part of the room" % (row, col)
+        return "the %s-%s part of the %s" % (row, col, place)
     if row or col:
         return "the middle of the %s side" % (row or col)
-    return "the middle of the room"
+    return "the middle of the %s" % place
 
 
-def _camera_of(scene, room_id, openings, viewer=None, viewer_camera=False):
+def _camera_of(scene, room_id, openings, viewer=None, viewer_camera=False,
+               outdoors=False):
     """Where the picture is taken from: the room's MAIN ENTRANCE looking in
     -- the first passable doorway in `CAMERA_WALL_ORDER` -- level and wide;
     or, behind `backdrop_continuity` (`viewer_camera`), the viewer's own
@@ -723,16 +763,37 @@ def _camera_of(scene, room_id, openings, viewer=None, viewer_camera=False):
         cell = body_cell(scene or {}, viewer)
         facing = effective_facing(scene or {}, viewer)
         if cell and facing:
-            return {"from": _part_of_room(cell, room_grid(scene or {}, room_id)),
+            return {"from": _part_of_room(cell, room_grid(scene or {}, room_id),
+                                          outdoors),
                     "looking": _WALL_WORD.get(facing, facing),
                     "framing": "eye level, wide"}
     for wall in CAMERA_WALL_ORDER:
         for opening in openings.get(wall) or []:
             if opening.get("barrier") in _PASSABLE_BARRIERS:
-                return {"from": "the %s doorway" % _WALL_WORD[wall],
+                return {"from": ("the %s edge of the %s"
+                                 % (_WALL_WORD[wall], _OPEN_GROUND))
+                                if outdoors
+                                else "the %s doorway" % _WALL_WORD[wall],
                         "looking": _WALL_WORD[opposite_bearing(wall)],
                         "framing": "level, wide"}
     return None
+
+
+def _sky_of(scene, room_id, exposure):
+    """The three facts that decide an outdoor picture, or {} for a room with
+    no sky over it: how much of it this place stands under, what time of day
+    the light is, and what is coming down. Every one is already on the scene;
+    PD12 measured that none of them reached the brief."""
+    if exposure not in _EXPOSURE_PHRASE:
+        return {}
+    out = {"exposure": exposure}
+    bucket = time_bucket((scene or {}).get("time_of_day"))
+    if bucket:
+        out["time"] = bucket
+    words = weather_words(weather_for_room(scene or {}, room_id), "sight")
+    if words:
+        out["weather"] = list(words)
+    return out
 
 
 def room_brief(scene, room_id, viewer=None, *, regions=None,
@@ -741,21 +802,34 @@ def room_brief(scene, room_id, viewer=None, *, regions=None,
     each present only when it has something to say, so a room with none of
     them projects and hashes exactly as it did before the brief existed.
     `regions` is the frame's region registry (`world.regions.region_registry`),
-    read for the region's `look`; the projection stays pure over it."""
+    read for the region's `look`; the projection stays pure over it.
+
+    An OPEN room is briefed as the place it is: {ground, ways, proportion,
+    camera, sky, look}. Same records, same structure, the vocabulary an
+    outdoors has -- and `sky`, which carries the exposure, the day phase and
+    the weather that decide an outdoor picture. An enclosed room's brief is
+    untouched, keys and text, so its cache key is the one it had.
+    """
     scene = scene or {}
     out = {}
+    exposure = room_exposure(scene, room_id)
+    outdoors = exposure == "open"
     walls = _walls_of(scene, room_id)
     if walls:
-        out["walls"] = walls
+        out["ground" if outdoors else "walls"] = walls
     openings = _openings_of(scene, room_id)
     if openings:
-        out["openings"] = openings
-    proportion = _proportion_of(scene, room_id)
+        out["ways" if outdoors else "openings"] = openings
+    proportion = _proportion_of(scene, room_id, outdoors)
     if proportion:
         out["proportion"] = proportion
-    camera = _camera_of(scene, room_id, openings, viewer, viewer_camera)
+    camera = _camera_of(scene, room_id, openings, viewer, viewer_camera,
+                        outdoors)
     if camera:
         out["camera"] = camera
+    sky = _sky_of(scene, room_id, exposure)
+    if sky:
+        out["sky"] = sky
     if regions:
         from world.regions import room_region
         region = room_region(scene, room_id)
@@ -1108,47 +1182,66 @@ def _source_lighting(place):
     return [fragment]
 
 
-def _wall_phrase(wall):
-    return "%s wall" % _WALL_WORD[wall] if wall in _WALL_WORD else \
-        ("standing free of the walls" if wall == "free" else "")
+def _wall_phrase(wall, outdoors=False):
+    if wall in _WALL_WORD:
+        return ("to the %s" % _WALL_WORD[wall]) if outdoors \
+            else "%s wall" % _WALL_WORD[wall]
+    if wall == "free":
+        return "standing out in the open" if outdoors \
+            else "standing free of the walls"
+    return ""
 
 
 def _brief_sentences(place):
     """The walls and openings of a brief as prompt fragments, then the
-    camera. One fragment per wall that has anything on it or through it."""
-    walls = place.get("walls") or {}
-    openings = place.get("openings") or {}
+    camera. One fragment per wall that has anything on it or through it.
+
+    An open place's brief carries the same two groupings under `ground` and
+    `ways` (`room_brief`), and is rendered in the vocabulary an outdoors has:
+    a bearing is a side and not a wall, a passable edge is where the ground
+    carries on, and the floor the camera leaves empty is the ground."""
+    outdoors = "ground" in place or "ways" in place or "sky" in place
+    walls = place.get("ground") or place.get("walls") or {}
+    openings = place.get("ways") or place.get("openings") or {}
+    height_word = _OPEN_HEIGHT_WORD if outdoors else _HEIGHT_WORD
+    footprint_word = _OPEN_FOOTPRINT_WORD if outdoors else _FOOTPRINT_WORD
+    way_word = _OPEN_WAY_WORD if outdoors else {
+        "open": "an opening", "open_door": "an open doorway",
+        "closed_door": "a closed door", "window": "a window",
+        "bars": "a barred opening", "membrane": "a curtained way",
+        "one_way_window": "a dark pane"}
     out = []
     for wall in BRIEF_WALL_ORDER + ("unplaced",):
         items = []
         for anchor in walls.get(wall) or []:
             words = str(anchor.get("desc") or "")
-            qualifiers = [q for q in (_HEIGHT_WORD.get(anchor.get("height")),
-                                      _FOOTPRINT_WORD.get(anchor.get("footprint")))
+            qualifiers = [q for q in (height_word.get(anchor.get("height")),
+                                      footprint_word.get(anchor.get("footprint")))
                           if q]
             if qualifiers:
                 words += " (%s)" % ", ".join(qualifiers)
             items.append(words)
         for opening in openings.get(wall) or []:
-            barrier = opening.get("barrier")
-            what = opening.get("name") or {
-                "open": "an opening", "open_door": "an open doorway",
-                "closed_door": "a closed door", "window": "a window",
-                "bars": "a barred opening", "membrane": "a curtained way",
-                "one_way_window": "a dark pane"}.get(barrier, "a way through")
+            what = opening.get("name") or way_word.get(
+                opening.get("barrier"), "a way through")
             if opening.get("vertical"):
                 what += " leading %s" % opening["vertical"]
             items.append(what)
         if not items:
             continue
-        where = _wall_phrase(wall)
+        where = _wall_phrase(wall, outdoors)
         out.append(("%s: %s" % (where, ", ".join(items))) if where
                    else ", ".join(items))
+    sky = place.get("sky") or {}
+    phrase = _EXPOSURE_PHRASE.get(sky.get("exposure"))
+    if phrase:
+        out.append(phrase)
     camera = place.get("camera")
     if camera:
-        out.append("seen from %s looking %s, %s, the middle of the floor empty"
+        out.append("seen from %s looking %s, %s, the middle of the %s empty"
                    % (camera.get("from"), camera.get("looking"),
-                      camera.get("framing")))
+                      camera.get("framing"),
+                      "ground" if outdoors else "floor"))
     return out
 
 
