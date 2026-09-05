@@ -15,7 +15,7 @@
 | `agents/director_contact.py` | 457 |  | `story.character_schema`, `world.spatial` |
 | `agents/director_evidence.py` | 1195 |  | `agents.common`, `agents.director_lingua`, `llm`, `world.spatial` |
 | `agents/director_fanout.py` | 887 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
-| `agents/director_floors.py` | 1692 |  | `agents.common`, `agents.director_lingua`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
+| `agents/director_floors.py` | 1718 |  | `agents.common`, `agents.director_lingua`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
 | `agents/director_lingua.py` | 29 |  | — |
 | `agents/director_movement.py` | 1260 |  | `agents.director_lingua`, `story.character_schema`, `world.spatial` |
 | `agents/director_reconcile.py` | 592 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story`, `world.spatial` |
@@ -49,7 +49,7 @@
 | `llm/research_providers.py` | 247 |  | `core.db` |
 | `llm/schemas.py` | 5645 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `mind/__init__.py` | 6 |  | — |
-| `mind/affect.py` | 2406 |  | `mind.theory_of_mind` |
+| `mind/affect.py` | 2428 |  | `mind.theory_of_mind` |
 | `mind/canon_provenance.py` | 398 |  | — |
 | `mind/knowledge_circles.py` | 134 |  | `core.db` |
 | `mind/memory.py` | 137 | Facade re-exporting every mind.memory_* name; holds no domain code of its own. | `core`, `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.memory_common`, `mind.memory_context`, `mind.memory_inference`, `mind.memory_lore_entries`, `mind.memory_lorebooks`, `mind.memory_read`, `mind.memory_relationships`, `mind.memory_retrieval`, `mind.memory_snapshot`, `mind.memory_summaries`, `mind.memory_time`, `mind.memory_vectors`, `mind.memory_write`, `mind.theory_of_mind` |
@@ -67,7 +67,7 @@
 | `mind/memory_time.py` | 332 |  | `core.db` |
 | `mind/memory_vectors.py` | 772 | Rebuilding vectors after the embedding model changes: bank status, the rebuild, and its background run. | `core.db`, `core.logging_utils`, `llm.providers`, `mind.memory_common`, `mind.memory_retrieval`, `mind.memory_write` |
 | `mind/memory_write.py` | 829 | How a memory becomes a row: normalisation, extraction, FTS mirror, the upsert, and the embedding-repair thread. | `core.db`, `core.logging_utils`, `llm.providers`, `mind.memory_common` |
-| `mind/psychology_runtime.py` | 749 |  | — |
+| `mind/psychology_runtime.py` | 767 |  | — |
 | `mind/theory_of_mind.py` | 725 |  | — |
 | `persist/__init__.py` | 6 |  | — |
 | `persist/chat_archive.py` | 1274 | Typed, atomic chat archive export/import service and HTTP routes. | `core.db`, `llm.schemas`, `mind.memory`, `persist.checkpoints`, `story.character_schema`, `story.room_conversation` |
@@ -81,7 +81,7 @@
 | `persist/commit_entities.py` | 560 | world_entities projection of the scene commit, awareness gate, disguise supersession. | `core.db`, `persist.commit_common`, `story.character_schema`, `story.scene`, `world.spatial` |
 | `persist/commit_ledgers.py` | 374 | Pending-obligation and world-pressure debt ledgers. | `core.db`, `core.pipeline_context`, `persist.commit_common` |
 | `persist/commit_mapping.py` | 730 | Lore/book mapping commit: book ops, lore ops, canon fallback ops, offscreen-event normaliser. | `core.db`, `core.frames`, `mind.memory`, `persist.commit_common`, `story.character_schema`, `story.provenance_text`, `world.spatial` |
-| `persist/commit_mechanics.py` | 393 | Transit/news sweeps, the world-event spine, information carriers, cast changes. | `core.db`, `persist.commit_common`, `persist.commit_scene_state`, `story.character_schema`, `story.scene`, `world.mechanics` |
+| `persist/commit_mechanics.py` | 438 | Transit/news sweeps, the world-event spine, information carriers, cast changes. | `core.db`, `persist.commit_common`, `persist.commit_scene_state`, `story.character_schema`, `story.scene`, `world.mechanics` |
 | `persist/commit_memory.py` | 1794 | Pre-lock memory preparation: per-mind memories and the psychology deltas riding with them. | `core.db`, `mind`, `mind.memory`, `mind.theory_of_mind`, `persist.commit_background`, `persist.commit_common`, `persist.commit_place_graph`, `story.character_schema`, `world.comfort`, `world.spatial`, `world.stimulation`, `world.survival` |
 | `persist/commit_memory_write.py` | 325 | The durable memory write and its out-of-band consolidation twin. | `core.db`, `mind.memory`, `persist.commit_memory`, `story.character_schema`, `story.scene` |
 | `persist/commit_place_graph.py` | 321 | Per-mind durable place graph and per-beat spatial experience. | `world.spatial` |
@@ -173,7 +173,7 @@
 | `world/degradation.py` | 171 |  | — |
 | `world/gaps.py` | 454 |  | `core.db`, `mind.canon_provenance`, `world.spatial`, `world.subjects` |
 | `world/living_world.py` | 596 |  | `core.logging_utils`, `world.mechanics` |
-| `world/mechanics.py` | 930 |  | `core`, `world.spatial`, `world.spatial_frames` |
+| `world/mechanics.py` | 1156 |  | `core`, `world.spatial`, `world.spatial_frames` |
 | `world/offscreen.py` | 2299 |  | `core`, `core.logging_utils`, `llm.prompts` |
 | `world/paradox.py` | 648 |  | `core.db`, `core.frames`, `story.character_schema`, `world.spatial` |
 | `world/place_purpose.py` | 545 |  | `mind.theory_of_mind`, `world.comfort`, `world.spatial`, `world.survival` |
@@ -205,7 +205,7 @@
 | `world/stimulation.py` | 239 |  | `story`, `world.spatial` |
 | `world/structure.py` | 1394 |  | `world.charter_model`, `world.regions`, `world.spatial` |
 | `world/subjects.py` | 500 |  | `core.db`, `mind.canon_provenance`, `world.spatial` |
-| `world/survival.py` | 354 |  | `core.db` |
+| `world/survival.py` | 463 |  | `core.db` |
 | `world/weather.py` | 916 |  | — |
 
 ## Largest top-level functions
@@ -318,14 +318,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_bind_minted_entities_to_present_figures()` | 1427 | 160 lines |
-| `_awareness_exits()` | 689 | 98 lines |
-| `_release_attempts()` | 947 | 93 lines |
-| `_conditions_view()` | 569 | 87 lines |
-| `strip_addressee_concealment()` | 1612 | 81 lines |
-| `_narrated_destruction_subjects()` | 1207 | 79 lines |
-| `_unsupported_character_awareness()` | 284 | 66 lines |
-| `_restraint_exits()` | 1073 | 64 lines |
+| `_bind_minted_entities_to_present_figures()` | 1453 | 160 lines |
+| `_awareness_exits()` | 715 | 98 lines |
+| `_release_attempts()` | 973 | 93 lines |
+| `_conditions_view()` | 595 | 87 lines |
+| `strip_addressee_concealment()` | 1638 | 81 lines |
+| `_narrated_destruction_subjects()` | 1233 | 79 lines |
+| `_unsupported_character_awareness()` | 310 | 66 lines |
+| `_restraint_exits()` | 1099 | 64 lines |
 
 ### `agents/director_lingua.py`
 
@@ -665,14 +665,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `resolve_affect()` | 791 | 184 lines |
-| `apply_intent_ops()` | 1207 | 164 lines |
-| `appraise()` | 480 | 145 lines |
-| `apply_project_ops()` | 1612 | 137 lines |
-| `settle_intent_world_anchors()` | 1433 | 132 lines |
-| `normalize_wants()` | 981 | 89 lines |
-| `update_drive_strain()` | 2063 | 83 lines |
-| `validate_drive_shift()` | 2189 | 79 lines |
+| `resolve_affect()` | 810 | 184 lines |
+| `apply_intent_ops()` | 1226 | 164 lines |
+| `appraise()` | 499 | 145 lines |
+| `apply_project_ops()` | 1631 | 137 lines |
+| `settle_intent_world_anchors()` | 1452 | 132 lines |
+| `normalize_wants()` | 1000 | 89 lines |
+| `update_drive_strain()` | 2082 | 86 lines |
+| `validate_drive_shift()` | 2211 | 79 lines |
 
 ### `mind/canon_provenance.py`
 
@@ -875,12 +875,12 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `resolve_hedonic()` | 149 | 198 lines |
-| `resolve_stress()` | 349 | 108 lines |
-| `apply_belief_updates()` | 560 | 74 lines |
-| `apply_association_updates()` | 636 | 49 lines |
-| `_authored_beliefs()` | 512 | 46 lines |
-| `cognitive_absorption()` | 705 | 45 lines |
-| `_within_cap()` | 473 | 29 lines |
+| `resolve_stress()` | 349 | 126 lines |
+| `apply_belief_updates()` | 578 | 74 lines |
+| `apply_association_updates()` | 654 | 49 lines |
+| `_authored_beliefs()` | 530 | 46 lines |
+| `cognitive_absorption()` | 723 | 45 lines |
+| `_within_cap()` | 491 | 29 lines |
 | `elapsed_psych_units()` | 132 | 15 lines |
 
 ### `mind/theory_of_mind.py`
@@ -1029,10 +1029,10 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `commit_transit_sweep()` | 22 | 192 lines |
-| `commit_information_carriers()` | 264 | 76 lines |
-| `commit_cast_changes()` | 343 | 51 lines |
-| `commit_world_event_spine()` | 216 | 46 lines |
+| `commit_transit_sweep()` | 31 | 228 lines |
+| `commit_information_carriers()` | 309 | 76 lines |
+| `commit_cast_changes()` | 388 | 51 lines |
+| `commit_world_event_spine()` | 261 | 46 lines |
 
 ### `persist/commit_memory.py`
 
@@ -2118,14 +2118,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_tick_conditions()` | 746 | 112 lines |
+| `_tick_conditions()` | 824 | 128 lines |
 | `read_time_diff()` | 172 | 110 lines |
 | `_fire_due_events()` | 468 | 96 lines |
-| `mechanics_sweep()` | 872 | 59 lines |
+| `mechanics_sweep()` | 1098 | 59 lines |
 | `_schedule_new_arrivals()` | 566 | 44 lines |
+| `unanswered_hazard_subjects()` | 1042 | 42 lines |
 | `time_diff_claims()` | 310 | 31 lines |
 | `beat_end_elapsed()` | 343 | 31 lines |
-| `_tick_spec()` | 691 | 28 lines |
 
 ### `world/offscreen.py`
 
@@ -2507,14 +2507,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `tick_vitals()` | 237 | 61 lines |
-| `is_sealed_in()` | 199 | 36 lines |
-| `apply_vitals_diff()` | 300 | 30 lines |
-| `seed_vitals()` | 146 | 23 lines |
-| `vitals_facts()` | 332 | 23 lines |
-| `_stored_vitals()` | 123 | 21 lines |
-| `vital_label()` | 183 | 14 lines |
-| `vitals_of()` | 171 | 10 lines |
+| `tick_vitals()` | 321 | 75 lines |
+| `apply_vitals_diff()` | 398 | 41 lines |
+| `is_sealed_in()` | 227 | 36 lines |
+| `seed_vitals()` | 174 | 23 lines |
+| `vitals_facts()` | 441 | 23 lines |
+| `_stored_vitals()` | 151 | 21 lines |
+| `add_air_denied()` | 281 | 19 lines |
+| `set_air_denied()` | 302 | 17 lines |
 
 ### `world/weather.py`
 

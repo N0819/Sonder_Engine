@@ -415,12 +415,20 @@ class TestAirAndSealedContainers:
         assert scene["vitals"]["P"]["air"] == 1.0
 
     def test_air_returns_once_out(self):
+        """Returns, over minutes rather than instantly: a full breath a
+        MINUTE was fifteen times the rate a sealed jar takes one away, so
+        nothing the world or the Director could write about a body's air
+        survived a single beat (chat "rush" 2026-09-05, PR3)."""
         scene = merge_scene_with_diff(
             self._jar(), {"time": {"duration_seconds": 600}})
-        assert scene["vitals"]["P"]["air"] < 1.0
+        sealed = scene["vitals"]["P"]["air"]
+        assert sealed < 1.0
 
         scene["positions"]["P"] = "hall"
         scene = merge_scene_with_diff(scene, {"time": {"duration_seconds": 120}})
+        assert scene["vitals"]["P"]["air"] > sealed
+
+        scene = merge_scene_with_diff(scene, {"time": {"duration_seconds": 600}})
         assert scene["vitals"]["P"]["air"] == 1.0
 
 
@@ -935,9 +943,11 @@ class TestSurvivalSurvivesBranchingAndRerolls:
         stamina = merged["vitals"]["P"]["stamina"]
         assert isinstance(stamina, float)
         # The unreadable one falls to its default; the readable ones are
-        # untouched by their neighbour's damage.
+        # untouched by their neighbour's damage. The declared `air: 0.8`
+        # STANDS -- the beat's own account of a body's air outranks the tick
+        # that follows it in the same merge (PR3).
         assert merged["vitals"]["P"]["nourishment"] < 0.5
-        assert merged["vitals"]["P"]["air"] > 0.8
+        assert merged["vitals"]["P"]["air"] == 0.8
 
 
 class TestAuthoringSettingsSurviveARestore:

@@ -12,12 +12,21 @@ import json, time
 from core.db import q, qtx, transaction, wget, wset
 from story.character_schema import character_name_from_text, persona_name
 from story.scene import cast_change_status, set_char_status
-from world.mechanics import mechanics_sweep, stable_event_key
+from world.mechanics import (HAZARD_REPORT_CAP, inert_condition_ids,
+                            mechanics_sweep, stable_event_key,
+                            unanswered_hazard_subjects)
 from persist.commit_common import (ENGINE_NOTICES_KEY, _registered_name_roster,
                                    _room_of, compose_engine_notices)
 from persist.commit_scene_state import prepare_scene_commit
 
 # ---- Mechanics sweep: timed arrivals, expiry, news, engine notices ----
+
+#: How many inert-cadence condition ids one warning names before it says
+#: "and N more". A warning is a developer-facing line, and one chat in the
+#: corpus carries 24 active condition rows (engine.db 2026-08-25) -- the
+#: count is the finding, the ids are the handle.
+_INERT_CONDITION_REPORT_CAP = 6
+
 
 def commit_transit_sweep(ctx, nonce, *, prepared=None):
     """Commit-domain wrapper around mechanics.mechanics_sweep, run FIRST
@@ -85,6 +94,42 @@ def commit_transit_sweep(ctx, nonce, *, prepared=None):
             cast_changes=diff.get("cast_changes") or [],
             player_room=_player_room,
         )
+
+        # A condition that SPELLS a cadence and fills it with nothing acts on
+        # nobody and says so nowhere. Six of six did in the burning tenement
+        # (chat "rush" 2026-09-05, PR4b) and the fire therefore never touched
+        # a body. Reported once per beat, ids only: the fix is the Director
+        # re-emitting the row with a cadence, and it needs to know which rows.
+        _inert = inert_condition_ids(conditions)
+        if _inert:
+            ctx.add_warning(
+                "%d standing condition%s declare a tick cadence and give no "
+                "usable interval, so nothing they describe ever acts: %s"
+                % (len(_inert), "" if len(_inert) == 1 else "s",
+                   ", ".join(_inert[:_INERT_CONDITION_REPORT_CAP])
+                   + ("" if len(_inert) <= _INERT_CONDITION_REPORT_CAP
+                      else ", and %d more"
+                           % (len(_inert) - _INERT_CONDITION_REPORT_CAP))))
+
+        # THE WORLD IS A PARTY TO A CONTEST. A body standing in a place the
+        # scene itself states is dangerous, on a beat that rolled nothing and
+        # recorded no condition, vital or consequence for anyone, is a beat
+        # in which the world was present and was not answered. Reported after
+        # the sweep, so a condition that ticked a vital this beat has already
+        # counted as the answer and silences it.
+        _unanswered = unanswered_hazard_subjects(
+            sc, conditions, None, diff)
+        if _unanswered:
+            ctx.add_warning(
+                "The scene states a hazard where %s stand%s, and this beat "
+                "rolled nothing and recorded no condition, vital or "
+                "consequence for anyone -- a contest needs an opposing "
+                "force, not an opposing person."
+                % (", ".join(_unanswered[:HAZARD_REPORT_CAP])
+                   + ("" if len(_unanswered) <= HAZARD_REPORT_CAP
+                      else " and %d more"
+                           % (len(_unanswered) - HAZARD_REPORT_CAP)),
+                   "s" if len(_unanswered) == 1 else ""))
 
         row_by_id = {row["event_id"]: row for row in pending}
         # What fired, and of which kind, is counted by the pass that fired it

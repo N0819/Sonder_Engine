@@ -255,6 +255,25 @@ _LEAK_SIMILARITY = 0.5
 #   an unrelated personality transplant; both are refused as breaks.
 
 _STRAIN_HALF_LIFE = 60.0
+#: The most of a standing drive strain one beat may decay away, however long
+#: the beat was. `_STRAIN_HALF_LIFE` is fed `elapsed_psych_units`, which is
+#: one unit per TURN in a story that does not move the simulation clock and
+#: one unit per MINUTE in one that does -- so the same seven beats relaxed a
+#: drive by 8% in the first kind of story and by 84% in the second, off one
+#: constant. Measured chat "quiet" 2026-09-05 (PQ21): a two-hour conversation
+#: in which a man's taboo was approached and deflected on seven straight
+#: beats reported `drive_strain 0.0`, which means the rupture mechanism could
+#: never fire in a story of that shape.
+#:
+#: The rule, rather than a second constant with a second unit: TIME DOES NOT
+#: PAY DOWN A DRIVE. A mood relaxes on a clock; a drive's strain is paid down
+#: by living something that answers it, which this function already models as
+#: `_STRAIN_RELIEF_GAIN`, and by the rupture's own force-close. 0.97 leaves
+#: the turn-cadence path untouched (0.5**(1/60) = 0.988 is above it, so a
+#: clockless story decays exactly as before) and bounds the clocked path to
+#: the same order: ~19% of a standing strain gone over a seven-beat scene,
+#: ~46% over twenty, rather than all of it over either.
+_STRAIN_DECAY_FLOOR_PER_BEAT = 0.97
 # Certainty floor for DRIVE-STRAIN accrual and rupture ignition -- lower than
 # the mood-appraisal _CERTAINTY_THRESHOLD (0.8) on purpose. A drive rupture is
 # the ONE domain where a character is inherently uncertain ("was it a fool's
@@ -2066,7 +2085,9 @@ def update_drive_strain(strain, strain_log, appraisal_out, enacted_serves,
 
     Strain is the deterministic ledger behind drive rupture. The previous
     value first decays toward 0 (half-life _STRAIN_HALF_LIFE over
-    `turns_since` — the same 0.5**(t/hl) idiom as decay_affect), then
+    `turns_since` — the same 0.5**(t/hl) idiom as decay_affect, bounded per
+    beat by _STRAIN_DECAY_FLOOR_PER_BEAT because `turns_since` arrives in
+    turns from a clockless story and in minutes from a clocked one), then
     moves by at most one delta from the impact that serves the DRIVE this
     beat (`_drive_serving_impact`: `appraise`'s dedicated `drive_impact`,
     falling back to `dominant` only when the dominant one serves the drive
@@ -2100,7 +2121,8 @@ def update_drive_strain(strain, strain_log, appraisal_out, enacted_serves,
     new = _clamp01(strain)
     elapsed = max(0.0, _float_or(turns_since))
     if elapsed:
-        new *= 0.5 ** (elapsed / _STRAIN_HALF_LIFE)
+        new *= max(0.5 ** (elapsed / _STRAIN_HALF_LIFE),
+                   _STRAIN_DECAY_FLOOR_PER_BEAT)
 
     recent = [e for e in (strain_log or []) if isinstance(e, dict)]
     recent = recent[-_STRAIN_PUMP_WINDOW:]
