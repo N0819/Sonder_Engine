@@ -767,6 +767,48 @@ def contact_endpoint_is_body(scene, name) -> bool:
     return _endpoint_is_body(scene, name)
 
 
+def _anchor_room_of(scene, name, *, prefer=None):
+    """The room whose own fixtures include `name`, or None.
+
+    A ROOM'S FIXTURES ARE CONTACT ENDPOINTS. A counter, a doorway, a rail --
+    a body leans on them, sets a hand on them, puts its back against them --
+    and the scene records them as the room's anchors rather than as things
+    with positions of their own. `normalize_scene_contacts` asks `positions`
+    where each endpoint is, so every such contact failed its membership test
+    and was dropped in silence; the specialist that noticed refused to write
+    them at all (caravanserai turns 3-5, "counter is not an indexed entity").
+
+    Through `effective_anchors`, so an implicit `door:<room>` doorway answers
+    under the id every other reader already uses -- one object, one name,
+    whichever hand is speaking (flat turn 9).
+
+    `prefer` is the other endpoint's room, tried first: an anchor id is
+    unique within its room and nothing promises it is unique across a whole
+    building, and the room the other party is standing in is the only one a
+    contact can be happening in. Scene-wide afterwards, and only when
+    exactly one room claims the id -- an ambiguous fixture names no room, so
+    the contact drops exactly as it does today.
+    """
+    from world.spatial_geometry import effective_anchors
+
+    key = str(name or "").strip()
+    if not key or not isinstance(scene, dict):
+        return None
+    rooms = scene.get("rooms")
+    if not isinstance(rooms, dict) or not rooms:
+        return None
+
+    def holds(room_id):
+        anchors = effective_anchors(scene, room_id) or {}
+        folded = key.casefold()
+        return any(str(aid).strip().casefold() == folded for aid in anchors)
+
+    if prefer and prefer in rooms and holds(prefer):
+        return prefer
+    found = [rid for rid in rooms if holds(rid)]
+    return found[0] if len(found) == 1 else None
+
+
 def contact_thing_label(scene, name) -> str:
     """The plain name for a contact endpoint the scene positively records as a
     THING rather than a body, or "" when it cannot say.
@@ -789,7 +831,24 @@ def contact_thing_label(scene, name) -> str:
     if not text or _endpoint_is_body(scene, text):
         return ""
     eid, entity = _unique_entity_keyed(scene, text)
-    if not eid or _is_body_entity(scene, eid, entity):
+    if not eid:
+        # A ROOM'S OWN FIXTURE IS A THING TOO, and the scene vouches for it
+        # as positively as it vouches for an entity: the room names it among
+        # its anchors. Without this the identity floor below falls through to
+        # its person-shaped answer and a hand on the counter is rendered as
+        # "someone against your hand" -- the combadge defect (chat 98 t22)
+        # with a fixture in place of a badge.
+        room = _anchor_room_of(scene, text)
+        if room:
+            from world.spatial_geometry import effective_anchors
+            folded = text.casefold()
+            for aid, anchor in (effective_anchors(scene, room) or {}).items():
+                if str(aid).strip().casefold() != folded:
+                    continue
+                desc = str((anchor or {}).get("desc") or "").strip()
+                return desc or str(aid).replace("_", " ")
+        return ""
+    if _is_body_entity(scene, eid, entity):
         return ""
     return str((entity or {}).get("name") or "").strip() or str(eid)
 
@@ -1218,6 +1277,19 @@ def normalize_scene_contacts(scene: dict) -> dict:
             continue
         actor_room = _ci_get(positions, contact["actor"])
         target_room = _ci_get(positions, contact["target"])
+        # A ROOM'S OWN FIXTURE IS WHERE THE ROOM IS. `positions` places
+        # bodies and the things the scene mints; a counter, a rail or a
+        # doorway is an ANCHOR of its room and has no position of its own, so
+        # every contact naming one failed this membership test and vanished
+        # without a word. Resolved against the OTHER endpoint's room first
+        # (see `_anchor_room_of`); an endpoint no room claims is unplaced
+        # exactly as it was before, and two unplaced endpoints still drop.
+        if actor_room is None and target_room is not None:
+            actor_room = _anchor_room_of(scene, contact["actor"],
+                                         prefer=target_room)
+        elif target_room is None and actor_room is not None:
+            target_room = _anchor_room_of(scene, contact["target"],
+                                          prefer=actor_room)
         if actor_room is None or target_room is None:
             continue
         if actor_room != target_room:

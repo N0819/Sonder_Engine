@@ -5826,6 +5826,47 @@ Writers' Room founds something for it to belong to. If that proves too
 costly in play, the answer is a Room-facing prompt to found the institution,
 not a branch that founds one silently.
 
+### 1.123 An errand the fiction promised has no channel to the institution
+
+**Found 2026-09-05** (`docs/experiments/PLAY_2026_09_05_caravanserai.md`
+§ PB13), and registered rather than built: this is a CAPABILITY, not a
+defect, and the shape is the owner's to choose. Its siblings — PC9, PC5,
+PB10 and PE12 — were all "a hand could see something true and had no channel
+to say it", and all four landed the same day; this is the fifth, and the
+only one where the missing channel would give the Director a new kind of
+authority rather than a new way to write down what it already rules on.
+
+**Measured.** Turns 5 and 10: the player asked twice that someone fetch the
+gate warden; the innkeeper agreed on the record ("She'll be told when the
+rush settles", "The girl at the tap can call him") and the Director's prose
+said she was "signalling the serving hand Neris to attend to it". Nothing in
+`state_diff` carries it — `sv_neris` has no `walk`, no `errand`, an
+unchanged `place`, and the warden was still at his bench on turn 14. The
+`errand` operation EXISTS (`plot_packages.OPERATION_FIELDS`,
+`charter_surgery.send_errand`) and only the Writers' Room can author one, so
+the fiction and the ledger disagree from the moment an NPC is asked to do
+anything.
+
+**The shape, if it is built.** A `charter_ops` channel on the resolve,
+owned by the `social` specialist — it already holds `crowd_ops`,
+`courier_ops` and `telling_ops`, which are the same kind of thing (speech
+and roster work whose SIMULATION belongs to charter), and it is already the
+one hand shown the traffic ledgers and the room index its ops would name.
+One op to start with, `{op: "errand", who, to_room, purpose}`, routed
+through `charter_place`/`charter_move` exactly as `positions` and `stations`
+already route through `charter_place.resolve_scene_placements`, and refused
+the same way: an errand naming a body the town does not stand, or a room no
+plan holds, writes nothing and says so. Fail-open — absent means today's
+behaviour, and no scene without a charter changes.
+
+**The cheaper half, if it is not.** One clause in the Director sheet stating
+the class: an instruction to a townsperson is realised as a write this beat
+or it is not narrated as agreed. That costs nothing and stops the ledger
+contradicting the prose, at the price of the fiction being unable to promise
+an errand at all. PB12 (the institution never ticks at conversational pace)
+is the reason either answer matters: at ~18 story-seconds a beat no charter
+window is ever charged, so even a dispatched errand would not walk.
+
 ## 2. Roadmap
 
 Features the architecture intends and has not built. Ordered by value per unit
