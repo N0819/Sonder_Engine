@@ -352,3 +352,120 @@ every anchor kind on every size tier.
     language_packs/*/cards/system_prompts/specialists/spatial/chunks/rooms.txt
     language_packs/*/cards/system_prompts/prompts/backdrop_prompt.txt
     tests/test_room_shapes.py, tests/test_room_lint.py, tests/test_backdrop_brief.py
+    web/world_routes.py               grid_view / map_view (§10), the offset PATCH
+    static/js/world_browser.js        the map editor (§10)
+
+## 10. The map editor, and `offset` (built 2026-09-04, the owner's ruling)
+
+The owner's ruling later the same day: the World Browser's Rooms tab is a
+MAP EDITOR -- the grid is the surface, and clicking opens the fields. The
+tree-and-card tab became a map on the left and the same card on the right;
+nothing the card edited is lost, and nothing the map does is a second way
+of doing it. `web/world_routes.py` (`grid_view`, `map_view`),
+`static/js/world_browser.js` ("The map editor"), and one new field.
+
+**Two read-only routes, pure over the engine's geometry.** `GET
+/rooms/{id}/grid` returns one room's field exactly as `room_grid`,
+`anchor_cells`, `body_cell` and `room_field` compute it -- the shape's
+cells and each wall's rim in `RoomGrid.rim`'s order, every anchor's
+footprint cells with its height/footprint/opacity and the `offset` it was
+placed by, every doorway's cells (empty when the edge has no bearing to
+place it by), every body's cell and facing and station (a body with no
+station has no cell: "somewhere in the room" is not a cell, and the map
+draws it in a lane below the room), the things, the field's wall LINES
+with their apertures, and every neighbour `room_field` lays beyond a door
+at the offset it lays it, its cells in its own frame. `GET /map` returns
+every live room placed by bearing through `layout_rooms` -- the lint's own
+embedding -- one component per connected set of beared, non-wall edges. A
+room the bearings land on another is DRAWN, at the offset the rule gave it
+before the collision refused it: `layout_rooms` gained a third key,
+`collided: {room: offset}`, additive, never an entry of `offsets`, placing
+nothing. There is no second geometry anywhere: the map cannot show a wall
+the cast is not judged by.
+
+**Click opens the fields.** A click on an anchor, a doorway, a body, a
+thing or a lint mark scrolls the card to that editor row and puts the
+cursor in its first control (`wbFocusRow`; the rows carry `data-anchor`,
+`data-exit`, `data-body`, `data-thing`, `data-kind`). Every mark is a
+focusable button; Enter or Space is the click. The card is the panel.
+
+**Drag places, through the card's own routes.** An anchor dragged to a
+wall gets that wall's bearing and an `offset` along it; dragged into the
+room it loses its bearing and is placed by seed again (the room PATCH's
+`anchors`). A doorway dragged along its wall sets the exit's `offset` (the
+room PATCH's `exits`), written on BOTH rooms' edges. A body dropped on a
+cell is re-stationed (the station PUT): at the anchor whose cell it is --
+a door anchor included -- else free in the room, `at` cleared; dropped in
+a neighbour's cells it is moved there by the cast editor's position route
+and then stationed, so nothing stale from the old room survives. Only the
+registered cast has a position route; the player and a presence are
+re-stationed within their room and refused across it with a toast, the
+cast editor's rule. An authored fact every time: no Director call, no
+memory of a step, a toast on success, the server's refusal on failure.
+
+**`offset`, the one new field.** On an anchor beside `dir`, and on an exit
+edge beside `dir` and `barrier`:
+
+    offset   a number in [0, 1]   where along its wall the thing stands,
+                                  as a fraction of the positions its
+                                  footprint leaves, from the wall's START
+
+**The wall-start convention.** A wall's start is the first cell
+`RoomGrid.rim` lists: the WEST end of a north or south wall, the NORTH end
+of an east or west wall -- and on a round room's arc the same rule, the arc
+ordered west to east or north to south. So 0 puts the anchor's first cell
+at the start, 1 at the far end, and 0.5 in the middle; for an anchor of
+`length` cells the index is `round(offset * (along - length))`, clamped,
+never wrapping. Read by `normalize_offset` (`world/spatial_geometry.py`):
+a boolean is not a fraction, prose is not a fraction, 1.5 is not a fraction
+of a wall -- each is None, which is the seeded placement. A corner anchor
+has no wall to run along and ignores it; a free anchor has no wall and
+ignores it. The route refuses a value outside the range naming the range
+and never clamps: a host who typed 1.5 meant something the wall does not
+have. Null or '' clears it.
+
+**Why the same fraction on both edges, not the mirror.** A north wall runs
+west to east; the south wall of the room beyond it runs west to east too.
+An east wall runs north to south; so does the west wall facing it. The
+start is the same end seen from either room, so a doorway at 0.25 on this
+side is at 0.25 on the far side, and `_apply_exits` COPIES the fraction
+onto the reciprocal edge rather than mirroring it. `effective_anchors`
+copies an edge's `offset` onto the implicit door anchor it contributes,
+from either side, so `_door_cells` places the doorway there without a
+change of its own.
+
+**Fail-open, pinned.** An anchor or an edge with no `offset`, or with one
+that does not read, is placed by the seeded formula the geometry note
+wrote, byte for byte, on every shape (`tests/test_world_routes.py::
+TestOffset::test_placement_without_an_offset_is_the_seeded_placement_byte_for_byte`,
+which copies the formula rather than importing it; `test_room_shapes.py`'s
+pin against the pre-extent arithmetic stands beside it). No existing scene
+carries the field, so no existing scene moves.
+
+**The merge keeps it.** `_merge_room` replaced a room's `anchors` map
+whole, so a Director re-declaring "the bar, north wall" would have dropped
+the `height` a body took cover behind and the `offset` a host dragged it
+to. `_merge_anchor_fields` applies the edge-field doctrine to an anchor's
+fields: a field the re-declaration leaves out or blanks is silence, a value
+lands, and an anchor the map does not name is still dropped (the map is
+written whole; `{}` alone is already silence by `_ROOM_SILENT_WHEN_EMPTY`).
+Edges already kept unknown fields (`{**prior, **spoken}`), so an edge's
+`offset` rode through unchanged. `RoomDef.anchors` is `dict[str, dict]` and
+`adjacent` is `list[dict]`, so the Director's typed round trip keeps the
+field without a schema change.
+
+**Overlays.** The grid route returns `overlays: {}`. The SVG paints any
+`{name: {"x,y": word}}` it receives as a tint per cell (a graded mix of the
+page's accent, one step per distinct word in the order the readings came)
+with a legend and a select over the names; it knows no word in advance and
+computes nothing. The light field and the sound field are the readers that
+fill the slot, in the sibling worktree.
+
+**What argues against it, and what it does not do:** `docs/UNBUILT.md`
+§ 2.26, "What the map editor does not yet do" -- among them that a body
+dropped on a plain cell is not pinned to that cell (the engine has no
+per-cell station; `at` is cleared), that the structure map draws an exit as
+a tick at the middle of its wall rather than at its door cell, and a
+measured gap in the placement itself: a doorway on the inner wall of an L's
+notch lays the neighbour into the notch, where it overlaps the room's own
+other part and `room_field` skips it without a row.

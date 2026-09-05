@@ -205,9 +205,34 @@ def _merge_room(existing: dict, incoming: dict, room_id=None) -> dict:
         # room. Emptying one goes through an explicit write, not a default.
         if key in _ROOM_SILENT_WHEN_EMPTY and not value:
             continue
+        if key == "anchors" and isinstance(value, dict) \
+                and isinstance(existing.get("anchors"), dict):
+            value = _merge_anchor_fields(existing["anchors"], value)
         merged_room[key] = value
 
     return merged_room
+
+
+def _merge_anchor_fields(prior: dict, incoming: dict) -> dict:
+    """The edge-field doctrine above, applied to an anchor's fields: a model
+    re-declaring a room's anchors ("the bar, north wall") has no reliable
+    way to echo back the geometry it never thinks about -- the height a
+    body took cover behind, the footprint, the `offset` a host dragged it
+    to on the World Browser's map -- so a field the re-declaration leaves
+    out or blanks is silence, and a value still lands. An anchor the
+    incoming map does not name at all is still dropped: the map, unlike an
+    edge list, is written whole, and `anchors: {}` is already silence by
+    `_ROOM_SILENT_WHEN_EMPTY`."""
+    out = {}
+    for aid, anchor in incoming.items():
+        before = prior.get(aid)
+        if isinstance(anchor, dict) and isinstance(before, dict):
+            spoken = {k: v for k, v in anchor.items()
+                      if v is not None and v != ""}
+            out[aid] = {**before, **spoken}
+        else:
+            out[aid] = anchor
+    return out
 
 
 # Room fields whose empty value means "unmentioned" rather than "cleared".

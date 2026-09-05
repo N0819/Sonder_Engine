@@ -142,6 +142,7 @@ from dressing.ambience import (FREESOUND_LICENCES, ambience_error, ambience_erro
                       set_ambience_pin)
 from web.room_routes import router as room_router
 from web.world_routes import bodies_router as world_bodies_router
+from web.world_routes import map_router as world_map_router
 from web.world_routes import regions_router as world_regions_router
 from web.world_routes import router as world_router
 from web.auth_routes import (
@@ -503,6 +504,7 @@ app.include_router(room_router)
 app.include_router(world_router)
 app.include_router(world_bodies_router)
 app.include_router(world_regions_router)
+app.include_router(world_map_router)
 # The Story Planner takes the room's seat once, here: the routes stay
 # transport, the agent stays out of the turn pipeline, and a test that wants
 # the placeholder back unseats it (`story_planner.unseat`).
