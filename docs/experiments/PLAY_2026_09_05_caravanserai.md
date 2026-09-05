@@ -249,6 +249,17 @@ and their union is every unpromoted body the registry places there.
 (`_presence_speech_verdict` → `world/charter_enrol.enrol_person`), opening
 commit.
 
+**RESOLVED 2026-09-05.** `commit_background.presence_is_enrollable` is the
+enrolment gate now, and it is never wider than the speech gate: inside it,
+only a SETTLED person answer enrols -- `blurb_mint`'s frozen `nature`, a
+presence the scene keeps no entity record for (provenance already
+person-shaped), or conduct, a turn taken at speech. A kind noun on a scene
+entity settles nothing, so the mule stays a scene entity and its
+`rendered_unplanned` need stays open for the Room. Residual: `nature` is
+only asked under `scene_life: ambient|full` (UNBUILT 1.71), so below that a
+genuine person the scene ALSO placed as an entity waits for their first
+line.
+
 The establish minted `tamsin_mule` (`kind: "animal"`, "A sturdy, dust-caked
 grey pack mule…"). The opening commit filed a person-need for it and the
 deterministic fill enrolled it as a guest of the house:
@@ -381,6 +392,17 @@ my elbows on the counter" in a room whose `counter` is an anchor produces a
 ### PB11. Planning needs are filed for people and facts the payload already carried
 **Severity: cosmetic-to-wrong.** Origin: `agents/mapping.py` /
 `commit_mapping`, turns 0 and 3.
+
+**RESOLVED 2026-09-05, in part.**
+`commit_mapping._drop_needs_the_beat_answers` runs before
+`record_planning_needs`: a person- or thing-need answered by what the beat
+was already holding -- a thing the scene places in the room the need names,
+or a `present_figures` body sharing two or more content words with the
+subject -- is not filed, and a subject that reads as a sentence rather than
+a name is refused outright. Two words and not one because this reads free
+prose and must fail toward filing. The `setting_fact` half of this finding
+(F4's class: needs by design that read as missing objects) is untouched --
+room-needs and setting-fact needs are never dropped here.
 
 Turn 3's commit: "1 planning need(s) recorded: the beat reached for thing
 **'the woman with the keys at her belt'** no plan holds" — while the same

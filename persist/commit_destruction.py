@@ -11,7 +11,7 @@ from mind.memory import lorebook_descendants
 from world.mechanics import news_latency_seconds
 from world.spatial import normalize_room_id
 from world.spatial_frames import _cast_changes_leaving
-from persist.commit_common import _stable_event_key
+from persist.commit_common import _stable_event_key, add_engine_notice
 
 # ---- Destruction: single-book (Phase 2) + multi-book cascades (3b) ----
 #
@@ -400,12 +400,15 @@ def _apply_destruction(cid, turn_id, destruction):
             (row["event_id"], row["chat_id"], row["due_at"], row["kind"],
              row["location_id"], row["payload"], row["seed"], row["status"]),
         )
-    notices = wget(cid, "engine_notices", []) or []
     retired = len(destruction.get("retire_rooms") or [])
-    notices.append(
+    # Filed through the one writer (`commit_common.add_engine_notice`). This
+    # domain runs AFTER the sweep's rewrite of the notice key, so its append is
+    # the half that lands -- but which half lands is the helper's to know, not
+    # this caller's to remember.
+    add_engine_notice(
+        None, cid,
         f"{destruction['label']} has been {destruction['kind']}; "
         f"its records ({retired} registered room(s)"
         + (f", {len(book_ids)} lorebook(s)" if book_ids else "")
         + ") are retired history now."
     )
-    wset(cid, "engine_notices", notices)

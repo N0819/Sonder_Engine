@@ -13,7 +13,8 @@ from core.db import q, qtx, transaction, wget, wset
 from story.character_schema import character_name_from_text, persona_name
 from story.scene import cast_change_status, set_char_status
 from world.mechanics import mechanics_sweep, stable_event_key
-from persist.commit_common import _registered_name_roster, _room_of
+from persist.commit_common import (ENGINE_NOTICES_KEY, _registered_name_roster,
+                                   _room_of, compose_engine_notices)
 from persist.commit_scene_state import prepare_scene_commit
 
 # ---- Mechanics sweep: timed arrivals, expiry, news, engine notices ----
@@ -193,12 +194,17 @@ def commit_transit_sweep(ctx, nonce, *, prepared=None):
         except Exception as exc:
             ctx.add_warning(f"living-world consequences not committed: {exc}")
 
-        # What the deterministic layer made of this beat's output, in the
-        # Director's own terms. Carried on the same channel as the mechanical
-        # notices because it is the same kind of message: here is what
-        # actually happened, as against what you asked for.
-        notices = list(notices) + list(getattr(ctx, "engine_feedback", []) or [])
-        wset(cid, "engine_notices", notices)
+        # THE BEAT'S ONE REWRITE OF THE NOTICE KEY. What the deterministic
+        # layer made of this beat's output, in the Director's own terms,
+        # carried on the same channel as the mechanical notices because it is
+        # the same kind of message: here is what actually happened, as against
+        # what you asked for. Composed rather than concatenated because this
+        # write RETIRES the previous beat's list, and everything the beat
+        # filed earlier -- in prepare, before the lock -- is staged on the
+        # context rather than in the key for exactly that reason
+        # (`commit_common.add_engine_notice`).
+        notices = compose_engine_notices(ctx, notices)
+        wset(cid, ENGINE_NOTICES_KEY, notices)
 
     return {"fired": fired, "scheduled": scheduled, "expired": expired,
             "ticked": ticked, "news_fired": news_fired,
