@@ -188,8 +188,10 @@ from .director_movement import (
     _travel_in_flight_view,
     _travel_continues,
     _guard_approach_is_not_arrival,
+    crossing_legs,
 )
 from .director_floors import (
+    strip_addressee_concealment,
     _unplaced_minted_entities,
     _bind_minted_entities_to_present_figures,
     _mint_fallback_room,
@@ -1051,8 +1053,14 @@ def director_interpret(ctx, nonce):
     # Bind the acts the model left unbound BEFORE anything downstream asks
     # whether they land on a character: the reaction-phase gate, claim subject
     # binding and perception's targeted-observer check all read `targets`.
-    _, target_forms = _cast_match_forms(ctx.cast)
+    cast_by_id, target_forms = _cast_match_forms(ctx.cast)
     bind_sequence_targets(out.get("sequence"), target_forms)
+    # A line cannot be concealed from the person it is addressed to, and the
+    # addressee is named in two places -- the flow's list, which the schema
+    # floor reads, and the element's own targets, which it does not (PC2).
+    for _note in strip_addressee_concealment(
+            out.get("sequence"), cast_by_id, target_forms):
+        ctx.add_warning("player state: director_interpret: %s" % _note)
     out["sequence"] = assign_event_ids(
         out.get("sequence"), f"turn:{ctx.turn.id}:player")
 
@@ -1069,6 +1077,9 @@ def director_interpret(ctx, nonce):
         norm_sequence(entry)
         repair_narrated_speech_elements(entry)
         bind_sequence_targets(entry.get("sequence"), target_forms)
+        for _note in strip_addressee_concealment(
+                entry.get("sequence"), cast_by_id, target_forms):
+            ctx.add_warning("player state: director_interpret: %s" % _note)
         entry["sequence"] = assign_event_ids(
             entry.get("sequence"), f"turn:{ctx.turn.id}:extra:{pid}")
 

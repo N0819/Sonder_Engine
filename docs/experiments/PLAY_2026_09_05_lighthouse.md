@@ -165,6 +165,25 @@ and CLAUDE.md's objection to guards that read free prose applies. Test:
 two of them, and an observer in the first -- the observer's percepts and
 episode must name the room left and no other.
 
+**FIXED 2026-09-05**, by (a) and only as far as the deterministic floor
+reaches. `agents/director_movement.crossing_legs` walks the rooms a body was
+in this beat; `agents/perception._multi_room_legs` keeps the walks that cross
+MORE than one boundary, and `_channel_to_every_leg` admits the beat's single
+observable surface only to an observer whose channel stood in every one of
+those rooms. Everyone else keeps the arrival and departure crossings the
+engine already delivers, which name no room but their own. One boundary is
+untouched, byte for byte: both its rooms are rooms the body was in with those
+observers in them, and they are the two ends of one doorway. The episode is
+minted from the delivered percepts (`composer.render_episode`), so the memory
+boundary needed no gate of its own -- what delivery refuses, memory never
+sees. Tests in `tests/test_played_scene_classes.py` (PA1 block), including
+F36's sibling: the unearned ROOM cannot reach the episode.
+
+What is NOT fixed is the per-leg ELEMENT, which is what would give the
+observer at either end the prose of the leg they DID see. It needs
+`ActionElement.room`, `norm_sequence` carrying that key, and one interpret
+clause; registered in `docs/UNBUILT.md` s1.114.
+
 ### PA2. A sound that happens ONCE is stored as a source that runs for ever
 *Stage of origin: `director_resolve.state_diff.entities` (objects
 specialist), turn 11. Severity: **story-breaking**.*

@@ -258,6 +258,7 @@
     "drowsy": ""
   },
   "templates": {
+    "act_shapes": "{label} moves, too little of it to make out.",
     "activity": "You are {value}.",
     "appearance": "You see {description}.",
     "appearance_change": "{label} is {change}.",
@@ -280,6 +281,7 @@
     "environment_here": "{label} is here with you.",
     "environment_nearby": "You can see {label} nearby.",
     "episode_act": "I saw {label} {action}{ending}",
+    "episode_act_shapes": "{label} moved, too little of it to make out.",
     "episode_activity": "I was {value}.",
     "episode_appearance": "I saw {description}.",
     "episode_arrived": "{label} came in.",
@@ -289,6 +291,8 @@
     "episode_light_dark": "It was dark.",
     "episode_light_dim": "The light was dim.",
     "episode_muffled": "I heard a muffled voice: {fragment}",
+    "episode_muffled_attributed": "I heard {label} say something I could not make out: {fragment}",
+    "episode_muffled_attributed_via": "Over {via} I heard {label} say something I could not make out: {fragment}",
     "episode_muffled_via": "Over {via} I heard a muffled voice: {fragment}",
     "episode_posture": "I was {value}.",
     "episode_room": "I was in {room}.",
@@ -333,6 +337,7 @@
     "loop_self_did": "You did: {surface}",
     "loop_speech": "{label} says: \"{body}\"",
     "muffled": "A muffled voice: {fragment}",
+    "muffled_attributed": "{label} says something you cannot make out: {fragment}",
     "muffled_indistinct": "...something indistinct...",
     "narrator_immediate": "You register your immediate surroundings.",
     "narrator_nothing": "Nothing in particular reaches you this beat.",

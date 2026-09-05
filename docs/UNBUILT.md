@@ -5392,6 +5392,65 @@ A third option was considered and rejected: warning whenever an `add` lands
 on an already-covered region. It fires on every legitimate layer — a coat, an
 apron, a robe over nightwear — which is PE20's disease one module over.
 
+### 1.116 The 2026-09-05 play runs: the perception-delivery classes
+
+**Found** by five fresh scenarios played end to end on 2026-09-05 (the
+lighthouse, `experiments/PLAY_2026_09_05_lighthouse.md`; the Ambry road,
+`PLAY_2026_09_05_road.md`; the manor, `PLAY_2026_09_05_manor.md`; the flat,
+`PLAY_2026_09_05_flat.md`), every stage of every beat read against the
+others. Five of them are one family — what perception hands a mind, and what
+that mind then remembers — and they are FIXED together, pinned in
+`tests/test_played_scene_classes.py`:
+
+- **PA1 (firewall)** — an act that crossed rooms was delivered whole to an
+  observer who had a channel only to the room it began in, and became that
+  mind's episodic memory (lighthouse turn 16, `memories` rows 69 and 77).
+  FIXED: `director_movement.crossing_legs` walks the rooms a body was in;
+  `perception._channel_to_every_leg` admits the beat's single surface only
+  where the observer's channel stood in every one of them. One boundary is
+  left exactly as it was.
+- **PC1 + PE9 (firewall)** — sight is graded and the act channel was not:
+  a `shapes`-only grade (a crossing record floors sight there for a beat)
+  bought a readable description of conduct through a locked door (manor turns
+  11-12), and `_in_plain_view`'s `same_room` short-circuit meant an occluder
+  inside one room never subtracted at all (PE9). FIXED:
+  `perception._sight_detail` passes the grade, and `composer.act_percept`
+  spends it — `full` admits the surface, `shapes` a motion percept naming no
+  object, `none` refuses.
+- **PD3 (story-breaking, corrupts memory)** — a fragment from a speaker the
+  observer could see and knew was delivered anonymously, the narrator
+  invented a source for it, and the invention was filed as fact (road turn
+  20). FIXED: `composer.speech_percept` marks a fragment `attributed` when
+  the observer can see who spoke; both renderers keep the speaker.
+- **PC2 (story-breaking)** — a line whose `conceal_from` named its own
+  addressee reached nobody, the addressee included, and the player's declared
+  speech was silently deleted (manor turn 17). FIXED:
+  `director_floors.strip_addressee_concealment` strips every addressee the
+  ELEMENT names, and a line concealed from every body in the scene is
+  reported as a dropped declaration.
+- **PC3 (story-breaking), half of it** — the act pass and the outcome pass
+  graded one shout differently because the relations perception builds for a
+  beat did not all carry the same sound field (manor turn 16, F61 with the
+  roles reversed). FIXED here: every `spatial_rel_between` perception builds
+  for a beat is given the beat's field. **STILL OPEN:** the field's own floor
+  — a raised voice one passable edge away should not grade below `fragment`
+  when the edge model says `full` — belongs in
+  `world/spatial_sound_field.py` and is not built. Until it lands the two
+  passes agree and both are the strict answer, so a shout across one open
+  archway can still reach nobody.
+
+**Still open from PA1's own report**, and deliberately: the per-leg action
+ELEMENT. The Director cannot say which leg an act happened on, because
+`ActionElement` has no room and `agents/common.norm_sequence` whitelists the
+keys it carries, so a walk past one boundary delivers the crossing percepts
+and not the act surface to the observers at either end. Restoring the prose
+needs three edits nobody has made: `ActionElement.room` in `llm/schemas.py`,
+that key carried through `norm_sequence`, and one clause in
+`director_interpret` stating the class — a declaration that crosses rooms is
+one action element per room, each describing only what happens there. The
+deterministic floor above does not depend on any of them and must stay
+whichever way that goes.
+
 ## 2. Roadmap
 
 Features the architecture intends and has not built. Ordered by value per unit
