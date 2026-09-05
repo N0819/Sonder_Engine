@@ -274,6 +274,8 @@
     "presence": "{label}がいる。",
     "presence_in_room": "{room}に",
     "presence_at": "、{at}のところに",
+    "presence_at_bare": "{at}",
+    "presence_unchanged": "{label}は変わらず{where}にいる。",
     "presence_behind": "、{behind}の向こうに",
     "presence_shows": "、{shows}から上だけが見えて",
     "features": "{items}が見える。",
@@ -301,7 +303,7 @@
     "surface_summary_wearing": "{text}、{items}を身につけている",
     "opening_seen": "{opening}の向こうは{room}。",
     "opening_features": "その奥に{items}が見える。",
-    "opening_closed": "{opening}は閉ざされている。",
+    "opening_closed": "{opening}の向こうは何も見えない。",
     "opening_dark": "{opening}の向こうは暗闇だけ。",
     "opening_bare": "{opening}がある。"
   },
