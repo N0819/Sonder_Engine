@@ -141,6 +141,7 @@ from dressing.ambience import (FREESOUND_LICENCES, ambience_error, ambience_erro
                       search_candidates,
                       set_ambience_pin)
 from web.room_routes import router as room_router
+from web.world_routes import router as world_router
 from web.auth_routes import (
     GUEST_ALLOWED_API_PATHS,
     GUEST_COOKIE,
@@ -497,6 +498,7 @@ class _SelectiveGZipResponder:
 app.add_middleware(SelectiveGZipMiddleware, minimum_size=2048)
 app.include_router(auth_router)
 app.include_router(room_router)
+app.include_router(world_router)
 # The Story Planner takes the room's seat once, here: the routes stay
 # transport, the agent stays out of the turn pipeline, and a test that wants
 # the placeholder back unseats it (`story_planner.unseat`).

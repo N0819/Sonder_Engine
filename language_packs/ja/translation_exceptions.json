@@ -182,5 +182,11 @@
   "?frame_id=": "URL, route, or query-string fragment",
   "before=": "URL, route, or query-string fragment",
   "an empty line is not a message": "engine-internal ValueError text in story/room_conversation.py; the room route refuses an empty line with its own translated 400 before this can be raised, so no reader sees it",
-  "?chat_id=${encodeURIComponent(S.chatId)}": "A query-string fragment with a template placeholder, harvested from static/js/lorebooks.js; it is a URL, not a sentence anybody reads."
+  "?chat_id=${encodeURIComponent(S.chatId)}": "A query-string fragment with a template placeholder, harvested from static/js/lorebooks.js; it is a URL, not a sentence anybody reads.",
+  "${o.op} #${o.index + 1}": "A package operation's enum name and its index, shown as stored",
+  "(${g.state})": "A garment's ledger state enum, shown as stored",
+  "badge err": "CSS class names",
+  "err small": "CSS class names",
+  "wb-occupants dim": "CSS class names",
+  "— ${g.condition}": "A garment's condition note, story data shown as stored"
 }
