@@ -15,6 +15,12 @@ never the case:
   * a setting-fact need is named as one in the commit warning (F4);
   * an anchor is resolved in the body's own room before scene-wide (F27);
   * a leg walked toward a destination is an arrival in the room between (F28).
+
+And from the play runs of 2026-09-05:
+
+  * `near` names another body, and a body placed near another stands beside
+    it; the anchor's spread decides where a body stands only when nothing
+    closer says otherwise (`PLAY_2026_09_05_road.md` § PD1).
 """
 from __future__ import annotations
 
@@ -458,3 +464,88 @@ def test_an_entity_named_with_its_article_is_not_given_another():
              "positions": {"Hinami": "beach", "tardis": "beach", "console": "beach"}}
     assert _pose_referent(scene, "Hinami", {}, [], "tardis") == "The TARDIS"
     assert _pose_referent(scene, "Hinami", {}, [], "console") == "the hexagonal console"
+
+
+# ---------------------------------------------------------------------------
+# PD1 (2026-09-05): `near` names a body, and a body near another stands
+# beside it -- the anchor's spread places a body only when nothing closer
+# says otherwise
+# ---------------------------------------------------------------------------
+
+def _scrub_edge(stations, room=None):
+    """A 15x20 hilltop with a run anchor along its whole north wall, the
+    shape the two bodies were dealt six paces apart on."""
+    return {
+        "rooms": {"hilltop": {
+            "name": "the hilltop", "extent": {"w": 15, "d": 20},
+            "light": "lit",
+            "adjacent": [],
+            "anchors": {
+                "scrub_edge": {"desc": "the scrub edge", "dir": "n",
+                               "footprint": "run", "height": "waist"},
+                "cairn": {"desc": "the cairn", "dir": "s", "height": "waist"},
+            }}},
+        "positions": {name: room or "hilltop" for name in stations},
+        "stations": {k: dict(v) for k, v in stations.items()},
+        "poses": {}, "orientation": {}, "entities": {}, "contained": {},
+    }
+
+
+def _apart(scene, a, b):
+    from world.spatial import body_cell
+    ca, cb = body_cell(scene, a), body_cell(scene, b)
+    assert ca is not None and cb is not None
+    return max(abs(ca[0] - cb[0]), abs(ca[1] - cb[1])), ca, cb
+
+
+def test_two_bodies_each_near_the_other_stand_together_at_one_anchor():
+    """Turn 18/19/20 of the road run: both stations read `{"at":
+    "scrub_edge", "near": [the other]}` and the derived cells were (4, 3)
+    and (10, 3) -- six paces apart on a run anchor spanning a fifteen-pace
+    wall, while the composed view of the same beat said "within arm's
+    reach". The player's line reached neither of them
+    (`PLAY_2026_09_05_road.md` § PD1)."""
+    sc = _scrub_edge({
+        "Sable": {"at": "scrub_edge", "near": ["Corin Ashe"]},
+        "Corin Ashe": {"at": "scrub_edge", "near": ["Sable"]},
+    })
+    gap, ca, cb = _apart(sc, "Sable", "Corin Ashe")
+    assert gap <= 1, (ca, cb)
+    # Symmetric: the pair's two cells do not depend on which is asked for,
+    # and both still stand AT the anchor they named.
+    from world.spatial import anchor_cells, body_cell
+    again = _apart(sc, "Corin Ashe", "Sable")
+    assert (again[2], again[1]) == (ca, cb)
+    run = {tuple(c) for c in anchor_cells(sc, "hilltop")["scrub_edge"]["cells"]}
+    for cell in (ca, cb):
+        assert min(max(abs(cell[0] - x), abs(cell[1] - y))
+                   for x, y in run) <= 1
+
+
+def test_a_body_near_another_stands_beside_it_and_an_authored_cell_wins():
+    """`near` outranks the anchor's spread; an authored `cell` is geometry
+    and outranks both."""
+    one_sided = _scrub_edge({
+        "Sable": {"at": "cairn"},
+        "Corin Ashe": {"at": "scrub_edge", "near": ["Sable"]},
+    })
+    assert _apart(one_sided, "Sable", "Corin Ashe")[0] <= 1
+    pinned = _scrub_edge({
+        "Sable": {"at": "scrub_edge", "near": ["Corin Ashe"],
+                  "cell": [12, 9]},
+        "Corin Ashe": {"at": "scrub_edge", "near": ["Sable"]},
+    })
+    from world.spatial import body_cell
+    assert body_cell(pinned, "Sable") == (12, 9)
+
+
+def test_a_pair_standing_together_can_hear_each_other():
+    """What the six paces cost: a normal voice between two bodies the scene
+    says are together."""
+    from world.spatial import hear_level, spatial_rel_between
+    sc = _scrub_edge({
+        "Sable": {"at": "scrub_edge", "near": ["Corin Ashe"]},
+        "Corin Ashe": {"at": "scrub_edge", "near": ["Sable"]},
+    })
+    rel = spatial_rel_between(sc, "Corin Ashe", "Sable")
+    assert hear_level(rel, "normal") == "full"

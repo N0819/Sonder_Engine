@@ -5348,6 +5348,113 @@ never a fragment of itself — and then to decide whether tier (c)'s uniqueness
 test is enough protection for a three-letter name like `tie`, which is what
 the floor is currently standing in for.
 
+### 1.114 The declared room word against the sources: two owner decisions the PA3 repair did not take
+
+**Found 2026-09-05**, fixing PA3 (`docs/experiments/PLAY_2026_09_05_lighthouse.md`).
+The declared word and the sources are two accounts of one fact, and the
+repair let the sources correct the word in ONE case only: an `enclosed` room
+that holds room-filling fixtures with every one of them switched off takes
+the sources' answer (`spatial_light_field.ambient_floor_word`). Two questions
+were deliberately left for the owner, because either answer changes every
+story and the measured case does not decide them.
+
+* **Should a declared word ever outrank the sources OUTDOORS?** Today an
+  `open` or `sheltered` room's word never yields, on the reasoning that the
+  sky is that room's account of its light and `room_light` already lets the
+  sun overrule the declared word there (a declared `light` may only DARKEN an
+  outdoor room). The case that would test it: a `sheltered` market hall
+  declared `lit` at night with its braziers out. It currently reads `lit` at
+  midnight, because `sun_light` darkens it only where `day_phase` is set and
+  a scene without a clock reads as indoors.
+* **Should the floor hold for `dim`?** Today it yields for any word above
+  `dark`, so an enclosed room declared `dim` with its one dead sconce in it
+  reads `dark`. The argument for exempting `dim`: `dim` is the word an author
+  reaches for when a room has SOME light from nowhere in particular -- a
+  grate, a gap under a door, a window nobody minted -- and taking it to zero
+  makes the room unnavigable for a reason the reader cannot see. The argument
+  against: it is exactly the same lie the `bright` case was, one rung down.
+
+F50 (`DEBUG_RUN_2026_09_05.md`) is the third of the family and is untouched:
+a LIT source still cannot quantise below its room's declared floor, so a
+single candle in a `dim` parlour lights all 32 cells to `dim` and its falloff
+is invisible. All three want one answer.
+
+### 1.115 Outdoors, ordinary speech is `full` only inside about five paces — a constants decision
+
+**Found 2026-09-05** (`docs/experiments/PLAY_2026_09_05_road.md` § PD2),
+measured again here against the constants as they stand. NOT a bug: the
+ambient floor is applied once, to the LISTENER's cell's room
+(`SoundField.noise_at` reads `self.ambient[grid.inside[cell]]`), and the
+weather term is a separate quantity from the exposure term
+(`_ambient_floor` = `AMBIENT[exposure]` + `WEATHER_NOISE[intensity] * gain` +
+`WIND_NOISE[wind]`, and `weather_for_room` returns `gain` 1.0 for an open
+room, so nothing is counted twice). What is in question is the VALUES, and
+they are the owner's.
+
+Straight-line radii in cells at which each volume is still `full` / still
+`fragment`, solving `P/(1+d²) >= max(SNR * noise, HEAR_FLOOR)` on the
+constants as they stand (a real path costs 1.4 per diagonal, so these are
+upper bounds):
+
+| room | noise | whisper | normal | loud | shout |
+|---|---|---|---|---|---|
+| enclosed, still | 0.05 | 3.0 / 4.4 | 10.9 / 15.5 | 20.0 / 28.3 | 34.6 / 49.0 |
+| sheltered, still | 0.10 | 2.0 / 3.4 | 7.7 / 12.2 | 14.1 / 22.3 | 24.5 / 38.7 |
+| open, fair | 0.20 | 1.2 / 2.3 | 5.4 / 8.6 | 9.9 / 15.8 | 17.3 / 27.4 |
+| open, light rain | 0.50 | — / 1.2 | 3.3 / 5.4 | 6.2 / 9.9 | 10.9 / 17.3 |
+| open, moderate rain | 0.80 | — / 0.7 | 2.5 / 4.2 | 4.9 / 7.8 | 8.6 / 13.7 |
+| open, heavy rain | 1.20 | — / 0.2 | 2.0 / 3.4 | 4.0 / 6.4 | 7.0 / 11.1 |
+| open, heavy rain + gale | 2.20 | — / — | 1.3 / 2.4 | 2.8 / 4.7 | 5.1 / 8.2 |
+
+The rule the constants should satisfy, stated by the run that found it: *two
+people walking together on an open road converse in full; the road takes
+their voices at the distance you would have to raise your voice in life.*
+Fair weather outdoors already gives 5.4 paces, which is about right. It is
+the WEATHER term that closes the road: light rain — the commonest weather
+there is — more than doubles the noise floor of an open room and takes normal
+speech to 3.3 paces, and a campfire beside them (an `audible` source at 12)
+took the same pair to `none` at four.
+
+**Recommendation, for the owner to take or refuse.** Move two constants and
+no others, both in `world/spatial_sound_field.py`:
+
+* `AMBIENT["open"]` 0.2 → 0.1 (equal to `sheltered`). Open air is not itself
+  a noise; what is noisy outdoors is the weather, which is counted
+  separately, and 0.2 is currently four times a quiet room for no source the
+  world holds.
+* `WEATHER_NOISE` light 0.3 → 0.1, moderate 0.6 → 0.25, heavy 1.0 → 0.5.
+  Rain you can talk through until it is heavy.
+
+That gives, for a normal voice: fair 7.7 paces full, light rain 5.4,
+moderate 4.0, heavy 3.0, heavy + gale 1.7 — a road you can walk and talk
+down, and a downpour you have to raise your voice in. The alternative considered and NOT
+recommended is raising `SPEECH_POWER["normal"]`: it also stretches the indoor
+radius, which is already 10.9 cells, and compresses the ladder against
+`loud`. Test to land with whichever is chosen: an empty `open` room, fair
+weather, two bodies four paces apart, normal volume ⇒ `full`.
+
+### 1.116 The two rescues that promote an unheard line, and the record that would show them
+
+**Found 2026-09-05** (`docs/experiments/PLAY_2026_09_05_lighthouse.md` § PA4),
+half-addressed. The delivered clarity of a cross-room line is not
+reproducible from the committed scene: a shout three rooms up a stone tower
+was delivered verbatim on four separate beats, while every deterministic
+reader replayed on the same scene answers `fragment` or `none`. The 2026-09-05
+sound work removed one candidate cause (the pair's gain is now the same
+number from either end, § PB2) and capped the answer by the listener's own
+noise (§ PA5), so the live grade can no longer beat the room it is heard in.
+
+What is left is in files that repair did not own: `composer.speech_percept`'s
+`open_group_continuity` floor (`composer.py:2116`), which turns `none` into
+`full` for any normal/loud/shout line, and `line_hear_level`'s addressed
+rescue, whose premise — that a by-name exchange across a barrier implies a
+device carrying it — is false in a stone tower. Both promote an unheard line
+to a full verbatim quotation, which is a comm channel invented from a name.
+And `speech_percept` still records nothing: give it the `note_step_decision`
+record `act_percept` has (level, volume, barrier, distance, which rescue
+fired) before deciding either rescue's fate, because the reason this was hard
+to attribute is that nothing persisted which relation was used or why.
+
 ## 2. Roadmap
 
 Features the architecture intends and has not built. Ordered by value per unit

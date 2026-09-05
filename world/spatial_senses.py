@@ -805,6 +805,61 @@ def hear_level(
     vouched: bool = False,
     proximity: str | None = None,
 ) -> str:
+    """How much of a line at `volume` this relation delivers: none |
+    fragment | full.
+
+    ONE MASKING RULE, ON EVERY PATH. A listener's noise floor is a property
+    of where the LISTENER stands, not of how far away the speaker is, so it
+    grades every voice that reaches them whatever path it came by. Where the
+    field placed both bodies it says so with `signal` and `noise` and the
+    quantisation below is the whole answer. Where it could not place the
+    speaker -- more rooms away than a composite covers -- it stamps
+    `door_gain` instead: what the same voice would deliver from this room's
+    own best opening, which no path from beyond it can beat. The edge rules
+    then answer as they always have and this CEILING caps them, so a bell
+    that drowns an ordinary voice in the room also drowns a shout from three
+    rooms off (`PLAY_2026_09_05_lighthouse.md` § PA5).
+
+    A `vouched` channel is exempt: a voice on a live comm channel is not
+    crossing this room's air and the room's own doorways say nothing about
+    it. The enclosure cases never carry either stamp
+    (`stamp_sound_relation`), so the conducted answers below are untouched.
+    """
+    level = _hear_level(rel, volume, vouched, proximity)
+    if level == "none" and not vouched:
+        # A RAISED VOICE CARRIES THROUGH AN OPENING: one passable edge away
+        # it is at worst a fragment, whatever the walk costs it. The edge
+        # model always delivered that and the field can refuse it, so when
+        # both perception passes came to read the field a shout across one
+        # archway could reach nobody at all (§ PC3). The floor is the field's
+        # own (`spatial_sound_field.open_edge_floor`, capped by the same
+        # noise the masking rule uses) and it is stamped on the relation
+        # only where the rooms are one opening apart.
+        from world.spatial_sound_field import open_edge_floor
+        level = open_edge_floor(volume, rel) or level
+    if vouched or level == "none":
+        return level
+    door = rel.get("door_gain") if isinstance(rel, dict) else None
+    if door is None or rel.get("noise") is None:
+        return level
+    return _weaker_hearing(level, _field_hear_level(volume, door,
+                                                    rel["noise"]))
+
+
+_HEARING_ORDER = {"none": 0, "fragment": 1, "full": 2}
+
+
+def _weaker_hearing(a: str, b: str) -> str:
+    """The quieter of two hearing grades -- caps only ever subtract."""
+    return a if _HEARING_ORDER.get(a, 2) <= _HEARING_ORDER.get(b, 2) else b
+
+
+def _hear_level(
+    rel: dict,
+    volume: str,
+    vouched: bool = False,
+    proximity: str | None = None,
+) -> str:
     volume = str(volume or "normal").strip().casefold()
     barrier = _material_shifted_barrier(
         normalize_barrier(rel.get("barrier")), rel.get("material"))

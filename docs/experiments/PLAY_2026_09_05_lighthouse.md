@@ -236,6 +236,25 @@ failing` mean anything at all; it is also the smaller change, because
 `bright` with one `bright` fixture composes `bright`; the same room with
 `state.lit: false` on that fixture composes `dark`.
 
+**FIXED (2026-09-05), in the narrow form; the wide one is registered.**
+`spatial_light_field.ambient_floor_word` is now the one answer to "what light
+does a room give its own cells", read by both the floor and the doorway
+spill: `room_light`, unless the room HOLDS room-filling fixtures and every one
+of them is switched off, in which case the word yields and the sources answer.
+Narrow three ways, each of which is a case the wide rule would have got wrong:
+a room with no fixture keeps its word (F40's opposite instance — a declared
+`lit` room must not go dark for want of an entity nobody wrote); a doused
+thing someone CARRIED in is not the room's account of itself (`_light_radius`
+`spot`, so a stranger with a dead lantern does not put a hall out); and only
+an `enclosed` room's word yields, because outdoors the sky is the account
+already. The switch is what counts, not the beat: a `flickering` fixture
+between its beats is lit. Whether a declared word should ever outrank the
+sources OUTDOORS, and whether the floor should hold for `dim`, are the
+owner's — registered in `docs/UNBUILT.md`. Pinned by
+`tests/test_light_field.py::test_a_room_whose_only_fixture_is_out_reads_dark`,
+`::test_the_floor_yields_only_to_the_rooms_own_fixtures` and
+`::test_a_doused_rooms_floor_no_longer_spills_next_door`.
+
 ### PA4. The delivered clarity of a cross-room line is not reproducible from the committed scene
 *Stage of origin: `agents/perception.py`'s per-beat relation for speech (the
 grade is not recorded anywhere). Severity: **wrong-but-recoverable**, and it
@@ -275,6 +294,21 @@ that promotes an unheard line to a full verbatim quotation is a comm channel
 invented from a name. Test: two rooms with a closed door between and no
 comms record; a normal voice naming the far body is not delivered in full.
 
+**NOT PB2, and still open (2026-09-05).** Checked while fixing PB2, because
+the two look alike: they are different defects. PB2 is two ADJACENT rooms
+whose two composites disagree, and its fix makes any pair the field can place
+answer the same number from either end. Ivo and Wren were three hops apart,
+so NO composite placed the pair in either direction and the field was not the
+generous reader -- the edge model was, and then `composer`'s two rescues
+(`open_group_continuity` at `composer.py:2116` and `line_hear_level`'s
+addressed rescue) promoted its answer. Both live in files this repair did not
+own. What did change here is PA5's ceiling: a line from beyond the field is
+now capped by what the same voice would deliver from the listener's own
+doorway, so the rescues can no longer beat the room's noise -- but a rescue
+in a QUIET tower still promotes an unheard line, and the missing
+`note_step_decision` record is still missing. The remaining half is
+registered in `docs/UNBUILT.md`.
+
 ### PA5. Noise masks a co-present voice and does not mask a voice from the next room
 *Stage of origin: `world/spatial_senses.hear_level`'s edge branch. Severity:
 wrong-but-recoverable. F61's class, one level up.*
@@ -295,6 +329,21 @@ is* -- so the cross-room branch quantises against the same
 model supplying the signal's attenuation and the field supplying the noise.
 Test: a `deafening` source beside the listener drops a shout from the next
 room by at least one grade.
+
+**FIXED (2026-09-05).** One rule, stated once and applied on every path: a
+listener's noise floor is a property of where the LISTENER stands, so it
+grades every voice that reaches them whatever path it came by. Where the
+field places both bodies it says so with `signal` and `noise`, as before.
+Where it cannot place the speaker, `stamp_sound_relation` now stamps
+`door_gain` instead -- what the same voice would deliver from this room's own
+best opening (`SoundField.door_gain`), which no path from beyond the room can
+beat, since whatever came from outside entered through one of those openings
+and crossed the rest of the room like any other sound. `hear_level` runs the
+edge rules exactly as it always has and takes the WEAKER of the two, so the
+ceiling only ever subtracts. A `vouched` channel is exempt: a voice on a live
+comm channel is not crossing this room's air. Pinned by
+`tests/test_sound_field.py::test_noise_beside_the_listener_masks_a_voice_from_beyond_the_field`
+and `::test_a_quiet_room_masks_nothing_and_a_vouched_channel_is_exempt`.
 
 ### PA6. F60 recurs three times, and the World Browser cannot outrun it
 *Stage of origin: `world/spatial_merge._merge_anchor_fields`. Severity:
@@ -364,6 +413,24 @@ an anchor whose cell is `dark` is not visible, exactly as an occluded one is
 not. The one case worth carving out is the anchor a body is TOUCHING, which
 is knowledge from a channel that does not need light. Test: a room with no
 lit source names no features and still names its doorways as doorways.
+
+**FIXED (2026-09-05).** A THING IS SEEN BY THE LIGHT THAT FALLS ON IT,
+exactly as a body is (`body_visibility` reads `light_at` on the TARGET).
+`feature_visibility` now takes the light field's own answer for the anchor's
+cells and refuses one that no light reaches, with `basis: "light"` beside
+`"cone"` and `"line"`. Two carve-outs, each a channel that does not need
+light: the anchor a body is STATIONED at, which it has its hands on, and a
+DOORWAY -- a gap in the wall rather than a thing in the room, graded beyond
+by the far room's own light where the boundary is composed
+(`perception._visible_openings`), and a body that cannot find the way out of a
+dark room could not leave it. A consequence worth stating: `light_shape`
+groups the VISIBLE anchors, so its `dark` group now holds only a thing the
+light reaches somewhere ALONG it (a counter run half in the light, graded at
+its nearest cell) and never a thing nothing falls on. F52's corridor sentence
+loses the coat-stand and the clock it named "in the dark"; that is the same
+subtraction one level up, and naming what a body cannot see is what PA8 is.
+Pinned
+by `tests/test_light_field.py::test_a_dark_room_names_no_features_and_still_names_its_doorways`.
 
 ### PA9. The failing-source notice is written and then discarded inside the same commit
 *Stage of origin: `persist/commit.py`'s domain order. Severity:
