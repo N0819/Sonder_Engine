@@ -1,0 +1,347 @@
+"""Classes found by playing, 2026-09-04: a fresh scenario (chat 116, "The
+Lantern Station") and chat 114, both on copies of the owner's database with
+Gemini 3.8 flash, every stage of every beat read against the others. Each
+test names the live case that proved the rule was missing and pins the rule,
+never the case:
+
+  * a barrier is a property of the doorway, so a change written on one side
+    is written on the other (F16);
+  * a planned exit is restored only into a room the scene holds, or the
+    dangling-exit guard undoes it in the same commit (F13);
+  * a frontier names what lies that way, never a bare direction (F3);
+  * the structure check judges the structure's still-planned rooms, not
+    every developed one (F31);
+  * the minds view carries the authored tier beside the ledgers (F8);
+  * a setting-fact need is named as one in the commit warning (F4);
+  * an anchor is resolved in the body's own room before scene-wide (F27);
+  * a leg walked toward a destination is an arrival in the room between (F28).
+"""
+from __future__ import annotations
+
+import json
+import time
+import types
+
+import pytest
+
+from agents.director import (
+    _guard_approach_is_not_arrival, _reconcile_near_group_positions)
+from persist.commit import prune_dangling_exits
+from story.plot_packages import OPERATION_FIELDS, _shape_plan_rooms
+from story.room_tools import MIND_AUTHORED_ITEMS, MIND_LINE_CHARS, run_tool
+from world.spatial import merge_scene_with_diff
+from world.structure import plant_structure, protect_planned_edges
+
+
+# ---------------------------------------------------------------------------
+# F16: one doorway, one barrier
+# ---------------------------------------------------------------------------
+
+def _two_rooms(a="closed_door", b="closed_door"):
+    return {"rooms": {
+        "platform": {"name": "Platform", "adjacent": [
+            {"to": "gallery", "barrier": a, "dir": "e"}]},
+        "gallery": {"name": "Gallery", "adjacent": [
+            {"to": "platform", "barrier": b, "dir": "w"},
+            {"to": "radio", "barrier": "open_door", "dir": "n"}]},
+        "radio": {"name": "Radio", "adjacent": [
+            {"to": "gallery", "barrier": "open_door", "dir": "s"}]},
+    }, "positions": {}, "entities": {}}
+
+
+def _edge(scene, room, to):
+    return next(e for e in scene["rooms"][room]["adjacent"] if e["to"] == to)
+
+
+def test_a_door_opened_from_one_side_is_open_from_the_other():
+    """Chat 116 beat 1: Marisol held the platform door open; the diff wrote
+    `platform -> gallery: open_door` and nothing on the gallery, whose edge
+    stayed shut, so the two rooms disagreed about one door."""
+    merged = merge_scene_with_diff(_two_rooms(), {"rooms": {
+        "platform": {"name": "", "desc": "",
+                     "adjacent": [{"to": "gallery", "barrier": "open_door"}]}}})
+    assert _edge(merged, "platform", "gallery")["barrier"] == "open_door"
+    assert _edge(merged, "gallery", "platform")["barrier"] == "open_door"
+    # Nothing else about the gallery moved: its other exit and its bearing.
+    assert _edge(merged, "gallery", "radio")["barrier"] == "open_door"
+    assert _edge(merged, "gallery", "platform")["dir"] == "w"
+
+
+def test_a_door_closed_from_one_side_is_closed_from_the_other():
+    merged = merge_scene_with_diff(_two_rooms("open_door", "open_door"), {"rooms": {
+        "gallery": {"adjacent": [{"to": "platform", "barrier": "closed_door"}]}}})
+    assert _edge(merged, "platform", "gallery")["barrier"] == "closed_door"
+
+
+def test_a_diff_that_wrote_both_sides_is_left_as_written():
+    merged = merge_scene_with_diff(_two_rooms(), {"rooms": {
+        "platform": {"adjacent": [{"to": "gallery", "barrier": "open_door"}]},
+        "gallery": {"adjacent": [{"to": "platform", "barrier": "window"}]}}})
+    assert _edge(merged, "platform", "gallery")["barrier"] == "open_door"
+    assert _edge(merged, "gallery", "platform")["barrier"] == "window"
+
+
+def test_the_two_asymmetric_cases_are_not_mirrored():
+    """A one-way window is asymmetric by design; a wall is a seal, which
+    already takes a two-sided declaration (`_shield_minted_edges`)."""
+    scene = _two_rooms("open_door", "one_way_window")
+    merged = merge_scene_with_diff(scene, {"rooms": {
+        "platform": {"adjacent": [{"to": "gallery", "barrier": "window"}]}}})
+    assert _edge(merged, "gallery", "platform")["barrier"] == "one_way_window"
+    merged = merge_scene_with_diff(_two_rooms(), {"rooms": {
+        "platform": {"adjacent": [{"to": "gallery", "barrier": "one_way_window"}]}}})
+    assert _edge(merged, "gallery", "platform")["barrier"] == "closed_door"
+    merged = merge_scene_with_diff(_two_rooms("open_door", "open_door"), {"rooms": {
+        "platform": {"adjacent": [{"to": "gallery", "barrier": "wall"}]}}})
+    assert _edge(merged, "gallery", "platform")["barrier"] == "open_door"
+
+
+def test_an_edge_that_names_a_room_the_scene_lacks_mints_nothing():
+    merged = merge_scene_with_diff(_two_rooms(), {"rooms": {
+        "platform": {"adjacent": [{"to": "west", "barrier": "open_door"}]}}})
+    assert "west" not in merged["rooms"]
+
+
+def test_an_edge_written_without_a_barrier_changes_nothing_across():
+    merged = merge_scene_with_diff(_two_rooms(), {"rooms": {
+        "platform": {"adjacent": [{"to": "gallery", "distance": 4}]}}})
+    assert _edge(merged, "gallery", "platform")["barrier"] == "closed_door"
+
+
+# ---------------------------------------------------------------------------
+# F13: a planned exit comes back only into a room the scene holds
+# ---------------------------------------------------------------------------
+
+def _station(temp_db):
+    cid = temp_db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+                     ("Terrace", "", time.time()))
+    plant_structure(cid, {"key": "house", "name": "House"}, {
+        "terrace": {"name": "Terrace", "adjacent": [
+            {"to": "lounge", "barrier": "open_door"},
+            {"to": "dining", "barrier": "open_door"}]},
+        "lounge": {"name": "Lounge", "adjacent": [{"to": "terrace", "barrier": "open_door"}]},
+        "dining": {"name": "Dining", "adjacent": [{"to": "terrace", "barrier": "open_door"}]},
+    })
+    return cid
+
+
+def test_a_planned_exit_into_an_unminted_room_is_not_restored(temp_db):
+    """Chat 114: every beat restored terrace -> lounge/dining/garden and the
+    dangling-exit guard dropped them as undefined in the same commit."""
+    cid = _station(temp_db)
+    scene = {"rooms": {"terrace": {"name": "Terrace", "desc": "Flagstones.",
+                                   "adjacent": []}}}
+    assert protect_planned_edges(cid, scene) == []
+    assert scene["rooms"]["terrace"]["adjacent"] == []
+    assert prune_dangling_exits(scene) == []
+
+
+def test_the_exit_returns_the_beat_the_stub_is_minted(temp_db):
+    cid = _station(temp_db)
+    scene = {"rooms": {
+        "terrace": {"name": "Terrace", "desc": "Flagstones.", "adjacent": []},
+        "lounge": {"name": "Lounge", "planned": True, "adjacent": []}}}
+    restored = protect_planned_edges(cid, scene)
+    # One doorway, restored from whichever end the sweep reached first.
+    assert set(restored) & {("terrace", "lounge"), ("lounge", "terrace")}
+    assert len(restored) == 1
+    joined = ([e for e in scene["rooms"]["terrace"]["adjacent"] if e["to"] == "lounge"]
+              or [e for e in scene["rooms"]["lounge"]["adjacent"] if e["to"] == "terrace"])
+    assert joined and joined[0]["barrier"] == "open_door"
+    assert prune_dangling_exits(scene) == []
+
+
+# ---------------------------------------------------------------------------
+# F3: a frontier is what lies that way
+# ---------------------------------------------------------------------------
+
+def _plan(frontier):
+    return {"op": "plan_rooms", "structure": {"key": "stn", "name": "Station"},
+            "rooms": {"platform": {"name": "Platform", "purpose": "arrivals",
+                                   "adjacent": [], "frontier": frontier}}}
+
+
+@pytest.mark.parametrize("word", ["west", "W", "North-East", "up", " down "])
+def test_a_bare_direction_is_refused_as_a_frontier(word):
+    """Chat 116: `frontier: ["west"]` minted a room called West at the
+    opening commit."""
+    with pytest.raises(ValueError) as caught:
+        _shape_plan_rooms(_plan([word]))
+    assert "is a direction" in str(caught.value)
+    assert "adjacent.bearing" in str(caught.value)
+
+
+def test_a_frontier_that_names_a_place_is_kept():
+    shaped = _shape_plan_rooms(_plan(["the service road down to the valley",
+                                      "west ridge path"]))
+    assert shaped["rooms"]["platform"]["frontier"] == [
+        "the service road down to the valley", "west ridge path"]
+
+
+def test_the_field_text_no_longer_asks_for_a_direction():
+    text = OPERATION_FIELDS["plan_rooms"]["rooms"]
+    assert "<direction>" not in text
+    assert "never a bare direction" in text
+
+
+# ---------------------------------------------------------------------------
+# F31: the structure check judges planned rooms
+# ---------------------------------------------------------------------------
+
+def _story_with_structure(temp_db, rooms):
+    cid = temp_db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+                     ("Station", "", time.time()))
+    plant_structure(cid, {"key": "stn", "name": "Station"}, {
+        "platform": {"name": "Platform", "adjacent": [{"to": "gallery"}]},
+        "gallery": {"name": "Gallery", "adjacent": [{"to": "platform"}]}})
+    temp_db.wset(cid, "scene", {"location": "Station", "rooms": rooms,
+                                "positions": {"P": "platform"}, "entities": {}})
+    return cid
+
+
+def test_developed_planned_rooms_are_not_contradictions(temp_db):
+    """Chat 116 after the opening: all five rooms the establish developed
+    from the plan were reported as 'planned room contains prose'."""
+    cid = _story_with_structure(temp_db, {
+        "platform": {"name": "Platform", "desc": "Timber and iron.",
+                     "adjacent": [{"to": "gallery", "barrier": "closed_door"}]},
+        "gallery": {"name": "Gallery", "desc": "Glass and brass.",
+                    "adjacent": [{"to": "platform", "barrier": "closed_door"}]}})
+    found = run_tool(cid, "inspect_contradictions")
+    assert found["structure"] == []
+
+
+def test_a_stub_that_carries_prose_without_settling_still_is_one(temp_db):
+    cid = _story_with_structure(temp_db, {
+        "platform": {"name": "Platform", "desc": "Timber and iron.", "adjacent": []},
+        "gallery": {"name": "Gallery", "planned": True, "desc": "Glass and brass.",
+                    "adjacent": []}})
+    found = run_tool(cid, "inspect_contradictions")
+    assert any("gallery: planned room contains prose" in w for w in found["structure"])
+
+
+# ---------------------------------------------------------------------------
+# F8: the minds view carries the card
+# ---------------------------------------------------------------------------
+
+def test_the_minds_view_carries_the_authored_tier(temp_db):
+    """Chat 116: asked what Marisol believed, the Planner read an empty
+    belief ledger and invented one that contradicted her card."""
+    cid = temp_db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+                     ("Minds", "", time.time()))
+    temp_db.wset(cid, "scene", {"location": "Station", "rooms": {
+        "gallery": {"name": "Gallery", "adjacent": []}},
+        "positions": {"P": "gallery"}, "entities": {}})
+    for _ in range(3):
+        temp_db.qi("INSERT INTO turns(chat_id,idx,player_input,created) VALUES(?,?,?,?)",
+                   (cid, _, "", time.time()))
+    sheet = {"name": "Marisol Oda", "psychology": {
+        "drive": {"essence": "that a true record exists", "expression": "checks twice",
+                  "taboo": "letting a wrong reading stand"},
+        "values": ["accuracy over comfort", "the record over her own reputation"]
+                  + ["v%d" % i for i in range(MIND_AUTHORED_ITEMS + 3)],
+        "traits": [{"name": "exacting", "strength": 0.8}, {"name": "dry", "strength": 0.6}],
+        "self_model": {"summary": "Believes the generator fault is in the fuel line "
+                                  "and that Teo will not admit he changed the filter. "
+                                  + "y" * (MIND_LINE_CHARS * 3),
+                       "protected_beliefs": ["A number is not rounded."]}}}
+    char_id = temp_db.qi("INSERT INTO characters(name,sheet,created) VALUES(?,?,?)",
+                         ("Marisol Oda", json.dumps(sheet), time.time()))
+    temp_db.qi("INSERT INTO chat_chars(chat_id,char_id,status,state) VALUES(?,?,?,?)",
+               (cid, char_id, "active", json.dumps({})))
+    (mind,) = run_tool(cid, "inspect_minds")["minds"]
+    authored = mind["authored"]
+    assert authored["self_model"].startswith("Believes the generator fault is in the fuel line")
+    assert authored["values"][:2] == ["accuracy over comfort",
+                                      "the record over her own reputation"]
+    assert len(authored["values"]) == MIND_AUTHORED_ITEMS
+    assert authored["traits"] == ["exacting (0.8)", "dry (0.6)"]
+    assert authored["protected_beliefs"] == ["A number is not rounded."]
+    assert mind["beliefs"] == []                   # the ledger is still the ledger
+
+
+# ---------------------------------------------------------------------------
+# F4: a setting fact is named as one
+# ---------------------------------------------------------------------------
+
+def test_a_setting_fact_need_is_named_as_a_fact():
+    from persist.commit import _describe_need
+    assert _describe_need({"kind": "thing", "reason": "setting_fact",
+                           "subject": "The cable car runs once a day."}) \
+        == "setting fact 'The cable car runs once a day.'"
+    assert _describe_need({"kind": "room", "reason": "rendered_unplanned",
+                           "subject": "cellar"}) == "room 'cellar'"
+
+
+# ---------------------------------------------------------------------------
+# F27: an anchor lives in a room
+# ---------------------------------------------------------------------------
+
+class _Ctx(types.SimpleNamespace):
+    def get(self, key, default=None):
+        return getattr(self, key, default)
+
+
+def test_a_door_anchored_on_both_its_sides_is_not_an_ambiguity():
+    """Chat 116 beat 2: `station_door` on the platform AND on the gallery
+    (one door, two sides); two bodies near each other at the gallery's read
+    as 'fresh station anchors do not identify one unambiguous room'."""
+    scene = {"rooms": {
+        "platform": {"name": "Platform", "anchors": {"station_door": {"desc": "the door"}},
+                     "adjacent": [{"to": "gallery", "barrier": "open_door"}]},
+        "gallery": {"name": "Gallery", "anchors": {"station_door": {"desc": "the door"}},
+                    "adjacent": [{"to": "platform", "barrier": "open_door"}]}},
+        "positions": {"Ren": "platform", "Marisol": "gallery", "Teo": "gallery"}}
+    diff = {"positions": {}, "stations": {
+        "Teo": {"at": "station_door", "near": ["Marisol"]},
+        "Marisol": {"at": "station_door", "near": ["Teo"]}}}
+    ctx = _Ctx(warnings=[], director_interpret={})
+    _reconcile_near_group_positions(ctx, scene, diff, "Ren")
+    assert not [w for w in ctx.warnings if "Near-group position conflict" in w]
+    assert diff["positions"] == {}
+
+
+# ---------------------------------------------------------------------------
+# F28: a leg walked is an arrival in the room between
+# ---------------------------------------------------------------------------
+
+def _corridor():
+    return {"rooms": {
+        "radio": {"name": "Radio", "adjacent": [{"to": "gallery", "barrier": "open_door"}]},
+        "gallery": {"name": "Gallery", "adjacent": [
+            {"to": "radio", "barrier": "open_door"},
+            {"to": "shed", "barrier": "closed_door"},
+            {"to": "platform", "barrier": "closed_door"}]},
+        "shed": {"name": "Shed", "adjacent": [{"to": "gallery", "barrier": "closed_door"}]},
+        "platform": {"name": "Platform", "adjacent": [{"to": "gallery", "barrier": "closed_door"}]},
+    }, "positions": {"Ren": "radio"}}
+
+
+def _heading(to="shed"):
+    return {"movement": {"to_room": to, "mover": "self", "arrives": False}}
+
+
+def test_the_room_between_is_reached_on_the_way():
+    """Chat 116 beat 3: 'I pick up the tool roll and head for the shed' from
+    the radio room; the beat walked Ren into the gallery and the guard put
+    them back in the radio room, which the next beat narrated from."""
+    ctx, diff = types.SimpleNamespace(warnings=[]), {"positions": {"Ren": "gallery"}}
+    _guard_approach_is_not_arrival(ctx, _heading(), diff, _corridor(), "Ren")
+    assert diff["positions"] == {"Ren": "gallery"}
+    assert "Approach leg" in ctx.warnings[0]
+
+
+def test_the_destination_itself_is_still_not_reached():
+    ctx, diff = types.SimpleNamespace(warnings=[]), {"positions": {"Ren": "shed"}}
+    scene = _corridor()
+    scene["positions"]["Ren"] = "gallery"
+    _guard_approach_is_not_arrival(ctx, _heading(), diff, scene, "Ren")
+    assert diff["positions"] == {}
+    assert "Approach is not arrival" in ctx.warnings[0]
+
+
+def test_a_room_that_is_not_a_step_from_here_is_not_a_leg():
+    ctx, diff = types.SimpleNamespace(warnings=[]), {"positions": {"Ren": "platform"}}
+    _guard_approach_is_not_arrival(ctx, _heading(), diff, _corridor(), "Ren")
+    assert diff["positions"] == {}
+    assert "Approach is not arrival" in ctx.warnings[0]

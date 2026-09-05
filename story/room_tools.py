@@ -84,6 +84,11 @@ MIND_TEXT_CHARS = 240
 #: (`cast_minds_summary`), so the Planner knows to reach for the tool.
 #: Measured 2026-09-04 on chat 114: 136 characters for the one cast member.
 MIND_LINE_CHARS = 120
+#: Owner-visible: authored values, traits and protected beliefs shown per
+#: mind (each cut to MIND_LINE_CHARS). The card is author knowledge as much
+#: as the ledger is -- read without it the Planner INVENTED a belief for a
+#: character whose sheet stated the opposite (chat 116, 2026-09-04).
+MIND_AUTHORED_ITEMS = 8
 
 
 class ToolError(ValueError):
@@ -541,8 +546,17 @@ def _t_inspect_contradictions(cid, frame_id):
                                      structure_warnings)
         stored = normalize_structures(
             wget_for_frame(cid, STRUCTURES_KEY, None, {}) or {})
+        # The structure check asks whether a PLANNED room carries prose.
+        # Handed every live room it called each developed room a
+        # contradiction (chat 116, 2026-09-04: all five rooms the opening
+        # developed from the plan). Only stubs still flagged `planned` are
+        # the structure's planned rooms in the live scene.
+        stubs = {rid: room for rid, room in (scene.get("rooms") or {}).items()
+                 if isinstance(room, dict) and room.get("planned")}
         for key, structure in stored["items"].items():
-            for w in structure_warnings(structure, scene.get("rooms") or {}):
+            for w in structure_warnings(structure, stubs):
+                if w.endswith("structure has no planned rooms"):
+                    continue
                 out["structure"].append("%s: %s" % (key, w))
     except Exception as exc:
         out["structure"] = ["structures unreadable: %s" % exc]
@@ -780,9 +794,38 @@ def _mind_of(row, turn_idx):
                                 "confidence": v["leading"].get("confidence")}
                          for kind, v in kinds.items() if isinstance(v, dict)}
 
+    psych = character_psychology(sheet)
+    self_model = psych.get("self_model") if isinstance(psych.get("self_model"), dict) else {}
+
+    def _authored_list(items):
+        out_items = []
+        for item in (items or [])[:MIND_AUTHORED_ITEMS]:
+            if isinstance(item, dict):
+                text = " ".join(str(v) for k, v in item.items()
+                                if k in ("name", "value", "text", "belief", "trait")
+                                and str(v or "").strip()) or json.dumps(item, ensure_ascii=False)
+                strength = item.get("strength") if "strength" in item else item.get("weight")
+                if strength is not None:
+                    text = "%s (%s)" % (text, strength)
+            else:
+                text = str(item)
+            text = " ".join(text.split())
+            if text:
+                out_items.append(text if len(text) <= MIND_LINE_CHARS
+                                 else text[:MIND_LINE_CHARS - 1] + "…")
+        return out_items
+
+    authored = {
+        "self_model": _cut(self_model.get("summary")),
+        "values": _authored_list(psych.get("values")),
+        "traits": _authored_list(psych.get("traits")),
+        "protected_beliefs": _authored_list(self_model.get("protected_beliefs")),
+    }
+
     mind = {
         "id": row["id"], "name": row["name"],
         "drive": out_drive,
+        "authored": authored,
         "former_drives": former_drives,
         "strain": out_strain,
         "stress": out_stress,
