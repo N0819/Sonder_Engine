@@ -167,6 +167,10 @@ LEDGERS = {
     "claim_dispositions": (None, "the claims are this turn's, from interpret"),
     "phase_sources": (None, "provenance stamped on this beat's own diff, not "
                             "a standing ledger"),
+    "movement_refused": (None, "engine-authored by the movement backstop "
+                               "about this beat's own refusal; no hand "
+                               "writes it and there is no standing ledger "
+                               "of refusals to show"),
 }
 
 

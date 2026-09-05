@@ -1341,6 +1341,22 @@ class RoomDef(LenientModel):
     # hanging off them with it. Same shape as `zone`/`light`/`exposure` above,
     # for the same reason.
     anchors: Optional[dict[str, dict]] = None
+    # The anchors that LEAVE this room -- burned out, torn down, carried off.
+    # `anchors` above is merged onto the room's existing map by id
+    # (`spatial._merge_anchor_fields`), so silence about a fixture is silence
+    # and not an erasure; this is the channel that says a fixture is gone,
+    # exactly as `remove_adjacent` is for edges. Nested on the room rather
+    # than beside `rooms` in StateDiff because it names anchors OF a room and
+    # the hand writing it is already writing that room, and because the
+    # anchor map's owner is the room record. Consumed and stripped by
+    # `merge_scene_with_diff`; it never reaches the stored scene.
+    #
+    # It exists because the whole-map rule cost three runs a room's furniture:
+    # caravanserai turn 7 reduced the common room from four anchors to one
+    # (PB3), lighthouse turns 4, 7 and 16 did the same three times (PA6),
+    # and a host restoring the map through the World Browser was overwritten
+    # by the next beat that named any anchor.
+    remove_anchors: Optional[list[str]] = None
     # How much floor there is to cross: tiny | small | medium | large | huge
     # | vast -- spatial_geometry.ROOM_SIZES, ordered, and the ONE statement of
     # the set. The only thing that makes two distinct anchors read as "across"
@@ -2012,6 +2028,18 @@ class StateDiff(LenientModel):
     remove_entities: list[str] = Field(default_factory=list)
     remove_rooms: list[str] = Field(default_factory=list)
     remove_adjacent: list[dict] = Field(default_factory=list)
+    # ENGINE-AUTHORED, like `phase_sources` above: the movement backstop
+    # writes `[{subject, to_room}]` for every body whose declared walk it
+    # refused, at the moment it pops the position, and
+    # `spatial.merge_scene_with_diff` subtracts that body's position, station
+    # and pose from the beat before anything is applied. A pose describes the
+    # body where it stands, so a move that did not happen leaves nothing
+    # behind -- manor turn 13 (PC7) committed a pose reading "standing on the
+    # flagged floor of the long gallery" for a body the same beat had just
+    # refused entry to the gallery, and the narrator wrote the scene from it.
+    # Declared on the model so the validation round trip and every stored
+    # variant keep it; no specialist owns it, so it is in no channel table.
+    movement_refused: list[dict] = Field(default_factory=list)
     conditions: dict[str, list[dict]] = Field(default_factory=dict)
     inventory_ops: list[dict] = Field(default_factory=list)
     # Body position tracking. Contact is a RELATION, so it is not stored on
