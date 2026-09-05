@@ -660,6 +660,34 @@ def _plan_edge(edge):
     return out
 
 
+def _plan_claim(uid, raw):
+    """The frontier space this planned room says it FILLS, by identity.
+
+    A plan reserves a space with a `frontier` axis, and until now nothing
+    could ever fill it: the axis was spent the moment a stub minted from it,
+    so a later plan wanting that place had no way to say "that one" and
+    built a rival beside it (the second bridge road, Harrowmere 2026-09-03,
+    and every duplicate room of that run).
+
+    Two ids, both of which `inspect_structures` already hands the Room: the
+    HOLDER room the frontier hangs off, and the AXIS. No name, no
+    similarity, nothing read out of prose -- this decides whether two places
+    are one place, and a guard that reads free prose fails in whichever
+    direction its missing word points.
+    """
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise ValueError("room %r: claims is {room, axis} -- the room the "
+                         "frontier hangs off and the axis it fills" % uid)
+    room = _text(raw.get("room"), 120)
+    axis = _text(raw.get("axis"), 60)
+    if not room or not axis:
+        raise ValueError("room %r: a claim names both the room the frontier "
+                         "hangs off and the axis it fills" % uid)
+    return {"claims": {"room": room, "axis": axis}}
+
+
 def _shape_plan_rooms(op):
     structure = op.get("structure") if isinstance(op.get("structure"), dict) else {}
     rooms = op.get("rooms") if isinstance(op.get("rooms"), dict) else {}
@@ -693,14 +721,24 @@ def _shape_plan_rooms(op):
             "frontier": [_text(x, 60) for x in raw.get("frontier") or ()
                          if _text(x, 60)],
             **_plan_geometry(raw),
+            **_plan_claim(uid, raw.get("claims")),
         }
     return {"structure": dict(structure), "rooms": clean,
             "owning_book_id": op.get("owning_book_id")}
 
 
 def _preview_plan_rooms(cid, frame_id, op, world):
+    from world.structure import claim_frontier_spaces
+
     errors, warnings, changes = [], [], []
-    rooms = op["rooms"]
+    # A CLAIM IS RESOLVED BEFORE ANYTHING ELSE IS CHECKED, because it decides
+    # which room ids this operation is actually about: a claiming room is
+    # rekeyed onto the room already holding the space, and every edge inside
+    # the operation follows it.
+    rooms, claim_plan, claim_errors = claim_frontier_spaces(
+        cid, op["rooms"], scene=world.get("scene"))
+    errors.extend(claim_errors)
+    claimed_uids = {str(c["room"]) for c in claim_plan["claims"]}
     contained = world.get("containment") or {}
     for uid, room in rooms.items():
         if uid in contained:
@@ -710,10 +748,21 @@ def _preview_plan_rooms(cid, frame_id, op, world):
                 "body is the Director's, and it is transient"
                 % (uid, contained[uid]))
             continue
-        if uid in world["described_rooms"]:
+        if uid in world["described_rooms"] and uid not in claimed_uids:
             errors.append(
                 "room %r is already described in the scene; a room the "
                 "story has seen is a retcon, not a plan" % uid)
+        elif uid in claimed_uids and uid in world["described_rooms"]:
+            # A CLAIM ON A ROOM THE STORY HAS BEEN IN IS NOT A RETCON, and it
+            # is not free either: it takes the purpose, the geometry and the
+            # onward axes, it LEAVES the name, and it cannot retract prose
+            # already written about a place that suited a lane and may not
+            # suit a guildhall.
+            warnings.append(
+                "room %r is a space the story has already been in: the claim "
+                "takes its purpose, its measurements and its onward axes and "
+                "leaves the name it is known by, and prose already written "
+                "about it stands" % uid)
         for edge in room["adjacent"]:
             to = str(edge.get("to"))
             if to in contained:
@@ -745,17 +794,43 @@ def _preview_plan_rooms(cid, frame_id, op, world):
         change["geometry"] = geometry
     if vertical:
         change["vertical"] = vertical
+    if claim_plan["claims"]:
+        # What each claim DID, shown back, because the two outcomes differ in
+        # the one way a host cares about: a room nobody has been in takes the
+        # plan's name and keeps its old one as an alias; a room somebody has
+        # been in keeps the name the story has been using and takes only the
+        # purpose, the geometry and the onward axes.
+        change["claimed"] = [
+            {"room": c["room"], "axis": c["axis"], "off": c["holder"],
+             "name": c["name"],
+             **({"was": c["was"]} if c["was"] and c["was"] != c["name"] else {}),
+             "outcome": ("renamed" if c["renamed"] else
+                         "name kept (the story has been in it)"
+                         if c["kept_name"] else "filled")}
+            for c in claim_plan["claims"]]
     changes.append(change)
     return {"changes": changes, "errors": errors, "warnings": warnings}
 
 
 def _apply_plan_rooms(cid, frame_id, op, turn_idx):
-    from world.structure import plant_structure
+    from world.structure import claim_frontier_spaces, plant_structure
 
+    rooms, claim_plan, errors = claim_frontier_spaces(cid, op["rooms"])
+    # A CLAIM THAT CANNOT BE HONOURED PLANTS NOTHING. The world can move
+    # between the preview that passed the claim and the publish that applies
+    # it -- another package fills the space first -- and a room planted
+    # beside the space it meant to fill is the entire defect this closes.
+    for key in claim_plan["refused"]:
+        rooms.pop(key, None)
     structure, planted = plant_structure(
-        cid, op["structure"], op["rooms"],
-        owning_book_id=op.get("owning_book_id"))
-    return {"structure": structure["key"], "rooms": sorted(planted)}
+        cid, op["structure"], rooms,
+        owning_book_id=op.get("owning_book_id"), claims=claim_plan)
+    out = {"structure": structure["key"], "rooms": sorted(planted)}
+    if claim_plan["claims"]:
+        out["claimed"] = claim_plan["claims"]
+    if errors:
+        out["refused"] = errors
+    return out
 
 
 # -- plan_entity --------------------------------------------------------------
@@ -1823,7 +1898,7 @@ CLOCK_ONLY_KINDS = ("scheduled_consequence",)
 OPERATION_FIELDS = {
     "plan_rooms": {
         "structure": "{key, name} -- the structure the rooms belong to",
-        "rooms": "{<room_id>: {name, purpose, access, extent? {w, d} (how many paces across and how many deep -- the measurement belongs in this field, not in the prose of purpose), shape? (rectangle | round | l | composite), exposure? (open | sheltered | enclosed -- how much sky and weather reach it), adjacent: [{to: <room_id>, barrier? (omit for an open way through), bearing?, vertical? (up | down -- how a body reaches another storey; a bearing names a compass point and cannot say this)}], frontier: [<the NAME of a place that lies beyond, as the way out would be labelled -- never a direction and never a description of what is that way>]}}",
+        "rooms": "{<room_id>: {name, purpose, access, extent? {w, d} (how many paces across and how many deep -- the measurement belongs in this field, not in the prose of purpose), shape? (rectangle | round | l | composite), exposure? (open | sheltered | enclosed -- how much sky and weather reach it), adjacent: [{to: <room_id>, barrier? (omit for an open way through), bearing?, vertical? (up | down -- how a body reaches another storey; a bearing names a compass point and cannot say this)}], frontier: [<the NAME of a place that lies beyond, as the way out would be labelled -- never a direction and never a description of what is that way>], claims? {room, axis} (this room FILLS a space an earlier plan held open -- give the room the frontier hangs off and its axis, exactly as inspect_structures lists them under `frontiers`; the space becomes this room instead of a second one beside it, and a room the story has already been in keeps the name it is known by)}}",
         "owning_book_id?": "lorebook id"},
     "plan_entity": {
         "name": "the entity's name", "kind": "person | thing | creature",
@@ -2121,6 +2196,11 @@ def _reach_warning(cid, world, pkg):
                 for edge in room.get("adjacent") or ():
                     if isinstance(edge, dict) and edge.get("to"):
                         join(str(rid), str(edge["to"]))
+                # A claim IS an adjacency: the space hangs off the holder
+                # room, so a claiming room is exactly as reachable as it.
+                claims = room.get("claims")
+                if isinstance(claims, dict) and claims.get("room"):
+                    join(str(rid), str(claims["room"]))
     if not named or not occupied:
         return None
     for rid, others in passable_neighbors(world.get("scene") or {}).items():

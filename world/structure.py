@@ -230,7 +230,25 @@ def mint_frontier(structure, from_uid, axis, seed, existing=()):
     "crossing") beside the real Bridge Road, and the Director, shown a stub
     called "bridge road" north of the gate, minted `upland_road` beside it;
     `slate_lane_2`, `market_square_2` and `_3` were the same class, and
-    those were every duplicate room of the run.
+    those were every duplicate room of the run. THAT CLASS IS CLOSED, in two
+    halves: the naming half here (2026-09-03), and the half a name could
+    never reach -- a later plan had no way to say "that space is mine", so
+    it built a rival beside the stub whatever the stub was called. A plan
+    now CLAIMS the space by identity (`claim_frontier_spaces`,
+    `docs/design/DESIGN_FRONTIER_SPACES.md`, 2026-09-05).
+
+    A STUB REMEMBERS WHAT IT STANDS FOR, which is what makes a later plan
+    able to claim it instead of building a rival beside it: the spec keeps
+    the axis it was minted from (`frontier_of`) and a `provisional` mark
+    saying this room is a space held open, not a space spent.
+
+    AND IT INHERITS THE AXIS IT WAS MINTED FROM, so the road runs on. A
+    frontier is the answer to "what lies that way", and one ring out the
+    answer is still the same road -- so the stub carries the axis onward and
+    the world does not stop one ring past whatever a plan drew.  The onward
+    axis is refused exactly where the plan-side gate refuses it (ONE RULE,
+    ONE OWNER, `frontier_refusal`): a bearing is not the name of a place, so
+    it cannot be the name of what lies beyond the place it named.
     """
     structure = normalize_structure(structure)
     material = "|".join((structure["key"], str(from_uid), str(axis), str(seed)))
@@ -276,14 +294,24 @@ def mint_frontier(structure, from_uid, axis, seed, existing=()):
         "name": name, "purpose": purposes[rng.randrange(len(purposes))],
         "structure": structure["key"], "access": "",
         "adjacent": [{"to": str(from_uid), "barrier": "open_door"}],
-        "frontier": [],
+        "frontier": [] if frontier_refusal(axis) else [str(axis)],
+        "provisional": True,
+        "frontier_of": {"room": str(from_uid), "axis": str(axis)},
     }
 
 
 def plant_structure(cid, structure, rooms, *, owning_book_id=None,
-                    created_turn_id=None):
-    """Persist a prose-free planned skeleton and its structure grammar."""
-    from core.db import qi, transaction, wget_for_frame, wset_for_frame
+                    created_turn_id=None, claims=None):
+    """Persist a prose-free planned skeleton and its structure grammar.
+
+    `claims` is `claim_frontier_spaces`' second return value, and it is the
+    only thing that may write a room's NAME to something other than the
+    plan's own: a claimed room keeps the name a story has been using for it
+    and accumulates the other spelling as an alias, so every reference
+    already written still resolves (`_planned_spellings`). Absent, this
+    writes exactly what it always wrote.
+    """
+    from core.db import q, qi, transaction, wget_for_frame, wset_for_frame
 
     structure = normalize_structure(structure)
     normalized = {}
@@ -298,6 +326,12 @@ def plant_structure(cid, structure, rooms, *, owning_book_id=None,
             "adjacent": [dict(edge) for edge in raw.get("adjacent") or ()
                          if isinstance(edge, dict) and edge.get("to")],
             "frontier": [str(x) for x in raw.get("frontier") or () if str(x)],
+            # What a claimed stub was minted for, carried through the claim:
+            # the axis a room was minted from names the way ON, and
+            # `prepare_frontier_expansion` reads it to tell a chain from a
+            # reference. Absent on every room no frontier made.
+            **({"frontier_of": dict(raw["frontier_of"])}
+               if isinstance(raw.get("frontier_of"), dict) else {}),
             # A plan could say what a room is FOR and not how big it is: this
             # rebuild listed the prose fields and dropped the measurement, so
             # a stall range asked for "four paces wide and twenty long"
@@ -307,9 +341,30 @@ def plant_structure(cid, structure, rooms, *, owning_book_id=None,
         }
     if len(normalized) > structure["max_planned"]:
         raise ValueError("planned rooms exceed structure.max_planned")
+    claimed = (claims or {}).get("rows") or {}
+    holders = (claims or {}).get("holders") or {}
     with transaction():
         for uid, planned in normalized.items():
             payload = json.dumps({"planned": planned}, ensure_ascii=False)
+            row = claimed.get(uid)
+            if row:
+                # A CLAIM RENAMES IN PLACE. The uid never moves, so the name
+                # and the alias list are the only columns that change, and
+                # the old name goes into the aliases the same commit the new
+                # one goes into the column.
+                qi(
+                    "INSERT INTO room_registry"
+                    "(chat_id,room_uid,owning_book_id,parent_entity,name,"
+                    "aliases,payload,created_turn_id,retired_turn_id) "
+                    "VALUES(?,?,?,?,?,?,?,?,NULL) "
+                    "ON CONFLICT(chat_id,room_uid) DO UPDATE SET "
+                    "name=excluded.name,aliases=excluded.aliases,"
+                    "payload=excluded.payload,retired_turn_id=NULL",
+                    (cid, uid, owning_book_id, None, row["name"],
+                     json.dumps(row.get("aliases") or [], ensure_ascii=False),
+                     payload, created_turn_id),
+                )
+                continue
             qi(
                 "INSERT INTO room_registry"
                 "(chat_id,room_uid,owning_book_id,parent_entity,name,aliases,"
@@ -320,6 +375,19 @@ def plant_structure(cid, structure, rooms, *, owning_book_id=None,
                  json.dumps([planned["name"], uid.replace("_", " ")]),
                  payload, created_turn_id),
             )
+        # A claim on a space nothing has minted into yet spends the holder's
+        # axis and records what now stands in it; only the holder's planned
+        # payload moves, never its identity.
+        for uid, spec in holders.items():
+            row = q("SELECT payload FROM room_registry WHERE chat_id=? AND "
+                    "room_uid=?", (cid, uid), one=True)
+            if not row:
+                continue
+            payload = _payload(row)
+            payload["planned"] = spec
+            qi("UPDATE room_registry SET payload=? WHERE chat_id=? AND "
+               "room_uid=?",
+               (json.dumps(payload, ensure_ascii=False), cid, uid))
         stored = normalize_structures(
             wget_for_frame(cid, STRUCTURES_KEY, None, {}) or {})
         stored["items"][structure["key"]] = structure
@@ -400,6 +468,25 @@ def materialize_planned_fringe(cid, scene):
         supply[uid] = [dict(e) for e in spec.get("adjacent") or ()
                        if isinstance(e, dict) and e.get("to")]
         added += 1
+    # WHILE A ROOM IS STILL THE PLAN'S PROSE-FREE STUB, THE PLAN OWNS ITS
+    # NAME, ITS PURPOSE AND ITS MEASUREMENTS. A claim renames the registry
+    # row in place, and the live scene has to follow: `_prepare_room_registry`
+    # projects the registry's name FROM the scene every commit, so a
+    # registry-only rename of a stub the fringe has already materialized is
+    # written back to its old name on the next beat and the claim silently
+    # un-happens. Once the room carries prose it is its own
+    # (`settle_developed_stubs` takes the seed off) and nothing here touches
+    # it -- which is the same line the claim draws when it refuses to rename.
+    for uid, (name, spec) in planned.items():
+        room = rooms.get(uid)
+        if not isinstance(room, dict) or not room.get("planned"):
+            continue
+        if str(room.get("desc") or room.get("description") or "").strip():
+            continue
+        room["name"] = name
+        if str(spec.get("purpose") or ""):
+            room["purpose"] = str(spec["purpose"])
+        room.update(planned_geometry(spec))
     # THE SCENE ONLY EVER HOLDS AN EDGE INTO A ROOM THE SCENE HOLDS, and the
     # membership test runs after every stub of this pass exists, so two
     # planned rooms minted together keep the doorway between them.
@@ -447,16 +534,52 @@ def _planned_specs(cid):
     return out
 
 
+def _planned_spellings(cid):
+    """``{room_uid: {spelling, ...}}`` -- every spelling a live planned room
+    answers to, folded by `normalize_room_id`: its id, its current name and
+    every alias the registry keeps for it.
+
+    THE ALIAS IS THE WHOLE POINT OF A RENAME. A room the plan renames keeps
+    its uid and its old name as an alias (`claim_frontier_spaces`), and a
+    lookup that reads only the `name` column stops answering to the old
+    spelling the moment the new one lands -- so a Director still saying
+    "Coastal Lane" mints `coastal_lane_2` beside the plan's room, which is
+    exactly the duplicate class the claim exists to close (the second bridge
+    road, Harrowmere 2026-09-03). `_registry_alias_index` and
+    `subjects.resolve_subject` already read aliases; the plan's own tables
+    did not.
+    """
+    from core.db import q
+
+    out = {}
+    for row in q(
+            "SELECT room_uid,name,aliases,payload FROM room_registry "
+            "WHERE chat_id=? AND retired_turn_id IS NULL", (cid,)):
+        payload = _payload(row)
+        spec = payload.get("planned") if isinstance(payload, dict) else None
+        if not isinstance(spec, dict):
+            continue
+        try:
+            aliases = json.loads(row["aliases"] or "[]")
+        except (TypeError, ValueError, json.JSONDecodeError):
+            aliases = []
+        keys = {normalize_room_id(str(row["room_uid"])),
+                normalize_room_id(str(row["name"] or ""))}
+        keys.update(normalize_room_id(str(a or "")) for a in aliases or ())
+        keys.discard("")
+        out[str(row["room_uid"])] = keys
+    return out
+
+
 def planned_room_spellings(cid):
     """{spelling: room_uid} for every live planned registry room, under its
-    id and its name as `normalize_room_id` spells them. A spelling two
-    plans share maps to ``""``: two rooms answer to it, so it names
-    neither (the room rule `dedup_minted_rooms` applies to bodies too)."""
+    id, its name and every alias as `normalize_room_id` spells them. A
+    spelling two plans share maps to ``""``: two rooms answer to it, so it
+    names neither (the room rule `dedup_minted_rooms` applies to bodies
+    too)."""
     out = {}
-    for uid, (name, _spec) in _planned_specs(cid).items():
-        for key in {normalize_room_id(str(uid)), normalize_room_id(str(name or ""))}:
-            if not key:
-                continue
+    for uid, keys in _planned_spellings(cid).items():
+        for key in keys:
             out[key] = "" if key in out and out[key] != uid else uid
     return out
 
@@ -599,9 +722,7 @@ def planned_rooms_named_in(cid, text):
     if not folded:
         return []
     out = []
-    for rid, (name, _spec) in _planned_specs(cid).items():
-        keys = {normalize_room_id(str(rid)), normalize_room_id(str(name or ""))}
-        keys.discard("")
+    for rid, keys in _planned_spellings(cid).items():
         if any(k == folded or k in folded for k in keys):
             out.append(str(rid))
     return sorted(out)
@@ -681,15 +802,21 @@ def planned_context(cid, query):
         "WHERE chat_id=? AND retired_turn_id IS NULL", (cid,))
     names = {str(row["room_uid"]): str(row["name"] or row["room_uid"])
              for row in all_rows}
+    # AND EVERY SPELLING THE ROOM ANSWERS TO, the old name a claim retired
+    # included (`_planned_spellings`): a brief asked for under the name the
+    # story has been using is the same room, not an unplanned destination.
+    spellings = _planned_spellings(cid)
     for row in all_rows:
         payload = _payload(row)
         spec = payload.get("planned") if isinstance(payload, dict) else None
         if not isinstance(spec, dict):
             continue
         uid, name = str(row["room_uid"]), str(row["name"] or row["room_uid"])
-        uid_key, name_key = normalize_room_id(uid), normalize_room_id(name)
-        exact = folded in {uid_key, name_key}
-        if not exact and name_key not in folded and uid_key not in folded:
+        keys = set(spellings.get(uid) or ())
+        keys.update({normalize_room_id(uid), normalize_room_id(name)})
+        keys.discard("")
+        exact = folded in keys
+        if not exact and not any(key in folded for key in keys):
             continue
         rows.append({
             "_exact": exact,
@@ -786,6 +913,16 @@ def prepare_frontier_expansion(cid, scene):
             "key": structure_key, "max_planned": 200, "grammar": []}
         frontiers = [str(x) for x in spec.get("frontier") or () if str(x)]
         retained = []
+        # WHAT THE PLAN RESERVED AND WHAT NOW STANDS IN IT. An axis used to
+        # be simply deleted the moment it minted, so nothing anywhere
+        # recorded that a room was a placeholder and a later plan had no
+        # slot to claim -- it built a rival beside it instead (the second
+        # bridge road). ``{axis: room_uid}`` on the holder is that record.
+        standing = dict(spec.get("frontier_standing") or {}) \
+            if isinstance(spec.get("frontier_standing"), dict) else {}
+        origin = spec.get("frontier_of")
+        own_axis = str((origin or {}).get("axis") or "") \
+            if isinstance(origin, dict) else ""
         for axis in frontiers:
             # WHAT CANNOT BE A PLACE'S NAME IS NOT MINTED AS ONE. A phrase
             # describing what lies that way is kept on the spec, where
@@ -797,7 +934,15 @@ def prepare_frontier_expansion(cid, scene):
             # An axis that names a room the plan already has is not a stub
             # to mint but an edge to draw: "the lane continues to Market
             # Square" reaches the square, never a second one.
-            target = by_name.get(
+            #
+            # AN AXIS A ROOM WAS MINTED FROM NAMES THE WAY ON, NOT THE ROOM
+            # IT MADE. A stub inherits its axis so the frontier keeps
+            # moving; read as a reference, the inherited label would resolve
+            # to the very room it named -- one ring out, the room BEFORE it
+            # -- and the road would stop at its second segment with an edge
+            # doubling back. A room's own origin axis is the one spelling
+            # that cannot mean a room that already exists.
+            target = None if axis == own_axis else by_name.get(
                 normalize_room_id(str(axis).replace("_", " ")))
             if target and target != uid:
                 edge = {"to": target, "barrier": "open_door", "axis": axis}
@@ -808,6 +953,7 @@ def prepare_frontier_expansion(cid, scene):
                 if isinstance(rooms.get(target), dict):
                     rooms[target].setdefault("adjacent", []).append(
                         {"to": uid, "barrier": "open_door"})
+                standing[axis] = target
                 continue
             if counts.get(structure_key, 0) >= normalize_structure(
                     structure)["max_planned"]:
@@ -816,6 +962,7 @@ def prepare_frontier_expansion(cid, scene):
             new_uid, new_spec = mint_frontier(
                 structure, uid, axis, f"{cid}:{structure_key}", existing)
             existing.add(new_uid)
+            standing[axis] = new_uid
             counts[structure_key] = counts.get(structure_key, 0) + 1
             edge = {"to": new_uid, "barrier": "open_door",
                     "axis": axis}
@@ -841,6 +988,8 @@ def prepare_frontier_expansion(cid, scene):
             })
         if frontiers:
             spec["frontier"] = retained
+            if standing:
+                spec["frontier_standing"] = standing
             payload = dict(payload, planned=spec)
             mutations.append({
                 "room_uid": uid,
@@ -851,6 +1000,269 @@ def prepare_frontier_expansion(cid, scene):
                 "payload": payload,
             })
     return scene, mutations
+
+
+def frontier_spaces(cid):
+    """Every frontier space the plan is still holding OPEN, for a planner.
+
+    A SPACE IS THE AXIS, THE ROOM IT HANGS OFF, AND WHAT STANDS THERE. Two
+    states, and both are unfilled:
+
+    * ``open`` -- the axis is on the holder's plan and nothing has minted
+      from it, because nobody has stood in the holder room yet. An axis the
+      mint refuses (`frontier_refusal`) is open too and says why.
+    * ``provisional`` -- a stub stands in the space, named from the
+      structure's grammar, standing in until a plan claims it.
+
+    A space a real plan fills is not a space and is not listed. A planner
+    that cannot see the slot plans BESIDE it, which is exactly what the
+    Harrowmere corpus measured: the axis "upland road" minted a stub called
+    "bridge road" beside the real Bridge Road and the Director, shown the
+    stub, minted `upland_road` beside THAT. Those, with `slate_lane_2` and
+    `market_square_2`/`_3`, were every duplicate room of the run.
+
+    `claim_frontier_spaces` takes the ``room`` and ``axis`` of a row here.
+    """
+    specs = _planned_specs(cid)
+    out = []
+    for uid, (name, spec) in specs.items():
+        skey = str(spec.get("structure") or "")
+        for axis in spec.get("frontier") or ():
+            axis = str(axis or "")
+            if not axis:
+                continue
+            row = {"room": uid, "room_name": name, "structure": skey,
+                   "axis": axis, "state": "open"}
+            refusal = frontier_refusal(axis, allow_bearing=True)
+            if refusal:
+                row["unmintable"] = refusal
+            out.append(row)
+        standing = spec.get("frontier_standing")
+        if not isinstance(standing, dict):
+            continue
+        for axis, target in standing.items():
+            stub_name, stub_spec = specs.get(str(target), ("", {}))
+            if not isinstance(stub_spec, dict) or not stub_spec.get("provisional"):
+                continue
+            out.append({"room": uid, "room_name": name, "structure": skey,
+                        "axis": str(axis), "state": "provisional",
+                        "stub": str(target), "stub_name": stub_name})
+    return sorted(out, key=lambda row: (row["room"], row["axis"]))
+
+
+def _registry_aliases(cid):
+    """``{room_uid: [alias, ...]}`` as the registry stores them."""
+    from core.db import q
+
+    out = {}
+    for row in q("SELECT room_uid,aliases FROM room_registry WHERE chat_id=? "
+                 "AND retired_turn_id IS NULL", (cid,)):
+        try:
+            aliases = json.loads(row["aliases"] or "[]")
+        except (TypeError, ValueError, json.JSONDecodeError):
+            aliases = []
+        out[str(row["room_uid"])] = [str(a) for a in aliases or () if str(a)]
+    return out
+
+
+def claim_frontier_spaces(cid, rooms, *, scene=None):
+    """Rekey planned rooms that CLAIM a frontier space onto the room already
+    holding it.
+
+    THE RULE: a minted stub is the space the plan reserved, standing in
+    until a plan claims it; claiming renames the room and never mints a
+    second one.
+
+    A plan says which space it fills BY IDENTITY -- ``claims: {room, axis}``
+    on a planned room, the holder's uid and the axis, both ids
+    `frontier_spaces` already hands the planner. Never a name and never a
+    resemblance between two nouns: a guard reading free prose fails in
+    whichever direction its missing word points, and this one would decide
+    whether two places are one place.
+
+    Returns ``(rooms, plan, errors)``:
+
+    * `rooms` -- the map rekeyed onto the claimed uids, every
+      ``adjacent.to`` inside the same operation remapped with it, so THE
+      ROOM'S UID NEVER CHANGES: edges, the registry projection, anything
+      standing in it and every reference already written stay intact. The
+      stub's own edges survive a claim that does not name them, the same
+      rule `protect_planned_edges` keeps for a developed room.
+    * `plan` -- ``{"rows", "holders", "claims"}`` for `plant_structure` to
+      write and for a preview to report.
+    * `errors` -- one per refusal, naming the holder and what fills the
+      space. First claim wins; a second is refused, because a place cannot
+      be two things. `plan["refused"]` names the rooms those refusals came
+      from: a claim that cannot be honoured must not fall back to planting
+      the room ANYWAY, because a room planted beside the space it meant to
+      fill is the whole defect.
+
+    A ROOM SOMEBODY HAS BEEN IN KEEPS ITS NAME. A name is what the player
+    knows the place by, and renaming it is a lie about their own memory --
+    so a claim on such a room takes the purpose, the geometry and the onward
+    axes and LEAVES the name, and says which it did. What "has been in"
+    means is the record the engine can answer honestly rather than the one
+    that would be nicest to have: the room CARRIES PROSE (the live `desc`,
+    or `planned.resolved`, which `_prepare_room_registry` maintains from it
+    every commit) or a body stands in it NOW. This engine keeps no durable
+    "was ever occupied" mark to ask, and prose is the closest honest
+    proxy -- a stub is furnished the beat a beat reaches it, and a memory
+    is only ever written under the name of a room its owner was standing
+    in, so the rooms whose names memory retrieval depends on
+    (`memory_retrieval`, which matches `memories.location` by NAME) are
+    exactly the rooms this refuses to rename.
+    """
+    from core.db import wget
+
+    specs = _planned_specs(cid)
+    aliases_by_uid = _registry_aliases(cid)
+    if scene is None:
+        scene = wget(cid, "scene", {}) or {}
+    scene = scene if isinstance(scene, dict) else {}
+    live = scene.get("rooms") or {}
+    occupied = {str(r) for r in (scene.get("positions") or {}).values()
+                if str(r)}
+    rooms = {str(k): dict(v) for k, v in (rooms or {}).items()
+             if isinstance(v, dict)}
+    errors, records, rows, work = [], [], {}, {}
+    rename, filled, refused = {}, set(), []
+
+    def _live_prose(uid):
+        room = live.get(uid)
+        if not isinstance(room, dict):
+            return False
+        return bool(str(room.get("desc") or room.get("description")
+                        or "").strip())
+
+    for key in sorted(rooms):
+        raw = rooms[key].pop("claims", None)
+        if raw is None:
+            continue
+        if not isinstance(raw, dict):
+            errors.append("room %r claims a frontier space that is not a "
+                          "{room, axis}" % key)
+            refused.append(key)
+            continue
+        holder = str(raw.get("room") or "")
+        axis = str(raw.get("axis") or "")
+        if not holder or not axis:
+            errors.append("room %r claims a frontier space without naming "
+                          "both the room it hangs off and the axis it fills"
+                          % key)
+            refused.append(key)
+            continue
+        if holder not in specs:
+            errors.append("room %r claims the space %r off %r, which holds no "
+                          "plan; a frontier space hangs off a planned room"
+                          % (key, axis, holder))
+            refused.append(key)
+            continue
+        hspec = work.get(holder) or specs[holder][1]
+        standing = hspec.get("frontier_standing")
+        standing = dict(standing) if isinstance(standing, dict) else {}
+        open_axes = [str(a) for a in hspec.get("frontier") or () if str(a)]
+        if (holder, axis) in filled:
+            errors.append("room %r claims the space %r off %r, which an "
+                          "earlier room of this plan already fills; a place "
+                          "cannot be two things" % (key, axis, holder))
+            refused.append(key)
+            continue
+        if axis in standing:
+            target = str(standing[axis])
+            stub_name, stub_spec = specs.get(target, ("", None))
+            if not isinstance(stub_spec, dict):
+                errors.append("room %r claims the space %r off %r, whose room "
+                              "%r the plan no longer holds"
+                              % (key, axis, holder, target))
+                refused.append(key)
+                continue
+            if not stub_spec.get("provisional"):
+                errors.append("room %r claims the space %r off %r, which %r "
+                              "already fills; a place cannot be two things"
+                              % (key, axis, holder, target))
+                refused.append(key)
+                continue
+            if target in rooms and target != key:
+                errors.append("room %r claims the space %r off %r, whose room "
+                              "%r this same plan also plants"
+                              % (key, axis, holder, target))
+                refused.append(key)
+                continue
+            filled.add((holder, axis))
+            rename[key] = target
+            was = str(stub_name or target)
+            wants = str(rooms[key].get("name") or key)
+            visited = target in occupied or bool(stub_spec.get("resolved")) \
+                or _live_prose(target)
+            keep = bool(visited and was and wants != was)
+            # The stub's ways out survive a claim that does not name them.
+            edges = {str(e.get("to")): dict(e)
+                     for e in stub_spec.get("adjacent") or ()
+                     if isinstance(e, dict) and e.get("to")}
+            for edge in rooms[key].get("adjacent") or ():
+                if isinstance(edge, dict) and edge.get("to"):
+                    edges[str(edge["to"])] = dict(edge)
+            rooms[key]["adjacent"] = list(edges.values())
+            if isinstance(stub_spec.get("frontier_of"), dict):
+                rooms[key]["frontier_of"] = dict(stub_spec["frontier_of"])
+            rows[target] = {
+                "name": was if keep else wants,
+                "aliases": list(dict.fromkeys(
+                    [*aliases_by_uid.get(target, ()), was, wants,
+                     target.replace("_", " ")])),
+            }
+            records.append({
+                "room": target, "holder": holder, "axis": axis,
+                "stub": target, "was": was, "name": was if keep else wants,
+                "renamed": bool(not keep and wants != was),
+                "kept_name": keep, "visited": bool(visited)})
+            continue
+        if axis in open_axes:
+            # NOTHING STANDS THERE YET, and the plan's own room fills the
+            # space directly: no stub, no rename, and the axis is spent the
+            # way a mint spends it.
+            filled.add((holder, axis))
+            wspec = work.setdefault(holder, copy.deepcopy(specs[holder][1]))
+            wspec["frontier"] = [str(a) for a in wspec.get("frontier") or ()
+                                 if str(a) and str(a) != axis]
+            wstanding = wspec.get("frontier_standing")
+            wstanding = dict(wstanding) if isinstance(wstanding, dict) else {}
+            wstanding[axis] = key
+            wspec["frontier_standing"] = wstanding
+            hedges = {str(e.get("to")): dict(e)
+                      for e in wspec.get("adjacent") or ()
+                      if isinstance(e, dict) and e.get("to")}
+            hedges.setdefault(key, {"to": key, "barrier": "open_door",
+                                    "axis": axis})
+            wspec["adjacent"] = list(hedges.values())
+            redges = {str(e.get("to")): dict(e)
+                      for e in rooms[key].get("adjacent") or ()
+                      if isinstance(e, dict) and e.get("to")}
+            redges.setdefault(holder, {"to": holder, "barrier": "open_door"})
+            rooms[key]["adjacent"] = list(redges.values())
+            records.append({
+                "room": key, "holder": holder, "axis": axis, "stub": "",
+                "was": "", "name": str(rooms[key].get("name") or key),
+                "renamed": False, "kept_name": False, "visited": False})
+            continue
+        held = sorted(set(open_axes) | set(standing))
+        errors.append("room %r claims the space %r off %r, which holds no "
+                      "such frontier; %r holds %s"
+                      % (key, axis, holder, holder,
+                         ", ".join(repr(a) for a in held) or "no frontier"))
+        refused.append(key)
+
+    for old, new in rename.items():
+        rooms[new] = rooms.pop(old)
+    if rename:
+        for room in rooms.values():
+            for edge in room.get("adjacent") or ():
+                if isinstance(edge, dict) and str(edge.get("to")) in rename:
+                    edge["to"] = rename[str(edge["to"])]
+    return (rooms,
+            {"rows": rows, "holders": work, "claims": records,
+             "refused": refused},
+            errors)
 
 
 def apply_frontier_mutations(cid, turn_id, mutations):
@@ -938,8 +1350,9 @@ def structure_warnings(structure, rooms, known=()):
 
 __all__ = [
     "FRONTIER_NAME_WORDS", "GEOMETRY_FIELDS", "STRUCTURES_KEY",
-    "apply_frontier_mutations",
-    "composed_scene", "frontier_refusal", "planned_geometry",
+    "apply_frontier_mutations", "claim_frontier_spaces",
+    "composed_scene", "frontier_refusal", "frontier_spaces",
+    "planned_geometry",
     "materialize_planned_fringe", "prepare_frontier_expansion",
     "mint_frontier", "normalize_structure", "normalize_structures",
     "planned_context",

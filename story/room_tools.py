@@ -219,13 +219,25 @@ def _t_scan_lore(cid, frame_id, *, book_id=None, category=None, cursor=0,
 
 
 def _t_inspect_structures(cid, frame_id):
+    """The planted structures, their planned rooms, and THE SPACES STILL
+    HELD OPEN.
+
+    A planner that cannot see the slot plans beside it, which is what the
+    Harrowmere corpus measured: every duplicate room of that run was a plan
+    built next to a stub standing for the same place. `frontiers` is
+    `structure.frontier_spaces` -- the axis, the room it hangs off, and
+    whether a provisional stub already stands there -- and its `room` and
+    `axis` are what a `plan_rooms` room's `claims` field takes.
+    """
     from core.db import wget_for_frame
-    from world.structure import STRUCTURES_KEY, normalize_structures, planned_room_ids
+    from world.structure import (STRUCTURES_KEY, frontier_spaces,
+                                 normalize_structures, planned_room_ids)
 
     stored = normalize_structures(
         wget_for_frame(cid, STRUCTURES_KEY, None, {}) or {})
     planned = sorted(planned_room_ids(cid))
-    return {"structures": stored["items"], "planned_rooms": planned}
+    return {"structures": stored["items"], "planned_rooms": planned,
+            "frontiers": frontier_spaces(cid)}
 
 
 def _t_inspect_rooms(cid, frame_id, *, room_ids=None):
@@ -1258,7 +1270,7 @@ TOOLS = [
      "args": _schema({"book_id": _I, "category": _S, "cursor": _I, "limit": _I}),
      "handler": _t_scan_lore},
     {"name": "inspect_structures",
-     "description": "The planted structures (settlements, buildings) and every planned room id the registry holds -- the town's own topology, which a beat may furnish and may not delete.",
+     "description": "The planted structures (settlements, buildings), every planned room id the registry holds -- the town's own topology, which a beat may furnish and may not delete -- and `frontiers`, the spaces the plan is still holding open: each is an axis, the room it hangs off, and whether it is `open` (nothing minted there yet) or `provisional` (a stub stands in it, named from the structure's grammar, until a plan claims it). To fill one, plan a room with `claims: {room, axis}` copied from the row: the space BECOMES that room -- same id, so every edge and everything standing in it survives -- instead of a second room beside it. A room the story has already been in keeps the name it is known by and takes the rest.",
      "args": _schema({}), "handler": _t_inspect_structures},
     {"name": "inspect_rooms",
      "description": "The map and the neighbourhood. With no arguments: `index` is every room the story knows -- live, planned (a stub nobody has entered) or retired (an id that is spent) -- with its holder when it is the inside of a body, its `region` (the part of the map it belongs to; the index is grouped by it, the cast's region first) and its distance in hops from the cast; `rooms` is the full slice of every room within two hops (description, exits with barriers, who stands there and in what, what stands there, the plan's brief for a stub, and what the author layer already claims for it: planned entities, open needs, package operations). Everything farther is index-only: pass room_ids to open any rooms by id, whatever their status. The room a body stands in is a room whatever holds it.",
