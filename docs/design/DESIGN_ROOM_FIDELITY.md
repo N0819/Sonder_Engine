@@ -601,6 +601,32 @@ junk is dropped again). Archive, checkpoint and branch carry the scene
 blob whole, so nothing else moves. The Director is never asked for a cell:
 `_coerce_station_table` keeps only `at`/`near`.
 
+*A cell is the precise place of the STATION it was pinned with* (the
+owner's ruling of 2026-09-05, F39 of
+`experiments/DEBUG_RUN_2026_09_05.md`, and it REVERSES half of the
+2026-09-04 convention above). A body's cell was kept through any station
+re-echo whatever it said, on the ground that the map's pin outranks a
+Director `at`; live, that made the pin outlive the station it was written
+with. Chat 115, turn 4: the resolve moved a body from the north control
+panel to the east threshold, the merge kept the map's `cell: [0, 1]` on the
+west wall, and because `body_cell` reads the cell FIRST, every field drew
+her at the west wall while every ledger said the east sill; turn 6 moved
+her again and the pin was still on her. So an incoming station whose `at`
+NAMES another anchor takes the cell down
+(`spatial_merge._station_moved_off_its_pin`) -- that is the story moving
+the body, and a body drawn at the bar while every ledger says the hearth is
+worse than a host having to pin again. The half the 2026-09-04 ruling was
+written for stands: a re-echo of the SAME anchor keeps the pin, and so does
+a station that names no `at` at all, so a Director handing back a station
+it never thought about cannot flatten "at the bar, this end of it". Two
+adjacent cases were decided with it. An `at` cleared to nothing keeps the
+cell: leaving an anchor is not arriving anywhere, nothing then contradicts
+the pin, and a cell with no `at` is a supported record everywhere else --
+it is what a drop on open floor writes. And `near` never decides it in
+either direction: it names a BODY, whose own place moves, so it can neither
+confirm nor contradict a fixed cell in the room's grid, and a pinned pair
+is measured from the cells (`_cell_proximity`).
+
 *Proximity, narrowly.* `proximity_rel` reads cell distance ONLY when at
 least one of the pair stands on an authored `cell` and both stand on a
 cell (`_cell_proximity`): within reach at a Chebyshev distance of at most
