@@ -15,6 +15,7 @@ import random
 import re
 
 from world.charter_model import integer as _integer
+from world.regions import normalize_region_id
 from world.spatial import normalize_room_id
 
 
@@ -83,6 +84,9 @@ def skeleton_rooms(cid, structure_key, frame_id=None):
             "planned": True,
             "purpose": str(planned.get("purpose") or ""),
             "access": str(planned.get("access") or ""),
+            # A structure IS a region (world/regions.py): a planned room
+            # enters the scene already knowing which part of the map it is.
+            "region": normalize_region_id(structure_key),
         }
     return {"rooms": rooms}
 
@@ -280,6 +284,8 @@ def materialize_planned_fringe(cid, scene):
             "name": name, "adjacent": [dict(e) for e in spec.get("adjacent") or ()],
             "planned": True, "purpose": str(spec.get("purpose") or ""),
         }
+        if spec.get("structure"):
+            rooms[uid]["region"] = normalize_region_id(spec["structure"])
         added += 1
     return scene, added
 
@@ -415,6 +421,14 @@ def planned_room_brief(cid, scene, room_ids):
                     "key": skey,
                     "grammar": structure.get("grammar") or [],
                 }
+            # The part of the map the room is in, by the structure that
+            # planned it (world/regions.py) -- so the hand furnishing a stub
+            # knows what the room is part of, and its neighbours it mints
+            # inherit the same answer.
+            brief["region"] = {
+                "id": normalize_region_id(skey),
+                "name": str((structure or {}).get("name") or skey),
+            }
         out[rid] = brief
     return out
 
@@ -535,6 +549,9 @@ def planned_context(cid, query):
             "room_uid": uid, "name": name,
             "purpose": str(spec.get("purpose") or ""),
             "structure": str(spec.get("structure") or ""),
+            # The structure's key as a region id (world/regions.py): the
+            # part of the map a reader files the room under.
+            "region": normalize_region_id(spec.get("structure") or "") or None,
             "access": str(spec.get("access") or ""),
             "adjacent": [names.get(str(edge.get("to")), str(edge.get("to")))
                          for edge in spec.get("adjacent") or ()
@@ -657,6 +674,8 @@ def prepare_frontier_expansion(cid, scene):
                 "purpose": new_spec["purpose"],
                 "adjacent": [dict(e) for e in new_spec["adjacent"]],
             }
+            if structure_key:
+                rooms[new_uid]["region"] = normalize_region_id(structure_key)
             new_payload = {"planned": new_spec}
             mutations.append({
                 "room_uid": new_uid,

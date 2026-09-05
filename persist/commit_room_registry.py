@@ -317,6 +317,16 @@ def _prepare_room_registry(cid, canon_book_id, prev_scene, sc):
             planned["resolved"] = bool(str(
                 rdef.get("desc") or rdef.get("description") or "").strip())
             payload["planned"] = planned
+        # The room's REGION rides the payload, so the registry remembers which
+        # part of the map a room was in for as long as it remembers the room
+        # -- a retired room keeps its region. An interior room records none:
+        # it reports its holder's room's (world/regions.py), and a stored one
+        # would be stale the moment the holder moved.
+        region = rdef.get("region") if not owner else None
+        if region:
+            payload["region"] = str(region)
+        else:
+            payload.pop("region", None)
         if row is not None \
                 and row["owning_book_id"] == book_id \
                 and row["parent_entity"] == owner \

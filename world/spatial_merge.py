@@ -211,7 +211,7 @@ def _merge_room(existing: dict, incoming: dict, room_id=None) -> dict:
 
 
 # Room fields whose empty value means "unmentioned" rather than "cleared".
-_ROOM_SILENT_WHEN_EMPTY = frozenset({"anchors", "size", "zone", "light",
+_ROOM_SILENT_WHEN_EMPTY = frozenset({"anchors", "size", "zone", "region", "light",
                                      "exposure", "transit_seconds"})
 
 # Every SceneEntityDef field whose schema default is indistinguishable from

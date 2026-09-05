@@ -6520,14 +6520,21 @@ for what follows. Residuals of this entry rather than a section of their own:
   (exits, declared destinations, projects that name places) is not read;
   the measure is planned stubs within `FRONTIER_DEPTH_HOPS` and unrendered
   person plans anywhere, and the Planner is told what is short.
-- **The room index is ordered by distance, not grouped by structure.**
-  `story/room_slice.py` (2026-09-04) gives `inspect_rooms` an index of every
-  room -- live, planned, retired, with holder and hops -- plus the slices
-  within `FRONTIER_DEPTH_HOPS`, and the frontier counts over the same graph
-  (the chat 115 second-lift-car defect). The index costs ~107 characters a
-  row, so a story with several hundred planned rooms loses its farthest rows
-  to the 12,000-character cap; the region tier that answers that is
-  `design/DESIGN_ROOM_REGIONS.md` and is not built.
+- **The region tier has the field and the grouping, not yet the index of
+  its own.** `world/regions.py` (2026-09-04) gives every room a derived
+  `region` and groups `room_index` by it, and `inspect_contradictions`
+  reports a region in pieces (the chat 115 second-lift-car shape). What
+  `design/DESIGN_ROOM_REGIONS.md` §5 still asks for: `inspect_regions`, one
+  row per region at O(regions) so a story with several hundred planned
+  rooms stops losing its farthest index rows to the 12,000-character cap;
+  a `region` argument on `inspect_rooms` filtering index and slices alike;
+  and a writer for the registry's `brief` (the field exists, nothing authors
+  it -- the design note argued the intent belongs in the bible, and the
+  registry gained the field instead when the owner asked for one). Measured
+  on a copy of the owner's database at the backfill: 396 of 590 rooms have
+  no region a rule can reach -- the residue is Director-minted rooms in
+  stories with no plan and no zone, and it is surfaced as `region: null`,
+  never hidden.
 - **The fill job is queued from the commit tail, not from a threshold
   crossing.** Every commit with an open need or a short frontier and a
   grant submits one job (deduped per chat, capped per story hour); there

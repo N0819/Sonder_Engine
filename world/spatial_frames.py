@@ -848,6 +848,10 @@ def perform_split(chat_id, parent_frame_id, turn_idx, away_zone):
             ("known", {}), ("simulation_clock", {}), ("standing_intentions", []),
             ("pending_obligations", []),
             ("shadow_profile", ""), ("background_presences", {}), ("offscreen_log", []),
+            # The parts of the map the away rooms carry the ids of
+            # (world/regions.py): the away scene keeps every room's `region`,
+            # so the registry that names them must come along.
+            ("regions", {}),
         ):
             wset_for_frame(chat_id, key, wget_for_frame(chat_id, key, parent_frame_id, default),
                            new_frame_id)
