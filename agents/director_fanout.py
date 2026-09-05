@@ -471,6 +471,12 @@ def _specialist_payload(name, ctx, sc, view, extras):
         # beat perceived -- and never a plan.
         if extras.get("planning_needs"):
             payload["planning_needs"] = extras["planning_needs"]
+        # The room's notes on what its plan MEANS (which planned thing is
+        # which live thing), for the hand that mints and binds things.
+        # Author knowledge on an objective-causality surface; absent when
+        # there are none, so an ordinary beat's payload is unchanged.
+        if extras.get("author_notes"):
+            payload["author_notes"] = extras["author_notes"]
         if extras.get("present_figures"):
             # WHO IS ALREADY STANDING HERE, for the one hand that mints
             # people. Derived, not the durable ledger: a charter body
@@ -550,6 +556,10 @@ def _specialist_payload(name, ctx, sc, view, extras):
         # on an objective-causality surface; no mind receives it.
         if extras.get("planned_rooms"):
             payload["planned_rooms"] = extras["planned_rooms"]
+        # And the room's notes on what those rooms mean -- which planned
+        # room is which live one -- for the hand that keeps the graph.
+        if extras.get("author_notes"):
+            payload["author_notes"] = extras["author_notes"]
     return payload
 
 
