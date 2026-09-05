@@ -9,9 +9,9 @@
 | `agents/__init__.py` | 97 | Backward-compatible facade for the role-specific agent package. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `story.scene` |
 | `agents/background.py` | 1692 |  | `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `persist.commit`, `story.character_schema`, `story.scene`, `world.background_claims`, `world.spatial` |
 | `agents/character.py` | 4256 | Private character decision agent. | `agents.common`, `core.db`, `core.frames`, `llm.prompts`, `llm.schemas`, `mind`, `mind.affect`, `mind.memory`, `mind.memory_judge`, `mind.psychology_runtime`, `mind.theory_of_mind`, `story.character_schema`, `story.scene`, `world.gaps`, `world.place_purpose`, `world.spatial`, `world.survival` |
-| `agents/common.py` | 9615 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
+| `agents/common.py` | 9763 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
 | `agents/composer.py` | 4128 |  | `agents.common`, `core.pipeline_context`, `story.provenance_text`, `story.scene`, `world.spatial` |
-| `agents/director.py` | 4963 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial`, `world.survival` |
+| `agents/director.py` | 4987 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial`, `world.survival` |
 | `agents/director_contact.py` | 457 |  | `story.character_schema`, `world.spatial` |
 | `agents/director_evidence.py` | 1195 |  | `agents.common`, `agents.director_lingua`, `llm`, `world.spatial` |
 | `agents/director_fanout.py` | 941 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
@@ -24,11 +24,11 @@
 | `agents/dramaturge.py` | 311 |  | `core.logging_utils` |
 | `agents/loops.py` | 1337 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `core.db`, `story.character_schema`, `story.scene`, `world.spatial` |
 | `agents/mapping.py` | 520 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `core.db`, `mind.memory`, `story.scene`, `world.spatial` |
-| `agents/narration.py` | 2015 | Player-facing narration agent. | `agents`, `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `story.character_schema`, `story.scene`, `world.spatial`, `world.weather` |
+| `agents/narration.py` | 2256 | Player-facing narration agent. | `agents`, `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `story.character_schema`, `story.scene`, `world.spatial`, `world.weather` |
 | `agents/perception.py` | 5501 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `core.pipeline_context`, `mind`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
-| `agents/runtime.py` | 1382 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `core.db`, `core.pipeline_context`, `llm.providers`, `persist.checkpoints`, `persist.commit`, `story.character_schema`, `story.scene` |
+| `agents/runtime.py` | 1471 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `core.db`, `core.pipeline_context`, `llm.providers`, `persist.checkpoints`, `persist.commit`, `story.character_schema`, `story.scene` |
 | `agents/storage.py` | 123 | Step and active-variant persistence helpers. | `core.db` |
-| `agents/story_planner.py` | 1146 |  | `core.logging_utils` |
+| `agents/story_planner.py` | 1203 |  | `core.logging_utils` |
 | `core/__init__.py` | 6 |  | — |
 | `core/db.py` | 2614 | SQLite schema, migrations, connection management, transactions, and key/value world access. | `core.paths` |
 | `core/frames.py` | 220 |  | `core.db` |
@@ -42,7 +42,7 @@
 | `dressing/ambience.py` | 2072 |  | `core`, `core.db`, `core.paths`, `dressing.backdrops`, `world.weather` |
 | `dressing/backdrops.py` | 1703 |  | `core`, `core.db`, `core.logging_utils`, `core.paths`, `world.day_cycle`, `world.spatial`, `world.weather` |
 | `llm/__init__.py` | 6 |  | — |
-| `llm/llm_quality.py` | 813 | Strict JSON parsing, schema validation, and model-assisted repair. | `core.pipeline_context`, `llm.prompts`, `llm.providers`, `llm.schemas` |
+| `llm/llm_quality.py` | 854 | Strict JSON parsing, schema validation, and model-assisted repair. | `core.pipeline_context`, `llm.prompts`, `llm.providers`, `llm.schemas` |
 | `llm/prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `llm.providers` |
 | `llm/prompts.py` | 516 | Default system prompts and prompt preset access. | `core.db` |
 | `llm/providers.py` | 3906 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `core.db`, `core.logging_utils` |
@@ -241,13 +241,13 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `norm_sequence()` | 3632 | 284 lines |
-| `_check_narrator_fidelity()` | 9093 | 221 lines |
+| `_check_narrator_fidelity()` | 9239 | 223 lines |
 | `presence_figures_for_room()` | 1885 | 211 lines |
 | `_unknown_actor_label()` | 4392 | 152 lines |
-| `_scrub_invented_dialogue()` | 7733 | 151 lines |
+| `_scrub_invented_dialogue()` | 7771 | 151 lines |
+| `_check_quote_attribution()` | 8802 | 139 lines |
 | `observer_body_regions()` | 1449 | 137 lines |
 | `_scrub_unknown_identities()` | 4644 | 124 lines |
-| `validated_player_state_assertions()` | 9427 | 121 lines |
 
 ### `agents/composer.py`
 
@@ -266,7 +266,7 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `director_resolve()` | 3012 | 1918 lines |
+| `director_resolve()` | 3012 | 1942 lines |
 | `director_interpret()` | 760 | 660 lines |
 | `_reconcile_resolution()` | 1796 | 522 lines |
 | `_run_specialists()` | 2525 | 263 lines |
@@ -427,14 +427,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `narrator()` | 1448 | 368 lines |
-| `_ordered_beat_events()` | 525 | 230 lines |
-| `_sensory_channels_manifest()` | 331 | 165 lines |
-| `narrator_extra()` | 1855 | 161 lines |
-| `_visible_portal_states()` | 847 | 88 lines |
-| `_generate_narration()` | 1299 | 74 lines |
-| `_render_observed_events()` | 1054 | 69 lines |
-| `_resolve_narration_person()` | 116 | 66 lines |
+| `narrator()` | 1631 | 388 lines |
+| `_ordered_beat_events()` | 646 | 230 lines |
+| `narrator_extra()` | 2080 | 177 lines |
+| `_sensory_channels_manifest()` | 452 | 165 lines |
+| `_visible_portal_states()` | 968 | 88 lines |
+| `_generate_narration()` | 1482 | 74 lines |
+| `_resolve_narration_person()` | 161 | 71 lines |
+| `_render_observed_events()` | 1175 | 69 lines |
 
 ### `agents/perception.py`
 
@@ -453,14 +453,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_run_pipeline()` | 997 | 330 lines |
-| `build_plan()` | 738 | 109 lines |
-| `resume_key_for_turn()` | 645 | 92 lines |
+| `_run_pipeline()` | 1034 | 330 lines |
+| `build_plan()` | 775 | 109 lines |
+| `resume_key_for_turn()` | 682 | 92 lines |
 | `_load_extra_players()` | 50 | 74 lines |
 | `_stream_one()` | 448 | 68 lines |
 | `_stream_parallel()` | 517 | 60 lines |
+| `run_pipeline()` | 1415 | 57 lines |
 | `_with_engine_notes()` | 388 | 55 lines |
-| `run_pipeline()` | 1328 | 55 lines |
 
 ### `agents/storage.py`
 
@@ -479,14 +479,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `run_planner()` | 570 | 230 lines |
-| `deliberate()` | 902 | 91 lines |
-| `schedule_room_work()` | 1084 | 63 lines |
-| `_payload()` | 366 | 55 lines |
-| `_shown_transcript()` | 314 | 50 lines |
-| `planner_reply()` | 839 | 40 lines |
-| `run_dramaturge_pass()` | 995 | 40 lines |
-| `_run_task()` | 802 | 35 lines |
+| `run_planner()` | 601 | 256 lines |
+| `deliberate()` | 959 | 91 lines |
+| `schedule_room_work()` | 1141 | 63 lines |
+| `_payload()` | 368 | 55 lines |
+| `_shown_transcript()` | 316 | 50 lines |
+| `planner_reply()` | 896 | 40 lines |
+| `run_dramaturge_pass()` | 1052 | 40 lines |
+| `_run_task()` | 859 | 35 lines |
 
 ### `core/db.py`
 
@@ -593,14 +593,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `complete_validated_json()` | 385 | 429 lines |
-| `_targeted_field_patch()` | 188 | 63 lines |
+| `complete_validated_json()` | 426 | 429 lines |
+| `_targeted_field_patch()` | 229 | 63 lines |
 | `output_ran_out_of_room()` | 77 | 47 lines |
+| `json_failure_diagnosis()` | 126 | 39 lines |
 | `_extract_balanced_object()` | 23 | 34 lines |
-| `_step_json_schema()` | 354 | 29 lines |
-| `_character_wire_schema()` | 329 | 23 lines |
-| `strict_json_parse()` | 126 | 19 lines |
-| `_accepted()` | 253 | 19 lines |
+| `_step_json_schema()` | 395 | 29 lines |
+| `_character_wire_schema()` | 370 | 23 lines |
+| `strict_json_parse()` | 167 | 19 lines |
 
 ### `llm/prompt_cache.py`
 
@@ -2927,8 +2927,8 @@ Sections: The World Browser (`:3`); with its room, station, pose, and its FULL a
 
 Declared functions: `wbStatusBadge()`, `wbRoomLabel()`, `wbSelect()`, `wbText()`, `wbWrite()`, `wbRenderTree()`, `wbSection()`, `wbIndexRows()`, `wbCellOf()`, `wbCellText()`, `wbStationText()`, `wbPoseText()`, `wbMoveControl()`, `wbNumber()`, `wbBodyMove()`, `wbCharterUrl()`, `wbCharterStationBody()`, `wbSourceWord()`, `wbCharterWhere()`, `wbCharterRow()`, `wbPoseEditor()`, `wbLintRows()`, `wbRoomFields()`, `wbRegionLook()`, `wbExits()`, `wbAnchors()`, `wbOccupant()`, `wbThing()`, `wbRenderCard()`, `wbGroupGarments()`, `wbLedgerEntry()`, `wbAttireEditor()`, `wbBodyKind()`, `wbCharterDetails()`, `wbRenderBodies()`, `wbRenderRaw()`, `wbSvg()`, `wbSvgPoint()`, `wbDraggable()`, `wbUndoStack()`, `wbWallOf()`, `wbOffsetAlong()`, `wbBearingBetween()`, `wbActivatable()`, `wbBoundary()`, `wbFocusRow()`, `wbFootprintLength()`, `wbRenderRoomMap()`, `centre()`, `partBox()`, `writeParts()`, `movePart()`, `dropPart()`, `sizePart()`, `resizePart()`, `writeExtent()`, `dropHandle()`, `nudgeHandle()`, `writeAnchors()`, `dropAnchor()`, `dropDoorway()`, `dropBody()`, `dropCharter()`, `dropThing()`, `wbRenderStructureMap()`, `wbRegionLegend()`, `wbMarksLegend()`, `wbMapPane()`, `wbWallForm()`, `wbCellForm()`, `wbMapNotes()`, `wbMapLegend()`, `openWorldBrowser()`, `moveRoute()`, `renderMapBar()`, `drawGrid()`, `loadGrid()`, `showStructure()`, `refreshIndex()`, `loadCard()`, `loadRoom()`, `selectTab()`.
 
-### `static/js/writers_room.js` (699 lines)
+### `static/js/writers_room.js` (700 lines)
 
-Sections: The Writers' Room panel (`:3`); bd-panel for this element alone. (`:20`); Named limits (`:33`); Shape: docked / floating / closed (`:147`); Loading (`:204`); Sending (`:273`); The stream (`:306`); Rendering (`:381`); Building the panel (`:575`); Boot (`:688`).
+Sections: The Writers' Room panel (`:3`); bd-panel for this element alone. (`:20`); Named limits (`:33`); Shape: docked / floating / closed (`:148`); Loading (`:205`); Sending (`:274`); The stream (`:307`); Rendering (`:382`); Building the panel (`:576`); Boot (`:689`).
 
 Declared functions: `roomCls()`, `roomStoreGet()`, `roomStoreSet()`, `roomRestorePrefs()`, `roomClampWidth()`, `roomClampOpacity()`, `roomClampGeometry()`, `roomApplyShape()`, `roomOpen()`, `roomSetMode()`, `roomKey()`, `roomFrameQuery()`, `roomLoad()`, `roomLoadEarlier()`, `roomStartWatch()`, `roomStopWatch()`, `roomSend()`, `roomStream()`, `roomEvent()`, `roomRevoke()`, `roomRender()`, `roomRenderStatus()`, `roomRenderMandates()`, `roomRenderThread()`, `roomRenderCitations()`, `roomLiveNode()`, `roomBuild()`, `roomWireDrag()`, `track()`.

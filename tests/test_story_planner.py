@@ -598,7 +598,8 @@ def test_the_planners_fixed_lines_are_in_both_catalogs():
     ja = json.loads((root / "language_packs" / "ja" / "ui.json").read_text("utf-8"))
     script = (root / "static" / "js" / "writers_room.js").read_text("utf-8")
     for line in (sp.BOUNDED_LINE, sp.NO_STATUS_LINE, sp.WAITING_LINE, sp.REWOUND_LINE,
-                 sp.SPENT_LINE, sp.HOUR_SPENT_LINE, sp.DISAGREEMENT_LINE):
+                 sp.SPENT_LINE, sp.HOUR_SPENT_LINE, sp.DISAGREEMENT_LINE,
+                 sp.LOST_ANSWER_LINE):
         assert line in en and line in script
         assert ja.get(line) not in (None, line)
 
@@ -992,3 +993,42 @@ def test_a_claim_naming_a_row_the_reply_read_stands_and_one_naming_none_is_demot
     assert found["proposed"] == ["He is late"]
     assert not found["stated_nothing"]
     assert "he is late by now" in out["replies"][-1]["text"]
+
+
+def test_a_lost_answer_does_not_discard_the_work_the_reply_did(temp_db,
+                                                               scripted):
+    """masque 2026-09-05, PX22. One reply: 287 seconds, 14 model calls, 36
+    tool calls, a package sitting at revision 7 with `validation: {ok: true}`
+    -- then `ReasoningBudgetExhausted`, `reply: None`, `published: None`, and
+    nothing anywhere said the package was there. The host found it by running
+    `inspect_packages` by hand."""
+    from llm.providers import ReasoningBudgetExhausted
+
+    def die(_payload):
+        raise ReasoningBudgetExhausted("openrouter: m returned reasoning "
+                                       "but no answer")
+
+    cid, _ = _story(temp_db)
+    scripted({"calls": [{"tool": "inspect_clock", "args": {}}]}, die)
+    out = sp.run_planner(cid, None, text="what is the hour")
+
+    assert out["stopped"] == "model"
+    assert out["reply"] == sp.LOST_ANSWER_LINE
+    assert out["calls"] == 1
+    assert any("model call failed at step 2" in n for n in out["notes"])
+    assert any("inspect_clock" in n for n in out["notes"])
+
+
+def test_a_first_step_failure_with_nothing_done_still_raises(temp_db,
+                                                             scripted):
+    """There is no account to give, and swallowing it would hide an outage
+    from a caller whose retry is the right answer."""
+    from llm.providers import ReasoningBudgetExhausted
+
+    def die(_payload):
+        raise ReasoningBudgetExhausted("no answer")
+
+    cid, _ = _story(temp_db)
+    scripted(die)
+    with pytest.raises(ReasoningBudgetExhausted):
+        sp.run_planner(cid, None, text="anything")

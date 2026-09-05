@@ -12,7 +12,7 @@ from story.character_schema import (character_name, character_name_from_text,
                               normalize_persona_data, persona_appearance)
 from persist.checkpoints import ensure_checkpoint, restore_checkpoint
 from persist.commit import commit_all
-from core.db import active_frame_id, q, qi, wset
+from core.db import active_frame_id, q, qi, transaction, wset
 from language_runtime import current_language_id, story_language
 from core.pipeline_context import (
     ChatData, PipelineContext, TurnData, current_step_key,
@@ -637,10 +637,47 @@ def _step_stream(bus, turn_id, key, label, ordn, ctx, nonce):
     # ctx keeps the stage's own output; only what is PERSISTED carries the
     # notes, so no downstream stage reads a key its schema never declared.
     saved = _with_engine_notes(holder["v"], ctx, key)
-    sid, vid, n = save_step(turn_id, key, label, ordn, saved,
-                            reasoning=holder.get("reasoning"))
+    sid, vid, n = _save_or_reuse_variant(
+        turn_id, key, label, ordn, saved, holder.get("reasoning"))
     _extension_step_saved(ctx, key, saved)
     yield _evt(key, label, sid, vid, n, saved)
+
+
+def _save_or_reuse_variant(turn_id, key, label, ordn, saved, reasoning):
+    """Save this step's output, unless it is byte-for-byte the answer already
+    standing -- in which case the standing variant IS this run's answer.
+
+    A VARIANT IS AN ALTERNATIVE, NOT A VISIT. `perception_act`,
+    `perception_outcome` and `compile_world_context` are deterministic (no
+    model role exists for any of them), so re-entering one with unchanged
+    inputs cannot produce a different answer -- and every resume, every
+    `from_key` rerun and every retry after a provider failure ran them again
+    and minted a fresh row. Measured (multitude, 2026-09-05, PM19): turn 5
+    failed at `director_interpret` on an HTTP 402 and was resumed once per
+    failure; `perception_act` ended the beat with sixteen variants, fifteen
+    of them inactive and byte-equivalent, while every model stage held one.
+
+    Stated over the CONTENT rather than over a list of deterministic keys,
+    because the property that makes a duplicate worthless is that it is a
+    duplicate -- a model stage that happens to return exactly what it
+    returned before has produced no alternative either, and a new key added
+    to the plan gets this for free instead of needing to be remembered. The
+    step row is still touched (label, ord and the stale flag are this run's
+    business), so a resumed step still clears stale exactly as before.
+    """
+    blob = json.dumps(saved)
+    standing = q(
+        "SELECT s.id AS sid, v.id AS vid FROM steps s "
+        "JOIN variants v ON v.step_id=s.id AND v.active=1 "
+        "WHERE s.turn_id=? AND s.key=? AND v.content=?",
+        (turn_id, key, blob), one=True)
+    if standing is None:
+        return save_step(turn_id, key, label, ordn, saved,
+                         reasoning=reasoning)
+    qi("UPDATE steps SET label=?,ord=?,stale=0 WHERE id=?",
+       (label, ordn, standing["sid"]))
+    return (standing["sid"], standing["vid"],
+            variant_count(turn_id, key))
 
 def resume_key_for_turn(turn_id, chat_id):
     """Find the first missing or stale step in a turn's plan.
@@ -1325,6 +1362,56 @@ def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None):
     clear_steps_stale(turn_id, keys)
     yield {"type": "done", "turn_id": turn_id}
 
+def _discard_stepless_turn(chat_id, turn_id):
+    """Remove a turn row that produced no step, and the checkpoint taken for
+    it. Returns True when it removed one.
+
+    A TURN IS A BEAT THAT HAPPENED; A BEAT THAT PRODUCED NO STEP IS NOT A
+    TURN. The row is written before the pipeline runs -- it has to be, since
+    every step is filed under its id -- and nothing removed it when the run
+    died before the first stage saved anything. What survived was an entry in
+    the history holding the player's line and no narration, no commit and no
+    outcome, and it still ADVANCED THE STORY CLOCK: the next beat allocates
+    `idx + 1` off it, so the story steps over a beat that never happened.
+
+    Measured (quiet, 2026-09-05, PQ10): a provider ran out of credit and left
+    one half-committed turn and eight rows with zero steps, `idx` 10 through
+    19. The Writers' Room's scheduled arrival was due at 21, was overrun by
+    beats that never ran, and was eventually retired stale; an NPC's
+    intention `idle_beats` counters ticked against the same nothing. Eight of
+    them were a retry loop. One of them is any player whose provider hiccups
+    once.
+
+    NO STEP, not "no commit": a turn that ran three stages and then failed is
+    a partial beat with real work in it, resumable from the pipeline drawer,
+    and deleting that would destroy the record. The checkpoint goes with the
+    row (it is the snapshot taken FOR this idx and `ensure_checkpoint` will
+    write a fresh one for whatever claims the idx next), and only when no
+    other turn shares the idx.
+    """
+    try:
+        if q("SELECT 1 FROM steps WHERE turn_id=? LIMIT 1", (turn_id,),
+             one=True):
+            return False
+        row = q("SELECT chat_id, idx FROM turns WHERE id=?", (turn_id,),
+                one=True)
+        if row is None or row["chat_id"] != chat_id:
+            return False
+        with transaction():
+            shared = q("SELECT 1 FROM turns WHERE chat_id=? AND idx=? AND id<>? "
+                       "LIMIT 1", (chat_id, row["idx"], turn_id), one=True)
+            if not shared:
+                qi("DELETE FROM checkpoints WHERE chat_id=? AND turn_idx=?",
+                   (chat_id, row["idx"]))
+            qi("DELETE FROM turns WHERE id=?", (turn_id,))
+        return True
+    except Exception:
+        # A failed cleanup must never replace the failure it was cleaning up
+        # after: the caller is already raising, and this is housekeeping.
+        _step_logger.info("stepless turn %s not discarded", turn_id, exc_info=True)
+        return False
+
+
 def run_pipeline(
     chat_id,
     turn_id,
@@ -1360,6 +1447,7 @@ def run_pipeline(
             yield event
 
     except Aborted:
+        _discard_stepless_turn(chat_id, turn_id)
         yield {
             "type": "aborted",
             "turn_id": turn_id,
@@ -1370,6 +1458,7 @@ def run_pipeline(
             wset(chat_id, "pending", [])
         except Exception:
             pass
+        _discard_stepless_turn(chat_id, turn_id)
         raise
 
     finally:
