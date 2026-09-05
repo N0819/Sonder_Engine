@@ -5867,6 +5867,59 @@ an errand at all. PB12 (the institution never ticks at conversational pace)
 is the reason either answer matters: at ~18 story-seconds a beat no charter
 window is ever charged, so even a dispatched errand would not walk.
 
+### 1.122 The Director cannot dispatch an errand to an institution (PB13)
+
+**Found 2026-09-05** (`docs/experiments/PLAY_2026_09_05_caravanserai.md` §
+PB13), registered rather than built: the shape needs `llm/schemas.py`, which
+another agent held on the day PB12 was fixed.
+
+Turns 5 and 10 of that run: the player asked twice that someone fetch the
+gate warden, the innkeeper agreed on the record ("She'll be told when the
+rush settles", "The girl at the tap can call him"), and the Director's own
+prose said she was "signalling the serving hand Neris to attend to it".
+Nothing in `state_diff` carried it. The registry shows `sv_neris` with no
+`walk`, no `errand` and `place` unchanged, and the warden still at his bench
+on turn 14. The `errand` operation EXISTS —
+`plot_packages.OPERATION_FIELDS`, `charter_surgery.send_errand` — but only
+the Writers' Room can author one. The Director owns objective causality and
+had just narrated the order, and has no channel to it.
+
+This is now the sharper gap, not the duller one: since PB12 the town does
+advance every beat, so an errand dispatched would actually be WALKED, one
+room at a time, at a pace the scene can watch (`charter_move`, and the
+0.2-of-a-room credit that carries between short beats). Before PB12 the
+channel would have written a route nothing stepped.
+
+**Recommendation, for the owner and for whoever holds `llm/schemas.py`.**
+Take the first of the two options that play report offered — a `charter_ops`
+channel on the resolve — and shape it exactly as `positions`/`stations`
+already are, because the routing seam for a Director write that lands on a
+charter body rather than the scene is built and tested
+(`charter_place.resolve_scene_placements`, `charter_runtime.
+route_scene_placements` before the merge, `apply_scene_placements` inside
+`commit_scene`). Concretely:
+
+* One op, `errand`, with `{who, to, purpose}` — the body as the beat names
+  it, the destination as a room or a place the charter holds, and the reason
+  in the institution's own words. `charter_surgery.send_errand` is the
+  landing function and already exists; nothing new simulates.
+* It belongs to the **`social` specialist**, which owns the traffic channels
+  since the `offscreen` hand was retired (2026-09-04) and is the hand that
+  already rules on who was told to do what.
+* It must FAIL LOUD, not silently: a `who` no charter body answers to, or a
+  `to` no room holds, reaches `tell_director` the way an unrouted ledger
+  note does. An order the fiction stated and the ledger dropped is the exact
+  defect being closed, so the fix must not be able to drop one quietly.
+* The alternative the play report offered — a Director-sheet clause saying an
+  instruction to a townsperson must be realised as a `positions` write this
+  beat or not narrated as agreed — is **not** recommended as the primary. It
+  states the class correctly, but `positions` teleports a body to its
+  destination, which is the thing `charter_move` was written to stop doing:
+  an errand is a walk that takes time and passes through rooms, and
+  collapsing it to a position would undo the property that makes it worth
+  narrating. Keep the clause as a companion if the channel is built, so a
+  beat that narrates an order without writing one is told.
+
 ## 2. Roadmap
 
 Features the architecture intends and has not built. Ordered by value per unit

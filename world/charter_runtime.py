@@ -17,6 +17,7 @@ import hashlib
 import json
 import re
 import threading
+import time
 import uuid
 
 from core import jobs
@@ -60,6 +61,60 @@ CAST_HISTORY_REQUEST_CAP = 16
 #: Different institutions sharing one place exchange through a few actual
 #: bodies, never by merging registers or broadcasting to both populations.
 CROSS_CHARTER_GOSSIP_CAP = 8
+
+#: WHERE THE BEAT AN ADVANCE IS FOR IS STORED. Inside the existing
+#: frame-scoped `offscreen_epoch` row -- `world/offscreen.advance_epoch`
+#: stamps `beat_id` on it every beat -- rather than in a key of its own, so
+#: the identity is already covered by the checkpoint, branch remap and
+#: portable archive that row rides in, with no new persistent field.
+BEAT_KEY = "offscreen_epoch"
+
+#: WALL-CLOCK BUDGET PER CONTEXT AN ADVANCE RUNS IN, in seconds. Three
+#: contexts in one table, because "how long may the town take" has a
+#: different honest answer in each and one constant with exceptions hides
+#: that.
+#:
+#:  * ``beat`` -- 10.0, the owner's cap (2026-09-05, quoted: "10 seconds is
+#:    the max cap i am willing to give charter"). The only context that
+#:    competes with a turn a player is waiting on, and the only one a
+#:    population can realistically push against, since a beat advances the
+#:    town by minutes.
+#:  * ``time_skip`` -- 60.0, RECOMMENDED rather than ruled. A declared skip
+#:    is a beat the player ASKED to be long, so a longer catch-up is
+#:    expected rather than surprising. Which context a beat runs in is
+#:    decided by what the beat IS (`offscreen._beat_context` reads the
+#:    resolve's own `state_diff.time.mode`), never by how much elapsed time
+#:    happens to have accumulated -- otherwise an ordinary beat after a long
+#:    pause would silently take the generous budget.
+#:  * ``presim`` -- None, deliberately unbounded by wall clock. A prehistory
+#:    or a mint happens once, with model calls already running and the host
+#:    plainly waiting for a world to exist; `MAX_PRESIM_HOURS` is its bound.
+#:
+#: WHICH BOUND BINDS FIRST, because the two bound different things:
+#: `MAX_CATCHUP_HOURS`/`MAX_PRESIM_HOURS` cap SIMULATED time, these cap WALL
+#: CLOCK.
+#:
+#:  * On a beat the hours cap never binds -- a beat is minutes of story -- so
+#:    the seconds budget is the only live bound, and it binds only on a
+#:    population large enough that one short window costs seconds.
+#:  * On a time skip the hours cap binds first in the ordinary case: 720
+#:    simulated hours is what the design says is worth catching up on, and
+#:    the seconds budget sits under it as a backstop.
+#:  * On a presim the hours cap is the only bound, always.
+#:
+#: WHAT HAPPENS WHEN A BUDGET BINDS: nothing is lost. `advance_snapshot`
+#: takes the charters furthest behind first, finishes the window it is in,
+#: writes each charter's `last_elapsed_seconds` from the clock it ACTUALLY
+#: reached, and leaves the rest untouched -- so the next advance sees a
+#: larger delta and catches up. Inside one charter `charter_run.step`
+#: already orders the work the way a player would want it short: walks and
+#: the watch bill are stepped before the slow ledgers, so a window that is
+#: begun at all moves bodies before it drifts upkeeps.
+CHARTER_BUDGET_SECONDS = {
+    "beat": 10.0,
+    "time_skip": 60.0,
+    "presim": None,
+}
 
 
 def _window_hours(value):
@@ -2000,12 +2055,44 @@ def _story_day(cid, frame_id, clock=None):
     return anchor, length
 
 
+def _catchup_order(registry):
+    """Charters furthest behind first, then by key.
+
+    THE ORDER MATTERS ONLY WHEN THE BUDGET BINDS, and then it decides who
+    gets dropped. Sorted by how far behind each institution is, so the one
+    that has been waiting longest is served first and, once caught up, falls
+    to the back of its own accord -- a fixed alphabetical order would starve
+    the same charter every beat forever. Deterministic either way: seeds are
+    keyed by charter (`stable_event_key(beat, key)`), never by position.
+    """
+    def _behind(pair):
+        key, item = pair
+        previous = item.get("last_elapsed_seconds")
+        # The lowest mark is the one that has lived the least of the
+        # story. Never-seen (None) sorts first: it only costs a baseline.
+        return (-1.0 if previous is None else float(previous), str(key))
+
+    return sorted(registry["items"].items(), key=_behind)
+
+
 def advance_snapshot(registry, *, elapsed_seconds, epoch_id, base_turn,
-                     cid, frame_id, scene=None, cancelled=None):
-    """Advance a copied registry and compose stable scheduled-event rows."""
+                     cid, frame_id, scene=None, cancelled=None,
+                     budget_seconds=None):
+    """Advance a copied registry and compose stable scheduled-event rows.
+
+    ``budget_seconds`` is the wall clock this advance may spend -- one of
+    `CHARTER_BUDGET_SECONDS`, None for unbounded. It is a STOP, not a skip:
+    a charter the budget never reaches keeps its `last_elapsed_seconds`
+    untouched and is simply further behind next time, and a charter stopped
+    part-way through a long catch-up records the clock it actually reached.
+    Nothing is lost either way; the town catches up.
+    """
     registry = normalize_registry(copy.deepcopy(registry))
     rows, produced = [], []
     elapsed_seconds = max(0.0, float(elapsed_seconds or 0.0))
+    deadline = None
+    if budget_seconds:
+        deadline = time.monotonic() + max(0.0, float(budget_seconds))
     advanced_any = False
     # A registry holding a creature is advanced TOGETHER (every charter one
     # window, then the predation round) rather than one institution at a
@@ -2014,8 +2101,13 @@ def advance_snapshot(registry, *, elapsed_seconds, epoch_id, base_turn,
     together = any((item.get("state") or {}).get("creature")
                    for item in registry["items"].values())
     prepared = {}
-    for index, (key, item) in enumerate(sorted(registry["items"].items())):
+    for index, (key, item) in enumerate(_catchup_order(registry)):
         if cancelled is not None and cancelled.is_set():
+            break
+        if deadline is not None and time.monotonic() >= deadline:
+            # Out of budget. Every charter not reached keeps its own
+            # `last_elapsed_seconds`, so the next advance sees the whole
+            # delta and this one is simply first in line for it.
             break
         previous_elapsed = item.get("last_elapsed_seconds")
         if previous_elapsed is None:
@@ -2105,11 +2197,19 @@ def advance_snapshot(registry, *, elapsed_seconds, epoch_id, base_turn,
             state, hours=advanced_hours,
             window=item["window_hours"],
             seed=int(stable_event_key(epoch_id, key)[-8:], 16),
+            deadline=deadline,
         )
         item["state"] = state
         advanced_any = True
+        # WHAT THE CHARTER ACTUALLY LIVED, read off its own clock rather
+        # than assumed from the request: `run` stops at the deadline, and a
+        # `last_elapsed_seconds` written from `advanced_hours` would then
+        # claim hours nobody simulated and lose them forever.
+        actual_hours = max(0.0, min(
+            advanced_hours,
+            float(state.get("clock_hours") or 0.0) - before_hours))
         item["last_elapsed_seconds"] = (
-            previous_elapsed + advanced_hours * 3600.0)
+            previous_elapsed + actual_hours * 3600.0)
         item["last_epoch_id"] = str(epoch_id)
         start_elapsed = previous_elapsed
         for event in events:
@@ -2141,8 +2241,16 @@ def advance_snapshot(registry, *, elapsed_seconds, epoch_id, base_turn,
                 _s, _h, previous_elapsed, before_hours, item = prepared[key]
                 item["state"] = state
                 advanced_any = True
+                # Read off the clock for the same reason the solitary path
+                # does. A creature registry is stepped WHOLE by
+                # `charter_predation.run_registry`, which takes no deadline,
+                # so the budget bounds this path at entry only: a group
+                # begun is a group finished.
+                actual_hours = max(0.0, min(
+                    float(hours),
+                    float(state.get("clock_hours") or 0.0) - before_hours))
                 item["last_elapsed_seconds"] = (
-                    previous_elapsed + hours * 3600.0)
+                    previous_elapsed + actual_hours * 3600.0)
                 item["last_epoch_id"] = str(epoch_id)
                 for event in events.get(key) or ():
                     offset_hours = max(
@@ -2256,7 +2364,14 @@ def cross_charter_gossip(registry, cap=CROSS_CHARTER_GOSSIP_CAP):
 
 def land_snapshot(cid, frame_id, base_turn, epoch_id, registry, rows,
                   produced, *, expected_revision=None):
-    """Atomically land state and consequences if the scheduling edge remains."""
+    """Atomically land state and consequences if the scheduling edge remains.
+
+    ``epoch_id`` is the BEAT this snapshot was advanced for -- the token
+    `world/offscreen.advance_epoch` stamped on the frame's `offscreen_epoch`
+    row (`BEAT_KEY`). The edge used to be the epoch, back when an epoch was
+    the only thing that scheduled an advance; it is the beat now, because
+    every beat schedules one.
+    """
     from core.db import (q, qtx, transaction, wget_for_frame,
                          wset_for_frame)
 
@@ -2264,10 +2379,9 @@ def land_snapshot(cid, frame_id, base_turn, epoch_id, registry, rows,
         # All three checks run under the same write lock as landing. Reading
         # them before BEGIN leaves a gap where a turn commit, restore, or
         # author edit can invalidate the snapshot and then be overwritten.
-        current_epoch = wget_for_frame(
-            cid, "offscreen_epoch", frame_id, {}) or {}
-        if str(current_epoch.get("epoch_id") or "") != str(epoch_id):
-            logger.info("charter tick discarded: chat=%s epoch=%s changed",
+        current_beat = wget_for_frame(cid, BEAT_KEY, frame_id, {}) or {}
+        if str(current_beat.get("beat_id") or "") != str(epoch_id):
+            logger.info("charter tick discarded: chat=%s beat=%s changed",
                         cid, epoch_id)
             return {"advanced": 0, "events": 0,
                     "discarded": len(produced), "reason": "epoch_changed"}
@@ -2308,53 +2422,92 @@ def land_snapshot(cid, frame_id, base_turn, epoch_id, registry, rows,
 
 
 def schedule_charter_ticks(ctx, epoch=None):
-    """Queue deterministic institution catch-up for one committed epoch.
+    """Queue deterministic institution catch-up for THIS BEAT.
 
-    NOT GATED, and that is deliberate (owner ruling, 2026-09-04). Charter is
-    where an unwatched body lives, not a feature with a switch, so the only
-    reason this returns without scheduling is that the story has no charter
-    yet -- `charter_skip: "no_charters"`.
+    EVERY BEAT, BY ITS OWN ELAPSED TIME. Charter is semi-cheap off-screen
+    simulation and it is supposed to advance every beat (owner, 2026-09-05).
+    It did not: this function opened on `epoch["opportunity"]`, and an epoch
+    is declared only by the opening beat, a change of the scene's top-level
+    location, a crossed in-world HOUR, or a due event
+    (`world/offscreen.epoch_reasons`). An evening at an inn crosses none of
+    them, so forty bodies stood still for fifteen turns
+    (`docs/experiments/PLAY_2026_09_05_caravanserai.md` PB12).
 
-    It used to refuse below the `offscreen_life` ladder's `deterministic`
-    rung. That ladder is a SPEND gate: `living_world.effective_depth` says so
-    in as many words, and `artifacts.schedule_artifact_text` uses it to
-    withhold model-authored wording. This path spends nothing -- there is no
-    provider seam anywhere in this module, and `advance_snapshot` is a
-    deterministic walk of a copied registry -- so the ceiling was withholding
-    free work, and a host who lowered the ladder to save money silently froze
-    the town instead of saving anything. Everything the ladder still gates
-    costs a model call; this does not.
+    THE EPOCH GATE WAS NEVER THIS PATH'S GATE. It is the rung the off-screen
+    work that COSTS MONEY hangs from -- `offscreen.schedule_profile_ticks`
+    and the dormant-actor ticks -- and it stays exactly where it is for
+    them. This walk spends nothing: there is no provider seam anywhere in
+    this module and `advance_snapshot` is a deterministic walk of a copied
+    registry, so an hour bucket was rationing free work. (The same argument
+    retired the `offscreen_life` ceiling here on 2026-09-04, one rung up.)
+
+    NOT GATED OTHERWISE either, and that is deliberate (owner ruling,
+    2026-09-04): the only reason this returns without scheduling is that the
+    story has no charter yet -- `charter_skip: "no_charters"`.
+
+    IDEMPOTENCE IS THE BEAT'S OWN IDENTITY. `advance_snapshot` refuses a
+    charter whose `last_epoch_id` is already this beat's token, and
+    `land_snapshot` refuses a snapshot whose beat is no longer the frame's,
+    so a reroll or a rerun-from-stage of one beat cannot advance the town
+    twice. A beat that IS an epoch is still one beat and still advances once
+    -- the beat is what schedules, and the epoch only decides which budget
+    it runs under and whether the paid rungs also fire.
+
+    ONE WALK PER CHAT AND FRAME AT A TIME. The job key names the frame, not
+    the beat, so a slow advance cannot pile up behind the next beat's: a
+    submit while one is in flight JOINS it (`core/jobs.submit` dedupes on
+    key) and does nothing, and the beat after that covers the accumulated
+    delta because `last_elapsed_seconds` is incremental. Two landings can
+    therefore never race for one frame; across frames they touch different
+    registries.
     """
     from core.db import wget_for_frame
 
     epoch = epoch if isinstance(epoch, dict) else {}
-    if not epoch.get("opportunity") or not epoch.get("epoch_id"):
+    beat_id = str(epoch.get("beat_id") or "")
+    if not beat_id:
         return None
     cid, frame_id, base_turn = ctx.chat.id, ctx.turn.frame_id, ctx.turn.idx
-    registry = registry_for_update(cid, frame_id)
-    if not registry["items"]:
+    # The SHARED read, because this runs in the turn's own wall clock and a
+    # generated town's registry costs ~1s to parse. The job below takes its
+    # own private copy off the turn's clock; this one only answers "is there
+    # a charter at all", and the pipeline has already warmed the cache.
+    present = registry_for(cid, frame_id)["items"]
+    if not present:
         epoch["charter_skip"] = "no_charters"
         return None
     scene = wget_for_frame(cid, "scene", frame_id, {}) or {}
-    epoch_id = str(epoch["epoch_id"])
-    elapsed = float(epoch.get("elapsed_seconds") or 0.0)
-    source_revision = registry_revision(registry)
+    elapsed = float(epoch.get("beat_elapsed_seconds")
+                    or epoch.get("elapsed_seconds") or 0.0)
+    context = str(epoch.get("beat_context") or "beat")
+    budget = CHARTER_BUDGET_SECONDS.get(context, CHARTER_BUDGET_SECONDS["beat"])
+    key = "charter:%s" % (frame_id if frame_id is not None else "present")
 
     def _produce(job):
+        registry = registry_for_update(cid, frame_id)
+        source_revision = registry_revision(registry)
         advanced, rows, produced = advance_snapshot(
-            registry, elapsed_seconds=elapsed, epoch_id=epoch_id,
+            registry, elapsed_seconds=elapsed, epoch_id=beat_id,
             base_turn=base_turn, cid=cid, frame_id=frame_id, scene=scene,
-            cancelled=job.cancelled)
+            cancelled=job.cancelled, budget_seconds=budget)
         if job.cancelled.is_set():
             return {"advanced": 0, "events": 0, "cancelled": True}
-        return land_snapshot(cid, frame_id, base_turn, epoch_id, advanced,
+        return land_snapshot(cid, frame_id, base_turn, beat_id, advanced,
                              rows, produced,
                              expected_revision=source_revision)
 
-    job = jobs.submit(cid, f"charter:{epoch_id}", _produce,
-                      base_turn=base_turn)
-    epoch["charter_scheduled"] = True
-    epoch["charters"] = len(registry["items"])
+    in_flight = jobs.status(cid, key) in ("pending", "running")
+    job = jobs.submit(cid, key, _produce, base_turn=base_turn)
+    if in_flight:
+        # Joined the walk already running for this frame rather than paying
+        # twice. Nothing is skipped: this beat's elapsed reaches the town on
+        # the next advance, which sees the whole accumulated delta.
+        epoch["charter_deferred"] = True
+    else:
+        epoch["charter_scheduled"] = True
+    epoch["charter_context"] = context
+    epoch["charter_budget_seconds"] = budget
+    epoch["charters"] = len(present)
     return job
 
 

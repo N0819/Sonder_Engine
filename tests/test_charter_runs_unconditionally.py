@@ -51,7 +51,9 @@ def _seed_one_charter(db, cid):
 
 
 def _epoch():
-    return {"opportunity": True, "epoch_id": "epoch-1", "elapsed_seconds": 3600.0}
+    return {"opportunity": True, "epoch_id": "epoch-1",
+            "beat_id": "beat-1", "beat_elapsed_seconds": 3600.0,
+            "elapsed_seconds": 3600.0}
 
 
 @pytest.mark.parametrize("rung", ["inert", "deterministic", "stochastic"])
@@ -73,7 +75,7 @@ def test_charter_runs_at_every_rung_of_the_offscreen_ladder(temp_db, monkeypatch
 
     assert job is not None, "the ladder must not silence charter at %r" % rung
     assert epoch.get("charter_skip") is None
-    assert submitted["key"] == "charter:epoch-1"
+    assert submitted["key"] == "charter:present"
 
 
 def test_the_only_reason_charter_does_not_run_is_that_there_is_none(temp_db):
@@ -85,7 +87,34 @@ def test_the_only_reason_charter_does_not_run_is_that_there_is_none(temp_db):
     assert epoch["charter_skip"] == "no_charters"
 
 
-def test_a_beat_with_no_epoch_opportunity_still_schedules_nothing(temp_db):
+def test_a_beat_that_is_no_epoch_at_all_still_advances_the_town(
+        temp_db, monkeypatch):
+    """PB12, inverted. Fifteen turns at an inn crossed no hour and changed
+    no location, so `epoch_reasons` declared nothing and forty bodies stood
+    still. A beat is now enough on its own."""
+    cid = _chat(temp_db)
+    _seed_one_charter(temp_db, cid)
+    submitted = {}
+
+    def immediate_submit(chat_id, key, produce, base_turn=None):
+        submitted["key"] = key
+        return types.SimpleNamespace(as_dict=lambda: {"key": key})
+
+    monkeypatch.setattr("world.charter_runtime.jobs.submit", immediate_submit)
+    beat = {"opportunity": False, "epoch_id": "", "reasons": [],
+            "beat_id": "beat-plain", "beat_elapsed_seconds": 120.0}
+
+    job = schedule_charter_ticks(_ctx(cid), beat)
+
+    assert job is not None
+    assert beat["charter_scheduled"] is True
+    assert beat.get("charter_skip") is None
+    assert submitted["key"] == "charter:present"
+
+
+def test_without_a_beat_identity_nothing_is_scheduled(temp_db):
+    """The one remaining refusal: a caller that cannot name the beat. An
+    advance with no token could not be idempotent, so it does not run."""
     cid = _chat(temp_db)
     _seed_one_charter(temp_db, cid)
 
