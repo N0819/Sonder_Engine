@@ -68,6 +68,7 @@ from world.spatial import (
     visual_level_between,
     hear_level,
     heard_events,
+    light_shape,
     measured_proximity_rel,
     merge_scene_with_diff,
     neighbour_feature_visibility,
@@ -83,7 +84,7 @@ from world.spatial import (
     spatial_rel,
     spatial_rel_between,
     sound_field,
-    sound_notices,
+    sound_shape,
     substance_event_clause,
     visible_adjacent_rooms,
 )
@@ -2002,15 +2003,12 @@ def perception_act(ctx, nonce):
     # `sc`, and a room resolved before it grades every observer's channel to
     # the player from the room she left. See `_player_room_in`.
     p_room = _player_room_in(sc, pers, interp, ctx, p_name)
-    # A `failing` sound source that went quiet this beat is heard as silence
-    # where there was noise (DESIGN_SOUND_FIELD.md section 5): the field files
-    # an engine notice through the channel every other deterministic notice
-    # takes -- `engine_feedback`, carried to `engine_notices` at commit and
-    # read by the Director next beat. Once per turn, deduplicated, because
-    # the failure is a fact about the source and not about who is listening.
-    for notice in sound_notices(sc, getattr(ctx.turn, "idx", None)):
-        if notice not in ctx.engine_feedback:
-            ctx.engine_feedback.append(notice)
+    # A `failing` sound source that goes quiet this beat is heard as silence
+    # where there was noise (DESIGN_SOUND_FIELD.md section 5). The notice the
+    # Director answers is filed ONCE, at commit, beside the light field's --
+    # `persist/commit_scene_state.py`'s failed-source block writes the
+    # switch and the notice for both senses -- so a thing that both lights
+    # and hums is reported once, not twice. Perception only hears the beat.
     p_appearance = _appearance_as_prose(appearance_of(
         p_name, pers.get("appearance") or persona_appearance(pers), sc))
     # A physical disguise conceals the actor's real appearance from observers:
@@ -3623,7 +3621,8 @@ def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
                                 gate=None, extra_parts=None,
                                 body_scents=None, body_descriptions=None,
                                 prune_appearance=False,
-                                self_forms=(), self_pronouns=None):
+                                self_forms=(), self_pronouns=None,
+                                sound=None):
     """The standing-state half of one observer's IR: environment, presence,
     first-mention/changed appearances, own body state, standing contact
     sensations, bare body regions. Every admission is a subtraction --
@@ -3633,20 +3632,36 @@ def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
     `gate` is this observer's authored-prose gate (`_authored_prose_gate`).
     Room notes and appearance/overlay descriptions pass through it because
     nobody wrote either of them for a particular mind -- see
-    `_composer_authored_prose`."""
+    `_composer_authored_prose`.
+
+    `sound` is this observer's sound field for the beat (`_sound_field_for`:
+    crowds and the turn index included); it is what the soundscape sentence
+    is read from, so the sentence and the hearing grades cannot disagree."""
     percepts = []
     room = p.get("room")
     room_notes = p.get("room_notes")
     if gate is not None:
         room_notes = gate(room_notes)
+    sweep = bool(p.get("sweep"))
+    # WHERE THE LIGHT FALLS AND WHERE THE SOUND IS (2026-09-04): the two
+    # fields' shapes, each None unless its room is uneven, each built from
+    # what this observer's eyes already reach (`feature_visibility`) and
+    # what they already see or hear, so the composer can only say less than
+    # the observer has. The composer reads no scene; perception hands it the
+    # shape and the templates do the rest.
     env = composer.environment_percept(
         room, p.get("room_name"), room_notes,
         effective_light(sc, room) if room else "",
-        features=_visible_features(sc, name, room, sweep=p.get("sweep")),
-        openings=_visible_openings(sc, name, room, sweep=p.get("sweep"),
-                                   gate=gate))
+        features=_visible_features(sc, name, room, sweep=sweep),
+        openings=_visible_openings(sc, name, room, sweep=sweep, gate=gate),
+        light_shape=light_shape(sc, name, sweep=sweep) if room else None)
     if env:
         percepts.append(env)
+    if room:
+        soundscape = composer.soundscape_percept(
+            sound_shape(sc, name, sound=sound, room=room, sweep=sweep), room)
+        if soundscape:
+            percepts.append(soundscape)
     # Crowds, couriers and posted notices: three built subsystems whose whole
     # perception seam is these three keys, and until now nothing read them.
     # Already room-scoped and already reduced to what a bystander takes in by
@@ -4032,7 +4047,8 @@ def _composer_establish(ctx, sc, perceivers, known, p_name, p_appearance,
                 body_scents=body_scents,
                 body_descriptions=body_descriptions,
                 self_forms=self_forms,
-                self_pronouns=p.get("pronouns"))
+                self_pronouns=p.get("pronouns"),
+                sound=_sound_field_for(ctx, sc, name, p.get("room")))
             percepts.extend(
                 _gated_ambient_percepts(gate, sensory_events, p.get("room")))
             # A SOUND EVENT IN ANOTHER ROOM IS A ONE-BEAT SOURCE on that
@@ -4149,7 +4165,8 @@ def _composer_act(ctx, sc, interp, perceivers, known, p_name, p_visible,
                 extra_parts=cast_parts, body_scents=body_scents,
                 body_descriptions=body_descriptions,
                 self_forms=self_forms,
-                self_pronouns=p.get("pronouns"))
+                self_pronouns=p.get("pronouns"),
+                sound=_sound_field_for(ctx, sc, name, p.get("room")))
             rel = p.get("spatial_to_actor") or {}
             vis = p.get("visual_channel_to_actor", False)
             can_see = _in_plain_view(rel, vis)
@@ -4675,7 +4692,8 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
                 prune_appearance=(is_player_view
                                   and not full_player_render),
                 self_forms=self_forms,
-                self_pronouns=p.get("pronouns"))
+                self_pronouns=p.get("pronouns"),
+                sound=_sound_field_for(ctx, sc, name, p.get("room")))
             spatial = p.get("spatial_to_sources") or {}
             visual = p.get("visual_channel_to_sources") or {}
             recognized, unknown = _composer_unknown_sources(

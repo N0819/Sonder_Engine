@@ -750,23 +750,57 @@ def _door_cells(scene, room_id, neighbour_id):
     return list(placed["cells"]), placed["dir"]
 
 
+def sight_passes(scene, room_id, edge):
+    """`observer_field`'s placement rule, as a THROUGH predicate for
+    `room_field`: 1.0 for a barrier an open sightline joins two grids across
+    -- one a body can be walked into -- and None for everything else. Sight
+    passes a window, a grille or a one-way pane, but none of those is a
+    doorway a grid can be walked into; those stay with
+    `visual_level_between`."""
+    barrier = normalize_barrier(edge.get("barrier"))
+    if barrier not in _SIGHT_BARRIERS:
+        return None
+    if barrier in ("window", "bars", "one_way_window"):
+        return None
+    return 1.0
+
+
 def _sight_neighbours(scene, room_id):
     """Rooms an open sightline joins to this one, with the edge bearing."""
+    return [(other, bearing) for other, bearing, _factor
+            in _placed_neighbours(scene, room_id, sight_passes)]
+
+
+def _placed_neighbours(scene, room_id, through):
+    """`[(neighbour id, bearing, pass)]` for every edge `through` admits.
+
+    ONE PLACEMENT FOR EVERY SENSE. `through(scene, room_id, edge)` answers
+    what fraction of a sense the edge's barrier lets across -- None or 0 to
+    leave the neighbour unplaced -- and the composite is laid out identically
+    whatever the predicate: sight places what a body walks into
+    (`sight_passes`), light places what light crosses, glass included
+    (`spatial_light_field.light_passes`), sound places whatever is not a
+    wall, at the aperture's drop (`spatial_sound_field.sound_passes`). The
+    sound field carried its own copy of this loop until 2026-09-04
+    (`_acoustic_grid`), and that copy still laid rooms out as tier squares
+    after the room-shapes work had taught this one about L and round rooms
+    -- the drift a second copy exists to have.
+    """
     from world.spatial_barriers import effective_adjacent
+    rooms = (scene or {}).get("rooms") or {}
     out = []
     for edge in effective_adjacent(scene, room_id):
         if not isinstance(edge, dict) or not edge.get("to"):
             continue
-        if normalize_barrier(edge.get("barrier")) not in _SIGHT_BARRIERS:
+        other = str(edge["to"])
+        if other not in rooms or other == str(room_id):
             continue
-        if normalize_barrier(edge.get("barrier")) in ("window", "bars",
-                                                      "one_way_window"):
-            # Sight passes, but a grille or glass is not a doorway a grid
-            # can be walked into; those stay with `visual_level_between`.
+        factor = through(scene, room_id, edge)
+        if not factor or factor <= 0:
             continue
         bearing = normalize_bearing(edge.get("dir"))
-        if bearing and edge.get("to") in (scene.get("rooms") or {}):
-            out.append((str(edge["to"]), bearing))
+        if bearing:
+            out.append((other, bearing, float(factor)))
     return out
 
 
@@ -780,18 +814,27 @@ def observer_field(scene: dict, observer: str) -> Optional[_Field]:
     return room_field(scene, room_id)
 
 
-def room_field(scene: dict, room_id) -> Optional[_Field]:
+def room_field(scene: dict, room_id, *, through=None) -> Optional[_Field]:
     """`observer_field` by ROOM: the composite every observer standing in
     `room_id` sees over, which depends on the room alone. Split out so the
     light field (`world/spatial_light_field.py`) can be computed once per
     room and read for every body in it -- the lamp's rays do not depend on
-    who is looking."""
+    who is looking.
+
+    `through` is the placement predicate (`_placed_neighbours`); absent, the
+    sight rule, so every existing caller is byte-identical
+    (`tests/test_one_grid_two_senses.py` pins cells, heights, occluders,
+    offsets, anchors and walls on every existing scene). Each wall record
+    carries the predicate's `pass` for its aperture -- 1.0 under the sight
+    rule -- beside the five keys it always had.
+    """
     if not room_id or room_id not in ((scene or {}).get("rooms") or {}):
         return None
     field = _Field()
     field.add_room(scene, room_id, (0, 0))
     grid = room_grid(scene, room_id)
-    for other, bearing in _sight_neighbours(scene, room_id):
+    for other, _bearing, factor in _placed_neighbours(
+            scene, room_id, through or sight_passes):
         d1s, b1 = _door_cells(scene, room_id, other)
         d2s, _b2 = _door_cells(scene, other, room_id)
         if not d1s or not d2s:
@@ -828,8 +871,24 @@ def room_field(scene: dict, room_id) -> Optional[_Field]:
                 "aperture": (min(c[along] for c in aperture_cells) - 0.5,
                              max(c[along] for c in aperture_cells) + 0.5),
                 "to": other,
+                "pass": factor,
             })
     return field
+
+
+def wall_aperture_cells(wall) -> list:
+    """The cells of the wall band inside a wall record's aperture -- where
+    the doorway's gap actually is, as integer cells on the wall's line. The
+    light field emits a room's ambient spill from these."""
+    axis = wall["axis"]
+    lo, hi = wall["aperture"]
+    out = []
+    for along in range(int(math.ceil(lo)), int(math.floor(hi)) + 1):
+        cell = [0, 0]
+        cell[axis] = wall["coord"]
+        cell[1 - axis] = along
+        out.append(tuple(cell))
+    return out
 
 
 # ---------------------------------------------------------------------------

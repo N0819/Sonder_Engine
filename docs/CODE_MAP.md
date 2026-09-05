@@ -10,14 +10,14 @@
 | `agents/background.py` | 1653 |  | `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `persist.commit`, `story.character_schema`, `story.scene`, `world.background_claims`, `world.spatial` |
 | `agents/character.py` | 4160 | Private character decision agent. | `agents.common`, `core.db`, `core.frames`, `llm.prompts`, `llm.schemas`, `mind`, `mind.affect`, `mind.memory`, `mind.memory_judge`, `mind.psychology_runtime`, `mind.theory_of_mind`, `story.character_schema`, `story.scene`, `world.gaps`, `world.place_purpose`, `world.spatial`, `world.survival` |
 | `agents/common.py` | 9284 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
-| `agents/composer.py` | 3551 |  | `agents.common`, `core.pipeline_context`, `story.provenance_text`, `story.scene`, `world.spatial` |
+| `agents/composer.py` | 3706 |  | `agents.common`, `core.pipeline_context`, `story.provenance_text`, `story.scene`, `world.spatial` |
 | `agents/director.py` | 4746 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial`, `world.survival` |
 | `agents/director_contact.py` | 457 |  | `story.character_schema`, `world.spatial` |
 | `agents/director_evidence.py` | 1187 |  | `agents.common`, `agents.director_lingua`, `llm`, `world.spatial` |
 | `agents/director_fanout.py` | 840 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
 | `agents/director_floors.py` | 1586 |  | `agents.common`, `agents.director_lingua`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
 | `agents/director_lingua.py` | 29 |  | — |
-| `agents/director_movement.py` | 1052 |  | `agents.director_lingua`, `story.character_schema`, `world.spatial` |
+| `agents/director_movement.py` | 1080 |  | `agents.director_lingua`, `story.character_schema`, `world.spatial` |
 | `agents/director_reconcile.py` | 592 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story`, `world.spatial` |
 | `agents/director_scopes.py` | 856 |  | `agents.director_views`, `core.db`, `world.survival` |
 | `agents/director_views.py` | 627 |  | `agents.common`, `story.character_schema`, `story.scene`, `world.background_claims` |
@@ -25,7 +25,7 @@
 | `agents/loops.py` | 1337 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `core.db`, `story.character_schema`, `story.scene`, `world.spatial` |
 | `agents/mapping.py` | 520 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `core.db`, `mind.memory`, `story.scene`, `world.spatial` |
 | `agents/narration.py` | 1953 | Player-facing narration agent. | `agents`, `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `story.character_schema`, `story.scene`, `world.spatial`, `world.weather` |
-| `agents/perception.py` | 4904 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `mind`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
+| `agents/perception.py` | 4922 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `mind`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
 | `agents/runtime.py` | 1382 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `core.db`, `core.pipeline_context`, `llm.providers`, `persist.checkpoints`, `persist.commit`, `story.character_schema`, `story.scene` |
 | `agents/storage.py` | 123 | Step and active-variant persistence helpers. | `core.db` |
 | `agents/story_planner.py` | 1083 |  | `core.logging_utils` |
@@ -86,7 +86,7 @@
 | `persist/commit_memory_write.py` | 325 | The durable memory write and its out-of-band consolidation twin. | `core.db`, `mind.memory`, `persist.commit_memory`, `story.character_schema`, `story.scene` |
 | `persist/commit_place_graph.py` | 321 | Per-mind durable place graph and per-beat spatial experience. | `world.spatial` |
 | `persist/commit_room_registry.py` | 496 | Room identity across frames: registry projection, mint dedup, renames, retirement, exit pruning. | `core.db`, `persist.commit_common`, `story.character_schema`, `world.spatial` |
-| `persist/commit_scene_state.py` | 1542 | The prepared post-turn scene: pre-lock build, scene commit domain, book anchoring, ground advance. | `core.db`, `core.pipeline_context`, `mind.memory`, `persist.commit_attire`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_room_registry`, `story.character_schema`, `story.provenance_text`, `world.mechanics`, `world.spatial`, `world.spatial_frames`, `world.weather` |
+| `persist/commit_scene_state.py` | 1581 | The prepared post-turn scene: pre-lock build, scene commit domain, book anchoring, ground advance. | `core.db`, `core.pipeline_context`, `mind.memory`, `persist.commit_attire`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_room_registry`, `story.character_schema`, `story.provenance_text`, `world.mechanics`, `world.spatial`, `world.spatial_frames`, `world.weather` |
 | `persist/llm_capture.py` | 229 |  | `core.db` |
 | `persist/pipeline_trace.py` | 574 | Privacy-conscious export, validation, and offline replay of persisted pipeline history. | `core.db` |
 | `story/__init__.py` | 6 |  | — |
@@ -178,31 +178,31 @@
 | `world/region_events.py` | 420 |  | — |
 | `world/regions.py` | 556 |  | `world.spatial` |
 | `world/routines.py` | 208 |  | — |
-| `world/spatial.py` | 273 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `llm.schemas`, `world.spatial_barriers`, `world.spatial_contact_migration`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_light_field`, `world.spatial_lint`, `world.spatial_merge`, `world.spatial_orientation`, `world.spatial_prose`, `world.spatial_routing`, `world.spatial_senses`, `world.spatial_sound_field`, `world.spatial_substance`, `world.spatial_transit` |
+| `world/spatial.py` | 283 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `llm.schemas`, `world.spatial_barriers`, `world.spatial_contact_migration`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_light_field`, `world.spatial_lint`, `world.spatial_merge`, `world.spatial_orientation`, `world.spatial_prose`, `world.spatial_routing`, `world.spatial_senses`, `world.spatial_sound_field`, `world.spatial_substance`, `world.spatial_transit` |
 | `world/spatial_barriers.py` | 666 |  | `world.spatial_orientation` |
 | `world/spatial_contact_migration.py` | 331 |  | `world.spatial_contacts`, `world.spatial_identity` |
 | `world/spatial_contacts.py` | 1864 |  | `world.spatial_containment`, `world.spatial_identity`, `world.spatial_transit` |
 | `world/spatial_containment.py` | 3026 |  | `world.spatial_barriers`, `world.spatial_identity`, `world.spatial_transit` |
-| `world/spatial_fov.py` | 1198 |  | `world.spatial_barriers`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_orientation` |
+| `world/spatial_fov.py` | 1257 |  | `world.spatial_barriers`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_orientation` |
 | `world/spatial_frames.py` | 1091 |  | `core.db`, `core.frames`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial` |
 | `world/spatial_geometry.py` | 1570 |  | `world.spatial_barriers`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_identity`, `world.spatial_orientation` |
 | `world/spatial_identity.py` | 498 |  | — |
 | `world/spatial_light.py` | 260 |  | `world.spatial_barriers`, `world.spatial_geometry`, `world.spatial_identity` |
-| `world/spatial_light_field.py` | 802 |  | `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_orientation` |
+| `world/spatial_light_field.py` | 1041 |  | `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_orientation` |
 | `world/spatial_lint.py` | 361 |  | `world.spatial_barriers`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_orientation` |
 | `world/spatial_merge.py` | 1803 |  | `llm.schemas`, `world.spatial_barriers`, `world.spatial_contact_migration`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_orientation`, `world.spatial_routing`, `world.spatial_senses`, `world.spatial_substance`, `world.spatial_transit` |
 | `world/spatial_orientation.py` | 246 | Bearing math and reciprocal spatial-edge normalization. | — |
 | `world/spatial_prose.py` | 397 |  | `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light` |
 | `world/spatial_routing.py` | 1098 |  | `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_light`, `world.spatial_orientation` |
 | `world/spatial_senses.py` | 1362 |  | `world.spatial_barriers`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_orientation`, `world.spatial_routing` |
-| `world/spatial_sound_field.py` | 791 |  | `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_identity`, `world.spatial_light_field`, `world.spatial_orientation`, `world.spatial_senses` |
+| `world/spatial_sound_field.py` | 912 |  | `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light_field`, `world.spatial_senses` |
 | `world/spatial_substance.py` | 1128 |  | `world.spatial_contacts`, `world.spatial_identity` |
 | `world/spatial_transit.py` | 522 |  | `world.spatial_barriers`, `world.spatial_identity` |
 | `world/stimulation.py` | 239 |  | `story`, `world.spatial` |
 | `world/structure.py` | 773 |  | `world.charter_model`, `world.regions`, `world.spatial` |
 | `world/subjects.py` | 500 |  | `core.db`, `mind.canon_provenance`, `world.spatial` |
 | `world/survival.py` | 354 |  | `core.db` |
-| `world/weather.py` | 853 |  | `world.spatial` |
+| `world/weather.py` | 862 |  | — |
 
 ## Largest top-level functions
 
@@ -249,14 +249,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `observations_from_render()` | 3343 | 209 lines |
-| `_render_view_english()` | 2842 | 153 lines |
-| `pose_percepts()` | 1346 | 144 lines |
-| `presence_percepts()` | 829 | 106 lines |
-| `_pose_referent()` | 1047 | 91 lines |
-| `environment_percept()` | 671 | 88 lines |
-| `_render_standing()` | 2697 | 85 lines |
-| `_render_episode_english()` | 3144 | 84 lines |
+| `observations_from_render()` | 3498 | 209 lines |
+| `_render_view_english()` | 2997 | 153 lines |
+| `pose_percepts()` | 1492 | 144 lines |
+| `presence_percepts()` | 975 | 106 lines |
+| `environment_percept()` | 718 | 101 lines |
+| `_render_standing()` | 2843 | 94 lines |
+| `_pose_referent()` | 1193 | 91 lines |
+| `_render_episode_english()` | 3299 | 84 lines |
 
 ### `agents/director.py`
 
@@ -333,14 +333,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_reconcile_near_group_positions()` | 157 | 284 lines |
-| `_travel_continues()` | 846 | 109 lines |
-| `_guard_approach_is_not_arrival()` | 957 | 96 lines |
-| `_apply_following_movement()` | 532 | 88 lines |
-| `_unreachable_position_writes()` | 621 | 68 lines |
-| `_travel_in_flight_view()` | 795 | 49 lines |
+| `_reconcile_near_group_positions()` | 185 | 284 lines |
+| `_travel_continues()` | 874 | 109 lines |
+| `_guard_approach_is_not_arrival()` | 985 | 96 lines |
+| `_apply_following_movement()` | 560 | 88 lines |
+| `_unreachable_position_writes()` | 649 | 68 lines |
+| `_travel_in_flight_view()` | 823 | 49 lines |
 | `_egocentric_exits()` | 29 | 48 lines |
-| `_resolve_movement_mover()` | 691 | 37 lines |
+| `_sightlines_view()` | 79 | 48 lines |
 
 ### `agents/director_reconcile.py`
 
@@ -436,14 +436,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_composer_outcome()` | 4449 | 456 lines |
-| `perception_outcome()` | 2407 | 286 lines |
-| `_composer_standing_percepts()` | 3619 | 223 lines |
-| `perception_act()` | 1967 | 193 lines |
-| `_composer_act()` | 4073 | 172 lines |
-| `_outcome_event_stream()` | 670 | 152 lines |
-| `_source_channels()` | 951 | 135 lines |
-| `_scent_sources_for()` | 3339 | 129 lines |
+| `_composer_outcome()` | 4466 | 457 lines |
+| `perception_outcome()` | 2405 | 286 lines |
+| `_composer_standing_percepts()` | 3617 | 240 lines |
+| `perception_act()` | 1968 | 190 lines |
+| `_composer_act()` | 4089 | 173 lines |
+| `_outcome_event_stream()` | 671 | 152 lines |
+| `_source_channels()` | 952 | 135 lines |
+| `_scent_sources_for()` | 3337 | 129 lines |
 
 ### `agents/runtime.py`
 
@@ -1076,14 +1076,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `prepare_scene_commit()` | 608 | 879 lines |
+| `prepare_scene_commit()` | 659 | 867 lines |
 | `_advance_day_cycle()` | 67 | 111 lines |
 | `_merge_overlays()` | 538 | 68 lines |
 | `sync_anchored_books()` | 196 | 66 lines |
 | `_guard_occupied_mover_removal()` | 263 | 60 lines |
+| `_record_failed_sources()` | 608 | 49 lines |
 | `_dedupe_overlay_entries()` | 496 | 40 lines |
 | `_advance_ground()` | 325 | 31 lines |
-| `_overlay_ending_handles()` | 465 | 29 lines |
 
 ### `persist/llm_capture.py`
 
@@ -2230,13 +2230,13 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `body_visibility()` | 1077 | 70 lines |
-| `neighbour_feature_visibility()` | 1006 | 69 lines |
+| `body_visibility()` | 1136 | 70 lines |
+| `neighbour_feature_visibility()` | 1065 | 69 lines |
+| `room_field()` | 817 | 60 lines |
 | `_place_anchors()` | 420 | 57 lines |
 | `body_cell()` | 500 | 57 lines |
-| `feature_visibility()` | 947 | 57 lines |
+| `feature_visibility()` | 1006 | 57 lines |
 | `_line()` | 592 | 52 lines |
-| `room_field()` | 783 | 50 lines |
 | `shadowcast()` | 646 | 47 lines |
 
 ### `world/spatial_frames.py`
@@ -2295,14 +2295,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `light_sources()` | 352 | 77 lines |
-| `_bounce()` | 544 | 57 lines |
-| `glare_between()` | 722 | 49 lines |
-| `compute_light_field()` | 603 | 38 lines |
-| `_cast()` | 443 | 31 lines |
-| `_resolve_pointed_at()` | 322 | 28 lines |
-| `field_rows()` | 782 | 21 lines |
-| `light_geometry_exists()` | 200 | 18 lines |
+| `light_shape()` | 905 | 110 lines |
+| `light_sources()` | 411 | 77 lines |
+| `_bounce()` | 605 | 57 lines |
+| `glare_between()` | 845 | 49 lines |
+| `_spill()` | 664 | 45 lines |
+| `compute_light_field()` | 711 | 43 lines |
+| `_cast()` | 502 | 31 lines |
+| `_resolve_pointed_at()` | 381 | 28 lines |
 
 ### `world/spatial_lint.py`
 
@@ -2382,14 +2382,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `sound_sources()` | 459 | 88 lines |
-| `_acoustic_grid()` | 285 | 59 lines |
-| `spread()` | 373 | 45 lines |
-| `stamp_sound_relation()` | 736 | 29 lines |
-| `sound_field()` | 702 | 26 lines |
-| `heard_events()` | 767 | 25 lines |
-| `_crossing_pass()` | 346 | 20 lines |
-| `steadiness_this_beat()` | 221 | 19 lines |
+| `sound_shape()` | 818 | 95 lines |
+| `sound_sources()` | 450 | 88 lines |
+| `spread()` | 360 | 49 lines |
+| `stamp_sound_relation()` | 756 | 29 lines |
+| `sound_field()` | 722 | 26 lines |
+| `heard_events()` | 787 | 25 lines |
+| `failing_sound_sources_out()` | 552 | 22 lines |
+| `_crossing_pass()` | 333 | 20 lines |
 
 ### `world/spatial_substance.py`
 
@@ -2469,13 +2469,13 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `weather_for_room()` | 467 | 76 lines |
+| `weather_for_room()` | 476 | 76 lines |
 | `normalize_weather()` | 225 | 69 lines |
-| `weather_depth()` | 394 | 57 lines |
-| `weather_words()` | 567 | 54 lines |
-| `advance_weather()` | 674 | 49 lines |
+| `weather_depth()` | 403 | 57 lines |
+| `weather_words()` | 576 | 54 lines |
+| `advance_weather()` | 683 | 49 lines |
 | `room_exposure()` | 296 | 43 lines |
-| `ground_after()` | 777 | 38 lines |
+| `ground_after()` | 786 | 38 lines |
 | `_resolve()` | 192 | 27 lines |
 
 ## FastAPI routes

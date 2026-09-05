@@ -81,12 +81,66 @@ class JapaneseRenderer:
         notes = str(data.get("room_notes") or "").strip()
         if notes:
             parts.append(_full_stop(notes))
+        # Where the light falls, when the field found the room uneven; the
+        # flat word otherwise, as before. The shape is a VIEW sentence: a
+        # memory keeps the room's one word (no episode_ templates for it).
+        shaped = self._light_shape(data.get("light_shape")) if not prefix else ""
+        if shaped:
+            parts.append(shaped)
+            return "".join(parts)
         light = str(data.get("light") or "").casefold()
         if light in ("dim", "low"):
             parts.append(self._text(prefix + "light_dim"))
         elif light in ("dark", "none", "pitch_black", "black"):
             parts.append(self._text(prefix + "light_dark"))
         return "".join(parts)
+
+    @staticmethod
+    def _items(items):
+        return "と".join(str(i) for i in items if str(i or "").strip())
+
+    def _light_shape(self, shape):
+        """Where the light falls (`composer.render_light_shape`, the same
+        closed set): the origin as its own sentence, one sentence per light
+        word bright to dark, and where the observer stands."""
+        from agents.composer import LIGHT_SHAPE_LEVELS, _clean_shape
+        shape = _clean_shape(shape, LIGHT_SHAPE_LEVELS)
+        if not shape:
+            return ""
+        parts = []
+        froms = shape["sources"] + shape["openings"]
+        if froms and shape["groups"]:
+            parts.append(self._text("light_origin", items=self._items(froms)))
+        for group in shape["groups"]:
+            parts.append(self._text("light_at_" + group["level"],
+                                    items=self._items(group["items"])))
+        if shape["self"]:
+            parts.append(self._text("light_self_" + shape["self"]))
+        return "".join(parts)
+
+    def _sound_shape(self, shape):
+        """Where the sound is (`composer.render_sound_shape`)."""
+        from agents.composer import SOUND_SHAPE_LEVELS, _clean_shape
+        shape = _clean_shape(shape, SOUND_SHAPE_LEVELS)
+        if not shape:
+            return ""
+        parts = []
+        froms = shape["sources"] + [
+            self._text("sound_beyond_opening", opening=o)
+            for o in shape["openings"]]
+        if froms and shape["groups"]:
+            parts.append(self._text("sound_origin", items=self._items(froms)))
+        for group in shape["groups"]:
+            parts.append(self._text("sound_at_" + group["level"],
+                                    items=self._items(group["items"])))
+        if shape["self"]:
+            parts.append(self._text("sound_self_" + shape["self"]))
+        return "".join(parts)
+
+    def field_shape_sentence(self, kind, shape):
+        """The seam `composer.field_shape_sentence` reads for the Director's
+        digest: the same sentence a Japanese view carries."""
+        return self._light_shape(shape) if kind == "light" else self._sound_shape(shape)
 
     def _presence(self, p, data, label, prefix):
         if prefix:
@@ -273,6 +327,8 @@ class JapaneseRenderer:
             return self._pose(p, data, label, prefix)
         if p.kind == "scent":
             return self._scent(data, label, prefix)
+        if p.kind == "ambient" and data.get("soundscape") and not prefix:
+            return self._sound_shape(data.get("soundscape"))
         if p.kind in ("sensation", "substance", "ambient"):
             return _full_stop(data.get("clause") or data.get("text")
                               or data.get("desc") or "")

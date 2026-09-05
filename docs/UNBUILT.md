@@ -6827,44 +6827,48 @@ anchors and a body a cell, and answer exactly as before everywhere else
 (pinned byte-for-byte on seven no-geometry scenes). `flickering` and
 `failing` are a hash of (beat, source); the commit stamps `scene.beat_idx`,
 records a failed source `state.lit: false` and files an `engine_notices`
-line. Left:
+line. Extended 2026-09-04 at the merge with the sound field (the note's
+status header lists the six items: one grid, `FLOOR_SPILL`, the shape
+sentence, the median for an unstationed body, glare decided, one commit
+block; corpus re-measured in § 9.6, `tests/test_field_sentences.py` and
+`tests/test_one_grid_two_senses.py`). Left:
 
-  * **The owner's three open questions**, in the order they bite: whether
-    the ambient floor should spill through a doorway at all (§ 4.6 -- as
-    built it does not, and two live rooms went dim -> dark for exactly that
-    reason: chats 73/74's hotel back office beside its lit lobby); median
-    or mean for a room's reading (§ 4b; median as built, and chat 115's
-    dim corridor with one lit source reads dim, not lit); and the
-    constants (§ 6). One already moved: LIT_T 2.0 -> 2.5, because 2.0 sat
-    exactly on POWER[dim] and every dim room with a grid read lit. The
-    § 9.3 table shows a `lit` source reaching one cell as lit and three as
-    dim against the note's "about two ... about four"; LIT_T <= 1.2 or
-    POWER[lit] >= 12 would meet the sentence.
-  * **The composer's shape sentence** (§ 4b last bullet: "the lamp lights
-    the table and the near wall; the far end of the room is dark"). Not
-    built: it needs en/ja compositor templates and a per-anchor mapping
-    from the field's cells to the room's features, and nothing in the
-    field's numbers may reach prose. The Narrator and the Director still
-    see only the four words.
-  * **An unstationed source stands at its room's centre**, the same
-    approximation `_observer_cell` makes for an unplaced observer, and an
-    unstationed BODY keeps the room-level `light_at` answer (§ 7's rule).
-    Both live sources today are unstationed. Whether a body with no cell
-    should instead read the room's median is a choice the note does not
-    make.
-  * **Glare requires a cell for both bodies and a facing**, and reads the
-    per-source contribution at the observer's cell, so a cone pointed away
-    dazzles nobody. The note does not say whether an all_round lantern
-    held between two faces should count; as built it does.
+  * **Two of the owner's three open questions**: median or mean for a
+    room's reading (§ 4b; median as built, and chat 115's dim corridor
+    with one lit source reads dim, not lit); and the constants (§ 6). One
+    already moved: LIT_T 2.0 -> 2.5, because 2.0 sat exactly on POWER[dim]
+    and every dim room with a grid read lit. The § 9.3 table shows a `lit`
+    source reaching one cell as lit and three as dim against the note's
+    "about two ... about four"; LIT_T <= 1.2 or POWER[lit] >= 12 would
+    meet the sentence. `FLOOR_SPILL` (0.25) is a fourth constant the owner
+    may move; its table is beside it.
+  * **The shape sentence replaces the flat one** when a room is uneven
+    (§ 4b). The room's median word is then not said; the observer's own
+    standing is. Whether the median should ALSO be said is a wording
+    choice the owner has not seen on a live page.
   * **`light_radius` is superseded where geometry exists** (§ 3). Three
     assertions in `tests/test_light_and_survival.py` changed to say so; a
     `lit` fixture no longer fills a large hall and a `bright` one does.
   * **§ 9.5 live beats** were not played. Two beats with a held cone in a
     fresh non-explicit scenario, every stage read, is the next measurement
-    under the standing grant.
+    under the standing grant -- and the first live reading of the shape
+    sentence, which the corpus hands to one body in 104 scenes.
   * **Cost was not measured** at the geometry note's precision. The field
     is cached per (scene inputs, room) in a 64-entry memo keyed on a JSON
-    dump of what it reads; the dump is taken on every reader call.
+    dump of what it reads; the dump is taken on every reader call. The
+    shape adds one `feature_visibility` and, per source, one `_visible_set`
+    per observer per stage.
+  * **The backdrop brief's `lighting` slot** (`dressing/backdrops.room_brief`,
+    reserved for the light field's sentence) is still empty; `light_shape`
+    is the input it was reserved for, and nothing hands it over yet.
+  * **The Japanese adapter renders neither the furniture sentence nor the
+    openings** (`language_adapters/japanese.py::_environment` reads
+    `room_name`, `room_notes`, `light` and now `light_shape`; the pack's
+    `features`, `feature_item`, `feature_glimpse` and `opening_*` templates
+    are authored and never called). Found while wiring the shape sentence;
+    the adapter's own docstring names this failure class. Not fixed here
+    -- the tier and side phrases it needs are language data with their own
+    reading rules -- and registered.
 
 ### 2.36 The sound field — PROTOTYPE, on a branch
 
@@ -6879,19 +6883,27 @@ listener's room carries geometry and `hear_level` reads them; entities carry
 `sound_source`, `steadiness`, `state.running`; a failing source files an
 engine notice; a scene without geometry composes byte-identically (pinned).
 Measured: 2 of 589 live rooms carry geometry, 2 speaker-listener pairs on a
-field, whisper and mutter the only words that moved. Left, each in the note's
-§ 10 and each an owner decision: the constants (§ 6a set them off the § 6
-proposal, with the reason); whether a crowd's `mood` should raise its level
-(built on its band, a closed set); which lines of a beat are simultaneous
-(the reader grades one line at a time; simultaneous masking exists only
-through the module API); whether a failing source should switch itself off at
-commit; the composer's sound-shape sentence (not built: it needs a percept
-kind and templates); whether a fragment should thin with the ratio; and the
-live run, which needs a copy of the owner's database there was no room for.
-The `STEADINESS`/`FLICKER_RATE`/`FAIL_RATE` definitions must be unified with
-the light field's at merge, and `_acoustic_grid`'s neighbour placement (a
-copy of `observer_field`'s, for the wider predicate) may fold into `_Field`
-under the room-shapes work.
+field, whisper and mutter the only words that moved. Merged with the light
+field 2026-09-04: the composite is `room_field` under `sound_passes`
+(`_acoustic_grid`, which had drifted to squares, is gone), the steadiness
+words, hash and rates are the light field's, a failing source is switched
+off at commit in one block with the light field's and reported once, the
+composer says where the sound is (`sound_shape`, `NOISE_WORDS` derived from
+the SNR thresholds), and a listener standing on an occluder's cell hears.
+Left, each in the note's § 10 and each an owner decision: the constants
+(§ 6a set them off the § 6 proposal, with the reason); whether a crowd's
+`mood` should raise its level (built on its band, a closed set); which lines
+of a beat are simultaneous (the reader grades one line at a time;
+simultaneous masking exists only through the module API); whether a
+fragment should thin with the ratio; **`sensory_events` on no schema after
+establish** (§ 10.9 -- a crash two rooms away on a normal beat has no
+channel to arrive by; a Director schema addition, and which hand owns a
+one-beat sound is the owner's to say); **two gates** (§ 10.10 -- hearing
+exists in the 2 rooms with an authored footprint/height/opacity, light in
+the 321 with a size tier or anchors; whether hearing should take the wider
+gate); and the live run, which needs a copy of the owner's database there
+was no room for (the 2026-09-04 corpus pass streamed read-only instead, and
+found no live room uneven for sound).
 
 ### 2.35 What the 2026-09-04 debug runs left open
 
