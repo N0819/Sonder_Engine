@@ -134,7 +134,21 @@ def test_a_run_can_leave_the_room_a_story_started_in():
 
 
 def test_sight_runs_down_a_passage_declared_from_the_far_end():
-    assert {line["dir"] for line in corridor_sightlines(_sink_scene(), ORIGIN)} \
+    """The reciprocal edge is what lets the line START at all.
+
+    Each neighbour is given a room beyond it because a corridor sight
+    reports what the line meets PAST the room next door (PM17, 2026-09-05):
+    a line that stops at the neighbour is not a passage, and the neighbour
+    is delivered as a room by the ordinary channels.
+    """
+    scene = _sink_scene()
+    scene["rooms"][BACK]["adjacent"].append(
+        {"to": "r_back_2", "barrier": "open", "dir": "n"})
+    scene["rooms"][FAR]["adjacent"].append(
+        {"to": "r_far_2", "barrier": "open", "dir": "e"})
+    for rid in ("r_back_2", "r_far_2"):
+        scene["rooms"][rid] = {"name": rid, "light": "lit", "adjacent": []}
+    assert {line["dir"] for line in corridor_sightlines(scene, ORIGIN)} \
         == {"n", "e"}
 
 

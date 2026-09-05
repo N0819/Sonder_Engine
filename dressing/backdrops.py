@@ -767,8 +767,20 @@ def _camera_of(scene, room_id, openings, viewer=None, viewer_camera=False,
                                           outdoors),
                     "looking": _WALL_WORD.get(facing, facing),
                     "framing": "eye level, wide"}
+    # A CAMERA STANDS IN A DOORWAY AND LOOKS LEVEL ACROSS THE ROOM, so a
+    # VERTICAL way is not a place it can stand: a stair, a ladder, a hatch or
+    # a shaft is a way up or down, and there is no level, wide shot to be
+    # taken from inside one. Measured (PR14,
+    # `docs/experiments/PLAY_2026_09_05C_rush.md`): the brief for a landing
+    # at the top of a burning stairwell put the camera in "the north
+    # doorway" looking south, level and wide -- the north doorway being the
+    # stair going down into the flashover. Where every passable way out is
+    # vertical the answer is None, which is this function's documented "say
+    # nothing about a camera" rather than a worse picture.
     for wall in CAMERA_WALL_ORDER:
         for opening in openings.get(wall) or []:
+            if opening.get("vertical"):
+                continue
             if opening.get("barrier") in _PASSABLE_BARRIERS:
                 return {"from": ("the %s edge of the %s"
                                  % (_WALL_WORD[wall], _OPEN_GROUND))

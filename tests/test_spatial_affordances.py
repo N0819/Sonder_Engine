@@ -213,11 +213,16 @@ class TestCorridorSight:
         assert line["distance"] == 3
 
     def test_distance_is_reported_vaguely(self):
-        """'some way north the passage ends', not 'three rooms north'."""
+        """'some way north the passage ends', not 'three rooms north'.
+
+        The near case is a three-room passage since PM17 (2026-09-05): a
+        two-room one stops at the neighbour and is no longer a corridor
+        sight at all.
+        """
         from world.spatial import corridor_sightlines
-        near = corridor_sightlines(self._scene(self._corridor(2, [])), "r0")[0]
+        near = corridor_sightlines(self._scene(self._corridor(3, [])), "r0")[0]
         far = corridor_sightlines(self._scene(self._corridor(5, [])), "r0")[0]
-        assert near["vagueness"] == "just ahead"
+        assert near["vagueness"] == "a short way"
         assert far["vagueness"] in ("some way", "far")
         assert near["vagueness"] != far["vagueness"]
 

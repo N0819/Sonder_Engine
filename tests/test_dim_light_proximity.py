@@ -48,13 +48,20 @@ class TestTheLadderOfKind:
         # ...and symmetrically: the body being touched sees its toucher.
         assert spatial.visual_level_between(sc, "Hinami", "Elyra") == "full"
 
-    def test_dim_at_range_is_still_a_silhouette(self):
-        """The same dim room, a body with no measured closeness: shapes.
-        `proximity_rel` answers its "near" DEFAULT for this pair, and the
-        default must never masquerade as a measurement."""
+    def test_dim_at_range_is_conduct_and_not_full(self):
+        """The same dim room, a body with no measured closeness: `conduct`.
+
+        Two rules meet here and neither moved. `proximity_rel` answers its
+        "near" DEFAULT for this pair, and the default must never masquerade
+        as a measurement -- so the lift to `full` design note 18 grants a
+        measured intimacy does NOT fire, and identity and appearance stay
+        withheld. What changed on 2026-09-05 (PQ2) is what the light itself
+        grants: `dim` withholds detail, not conduct, so an unmeasured pair
+        in one dim room sees what the other is doing.
+        """
         sc = _dim_room()
-        assert spatial.visual_level_between(sc, "Elyra", "Moth") == "shapes"
-        assert spatial.visual_level_between(sc, "Moth", "Hinami") == "shapes"
+        assert spatial.visual_level_between(sc, "Elyra", "Moth") == "conduct"
+        assert spatial.visual_level_between(sc, "Moth", "Hinami") == "conduct"
 
     def test_dim_within_measured_reach_is_full(self):
         sc = {
@@ -84,7 +91,10 @@ class TestTheLadderOfKind:
             },
             "positions": {"O": "a", "T": "b"},
         }
-        assert spatial.visual_level_between(sc, "O", "T") == "shapes"
+        # Not `full`: that is what this test is about. The rung is the one
+        # the LIGHT in room B grants (`conduct` since PQ2, 2026-09-05); no
+        # closeness reaches across the opening to lift it.
+        assert spatial.visual_level_between(sc, "O", "T") == "conduct"
 
     def test_a_carried_light_is_still_light_ats_business(self):
         """The torch prior art is untouched: lit beside the holder without
