@@ -188,10 +188,10 @@
 | `world/spatial_frames.py` | 1091 |  | `core.db`, `core.frames`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial` |
 | `world/spatial_geometry.py` | 1893 |  | `world.spatial_barriers`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_identity`, `world.spatial_orientation` |
 | `world/spatial_identity.py` | 498 |  | — |
-| `world/spatial_light.py` | 260 |  | `world.spatial_barriers`, `world.spatial_geometry`, `world.spatial_identity` |
+| `world/spatial_light.py` | 362 |  | `world.spatial_barriers`, `world.spatial_geometry`, `world.spatial_identity` |
 | `world/spatial_light_field.py` | 1121 |  | `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_orientation` |
 | `world/spatial_lint.py` | 429 |  | `world.spatial_barriers`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_orientation` |
-| `world/spatial_merge.py` | 2105 |  | `llm.schemas`, `world.spatial_barriers`, `world.spatial_contact_migration`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_orientation`, `world.spatial_routing`, `world.spatial_senses`, `world.spatial_substance`, `world.spatial_transit` |
+| `world/spatial_merge.py` | 2187 |  | `llm.schemas`, `world.spatial_barriers`, `world.spatial_contact_migration`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_orientation`, `world.spatial_routing`, `world.spatial_senses`, `world.spatial_substance`, `world.spatial_transit` |
 | `world/spatial_orientation.py` | 246 | Bearing math and reciprocal spatial-edge normalization. | — |
 | `world/spatial_prose.py` | 397 |  | `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light` |
 | `world/spatial_routing.py` | 1103 |  | `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_light`, `world.spatial_orientation` |
@@ -2296,14 +2296,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `light_at()` | 151 | 52 lines |
-| `source_light()` | 87 | 51 lines |
-| `effective_light()` | 205 | 39 lines |
-| `room_light()` | 41 | 33 lines |
-| `_light_radius()` | 144 | 5 lines |
-| `normalize_light()` | 35 | 4 lines |
-| `light_blocks_sight()` | 246 | 3 lines |
-| `_brighter()` | 79 | 2 lines |
+| `room_light()` | 41 | 67 lines |
+| `light_at()` | 253 | 52 lines |
+| `source_light()` | 189 | 51 lines |
+| `effective_light()` | 307 | 39 lines |
+| `unsourced_light_rooms()` | 145 | 31 lines |
+| `_declaration_is_the_only_account()` | 118 | 25 lines |
+| `_sky_light()` | 110 | 6 lines |
+| `_light_radius()` | 246 | 5 lines |
 
 ### `world/spatial_light_field.py`
 
@@ -2335,7 +2335,7 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `merge_scene_with_diff()` | 1429 | 677 lines |
+| `merge_scene_with_diff()` | 1474 | 688 lines |
 | `_expire_transient_entity_state()` | 551 | 116 lines |
 | `_shield_standing_bearings()` | 833 | 107 lines |
 | `_shield_minted_edges()` | 1075 | 95 lines |

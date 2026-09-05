@@ -53,6 +53,38 @@ def room_light(scene: dict, room_id: str) -> str:
     makes a square go dark at night without anyone re-declaring it, and a
     torch in that square light it again without anyone re-declaring that.
 
+    SOURCES DECIDE WHERE THE ENGINE CAN SEE SOURCES; WHERE IT CAN SEE NONE,
+    THE DECLARATION IS THE EVIDENCE (owner's decision, 2026-09-05, F40 of
+    `docs/experiments/DEBUG_RUN_2026_09_05.md`). The rule above is right
+    about a square and wrong about a covered place nobody wrote a lamp into:
+    chat 114's console room -- "bathed in amber and greenish light",
+    `light: lit`, `exposure: sheltered`, holding no entity with
+    `light_source` -- composed "It is dark here." in EVERY view for four
+    turns while the narrator wrote the amber warmth of the chamber. So in a
+    room that is not `open`, where the declared word stands ABOVE what the
+    sky gives it and the room holds no light source of its own, the word
+    stands as a floor: it is the only thing in the scene that knows about
+    the lamp nobody wrote as an entity. The exclusions are the rule, not
+    exceptions to it:
+
+      * `open` is untouched. There is no roof to hide a lamp under, so the
+        sky is that room's whole account and a word above it is simply
+        wrong -- the moonlit shore stays dark at night.
+      * A room that HOLDS a source is decided by its sources, switched off
+        included: the account exists, so the word cannot overrule it, and
+        putting the braziers out darkens a sheltered hall at midnight. That
+        is the same direction as `ambient_floor_word`'s PA3 repair one
+        module over (`world/spatial_light_field.py`), which lets an
+        `enclosed` room's dead fixtures darken its word. The pair is one
+        rule read from both ends.
+      * A room that declares NOTHING declares nothing. An absent `light`
+        reads as `lit` by the fail-open at the top of this module, and a
+        fail-open is not a claim, so every scene that never said a word
+        about its light is byte for byte what it was.
+
+    `unsourced_light_rooms` reports exactly the rooms this branch fires on,
+    for the engine notice that asks the Director to write the source.
+
     Indoors -- or in a scene that has never said what time it is, or a room
     the exposure reader cannot place, which it reads as indoors -- the
     declared light stands exactly as it always has.
@@ -65,12 +97,82 @@ def room_light(scene: dict, room_id: str) -> str:
     if not phase:
         return declared
     from world.weather import room_exposure
-    if room_exposure(scene, room_id) == "enclosed":
+    exposure = room_exposure(scene, room_id)
+    if exposure == "enclosed":
         return declared
+    sky = _sky_light(scene, phase)
+    if _declaration_is_the_only_account(scene, room_id, room, exposure,
+                                        declared, sky):
+        return declared
+    return _darker(sky, declared)
+
+
+def _sky_light(scene: dict, phase: str) -> str:
+    """What the sky alone gives a room the weather reaches, this phase."""
     from world.day_cycle import sun_light
     weather = (scene or {}).get("weather")
-    sky = weather.get("sky") if isinstance(weather, dict) else None
-    return _darker(sun_light(phase, sky), declared)
+    return sun_light(phase, weather.get("sky") if isinstance(weather, dict)
+                     else None)
+
+
+def _declaration_is_the_only_account(scene, room_id, room, exposure,
+                                     declared, sky) -> bool:
+    """Is this room's own light WORD the only account of its light, and is
+    it brighter than the sky leaves it? The F40 branch of `room_light`,
+    factored out so the engine notice reports exactly what the reader did.
+
+    The room must actually carry a word (an absent `light` is a fail-open,
+    not a declaration), stand under a roof but not sealed under one
+    (`sheltered`: `open` has no roof to hide a source under and `enclosed`
+    never reaches the sky rule at all), claim more light than the sky gives
+    it, and hold no light source of its own.
+
+    WHAT COUNTS AS THE ROOM'S OWN SOURCE is `_room_fixtures`, the same
+    reading PA3 makes: a thing that FILLS the room and stands in it, lit or
+    not. A hand light someone carried in is not the room's account of
+    itself -- it makes a pool and it leaves with its bearer -- so a doused
+    lantern in a stranger's fist neither darkens the room nor silences the
+    notice.
+    """
+    if exposure != "sheltered" or not str(room.get("light") or "").strip():
+        return False
+    if _LIGHT_ORDER.get(declared, 2) <= _LIGHT_ORDER.get(sky, 2):
+        return False
+    from world.spatial_light_field import _room_fixtures
+    return not _room_fixtures(scene, room_id)
+
+
+def unsourced_light_rooms(scene: dict) -> list:
+    """`[(room_id, declared, sky)]` for every room whose declared light word
+    is the only account of its light and outranks the sky (`room_light`'s
+    F40 branch).
+
+    A room here is a room the story described as lit and never gave a lamp:
+    the word is honoured, and the Director is told once that the room wants
+    a source written, so the next beat can mint the thing that lights it
+    and the light field can place its rays. `merge_scene_with_diff`'s
+    `light_report` composes the sentence; the commit hands it to
+    `ctx.tell_director` with the rest.
+    """
+    rooms = (scene or {}).get("rooms") or {}
+    if not isinstance(rooms, dict):
+        return []
+    phase = str((scene or {}).get("day_phase") or "").strip()
+    if not phase:
+        return []
+    from world.weather import room_exposure
+    sky = _sky_light(scene, phase)
+    out = []
+    for room_id in sorted(rooms):
+        room = rooms.get(room_id)
+        if not isinstance(room, dict):
+            continue
+        declared = normalize_light(room.get("light"))
+        if _declaration_is_the_only_account(
+                scene, room_id, room, room_exposure(scene, room_id),
+                declared, sky):
+            out.append((str(room_id), declared, sky))
+    return out
 
 
 _LIGHT_ORDER = {"dark": 0, "dim": 1, "lit": 2, "bright": 3}
