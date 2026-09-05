@@ -143,3 +143,118 @@ def test_the_operation_shape_offers_the_fields():
     rooms = OPERATION_FIELDS["plan_rooms"]["rooms"]
     for field in ("extent", "shape", "exposure", "vertical"):
         assert field in rooms
+
+
+# ---------------------------------------------------------------------------
+# ...and into the live scene (`world/structure.py`)
+# ---------------------------------------------------------------------------
+#
+# The plan side above landed on one side of a boundary, and the registry
+# rebuilt a planned room field by field on the other -- listing the prose
+# fields and dropping the measurement. So a room asked for four paces by
+# twenty was SHAPED right, planted sizeless, and materialised sizeless, which
+# is the same defect one step further along. These run the whole road:
+# package -> registry -> the room the scene reads.
+
+
+def _plant(temp_db, rooms, key="lighthouse"):
+    """Shape a `plan_rooms` op the way a package does, and apply it."""
+    import time
+
+    from world.structure import plant_structure
+
+    cid = temp_db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+                     ("Planned geometry", "", time.time()))
+    op = _plan(rooms, key=key)
+    plant_structure(cid, op["structure"], op["rooms"])
+    return cid
+
+
+def test_a_room_planned_at_an_extent_reaches_the_scene_at_that_extent(temp_db):
+    """F47, end to end: the grid the scene reasons over is the plan's."""
+    from world.spatial import room_grid
+    from world.structure import skeleton_rooms
+    from world.weather import room_exposure
+
+    cid = _plant(temp_db, {"stall_range": {
+        "name": "Stall range", "purpose": "where the beasts are kept",
+        "extent": {"w": 4, "d": 20}, "shape": "rectangle",
+        "exposure": "sheltered"}})
+
+    scene = skeleton_rooms(cid, "lighthouse")
+    room = scene["rooms"]["stall_range"]
+    assert room["extent"] == {"w": 4, "d": 20}
+    assert room["shape"] == "rectangle"
+    grid = room_grid(scene, "stall_range")
+    assert (grid.w, grid.d) == (4, 20)
+    assert room_exposure(scene, "stall_range") == "sheltered"
+
+
+def test_the_fringe_mints_a_measured_stub(temp_db):
+    """The other road in. A plan published mid-story reaches the live scene
+    as the fringe materialises the neighbour a body is standing next to, and
+    that stub is measured the beat it is minted -- a measurement the plan
+    stated is not the Director's to invent a second time."""
+    from world.spatial import room_grid
+    from world.structure import materialize_planned_fringe
+
+    cid = _plant(temp_db, {
+        "square": {"name": "Square", "adjacent": [{"to": "lamp_room"}]},
+        "lamp_room": {"name": "Lamp room", "extent": {"w": 12, "d": 12},
+                      "shape": "round", "exposure": "open",
+                      "adjacent": [{"to": "square"}]},
+    })
+
+    scene = {"rooms": {"square": {"name": "Square", "desc": "Cobbles."}},
+             "positions": {"Player": "square"}}
+    scene, added = materialize_planned_fringe(cid, scene)
+    assert added == 1
+    stub = scene["rooms"]["lamp_room"]
+    assert stub["extent"] == {"w": 12, "d": 12} and stub["shape"] == "round"
+    grid = room_grid(scene, "lamp_room")
+    assert (grid.w, grid.d) == (12, 12)
+
+
+def test_a_room_that_measured_nothing_reads_exactly_as_it_did(temp_db):
+    """Absent stays absent. A plan that measured nothing must plant the room
+    it planted before any of this existed -- not one carrying three empty
+    fields the scene's own defaults would then have to talk around."""
+    from world.structure import materialize_planned_fringe, skeleton_rooms
+
+    cid = _plant(temp_db, {
+        "square": {"name": "Square", "adjacent": [{"to": "cell"}]},
+        "cell": {"name": "Cell", "purpose": "holding",
+                 "adjacent": [{"to": "square"}]},
+    })
+
+    for field in ("extent", "shape", "exposure"):
+        assert field not in skeleton_rooms(cid, "lighthouse")["rooms"]["cell"]
+
+    scene = {"rooms": {"square": {"name": "Square", "desc": "Cobbles."}},
+             "positions": {"Player": "square"}}
+    scene, _added = materialize_planned_fringe(cid, scene)
+    for field in ("extent", "shape", "exposure"):
+        assert field not in scene["rooms"]["cell"]
+
+
+def test_the_way_up_is_walkable_from_the_scene_the_plan_planted(temp_db):
+    """PA7, end to end. The registry copies an edge whole, so `vertical`
+    already survived the plant; what this holds is that the room the SCENE
+    reads still has the way up, and that its far side is a way down."""
+    from world.spatial import edge_passable, effective_adjacent
+    from world.structure import skeleton_rooms
+
+    cid = _plant(temp_db, {
+        "watch_room": {"name": "Watch room"},
+        "loft": {"name": "Loft",
+                 "adjacent": [{"to": "watch_room", "vertical": "up"}]},
+    })
+
+    scene = skeleton_rooms(cid, "lighthouse")
+    up = [e for e in effective_adjacent(scene, "loft")
+          if e.get("to") == "watch_room"]
+    assert up and up[0].get("vertical") == "up"
+    assert edge_passable(up[0], "loft")
+    down = [e for e in effective_adjacent(scene, "watch_room")
+            if e.get("to") == "loft"]
+    assert down and down[0].get("vertical") == "down"

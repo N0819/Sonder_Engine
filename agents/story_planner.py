@@ -137,7 +137,7 @@ DELIBERATION_ROUNDS = 2
 #: The keys an answer may carry. An output carrying none of them is not an
 #: answer -- almost always one cut off at the token ceiling -- and is told so.
 ANSWER_KEYS = ("calls", "reply", "grants", "questions", "status_line",
-               "verdicts", "to_dramaturge")
+               "verdicts", "to_dramaturge", "claims")
 CUT_OFF_NOTE = ("your last output was not one JSON object with the known keys "
                 "-- most likely cut off at the token ceiling; nothing in it "
                 "ran. Take smaller steps: one operation per call, a few calls "
@@ -173,13 +173,20 @@ RESUMABLE_STOPS = ("steps", "calls", "wall")
 # ---------------------------------------------------------------------------
 
 def _call(system, payload, *, max_tokens):
-    """One JSON-shaped call on the Planner's role. Read through the
-    provider module at call time so a test seals or stubs one name."""
+    """One JSON-shaped call on the Planner's role.
+
+    Through `story.room_calls.room_call` rather than `chat_complete`
+    directly: same provider, same arguments, same return, same exceptions,
+    and the exchange is recorded when the host has capture on. Every
+    pipeline stage and every Director specialist was already readable that
+    way; the Planner was the one agent in the engine whose payload was not,
+    which all five play runs of 2026-09-05 named as the thing they most
+    wanted and could not have. `room_call` reads the provider module at
+    call time too, so a test still seals or stubs one name."""
     from agents.common import jparse
-    from llm import providers
-    raw = providers.chat_complete(
-        PLANNER_ROLE, system, json.dumps(payload, ensure_ascii=False),
-        json_mode=True, max_tokens=max_tokens)
+    from story.room_calls import room_call
+    raw = room_call(PLANNER_ROLE, system, payload,
+                    max_tokens=max_tokens, phase="planner")
     out = jparse(raw)
     return out if isinstance(out, dict) else {}
 
@@ -281,9 +288,23 @@ def _bible_block(cid, frame_id):
         return ""
 
 
+def _contract_block():
+    """The citation contract, in the words the check holds the room to.
+
+    It rides here rather than in the prompt card DELIBERATELY: the sentence
+    the room is given and the test that enforces it are one string
+    (`story.room_citations.CONTRACT_TEXT`), so neither can be edited into
+    disagreement with the other. Static, so it stays inside the cacheable
+    prefix beside the tool table.
+    """
+    from story.room_citations import CONTRACT_TEXT
+    return "\n\nWHAT YOU STATE AS FACT.\n" + CONTRACT_TEXT
+
+
 def system_block(cid, frame_id):
     from llm.prompts import get_prompt
-    return get_prompt("story_planner") + _tools_block() + _bible_block(cid, frame_id)
+    return (get_prompt("story_planner") + _tools_block() + _contract_block()
+            + _bible_block(cid, frame_id))
 
 
 def _encoded(value):
@@ -564,6 +585,7 @@ def run_planner(cid, frame_id, *, text=None, task=None, base_turn=None,
     from core.jobs import story_rewound_past
     from story import room_conversation as room
     from story.mandates import expire_mandates, spend_citation, spend_limits
+    from story.room_citations import normalize_claim
     from story.room_frontier import record_spend, spend_this_hour
     from story.room_tools import TOOL_INDEX, ToolError, run_tool
 
@@ -581,7 +603,7 @@ def run_planner(cid, frame_id, *, text=None, task=None, base_turn=None,
     hour_left = max(0, int(spend["calls_per_hour"])
                     - spend_this_hour(cid, frame_id, turn_idx))
     started = time.time()
-    transcript, notes, published, verdicts = [], [], [], []
+    transcript, notes, published, verdicts, claims = [], [], [], [], []
     calls_made, delegations, steps = 0, 0, 0
     reply, status_line, questions, ask_dramaturge = "", "", [], None
     stopped = None
@@ -632,6 +654,14 @@ def run_planner(cid, frame_id, *, text=None, task=None, base_turn=None,
             reply = str(out["reply"])
         if isinstance(out.get("verdicts"), list):
             verdicts = [v for v in out["verdicts"] if isinstance(v, dict)]
+        if isinstance(out.get("claims"), list):
+            # The step that wrote the reply is the step that enumerates what
+            # the reply states, so the last list wins, exactly as the reply
+            # itself does. Nothing is checked here: `room_citations` holds
+            # the claims to the rows `run_tool` recorded, and does it in the
+            # context that owns the ledger.
+            claims = [normalize_claim(c) for c in out["claims"]
+                      if isinstance(c, (dict, str))]
         if text is not None and out.get("to_dramaturge"):
             ask_dramaturge = " ".join(str(out["to_dramaturge"]).split())[:1200]
         # PROGRESS IS VISIBLE: the status row is rewritten every step, so
@@ -755,7 +785,7 @@ def run_planner(cid, frame_id, *, text=None, task=None, base_turn=None,
                           turn_idx=turn_idx)
     return {"reply": reply, "dramaturge": None,
             "mandates": room.mandates(cid, frame_id), "status": status,
-            "published": published, "verdicts": verdicts,
+            "published": published, "verdicts": verdicts, "claims": claims,
             "ask_dramaturge": ask_dramaturge, "calls": calls_made,
             "steps": steps, "notes": notes, "stopped": stopped, "regime": regime}
 
@@ -787,6 +817,9 @@ def _run_task(cid, frame_id, task, *, base_turn, job=None):
                    "calls": out["calls"] + this["calls"],
                    "steps": out["steps"] + this["steps"],
                    "notes": out["notes"] + this["notes"],
+                   # Each pass states its own facts, so they add up; a pass
+                   # that stated none does not erase the one before it.
+                   "claims": out["claims"] + this["claims"],
                    "verdicts": this["verdicts"] or out["verdicts"]}
         if this["stopped"] not in RESUMABLE_STOPS:
             break
@@ -800,6 +833,7 @@ def planner_reply(cid, frame_id, text, *, on_event=None):
     background task has no wall) and its lines land in the thread; the
     envelope's `dramaturge` stays None and the panel's watch shows them."""
     from core import jobs
+    from persist.llm_capture import room_capture
     from story.mandates import surprise_dial
     from story.room_bible import schedule_fold
     out = run_planner(cid, frame_id, text=text, regime="reply",
@@ -811,8 +845,14 @@ def planner_reply(cid, frame_id, text, *, on_event=None):
             base = None
 
             def _run(job):
-                return run_dramaturge_pass(cid, frame_id, base_turn=base,
-                                           brief=brief, job=job)
+                # The reply's own scope does not reach here: the pass runs
+                # out of band, in a job, and `core/jobs.py` clears
+                # turn-scoped contextvars. A brief handed to the Dramaturge
+                # is the most readable thing the room does and would
+                # otherwise be the least readable.
+                with room_capture(cid, "dramaturge"):
+                    return run_dramaturge_pass(cid, frame_id, base_turn=base,
+                                               brief=brief, job=job)
 
             jobs.submit(cid, DRAMATURGE_JOB_KEY, _run, base_turn=base)
     try:
@@ -820,6 +860,12 @@ def planner_reply(cid, frame_id, text, *, on_event=None):
     except Exception as exc:
         logger.info("bible fold not scheduled: %s", exc)
     return {"reply": out["reply"], "dramaturge": None,
+            # What the reply STATED, for `room_citations.check_claims` to
+            # hold against the rows this reply actually read. The seam
+            # returns them rather than checking them: the ledger lives in
+            # the context that made the calls, which for a streamed reply
+            # is a worker thread.
+            "claims": out["claims"],
             "mandates": out["mandates"], "status": out["status"]}
 
 
@@ -1035,6 +1081,7 @@ def schedule_room_work(ctx):
     window. With no grant the status row asks. Never raises; returns the
     first job queued, or None."""
     from core import jobs
+    from persist.llm_capture import room_capture
     from story import room_conversation as room
     from story.mandates import (beats_per_proposal, fill_limit, spend_limits,
                                 surprise_dial)
@@ -1063,7 +1110,12 @@ def schedule_room_work(ctx):
                              questions=texts + [WAITING_LINE], turn_idx=turn_idx)
         elif hour_open and fills_this_hour(cid, frame_id, turn_idx) < limit:
             def _fill(job):
-                return run_fill(cid, frame_id, base_turn=turn_idx, job=job)
+                # ARMED INSIDE THE JOB, not around the submit. `core/jobs.py`
+                # clears turn-scoped contextvars by design and this body runs
+                # outside any reply, so a scope set here is the only one the
+                # calls below can see (`persist/llm_capture.room_capture`).
+                with room_capture(cid, "fill"):
+                    return run_fill(cid, frame_id, base_turn=turn_idx, job=job)
             queued.append(jobs.submit(cid, FILL_JOB_KEY, _fill, base_turn=turn_idx))
 
     dial = surprise_dial(cid, frame_id, turn_idx)
@@ -1072,7 +1124,9 @@ def schedule_room_work(ctx):
         last = last_pass_turn(cid, frame_id)
         if last is None or int(turn_idx) - last >= int(beats):
             def _pass(job):
-                return run_dramaturge_pass(cid, frame_id, base_turn=turn_idx, job=job)
+                with room_capture(cid, "dramaturge"):
+                    return run_dramaturge_pass(cid, frame_id,
+                                               base_turn=turn_idx, job=job)
             queued.append(jobs.submit(cid, DRAMATURGE_JOB_KEY, _pass,
                                       base_turn=turn_idx))
 

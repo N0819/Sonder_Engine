@@ -93,6 +93,10 @@ const ROOM = {
   // doing right now. All three are cleared when the stored rows arrive, so
   // the thread never holds two copies of one answer.
   live: null,
+  // WHAT THE LAST REPLY STATED, and what it read to know it
+  // (`story/room_citations.py`). Per reply, not per thread: it is the
+  // answer's own accounting and it goes when the next answer starts.
+  citations: null,
   // Whether the working is expanded, per viewer. Collapsed by default: it is
   // there to be opened when an answer surprises you, not to be read every
   // time.
@@ -211,6 +215,10 @@ function roomFrameQuery() {
 async function roomLoad() {
   const key = roomKey();
   ROOM.loadedKey = key;
+  // The accounting belongs to a reply, and the thread this loads is not it:
+  // the stored lines carry no claims, so a check left over from another
+  // story or another era would be read as this one's.
+  ROOM.citations = null;
   if (!S.chatId) {
     ROOM.messages = []; ROOM.mandates = []; ROOM.status = null; ROOM.seated = false;
     roomRender();
@@ -278,6 +286,8 @@ async function roomSend() {
   const send = $("#room-send");
   if (send) send.disabled = true;
   box.value = "";
+  // Last answer's accounting goes with the last answer.
+  ROOM.citations = null;
   ROOM.live = { text: "", reasoning: "", note: "" };
   roomRender();
   try {
@@ -346,6 +356,7 @@ function roomEvent(event) {
     ROOM.messages = ROOM.messages.concat(event.replies || []);
     ROOM.mandates = event.mandates || ROOM.mandates;
     ROOM.status = event.status || ROOM.status;
+    ROOM.citations = event.citations || null;
     ROOM.seated = !!event.seated;
     ROOM.loadedKey = roomKey();
     if (event.error) toast(t("The room could not answer: {why}", { why: event.error }), "err");
@@ -479,6 +490,56 @@ function roomRenderThread(box) {
     box.append(node);
   }
   if (ROOM.live) box.append(roomLiveNode());
+  else roomRenderCitations(box);
+}
+
+// What the last reply STATED, and what it read to know it
+// (`story/room_citations.py`).
+//
+// A claim the room cited rows for is the world talking. A claim it cited no
+// row for is the room talking, which is a proposal -- and the room is free to
+// propose, invent and speculate, so nothing here deletes a sentence. THE
+// DEMOTION IS THE WHOLE MECHANISM, so a demoted claim is rendered AMONG the
+// proposals and in their clothes, never as an assertion with a warning
+// hung off it: a reader who cannot see which is which at a glance is back
+// where they started, reading a recap that says a character was feigning
+// sleep as though the ledger had said so.
+//
+// A reply that enumerated nothing shows nothing. There is no claim to mark,
+// and a badge saying so on every reply would be read as a verdict on the
+// prose rather than a note about the accounting.
+function roomRenderCitations(box) {
+  const found = ROOM.citations;
+  const claims = (found && found.claims) || [];
+  if (!claims.length) return;
+  const stated = claims.filter(c => c.verdict === "supported");
+  const proposed = claims.filter(c => c.verdict !== "supported");
+  const node = el("div", { class: "room-citations" });
+  if (stated.length) {
+    node.append(el("div", { class: "room-section-title" }, "States, from what it read"));
+    for (const claim of stated) {
+      node.append(el("div", { class: roomCls("room-claim", "stated") },
+        el("span", { class: "room-claim-text" }, claim.text),
+        el("span", {
+          class: roomCls("dim", "small"),
+          title: (claim.cites || []).join(", "),
+        }, " · " + t("{n} cited", { n: (claim.cites || []).length }))));
+    }
+  }
+  if (proposed.length) {
+    node.append(el("div", { class: "room-section-title" }, "Proposes"));
+    for (const claim of proposed) {
+      node.append(el("div", { class: roomCls("room-claim", "proposed") },
+        el("span", { class: "room-claim-text" }, claim.text),
+        claim.verdict === "unsupported"
+          ? el("span", {
+              class: roomCls("dim", "small"),
+              title: "Stated as fact, and naming no row this reply read. It stands as a suggestion.",
+            }, " · " + t("no row"))
+          : null));
+    }
+  }
+  box.append(node);
 }
 
 // The answer as it is written: the working (collapsed), what the loop is

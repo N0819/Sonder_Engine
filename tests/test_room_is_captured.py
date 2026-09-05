@@ -164,3 +164,117 @@ def test_the_bible_fold_is_a_room_call_too(temp_db, monkeypatch):
     rows = llm_capture.exchanges_for_turn(turn_id)
     assert [r["step_key"] for r in rows] == ["room:bible"], (
         "a fold names its own phase even inside a planner scope")
+
+
+# ---------------------------------------------------------------------------
+# The two agents the runs asked for
+# ---------------------------------------------------------------------------
+#
+# The seam above was built and the callers were not wired to it: the Planner
+# and the Dramaturge each still called `providers.chat_complete` directly, so
+# the recorder existed and recorded nothing either of them did.
+
+
+def test_the_planners_own_call_is_recorded(temp_db, monkeypatch):
+    """Not `room_call` -- `agents/story_planner.py`'s own model call, which
+    is the one every play run asked to read."""
+    from core import db
+    from agents import story_planner
+    _seal(monkeypatch)
+    db.set_setting("llm_capture_enabled", "1")
+    db.set_setting("llm_capture_bodies", "full")
+    chat_id, turn_id = _chat_with_a_turn(db)
+
+    with llm_capture.room_capture(chat_id, "planner"):
+        out = story_planner._call("PLANNER SHEET", {"task": {"kind": "fill"}},
+                                  max_tokens=64)
+    assert out == {"reply": "ok"}, "the seam returns what it always returned"
+
+    export = pipeline_trace.export_turn_debug(turn_id)
+    calls = [e for e in export["timeline"] if e["kind"] == "call"]
+    assert [c["step"] for c in calls] == ["room:planner"]
+    assert calls[0]["sent"]["system"] == "PLANNER SHEET"
+    assert calls[0]["sent"]["payload"]["task"] == {"kind": "fill"}
+
+
+def test_the_dramaturges_own_call_is_recorded(temp_db, monkeypatch):
+    """And it names its own phase, so a pass reads apart from a reply."""
+    from core import db
+    from agents import dramaturge
+    _seal(monkeypatch, answer='{"proposals": []}')
+    db.set_setting("llm_capture_enabled", "1")
+    chat_id, turn_id = _chat_with_a_turn(db)
+
+    with llm_capture.room_capture(chat_id, "planner"):
+        dramaturge._call("DRAMATURGE SHEET", {"dial": 2})
+
+    rows = llm_capture.exchanges_for_turn(turn_id)
+    assert [r["step_key"] for r in rows] == ["room:dramaturge"]
+
+
+def test_neither_agent_records_when_capture_is_off(temp_db, monkeypatch):
+    """Off by default, the same as every stage. The setting is the whole
+    of the gate: wiring the seam did not turn anything on."""
+    from core import db
+    from agents import dramaturge, story_planner
+    _seal(monkeypatch)
+    chat_id, turn_id = _chat_with_a_turn(db)
+
+    with llm_capture.room_capture(chat_id, "planner"):
+        story_planner._call("SHEET", {"task": "recap"}, max_tokens=64)
+        dramaturge._call("SHEET", {"dial": 1})
+
+    assert llm_capture.exchanges_for_turn(turn_id) == []
+    assert pipeline_trace.export_turn_debug(turn_id)["room_calls_captured"] == 0
+
+
+def test_a_job_queued_from_the_commit_tail_arms_its_own_scope(
+        temp_db, monkeypatch):
+    """`core/jobs.py` clears turn-scoped contextvars by design and these
+    jobs are submitted outside a reply, so a scope taken around the SUBMIT
+    is not one the job body can see. It is armed inside the body, which is
+    the only place it reaches the calls."""
+    from core import db, jobs
+    from agents import story_planner
+    from story import mandates, room_bible, room_frontier, room_proposals
+    _seal(monkeypatch)
+    db.set_setting("llm_capture_enabled", "1")
+    chat_id, turn_id = _chat_with_a_turn(db)
+
+    monkeypatch.setattr(room_frontier, "frontier_report",
+                        lambda *a, **k: {"rooms_short": 2})
+    monkeypatch.setattr(room_frontier, "record_measure", lambda *a, **k: None)
+    monkeypatch.setattr(room_frontier, "spend_this_hour", lambda *a, **k: 0)
+    monkeypatch.setattr(room_frontier, "fills_this_hour", lambda *a, **k: 0)
+    monkeypatch.setattr(mandates, "spend_limits",
+                        lambda *a, **k: {"calls_per_hour": 10})
+    monkeypatch.setattr(mandates, "fill_limit", lambda *a, **k: 3)
+    monkeypatch.setattr(mandates, "surprise_dial", lambda *a, **k: None)
+    monkeypatch.setattr(mandates, "beats_per_proposal", lambda *a, **k: 1)
+    monkeypatch.setattr(room_proposals, "last_pass_turn", lambda *a, **k: None)
+    monkeypatch.setattr(room_bible, "schedule_fold", lambda *a, **k: None)
+    # The fill's own work is not what this holds; that it runs armed is.
+    monkeypatch.setattr(story_planner, "run_fill",
+                        lambda *a, **k: story_planner._call(
+                            "FILL SHEET", {"kind": "fill"}, max_tokens=64))
+
+    bodies = []
+    monkeypatch.setattr(jobs, "submit",
+                        lambda cid, key, fn, **k: bodies.append(fn) or fn)
+
+    class _Turn:
+        idx, frame_id = 3, None
+
+    class _Chat:
+        id = chat_id
+
+    class _Ctx:
+        chat, turn = _Chat(), _Turn()
+
+    story_planner.schedule_room_work(_Ctx())
+    assert bodies, "a fill was due and should have been queued"
+    bodies[0](None)
+
+    rows = llm_capture.exchanges_for_turn(turn_id)
+    assert [r["step_key"] for r in rows] == ["room:planner"], (
+        "the call a fill job makes is filed against the turn in play")

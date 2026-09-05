@@ -141,6 +141,12 @@ LEDGERS = {
     "artifact_ops": (None, "world_artifacts rows; delivered as `notices`"),
     "destruction": (None, "acts on rooms and entities the hand already has; "
                           "no ledger of its own"),
+    "sensory_events": (None, "there IS no standing ledger: the beat number "
+                             "is the whole lifetime, and a beat that says "
+                             "nothing about a noise does not inherit the "
+                             "last one -- which is the difference from "
+                             "`state.running` and the reason the fog bell "
+                             "was a defect"),
     # --- spatial ----------------------------------------------------------
     "positions": ("positions", "Zolwarden"),
     "rooms": ("rooms", "Zolkeep Hall"),

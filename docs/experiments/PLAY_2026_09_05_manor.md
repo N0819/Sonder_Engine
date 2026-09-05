@@ -592,6 +592,11 @@ resolve.
   field. The reply then reported the sizes back to me as though they had been
   set, and one of them silently changed on the way (I asked for a stable yard
   "roughly ten by six"; the reply says fourteen by twelve).
+  *(RESOLVED 2026-09-05. `plan_rooms` takes `extent`, `shape` and `exposure`;
+  `structure.planned_geometry` carries them into the scene; and the preview
+  now reports back what the plan MEASURED, so a host who asked for ten by six
+  and is handed fourteen by twelve can see that the measurement did not
+  survive instead of reading it back in prose and believing it did.)*
 - It cannot retire what it published: I asked it to retire the package, it
   resolved it instead (`retire_package` is host-only) and did not say that was
   why.

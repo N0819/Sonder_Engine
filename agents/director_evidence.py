@@ -414,6 +414,10 @@ _SUBJECT_OP_CHANNELS = {
     "artifact_ops": ("artifact_id", "poster", "room", "reader", "by"),
     "consequences": ("where", "originator"),
     "destruction": ("effect_id", "target_id", "affected_locations"),
+    # A one-beat signal: the room it happened in, and the thing that made
+    # it. `detail` is what the noise was LIKE and names nothing, so it is
+    # not read here.
+    "sensory_events": ("room", "source"),
 }
 
 # A manifest subject that names the CHANNEL rather than a body ("contacts",

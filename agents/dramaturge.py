@@ -76,11 +76,14 @@ DIAL_SCALE = ("0 holds to the target the player stated and proposes only what "
 # ---------------------------------------------------------------------------
 
 def _call(system, payload, *, max_tokens=DRAMATURGE_MAX_TOKENS):
+    # Through `story.room_calls.room_call` rather than `chat_complete`
+    # directly, so a pass is as readable as a beat's stages are when the
+    # host has capture on (`persist/llm_capture.py`). Same provider, same
+    # arguments, same return.
     from agents.common import jparse
-    from llm import providers
-    raw = providers.chat_complete(
-        DRAMATURGE_ROLE, system, json.dumps(payload, ensure_ascii=False),
-        json_mode=True, max_tokens=max_tokens)
+    from story.room_calls import room_call
+    raw = room_call(DRAMATURGE_ROLE, system, payload,
+                    max_tokens=max_tokens, phase="dramaturge")
     out = jparse(raw)
     return out if isinstance(out, dict) else {}
 

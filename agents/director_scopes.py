@@ -130,7 +130,7 @@ SPECIALISTS = {
         "step_key": "director_objects",
         "role": "director_objects",
         "channels": ("entities", "remove_entities", "inventory_ops",
-                     "artifact_ops", "destruction"),
+                     "artifact_ops", "destruction", "sensory_events"),
     },
     # The geography. Carved LAST by design: the movement backstop, the
     # following projection, approach semantics and the near-group

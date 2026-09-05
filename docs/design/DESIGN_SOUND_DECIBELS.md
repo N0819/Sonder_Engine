@@ -304,10 +304,55 @@ readers share one build. **That `effective_adjacent` is O(scene) per room is
 not this work's to fix and is worth someone's attention**: it is paid by
 every scene-wide walk, not only this one.
 
-## 8. What was registered rather than built
+## 8. What was registered rather than built — LANDED 2026-09-05
 
-Three lines, in three files this work did not own, and until they land the
-event channel exists and nothing writes to it from a live turn:
+All three wired the same day, and the section is kept because two of them
+were not the one line each it says they were, and the third was wrong about
+the code. What actually landed:
+
+1. `StateDiff.sensory_events` — one line, as stated.
+2. `SPECIALISTS["objects"]["channels"]` — **not one line.** "The objects
+   hand's card already asks for it" was false: there was no chunk, and
+   `tools/project_check.py` refuses a channel whose scoped sheet can never
+   teach it. Adding the channel also moved four registries that hold the
+   split level — `schemas.SPECIALIST_CHANNELS`, the objects specialist model
+   and its repair example, the subject table in `agents/director_evidence.py`
+   and the prose author's delegation paragraph in both packs — plus the two
+   test ledgers that record a decision per channel (its application class,
+   and why no manifest category reaches it). That is the guard rail working:
+   a channel added to one registry and not the rest is exactly the silent
+   drop this engine keeps measuring.
+3. The delivery — **and § 8's own call was wrong.** `beat_sensory_events(sc,
+   turn_idx)` answers `[]` at this point in the turn: the scene's record is
+   written by `commit_scene_state._record_sensory_events`, which runs after
+   the narrator, and next turn the beat number has moved so it answers `[]`
+   again. `agents/perception._composer_outcome` therefore reads the beat's
+   OWN diff and grades it with the commit's own `normalize_sensory_event`,
+   so what a view delivers and what the beat stores cannot disagree about
+   which events were real. The room the signal happened in hears it whole
+   through `ambient_percepts` (the near field's, as § 3 says); everything
+   beyond it goes through `distant_sounds` into
+   `composer.distant_sound_percepts`, which keeps only `level`, the bearing
+   PHRASE and the character — the subtraction stated by naming what is kept,
+   so a field added upstream cannot ride in behind it. A record the far
+   field could give no bearing for is dropped: all three templates say which
+   way the sound came from, and silence is the honest rendering of a noise
+   this observer has no frame for.
+
+Pinned in `tests/test_distant_sound_delivery.py`, including the two that
+matter most: a beat with no events composes byte-identically, and no key but
+the note's own survives the normaliser.
+
+**One residual, and it is the dispatch.** A hand runs when the Director's
+ruling reaches it. A one-beat signal is not a persistent change, so it has
+no manifest category (recorded, with the reason, in
+`tests/test_director_orchestration._UNREACHABLE_BY_DESIGN`) and reaches the
+objects hand only through a `ledger_notes` line keyed `sensory_events`. On a
+beat whose only object-world event is a noise, nothing else dispatches that
+hand — so whether the prose author reliably writes that note is unmeasured,
+and is the next thing to watch.
+
+The original registration, kept for the record:
 
 1. **`llm/schemas.py`, `StateDiff`**: `sensory_events: list[dict] =
    Field(default_factory=list)` -- the same declaration `EstablishOut`
@@ -328,3 +373,5 @@ event channel exists and nothing writes to it from a live turn:
 
 The engine-side halves of all three are built and tested; what is missing is
 the wiring, and it is one line each.
+
+(It was not one line each. See the head of this section.)
