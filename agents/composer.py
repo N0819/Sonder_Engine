@@ -2226,8 +2226,30 @@ def speech_percept(entry, rel, observer_name, *, display, can_see,
     if not body:
         return None
     volume = str(entry.get("volume") or "normal")
-    level = line_hear_level(entry, rel, observer_name, proximity=proximity,
-                            senses=senses)
+    # WHICH RELATION DECIDED, AND WHY. `act_percept` records every refusal
+    # and delivery; this function recorded nothing, and the cost was
+    # measured: a shout three rooms up a stone tower arrived verbatim on four
+    # beats while every deterministic reader replayed on the committed scene
+    # answered `fragment` or `none`, and nothing persisted which of the two
+    # rescues had fired (lighthouse, 2026-09-05, PA4 -- docs/UNBUILT.md
+    # § 1.121). Two paths can promote an unheard line to a full verbatim
+    # quotation and they have different premises, so an attribution has to
+    # say which one. Same shape as `act_percept`: no-op when debug capture is
+    # off, one ContextVar read.
+    _who = "%s -> %s" % (str(entry.get("speaker") or "?"), observer_name)
+    _spatial = line_hear_level(entry, rel, observer_name, proximity=proximity,
+                               senses=senses)
+    level = _spatial
+    _how = "spatial"
+    if isinstance(rel.get("comm_channel"), dict):
+        _how = "comm channel"
+    elif level == "full" and _sense_graded(
+            hear_level(rel, volume, proximity=proximity),
+            "hearing", senses) == "none":
+        # `line_hear_level` already applied the addressed rescue; naming it
+        # here is a report of what happened inside it, not a second copy of
+        # the rule.
+        _how = "addressed rescue (named across a barrier)"
     if level == "none" and rel.get("open_group_continuity") \
             and volume.casefold() in ("normal", "loud", "shout"):
         # Compatibility floor for a rerolled checkpoint predating the
@@ -2236,6 +2258,14 @@ def speech_percept(entry, rel, observer_name, *, display, can_see,
         # onset prose path carried the twin of this rescue and has since been
         # deleted, so this is the only copy.)
         level = "full"
+        _how = "open-group continuity floor (pre-repair checkpoint)"
+    note_step_decision(
+        "speech_percept", _who,
+        "refused" if level == "none" else "delivered",
+        "%s via %s; volume %s, barrier %s, tier %s" % (
+            level, _how, volume,
+            str(rel.get("barrier") or "none"),
+            str(proximity or rel.get("tier") or "unmeasured")))
     if level == "none":
         return None
     channel = rel.get("comm_channel")

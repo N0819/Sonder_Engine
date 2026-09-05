@@ -589,3 +589,83 @@ def test_act_surface_identity_scrub_at_admission():
         "steps protectively in front of Hinami", "Reya", recognized, unknown)
     assert "Hinami" not in surface
     assert "fox" in surface.casefold()
+
+
+# ---------------------------------------------------------------------------
+# The two rescues that promote an unheard line -- live, and now attributable
+# ---------------------------------------------------------------------------
+
+def _speech_decisions(entry, rel, observer, **kw):
+    """Every decision `speech_percept` records for one line, plus its result.
+
+    `note_step_decision` is a no-op outside a running step, so a test that
+    only calls the function would assert against an engine that recorded
+    nothing. This sets the sink the runtime normally sets.
+    """
+    import contextlib
+    from core.pipeline_context import current_decision_sink, current_step_key
+
+    seen = []
+    token = current_step_key.set("perception_outcome")
+    sink = current_decision_sink.set(
+        lambda kind, subject, verdict, reason="": seen.append(
+            (kind, subject, verdict, reason)))
+    try:
+        kw.setdefault("display", observer)
+        kw.setdefault("can_see", False)
+        out = composer.speech_percept(entry, rel, observer, **kw)
+    finally:
+        current_decision_sink.reset(sink)
+        current_step_key.reset(token)
+    return out, [row for row in seen if row[0] == "speech_percept"]
+
+
+def test_the_addressed_rescue_is_live_and_says_so():
+    """NOT DEAD -- a play run that never triggers a branch has measured its
+    own story, not the code.
+
+    A line the wall would drop, addressed BY NAME at spoken volume, is
+    rescued to a full quotation. That is what carries an ordinary shout
+    through a closed door, which is why the rescue exists; the open question
+    (docs/UNBUILT.md § 1.121) is whether its premise survives three rooms of
+    stone tower, and that question could not be asked because nothing
+    recorded which relation had decided. Now the record names it.
+    """
+    entry = {"volume": "normal", "text": "Get down here.",
+             "intended_target": "Alice", "speaker": "Bram"}
+    rel = {"barrier": "wall", "same_room": False}
+    # The ordinary spatial read drops it...
+    assert composer.hear_level(rel, "normal") == "none"
+    # ...and the addressed rescue carries it, by name and by name only.
+    out, decisions = _speech_decisions(entry, rel, "Alice")
+    assert out is not None and out.data["level"] == "full"
+    assert any("addressed rescue" in row[3] for row in decisions), decisions
+    assert composer.speech_percept(entry, rel, "Carol", display="Carol",
+                                   can_see=False) is None
+
+
+def test_the_open_group_continuity_floor_is_live_and_says_so():
+    """The other rescue, from the other direction: a compatibility floor for
+    a rerolled checkpoint that predates the near-group position repair. It
+    fires only when `perception._previous_open_group_continuity` has stamped
+    the relation, and it grants hearing alone.
+    """
+    entry = {"volume": "normal", "text": "Mind the step.", "speaker": "Bram"}
+    rel = {"barrier": "wall", "same_room": False}
+    assert composer.speech_percept(entry, rel, "Alice", display="Alice",
+                                   can_see=False) is None
+
+    out, decisions = _speech_decisions(
+        entry, {**rel, "open_group_continuity": True}, "Alice")
+    assert out is not None and out.data["level"] == "full"
+    assert any("open-group continuity floor" in row[3] for row in decisions), \
+        decisions
+
+
+def test_an_ordinary_refusal_is_recorded_with_its_reason():
+    entry = {"volume": "normal", "text": "Nothing.", "speaker": "Bram"}
+    out, decisions = _speech_decisions(
+        entry, {"barrier": "wall", "same_room": False}, "Alice")
+    assert out is None
+    assert decisions and decisions[0][2] == "refused"
+    assert "via spatial" in decisions[0][3]
