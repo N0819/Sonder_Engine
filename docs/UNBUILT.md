@@ -5578,16 +5578,38 @@ gap made a fog bell rung ONCE into a permanently running source, and nine
 beats of one story were rewritten by a noise floor of 20.5 against a
 whisper's 0.34.
 
-Both halves are now less damaging and neither is closed. The objects hand's
-card states the class (an emission is a state, a noise is an event, and the
-test is whether somebody would have to do something to make it stop) and
-points a one-off at `state.<x>_action`, which the merge expires with the beat
-that asserted it; `commit_scene_state._report_started_sources` tells the
-Director on the next beat about every `running` switch a beat threw. What is
-still missing is a channel a beat can write a sound INTO -- one that is heard
-where it happened, by whoever was there to hear it, and is then over. Until it
-exists a one-off sound is either a state that outlives it or nothing at all,
-and the clause is the only thing standing between those two.
+**Narrowed 2026-09-05 to three lines of wiring**
+(`docs/design/DESIGN_SOUND_DECIBELS.md` § 4, § 8). The channel is BUILT: the
+shape (`spatial_sound_field.normalize_sensory_event`, a closed set of keys,
+capped at `MAX_SENSORY_EVENTS` 8 a beat), the write
+(`commit_scene_state._record_sensory_events`, which stores the beat's sounds
+under the beat that made them and drops the record on any beat that makes
+none), and the read (`beat_sensory_events`, which refuses any beat but its
+own). The beat number IS the lifetime, so nothing decays and nothing expires
+on a counter. The objects hand's card now points a one-off at that channel
+rather than at `state.<x>_action`, and a sound loud enough to leave the room
+travels the room graph to wherever it is still audible
+(`spatial_sound_field.distant_sounds`).
+
+**What remains is that nothing writes to it from a live turn**, because
+three edits are in files the decibel work did not own:
+
+1. `llm/schemas.py`, `StateDiff`: `sensory_events: list[dict] =
+   Field(default_factory=list)` — the same declaration `EstablishOut`
+   already carries. Without it the field does not survive the validation
+   round trip, so a Director that writes one has it silently dropped.
+2. `agents/director_scopes.py`: add `"sensory_events"` to
+   `SPECIALISTS["objects"]["channels"]`. The card already asks for it.
+3. `agents/perception.py` / `agents/composer.py`: the delivery, one call and
+   one percept. The exact call and the four templates (already in both
+   packs) are in the note's § 8.
+
+Until those land, a one-off sound written by the objects hand is dropped at
+validation, which is a smaller failure than the two it replaces — it is no
+longer a state that outlives the beat — but it is still nobody hearing it.
+
+`commit_scene_state._report_started_sources` continues to tell the Director
+on the next beat about every `running` switch a beat threw.
 
 ### 1.115 The needs filter reads free prose, and its threshold is a judgement
 
@@ -5684,6 +5706,29 @@ single candle in a `dim` parlour lights all 32 cells to `dim` and its falloff
 is invisible. All three want one answer.
 
 ### 1.120 Outdoors, ordinary speech is `full` only inside about five paces — a constants decision
+
+**TAKEN AND LANDED 2026-09-05.** The owner accepted the recommendation
+below in full: `AMBIENT["open"]` 0.2 → 0.1 (27.0 → 30.0 dB, level with
+`sheltered`) and `WEATHER_NOISE` light/moderate/heavy 0.3/0.6/1.0 →
+0.1/0.25/0.5, and nothing else — `WIND_NOISE` deliberately unmoved, because
+wind you have to raise your voice over is what wind is. Landed with the
+test § 1.120 asked for (`tests/test_sound_field.py::
+test_a_road_is_a_road_you_can_walk_and_talk_down`). Measured after, for a
+normal voice, `full` radius in paces: fair 5.4 → **7.7**, light rain 3.3 →
+**5.4**, moderate 2.5 → **4.0**, heavy 2.0 → **3.0**, heavy + gale 1.3 →
+**1.7**. A road you can walk and talk down, and a downpour you have to raise
+your voice in.
+
+It interacts with the far field built the same day
+(`DESIGN_SOUND_DECIBELS.md`) in one direction only, and less than expected:
+the flood's TERMINATION is bounded by the quietest floor the model has,
+which is `AMBIENT["enclosed"]` and did not move, so a `catastrophic` event
+still reaches exactly 51 medium rooms of open doorways and no further. What
+changed is what an OPEN room can hear of it — audible in 43 → **48** of
+those rooms in fair weather, and 37 → **43** in light rain.
+
+The rest of this entry is the measurement and the argument as they stood
+before the decision, kept because the decision is only legible against them.
 
 **Found 2026-09-05** (`docs/experiments/PLAY_2026_09_05_road.md` § PD2),
 measured again here against the constants as they stand. NOT a bug: the
@@ -5867,7 +5912,7 @@ an errand at all. PB12 (the institution never ticks at conversational pace)
 is the reason either answer matters: at ~18 story-seconds a beat no charter
 window is ever charged, so even a dispatched errand would not walk.
 
-### 1.122 The Director cannot dispatch an errand to an institution (PB13)
+### 1.124 The Director cannot dispatch an errand to an institution (PB13)
 
 **Found 2026-09-05** (`docs/experiments/PLAY_2026_09_05_caravanserai.md` §
 PB13), registered rather than built: the shape needs `llm/schemas.py`, which
@@ -5919,6 +5964,59 @@ route_scene_placements` before the merge, `apply_scene_placements` inside
   collapsing it to a position would undo the property that makes it worth
   narrating. Keep the clause as a companion if the channel is built, so a
   beat that narrates an order without writing one is told.
+
+### 1.125 The decibel constants: a wall's loss, two new rungs, and three margins
+
+**Built 2026-09-05** (`docs/design/DESIGN_SOUND_DECIBELS.md`). The model is
+denominated in decibels, a wall has a finite transmission loss, and a sound
+over 70 dB floods the room graph until it is inaudible. The conversion was
+exactly identity — 12,685 tests unchanged — so everything below is a NEW
+number, and every one of them is the owner's.
+
+**Taken as the note proposed, and pinned:** `WALL_LOSS_DB` 45,
+`FLOOR_CEILING_LOSS_DB` 50, `FAR_FIELD_ENTRY_DB` 70, `SOUND_DB`
+`thunderous` 85 / `catastrophic` 100. **New, not in the note, and named
+here because every cap in this engine is named:** `DB_REF` 40 (the
+reference; arbitrary, and it cancels out of every comparison but the
+absolute floor and the far-field entry), `OVERWHELMING_MARGIN_DB` 20 (where
+a distant sound stops being something you notice), `MAX_SENSORY_EVENTS` 8
+(one-off sounds one beat may hold), `_DB_EPS` 1e-12 dB (arithmetic, not a
+judgement: measured at seventy times the worst error a logarithm introduces
+at an exact threshold).
+
+**The one decision this work could not take.** At 45 dB the wall does half
+of what the note claims. Measured, medium rooms, enclosed, floor 27.0 dB:
+
+| | one wall | two walls |
+|---|---|---|
+| shout (60.8 dB) | inaudible | inaudible |
+| deafening (61.8) | inaudible | inaudible |
+| thunderous (85) | 18.4 dB — inaudible | inaudible |
+| catastrophic (100) | 33.4 dB — **heard** | inaudible |
+
+"A shout is inaudible through it" holds. "A `catastrophic` event is a
+fragment two rooms away" holds through doorways and NOT through walls: only
+the top rung crosses a wall, and only one wall. The three numbers that
+decide this are the wall's loss, the top rung, and the per-room spreading
+term, and moving any of them moves the answer.
+
+**Recommendation, for the owner to take or refuse.** Leave 45 dB and accept
+that a wall is nearly absolute — it is the physical number for masonry, and
+"one wall stops all but the loudest thing in the world" is a defensible
+sentence about a building. If the note's sentence is the one that matters,
+`WALL_LOSS_DB` 18 makes both halves true (a shout still dies at one wall; a
+catastrophic event is a fragment at two) at the cost of a wall that a
+`thunderous` sound also crosses. Do NOT reach for raising `catastrophic`
+instead: it is already 38 dB over `deafening`, and stretching it further
+compresses everything under it into one rung. **Test to land with whichever
+is chosen**: two enclosed medium rooms joined by a `wall`, a `catastrophic`
+event in one ⇒ heard in the other; a `shout` ⇒ not.
+
+**And one measurement worth a play test before anything is moved:** a
+`catastrophic` event crosses about 50 medium rooms of open doorways before
+it terminates on audibility, and a `thunderous` one about 28. That is the
+owner's sentence working — an incredibly loud noise travels very far — and
+it is also the number most likely to feel wrong in a town.
 
 ## 2. Roadmap
 

@@ -824,6 +824,55 @@ def _place_orphan_mints(ctx, cid, sc, diff):
     return placed
 
 
+def _record_sensory_events(ctx, cid, sc, diff, turn_idx):
+    """A NOISE IS AN EVENT, AND AN EVENT IS OVER WHEN THE BEAT IS.
+
+    The other half of `_report_started_sources` below, and the half that was
+    missing (`docs/UNBUILT.md` § 1.117): that one tells the Director about a
+    switch a beat threw so the next beat can throw it back, because until
+    today a one-off sound had nowhere else to go. `state_diff.sensory_events`
+    is the somewhere. A stroke, a shot, a crash, a cry: written by the
+    objects hand into the beat's own record, heard where it happened by
+    whoever was there, spread past the near field by
+    `spatial_sound_field.distant_sounds` when it is loud enough to travel,
+    and GONE when the beat is -- because the record carries the beat that
+    wrote it and every reader asks for a beat.
+
+    Nothing decays and nothing expires on a counter: the beat number is the
+    lifetime, which is the one rule that cannot get the class wrong.
+    """
+    from world.spatial import (MAX_SENSORY_EVENTS, normalize_sensory_event,
+                               SENSORY_EVENTS_KEY)
+    incoming = (diff or {}).get("sensory_events")
+    rooms = sc.get("rooms") if isinstance(sc.get("rooms"), dict) else {}
+    kept, dropped = [], []
+    for event in (incoming if isinstance(incoming, list) else []):
+        record = normalize_sensory_event(event, rooms=rooms)
+        if record is None:
+            dropped.append(event)
+            continue
+        kept.append(record)
+        if len(kept) >= MAX_SENSORY_EVENTS:
+            break
+    if kept:
+        sc[SENSORY_EVENTS_KEY] = {"beat": int(turn_idx), "events": kept}
+    else:
+        # Not "leave the old one": a beat that made no noise is a beat with
+        # no noise in it, and a record left standing is exactly the fog bell
+        # again one indirection further out.
+        sc.pop(SENSORY_EVENTS_KEY, None)
+    for event in dropped:
+        room = ""
+        if isinstance(event, dict):
+            room = str(event.get("room") or event.get("room_id")
+                       or event.get("source_room") or "")
+        ctx.warnings.append(
+            "A sensory event was dropped: it names %s, which is not a room "
+            "this scene holds. A sound happens somewhere."
+            % (repr(room) if room else "no room"))
+    return kept
+
+
 def _report_started_sources(ctx, cid, sc, diff, turn_idx):
     """AN EVENT IS NOT A STATE, AND THE BEAT THAT THROWS A SWITCH IS TOLD SO.
 
@@ -1724,6 +1773,7 @@ def prepare_scene_commit(ctx):
     _fold_duplicate_mints(ctx, cid, sc, prev_scene, diff)
     _place_orphan_mints(ctx, cid, sc, diff)
     _report_started_sources(ctx, cid, sc, diff, _turn_idx)
+    _record_sensory_events(ctx, cid, sc, diff, _turn_idx)
     sc[BEAT_KEY] = _turn_idx + 1
     # THE LAYOUT LINT, under the same once-on-appearance rule
     # (`world/spatial_lint.py`, DESIGN_ROOM_FIDELITY §3): a reciprocal bearing

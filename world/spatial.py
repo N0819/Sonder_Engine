@@ -218,7 +218,7 @@ from world.spatial_senses import (
     crossing_visible_from, has_visual, hear_level, HEARING_LEVELS,
     is_alarming, normalize_scene_comms, scent_level, SCENT_LEVELS,
     sense_acuity_offset, sense_adjusted, sense_entry, sense_range_class,
-    sight_level, sound_bearing, sound_path, sound_walk_level,
+    sight_level, sound_bearing, sound_bearing_via, sound_path, sound_walk_level,
     spatial_rel_between, visual_level_between,
 )
 
@@ -282,6 +282,19 @@ from world.spatial_sound_field import (
     sound_passes, sound_shape, sound_sources, SOUND_LEVELS, SOUND_POWER,
     SoundField, SPEECH_POWER, SPEECH_VOLUMES, spread, stamp_sound_relation,
     steadiness_this_beat, VOICE_ONE_PACE, WEATHER_NOISE, WIND_NOISE,
+    # Decibels: the denomination (DESIGN_SOUND_DECIBELS.md, 2026-09-05).
+    AMBIENT_DB, APERTURE_LOSS_DB, db_of_power, db_ratio, DB_REF, event_db,
+    FRAGMENT_SNR_DB, FULL_SNR_DB, HEAR_FLOOR_DB, loss_db_at, noise_word_db,
+    OCCLUDER_LOSS_DB, power_of_db, quantise_hearing_db, SOUND_DB, SPEECH_DB,
+    spreading_loss_db, VOICE_ONE_PACE_DB, WEATHER_NOISE_DB, WIND_NOISE_DB,
+    # The far field: a very loud sound on the room graph.
+    _inaudible_everywhere_db, DISTANT_LEVELS, distant_level_word,
+    distant_sounds, FAR_FIELD_ENTRY_DB, far_field_graph, far_field_sources,
+    FLOOR_CEILING_LOSS_DB, OVERWHELMING_MARGIN_DB, room_sound_flood,
+    room_span, WALL_LOSS_DB,
+    # A sound that HAPPENS: the beat-scoped event channel.
+    beat_sensory_events, MAX_SENSORY_EVENTS, normalize_sensory_event,
+    SENSORY_EVENTS_KEY,
 )
 
 
