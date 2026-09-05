@@ -7614,18 +7614,22 @@ patch in a file another hand was editing that day:
   "at the sill" spoke from three cells away. `stationable` already lists the
   implicit anchor; the hands do not use it. Prompt, or fold a hand-written
   anchor whose desc names an exit onto that exit's implicit anchor.
-- **A refused walk is recorded by nothing the merge can read (PC7, half
-  built).** `spatial.merge_scene_with_diff` now consumes
+- **A refused walk leaves nothing behind (PC7, BUILT 2026-09-05, both
+  halves).** `spatial.merge_scene_with_diff` consumes
   `state_diff.movement_refused` -- `[{subject, to_room}]` -- and subtracts
-  that body's position, station and pose from the beat, so a move that did
-  not happen leaves nothing behind. NOTHING WRITES THE CHANNEL YET: the
-  movement backstop (`agents/director.py`, the `Blocked movement` branch and
-  the `stranded` companions beside it) must append one record per body at the
-  moment it pops the position, and until it does, manor turn 13's committed
-  pose ("standing on the flagged floor of the long gallery" for a body
-  refused entry to the gallery) still stands. The second half of PC7's own
-  fix -- walking the passable PREFIX of a declared path, so a refusal is
-  "she got as far as the hall" -- is F28's rule and is not this.
+  that body's position, station and pose from the beat; `director._refuse_movement`
+  writes one record per body at the moment the `Blocked movement` branch pops
+  the position, for the declarer and for each `stranded` companion the same
+  beat sent to the same destination. Manor turn 13's committed pose
+  ("standing on the flagged floor of the long gallery" for a body refused
+  entry to the gallery) cannot recur. What remains open is the SECOND half of
+  PC7's own fix, which is F28's rule and not this: walking the passable
+  PREFIX of a declared path, so a refusal reads "she got as far as the hall"
+  rather than "she never set out". Every measured case of that class is
+  F28/PA12/PE2 -- PE2 is the sharpest (four of six declared inter-room moves
+  in an ordinary flat never committed, because one door on the path was
+  shut), and the proposed rule is that a route whose only impassable edges
+  are `closed_door` is CONTESTED, not blocked.
 - **One whisper, two grades in one beat (F61).** The act stage's
   deterministic floor grades speech through `hear_level`'s edge model (same
   room, whisper, near -> fragment); the outcome's delivery grades it through

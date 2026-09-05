@@ -2930,6 +2930,30 @@ class CampaignInvariantError(RuntimeError):
     """
 
 
+def _refuse_movement(sd, subject, to_room):
+    """Record that this beat refused to move `subject` to `to_room`.
+
+    One entry per body held back, written at the moment the backstop pops
+    the position, so the merge can subtract everything else the beat wrote
+    for a journey that did not happen (`spatial_merge._refused_movers`).
+    Idempotent by (subject, room): the mover can be reached by both the
+    declarer branch and the stranded-companion sweep, and a body refused
+    twice was still refused once.
+    """
+    name = str(subject or "").strip()
+    room = str(to_room or "").strip()
+    if not name:
+        return
+    records = sd.setdefault("movement_refused", [])
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+        if (str(record.get("subject") or "").strip().casefold() == name.casefold()
+                and str(record.get("to_room") or "").strip() == room):
+            return
+    records.append({"subject": name, "to_room": room})
+
+
 def director_resolve(ctx, nonce, _corrections=None):
     from persist.commit import presence_name_items
     chat = ctx.chat
@@ -4059,6 +4083,16 @@ def director_resolve(ctx, nonce, _corrections=None):
             # a blocked route must strip it, not just warn.
             if sd["positions"].get(move_subject) == mv["to_room"]:
                 sd["positions"].pop(move_subject)
+            # SAY WHAT WAS REFUSED, so nothing written for the journey it
+            # did not make survives it. Popping the position leaves the
+            # rest of the beat's writing for that body standing: the manor
+            # run of 2026-09-05 (PC7) held a body in the hall and kept the
+            # pose that had her seated in the gallery, so the ledger posed
+            # her in a room she never entered. `state_diff.movement_refused`
+            # is the merge's channel for exactly that (`_refused_movers`),
+            # and it is engine-authored: a body named here is a body that
+            # did not move, which subtracts and cannot invent an arrival.
+            _refuse_movement(sd, move_subject, mv["to_room"])
             # AND EVERYONE ELSE THE SAME BEAT SENT THERE.
             #
             # The block above protects ONE body. Nobody else's position is
@@ -4088,6 +4122,7 @@ def director_resolve(ctx, nonce, _corrections=None):
             ]
             for subject in stranded:
                 sd["positions"].pop(subject, None)
+                _refuse_movement(sd, subject, mv["to_room"])
             if stranded:
                 ctx.warnings.append(
                     "Blocked movement also held back "
