@@ -1428,7 +1428,13 @@ def _presence_bodies(ctx, sc, rooms, chatter):
     who has not met them. What changes is that the guards get to run at all.
     """
     rows, seen = [], set()
-    for room in dict.fromkeys(r for r in rooms if r):
+    # The observed rooms AND the rooms `room_field` lays beyond their open
+    # doorways: a body standing in the next room is in the observer's line
+    # exactly as a cast member there is, and is graded by the same doorway
+    # cone (`presence_percepts`' "beyond" tier). Nothing further is laid.
+    from world.charter_place import lay_charter_bodies, rooms_in_frame
+    placements, keys = {}, {}
+    for room in rooms_in_frame(sc, rooms):
         for row in presence_figures_for_room(
                 ctx.chat.id, sc, room, chatter,
                 turn_idx=ctx.turn.idx,
@@ -1437,7 +1443,17 @@ def _presence_bodies(ctx, sc, rooms, chatter):
             if not name or name.casefold() in seen:
                 continue
             seen.add(name.casefold())
-            if not room_of(sc, name):
+            placed = row.get("placement") if isinstance(
+                row.get("placement"), dict) else None
+            if placed and not room_of(sc, name):
+                # AT ITS CELL, not merely in its room: the positions row,
+                # the station and the facing `world.charter_place` derived,
+                # laid on this stage's copy under the record's own name so
+                # `visual_level_between`, `body_visibility`, `light_at` and
+                # the sound field read it as they read a cast body's.
+                placements[placed["uid"]] = placed
+                keys[placed["uid"]] = name
+            elif not room_of(sc, name):
                 sc.setdefault("positions", {})[name] = row["room"]
             rows.append({
                 "name": name, "room": row["room"],
@@ -1462,6 +1478,8 @@ def _presence_bodies(ctx, sc, rooms, chatter):
                 "disguise_known_to": [],
                 "disguise_conceals_identity": False,
             })
+    if placements:
+        lay_charter_bodies(sc, placements, keys=keys)
     return rows
 
 

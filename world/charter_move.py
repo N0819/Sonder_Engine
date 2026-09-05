@@ -178,7 +178,14 @@ def _advance(body_key, body, neighbors, travelled, walked):
         edges = own.setdefault(here, {})
         edges[nxt] = int(edges.get(nxt) or 0) + 1
     body = dict(body)
-    body["place"] = route[leg] if route else str(body.get("place") or "")
+    was = str(body.get("place") or "")
+    body["place"] = route[leg] if route else was
+    if body["place"] != was:
+        # A within-room station is a fact about ONE room -- an anchor of it,
+        # a cell of its grid -- so a leg into another room leaves it behind,
+        # exactly as `world.spatial.invalidate_moved_body_cells` drops a
+        # scene body's pinned cell on a room change (`charter_place` rule i).
+        body.pop("station", None)
     if route and leg == len(route) - 1:
         body.pop("walk", None)
     else:
@@ -393,6 +400,64 @@ def homecomings(bodies, watch, visits):
         if berth and str(body.get("place") or "") != berth:
             out[key] = berth
     return out
+
+
+# ------------------------------------------------- the scene's own movement
+
+def place_body(registry, charter_key, body_key, room):
+    """The SCENE moved this body: land it. Returns the registry (mutated).
+
+    Not `relocate`/`walk`, on purpose. Those dispatch a body along a route
+    the charter planned and pay for it window by window; a Director
+    `positions` entry naming a townsperson is a fact the beat already
+    resolved -- she is in the next room NOW -- so nothing is walked and no
+    route may compete with what the scene just did: the walk (and the errand
+    riding it) is dropped and the body stands where the scene put it. The
+    station goes with it, as on every other `place` write (`_advance`): an
+    anchor or a cell of the old room names nothing in the new one. The
+    charter stays the ONE owner of `place` -- the scene keeps no positions
+    row for an unpromoted body (`world/charter_place.py`).
+
+    The authoring seam the World Browser's map will call to drag a body
+    between rooms (`docs/UNBUILT.md`, the charter-placement follow-up); the
+    commit reaches it through `charter_runtime.apply_scene_placements`.
+    """
+    item = ((registry or {}).get("items") or {}).get(str(charter_key))
+    body = ((item or {}).get("state") or {}).get("bodies", {}).get(str(body_key)) \
+        if item else None
+    if body is None:
+        return registry
+    room = str(room or "")
+    if room and room != str(body.get("place") or ""):
+        body["place"] = room
+        body.pop("station", None)
+    body.pop("walk", None)
+    body.pop("errand", None)
+    return registry
+
+
+def station_body(registry, charter_key, body_key, station):
+    """Where in its place this body stands, authored: ``{"at": anchor}`` or
+    ``{"cell": [x, y]}``, optionally with ``near`` and ``facing``
+    (`charter_model.normalize_body_station`); ``None`` clears it and the
+    body falls back to the post's anchor or its dealt cell
+    (`world/charter_place.py` rules ii/iv). Returns the registry (mutated).
+
+    The within-room half of the authoring seam `place_body` is the room half
+    of; the map's drop onto a cell or a fixture lands here."""
+    from .charter_model import normalize_body_station
+
+    item = ((registry or {}).get("items") or {}).get(str(charter_key))
+    body = ((item or {}).get("state") or {}).get("bodies", {}).get(str(body_key)) \
+        if item else None
+    if body is None:
+        return registry
+    normalized = normalize_body_station(station) if body.get("place") else None
+    if normalized:
+        body["station"] = normalized
+    else:
+        body.pop("station", None)
+    return registry
 
 
 def furthest_travelled(travelled, limit=5):

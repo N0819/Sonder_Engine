@@ -59,6 +59,7 @@ from .charter_model import (
     LEVEL_MIN,
     meets,
     normalize_body,
+    normalize_body_station,
     normalize_charter,
     normalize_competence,
     normalize_post,
@@ -109,7 +110,12 @@ from .charter_mark import (
 )
 from .charter_move import (
     ERRAND_RATE, WALK_ROOMS_PER_HOUR, continue_walks, en_route, errands,
-    furthest_travelled, homecomings, relocate, walk, walked_edges)
+    furthest_travelled, homecomings, place_body, relocate, station_body,
+    walk, walked_edges)
+from .charter_place import (
+    charter_placements, lay_charter_bodies, placement_uid,
+    placements_from_slices, resolve_scene_placements, rooms_in_frame,
+    scene_with_charter_bodies)
 from .charter_temper import (
     SPREAD,
     TRAITS,
@@ -455,11 +461,21 @@ __all__ = [
     "spend_reluctance",
     "summarize",
     "travel_rooms",
+    "charter_placements",
+    "lay_charter_bodies",
+    "place_body",
+    "placement_uid",
+    "placements_from_slices",
+    "resolve_scene_placements",
+    "rooms_in_frame",
+    "scene_with_charter_bodies",
+    "station_body",
     "window_note",
     "witnessed",
     "hours_until_floor",
     "meets",
     "normalize_body",
+    "normalize_body_station",
     "normalize_charter",
     "normalize_competence",
     "normalize_post",

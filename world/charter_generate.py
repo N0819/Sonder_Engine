@@ -101,7 +101,10 @@ repeat, and none describing an individual the lore names. stature, build,
 gait, complexion and age are words that stand before a noun; hair and marks
 are the thing itself. Each post may carry worn:[] (what its holders visibly
 wear at the work) and marks:[] (what the work leaves on a body); supply them
-where the trade shows on the person and omit them where it does not.
+where the trade shows on the person and omit them where it does not. A post
+may also carry anchor: the id of one of its place's fixtures -- where in the
+room the duty is stood, as one of that room's anchors; omit it where the
+duty is stood anywhere in the room.
 Economy is strictly id-keyed:
 goods:{good:{label,base_value,unit}}, stocks:{holder:{good:lots}}, targets:
 {holder:{good:{minimum,desired,capacity}}}, flows:{id:{holder,good,kind:

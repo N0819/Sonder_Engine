@@ -880,6 +880,25 @@ def prepare_scene_commit(ctx):
             frame_id=getattr(getattr(ctx, "turn", None), "frame_id", None))
     except Exception as exc:  # the scene must commit without the town
         ctx.add_warning("charter carriers unavailable to the merge: %s" % exc)
+    # A DIRECTOR MOVE OF A TOWNSPERSON IS THE REGISTRY'S TO LAND, NOT THE
+    # SCENE'S. `merge_scene_with_diff` updates the position map blind, so a
+    # `positions`/`stations` entry naming a charter body -- which the scene
+    # stands nowhere -- would commit as a second row disagreeing with the
+    # body's `place` from the next beat on. Routed instead
+    # (`world.charter_place.resolve_scene_placements`): the entries are
+    # stripped from this copy of the diff here, and `commit_scene` lands
+    # them on the body record inside the transaction
+    # (`charter_runtime.apply_scene_placements`), so `place` stays the ONE
+    # owner of the room and `station` of the within-room position.
+    _charter_placements = {"moves": [], "stations": [], "names": []}
+    try:
+        from world.charter_runtime import route_scene_placements
+
+        _charter_placements = route_scene_placements(
+            cid, diff, prev_scene,
+            frame_id=getattr(getattr(ctx, "turn", None), "frame_id", None))
+    except Exception as exc:  # the scene must commit without the town
+        ctx.add_warning("charter placements not routed: %s" % exc)
     sc = merge_scene_with_diff(
         prev_scene, diff, contact_report=_contact_report,
         substance_report=_substance_report.append,
@@ -1519,6 +1538,10 @@ def prepare_scene_commit(ctx):
             cid, chat.lorebook_id, prev_scene, sc),
         "frontier_mutations": _frontier_mutations,
         "destruction": destruction,
+        # The Director's `positions`/`stations` entries that named a charter
+        # body, stripped from `diff` above and landed on the registry by
+        # `commit_scene` (`charter_runtime.apply_scene_placements`).
+        "charter_placements": _charter_placements,
         # `{region_id: name}` the region registry must hold for this scene's
         # rooms: folded zones and Director-declared regions, named as written.
         "regions": _region_entries,
@@ -1551,8 +1574,21 @@ def commit_scene(ctx, nonce, *, prepared=None):
         if prepared.get("destruction"):
             _apply_destruction(
                 ctx.chat.id, ctx.turn.id, prepared["destruction"])
+        _apply_charter_placements(ctx, prepared.get("charter_placements"))
         _record_subject_last_seen(ctx, sc, prepared.get("clock"))
     return sc
+
+
+def _apply_charter_placements(ctx, routing):
+    """Land the beat's routed townsperson moves and stations on the charter
+    registry (`charter_runtime.apply_scene_placements`), in the scene
+    domain's own transaction so a rollback takes them with the scene. A
+    beat that moved nobody costs no registry parse."""
+    routing = routing if isinstance(routing, dict) else {}
+    if not routing.get("moves") and not routing.get("stations"):
+        return 0
+    from world.charter_runtime import apply_scene_placements
+    return apply_scene_placements(ctx.chat.id, routing, ctx.turn.frame_id)
 
 
 def _record_subject_last_seen(ctx, sc, clock):

@@ -626,6 +626,12 @@ def _present_figure_rows(figures, answers=None, cap=24):
             row["kind"] = f["kind"]
         if f.get("brief"):
             row["brief"] = f["brief"]
+        # Where in the room the body stands (`world.charter_place`): at a
+        # fixture, or at a cell of the room's grid -- so the hands can say
+        # who is beside what, and so a `stations` entry for the body lands
+        # on the same vocabulary (`stations`' own `at`).
+        if f.get("station"):
+            row["station"] = f["station"]
         if answers and f.get("name") in answers:
             row["answers"] = answers[f["name"]]
         rows.append(row)
@@ -3186,10 +3192,10 @@ def director_resolve(ctx, nonce, _corrections=None):
     _reserved_figures = []
     _figure_answers = {}
     _dwellings = []
+    _fig_rooms = set()
     try:
         from .common import present_charter_figures
         from world.spatial import ambient_scope
-        _fig_rooms = set()
         if ctx.get("_player_room"):
             _fig_rooms.add(str(ctx.get("_player_room")))
             _nearby, _ = ambient_scope(sc, str(ctx.get("_player_room")))
@@ -4211,8 +4217,24 @@ def director_resolve(ctx, nonce, _corrections=None):
                 subject for subject, room in (sd["positions"] or {}).items()
                 if room == mv.get("to_room")
                 and room_of(sc, subject) == subject_prev_room)
+    # THE TOWN'S PEOPLE, AT THEIR CELLS. A charter body has no positions row
+    # in the stored scene, so the floor could not read its origin and never
+    # route-checked a move of one: the Director could walk a townsperson
+    # through a wall and nothing objected. The view (`world.charter_place`)
+    # stands every unpromoted body in the rooms this beat is about -- and
+    # the rooms beyond their doorways -- so the same floor judges the same
+    # route for a townsperson as for a cast member. Read-only: the view is a
+    # copy, and the merge below is the floor's own scratch merge.
+    _route_sc = sc
+    try:
+        from .common import charter_view_for_rooms
+        _route_sc, _charter_keys = charter_view_for_rooms(
+            chat["id"], sc, _fig_rooms, frame_id=ctx.turn.frame_id)
+        _bodies.extend(_charter_keys)
+    except Exception:
+        _route_sc = sc
     for _body, _from, _to in _unreachable_position_writes(
-            sc, merge_scene_with_diff(sc, sd), sd["positions"],
+            _route_sc, merge_scene_with_diff(_route_sc, sd), sd["positions"],
             _bodies, exempt=_spared):
         sd["positions"].pop(_body, None)
         ctx.add_warning(

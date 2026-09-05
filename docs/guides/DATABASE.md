@@ -257,7 +257,13 @@ removed. Do not delete the body itself—rosters, watches, standing and service
 history still refer to its durable key, and the character may continue to hold
 office. `background_presences[].charter_refs` contains only stable
 `{charter,body}` references; the Charter registry remains the identity and
-state authority.
+state authority. Two optional fields since 2026-09-05
+(`docs/design/DESIGN_CHARTER_PLACEMENT.md`): `posts.<key>.anchor` names a
+fixture of the post's place where the duty is stood, and `bodies.<key>.station`
+(`{at}` or `{cell:[x,y]}`, optionally `near`/`facing`) is the body's authored
+within-room position, cleared by every writer of `place`. Both ride the one
+Charter blob; neither is a positions row -- the scene never stores a position
+for an unpromoted body, and the derived placement view is never persisted.
 
 A generated authored resident additionally carries `resident_seed_id` on its
 body. It is placement identity only, never cognition and never a card payload;

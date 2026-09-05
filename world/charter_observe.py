@@ -53,12 +53,14 @@ def _is_concealed(evidence, forms):
 
 
 def _observer_scene(scene, observer, place):
-    """A view copy placing the unpromoted body without mutating scene.
+    """The room-only fallback: a view copy standing the observing body in its
+    ``place`` with no within-room position, for a body `charter_placements`
+    could not place (its place is no room the scene holds).
 
-    Charter owns this body's position until promotion, so it usually has no
-    scene.positions row.  Sight still belongs to the same spatial primitive;
-    adding the observer's one known position to a shallow scene copy lets that
-    primitive answer without inventing a second geometry implementation.
+    Until 2026-09-05 this was the ONLY way a charter body ever met the sight
+    primitive -- a bare positions row for the observer alone, graded by room
+    and never by line or by the light on its own cell. `observer_view`
+    replaces it wherever the body has a cell to stand at.
     """
     viewed = dict(scene or {})
     viewed["positions"] = dict((scene or {}).get("positions") or {})
@@ -66,8 +68,35 @@ def _observer_scene(scene, observer, place):
     return viewed
 
 
-def body_receives_evidence(scene, body_key, body, roles, naming, evidence):
-    """Whether this body receives the exact public source."""
+def observer_view(charter, scene):
+    """``(viewed_scene, {body_key: positions key})`` for one charter: every
+    unbound body standing at its cell (`charter_place.charter_placements`
+    over every room the scene holds -- the evidence pass asks about every
+    body, not one observer's room), laid on a shallow copy of the scene the
+    stored scene never sees (`scene_with_charter_bodies`). The observing
+    body AND everyone else stand at their cells, so a townsperson's eye is
+    graded by line and light, and it listens at its cell."""
+    from world.charter_place import (charter_placements,
+                                     scene_with_charter_bodies)
+
+    if not isinstance(scene, dict) or not scene.get("rooms"):
+        return scene or {}, {}
+    placements = charter_placements(
+        {"items": {str(charter.get("key") or ""): {"state": charter}}}, scene)
+    keys = {p["body"]: p["key"] for p in placements.values()}
+    return scene_with_charter_bodies(scene, placements), keys
+
+
+def body_receives_evidence(scene, body_key, body, roles, naming, evidence,
+                           *, observer=None):
+    """Whether this body receives the exact public source.
+
+    ``observer`` is the key the body stands under in ``scene`` when the
+    caller has already laid it there (`observer_view`); absent, the body has
+    no within-room position and is stood in its ``place`` by room alone
+    (`_observer_scene`), which is every caller before the placement view
+    existed and the fallback for a place the scene does not hold.
+    """
     place = str((body or {}).get("place") or "")
     actor = str((evidence or {}).get("actor") or "")
     actor_room = str(room_of(scene or {}, actor) or "")
@@ -76,6 +105,7 @@ def body_receives_evidence(scene, body_key, body, roles, naming, evidence):
     forms = _identity_forms(body_key, body or {}, roles, naming)
     if _is_concealed(evidence or {}, forms):
         return False
+    placed = bool(observer) and room_of(scene or {}, str(observer)) == place
 
     if evidence.get("kind") in ("speech", "communication"):
         # A private comm reaches only its named endpoint.  Otherwise sound
@@ -86,14 +116,16 @@ def body_receives_evidence(scene, body_key, body, roles, naming, evidence):
                 and _names_body(evidence.get("target"), forms):
             return True
         rel = spatial_rel_between(
-            scene or {}, str(body_key), actor,
+            scene or {}, str(observer) if placed else str(body_key), actor,
             observer_room=place, target_room=actor_room)
         return hear_level(rel, evidence.get("volume") or "normal") == "full"
 
     if evidence.get("kind") == "action":
-        observer = f"__charter_observer__:{body_key}"
+        if placed:
+            return visual_level_between(scene, str(observer), actor) == "full"
+        stand_in = f"__charter_observer__:{body_key}"
         return visual_level_between(
-            _observer_scene(scene, observer, place), observer, actor) == "full"
+            _observer_scene(scene, stand_in, place), stand_in, actor) == "full"
     return False
 
 
@@ -386,11 +418,14 @@ def plan_public_evidence(charter, evidence_rows, scene, turn_id,
         role_map.setdefault(str(assigned), []).append(str(post))
 
     opportunities = acquired = 0
-    # Unpromoted bodies have no individual facing/station in the scene graph;
-    # for an overt source the sensory answer is therefore identical for every
-    # Charter body sharing a place.  Cache that answer by source+place so a
-    # thousand-person hall does not copy/re-evaluate the same scene a thousand
-    # times.  Targeted concealment remains per identity and bypasses the cache.
+    # Every unbound body stands at its cell on ONE view of the scene
+    # (`observer_view`), built once per plan. The sensory answer for an
+    # overt source is identical for two bodies standing at the same cell
+    # with the same facing in the same place, so the cache is keyed by that
+    # -- not by place alone, which was exact only while no body had a
+    # within-room position. Targeted concealment remains per identity and
+    # bypasses the cache.
+    viewed, observer_keys = observer_view(charter, scene)
     sensory_cache = {}
     recipients = {}
     receiving = []
@@ -418,13 +453,21 @@ def plan_public_evidence(charter, evidence_rows, scene, turn_id,
             roles = role_map.get(body_key) or ()
             cacheable = (str(evidence.get("visibility") or "overt").casefold()
                          != "concealed" and not evidence.get("conceal_from"))
+            observer = observer_keys.get(str(body_key))
+            stood = (viewed.get("stations") or {}).get(observer) or {} \
+                if observer else {}
             cache_key = (str(evidence.get("source_id") or ""),
-                         str(body.get("place") or ""))
+                         str(body.get("place") or ""),
+                         str(stood.get("at") or ""),
+                         tuple(stood.get("cell") or ()),
+                         str(((viewed.get("orientation") or {}).get(observer)
+                              or {}).get("facing") or "") if observer else "")
             if cacheable and cache_key in sensory_cache:
                 receives = sensory_cache[cache_key]
             else:
                 receives = body_receives_evidence(
-                    scene, body_key, body, roles, naming, evidence)
+                    viewed, body_key, body, roles, naming, evidence,
+                    observer=observer)
                 if cacheable:
                     sensory_cache[cache_key] = receives
             if not receives:
@@ -537,6 +580,6 @@ def apply_public_evidence(charter, evidence_rows, scene, turn_id,
 
 __all__ = [
     "PUBLIC_EVIDENCE_CAP", "apply_public_evidence", "body_receives_evidence",
-    "evidence_claim", "evidence_key", "evidence_phrase",
+    "evidence_claim", "evidence_key", "evidence_phrase", "observer_view",
     "plan_public_evidence", "resolve_target_body",
 ]

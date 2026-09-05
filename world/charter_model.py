@@ -176,6 +176,55 @@ def normalize_post(key, entry):
         out["worn"] = dress["worn"]
     if dress["marks"]:
         out["marks"] = dress["marks"]
+    # WHERE IN ITS PLACE THE DUTY IS STOOD, as one of the room's fixtures: the
+    # id of an anchor of ``place`` (`world/charter_place.py`). Optional, and
+    # FAIL-OPEN at the reader rather than validated here -- the normalizer
+    # cannot see the scene, and an anchor the room does not carry is simply
+    # ignored when the watch-holder is placed, never a lint. Kept only when
+    # authored, so a post written before the field existed is byte-identical.
+    anchor = " ".join(str(entry.get("anchor") or "").split())[:120]
+    if anchor:
+        out["anchor"] = anchor
+    return out
+
+
+def normalize_body_station(value):
+    """A body's authored within-room position (`world/charter_place.py`
+    rule i), or ``None``: ``{"at": anchor}`` or ``{"cell": [x, y]}`` (a
+    cell of its room's own grid, `world.spatial.normalize_cell`), either
+    optionally carrying ``near`` (bodies it stands beside, as spelled) and
+    ``facing`` (a compass bearing). Host-written -- the World Browser's map
+    or a Director ``stations`` entry routed at commit -- and cleared by every
+    writer of ``place`` (`charter_move.place_body`, `charter_move._advance`),
+    because a cell or an anchor names nothing in another room. Whether the
+    anchor or cell is one the room HOLDS is the reader's question, answered
+    fail-open there."""
+    if not isinstance(value, dict):
+        return None
+    from .spatial import normalize_bearing, normalize_cell
+    out = {}
+    at = " ".join(str(value.get("at") or "").split())
+    if at:
+        out["at"] = at
+    cell = normalize_cell(value.get("cell"))
+    if cell is not None:
+        out["cell"] = [cell[0], cell[1]]
+    near = value.get("near")
+    if isinstance(near, str):
+        near = [near]
+    if isinstance(near, (list, tuple)):
+        kept = []
+        for other in near:
+            other = " ".join(str(other or "").split())
+            if other and other not in kept:
+                kept.append(other)
+        if kept:
+            out["near"] = kept
+    if not out:
+        return None
+    facing = normalize_bearing(value.get("facing"))
+    if facing:
+        out["facing"] = facing
     return out
 
 
@@ -301,6 +350,14 @@ def normalize_body(key, entry):
                 "credit": max(0.0, number(rec.get("credit"), 0.0)),
                 "held": bool(rec.get("held", False)),
             }
+    # Where in its place the body stands (`normalize_body_station`,
+    # `world/charter_place.py` rule ii). Kept only when authored AND the body
+    # stands somewhere: a station is a fact about one room, so a body whose
+    # place is empty (dead, missing, departed) carries none.
+    station = normalize_body_station(entry.get("station")) \
+        if body["place"] else None
+    if station:
+        body["station"] = station
     return body
 
 
