@@ -28,7 +28,7 @@ from world.spatial import (
     visual_level_between,
 )
 
-_RANK = {"none": 0, "shapes": 1, "full": 2}
+_RANK = {"none": 0, "shapes": 1, "conduct": 2, "full": 3}
 
 
 def _scene(size="medium", light=None, distance=None, barrier="open_door",

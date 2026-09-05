@@ -190,6 +190,8 @@ from world.spatial_light import (
     _brighter, _LIGHT_ALIASES, _LIGHT_ORDER, _light_radius, _LIGHT_SIGHT,
     effective_light, light_at, light_blocks_sight, LIGHT_LEVELS,
     normalize_light, room_light, SIGHT_LEVELS, source_light,
+    unsourced_light_notices, unsourced_light_rooms,
+    UNSOURCED_LIGHT_NOTICE_ROOMS,
 )
 
 
