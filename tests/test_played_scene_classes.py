@@ -2209,3 +2209,306 @@ def test_a_pair_standing_together_can_hear_each_other():
     })
     rel = spatial_rel_between(sc, "Corin Ashe", "Sable")
     assert hear_level(rel, "normal") == "full"
+
+
+# ---------------------------------------------------------------------------
+# Four hands that could see something true and had no channel to say it
+# (the play runs of 2026-09-05). Each is the class, not the case:
+#
+#   * taking cover is a fact about which side of a fixture a body stands on,
+#     and the geometry has had a place for it since the prototype -- what was
+#     missing was the field reaching the geometry at all (manor § PC9);
+#   * a thing is hidden by something being between it and the room, and that
+#     something has a name; a sentence saying it is hidden is read by nothing
+#     (manor § PC5);
+#   * a room's own fixture is a contact endpoint like any other -- a body
+#     leans on it, sets its back against it (caravanserai § PB10);
+#   * one object, one name, whichever hand is speaking: a doorway answers to
+#     `door:<room>` for the hand that places bodies and for the hand that
+#     records touch alike (flat § PE12).
+# ---------------------------------------------------------------------------
+
+
+def _gallery(stations, extra_anchors=None):
+    """A lit 11x11 gallery with an opaque, head-high folding screen pinned
+    across the middle and a waist-high hearth to the south of it -- the shape
+    the manor's turn 15 was played on."""
+    anchors = {
+        "folding_screen": {"desc": "the folding screen", "dir": "n",
+                           "cell": [5, 5], "footprint": "run",
+                           "height": "head", "opacity": "opaque"},
+        "hearth": {"desc": "the hearth", "dir": "s", "cell": [5, 9],
+                   "height": "waist"},
+    }
+    anchors.update(extra_anchors or {})
+    return {
+        "rooms": {"gallery": {"name": "the long gallery", "light": "lit",
+                              "extent": {"w": 11, "d": 11}, "adjacent": [],
+                              "anchors": anchors}},
+        "positions": {name: "gallery" for name in stations},
+        "stations": {k: dict(v) for k, v in stations.items()},
+        "poses": {}, "orientation": {}, "entities": {}, "contained": {},
+    }
+
+
+def test_a_body_that_takes_cover_is_out_of_the_line_that_crosses_the_fixture():
+    """PC9. The station said WHERE (the screen) and nothing said WHICH SIDE,
+    so a body that stepped behind an opaque, head-high screen was judged by
+    sight, light and sound as standing in the open on the room's side of it.
+    """
+    from world.spatial import body_visibility
+
+    stations = {"Ada Quill": {"at": "folding_screen"},
+                "Edmund": {"at": "hearth"},
+                "Penrose": {"at": "alcove"}}
+    alcove = {"alcove": {"desc": "the alcove", "dir": "n", "cell": [5, 1],
+                         "height": "waist"}}
+
+    open_ = _gallery(stations, alcove)
+    assert body_visibility(open_, "Edmund", "Ada Quill")["fraction"] == 1.0
+
+    covered = dict(stations)
+    covered["Ada Quill"] = {"at": "folding_screen", "cover": "folding_screen"}
+    behind = _gallery(covered, alcove)
+
+    # The line that CROSSES the screen loses her, and names what took her.
+    across = body_visibility(behind, "Edmund", "Ada Quill")
+    assert across["visible"] is False and across["fraction"] == 0.0
+    assert across["occluded_by"] == "the folding screen"
+
+    # The line that does NOT cross it is untouched: cover is a fact about one
+    # fixture, not a cloak.
+    same_side = body_visibility(behind, "Penrose", "Ada Quill")
+    assert same_side["visible"] is True and same_side["fraction"] == 1.0
+
+
+def test_the_station_table_carries_the_cover_the_hand_was_told_to_write():
+    """The other half of PC9, and the whole of why the clause had no effect:
+    the spatial chunk has said `cover:true` or an anchor id since 2026-09-02
+    and `_coerce_station_table` kept only `at` and `near`, so the field never
+    survived the round trip into the merge.
+
+    A bare `true` is canonicalized against the `at` of the same entry, and
+    station hygiene keeps it honest across beats: stations merge PARTIALLY,
+    so left alone a cover would ride into the next station this body is given
+    and put it behind a fixture nobody ducked behind.
+    """
+    from llm.schemas import DirectorSpatialSpecialist, StateDiff
+    from world.spatial import merge_scene_with_diff
+
+    hand = DirectorSpatialSpecialist(
+        stations={"Ada Quill": {"at": "folding_screen", "cover": True}})
+    assert hand.stations["Ada Quill"]["cover"] == "folding_screen"
+
+    named = StateDiff(stations={"Ada Quill": {"at": "folding_screen",
+                                              "cover": "folding_screen"}})
+    assert named.stations["Ada Quill"]["cover"] == "folding_screen"
+
+    # ...and a station that says nothing about cover carries no `cover` key,
+    # which is exactly the record every scene has today.
+    plain = StateDiff(stations={"Ada Quill": {"at": "hearth"}})
+    assert "cover" not in plain.stations["Ada Quill"]
+
+    # Cover is about the fixture the body is AT, so stepping to another one
+    # leaves nothing to be behind and the merge cleans it -- the sibling of
+    # the stale `at` and the stale `near` that hygiene already clears.
+    behind = _gallery({"Ada Quill": {"at": "folding_screen",
+                                     "cover": "folding_screen"}})
+    assert behind["stations"]["Ada Quill"]["cover"] == "folding_screen"
+    moved = merge_scene_with_diff(
+        behind, {"stations": {"Ada Quill": {"at": "hearth"}}})
+    assert "cover" not in moved["stations"]["Ada Quill"]
+
+
+def _tower_and_gallery():
+    """A ledger authored inside a window seat, one open doorway from the
+    gallery the player is standing in -- the manor's turns 14 and 18."""
+    return {
+        "rooms": {
+            "tower": {"name": "the tower room", "light": "lit",
+                      "extent": {"w": 8, "d": 8},
+                      "adjacent": [{"to": "gallery", "barrier": "open",
+                                    "dir": "s"}],
+                      "anchors": {"window_seat": {"desc": "the window seat",
+                                                  "dir": "n"}}},
+            "gallery": {"name": "the long gallery", "light": "lit",
+                        "extent": {"w": 8, "d": 8},
+                        "adjacent": [{"to": "tower", "barrier": "open",
+                                      "dir": "n"}],
+                        "anchors": {}},
+        },
+        "positions": {"Ada Quill": "gallery", "estate_ledger": "tower"},
+        "stations": {}, "poses": {}, "orientation": {}, "contained": {},
+        "entities": {
+            "window_seat": {"name": "the window seat", "kind": "container",
+                            "container": True, "state": {"open": False}},
+            "estate_ledger": {
+                "name": "the estate ledger", "kind": "object",
+                "portable": True,
+                "scent": "old paper, binding paste, dry leather"},
+        },
+    }
+
+
+def test_a_thing_shut_inside_a_scene_object_is_revealed_by_opening_it():
+    """PC5. The ledger was authored `state: {concealment: "hidden inside the
+    locked tower window seat"}` -- a key no reader in the engine consults --
+    so its own scent reached the player a room away through a shut chest, and
+    the beat that opened the seat could only flip that string to "exposed",
+    which the reconciliation reported as prose the diff does not encode.
+
+    The record that carries the fact is the one the engine already keeps, and
+    every field subtracts from it for free. Revealing is RELEASING it, which
+    is what makes finding a hidden thing an act with a result.
+    """
+    import copy
+
+    from world.spatial import (hiding_holders_of, merge_scene_with_diff,
+                               scent_level, spatial_rel_between)
+
+    hidden = merge_scene_with_diff(copy.deepcopy(_tower_and_gallery()), {
+        "containment": {"estate_ledger": {"in": "window_seat",
+                                          "mode": "container"}}})
+    assert hiding_holders_of(hidden, "estate_ledger") == ["window_seat"]
+    # A carried thing has no position of its own: it is wherever its holder
+    # is, which is the room the seat stands in.
+    assert hidden["positions"]["estate_ledger"] == "tower"
+    shut = spatial_rel_between(hidden, "Ada Quill", "estate_ledger")
+    assert shut["concealed"] is True
+    assert scent_level(shut) != "full"
+
+    found = merge_scene_with_diff(copy.deepcopy(hidden), {
+        "containment": {"estate_ledger": None},
+        "entities": {"window_seat": {"state": {"open": True}}}})
+    assert hiding_holders_of(found, "estate_ledger") == []
+    assert found["positions"]["estate_ledger"] == "tower"
+    open_seat = spatial_rel_between(found, "Ada Quill", "estate_ledger")
+    assert not open_seat.get("concealed")
+    assert scent_level(open_seat) == "full"
+
+
+def _caravanserai(positions=None):
+    """A caravanserai common room whose counter is an ANCHOR and not an
+    entity, with a shut door onto the yard."""
+    return {
+        "rooms": {
+            "common_room": {
+                "name": "the common room", "light": "lit",
+                "extent": {"w": 10, "d": 10},
+                "adjacent": [{"to": "yard", "barrier": "closed_door",
+                              "dir": "e"}],
+                "anchors": {"counter": {"desc": "the long counter",
+                                        "dir": "w"}}},
+            "yard": {"name": "the yard", "light": "lit",
+                     "extent": {"w": 8, "d": 8},
+                     "adjacent": [{"to": "common_room",
+                                   "barrier": "closed_door", "dir": "w"}],
+                     "anchors": {}},
+        },
+        "positions": positions or {"Rasa Oren": "common_room"},
+        "stations": {}, "poses": {}, "orientation": {}, "contained": {},
+        "entities": {},
+    }
+
+
+def _touch(target, actor="Rasa Oren", part="elbows", manner="lean"):
+    return {"op": "add", "actor": actor, "actor_part": part,
+            "target": target, "target_part": "", "manner": manner,
+            "relation": "surface", "motion": "settled"}
+
+
+def test_a_contact_naming_a_rooms_own_fixture_lands():
+    """PB10. Three beats in a row the contact hand refused an ordinary act --
+    "counter is not an indexed entity; cannot record contact for elbows on
+    counter" -- with `counter` an anchor of the room the player stood in.
+    Even had it written the op, the merge would have dropped it: contact
+    hygiene asks `positions` where each endpoint is, and a fixture has no
+    position of its own.
+    """
+    import copy
+
+    from world.spatial import (contact_thing_label, contacts_of,
+                               effective_station, merge_scene_with_diff)
+
+    leaning = merge_scene_with_diff(copy.deepcopy(_caravanserai()),
+                                    {"contact_ops": [_touch("counter")]})
+    [contact] = contacts_of(leaning, "Rasa Oren")
+    assert contact["target"] == "counter" and contact["actor_part"] == "elbows"
+
+    # A body against the furniture is a body AT it: the station the hand
+    # never writes falls out of the ledger it does.
+    assert effective_station(leaning, "Rasa Oren")["at"] == "counter"
+
+    # And the room vouches for the fixture as a THING, so the identity floor
+    # that feeds the narrator does not mint a person out of it.
+    assert contact_thing_label(leaning, "counter") == "the long counter"
+
+    # Fail-open: a target no index names is as unrecordable as it was.
+    nothing = merge_scene_with_diff(copy.deepcopy(_caravanserai()),
+                                    {"contact_ops": [_touch("chandelier")]})
+    assert contacts_of(nothing, "Rasa Oren") == []
+
+
+def test_the_same_doorway_answers_to_both_hands_under_one_id():
+    """PE12. The interpret's contact hand refused ("door is not in
+    entity_names") while the resolve's wrote a contact whose target was a
+    ROOM ID and whose part was a prose label -- two vocabularies for one
+    object, so what one hand wrote the other could not read. The engine has
+    owned the name all along: `effective_anchors` contributes `door:<room>`
+    for every edge, which is the id the hand that places bodies already uses
+    for `at`.
+    """
+    import copy
+
+    from agents import director
+    from world.spatial import (contacts_of, effective_anchors,
+                               effective_station, merge_scene_with_diff)
+
+    scene = _caravanserai()
+    assert "door:yard" in effective_anchors(scene, "common_room")
+
+    # The hand that places bodies names it...
+    stationed = merge_scene_with_diff(
+        copy.deepcopy(scene), {"stations": {"Rasa Oren": {"at": "door:yard"}}})
+    assert effective_station(stationed, "Rasa Oren")["at"] == "door:yard"
+
+    # ...and the hand that records touch names the same object the same way.
+    against = merge_scene_with_diff(
+        copy.deepcopy(scene),
+        {"contact_ops": [_touch("door:yard", part="back", manner="rest")]})
+    [contact] = contacts_of(against, "Rasa Oren")
+    assert contact["target"] == "door:yard"
+
+    # Both because the contact hand is now SHOWN the id, beside the room's
+    # authored fixtures: it can no longer reach for a room id or a phrase.
+    payload = director._specialist_payload(
+        "contact", None, scene,
+        {"source": "resolved_beat", "player": "Rasa Oren", "cast": [],
+         "declared_actions": [], "dice": {}, "prose": "She leans back.",
+         "dialogue": [], "manifest": []},
+        {})
+    assert sorted(payload["anchors"]["common_room"]) == ["counter", "door:yard"]
+    assert payload["anchors"]["common_room"]["door:yard"]
+
+
+def test_a_beat_that_uses_none_of_these_writes_none_of_them():
+    """The freeze. Two bodies touching in a room with a fixture nobody
+    touched: no cover on any station, no containment record, and every
+    contact endpoint still a subject the scene positions -- the three new
+    paths are silent on a beat that does not reach for them.
+    """
+    import copy
+
+    from world.spatial import contacts_of, merge_scene_with_diff
+
+    scene = _caravanserai({"Rasa Oren": "common_room", "Yusra": "common_room"})
+    before = copy.deepcopy(scene)
+    after = merge_scene_with_diff(scene, {
+        "stations": {"Rasa Oren": {"at": "counter", "near": ["Yusra"]}},
+        "contact_ops": [_touch("Yusra", part="hand", manner="rest")],
+    })
+    assert all("cover" not in st for st in after["stations"].values())
+    assert after.get("contained") == before.get("contained") == {}
+    for contact in contacts_of(after, "Rasa Oren"):
+        assert contact["actor"] in after["positions"]
+        assert contact["target"] in after["positions"]

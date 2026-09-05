@@ -16,7 +16,7 @@ from story.character_schema import character_name_from_text
 from core.db import get_setting, wget
 from world.survival import survival_enabled, vitals_of
 from world.spatial import (contact_action_ledger_index, contact_id,
-                           substance_ledger_index)
+                           effective_anchors, room_of, substance_ledger_index)
 
 from .common import (communication_surface, observable_action_text,
                      scene_compact_attire)
@@ -282,6 +282,32 @@ def _note_for(notes, name):
                 return lowered[form]
     return None
 
+def _anchor_names(sc, whos):
+    """`{room_id: {anchor_id: what it is}}` for the rooms `whos` stand in.
+
+    The fixture half of a contact's target vocabulary (PB10/PE12). Derived
+    through `effective_anchors`, so a doorway the scene never authored as an
+    anchor is still nameable under the id every other reader already uses
+    (`door:<other room>`); the description is the anchor's own, falling back
+    to the id read as words. Empty when nothing places anybody, which is the
+    payload the hand had before.
+    """
+    out = {}
+    for who in whos:
+        room = room_of(sc, str(who or "")) if who else None
+        if not room or room in out:
+            continue
+        anchors = effective_anchors(sc, room) or {}
+        named = {
+            str(aid): (str((anchor or {}).get("desc") or "").strip()
+                       or str(aid).replace("_", " "))
+            for aid, anchor in anchors.items() if str(aid).strip()
+        }
+        if named:
+            out[room] = named
+    return out
+
+
 def _specialist_payload(name, ctx, sc, view, extras):
     """One specialist's scoped payload -- its written entitlement, applied
     to whichever stage's beat view it was handed. Shared part: the beat
@@ -452,6 +478,27 @@ def _specialist_payload(name, ctx, sc, view, extras):
             # cognition payload changes, and no other hand gains the keys.
             "substances": substance_ledger_index(sc),
             "contact_actions": contact_action_ledger_index(sc),
+            # THE ROOM'S OWN FIXTURES, NAMEABLE BY THE HAND THAT RECORDS
+            # TOUCH. A body leans on furniture, sets a hand on a counter and
+            # puts its back against a door all day in this engine, and this
+            # hand was structurally unable to say so: `entity_names` reaches
+            # the things the scene mints and stops there, while a room's
+            # fixtures live in its anchors -- the vocabulary `stations.at`
+            # already uses. Measured, caravanserai turns 3, 4 and 5 (PB10):
+            # three refusals in a row, "counter is not an indexed entity;
+            # cannot record contact", with `counter` an anchor of the room
+            # the player was standing in; and flat turn 9 (PE12), where the
+            # same gap for a doorway produced a contact whose target was a
+            # ROOM ID and whose part was a prose label, so what one hand
+            # wrote the other could not read.
+            #
+            # `effective_anchors`, so the implicit `door:<room>` doorway
+            # anchors are in it: one object, one name, whichever hand is
+            # speaking. Scoped to the rooms this beat's people are standing
+            # in, which is where a contact can happen at all -- no room
+            # graph, no barriers, no bearings, just what each fixture is
+            # called and what it is.
+            "anchors": _anchor_names(sc, [view["player"]] + list(view["cast"])),
         })
         if extras.get("body_parts"):
             payload["body_parts"] = extras["body_parts"]

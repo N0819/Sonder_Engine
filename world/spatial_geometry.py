@@ -1006,6 +1006,24 @@ def normalize_scene_stations(scene: dict) -> dict:
             st["at"] = None
         st["near"] = [n for n in (st.get("near") or [])
                       if _ci_get(positions, n) is not None and _ci_get(positions, n) == my_room]
+        # `cover` is about the fixture the body is AT (`_takes_cover`): it
+        # says the body stands on the far side of THAT anchor, so a station
+        # with no anchor has nothing to be behind. A cover NAMING a fixture
+        # is cleaned when the body is no longer at it -- a screen it has
+        # since walked away from, carried forward by the partial station
+        # merge -- the same way the stale `at` above and the stale `near`
+        # below are. A bare `true` is left exactly as written: it means
+        # "behind whatever I am at", which stays true of whatever the
+        # station now names, and it is the spelling the map editor writes
+        # (`web/world_routes.py`, the field the route does not own).
+        if "cover" in st:
+            cover = st.get("cover")
+            at = str(st.get("at") or "").strip()
+            if not at or not cover:
+                st.pop("cover", None)
+            elif cover is not True and cover != 1 \
+                    and str(cover).strip() != at:
+                st.pop("cover", None)
         # `cell`: kept as two whole numbers, dropped as anything else. Its
         # room-change invalidation is `invalidate_moved_body_cells`, which
         # needs the previous positions this function does not see.

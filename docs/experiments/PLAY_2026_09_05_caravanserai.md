@@ -447,6 +447,22 @@ than taught to tolerate a spelling. `docs/UNBUILT.md` § 1.48.
 **Severity: wrong-but-recoverable.** Origin: `director_contact`'s payload
 (`entity_names` / `contacts`), turns 4, 5, 3.
 
+**RESOLVED 2026-09-05, together with the flat run's PE12 -- they are one
+class.** The payload carries the room's `effective_anchors` beside
+`entity_names` (`director_fanout._anchor_names`, scoped to the rooms the
+beat's people stand in), and ONE clause states the class both findings are
+instances of: a target is named by the name the scene already holds it
+under, and the room's fixtures are in that list under the ids `stations.at`
+already uses. The half the proposal below did not see: even had the hand
+written the op, the merge would have dropped it in silence --
+`normalize_scene_contacts` asks `positions` where each endpoint is, and a
+fixture has no position of its own. It now resolves a fixture endpoint
+against the other endpoint's room, `contact_thing_label` vouches for it so
+the narrator's identity floor does not mint a person out of a counter, and
+`derive_scene_stations` stations the body at what it is leaning on for free.
+Pinned in
+`tests/test_played_scene_classes.py::test_a_contact_naming_a_rooms_own_fixture_lands`.
+
 Three beats in a row the contact specialist refused an ordinary act:
 
 * "contact specialist: Counter is not an indexed entity; cannot record contact
