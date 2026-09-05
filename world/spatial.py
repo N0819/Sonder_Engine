@@ -218,6 +218,7 @@ from world.spatial_senses import (
     _sound_barrier_phrases, _SOUND_LADDER,
     _SOUND_WALK_BARRIERS, _weaker_sight, apply_comms_ops, can_perceive,
     can_perceive_onset, comms_between, comms_link, COMMS_MODES, comms_reach,
+    COMMS_ATTENDED_ROOMS, comms_reachable_rooms,
     crossing_visible_from, has_visual, hear_level, HEARING_LEVELS,
     is_alarming, normalize_scene_comms, scent_level, SCENT_LEVELS,
     sense_acuity_offset, sense_adjusted, sense_entry, sense_range_class,
