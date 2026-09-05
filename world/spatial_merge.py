@@ -243,6 +243,11 @@ _ENTITY_DEFAULT_FIELDS = {
     # next beat, and None is what "not declared" already looks like.
     "light_shape": None,
     "light_height": None,
+    # The sound field's two entity fields (`world/spatial_sound_field.py`),
+    # listed for the same reason as `light_source` beside them: a machine
+    # re-declared without its emission must keep it, and a re-declaration
+    # that says nothing about steadiness must not reset a failing one.
+    "sound_source": None,
     "steadiness": None,
     # Listed for the same reason as the two above, and pre-emptively: a
     # `scent` outside this map is copied verbatim by the tail loop below, so
@@ -588,7 +593,10 @@ _ENTITY_STRUCTURAL_FIELDS = (
     # What the thing is made of and what it gives off are as durable as what
     # it is -- and were being lost whenever two records for one entity
     # collapsed, which is the other half of the same gap.
-    "enclosure", "light_source", "light_shape", "light_height", "steadiness",
+    "enclosure", "light_source", "light_shape", "light_height",
+    # ...and what it sounds like and whether it can be relied on, for the
+    # same reason (the sound field; `steadiness` is shared with light).
+    "sound_source", "steadiness",
 )
 
 

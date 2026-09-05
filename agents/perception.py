@@ -67,6 +67,7 @@ from world.spatial import (
     room_has_geometry,
     visual_level_between,
     hear_level,
+    heard_events,
     measured_proximity_rel,
     merge_scene_with_diff,
     neighbour_feature_visibility,
@@ -81,6 +82,8 @@ from world.spatial import (
     same_subject,
     spatial_rel,
     spatial_rel_between,
+    sound_field,
+    sound_notices,
     substance_event_clause,
     visible_adjacent_rooms,
 )
@@ -605,6 +608,7 @@ from .common import (
     _resolve_player_room,
     _room_notes_from_lore,
     _room_notes_for_view,
+    CROWDS_KEY,
     crowds_for_room,
     artifacts_for_room,
     chatter_for_room,
@@ -929,8 +933,23 @@ def _sense_card(sheet):
     return []
 
 
+def _sound_field_for(ctx, sc, name, room):
+    """One perceiver's sound field for this stage
+    (`world/spatial_sound_field.py`), or None where their room carries no
+    geometry -- in which case every hearing reader runs today's edge rules
+    unchanged. The turn index seeds the steadiness hash so a reroll hears
+    what the beat it replaces heard; the crowd ledger is read once per stage
+    and every perceiver's field shares it."""
+    crowds = ctx.get("_sound_crowds")
+    if crowds is None:
+        crowds = wget(ctx.chat.id, CROWDS_KEY, []) or []
+        ctx["_sound_crowds"] = crowds
+    return sound_field(sc, name, room=room,
+                       turn_idx=getattr(ctx.turn, "idx", None), crowds=crowds)
+
+
 def _source_channels(sc, perceiver_name, perceiver_room, sources,
-                     prev_sc=None, senses=None):
+                     prev_sc=None, senses=None, sound=None):
     """spatial_to_sources / visual_channel_to_sources for ONE perceiver.
 
     Concealment by containment belongs here rather than at the call sites. A
@@ -1002,9 +1021,13 @@ def _source_channels(sc, perceiver_name, perceiver_room, sources,
         # light of the room being LOOKED AT, and the hand-built form passed
         # (source_room, perceiver_room) -- grading sight of the source by the
         # light where the PERCEIVER stood (register L6).
+        # `sound` is this perceiver's sound field for the beat (crowds and
+        # the turn index included), built once by `_sound_field_for` and
+        # stamped onto every source relation here; None where the room
+        # carries no geometry, and the relation is then exactly as before.
         rel = spatial_rel_between(sc, perceiver_name, s["name"],
                                   observer_room=perceiver_room,
-                                  target_room=s["room"])
+                                  target_room=s["room"], sound=sound)
         if prev_sc:
             prev_rel = spatial_rel_between(
                 prev_sc, perceiver_name, s["name"],
@@ -1888,7 +1911,8 @@ def perception_establish(ctx, nonce):
         "knows_identity": True,
         "entity_state": p_state,
         **_source_channels(sc, p_name, p_room, sources,
-                           senses=_sense_card(pers)),
+                           senses=_sense_card(pers),
+                           sound=_sound_field_for(ctx, sc, p_name, p_room)),
         "proximity_to_sources": _proximity_to_sources(sc, p_name, sources),
         "behind_sources": _behind_sources(sc, p_name, sources),
         "behind_rooms": _behind_rooms(sc, p_name),
@@ -1916,7 +1940,9 @@ def perception_establish(ctx, nonce):
             "knows_identity": p_name in (known.get(character_name(sh)) or []),
             "entity_state": entity_states.get(character_name(sh)) or {},
             **_source_channels(sc, character_name(sh), r, c_sources,
-                               senses=_sense_card(sh)),
+                               senses=_sense_card(sh),
+                               sound=_sound_field_for(
+                                   ctx, sc, character_name(sh), r)),
             "proximity_to_sources": _proximity_to_sources(sc, character_name(sh), c_sources),
             "behind_sources": _behind_sources(sc, character_name(sh), c_sources),
         })
@@ -1976,6 +2002,15 @@ def perception_act(ctx, nonce):
     # `sc`, and a room resolved before it grades every observer's channel to
     # the player from the room she left. See `_player_room_in`.
     p_room = _player_room_in(sc, pers, interp, ctx, p_name)
+    # A `failing` sound source that went quiet this beat is heard as silence
+    # where there was noise (DESIGN_SOUND_FIELD.md section 5): the field files
+    # an engine notice through the channel every other deterministic notice
+    # takes -- `engine_feedback`, carried to `engine_notices` at commit and
+    # read by the Director next beat. Once per turn, deduplicated, because
+    # the failure is a fact about the source and not about who is listening.
+    for notice in sound_notices(sc, getattr(ctx.turn, "idx", None)):
+        if notice not in ctx.engine_feedback:
+            ctx.engine_feedback.append(notice)
     p_appearance = _appearance_as_prose(appearance_of(
         p_name, pers.get("appearance") or persona_appearance(pers), sc))
     # A physical disguise conceals the actor's real appearance from observers:
@@ -2065,7 +2100,9 @@ def perception_act(ctx, nonce):
         # sight OF the actor by the light where the OBSERVER stood -- a full
         # visual channel to an actor standing in darkness (register L6).
         rel = spatial_rel_between(sc, character_name(sh), p_name,
-                                  observer_room=r, target_room=p_room)
+                                  observer_room=r, target_room=p_room,
+                                  sound=_sound_field_for(
+                                      ctx, sc, character_name(sh), r))
         if _previous_open_group_continuity(
                 ctx, sc, p_name, character_name(sh), c["id"], p_room, r):
             rel = {**rel, "open_group_continuity": True}
@@ -2564,7 +2601,8 @@ def perception_outcome(ctx, nonce):
         "attention": "engaged",
         "knows_identity": True,
         **_source_channels(sc, p_name, p_room, sources, prev_sc=prev_scene,
-                           senses=_sense_card(pers)),
+                           senses=_sense_card(pers),
+                           sound=_sound_field_for(ctx, sc, p_name, p_room)),
         "proximity_to_sources": _proximity_to_sources(sc, p_name, sources),
         "behind_sources": _behind_sources(sc, p_name, sources),
         "behind_rooms": _behind_rooms(sc, p_name),
@@ -2590,7 +2628,8 @@ def perception_outcome(ctx, nonce):
             "attention": "engaged",
             "knows_identity": True,
             **_source_channels(sc, e_name, e_room, sources, prev_sc=prev_scene,
-                               senses=_sense_card(extra)),
+                               senses=_sense_card(extra),
+                               sound=_sound_field_for(ctx, sc, e_name, e_room)),
             "proximity_to_sources": _proximity_to_sources(sc, e_name, sources),
             "behind_sources": _behind_sources(sc, e_name, sources),
             "behind_rooms": _behind_rooms(sc, e_name),
@@ -2620,7 +2659,9 @@ def perception_outcome(ctx, nonce):
             "attention": act.get("goal") or "ambient",
             "knows_identity": p_name in (known.get(character_name(sh)) or []),
             **_source_channels(sc, character_name(sh), r, sources,
-                               prev_sc=prev_scene, senses=_sense_card(sh)),
+                               prev_sc=prev_scene, senses=_sense_card(sh),
+                               sound=_sound_field_for(
+                                   ctx, sc, character_name(sh), r)),
             "proximity_to_sources": _proximity_to_sources(sc, character_name(sh), sources),
             "behind_sources": _behind_sources(sc, character_name(sh), sources),
             "behind_rooms": _behind_rooms(sc, character_name(sh)),
@@ -3994,6 +4035,23 @@ def _composer_establish(ctx, sc, perceivers, known, p_name, p_appearance,
                 self_pronouns=p.get("pronouns"))
             percepts.extend(
                 _gated_ambient_percepts(gate, sensory_events, p.get("room")))
+            # A SOUND EVENT IN ANOTHER ROOM IS A ONE-BEAT SOURCE on that
+            # room's centre (DESIGN_SOUND_FIELD.md section 4b), spread through
+            # the doorway it came by and admitted only where the field grades
+            # it above `none`. Rewritten to the observer's room so
+            # `ambient_percepts`' own-room admission takes it; the gate still
+            # scrubs the text. Without a field the list is empty and the
+            # opening composes exactly as before.
+            afar = heard_events(
+                sc, name, sensory_events, room=p.get("room"),
+                turn_idx=getattr(ctx.turn, "idx", None),
+                crowds=ctx.get("_sound_crowds"))
+            if afar:
+                here = str(p.get("room") or "")
+                percepts.extend(_gated_ambient_percepts(
+                    gate, [{**event, "room": here, "room_id": here,
+                            "source_room": here} for event, _level in afar],
+                    p.get("room")))
             company[pid] = _composer_company(others, display_map, percepts)
         # A scene opening is the one beat where everything is legitimately
         # new: full render for every mind, and the ledger starts here.
