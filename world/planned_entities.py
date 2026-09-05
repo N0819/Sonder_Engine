@@ -107,6 +107,15 @@ def normalize_plan(uid, entry):
     surface = entry.get("surface")
     if isinstance(surface, dict) and surface:
         out["surface"] = dict(surface)
+    # THE SOURCE FIELDS. What a planned thing EMITS, in the engine's own
+    # closed vocabularies (`story.plot_packages._plan_sources` is the one
+    # validator, so anything stored here has already been read against those
+    # tables). A plan that says an oven roars has to be able to SAY it in a
+    # field, or the roar lives in prose no field reads (PR12).
+    sources = entry.get("sources")
+    if isinstance(sources, dict) and sources:
+        out["sources"] = {str(k): str(v) for k, v in sources.items()
+                          if str(v or "")}
     look = _text(entry.get("look"), SURFACE_CHARS)
     if look:
         out["look"] = look
@@ -180,6 +189,8 @@ def plan_figure(plan):
     }
     if look:
         row["look"] = look
+    if isinstance(plan.get("sources"), dict) and plan["sources"]:
+        row["sources"] = dict(plan["sources"])
     purpose = str(brief.get("purpose") or "")
     truths = str(brief.get("truths") or "")
     if purpose or truths:

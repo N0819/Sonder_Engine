@@ -14,7 +14,9 @@ the point -- NOT dropped: an event the resolution did not cover is re-queued
 (bounded) rather than lost, which is the deterministic floor the standing
 back-burner concern about weak models dropping player-narrated world events
 asked for. Coverage is judged by omission-detection (content-token overlap),
-never a keyword list.
+never a keyword list -- and against BOTH the beat's prose and the beat's
+committed diff, because an event is spent when the world changes and not when
+the conversation reaches it (`resolve_authored_events`).
 
 Two bounds keep "never dropped" from becoming "never ends". Rows are keyed by
 the ASSERTION rather than by the minting beat, so a rerun -- or the Director
@@ -37,8 +39,8 @@ from core.db import q, qi
 # many times, then marked 'stale' with a warning -- so a mis-scheduled or
 # un-resolvable beat cannot loop forever.
 MAX_REQUEUES = 2
-# Fraction of the summary's distinctive tokens that must appear in the resolved
-# prose for the event to count as enacted this beat.
+# Fraction of the summary's distinctive tokens that must appear in a channel
+# for that channel to be said to carry the event.
 _COVERAGE_RATIO = 0.5
 
 # Op verbs that mean "this row stops standing". A scheduled assertion whose
@@ -82,6 +84,44 @@ def _retired_text(state_diff):
                         and str(item.get("op") or "").strip().casefold()
                         in _RETIRING_OPS):
                     _collect(item)
+    return " ".join(out)
+
+
+def _changed_text(state_diff):
+    """Every word this beat's committed diff spent CHANGING the world.
+
+    THE WORLD RECORD, as against the narration. `state_diff` is what the beat
+    wrote down; `resolved_event` is what it said. A scheduled event is spent
+    when the world changes, not when the conversation reaches it -- and the
+    two are separable exactly here (PX9).
+
+    Channel-agnostic for the same reason `_retired_text` is: naming the
+    channels would tie the rule to today's diff shape. A nested KEY counts,
+    because a diff keys its channels by the subject they are about (a body's
+    name in `positions`, a room id in `rooms`) and that is the world saying
+    who changed. The top-level channel names do not: `positions` is the
+    engine's word for a kind of change, never a word an assertion is about --
+    the same distinction `_retired_text` draws about `op`.
+    """
+    if not isinstance(state_diff, dict):
+        return ""
+    out = []
+
+    def _collect(value):
+        if isinstance(value, str):
+            out.append(value)
+        elif isinstance(value, dict):
+            for key, inner in value.items():
+                if str(key) == "op":
+                    continue
+                out.append(str(key))
+                _collect(inner)
+        elif isinstance(value, (list, tuple)):
+            for inner in value:
+                _collect(inner)
+
+    for _channel, value in state_diff.items():
+        _collect(value)
     return " ".join(out)
 
 
@@ -171,16 +211,44 @@ def due_authored_events(cid, turn_idx):
     return out
 
 
+def _covers(stoks, other):
+    return bool(stoks) and len(stoks & other) / len(stoks) >= _COVERAGE_RATIO
+
+
 def resolve_authored_events(cid, turn_idx, resolved_text, state_diff=None):
-    """After the beat resolves: mark each DUE authored event 'fired' if the
-    resolved prose covers it (content-token overlap), 'stale' if this beat's
-    committed diff RETIRED what it names, else re-queue to the next turn
-    (bounded) so the player-narrated future beat is never silently dropped.
-    Returns (fired, requeued, dropped). Idempotent per (turn, event)."""
+    """After the beat resolves: mark each DUE authored event 'fired' when the
+    beat both TOLD it and WROTE IT DOWN, 'stale' if this beat's committed diff
+    RETIRED what it names, else re-queue to the next turn (bounded) so the
+    player-narrated future beat is never silently dropped.
+    Returns (fired, requeued, dropped). Idempotent per (turn, event).
+
+    TWO CHANNELS, NOT ONE, and this is the correction that matters. Coverage
+    used to be measured against the resolved PROSE alone, so in a story where
+    the characters spend every beat talking ABOUT the coming thing, the
+    coming thing fires on its due beat whether or not it occurs: the Writers'
+    Room scheduled the Governor's descent for turn 10, turn 10 was pure
+    dialogue containing "bell", "governor" and "Torre", and the row read
+    `status: 'fired'` (PX9, masque run, 2026-09-05). That silently disarms
+    the Room's only lever on future beats.
+
+    A scheduled event is spent when the WORLD changes, not when the
+    conversation reaches it -- so the diff must carry it too. The prose is
+    still read, because it is what separates enactment from foreclosure: a
+    beat that retires the thing BY enacting the assertion says so, and a beat
+    that merely ends it does not.
+
+    An event the prose carries and no channel encodes is the inverse failure
+    and gets said out loud rather than swallowed: the Director narrated a
+    stair catching fire ten feet away, asserted it in no channel, and the
+    page for that beat was a woman letting go of a doorframe (PR2, rush run
+    turn 4, 2026-09-05).
+    """
     from agents.common import _content_tokens
+    from core.pipeline_context import note_step_warning
     rtoks = set(_content_tokens(resolved_text or ""))
-    # What the beat ENDED, judged by the same overlap that judges what it
-    # enacted -- one comparator, two answers.
+    # What the beat WROTE DOWN, and what it ENDED, judged by the same overlap
+    # that judges what it narrated -- one comparator, three answers.
+    wtoks = set(_content_tokens(_changed_text(state_diff)))
     xtoks = set(_content_tokens(_retired_text(state_diff)))
     fired = requeued = dropped = 0
     for ev in due_authored_events(cid, turn_idx):
@@ -191,7 +259,13 @@ def resolve_authored_events(cid, turn_idx, resolved_text, state_diff=None):
         except (TypeError, ValueError):
             payload = {}
         stoks = set(_content_tokens(ev["summary"]))
-        covered = bool(stoks) and len(stoks & rtoks) / len(stoks) >= _COVERAGE_RATIO
+        narrated = _covers(stoks, rtoks)
+        covered = narrated and _covers(stoks, wtoks)
+        if narrated and not covered:
+            note_step_warning(
+                "authored event %r was narrated and encoded in no channel, "
+                "so it reaches no ledger and no reader; re-queued rather "
+                "than counted as enacted" % ev["summary"][:160])
         if covered:
             qi("UPDATE scheduled_events SET status='fired' "
                "WHERE chat_id=? AND event_id=?", (cid, ev["event_id"]))
@@ -205,7 +279,7 @@ def resolve_authored_events(cid, turn_idx, resolved_text, state_diff=None):
         # beat that retires a thing BY enacting the assertion still fires.
         # Subtractive: this can only end an event sooner, never create or
         # extend one, and it needs no cooperation from any model.
-        if stoks and len(stoks & xtoks) / len(stoks) >= _COVERAGE_RATIO:
+        if _covers(stoks, xtoks):
             qi("UPDATE scheduled_events SET status='stale' "
                "WHERE chat_id=? AND event_id=?", (cid, ev["event_id"]))
             dropped += 1

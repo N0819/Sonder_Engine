@@ -1950,7 +1950,7 @@ def test_a_need_naming_a_body_the_beat_carried_is_answered_by_it(
         for row in figures:
             rows.append((set(mapping._need_words(
                 " ".join(str(row[f]) for f in ("name", "role", "appearance")))),
-                row["room"]))
+                row["room"], "the beat"))
         return rows
 
     # Patched on the module that DEFINES it: a patch on the facade's
@@ -1960,6 +1960,25 @@ def test_a_need_naming_a_body_the_beat_carried_is_answered_by_it(
         ctx, [_need("the woman with the keys at her belt", kind="person",
                     room="hall")])
     assert kept == []
+
+
+def test_a_name_the_worlds_plans_already_hold_files_no_need(temp_db):
+    """PQ13, quiet run 2026-09-05. The Writers' Room published a
+    `plan_entity` for Jem Clough; four beats later the commit filed *"the beat
+    reached for thing 'Jem Clough' no plan holds"* -- for a person whose plan
+    the world was holding, in the ledger this reads from. A need is what
+    NOBODY has planned, and a published plan is a plan; asking the Room to
+    author a second Jem Clough is what not looking costs."""
+    from persist.commit import _drop_needs_the_beat_answers
+    from world.planned_entities import add_planned_entity
+
+    cid = _play_chat(temp_db, _flat_scene())
+    ctx = _play_ctx(temp_db, cid, {})
+    add_planned_entity(cid, {"kind": "person", "name": "Jem Clough",
+                             "role": "caller",
+                             "brief": {"where": "hall"}})
+    assert _drop_needs_the_beat_answers(
+        ctx, [_need("Jem Clough", kind="person", room="hall")]) == []
 
 
 def test_one_word_in_common_is_not_an_answer(temp_db):

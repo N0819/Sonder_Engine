@@ -1624,8 +1624,9 @@ def region_patch(cid: int, region_id: str, body: dict = Body(...),
     removes the field. Returns ``{id, name, brief, look, rooms}``, `rooms`
     the live rooms of this frame in the region, so the card can say how
     many rooms the one sentence reaches."""
-    from world.regions import (normalize_region_id, region_registry,
-                               set_region_look, set_region_name)
+    from world.regions import (ensure_regions, normalize_region_id,
+                               region_registry, set_region_look,
+                               set_region_name)
     chat = _chat_or_404(cid)
     _require_idle(cid)
     if not isinstance(body, dict) or not ({"look", "name"} & set(body)):
@@ -1642,6 +1643,16 @@ def region_patch(cid: int, region_id: str, body: dict = Body(...),
     if "name" in body and (not isinstance(name, str) or not name.strip()):
         raise HTTPException(400, "A region needs a name")
     with _era(cid, frame_id):
+        # A REGION IS ENTERED UNDER THE SPELLING IT WAS ASKED FOR. `rid` is
+        # the id derived from that spelling, and the seam seeds a new entry's
+        # display name from whatever it is handed -- so entering "the working
+        # wing" wrote back `{"id": "the_working_wing", "name":
+        # "the_working_wing"}`: the human phrase became the id and then the id
+        # became the name (PX19, masque run, 2026-09-05). `ensure_regions`
+        # never overwrites a standing entry, so this only ever supplies the
+        # name a region did not have.
+        ensure_regions(cid, frame_id,
+                       {rid: " ".join(str(region_id).split()) or rid})
         entry = None
         if "look" in body:
             entry = set_region_look(cid, frame_id, rid, look or "")

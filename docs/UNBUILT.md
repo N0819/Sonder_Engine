@@ -6600,6 +6600,68 @@ is `agents/director_movement.py` plus the interpret/resolve prompt cards; the
 2026-09-05 fix wave assigned the finding to the composer lane, which owns
 none of them.
 
+### 1.134 What the campaign-3 plan/structure/tools wave left open (2026-09-05)
+
+Fourteen findings from the five 2026-09-05 play runs were worked as one lane
+(the plan, the structures and the Writers' Room's own tools). What landed is
+in the commit; this records the parts that were deliberately not built, and
+who owns them.
+
+**PR10 -- a residential structure with nobody in it.** The rush run reported
+that "no beat can put anybody there". Audited: **that half is wrong**, and the
+audit is the point (§ 1.126's rule -- an empty field is not a dead field).
+`commit_background.track_background_presences` mints a background presence
+from any `state_diff.entities` row whose `kind` is not in
+`_INERT_ENTITY_KINDS`, so a Director that declares a person in a room *does*
+put one in the world. What is genuinely missing is the one that made the flats
+empty: **the establish invents nobody for a dwelling it has just declared.**
+That is a clause in `director_establish.txt` (both packs) -- a residential
+structure the establish declares carries the people who live in it, or the
+establish says it does not -- and it belongs with the light/establish work. Not
+built here.
+
+**PQ13(b) -- an arrival is met by being perceived.** A published arrival at a
+room nobody occupies now WARNS at preview (`_preview_arrival`), which is the
+half the authoring surface owns. The other half stands: *a knock is a sound,
+and the sound field already crosses a closed door*, so an arrival should be
+able to reach the rooms in earshot as a hearing percept and leave the body
+outside, rather than requiring somebody to open the door before the arrival
+exists. That needs a channel from the arrival op into `sensory_events` and the
+admission gates in `agents/perception.py`; it is a perception change, not an
+authoring one.
+
+**PR12 -- a planned source reaches the plan, not yet the minted entity.**
+`plan_entity` now carries `light_source`, `light_shape`, `light_height`,
+`steadiness` and `sound_source` through the same closed tables the World
+Browser validates against; they are stored on the plan and handed to the
+Director in `plan_figure`. What remains is the deterministic half: when
+`agents/director_floors.py` binds a minted entity to a plan (`ent["plan_ref"]
+= ...`), the plan's `sources` should be copied onto the entity, so a roar the
+Room authored is a roar the field reads without the model having to restate
+it.
+
+**PM12 -- the naming register is evidence, not a rule.** `propose_town` is now
+handed the story's registered names and told the law it proposes must produce
+names that stand beside them. That is a clause; whether a generated law should
+be DERIVED from the story's existing names (a phonology read off the cast
+rather than proposed beside them) is a larger question and is not answered
+here.
+
+**PS6(a) -- the double-reported overlap is collapsed at the tool, not at the
+lint.** `room_tools._one_row_per_contradiction` reports one row per unordered
+pair, which is what a reader asking "how many things are wrong" wants. The
+lint itself (`world/spatial_lint.py`) still emits `rooms_overlap_when_placed`
+once per ordering, because it walks the pair from each end; deduping there is
+the geometry lane's call.
+
+**PX24 -- a mandate's width.** A grant can now name the ask that earned it
+(`grants[].request`, passed through `_apply_grants` to the seam that has
+accepted it since 2026-09-04), so a grant earned by one request lapses with
+it. What no code can judge is whether the CAPABILITIES a grant lists are the
+ones the player's sentence asked for -- that is a reading, and it stays the
+Planner's, under the standing clause "only what they said, never what would be
+convenient".
+
 ## 2. Roadmap
 
 Features the architecture intends and has not built. Ordered by value per unit

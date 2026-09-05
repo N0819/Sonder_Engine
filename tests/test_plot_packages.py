@@ -341,14 +341,22 @@ class TestOperations:
 
         def fake_generate(cid_, request, *, frame_id=None):
             calls.append(request["name"])
-            return {"town": {"name": "Saltmarsh", "rooms": {"salt_quay": {}},
-                             "charters": {"salters": {}}}}
+            # THE SHAPE `generate_lived_location` ACTUALLY RETURNS: the town's
+            # NAME under `town`, the room COUNT under `rooms`, the charter
+            # keys as a list. This stub used to return a nested town dict --
+            # the shape the reader wrongly assumed -- which is how a
+            # generation that planted eleven rooms reported `rooms: []` with
+            # no warning and nothing here noticed (PM10, 2026-09-05).
+            return {"ok": True, "town": "Saltmarsh",
+                    "structure": {"key": "saltmarsh"}, "rooms": 1,
+                    "bound_rooms": [], "charters": ["salters"],
+                    "warnings": []}
         monkeypatch.setattr("world.charter_runtime.generate_lived_location",
                             fake_generate)
         out = prepare_package(cid, uid)
         assert out["prepared"] == [0] and calls == ["Saltmarsh"]
         op = get_package(cid, uid)["operations"][0]
-        assert op["prepared"]["rooms"] == ["salt_quay"]
+        assert op["prepared"]["rooms"] == 1
         assert op["prepared"]["charters"] == ["salters"]
         # Preparing again runs nothing: the record says it is done.
         assert prepare_package(cid, uid)["prepared"] == [] and calls == ["Saltmarsh"]
