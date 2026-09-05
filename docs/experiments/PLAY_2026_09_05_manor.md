@@ -258,6 +258,23 @@ never off in the first place.
 **Severity: story-breaking (the scenario's payoff).** Stage of origin: the
 objects specialist's `state_diff.entities`, caught by the resolve reconciliation.
 
+**RESOLVED 2026-09-05 (a), (b) partly, (c) not taken.** The channel was
+never absent -- `containment` carries a THING on exactly the terms it
+carries a body, `_clean_containment` accepts any holder the scene places,
+`derive_contained_positions` puts the thing where its holder is, and
+`hiding_holders_of` then subtracts scent, sight, sound and reach for free.
+What was absent was any sentence telling either hand so: the containment
+chunk opened "when a BODY stops being independently placed", and the objects
+chunk enumerated `state` as configuration ("open, worn, held, lit, in
+transit"), which is an invitation to write exactly the key that broke this
+story. Two clauses, stating one class from each side -- something is between
+the thing and the room and that something has a name; where a thing is is
+never a word in `state`. Release (`{thing: null}`) is what makes finding it
+an act with a result. (b) is served by the second clause naming what the
+silent failure costs rather than by a new warning; (c), a planning need from
+the reconciliation, is not taken -- it already warns. Pinned in
+`tests/test_played_scene_classes.py::test_a_thing_shut_inside_a_scene_object_is_revealed_by_opening_it`.
+
 The ledger was authored as the establish left it: `state: {condition: intact,
 concealment: "hidden inside the locked tower window seat"}`, positioned in the
 tower room at the `window_seat` anchor. Nothing in the engine reads
@@ -359,6 +376,22 @@ title adjacent to a pronoun or a doubled token.
 ### PC9. `cover` is authored only by a station, so "behind the screen" is prose the geometry never sees
 **Severity: wrong-but-recoverable (owner decision on the second half).**
 Stage of origin: `director_resolve`'s spatial channel.
+
+**RESOLVED 2026-09-05, and the diagnosis above was half wrong in the way
+worth recording.** The prompt half was already done: the spatial chunk has
+carried the cover clause since 2026-09-02 (`EXPECTED_DIVERGENCE`,
+`specialists.spatial.chunks.stations`). What no one had checked is whether
+the field the clause names could reach the geometry, and it could not --
+`schemas._coerce_station_table` built its entry from `at` and `near` alone,
+so every `cover` any hand has ever written was dropped at the schema
+boundary before the merge saw it. One key through the coercion is the whole
+fix; `normalize_scene_stations` cleans a cover naming a fixture the body has
+left, the sibling of the stale `at` it already blanks. The clause was right
+and had nothing to write to. Pinned in
+`tests/test_played_scene_classes.py::test_a_body_that_takes_cover_is_out_of_the_line_that_crosses_the_fixture`
+and `::test_the_station_table_carries_the_cover_the_hand_was_told_to_write`.
+The owner decision below (should `relation: "behind"` set cover
+deterministically) is untouched and stays open.
 
 Turn 15 the player stood behind the opaque folding screen. The diff wrote
 `stations.Ada Quill = {at: folding_screen, near: []}` and a pose whose

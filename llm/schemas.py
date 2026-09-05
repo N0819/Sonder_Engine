@@ -83,7 +83,8 @@ def _coerce_str_list(value):
 
 
 def _coerce_station_table(value):
-    """Normalize a `stations` table into {name: {at?, near?}}, dropping junk.
+    """Normalize a `stations` table into {name: {at?, near?, cover?}},
+    dropping junk.
 
     Deliberately NOT a typed sub-model, and the reason is a correctness one
     rather than a style one. The merge contract (spatial.merge_scene_with_diff)
@@ -120,6 +121,29 @@ def _coerce_station_table(value):
         if "near" in station:
             entry["near"] = [n for n in _coerce_str_list(station.get("near"))
                              if str(n).strip()]
+        # WHICH SIDE OF THE FIXTURE (`spatial_fov._takes_cover`). The station
+        # chunk has told the spatial hand since 2026-09-02 that `cover:true`
+        # or an anchor id puts a body on the FAR side of what it stands at,
+        # and this table dropped the key on the way in, so the answer never
+        # reached the geometry: manor turn 15 (PC9) wrote a station at the
+        # folding screen and a pose relating the body to it, and sight, light
+        # and sound all judged her standing in the open on the room's side.
+        # The clause was right; the field it names had nowhere to land.
+        #
+        # `true` is canonicalized to the anchor named in the same entry so the
+        # diff says which fixture it means; `normalize_scene_stations` owns
+        # the durable rule (cover is about the fixture the body is AT, so one
+        # naming anything else is cleaned at merge exactly as a stale `at` and
+        # a stale `near` are). Absent means absent: a station that says
+        # nothing about cover carries no `cover` key and behaves as before.
+        if "cover" in station:
+            cover = station.get("cover")
+            if cover is True or cover == 1:
+                entry["cover"] = entry.get("at") or True
+            elif cover in (None, False, 0):
+                entry["cover"] = None
+            else:
+                entry["cover"] = str(cover).strip() or None
         if entry:
             out[name] = entry
     return out
@@ -2078,7 +2102,8 @@ class StateDiff(LenientModel):
     # player interpretation and character decisions. The resolve model does
     # not author these. {op:start|stop,follower,target?,reason?,turn?}.
     following_ops: list[dict] = Field(default_factory=list)
-    # Within-room position: {name: {at: anchor_id|None, near: [names]}}. The
+    # Within-room position: {name: {at: anchor_id|None, near: [names],
+    # cover: anchor_id|true|None}}. The
     # sibling of `positions` at the grain below the room -- at the bed, at the
     # hearth, beside each other. Undeclared until now, and that omission was
     # the whole feature: prompts.py has asked the Director for this since
