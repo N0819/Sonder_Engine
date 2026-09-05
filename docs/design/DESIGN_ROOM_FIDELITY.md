@@ -390,18 +390,21 @@ cursor in its first control (`wbFocusRow`; the rows carry `data-anchor`,
 focusable button; Enter or Space is the click. The card is the panel.
 
 **Drag places, through the card's own routes.** An anchor dragged to a
-wall gets that wall's bearing and an `offset` along it; dragged into the
-room it loses its bearing and is placed by seed again (the room PATCH's
-`anchors`). A doorway dragged along its wall sets the exit's `offset` (the
-room PATCH's `exits`), written on BOTH rooms' edges. A body dropped on a
-cell is re-stationed (the station PUT): at the anchor whose cell it is --
-a door anchor included -- else free in the room, `at` cleared; dropped in
-a neighbour's cells it is moved there by the cast editor's position route
-and then stationed, so nothing stale from the old room survives. Only the
-registered cast has a position route; the player and a presence are
-re-stationed within their room and refused across it with a toast, the
-cast editor's rule. An authored fact every time: no Director call, no
-memory of a step, a toast on success, the server's refusal on failure.
+wall gets that wall's bearing and an `offset` along it; dragged onto any
+other cell it is PINNED there by its `cell` (below), its bearing and offset
+cleared (the room PATCH's `anchors`). A doorway dragged along its wall sets
+the exit's `offset` (the room PATCH's `exits`), written on BOTH rooms'
+edges. A body dropped on ANY cell is pinned to it by its station `cell`
+(the station PUT), and stationed `at` the anchor whose cell it is -- a door
+anchor included -- when it is one, else `at` cleared; dropped in a
+neighbour's cells it is moved there by the cast editor's position route
+(which drops the pin, a place in the old room's grid) and then stationed
+with the cell in the NEIGHBOUR's grid, so nothing stale from the old room
+survives. Only the registered cast has a position route; the player and a
+presence are pinned within their room exactly as the cast is and refused
+across it with a toast, the cast editor's rule. An authored fact every
+time: no Director call, no memory of a step, a toast on success, the
+server's refusal on failure.
 
 **`offset`, the one new field.** On an anchor beside `dir`, and on an exit
 edge beside `dir` and `barrier`:
@@ -442,6 +445,98 @@ which copies the formula rather than importing it; `test_room_shapes.py`'s
 pin against the pre-extent arithmetic stands beside it). No existing scene
 carries the field, so no existing scene moves.
 
+**`cell`, the second new field (later the same day).** The owner, trying
+the map: "Why are characters and personas locked to stations in the
+editor? ... I have to drag them to stations." and "I can only place
+anchors at stations when I don't wall-attach them, which is quite
+limiting." The station schema had no cell, so a body could only snap to an
+anchor or be cleared; an anchor could only take a wall or the seed. One
+optional field on both, in the ROOM's own grid coordinates (the cells
+`room_grid` lays the room out in):
+
+    cell   [x, y]   on a station: the cell the body stands on
+                    on an anchor: its ORIGIN -- the west-most, north-most
+                                  cell of its footprint
+
+*The body rule.* `body_cell` reads the station's `cell` FIRST: present and
+inside the room's current cells, that is the cell; absent, exactly today's
+derivation from `at`/`near`, byte for byte on every shape
+(`tests/test_body_cells.py` pins it against a table frozen from the code
+before the field existed). A body with a `cell` and no `at` stands at that
+cell, free of any feature. A body with both keeps `at` for PROSE -- "at
+the hearth" -- and `cell` for GEOMETRY: the two are not checked against
+each other, because the map writes them together (a drop on an anchor's
+cell writes both) and a host may well want "at the bar, this end of it".
+`near` is unchanged. A pinned body is MEASURED (`_has_measured_station`),
+so sight, cover and the light field read its cell as they read an
+anchored one.
+
+*The anchor rule.* `_place_anchors` reads the anchor's `cell` FIRST: the
+footprint is laid from the origin eastward and, for `large`, southward --
+the arrangement a free anchor's seed already used -- clipped to the room,
+so a two-cell thing pinned at the east wall is one cell rather than one
+outside. `dir` alongside is the wall it is against, for prose ("against
+the north wall"), and moves nothing: no inset, no wall cells. `offset` and
+`cell` are EXCLUSIVE -- a cell is a place, an offset is a place along a
+wall -- so the route clears the offset when a cell is written and the map
+sends `cell: null` when it drags an anchor onto a wall; at read time a
+cell outranks an offset a re-echo may have left beside it. Corner anchors
+follow the same rule. Absent, exactly today's placement, byte for byte.
+
+*The snap.* A cell the room's extent or shape has since moved out from
+under -- the host measured the kitchen down from twelve paces to eight
+after pinning a body at (10, 2) -- is the NEAREST cell the room still
+holds (`RoomGrid.nearest`: Euclidean, ties to the smaller coordinates, so
+a reroll agrees). The reader fails open; the ROUTES do not: a fresh cell
+outside the room is refused naming the bounds (`_cell_or_400`: "a
+rectangle of 8 by 4 paces, x in 0..7 and y in 0..3, and on a cell the
+shape keeps"), because an authoring surface should not quietly move a
+fresh mistake.
+
+*What reads as a cell.* `normalize_cell`: two whole numbers, and nothing
+else -- a boolean is not a coordinate, prose is not, one number or three
+are not. Junk is no cell: the hygiene (`normalize_scene_stations` for a
+station, `normalize_scene_anchor_cells` for an anchor, both run by the
+merge and by every World Browser write) drops it, and the reader places
+as if it were absent.
+
+*Durability and invalidation.* A body's cell is in ONE room's coordinates,
+so when its ROOM changes -- `positions` differs from the previous scene's
+-- the cell is dropped (`invalidate_moved_body_cells`, the
+`invalidate_moved_body_pose_details` precedent, run beside station
+hygiene in the merge; `chat_char_position_put` applies the same rule
+because it writes the scene without the merge). The `at` a room change
+strands was already blanked by the anchor membership test; a cell has no
+membership test to fail, which is why it is compared against where the
+body WAS. An anchor's cell rides with its room and is kept through a
+Director re-echo by `_merge_anchor_fields` (silence keeps, a value lands,
+junk is dropped again). Archive, checkpoint and branch carry the scene
+blob whole, so nothing else moves. The Director is never asked for a cell:
+`_coerce_station_table` keeps only `at`/`near`.
+
+*Proximity, narrowly.* `proximity_rel` reads cell distance ONLY when at
+least one of the pair stands on an authored `cell` and both stand on a
+cell (`_cell_proximity`): within reach at a Chebyshev distance of at most
+`CELL_REACH_PACES` (1 -- a diagonal neighbour counts), near under a
+`CELL_NEAR_DIVISOR`th (a third) of the room's longer side, else across;
+`measured_proximity_rel` passes that "near" through as the measurement it
+is. Deliberately NOT "whenever both bodies derive a cell": two bodies at
+two anchors derive cells too, and sixteen test files pin the anchor-tier
+rule for them, so every answer for an unpinned pair is byte for byte what
+it was. Widening the rule to derived cells is registered in
+`docs/UNBUILT.md` § 2.26 rather than done.
+
+*The map and the editors.* `grid_view` returns each body's `source`
+(`"cell"` | `"anchor"` | `"none"`) and each anchor's (`"cell"` |
+`"offset"` | `"seed"`), so the map says what placed a thing without
+re-deriving it; a pinned body is drawn with a `pinned` class and its title
+says so. The card's station row shows the cell beside `at` with a clear
+(choosing an anchor from the select also lets the cell go -- "stand at it"
+is the anchor's placement; ticking a `near` keeps it); the Bodies tab shows
+the cell in the station line with the same clear. The anchor row shows the
+cell beside the wall select with a clear, and an anchor with a cell is
+listed under "No wall" when its bearing was cleared by the drop.
+
 **The merge keeps it.** `_merge_room` replaced a room's `anchors` map
 whole, so a Director re-declaring "the bar, north wall" would have dropped
 the `height` a body took cover behind and the `offset` a host dragged it
@@ -462,10 +557,10 @@ computes nothing. The light field and the sound field are the readers that
 fill the slot, in the sibling worktree.
 
 **What argues against it, and what it does not do:** `docs/UNBUILT.md`
-§ 2.26, "What the map editor does not yet do" -- among them that a body
-dropped on a plain cell is not pinned to that cell (the engine has no
-per-cell station; `at` is cleared), that the structure map draws an exit as
-a tick at the middle of its wall rather than at its door cell, and a
-measured gap in the placement itself: a doorway on the inner wall of an L's
-notch lays the neighbour into the notch, where it overlaps the room's own
-other part and `room_field` skips it without a row.
+§ 2.26, "What the map editor does not yet do" -- among them that proximity
+reads cell distance only for a pinned pair and not for two anchored bodies
+whose cells are derived, that the structure map draws an exit as a tick at
+the middle of its wall rather than at its door cell, and a measured gap in
+the placement itself: a doorway on the inner wall of an L's notch lays the
+neighbour into the notch, where it overlaps the room's own other part and
+`room_field` skips it without a row.

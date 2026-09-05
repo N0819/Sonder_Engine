@@ -64,6 +64,7 @@ from world.spatial_geometry import (
     effective_facing,
     effective_room_size,
     effective_station,
+    normalize_cell,
     normalize_extent,
     normalize_offset,
     proximity_rel,
@@ -427,7 +428,32 @@ def _place_anchors(room_id, grid: RoomGrid, anchors) -> dict:
         bearing = normalize_bearing(anchor.get("dir"))
         seed = _seed(room_id, aid)
         fp = geo["footprint"]
-        if bearing:
+        pinned = normalize_cell(anchor.get("cell"))
+        source = "seed"
+        if pinned is not None:
+            # An authored ORIGIN cell (the World Browser's map, 2026-09-04:
+            # the owner could place an anchor anywhere only by taking it
+            # off its wall, and asked for any cell). The origin is the
+            # anchor's west-most, north-most cell; the footprint is laid
+            # from it eastward, and for `large` southward too -- the
+            # arrangement a free anchor's seed already uses -- clipped to
+            # the room, so a two-cell thing on the east wall is one cell
+            # rather than one outside. `dir` alongside is the wall it is
+            # against, for prose, and moves nothing: no inset, no wall
+            # cells. `offset` is a place along a wall and a cell is a
+            # place, so a cell outranks it; the route keeps the two
+            # exclusive. Snapped to the nearest cell when the extent or
+            # shape has since moved out from under it.
+            source = "cell"
+            x, y = grid.nearest(pinned)
+            cells = [(x, y)]
+            more = []
+            if fp in ("small", "run"):
+                more = [(x + 1, y)]
+            elif fp == "large":
+                more = [(x + 1, y), (x, y + 1), (x + 1, y + 1)]
+            cells += [c for c in more if grid.contains(c)]
+        elif bearing:
             # The wall's OWN length, not the grid's side: on a wide room the
             # north anchor has the long wall to sit on and the east anchor
             # the short one. For a square the two are the same number.
@@ -443,6 +469,7 @@ def _place_anchors(room_id, grid: RoomGrid, anchors) -> dict:
                 # seeded placement below, byte for byte.
                 room_for = max(0, along - length)
                 offset = min(room_for, max(0, int(round(placed_at * room_for))))
+                source = "offset"
             else:
                 offset = 1 + seed % max(1, along - 2 - (length - 1)) \
                     if along > 2 else 0
@@ -483,6 +510,11 @@ def _place_anchors(room_id, grid: RoomGrid, anchors) -> dict:
             "desc": str(anchor.get("desc") or aid),
             "implicit": bool(anchor.get("implicit")),
             "offset": normalize_offset(anchor.get("offset")),
+            # The authored origin cell as read, and what placed the anchor:
+            # "cell" (that origin), "offset" (a place along its wall), or
+            # "seed" (the formula, byte for byte what it always was).
+            "cell": [pinned[0], pinned[1]] if pinned is not None else None,
+            "source": source,
         }
     return out
 
@@ -504,20 +536,46 @@ def _takes_cover(station: dict, anchor_id) -> bool:
 
 
 def _has_measured_station(scene: dict, name: str) -> bool:
+    """A station is measured when it says WHERE in the room: at an anchor,
+    near a body, or -- since the map editor (2026-09-04) -- pinned to a
+    cell. Sight and cover subtract only between two measured bodies."""
     st = effective_station(scene, name)
-    return bool(st.get("at")) or bool(st.get("near"))
+    return bool(st.get("at")) or bool(st.get("near")) \
+        or normalize_cell(st.get("cell")) is not None
+
+
+def body_cell_source(scene: dict, name: str) -> str:
+    """Where a body's cell comes from, for the map: `"cell"` (an authored
+    station `cell`, the owner's pin), `"anchor"` (derived from its station
+    -- `at` an anchor, or `near` a body that has a cell, which bottoms out at
+    an anchor or a pin), or `"none"` (no cell: somewhere in the room)."""
+    if not room_of(scene, name):
+        return "none"
+    if normalize_cell(effective_station(scene, name).get("cell")) is not None:
+        return "cell"
+    return "anchor" if body_cell(scene, name) else "none"
 
 
 def body_cell(scene: dict, name: str, _seen=None) -> Optional[tuple]:
-    """The cell a body stands in, derived from its station, or None when
-    the station is unmeasured. `at` an anchor: one step inward from the
-    anchor's first cell. `near` another body: beside that body's cell.
-    Never stored."""
+    """The cell a body stands in, or None when the station is unmeasured.
+
+    An authored station `cell` first (the World Browser's map, 2026-09-04:
+    the owner could only drop a body on an anchor, and asked for any cell),
+    snapped to the nearest cell the room still holds when its extent or
+    shape has moved since (`RoomGrid.nearest`, ties to the smaller
+    coordinates). A body with a `cell` and an `at` keeps `at` for prose --
+    "at the hearth" -- and `cell` for geometry; the two are not checked
+    against each other. Without one, derived: `at` an anchor is one step
+    inward from the anchor's first cell; `near` another body is beside that
+    body's cell. The derivation is never stored."""
     room_id = room_of(scene, name)
     if not room_id:
         return None
     grid = room_grid(scene, room_id)
     st = effective_station(scene, name)
+    pinned = normalize_cell(st.get("cell"))
+    if pinned is not None:
+        return grid.nearest(pinned)
     at = st.get("at")
     if at:
         placed = anchor_cells(scene, room_id).get(at)

@@ -39,8 +39,10 @@ from world.spatial_containment import (
 from world.spatial_geometry import (apply_pose_diff, derive_scene_stations,
                               poses_broken_by_scale_change,
                               invalidate_contact_bound_poses,
+                              invalidate_moved_body_cells,
                               invalidate_moved_body_pose_details,
                               invalidate_transferred_pose_details,
+                              normalize_scene_anchor_cells,
                               normalize_scene_poses, normalize_scene_stations)
 from world.spatial_identity import (_ci_get, _entity_named, room_of,
                               is_derived_room_name, normalize_scene_subjects)
@@ -1506,6 +1508,10 @@ def merge_scene_with_diff(
     # reciprocals so either room can derive a consistent left/right. Runs after
     # dedupe (so only surviving edges are reconciled) and barrier normalization.
     normalize_scene_bearings(merged)
+    # An anchor's `cell` (the map editor's pin, 2026-09-04) is two whole
+    # numbers or nothing; `_merge_anchor_fields` above kept it through a
+    # re-echo, and this drops what a re-echo could not have written well.
+    normalize_scene_anchor_cells(merged)
     # Station hygiene moved to the end of the merge, beside contact hygiene:
     # it has to run after `derive_contained_positions`, or a carried body keeps
     # the anchor it was standing at while its carrier walks off with it.
@@ -1782,6 +1788,11 @@ def merge_scene_with_diff(
     derive_scene_stations(merged, diff.get("stations"), diff.get("contact_ops"))
     merged.setdefault("stations", {})
     normalize_scene_stations(merged)
+    # ...AND A BODY THAT CHANGED ROOM IS NOT ON ITS OLD CELL. A station
+    # `cell` is in one room's coordinates; the anchor hygiene above cannot
+    # see it fail (a cell has no membership test), so it is compared against
+    # where the body stood before this beat, as the pose details were.
+    invalidate_moved_body_cells(merged, _positions_before)
     invalidate_contact_bound_poses(merged, _contacts_before_ops)
     normalize_scene_poses(merged)
 
