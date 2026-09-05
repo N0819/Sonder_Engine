@@ -1409,6 +1409,78 @@ def test_an_action_may_still_be_concealed_from_the_person_it_targets():
 
 
 # ---------------------------------------------------------------------------
+# PX4: a concealment names a body, and a name the scene cannot resolve is a
+# failure to be reported, never a permission
+# ---------------------------------------------------------------------------
+
+def _resolve(sequence):
+    from agents.director import resolve_concealment_refs
+    return resolve_concealment_refs(sequence, _CAST_BY_ID, _CAST_BY_NAME)
+
+
+def test_a_conceal_from_spelling_the_reader_cannot_match_is_canonicalised():
+    """`composer.concealed_from_observer` is the firewall reader and it holds
+    no scene: it matches the observer's own name, id and `character:<id>`
+    form and nothing else. The Director writes whichever spelling it reached
+    for, and the two need not be the same word."""
+    sequence = _whisper(["felix"])
+    sequence[0]["targets"] = []
+    assert _resolve(sequence) == []
+    assert sequence[0]["conceal_from"] == ["character:4", "Felix Brand"]
+
+
+def test_a_conceal_from_naming_nobody_keeps_the_line_concealed_and_warns():
+    """It failed OPEN, in the direction that discloses, silently. Measured
+    (the Cold Season Ball, 2026-09-05, PX4): the player's own declaration
+    carried `conceal_from: ["character:sault", "character:ivo"]`, neither
+    entry matched anything, the reader's default is `return False`, and Ivo
+    received the line in full in his composed view. No warning in the beat.
+
+    `character:<x>` is a form the ENGINE mints and the model is copying, so
+    one that resolves to nobody is a reference that failed, and the safe
+    reading of "I meant to hide this from somebody I cannot name" is to keep
+    it hidden -- from every body the beat knows about that this line is not
+    addressed to, which still delivers it to the person it was said to.
+    Over-concealing costs a beat; under-concealing costs the plot."""
+    sequence = _whisper(["character:ivo", "character:sault"])
+    notes = _resolve(sequence)
+    assert any("engine form" in note for note in notes), notes
+    kept = sequence[0]["conceal_from"]
+    # Felix is not the addressee, so the line is withheld from him...
+    assert "character:4" in kept or "Felix Brand" in kept
+    # ...and the man it was addressed to still hears it.
+    assert "character:7" not in kept and "Lord Edmund" not in kept
+
+
+def test_a_bare_name_the_scene_does_not_hold_is_left_alone_and_reported():
+    """The one case this cannot tell from a typo, and the reason the engine
+    form is treated differently. "Don't tell the Doctor" names a third party
+    who is not in the room; concealing that line from everybody present would
+    delete a declaration rather than keep a secret."""
+    sequence = _whisper(["the_doctor"])
+    sequence[0]["targets"] = []
+    notes = _resolve(sequence)
+    assert sequence[0]["conceal_from"] == ["the_doctor"]
+    assert any("no body in this scene answers to" in note for note in notes)
+
+
+def test_a_star_exclusion_is_left_exactly_as_it_is():
+    sequence = _whisper(["*"])
+    sequence[0]["targets"] = []
+    assert _resolve(sequence) == []
+    assert sequence[0]["conceal_from"] == ["*"]
+
+
+def test_resolving_an_already_resolved_exclusion_changes_nothing():
+    sequence = _whisper(["felix"])
+    sequence[0]["targets"] = []
+    _resolve(sequence)
+    first = list(sequence[0]["conceal_from"])
+    assert _resolve(sequence) == []
+    assert sequence[0]["conceal_from"] == first
+
+
+# ---------------------------------------------------------------------------
 # PC3: one beat, one field
 # ---------------------------------------------------------------------------
 #
