@@ -675,14 +675,28 @@ legitimately perceive, learn, remember or infer.
   what they can reach, then the plan's rooms nobody can reach yet, retired
   ids folded away; a room inside a body nested under its holder's) and the
   chosen room's card: its name, description and notes as text; light, size
-  and exposure as menus over the engine's own words; its region; its exits
-  (barrier and bearing per doorway, remove, add — the far room's side of
-  the doorway is written too, because a doorway is one object); its anchors
-  (description, bearing, height, footprint, opacity); the things standing
-  here (kind, description, portable, the light it gives off, lit, and a
-  move to another room); who is here, with the anchor each body stands at
-  and who they stand beside; the plan's stub while it is still one, and
-  what the Writers' Room has planned for it. "Move here" relocates a cast
+  and exposure as menus over the engine's own words; its measurement — an
+  extent in paces (both sides, within the engine's range), a shape
+  (rectangle, round, L) and for an L its parts (each a rectangle at a
+  corner of the box) — with size shown as *derived from the extent* and
+  not offered while an extent stands, and offered again when it is
+  cleared; its region, and the region's **look** (the visual register every
+  picture of that part of the map shares), edited here and shared by every
+  room in the region; its exits (barrier and bearing per doorway, remove,
+  add — the far room's side of the doorway is written too, because a
+  doorway is one object); its anchors listed **under their wall** — each
+  straight wall heading says how many paces it has, from the extent or the
+  size tier, with the doorways it carries, so a wall that cannot hold what
+  stands on it is visible before the lint says so — each with description,
+  bearing (change it to move the anchor to another wall), height,
+  footprint, opacity; the things standing here (kind, description,
+  portable, the light it gives off, lit, and a move to another room); who
+  is here, with the anchor each body stands at and who they stand beside;
+  the plan's stub while it is still one, and what the Writers' Room has
+  planned for it. Where the layout lint finds the room's geometry cannot
+  all be true, each row is shown beside the field it concerns (a bearing
+  row under the exits, a wall row under that wall, a shape row under the
+  shape) and the tree marks the room. "Move here" relocates a cast
   member the way the cast panel does. **Bodies** (👕 opens here) lists
   every body the scene knows — player, cast, promoted presence — with its
   room, station and pose, and its full attire ledger as an editor: per body

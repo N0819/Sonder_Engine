@@ -6538,10 +6538,20 @@ for what follows. Residuals of this entry rather than a section of their own:
 - **The World Browser's editors stop where the ledgers stop** (2026-09-04,
   the attire-editor residual closed the same day: the Bodies tab edits the
   ledger as stored, a spanning garment carried through every region,
-  through `PUT /attire`). What the field editors still do not reach, and
-  Raw JSON does: an exit's `distance` and `passage_from` (kept verbatim on
-  an edited edge, never shown); an anchor's fields beyond desc / bearing /
-  the three geometry words; an entity's `aliases`, `plan_ref` and the rest
+  through `PUT /attire`; the room's measurement -- extent, shape, an L's
+  parts -- the region's `look`, and the layout lint's rows beside their
+  field landed later the same day). What the field editors still do not
+  reach, and Raw JSON does: an exit's `distance`, `passage_from` and
+  `vertical` (kept verbatim on an edited edge, never shown; the passage
+  record that would make a doorway one object is § 2.37's and is not
+  built, so an edge declared from the far side alone stays read-only on
+  this room's card); an anchor's fields beyond desc / bearing / the three
+  geometry words; a region's `name` and `brief` (only its `look` is edited,
+  and only from a room that is in the region -- a region with no live room
+  in the frame has no card to be reached from); the layout lint's rows are
+  SHOWN and never fixed (rows, never fixes: `wall_overfull` names the wall,
+  and the host moves an anchor or widens the extent); a corner anchor's
+  wall has no pace count (a corner is one cell); an entity's `aliases`, `plan_ref` and the rest
   of its `state` beyond `lit`; a body's pose (shown on the Bodies tab, not
   edited -- `poses` is the body specialist's channel and an authoring
   surface for it wants the pose vocabulary, `_POSE_FIELDS`, as a form);
@@ -6944,10 +6954,12 @@ room and body. Left open, each an owner decision or a build:
   `spatial_routing.py` and `spatial_merge.py` in the same window. The
   mirror remains the answer to F16 until this lands.
 - **A Room tool that writes a region's `look`.** `regions.set_region_look`
-  is the seam and nothing calls it; the registry's only writer at commit
-  enters names. A `describe_region` tool (look, and the `brief` the regions
-  note left for the same reason) is one tool, one mandate kind, and a card
-  clause.
+  is the seam; since later on 2026-09-04 the World Browser's room card calls
+  it through `PATCH /api/chats/{cid}/regions/{region_id}` (`web/world_routes.py`),
+  so a HOST sets a look by hand. Nothing in the Room does: the registry's
+  only writer at commit still enters names. A `describe_region` tool (look,
+  and the `brief` the regions note left for the same reason) is one tool,
+  one mandate kind, and a card clause.
 - **The Director has to write extents.** 0 of 589 rooms carry one. The
   clause asks for one where proportion matters; whether the hand supplies
   it, and whether `size_disagrees_with_extent` then fires often enough to

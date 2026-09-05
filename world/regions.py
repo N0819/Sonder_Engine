@@ -157,10 +157,11 @@ def set_region_look(cid, frame_id, region_id, look):
     when the registry lacks it. An empty `look` removes the field. Returns
     the stored entry.
 
-    THE SEAM, NOT YET A TOOL: nothing in the Room calls this yet (the only
-    registry writer at commit is `ensure_regions`, which enters names), so a
-    look is set by a host the way any frame-scoped world key is, and the
-    Room tool that would write it is registered in `docs/UNBUILT.md`.
+    THE SEAM, NOT YET A TOOL: nothing in the Room calls this (the only
+    registry writer at commit is `ensure_regions`, which enters names). A
+    HOST writes it from the World Browser's room card, through
+    `web/world_routes.region_patch`; the Room tool that would write it is
+    registered in `docs/UNBUILT.md`.
     """
     from core.db import wget_for_frame, wset_for_frame
 

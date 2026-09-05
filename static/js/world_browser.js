@@ -8,13 +8,19 @@
 //   Rooms   -- a tree of every room the story knows on the left, the selected
 //              room on the right. Every field the card shows is edited where
 //              it is shown: name, description, notes, light / size / exposure
-//              (selects over the engine's own sets), region (a datalist of
-//              the map's regions), exits (barrier and bearing per doorway,
-//              remove, add -- the far room's edge is written too, because a
-//              doorway is one object), anchors (description, bearing, and the
-//              three geometry words), the things standing here (kind,
-//              description, portable, light, lit, move), and each body's
-//              station (the anchor it stands at, who it stands beside).
+//              (selects over the engine's own sets), the room's MEASUREMENT
+//              (extent in paces, shape, and an L's parts -- size is shown as
+//              derived while an extent stands), region (a datalist of the
+//              map's regions) with the region's shared `look`, exits (barrier
+//              and bearing per doorway, remove, add -- the far room's edge is
+//              written too, because a doorway is one object), anchors under
+//              the WALL their bearing names (each wall heading saying how
+//              many paces it has; description, bearing, and the three
+//              geometry words), the things standing here (kind, description,
+//              portable, light, lit, move), and each body's station (the
+//              anchor it stands at, who it stands beside). The layout lint's
+//              rows for the room are shown beside the field each concerns,
+//              and the tree marks a room that carries one.
 //   Bodies  -- every body the scene knows -- cast, player, promoted presence
 //              -- with its room, station, pose, and its FULL attire ledger,
 //              editable: a garment's state and condition, add and remove,
@@ -30,9 +36,11 @@
 // and the frontier also use, so the host and the Planner see one world.
 //
 // Writes, each narrow and each validated by the server against the SAME sets
-// the menus are built from: `PATCH /rooms/{id}` (changed fields only; exits
-// and anchors as this room's full list), `PATCH /rooms/{id}/entities/{eid}`,
-// `PUT /bodies/{name}/station`, and the two writes the app already had --
+// the menus are built from: `PATCH /rooms/{id}` (changed fields only; exits,
+// anchors and parts as this room's full list), `PATCH /rooms/{id}/entities/{eid}`,
+// `PUT /bodies/{name}/station`, `PATCH /regions/{id}` (the region's look,
+// one sentence every room in the region shares), and the two writes the app
+// already had --
 // "Move here" is the cast editor's `PUT /characters/{ch}/position`, and every
 // attire edit sends the WHOLE ledger to `PUT /attire`, which re-derives each
 // entry (`story.attire.rederive_entry`). The ledger stores a garment
@@ -185,6 +193,12 @@ function wbRenderTree(host, index, selectedId, onSelect) {
                        title: "Rooms between here and the nearest cast member" },
             `${row.hops} hops`)
         : null,
+      // The layout lint names this room: the card shows each row beside the
+      // field it concerns.
+      row.lint ? el("span", { class: "badge warn wb-lint-mark",
+                              title: "The layout lint has something to say about this room" },
+                    "Layout")
+               : null,
       wbStatusBadge(row.status));
     const wrap = el("div", { class: depth ? "wb-nested" : "" }, b);
     for (const child of children.get(row.id) || []) {
@@ -277,11 +291,54 @@ function wbMoveControl(slice, positions, chatId, ctx) {
   return el("div", { class: "row", style: "margin-top:6px" }, select, button);
 }
 
+// A whole-number control in paces, clamped by the engine's own range
+// (`vocab.extent`), committing on blur or Enter like `wbText` and reverting on
+// Escape. `save` gets the number, or null when the box was emptied.
+function wbNumber(value, save, { min, max, title = null, placeholder = "" } = {}) {
+  const input = el("input", { type: "number", class: "wb-input wb-paces", min: String(min),
+                              max: String(max), step: "1", translate: "no",
+                              ...(title ? { title } : {}),
+                              ...(placeholder ? { placeholder } : {}) });
+  input.value = value == null || value === "" ? "" : String(value);
+  let settled = input.value;
+  const commit = async () => {
+    if (input.value === settled) return;
+    settled = input.value;
+    await save(input.value === "" ? null : Number(input.value));
+  };
+  input.addEventListener("blur", commit);
+  input.addEventListener("keydown", e => {
+    if (e.key === "Enter") { e.preventDefault(); input.blur(); }
+    if (e.key === "Escape") { input.value = settled; input.blur(); }
+  });
+  return input;
+}
+
+// The layout lint's rows naming this room that concern one card field
+// (`field`, the server's `LINT_FIELDS` word), and -- for the anchor editor --
+// one wall of it. Each row is the sentence the commit's warning list would
+// carry (`layout_warning`), rendered where the field it is about is edited,
+// so a host reads "the north wall cannot hold them" under the north wall.
+function wbLintRows(slice, field, { wall = undefined } = {}) {
+  return (slice.lint || [])
+    .filter(row => row.field === field && (wall === undefined || (row.wall || "") === wall))
+    .map(row => el("div", { class: "wb-lint", "data-kind": row.kind },
+      el("span", { class: "badge warn", title: "The layout lint: where this room's geometry cannot all be true" },
+        "Layout"),
+      el("span", { class: "small", translate: "no" }, txt(row.text))));
+}
+
 // The room's fields: a PATCH of just the one that changed, the card rebuilt
-// from the slice the server hands back.
+// from the slice the server hands back. Since the room grew a measurement
+// (`docs/design/DESIGN_ROOM_FIDELITY.md` §2): the extent in paces, the shape,
+// and for an L its parts, with size shown as DERIVED while an extent stands
+// -- `size` is the word for the floor and `extent` its measurement, so the
+// word is not edited apart from the number.
 function wbRoomFields(slice, ctx) {
   const record = slice.record;
   const vocab = ctx.vocab;
+  const geometry = record.geometry || {};
+  const range = vocab.extent || {};
   const patch = fields => wbWrite(ctx, async () => {
     const fresh = await api("PATCH",
       `/api/chats/${ctx.chatId}/rooms/${encodeURIComponent(slice.id)}${frameQuery()}`,
@@ -289,22 +346,131 @@ function wbRoomFields(slice, ctx) {
     await ctx.replaceCard(fresh);
     return fresh;
   });
-  const field = (label, control) => el("label", { class: "wb-field" },
+  const field = (label, control, cls = "") => el("label", { class: "wb-field " + cls },
     el("span", { class: "small dim" }, label), control);
+
+  // Size: the tier as authored, or -- while an extent stands -- the tier the
+  // extent gives (`size_from_extent`), shown and not offered.
+  const measured = !!record.extent;
+  const size = wbSelect(vocab.size, measured ? geometry.size_derived : record.size,
+    { blank: "—", onchange: v => patch({ size: v }) });
+  if (measured) {
+    size.disabled = true;
+    size.title = t("Derived from the extent: the measurement decides how much floor there is, so the word follows it. Clear the extent to choose a size.");
+  }
+
+  // Extent: both sides in paces. A pair commits when both boxes hold a
+  // number (one side alone is not a measurement -- the engine refuses to
+  // guess the other); the clear button withdraws the measurement.
+  const extent = record.extent || {};
+  let w = extent.w ?? null, d = extent.d ?? null;
+  const commitExtent = () => {
+    if (w == null || d == null) return;
+    if (record.extent && record.extent.w === w && record.extent.d === d) return;
+    return patch({ extent: { w, d } });
+  };
+  const wInput = wbNumber(w, v => { w = v; return commitExtent(); },
+    { min: range.min, max: range.max, title: "Paces east to west", placeholder: "w" });
+  const dInput = wbNumber(d, v => { d = v; return commitExtent(); },
+    { min: range.min, max: range.max, title: "Paces north to south", placeholder: "d" });
+  const extentControl = el("span", { class: "wb-extent" }, wInput,
+    el("span", { class: "small dim" }, "×"), dInput,
+    measured ? el("button", { class: "small wb-remove", title: "Clear the extent; the room is its size tier's square again",
+                              onclick: () => patch({ extent: null }) }, "✕") : null,
+    !measured ? el("span", { class: "small dim", title: "With no extent the room is the square its size tier gives it" },
+                    `${geometry.w ?? "?"} × ${geometry.d ?? "?"} from the tier`) : null);
+
+  // Shape, and the parts of an L. The parts editor shows for an `l`, and for
+  // any shape that still carries parts, so a `corner_in_round_room` row can
+  // be fixed here rather than in Raw JSON.
+  const shape = wbSelect(vocab.shapes, record.shape || "",
+    { blank: "—", title: "Rectangle when unset", onchange: v => patch({ shape: v }) });
+  const parts = (record.parts || []).map(p => ({ ...p }));
+  const patchParts = () => patch({ parts: parts.map(p => ({ w: p.w, d: p.d, at: p.at })) });
+  let partsEditor = null;
+  if (record.shape === "l" || parts.length) {
+    const rows = parts.map((part, i) => el("div", { class: "wb-exit wb-part" },
+      el("span", { class: "small dim" }, "Corner"),
+      wbSelect(vocab.corners, part.at, { title: "Which corner of the box this part fills",
+                                         onchange: v => { part.at = v; return patchParts(); } }),
+      wbNumber(part.w, v => { if (v == null) return; part.w = v; return patchParts(); },
+        { min: range.min, max: range.max, title: "Paces east to west" }),
+      el("span", { class: "small dim" }, "×"),
+      wbNumber(part.d, v => { if (v == null) return; part.d = v; return patchParts(); },
+        { min: range.min, max: range.max, title: "Paces north to south" }),
+      el("button", { class: "small wb-remove", title: "Remove this part",
+                     onclick: () => { parts.splice(i, 1); return patchParts(); } }, "✕")));
+    const used = new Set(parts.map(p => p.at));
+    const corner = wbSelect(vocab.corners,
+      (vocab.corners || []).find(c => !used.has(c)) || (vocab.corners || [])[0],
+      { title: "Which corner of the box the new part fills", onchange: () => {} });
+    const newW = wbNumber("", () => {}, { min: range.min, max: range.max, placeholder: "w",
+                                          title: "Paces east to west" });
+    const newD = wbNumber("", () => {}, { min: range.min, max: range.max, placeholder: "d",
+                                          title: "Paces north to south" });
+    const add = () => {
+      if (newW.value === "" || newD.value === "") return toast(t("A part needs both sides in paces"), "err");
+      parts.push({ w: Number(newW.value), d: Number(newD.value), at: corner.value });
+      return patchParts();
+    };
+    partsEditor = el("div", { class: "wb-parts" },
+      rows.length ? el("div", {}, ...rows)
+                  : el("div", { class: "small dim" }, "An L is the union of two rectangles, each placed at a corner of the box."),
+      el("div", { class: "wb-exit wb-add" }, el("span", { class: "small dim" }, "Corner"), corner,
+        newW, el("span", { class: "small dim" }, "×"), newD,
+        el("button", { class: "small", onclick: add }, "Add part")));
+  }
+
+  // The region, and the look every room in it shares.
   const regionsList = el("datalist", { id: "wb-regions-list" },
     ...(vocab.regions || []).map(r => el("option", { value: r.id, translate: "no" },
       txt(r.name && r.name !== r.id ? r.name : ""))));
   const regionInput = wbText(record.region, value => patch({ region: value }),
     { placeholder: "Which part of the map" });
   regionInput.setAttribute("list", "wb-regions-list");
-  return el("div", { class: "wb-fields" },
-    field("Light", wbSelect(vocab.light, record.light,
-      { blank: "—", onchange: v => patch({ light: v }) })),
-    field("Size", wbSelect(vocab.size, record.size,
-      { blank: "—", onchange: v => patch({ size: v }) })),
-    field("Exposure", wbSelect(vocab.exposure, record.exposure,
-      { blank: "—", onchange: v => patch({ exposure: v }) })),
-    field("Region", el("span", {}, regionInput, regionsList)));
+
+  return el("div", {},
+    el("div", { class: "wb-fields" },
+      field("Light", wbSelect(vocab.light, record.light,
+        { blank: "—", onchange: v => patch({ light: v }) })),
+      field("Size", el("span", { class: "wb-size" }, size,
+        measured ? el("span", { class: "small dim wb-derived" }, "derived from the extent") : null), "wb-field-size"),
+      field("Extent (paces)", extentControl, "wb-field-extent"),
+      field("Shape", shape, "wb-field-shape"),
+      field("Exposure", wbSelect(vocab.exposure, record.exposure,
+        { blank: "—", onchange: v => patch({ exposure: v }) })),
+      field("Region", el("span", {}, regionInput, regionsList))),
+    ...wbLintRows(slice, "extent"),
+    partsEditor,
+    ...wbLintRows(slice, "shape"),
+    wbRegionLook(slice, ctx));
+}
+
+// The region's `look`: the visual register a picture of any room in the
+// region shares (`world/regions.py`, the registry record). It is the
+// REGION's field, so the write is the regions route and the card says how
+// far the sentence reaches; a room in no region has no look to edit.
+function wbRegionLook(slice, ctx) {
+  const region = slice.record ? slice.record.region : slice.region;
+  if (!region) return null;
+  const siblings = wbIndexRows(ctx.index).filter(r => r.region === region && r.status !== "retired");
+  const name = slice.region_name && slice.region_name !== region ? slice.region_name : region;
+  const save = look => wbWrite(ctx, async () => {
+    await api("PATCH",
+      `/api/chats/${ctx.chatId}/regions/${encodeURIComponent(region)}${frameQuery()}`,
+      { look });
+    await ctx.refresh();
+    return true;
+  });
+  return el("div", { class: "wb-look" },
+    el("label", { class: "wb-field" },
+      el("span", { class: "small dim" }, "Look of the region"),
+      wbText(slice.region_look || "", save,
+        { placeholder: "What every picture of this part of the map shares — brick and iron under sodium lamps" })),
+    el("div", { class: "small dim" },
+      "Shared by every room in", " ", el("b", { translate: "no" }, txt(name)),
+      siblings.length ? [" ", el("span", { translate: "no" },
+        txt(`(${siblings.length})`))] : null));
 }
 
 // Exits: the way the world is walked, and now the way a doorway is authored.
@@ -379,14 +545,24 @@ function wbExits(slice, ctx) {
           "Add exit")));
     }
   }
+  kids.push(...wbLintRows(slice, "exits"));
   return wbSection("Exits", ...kids);
 }
 
-// Anchors: the room's named features, each with a wall and its geometry.
+// Anchors: the room's named features, each with a wall and its geometry --
+// listed UNDER their wall. The four straight walls always head a group,
+// each saying how many paces it has (`record.geometry.walls`, the engine's
+// own rim count, from the extent or the size tier), so a wall that cannot
+// hold what stands on it is visible before the lint says so; the doorways
+// the wall carries are shown there too, read-only, because they take wall
+// as well. A corner heads a group only when an anchor sits in it; anchors
+// with no bearing are listed last. Moving an anchor to another wall is
+// changing its bearing.
 function wbAnchors(slice, ctx) {
   if (!slice.record) return null;
   const vocab = ctx.vocab;
   const anchors = slice.record.anchors || {};
+  const walls = (slice.record.geometry || {}).walls || {};
   const patchAnchors = next => wbWrite(ctx, async () => {
     const fresh = await api("PATCH",
       `/api/chats/${ctx.chatId}/rooms/${encodeURIComponent(slice.id)}${frameQuery()}`,
@@ -404,10 +580,10 @@ function wbAnchors(slice, ctx) {
     next[aid] = { ...next[aid], ...changes };
     return patchAnchors(next);
   };
-  const rows = Object.entries(anchors).map(([aid, a]) => el("div", { class: "wb-exit" },
+  const row = (aid, a) => el("div", { class: "wb-exit wb-anchor", "data-anchor": aid },
     el("span", { class: "small dim", translate: "no", title: "Anchor id" }, txt(aid)),
     wbText(a.desc || "", v => update(aid, { desc: v }), { placeholder: "Description" }),
-    wbSelect(vocab.dirs, a.dir || "", { blank: "—", title: "Bearing",
+    wbSelect(vocab.dirs, a.dir || "", { blank: "—", title: "Bearing — the wall this anchor stands on; change it to move the anchor",
                                         onchange: v => update(aid, { dir: v }) }),
     wbSelect(vocab.heights, a.height || "", { blank: "—", title: "Height",
                                               onchange: v => update(aid, { height: v }) }),
@@ -419,21 +595,72 @@ function wbAnchors(slice, ctx) {
       const next = copy();
       delete next[aid];
       return patchAnchors(next);
-    } }, "✕")));
+    } }, "✕"));
+
+  // Group by bearing: the straight walls in the engine's order, then the
+  // corners that hold something, then no bearing at all.
+  const byDir = new Map();
+  for (const [aid, a] of Object.entries(anchors)) {
+    const key = a.dir || "";
+    if (!byDir.has(key)) byDir.set(key, []);
+    byDir.get(key).push([aid, a]);
+  }
+  const doors = (slice.stationable || []).filter(a => a.implicit);
+  const groups = [];
+  for (const wall of vocab.walls || []) {
+    const paces = walls[wall];
+    const here = byDir.get(wall) || [];
+    const hereDoors = doors.filter(a => a.dir === wall);
+    groups.push(el("div", { class: "wb-wall", "data-wall": wall },
+      el("div", { class: "wb-wall-head" },
+        el("span", { class: "wb-wall-name", translate: "no" }, txt(wall.toUpperCase())),
+        el("span", {}, "wall"),
+        paces != null ? el("span", { class: "dim wb-wall-paces", title: "How many paces this wall has, from the extent or the size tier" },
+          `${paces} paces`) : null),
+      ...hereDoors.map(a => el("div", { class: "wb-exit wb-doorway small dim" },
+        el("span", {}, "Doorway"), el("span", { translate: "no" }, txt(a.desc)),
+        el("span", { translate: "no" }, txt(`(${a.id})`)))),
+      ...here.map(([aid, a]) => row(aid, a)),
+      ...wbLintRows(slice, "anchors", { wall })));
+  }
+  for (const corner of vocab.corners || []) {
+    const here = byDir.get(corner) || [];
+    if (!here.length) continue;
+    groups.push(el("div", { class: "wb-wall", "data-wall": corner },
+      el("div", { class: "wb-wall-head" },
+        el("span", { class: "wb-wall-name", translate: "no" }, txt(corner.toUpperCase())),
+        el("span", {}, "corner")),
+      ...here.map(([aid, a]) => row(aid, a))));
+  }
+  const free = byDir.get("") || [];
+  if (free.length) {
+    groups.push(el("div", { class: "wb-wall", "data-wall": "" },
+      el("div", { class: "wb-wall-head" }, el("span", {}, "No wall"),
+        el("span", { class: "dim" }, "— placed somewhere in the room")),
+      ...free.map(([aid, a]) => row(aid, a))));
+  }
+  // An anchor row naming no wall (none of today's kinds, kept so a new kind
+  // is shown rather than lost).
+  const stray = wbLintRows(slice, "anchors", { wall: "" });
+
   const desc = el("input", { type: "text", class: "wb-input", translate: "no",
                              placeholder: "A feature prose refers to — the hearth, the bar" });
+  const dir = wbSelect(vocab.dirs, "", { blank: "—", title: "Bearing — which wall the new anchor stands on",
+                                         onchange: () => {} });
   const add = () => {
     const text = desc.value.trim();
     if (!text) return;
     const next = copy();
-    next[""] = { desc: text };
+    next[""] = dir.value ? { desc: text, dir: dir.value } : { desc: text };
     return patchAnchors(next);
   };
   desc.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); add(); } });
   return wbSection("Anchors",
-    rows.length ? el("div", {}, ...rows)
-                : el("div", { class: "small dim" }, "No anchors recorded."),
-    el("div", { class: "wb-exit wb-add" }, desc,
+    Object.keys(anchors).length || doors.length ? null
+      : el("div", { class: "small dim" }, "No anchors recorded."),
+    ...groups,
+    ...stray,
+    el("div", { class: "wb-exit wb-add" }, desc, dir,
       el("button", { class: "small", onclick: add }, "Add anchor")));
 }
 
