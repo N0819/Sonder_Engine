@@ -102,6 +102,23 @@ Aster", whose presence is withheld until distinguished (correct).
 ## 3. Findings
 
 ### PB1. A presence addressed by description answers a line it had no channel to hear
+**FIXED 2026-09-05.** The rule now lives in `persist/commit_background.py`:
+`address_reaches` (the hearing test the address class is subject to) and
+`beat_scene` (the room the beat's own diff puts the speaker in), applied by
+`pick_voice_demand` and by `agents/background._demanded_presences`, which
+reads the beat scene through `agents/background._beat_scene`. The rule, in
+engine vocabulary: **being addressed changes whether a body is PICKED to
+answer, never whether it HEARD -- a line reaches a body only through the
+ordinary hearing model**; if nothing can hear the line, nobody answers, and
+zero is the correct count. Only two spellings stay `channel:exempt`, and
+neither is an address: `routed` (the Director wrote a line FOR this presence
+that the engine removed) and `emerged` (the Director called this body out of
+a crowd); `character_address` stays exempt because it already passed the same
+FULL bar at its own speaker's room. Pinned in
+`tests/test_played_scene_classes.py` and `tests/test_voice_demand.py` (whose
+`test_a_directors_flow_address_is_exempt` asserted the defect and is now
+`..._is_not_a_channel`).
+
 **Severity: firewall.** Stage of origin: `background_react` selection
 (`persist/commit_background.descriptor_bindings` +
 `_presence_speech_verdict`'s `channel:exempt`).
@@ -293,6 +310,18 @@ the rest as scene entities. Test: an opening that mints an `animal` leaves the
 registry's body count unchanged.
 
 ### PB6. A description binds to a body that does not match it, while bodies that do stand in the room
+**FIXED 2026-09-05**, with PB1 and in the same seam:
+`persist/commit_background._bodies_the_description_could_be_true_of` narrows
+the cohort to the bodies whose visible surface or role noun answers the
+description before `descriptor_bindings`' seeded pick, and the cohort itself
+is now resolved against the room the beat leaves the speaker in
+(`beat_scene`). A word discriminates only if it does not describe everybody
+in the cohort -- the same derivation `_shared_name_words` uses -- so the words
+the engine joins a surface with ("with" before hair and marks, "wearing"
+before what is worn) fall out by construction instead of being listed. The
+narrowing is a PREFERENCE over the seed, so a description nothing in the room
+answers still binds, in that room.
+
 **Severity: wrong-but-recoverable.** Origin:
 `persist/commit_background.descriptor_bindings`'s seeded pick.
 

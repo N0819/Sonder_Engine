@@ -5609,6 +5609,43 @@ built here. **And the `setting_fact` half of PB11 is untouched**: a fact the
 scenario text already states still files a need that reads as a missing
 object, which is F4's legibility class and is registered with it.
 
+### 1.118 Residuals from the addressed-hearing repair (PB1/PB6)
+
+**Landed 2026-09-05** with the caravanserai firewall fix
+(`docs/experiments/PLAY_2026_09_05_caravanserai.md` PB1/PB6): being addressed
+changes whether a body is PICKED to answer, never whether it heard
+(`persist/commit_background.address_reaches`), and a description is resolved
+against the room the beat's diff puts the speaker in (`beat_scene`). Three
+things were deliberately left.
+
+* **`docs/design/DESIGN_BACKGROUND_PRESENTATION.md` §C3 still states the
+  addressee guarantee unqualified** ("an addressee is never silently
+  dropped"), and the code now qualifies it: an addressee who could not
+  receive the line is not one this stage has anything to hand. The comment in
+  `pick_voice_demand` carries the qualification; the design note does not.
+  One sentence, in the note's own vocabulary, is what it owes. (Left because
+  the note was outside the fix's edit scope, not because the change is
+  uncertain.)
+
+* **The background packet still says nothing about HOW WELL a body heard.**
+  The play run's own proposal (§6): carry the graded `hear_level` on
+  `addressed_by` and state in the `background_react` sheet that a body
+  answers what it heard rather than what it was told about. Not needed for
+  the firewall — the deterministic floor is the gate, and a leak must not
+  depend on a model cooperating — but a presence handed a line it made out
+  only in part has no way to say so, and currently either answers it whole or
+  is not picked at all. The engine has the number; the packet drops it.
+
+* **`agents/background._filtered_player_declaration` and
+  `_beat_for_presence` grade a line without proximity**, while every cast
+  path (`agents/loops.py`, `composer.line_hear_level`) passes it. So a
+  background presence across a large room from a whispered line receives it
+  in full where a registered mind would get a fragment. Not a cross-room
+  leak — both read the same rooms — and not what PB1 was: the gate now
+  refuses the pick in that case (`measured_proximity_rel`), so the content
+  filter is not reached. It is an inconsistency between two readers of one
+  question, which is the shape every other defect in this family had.
+
 ## 2. Roadmap
 
 Features the architecture intends and has not built. Ordered by value per unit
