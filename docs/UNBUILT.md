@@ -6738,6 +6738,49 @@ itself makes).
   its own beyond the view. Two was chosen because one shared word is a
   coincidence; nobody has replayed it against the stored corpus.
 
+### 1.136 The rear arc promises sound and delivers silence — an owner decision, sharpened by the horror run
+
+**Isolated 2026-09-05** (multitude § PM5, lane B's trace). `spatial.entity_arc`
+documents the blind spot as *"the observer gets NO NEW VISUAL detail from them
+(a silent approach or gesture is unseen) though sound still carries"*, and
+neither half of that holds:
+
+* `composer.presence_percepts` drops a rear-arc body **outright**, so a body
+  that has stood in the room for eight beats is not in the room at all -- not
+  merely undetailed.
+* `composer.act_percept` refuses on the arc with no substitute, and nothing
+  carries the sound, because an act reaches an observer on the SIGHT channel
+  alone.
+
+Measured: five factors at one anchor; the three turned north got neither the
+act nor the actor's presence and acted as if the beat had not happened, while
+the two turned south got both.
+
+**Why this is not fixed here.** The obvious repair -- admit a rear-arc body's
+presence and withhold only detail -- is the same edit that would announce a
+thing walking up behind you, and the blind spot is the machinery a horror
+scene runs on. The Sarah Moon descent run
+([[sarah-moon-descent-run]], creatures that are dangers rather than
+interlocutors) will exercise exactly this, in both directions, within its
+first twenty beats. So the fork is stated and left:
+
+* **(a)** presence is not a visual detail -- a co-present body is in the room
+  whichever way you are facing, and what the arc takes is their conduct and
+  their appearance. Costs the silent approach unless something else conceals
+  them; `concealed_from_observer` and `visual_level_between` are the channels
+  that already exist for deliberate concealment, and the argument is that
+  hiding should be a thing a body DOES rather than a consequence of where the
+  observer's nose points.
+* **(b)** the arc stands as it is, and the missing half is the SOUND the
+  contract already promises: an act in the same room reaches a rear-arc
+  observer on the hearing channel, ungraded by sight. This needs an act to be
+  deliverable by hearing at all, which is § 1.117 from the other side and is
+  a representation change rather than a gate change.
+
+They are not exclusive; (b) is owed either way. What must not happen is (a)
+landing quietly as a side effect of some other repair, which is why it is
+written down before the run rather than after it.
+
 ## 2. Roadmap
 
 Features the architecture intends and has not built. Ordered by value per unit

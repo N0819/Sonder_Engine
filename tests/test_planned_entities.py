@@ -468,3 +468,42 @@ def test_both_ledgers_survive_archive_and_checkpoint(temp_db):
     assert open_planning_needs(imported["id"])[0]["surface"]["name"] == "the letter"
     restore_checkpoint(cid, 1)
     assert "rendered" not in planned_entities(cid)[plan["uid"]]
+
+
+def test_a_source_the_plan_authored_reaches_the_entity_the_mint_binds_to():
+    """A SOURCE THE PLAN AUTHORED IS A SOURCE THE FIELD MUST READ.
+
+    `plan_entity` takes `light_source`/`sound_source` through the same closed
+    tables the World Browser validates against, and `plan_figure` carries
+    them to the binding floor -- but the mint they bind to is written by a
+    model that was never told about them, so a roar or a lamp the Writers'
+    Room authored existed on the plan and nowhere the light and sound fields
+    look (the burning night, 2026-09-05: a tenement on fire with 0 light
+    sources and 0 sound sources in its final scene).
+
+    The beat is closer to the fact than the plan is, so a mint that already
+    said something keeps its own word.
+    """
+    from agents.director import _bind_minted_entities_to_present_figures
+
+    figures = [{"name": "The Brazier", "plan": "plan:thing:brazier",
+                "room": "yard", "kind": "thing",
+                "sources": {"light_source": "lit", "steadiness": "flicker"}}]
+    scene = {"rooms": {"yard": {"name": "The Yard"}}, "positions": {},
+             "entities": {}}
+    diff = {"entities": {"brazier": {"name": "the brazier", "kind": "fixture",
+                                     "room": "yard"}},
+            "positions": {"the brazier": "yard"}}
+    _bind_minted_entities_to_present_figures(
+        scene, diff, figures, fallback_room="yard")
+    ent = diff["entities"]["brazier"]
+    assert ent.get("light_source") == "lit"
+    assert ent.get("steadiness") == "flicker"
+
+    # A mint that spoke for itself is not overwritten by the plan.
+    diff2 = {"entities": {"brazier": {"name": "the brazier", "kind": "fixture",
+                                      "room": "yard", "light_source": "out"}},
+             "positions": {"the brazier": "yard"}}
+    _bind_minted_entities_to_present_figures(
+        scene, diff2, figures, fallback_room="yard")
+    assert diff2["entities"]["brazier"]["light_source"] == "out"
