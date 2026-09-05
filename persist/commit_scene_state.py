@@ -1176,6 +1176,15 @@ def prepare_scene_commit(ctx):
             frame_id=getattr(getattr(ctx, "turn", None), "frame_id", None))
     except Exception as exc:  # the scene must commit without the town
         ctx.add_warning("charter placements not routed: %s" % exc)
+    # AN ORDER THE BEAT GAVE IS THE INSTITUTION'S TO LAND, NOT THE SCENE'S.
+    # `charter_ops` is the Director's hand on a charter (`world/charter_ops.py`,
+    # the same closed op set the Planner writes through a package), so it is
+    # taken off the diff here for the same reason a townsperson's `positions`
+    # entry is: the scene has no row for any of it, and the registry is the one
+    # owner. Landed in `commit_scene` inside the transaction.
+    _charter_orders = list(diff.get("charter_ops") or [])
+    if "charter_ops" in diff:
+        diff.pop("charter_ops", None)
     sc = merge_scene_with_diff(
         prev_scene, diff, contact_report=_contact_report,
         substance_report=_substance_report.append,
@@ -1821,6 +1830,7 @@ def prepare_scene_commit(ctx):
         # body, stripped from `diff` above and landed on the registry by
         # `commit_scene` (`charter_runtime.apply_scene_placements`).
         "charter_placements": _charter_placements,
+        "charter_orders": _charter_orders,
         # `{region_id: name}` the region registry must hold for this scene's
         # rooms: folded zones and Director-declared regions, named as written.
         "regions": _region_entries,
@@ -1854,6 +1864,7 @@ def commit_scene(ctx, nonce, *, prepared=None):
             _apply_destruction(
                 ctx.chat.id, ctx.turn.id, prepared["destruction"])
         _apply_charter_placements(ctx, prepared.get("charter_placements"))
+        _apply_charter_orders(ctx, prepared.get("charter_orders"))
         _record_subject_last_seen(ctx, sc, prepared.get("clock"))
     return sc
 
@@ -1868,6 +1879,54 @@ def _apply_charter_placements(ctx, routing):
         return 0
     from world.charter_runtime import apply_scene_placements
     return apply_scene_placements(ctx.chat.id, routing, ctx.turn.frame_id)
+
+
+def _apply_charter_orders(ctx, ops):
+    """Land the beat's `charter_ops` on the registry, inside the scene
+    domain's transaction so a rollback takes them with the scene.
+
+    FAIL LOUD, NEVER QUIETLY. The defect this closes (caravanserai run,
+    PB13) is an order the fiction gave and the ledger dropped: the player
+    asked twice that somebody fetch the gate warden, the innkeeper agreed on
+    the record, the Director's own prose said she was signalling a serving
+    hand to attend to it, and `state_diff` carried nothing -- the body had no
+    walk, no errand and the warden was still at his bench nine beats later.
+    So an op that cannot be routed reaches the Director as a note rather than
+    disappearing, and the beat still commits: a town that could not take an
+    order is not a reason to lose the scene.
+
+    `author_charter_ops` is all-or-nothing by design -- an event that half
+    lands is a town whose ledgers disagree with the sentence that made them --
+    so a refusal anywhere reports the whole event and applies none of it.
+    """
+    ops = [op for op in (ops or []) if isinstance(op, dict)]
+    if not ops:
+        return 0
+    from world.charter_runtime import author_charter_ops, registry_for
+    # A story with ONE institution should not make the hand name it: the
+    # engine knows which, and an op refused for a field the beat could not
+    # have known is a refusal the fiction cannot act on. With two or more,
+    # the op names its charter or the refusal says so.
+    try:
+        _items = (registry_for(ctx.chat.id, ctx.turn.frame_id) or {}).get("items") or {}
+        if len(_items) == 1:
+            _only = next(iter(_items))
+            ops = [dict(op) if op.get("charter") else {**op, "charter": _only}
+                   for op in ops]
+    except Exception:
+        pass
+    try:
+        landed = author_charter_ops(
+            ctx.chat.id, ctx.turn.frame_id, ops,
+            by="director", turn_idx=getattr(ctx.turn, "idx", None))
+    except Exception as exc:
+        ctx.add_warning("charter ops not landed: %s" % exc)
+        ctx.tell_director(
+            "The institution refused this beat's order and nothing was "
+            "dispatched (%s). Name the body as its charter does and a place "
+            "the rooms hold, or say it in prose without an op." % exc)
+        return 0
+    return len((landed or {}).get("applied") or [])
 
 
 def _record_subject_last_seen(ctx, sc, clock):

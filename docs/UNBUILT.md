@@ -5939,11 +5939,35 @@ an errand at all. PB12 (the institution never ticks at conversational pace)
 is the reason either answer matters: at ~18 story-seconds a beat no charter
 window is ever charged, so even a dispatched errand would not walk.
 
-### 1.124 The Director cannot dispatch an errand to an institution (PB13)
+### 1.124 The Director dispatches an errand to an institution (PB13, BUILT 2026-09-05)
 
 **Found 2026-09-05** (`docs/experiments/PLAY_2026_09_05_caravanserai.md` §
 PB13), registered rather than built: the shape needs `llm/schemas.py`, which
 another agent held on the day PB12 was fixed.
+
+**BUILT 2026-09-05, the same day it was narrowed.** `charter_ops` is now a
+channel of the SOCIAL specialist -- one closed op vocabulary
+(`world/charter_ops.py`), two authors, which is the point of routing the
+Director through the Planner's own landing function rather than giving it a
+second one. The registries that make a channel real all name it: `StateDiff`
+and `DirectorSocialSpecialist` in `llm/schemas.py`, `SPECIALIST_CHANNELS`,
+`director_scopes.SPECIALISTS`, `director_evidence._SUBJECT_OP_CHANNELS`
+(`body`, `to`), a prompt chunk in both packs, the prose author's delegation
+paragraph, and the two test ledgers that say what payload shows the hand its
+own state and why an order is not a manifest category (a dispatch changes
+nothing until the body has walked it).
+
+Routed exactly as a townsperson's `positions` entry is, and for the same
+reason: the ops are stripped from the diff in `prepare_scene_commit` before
+the merge, because the scene has no row for any of it, and landed by
+`_apply_charter_orders` inside `commit_scene`'s transaction, so a rollback
+takes them with the scene. A story with ONE institution does not make the
+hand name it -- the engine knows which, and an op refused for a field the
+beat could not have known is a refusal the fiction cannot act on. A refusal
+anywhere reports the WHOLE event and applies none of it (`author_charter_ops`
+is all-or-nothing), reaches the Director through `tell_director`, and the
+beat still commits: a town that could not take an order is not a reason to
+lose the scene.
 
 **Narrowed 2026-09-05.** The Planner's half is built (`charter_ops`,
 § 1.123), so what is missing here is now only the CHANNEL and not the landing

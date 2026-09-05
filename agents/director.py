@@ -227,6 +227,7 @@ from .director_floors import (
     _scan_for_untracked_restraint,
 )
 from .director_evidence import (
+    _SUBJECT_OP_CHANNELS,
     _RECONCILE_INTERPRET_MAX_UNITS,
     _INTERPRET_COVERAGE_MIN,
     _decl_tokens,

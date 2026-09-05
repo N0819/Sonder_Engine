@@ -2063,6 +2063,14 @@ class StateDiff(LenientModel):
     # refused entry to the gallery, and the narrator wrote the scene from it.
     # Declared on the model so the validation round trip and every stored
     # variant keep it; no specialist owns it, so it is in no channel table.
+    # The Director's hand on an institution (`world/charter_ops.py`), the
+    # same closed op set the Planner writes through a package: one hand
+    # authors, one vocabulary. Owned by the SOCIAL specialist, which already
+    # rules on who was told to do what. Routed out of the diff before the
+    # merge and landed on the registry inside the commit, exactly as a
+    # charter body's `positions`/`stations` are, so `place` stays the
+    # charter's one answer and nothing is stored twice.
+    charter_ops: list[dict] = Field(default_factory=list)
     movement_refused: list[dict] = Field(default_factory=list)
     conditions: dict[str, list[dict]] = Field(default_factory=dict)
     inventory_ops: list[dict] = Field(default_factory=list)
@@ -2529,6 +2537,9 @@ class DirectorSocialSpecialist(LenientModel):
     crowd_ops: list[CrowdOp] = Field(default_factory=list)
     courier_ops: list[CourierOp] = Field(default_factory=list)
     telling_ops: list[TellingOp] = Field(default_factory=list)
+    # An order given to somebody the institution employs, in the one closed
+    # op set `world/charter_ops.py` owns.
+    charter_ops: list[dict] = Field(default_factory=list)
     ratified_claims: list[str] = Field(default_factory=list)
     contradicted_claims: list[str] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
@@ -3788,7 +3799,8 @@ SPECIALIST_CHANNELS = {
     "director_body": ("attire", "conditions", "vitals", "overlays"),
     "director_social": ("cast_changes", "introductions", "world_facts",
                         "public_evidence", "crowd_ops", "courier_ops",
-                        "telling_ops", "ratified_claims", "contradicted_claims"),
+                        "telling_ops", "ratified_claims", "contradicted_claims",
+                        "charter_ops"),
     "director_contact": ("contact_ops", "contact_action_ops",
                          "substance_ops", "containment", "scales"),
     "director_objects": ("entities", "remove_entities", "inventory_ops",
@@ -4926,6 +4938,15 @@ OUTPUT_EXAMPLES = {
         "telling_ops": [],
         "ratified_claims": [],
         "contradicted_claims": [],
+        # An order the beat GAVE to somebody the institution employs. Shown
+        # populated because the shape is the part most easily got wrong: the
+        # body as the beat names it, the place it is sent to, and the reason
+        # in the institution's words. What follows -- who covers the post,
+        # who notices -- is the simulation's answer on the beats after.
+        "charter_ops": [
+            {"op": "errand", "body": "Neris",
+             "to": "gatehouse", "purpose": "fetch the gate warden"},
+        ],
         "notes": [],
     },
     "director_contact": {

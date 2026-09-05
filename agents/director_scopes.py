@@ -115,7 +115,8 @@ SPECIALISTS = {
         # work, and this is the hand that owns speech consequences.
         "channels": ("cast_changes", "introductions", "world_facts",
                      "public_evidence", "crowd_ops", "courier_ops",
-                     "telling_ops", "ratified_claims", "contradicted_claims"),
+                     "telling_ops", "ratified_claims", "contradicted_claims",
+                     "charter_ops"),
         # This channel is step metadata rather than StateDiff, so its list
         # shape cannot be derived from StateDiff's annotations below.
         "list_channels": ("public_evidence",),

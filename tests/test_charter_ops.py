@@ -24,6 +24,7 @@ downstream is the simulation's answer.
 
 from __future__ import annotations
 
+import pytest
 import copy
 import json
 import re
@@ -765,3 +766,51 @@ class TestThePackageOperation:
 
 def _rev(cid, uid):
     return get_package(cid, uid)["revision"]
+
+
+# ---------------------------------------------------------------------------
+# The Director's own channel (PB13)
+# ---------------------------------------------------------------------------
+#
+# Caravanserai run, turns 5 and 10: the player asked twice that somebody fetch
+# the gate warden, the innkeeper agreed on the record ("She'll be told when the
+# rush settles"), the Director's prose said she was signalling the serving hand
+# to attend to it, and `state_diff` carried nothing. The registry showed the
+# serving hand with no walk and no errand, and the warden still at his bench on
+# turn 14. The Planner could author an errand and the Director, which owns
+# objective causality and had just narrated the order, could not.
+
+def test_the_director_channel_is_registered_everywhere_a_channel_must_be():
+    """A channel is only real when every registry names it: the diff it rides,
+    the specialist that owns it, the scope table, the subject classification
+    and a prompt chunk in both packs. `project_check` enforces the last two;
+    this pins the first three so a future edit cannot quietly orphan it."""
+    from llm.schemas import SPECIALIST_CHANNELS, StateDiff, DirectorSocialSpecialist
+    # Through the facade: the sibling rule allows a test to name a sibling it
+    # PATCHES or reads the source of, and this one only reads a table.
+    from agents.director import SPECIALISTS, _SUBJECT_OP_CHANNELS
+
+    assert "charter_ops" in StateDiff.model_fields
+    assert "charter_ops" in DirectorSocialSpecialist.model_fields
+    assert "charter_ops" in SPECIALIST_CHANNELS["director_social"]
+    assert "charter_ops" in SPECIALISTS["social"]["channels"]
+    assert _SUBJECT_OP_CHANNELS["charter_ops"] == ("body", "to")
+
+
+def test_the_op_vocabulary_is_the_planners_own():
+    """One closed set, two authors. The point of routing the Director through
+    `world/charter_ops.py` rather than giving it a channel of its own is that
+    an errand means the same thing whoever wrote it."""
+    from world import charter_ops
+
+    op = charter_ops.normalize_charter_op(
+        {"op": "errand", "body": "Neris", "to": "gatehouse",
+         "purpose": "fetch the gate warden"}, default_charter="caravanserai")
+    assert op["op"] == "errand" and op["charter"] == "caravanserai"
+
+    # A field the kind does not take is REFUSED rather than ignored, which is
+    # what makes "no op may name who reacts" structural rather than hoped for.
+    with pytest.raises(ValueError):
+        charter_ops.normalize_charter_op(
+            {"op": "errand", "body": "Neris", "to": "gatehouse",
+             "who_reacts": "the innkeeper"}, default_charter="caravanserai")
