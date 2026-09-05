@@ -894,6 +894,59 @@ def _player_room_in(sc, pers, interp, ctx, player_name):
     return room
 
 
+def _declared_arrival_room(sc, interp, p_room):
+    """The room this beat's DECLARATION says the player's own body reaches,
+    when the scene holds it and it is not where the beat found them.
+
+    "", which every caller reads as "nothing was declared", for a move of a
+    vehicle rather than a body (`MovementDecl.mover`), for a declaration that
+    only sets off (`arrives: false`), and for a destination no room answers
+    to -- the beat cannot grade a channel to a place the world does not have.
+    """
+    mv = (interp or {}).get("movement")
+    if not isinstance(mv, dict) or not mv.get("arrives", True):
+        return ""
+    if str(mv.get("mover") or "self").strip().casefold() not in ("", "self"):
+        return ""
+    dest = str(mv.get("to_room") or "").strip()
+    if not dest or dest == str(p_room or ""):
+        return ""
+    return dest if dest in ((sc or {}).get("rooms") or {}) else ""
+
+
+def _speech_room_for(sc, event, arrival_room, p_room):
+    """WHERE THE SPEAKER STOOD WHEN THEY SAID IT.
+
+    A line is heard from the room its speaker was in when they spoke, and a
+    beat that carries both a walk and a line has two candidate rooms. The
+    declaration's own ORDER would settle it and no field carries that order
+    (`MovementDecl` has no index into `sequence`), so the beat is asked the
+    one thing it does say: WHO the line was aimed at, and where the scene
+    stands them.
+
+    Live case, flat turn 20 (2026-09-05): a woman came in from the balcony,
+    put a hand flat on a man's shoulder -- the contact landed, with a perfect
+    reciprocal touch percept -- and the line she said with her hand on him
+    reached both cast views as "A muffled voice: ...going... anything...
+    tonight...", graded from the balcony through a shut glass door, and lost
+    its speaker with it.
+
+    The floor stays where it was. Only a line the beat aims at somebody the
+    scene stands in the DESTINATION is graded there; everything else -- an
+    unaddressed line, an addressee in the room left behind, a line before a
+    declared departure -- keeps the room the beat found the speaker in.
+    Widening a channel is the direction a mistake here would leak in, so it
+    is taken only where the declaration itself says the speaker was there.
+    """
+    if not arrival_room:
+        return p_room
+    for target in (event or {}).get("targets") or ():
+        who = str(target or "").strip()
+        if who and room_of(sc, who) == arrival_room:
+            return arrival_room
+    return p_room
+
+
 def _body_relocated(prev_sc, sc, name, fallback_room=None):
     """Did THIS body's own position change across the beat.
 
@@ -1308,6 +1361,34 @@ def _identity_roster(p_name, p_appearance, cast):
         })
     return roster
 
+#: How much of the text on either side of an offending fragment a diagnostic
+#: carries. A GUARD'S MESSAGE HAS TO LOCATE ITS CAUSE. The self-narration
+#: tripwire fired on live data (lighthouse turn 9, 2026-09-05), repaired the
+#: view correctly, and printed `'Marrick...'` -- a fragment the sentence
+#: splitter had already cut down to nothing findable, in a view of a thousand
+#: characters. A warning nobody can act on is worse than no warning: it costs
+#: attention and hides the ones that can be acted on.
+_EXCERPT_CONTEXT_CHARS = 40
+
+
+def _excerpt_in(text, fragment, context=_EXCERPT_CONTEXT_CHARS, cap=200):
+    """``fragment`` with enough of ``text`` around it to find the sentence.
+
+    Falls back to the fragment alone when the text does not contain it --
+    the repair may have rewritten what it reports, and a bounded excerpt is
+    still better than nothing.
+    """
+    text, fragment = str(text or ""), str(fragment or "")
+    if not fragment:
+        return ""
+    at = text.find(fragment)
+    if at < 0:
+        return fragment[:cap]
+    start, end = max(0, at - context), min(len(text), at + len(fragment) + context)
+    return "%s%s%s" % ("..." if start else "", text[start:end],
+                       "..." if end < len(text) else "")
+
+
 def _strip_self_narration(view, perceiver_name, other_names=(), refusals=None):
     """Drop sentences that narrate the PERCEIVER from outside their own view.
 
@@ -1412,7 +1493,7 @@ def _strip_self_narration(view, perceiver_name, other_names=(), refusals=None):
             refusals.append(
                 "dropping self-narration would have left this view with no "
                 "sight in it at all, so it was delivered as written: "
-                + "; ".join(s[:120] for s in dropped))
+                + "; ".join(_excerpt_in(view, s) for s in dropped))
         return view, []
     return " ".join(kept), dropped
 
@@ -2687,7 +2768,11 @@ def perception_outcome(ctx, nonce):
     br_entries = [b["entry"] for b in _bg_beats if b["entry"]]
 
     raw_dlog = list(res.get("dialogue_log") or [])
-    raw_dlog.extend(br_entries)
+    # MARKED AS THE BACKGROUND STAGE'S, under the same `source` key
+    # `commit_memory` files them by. `_composer_outcome` reads it to notice a
+    # produced answer that reached no view at all, which is otherwise
+    # indistinguishable from the presence having said nothing.
+    raw_dlog.extend({**e, "source": "background_react"} for e in br_entries)
     enriched_dlog = []
     for d in raw_dlog:
         speaker = d.get("speaker", "?")
@@ -2705,6 +2790,7 @@ def perception_outcome(ctx, nonce):
             # medium:'comm' carries a transmitted line to its addressed party
             # across a physical barrier (see the perception_outcome injection).
             "medium": d.get("medium"),
+            "source": d.get("source") or "",
         })
 
     sources = [{"name": p_name, "room": p_room}]
@@ -3309,7 +3395,7 @@ def _composer_authored_prose(ctx, stage, text, name, recognized,
         notes.append(
             f"{stage}: authored prose narrates {name} in the third person "
             "inside a quoted line, so it was admitted as written rather "
-            f"than cut: {refused[0][:120]!r}")
+            f"than cut: {_excerpt_in(text, refused[0])!r}")
     return text, notes
 
 
@@ -3361,16 +3447,20 @@ def _composer_tripwires(ctx, stage, pid, name, view, known, roster,
     stripped, self_narrated, refused = _strip_self_narration_quote_safe(
         view, name, [s["name"] for s in roster])
     if self_narrated:
+        # WITH THE TEXT AROUND IT (`_excerpt_in`): the fragment alone is
+        # whatever the sentence splitter handed back, and on live data that
+        # was four characters of a thousand-character view.
         ctx.warnings.append(
             f"{stage}: COMPOSER TRIPWIRE -- composed view of {name} narrated "
-            f"its own perceiver (engine defect): {self_narrated[0][:120]!r}")
+            "its own perceiver (engine defect): "
+            f"{_excerpt_in(view, self_narrated[0])!r}")
         view = stripped
     if refused:
         ctx.warnings.append(
             f"{stage}: COMPOSER TRIPWIRE -- composed view of {name} narrates "
             "its own perceiver inside a delivered line; the line was kept "
             f"and the framing error stands (engine defect): "
-            f"{refused[0][:120]!r}")
+            f"{_excerpt_in(view, refused[0])!r}")
     if spoken_lines is not None:
         _checked, invented = _scrub_invented_dialogue(
             view, spoken_lines, cast_names=[s["name"] for s in roster])
@@ -4323,6 +4413,12 @@ def _composer_act(ctx, sc, interp, perceivers, known, p_name, p_visible,
     all_bodies.append(actor_body)
     bodies_by_name = {b["name"]: b for b in all_bodies if b.get("name")}
     joint_labels = _joint_stranger_labels(all_bodies)
+    # WHERE THE BEAT SAYS THIS BODY ENDS UP (`_declared_arrival_room`), and
+    # one relation per observer per room built from it (`_speech_room_for`):
+    # a line said with a hand on somebody in the room walked INTO is heard
+    # from there, not from the room left behind.
+    arrival_room = _declared_arrival_room(sc, interp, actor_body.get("room"))
+    arrival_rels = {}
     clean_views, observations, ledger, company = {}, {}, {}, {}
     for p in perceivers:
         pid = str(p["id"])
@@ -4375,12 +4471,38 @@ def _composer_act(ctx, sc, interp, perceivers, known, p_name, p_visible,
             recognized, unknown = _composer_unknown_sources(
                 name, known, roster)
             continuity = bool(rel.get("open_group_continuity"))
+
+            def _spoken_from(room, _p=p, _name=name, _rel=rel, _vis=vis):
+                """(relation, can_see) for a line said in ``room``.
+
+                One relation per observer per room, built the way the
+                onset's own is (`perception_act`), so a line graded at the
+                declared destination is graded by the same reader that
+                grades one at the origin -- one beat, one field.
+                """
+                if room == actor_body.get("room") or not room:
+                    return _rel, _in_plain_view(_rel, _vis)
+                cached = arrival_rels.get((_name, room))
+                if cached is None:
+                    alt = spatial_rel_between(
+                        sc, _name, p_name, observer_room=_p.get("room"),
+                        target_room=room,
+                        sound=_sound_field_for(ctx, sc, _name,
+                                               _p.get("room")))
+                    alt_vis = has_visual(alt) and composer._sense_graded(
+                        "full", "sight", _p.get("sense_card")) != "none"
+                    cached = (alt, _in_plain_view(alt, alt_vis))
+                    arrival_rels[(_name, room)] = cached
+                return cached
+
             for idx, event in enumerate(onset_sequence):
                 if not isinstance(event, dict):
                     continue
                 if event.get("type") == "speech":
-                    speech_rel = rel if continuity else {
-                        **rel, "open_group_continuity": False}
+                    said_rel, said_seen = _spoken_from(_speech_room_for(
+                        sc, event, arrival_room, actor_body.get("room")))
+                    speech_rel = said_rel if continuity else {
+                        **said_rel, "open_group_continuity": False}
                     speech_rel = _with_comm_channel(
                         sc, speech_rel, speaker=p_name, observer=name,
                         observer_room=p.get("room"))
@@ -4394,21 +4516,23 @@ def _composer_act(ctx, sc, interp, perceivers, known, p_name, p_visible,
                     }
                     percept = composer.speech_percept(
                         entry, speech_rel, name, display=display,
-                        can_see=can_see,
+                        can_see=said_seen,
                         proximity=p.get("proximity_to_actor"),
                         order_key=idx, observer_id=pid,
                         senses=p.get("sense_card"))
                     if percept:
                         percepts.append(percept)
                 elif event.get("type") == "communication":
-                    speech_rel = rel if continuity else {
-                        **rel, "open_group_continuity": False}
+                    said_rel, said_seen = _spoken_from(_speech_room_for(
+                        sc, event, arrival_room, actor_body.get("room")))
+                    speech_rel = said_rel if continuity else {
+                        **said_rel, "open_group_continuity": False}
                     entry = {**event, "speaker": p_name}
                     percept = composer.communication_percept(
                         entry, _with_comm_channel(
                             sc, speech_rel, speaker=p_name, observer=name,
                             observer_room=p.get("room")),
-                        name, display=display, can_see=can_see,
+                        name, display=display, can_see=said_seen,
                         proximity=p.get("proximity_to_actor"),
                         order_key=idx, observer_id=pid,
                         senses=p.get("sense_card"))
@@ -4860,6 +4984,15 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
     full_player_render = _explicit_look_intent(interp)
     _ubiq = _ubiquitous_names(sc)
 
+    # Every background line this beat produced, until a view takes it.
+    # `source` is stamped where the reactions are merged into the dialogue
+    # log (`perception_outcome`), the same marker `commit_memory` files them
+    # under in the persisted event record.
+    unheard = {(str(d.get("speaker") or "").strip(),
+                str(d.get("exact_quote") or ""))
+               for d in enriched_dlog
+               if str(d.get("source") or "") == "background_react"
+               and str(d.get("exact_quote") or "").strip()}
     clean_views, observations, ledger, company = {}, {}, {}, {}
     episodes, episode_meta = {}, {}
     for p in perceivers:
@@ -4979,6 +5112,9 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
                         senses=p.get("sense_card"))
                     if percept:
                         percepts.append(percept)
+                        unheard.discard(
+                            (str(speaker or "").strip(),
+                             str(d.get("exact_quote") or "")))
                     order += 1
                     continue
 
@@ -5150,6 +5286,21 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
                 ident_roster)
             episodes[pid] = content
             episode_meta[pid] = {"gist": gist, "entities": entities}
+    # AN ANSWER THAT WAS PRODUCED AND NOBODY HEARD IS SAID OUT LOUD. A
+    # background presence's line goes through the same grading a cast line
+    # does, and grading may correctly leave it reaching nobody -- but a beat
+    # in which the NPC answered and nothing carried it is indistinguishable,
+    # from every record afterwards, from a beat in which the NPC said
+    # nothing. Live on the road, 2026-09-05: a burner answered a direct
+    # question, the words reached no view, and the run gave no warning.
+    # The line still stands in the beat's own dialogue log (`commit_memory`
+    # folds every fired reaction into the persisted event), so the record of
+    # who spoke keeps it; what this adds is that the silence is legible.
+    for (speaker, quote) in sorted(unheard):
+        ctx.add_warning(
+            "perception_outcome: %s answered and the line reached no view; "
+            "no channel in this beat carried it (%r)"
+            % (speaker, quote[:120]))
     merged = dict(base_ledger)
     merged.update(ledger)
     ctx["_composer_turn_ledger"] = merged

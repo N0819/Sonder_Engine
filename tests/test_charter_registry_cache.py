@@ -202,6 +202,9 @@ class TestTheSixCallTurnBracket:
         assert act is not outcome
         assert act["memo"] is not outcome["memo"]
         act["memo"]["hall"] = [{"stale": True}]
-        act.setdefault("crowd_memo", {})["hall"] = [{"stale": True}]
+        # `ground_memo` is the crowd/figure answer's memo since 2026-09-05:
+        # one subtraction per (room, stage), read by both presentations
+        # (`agents.common.charter_ground_for_room`).
+        act.setdefault("ground_memo", {})["hall"] = [{"stale": True}]
         assert "hall" not in outcome["memo"]
-        assert "hall" not in outcome.get("crowd_memo", {})
+        assert "hall" not in outcome.get("ground_memo", {})

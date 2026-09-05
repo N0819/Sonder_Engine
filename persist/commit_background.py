@@ -2313,9 +2313,16 @@ def track_background_presences(ctx, nonce, *, prepared=None):
                 filled = enrol_person(cid, need, frame_id=ctx.turn.frame_id,
                                       scene=live_scene)
                 if not filled or not filled.get("ref"):
+                    # NOBODY KEEPS THEM AND NOBODY WAS INVENTED TO. The fill
+                    # enrols into an institution that exists; where none
+                    # does, it declines, the need stays open for the Room,
+                    # and this body stays an ordinary presence with the
+                    # surface the story gave it (road run, 2026-09-05).
                     ctx.tell_director(
-                        "%s has no plan behind them and the town could not "
-                        "place them; a planning need is open." % _name)
+                        "%s has no plan behind them and no institution here "
+                        "could keep them; a planning need is open." % _name)
+                    for note in (filled or {}).get("notes") or ():
+                        ctx.add_warning("enrolment of %s: %s" % (_name, note))
                     continue
                 _ref = dict(filled["ref"])
                 fill_planning_need(
@@ -2339,8 +2346,6 @@ def track_background_presences(ctx, nonce, *, prepared=None):
                         "guest": "lodged as a guest of %s" % filled.get("charter"),
                         "household": "enrolled in %s, berthed at %s" % (
                             filled.get("charter"), filled.get("berth")),
-                        "minted_households": "enrolled in a households "
-                        "charter minted for this story",
                     }.get(filled["how"], filled["how"])
                     ctx.tell_director(
                         "%s had no plan behind them; the town has %s. Their "

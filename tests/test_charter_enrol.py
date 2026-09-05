@@ -202,16 +202,20 @@ class TestTheClassesOfEnrolment:
         assert rec["how"] == "household" and rec["room_need"] is True
         assert rec["berth"] in ("house_a", "house_b")
 
-    def test_a_story_with_no_town_mints_a_households_charter(self, temp_db):
+    def test_a_story_with_no_town_founds_no_institution_to_hold_a_body(
+            self, temp_db):
+        """A body is enrolled by an institution that EXISTS, and nothing is
+        minted to hold one. Live on the road, 2026-09-05: a charcoal burner
+        at a woodland camp was written into a freshly founded `households`
+        charter, which then refused his greeting as `outside_licence`. The
+        need stays open for the Writers' Room, the one author that may
+        found a town."""
         from world.charter_runtime import registry_for
         cid = _chat(temp_db)
         rec = enrol_person(cid, _need("Dock Hand", "quay"))
-        assert rec["how"] == "minted_households"
-        assert rec["charter"] == HOUSEHOLDS_CHARTER and rec["room_need"] is True
-        state = registry_for(cid)["items"][HOUSEHOLDS_CHARTER]["state"]
-        assert state["bodies"][rec["body"]]["place"] == "quay"
-        assert not state["posts"] and not state["upkeeps"]
-        assert "ambient" not in registry_for(cid)["items"]
+        assert rec["ref"] is None and not rec["charter"] and not rec["how"]
+        assert registry_for(cid)["items"] == {}
+        assert any("no institution stands here" in n for n in rec["notes"])
 
     def test_a_person_the_registry_already_holds_is_left_there(self, temp_db, town):
         from world.charter_runtime import registry_for
