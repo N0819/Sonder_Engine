@@ -2136,6 +2136,18 @@ def speech_percept(entry, rel, observer_name, *, display, can_see,
     }
     if level == "fragment":
         data["fragment"] = _muffled_fragment(body)
+        # WHO SPOKE IS SIGHT'S ANSWER, NOT HEARING'S. A line degraded by
+        # distance or noise loses its WORDS, never its speaker, when the
+        # observer can see who spoke: hearing less of a sentence is not the
+        # same as not knowing who said it, and the two are separate channels.
+        # Live (PD3), turn 20: Sable's view rendered her own employer, three
+        # paces in front of her in daylight and described in full by the same
+        # view, as "A muffled voice: ...milestone... ferryman... business...".
+        # A percept whose source is stripped does not stay stripped -- the
+        # mind fills it, the narrator sited it at a gatehouse, and the
+        # invention was filed as memory. Anonymity is for a speaker the
+        # observer cannot place.
+        data["attributed"] = bool(can_see and str(display or "").strip())
         fidelity = "fragment"
     else:
         data["body"] = body
@@ -2198,11 +2210,20 @@ def act_percept(scene, event, observer_name, actor_name, rel, *,
                 display, can_see, self_forms=None, self_pronouns=None,
                 other_forms=None,
                 order_key=0,
-                observer_id=None, surface=None):
+                observer_id=None, surface=None, sight="full"):
     """Admit one action element's observable surface for one observer, or
     None. Gates: concealment, rear arc, sight (an action is visible or it is
     nothing -- a touch-only source contributes sensation percepts instead,
-    never an event surface)."""
+    never an event surface).
+
+    `sight` is the GRADE, not a second boolean: "full" admits the observable
+    surface, "shapes" admits a motion percept that names no object and no
+    detail, "none" refuses. Every grader upstream already answers in those
+    three words and this channel used to spend the answer as true/false --
+    live (PC1), a shape-in-a-doorway budget bought "opens a black notebook on
+    her knee" through a locked door, in the same beat the dialogue gate
+    honoured the same wall.
+    """
     # Each refusal below is recorded with the reason it refused. They all
     # return None, and from outside the four are indistinguishable from "the
     # actor did nothing" -- which is how a body stood exposed inside another
@@ -2225,10 +2246,22 @@ def act_percept(scene, event, observer_name, actor_name, rel, *,
         note_step_decision("act_percept", _who, "refused",
                            "actor is in the observer's rear arc")
         return None
-    if not can_see:
+    if not can_see or sight == "none":
         note_step_decision("act_percept", _who, "refused",
                            "observer cannot see (sight gate)")
         return None
+    if sight == "shapes":
+        # A body moving, and nothing about what it is doing. The label is
+        # whatever identity the caller already earned -- who this is was
+        # decided upstream and is not this grade's question.
+        note_step_decision("act_percept", _who, "delivered",
+                           "shapes only -- motion without conduct")
+        return Percept(
+            kind="act", channel="sight", source_label=display,
+            fidelity="shapes", data={"motion": True},
+            salience=0.5, suddenness=0.2, order_key=order_key,
+            dedupe_key="act-shapes:" + _short_hash(
+                event.get("event_id") or "", actor_name))
     note_step_decision("act_percept", _who, "delivered", surface[:120])
     targets_self = any(
         same_subject(scene, target, observer_name)
@@ -2969,7 +3002,10 @@ def _render_event(p):
         # (bare-infinitive heard form, conducted, articulation) emitting into
         # nothing -- no duplicate detection against model prose needed.
         if p.fidelity == "fragment":
-            line = _en("muffled", fragment=p.data.get("fragment", ""))
+            line = _en(
+                "muffled_attributed" if p.data.get("attributed") else "muffled",
+                label=_cap(p.source_label),
+                fragment=p.data.get("fragment", ""))
         else:
             line = _inject_dialogue(
                 "", p.source_label, f'"{body}"', p.data.get("level", "full"),
@@ -2991,6 +3027,8 @@ def _render_event(p):
         return (_en("speech_via", sentence=line.rstrip("."), via=via)
                 if via and line else line)
     if p.kind == "act":
+        if p.fidelity == "shapes":
+            return _en("act_shapes", label=_cap(p.source_label))
         return _observable_predicate(
             p.source_label, p.data.get("surface")) or ""
     if p.kind == "crossing":
@@ -3247,11 +3285,13 @@ def _episode_sentence(p):
     if p.kind == "speech":
         via = str(p.data.get("via") or "")
         if p.fidelity == "fragment":
-            if via:
-                return _en("episode_muffled_via", via=via,
-                           fragment=p.data.get("fragment", ""))
-            return _en(
-                "episode_muffled", fragment=p.data.get("fragment", ""))
+            attributed = bool(p.data.get("attributed"))
+            key = ("episode_muffled_attributed_via" if attributed and via
+                   else "episode_muffled_via" if via
+                   else "episode_muffled_attributed" if attributed
+                   else "episode_muffled")
+            return _en(key, via=via, label=p.source_label,
+                       fragment=p.data.get("fragment", ""))
         body = p.data.get("body") or ""
         # The route rides into MEMORY too. A character who later recalls being
         # told something over a radio must not remember the speaker standing
@@ -3265,6 +3305,8 @@ def _episode_sentence(p):
                 "episode_conducted", label=_cap(p.source_label), body=body)
         return _en("episode_speech", label=p.source_label, body=body)
     if p.kind == "act":
+        if p.fidelity == "shapes":
+            return _en("episode_act_shapes", label=_cap(p.source_label))
         surface = _first_person(str(p.data.get("surface") or "").strip())
         words = surface.split()
         if words:

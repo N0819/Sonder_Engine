@@ -22,6 +22,7 @@ from world.spatial import (
     passable_route_exists,
     passable_route_next_step,
     room_of,
+    spatial_rel,
 )
 
 from .director_lingua import _ling
@@ -1078,3 +1079,64 @@ def _guard_approach_is_not_arrival(ctx, interp, sd, sc, p_name):
         "unchanged -- moving closer to somewhere is not being there, and "
         "reaching a building is not entering it."
     )
+
+
+def crossing_legs(scene, from_room, to_room):
+    """The rooms a body is in while it crosses from one room to another.
+
+    THE RULE THIS SERVES: a body that crosses rooms performs one act per room
+    it is in, and an observer is entitled to the legs that happened where
+    their channel stood. The engine already emits one CROSSING per boundary
+    (`composer.crossing_percept`); what it lacked was the other half -- that
+    the beat's single observable surface belongs to every room the body was
+    in, not to the room the walk started in.
+
+    Live, "The Lamp at Sorrow Point" turn 16 (PA1). Wren left the watch room
+    and walked down three rooms; Ivo, who stayed behind, received on the SIGHT
+    channel "descends the spiral stair, passing through the store below and
+    stepping into the kitchen", cited it as present evidence, and it became
+    rows 69 and 77 of his `memories`. The stair is dark and the last hop is
+    through a door. Nothing was wrong with `act_percept`, which graded one
+    surface against one relation exactly as asked: the surface described three
+    rooms and the relation knew about one.
+
+    ONE BOUNDARY IS NOT THE CLASS. Where a body crosses a single doorway,
+    every observer of either side stood in a room the body was in this beat,
+    and the two rooms are the two ends of a doorway they can both see -- which
+    is the engine's own standing convention, written into the arrival and
+    departure bands in `composer`: a crossing BOUNDS the beat for that body.
+    Past one boundary that stops being true: there are rooms in the middle
+    that neither end has a channel to, and one surface covers all of them.
+
+    Returns the ordered rooms, first to last. `()` when neither room is
+    known; a one-room tuple when nothing crossed. Where the outcome scene can
+    show no walkable route (carried, a lift, a door shut behind them) the
+    rooms between are real and unnameable, and an empty string stands in for
+    them so no observer is credited with a channel to a room the engine
+    cannot name.
+    """
+    from_room = str(from_room or "").strip()
+    to_room = str(to_room or "").strip()
+    if not from_room or not to_room:
+        return tuple(room for room in (from_room, to_room) if room)
+    if from_room == to_room:
+        return (from_room,)
+    # Direct adjacency is one boundary WHATEVER the barrier: a door opened,
+    # crossed and shut in one beat leaves no passable route behind it, and
+    # that walk is still one step through one doorway.
+    if str(spatial_rel(scene, from_room, to_room).get("barrier")
+           or "") != "separated":
+        return (from_room, to_room)
+    legs = [from_room]
+    here = from_room
+    # One step per room in the map is the loop's own ceiling: a shortest walk
+    # cannot revisit a room, so it cannot be longer than the graph.
+    for _ in range(len(scene.get("rooms") or {}) + 1):
+        step = passable_route_next_step(scene, here, to_room)
+        if not step:
+            break
+        legs.append(step)
+        here = step
+        if here == to_room:
+            return tuple(legs)
+    return (from_room, "", to_room)

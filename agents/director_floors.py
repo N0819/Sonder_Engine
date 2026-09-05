@@ -1584,3 +1584,109 @@ def _bind_minted_entities_to_present_figures(sc, sd, figures, *,
                          "ambiguous": ambiguous,
                          "plan": str(chosen.get("plan") or "")})
     return bindings
+
+
+def _concealment_forms(ref, by_id, by_name):
+    """Every spelling of one body, for matching a `conceal_from` entry.
+
+    The two views the cast is already kept in: `conceal_from` is written by
+    the same model that writes `targets`, in whichever spelling it reached
+    for -- a cast id, the `character:<id>` form, a display name, a scene key.
+    """
+    text = str(ref or "").strip()
+    if not text:
+        return set()
+    low = text.casefold()
+    if low.startswith("character:"):
+        low = low[len("character:"):].strip()
+    for cid, forms in (by_id or {}).items():
+        cid_low = str(cid).casefold()
+        if low == cid_low or low in forms:
+            return set(forms) | {cid_low, "character:" + cid_low}
+    for name, forms in (by_name or {}).items():
+        if low == str(name).casefold() or low in forms:
+            return set(forms) | {str(name).casefold()}
+    return {low}
+
+
+def strip_addressee_concealment(sequence, by_id, by_name, warn=None):
+    """A line cannot be concealed from the person it is addressed to.
+
+    `llm.schemas._uncross_concealed_speech` already runs this rule against
+    the FLOW's addressee list. It is the same rule and it was reading one of
+    the two places an addressee is named: live (PC2, "The Long Gallery" turn
+    17) the player whispered to Edmund at arm's reach, the validator repaired
+    the one id the flow happened to carry -- "speech concealed from its own
+    addressee (4); dropped from conceal_from, 1 excluded remain" -- and the
+    exclusion it left standing was the addressee. The line then appears in no
+    view at all, not Edmund's, not the player's own, and in no narration: the
+    player's declared speech was deleted by a field that exists to keep a
+    secret from somebody.
+
+    So the element's OWN addressees are stripped here too, after
+    `bind_sequence_targets` has resolved them. Emptying `conceal_from` is not
+    the same as excluding nobody -- both concealment readers treat an empty
+    list as hidden from everyone who is not the actor -- so an emptied
+    exclusion drops concealment entirely and leaves audibility to volume and
+    distance, which is the deterministic floor the field was standing in
+    front of.
+
+    A line concealed from every body the beat knows about is a declaration
+    the engine DROPPED rather than a secret it kept, and it says so.
+
+    Speech only, for the reason the schema floor gives: concealing an ACTION
+    from the person you are addressing is ordinary and load-bearing.
+    """
+    notes = []
+    for event in sequence or []:
+        if not isinstance(event, dict) or event.get("type") != "speech":
+            continue
+        if str(event.get("visibility") or "").strip().lower() != "concealed":
+            continue
+        listed = [value for value in (event.get("conceal_from") or [])
+                  if str(value or "").strip()]
+        if not listed:
+            continue
+        addressed = set()
+        for ref in (list(event.get("targets") or [])
+                    + [event.get("intended_target")]):
+            addressed |= _concealment_forms(ref, by_id, by_name)
+        if not addressed:
+            continue
+        kept, dropped = [], []
+        for value in listed:
+            if _concealment_forms(value, by_id, by_name) & addressed:
+                dropped.append(str(value))
+            else:
+                kept.append(value)
+        if dropped:
+            event["conceal_from"] = kept
+            if not kept:
+                event["visibility"] = "overt"
+                notes.append(
+                    "speech concealed from its own addressee (%s) and from "
+                    "nobody else; concealment dropped, audibility left to "
+                    "volume and distance" % ", ".join(dropped))
+            else:
+                notes.append(
+                    "speech concealed from its own addressee (%s); dropped "
+                    "from conceal_from, %d excluded remain"
+                    % (", ".join(dropped), len(kept)))
+        remaining = event.get("conceal_from") or []
+        if (str(event.get("visibility") or "").lower() == "concealed"
+                and remaining and by_name):
+            excluded = set()
+            for value in remaining:
+                excluded |= _concealment_forms(value, by_id, by_name)
+            everyone = all(
+                _concealment_forms(name, by_id, by_name) & excluded
+                for name in by_name)
+            if everyone:
+                notes.append(
+                    "speech concealed from every body in the scene; the "
+                    "declaration reaches nobody and is dropped rather than "
+                    "kept secret")
+    if warn:
+        for note in notes:
+            warn(note)
+    return notes
