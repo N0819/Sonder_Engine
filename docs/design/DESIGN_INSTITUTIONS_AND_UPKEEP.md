@@ -210,12 +210,119 @@ through the existing path, inherit the existing cap, and reach the player
 through the aftermath/in-progress shapes `DESIGN_LIVING_WORLD.md` already
 defines. Nothing new is needed to deliver any of it.
 
+## 7a. THE CHARTER ADVANCES EVERY BEAT; only the paid rungs are epoch-gated
+
+Ruled by the owner 2026-09-05: *"Charter is supposed to advance every beat,
+its whole intention is semi cheap off screen simulation."*
+
+For a year the advance was scheduled by the off-screen EPOCH, and an epoch is
+declared on four things only (`world/offscreen.epoch_reasons`): the opening
+beat, a change of the scene's top-level location, a crossed in-world HOUR, or
+a due event firing. A scene that spans minutes crosses none of them. Measured
+(`docs/experiments/PLAY_2026_09_05_caravanserai.md` PB12): forty bodies,
+fifteen turns at an inn, `clock_hours` 0.0, `moved: []` — nobody moved at
+all.
+
+**The epoch was never this path's gate.** It is the rung the off-screen work
+that COSTS MONEY hangs from — `offscreen.schedule_profile_ticks`, the
+stochastic draw, the dormant-actor ticks — and it stays exactly where it is
+for them. The deterministic walk has no provider seam anywhere in its module,
+so an hour bucket was rationing free work, which is the same mistake the
+`offscreen_life` ceiling made here one rung up (fixed 2026-09-04). What is
+separated is a free walk from a paid one; no gate is removed from anything
+that spends.
+
+So: **`schedule_charter_ticks` runs on every beat, by that beat's own elapsed
+time.** The bookkeeping was already incremental and needed no change —
+`advance_snapshot` keeps `last_elapsed_seconds` per charter and advances by
+the delta — and a two-minute beat is simply a very short window.
+
+**IDEMPOTENCE IS THE BEAT'S OWN IDENTITY.** `world/offscreen.advance_epoch`
+stamps a stable `beat_id` on the frame's existing `offscreen_epoch` row every
+beat, minted from the same material and the same hash the epoch id already
+uses (chat, frame, turn, elapsed, location — minus `reasons`, because an
+epoch is named by its causes and a beat is simply where the story stands). A
+reroll or a rerun-from-stage of one beat is the same beat, so it cannot
+advance the town twice. It rides that row rather than a key of its own, so
+the checkpoint, branch remap and portable archive already carry it: no new
+persistent field.
+
+**A BEAT THAT IS ALSO AN EPOCH ADVANCES ONCE.** The two coincide constantly —
+every hour crossed is both — and the beat is what schedules. The epoch decides
+only which budget the beat runs under and whether the paid rungs also fire.
+
+**FRACTIONS CARRY, WHICH IS THE WHOLE POINT.** A two-minute beat is a
+thirtieth of an hour, and at `WALK_ROOMS_PER_HOUR` = 6 that is 0.2 of a room.
+`charter_move`'s walk `credit` accumulates across beats (0.2 → 0.4 → 0.6 →
+0.8 → one room crossed) and survives the registry save/normalize round trip,
+because `normalize_body` preserves it. Every per-hour ledger — upkeep drift
+and service, needs, roster and mind decay, economy production — is linear in
+hours, so half an hour taken in fifteen slices lands exactly where half an
+hour taken whole does. Nothing floors.
+`tests/test_charter_every_beat.py` holds both.
+
+### The two bounds, which bound different things
+
+`MAX_CATCHUP_HOURS` / `MAX_PRESIM_HOURS` cap **simulated time**: how much
+story one advance may catch up on. `CHARTER_BUDGET_SECONDS`
+(`world/charter_runtime.py`) caps **wall clock**: how long the work may take.
+They are not interchangeable and a reader should never have to guess which is
+meant.
+
+| context | wall-clock budget | simulated-hours cap | binds first |
+|---|---|---|---|
+| a beat, during play | **10.0s** — the owner's cap, 2026-09-05 | `MAX_CATCHUP_HOURS` 720h | the seconds; the hours cap cannot bind, since a beat is minutes |
+| a declared time skip | **60.0s** — *recommended, not ruled* | `MAX_CATCHUP_HOURS` 720h | the hours, ordinarily; the seconds are a backstop under them |
+| a mint or a presim | **none** — *recommended, deliberate* | `MAX_PRESIM_HOURS` 17520h | the hours, always |
+
+The ten seconds is the number to hold: it is the only one that competes with
+a turn a player is waiting on. The other two are generous on purpose — a mint
+is already making model calls with the host waiting for a world to exist, and
+a declared skip is a beat the player ASKED to be long.
+
+**WHICH CONTEXT A BEAT IS IN IS DECIDED BY WHAT THE BEAT IS**, never by how
+much elapsed time happens to have accumulated (`offscreen._beat_context`
+reads the resolve's own `state_diff.time.mode`). Otherwise an ordinary beat
+after a long real-world pause would silently take the generous budget, which
+is exactly the case the cap exists for.
+
+**WHEN A BUDGET BINDS, NOTHING IS LOST.** `advance_snapshot` takes the
+charters furthest behind first (a fixed alphabetical order would starve the
+same institution forever), finishes the window it is in, and writes each
+charter's `last_elapsed_seconds` from the clock it ACTUALLY reached rather
+than the one it was asked for — so a stopped advance leaves a larger delta
+and the next beat catches it up. Inside one charter, `charter_run.step`
+already orders the work the way a short budget should want it: walks and the
+watch bill are stepped before the slow ledgers, so a window begun at all
+moves bodies before it drifts upkeeps. A creature registry is stepped WHOLE
+by `charter_predation.run_registry`, which takes no deadline, so there the
+budget bounds at entry only: a group begun is a group finished.
+
+**Does the budget ever fire?** Measured 2026-09-05 on a loaded machine (six
+other agents, load average 6-11, so an upper bound), median of twelve beats:
+8 bodies 0.010s, 40 bodies 0.041-0.077s, 240 bodies 0.31-0.49s, 500 bodies
+0.85-0.94s, worst single beat 1.78s. **It does not fire at any population
+this repo can build.** It is a guard for the town that is larger than the
+fixtures, and it should be understood as insurance rather than as a throttle
+answering a measured cost.
+
+**ONE WALK PER CHAT AND FRAME AT A TIME.** The job key names the frame, not
+the beat, so a slow advance cannot pile up behind the next beat's: a submit
+while one is in flight joins it (`core/jobs.submit` dedupes on key) and does
+nothing, and the beat after covers the accumulated delta. Two landings can
+therefore never race for one frame. A landing whose beat is no longer the
+frame's current beat is discarded and re-earned on the next advance, which is
+the same self-healing property the incremental bookkeeping already had.
+
 ## 8. Fidelity, as a ladder under the existing ceiling
 
 `scene.OFFSCREEN_LIFE_LADDER` remains the only permission ladder and this
 adds no second vocabulary. Charters degrade down it:
 
-- **inert** — no charter runs. Upkeep is frozen; the world is scenery.
+- **inert** — ~~no charter runs~~ **superseded 2026-09-04**: the ladder is a
+  SPEND gate and the charter walk spends nothing, so the deterministic walk
+  runs at every rung including this one. What `inert` still silences is the
+  paid work below.
 - **deterministic** — charters plan, upkeep drifts, fuses mint. No randomness,
   no model. *This rung alone is enough to run a ship.*
 - **reactive** — charters replan when a fuse fires or a body becomes

@@ -43,6 +43,7 @@ mechanism first, and a pure function is testable in ways a commit path is not.
 from __future__ import annotations
 
 import hashlib
+import time
 
 from .charter_drift import advance_level, starving_input, supply_factor
 from .charter_model import (EXPERIENCE_CAP, normalize_charter,
@@ -1396,9 +1397,19 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
     return after_charter, events
 
 
-def run(charter, hours, window=4.0, seed=0, trace=False, simulate_bound=False):
+def run(charter, hours, window=4.0, seed=0, trace=False, simulate_bound=False,
+        deadline=None):
     """Advance many windows. Returns ``(charter, events)``, or
     ``(charter, events, trace)`` when ``trace`` is set.
+
+    ``deadline`` is an absolute ``time.monotonic()`` reading past which no
+    further window is begun. IT IS A STOP, NOT A SKIP: the charter is handed
+    back advanced exactly as far as it got, its own ``clock_hours`` says how
+    far that was, and the caller carries the remainder into the next advance
+    (`charter_runtime.advance_snapshot` reads the clock rather than assuming
+    the request was met). A window in progress is always finished, because a
+    half-stepped charter is not a state this package can represent -- so the
+    budget is honoured to within one window, not to the millisecond.
 
     THE TRACE IS NOT STATE. It is handed back beside the events rather than
     folded into them, and nothing reads it — a run behaves identically whether
@@ -1459,6 +1470,8 @@ def run(charter, hours, window=4.0, seed=0, trace=False, simulate_bound=False):
                                      charter.get("told", 0)))
         remaining -= span
         index += 1
+        if deadline is not None and time.monotonic() >= deadline:
+            break
     if trace:
         return charter, events, notes
     return charter, events
