@@ -29,6 +29,10 @@ from agents.director import (
 from persist.commit import prune_dangling_exits
 from story.plot_packages import OPERATION_FIELDS, _shape_plan_rooms
 from story.room_tools import MIND_AUTHORED_ITEMS, MIND_LINE_CHARS, run_tool
+from agents.background import (_beat_for_presence, _beat_scene,
+                               _filtered_player_declaration)
+from core.pipeline_context import ChatData, PipelineContext, TurnData
+from persist.commit import descriptor_bindings, pick_voice_demand
 from world.spatial import merge_scene_with_diff
 from world.structure import plant_structure, protect_planned_edges
 
@@ -458,3 +462,178 @@ def test_an_entity_named_with_its_article_is_not_given_another():
              "positions": {"Hinami": "beach", "tardis": "beach", "console": "beach"}}
     assert _pose_referent(scene, "Hinami", {}, [], "tardis") == "The TARDIS"
     assert _pose_referent(scene, "Hinami", {}, [], "console") == "the hexagonal console"
+
+
+# ---------------------------------------------------------------------------
+# PB1/PB6: being addressed changes who is PICKED, never what was HEARD --
+# and a description is resolved against the room the beat puts the speaker in
+# ---------------------------------------------------------------------------
+
+GALLERY = "upper_gallery"
+YARD = "courtyard"
+
+# The caravanserai's shape, turn 13: two rooms one shut door apart. Measured
+# on that scene, `Sef Ul -> Tamsin` grades `none` at whisper and `fragment`
+# at ordinary speech, so neither volume clears the FULL bar an address needs.
+_HOUSE_ROOMS = {
+    YARD: {"name": "Courtyard", "adjacent": [
+        {"to": GALLERY, "barrier": "closed_door", "dir": "u"}]},
+    GALLERY: {"name": "Upper Gallery", "adjacent": [
+        {"to": YARD, "barrier": "closed_door", "dir": "d"}]},
+}
+
+# `charter_surface.appearance_text`'s own shape -- adjectives, the role
+# noun, "with" the hair and marks, "wearing" what is worn -- so the words the
+# ENGINE joins with are the ones every body in a cohort shares, and fall out
+# of the match by construction rather than by being listed.
+APRON = ("young broad-shouldered ruddy person, with a black braid, "
+         "wearing a long apron")
+APRON_2 = ("middle-aged rangy sallow person, with a shaved scalp, "
+           "wearing a long apron")
+NO_APRON = ("boyish rangy square sun-darkened quick-stepping person, with "
+            "hair bound in a cloth, a missing front tooth")
+
+
+def _presence(where, appearance, role):
+    return {"first_turn": 1, "last_turn": 4, "where": where,
+            "sketch": {"station_room": where, "appearance": appearance,
+                       "role_hint": role}}
+
+
+def _house(temp_db, presences, *, opens_in=YARD, ends_in=GALLERY,
+           refs=(), volume="whisper", line="Which of these doors is free?",
+           rooms=None, stations=None):
+    """A chat standing the player in `opens_in` with a diff that moves her to
+    `ends_in` -- the pre-commit read every background reader gets, since the
+    stage runs before `persist/commit.py` writes anything."""
+    cid = temp_db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+                     ("Caravanserai", "", time.time()))
+    positions = {"The Stranger": opens_in}
+    for name, rec in presences.items():
+        positions[name] = rec["where"]
+    scene = {"location": "house", "time": "dusk",
+             "rooms": json.loads(json.dumps(rooms or _HOUSE_ROOMS)),
+             "positions": positions, "entities": {}, "attire": {},
+             "overlays": {}}
+    if stations:
+        scene["stations"] = dict(stations)
+    temp_db.wset(cid, "scene", scene)
+    temp_db.wset(cid, "background_presences",
+                 {name: {k: v for k, v in rec.items() if k != "where"}
+                  for name, rec in presences.items()})
+    turn_id = temp_db.qi(
+        "INSERT INTO turns(chat_id,idx,player_input,created) VALUES(?,?,?,?)",
+        (cid, 13, line, time.time()))
+    dr = {"resolved_event": "She reaches the rail.",
+          "dialogue_log": [{"speaker": "The Stranger", "exact_quote": line,
+                            "volume": volume, "visibility": "overt"}],
+          "state_diff": {"positions": {"The Stranger": ends_in}}}
+    ctx = PipelineContext(
+        chat=ChatData(id=cid, name="Caravanserai", persona_id=None,
+                      lorebook_id=None, scenario="", created=time.time()),
+        turn=TurnData(id=turn_id, chat_id=cid, idx=13, player_input=line,
+                      created=time.time()),
+        cast=[], input=line, director_resolve=dr)
+    ctx["director_interpret"] = {
+        "flow": {"addressed_to_refs": list(refs)},
+        "sequence": [{"type": "speech", "text": line, "volume": volume,
+                      "visibility": "overt"}],
+        "movement": {"mover": "self", "to_room": ends_in}}
+    return ctx, dr
+
+
+def test_a_presence_that_cannot_hear_the_line_is_not_picked_to_answer_it(temp_db):
+    """Caravanserai turn 13 (PLAY_2026_09_05, PB1). Tamsin climbed to the
+    upper gallery and said quietly "which of these doors is free?", addressing
+    a shape at the balustrade. The gate stamped the pick `channel: exempt` on
+    the strength of the address and voiced a boy standing in the courtyard one
+    floor below -- `hear_level` none at every volume, both directions -- who
+    answered the question's content. An address is a claim about who the
+    SPEAKER meant; it is not a channel."""
+    ctx, dr = _house(temp_db,
+                     {"Sef Ul": _presence(YARD, NO_APRON, "yard boy")},
+                     refs=["the shape leaning on the balustrade"])
+    assert pick_voice_demand(ctx, dr, cap=1)["picks"] == []
+
+
+def test_no_percept_of_a_line_it_could_not_hear_reaches_that_presence(temp_db):
+    """The other half of the same guarantee: nothing about the beat is
+    delivered to a body out of earshot, so even a picked one would have
+    nothing to answer from."""
+    ctx, dr = _house(temp_db,
+                     {"Sef Ul": _presence(YARD, NO_APRON, "yard boy")},
+                     refs=["the shape leaning on the balustrade"])
+    sc = _beat_scene(ctx, dr)
+    assert _filtered_player_declaration(ctx, sc, "Sef Ul", YARD) == ""
+    assert _beat_for_presence(dr, sc, YARD, "Sef Ul", beat_room=GALLERY) == ""
+
+
+def test_the_same_presence_in_the_room_the_beat_ends_in_does_answer(temp_db):
+    """The complement, and the reason the fix narrows eligibility rather than
+    the address: standing where the line was spoken, the same body hears it
+    and is picked. Silence is legitimate; silence everywhere is not."""
+    ctx, dr = _house(temp_db,
+                     {"Sef Ul": _presence(GALLERY, NO_APRON, "house boy")},
+                     refs=["the shape leaning on the balustrade"])
+    out = pick_voice_demand(ctx, dr, cap=1)
+    assert out["picks"] == ["Sef Ul"]
+    assert out["meta"]["Sef Ul"]["player_addressed"] is True
+    assert "channel:hearing" in out["meta"]["Sef Ul"]["why"]
+
+
+def test_a_description_binds_inside_the_room_the_beat_puts_the_speaker_in(temp_db):
+    """PB6, and PB1's first cause. Turn 11: "the girl with the apron" bound to
+    a trader with no apron and no post while apron-wearing serving hands stood
+    in the room. Two rules meet here -- the cohort is the room the beat's own
+    diff leaves the speaker in, never the one the stored scene still holds
+    her in, and the seeded pick runs over the bodies the description could be
+    true of."""
+    presences = {
+        "Neris Qadan": _presence(GALLERY, APRON, "serving hand"),
+        "Ysolde Marr": _presence(GALLERY, APRON_2, "serving hand"),
+        "Nuri Haddan": _presence(GALLERY, NO_APRON, "trader"),
+        "Hamo Fesk": _presence(YARD, APRON, "serving hand"),
+    }
+    ctx, dr = _house(temp_db, presences, refs=["the girl with the apron"],
+                     volume="normal")
+    bound = descriptor_bindings(ctx, dr)["the girl with the apron"]
+    assert bound in ("Neris Qadan", "Ysolde Marr")
+    # Stable: the gate reads the binding before commit and the debt writer
+    # reads it at commit, and the two must be the same body.
+    assert descriptor_bindings(ctx, dr)["the girl with the apron"] == bound
+    assert pick_voice_demand(ctx, dr, cap=1)["picks"] == [bound]
+
+
+def test_a_description_nothing_in_the_room_answers_still_binds_in_that_room(temp_db):
+    """The narrowing is a preference, not a filter: the binding is a MINT, so
+    a description no co-present body answers still resolves -- to somebody in
+    the room the beat leaves the speaker in."""
+    presences = {"Nuri Haddan": _presence(GALLERY, NO_APRON, "trader"),
+                 "Hamo Fesk": _presence(YARD, APRON, "serving hand")}
+    ctx, dr = _house(temp_db, presences, refs=["the girl with the apron"],
+                     volume="normal")
+    assert descriptor_bindings(ctx, dr)[
+        "the girl with the apron"] == "Nuri Haddan"
+
+
+def test_a_whisper_the_sound_model_calls_inaudible_gets_no_reply(temp_db):
+    """Same room, and still not reached: a measured `across` in a large room
+    grades a whisper to none. The volume is the beat's own, so the gate asks
+    the question the line actually poses rather than assuming ordinary
+    speech."""
+    rooms = {GALLERY: {"name": "Upper Gallery", "size": "large",
+                       "anchors": {"rail": {}, "stair": {}}}}
+    ctx, dr = _house(
+        temp_db, {"Sef Ul": _presence(GALLERY, NO_APRON, "house boy")},
+        opens_in=GALLERY, ends_in=GALLERY, rooms=rooms,
+        refs=["the shape leaning on the balustrade"],
+        stations={"The Stranger": {"at": "rail"}, "Sef Ul": {"at": "stair"}})
+    assert pick_voice_demand(ctx, dr, cap=1)["picks"] == []
+    # And the same pair at ordinary speech is reached, so the refusal is the
+    # sound model's answer about this line and not a rule about the room.
+    ctx2, dr2 = _house(
+        temp_db, {"Sef Ul": _presence(GALLERY, NO_APRON, "house boy")},
+        opens_in=GALLERY, ends_in=GALLERY, rooms=rooms, volume="normal",
+        refs=["the shape leaning on the balustrade"],
+        stations={"The Stranger": {"at": "rail"}, "Sef Ul": {"at": "stair"}})
+    assert pick_voice_demand(ctx2, dr2, cap=1)["picks"] == ["Sef Ul"]
