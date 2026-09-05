@@ -227,13 +227,38 @@ def normalize_scene_bearings(scene: dict) -> dict:
 
     # Judge inferred bearings in the same pass by resolving collisions after
     # reciprocity.
+    #
+    # A WAY THAT GOES UP OR DOWN DOES NOT STAND ON A WALL, SO IT CANNOT
+    # OCCUPY ONE. This loop exists for two ways out competing for the same
+    # stretch of wall; a stair, a ladder, a hatch or a gallery opening is not
+    # on the wall at all -- it is in the floor or the ceiling, and the compass
+    # word on it says which way it LEANS, not which wall it takes up. Grouping
+    # by `dir` alone made a vertical edge collide with the horizontal one
+    # beside it and stripped the bearing from BOTH, and from both reciprocals,
+    # so the doorway that really was on that wall lost the one fact placing
+    # it.
+    #
+    # Live, the hearing at Vaunt's Yard (2026-09-05, PM1): the establish
+    # authored `guild_hall -> gallery {dir: "s", vertical: "up"}` (a narrow
+    # wooden stair) beside `guild_hall -> yard {dir: "s"}` (the tall yard
+    # doors). Both left this loop bearingless while the anchors
+    # `gallery_stair` and `hall_doors` kept theirs -- and with no bearing on
+    # the stair edge nothing could work out that the gallery looks down on the
+    # floor it overlooks (PM2).
+    #
+    # Two verticals the same way up the same wall still collide with each
+    # other: two flights of stairs up the south wall are exactly the ambiguity
+    # this loop is for.
     for room_id, room in rooms.items():
         if not isinstance(room, dict):
             continue
         by_bearing: dict[str, list] = {}
         for edge in room.get("adjacent") or []:
             if isinstance(edge, dict) and edge.get("dir"):
-                by_bearing.setdefault(edge["dir"], []).append(edge)
+                key = edge["dir"]
+                if edge.get("vertical"):
+                    key = "%s|%s" % (key, edge["vertical"])
+                by_bearing.setdefault(key, []).append(edge)
         for colliding in by_bearing.values():
             if len(colliding) < 2:
                 continue

@@ -641,10 +641,33 @@ def _plan_edge(edge):
     found in `dir` or `bearing` is moved to `vertical`, because a field that
     holds a compass point cannot also hold a storey, and a word in the wrong
     field is what the plan meant, not what it said.
+
+    AND HOW FAR IT IS. `distance` is the one cost the graph reads on an
+    edge: `_LONG_EDGE_DISTANCES` in `agents/director_movement.py` spends
+    `_LONG_EDGE_BEATS` on a `far` or `remote` crossing, so a way through
+    that takes a while can say so instead of being narrated as taking a
+    while and walked in a breath. The vocabulary is
+    `world.spatial.normalize_edge_distance`'s, numbers and units included,
+    and it is normalized HERE rather than passed through, because that
+    function answers `near` for anything it cannot read and a silent `near`
+    is what the plan already had.
+
+    Live, the rush (2026-09-05, PR13): the Room authored the escape to
+    Number 16 with a director_note reading "crossing requires stepping over
+    an 18-inch void with a four-foot drop ... impossible for an
+    eighty-year-old woman without two hands bracing and lowering her", and
+    the EDGE it wrote was `{"to": "roof", "bearing": "e"}`. A four-foot drop
+    and an open doorway were the same object to the graph, and the crossing
+    took one beat while carrying a child. `distance` does not say a passage
+    is HARD -- the engine has no difficulty axis, and this does not invent
+    one -- it says the crossing is not instantaneous, which is the half of
+    that note the graph can hold.
     """
-    from world.spatial import normalize_vertical
+    from world.spatial import normalize_edge_distance, normalize_vertical
 
     out = dict(edge)
+    if out.get("distance") is not None:
+        out["distance"] = normalize_edge_distance(out.get("distance"))
     vertical = normalize_vertical(out.get("vertical"))
     if not vertical:
         for field in ("dir", "bearing"):
@@ -1898,7 +1921,7 @@ CLOCK_ONLY_KINDS = ("scheduled_consequence",)
 OPERATION_FIELDS = {
     "plan_rooms": {
         "structure": "{key, name} -- the structure the rooms belong to",
-        "rooms": "{<room_id>: {name, purpose, access, extent? {w, d} (how many paces across and how many deep -- the measurement belongs in this field, not in the prose of purpose), shape? (rectangle | round | l | composite), exposure? (open | sheltered | enclosed -- how much sky and weather reach it), adjacent: [{to: <room_id>, barrier? (omit for an open way through), bearing?, vertical? (up | down -- how a body reaches another storey; a bearing names a compass point and cannot say this)}], frontier: [<the NAME of a place that lies beyond, as the way out would be labelled -- never a direction and never a description of what is that way>], claims? {room, axis} (this room FILLS a space an earlier plan held open -- give the room the frontier hangs off and its axis, exactly as inspect_structures lists them under `frontiers`; the space becomes this room instead of a second one beside it, and a room the story has already been in keeps the name it is known by)}}",
+        "rooms": "{<room_id>: {name, purpose, access, extent? {w, d} (how many paces across and how many deep -- the measurement belongs in this field, not in the prose of purpose), shape? (rectangle | round | l | composite), exposure? (open | sheltered | enclosed -- how much sky and weather reach it), adjacent: [{to: <room_id>, barrier? (omit for an open way through), bearing?, vertical? (up | down -- how a body reaches another storey; a bearing names a compass point and cannot say this), distance? (adjacent | near | far | remote, or a measurement with its unit -- how much ground the crossing itself is; far and remote take more than one beat to cross, so a way through that is not stepped over in a breath must say so here and not only in prose)}], frontier: [<the NAME of a place that lies beyond, as the way out would be labelled -- never a direction and never a description of what is that way>], claims? {room, axis} (this room FILLS a space an earlier plan held open -- give the room the frontier hangs off and its axis, exactly as inspect_structures lists them under `frontiers`; the space becomes this room instead of a second one beside it, and a room the story has already been in keeps the name it is known by)}}",
         "owning_book_id?": "lorebook id"},
     "plan_entity": {
         "name": "the entity's name", "kind": "person | thing | creature",

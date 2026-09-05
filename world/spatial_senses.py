@@ -632,6 +632,9 @@ def _opening_view_cap(scene: dict, room_id, body: str, other_room) -> str:
     this same set; read from this room's own edge the axis is the opposite
     bearing.)
 
+    A VERTICAL edge is not on a wall and gets no cone at all: see the
+    comment on that branch below.
+
     Placement unknown: fall back by room size -- tiny/small has no off-axis
     corner worth modelling (always in cone), medium keeps today's fail-open,
     large+ caps at `shapes` (through a door you can tell a big room is
@@ -642,6 +645,25 @@ def _opening_view_cap(scene: dict, room_id, body: str, other_room) -> str:
     """
     rec = crossing_of(scene, body)
     if rec and {rec.get("from"), rec.get("to")} == {room_id, other_room}:
+        return "full"
+    # AN OPENING YOU LOOK DOWN THROUGH SHOWS THE FLOOR, NOT A SLICE OF IT.
+    # The cone above models a hole in a WALL seen from the side, where the
+    # doorframe hides everything beside it. A gallery, balcony, mezzanine,
+    # loft or stairhead is a hole in the CEILING, and the room below is not
+    # off to one side of it -- the whole floor is in view, which is what
+    # such a place is built for. Applied from either side and before any
+    # bearing or size test, because the bearing of a vertical edge says
+    # which way the flight leans and never which slice of the far room it
+    # frames.
+    #
+    # Live, the hearing at Vaunt's Yard (2026-09-05, PM2): the player stood
+    # in a gallery whose own description reads "offering a clear view down
+    # over the witness floor", and every act on the lit floor below rendered
+    # "moves, too little of it to make out". Probed on the committed scene,
+    # there was no configuration that worked: with no bearing on the stair
+    # edge the large-room branch capped at `shapes`, and with a proper
+    # bearing a body more than one sector off the axis capped at `none`.
+    if _edge_vertical(scene, room_id, other_room):
         return "full"
     at = effective_station(scene, body).get("at")
     if at and at == door_anchor_id(other_room):
