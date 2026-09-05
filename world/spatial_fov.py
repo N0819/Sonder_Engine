@@ -65,6 +65,7 @@ from world.spatial_geometry import (
     effective_room_size,
     effective_station,
     normalize_extent,
+    normalize_offset,
     proximity_rel,
 )
 from world.spatial_identity import _ci_get, room_of
@@ -434,8 +435,17 @@ def _place_anchors(room_id, grid: RoomGrid, anchors) -> dict:
                 else grid.side
             length = {"point": 1, "small": 2, "large": 2,
                       "run": max(2, along - 2)}[fp]
-            offset = 1 + seed % max(1, along - 2 - (length - 1)) \
-                if along > 2 else 0
+            placed_at = normalize_offset(anchor.get("offset"))
+            if placed_at is not None and bearing not in ROOM_CORNERS:
+                # An authored place along the wall: the fraction of the
+                # positions the footprint leaves, from the wall's start
+                # (`RoomGrid.rim`'s order), never wrapping. Absent, the
+                # seeded placement below, byte for byte.
+                room_for = max(0, along - length)
+                offset = min(room_for, max(0, int(round(placed_at * room_for))))
+            else:
+                offset = 1 + seed % max(1, along - 2 - (length - 1)) \
+                    if along > 2 else 0
             cells = _wall_cells(grid, bearing, offset, length)
             # A THING stands one pace off its wall -- a counter, a table, a
             # screen, anything with a height -- leaving the lane a body
@@ -472,6 +482,7 @@ def _place_anchors(room_id, grid: RoomGrid, anchors) -> dict:
             "dir": bearing,
             "desc": str(anchor.get("desc") or aid),
             "implicit": bool(anchor.get("implicit")),
+            "offset": normalize_offset(anchor.get("offset")),
         }
     return out
 
@@ -742,7 +753,11 @@ def _door_cells(scene, room_id, neighbour_id):
     """(cells, bearing) of the room's doorway onto `neighbour_id`, or
     (None, None) when the door has no bearing to place it by. The cells are
     the door anchor's whole extent along its wall: the aperture is as wide
-    as the doorway, one cell for the implicit door an edge contributes."""
+    as the doorway, one cell for the implicit door an edge contributes. An
+    edge carrying `offset` puts the doorway there along its wall
+    (`effective_anchors` copies it onto the implicit anchor, and
+    `_place_anchors` reads it); without one the doorway sits at the seeded
+    cell it always did."""
     from world.spatial_geometry import door_anchor_id
     placed = anchor_cells(scene, room_id).get(door_anchor_id(neighbour_id))
     if not placed or not placed["cells"] or not placed.get("dir"):

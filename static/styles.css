@@ -1081,10 +1081,89 @@ letter-spacing:.06em;color:var(--dim);border-bottom:1px solid var(--bd);margin-b
 border-left:3px solid var(--warn,var(--acc));background:var(--hover-bg,color-mix(in srgb,var(--acc) 6%,transparent));
 border-radius:0 6px 6px 0}
 .wb-lint-mark{font-size:10px}
+/* The map editor (2026-09-04, the owner's ruling): the Rooms tab's left pane
+   is the grid, the card is what it opens. SVG drawn by world_browser.js;
+   every colour here is a page token, so the theme carries the map. */
+.wb-map-pane{flex:0 0 400px;max-width:48%;max-height:70vh;overflow:auto;
+border-right:1px solid var(--bd);padding-right:8px}
+.wb-map-pane .wb-tree{flex:none;max-width:none;max-height:none;overflow:visible;
+border-right:none;padding-right:0}
+.wb-map-bar{display:flex;gap:6px;align-items:baseline;flex-wrap:wrap;font-size:12px;margin-bottom:4px}
+.wb-map-hint{flex-basis:100%;font-size:11px}
+.wb-map{background:var(--bg2);border:1px solid var(--bd);border-radius:8px;padding:6px;min-height:80px}
+.wb-map-svg{display:block;width:100%;height:auto;max-height:58vh;font-family:inherit;touch-action:none}
+.wb-map-svg text{fill:var(--fg);font-size:9px;pointer-events:none;user-select:none}
+.wb-m-cell{fill:var(--bg3);stroke:var(--bd);stroke-width:.5}
+.wb-m-tint{pointer-events:none}
+.wb-m-edge{stroke:var(--fg);stroke-width:2.2;stroke-linecap:square}
+.wb-m-doorway{cursor:grab;outline:none}
+.wb-m-door{stroke:var(--acc);stroke-width:4;stroke-linecap:butt}
+.wb-m-door-corner{fill:var(--acc)}
+.wb-m-door-hit{fill:transparent;stroke:none}
+.wb-m-doorway:hover .wb-m-door,.wb-m-doorway:focus-visible .wb-m-door,
+.wb-m-doorway:hover .wb-m-door-corner,.wb-m-doorway:focus-visible .wb-m-door-corner{stroke:var(--fg);stroke-width:5}
+.wb-m-far-cell{fill:var(--bg2);stroke:var(--bd);stroke-width:.5}
+.wb-m-far-edge{stroke:var(--dim);stroke-width:1;stroke-dasharray:3 2}
+.wb-m-far-anchor{fill:color-mix(in srgb,var(--acc) 18%,transparent)}
+.wb-m-far-name{fill:var(--dim);font-size:9px}
+.wb-m-neighbour{cursor:pointer;outline:none}
+.wb-m-neighbour:hover .wb-m-far-cell,.wb-m-neighbour:focus-visible .wb-m-far-cell{
+fill:var(--hover-bg,color-mix(in srgb,var(--acc) 10%,transparent))}
+.wb-m-anchor{cursor:grab;outline:none}
+.wb-m-anchor-cell{fill:color-mix(in srgb,var(--acc) 42%,var(--bg3));stroke:var(--acc);stroke-width:1}
+.wb-m-anchor-cell.see-through{stroke-dasharray:2 2}
+.wb-m-anchor:hover .wb-m-anchor-cell,.wb-m-anchor:focus-visible .wb-m-anchor-cell{stroke:var(--fg);stroke-width:1.6}
+.wb-m-anchor.dragging,.wb-m-body.dragging,.wb-m-doorway.dragging{opacity:.55;cursor:grabbing}
+.wb-m-height{fill:var(--fg);opacity:.85}
+.wb-m-label{font-size:8px}
+.wb-m-body{cursor:grab;outline:none}
+.wb-m-body-dot{fill:var(--acc);stroke:var(--bg);stroke-width:1.5}
+.wb-m-body.player .wb-m-body-dot{fill:var(--ok)}
+.wb-m-body.presence .wb-m-body-dot{fill:var(--warn)}
+.wb-m-body.unplaced .wb-m-body-dot{stroke:var(--dim);stroke-dasharray:2 2;fill-opacity:.55}
+.wb-m-body:hover .wb-m-body-dot,.wb-m-body:focus-visible .wb-m-body-dot{stroke:var(--fg);stroke-width:2}
+.wb-m-facing{stroke:var(--bg);stroke-width:2.5;stroke-linecap:round}
+.wb-m-name{font-size:8.5px}
+.wb-m-lane{fill:var(--dim);font-size:8px}
+.wb-m-thing{cursor:pointer;outline:none}
+.wb-m-thing polygon{fill:var(--bg4,var(--bg3));stroke:var(--fg);stroke-width:1}
+.wb-m-thing:hover polygon,.wb-m-thing:focus-visible polygon{stroke:var(--acc);stroke-width:1.8}
+.wb-m-lint-mark{cursor:pointer;outline:none}
+.wb-m-lint-mark circle{fill:var(--warn);stroke:var(--bg);stroke-width:1.2}
+.wb-m-lint-mark text{fill:var(--bg);font-weight:700;font-size:10px}
+.wb-m-lint-mark:hover circle,.wb-m-lint-mark:focus-visible circle{stroke:var(--fg)}
+.wb-m-lint-wall{stroke:var(--warn);stroke-width:5;opacity:.7}
+.wb-sm-room{cursor:pointer;outline:none}
+.wb-sm-box,.wb-sm-box-cell{fill:var(--bg3);stroke:var(--fg);stroke-width:1.2}
+.wb-sm-box-cell{stroke:none}
+.wb-sm-edge{stroke:var(--fg);stroke-width:1.2}
+.wb-sm-room.occupied .wb-sm-box,.wb-sm-room.occupied .wb-sm-box-cell{fill:color-mix(in srgb,var(--acc) 14%,var(--bg3))}
+.wb-sm-room:hover .wb-sm-box,.wb-sm-room:focus-visible .wb-sm-box,.wb-sm-room.on .wb-sm-box,
+.wb-sm-room:hover .wb-sm-edge,.wb-sm-room:focus-visible .wb-sm-edge,.wb-sm-room.on .wb-sm-edge{stroke:var(--acc);stroke-width:2}
+.wb-sm-room.collided .wb-sm-box,.wb-sm-room.collided .wb-sm-edge{stroke:var(--err);stroke-dasharray:3 2}
+.wb-sm-room.collided .wb-sm-box,.wb-sm-room.collided .wb-sm-box-cell{fill:color-mix(in srgb,var(--err) 25%,transparent)}
+.wb-sm-exit{stroke:var(--acc);stroke-width:3;fill:var(--acc)}
+.wb-sm-exit.far-unplaced{stroke-dasharray:2 2}
+.wb-sm-name{font-size:7.5px;font-weight:600}
+.wb-sm-who{font-size:6px;fill:var(--dim)}
+.wb-sm-unbeared{font-size:6.5px;fill:var(--dim)}
+.wb-sm-lint{fill:var(--warn);stroke:var(--bg);stroke-width:.8}
+.wb-map-legend{display:flex;gap:10px;flex-wrap:wrap;margin-top:4px;align-items:center}
+.wb-map-legend:empty,.wb-map-notes:empty{display:none}
+.wb-swatch{display:inline-block;width:12px;height:12px;border-radius:3px;border:1px solid var(--bd);
+vertical-align:middle;margin-right:4px}
+.wb-map-notes{margin-top:4px}
+.wb-list{margin-top:8px}
+.wb-list>summary{cursor:pointer;list-style:none}
+.wb-focus{outline:2px solid var(--acc);outline-offset:2px;border-radius:6px}
 @media (max-width:760px){
   .wb{flex-direction:column}
   .wb-tree{flex:none;max-width:none;width:100%;border-right:none;
   border-bottom:1px solid var(--bd);padding-right:0;max-height:30vh}
+  .wb-map-pane{flex:none;max-width:none;width:100%;max-height:none;border-right:none;
+  border-bottom:1px solid var(--bd);padding-right:0}
+  .wb-map-pane .wb-tree{border-bottom:none;max-height:30vh;overflow:auto}
+  .wb-map-svg{max-height:50vh}
   .wb-fields{flex-direction:column}
   .wb-wall-head{flex-wrap:wrap}
 }

@@ -321,7 +321,7 @@ def effective_anchors(scene: dict, room_id) -> dict:
         if isinstance(anchor, dict):
             out[aid] = anchor
 
-    def add(neighbor_id, barrier, bearing, vertical):
+    def add(neighbor_id, barrier, bearing, vertical, offset=None):
         aid = door_anchor_id(neighbor_id)
         if aid in out:
             return
@@ -334,13 +334,22 @@ def effective_anchors(scene: dict, room_id) -> dict:
             anchor["dir"] = bearing
         if vertical:
             anchor["vertical"] = vertical
+        # Where along the wall the doorway stands (`normalize_offset`), so
+        # `_door_cells` places it there rather than at the seeded cell. The
+        # World Browser writes the same fraction on both edges of a doorway
+        # (a doorway is one object), and a wall's start is the same end seen
+        # from either room -- west for a north or south wall, north for an
+        # east or west one -- so the far side's value reads unchanged.
+        if offset is not None:
+            anchor["offset"] = offset
         out[aid] = anchor
 
     for edge in room.get("adjacent") or []:
         if isinstance(edge, dict) and edge.get("to"):
             add(edge["to"], edge.get("barrier"),
                 normalize_bearing(edge.get("dir")),
-                normalize_vertical(edge.get("vertical")))
+                normalize_vertical(edge.get("vertical")),
+                normalize_offset(edge.get("offset")))
     # An edge declared only from the neighbour's side is still a doorway in
     # THIS room; its bearing and verticality read reciprocally, the same rule
     # travel_bearing already applies.
@@ -351,7 +360,8 @@ def effective_anchors(scene: dict, room_id) -> dict:
             if isinstance(edge, dict) and edge.get("to") == room_id:
                 add(other_id, edge.get("barrier"),
                     opposite_bearing(normalize_bearing(edge.get("dir"))),
-                    opposite_vertical(normalize_vertical(edge.get("vertical"))))
+                    opposite_vertical(normalize_vertical(edge.get("vertical"))),
+                    normalize_offset(edge.get("offset")))
     return out
 
 
@@ -506,6 +516,24 @@ def normalize_extent(value) -> Optional[dict]:
     clamp = lambda n: int(min(EXTENT_MAX_PACES, max(EXTENT_MIN_PACES,
                                                      round(n))))
     return {"w": clamp(w), "d": clamp(d)}
+
+
+def normalize_offset(value) -> Optional[float]:
+    """Where along its wall an anchor or a doorway stands, as a fraction in
+    [0, 1] of the wall's length from the wall's START -- the west end of a
+    north or south wall, the north end of an east or west wall, the order
+    `RoomGrid.rim` lists the wall's cells in -- or None when the value is
+    not a number in that range. None is the seeded placement
+    (`spatial_fov._place_anchors`), so an anchor that never carried the
+    field lands exactly where it always did. A boolean is not a fraction;
+    prose is not a fraction; 1.5 is not a fraction of a wall.
+    `docs/design/DESIGN_ROOM_FIDELITY.md` §10."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    number = float(value)
+    if number != number or not 0.0 <= number <= 1.0:
+        return None
+    return number
 
 
 def size_from_extent(extent) -> Optional[str]:

@@ -6562,6 +6562,46 @@ for what follows. Residuals of this entry rather than a section of their own:
   has no independent edit. A `covered_zones` (displacement) editor per
   garment is the largest attire gap: the ledger carries it and the editor
   preserves it, but offers no control.
+- **What the map editor does not yet do** (2026-09-04, the owner's ruling
+  of the same day landed the Rooms tab as a map: `web/world_routes.py`
+  `grid_view`/`map_view`, `static/js/world_browser.js` "The map editor",
+  `DESIGN_ROOM_FIDELITY.md` §10). The map draws the engine's own field and
+  writes through the card's routes; what it does not draw or write:
+  **overlays** -- the grid route returns `overlays: {}` and the SVG paints
+  any `{name: {"x,y": word}}` it is handed with a legend, but nothing fills
+  the slot yet; the light-field and sound-field readers are the sibling
+  worktree's, and until they land the select does not appear. **The player
+  and a presence cannot be dragged between rooms** -- only a registered cast
+  member has a position route (`chat_char_position_put`; the cast editor's
+  rule that the player's place is the story's business); both can still be
+  re-stationed within their room by drag. **A doorway declared from the far
+  side alone cannot be dragged from this room** (the passage record, § 2.37,
+  is what would make it one object; the map says so and does nothing).
+  **A body dropped on a plain cell is not pinned to that cell** -- there is
+  no per-cell station in the engine; `at` is cleared and the body is
+  "somewhere in the room" again, which the map shows in the lane below the
+  grid. **Things are not dragged** -- the entity route moves a thing between
+  rooms and a thing has no station the map could write; it is clicked to
+  its editor. **Nothing is created on the map** -- no anchor, doorway or room
+  is drawn into being; the card's add rows do that, as before. **A room's
+  extent is not resized by dragging its wall.** **A corner anchor has no
+  `offset`** (a corner is one cell; the field is kept on the record and
+  moves nothing). **The structure map does not show door positions** -- an
+  exit is a tick at the middle of its wall, and two rooms off one wall are
+  told apart by their placement, not by where the tick sits; `layout_rooms`
+  knows the door cells, and the `/map` route could carry them. **The
+  structure map is not draggable** -- a room's bearing to a neighbour is
+  edited on the card's exit row. **No undo** beyond editing the field back.
+  **A body dropped in a neighbour's cells that are also a doorway's** is
+  stationed at that door anchor, which is the honest reading and looks odd
+  when the host meant "just inside". **Measured on the L test room**: a
+  doorway on the inner wall of the notch (an `e`-facing rim cell of the
+  west part) lays the neighbour INTO the notch, where it overlaps the
+  room's own east part and `room_field` skips it silently -- the neighbour
+  is then absent from the map with no row saying why; the lint's
+  `rooms_overlap_when_placed` runs per component from `layout_rooms` and
+  does not see a room colliding with the room it hangs off, so this is a
+  gap in the lint as much as in the map.
 - **The naturalness guard is a clause plus the structural floor, not a
   refusal over prose** (2026-09-04). The owner's phrasing was "refuse ops or
   notes naming what a character will think, feel or decide". What is built:

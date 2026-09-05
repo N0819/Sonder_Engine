@@ -42,6 +42,16 @@ On each room anchor, beside `desc` and `dir`:
     height      floor | waist | head | full     what a line of sight is cut at
     opacity     opaque | see_through            whether it blocks sight at all
 
+And since 2026-09-04 (the World Browser's map editor, `DESIGN_ROOM_FIDELITY.md`
+§10), on an anchor and on an exit edge alike:
+
+    offset      0.0 .. 1.0                 where along its wall the thing
+                                            stands, from the wall's START --
+                                            the west end of a north or south
+                                            wall, the north end of an east or
+                                            west wall (`RoomGrid.rim`'s order);
+                                            absent, the seeded place below
+
 On each station, beside `at` and `near`:
 
     cover       true | <anchor_id>              the body is on the FAR side of
