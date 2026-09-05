@@ -1,9 +1,34 @@
 # The light field: light as a quantity on the sight grid
 
-Status: DESIGN, not built. Agreed with the owner 2026-09-04 as the item
-after the Writers' Room waves and regions (see `docs/UNBUILT.md` § 2.34).
-Every number in § 6 is a proposed constant, not a measurement; the
-measurements this note asks for are listed in § 9 and none has been taken.
+Status: PROTOTYPE, on a branch. Built 2026-09-04 in an isolated worktree
+from this note, §§ 3-8, as `world/spatial_light_field.py` behind the
+`world/spatial.py` facade, with `tests/test_light_field.py` (36 tests) and
+the measurements of § 9.1-9.4 taken read-only on a copy of the owner's
+database (chat 111 excluded). Nothing here is merged. Headline numbers:
+
+    corpus (104 scenes, 589 rooms, 823 entities)
+      entities carrying light_source             2   (one dim, one lit)
+      of those portable / stationed / held       0 / 0 / 0
+      rooms with a size tier or anchors        321 / 589   (the field exists)
+      rooms with an authored geometry field      2 / 589
+      rooms holding a source                     2, both with size/anchors,
+                                                    neither with a height
+    before/after over scenes carrying geometry (81 scenes, 321 rooms)
+      effective_light changed                    3 rooms (dim->dark 2,
+                                                          lit->dim 1)
+      light_at over 171 positioned bodies        0 changed (81 hold a cell)
+      sight_level over 312 body pairs            0 changed
+    pin: 7 no-geometry scenes compose byte-identically with the field's
+    readers on and off (`test_a_scene_without_geometry_composes_byte_
+    identically`)
+
+One constant moved from the § 6 proposal: LIT_T 2.0 -> 2.5, because 2.0 was
+exactly POWER[dim] and the ambient floor of every `dim` room with a grid
+quantised back to `lit` on the pin's first run. The § 6 table below keeps
+the proposal and § 9.3 records the consequence. Three assertions in
+`tests/test_light_and_survival.py` that encoded the room-level model on a
+scene which carries geometry now pin both contracts (§ 9.4). The § 9.5 live
+beats were not played.
 
 The ask, in the owner's words across one conversation: make lighting
 realistic; allow a held conical flashlight and all-round lights like a
@@ -230,6 +255,9 @@ four, and reaches the far wall as `dark`, and so that a `bright` fixture at
 
     POWER          dark 0 | dim 2 | lit 6 | bright 18   ladder units at d=0
     DIM_T / LIT_T / BRIGHT_T   0.5 / 2.0 / 8.0          quantisation
+                   (built at 0.5 / 2.5 / 8.0: the thresholds must lie
+                    strictly between the powers or a word's own floor
+                    renames it -- § 9.3)
     DARK_THRESHOLD  = DIM_T                              reach and bounce stop
     CONE_HALF_ANGLE 30 deg     CONE_PENUMBRA 20 deg
     BOUNCE          enclosed 0.25 | sheltered 0.12 | open 0.05
@@ -304,3 +332,140 @@ floor should spill through doorways at all (§ 4.6); median or mean for a
 room's reading (§ 4b); and the starting constants themselves (§ 6), which
 the owner may want to set after seeing the synthetic table in § 9.3 rather
 than before.
+
+### 9.1 Corpus (2026-09-04, read-only on a copy, chat 111 excluded)
+
+    scenes / rooms / entities                    104 / 589 / 823
+    entities carrying light_source                 2   (dim 1, lit 1;
+                                                        light_radius unset on both)
+    of those: portable / with a station / held     0 / 0 / 0
+    with state.lit off                             0
+    rooms with a size tier or anchors            321 / 589   (the field's gate)
+    rooms with an authored footprint/height/
+      opacity on an anchor                         2 / 589
+    rooms holding a source                         2; both carry size/anchors,
+                                                   neither an authored height
+
+So the field exists for 55% of live rooms and bites, today, on ambient and
+on spill; the two sources are one `dim` and one `lit` fixture with no
+station, placed at their room's centre.
+
+### 9.2 Pin
+
+`test_a_scene_without_geometry_composes_byte_identically`: seven scenes
+drawn from the existing light fixtures (two rooms, no size, no anchors;
+lit/lit, dark/lit, lit/dark, dim/dim, dark/bright through a closed door,
+dark/lit through a window, and a held torch in two dark rooms) are composed
+-- `light_at` for every body, `effective_light` for every room,
+`spatial_rel_between`, `sight_level` and `visual_level_between` for every
+pair, `presence_percepts` and `environment_percept` for every observer --
+once with the field's three readers live and once with them replaced by
+"no field", and the two JSON strings are equal. A geometry room with no
+source reads its own light for all four words
+(`test_a_room_with_geometry_and_no_source_reads_its_own_light`).
+
+### 9.3 Synthetic (constants as built: LIT_T 2.5, the rest as § 6)
+
+One all_round source standing free at the centre of a medium (6-cell),
+enclosed, dark room, head height. Intensity then level, direct / with
+bounce, along the north ray:
+
+    source   d=0            d=1            d=2            d=3            corner (4.2)
+    dim      2.00/2.13 dim  1.00/1.12 dim  0.40/0.48 dark 0.00/0.03 dark 0.00 dark
+    lit      6.00/6.60 lit  3.00/3.56 lit  1.20/1.60 dim  0.60/0.81 dim  0.32/0.37 dark
+    bright  18.0/20.1 brt   9.00/11.0 brt  3.60/5.03 lit  1.80/2.64 lit  0.95/1.28 dim
+    room median (with bounce): dim -> 0.40 dark; lit -> 1.34 dim; bright -> 4.25 lit
+
+Against the § 6 intention ("a lit source ... lit to about two cells, dim
+to about four, and reaches the far wall as dark"): lit reaches ONE cell as
+lit and three as dim, the far wall of a medium room as dim and only the
+corners as dark. The constants that would meet the sentence are LIT_T
+<= 1.2 or POWER[lit] >= 12; that is the owner's call, and the reason the
+table exists. A `bright` fixture at `full` height DOES fill a medium
+enclosed room to `lit` once bounce is applied (no cell darker than dim;
+the edge cell at d=3 goes 1.80 dim -> 2.64 lit), which is the other half
+of the § 6 sentence and holds.
+
+Bounce, as built: a cell re-emits BOUNCE[exposure] of its intensity IN
+TOTAL, shared among the cells it reaches within BOUNCE_REACH in proportion
+to 1/(1+d^2). Read as "that much to each cell" the first prototype returned
+about six times the light that fell (the weights over a 3-cell disc sum to
+about 6) and a single lit lamp made a medium room bright to its corners.
+Shared, bounce adds 43.5 to a direct total of 140.6 for the bright fixture
+(ratio 0.31, i.e. 0.25 + 0.25^2 + ..., the cap never binding), and the
+open-air coefficient adds least (`test_an_open_room_bounces_least`).
+
+A lit CONE at the centre pointed north (half-angle 30, penumbra 20),
+direct intensities:
+
+    on the axis (3,1) d=2      1.20     the same as all_round
+    diagonal ahead (4,2) 45deg 0.50     the penumbra's ramp: 2.00 x 0.25
+    beside (5,3) 90deg         0.00
+    behind (3,5)               0.00
+
+A lit candle at a waist-high counter (run, one pace off the north wall),
+a standing body H at the same counter on the wall side (`cover`), P on the
+room side. The candle stands at (2,2), H at (2,0):
+
+    candle height   H's cell direct / total -> level    cell in front at H's x
+    floor           0.00 / 0.28 -> dark                  6.51 lit
+    waist           0.00 / 0.28 -> dark                  6.51 lit
+    head            1.20 / 1.60 -> dim                   6.60 lit
+    full            1.20 / 1.60 -> dim                   6.60 lit
+
+The counter cuts the ray from anything at or below its own height and
+nothing above it; the ceiling light casts no shadow and needed no ceiling.
+Bounce puts 0.28 behind the counter -- still dark.
+
+A lit kitchen (bright fixture at its centre) and a dark cellar joined by a
+one-pace door (both medium; the cellar's own field, kitchen placed north
+across the wall line at row -1, aperture x in [3.5, 4.5]; the stove lands at
+(3,-4), one cell west of the door's axis):
+
+    cellar cells receiving direct light   (4,0) (4,1) (4,2) (5,0) (5,1) (5,2)
+    (3,0) beside the frame, stove's side  ray crosses the wall at 3.25: out
+                                          0.00 direct, 0.14 total -> dark
+    (4,0) the door cell                   1.00 direct, 1.25 total -> dim
+    (5,0) beside the frame, far side      ray crosses at 4.25: through
+                                          0.86 direct, 1.00 total -> dim
+    cellar median                         dark; effective_light(c) = dark
+    without the stove (floors only)       dark  (the room-level rule: dim)
+
+The wedge is exactly the set of cells whose straight ray threads the gap:
+a source standing off-axis lights the cell beside the frame on the FAR
+side, through the gap at an angle, and never the one on its own side. The
+kitchen's `lit` floor spills nothing -- which is open question 1.
+
+### 9.4 Corpus before/after (81 scenes with a geometry room)
+
+    effective_light, 321 rooms   before dark 9 / dim 43 / lit 269
+                                 after  dark 11 / dim 42 / lit 268
+    changed: 3 rooms
+      chat 73 and 74, 'Hotel back office' (small, declared dark, 2 anchors,
+        no source): dim -> dark. The open edge onto the lit lobby spilled
+        under the room-level rule; the field has no source to cast and the
+        floor does not spill. Chat 74's room holds the night clerk.
+      chat 115, 'Sublevel Four Shelter Approach' (medium, declared dim,
+        enclosed): lit -> dim. Its `lit` source (`elevator_shelter`, no
+        station, at the centre) filled the room under `light_radius`
+        defaulting to `room`; the median cell of the field is 2.00 -- the
+        floor -- so the room reads its own word, dim.
+    light_at, 171 positioned bodies in geometry rooms (81 hold a cell)
+                                 before dark 6 / dim 19 / lit 146; after identical
+    sight_level, 312 body pairs  before full 190 / none 70 / shapes 52; after identical
+
+There were no changed pairs to read one by one: no live body with a cell
+stands in a room whose field differs from its floor, because the two live
+sources have no station and light a room whose bodies have none either.
+The three existing assertions that changed are in
+`tests/test_light_and_survival.py::TestLightIsLocalNotRoomWide`: a hall
+carrying a size tier and anchors, where `light_radius: room` and the
+fixed-source default no longer fill a LARGE room with a `lit` source (a
+`bright` one does), and one lit torch reads the hall as `dim` (median)
+rather than `dark`. Each now pins the room-level answer on the same hall
+without geometry beside the field's answer with it.
+
+### 9.5 Live
+
+Not played. The standing grant covers it; two beats with a held cone in a
+fresh non-explicit scenario are the next measurement.

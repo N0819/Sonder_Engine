@@ -1405,6 +1405,39 @@ def prepare_scene_commit(ctx):
     if not _told:
         wset(cid, "sight_contradictions_told", True)
 
+    # THE LIGHT FIELD'S BEAT (`world/spatial_light_field.py` § 5). Two things,
+    # both deterministic on (turn index, source id) so a REROLL of a beat
+    # sees the light the beat it replaces saw:
+    #   * the scene is stamped with the index of the beat about to be played,
+    #     so a `flickering` source's flicker beats can be read from the scene
+    #     alone at perception time (nothing in `world/spatial_*` holds a
+    #     PipelineContext, and the blob is what perception is handed);
+    #   * a `failing` source the hash puts out THIS beat is recorded out
+    #     (`state.lit: false` -- the same switch a doused torch already uses,
+    #     so every reader sees it dark without a second field) and an engine
+    #     notice is filed for the Director to answer next beat: relight it,
+    #     replace it, or leave the corridor dark. The field read the same
+    #     hash for this beat's perception, so the two agree without a write.
+    _turn_idx = int(getattr(getattr(ctx, "turn", None), "idx", 0) or 0)
+    from world.spatial import BEAT_KEY, failing_sources_out
+    _went_out = failing_sources_out(sc, _turn_idx)
+    if _went_out:
+        _notices = wget(cid, "engine_notices", []) or []
+        for _eid, _label in _went_out:
+            _ent = (sc.get("entities") or {}).get(_eid)
+            if isinstance(_ent, dict):
+                _state = _ent.get("state") if isinstance(_ent.get("state"), dict) else {}
+                _state["lit"] = False
+                _ent["state"] = _state
+            _msg = (f"{_label!r} has gone out -- it was declared `steadiness: "
+                    "failing` and this is the beat it failed. Its light is "
+                    "gone from the scene; relight it, replace it, or let the "
+                    "dark stand.")
+            ctx.warnings.append(_msg)
+            _notices.append(_msg)
+        wset(cid, "engine_notices", _notices)
+    sc[BEAT_KEY] = _turn_idx + 1
+
     for _room in guessed_room_sizes(sc, prev_scene):
         ctx.warnings.append(
             f"Room {_room['name']!r} holds {_room['occupants']} and has no "

@@ -432,6 +432,12 @@ def sight_level(rel: dict) -> str:
     if not _sight_line(rel):
         return "shapes" if crossing else "none"
     level = _LIGHT_SIGHT.get(normalize_light(rel.get("light")), "full")
+    # GLARE: a strong source between the observer and the target, in the
+    # observer's eyes, caps sight at shapes -- the flashlight in your face.
+    # Set by `spatial_rel_between` from the light field
+    # (`spatial_light_field.glare_between`); never present without geometry.
+    if rel.get("glare") and level == "full":
+        level = "shapes"
     if crossing and level == "none":
         return "shapes"
     return level
@@ -511,6 +517,9 @@ def spatial_rel_between(
     rel = dict(spatial_rel(scene, o_room, t_room))
     if crossing_visible_from(scene, o_room, target):
         rel["crossing"] = True
+    from world.spatial_light_field import glare_between
+    if glare_between(scene, observer, target):
+        rel["glare"] = True
     holder = _body_interior_holder(scene, observer)
     if holder and same_subject(scene, holder, target):
         rel["inside_source"] = True
@@ -664,6 +673,15 @@ def visual_level_between(scene: dict, observer: str, target: str) -> str:
     if level == "shapes" and rel.get("same_room") \
             and _measured_intimacy(scene, observer, target):
         level = "full"
+    # GLARE (`spatial_light_field.glare_between`): a source of GLARE_POWER
+    # or more within GLARE_CELLS in the observer's front cone, lighting the
+    # observer's cell, with the target beyond it, caps sight at shapes. The
+    # same rule `sight_level` applies to `rel["glare"]`; only ever True where
+    # the observer's room carries geometry and both bodies hold a cell.
+    if level == "full":
+        from world.spatial_light_field import glare_between
+        if glare_between(scene, observer, target):
+            level = "shapes"
     if not rel.get("same_room"):
         cap = _weaker_sight(
             _opening_view_cap(scene, t_room, target, o_room),
