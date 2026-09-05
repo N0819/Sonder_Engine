@@ -16,7 +16,8 @@ from story.character_schema import character_name_from_text
 from core.db import get_setting, wget
 from world.survival import survival_enabled, vitals_of
 from world.spatial import (contact_action_ledger_index, contact_id,
-                           effective_anchors, room_of, substance_ledger_index)
+                           crossing_of, effective_anchors, room_of,
+                           substance_ledger_index)
 
 from .common import (communication_surface, observable_action_text,
                      scene_compact_attire)
@@ -282,8 +283,48 @@ def _note_for(notes, name):
                 return lowered[form]
     return None
 
-def _anchor_names(sc, whos):
-    """`{room_id: {anchor_id: what it is}}` for the rooms `whos` stand in.
+def _beat_rooms(sc, ctx, whos, view=None):
+    """The rooms a body could be STANDING IN by the end of this beat.
+
+    A hand's room scope is a question about the beat, not about the moment
+    before it. The scene a specialist reads is the scene as the turn STARTED
+    -- positions commit at the end -- so scoping by `room_of` alone shows the
+    hand the room a walker has already left.
+
+    Three sources, all of them facts the engine holds and none of them a
+    room graph: where each body stands now, either end of a crossing already
+    under way (`crossing_of`), and the destination of the beat's declared
+    movement -- the interpret view's own `declaration.movement` while the
+    interpret is still being written, and `PipelineContext.declared_movement`
+    once it is, whose `to_room` is already spelled the way the world spells
+    it.
+    """
+    rooms = []
+    for who in whos:
+        room = room_of(sc, str(who or "")) if who else None
+        if room:
+            rooms.append(room)
+        rec = crossing_of(sc, str(who or "")) if who else None
+        if isinstance(rec, dict):
+            rooms.extend(str(r) for r in (rec.get("from"), rec.get("to")) if r)
+    declared = ((view or {}).get("declaration") or {}).get("movement")
+    if not isinstance(declared, dict) or not declared.get("to_room"):
+        try:
+            declared = ctx.declared_movement() if ctx is not None else None
+        except Exception:
+            declared = None
+    if isinstance(declared, dict) and declared.get("to_room"):
+        rooms.append(str(declared["to_room"]))
+    out = []
+    for room in rooms:
+        if room in ((sc or {}).get("rooms") or {}) and room not in out:
+            out.append(room)
+    return out
+
+
+def _anchor_names(sc, whos, ctx=None, view=None):
+    """`{room_id: {anchor_id: what it is}}` for the rooms this beat can put
+    `whos` in (`_beat_rooms`).
 
     The fixture half of a contact's target vocabulary (PB10/PE12). Derived
     through `effective_anchors`, so a doorway the scene never authored as an
@@ -291,11 +332,21 @@ def _anchor_names(sc, whos):
     (`door:<other room>`); the description is the anchor's own, falling back
     to the id read as words. Empty when nothing places anybody, which is the
     payload the hand had before.
+
+    THE ROOM A BODY ARRIVES IN IS A ROOM IT CAN TOUCH SOMETHING IN. Scoped
+    to the starting room alone, a contact made on arrival had no nameable
+    target: live, the hearing at Vaunt's Yard (2026-09-05, PM15), the player
+    walked `guild_hall -> gallery` and gripped the rail, and the hand
+    answered "gallery rail not in entity_names or anchors" while
+    `gallery.anchors.gallery_rail` read "a waist-high oak railing
+    overlooking the floor below". The contact landed on an unnamed referent
+    and the view rendered "something's surface". Same class as PB10/PE12,
+    resolved there for the room a body is IN and not for the room a body is
+    going to.
     """
     out = {}
-    for who in whos:
-        room = room_of(sc, str(who or "")) if who else None
-        if not room or room in out:
+    for room in _beat_rooms(sc, ctx, whos, view):
+        if room in out:
             continue
         anchors = effective_anchors(sc, room) or {}
         named = {
@@ -494,11 +545,14 @@ def _specialist_payload(name, ctx, sc, view, extras):
             #
             # `effective_anchors`, so the implicit `door:<room>` doorway
             # anchors are in it: one object, one name, whichever hand is
-            # speaking. Scoped to the rooms this beat's people are standing
-            # in, which is where a contact can happen at all -- no room
-            # graph, no barriers, no bearings, just what each fixture is
-            # called and what it is.
-            "anchors": _anchor_names(sc, [view["player"]] + list(view["cast"])),
+            # speaking. Scoped to the rooms this beat can leave this beat's
+            # people standing in (`_beat_rooms` -- where they are, either end
+            # of a crossing under way, and the declared destination), which
+            # is where a contact can happen at all -- no room graph, no
+            # barriers, no bearings, just what each fixture is called and
+            # what it is.
+            "anchors": _anchor_names(
+                sc, [view["player"]] + list(view["cast"]), ctx, view),
         })
         if extras.get("body_parts"):
             payload["body_parts"] = extras["body_parts"]

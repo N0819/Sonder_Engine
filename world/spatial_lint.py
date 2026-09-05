@@ -32,7 +32,9 @@ from world.spatial_fov import (
 from world.spatial_geometry import (
     ROOM_SIZES, normalize_extent, size_from_extent,
 )
-from world.spatial_orientation import normalize_bearing, opposite_bearing
+from world.spatial_orientation import (
+    normalize_bearing, normalize_vertical, opposite_bearing,
+)
 
 
 #: Every row kind this module can produce, so a reader can enumerate them.
@@ -244,12 +246,25 @@ def _bearing_rows(rooms):
 
 def _beared_neighbours(scene, room_id, rooms):
     """(neighbour, bearing) for every edge of the room with a bearing whose
-    barrier is not a wall -- a closed door has geometry too."""
+    barrier is not a wall -- a closed door has geometry too.
+
+    A ROOM YOU REACH BY GOING UP OR DOWN IS NOT BESIDE YOU, so it is not
+    laid out on this floor and cannot collide with anything on it. The
+    bearing on a vertical edge says which way the flight leans, not which
+    stretch of wall it takes; embedding the far room at it puts a storey on
+    the plane and then reports the overlap as a contradiction the author
+    must fix. `spatial_fov.sight_passes` keeps the same rule for the sight
+    field, and `spatial_orientation.normalize_scene_bearings` for the
+    collision that strips a bearing (2026-09-05, PM1, and F67 of
+    `DEBUG_RUN_2026_09_04.md`, which is this confusion in the lint).
+    """
     out = []
     for edge in effective_adjacent(scene, room_id):
         if not isinstance(edge, dict) or not edge.get("to"):
             continue
         if normalize_barrier(edge.get("barrier")) == "wall":
+            continue
+        if normalize_vertical(edge.get("vertical")):
             continue
         bearing = normalize_bearing(edge.get("dir"))
         to_id = str(edge["to"])

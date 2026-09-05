@@ -6186,6 +6186,71 @@ make it; whether a fuzzy match belongs in `planned_context` is a separate
 question, and the deterministic matcher is deliberately exact
 (§ *An exact match is not ambiguous*).
 
+### 1.128 Geometry after the 2026-09-05 campaign: what the vertical repair left open
+
+**Fixed 2026-09-05** in `world/spatial_orientation.py`,
+`world/spatial_senses.py`, `world/spatial_fov.py`, `world/spatial_lint.py`,
+`world/spatial_geometry.py`, `agents/director_movement.py`,
+`agents/director_fanout.py` and `story/plot_packages.py`; regressions in
+`tests/test_spatial_campaign3.py`. A VERTICAL WAY OUT IS NOT ON A WALL, so
+it no longer collides for one (PM1), gets no doorway view-cone (PM2), and is
+not laid out on the floor below it by the sight field or the layout lint
+(F67, which PM1's repair would otherwise have made live). A fixture with
+`footprint: run` no longer puts two bodies at its two ends within arm's reach
+(PM3). An extent is an authored size, so the unauthored-size row no longer
+fires against the lint that says the extent decides (PS17). `extent_clamp`
+reports a measurement `EXTENT_MAX_PACES` moved (PS19). The contact hand is
+scoped to the rooms the beat can leave a body in, not the one it started in
+(PM15). A declared walk is attributed to the LEAST OBSTRUCTED route rather
+than the shortest (PX11). A planned edge may carry `distance` (PR13).
+
+**Residuals, each an owner decision or another lane's file.**
+
+* **PS7 — an anchor whose description names a passage is not a passage.**
+  `upper_terrace_rim.anchors.cistern_arch` read "the deep, unglazed archway
+  leading into the lower cistern vaults" in a room with no edge to any
+  cistern; the player walked into it and there was nothing through it. The
+  merge cannot fold it onto the exit it names without READING the anchor's
+  prose to decide whether it names one, which is the free-prose guard
+  `CLAUDE.md` refuses and F58 was already refused on. The fix is one clause
+  in `language_packs/{en,ja}/cards/system_prompts/prompts/director_establish.txt`
+  and the spatial specialist's `chunks/rooms.txt`: *an anchor is a place in
+  this room, never a way out of it; a way out is an `adjacent` entry.* The
+  second half — the interpret raised `needs_mapping` with
+  `mapping_request: "Map the interior of the cistern vault accessible through
+  upper_terrace_rim's cistern_arch"` and nothing answered it — is real and
+  not addressed: `agents/mapping.py` files a planning need for an unplanned
+  DESTINATION and an unmatched LOCATION QUERY and for nothing else, and
+  `needs_mapping` alone is set from a word-cue list on ordinary declarations,
+  so filing on it would flood. A need reason for a mapping request the beat
+  raised and no other need covers wants `world/planning_needs.py` and
+  `agents/mapping.py` together.
+* **PM3's other half — nothing authors a `run`.** The floor is built and
+  answers correctly; no establish or specialist prompt tells a hand that a
+  fixture with length carries `footprint: run`, and the spatial chunk that
+  documents `footprint` describes it only in terms of sight
+  (`specialists/spatial/chunks/rooms.txt`). Until that clause lands, the
+  measurement in the live case — a fourteen-pace table — still has nowhere
+  to live.
+* **PR11's other half — a character's crossing is not a declared walk.**
+  `_travel_continues` advances a walk the PLAYER declared, a leg a beat,
+  through the `approach` record `persist/commit_scene_state.py` writes from
+  `interp.movement`. A character has no such record: their movement is a
+  position the spatial hand writes or does not, so a body narrated climbing
+  for six beats simply never arrives (rush turns 7-13, four
+  "progress held at 0.0" warnings and no position change). Opening a travel
+  leg for a character is Director/character-side work, not geometry.
+* **PR13's other half — the engine has no difficulty axis.** `distance` says
+  a crossing takes more than one beat; nothing says it is HARD. The Room's
+  own note ("an 18-inch void with a four-foot drop … impossible for an
+  eighty-year-old woman without two hands bracing") has no field. Whether a
+  way through should carry a cost the movement backstop can refuse against a
+  body's state is an owner decision, and inventing one would touch the edge
+  schema, the backstop, the World Browser and both packs.
+* **PS19's other half — the tool must state what it stored.** `extent_clamp`
+  exists; `story/room_tools.py`'s `plan_rooms` result still reports the
+  extent the Room asked for rather than the one the registry holds.
+
 ## 2. Roadmap
 
 Features the architecture intends and has not built. Ordered by value per unit

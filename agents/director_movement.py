@@ -786,9 +786,63 @@ def _resolve_movement_mover(sc, sd, mv, p_name):
 _WALK_ROUTE_LIMIT = 12
 
 
+def _open_reach(scene, from_room, limit=_WALK_ROUTE_LIMIT):
+    """`({room: hops}, {room: room it was reached from})` over PASSABLE
+    doorways alone -- how far a body gets on its own feet without touching
+    a door. Breadth-first in sorted order, so a reroll reaches the same
+    rooms the same way."""
+    from collections import deque
+    dist = {str(from_room): 0}
+    prev = {str(from_room): None}
+    neighbors = passable_neighbors(scene)
+    queue = deque([str(from_room)])
+    while queue:
+        cur = queue.popleft()
+        if dist[cur] >= limit:
+            continue
+        for nxt in sorted(neighbors.get(cur, ())):
+            if nxt not in dist:
+                dist[nxt] = dist[cur] + 1
+                prev[nxt] = cur
+                queue.append(nxt)
+    return dist, prev
+
+
+def _doors_to(scene, to_room, limit=_WALK_ROUTE_LIMIT):
+    """From every room, the cheapest way onward to `to_room` counted in SHUT
+    DOORS: `{room: (doors, hops, next room on that way)}`.
+
+    A 0/1 breadth-first search backwards from the destination over
+    `_ROUTE_MEMORY_BARRIERS`, with an already-passable step costing nothing
+    and a shut door costing one. Ties break on hops and then on the room
+    id, so the answer is a function of the scene.
+    """
+    from collections import deque
+    route = neighbor_map(scene, _ROUTE_MEMORY_BARRIERS, directional=True)
+    passable = passable_neighbors(scene)
+    back = {}
+    for room, onward in route.items():
+        for nxt in onward:
+            back.setdefault(nxt, set()).add(room)
+    best = {str(to_room): (0, 0, None)}
+    queue = deque([str(to_room)])
+    while queue:
+        cur = queue.popleft()
+        doors, hops, _ = best[cur]
+        if hops >= limit:
+            continue
+        for prev_room in sorted(back.get(cur, ())):
+            step = doors + (0 if cur in (passable.get(prev_room) or ()) else 1)
+            candidate = (step, hops + 1, cur)
+            if prev_room not in best or candidate < best[prev_room]:
+                best[prev_room] = candidate
+                queue.append(prev_room)
+    return best
+
+
 def _door_route(scene, from_room, to_room, limit=_WALK_ROUTE_LIMIT):
-    """The shortest walk from one room to another over doorways a body could
-    go through NOW OR BY OPENING THEM, as a list of rooms excluding the start.
+    """The walk from one room to another over doorways a body could go
+    through NOW OR BY OPENING THEM, as a list of rooms excluding the start.
 
     `_ROUTE_MEMORY_BARRIERS` is already the engine's name for exactly that
     set -- the passable barriers plus `closed_door` -- and the vocabulary has
@@ -797,30 +851,62 @@ def _door_route(scene, from_room, to_room, limit=_WALK_ROUTE_LIMIT):
     welded and bricked onto `wall` (a kind of wall). So this walks doors and
     refuses walls without a second table of its own.
 
-    Deterministic: neighbours in sorted order, so a tie between two equally
-    short routes always breaks the same way and a reroll reproduces the diff.
+    A BODY'S PATH IS MADE OF DOORWAYS IT MAY CROSS, so the route chosen is
+    the LEAST OBSTRUCTED one and not the shortest: fewest shut doors first,
+    then the one that carries the body FURTHEST on open doorways before the
+    first shut one -- the engine's own "she still got as far as the hall"
+    rule, which is what `declared_walk_leg` then reports -- then fewest
+    hops, then the room ids, so a reroll reproduces the diff.
+
+    Hop count alone chose a route THROUGH the obstacle the story was about.
+    Live, the masque (2026-09-05, PX11): a declared walk from the reception
+    room to the servants' passage had two two-hop routes, one through the
+    music room's panelled door and one through the locked governor's study
+    -- the room the whole plot turned on, which had refused the player two
+    beats earlier. The tie broke on the room id, the study won, and the
+    arrival was committed with a note saying the walk passed a closed door
+    into it. The obstacle held when it was pushed on and was walked through
+    when it was not.
     """
     if not from_room or not to_room or from_room == to_room:
         return []
-    neighbors = neighbor_map(scene, _ROUTE_MEMORY_BARRIERS, directional=True)
-    from collections import deque
-    prev = {str(from_room): None}
-    queue = deque([(str(from_room), 0)])
-    while queue:
-        cur, depth = queue.popleft()
-        if cur == str(to_room):
-            path = []
-            while prev[cur] is not None:
-                path.append(cur)
-                cur = prev[cur]
-            return list(reversed(path))
-        if depth >= limit:
-            continue
-        for nxt in sorted(neighbors.get(cur, ())):
-            if nxt not in prev:
-                prev[nxt] = cur
-                queue.append((nxt, depth + 1))
-    return []
+    from_room, to_room = str(from_room), str(to_room)
+    open_dist, open_prev = _open_reach(scene, from_room, limit)
+    if to_room in open_dist:
+        return _walk_back(open_prev, to_room)
+    onward = _doors_to(scene, to_room, limit)
+    passable = passable_neighbors(scene)
+    route = neighbor_map(scene, _ROUTE_MEMORY_BARRIERS, directional=True)
+    best = None
+    for room, prefix in sorted(open_dist.items()):
+        for step in sorted(route.get(room, ())):
+            if step in (passable.get(room) or ()) or step not in onward:
+                continue                    # not a shut door, or leads nowhere
+            doors, hops, _ = onward[step]
+            key = (doors + 1, -prefix, prefix + 1 + hops, room, step)
+            if best is None or key < best:
+                best = key
+    if best is None:
+        return []
+    _, _, _, room, step = best
+    path = _walk_back(open_prev, room) + [step]
+    cur = step
+    while cur != to_room:
+        cur = onward[cur][2]
+        if cur is None:
+            return []
+        path.append(cur)
+    return path
+
+
+def _walk_back(prev, room) -> list:
+    """The rooms from a breadth-first parent map back to its start, in
+    walking order and excluding the start."""
+    out = []
+    while prev.get(room) is not None:
+        out.append(room)
+        room = prev[room]
+    return list(reversed(out))
 
 
 def declared_walk_leg(scene, from_room, to_room):
@@ -850,6 +936,10 @@ def declared_walk_leg(scene, from_room, to_room):
     because a single interior door on a two-hop path was shut, while the
     identical one-hop crossing would have been allowed. The host had to move
     a body by hand three times for the story to continue.
+
+    WHICH route is `_door_route`'s answer and not this one's, and it is the
+    least obstructed one rather than the shortest -- an arrival is not a
+    warrant for the route to it (PX11).
 
     Two rooms of the answer are deliberately separate. How FAR she got is a
     question about the floor plan and is answered here. What happens at the

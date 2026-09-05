@@ -530,6 +530,49 @@ def normalize_extent(value) -> Optional[dict]:
     return {"w": clamp(w), "d": clamp(d)}
 
 
+def extent_clamp(value) -> Optional[dict]:
+    """What `normalize_extent` CHANGED about a readable extent, or None when
+    it changed nothing.
+
+    `{"requested": {w, d}, "stored": {w, d}, "sides": [...], "min": .., "max": ..}`
+    -- the sides listed are the ones the clamp moved. Rounding is not a
+    clamp: 3.4 paces is 3 paces because paces are whole, and nobody needs
+    telling. Being told 28 and storing 24 is a clamp.
+
+    A CLAMP THE AUTHOR IS NOT TOLD ABOUT IS A MEASUREMENT THE AUTHOR DOES
+    NOT HAVE. The ceiling is real and stays (`EXTENT_MAX_PACES`, an
+    owner-visible cap: 24 paces a side, 576 cells, the most the shadowcast
+    is accepted at without a measurement). What was wrong was its silence.
+
+    Live, the salt terraces (2026-09-05, PS19): the Writers' Room told the
+    host "Rectangular, 28 paces wide by 16 paces deep" and "Composite shape,
+    32 paces wide by 18 paces deep" while the rows it had just written held
+    `{w: 24, d: 16}` and `{w: 24, d: 18}`. Two differently-sized terraces
+    became the same width and nothing said so, which leaves a co-author
+    reading their collaborator's prose against rows it does not match.
+
+    Data, never a sentence: the seam that knows whose reader it is writing
+    for words it, exactly as `spatial_lint` and `guessed_room_sizes` do.
+    """
+    stored = normalize_extent(value)
+    if not stored:
+        return None
+    requested = {"w": _pace(value.get("w", value.get("width"))),
+                 "d": _pace(value.get("d", value.get("depth")))}
+    sides = [side for side in ("w", "d")
+             if not (EXTENT_MIN_PACES <= requested[side] <= EXTENT_MAX_PACES)]
+    if not sides:
+        return None
+    return {
+        "requested": {side: (int(n) if float(n).is_integer() else float(n))
+                      for side, n in requested.items()},
+        "stored": dict(stored),
+        "sides": sides,
+        "min": EXTENT_MIN_PACES,
+        "max": EXTENT_MAX_PACES,
+    }
+
+
 def normalize_offset(value) -> Optional[float]:
     """Where along its wall an anchor or a doorway stands, as a fraction in
     [0, 1] of the wall's length from the wall's START -- the west end of a
@@ -721,6 +764,11 @@ def guessed_room_sizes(scene: dict, prev_scene: dict = None) -> list[dict]:
     no `size`, of which the keyword hint rescues 24 and 151 fall to
     `medium`.
 
+    A room carrying a readable `extent` is not one of them: the extent IS
+    the authored size, `effective_room_size` derives the tier from it, and
+    `spatial_lint.size_disagrees_with_extent` says as much in the other
+    direction (PS17, below).
+
     Two subtractions keep this readable. Only rooms with two or more
     occupants, because a room with nobody in it has no proximity to grade.
     And only the beat the room CROSSES into being shared -- pass
@@ -744,6 +792,21 @@ def guessed_room_sizes(scene: dict, prev_scene: dict = None) -> list[dict]:
         if not isinstance(room, dict):
             continue
         if str(room.get("size") or "").strip():
+            continue
+        # AN EXTENT IS AN AUTHORED SIZE. `effective_room_size` derives the
+        # tier from a measured extent and lets it beat the word, and
+        # `spatial_lint.size_disagrees_with_extent` says outright that "the
+        # extent decides" -- so a room that carries one has not been graded
+        # by a guess and has nothing for this row to report.
+        #
+        # Live, the salt terraces (2026-09-05, PS17): turn 4 told the host
+        # "the extent decides, and the size word should agree with it", and
+        # turn 5 told them a room holding three "has no authored size;
+        # perception is grading it 'vast' by default" -- about a room
+        # carrying `extent: {w: 10, d: 14}`. Two pieces of engine advice
+        # about the same field, contradicting each other in consecutive
+        # beats, one of them wrong.
+        if normalize_extent(room.get("extent")):
             continue
         occupants = counts.get(str(room_id), 0)
         if occupants < 2:
@@ -805,10 +868,45 @@ def _cell_proximity(scene: dict, room_id, observer: str, target: str) -> Optiona
     return "across"
 
 
+def _anchor_is_a_run(scene: dict, room_id, anchor_id) -> bool:
+    """Does this anchor have LENGTH -- `footprint: run`?
+
+    A FIXTURE WITH LENGTH IS NOT A POINT: standing at it says which fixture,
+    not where along it. Every other footprint (`point`, `small`, `large`) is
+    a thing a body stands beside and two bodies at it are at each other's
+    elbow; a run is a table, a bar, a bench, a rail, a wall of shelving --
+    the engine's own word for a fixture laid out along a line -- and two
+    bodies at one are as likely to be at its two ends as side by side.
+
+    Live, the hearing at Vaunt's Yard (2026-09-05, PM3). The hall's fourteen
+    paces of oak trestle were one anchor at one point, so three bodies the
+    prose kept placing "at the head of the table", "at the table's far end"
+    and "looking down its length" all read `within_reach` of each other. A
+    whisper the player explicitly limited to "no further than the head of
+    the table" was therefore delivered whole to the man at the far end, who
+    acted on it the next beat. Nothing crossed a boundary the engine
+    believed in; the boundary was never measured.
+
+    Pure subtraction: an unmeasured pair at a run falls to `near`, which is
+    the tier the engine already returns whenever it does not know. Two
+    bodies a host or a hand has actually PLACED still answer precisely --
+    `_cell_proximity` runs first and reads their cells -- and an explicit
+    `near` link between the pair is a positive statement by a writer and
+    still means within reach.
+    """
+    anchor = (effective_anchors(scene, room_id) or {}).get(str(anchor_id or ""))
+    if not isinstance(anchor, dict):
+        return False
+    from world.spatial_fov import normalize_footprint
+    return normalize_footprint(anchor.get("footprint")) == "run"
+
+
 def proximity_rel(scene: dict, observer: str, target: str) -> Optional[str]:
     """Within-room proximity tier between two entities: 'within_reach' | 'near'
-    | 'across', or None when they are not co-located. within_reach: same anchor,
-    or a mutual 'near' station link. across: distinct anchors in a room flagged
+    | 'across', or None when they are not co-located. within_reach: same anchor
+    -- unless that anchor is a `run`, which has length and so places nobody
+    (`_anchor_is_a_run`) -- or a mutual 'near' station link. across: distinct
+    anchors in a room flagged
     size 'large' OR BIGGER -- 'huge' and 'vast' are equally real scene sizes
     (see _ROOM_COST), and gating on 'large' exactly made the two largest floors
     read as more intimate than a merely large one. Otherwise 'near' -- the safe
@@ -833,7 +931,7 @@ def proximity_rel(scene: dict, observer: str, target: str) -> Optional[str]:
         w = str(who or "").strip().casefold()
         return any(str(n).strip().casefold() == w for n in near or [])
 
-    if (o_at and t_at and o_at == t_at) \
+    if (o_at and t_at and o_at == t_at and not _anchor_is_a_run(scene, o_room, o_at)) \
             or _in_near(o_st.get("near"), target) \
             or _in_near(t_st.get("near"), observer):
         return "within_reach"
