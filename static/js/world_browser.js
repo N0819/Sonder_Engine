@@ -30,7 +30,12 @@
 //   Bodies  -- every body the scene knows -- cast, player, promoted presence
 //              -- with its room, station, pose, and its FULL attire ledger,
 //              editable: a garment's state and condition, add and remove,
-//              the region a garment is worn under, the free notes.
+//              the region a garment is worn under, the free notes. Then the
+//              TOWNSPEOPLE (2026-09-05): the charter bodies the registry
+//              stands in a room, under their own group, each with its room,
+//              its posts and the station the placement rule derives -- no
+//              pose, no attire, since a townsperson has no row in either
+//              ledger; its room is authored here, its station on the map.
 //   Raw JSON -- the two editors that used to be the whole of these buttons,
 //              unchanged: the world table (🌍) or the attire ledger (👕),
 //              whole-body PUTs. The REPAIR path, kept because hand repair of
@@ -45,8 +50,10 @@
 // the menus are built from: `PATCH /rooms/{id}` (changed fields only; exits,
 // anchors and parts as this room's full list), `PATCH /rooms/{id}/entities/{eid}`,
 // `PUT /bodies/{name}/station`, `PATCH /regions/{id}` (the region's look,
-// one sentence every room in the region shares), and the two writes the app
-// already had --
+// one sentence every room in the region shares), a townsperson's place
+// (`PUT`/`DELETE /charters/{charter}/bodies/{body}/station` -- the charter
+// REGISTRY, never the scene: `world/charter_place.py`), and the two writes
+// the app already had --
 // "Move here" is the cast editor's `PUT /characters/{ch}/position`, and every
 // attire edit sends the WHOLE ledger to `PUT /attire`, which re-derives each
 // entry (`story.attire.rederive_entry`). The ledger stores a garment
@@ -351,9 +358,84 @@ function wbBodyMove(body, roomId, ctx) {
     const target = select.value;
     if (!target) return;
     select.disabled = true;
-    await ctx.moveBodyTo(body, target);
+    // A townsperson's room is the charter registry's `place`, written
+    // through its own route; every other body's is the scene's.
+    await (body.kind === "charter" ? ctx.placeCharter(body, target) : ctx.moveBodyTo(body, target));
   });
   return select;
+}
+
+// ---- Townspeople (2026-09-05, DESIGN_CHARTER_PLACEMENT § the map) -----------
+//
+// A charter body has no row in the scene: its room is the registry's `place`
+// and where it stands within the room is DERIVED at read time by one rule --
+// its authored station, else its post's anchor, else the doorway of the walk
+// it is on, else a cell dealt from its identity (`world/charter_place.py`;
+// the server's `source` says which clause answered, `vocab.charter_sources`
+// is the set). So the row shows the answer and the clause, and a host
+// authors exactly two things: the room, from the row, and the station, by
+// dropping the mark on the map; the clear returns the body to the rule.
+
+// The route a townsperson's place goes through -- room and station alike.
+function wbCharterUrl(chatId, body) {
+  return `/api/chats/${chatId}/charters/${encodeURIComponent(body.charter)}/bodies/${encodeURIComponent(body.body)}/station${frameQuery()}`;
+}
+
+// What the route accepts of an authored station: the room, and `at` or
+// `cell`, with a facing where one was authored. `near` is a fact the rule
+// reads and this surface never writes.
+function wbCharterStationBody(room, station) {
+  const out = { room };
+  if (station && station.at) out.at = station.at;
+  else if (station && wbCellOf(station)) out.cell = wbCellOf(station);
+  if (station && station.facing) out.facing = station.facing;
+  return out;
+}
+
+// The clause that placed a townsperson, said in words. The set is the
+// engine's (`vocab.charter_sources`); a word this table does not know is
+// shown as the engine says it rather than guessed at.
+const WB_CHARTER_SOURCE = {
+  authored: "placed by hand", post: "at the post's anchor",
+  walk: "at the doorway of the walk", dealt: "dealt a cell — nothing placed them",
+};
+function wbSourceWord(source) {
+  return WB_CHARTER_SOURCE[source] ? t(WB_CHARTER_SOURCE[source]) : txt(source || "");
+}
+
+// Where a townsperson stands, and how the rule placed it: the anchor or the
+// cell, the facing, the clause, and -- for an authored station only -- the
+// clear that hands the body back to the rule.
+function wbCharterWhere(body, ctx) {
+  const station = body.station || {};
+  const cell = wbCellOf(station);
+  return el("div", { class: "wb-exit wb-charter-where" },
+    el("span", { class: "small dim" }, "Stands"),
+    station.at ? el("span", { translate: "no" }, txt(station.at)) : null,
+    cell ? wbCellText(cell) : null,
+    body.facing ? el("span", { class: "small dim" }, "Facing", " ",
+      el("span", { translate: "no" }, txt(body.facing))) : null,
+    el("span", { class: "small dim wb-charter-source", "data-source": body.source || "" },
+      "(", wbSourceWord(body.source), ")"),
+    body.source === "authored"
+      ? el("button", { class: "small wb-remove wb-clear-station",
+                       title: "Clear the authored station — the post, the walk or the dealt cell places them again",
+                       onclick: e => { e.preventDefault(); ctx.clearCharterStation(body); } }, "✕")
+      : null);
+}
+
+// A townsperson in the room, on the card: the row the map's mark opens.
+function wbCharterRow(body, roomId, ctx) {
+  return el("div", { class: "wb-body wb-charter", "data-body": body.name },
+    el("div", { class: "row wb-body-head" },
+      el("b", { translate: "no" }, txt(body.name)),
+      wbBodyKind(body.kind),
+      body.posts && body.posts.length
+        ? el("span", { class: "small dim" }, "Post", " ",
+            el("span", { translate: "no" }, txt(body.posts.join(", "))))
+        : null,
+      wbBodyMove(body, roomId, ctx)),
+    wbCharterWhere(body, ctx));
 }
 
 // A body's pose, edited in its row: the engine's six fields (`vocab.pose_fields`,
@@ -1047,10 +1129,18 @@ function wbRenderCard(host, slice, ctx) {
     return ctx.addPresence(slice.id, text, null);
   };
   presenceName.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); addPresence(); } });
+  // The townspeople standing here, from the index's Bodies rows (the
+  // registry's, not the slice's occupants): the rows the map's marks open.
+  const townsfolk = (ctx.index.bodies || []).filter(b => b.kind === "charter" && b.room === slice.id);
   host.append(wbSection("Who is here",
     occupants.length
       ? el("div", {}, ...occupants.map(o => wbOccupant(o, slice, ctx)))
       : el("div", { class: "small dim" }, "Nobody is here."),
+    townsfolk.length
+      ? el("div", { class: "wb-townsfolk" },
+          el("div", { class: "small dim wb-group" }, "Townspeople"),
+          ...townsfolk.map(b => wbCharterRow(b, slice.id, ctx)))
+      : null,
     record && slice.status === "live" ? el("div", { class: "wb-exit wb-add wb-add-presence" }, presenceName,
       el("button", { class: "small", onclick: addPresence }, "Add presence")) : null));
 
@@ -1285,16 +1375,52 @@ function wbAttireEditor(body, ctx) {
 function wbBodyKind(kind) {
   if (kind === "player") return el("span", { class: "badge ok" }, "Player");
   if (kind === "cast") return el("span", { class: "badge" }, "Cast");
+  if (kind === "charter") return el("span", { class: "badge wb-badge-charter" }, "Townsperson");
   return el("span", { class: "badge warn" }, "Presence");
+}
+
+// A townsperson on the Bodies tab: its room (a select, through its own
+// route), its posts, where it stands and the clause that put it there.
+function wbCharterDetails(body, ctx) {
+  const open = ctx.openBodies.has(body.name);
+  const details = el("details", { class: "wb-body wb-charter", "data-body": body.name,
+                                  ...(open ? { open: "" } : {}) },
+    el("summary", {},
+      el("b", { translate: "no" }, txt(body.name)),
+      wbBodyKind(body.kind),
+      body.room
+        ? el("button", { class: "wb-link", translate: "no",
+                         onclick: e => { e.preventDefault(); ctx.showRoom(body.room); } },
+            txt(body.room_name || body.room))
+        : el("span", { class: "small dim" }, "Offscreen"),
+      body.posts && body.posts.length
+        ? el("span", { class: "small dim" }, " · ", "Post", " ",
+            el("span", { translate: "no" }, txt(body.posts.join(", "))))
+        : null,
+      wbStationText(body.station),
+      el("span", { class: "small dim wb-charter-source", "data-source": body.source || "" },
+        " · ", wbSourceWord(body.source))),
+    body.room ? el("div", { class: "wb-exit wb-body-place" },
+      el("span", { class: "small dim" }, "Room"),
+      wbBodyMove(body, body.room, ctx)) : null,
+    wbCharterWhere(body, ctx));
+  details.addEventListener("toggle", () => {
+    if (details.open) ctx.openBodies.add(body.name); else ctx.openBodies.delete(body.name);
+  });
+  return details;
 }
 
 function wbRenderBodies(host, ctx) {
   host.innerHTML = "";
-  const bodies = ctx.index.bodies || [];
-  if (!bodies.length) {
+  const every = ctx.index.bodies || [];
+  if (!every.length) {
     host.append(el("div", { class: "small dim" }, "No bodies yet — nobody stands in the scene."));
     return;
   }
+  // The scene's bodies first, as they were; the townspeople under their own
+  // heading after them.
+  const bodies = every.filter(b => b.kind !== "charter");
+  const townsfolk = every.filter(b => b.kind === "charter");
   for (const body of bodies) {
     const open = ctx.openBodies.has(body.name);
     const details = el("details", { class: "wb-body", "data-body": body.name,
@@ -1348,6 +1474,10 @@ function wbRenderBodies(host, ctx) {
       if (details.open) ctx.openBodies.add(body.name); else ctx.openBodies.delete(body.name);
     });
     host.append(details);
+  }
+  if (townsfolk.length) {
+    host.append(el("div", { class: "wb-group wb-townsfolk-heading" }, "Townspeople"),
+      ...townsfolk.map(b => wbCharterDetails(b, ctx)));
   }
 }
 
@@ -1430,6 +1560,16 @@ function wbRenderRaw(host, chatId, kind, cache) {
 // neighbour's cells it MOVES there (the cast editor's position route, then
 // its station with the cell in the neighbour's grid). An authored fact, like
 // every edit here: no Director call, no memory of a step.
+//
+// A TOWNSPERSON (2026-09-05) is drawn from the same `bodies` map with its
+// own mark -- `kind: "charter"`, a square where the scene's bodies are dots,
+// the dealt ones lighter than the placed, and the ones standing in a laid
+// neighbour faintly where the neighbour is -- and is dragged by ONE route
+// onto the charter registry, never the scene (`PUT /charters/{c}/bodies/{b}/
+// station`): on an anchor's cell it stands `at` the anchor, on any other cell
+// it is pinned to that `cell`, in a neighbour's cells it is moved there and
+// placed where it landed. Its click opens its row under "Who is here"; its
+// Undo puts back the station the record held, or clears one it did not.
 //
 // Overlays: the grid route's `overlays` slot (`{name: {"x,y": word}}`) is
 // painted as a tint per cell with a legend whenever a sibling fills it --
@@ -1619,7 +1759,12 @@ function wbRenderRoomMap(host, view, ctx, { overlay = null } = {}) {
   const cells = room.cells || [];
   const cellSet = new Set(cells.map(c => c.join(",")));
   const far = view.neighbours || [];
-  const bodies = Object.entries(view.bodies || {});
+  // A townsperson carries `room`: standing here, it is drawn and dragged
+  // with the room's bodies; standing in a laid neighbour, it is drawn
+  // faintly there and dragged from that room's own grid.
+  const every = Object.entries(view.bodies || {});
+  const bodies = every.filter(([, b]) => !(b.kind === "charter" && b.room && b.room !== room.id));
+  const beyond = every.filter(([, b]) => b.kind === "charter" && b.room && b.room !== room.id);
   const unplaced = bodies.filter(([, b]) => !b.cell);
   const laneY = room.d + 1;
 
@@ -1679,6 +1824,8 @@ function wbRenderRoomMap(host, view, ctx, { overlay = null } = {}) {
   const lightWord = t("light source");
   const atWord = t("at");
   const pinnedWord = t("pinned to this cell");
+  const charterHint = t("a townsperson — click for the row, drag onto an anchor or any cell to place, arrows nudge");
+  const postWord = t("Post");
 
   // -- the neighbours, faintly, where the field lays them ------------------
   for (const n of far) {
@@ -1709,6 +1856,16 @@ function wbRenderRoomMap(host, view, ctx, { overlay = null } = {}) {
     }
     wbActivatable(g, () => ctx.select(n.id));
     gFar.append(g);
+  }
+  // Townspeople standing in a laid neighbour: drawn faintly where the field
+  // lays them, as the neighbour's anchors are, in the neighbour's frame.
+  for (const [name, b] of beyond) {
+    const n = far.find(nb => nb.id === b.room);
+    if (!n || !b.cell) continue;
+    const cx = (b.cell[0] + n.offset[0] + 0.5) * S, cy = (b.cell[1] + n.offset[1] + 0.5) * S;
+    gFar.append(wbSvg("rect", { x: cx - S * 0.26, y: cy - S * 0.26, width: S * 0.52, height: S * 0.52, rx: 3,
+                                class: "wb-m-far-body " + (b.source || ""), "data-body": name },
+      wbSvg("title", {}, `${name} — ${n.name}`)));
   }
 
   // -- the room's cells, and the overlay's tint over them ----------------
@@ -1869,17 +2026,29 @@ function wbRenderRoomMap(host, view, ctx, { overlay = null } = {}) {
   for (const [name, b] of bodies) {
     const cell = b.cell || [lane++, laneY];
     const cx = (cell[0] + 0.5) * S, cy = (cell[1] + 0.5) * S;
+    const charter = b.kind === "charter";
     // `source` says what placed the body: its own pinned cell, its
-    // anchor, or nothing -- the server's word, never re-derived here.
-    const where = b.cell
-      ? [b.at ? `${atWord} ${b.at}` : t("free in the room"),
-         b.source === "cell" ? pinnedWord : null].filter(Boolean).join(", ")
-      : t("somewhere in the room — no station");
+    // anchor, or nothing -- the server's word, never re-derived here. For
+    // a townsperson it is the placement rule's clause (`charter_sources`).
+    const where = charter
+      ? [b.at ? `${atWord} ${b.at}` : null,
+         b.posts && b.posts.length ? `${postWord} ${b.posts.join(", ")}` : null,
+         b.source || null].filter(Boolean).join(", ")
+      : b.cell
+        ? [b.at ? `${atWord} ${b.at}` : t("free in the room"),
+           b.source === "cell" ? pinnedWord : null].filter(Boolean).join(", ")
+        : t("somewhere in the room — no station");
     const g = wbSvg("g", { class: "wb-m-body " + b.kind + (b.cell ? "" : " unplaced")
-                                  + (b.source === "cell" ? " pinned" : ""),
+                                  + (b.source === "cell" ? " pinned" : "")
+                                  + (charter && b.source ? " " + b.source : ""),
                            "data-body": name, tabindex: "0", role: "button" },
-      wbSvg("title", {}, `${name} — ${where} — ${bodyHint}`),
-      wbSvg("circle", { cx, cy, r: S * 0.34, class: "wb-m-body-dot" }));
+      wbSvg("title", {}, `${name} — ${where} — ${charter ? charterHint : bodyHint}`),
+      // A townsperson's mark is a square where the scene's bodies are dots,
+      // so the two are never confused; the dealt ones are lighter (CSS).
+      charter
+        ? wbSvg("rect", { x: cx - S * 0.32, y: cy - S * 0.32, width: S * 0.64, height: S * 0.64, rx: 4,
+                          class: "wb-m-body-dot" })
+        : wbSvg("circle", { cx, cy, r: S * 0.34, class: "wb-m-body-dot" }));
     const u = WB_UNIT[b.facing];
     if (u) {
       const len = Math.hypot(u[0], u[1]);
@@ -1887,12 +2056,20 @@ function wbRenderRoomMap(host, view, ctx, { overlay = null } = {}) {
                                class: "wb-m-facing" }));
     }
     g.append(wbSvg("text", { x: cx, y: cy + S * 0.34 + 9, "text-anchor": "middle", class: "wb-m-name" }, name));
-    wbDraggable(svg, g, {
-      onClick: () => ctx.focusRow(`.wb-body[data-body="${CSS.escape(name)}"]`),
-      onDrop: p => dropBody(name, b, p),
-      // An unplaced body's arrow puts it on the room's first cell.
-      onArrow: (dx, dy) => dropBody(name, b, centre(b.cell ? [cell[0] + dx, cell[1] + dy] : cells[0]), true),
-    });
+    if (charter) {
+      wbDraggable(svg, g, {
+        onClick: () => ctx.focusRow(`.wb-charter[data-body="${CSS.escape(name)}"]`),
+        onDrop: p => dropCharter(name, b, p),
+        onArrow: (dx, dy) => dropCharter(name, b, centre([cell[0] + dx, cell[1] + dy]), true),
+      });
+    } else {
+      wbDraggable(svg, g, {
+        onClick: () => ctx.focusRow(`.wb-body[data-body="${CSS.escape(name)}"]`),
+        onDrop: p => dropBody(name, b, p),
+        // An unplaced body's arrow puts it on the room's first cell.
+        onArrow: (dx, dy) => dropBody(name, b, centre(b.cell ? [cell[0] + dx, cell[1] + dy] : cells[0]), true),
+      });
+    }
     gBodies.append(g);
   }
   if (unplaced.length) {
@@ -2191,6 +2368,36 @@ function wbRenderRoomMap(host, view, ctx, { overlay = null } = {}) {
     await ctx.moveBody(name, n, anchor ? anchor[0] : null, [c[0] - n.offset[0], c[1] - n.offset[1]]);
   }
 
+  // A townsperson dropped in its room: on an anchor's cell (a doorway's
+  // too) it stands `at` the anchor, on any other cell it is pinned to that
+  // `cell` -- ONE write to the charter registry, never the scene. In a
+  // neighbour's cells it is moved there and placed where it landed. Undo
+  // re-issues the station the record held (`authored`), or clears the one
+  // this drop wrote when the record held none.
+  async function dropCharter(name, b, p, quiet = false) {
+    const c = cellOf(p);
+    const previous = b.authored ? wbCharterStationBody(room.id, b.authored) : null;
+    const restore = label => previous
+      ? ctx.putCharterStation(b, previous, label)
+      : ctx.clearCharterStation(b, label);
+    if (inRoom(c)) {
+      const anchor = Object.entries(view.anchors || {}).find(([, a]) => a.cells.some(k => same(k, c)));
+      const door = (view.doorways || []).find(d => d.cells.some(k => same(k, c)));
+      const label = anchor ? t(`Placed ${name} at ${anchor[0]}`) : t(`Placed ${name} at (${c[0]}, ${c[1]})`);
+      const at = anchor ? anchor[0] : door ? door.id : null;
+      const done = await ctx.putCharterStation(b, { room: room.id, ...(at ? { at } : { cell: c }) }, label);
+      if (done) ctx.undo.remember(label, () => restore(t(`Undid: ${label}`)));
+      ctx.refocus(`.wb-m-body[data-body="${CSS.escape(name)}"]`);
+      return;
+    }
+    if (quiet) return;
+    const n = far.find(nb => nb.cells.some(k => same([k[0] + nb.offset[0], k[1] + nb.offset[1]], c)));
+    if (!n) return toast(t("Drop the body on a cell of this room, or of a neighbour to move it there."), "warn", 6000);
+    const anchor = Object.entries(n.anchors || {}).find(([, a]) =>
+      a.cells.some(k => same([k[0] + n.offset[0], k[1] + n.offset[1]], c)));
+    await ctx.moveCharter(name, b, n, anchor ? anchor[0] : null, [c[0] - n.offset[0], c[1] - n.offset[1]]);
+  }
+
   // A thing follows the body rule: pinned by `cell` in its room through the
   // station route; dropped in a neighbour it is moved there (the entity
   // route, which drops the old cell) and pinned in the neighbour's grid.
@@ -2383,7 +2590,9 @@ function wbMarksLegend(host) {
   const item = (cls, label) => el("span", { class: "wb-legend-item" }, el("span", { class: "wb-legend-mark " + cls }), label);
   host.append(
     item("wb-lg-anchor", "Anchor"), item("wb-lg-door", "Doorway"), item("wb-lg-body", "Cast"),
-    item("wb-lg-player", "Player"), item("wb-lg-presence", "Presence"), item("wb-lg-thing", "Thing"),
+    item("wb-lg-player", "Player"), item("wb-lg-presence", "Presence"),
+    item("wb-lg-charter", "Townsperson"), item("wb-lg-charter dealt", "Townsperson, dealt a cell"),
+    item("wb-lg-thing", "Thing"),
     item("wb-lg-ring", "Ceiling light (casts no shadow)"), item("wb-lg-part", "Part of the room"),
     item("wb-lg-handle", "Resize handle"), item("wb-lg-lint", "Layout lint"));
 }
@@ -2645,6 +2854,46 @@ async function openWorldBrowser(opts = {}) {
       moveBodyTo: async (body, room) => {
         const row = wbIndexRows(state.index).find(r => r.id === room) || { name: room };
         const done = await wbWrite(ctx, async () => { await moveRoute(body, room); return true; }, { quiet: true });
+        if (done) {
+          toast(t(`Moved ${body.name} to ${row.name}.`), "ok");
+          ctx.undo.clear();
+          await ctx.refresh();
+        }
+      },
+      // A townsperson's place is the charter registry's, never the scene's
+      // (DESIGN_CHARTER_PLACEMENT § the map): one route for the room and the
+      // within-room station, and its DELETE to hand the body back to the
+      // rule. `b` is the record the grid or the index carries (`charter`,
+      // `body`, `name`); the label is the toast, one per drop.
+      putCharterStation: (b, fields, label = null) => wbWrite(ctx, async () => {
+        await api("PUT", wbCharterUrl(chatId, b), fields);
+        if (label) toast(label, "ok");
+        await ctx.refresh();
+        return true;
+      }, { quiet: !!label }),
+      clearCharterStation: (b, label = null) => wbWrite(ctx, async () => {
+        await api("DELETE", wbCharterUrl(chatId, b));
+        toast(label || t("Cleared the station; the rule places them again."), "ok");
+        await ctx.refresh();
+        return true;
+      }, { quiet: true }),
+      moveCharter: async (name, b, neighbour, at, cell) => {
+        const done = await wbWrite(ctx, async () => {
+          await api("PUT", wbCharterUrl(chatId, b), { room: neighbour.id, ...(at ? { at } : { cell }) });
+          return true;
+        }, { quiet: true });
+        if (done) {
+          toast(t(`Moved ${name} to ${neighbour.name}.`), "ok");
+          ctx.undo.clear();
+          await ctx.refresh();
+        }
+      },
+      placeCharter: async (body, room) => {
+        const row = wbIndexRows(state.index).find(r => r.id === room) || { name: room };
+        const done = await wbWrite(ctx, async () => {
+          await api("PUT", wbCharterUrl(chatId, body), { room });
+          return true;
+        }, { quiet: true });
         if (done) {
           toast(t(`Moved ${body.name} to ${row.name}.`), "ok");
           ctx.undo.clear();

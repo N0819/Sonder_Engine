@@ -1,0 +1,2318 @@
+{
+ "bodies": [
+  {
+   "attire": null,
+   "kind": "player",
+   "name": "Nathan",
+   "pose": null,
+   "room": "study",
+   "room_name": "Study",
+   "station": null
+  },
+  {
+   "attire": {
+    "regions": {
+     "torso": {
+      "beneath": "",
+      "garments": [
+       {
+        "name": "apron",
+        "state": "worn"
+       }
+      ]
+     }
+    },
+    "state": [],
+    "wearing": [
+     "apron"
+    ]
+   },
+   "kind": "cast",
+   "name": "Alice",
+   "pose": null,
+   "room": "kitchen",
+   "room_name": "Kitchen",
+   "station": {
+    "at": "hearth",
+    "near": []
+   }
+  },
+  {
+   "attire": null,
+   "kind": "cast",
+   "name": "Bob",
+   "pose": null,
+   "room": "hallway",
+   "room_name": "Hallway",
+   "station": null
+  }
+ ],
+ "hallway": {
+  "anchors": {},
+  "bodies": {
+   "Bob": {
+    "at": null,
+    "cell": null,
+    "facing": null,
+    "kind": "cast",
+    "measured": false,
+    "near": [],
+    "source": "none"
+   }
+  },
+  "doorways": [
+   {
+    "barrier": "open",
+    "cells": [
+     [
+      0,
+      2
+     ]
+    ],
+    "declared_here": true,
+    "dir": "w",
+    "id": "door:kitchen",
+    "label": "",
+    "material": "",
+    "name": "Kitchen",
+    "offset": null,
+    "passage": null,
+    "state": {},
+    "status": "live",
+    "to": "kitchen",
+    "width": null
+   },
+   {
+    "barrier": "closed_door",
+    "cells": [
+     [
+      2,
+      0
+     ]
+    ],
+    "declared_here": true,
+    "dir": "n",
+    "id": "door:study",
+    "label": "",
+    "material": "",
+    "name": "Study",
+    "offset": null,
+    "passage": null,
+    "state": {},
+    "status": "live",
+    "to": "study",
+    "width": null
+   }
+  ],
+  "frame_id": null,
+  "light_sources": [],
+  "lint": [],
+  "neighbours": [
+   {
+    "anchors": {
+     "door:cellar": {
+      "cells": [
+       [
+        6,
+        1
+       ]
+      ],
+      "desc": "the doorway",
+      "implicit": true
+     },
+     "door:hallway": {
+      "cells": [
+       [
+        7,
+        2
+       ]
+      ],
+      "desc": "the opening",
+      "implicit": true
+     },
+     "hearth": {
+      "cells": [
+       [
+        1,
+        2
+       ]
+      ],
+      "desc": "the hearth",
+      "implicit": false
+     },
+     "oak_table": {
+      "cells": [
+       [
+        2,
+        2
+       ],
+       [
+        2,
+        3
+       ],
+       [
+        3,
+        2
+       ],
+       [
+        3,
+        3
+       ]
+      ],
+      "desc": "the oak table",
+      "implicit": false
+     }
+    },
+    "cells": [
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      1
+     ],
+     [
+      0,
+      2
+     ],
+     [
+      0,
+      3
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      1
+     ],
+     [
+      1,
+      2
+     ],
+     [
+      1,
+      3
+     ],
+     [
+      2,
+      0
+     ],
+     [
+      2,
+      1
+     ],
+     [
+      2,
+      2
+     ],
+     [
+      2,
+      3
+     ],
+     [
+      3,
+      0
+     ],
+     [
+      3,
+      1
+     ],
+     [
+      3,
+      2
+     ],
+     [
+      3,
+      3
+     ],
+     [
+      4,
+      0
+     ],
+     [
+      4,
+      1
+     ],
+     [
+      4,
+      2
+     ],
+     [
+      4,
+      3
+     ],
+     [
+      5,
+      0
+     ],
+     [
+      5,
+      1
+     ],
+     [
+      5,
+      2
+     ],
+     [
+      5,
+      3
+     ],
+     [
+      6,
+      0
+     ],
+     [
+      6,
+      1
+     ],
+     [
+      6,
+      2
+     ],
+     [
+      6,
+      3
+     ],
+     [
+      7,
+      0
+     ],
+     [
+      7,
+      1
+     ],
+     [
+      7,
+      2
+     ],
+     [
+      7,
+      3
+     ]
+    ],
+    "d": 4,
+    "id": "kitchen",
+    "name": "Kitchen",
+    "offset": [
+     -9,
+     0
+    ],
+    "shape": "rectangle",
+    "w": 8
+   }
+  ],
+  "overlays": {},
+  "rims": {
+   "e": [
+    [
+     5,
+     0
+    ],
+    [
+     5,
+     1
+    ],
+    [
+     5,
+     2
+    ],
+    [
+     5,
+     3
+    ],
+    [
+     5,
+     4
+    ],
+    [
+     5,
+     5
+    ]
+   ],
+   "n": [
+    [
+     0,
+     0
+    ],
+    [
+     1,
+     0
+    ],
+    [
+     2,
+     0
+    ],
+    [
+     3,
+     0
+    ],
+    [
+     4,
+     0
+    ],
+    [
+     5,
+     0
+    ]
+   ],
+   "s": [
+    [
+     0,
+     5
+    ],
+    [
+     1,
+     5
+    ],
+    [
+     2,
+     5
+    ],
+    [
+     3,
+     5
+    ],
+    [
+     4,
+     5
+    ],
+    [
+     5,
+     5
+    ]
+   ],
+   "w": [
+    [
+     0,
+     0
+    ],
+    [
+     0,
+     1
+    ],
+    [
+     0,
+     2
+    ],
+    [
+     0,
+     3
+    ],
+    [
+     0,
+     4
+    ],
+    [
+     0,
+     5
+    ]
+   ]
+  },
+  "room": {
+   "cells": [
+    [
+     0,
+     0
+    ],
+    [
+     0,
+     1
+    ],
+    [
+     0,
+     2
+    ],
+    [
+     0,
+     3
+    ],
+    [
+     0,
+     4
+    ],
+    [
+     0,
+     5
+    ],
+    [
+     1,
+     0
+    ],
+    [
+     1,
+     1
+    ],
+    [
+     1,
+     2
+    ],
+    [
+     1,
+     3
+    ],
+    [
+     1,
+     4
+    ],
+    [
+     1,
+     5
+    ],
+    [
+     2,
+     0
+    ],
+    [
+     2,
+     1
+    ],
+    [
+     2,
+     2
+    ],
+    [
+     2,
+     3
+    ],
+    [
+     2,
+     4
+    ],
+    [
+     2,
+     5
+    ],
+    [
+     3,
+     0
+    ],
+    [
+     3,
+     1
+    ],
+    [
+     3,
+     2
+    ],
+    [
+     3,
+     3
+    ],
+    [
+     3,
+     4
+    ],
+    [
+     3,
+     5
+    ],
+    [
+     4,
+     0
+    ],
+    [
+     4,
+     1
+    ],
+    [
+     4,
+     2
+    ],
+    [
+     4,
+     3
+    ],
+    [
+     4,
+     4
+    ],
+    [
+     4,
+     5
+    ],
+    [
+     5,
+     0
+    ],
+    [
+     5,
+     1
+    ],
+    [
+     5,
+     2
+    ],
+    [
+     5,
+     3
+    ],
+    [
+     5,
+     4
+    ],
+    [
+     5,
+     5
+    ]
+   ],
+   "d": 6,
+   "id": "hallway",
+   "measured": false,
+   "name": "Hallway",
+   "shape": "rectangle",
+   "w": 6
+  },
+  "sound_sources": [],
+  "things": [],
+  "walls": [
+   {
+    "aperture": [
+     1.5,
+     2.5
+    ],
+    "axis": 0,
+    "coord": -1,
+    "extent": [
+     -0.5,
+     5.5
+    ],
+    "name": "Kitchen",
+    "to": "kitchen"
+   }
+  ]
+ },
+ "kitchen": {
+  "anchors": {
+   "hearth": {
+    "cell": null,
+    "cells": [
+     [
+      1,
+      2
+     ]
+    ],
+    "desc": "the hearth",
+    "dir": "w",
+    "footprint": "point",
+    "height": "waist",
+    "implicit": false,
+    "offset": null,
+    "opacity": "opaque",
+    "source": "seed"
+   },
+   "oak_table": {
+    "cell": null,
+    "cells": [
+     [
+      2,
+      2
+     ],
+     [
+      2,
+      3
+     ],
+     [
+      3,
+      2
+     ],
+     [
+      3,
+      3
+     ]
+    ],
+    "desc": "the oak table",
+    "dir": null,
+    "footprint": "large",
+    "height": "waist",
+    "implicit": false,
+    "offset": null,
+    "opacity": "opaque",
+    "source": "seed"
+   }
+  },
+  "bodies": {
+   "Alice": {
+    "at": "hearth",
+    "cell": [
+     2,
+     2
+    ],
+    "facing": "e",
+    "kind": "cast",
+    "measured": true,
+    "near": [],
+    "source": "anchor"
+   }
+  },
+  "doorways": [
+   {
+    "barrier": "closed_door",
+    "cells": [],
+    "declared_here": true,
+    "dir": null,
+    "id": "door:cellar",
+    "label": "",
+    "material": "",
+    "name": "Cellar",
+    "offset": null,
+    "passage": null,
+    "state": {},
+    "status": "live",
+    "to": "cellar",
+    "width": null
+   },
+   {
+    "barrier": "open",
+    "cells": [
+     [
+      7,
+      2
+     ]
+    ],
+    "declared_here": true,
+    "dir": "e",
+    "id": "door:hallway",
+    "label": "",
+    "material": "",
+    "name": "Hallway",
+    "offset": null,
+    "passage": null,
+    "state": {},
+    "status": "live",
+    "to": "hallway",
+    "width": null
+   }
+  ],
+  "frame_id": null,
+  "light_sources": [],
+  "lint": [],
+  "neighbours": [
+   {
+    "anchors": {
+     "door:kitchen": {
+      "cells": [
+       [
+        0,
+        2
+       ]
+      ],
+      "desc": "the opening",
+      "implicit": true
+     },
+     "door:study": {
+      "cells": [
+       [
+        2,
+        0
+       ]
+      ],
+      "desc": "the doorway",
+      "implicit": true
+     }
+    },
+    "cells": [
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      1
+     ],
+     [
+      0,
+      2
+     ],
+     [
+      0,
+      3
+     ],
+     [
+      0,
+      4
+     ],
+     [
+      0,
+      5
+     ],
+     [
+      1,
+      0
+     ],
+     [
+      1,
+      1
+     ],
+     [
+      1,
+      2
+     ],
+     [
+      1,
+      3
+     ],
+     [
+      1,
+      4
+     ],
+     [
+      1,
+      5
+     ],
+     [
+      2,
+      0
+     ],
+     [
+      2,
+      1
+     ],
+     [
+      2,
+      2
+     ],
+     [
+      2,
+      3
+     ],
+     [
+      2,
+      4
+     ],
+     [
+      2,
+      5
+     ],
+     [
+      3,
+      0
+     ],
+     [
+      3,
+      1
+     ],
+     [
+      3,
+      2
+     ],
+     [
+      3,
+      3
+     ],
+     [
+      3,
+      4
+     ],
+     [
+      3,
+      5
+     ],
+     [
+      4,
+      0
+     ],
+     [
+      4,
+      1
+     ],
+     [
+      4,
+      2
+     ],
+     [
+      4,
+      3
+     ],
+     [
+      4,
+      4
+     ],
+     [
+      4,
+      5
+     ],
+     [
+      5,
+      0
+     ],
+     [
+      5,
+      1
+     ],
+     [
+      5,
+      2
+     ],
+     [
+      5,
+      3
+     ],
+     [
+      5,
+      4
+     ],
+     [
+      5,
+      5
+     ]
+    ],
+    "d": 6,
+    "id": "hallway",
+    "name": "Hallway",
+    "offset": [
+     9,
+     0
+    ],
+    "shape": "rectangle",
+    "w": 6
+   }
+  ],
+  "overlays": {
+   "light": {
+    "0,0": "lit",
+    "0,1": "lit",
+    "0,2": "lit",
+    "0,3": "lit",
+    "1,0": "lit",
+    "1,1": "lit",
+    "1,2": "lit",
+    "1,3": "lit",
+    "2,0": "lit",
+    "2,1": "lit",
+    "2,2": "lit",
+    "2,3": "lit",
+    "3,0": "lit",
+    "3,1": "lit",
+    "3,2": "lit",
+    "3,3": "lit",
+    "4,0": "lit",
+    "4,1": "lit",
+    "4,2": "lit",
+    "4,3": "lit",
+    "5,0": "lit",
+    "5,1": "lit",
+    "5,2": "lit",
+    "5,3": "lit",
+    "6,0": "lit",
+    "6,1": "lit",
+    "6,2": "lit",
+    "6,3": "lit",
+    "7,0": "lit",
+    "7,1": "lit",
+    "7,2": "lit",
+    "7,3": "lit"
+   },
+   "noise": {
+    "0,0": "quiet",
+    "0,1": "quiet",
+    "0,2": "quiet",
+    "0,3": "quiet",
+    "1,0": "quiet",
+    "1,1": "quiet",
+    "1,2": "quiet",
+    "1,3": "quiet",
+    "2,0": "quiet",
+    "2,1": "quiet",
+    "2,2": "quiet",
+    "2,3": "quiet",
+    "3,0": "quiet",
+    "3,1": "quiet",
+    "3,2": "quiet",
+    "3,3": "quiet",
+    "4,0": "quiet",
+    "4,1": "quiet",
+    "4,2": "quiet",
+    "4,3": "quiet",
+    "5,0": "quiet",
+    "5,1": "quiet",
+    "5,2": "quiet",
+    "5,3": "quiet",
+    "6,0": "quiet",
+    "6,1": "quiet",
+    "6,2": "quiet",
+    "6,3": "quiet",
+    "7,0": "quiet",
+    "7,1": "quiet",
+    "7,2": "quiet",
+    "7,3": "quiet"
+   }
+  },
+  "rims": {
+   "e": [
+    [
+     7,
+     0
+    ],
+    [
+     7,
+     1
+    ],
+    [
+     7,
+     2
+    ],
+    [
+     7,
+     3
+    ]
+   ],
+   "n": [
+    [
+     0,
+     0
+    ],
+    [
+     1,
+     0
+    ],
+    [
+     2,
+     0
+    ],
+    [
+     3,
+     0
+    ],
+    [
+     4,
+     0
+    ],
+    [
+     5,
+     0
+    ],
+    [
+     6,
+     0
+    ],
+    [
+     7,
+     0
+    ]
+   ],
+   "s": [
+    [
+     0,
+     3
+    ],
+    [
+     1,
+     3
+    ],
+    [
+     2,
+     3
+    ],
+    [
+     3,
+     3
+    ],
+    [
+     4,
+     3
+    ],
+    [
+     5,
+     3
+    ],
+    [
+     6,
+     3
+    ],
+    [
+     7,
+     3
+    ]
+   ],
+   "w": [
+    [
+     0,
+     0
+    ],
+    [
+     0,
+     1
+    ],
+    [
+     0,
+     2
+    ],
+    [
+     0,
+     3
+    ]
+   ]
+  },
+  "room": {
+   "cells": [
+    [
+     0,
+     0
+    ],
+    [
+     0,
+     1
+    ],
+    [
+     0,
+     2
+    ],
+    [
+     0,
+     3
+    ],
+    [
+     1,
+     0
+    ],
+    [
+     1,
+     1
+    ],
+    [
+     1,
+     2
+    ],
+    [
+     1,
+     3
+    ],
+    [
+     2,
+     0
+    ],
+    [
+     2,
+     1
+    ],
+    [
+     2,
+     2
+    ],
+    [
+     2,
+     3
+    ],
+    [
+     3,
+     0
+    ],
+    [
+     3,
+     1
+    ],
+    [
+     3,
+     2
+    ],
+    [
+     3,
+     3
+    ],
+    [
+     4,
+     0
+    ],
+    [
+     4,
+     1
+    ],
+    [
+     4,
+     2
+    ],
+    [
+     4,
+     3
+    ],
+    [
+     5,
+     0
+    ],
+    [
+     5,
+     1
+    ],
+    [
+     5,
+     2
+    ],
+    [
+     5,
+     3
+    ],
+    [
+     6,
+     0
+    ],
+    [
+     6,
+     1
+    ],
+    [
+     6,
+     2
+    ],
+    [
+     6,
+     3
+    ],
+    [
+     7,
+     0
+    ],
+    [
+     7,
+     1
+    ],
+    [
+     7,
+     2
+    ],
+    [
+     7,
+     3
+    ]
+   ],
+   "d": 4,
+   "id": "kitchen",
+   "measured": true,
+   "name": "Kitchen",
+   "shape": "rectangle",
+   "w": 8
+  },
+  "sound_sources": [],
+  "things": [
+   {
+    "anchor": "oak_table",
+    "cell": null,
+    "id": "oak_table",
+    "kind": "furniture",
+    "light_source": "",
+    "name": "Oak table",
+    "placed": "anchor",
+    "sound_source": "",
+    "source": "anchor"
+   }
+  ],
+  "walls": [
+   {
+    "aperture": [
+     1.5,
+     2.5
+    ],
+    "axis": 0,
+    "coord": 8,
+    "extent": [
+     -0.5,
+     5.5
+    ],
+    "name": "Hallway",
+    "to": "hallway"
+   }
+  ]
+ },
+ "map": {
+  "components": [
+   {
+    "collisions": [],
+    "rooms": [
+     {
+      "cells": [
+       [
+        0,
+        0
+       ],
+       [
+        0,
+        1
+       ],
+       [
+        0,
+        2
+       ],
+       [
+        0,
+        3
+       ],
+       [
+        0,
+        4
+       ],
+       [
+        0,
+        5
+       ],
+       [
+        1,
+        0
+       ],
+       [
+        1,
+        1
+       ],
+       [
+        1,
+        2
+       ],
+       [
+        1,
+        3
+       ],
+       [
+        1,
+        4
+       ],
+       [
+        1,
+        5
+       ],
+       [
+        2,
+        0
+       ],
+       [
+        2,
+        1
+       ],
+       [
+        2,
+        2
+       ],
+       [
+        2,
+        3
+       ],
+       [
+        2,
+        4
+       ],
+       [
+        2,
+        5
+       ],
+       [
+        3,
+        0
+       ],
+       [
+        3,
+        1
+       ],
+       [
+        3,
+        2
+       ],
+       [
+        3,
+        3
+       ],
+       [
+        3,
+        4
+       ],
+       [
+        3,
+        5
+       ],
+       [
+        4,
+        0
+       ],
+       [
+        4,
+        1
+       ],
+       [
+        4,
+        2
+       ],
+       [
+        4,
+        3
+       ],
+       [
+        4,
+        4
+       ],
+       [
+        4,
+        5
+       ],
+       [
+        5,
+        0
+       ],
+       [
+        5,
+        1
+       ],
+       [
+        5,
+        2
+       ],
+       [
+        5,
+        3
+       ],
+       [
+        5,
+        4
+       ],
+       [
+        5,
+        5
+       ]
+      ],
+      "collided": false,
+      "d": 6,
+      "exits": [
+       {
+        "barrier": "closed_door",
+        "cells": [],
+        "dir": null,
+        "name": "Kitchen",
+        "passage": null,
+        "placed": false,
+        "to": "kitchen"
+       }
+      ],
+      "holder": null,
+      "id": "cellar",
+      "lint": 0,
+      "measured": false,
+      "name": "Cellar",
+      "occupants": [],
+      "offset": [
+       0,
+       0
+      ],
+      "onto": null,
+      "placed_via": null,
+      "region": null,
+      "shape": "rectangle",
+      "via": null,
+      "w": 6
+     }
+    ],
+    "start": "cellar"
+   },
+   {
+    "collisions": [],
+    "rooms": [
+     {
+      "cells": [
+       [
+        0,
+        0
+       ],
+       [
+        0,
+        1
+       ],
+       [
+        0,
+        2
+       ],
+       [
+        0,
+        3
+       ],
+       [
+        0,
+        4
+       ],
+       [
+        0,
+        5
+       ],
+       [
+        1,
+        0
+       ],
+       [
+        1,
+        1
+       ],
+       [
+        1,
+        2
+       ],
+       [
+        1,
+        3
+       ],
+       [
+        1,
+        4
+       ],
+       [
+        1,
+        5
+       ],
+       [
+        2,
+        0
+       ],
+       [
+        2,
+        1
+       ],
+       [
+        2,
+        2
+       ],
+       [
+        2,
+        3
+       ],
+       [
+        2,
+        4
+       ],
+       [
+        2,
+        5
+       ],
+       [
+        3,
+        0
+       ],
+       [
+        3,
+        1
+       ],
+       [
+        3,
+        2
+       ],
+       [
+        3,
+        3
+       ],
+       [
+        3,
+        4
+       ],
+       [
+        3,
+        5
+       ],
+       [
+        4,
+        0
+       ],
+       [
+        4,
+        1
+       ],
+       [
+        4,
+        2
+       ],
+       [
+        4,
+        3
+       ],
+       [
+        4,
+        4
+       ],
+       [
+        4,
+        5
+       ],
+       [
+        5,
+        0
+       ],
+       [
+        5,
+        1
+       ],
+       [
+        5,
+        2
+       ],
+       [
+        5,
+        3
+       ],
+       [
+        5,
+        4
+       ],
+       [
+        5,
+        5
+       ]
+      ],
+      "collided": false,
+      "d": 6,
+      "exits": [],
+      "holder": "tardis",
+      "id": "console_room",
+      "lint": 0,
+      "measured": false,
+      "name": "Console Room",
+      "occupants": [],
+      "offset": [
+       0,
+       0
+      ],
+      "onto": null,
+      "placed_via": null,
+      "region": null,
+      "shape": "rectangle",
+      "via": null,
+      "w": 6
+     }
+    ],
+    "start": "console_room"
+   },
+   {
+    "collisions": [],
+    "rooms": [
+     {
+      "cells": [
+       [
+        0,
+        0
+       ],
+       [
+        0,
+        1
+       ],
+       [
+        0,
+        2
+       ],
+       [
+        0,
+        3
+       ],
+       [
+        0,
+        4
+       ],
+       [
+        0,
+        5
+       ],
+       [
+        1,
+        0
+       ],
+       [
+        1,
+        1
+       ],
+       [
+        1,
+        2
+       ],
+       [
+        1,
+        3
+       ],
+       [
+        1,
+        4
+       ],
+       [
+        1,
+        5
+       ],
+       [
+        2,
+        0
+       ],
+       [
+        2,
+        1
+       ],
+       [
+        2,
+        2
+       ],
+       [
+        2,
+        3
+       ],
+       [
+        2,
+        4
+       ],
+       [
+        2,
+        5
+       ],
+       [
+        3,
+        0
+       ],
+       [
+        3,
+        1
+       ],
+       [
+        3,
+        2
+       ],
+       [
+        3,
+        3
+       ],
+       [
+        3,
+        4
+       ],
+       [
+        3,
+        5
+       ],
+       [
+        4,
+        0
+       ],
+       [
+        4,
+        1
+       ],
+       [
+        4,
+        2
+       ],
+       [
+        4,
+        3
+       ],
+       [
+        4,
+        4
+       ],
+       [
+        4,
+        5
+       ],
+       [
+        5,
+        0
+       ],
+       [
+        5,
+        1
+       ],
+       [
+        5,
+        2
+       ],
+       [
+        5,
+        3
+       ],
+       [
+        5,
+        4
+       ],
+       [
+        5,
+        5
+       ]
+      ],
+      "collided": false,
+      "d": 6,
+      "exits": [],
+      "holder": null,
+      "id": "garden",
+      "lint": 0,
+      "measured": false,
+      "name": "Garden",
+      "occupants": [],
+      "offset": [
+       0,
+       0
+      ],
+      "onto": null,
+      "placed_via": null,
+      "region": null,
+      "shape": "rectangle",
+      "via": null,
+      "w": 6
+     }
+    ],
+    "start": "garden"
+   },
+   {
+    "collisions": [],
+    "rooms": [
+     {
+      "cells": [
+       [
+        0,
+        0
+       ],
+       [
+        0,
+        1
+       ],
+       [
+        0,
+        2
+       ],
+       [
+        0,
+        3
+       ],
+       [
+        0,
+        4
+       ],
+       [
+        0,
+        5
+       ],
+       [
+        1,
+        0
+       ],
+       [
+        1,
+        1
+       ],
+       [
+        1,
+        2
+       ],
+       [
+        1,
+        3
+       ],
+       [
+        1,
+        4
+       ],
+       [
+        1,
+        5
+       ],
+       [
+        2,
+        0
+       ],
+       [
+        2,
+        1
+       ],
+       [
+        2,
+        2
+       ],
+       [
+        2,
+        3
+       ],
+       [
+        2,
+        4
+       ],
+       [
+        2,
+        5
+       ],
+       [
+        3,
+        0
+       ],
+       [
+        3,
+        1
+       ],
+       [
+        3,
+        2
+       ],
+       [
+        3,
+        3
+       ],
+       [
+        3,
+        4
+       ],
+       [
+        3,
+        5
+       ],
+       [
+        4,
+        0
+       ],
+       [
+        4,
+        1
+       ],
+       [
+        4,
+        2
+       ],
+       [
+        4,
+        3
+       ],
+       [
+        4,
+        4
+       ],
+       [
+        4,
+        5
+       ],
+       [
+        5,
+        0
+       ],
+       [
+        5,
+        1
+       ],
+       [
+        5,
+        2
+       ],
+       [
+        5,
+        3
+       ],
+       [
+        5,
+        4
+       ],
+       [
+        5,
+        5
+       ]
+      ],
+      "collided": false,
+      "d": 6,
+      "exits": [
+       {
+        "barrier": "open",
+        "cells": [
+         [
+          0,
+          2
+         ]
+        ],
+        "dir": "w",
+        "name": "Kitchen",
+        "passage": null,
+        "placed": true,
+        "to": "kitchen"
+       },
+       {
+        "barrier": "closed_door",
+        "cells": [
+         [
+          2,
+          0
+         ]
+        ],
+        "dir": "n",
+        "name": "Study",
+        "passage": null,
+        "placed": true,
+        "to": "study"
+       }
+      ],
+      "holder": null,
+      "id": "hallway",
+      "lint": 0,
+      "measured": false,
+      "name": "Hallway",
+      "occupants": [
+       "Bob"
+      ],
+      "offset": [
+       0,
+       0
+      ],
+      "onto": null,
+      "placed_via": null,
+      "region": null,
+      "shape": "rectangle",
+      "via": null,
+      "w": 6
+     },
+     {
+      "cells": [
+       [
+        0,
+        0
+       ],
+       [
+        0,
+        1
+       ],
+       [
+        0,
+        2
+       ],
+       [
+        0,
+        3
+       ],
+       [
+        1,
+        0
+       ],
+       [
+        1,
+        1
+       ],
+       [
+        1,
+        2
+       ],
+       [
+        1,
+        3
+       ],
+       [
+        2,
+        0
+       ],
+       [
+        2,
+        1
+       ],
+       [
+        2,
+        2
+       ],
+       [
+        2,
+        3
+       ],
+       [
+        3,
+        0
+       ],
+       [
+        3,
+        1
+       ],
+       [
+        3,
+        2
+       ],
+       [
+        3,
+        3
+       ],
+       [
+        4,
+        0
+       ],
+       [
+        4,
+        1
+       ],
+       [
+        4,
+        2
+       ],
+       [
+        4,
+        3
+       ],
+       [
+        5,
+        0
+       ],
+       [
+        5,
+        1
+       ],
+       [
+        5,
+        2
+       ],
+       [
+        5,
+        3
+       ],
+       [
+        6,
+        0
+       ],
+       [
+        6,
+        1
+       ],
+       [
+        6,
+        2
+       ],
+       [
+        6,
+        3
+       ],
+       [
+        7,
+        0
+       ],
+       [
+        7,
+        1
+       ],
+       [
+        7,
+        2
+       ],
+       [
+        7,
+        3
+       ]
+      ],
+      "collided": false,
+      "d": 4,
+      "exits": [
+       {
+        "barrier": "closed_door",
+        "cells": [],
+        "dir": null,
+        "name": "Cellar",
+        "passage": null,
+        "placed": false,
+        "to": "cellar"
+       },
+       {
+        "barrier": "open",
+        "cells": [
+         [
+          7,
+          2
+         ]
+        ],
+        "dir": "e",
+        "name": "Hallway",
+        "passage": null,
+        "placed": true,
+        "to": "hallway"
+       }
+      ],
+      "holder": null,
+      "id": "kitchen",
+      "lint": 0,
+      "measured": true,
+      "name": "Kitchen",
+      "occupants": [
+       "Alice"
+      ],
+      "offset": [
+       -9,
+       0
+      ],
+      "onto": null,
+      "placed_via": "hallway",
+      "region": null,
+      "shape": "rectangle",
+      "via": null,
+      "w": 8
+     },
+     {
+      "cells": [
+       [
+        0,
+        0
+       ],
+       [
+        0,
+        1
+       ],
+       [
+        0,
+        2
+       ],
+       [
+        0,
+        3
+       ],
+       [
+        0,
+        4
+       ],
+       [
+        0,
+        5
+       ],
+       [
+        1,
+        0
+       ],
+       [
+        1,
+        1
+       ],
+       [
+        1,
+        2
+       ],
+       [
+        1,
+        3
+       ],
+       [
+        1,
+        4
+       ],
+       [
+        1,
+        5
+       ],
+       [
+        2,
+        0
+       ],
+       [
+        2,
+        1
+       ],
+       [
+        2,
+        2
+       ],
+       [
+        2,
+        3
+       ],
+       [
+        2,
+        4
+       ],
+       [
+        2,
+        5
+       ],
+       [
+        3,
+        0
+       ],
+       [
+        3,
+        1
+       ],
+       [
+        3,
+        2
+       ],
+       [
+        3,
+        3
+       ],
+       [
+        3,
+        4
+       ],
+       [
+        3,
+        5
+       ],
+       [
+        4,
+        0
+       ],
+       [
+        4,
+        1
+       ],
+       [
+        4,
+        2
+       ],
+       [
+        4,
+        3
+       ],
+       [
+        4,
+        4
+       ],
+       [
+        4,
+        5
+       ],
+       [
+        5,
+        0
+       ],
+       [
+        5,
+        1
+       ],
+       [
+        5,
+        2
+       ],
+       [
+        5,
+        3
+       ],
+       [
+        5,
+        4
+       ],
+       [
+        5,
+        5
+       ]
+      ],
+      "collided": false,
+      "d": 6,
+      "exits": [
+       {
+        "barrier": "closed_door",
+        "cells": [
+         [
+          1,
+          5
+         ]
+        ],
+        "dir": "s",
+        "name": "Hallway",
+        "passage": null,
+        "placed": true,
+        "to": "hallway"
+       }
+      ],
+      "holder": null,
+      "id": "study",
+      "lint": 0,
+      "measured": false,
+      "name": "Study",
+      "occupants": [
+       "Nathan"
+      ],
+      "offset": [
+       1,
+       -7
+      ],
+      "onto": null,
+      "placed_via": "hallway",
+      "region": null,
+      "shape": "rectangle",
+      "via": null,
+      "w": 6
+     }
+    ],
+    "start": "hallway"
+   }
+  ],
+  "frame_id": null,
+  "location": "Old Manor"
+ }
+}

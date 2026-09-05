@@ -1,9 +1,9 @@
 # Design: where a charter body stands in its room
 
 **Status: BUILT 2026-09-05** (`world/charter_place.py`,
-`tests/test_charter_placement.py`). The map half -- drawing the placed bodies
-on the World Browser's grid and dragging them -- is the follow-up registered
-in [`docs/UNBUILT.md`](../UNBUILT.md) §1.10b.
+`tests/test_charter_placement.py`), the map half the same day (`web/
+world_routes.py`'s `charter_body_records` and the charters router,
+`static/js/world_browser.js`; § The map below).
 
 ## The gap, measured in the code
 
@@ -172,20 +172,68 @@ townspeople. A charter body therefore does not shadow a cast member's line
 either. Making bodies occlude is a spatial-model change in
 `world/spatial_fov.py`, not a charter one, and is not made here.
 
-## The map follow-up (UNBUILT §1.10b)
+## The map (built 2026-09-05)
 
-`web/world_routes.py`'s `grid_view` lays bodies from `scene.positions`; the
-placed townspeople are on the view, not the store, so the map does not draw
-them yet. The seams the map's drag will call already exist:
+`web/world_routes.py`'s `grid_view` lays bodies from `scene.positions`, and
+the placed townspeople are on the view, not the store; so the map reads them
+through the placement module and nothing else. `charter_body_records(cid,
+frame, scene, frame_rooms)` calls `charter_placements` over `registry_for`,
+lays the rows on `scene_with_charter_bodies`, and reads the cell, facing and
+station back off that view with the SAME functions the grid reads a cast body
+with (`body_cell`, `effective_facing`, `effective_station`) -- there is no
+second derivation. Each record is filed under the placement's own `key` (the
+display name, or the uid `charter:<charter>:<body>` when the name is
+withheld; the map invents none) and carries `kind: "charter"`, `source` (one
+of `SOURCES`, exposed as `vocab.charter_sources`), `room`, `charter`, `body`,
+`uid`, `posts`, `presented`, `withheld`, the derived `station` and the body
+record's own `authored` station (what a clear returns from). A body the scene
+already stands under the same spelling is the scene's and is left to
+`positions`, exactly as `lay_charter_bodies` leaves it.
 
-* `charter_move.place_body(registry, charter, body, room)` -- the room half;
-* `charter_move.station_body(registry, charter, body, station)` -- the
-  within-room half, `station` as `{"at": anchor}` or `{"cell": [x, y]}`,
-  optionally `near`/`facing`; `None` clears it;
+Three readers take the records: `grid_view` adds them to `bodies` -- this
+room's, and the ones in a neighbour the field lays, each with its `room`, so
+the map draws the latter faintly where the neighbour is (the observer's frame
+is what is placed, `rooms_in_frame`); `map_view` counts them among each
+room's `occupants`; `body_rows` lists them after the scene's bodies under
+their own kind, with room and posts, no pose and no attire. A story with no
+charter registry produces byte-identical grid, map and body rows
+(`tests/test_world_routes.py::TestNoCharterIsByteIdentical`, frozen at
+527ffcc3 before the wiring).
 
-both through `registry_for_update` + `save_registry`. The route to add:
-`PUT /api/chats/{cid}/charters/{charter}/bodies/{body}/station` with body
-`{"room": <room id>, "at": <anchor id>}` or `{"room": <room id>, "cell":
-[x, y]}`, plus `grid_view` gaining a `charter_bodies` block from
-`charter_placements(registry_for(cid, frame), scene, frame_rooms={room})`
-keyed by uid, carrying `name`, `cell`, `facing`, `source` and `presented`.
+The map (`static/js/world_browser.js`) draws a townsperson as a SQUARE where
+the scene's bodies are dots, the dealt ones lighter and dashed, the walk's
+lighter, with its own legend entries; a click opens its row under "Who is
+here" (`.wb-charter[data-body]`) with the focus every other mark has; the
+Bodies tab lists them under "Townspeople" with room, posts, station and the
+clause that placed them.
+
+The drag is ONE route onto the registry, never the scene: `PUT
+/api/chats/{cid}/charters/{charter}/bodies/{body}/station` with `{room, at?,
+cell?, facing?}`. Dropped on an anchor's cell (a doorway's too) the body stands
+`at` the anchor; on any other cell it is pinned to that `cell`; in a
+neighbour's cells it is moved there and placed where it landed -- the room
+through `charter_move.place_body` (the walk and errand dropped, the old
+station with them), the station through `charter_move.station_body`, both
+landed by `registry_for_update` + `save_registry` for the chat's frame, so
+the next `grid_view` reads it back through rule (i). `DELETE` of the same
+clears the authored station: the body falls back to rules (ii)-(iv). A move
+with no `at`/`cell` leaves the body to the dealt rule in the new room (the
+Bodies tab's room select). Refused, naming the reason: the room not live
+(the known rooms named), the cell outside the room (the bounds named, never
+clamped -- `_cell_or_400`), the anchor not the room's (the room's anchors
+named), the body bound or reserved for a registered character
+(`body_of_an_authored_mind`) or departed, the charter or body unknown (404),
+the same room with nothing to write, a facing with nowhere to face from, a
+field the route does not own (`near` is the rule's to read, not the map's to
+write), a pipeline running (409). One toast per drop naming what was written;
+Undo re-issues the station the record held, or clears the one the drop wrote
+when it held none; arrow keys are the drag by one cell. Era-scoped like every
+other World Browser route.
+
+Pinned by `tests/test_world_routes.py::TestTownspeopleOnTheMap` (each
+refusal, a write read back by the grid, a dealt body's `source`, the
+neighbour move, the walk kept by a station and dropped by a move, the
+era) and the browser tier's four townspeople tests in
+`browser_tests/test_world_browser.py` (the mark and the click, the drag
+within the room with Undo and the arrow key, the drag into a neighbour, the
+clear).

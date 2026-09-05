@@ -1121,7 +1121,19 @@ fill:var(--hover-bg,color-mix(in srgb,var(--acc) 10%,transparent))}
 .wb-m-body.player .wb-m-body-dot{fill:var(--ok)}
 .wb-m-body.presence .wb-m-body-dot{fill:var(--warn)}
 .wb-m-body.unplaced .wb-m-body-dot{stroke:var(--dim);stroke-dasharray:2 2;fill-opacity:.55}
+/* A townsperson (2026-09-05): a square, not a dot; the placed ones solid, the
+   walk's lighter, the dealt ones lighter still and dashed -- the map says at
+   a glance whom the story has placed and whom the dealing law stood there. */
+.wb-m-body.charter .wb-m-body-dot{fill:var(--fg);fill-opacity:.82;stroke:var(--bg);stroke-width:1.2}
+.wb-m-body.charter.walk .wb-m-body-dot{fill-opacity:.6}
+.wb-m-body.charter.dealt .wb-m-body-dot{fill-opacity:.36;stroke:var(--dim);stroke-dasharray:2 1.5}
+.wb-m-far-body{fill:var(--fg);fill-opacity:.4;stroke:none;pointer-events:none}
+.wb-m-far-body.dealt{fill-opacity:.18}
 .wb-m-body:hover .wb-m-body-dot,.wb-m-body:focus-visible .wb-m-body-dot{stroke:var(--fg);stroke-width:2}
+.badge.wb-badge-charter{opacity:.8}
+.wb-townsfolk{margin-top:6px}
+.wb-townsfolk-heading{margin-top:10px}
+.wb-charter-source{font-style:italic}
 .wb-m-facing{stroke:var(--bg);stroke-width:2.5;stroke-linecap:round}
 .wb-m-name{font-size:8.5px}
 .wb-m-lane{fill:var(--dim);font-size:8px}
@@ -1192,6 +1204,8 @@ fill:var(--hover-bg,color-mix(in srgb,var(--acc) 10%,transparent))}
 .wb-lg-body{background:var(--acc);border-radius:50%}
 .wb-lg-player{background:var(--ok);border-radius:50%}
 .wb-lg-presence{background:var(--warn);border-radius:50%}
+.wb-lg-charter{background:var(--fg);opacity:.82;border-radius:3px}
+.wb-lg-charter.dealt{opacity:.36;border-style:dashed;border-color:var(--fg)}
 .wb-lg-thing{background:var(--bg4,var(--bg3));border-color:var(--fg);transform:rotate(45deg);width:9px;height:9px}
 .wb-lg-ring{border:2px dashed var(--warn);border-radius:50%;background:transparent}
 .wb-lg-part{border:1px dashed var(--acc);background:color-mix(in srgb,var(--acc) 6%,transparent)}
