@@ -10,7 +10,7 @@
 | `agents/background.py` | 1653 |  | `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `persist.commit`, `story.character_schema`, `story.scene`, `world.background_claims`, `world.spatial` |
 | `agents/character.py` | 4160 | Private character decision agent. | `agents.common`, `core.db`, `core.frames`, `llm.prompts`, `llm.schemas`, `mind`, `mind.affect`, `mind.memory`, `mind.memory_judge`, `mind.psychology_runtime`, `mind.theory_of_mind`, `story.character_schema`, `story.scene`, `world.gaps`, `world.place_purpose`, `world.spatial`, `world.survival` |
 | `agents/common.py` | 9360 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
-| `agents/composer.py` | 3706 |  | `agents.common`, `core.pipeline_context`, `story.provenance_text`, `story.scene`, `world.spatial` |
+| `agents/composer.py` | 3715 |  | `agents.common`, `core.pipeline_context`, `story.provenance_text`, `story.scene`, `world.spatial` |
 | `agents/director.py` | 4768 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial`, `world.survival` |
 | `agents/director_contact.py` | 457 |  | `story.character_schema`, `world.spatial` |
 | `agents/director_evidence.py` | 1187 |  | `agents.common`, `agents.director_lingua`, `llm`, `world.spatial` |
@@ -25,7 +25,7 @@
 | `agents/loops.py` | 1337 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `core.db`, `story.character_schema`, `story.scene`, `world.spatial` |
 | `agents/mapping.py` | 520 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `core.db`, `mind.memory`, `story.scene`, `world.spatial` |
 | `agents/narration.py` | 1953 | Player-facing narration agent. | `agents`, `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `story.character_schema`, `story.scene`, `world.spatial`, `world.weather` |
-| `agents/perception.py` | 4940 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `mind`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
+| `agents/perception.py` | 4975 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `mind`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
 | `agents/runtime.py` | 1382 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `core.db`, `core.pipeline_context`, `llm.providers`, `persist.checkpoints`, `persist.commit`, `story.character_schema`, `story.scene` |
 | `agents/storage.py` | 123 | Step and active-variant persistence helpers. | `core.db` |
 | `agents/story_planner.py` | 1083 |  | `core.logging_utils` |
@@ -200,7 +200,7 @@
 | `world/spatial_substance.py` | 1128 |  | `world.spatial_contacts`, `world.spatial_identity` |
 | `world/spatial_transit.py` | 522 |  | `world.spatial_barriers`, `world.spatial_identity` |
 | `world/stimulation.py` | 239 |  | `story`, `world.spatial` |
-| `world/structure.py` | 773 |  | `world.charter_model`, `world.regions`, `world.spatial` |
+| `world/structure.py` | 796 |  | `world.charter_model`, `world.regions`, `world.spatial` |
 | `world/subjects.py` | 500 |  | `core.db`, `mind.canon_provenance`, `world.spatial` |
 | `world/survival.py` | 354 |  | `core.db` |
 | `world/weather.py` | 862 |  | — |
@@ -250,14 +250,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `observations_from_render()` | 3498 | 209 lines |
-| `_render_view_english()` | 2997 | 153 lines |
-| `pose_percepts()` | 1492 | 144 lines |
+| `observations_from_render()` | 3507 | 209 lines |
+| `_render_view_english()` | 3006 | 153 lines |
+| `pose_percepts()` | 1501 | 144 lines |
 | `presence_percepts()` | 975 | 106 lines |
 | `environment_percept()` | 718 | 101 lines |
-| `_render_standing()` | 2843 | 94 lines |
-| `_pose_referent()` | 1193 | 91 lines |
-| `_render_episode_english()` | 3299 | 84 lines |
+| `_pose_referent()` | 1193 | 100 lines |
+| `_render_standing()` | 2852 | 94 lines |
+| `_render_episode_english()` | 3308 | 84 lines |
 
 ### `agents/director.py`
 
@@ -437,11 +437,11 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_composer_outcome()` | 4484 | 457 lines |
+| `_composer_outcome()` | 4516 | 460 lines |
 | `perception_outcome()` | 2423 | 286 lines |
 | `_composer_standing_percepts()` | 3635 | 240 lines |
 | `perception_act()` | 1986 | 190 lines |
-| `_composer_act()` | 4107 | 173 lines |
+| `_composer_act()` | 4139 | 173 lines |
 | `_outcome_event_stream()` | 671 | 152 lines |
 | `_source_channels()` | 952 | 135 lines |
 | `_scent_sources_for()` | 3355 | 129 lines |
@@ -2444,14 +2444,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `prepare_frontier_expansion()` | 593 | 113 lines |
+| `prepare_frontier_expansion()` | 616 | 113 lines |
+| `materialize_planned_fringe()` | 244 | 70 lines |
 | `mint_frontier()` | 137 | 64 lines |
-| `planned_room_brief()` | 372 | 62 lines |
-| `planned_context()` | 530 | 61 lines |
-| `materialize_planned_fringe()` | 244 | 47 lines |
+| `planned_room_brief()` | 395 | 62 lines |
+| `planned_context()` | 553 | 61 lines |
 | `plant_structure()` | 203 | 39 lines |
-| `protect_planned_edges()` | 469 | 39 lines |
-| `structure_warnings()` | 728 | 37 lines |
+| `protect_planned_edges()` | 492 | 39 lines |
+| `structure_warnings()` | 751 | 37 lines |
 
 ### `world/subjects.py`
 

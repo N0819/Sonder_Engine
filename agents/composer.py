@@ -1261,6 +1261,15 @@ def _pose_referent(scene, observer_name, display_map, co_present, other,
     entity = _entity_named(scene, text)
     named = str((entity or {}).get("name") or "").strip()
     if named:
+        # An entity may be NAMED with its determiner -- "The TARDIS", "the
+        # Nostromo" -- and the pack's template supplies one of its own, so
+        # the page read "facing the The TARDIS" (chat 114 on a copy,
+        # 2026-09-05, turn 2). The same determiner list the bare-noun path
+        # below consults decides it: a name that already opens with one is
+        # rendered as it is written.
+        first = named.split()[0].casefold().strip(",.")
+        if first in _POSE_BARE_DETERMINERS:
+            return named
         return _en("pose_entity", name=named)
     if "_" in text and not text.strip().count(" "):
         return None

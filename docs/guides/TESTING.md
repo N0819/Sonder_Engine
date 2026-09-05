@@ -458,6 +458,41 @@ loop. `python3 tools/room_bench.py --db engine.db --chat <id> --grant "..."
 --planner <provider_id>:<model> --critic --out <dir>` writes `report.md` and
 `summary.json`. Run it on a clean scenario when the provider refuses explicit
 content.
+
+`tools/export_bench.py` is the same measure for a database too large to copy
+(the owner's `engine.db` passed 3.4 GB on a disk with 4 GB free, 2026-09-05):
+`prepare(src, chat_ids, out_db)` EXPORTS each chat through
+`persist/chat_archive.py` over a `?mode=ro` connection to the source
+(`read_only_session` installs the connection in `core.db`'s slot, so a write
+raises), creates the scratch database fresh with `db.init()`, imports the
+archives through the same service the UI's import button uses, then copies
+what an archive does not carry table-to-table with ATTACH ... INSERT ...
+SELECT: the whole `providers` table and the whole `settings` table less the
+host-account rows (`SETTINGS_EXCLUDED`) -- the owner's ruling: everything
+the engine holds for model wiring, not a subset -- so a provider key moves
+between two files without being read into Python. `SETTINGS_FORCED` then
+turns adult content, backdrops and ambience off and CAPTURE ON with full
+bodies, because `read_trace` (over `persist.pipeline_trace.export_turn_debug`)
+is how a run reads what each stage was SENT, the Director's specialist
+sub-calls included; Writers' Room calls are not captured (only
+`agents/runtime.py` records) and that gap is noted, not built. `run_beat`
+wraps `room_bench.run_beat` with the F1 rule (a reasoning-only reply is
+retried from the failed stage up to `F1_RETRIES` times, then recorded and
+the run continues); `read_stages`, `state_diff`, `scene_before_after` (the
+pre-turn checkpoints), `registry_rows`, `regions_of`, `room` (the Planner
+with tool events captured), `tool` (a Room tool as the host) and `browser`
+(the World Browser's route functions, allowlists and all) read both sides;
+`Run` writes phases to `report.json` as they finish and skips them on
+resume. `leaks(text)` answers True/False against every key the scratch
+database holds and `scan(paths)` applies it to every file a run wrote --
+nothing is kept or committed until it returns []. `python3
+tools/export_bench.py prepare --src engine.db --chats 114 115 --out
+<scratch>/bench.db --model default=3:google/gemini-3.8-flash`, then `beat`,
+`stages`, `trace`, `scan`. `tests/test_export_bench.py` proves the export
+over a read-only source (digest unchanged), the import, the row copy with
+the key compared inside SQL, the forced policy, the leak check and the
+trace reader against a synthetic source with no model and no network.
+Evidence from its first run: `docs/experiments/DEBUG_RUN_2026_09_05.md`.
 `tests/test_charter_identity.py` pins thousand-body deterministic naming,
 non-renaming after profile edits/insertion, title aliases and permanent color
 seeds. `tests/test_charter_name_learning.py` pins the delivered-view and
