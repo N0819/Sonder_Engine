@@ -248,15 +248,7 @@ from world.spatial_light_field import (
 
 
 from world.spatial_sound_field import (
-    _acoustic_grid, _ambient_floor, _beat_hash, _cache_key, _CONDUCTED,
-    _crossing_pass, _event_power, _FIELD_CACHE, _OFF, _power_of_level,
-    _ROUND_RANK, _running, AMBIENT, APERTURE_PASS, CROWD_SOUND,
-    DIAGONAL_COST, FAIL_RATE, FLICKER_RATE, FRAGMENT_SNR, FULL_SNR,
-    gain_at, HEAR_FLOOR, heard_events, normalize_sound_level,
-    normalize_steadiness, quantise, sound_field, sound_field_hear_level,
-    sound_notices, sound_sources, SOUND_LEVELS, SOUND_POWER, SoundField,
-    SPEECH_POWER, SPEECH_VOLUMES, spread, stamp_sound_relation, STEADINESS,
-    steadiness_this_beat, WEATHER_NOISE, WIND_NOISE,
+    _acoustic_grid, _ambient_floor, _cache_key, _CONDUCTED, _crossing_pass, _event_power, _SOUND_FIELD_CACHE, _OFF, _power_of_level, _ROUND_RANK, _running, AMBIENT, APERTURE_PASS, CROWD_SOUND, DIAGONAL_COST, FRAGMENT_SNR, FULL_SNR, gain_at, HEAR_FLOOR, heard_events, normalize_sound_level, quantise_hearing, sound_field, sound_field_hear_level, sound_notices, sound_sources, SOUND_LEVELS, SOUND_POWER, SoundField, SPEECH_POWER, SPEECH_VOLUMES, spread, stamp_sound_relation, steadiness_this_beat, WEATHER_NOISE, WIND_NOISE,
 )
 
 

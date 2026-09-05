@@ -64,6 +64,8 @@ from world.spatial_fov import (
     room_has_geometry,
 )
 from world.spatial_identity import _ci_get, room_of
+from world.spatial_light_field import (
+    _beat_hash, FAIL_RATE, FLICKER_RATE, normalize_steadiness, STEADINESS)
 from world.spatial_orientation import normalize_bearing
 from world.spatial_senses import _material_shifted_barrier
 
@@ -78,13 +80,12 @@ from world.spatial_senses import _material_shifted_barrier
 #: and description say what it is.
 SOUND_LEVELS = ("faint", "audible", "loud", "deafening")
 
-#: Whether a source can be relied on. The light field
-#: (`DESIGN_LIGHT_FIELD.md` § 3, `world/spatial_light_field.py` on its own
-#: branch) defines the SAME set under the same name; the merge unifies the
-#: two definitions into one, because a generator that cuts out is the same
-#: class as a lamp that goes out, and when they are one entity they fail on
-#: the same beat (§ 5: one hash, two senses).
-STEADINESS = ("steady", "flickering", "failing")
+#: Whether a source can be relied on: `STEADINESS`, `normalize_steadiness`,
+#: `FLICKER_RATE`, `FAIL_RATE` and the beat hash are the LIGHT field's,
+#: imported above rather than defined twice (unified at the 2026-09-04
+#: merge): a generator that cuts out is the same class as a lamp that goes
+#: out, and when they are one entity they fail on the same beat -- one hash,
+#: two senses (`DESIGN_SOUND_FIELD.md` § 5).
 
 #: The speech volumes the social hand writes on a spoken line
 #: (`schemas.SpeechVolume`). Read here, declared there.
@@ -181,13 +182,8 @@ FULL_SNR = 2.0
 #: `fragment` when signal >= FRAGMENT_SNR * noise (and >= HEAR_FLOOR). Kept.
 FRAGMENT_SNR = 0.8
 
-#: Steadiness, shared with the light field (§ 5): a `flickering` source drops
-#: one level on one beat in FLICKER_RATE, a `failing` one goes quiet on one
-#: beat in FAIL_RATE, both chosen by the hash of (turn index, source id) so a
-#: REROLL of the beat hears what the beat it replaces heard. These two MUST
-#: equal the light field's at merge -- one hash, two senses.
-FLICKER_RATE = 4
-FAIL_RATE = 12
+#: Steadiness rates: see the light field's FLICKER_RATE / FAIL_RATE, imported
+#: above -- one hash, two senses, one pair of rates.
 
 #: Occluder ranks at or above this stop the flood's CELL and send it round:
 #: a counter, a screen, a partition. Floor-height things (a rug, a hearth on
@@ -201,7 +197,7 @@ _OFF = (False, 0, "off", "false", "no", "stopped", "silent", "dead")
 #: How many composite fields to remember. One perception stage asks for the
 #: same (scene, listener) field once per source; the derivation is pure, so a
 #: cache keyed on everything it reads cannot go stale.
-_FIELD_CACHE: dict = {}
+_SOUND_FIELD_CACHE: dict = {}
 _FIELD_CACHE_MAX = 64
 
 
@@ -214,22 +210,12 @@ def normalize_sound_level(value) -> Optional[str]:
     return v if v in SOUND_LEVELS else None
 
 
-def normalize_steadiness(value) -> str:
-    v = str(value or "").strip().casefold()
-    return v if v in STEADINESS else "steady"
-
-
 def _running(entity) -> bool:
     state = entity.get("state") if isinstance(entity.get("state"), dict) else {}
     running = state.get("running", True)
     if isinstance(running, str):
         running = running.strip().casefold()
     return running not in _OFF
-
-
-def _beat_hash(turn_idx, source_id) -> int:
-    joined = "%s\x1f%s" % (turn_idx, source_id)
-    return int(hashlib.sha1(joined.encode("utf-8")).hexdigest()[:8], 16)
 
 
 def steadiness_this_beat(steadiness, turn_idx, source_id) -> str:
@@ -273,10 +259,10 @@ def sound_field_hear_level(volume, signal_gain, noise) -> str:
     read."""
     volume = str(volume or "normal").strip().casefold()
     power = SPEECH_POWER.get(volume, SPEECH_POWER["normal"])
-    return quantise(power * float(signal_gain or 0.0), float(noise or 0.0))
+    return quantise_hearing(power * float(signal_gain or 0.0), float(noise or 0.0))
 
 
-def quantise(signal: float, noise: float) -> str:
+def quantise_hearing(signal: float, noise: float) -> str:
     if noise <= 0:
         return "full" if signal >= HEAR_FLOOR else "none"
     if signal >= FULL_SNR * noise:
@@ -679,7 +665,7 @@ class SoundField:
         noise = self.noise_at(listener, exclude=(source_id,), room=room)
         if signal is None or noise is None:
             return "none"
-        return quantise(signal, noise)
+        return quantise_hearing(signal, noise)
 
     def speech_level(self, speaker, volume, listener, *, speaker_room=None,
                      listener_room=None) -> Optional[str]:
@@ -726,7 +712,7 @@ def sound_field(scene: dict, listener: str, *, room=None, turn_idx=None,
     if not room or not room_has_geometry(scene, room):
         return None
     key = _cache_key(scene, room, turn_idx, crowds, events, speakers)
-    cached = _FIELD_CACHE.get(key)
+    cached = _SOUND_FIELD_CACHE.get(key)
     if cached is not None and cached.scene is scene:
         return cached
     grid = _acoustic_grid(scene, room)
@@ -735,9 +721,9 @@ def sound_field(scene: dict, listener: str, *, room=None, turn_idx=None,
     sources, notices = sound_sources(scene, turn_idx=turn_idx, crowds=crowds,
                                      events=events, speakers=speakers)
     field = SoundField(scene, room, grid, sources, notices, turn_idx)
-    if len(_FIELD_CACHE) >= _FIELD_CACHE_MAX:
-        _FIELD_CACHE.clear()
-    _FIELD_CACHE[key] = field
+    if len(_SOUND_FIELD_CACHE) >= _FIELD_CACHE_MAX:
+        _SOUND_FIELD_CACHE.clear()
+    _SOUND_FIELD_CACHE[key] = field
     return field
 
 
