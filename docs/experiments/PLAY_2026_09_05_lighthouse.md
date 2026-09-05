@@ -436,6 +436,16 @@ right thing and being told off for it. F54's proposal (normalise repeated
 quote runs before matching) stands; add that a fragment percept's rendered
 ellipsis is a delivered line and should be matched as one.
 
+**RESOLVED 2026-09-05, and the proposal was overtaken.** Normalising repeated
+runs would have been another literal guard; the weld is structural instead --
+`_substitute_dialogue_tokens` matches the token together with any marks the
+model wrapped it in and writes one pack-correct pair, so a doubled mark is
+never written. The fragment half was taken as stated: the invention guard now
+compares a quoted span against what the view DELIVERED rather than against
+what the view QUOTED, so a correctly rendered muffled fragment passes. No
+guard was deleted; both were made structural. Residual in `docs/UNBUILT.md`
+§ 1.48.
+
 ### PA11. Every character step is told it cited no delivered observation
 *Stage of origin: the claims floor in the interaction loop. Severity:
 wrong-but-recoverable (a warning that fires always carries no information).*
@@ -489,6 +499,14 @@ scent and speech sentences were correctly Japanese, and the narrator's prose
 was good Japanese. The room names and descriptions stay English, which is
 correct (they are authored English), but that makes the mixed pose sentence
 read as a bug rather than a translation gap.
+
+**RESOLVED 2026-09-05.** `you` was the composer's own token and now renders
+through the pack's `self_label`; the fused posture words were a clause join
+that is right for kana and wrong at a Latin/Latin boundary. The judgement in
+this finding -- that authored English is correct in a Japanese view -- is
+exactly where the new structural check draws its line: authored values are
+removed from the rendered text before it looks for Latin. `docs/UNBUILT.md`
+§ 1.48.
 
 ### PA15. A tripwire fired: the composed view narrated its own perceiver
 *Turn 9, both perception stages. Severity: firewall (caught).*

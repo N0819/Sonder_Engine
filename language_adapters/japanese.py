@@ -13,7 +13,49 @@ were already authored in the pack and simply never called.
 
 from __future__ import annotations
 
-from language_runtime import compositor_text, compositor_value, register_renderer
+import re
+
+from language_runtime import (
+    compositor_text, compositor_value, language_scope, register_renderer)
+
+#: The IR's own second-person token. `agents/composer.py` stamps the literal
+#: string ``you`` into `Percept.source_label` for the observer's own body --
+#: it is an ENGINE-OWNED slot, not English prose the story wrote, so a
+#: renderer that prints it verbatim has printed an untranslated key. Nine
+#: percept kinds read `source_label` as a label, and every one of them
+#: carried it through: 「youは…」 in the lighthouse, road, caravanserai and
+#: flat runs (F59; PA14, PB8, PD11, PE6).
+SELF_SOURCE_LABEL = "you"
+
+_LATIN_EDGE = re.compile(r"[0-9A-Za-z]")
+
+
+def _join_clauses(parts):
+    """Join rendered clauses the way Japanese joins them -- with nothing --
+    except where that would FUSE two words.
+
+    Japanese does not space its words, so concatenation is right for kana and
+    kanji and is what every clause here does. It is wrong at exactly one
+    boundary: where a clause ending in Latin script meets one beginning in
+    Latin script, because those two scripts DO space and the join invents a
+    word that was never written. That is how `constraint` + `posture` became
+    the word `bracedleaning` (PA14) and `relation` + `relative_to` became
+    `belowthe crest` (PD11).
+
+    The rule is about SCRIPT and not about which words happen to be English:
+    a story that writes its posture in any spaced script gets the same
+    treatment, and a story writing in Japanese never sees the space at all.
+    """
+    joined = ""
+    for part in parts:
+        part = str(part or "")
+        if not part:
+            continue
+        if (joined and _LATIN_EDGE.match(joined[-1])
+                and _LATIN_EDGE.match(part[0])):
+            joined += " "
+        joined += part
+    return joined
 
 
 def _full_stop(text):
@@ -32,6 +74,23 @@ class JapaneseRenderer:
 
     def _value(self, name):
         return compositor_value(name, self.language)
+
+    def _label(self, p):
+        """The body's name as this language writes it.
+
+        A LABEL IS EITHER THE STORY'S WORD OR THE ENGINE'S, AND ONLY THE
+        SECOND IS THIS RENDERER'S TO TRANSLATE. A named body carries the
+        name the story authored and it is reproduced exactly; the observer's
+        own body carries `SELF_SOURCE_LABEL`, which is a token the composer
+        stamps rather than a word anybody wrote, and printing it verbatim put
+        English inside every Japanese sentence that names the reader --
+        pose, presence, act, appearance, crossing, scent and body state
+        alike. Measured in four runs (PA14, PB8, PD11, PE6).
+        """
+        label = str(p.source_label or "")
+        if label == SELF_SOURCE_LABEL:
+            return str(self._value("self_label"))
+        return label
 
     # -- individual percept kinds ------------------------------------------
 
@@ -58,7 +117,7 @@ class JapaneseRenderer:
                 or verbs.get("default") or ("言う", "言う"))
         # [third-person, second-person], as in English: the observer's own
         # speech takes the second form.
-        verb = str(pair[1] if label == "あなた" or p.source_label == "you"
+        verb = str(pair[1] if p.source_label == SELF_SOURCE_LABEL
                    else pair[0])
         # An enum key, mapped through the pack -- never printed raw. Passing
         # it through emitted the literal English token into Japanese prose:
@@ -146,7 +205,9 @@ class JapaneseRenderer:
     def field_shape_sentence(self, kind, shape):
         """The seam `composer.field_shape_sentence` reads for the Director's
         digest: the same sentence a Japanese view carries."""
-        return self._light_shape(shape) if kind == "light" else self._sound_shape(shape)
+        with language_scope(self.language):  # as in render_view
+            return (self._light_shape(shape) if kind == "light"
+                    else self._sound_shape(shape))
 
     def _presence(self, p, data, label, prefix):
         if prefix:
@@ -172,7 +233,7 @@ class JapaneseRenderer:
         if not kind:
             return ""
         word = self._count_phrase(count, kind)
-        whose = "あなた" if p.source_label == "you" else label
+        whose = label
         aspect, at = data.get("aspect"), data.get("at")
         aspects = self._value("aspect_words") or {}
         aspect_word = aspects.get(aspect, aspect)
@@ -206,7 +267,13 @@ class JapaneseRenderer:
         other = str(data.get("relative_to") or "").strip()
         if other:
             relation = str(data.get("relation") or "").strip()
-            parts.append(relation + other if relation
+            # A relation is FREE PROSE from the beat that wrote it, so the
+            # pack has no word for it and must not pretend to -- but it still
+            # gets a Japanese FRAME rather than being glued to its object.
+            # `belowthe crest` was the relation and the object welded into
+            # one token with no grammar around either (PD11).
+            parts.append(self._text("pose_relation_at", other=other,
+                                    relation=relation) if relation
                          else self._text("pose_relation", other=other))
         support = str(data.get("support") or "").strip()
         if support:
@@ -218,7 +285,7 @@ class JapaneseRenderer:
         # 「ひざまずいて床の上に壁に接して」 -- locatives trailing the verb and
         # nothing terminating the sentence.
         parts.append(posture)
-        clause = "".join(part for part in parts if part).strip()
+        clause = _join_clauses(parts).strip()
         # A 〜て/〜で form is a continuative, not a sentence.
         if clause.endswith(("て", "で")):
             clause += "いる"
@@ -309,7 +376,7 @@ class JapaneseRenderer:
 
     def _sentence(self, percept, *, episode=False):
         p = percept
-        label = str(p.source_label or "")
+        label = self._label(p)
         data = p.data or {}
         prefix = "episode_" if episode else ""
         if p.kind == "speech":
@@ -322,12 +389,31 @@ class JapaneseRenderer:
             description = data.get("description") or ""
             return self._text(prefix + "appearance", label=label,
                               description=description) if description else ""
-        if p.kind == "act":
+        if p.kind in ("act", "communication"):
+            # A DROPPED KIND IS A FACT THE OBSERVER EARNED AND DOES NOT GET.
+            # `communication` is one of `composer.PERCEPT_KINDS` and this
+            # renderer had no branch for it at all, so every reported act of
+            # speech -- who asked what, who warned whom -- fell out of every
+            # Japanese view with no error anywhere. It carries the same
+            # observable predicate an `act` does; what it adds is the route
+            # it arrived over, which is a perceptual fact and not decoration.
+            #
+            # A `shapes` grade names no object, in either kind: the sight
+            # grade decides how much of an act is delivered (the 2026-09-05
+            # manor run spent a shape as full sight), and the same sentence
+            # is what a silhouette of a spoken act comes to.
             if p.fidelity == "shapes":
                 return self._text(prefix + "act_shapes", label=label)
             surface = str(data.get("surface") or "").strip()
-            return self._text(prefix + "act", label=label,
-                              action=surface) if surface else ""
+            if not surface:
+                return ""
+            sentence = self._text(prefix + "act", label=label,
+                                  action=surface)
+            via = str(data.get("via") or "").strip()
+            if via and p.kind == "communication":
+                sentence = self._text("speech_via",
+                                      sentence=sentence.rstrip("。"), via=via)
+            return sentence
         if p.kind == "crossing":
             direction = "arrived" if data.get("direction") == "arrived" else "departed"
             return self._text(prefix + direction, label=label)
@@ -359,6 +445,25 @@ class JapaneseRenderer:
     def render_view(self, percepts, *, mode="character",
                     prev_standing=frozenset(), prev_described=frozenset(),
                     full_render=False):
+        """THE VIEW IS COMPOSED IN ONE LANGUAGE, INCLUDING THE PARTS THIS
+        RENDERER BORROWS. Several sentences here are built by shared
+        deterministic code in `agents/common.py` and `agents/composer.py`,
+        and every one of those reads the pack through the ambient
+        `current_language_id` rather than through an argument. Outside a
+        turn nothing sets it, so `render_view(language="ja")` composed the
+        non-awake residue -- the WHOLE view for an unconscious mind -- in
+        English, and ran the English second-to-first-person rules over
+        Japanese memory prose. The pack had the Japanese text for both; only
+        the wiring was missing.
+        """
+        with language_scope(self.language):
+            return self._render_view(
+                percepts, mode=mode, prev_standing=prev_standing,
+                prev_described=prev_described, full_render=full_render)
+
+    def _render_view(self, percepts, *, mode="character",
+                     prev_standing=frozenset(), prev_described=frozenset(),
+                     full_render=False):
         from agents import composer
         from agents.composer import RenderedView
 
@@ -451,6 +556,13 @@ class JapaneseRenderer:
 
     def render_episode(self, percepts, *, prev_standing=frozenset(),
                        prev_described=frozenset()):
+        with language_scope(self.language):  # as in render_view
+            return self._render_episode(
+                percepts, prev_standing=prev_standing,
+                prev_described=prev_described)
+
+    def _render_episode(self, percepts, *, prev_standing=frozenset(),
+                        prev_described=frozenset()):
         percepts = list(percepts or [])
         residue = [p for p in percepts if p.kind == "residue"]
         if residue:  # the same floor as render_view
