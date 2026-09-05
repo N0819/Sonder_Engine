@@ -30,7 +30,7 @@ from world import spatial
 from world.spatial import (
     BEAT_KEY, BOUNCE, BOUNCE_PASSES_CAP, BOUNCE_REACH, BRIGHT_T,
     CONE_HALF_ANGLE, CONE_PENUMBRA, DARK_THRESHOLD, DIM_T, FAIL_RATE,
-    FLICKER_RATE, GLARE_CELLS, GLARE_POWER, LIGHT_LEVELS, LIGHT_SHAPES,
+    FLICKER_RATE, FLOOR_SPILL, GLARE_CELLS, GLARE_POWER, LIGHT_LEVELS, LIGHT_SHAPES,
     LIT_T, POWER, SIGHT_LEVELS, STEADINESS, _LIGHT_SIGHT, _ENTITY_DEFAULT_FIELDS,
     _ENTITY_STRUCTURAL_FIELDS, body_cell, compute_light_field, effective_light,
     emitted_level, failing_sources_out, fails_on, field_rows, flickers_on,
@@ -245,8 +245,11 @@ def kitchen_and_cellar(*, source=True):
 
 
 def test_spill_is_a_wedge_through_the_doorway_and_dark_beside_the_frame():
+    """The STOVE's rays: computed with the floor's spill off, so the wedge is
+    the stove's alone. What the kitchen's lit floor adds through the same
+    doorway is the next test's."""
     sc = kitchen_and_cellar()
-    lf = light_field(sc, "c")
+    lf = compute_light_field(sc, "c", spill=False)
     assert "k" in lf.field.offsets
     stove = lf.sources[0]
     direct = lf.per_source["stove"]
@@ -275,21 +278,90 @@ def test_spill_is_a_wedge_through_the_doorway_and_dark_beside_the_frame():
     assert dark_beside, "the near side of the frame is always in the wall's shadow"
     # Nothing arrives round the corner by bounce either.
     assert all(lf.level(c) == "dark" for c in dark_beside)
-    # The far corner of the cellar is dark; the floor of the kitchen does
-    # not spill (a floor is not a source), only the stove does.
+    # The far corner of the cellar is dark whatever comes through the door.
     far = max(cellar_cells, key=lambda c: (c[1], -abs(c[0] - door_x)))
     assert lf.level(far) == "dark"
     assert lf.floor["k"] == POWER["lit"] and lf.floor["c"] == POWER["dark"]
     assert stove["room"] == "k"
 
 
-def test_without_a_source_the_kitchen_floor_does_not_spill():
-    """The room-level rule lifted a dark room beside a lit one to dim; the
-    field makes spill a consequence of the rays, and a floor casts none. The
-    note's first open question for the owner (§ 4.6) is exactly this."""
+def _door_geometry(lf, room):
+    """(the aperture cell, the taking room's cell inside the door, the far
+    corner) for a field with one wall."""
+    [wall] = lf.field.walls
+    ap = spatial.wall_aperture_cells(wall)[0]
+    cells = lf.room_cells(room)
+    first = min(c[1] for c in cells)
+    door = (ap[0], first)
+    far = max(cells, key=lambda c: (c[1], abs(c[0] - ap[0])))
+    return ap, door, far
+
+
+def test_the_kitchen_floor_spills_through_the_doorway_and_no_further_than_dim():
+    """THE OWNER'S RULING (2026-09-04, the note's open question 1): the
+    ambient floor spills. Without a source, the lit kitchen's floor is
+    emitted from the doorway's aperture cell at FLOOR_SPILL of its power and
+    lands on the cellar: `dim` at the door cell and the two beside the
+    frame, `dark` at two paces and in the far corner, the room's median
+    still dark. A `bright` floor reaches dim three paces in and still never
+    `lit` at the door -- the room-level rule it replaces never lifted
+    borrowed light past dim, and 0.25 is the largest FLOOR_SPILL that keeps
+    that true (0.33 puts the door cell at 3.23, lit). The table beside the
+    constant is this test."""
     sc = kitchen_and_cellar(source=False)
-    assert effective_light(sc, "c") == "dark"
+    lf = light_field(sc, "c")
+    ap, door, far = _door_geometry(lf, "c")
+    assert FLOOR_SPILL == 0.25
+    assert lf.spill and set(lf.spill_from) == {"k"}
+    assert lf.spill[door] == pytest.approx(FLOOR_SPILL * POWER["lit"] / 2.0)
+    assert lf.level(door) == "dim"
+    for beside in ((door[0] - 1, door[1]), (door[0] + 1, door[1])):
+        if beside in lf.field.inside:
+            assert lf.level(beside) == "dim"
+    assert lf.level((door[0], door[1] + 1)) == "dark"
+    assert lf.level(far) == "dark"
+    assert effective_light(sc, "c") == "dark"          # the median: a small lit doorway
     assert effective_light(sc, "k") == "lit"
+    # Nothing arrives in the kitchen from its own floor (the giver's cells
+    # already have their floor), so its cells beside the door are its floor.
+    assert all(lf.field.inside.get(c) == "c" for c in lf.spill)
+    # A bright neighbour: dim to three paces, never lit at the door.
+    sc["rooms"]["k"]["light"] = "bright"
+    lf = light_field(sc, "c")
+    ap, door, far = _door_geometry(lf, "c")
+    assert [lf.level((door[0], door[1] + k)) for k in range(3)] == ["dim"] * 3
+    assert lf.level(far) == "dark"
+
+
+def test_floor_spill_at_zero_reproduces_the_field_as_first_built(monkeypatch):
+    sc = kitchen_and_cellar(source=False)
+    import world.spatial_light_field as sibling   # patched, not called
+    monkeypatch.setattr(sibling, "FLOOR_SPILL", 0.0)
+    lf = compute_light_field(sc, "c")
+    assert lf.spill == {} and lf.spill_from == {}
+    assert all(word == "dark" for row in field_rows(lf, "c") for word in row)
+    assert compute_light_field(sc, "c", spill=False).intensity == lf.intensity
+
+
+def test_light_crosses_glass_and_not_a_shut_door():
+    """`light_passes`: a window places the neighbour on the LIGHT composite
+    (sight's `observer_field` leaves it unplaced, because a grid cannot be
+    walked into through glass), so the lit room's floor spills through it
+    and a lamp behind it lights this room; a closed door places nothing,
+    and the field is the room alone."""
+    for barrier, placed in (("window", True), ("bars", True), ("open_door", True),
+                            ("closed_door", False), ("membrane", False),
+                            ("wall", False)):
+        sc = kitchen_and_cellar(source=False)
+        for room, edge in (("k", 0), ("c", 0)):
+            sc["rooms"][room]["adjacent"][edge]["barrier"] = barrier
+        lf = light_field(sc, "c")
+        assert ("k" in lf.field.offsets) is placed, barrier
+        assert bool(lf.spill) is placed, barrier
+        assert ("k" in spatial.observer_field(sc, "P").offsets) is (
+            barrier == "open_door"), barrier
+    assert spatial.light_passes({}, "c", {"barrier": "window"}) == 1.0
+    assert spatial.light_passes({}, "c", {"barrier": "closed_door"}) is None
 
 
 def test_the_room_reads_its_median_cell():
@@ -374,17 +446,23 @@ def test_light_at_speaks_the_ladder_and_reads_the_body_cell():
     assert level == lf.level(body_cell(sc, "P"))
 
 
-def test_a_body_without_a_station_keeps_the_room_level_answer(monkeypatch):
-    """A body with no station is somewhere in the room, and 'somewhere' has
-    no cell to read: the room-level `light_at` answers exactly as it does
-    with the field switched off, though the room itself carries geometry."""
+def test_a_body_without_a_station_reads_the_rooms_median(monkeypatch):
+    """A body with no station is somewhere in the room, and 'somewhere' is
+    the room's typical light -- the median cell `effective_light` already
+    answers with. Until 2026-09-04 it kept the ROOM-LEVEL answer instead,
+    so one room had two: chat 115's dim corridor with one lit fixture read
+    `dim` as a room and `lit` for every unstationed body in it (the fixture
+    'filling' the room under `light_radius`). Here: one lit lamp at the
+    centre of a dark medium room; the room reads dim, and so does a body
+    standing nowhere in particular in it, where the room-level model said
+    lit."""
     sc = lamp_room("lit")
     sc["positions"]["P"] = "r"
     assert light_geometry_exists(sc, "r") and body_cell(sc, "P") is None
-    with_field = light_at(sc, "P")
+    assert light_at(sc, "P") == effective_light(sc, "r") == "dim"
     import world.spatial_light_field as sibling   # patched, not called
     monkeypatch.setattr(sibling, "field_light_at", lambda scene, name: None)
-    assert with_field == light_at(sc, "P")
+    assert light_at(sc, "P") == "lit"             # the room-level model, for the record
 
 
 # ---------------------------------------------------------------------------

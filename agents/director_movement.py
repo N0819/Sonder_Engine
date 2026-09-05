@@ -91,11 +91,39 @@ def _sightlines_view(sc, ctx, p_name):
     try:
         from story.character_schema import character_name_from_text
         from world.spatial import sight_digest
-        names = [p_name] + [character_name_from_text(c["sheet"])
-                            for c in (ctx.cast or [])]
-        return sight_digest(sc, [n for n in names if n])
+        names = [n for n in [p_name] + [character_name_from_text(c["sheet"])
+                                        for c in (ctx.cast or [])] if n]
+        digest = sight_digest(sc, names)
     except Exception:
         return None
+    # WHERE THE LIGHT FALLS AND WHERE THE SOUND IS, per named body: the
+    # SAME sentences that body's own view carries (`composer.
+    # field_shape_sentence` over `light_shape`/`sound_shape`), so the
+    # Director resolving "she steps out of the lamplight" reads exactly what
+    # the observer was told and not a number the observer never had. Absent
+    # for a body whose room is even, has no geometry, or gives it no cell.
+    try:
+        from agents import composer
+        from world.spatial import light_shape, sound_shape
+        language = getattr(ctx, "language", None)
+        light = {}
+        sound = {}
+        for name in names:
+            shape = light_shape(sc, name)
+            if shape:
+                light[name] = composer.field_shape_sentence(
+                    "light", shape, language=language)
+            shape = sound_shape(sc, name)
+            if shape:
+                sound[name] = composer.field_shape_sentence(
+                    "sound", shape, language=language)
+        if light:
+            digest["light"] = light
+        if sound:
+            digest["sound"] = sound
+    except Exception:
+        pass
+    return digest
 
 
 def _planned_rooms_view(sc, ctx, focus_room, *extra):
