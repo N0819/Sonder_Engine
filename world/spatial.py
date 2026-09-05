@@ -234,7 +234,8 @@ from world.spatial_fov import (
     neighbour_feature_visibility, normalize_footprint,
     normalize_height, normalize_opacity, normalize_parts, normalize_shape,
     observer_field, posture_class, room_field, room_grid, room_has_geometry,
-    shadowcast, sight_digest,
+    shadowcast, sight_digest, sight_passes, _placed_neighbours,
+    wall_aperture_cells,
 )
 
 
@@ -250,16 +251,25 @@ from world.spatial_light_field import (
     cone_factor, CONE_HALF_ANGLE, CONE_PENUMBRA, DARK_THRESHOLD,
     DEFAULT_LIGHT_SHAPE, DEFAULT_STEADINESS, DIM_T, emitted_level,
     FAIL_RATE, fails_on, failing_sources_out, field_effective_light,
-    field_light_at, field_rows, FLICKER_RATE, flickers_on, glare_between,
-    GLARE_CELLS, GLARE_POWER, light_field, light_geometry_exists,
-    light_sources, LIGHT_HEIGHTS, LIGHT_SHAPES, LightField, LIT_T,
-    normalize_light_shape, normalize_steadiness, observer_light_field,
-    POWER, quantise, reach_radius, STEADINESS,
+    field_light_at, field_rows, FLICKER_RATE, flickers_on, FLOOR_SPILL,
+    glare_between, GLARE_CELLS, GLARE_POWER, light_field,
+    light_geometry_exists, light_passes, light_shape, light_sources,
+    LIGHT_HEIGHTS, LIGHT_SHAPES, LightField, LIT_T, normalize_light_shape,
+    normalize_steadiness, observer_light_field, POWER, quantise,
+    reach_radius, STEADINESS, _spill,
 )
 
 
 from world.spatial_sound_field import (
-    _acoustic_grid, _ambient_floor, _cache_key, _CONDUCTED, _crossing_pass, _event_power, _SOUND_FIELD_CACHE, _OFF, _power_of_level, _ROUND_RANK, _running, AMBIENT, APERTURE_PASS, CROWD_SOUND, DIAGONAL_COST, FRAGMENT_SNR, FULL_SNR, gain_at, HEAR_FLOOR, heard_events, normalize_sound_level, quantise_hearing, sound_field, sound_field_hear_level, sound_notices, sound_sources, SOUND_LEVELS, SOUND_POWER, SoundField, SPEECH_POWER, SPEECH_VOLUMES, spread, stamp_sound_relation, steadiness_this_beat, WEATHER_NOISE, WIND_NOISE,
+    acoustic_grid, _ambient_floor, _cache_key, _CONDUCTED, _crossing_pass,
+    _event_power, _SOUND_FIELD_CACHE, _OFF, _power_of_level, _ROUND_RANK,
+    _running, AMBIENT, APERTURE_PASS, CROWD_SOUND, DIAGONAL_COST,
+    failing_sound_sources_out, FRAGMENT_SNR, FULL_SNR, gain_at, HEAR_FLOOR,
+    heard_events, noise_word, NOISE_WORDS, normalize_sound_level,
+    quantise_hearing, sound_field, sound_field_hear_level, sound_notices,
+    sound_passes, sound_shape, sound_sources, SOUND_LEVELS, SOUND_POWER,
+    SoundField, SPEECH_POWER, SPEECH_VOLUMES, spread, stamp_sound_relation,
+    steadiness_this_beat, VOICE_ONE_PACE, WEATHER_NOISE, WIND_NOISE,
 )
 
 

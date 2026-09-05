@@ -7,8 +7,17 @@ rays) and built the same day in an isolated worktree as
 the light field (`DESIGN_LIGHT_FIELD.md`), whose grid, source class,
 quantise-last rule and fail-open it reuses. §§ 3-8 are built as written with
 the exceptions § 6a and § 10 name; § 9's measurements were taken read-only
-over the owner's corpus and are in § 9a, with the synthetic table. Nothing
-here is merged.
+over the owner's corpus and are in § 9a, with the synthetic table.
+
+**Merged with the light field 2026-09-04**, under the owner's ruling of the
+same day, each item pinned: the composite is ONE derivation
+(`spatial_fov.room_field` under `sound_passes`; `_acoustic_grid` is gone --
+§ 4.2, § 10.7); the composer says WHERE the sound is (`sound_shape`, the
+noise ladder `quiet | din | drowned` derived from the SNR thresholds --
+§ 4b, § 10.6); a `failing` source is switched off at commit and reported
+once, in one block with the light field's (§ 5, § 10.5); the steadiness
+words, hash and rates are the light field's (§ 10.8); and a listener whose
+station lands on an occluder's cell hears (§ 4.2). The rest of § 10 stands.
 
 ---
 
@@ -91,7 +100,14 @@ Computed per (scene, observer) on the same composite field as sight
    barrier's `material` shifts the class exactly as `_material_shifted_barrier`
    does today, so a thin door and a bank-vault door differ as they already
    do. Occluders inside a room do NOT block sound: a counter is walked
-   round by the flood at the cost of the extra path.
+   round by the flood at the cost of the extra path -- its own cells are
+   REACHED and never passed through (2026-09-04: a listener whose station
+   resolved onto another anchor's seeded cell was never entered and heard
+   nothing at any volume; now the flood steps onto the cell and goes round).
+   The composite the flood runs over is `spatial_fov.room_field` under the
+   `sound_passes` predicate -- every barrier that is not a wall, at its pass
+   -- the SAME derivation sight and light use, so an L or a round room is
+   its shape for sound as it is for sight.
 
 3. **Decay.** Intensity at a cell reached by path length L is
    `P / (1 + L^2)`, with the aperture factors applied where crossed. Path
@@ -136,10 +152,26 @@ the fragment should thin with the ratio.
   * `sensory_events` -- an event with a `source_room` and an `intensity` is a
     one-beat source at that level on that room's centre, spread the same
     way, so a crash two rooms away is heard through the door it came by.
-  * The composer gets, per room in view, the field's SHAPE in words --
-    "the generator drowns everything at the east end; by the door you could
-    hear yourself speak" -- from the per-anchor cell mapping sight already
-    uses. Prose from geometry, never a number.
+  * **Where the sound is** (built 2026-09-04: `sound_shape`, rendered by
+    `composer.render_sound_shape` and the Japanese adapter as a standing
+    HEARING percept, `soundscape_percept`; `tests/test_field_sentences.py`).
+    The noise at a cell is graded on a closed ladder DERIVED from the two SNR
+    thresholds -- `quiet` (a normal voice one pace off is `full`, noise <=
+    6.0 / FULL_SNR), `din` (a fragment, <= 6.0 / FRAGMENT_SNR), `drowned`
+    (nothing) -- so the words move with the constants (`NOISE_WORDS`,
+    `noise_word`). Then the light field's five rules, word for word: speak
+    only when the room is UNEVEN; grade by ANCHOR (the visible anchors at
+    the noise word of their nearest cell, loud to quiet); name a source in
+    this room only when it is HEARD, one beyond a doorway by the opening
+    ("the noise from beyond the open doorway") when that opening is in
+    view, and never one the listener has no channel to; say where the
+    listener stands (with a cell); subtract, never add -- the sentence is
+    re-derived by `observations_from_render` and each listener receives only
+    their own. Lines and one-beat events are the beat's, not the room's, and
+    are not named. The same sentence reaches the Director's digest
+    (`payload.sightlines.sound[name]`). "The noise from the generator drowns
+    everything at the shelf and the hearth and dies away at the table.
+    Where you stand, the noise drowns everything."
 
 ## 5. Steadiness
 
@@ -149,6 +181,15 @@ same hash and files the same engine notice ("the generator in the shed has
 stopped"), which is a sound event in its own right -- silence where there
 was noise is heard. One hash, two senses, so a lamp and the generator it
 runs on fail on the same beat when they are one entity.
+
+At commit (2026-09-04, `persist/commit_scene_state._record_failed_sources`)
+the two fields are one block: it reads `failing_sources_out` (light) and
+`failing_sound_sources_out` (sound), writes `state.running: false` for a
+sound that stopped as it writes `state.lit: false` for a light that went
+out, and files ONE notice per thing -- "has stopped", "has gone out", or
+"has failed" for a thing that does both. Perception no longer files the
+sound notice; `SoundField.notices` still carries it for the field's own
+readers.
 
 ## 6. Constants the owner sets
 
@@ -326,21 +367,35 @@ into aggregating scripts and nothing content-bearing was written to disk.
   4. **Sound events** reach other rooms at the OPENING (`heard_events` in
      `perception_establish`); `sensory_events` exist on no later stage's
      schema, so there is nothing to spread on a normal beat.
-  5. **Failing sources file the notice and stay running.** Perception is
-     read-only; whether the failure should also write `state.running:
-     false` at commit is the light field's decision too, to be made once.
-  6. **The composer's sound-shape sentence** (§ 4b, last bullet) is not
-     built: it needs a percept kind and en/ja templates, and the composer
-     may not read the scene, so perception would have to hand it the shape.
-  7. **The composite is placed twice.** `_acoustic_grid` repeats
-     `observer_field`'s neighbour placement for the wider predicate (sound
-     places a shut door's room; sight does not); a test holds the two to the
-     same cells, and the room-shapes work on `_Field` may lift it into one.
-  8. `STEADINESS`, `FLICKER_RATE` and `FAIL_RATE` are defined here and in
-     the light module on its branch; the merge unifies them.
+  5. ~~Failing sources file the notice and stay running.~~ Decided
+     2026-09-04, once for both fields: the commit switches the thing off in
+     every sense it has and files one notice (§ 5).
+  6. ~~The composer's sound-shape sentence is not built.~~ Built 2026-09-04
+     (§ 4b): perception hands the composer the shape, the templates say it.
+  7. ~~The composite is placed twice.~~ One derivation since 2026-09-04
+     (§ 4.2): `room_field(through=sound_passes)`; the copy had already
+     drifted to squares after the room-shapes work.
+  8. ~~`STEADINESS`, `FLICKER_RATE` and `FAIL_RATE` are defined twice.~~
+     The light field's, imported (the 2026-09-04 merge).
+  9. **`sensory_events` exist on no schema after establish** (item 4): a
+     crash two rooms away on a normal beat has no channel to arrive by. A
+     Director schema addition with an owner question attached -- which hand
+     owns a one-beat sound -- so registered, not built (`docs/UNBUILT.md`
+     § 2.36).
+ 10. **Two gates.** The sound field exists where `room_has_geometry` (an
+     authored footprint, height or opacity: 2 of 589 live rooms); the light
+     field where `light_geometry_exists` (a size tier or anchors: 321).
+     Both are argued in their notes; whether hearing should take the wider
+     gate is the owner's, and is registered.
+ 11. **`hear_level`'s `vouched` branch** is unreachable for a pair on a
+     field, as the comment there says: a vouched channel is one with NO
+     spatial relation (barrier unknown, distance remote), and two bodies on
+     one placed field always have one. Not a defect; comms decide before
+     `hear_level` is asked.
 
 Open questions for the owner: whether a fragment should THIN with the ratio
 (fewer words at 0.9 than at 1.9) or stay one kind of fragment; whether a
 crowd's level should follow its `mood` as well as its band (§ 10.2); which
-lines of a beat count as simultaneous (§ 10.3); whether a failing source
-should switch itself off at commit (§ 10.5); and the constants (§ 6a).
+lines of a beat count as simultaneous (§ 10.3); whether a one-beat sound
+should have a channel on a normal beat (§ 10.9); which gate hearing should
+take (§ 10.10); and the constants (§ 6a).
