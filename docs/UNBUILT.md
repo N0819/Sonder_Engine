@@ -6794,23 +6794,60 @@ model (2026-09-04): the world-context compiler reads the plan for a named
 room and raises a planning need for an unplanned one, so there is one seed
 per room again.
 
-### 2.34 The light field — DESIGN, not built
+### 2.34 The light field — PROTOTYPE, what is left
 
-Agreed 2026-09-04 as the item after the Writers' Room waves and regions:
-[`design/DESIGN_LIGHT_FIELD.md`](design/DESIGN_LIGHT_FIELD.md). Light
-becomes a scalar on the sight grid `world/spatial_fov.py` already derives:
-each source's power decays by inverse square along `shadowcast` rays from
-the source's cell, shadowed only by occluders at or above the source's
-height rank (so a ceiling light needs no ceiling), shaped by a cone with a
-penumbra when the source has a direction, summed across sources, floored by
-the room's ambient, filled by bounce whose coefficient is the room's
-`exposure`, and quantised to the existing four-step ladder LAST, so every
-current reader keeps its words. Spill is a consequence of the wall as a
-line, not a rule. Sources are a class on the entity (`light_shape`,
-`light_height`, `steadiness`, `state.pointed_at`), never a device
-vocabulary; flicker and failure are seeded on (turn, source) so a reroll
-sees the same light. Nothing is built, nothing is measured; the note's § 9
-lists what to measure first and its § 6 the constants the owner sets.
+Built 2026-09-04 on a branch from
+[`design/DESIGN_LIGHT_FIELD.md`](design/DESIGN_LIGHT_FIELD.md) §§ 3-8 as
+`world/spatial_light_field.py` (behind the `world/spatial.py` facade;
+`tests/test_light_field.py`, 36 tests; measurements in the note's § 9).
+Light is a scalar on the composite sight grid: per-source shadowcast from
+the source's cell, blocked by occluders at or above the source's height
+rank and by the wall line outside its doorway, inverse-square decay, a cone
+with a linear penumbra, summed, bounced by the room's `exposure`, floored
+by `room_light`, quantised LAST; `light_at`, `effective_light` (median
+cell) and `sight_level` (glare) read it where a room has a size tier or
+anchors and a body a cell, and answer exactly as before everywhere else
+(pinned byte-for-byte on seven no-geometry scenes). `flickering` and
+`failing` are a hash of (beat, source); the commit stamps `scene.beat_idx`,
+records a failed source `state.lit: false` and files an `engine_notices`
+line. Left:
+
+  * **The owner's three open questions**, in the order they bite: whether
+    the ambient floor should spill through a doorway at all (§ 4.6 -- as
+    built it does not, and two live rooms went dim -> dark for exactly that
+    reason: chats 73/74's hotel back office beside its lit lobby); median
+    or mean for a room's reading (§ 4b; median as built, and chat 115's
+    dim corridor with one lit source reads dim, not lit); and the
+    constants (§ 6). One already moved: LIT_T 2.0 -> 2.5, because 2.0 sat
+    exactly on POWER[dim] and every dim room with a grid read lit. The
+    § 9.3 table shows a `lit` source reaching one cell as lit and three as
+    dim against the note's "about two ... about four"; LIT_T <= 1.2 or
+    POWER[lit] >= 12 would meet the sentence.
+  * **The composer's shape sentence** (§ 4b last bullet: "the lamp lights
+    the table and the near wall; the far end of the room is dark"). Not
+    built: it needs en/ja compositor templates and a per-anchor mapping
+    from the field's cells to the room's features, and nothing in the
+    field's numbers may reach prose. The Narrator and the Director still
+    see only the four words.
+  * **An unstationed source stands at its room's centre**, the same
+    approximation `_observer_cell` makes for an unplaced observer, and an
+    unstationed BODY keeps the room-level `light_at` answer (§ 7's rule).
+    Both live sources today are unstationed. Whether a body with no cell
+    should instead read the room's median is a choice the note does not
+    make.
+  * **Glare requires a cell for both bodies and a facing**, and reads the
+    per-source contribution at the observer's cell, so a cone pointed away
+    dazzles nobody. The note does not say whether an all_round lantern
+    held between two faces should count; as built it does.
+  * **`light_radius` is superseded where geometry exists** (§ 3). Three
+    assertions in `tests/test_light_and_survival.py` changed to say so; a
+    `lit` fixture no longer fills a large hall and a `bright` one does.
+  * **§ 9.5 live beats** were not played. Two beats with a held cone in a
+    fresh non-explicit scenario, every stage read, is the next measurement
+    under the standing grant.
+  * **Cost was not measured** at the geometry note's precision. The field
+    is cached per (scene inputs, room) in a 64-entry memo keyed on a JSON
+    dump of what it reads; the dump is taken on every reader call.
 
 ### 2.36 The sound field — DESIGN, not built
 

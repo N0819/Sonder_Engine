@@ -236,6 +236,14 @@ _ENTITY_DEFAULT_FIELDS = {
     # silence still reads as silence.
     "enclosure": None,
     "light_source": None,
+    # The light field's three sibling fields (`world/spatial_light_field.py`:
+    # how the light is shaped, where it sits, whether it can be relied on),
+    # listed with `light_source` for its reason: a lamp re-echoed without
+    # them would otherwise lose its cone, its height and its flicker on the
+    # next beat, and None is what "not declared" already looks like.
+    "light_shape": None,
+    "light_height": None,
+    "steadiness": None,
     # Listed for the same reason as the two above, and pre-emptively: a
     # `scent` outside this map is copied verbatim by the tail loop below, so
     # the None validation fills in for every beat that does not re-declare it
@@ -580,7 +588,7 @@ _ENTITY_STRUCTURAL_FIELDS = (
     # What the thing is made of and what it gives off are as durable as what
     # it is -- and were being lost whenever two records for one entity
     # collapsed, which is the other half of the same gap.
-    "enclosure", "light_source",
+    "enclosure", "light_source", "light_shape", "light_height", "steadiness",
 )
 
 
