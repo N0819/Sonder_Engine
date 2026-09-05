@@ -718,17 +718,67 @@ def _tick_spec(payload):
     return deltas, str(block.get("percept") or "").strip()
 
 
+def _room_occupants(scene, room_id):
+    """Every body standing in `room_id`, in the scene's own order.
+
+    Read straight off `positions`, which is the one map that answers "where is
+    this body" -- not `rooms[...]` membership, which no scene keeps.
+    """
+    positions = (scene or {}).get("positions")
+    if not isinstance(positions, dict):
+        return []
+    target = str(room_id or "").strip()
+    return [str(name) for name, where in positions.items()
+            if str(where or "").strip() == target and str(name or "").strip()]
+
+
+def condition_subject_room(scene, subject):
+    """`subject` as a ROOM of this scene, or "" when it names no room.
+
+    A room is matched by its id and by its display name, because
+    `world_conditions.subject_id` is free model text and the body specialist
+    writes whichever of the two the payload it was shown put in front of it.
+    """
+    rooms = (scene or {}).get("rooms")
+    if not isinstance(rooms, dict):
+        return ""
+    raw = str(subject or "").strip()
+    if not raw:
+        return ""
+    if raw in rooms:
+        return raw
+    folded = raw.casefold()
+    for rid, room in rooms.items():
+        if str(rid).strip().casefold() == folded:
+            return str(rid)
+        if isinstance(room, dict) and str(
+                room.get("name") or "").strip().casefold() == folded:
+            return str(rid)
+    return ""
+
+
 def _tick_subjects(scene, cond):
     """Whose bodies one ticking condition acts on.
 
-    The row's own subject, and only that. This is the SINGLE place a ticking
-    condition's subject is resolved to bodies, so a later landing that lets a
-    PLACE carry a ticking condition has one function to change and nothing in
-    the firing, the batching, the clamps or the op family moves. Nothing is
-    declared for that here: a seam gets its fields when its consumer arrives.
+    A STANDING CONDITION OF A PLACE IS A FACT ABOUT STANDING IN IT. This is
+    still the SINGLE place a ticking condition's subject is resolved to
+    bodies, and it now answers the case the docstring here reserved: when the
+    subject names a room of this scene, the condition acts on whoever is in
+    that room, and on nobody when the room is empty. Everything else -- the
+    firing, the batching, the clamps, the op family -- is unchanged.
+
+    Measured, chat "rush" 2026-09-05 (PR4): `second_landing_fire` (severity
+    0.9) and `third_landing_fire` ("critical") stood for six beats while two
+    bodies climbed through them, and a condition whose subject is a landing
+    reached nobody, because the only subject this function knew was a person.
     """
     subject = str(cond.get("subject_id") or "").strip()
-    return [subject] if subject else []
+    if not subject:
+        return []
+    room_id = condition_subject_room(scene, subject)
+    if room_id:
+        return _room_occupants(scene, room_id)
+    return [subject]
 
 
 def _vitals_entry_key(table, name):
@@ -743,6 +793,34 @@ def _vitals_entry_key(table, name):
     return None
 
 
+def inert_condition_ids(conditions):
+    """Active conditions that SPELL a cadence and fill it with a non-cadence.
+
+    A row whose `tick_interval_seconds` is absent is a condition that never
+    claimed to act; a row that spells the field and puts `0` (or a negative,
+    or something unreadable) in it is a writer who meant "this goes on" and
+    said nothing the sweep can fire on. That second kind is silently inert,
+    and silence is this table's whole failure history -- 48 of the 131
+    interval-bearing corpus rows spell `0` (engine.db 2026-08-25), and all six
+    conditions of the burning tenement did (chat "rush" 2026-09-05, PR4b),
+    which is why a building on fire acted on nobody for twenty beats.
+
+    Returns condition ids, sorted, for the commit domain to report. Pure: it
+    reads rows and decides nothing.
+    """
+    out = []
+    for cond in conditions or []:
+        payload = _payload_of(cond)
+        if _condition_field(payload, "tick_interval_seconds") is None:
+            continue
+        if _tick_interval(payload) is not None:
+            continue
+        cid = str(cond.get("condition_id") or "").strip()
+        if cid and cid not in out:
+            out.append(cid)
+    return sorted(out)
+
+
 def _tick_conditions(scene, conditions, elapsed):
     """Pass (c1). Returns (event_ops, notices).
 
@@ -751,7 +829,7 @@ def _tick_conditions(scene, conditions, elapsed):
     """
     from world.survival import _stored_vitals
 
-    event_ops, notices, unnamed = [], [], []
+    event_ops, notices, unnamed, air_taken = [], [], [], []
     for cond in conditions or []:
         payload = _payload_of(cond)
         interval = _tick_interval(payload)
@@ -793,7 +871,17 @@ def _tick_conditions(scene, conditions, elapsed):
         deltas, percept = _tick_spec(payload)
         table = scene.get("vitals") if isinstance(scene, dict) else None
         moved, missing = [], []
-        for subject in _tick_subjects(scene, cond):
+        subjects = _tick_subjects(scene, cond)
+        if deltas.get("air", 0.0) < 0:
+            # WHOSE AIR THE WORLD IS TAKING, written down where the next
+            # beat's `tick_vitals` can read it (world/survival.AIR_DENIED_KEY).
+            # Recorded from the CONDITION acting, not from the ledger moving,
+            # so a story that has not enabled survival still records the fact
+            # and one that enables it mid-fire is right from the next beat.
+            for subject in subjects:
+                if subject not in air_taken:
+                    air_taken.append(subject)
+        for subject in subjects:
             if not deltas:
                 break
             if not isinstance(table, dict) or not table:
@@ -854,7 +942,145 @@ def _tick_conditions(scene, conditions, elapsed):
             "-- name the subject as the scene names them, or the change goes "
             "nowhere.")
 
+    if isinstance(scene, dict):
+        from world.survival import set_air_denied
+        # REPLACES every beat, like `engine_notices`: a body that walked out
+        # of the smoke this beat is not in this list, and recovers normally.
+        set_air_denied(scene, air_taken)
+
     return event_ops, notices
+
+
+#: How many bodies one unanswered-hazard warning names before it counts the
+#: rest. A crowd in a burning building is the case this exists for, and a
+#: warning that lists twenty names is a warning nobody reads.
+HAZARD_REPORT_CAP = 6
+
+#: The state_diff channels that constitute the world having ACTED on a body:
+#: a roll, a standing condition, a vital, a consequence. Named here because
+#: this is the whole vocabulary the engine has for "something happened to
+#: this body", and a floor that checked fewer of them would report a beat
+#: that did answer.
+_HAZARD_ANSWER_CHANNELS = ("dice", "conditions", "vitals", "consequences")
+
+
+def _condition_states_harm(cond):
+    """Does this row say, in a field the engine owns, that it is dangerous?
+
+    `kind` is open vocabulary -- 106 distinct strings across the corpus -- so
+    nothing here reads it, and a room condition is not a hazard just for
+    existing (a room can stand under a festival as easily as under a fire).
+    Two fields answer without a word list: a declared `severity`, which is
+    the row's own statement of how bad it is, and a `tick` that TAKES a
+    vital. All six conditions of the burning tenement carried the first
+    (`second_landing_fire` 0.9, `third_landing_fire` "critical") and none
+    carried the second, which is why severity has to count.
+    """
+    payload = _payload_of(cond)
+    if str(_condition_field(payload, "severity") or "").strip():
+        return True
+    deltas, _percept = _tick_spec(payload)
+    return any(value < 0 for value in deltas.values())
+
+
+def _hazard_rooms(scene, conditions):
+    """Room ids this scene states are dangerous to stand in, by cause.
+
+    Two sources, both facts the ENGINE already owns and neither of them prose:
+    a room carrying a `hazard` block (`world.region_events.apply_wave` writes
+    it), and an active `world_conditions` row whose subject resolves to a
+    room. Nothing here reads a description, a name or a severity word.
+    """
+    out = {}
+    rooms = (scene or {}).get("rooms")
+    if isinstance(rooms, dict):
+        for rid, room in rooms.items():
+            hazard = room.get("hazard") if isinstance(room, dict) else None
+            if isinstance(hazard, dict) and str(hazard.get("state") or "").strip():
+                out.setdefault(str(rid), []).append(
+                    str(hazard.get("cause") or hazard.get("state")))
+    for cond in conditions or []:
+        rid = condition_subject_room(scene, cond.get("subject_id"))
+        if not rid or not _condition_states_harm(cond):
+            continue
+        out.setdefault(rid, []).append(
+            str(cond.get("kind") or cond.get("condition_id") or "condition"))
+    return out
+
+
+def _answered_bodies(state_diff):
+    """Casefolded names of bodies this beat's diff recorded an outcome for.
+
+    A `dice` list with any entry in it answers for EVERYBODY: a beat that
+    rolled has contested something, and this floor is about beats that never
+    reached for the dice at all.
+    """
+    diff = state_diff if isinstance(state_diff, dict) else {}
+    if diff.get("dice"):
+        return None                     # None means "the whole beat answered"
+    named = set()
+    for key in ("vitals", "conditions", "consequences"):
+        value = diff.get(key)
+        if isinstance(value, dict):
+            for subject, entry in value.items():
+                named.add(str(subject).strip().casefold())
+                rows = entry if isinstance(entry, list) else [entry]
+                for row in rows:
+                    if isinstance(row, dict):
+                        named.add(str(row.get("subject_id") or "")
+                                  .strip().casefold())
+        elif isinstance(value, list):
+            for row in value:
+                if isinstance(row, dict):
+                    named.add(str(row.get("subject_id")
+                                  or row.get("subject")
+                                  or row.get("who") or "").strip().casefold())
+    named.discard("")
+    return named
+
+
+def unanswered_hazard_subjects(scene, conditions, bodies, state_diff):
+    """Bodies standing in a stated hazard on a beat that recorded no outcome.
+
+    THE WORLD IS A PARTY TO A CONTEST. `resolution_flags.contested` keys off
+    REACTORS, so a story with nobody else in it has no contest, no `dice`, and
+    a resolve that writes no `conditions`, `vitals` or `consequences` -- across
+    21 turns of chat "solitude" 2026-09-05 (PS12) those three channels were
+    empty 21 times out of 21, including a deliberate fast descent of a
+    twenty-pace salt-glazed stair with both hands full. The complement of that
+    finding is chat "rush" (PR4): six fire conditions stood over two bodies for
+    six beats and not one of them was ever answered either, and there a second
+    party was present. The common rule is not about who else is in the room.
+
+    Returns the names, in scene order, of bodies the scene puts inside a
+    hazardous place (`_hazard_rooms`) on a beat whose diff answered for
+    nobody. Pure and total; the caller decides what to say about it. It
+    self-silences the moment the mechanism works -- a condition that ticks a
+    vital IS an answer.
+    """
+    if not isinstance(scene, dict):
+        return []
+    hazards = _hazard_rooms(scene, conditions)
+    if not hazards:
+        return []
+    answered = _answered_bodies(state_diff)
+    if answered is None:
+        return []
+    positions = scene.get("positions")
+    if not isinstance(positions, dict):
+        return []
+    out = []
+    for name, where in positions.items():
+        label = str(name or "").strip()
+        if not label or str(where or "").strip() not in hazards:
+            continue
+        if bodies is not None and label.casefold() not in {
+                str(b).strip().casefold() for b in bodies}:
+            continue
+        if label.casefold() in answered:
+            continue
+        out.append(label)
+    return out
 
 
 def _expire_conditions(conditions, elapsed):

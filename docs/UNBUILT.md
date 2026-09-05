@@ -6186,6 +6186,69 @@ make it; whether a fuzzy match belongs in `planned_context` is a separate
 question, and the deterministic matcher is deliberately exact
 (§ *An exact match is not ambiguous*).
 
+### 1.128 Harm, conditions and the body: what the 2026-09-05 fixes left open
+
+Campaign 3 lane D (PR3, PR4, PS12, PQ21, PM9). Built the same day, in
+`world/survival.py`, `world/mechanics.py`, `persist/commit_mechanics.py`,
+`mind/psychology_runtime.py`, `mind/affect.py` and
+`agents/director_floors.py`: air no longer recovers while the world is taking
+it or in the same merge that declared it lost (`AIR_DENIED_KEY`); a standing
+condition whose subject is a ROOM acts on the bodies in that room; a
+condition that spells a cadence and fills it with nothing is reported at
+commit; a body standing in a stated hazard on a beat that rolled nothing is
+reported; an authored `initial_state.stress.activation` reaches the first
+beat; a drive's strain is not paid down by the clock; and the restraint scan
+pins its cue to one clause instead of indicting the room. What remains:
+
+**A room condition still reaches no VIEW.** PR4's half (a): *a standing
+condition of a place is a fact about standing in it.* Nothing in
+`agents/perception.py` or `agents/composer.py` reads `world_conditions` --
+grep returns the Director's `active_conditions` payload key and nothing else
+-- so turns 8–13 of the burning tenement put Mirela on a landing that was on
+fire and her view said *"steady pressure, weight and shared warmth"*. The
+condition now ACTS on her body; it still does not reach her senses.
+`world.mechanics._hazard_rooms(scene, conditions)` is the reader that answers
+"which rooms does the engine state are dangerous", and a percept path would
+compose from it the way a substance does.
+
+**`resolution_flags.contested` still keys off REACTORS.** PS12's owner
+question was answered YES -- a declared act against a stated physical hazard
+is contestable with no second party, because a contest needs an opposing
+FORCE, not an opposing person -- and the deterministic floor
+(`world.mechanics.unanswered_hazard_subjects`, warned from
+`persist/commit_mechanics.commit_transit_sweep`) reports the beats that went
+unanswered. It reports; it does not roll. The trigger itself belongs in
+`agents/director.py::_reconcile_resolution`, where `contested` is computed,
+and in one clause on the `body` specialist's sheet in both packs.
+
+**A mind-model claim can still form with no cited evidence.**
+`mind/psychology_runtime.apply_belief_updates` refuses an update carrying no
+`evidence` and stores `last_evidence` on what it keeps;
+`mind/theory_of_mind.apply_mind_model_updates` requires only a non-empty
+`claim` and records no provenance at all. That asymmetry is the most likely
+mechanism behind PQ21's one unattachable belief (*"Halla will let others
+circle the house unless she is stopped"*, 0.6, in a run whose every other
+belief traced to a beat). Not fixed on a single observation, and per the
+standing rule a missing field is not a dead one: the repair is ADDITIVE
+(store the cited evidence on the hypothesis so a reader can attach it),
+never a refusal that would silently drop theory of mind wholesale.
+
+**`_RESTRAINT_KEYWORDS` is still a word list read against free prose.** The
+attribution is fixed; the vocabulary is not, and `pinned` is an ordinary
+transitive verb of ordinary objects. The reduction the finding asks for is to
+state the class the engine owns -- a restraint is a `conditions` entry or a
+contact with a restraining relation -- and the audit that has to precede it
+is that the scan's own regression file pins a case where the only evidence is
+a line of dialogue (`"Reya is my hostage now."`), so the dialogue path is
+earned and cannot be dropped.
+
+**`elapsed_psych_units` returns one number in two units.** One unit per TURN
+in a story with no simulation clock, one per MINUTE in one with a clock, and
+three consumers (`resolve_stress`'s two half-lives, `resolve_hedonic`,
+`update_drive_strain`) read it as if it were one. `_STRAIN_DECAY_FLOOR_PER_BEAT`
+bounds the damage where it was measured; the clean fix is for the caller
+(`persist/commit_memory.py`) to say which unit it is passing.
+
 ## 2. Roadmap
 
 Features the architecture intends and has not built. Ordered by value per unit
