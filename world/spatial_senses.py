@@ -1205,6 +1205,32 @@ def sound_bearing(scene: dict, observer: str, source: str):
         if not path:
             return None
         next_room, scope = path[1], "beyond"
+    return _bearing_through(scene, observer, o_room, next_room, scope)
+
+
+def sound_bearing_via(scene: dict, observer: str, via_room, *, room=None):
+    """The bearing of a sound the FAR FIELD says arrives from `via_room` --
+    the last hop of its path, which is the neighbour of the observer's own
+    room it came through (`spatial_sound_field.distant_sounds`' `via`).
+
+    Split out from `sound_bearing` rather than reimplemented: the far field
+    knows the first edge and nothing else about where the sound is, and this
+    is the only part of `sound_bearing` that applies. Firewall-clean for the
+    same reason the `beyond` scope is -- every field names the OBSERVER's
+    own room's edges, and the returned dict carries no room id and no room
+    name, so a distant bang gives a direction and never a place.
+    """
+    o_room = room or room_of(scene, observer)
+    via_room = str(via_room or "")
+    if not o_room or not via_room or via_room == str(o_room):
+        return None
+    return _bearing_through(scene, observer, o_room, via_room, "beyond")
+
+
+def _bearing_through(scene: dict, observer: str, o_room, next_room, scope):
+    """The observer's own frame for a sound arriving through the edge onto
+    `next_room`: the edge's barrier, its compass bearing, its up/down, and
+    the sector that bearing falls in given the observer's facing."""
     barrier = spatial_rel(scene, o_room, next_room).get("barrier")
     bearing = travel_bearing(scene, o_room, next_room)
     vertical = _edge_vertical(scene, o_room, next_room)

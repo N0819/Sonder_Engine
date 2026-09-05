@@ -1706,12 +1706,19 @@ def test_a_beat_that_says_nothing_about_a_running_source_is_told_nothing(temp_db
 def test_the_objects_hand_is_told_an_event_is_not_a_state():
     from pathlib import Path
     root = Path(__file__).resolve().parents[1] / "language_packs"
+    # The clause named the distinction from 2026-09-04 and had nowhere to
+    # send the event: it pointed a one-off at the resolved prose or at a
+    # `_action` state key, neither of which anybody can hear. Since
+    # 2026-09-05 there is a channel, so the clause points at THAT
+    # (`docs/UNBUILT.md` \u00a7 1.117) -- the distinction is unchanged and the
+    # destination is real.
     for lang, phrase in (("en", "AN EMISSION IS A STATE"),
                          ("ja", "\u767a\u3059\u308b\u3053\u3068\u306f\u72b6\u614b")):
         text = (root / lang / "cards" / "system_prompts" / "specialists"
                 / "objects" / "chunks" / "entities.txt").read_text("utf-8")
         assert phrase in text, lang
-        assert "_action" in text, lang
+        assert "sensory_events" in text, lang
+        assert "state.running" in text, lang
 
 
 # ---------------------------------------------------------------------------
@@ -2209,3 +2216,160 @@ def test_a_pair_standing_together_can_hear_each_other():
     })
     rel = spatial_rel_between(sc, "Corin Ashe", "Sable")
     assert hear_level(rel, "normal") == "full"
+
+
+# ---------------------------------------------------------------------------
+# DECIBELS, AND HOW FAR A VERY LOUD SOUND GOES
+# (`docs/design/DESIGN_SOUND_DECIBELS.md`, 2026-09-05)
+#
+# Three classes, each stated as a rule and none as a case:
+#
+#   * a wall attenuates and does not abolish -- a sound loud enough crosses
+#     one and a voice never does, at any volume;
+#   * a sound that HAPPENS is heard where it happened and is over when the
+#     beat is (`docs/UNBUILT.md` § 1.117);
+#   * a distant sound delivers a direction and a character and never a
+#     sentence, and there is no configuration in which it delivers one.
+# ---------------------------------------------------------------------------
+
+def _two_room_house(barrier, *, size="medium"):
+    """Two rooms joined by one edge, no anchor geometry anywhere -- so what
+    answers is the far field and nothing else."""
+    return {
+        "rooms": {
+            "hall": {"name": "the hall", "size": size, "exposure": "enclosed",
+                     "adjacent": [{"to": "cellar", "barrier": barrier,
+                                   "dir": "s"}], "anchors": {}},
+            "cellar": {"name": "the cellar", "size": size,
+                       "exposure": "enclosed", "adjacent": [], "anchors": {}},
+        },
+        "positions": {}, "stations": {}, "orientation": {}, "poses": {},
+        "entities": {}, "contained": {},
+    }
+
+
+def test_a_wall_attenuates_and_does_not_abolish():
+    """THE CLASS: a barrier is a loss, not a switch. `APERTURE_PASS["wall"]`
+    was 0 because the table was borrowed from sight, where a wall really is
+    a switch -- so no explosion, ever, was heard through one by anybody, and
+    no constant could have changed that because the room beyond a wall was
+    not placed at all.
+
+    Stated as the two sentences it has to satisfy at once, which is what
+    makes a wall a wall: a sound loud enough crosses it, and a voice never
+    does however hard it is thrown."""
+    from world.spatial import (distant_sounds, SOUND_LEVELS, SPEECH_DB,
+                               far_field_sources)
+    sc = _two_room_house("wall")
+    crash = [{"kind": "sound", "source_room": "hall",
+              "level": "catastrophic", "detail": "a shattering roar"}]
+    sc["positions"] = {"Ada": "cellar"}
+    assert distant_sounds(sc, "Ada", events=crash), (
+        "a catastrophic event did not cross one wall")
+    # Every quieter rung dies against it, and the LADDER is what decides --
+    # not the room, not the story, not a special case. At the wall's
+    # proposed 45 dB only the top rung crosses; that the ladder's own top
+    # two do not both cross is the note's open constant, registered.
+    for level in SOUND_LEVELS:
+        quieter = [{**crash[0], "level": level}]
+        crossed = bool(distant_sounds(sc, "Ada", events=quieter))
+        assert crossed == (level == "catastrophic"), level
+    # And no voice, at any volume: the far field has no door for speech.
+    sc["positions"]["Bel"] = "hall"
+    for volume in SPEECH_DB:
+        assert far_field_sources(sc) == [], volume
+    # An open door in the same wall's place carries everything the wall
+    # stopped, which is what says the wall was the reason.
+    through = _two_room_house("open_door")
+    through["positions"] = {"Ada": "cellar"}
+    for level in ("thunderous", "catastrophic"):
+        assert distant_sounds(through, "Ada",
+                              events=[{**crash[0], "level": level}]), level
+
+
+def test_a_sound_that_happens_is_over_when_the_beat_is(temp_db):
+    """§ 1.117'S GAP, AND THE SHAPE OF ITS CLOSE. `sound_source` +
+    `state.running` is a STANDING emission and outlives every beat that says
+    nothing about it -- which is how a fog bell pulled once on turn 11
+    rewrote nine beats of one story with a noise floor of 20.5 against a
+    whisper's 0.34. There was no other channel, so a one-off sound was
+    either that or nothing.
+
+    The rule this pins is not "expire noises after N beats", which would be
+    guessing what kind of thing a noise is. It is that THE BEAT NUMBER IS
+    THE LIFETIME: the record carries the beat that wrote it, and every
+    reader asks for a beat.
+    """
+    import time as _time
+    from core.pipeline_context import ChatData, PipelineContext, TurnData
+    from persist import commit
+    from world.spatial import beat_sensory_events, SENSORY_EVENTS_KEY
+
+    def commit_beat(sc, beat, diff):
+        chat_id = temp_db.qi(
+            "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+            ("House", "", _time.time()))
+        temp_db.wset(chat_id, "scene", sc)
+        ctx = PipelineContext(
+            chat=ChatData(id=chat_id, name="House", persona_id=None,
+                          lorebook_id=None, scenario="", created=_time.time()),
+            turn=TurnData(id=1, chat_id=chat_id, idx=beat, player_input="",
+                          created=_time.time()),
+            cast=[], input="")
+        ctx.director_resolve = {"state_diff": dict(diff)}
+        return commit.prepare_scene_commit(ctx)["scene"], ctx
+
+    sc = _two_room_house("open_door")
+    event = {"kind": "sound", "room": "hall", "level": "thunderous",
+             "source": "the roof", "detail": "a long splintering crack"}
+    merged, ctx = commit_beat(sc, 11, {"sensory_events": [event]})
+    stored = merged[SENSORY_EVENTS_KEY]
+    assert stored["beat"] == 11
+    assert beat_sensory_events(merged, 11) == [event]
+    # ... and it is not this beat's noise on any other beat, ever.
+    assert beat_sensory_events(merged, 12) == []
+    # A beat that says nothing about it does not inherit it: a beat with no
+    # noise in it is a beat with no noise in it, which is the whole
+    # difference from `state.running` and the reason the bell was a defect.
+    quiet, _ctx = commit_beat(merged, 12, {})
+    assert SENSORY_EVENTS_KEY not in quiet
+    # A noise nowhere is not an event this engine holds, and the hand that
+    # wrote it is told so rather than having it silently dropped.
+    _lost, ctx = commit_beat(sc, 13,
+                             {"sensory_events": [{"level": "loud"}]})
+    assert any("A sound happens somewhere" in w for w in ctx.warnings)
+
+
+def test_a_distant_sound_gives_a_direction_and_never_a_place_or_a_line():
+    """THE FIREWALL FLOOR OF THE FAR FIELD, and it is a floor and not a
+    clause: a mind may receive a distant sound it had a channel to and
+    nothing more. A bearing is a DIRECTION, and the difference from a
+    location is the whole of what the far field may say -- the record names
+    the observer's own room's edge, which the payload already carried, and
+    carries no room id, no room name, no speaker and no words."""
+    from world.spatial import distant_sounds, sound_bearing_via
+    sc = _two_room_house("open_door")
+    sc["rooms"]["cellar"]["adjacent"] = [
+        {"to": "vault", "barrier": "open_door", "dir": "s"}]
+    sc["rooms"]["vault"] = {"name": "the sealed vault", "size": "small",
+                            "exposure": "enclosed", "adjacent": [],
+                            "anchors": {}}
+    sc["positions"] = {"Ada": "hall"}
+    events = [{"kind": "sound", "source_room": "vault",
+               "level": "catastrophic", "source": "the vault door",
+               "detail": "a deep grinding boom"}]
+    heard = distant_sounds(sc, "Ada", events=events)
+    assert heard and heard[0]["character"] == "a deep grinding boom"
+    bearing = heard[0]["bearing"]
+    assert bearing and bearing["phrase"]
+    # Not one room the listener has never been in is named anywhere: not in
+    # the record, not in the bearing, not in the room the sound came THROUGH
+    # -- which the flood knows and which never leaves the function.
+    blob = json.dumps(heard, sort_keys=True)
+    for unseen in ("vault", "the sealed vault", "cellar", "the cellar",
+                   "the vault door"):
+        assert unseen not in blob, (unseen, blob)
+    # What it DOES carry is the edge of the observer's own room, which they
+    # can see, and the character of the sound, which they can hear.
+    assert bearing["scope"] == "beyond" and bearing["barrier"] == "open_door"
+    assert sound_bearing_via(sc, "Ada", "hall", room="hall") is None
