@@ -8974,10 +8974,23 @@ def _check_narrator_fidelity(out, view, recent_prose=None, exclude_quotes=None,
         re.sub(r"\s+", " ", quote.casefold()).rstrip(".,!?…;:")
         for quote in view_quotes
     }
+    # INVENTED MEANS THE VIEW NEVER DELIVERED IT, NOT THAT THE VIEW DID NOT
+    # QUOTE IT. The set above holds only spans the view itself put inside
+    # quote marks, and the view marks a full line that way and a HALF-HEARD
+    # one not at all: a muffled percept renders as `A muffled voice:
+    # ...deafen... glass... midnight...`, and a narrator that correctly puts
+    # that fragment in the reader's ear as a quote was told it had invented
+    # dialogue (PA10, lighthouse turn 12 -- and the warning is enforceable,
+    # so the false positive bought a rewrite). The same holds for any other
+    # words the view delivers unquoted and prose rightly quotes. So the
+    # comparison is against WHAT THE VIEW DELIVERED: a span whose words are
+    # in the view verbatim came from the view, however the view marked them.
+    delivered = re.sub(r"\s+", " ", view_text.casefold())
     for match in quote_pattern.finditer(prose):
         quote = re.sub(r"\s+", " ", match.group(1).strip())
         normalized = quote.casefold().rstrip(".,!?…;:")
-        if normalized and normalized not in allowed_quotes:
+        if (normalized and normalized not in allowed_quotes
+                and normalized not in delivered):
             warnings.append(
                 "Narrator invented quoted dialogue absent from the player "
                 f"view: \"{quote[:80]}\""

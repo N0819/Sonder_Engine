@@ -7,7 +7,9 @@ import json
 from concurrent.futures import ThreadPoolExecutor
 
 from core.db import get_setting, q, wget, wset
-from language_runtime import compositor_text, english_linguistic, linguistic
+from language_runtime import (
+    LanguagePackError, compositor_text, compositor_value,
+    english_linguistic, installed_language_packs, linguistic)
 from llm.prompts import get_prompt, prompt_fragment
 from story.scene import (
     NON_AWAKE_GATED,
@@ -1185,8 +1187,64 @@ def _extension_narration_payload(ctx, payload, *, scope, player=""):
         return payload
 
 
-def _substitute_dialogue_tokens(prose, lines):
-    """Put the exact words where the model put the token.
+def _quote_marks():
+    """Every mark ANY installed pack counts as a quotation mark.
+
+    A closed vocabulary the ENGINE owns and can enumerate -- straight and
+    curly pairs in English, those plus 「」『』 in Japanese -- which is the
+    kind of list code is allowed to hold. It is read out of the packs, never
+    guessed at, and it is the UNION rather than the active pack's own set:
+    what is being stripped here is decoration a model put around the
+    ENGINE'S OWN TOKEN, and a model that reaches for a corner bracket in an
+    English story has still put a mark where the engine puts the marks. A
+    pack that adds a mark widens this by installing.
+    """
+    global _QUOTE_MARKS_CACHE
+    if _QUOTE_MARKS_CACHE is None:
+        marks = set()
+        for language_id in installed_language_packs():
+            try:
+                marks.update(str(c) for c in linguistic(
+                    "agents.common", "_QUOTE_CHARS", language_id))
+            except LanguagePackError:
+                continue
+        _QUOTE_MARKS_CACHE = "".join(sorted(marks))
+    return _QUOTE_MARKS_CACHE
+
+
+_QUOTE_MARKS_CACHE = None
+
+
+def _speech_weld(language=None):
+    """The one pair of marks a delivered line is welded in, from the pack.
+
+    A Japanese page welds 「」 where an English one welds straight quotes, and
+    neither spelling is this module's to choose. Before 2026-09-05 the weld
+    was the literal `'"%s"'`, so every Japanese view carried an English
+    speech mark inside a Japanese sentence.
+    """
+    pair = compositor_value("speech_quote_pair", language)
+    return str(pair[0]), str(pair[1])
+
+
+def _substitute_dialogue_tokens(prose, lines, language=None):
+    """Put the exact words where the model put the token, welded ONCE.
+
+    A QUOTED LINE IS WELDED ONCE, BY THE CODE THAT OWNS QUOTING. The
+    placeholder protocol hands the model a token and takes the words back
+    here; the marks around them are the engine's, not the model's. The model
+    reads DIALOGUE FIDELITY ("render the words as a quote") and writes
+    `"{{L1}}"`, and this function then added a second pair -- `""line""` in
+    English, `「"line"」` in Japanese. Measured on five separate play runs
+    (F29, F54; PA10, PB9, PE7): the majority of beats in each, and 31 false
+    guard warnings in the flat run alone, because a doubled mark shifts every
+    quote-region boundary a guard reads.
+
+    So the token is matched TOGETHER with any marks the model wrapped it in,
+    and the whole span is replaced by one pack-correct pair around a body
+    that has had its own marks stripped. There is no repeated-run
+    normalisation anywhere downstream: a doubled mark is not detected and
+    repaired, it is structurally never written.
 
     Returns the prose and the lines whose token never appeared. An OMITTED
     token is the residual failure mode, and it is a strictly better one than a
@@ -1195,11 +1253,15 @@ def _substitute_dialogue_tokens(prose, lines):
     """
     text = str(prose or "")
     missing = []
+    marks = _quote_marks()
+    open_mark, close_mark = _speech_weld(language)
+    wrap = "[%s]*" % re.escape(marks) if marks else ""
     for index, line in enumerate(lines, 1):
-        token = "{{L%d}}" % index
-        if token in text:
-            text = text.replace(token, '"%s"' % line)
-        else:
+        pattern = re.compile(r"%s\{\{L%d\}\}%s" % (wrap, index, wrap))
+        body = str(line or "").strip().strip(marks).strip()
+        welded = open_mark + body + close_mark
+        text, hits = pattern.subn(lambda _m: welded, text)
+        if not hits:
             missing.append((index, line))
     # A token for a line that does not exist is the model inventing an index.
     # Strip it rather than leaving `{{L9}}` on the page.
@@ -1276,7 +1338,7 @@ def _generate_narration(payload, view, prev, p_lines, correction_notes=None,
     # BEFORE the fidelity check, which is what makes the check measure the
     # page the reader gets rather than a draft that still holds tokens.
     prose, unplaced = _substitute_dialogue_tokens(
-        out.get("prose", ""), tokens)
+        out.get("prose", ""), tokens, language=language)
     out["prose"] = prose
     for _index, line in unplaced:
         warnings.append(
