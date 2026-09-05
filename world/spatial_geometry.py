@@ -1265,6 +1265,134 @@ def invalidate_moved_body_pose_details(scene: dict, previous_positions) -> list:
     return dropped
 
 
+#: A place phrase has to be a WORD in the prose, and one letter of a room id
+#: is not a place. Same floor `_detail_names_subject` puts under a name.
+_PLACE_PHRASE_MIN = 3
+
+_PLACE_SEPARATORS = re.compile(r"[_\-‐-―\s]+")
+
+
+def _place_phrase(raw) -> str:
+    """One place's id, name or description as a phrase to look for in prose.
+
+    Separators collapse to single spaces on BOTH sides of the comparison, so
+    the room id `upper_gallery`, the room name "Upper Gallery" and the prose
+    "the upper gallery above" are one phrase, and the anchor id `coat_stand`
+    finds "coat-stand"."""
+    return _PLACE_SEPARATORS.sub(" ", str(raw or "")).strip().casefold()
+
+
+def _detail_names_a_place(detail: str, phrases) -> bool:
+    low = _PLACE_SEPARATORS.sub(" ", str(detail or "")).casefold()
+    if not low:
+        return False
+    for phrase in phrases:
+        if len(phrase) < _PLACE_PHRASE_MIN:
+            continue
+        if re.search(r"(?<!\w)%s(?!\w)" % re.escape(phrase), low):
+            return True
+    return False
+
+
+def invalidate_moved_body_place_details(scene: dict, previous_positions,
+                                        stated=()) -> list:
+    """Retire a body's OWN pose `detail` when it names a place and the body
+    has just changed room.
+
+    THE CLASS: A POSE DETAIL BELONGS TO THE ROOM THE POSE WAS STRUCK IN. The
+    twin above reconciles a `detail`'s claim about ANOTHER body against
+    `positions`, and leaves the mover's own prose alone on the ground that
+    their prose is about themselves. That rule is right about a posture and
+    wrong about a place: "head tipped back toward the upper gallery" is about
+    where the body is as much as it is about the body, and a body that walks
+    out of the room takes the posture with it and leaves the place behind.
+
+    Measured twice, both times on the PLAYER's own body, which is the body
+    that moves:
+      * house turn 6 (F49): Wren walked from the corridor into the parlour
+        and her pose kept `detail: "standing near the coat-stand, looking
+        down toward the turn"`, so the parlour view placed her at the
+        corridor's coat-stand.
+      * caravanserai turn 13 (PB7): Tamsin, in the courtyard, tipped her head
+        back toward the gallery; she then CLIMBED to the gallery, and her own
+        outcome view opened "You are standing -- head tipped back toward the
+        upper gallery above. You are in Upper Gallery."
+
+    PB7 is why the room ENTERED is not an exception. A detail predating the
+    move that names the room the body now stands in was written from OUTSIDE
+    it, which is exactly the reading that produced that sentence.
+
+    THE PLACE VOCABULARY IS THE ENGINE'S OWN, not a guess at English: every
+    room's id and name, and the id/desc of every anchor of the room LEFT.
+    Anchors are scoped to that room because it is the room the pose was
+    struck in, and an anchor the room ENTERED holds under the same id or the
+    same description is subtracted -- a body that stood at a hearth and walks
+    into a room with a hearth is still standing at one.
+
+    Left alone:
+      * a detail with no place in it. "arms folded, hood up" is about the
+        body and travels with it; this subtracts, and subtracts only where
+        the prose reached for somewhere.
+      * a pose whose `detail` THIS BEAT's diff wrote (`stated`). The hand
+        that moved the body and wrote the prose in one breath was writing
+        about the destination; the merge does not get to know better.
+      * posture, support and the relation fields, exactly as both twins
+        leave them: the body is still standing, it is simply not standing
+        there.
+
+    Returns [(subject, room_left)] for the caller's report; mutates.
+    """
+    poses = (scene or {}).get("poses")
+    positions = (scene or {}).get("positions")
+    if not isinstance(poses, dict) or not poses:
+        return []
+    if not isinstance(positions, dict) or not isinstance(previous_positions, dict):
+        return []
+    rooms = (scene or {}).get("rooms") or {}
+    room_phrases = set()
+    for room_id, room in rooms.items():
+        room_phrases.add(_place_phrase(room_id))
+        if isinstance(room, dict):
+            room_phrases.add(_place_phrase(room.get("name")))
+    room_phrases.discard("")
+
+    def _anchor_phrases(room_id):
+        room = rooms.get(room_id)
+        out = set()
+        if isinstance(room, dict) and isinstance(room.get("anchors"), dict):
+            for aid, rec in room["anchors"].items():
+                out.add(_place_phrase(aid))
+                if isinstance(rec, dict):
+                    out.add(_place_phrase(rec.get("desc")))
+        out.discard("")
+        return out
+
+    spoken = {str(name).strip().casefold() for name in (stated or ())
+              if str(name or "").strip()}
+
+    dropped = []
+    for subject, room in positions.items():
+        was = previous_positions.get(subject)
+        if not was or not room or str(was) == str(room):
+            continue
+        for holder, pose in poses.items():
+            if not isinstance(pose, dict) or not pose.get("detail"):
+                continue
+            if not same_subject(scene, holder, subject):
+                continue
+            if str(holder).strip().casefold() in spoken \
+                    or str(subject).strip().casefold() in spoken:
+                continue
+            phrases = room_phrases | (
+                _anchor_phrases(was) - _anchor_phrases(room))
+            if not _detail_names_a_place(pose["detail"], phrases):
+                continue
+            pose["detail"] = ""
+            dropped.append((holder, was))
+            break
+    return dropped
+
+
 def _moved_subject_is_body(scene, subject) -> bool:
     """Is this mover a body, for the purpose of retiring a carriage clause?
 

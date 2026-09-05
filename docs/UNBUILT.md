@@ -7343,12 +7343,6 @@ patch in a file another hand was editing that day:
   with Mab stationed, `shapes` unstationed). Patch in `world/spatial_fov.py`
   (reserved that day): an unstationed body takes the room centre for sight
   as it does for light and sound, so the observer's shape is consulted.
-- **A mover's own pose detail names the room it left (F49).** `invalidate_
-  moved_body_pose_details` leaves the mover's prose alone by rule; "standing
-  near the coat-stand" followed Wren from the corridor into the parlour.
-  Patch: clear the mover's own `detail` when it names, on a word boundary,
-  an anchor of the room it left and none of the room it entered; the
-  owner's, since it narrows a documented rule.
 - **The declared word is a floor, so a lone source cannot show (F50).** A
   parlour "relieved only by a single candle" declared `dim` composes
   uniformly dim: the floor equals the candle's peak, the falloff never
@@ -7365,14 +7359,18 @@ patch in a file another hand was editing that day:
   "at the sill" spoke from three cells away. `stationable` already lists the
   implicit anchor; the hands do not use it. Prompt, or fold a hand-written
   anchor whose desc names an exit onto that exit's implicit anchor.
-- **A diff that adds one anchor drops every anchor the room had (F60).**
-  `_merge_anchor_fields` merges fields of anchors named on both sides and
-  writes the MAP whole by rule; a hand adding a door dropped the host's
-  `side_table` and `armchair` (both `height: waist`) and the room's sound
-  gate with them. Incoming anchors should ADD; a removal should be an
-  explicit channel. `tests/test_world_routes.py` and
-  `test_output_shape_publishes_every_field.py` pin the present rule and
-  would move with it.
+- **A refused walk is recorded by nothing the merge can read (PC7, half
+  built).** `spatial.merge_scene_with_diff` now consumes
+  `state_diff.movement_refused` -- `[{subject, to_room}]` -- and subtracts
+  that body's position, station and pose from the beat, so a move that did
+  not happen leaves nothing behind. NOTHING WRITES THE CHANNEL YET: the
+  movement backstop (`agents/director.py`, the `Blocked movement` branch and
+  the `stranded` companions beside it) must append one record per body at the
+  moment it pops the position, and until it does, manor turn 13's committed
+  pose ("standing on the flagged floor of the long gallery" for a body
+  refused entry to the gallery) still stands. The second half of PC7's own
+  fix -- walking the passable PREFIX of a declared path, so a refusal is
+  "she got as far as the hall" -- is F28's rule and is not this.
 - **One whisper, two grades in one beat (F61).** The act stage's
   deterministic floor grades speech through `hear_level`'s edge model (same
   room, whisper, near -> fragment); the outcome's delivery grades it through
