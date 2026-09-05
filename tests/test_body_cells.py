@@ -506,6 +506,12 @@ def test_the_anchor_tier_rule_is_untouched_where_nothing_is_pinned():
     assert proximity_rel(medium, "P", "Q") == "near"
     large = scene({"size": "large"}, {"P": {"at": "bar"}, "Q": {"at": "hearth"}})
     assert proximity_rel(large, "P", "Q") == "across"
-    same = scene({"size": "large"}, {"P": {"at": "bar"}, "Q": {"at": "bar"}})
+    same = scene({"size": "large"}, {"P": {"at": "hearth"}, "Q": {"at": "hearth"}})
     assert proximity_rel(same, "P", "Q") == "within_reach"
     assert proximity_rel(scene({"size": "large"}), "P", "Q") == "near"
+    # ...except at a fixture with LENGTH, where the anchor says which one and
+    # not where along it (`_anchor_is_a_run`; the hearing at Vaunt's Yard,
+    # 2026-09-05, PM3, where a whisper limited to the head of a fourteen-pace
+    # table was delivered to the man at its far end). `bar` is a `run`.
+    long_one = scene({"size": "large"}, {"P": {"at": "bar"}, "Q": {"at": "bar"}})
+    assert proximity_rel(long_one, "P", "Q") == "near"
