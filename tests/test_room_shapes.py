@@ -156,7 +156,10 @@ def test_a_body_in_a_square_room_stands_where_it_did():
 # ---------------------------------------------------------------------------
 
 def test_the_closed_sets_and_the_clamp():
-    assert SHAPES == ("rectangle", "round", "l")
+    # `composite` joined the set 2026-09-05 (the owner: "the room editor
+    # doesn't cover the multi room shape design"); `l` stays, the two-part
+    # case, readable exactly as it was.
+    assert SHAPES == ("rectangle", "round", "l", "composite")
     assert (EXTENT_MIN_PACES, EXTENT_MAX_PACES) == (2, 24)
     assert normalize_extent({"w": 100, "d": 1}) == {"w": 24, "d": 2}
     assert normalize_extent({"width": 3.4, "depth": 11.6}) == {"w": 3, "d": 12}

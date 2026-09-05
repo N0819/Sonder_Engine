@@ -525,6 +525,10 @@ def neighbor_map(scene: dict, barriers=None, *, known_rooms_only=False,
                 continue
             if known_rooms_only and target not in rooms:
                 continue
+            # The barrier THROUGH the passage when the edge names one (the
+            # passage record, `DESIGN_ROOM_FIDELITY.md` §5), per edge as
+            # always when it does not.
+            edge = resolve_edge(scene, edge)
             if barriers is not None \
                     and normalize_barrier(edge.get("barrier")) not in barriers:
                 continue
@@ -635,7 +639,11 @@ def effective_adjacent(scene: dict, room_id) -> list:
     """
     rooms = (scene or {}).get("rooms") or {}
     room = rooms.get(room_id)
-    own = [e for e in ((room or {}).get("adjacent") or [])
+    # An edge that names a passage reads its barrier, name, material and
+    # width THROUGH the passage (`resolve_edge`: a copy, so the scene is not
+    # written by a read); an edge that names none is the very dict the room
+    # holds, as it always was.
+    own = [resolve_edge(scene, e) for e in ((room or {}).get("adjacent") or [])
            if isinstance(e, dict) and e.get("to")]
     named = {str(e["to"]) for e in own}
     out = list(own)
@@ -647,6 +655,7 @@ def effective_adjacent(scene: dict, room_id) -> list:
             if not isinstance(edge, dict) \
                     or str(edge.get("to")) != str(room_id):
                 continue
+            edge = resolve_edge(scene, edge)
             if normalize_barrier(edge.get("barrier")) == "wall":
                 continue
             derived = {k: v for k, v in edge.items()
@@ -664,3 +673,135 @@ def effective_adjacent(scene: dict, room_id) -> list:
             named.add(str(other_id))
             break
     return out
+
+
+# ---------------------------------------------------------------------------
+# The passage record: one doorway, one object (DESIGN_ROOM_FIDELITY.md §5)
+# ---------------------------------------------------------------------------
+
+#: The fields a passage carries that both of its edges READ through it. A
+#: doorway stored as two edges could disagree (F16 / F22: one door, two
+#: answers, sight following the side you stand on); a passage is the one
+#: record the two edges resolve to. `vertical` is stored on the passage as
+#: seen from `rooms[0]` and written onto the edges by `sync_scene_passages`
+#: (the opposite onto `rooms[1]`'s), so it is not resolved here. `state`
+#: (a latch, a bar, a wedge) is carried for the readers that will want it
+#: and read by none yet; `offset` stays the per-edge fraction the map
+#: writes on both edges, because a wall's start is the same end from either
+#: room. Additive: a scene with no `passages` reads byte for byte as before.
+PASSAGE_FIELDS = ("barrier", "name", "material", "width")
+
+#: The barrier that is asymmetric BY DESIGN (it carries `sight_from`) and is
+#: the one field a passage does not force onto both edges -- the same
+#: exception `_mirror_symmetric_barriers` keeps.
+_ONE_WAY_BARRIER = "one_way_window"
+
+
+def passage_id_for(a, b) -> str:
+    """The id a doorway's passage record is minted under when nothing named
+    one: the two room ids in sorted order, so either side mints the same."""
+    x, y = sorted((str(a), str(b)))
+    return f"{x}|{y}"
+
+
+def scene_passages(scene) -> dict:
+    """``scene.passages`` as a mapping, ``{}`` when absent or unreadable."""
+    passages = (scene or {}).get("passages")
+    return passages if isinstance(passages, dict) else {}
+
+
+def passage_of(scene, edge):
+    """The passage record an edge names, or None: the edge's `passage` must
+    name an id `scene.passages` holds whose `rooms` list two ids. Anything
+    else is no passage, and the edge reads per edge as it always did."""
+    if not isinstance(edge, dict):
+        return None
+    pid = edge.get("passage")
+    if not isinstance(pid, str) or not pid:
+        return None
+    record = scene_passages(scene).get(pid)
+    if not isinstance(record, dict):
+        return None
+    rooms = record.get("rooms")
+    if not isinstance(rooms, (list, tuple)) or len(rooms) != 2:
+        return None
+    return record
+
+
+def resolve_edge(scene, edge):
+    """The edge as its readers see it: a COPY carrying the passage's
+    `PASSAGE_FIELDS` where the passage has a value, when the edge names a
+    passage; the edge itself, the same object, when it does not. The barrier
+    is overlaid only when the passage's is readable, and never over a
+    `one_way_window` on either record -- that barrier's asymmetry is a
+    field, not a disagreement."""
+    record = passage_of(scene, edge)
+    if record is None:
+        return edge
+    out = dict(edge)
+    for field in PASSAGE_FIELDS:
+        value = record.get(field)
+        if value is None or value == "":
+            continue
+        if field == "barrier":
+            word = normalize_barrier(value)
+            if word == _ONE_WAY_BARRIER \
+                    or normalize_barrier(edge.get("barrier")) == _ONE_WAY_BARRIER:
+                continue
+            out["barrier"] = word
+            continue
+        out[field] = value
+    return out
+
+
+def normalize_scene_passages(scene: dict) -> list:
+    """Passage hygiene, run at merge and on every World Browser write: a
+    passage whose `rooms` are not two live rooms, or whose barrier reads as
+    nothing, is dropped, and every edge naming a dropped or unknown passage
+    lets the name go (it reads per edge again, which is the fail-open). A
+    kept passage's barrier is canonicalised and its `width` read as a whole
+    number of paces of at least one, or dropped. Returns the ids dropped;
+    mutates. A scene with no `passages` key is left without one."""
+    passages = (scene or {}).get("passages")
+    if passages is None:
+        return []
+    if not isinstance(passages, dict):
+        scene.pop("passages", None)
+        passages = {}
+    rooms = (scene or {}).get("rooms") or {}
+    dropped = []
+    for pid in list(passages):
+        record = passages.get(pid)
+        pair = record.get("rooms") if isinstance(record, dict) else None
+        if not isinstance(pair, (list, tuple)) or len(pair) != 2 \
+                or any(str(r) not in rooms for r in pair) \
+                or str(pair[0]) == str(pair[1]):
+            passages.pop(pid, None)
+            dropped.append(str(pid))
+            continue
+        record["rooms"] = [str(pair[0]), str(pair[1])]
+        if "barrier" in record:
+            record["barrier"] = normalize_barrier(record.get("barrier"))
+        width = record.get("width")
+        if width is not None:
+            try:
+                width = int(width) if not isinstance(width, bool) else None
+            except (TypeError, ValueError):
+                width = None
+            if width is None or width < 1:
+                record.pop("width", None)
+            else:
+                record["width"] = width
+        for field in ("name", "material"):
+            if field in record and not str(record.get(field) or "").strip():
+                record.pop(field, None)
+    for room in rooms.values():
+        if not isinstance(room, dict):
+            continue
+        for edge in room.get("adjacent") or []:
+            if isinstance(edge, dict) and "passage" in edge \
+                    and edge.get("passage") not in passages:
+                edge.pop("passage", None)
+    if not passages:
+        scene.pop("passages", None)
+    return dropped
