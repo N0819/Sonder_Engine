@@ -1350,6 +1350,59 @@ class RoomDef(LenientModel):
         "transit_seconds", pre=True, allow_reuse=True
     )(lambda cls, value: _positive_float_or_none(value))
 
+    # The room's PROPORTION and SHAPE (docs/design/DESIGN_ROOM_FIDELITY.md).
+    # `extent` is {w, d} in paces -- east-west and north-south -- the
+    # measurement `size` is only the word for; `shape` is one of
+    # spatial_fov.SHAPES (rectangle | round | l); `parts` places an `l`'s two
+    # rectangles at corners of the box as [{w, d, at}]. Read by the grid that
+    # casts sight, by the proportion sentence the prose and the backdrop use,
+    # and by the layout lint. Declared for the reason every field above is
+    # -- the round trip drops what it does not declare -- and Optional-None so
+    # a room the Director merely echoes cannot square a corridor.
+    extent: Optional[dict] = None
+    shape: Optional[str] = None
+    parts: Optional[list] = None
+
+    # A PROSE MAGNITUDE MUST NOT COST THE BEAT, again: `{"w": "about ten
+    # paces", "d": 3}` heals to None, which is "no extent declared", rather
+    # than raising on the whole state_diff. The reader
+    # (`world.spatial_geometry.normalize_extent`) refuses the same set on its
+    # own and clamps; the two agree without either trusting the other.
+    _coerce_extent = validator(
+        "extent", pre=True, allow_reuse=True
+    )(lambda cls, value: _extent_or_none(value))
+    _coerce_parts = validator(
+        "parts", pre=True, allow_reuse=True
+    )(lambda cls, value: _parts_or_none(value))
+
+
+def _extent_or_none(value):
+    """{w, d} with both sides positive numbers, or None for anything else.
+    `width`/`depth` are accepted as the long spellings of the two keys."""
+    if not isinstance(value, dict):
+        return None
+    w = _positive_float_or_none(value.get("w", value.get("width")))
+    d = _positive_float_or_none(value.get("d", value.get("depth")))
+    if w is None or d is None:
+        return None
+    return {"w": w, "d": d}
+
+
+def _parts_or_none(value):
+    """The readable parts of an `l` room -- each an extent with an `at`
+    corner word -- or None when none is readable."""
+    if not isinstance(value, (list, tuple)):
+        return None
+    out = []
+    for part in value:
+        if not isinstance(part, dict):
+            continue
+        extent = _extent_or_none(part)
+        at = str(part.get("at") or "").strip()
+        if extent and at:
+            out.append({**extent, "at": at})
+    return out or None
+
 
 def _positive_float_or_none(value):
     """A duration in story seconds, or None for anything that is not one."""

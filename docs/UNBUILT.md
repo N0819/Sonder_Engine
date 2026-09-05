@@ -6850,6 +6850,59 @@ pinned in `tests/test_played_scene_classes.py`). Open, each an owner decision:
   two beats and eight quote-matching guards fired falsely (F29); the
   characters cited no delivered observation on most beats (F14).
 
+### 2.36 Room fidelity — what the 2026-09-04 prototype left
+
+Built on a branch, not merged: [`design/DESIGN_ROOM_FIDELITY.md`](design/DESIGN_ROOM_FIDELITY.md).
+A room may declare `extent` and `shape`; the layout lint reports where a
+scene's geometry cannot all be true; the backdrop brief draws the picture
+from the same record the composer and the geometry read. Measured on a copy
+of the owner's database: 0 of 589 rooms carry an extent; the lint finds 9
+rows in 4 of 104 scenes; the pre-change and built geometry agree on every
+room and body. Left open, each an owner decision or a build:
+
+- **The passage as one object (note §5).** F16 and F22 are one class -- a
+  doorway stored as two edges that can disagree. Designed:
+  `scene.passages[id] = {rooms, barrier, name, material, width, vertical,
+  state}`, edges carrying `passage: id`, readers (`spatial_rel`,
+  `effective_adjacent`, `neighbor_map`, `_sight_neighbours`,
+  `effective_anchors`' door derivation) resolving through the passage when
+  named and per-edge when not, the merge writing both from either, archive
+  and checkpoint riding the blob, the registry untouched. Not built: five
+  readers across four spatial siblings plus the merge block
+  `_mirror_symmetric_barriers` sits in, while the light-field sibling edits
+  `spatial_routing.py` and `spatial_merge.py` in the same window. The
+  mirror remains the answer to F16 until this lands.
+- **A Room tool that writes a region's `look`.** `regions.set_region_look`
+  is the seam and nothing calls it; the registry's only writer at commit
+  enters names. A `describe_region` tool (look, and the `brief` the regions
+  note left for the same reason) is one tool, one mandate kind, and a card
+  clause.
+- **The Director has to write extents.** 0 of 589 rooms carry one. The
+  clause asks for one where proportion matters; whether the hand supplies
+  it, and whether `size_disagrees_with_extent` then fires often enough to
+  want a repair rather than a report, is a play-test question.
+- **A rim is not a curve.** A round room's doorway is a gap in an
+  axis-aligned wall line between the two boxes; the arc itself is a
+  staircase of cells. Right for sight through the door, coarse at the arc.
+- **The lint's embedding check reads only beared edges.** 578 of 923 exits
+  carry no bearing and cannot be placed; a contradiction through one of
+  them is not seen. The same 578 are the ceiling on what any room geometry
+  can draw, cast through or picture.
+- **The viewer camera multiplies pictures** (up to nine parts by eight
+  facings per room) and is behind `backdrop_continuity` for that reason;
+  whether the edit-from-anchor path keeps the room the same room under a
+  turned camera is unmeasured, because no image call was made here.
+- **Every existing backdrop is redrawn once** (299 images across 74 chat
+  directories on the owner's install): the brief is keyed, as the module's
+  own rule requires, and every room with an exit or an anchor hashes anew.
+  A one-time cost, named rather than hidden; there is no migration that
+  could map an old key to a new one without lying about what the old picture
+  shows.
+- **`size` from area loses one distinction** (a 2x18 gallery and a 6x6 room
+  are both `medium` floor). The proportion sentence carries it to the
+  picture; the proximity ladder does not. If `near`/`across` should read the
+  long side for a corridor, that is a `proximity_rel` change, not a size one.
+
 ### 2.28 The day cycle's residuals
 
 Landed 2026-09-03 (`world/day_cycle.py`, `Design.md` "The day moves with the

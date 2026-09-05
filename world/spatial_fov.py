@@ -1,9 +1,12 @@
 # spatial_fov.py
 """Within-room geometry and occlusion, derived and never stored.
 
-A room is a small grid sized from its `size` tier. Its anchors are placed on
-that grid from their compass bearing with a seed keyed on (room, anchor), so a
-later anchor never moves an earlier one. A body's cell is derived from its
+A room is a small grid: the square its `size` tier gives it, or -- when the
+room declares an `extent` in paces and a `shape` -- the cells of that shape
+within that box (`room_grid`; `docs/design/DESIGN_ROOM_FIDELITY.md`). Its
+anchors are placed on the wall their compass bearing names, along that wall's
+own length, with a seed keyed on (room, anchor), so a later anchor never
+moves an earlier one. A body's cell is derived from its
 station (`at` an anchor, `near` another body) and is never written anywhere.
 From those two derivations a recursive shadowcast answers, per observer, which
 features and bodies a line of sight reaches, at what egocentric sector, at
@@ -56,10 +59,12 @@ from typing import Optional
 
 from world.spatial_barriers import _SIGHT_BARRIERS, normalize_barrier
 from world.spatial_geometry import (
+    _TIER_SIDE,
     effective_anchors,
     effective_facing,
     effective_room_size,
     effective_station,
+    normalize_extent,
     proximity_rel,
 )
 from world.spatial_identity import _ci_get, room_of
@@ -87,11 +92,25 @@ _HEIGHT_RANK = {"floor": 0.0, "waist": 1.0, "head": 2.0, "full": 3.0}
 OPACITIES = ("opaque", "see_through")
 DEFAULT_OPACITY = "opaque"
 
-#: Cells per side, by room size tier. One cell is roughly a pace; a `vast`
-#: hall at twelve paces is coarse on purpose (the metric-space note's test:
-#: model only what changes the fiction, and a pace is that grain).
-GRID_SIDE = {"tiny": 3, "small": 4, "medium": 6, "large": 8, "huge": 10,
-             "vast": 12}
+#: Cells per side, by room size tier, for a room with no `extent`. One cell is
+#: roughly a pace; a `vast` hall at twelve paces is coarse on purpose (the
+#: metric-space note's test: model only what changes the fiction, and a pace
+#: is that grain). The ONE statement of the table is `spatial_geometry._TIER_SIDE`,
+#: because `size_from_extent` there needs it too; this is that table under the
+#: name the geometry note gave it.
+GRID_SIDE = dict(_TIER_SIDE)
+
+#: The shapes a room may declare (`docs/design/DESIGN_ROOM_FIDELITY.md` §2).
+#: A closed set the ENGINE owns and enumerates: `rectangle` is the bounding
+#: box itself; `round` keeps the cells within the inscribed ellipse; `l` is the
+#: union of the rectangles `parts` places at corners of the box. Unknown ->
+#: rectangle, the shape that subtracts no cell.
+SHAPES = ("rectangle", "round", "l")
+DEFAULT_SHAPE = "rectangle"
+
+#: Where an `l` part may sit: the four corners of the bounding box, as the
+#: bearing words the rest of the engine already reads. Owner-visible.
+ROOM_CORNERS = ("ne", "se", "sw", "nw")
 
 #: Eye height, and equally the top of the body, by the body's own posture.
 #: The vocabulary is `world/comfort`'s -- the one place the engine already
@@ -204,9 +223,141 @@ def eye_rank(scene: dict, name: str) -> float:
 # Placement
 # ---------------------------------------------------------------------------
 
+def normalize_shape(value) -> str:
+    v = str(value or "").strip().casefold()
+    return v if v in SHAPES else DEFAULT_SHAPE
+
+
+def normalize_parts(value) -> list:
+    """The readable `l` parts, each `{w, d, at}` with a corner word and both
+    sides in paces (`normalize_extent`'s clamp). A part with no corner or no
+    readable extent is dropped, not guessed at."""
+    if not isinstance(value, (list, tuple)):
+        return []
+    out = []
+    for part in value:
+        if not isinstance(part, dict):
+            continue
+        at = normalize_bearing(part.get("at"))
+        extent = normalize_extent(part)
+        if at in ROOM_CORNERS and extent:
+            out.append({"w": extent["w"], "d": extent["d"], "at": at})
+    return out
+
+
+class RoomGrid:
+    """One room's cells: a `w` x `d` bounding box in paces and the set of
+    cells the shape keeps of it. Rectangle: every cell. Round: the cells
+    whose centres lie within the inscribed ellipse. L: the union of the
+    `parts`, each a rectangle placed at a corner of the box.
+
+    A room with no `extent` is the square its size tier gives it, so `w ==
+    d == GRID_SIDE[tier]` and every arithmetic below reduces to the form the
+    geometry note wrote (`test_room_shapes.py` pins the reduction byte for
+    byte). Derived, never stored.
+    """
+
+    __slots__ = ("w", "d", "shape", "parts", "cells", "measured")
+
+    def __init__(self, w, d, shape=DEFAULT_SHAPE, parts=(), measured=False):
+        self.w = int(w)
+        self.d = int(d)
+        self.shape = normalize_shape(shape)
+        self.parts = list(parts or ())
+        self.measured = bool(measured)
+        self.cells = _shape_cells(self.shape, self.w, self.d, self.parts)
+
+    @property
+    def side(self) -> int:
+        """The characteristic length: the longer side."""
+        return max(self.w, self.d)
+
+    def key(self):
+        return (self.shape, self.w, self.d,
+                tuple((p["w"], p["d"], p["at"]) for p in self.parts))
+
+    def contains(self, cell) -> bool:
+        return tuple(cell) in self.cells
+
+    def centre(self) -> tuple:
+        return self.nearest((self.w // 2, self.d // 2))
+
+    def nearest(self, cell) -> tuple:
+        """The cell itself when the shape holds it, else the nearest cell it
+        does (ties to the smaller coordinates, so a reroll agrees)."""
+        cell = (int(cell[0]), int(cell[1]))
+        if cell in self.cells:
+            return cell
+        return min(self.cells, key=lambda c: (
+            (c[0] - cell[0]) ** 2 + (c[1] - cell[1]) ** 2, c))
+
+    def rim(self, bearing) -> list:
+        """The cells that ARE the wall the bearing names -- inside the shape
+        with their neighbour in that direction outside -- ordered along the
+        wall (west to east for a north or south wall, north to south for an
+        east or west one). For a rectangle this is exactly the row or column
+        the geometry note placed anchors on; for a round room it is the arc
+        facing that way; for an L it includes the inner wall of the notch,
+        which faces that way too."""
+        ux, uy = _UNIT[bearing]
+        along = 0 if bearing in ("n", "s") else 1
+        cells = [c for c in self.cells
+                 if (c[0] + ux, c[1] + uy) not in self.cells]
+        return sorted(cells, key=lambda c: (c[along], c[1 - along]))
+
+    def corner(self, bearing) -> tuple:
+        """The shape's extreme cell toward a diagonal bearing: the corner of
+        a rectangle, the point of an arc, the outer corner of an L."""
+        ux, uy = _UNIT[bearing]
+        return max(self.cells, key=lambda c: (c[0] * ux + c[1] * uy,
+                                              -c[0], -c[1]))
+
+
+def _shape_cells(shape, w, d, parts) -> frozenset:
+    box = frozenset((x, y) for x in range(w) for y in range(d))
+    if shape == "round":
+        rx, ry = w / 2.0, d / 2.0
+        kept = frozenset(
+            (x, y) for x, y in box
+            if ((x + 0.5 - rx) / rx) ** 2 + ((y + 0.5 - ry) / ry) ** 2 <= 1.0)
+        return kept or box
+    if shape == "l" and parts:
+        kept = set()
+        for part in parts:
+            pw, pd = min(part["w"], w), min(part["d"], d)
+            x0 = w - pw if part["at"] in ("ne", "se") else 0
+            y0 = d - pd if part["at"] in ("se", "sw") else 0
+            kept.update((x, y) for x in range(x0, x0 + pw)
+                        for y in range(y0, y0 + pd))
+        return frozenset(kept) or box
+    return box
+
+
+def room_grid(scene: dict, room_id) -> RoomGrid:
+    """The grid a room's geometry runs over. With an `extent`, the box it
+    measures and the shape it declares; without one, the size tier's square
+    -- the whole of what existed before extents, unchanged."""
+    room = ((scene or {}).get("rooms") or {}).get(room_id)
+    room = room if isinstance(room, dict) else {}
+    extent = normalize_extent(room.get("extent"))
+    shape = normalize_shape(room.get("shape"))
+    parts = normalize_parts(room.get("parts")) if shape == "l" else []
+    if extent:
+        return RoomGrid(extent["w"], extent["d"], shape, parts, measured=True)
+    if shape == "l" and parts:
+        # An L with no box is the box its parts need: the widest by the
+        # deepest, so one part spans the width and one the depth.
+        return RoomGrid(max(p["w"] for p in parts), max(p["d"] for p in parts),
+                        shape, parts, measured=True)
+    side = GRID_SIDE.get(effective_room_size(scene, room_id),
+                         GRID_SIDE["medium"])
+    return RoomGrid(side, side, shape, parts)
+
+
 def grid_side(scene: dict, room_id) -> int:
-    size = effective_room_size(scene, room_id)
-    return GRID_SIDE.get(size, GRID_SIDE["medium"])
+    """The room's characteristic length in cells: the tier's side for a room
+    with no extent, the longer side of the box for one with."""
+    return room_grid(scene, room_id).side
 
 
 def _seed(*parts) -> int:
@@ -214,26 +365,16 @@ def _seed(*parts) -> int:
     return int(hashlib.sha1(joined.encode("utf-8")).hexdigest()[:8], 16)
 
 
-def _wall_cells(side: int, bearing: str, offset: int, length: int) -> list:
+def _wall_cells(grid: RoomGrid, bearing: str, offset: int, length: int) -> list:
     """`length` cells along the wall `bearing` names, starting at `offset`
-    (wrapped), or the corner cell for a diagonal bearing."""
-    last = side - 1
-    if bearing in ("ne", "se", "sw", "nw"):
-        x = last if bearing in ("ne", "se") else 0
-        y = 0 if bearing in ("ne", "nw") else last
-        return [(x, y)]
-    cells = []
-    for i in range(length):
-        k = (offset + i) % side
-        if bearing == "n":
-            cells.append((k, 0))
-        elif bearing == "s":
-            cells.append((k, last))
-        elif bearing == "e":
-            cells.append((last, k))
-        else:
-            cells.append((0, k))
-    return cells
+    (wrapped along the wall's own length), or the corner cell for a diagonal
+    bearing."""
+    if bearing in ROOM_CORNERS:
+        return [grid.corner(bearing)]
+    rim = grid.rim(bearing)
+    if not rim:
+        return [grid.centre()]
+    return [rim[(offset + i) % len(rim)] for i in range(length)]
 
 
 def _inward(bearing: str) -> tuple:
@@ -246,25 +387,26 @@ def anchor_cells(scene: dict, room_id) -> dict:
     """{anchor_id: {cells: [(x,y)...], height, opacity, footprint, dir,
     desc, implicit}} for every effective anchor of the room.
 
-    Placement depends on (room, anchor id, bearing, footprint) and nothing
-    else, so adding or removing any other anchor leaves this one where it
-    was. Two anchors may share a cell; the cell then blocks at the taller.
+    Placement depends on (room, anchor id, bearing, footprint) and the
+    room's grid, and nothing else, so adding or removing any other anchor
+    leaves this one where it was. Two anchors may share a cell; the cell
+    then blocks at the taller.
 
-    Memoised on the room's own inputs (its size, its anchors, its edges from
+    Memoised on the room's own inputs (its grid, its anchors, its edges from
     both sides), because one perception pass asks for the same room once
     per observer per pair; the derivation is pure, so a cache keyed on
     everything it reads cannot go stale.
     """
-    side = grid_side(scene, room_id)
+    grid = room_grid(scene, room_id)
     anchors = effective_anchors(scene, room_id)
     import json as _json
-    key = _json.dumps([str(room_id), side, anchors], sort_keys=True,
+    key = _json.dumps([str(room_id), grid.key(), anchors], sort_keys=True,
                       default=str)
     cached = _ANCHOR_CACHE.get(key)
     if cached is not None:
         return {aid: dict(rec, cells=list(rec["cells"]))
                 for aid, rec in cached.items()}
-    out = _place_anchors(room_id, side, anchors)
+    out = _place_anchors(room_id, grid, anchors)
     if len(_ANCHOR_CACHE) >= _ANCHOR_CACHE_MAX:
         _ANCHOR_CACHE.clear()
     _ANCHOR_CACHE[key] = out
@@ -275,7 +417,7 @@ _ANCHOR_CACHE: dict = {}
 _ANCHOR_CACHE_MAX = 256
 
 
-def _place_anchors(room_id, side, anchors) -> dict:
+def _place_anchors(room_id, grid: RoomGrid, anchors) -> dict:
     out = {}
     for aid, anchor in anchors.items():
         if not isinstance(anchor, dict):
@@ -285,34 +427,43 @@ def _place_anchors(room_id, side, anchors) -> dict:
         seed = _seed(room_id, aid)
         fp = geo["footprint"]
         if bearing:
+            # The wall's OWN length, not the grid's side: on a wide room the
+            # north anchor has the long wall to sit on and the east anchor
+            # the short one. For a square the two are the same number.
+            along = len(grid.rim(bearing)) if bearing in ("n", "s", "e", "w") \
+                else grid.side
             length = {"point": 1, "small": 2, "large": 2,
-                      "run": max(2, side - 2)}[fp]
-            offset = 1 + seed % max(1, side - 2 - (length - 1)) \
-                if side > 2 else 0
-            cells = _wall_cells(side, bearing, offset, length)
+                      "run": max(2, along - 2)}[fp]
+            offset = 1 + seed % max(1, along - 2 - (length - 1)) \
+                if along > 2 else 0
+            cells = _wall_cells(grid, bearing, offset, length)
             # A THING stands one pace off its wall -- a counter, a table, a
             # screen, anything with a height -- leaving the lane a body
             # takes COVER in (`stations.cover`). A door, a window or a
             # hearth, which has no height of its own, is the wall itself.
             standing_thing = geo["height"] != DEFAULT_HEIGHT \
                 or fp in ("run", "large")
-            if standing_thing and bearing in _UNIT and side > 3:
+            if standing_thing and bearing in _UNIT and min(grid.w, grid.d) > 3:
                 dx, dy = _inward(bearing)
-                cells = [(x + dx, y + dy) for x, y in cells]
+                inset = [(x + dx, y + dy) for x, y in cells
+                         if grid.contains((x + dx, y + dy))]
+                cells = inset or cells
             if fp == "large" and bearing in _UNIT and cells:
                 dx, dy = _inward(bearing)
                 cells = cells + [(x + dx, y + dy) for x, y in cells
-                                 if 0 <= x + dx < side and 0 <= y + dy < side]
+                                 if grid.contains((x + dx, y + dy))]
         else:
-            inner = max(1, side - 2)
-            x = 1 + seed % inner
-            y = 1 + (seed // 7) % inner
+            x = 1 + seed % max(1, grid.w - 2)
+            y = 1 + (seed // 7) % max(1, grid.d - 2)
+            x, y = grid.nearest((x, y))
             cells = [(x, y)]
+            more = []
             if fp in ("small", "run"):
-                cells.append((min(side - 1, x + 1), y))
+                more = [(min(grid.w - 1, x + 1), y)]
             elif fp == "large":
-                cells += [(min(side - 1, x + 1), y), (x, min(side - 1, y + 1)),
-                          (min(side - 1, x + 1), min(side - 1, y + 1))]
+                more = [(min(grid.w - 1, x + 1), y), (x, min(grid.d - 1, y + 1)),
+                        (min(grid.w - 1, x + 1), min(grid.d - 1, y + 1))]
+            cells += [c for c in more if grid.contains(c)]
         out[aid] = {
             "cells": sorted(set(cells)),
             "height": geo["height"],
@@ -326,6 +477,8 @@ def _place_anchors(room_id, side, anchors) -> dict:
 
 
 def _centre(side: int) -> tuple:
+    """The centre of a square grid -- kept for the one caller with no room
+    to ask (`_observer_cell` on a body in no room)."""
     return (side // 2, side // 2)
 
 
@@ -352,7 +505,7 @@ def body_cell(scene: dict, name: str, _seen=None) -> Optional[tuple]:
     room_id = room_of(scene, name)
     if not room_id:
         return None
-    side = grid_side(scene, room_id)
+    grid = room_grid(scene, room_id)
     st = effective_station(scene, name)
     at = st.get("at")
     if at:
@@ -367,7 +520,7 @@ def body_cell(scene: dict, name: str, _seen=None) -> Optional[tuple]:
             if bearing:
                 dx, dy = _inward(bearing)
             else:
-                cx0, cy0 = _centre(side)
+                cx0, cy0 = grid.centre()
                 dx = (1 if cx0 > x else -1) if cx0 != x else 0
                 dy = (1 if cy0 > y else -1) if cy0 != y else 0
                 if dx and dy:
@@ -385,8 +538,7 @@ def body_cell(scene: dict, name: str, _seen=None) -> Optional[tuple]:
             for ddx, ddy in ((dx, dy), (-dx, -dy), (dy, dx), (-dy, -dx)):
                 cx = x + ddx
                 cy = y + ddy
-                if 0 <= cx < side and 0 <= cy < side \
-                        and (cx, cy) not in cells:
+                if grid.contains((cx, cy)) and (cx, cy) not in cells:
                     return (cx, cy)
             return (x, y)
     _seen = set(_seen or ())
@@ -399,8 +551,8 @@ def body_cell(scene: dict, name: str, _seen=None) -> Optional[tuple]:
             x, y = cell
             k = _seed(room_id, str(name).casefold(), key) % 4
             dx, dy = ((1, 0), (-1, 0), (0, 1), (0, -1))[k]
-            return (min(max(x + dx, 0), side - 1),
-                    min(max(y + dy, 0), side - 1))
+            return grid.nearest((min(max(x + dx, 0), grid.w - 1),
+                                 min(max(y + dy, 0), grid.d - 1)))
     return None
 
 
@@ -411,7 +563,9 @@ def _observer_cell(scene: dict, name: str) -> tuple:
     if cell:
         return cell, "measured"
     room_id = room_of(scene, name)
-    return _centre(grid_side(scene, room_id) if room_id else 6), "centre"
+    if not room_id:
+        return _centre(6), "centre"
+    return room_grid(scene, room_id).centre(), "centre"
 
 
 # ---------------------------------------------------------------------------
@@ -562,11 +716,11 @@ class _Field:
 
     def add_room(self, scene, room_id, offset):
         ox, oy = offset
-        side = grid_side(scene, room_id)
         self.offsets[room_id] = offset
-        for x in range(side):
-            for y in range(side):
-                self.inside[(x + ox, y + oy)] = room_id
+        # The SHAPE's cells, not the box: a round room's corners and an L's
+        # notch are outside `inside`, so a line through them meets a wall.
+        for x, y in room_grid(scene, room_id).cells:
+            self.inside[(x + ox, y + oy)] = room_id
         placed = anchor_cells(scene, room_id)
         self.anchors[room_id] = placed
         for aid, rec in placed.items():
@@ -625,7 +779,7 @@ def observer_field(scene: dict, observer: str) -> Optional[_Field]:
         return None
     field = _Field()
     field.add_room(scene, room_id, (0, 0))
-    side = grid_side(scene, room_id)
+    grid = room_grid(scene, room_id)
     for other, bearing in _sight_neighbours(scene, room_id):
         d1s, b1 = _door_cells(scene, room_id, other)
         d2s, _b2 = _door_cells(scene, other, room_id)
@@ -636,10 +790,11 @@ def observer_field(scene: dict, observer: str) -> Optional[_Field]:
         band = (d1[0] + ux, d1[1] + uy)
         anchor_far = (band[0] + ux, band[1] + uy)
         offset = (anchor_far[0] - d2[0], anchor_far[1] - d2[1])
-        far_side = grid_side(scene, other)
-        if any(cell in field.inside for cell in (
-                (x + offset[0], y + offset[1])
-                for x in range(far_side) for y in range(far_side))):
+        far = room_grid(scene, other)
+        # The neighbour's ACTUAL cells, so two small rooms off one long wall
+        # of a wide room can both be laid out where two squares could not.
+        if any((x + offset[0], y + offset[1]) in field.inside
+               for x, y in far.cells):
             continue                        # two doorways on one wall overlap
         field.add_room(scene, other, offset)
         # THE WALL IS A LINE AND THE DOORWAY IS A GAP IN IT. The band of
@@ -651,8 +806,12 @@ def observer_field(scene: dict, observer: str) -> Optional[_Field]:
         for axis in ((1,) if b1 in ("n", "s") else
                      (0,) if b1 in ("e", "w") else (0, 1)):
             along = 1 - axis
+            # The wall runs over both rooms' reach ALONG it -- each box's
+            # own length on that axis, which for two squares was two sides.
+            mine = (grid.w, grid.d)[along]
+            theirs = (far.w, far.d)[along]
             lo = min(0, offset[along]) - 0.5
-            hi = max(side, offset[along] + far_side) - 0.5
+            hi = max(mine, offset[along] + theirs) - 0.5
             field.walls.append({
                 "axis": axis, "coord": band[axis], "extent": (lo, hi),
                 "aperture": (min(c[along] for c in aperture_cells) - 0.5,
