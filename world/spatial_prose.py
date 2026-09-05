@@ -9,10 +9,12 @@ from world.spatial_contacts import (
     _CONTACT_STATE_VERBS,
     _MOMENTARY_SET,
     _SENSATION_FORMS,
+    _SENSATION_FORMS_THING,
     _endpoint_is_worn_clothing,
     _is_anatomical_part,
     _part_is_clothing,
     _part_is_plural,
+    contact_endpoint_is_body,
     contact_is_momentary,
     contact_motion,
     contact_relation,
@@ -229,6 +231,10 @@ def contact_sensation(contact: dict, *, you: str, scene: dict = None,
                               or _part_is_clothing(scene, other, theirs)):
         return ""
 
+    # Asked of the endpoint AS THE RECORD SPELLS IT, before the identity floor
+    # replaces it with a label: the scene can only vouch for a spelling it
+    # holds, and "something" is not one.
+    other_is_body = scene is None or contact_endpoint_is_body(scene, other)
     if callable(label_for):
         other = str(label_for(other) or other)
 
@@ -297,7 +303,8 @@ def contact_sensation(contact: dict, *, you: str, scene: dict = None,
         return f"You feel {relation}: {quality}, {tail}"
 
     sensation_kind = "moving" if motion_kind == "moving" else "settled"
-    relation, quality = _SENSATION_FORMS[(sensation_kind, side)]
+    forms = _SENSATION_FORMS if other_is_body else _SENSATION_FORMS_THING
+    relation, quality = forms[(sensation_kind, side)]
     source = f"{other}'s {theirs}" if theirs else other
     # THE PART GOES WHERE IT IS FELT, not in front of a verb. The old shape
     # put the body part in the subject slot -- "your legs registers ... against

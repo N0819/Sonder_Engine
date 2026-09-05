@@ -74,6 +74,7 @@ from world.spatial import (
     _entity_named,
     _is_body_entity,
     body_visibility,
+    contact_thing_label,
     entity_arc,
     entity_side,
     hear_level,
@@ -1135,10 +1136,27 @@ def _names_a_body(scene, text, co_present):
     story calls its people: a body is something the observer is co-present
     with, something the scene gives a POSE, or something the enclosure code
     already recognises as a body.
+
+    A POSE IS NOT EVIDENCE OF A BODY, though, and that signal alone was
+    minting people. `scene.poses` is keyed by whatever the Director gave a
+    posture to, and a Director legitimately gives one to a thing: a survey
+    staff planted upright, a canteen slung, a notebook pocketed. Each of
+    those became "someone" in the composed view of a story whose cast was one
+    woman alone in a dead town -- fourteen of twenty beats, three of them in
+    the same paragraph -- while the mallet, the one possession that never
+    received a posture, rendered correctly by its own name in the same view.
+    So the scene is asked to vouch for a THING first, exactly as
+    `contact_sensation`'s docstring tells a caller holding an identity floor
+    to, and as `narration._partner_label` already does. That answer is
+    affirmative in both directions and outranks the person-shaped default;
+    silence leaves the default standing, which is what keeps a body the
+    observer cannot place from being named.
     """
     for body in co_present or []:
         if same_subject(scene, text, str(body.get("name") or "")):
             return True
+    if contact_thing_label(scene, text):
+        return False
     for posed in (scene.get("poses") or {}):
         if same_subject(scene, text, str(posed or "")):
             return True
