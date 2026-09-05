@@ -1334,6 +1334,86 @@ def _attach_unbidden(memory_context, entry, recall_limit=_RECALL_LIMIT):
     memory_context["surfaces_unbidden"] = entry
 
 
+#: The lanes whose presence in the wire contract means a present citation was
+#: ASKED FOR. (What the answer actually cited is collected as every lane is
+#: grounded, so no list has to stay complete on that side.)
+#:
+#: A guard may report the ABSENCE of something only where the answer was
+#: ASKED for it. The three top-level `*_used` lanes were retired from the ask
+#: (`llm_quality._CHARACTER_RETIRED_WIRE_FIELDS`) while `CharacterOutput`
+#: keeps them with an empty-list default, so "the key is present" says
+#: nothing about whether the model was ever invited to fill it. That is how
+#: one line came to emit 45 of one play run's 116 warnings (flat run, PE20)
+#: and to fire on 18 of 19 character steps in another (lighthouse, PA11) --
+#: on beats whose citations were sitting, correctly keyed, in
+#: `appraisal.present_evidence`. Read the advertised schema instead.
+_PRESENT_CITATION_LANES = (
+    "present_evidence_used",
+    "observations_used",
+    "appraisal.present_evidence",
+    "appraisal.somatic_impact.evidence",
+)
+
+
+def _schema_node(root, node):
+    """Follow a schema `$ref` (or a lone `allOf` wrapper) to its definition."""
+    for _hop in range(8):
+        if not isinstance(node, dict):
+            return None
+        ref = node.get("$ref")
+        if not ref and isinstance(node.get("allOf"), list) and \
+                len(node["allOf"]) == 1:
+            inner = node["allOf"][0]
+            if not isinstance(inner, dict):
+                return None
+            node = inner
+            continue
+        if not ref:
+            return node
+        if not isinstance(ref, str) or not ref.startswith("#/"):
+            return None
+        target = root
+        for part in ref[2:].split("/"):
+            if not isinstance(target, dict):
+                return None
+            target = target.get(part)
+        node = target
+    return None
+
+
+def _schema_offers(schema, lane):
+    """Does the advertised wire contract still ask for this dotted lane?"""
+    node = schema
+    for name in lane.split("."):
+        node = _schema_node(schema, node)
+        properties = (node or {}).get("properties") if isinstance(node, dict) \
+            else None
+        if not isinstance(properties, dict) or name not in properties:
+            return False
+        node = properties[name]
+    return True
+
+
+def _requested_present_lanes():
+    """The present-citation lanes THIS build asks a character to fill.
+
+    Derived from the schema actually advertised on the wire, because that is
+    the only thing that answers the question the guard needs answered: was
+    the answer ever asked for this? A build that advertises none of them gets
+    no citation warning at all -- there is nothing to be missing.
+    """
+    try:
+        from llm import llm_quality
+
+        schema = llm_quality._step_json_schema("character")
+    except Exception:
+        schema = None
+    if not isinstance(schema, dict):
+        return ()
+    return tuple(lane for lane in _PRESENT_CITATION_LANES
+                 if _schema_offers(schema, lane))
+
+
 def _ground_observation_citations(out, observations, memory_context,
                                   memory_internal=None):
     """Make present and remembered evidence mechanically distinguishable.
@@ -1408,6 +1488,10 @@ def _ground_observation_citations(out, observations, memory_context,
             summaries.add(str(origin["summary_id"]))
 
     warnings = []
+    # Which lanes the answer put a DELIVERED PRESENT citation in. Collected
+    # here rather than read off a list of fields, so a lane added later is
+    # counted by construction instead of being missed by an enumeration.
+    present_cited = set()
 
     def ground_refs(refs, path, *, namespace="either",
                     allow_summaries=True):
@@ -1444,6 +1528,9 @@ def _ground_observation_citations(out, observations, memory_context,
             else:
                 warnings.append(
                     f"dropped ungrounded {path} citation {eid!r}")
+        for item in grounded:
+            if str(item.get("event_id") or "") in current:
+                present_cited.add(path)
         return grounded
 
     # New output has physically separate lanes.  Split legacy mixed output on
@@ -1459,13 +1546,11 @@ def _ground_observation_citations(out, observations, memory_context,
         target = present if eid in current else past
         if ref not in target:
             target.append(ref)
-    # Only meaningful for a variant that CARRIED the citation lanes. They are
-    # no longer asked for (llm_quality._CHARACTER_RETIRED_WIRE_FIELDS), so
-    # without this guard the warning would fire on every turn and say nothing.
-    if current and (out.get("present_evidence_used") is not None
-                    or out.get("observations_used") is not None):
-        if not present:
-            warnings.append("no delivered present observation was cited")
+    # The "was anything present cited" question is answered at the END of
+    # this function, once every lane has been grounded -- see there. Asking
+    # it here read two wire lanes that are no longer requested and that
+    # `CharacterOutput` supplies as empty lists regardless, which made the
+    # warning a property of the schema rather than of the answer.
     out["present_evidence_used"] = present
     out["memory_evidence_used"] = past
     # Compatibility projection for commit/archive readers written before the
@@ -1639,6 +1724,17 @@ def _ground_observation_citations(out, observations, memory_context,
             update["fear_delta"] = 0.0
             warnings.append(
                 f"zeroed unsupported relationship_updates.{index}")
+
+    # THE CITATION FLOOR, and the two halves it needs to mean anything.
+    # A guard reports the absence of something the answer was ASKED for
+    # (`_requested_present_lanes` -- gone from the contract is not the same
+    # as omitted by the model), and it accepts that something from wherever
+    # the answer legitimately put it (`present_cited`, filled by every
+    # grounding pass above). Reading one retired lane and ignoring the rest
+    # is a guard measuring itself: 45 of 116 warnings in one play run, and
+    # 18 of 19 character steps in another, on beats that had cited.
+    if current and _requested_present_lanes() and not present_cited:
+        warnings.append("no delivered present observation was cited")
     return warnings
 
 

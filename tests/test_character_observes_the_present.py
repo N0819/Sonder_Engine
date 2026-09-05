@@ -259,3 +259,79 @@ def test_guard_warns_but_does_not_fabricate_a_present_citation():
     assert out["observations_used"] == [
         {"event_id": "event:old-bell", "fact": "old bell"}]
     assert any("no delivered present" in warning for warning in warnings)
+
+
+# ---------------------------------------------------------------------------
+# PE20 / PA11: a guard reports the absence of what the answer was ASKED for
+#
+# The same line found twice by playing on 2026-09-05: 45 of the flat run's 116
+# warnings came from it (2.25 a beat, the run's largest single class), and in
+# the lighthouse run 18 of 19 character steps were told "no delivered present
+# observation was cited" while `appraisal.present_evidence` carried
+# `current:2:3` and `current:2:0` on almost every one. The guard read two wire
+# lanes that were retired from the ask and that `CharacterOutput` supplies as
+# empty lists regardless, so it was measuring the schema, not the answer.
+# ---------------------------------------------------------------------------
+
+_LANTERN = [{"observation_id": "current:2:3",
+             "observed": {"text": "The lamp room door stands open."}},
+            {"observation_id": "current:2:0",
+             "observed": {"text": "Ivo turns from the bench."}}]
+
+
+def _lighthouse_step(**over):
+    """A character step in the shape this build actually produces: the wire
+    citation lanes empty, the citations in the appraisal."""
+    out = {"observations_used": [], "present_evidence_used": [],
+           "memory_evidence_used": [],
+           "appraisal": {"emotion": "wary", "present_evidence": [
+               {"event_id": "current:2:3", "fact": "the door stands open"}]}}
+    out.update(over)
+    return out
+
+
+def test_an_appraisal_that_cites_the_present_raises_no_citation_warning():
+    warnings = _ground_observation_citations(
+        _lighthouse_step(), _LANTERN, {"recent_episodes": []})
+    assert warnings == []
+
+
+def test_a_citation_in_any_lane_the_answer_used_counts():
+    """The floor asks whether a delivered observation was cited, not which
+    field it arrived in -- so a lane added later is counted by construction."""
+    step = _lighthouse_step(appraisal={"emotion": "wary"}, remember_lines=[
+        {"quote": "the light is out", "evidence": [
+            {"event_id": "current:2:0", "fact": "he turned"}]}])
+    assert _ground_observation_citations(
+        step, _LANTERN, {"recent_episodes": []}) == []
+
+
+def test_a_step_that_cites_nothing_still_warns_exactly_once():
+    step = _lighthouse_step(appraisal={"emotion": "wary"})
+    warnings = _ground_observation_citations(
+        step, _LANTERN, {"recent_episodes": []})
+    assert [w for w in warnings if "no delivered present" in w] == [
+        "no delivered present observation was cited"]
+
+
+def test_a_contract_that_asks_for_no_present_lane_never_warns(monkeypatch):
+    """Gone from the ask is not the same as omitted by the model. A build
+    advertising no present-citation lane has nothing to be missing."""
+    from llm import llm_quality
+
+    monkeypatch.setattr(
+        llm_quality, "_step_json_schema",
+        lambda step_key, wire_variant=None: {"properties": {"sequence": {}}})
+    step = _lighthouse_step(appraisal={"emotion": "wary"})
+    assert _ground_observation_citations(
+        step, _LANTERN, {"recent_episodes": []}) == []
+
+
+def test_the_lanes_are_read_off_the_advertised_contract():
+    """The two `*_used` lanes are retired from the ask while the model keeps
+    them as empty-list defaults; the appraisal lanes are what this build
+    actually requests."""
+    from agents import character
+
+    assert character._requested_present_lanes() == (
+        "appraisal.present_evidence", "appraisal.somatic_impact.evidence")

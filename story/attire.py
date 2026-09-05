@@ -2817,8 +2817,143 @@ def perceptible_region_surfaces(regions, beneath_visible=False):
     return out
 
 
+def _place_held(regions, name):
+    """The one region a worn garment HOLDS, and what it covers there.
+
+    Returns `(region, {zones})`, or `(None, set())` for a garment that holds
+    nothing -- off the body, merely attached, or displaced off everything it
+    covers. Sleeves and hems reach past the place a garment is FOR, so the
+    place it holds is its anchor (`region_of`); a garment whose placement was
+    DECLARED overruled the name table, and for that one the place it holds is
+    where it actually sits.
+    """
+    key = str(name or "").casefold()
+    occupied, placed = {}, False
+    for region in REGIONS:
+        for garment in ((regions or {}).get(region) or {}).get("garments") or []:
+            if not isinstance(garment, dict):
+                continue
+            if str(garment.get("name") or "").casefold() != key:
+                continue
+            if garment.get("state") == "removed" or garment.get("attaches"):
+                return None, set()
+            placed = placed or bool(garment.get("placed"))
+            occupied[region] = set(covered_zones_for(garment, region))
+    covering = {region: zones for region, zones in occupied.items() if zones}
+    if not covering:
+        return None, set()
+    anchor = region_of(name)
+    if placed or anchor not in covering:
+        anchor = next(region for region in REGIONS if region in covering)
+    return anchor, covering[anchor]
+
+
+def displaced_by(previous, garment, placement=None):
+    """The worn garments a garment put on IN PLACE of what is there turns out.
+
+    Dressing is a change of state, not an accumulation: a garment holds a
+    place on a body, and something that arrives in its stead puts it off
+    rather than under a new layer. What the ledger CANNOT decide is which of
+    the two a beat meant -- a coat over a jumper and a towel instead of one
+    occupy exactly the same regions, and only the beat's words separate them.
+    So layering stays the default and this answers the narrower question that
+    IS decidable from the closed vocabulary the engine owns (`REGIONS`,
+    `region_of`, `zones_of`, `covered_zones_for`): if this garment took the
+    place of what was there, what was there?
+
+    Measured (flat run, PE4, turn 11): out of the shower, the body hand wrote
+    `{"add": ["big blue bath towel"], "remove": []}`, and the ledger read
+    `towel, scrubs top, jumper, scrubs trousers, socks` -- a woman in a towel
+    over a jumper over scrubs, because an addition alone can only ever add.
+
+    A garment is displaced when the newcomer covers the place it HOLDS -- its
+    anchor region, and there at least the zones it still covers. The place,
+    not the whole span: a jumper reaching the arms and the waist is still a
+    torso garment, and a rule that asked the towel to cover a sleeve before
+    it could take the jumper would answer "nothing was displaced" for every
+    replacement anyone actually writes. Three exclusions, each in the safe
+    direction -- wrongly keeping a garment on is recoverable next beat,
+    wrongly taking one off is not:
+
+      * something that only ATTACHES is in nothing's way (a hair clip under a
+        hat stays clipped);
+      * something already off the body cannot come off again;
+      * something displaced off everything it covers holds no place to take,
+        so it is left where the coverage axis put it.
+
+    Returns names, in region order, each once. Nothing is written here: the
+    caller decides whether a replacement happened at all, and
+    `apply_flat_change` records the ones it names as removals, so a displaced
+    garment leaves the body rather than vanishing out of the ledger.
+    """
+    name = str(garment or "").strip()
+    if not name or attaches_only(name):
+        return []
+    where = (placement or {}).get(name) or (placement or {}).get(name.casefold())
+    covers = {}
+    for region in (where or regions_covered(name)):
+        if region in REGIONS:
+            covers[region] = set(zones_of(region))
+    if not covers:
+        return []
+    key = name.casefold()
+    out, seen = [], set()
+    for region in REGIONS:
+        for worn in ((previous or {}).get(region) or {}).get("garments") or []:
+            if not isinstance(worn, dict):
+                continue
+            worn_name = str(worn.get("name") or "").strip()
+            folded = worn_name.casefold()
+            if not worn_name or folded == key or folded in seen:
+                continue
+            held, zones = _place_held(previous, worn_name)
+            if held is None or not zones <= covers.get(held, set()):
+                continue
+            seen.add(folded)
+            out.append(worn_name)
+    return out
+
+
+def _displacement_targets(previous, displaces, worn_names, placement=None):
+    """Resolve a displacement declaration into the worn garments it takes off.
+
+    Accepts what a caller naturally holds: a collection of the garments that
+    were put on in place of what they cover, or a mapping from each of those
+    to the garments it displaced by name (``True`` to let `displaced_by`
+    answer). Handles are resolved against what this body is already wearing,
+    the same way every other channel's are, so a shorter phrase for the robe
+    is the robe.
+    """
+    if not displaces:
+        return set()
+    items = (list(displaces.items()) if isinstance(displaces, dict)
+             else [(handle, True) for handle in displaces])
+    keys = set()
+    for handle, targets in items:
+        name = str(handle or "").strip()
+        if not name:
+            continue
+        wearer = resolve_garment(name, worn_names,
+                                 allow_head_noun=False) or name
+        if targets is True or targets is None:
+            found = displaced_by(previous, wearer, placement)
+        else:
+            listed = (targets if isinstance(targets, (list, tuple, set))
+                      else [targets])
+            found = []
+            for target in listed:
+                text = str(target or "").strip()
+                if not text:
+                    continue
+                found.append(resolve_garment(text, worn_names) or text)
+        for garment in found:
+            if garment.casefold() != wearer.casefold():
+                keys.add(garment.casefold())
+    return keys
+
+
 def apply_flat_change(previous, wanted, decisive=False, conditions=None,
-                      process=False, placement=None):
+                      process=False, placement=None, displaces=None):
     """Reconcile a flat "what they are wearing now" list against the regions.
 
     The Director speaks in whole garments -- add these, remove those -- because
@@ -2829,6 +2964,15 @@ def apply_flat_change(previous, wanted, decisive=False, conditions=None,
     `conditions` maps a garment name to what has just happened to it -- spilled
     wine, a tear, soaking. It belongs to the GARMENT rather than to the body,
     so that taking the shirt off leaves the stain on the shirt.
+
+    `displaces` names the garments that were put on IN PLACE of what they
+    cover (see `displaced_by`). A displaced garment is marked `removed` even
+    where the caller's flat list still holds it -- a caller that builds
+    `wanted` by appending an addition to the previous list is stating an
+    accumulation, and the displacement is this beat's news about the same
+    body. It comes OFF rather than disappearing: `newly_removed` reports it
+    like any other departure, so the commit path mints it as a thing in the
+    room and a later beat can pick it up.
 
     Returns the reconciled regions. Deriving the flat list back out of them is
     `flat_wearing`, and the two must be written together or the ledger says two
@@ -2851,6 +2995,8 @@ def apply_flat_change(previous, wanted, decisive=False, conditions=None,
             continue
         resolved = resolve_garment(handle, worn_names) or str(handle)
         marks[resolved.casefold()] = _clean(text, CONDITION_LIMIT)
+    displaced_keys = _displacement_targets(
+        previous, displaces, worn_names, placement)
     wanted_keys = {}
     for name in (wanted or []):
         resolved = resolve_garment(name, worn_names, allow_head_noun=False) or str(name)
@@ -2867,7 +3013,7 @@ def apply_flat_change(previous, wanted, decisive=False, conditions=None,
             garment = dict(garment)
             if key in marks:
                 garment["condition"] = marks[key]
-            still_listed = key in wanted_keys
+            still_listed = key in wanted_keys and key not in displaced_keys
             if still_listed:
                 # Named as still worn: hold whatever partial state it had
                 # rather than snapping it back to pristine, or a beat that

@@ -571,7 +571,10 @@ Read from the capture (`read_trace`, 249 calls, 220 capture rows).
   arrives as one long composed view; the citation the floor asks for is by
   `observation_id`. Deliver the view AND the numbered observations as the same
   list the floor checks against, so citing is picking a number rather than
-  matching prose.
+  matching prose. *(The 44 warnings were the guard, not the minds: it read a
+  retired wire lane while the citations sat in `appraisal.present_evidence`.
+  Closed 2026-09-05 — flat run PE20. The payload proposal above stands on its
+  own merits and is unaffected.)*
 - **`narrator`** (20 calls, 11.9 s, 53.6k mean sent of which 38.2k is a constant
   system prompt). Two of the run's biggest warning classes are its quoting
   (PC11) and `narration: echoed the player's own line` ×10 — the latter fired on
