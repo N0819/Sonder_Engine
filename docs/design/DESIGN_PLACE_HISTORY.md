@@ -115,6 +115,16 @@ a barrier):
      on 2026-09-05 applies unchanged: a claim about a place either cites the
      rows it read or is a proposal.
 
+## 5a. Charter is the Planner's instrument
+
+Stated in full in `DESIGN_OFFSCREEN_SUPERSEDED.md` § 3a and referenced here
+because it is what section 2's interface becomes once it is built: Charter is
+the physics of off-screen life and the Planner is the hand that reaches into
+it, with a read side that must show posts, watch and stations (today's tool
+hides them and the Room invented staff as a result) and a write side,
+`charter_ops`, routed through the functions Charter already owns. The Planner
+directs and Charter computes.
+
 ## 6. Why the Planner and not the Director
 
 The Director owns objective causality for THIS beat and is already the most
