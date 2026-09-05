@@ -338,6 +338,20 @@ refusal is "she got as far as the hall", not "she never moved". Test: a locked
 edge two rooms along a declared walk; assert the position lands on the last
 passable room and no pose text names the room beyond it.
 
+**FIXED (2026-09-05).** (a) landed first as `state_diff.movement_refused`:
+`director._refuse_movement` records every body the backstop holds back and
+`spatial_merge._refused_movers` subtracts that body's position, station and
+pose together, so a refused walk leaves nothing behind. (b) landed the same
+day with the contest rule it belongs beside: a route whose only impassable
+edges are shut doors is CONTESTED rather than blocked, the resolve owns the
+crossing as it always has at one hop, and where the resolve does not assert it
+the walk commits its passable prefix. A locked door is a shut door
+(`normalize_barrier` folds locked/jammed/padlocked onto `closed_door`), so
+turn 13's walk now either commits — the resolve having said she unlocked it
+and went — or lands her in the hall with the gallery pose dropped;
+`_strip_unreached_placement` makes the second case the same subtraction the
+refusal channel makes, minus the position, which is true and stands.
+
 ### PC8. The second-person rewrite substitutes inside titles and repeated names
 **Severity: cosmetic, but it fires the composer's own engine-defect tripwire.**
 Recurs and widens `F65` (2026-09-05, "toward you you"). Stage of origin:
@@ -355,6 +369,25 @@ bounded — rather than on a name fragment, and never inside a token already
 rewritten. Test: an act surface naming "Lord Edmund Harrowgate", "Mrs Penrose"
 and a bare surname, rewritten for each as observer; assert no output contains a
 title adjacent to a pronoun or a doubled token.
+
+**FIXED (2026-09-05), as one rule in one place.** A NAME'S OCCURRENCE INCLUDES
+THE TITLE AND ARTICLE THAT LEAD IT: `common.name_occurrence_pattern` builds
+every name match from the engine's own closed table (`_NAME_LEADERS` narrowed
+to `_NAME_TITLE_TOKENS`, the same table `_identity_token_set` strips when it
+compares two names and `_subject_opener` accepts before a subject — the
+alternation is now shared, `_name_title_alternation`), so "Lord Edmund
+Harrowgate" and "Mrs. Penrose" are each one occurrence, matched from the title.
+And the forms of one body are alternated WIDEST FIRST, which is the doubling
+half: applied in arrival order the short form fired inside the long one, so
+"toward Dov Aharon" became "toward you Aharon" became "toward you you" (F65).
+`_self_second_person`, `_action_target_second_person` and
+`_pose_owner_second_person` all match through it, so the episode renderer's
+first-person pass ("Mrs. I") inherits the boundary rather than needing its own.
+NOT rewritten on the typed percept before rendering: the rewrite already
+operates on ONE authored surface with a known owner and a known observer
+rather than on free prose, and the defect was the match's boundary, not the
+layer. "turns away from Felix Brand Brand" and "behind Ada Quill's" are not
+this — neither is a second-person substitution — and are unaddressed.
 
 ### PC9. `cover` is authored only by a station, so "behind the screen" is prose the geometry never sees
 **Severity: wrong-but-recoverable (owner decision on the second half).**

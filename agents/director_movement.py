@@ -15,10 +15,13 @@ import re
 
 from story.character_schema import character_name_from_text
 from world.spatial import (
+    _ROUTE_MEMORY_BARRIERS,
     egocentric_frame,
     merge_scene_with_diff,
+    neighbor_map,
     normalize_bearing,
     normalize_edge_distance,
+    passable_neighbors,
     passable_route_exists,
     passable_route_next_step,
     room_of,
@@ -755,6 +758,101 @@ def _resolve_movement_mover(sc, sd, mv, p_name):
         return key, positions.get(key), str(eid)
     return None, None, None
 
+
+
+#: How many rooms a declared walk may be judged over. `passable_path` draws
+#: the same line for the same reason: past a dozen rooms a single-beat "walk"
+#: is a teleport wearing a route.
+_WALK_ROUTE_LIMIT = 12
+
+
+def _door_route(scene, from_room, to_room, limit=_WALK_ROUTE_LIMIT):
+    """The shortest walk from one room to another over doorways a body could
+    go through NOW OR BY OPENING THEM, as a list of rooms excluding the start.
+
+    `_ROUTE_MEMORY_BARRIERS` is already the engine's name for exactly that
+    set -- the passable barriers plus `closed_door` -- and the vocabulary has
+    already ruled on its edges: `normalize_barrier` folds locked, jammed and
+    padlocked onto `closed_door` (a state of a door), and sealed, bolted,
+    welded and bricked onto `wall` (a kind of wall). So this walks doors and
+    refuses walls without a second table of its own.
+
+    Deterministic: neighbours in sorted order, so a tie between two equally
+    short routes always breaks the same way and a reroll reproduces the diff.
+    """
+    if not from_room or not to_room or from_room == to_room:
+        return []
+    neighbors = neighbor_map(scene, _ROUTE_MEMORY_BARRIERS, directional=True)
+    from collections import deque
+    prev = {str(from_room): None}
+    queue = deque([(str(from_room), 0)])
+    while queue:
+        cur, depth = queue.popleft()
+        if cur == str(to_room):
+            path = []
+            while prev[cur] is not None:
+                path.append(cur)
+                cur = prev[cur]
+            return list(reversed(path))
+        if depth >= limit:
+            continue
+        for nxt in sorted(neighbors.get(cur, ())):
+            if nxt not in prev:
+                prev[nxt] = cur
+                queue.append((nxt, depth + 1))
+    return []
+
+
+def declared_walk_leg(scene, from_room, to_room):
+    """How far a declared walk gets on its own feet, and which door stopped it.
+
+    Returns `(reached, door_to, blocked)`:
+
+    * `reached` -- the last room open doorways alone carry the body to. It is
+      `to_room` when the whole route is already open, `from_room` when the
+      very first edge is shut, and a room in between otherwise.
+    * `door_to` -- the room on the FAR SIDE of the first shut door, or None
+      when nothing shut stands on the route.
+    * `blocked` -- True when no route reaches `to_room` at all, doors
+      counted. That is a wall, and a wall is not a contest.
+
+    THE RULE THIS ANSWERS. A directly adjacent shut door has always been
+    CONTESTED here rather than blocked: crossing it takes an action, and the
+    resolve owns whether the action succeeded. A shut door two rooms along
+    was BLOCKED, and the objection recorded in the backstop was that the
+    engine "cannot attribute the contest to one specific door on a multi-hop
+    path". This attributes it: the walk is followed edge by edge, and the
+    first edge it cannot cross names the door, so the contest has a location
+    and the body has somewhere to stop.
+
+    Measured, the flat run of 2026-09-05 (PE2): FOUR of six declared
+    inter-room moves in an ordinary flat never committed, every one of them
+    because a single interior door on a two-hop path was shut, while the
+    identical one-hop crossing would have been allowed. The host had to move
+    a body by hand three times for the story to continue.
+
+    Two rooms of the answer are deliberately separate. How FAR she got is a
+    question about the floor plan and is answered here. What happens at the
+    door that stopped her is a question about causality and is not: the
+    caller hands that to the resolve exactly as the adjacent branch already
+    does.
+    """
+    if not from_room or not to_room or from_room == to_room:
+        return (from_room, None, False)
+    if passable_route_exists(scene, from_room, to_room):
+        return (to_room, None, False)
+    route = _door_route(scene, from_room, to_room)
+    if not route:
+        return (from_room, None, True)
+    passable = passable_neighbors(scene)
+    reached = str(from_room)
+    for step in route:
+        if step not in (passable.get(reached) or ()):
+            return (reached, step, False)
+        reached = step
+    # Unreachable in practice: a fully passable route would have been caught
+    # above. Reported as no contest rather than asserting one that is not there.
+    return (reached, None, False)
 
 
 #: Edge distances that take more than one beat to cross. A corridor and a
