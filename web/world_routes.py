@@ -2,7 +2,7 @@
 per-room slice, read through `story/room_slice.py` -- the ONE reader the
 Writers' Room's `inspect_rooms`, the frontier and the browser all share, so
 a host and the Planner cannot be shown two different worlds -- and, since
-2026-09-04, three NARROW writes so a host edits a field rather than a blob.
+2026-09-04, four NARROW writes so a host edits a field rather than a blob.
 
 Reads (under ``/api/chats/{cid}/rooms``; ``frame_id`` absent or null is the
 present, else a frame row of this chat, 404 otherwise -- the same contract
@@ -25,12 +25,21 @@ present, else a frame row of this chat, 404 otherwise -- the same contract
   drift from the code (`vocabulary`).
 * ``GET  /{room_id}?frame_id=`` -> the slice plus ``holder_name``,
   ``record`` (the room's stored editable fields: name, desc, notes, light,
-  size, exposure, region, anchors, adjacent -- the slice renders prose
-  capped and exits derived, and an editor needs what is STORED) and
-  ``stationable`` (the anchors a station may name here, authored and the
-  implicit `door:<to>` ones -- `world.spatial.effective_anchors`, the same
-  set `normalize_scene_stations` keeps); 404 when no room of that id is
-  known to the story.
+  size, exposure, region, extent, shape, parts, anchors, adjacent -- the
+  slice renders prose capped and exits derived, and an editor needs what
+  is STORED -- plus ``geometry``, what the engine's grid makes of them:
+  ``{w, d, shape, measured, size_derived, walls: {n, e, s, w: paces}}``,
+  the wall counts being `RoomGrid.rim`'s, the number `wall_overfull`
+  measures an anchor load against), ``stationable`` (the anchors a station
+  may name here, authored and the implicit `door:<to>` ones --
+  `world.spatial.effective_anchors`, the same set
+  `normalize_scene_stations` keeps -- each with its bearing), ``region_look``
+  (the region's `look` from the registry, '' when none) and ``lint`` (the
+  layout-lint rows naming this room -- `world.spatial.room_layout_lint`,
+  every standing row -- each the row plus ``field`` (`LINT_FIELDS`: the
+  card field it concerns) and ``text`` (`layout_warning`)); 404 when no
+  room of that id is known to the story. Index rows carry ``lint`` as the
+  COUNT of rows naming the room, so the tree can mark it.
 
 Writes, each host-only and era-scoped exactly like the reads, each refused
 with 409 while any pipeline of the chat runs (the same guard `world_put`
@@ -49,7 +58,15 @@ tail), writing it through `wset` as `attire_put` does, and reconciling the
   with a message naming the set, and an empty string CLEARS the field
   (absent means the engine's default, which is what the word means);
   ``region`` is free text folded to a region id, empty clearing it;
-  ``exits`` and ``anchors`` are FULL replacement lists for this room. An
+  ``extent`` is ``{w, d}`` in paces, clamped by the engine's own
+  `normalize_extent` to [`EXTENT_MIN_PACES`, `EXTENT_MAX_PACES`], refused
+  when it is not a measurement, null/empty clearing it -- and setting one
+  writes the ``size`` tier it implies (`size_from_extent`), since the card
+  shows size as DERIVED while an extent stands; ``shape`` is a `SHAPES`
+  word (empty clears: the rectangle); ``parts`` is the full list of
+  ``{w, d, at}`` for an `l`, ``at`` refused outside `ROOM_CORNERS`, run
+  through `normalize_parts`; ``exits`` and ``anchors`` are FULL replacement
+  lists for this room. An
   exit is ``{to, barrier, dir?}``; a doorway is one object, so the far
   room's reciprocal edge is written too -- created when missing, its
   barrier set when it stands (every barrier but `one_way_window`, which is
@@ -73,6 +90,11 @@ tail), writing it through `wset` as `attire_put` does, and reconciling the
   anchor the body's room holds (`effective_anchors`; the refusal names
   them) or null; ``near`` names bodies standing in the same room. Returns
   the body's row.
+* ``PATCH /api/chats/{cid}/regions/{region_id}`` with ``{look}``: the
+  region's visual register, written through `world.regions.set_region_look`
+  into the frame's registry (not the scene, so no registry projection to
+  reconcile); an empty look removes it. Shared by every room in the region
+  by construction. Returns ``{id, name, brief, look, rooms}``.
 
 Attire is NOT written here: the browser's attire editor sends the whole
 ledger to `app.attire_put`, which re-derives every entry
@@ -99,10 +121,13 @@ from story.attire import GARMENT_STATES, REGIONS as ATTIRE_REGIONS
 from story.character_schema import character_name, persona_name
 from story.scene import get_scene, persona_of
 from world.spatial import (
-    _BEARINGS, _VALID_BARRIERS, FOOTPRINTS, HEIGHTS, LIGHT_LEVELS, OPACITIES,
-    ROOM_SIZES, effective_anchors, normalize_bearing, normalize_room_id,
+    _BEARINGS, _VALID_BARRIERS, EXTENT_MAX_PACES, EXTENT_MIN_PACES, FOOTPRINTS,
+    HEIGHTS, LAYOUT_LINT_KINDS, LIGHT_LEVELS, OPACITIES, ROOM_CORNERS,
+    ROOM_SIZES, SHAPES, effective_anchors, layout_warning, normalize_bearing,
+    normalize_extent, normalize_parts, normalize_room_id,
     normalize_scene_barriers, normalize_scene_bearings,
-    normalize_scene_stations, opposite_bearing, room_of,
+    normalize_scene_stations, normalize_shape, opposite_bearing, room_grid,
+    room_layout_lint, room_of, size_from_extent,
 )
 from world.weather import EXPOSURES
 
@@ -120,6 +145,29 @@ ROOM_ENUMS = {"light": LIGHT_LEVELS, "size": ROOM_SIZES, "exposure": EXPOSURES}
 
 #: The anchor geometry words and their sets (`world/spatial_fov.py` owns them).
 ANCHOR_ENUMS = {"height": HEIGHTS, "footprint": FOOTPRINTS, "opacity": OPACITIES}
+
+#: The card field each layout-lint row concerns, so the browser shows a row
+#: beside the field it is about and never has to know a kind by name. Keyed
+#: by every `LAYOUT_LINT_KINDS` word (`tests/test_world_routes.py` pins the
+#: coverage): a bearing or a placement row is about the doorways, a wall
+#: row about what stands on the wall, a shape row about the shape, and the
+#: two extent rows about the measurement.
+LINT_FIELDS = {
+    "reciprocal_bearing_disagrees": "exits",
+    "rooms_overlap_when_placed": "exits",
+    "openings_overlap": "exits",
+    "wall_overfull": "anchors",
+    "corner_in_round_room": "shape",
+    "l_part_redundant": "shape",
+    "shape_disconnected": "shape",
+    "size_disagrees_with_extent": "extent",
+    "extent_unreadable": "extent",
+}
+assert set(LINT_FIELDS) == set(LAYOUT_LINT_KINDS)
+
+#: The straight walls, in the order the browser lists them; the corners
+#: follow (`ROOM_CORNERS`), then the anchors with no bearing.
+WALLS = ("n", "e", "s", "w")
 
 #: The barrier that is asymmetric BY DESIGN and is never mirrored onto the far
 #: room's edge (`_mirror_symmetric_barriers` holds the same exception).
@@ -187,10 +235,34 @@ def _is_body(scene, who):
     return not kind or kind in _ANIMATE_ENTITY_KINDS
 
 
-def group_rows(index_rows, scene):
+def _lint_rows(scene):
+    """Every standing layout row of the scene (`room_layout_lint` with no
+    previous scene: the standing state, as the Room's `inspect_contradictions`
+    reads it), each carrying the room ids it names under `rooms` so a caller
+    can file it, the card field it concerns (`LINT_FIELDS`) and its sentence
+    (`layout_warning`)."""
+    out = []
+    for row in room_layout_lint(scene):
+        named = [str(r) for r in (row.get("rooms") or [])]
+        if row.get("room") is not None:
+            named.append(str(row["room"]))
+        out.append({**row, "rooms": named,
+                    "field": LINT_FIELDS.get(row.get("kind")),
+                    "text": layout_warning(row)})
+    return out
+
+
+def _room_lint(rows, room_id):
+    """The rows naming one room, in the lint's own order."""
+    return [dict(r) for r in rows if str(room_id) in (r.get("rooms") or [])]
+
+
+def group_rows(index_rows, scene, lint_rows=None):
     """Sort index rows into the four display groups, each keeping the
     index's order, and decorate every row for display. Pure over its inputs
-    so the grouping is testable without a request."""
+    so the grouping is testable without a request. `lint_rows` (the shape
+    `_lint_rows` returns) puts the count of layout rows naming each room on
+    its row as `lint`, so the tree can mark it."""
     # The names beside a cast room are BODIES, by the rule `cast_rooms` counts
     # the cast with: a position row keyed by a scene entity of an inanimate
     # kind places a thing (the slice lists it under `things`), and a row with
@@ -207,6 +279,7 @@ def group_rows(index_rows, scene):
         row["holder_name"] = _holder_name(scene, holder)
         row["holder_room"] = rooms.holder_room(scene, holder) if holder else None
         row["occupants"] = list(occupants.get(row["id"], []))
+        row["lint"] = len(_room_lint(lint_rows or [], row["id"]))
         if row["status"] == rooms.STATUS_RETIRED:
             groups["retired"].append(row)
         elif row["hops"] == 0:
@@ -235,7 +308,12 @@ def vocabulary(cid, frame_id):
         "heights": list(HEIGHTS),
         "footprints": list(FOOTPRINTS),
         "opacities": list(OPACITIES),
-        "regions": [{"id": rid, "name": str(entry.get("name") or rid)}
+        "shapes": list(SHAPES),
+        "corners": list(ROOM_CORNERS),
+        "walls": list(WALLS),
+        "extent": {"min": EXTENT_MIN_PACES, "max": EXTENT_MAX_PACES},
+        "regions": [{"id": rid, "name": str(entry.get("name") or rid),
+                     "look": str(entry.get("look") or "")}
                     for rid, entry in sorted(registry.items())],
         "attire_regions": list(ATTIRE_REGIONS),
         "garment_states": list(GARMENT_STATES),
@@ -321,17 +399,36 @@ def rooms_index(cid: int, frame_id: int | None = None):
         index = rooms.room_index(cid, frame_id, scene)
         bodies = body_rows(cid, chat, scene)
         vocab = vocabulary(cid, frame_id)
+        lint = _lint_rows(scene)
     return {
         "frame_id": frame_id,
         "location": str(scene.get("location") or ""),
-        "groups": group_rows(index, scene),
+        "groups": group_rows(index, scene, lint),
         "bodies": bodies,
         "vocab": vocab,
     }
 
 
-def _record(room):
-    """The room's stored editable fields, for the card's inputs."""
+def _geometry(scene, room_id, room):
+    """What the room's stored measurement comes to, by the engine's own
+    grid (`room_grid`): the box in paces, whether it is MEASURED (an extent
+    stands) or the size tier's square, the tier the extent implies
+    (`size_from_extent`, None without one), and how many paces each straight
+    wall has -- `RoomGrid.rim`, the same count `wall_overfull` compares an
+    anchor load against, so the card shows a wall's room before the lint
+    says it ran out."""
+    grid = room_grid(scene, room_id)
+    return {
+        "w": grid.w, "d": grid.d, "shape": grid.shape,
+        "measured": bool(grid.measured),
+        "size_derived": size_from_extent(room.get("extent")),
+        "walls": {wall: len(grid.rim(wall)) for wall in WALLS},
+    }
+
+
+def _record(scene, room_id, room):
+    """The room's stored editable fields, for the card's inputs, plus the
+    `geometry` the engine derives from them."""
     room = room if isinstance(room, dict) else {}
     anchors = room.get("anchors") or {}
     if isinstance(anchors, (list, tuple)):
@@ -344,6 +441,13 @@ def _record(room):
         "size": str(room.get("size") or ""),
         "exposure": str(room.get("exposure") or ""),
         "region": str(room.get("region") or ""),
+        # The measurement as the engine reads it: an unreadable stored extent
+        # is None here (the lint row `extent_unreadable` says what it was),
+        # an unknown shape word is the rectangle it is read as.
+        "extent": normalize_extent(room.get("extent")),
+        "shape": normalize_shape(room.get("shape")) if room.get("shape") else "",
+        "parts": normalize_parts(room.get("parts")),
+        "geometry": _geometry(scene, room_id, room),
         "anchors": {str(aid): dict(a) for aid, a in anchors.items()
                     if isinstance(a, dict)},
         "adjacent": [dict(e) for e in (room.get("adjacent") or [])
@@ -351,21 +455,41 @@ def _record(room):
     }
 
 
-def _decorated_slice(cid, frame_id, room_id, scene):
+def _region_look(cid, frame_id, region_id):
+    """The region's `look` from the registry, '' when it has none."""
+    if not region_id:
+        return ""
+    from world.regions import region_registry
+    entry = region_registry(cid, frame_id).get(str(region_id)) or {}
+    return str(entry.get("look") or "")
+
+
+def _decorated_slice(cid, frame_id, room_id, scene, lint_rows=None):
     row = rooms.room_slice(cid, frame_id, room_id, scene)
     if row is None:
         return None
     row["holder_name"] = _holder_name(scene, row.get("holder"))
+    # The region's look rides the card because the card is where a host
+    # meets the region; it is the REGION's field, shared by every room there,
+    # and is written through the regions route, never the room PATCH.
+    row["region_look"] = _region_look(cid, frame_id, row.get("region"))
     room = (scene.get("rooms") or {}).get(room_id)
     if isinstance(room, dict):
-        row["record"] = _record(room)
+        row["record"] = _record(scene, room_id, room)
         row["stationable"] = [
             {"id": str(aid), "desc": str((a or {}).get("desc") or aid),
-             "implicit": bool((a or {}).get("implicit"))}
+             "implicit": bool((a or {}).get("implicit")),
+             "dir": normalize_bearing((a or {}).get("dir"))}
             for aid, a in effective_anchors(scene, room_id).items()]
+        # The layout rows naming this room, each with the card field it
+        # concerns and its sentence, so the card puts a row beside the field
+        # it is about rather than in a list at the bottom.
+        row["lint"] = _room_lint(
+            lint_rows if lint_rows is not None else _lint_rows(scene), room_id)
     else:
         row["record"] = None
         row["stationable"] = []
+        row["lint"] = []
     # Each thing's stored editable fields, and HOW it is placed here: by a
     # position row (movable) or as one of the room's anchors (the anchor
     # editor's business).
@@ -536,6 +660,62 @@ def _apply_anchors(room, anchors):
     room["anchors"] = out
 
 
+def _paces_or_400(field, raw):
+    """`{w, d}` in whole paces within the engine's clamp, or a 400 naming
+    the range. `normalize_extent` CLAMPS a readable number and refuses only
+    an unreadable one -- prose, a missing side, a zero -- so the refusal here
+    is for a value that is not a measurement at all."""
+    extent = normalize_extent(raw)
+    if extent is None:
+        raise HTTPException(
+            400, f"{field} must be {{w, d}} in whole paces, each between "
+                 f"{EXTENT_MIN_PACES} and {EXTENT_MAX_PACES} (got {raw!r})")
+    return extent
+
+
+def _apply_extent(room, raw):
+    """Set or clear the room's extent. Setting one also writes the size
+    tier it implies (`size_from_extent`): `size` is the WORD for the floor
+    and `extent` its measurement, the card shows the word as derived while
+    an extent stands, and the record should say what the card shows rather
+    than carry a `size_disagrees_with_extent` row the host did not author.
+    Clearing leaves `size` as it stands -- the room does not shrink to an
+    unsized default because its measurement was withdrawn."""
+    if raw in (None, "", {}, []):
+        room.pop("extent", None)
+        return
+    extent = _paces_or_400("extent", raw)
+    room["extent"] = extent
+    room["size"] = size_from_extent(extent)
+
+
+def _apply_parts(room, raw):
+    """Replace the room's `l` parts: each `{w, d, at}`, the corner refused
+    outside `ROOM_CORNERS` and the sides outside the extent clamp, then the
+    engine's own `normalize_parts` over the result. An empty list clears.
+    Parts on a shape that is not `l` are accepted -- the lint reports them
+    (`corner_in_round_room`), and a host who changes the shape back keeps
+    what was authored."""
+    if raw in (None, ""):
+        raw = []
+    if not isinstance(raw, list):
+        raise HTTPException(400, "parts must be a list of {w, d, at}")
+    parts = []
+    for part in raw:
+        if not isinstance(part, dict):
+            raise HTTPException(400, "parts must be a list of {w, d, at}")
+        at = normalize_bearing(part.get("at"))
+        if at not in ROOM_CORNERS:
+            _refuse_outside("at", str(part.get("at")), list(ROOM_CORNERS))
+        extent = _paces_or_400("a part's extent", part)
+        parts.append({"w": extent["w"], "d": extent["d"], "at": at})
+    parts = normalize_parts(parts)
+    if parts:
+        room["parts"] = parts
+    else:
+        room.pop("parts", None)
+
+
 def _write_scene(cid, chat, before, scene):
     """The one way a route here lands a scene: normalised as the commit
     path normalises, written through `wset` under the ambient era, the
@@ -582,6 +762,16 @@ def room_patch(cid: int, room_id: str, body: dict = Body(...),
                 room["region"] = region
             else:
                 room.pop("region", None)
+        if "extent" in body:
+            _apply_extent(room, body.get("extent"))
+        if "shape" in body:
+            shape = _enum_value("shape", body.get("shape"), SHAPES)
+            if shape:
+                room["shape"] = shape
+            else:
+                room.pop("shape", None)
+        if "parts" in body:
+            _apply_parts(room, body.get("parts"))
         if "exits" in body:
             _apply_exits(scene, room_id, room, body.get("exits"))
         if "anchors" in body:
@@ -650,6 +840,44 @@ def room_entity_patch(cid: int, room_id: str, entity_id: str,
         _write_scene(cid, chat, before, scene)
         row = _decorated_slice(cid, frame_id, room_id, scene)
     return row
+
+
+regions_router = APIRouter(prefix="/api/chats/{cid}/regions", tags=["world-browser"])
+
+
+@regions_router.patch("/{region_id}")
+def region_patch(cid: int, region_id: str, body: dict = Body(...),
+                 frame_id: int | None = None):
+    """Write a region's `look` -- the visual register every room in the
+    region shares (`world.regions.set_region_look`, the seam the room
+    fidelity note left for a Room tool that is not built). Host-only,
+    era-scoped and idle-guarded like the room writes; the region is entered
+    by its id when the registry lacks it, as the seam does; an empty look
+    removes the field. Returns ``{id, name, brief, look, rooms}``, `rooms`
+    the live rooms of this frame in the region, so the card can say how
+    many rooms the one sentence reaches."""
+    from world.regions import normalize_region_id, set_region_look
+    chat = _chat_or_404(cid)
+    _require_idle(cid)
+    if not isinstance(body, dict) or "look" not in body:
+        raise HTTPException(400, "Send {look}")
+    rid = normalize_region_id(region_id)
+    if not rid:
+        raise HTTPException(400, "A region needs an id")
+    look = body.get("look")
+    if look is not None and not isinstance(look, str):
+        raise HTTPException(400, "look must be text")
+    with _era(cid, frame_id):
+        entry = set_region_look(cid, frame_id, rid, look or "")
+        scene = get_scene(cid, chat) or {}
+    if entry is None:
+        raise HTTPException(400, "A region needs an id")
+    in_region = sorted(
+        str(room_id) for room_id, room in (scene.get("rooms") or {}).items()
+        if isinstance(room, dict) and str(room.get("region") or "") == rid)
+    return {"id": rid, "name": str(entry.get("name") or rid),
+            "brief": str(entry.get("brief") or ""),
+            "look": str(entry.get("look") or ""), "rooms": in_region}
 
 
 bodies_router = APIRouter(prefix="/api/chats/{cid}/bodies", tags=["world-browser"])

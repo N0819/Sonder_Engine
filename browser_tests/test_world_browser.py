@@ -25,10 +25,10 @@ from test_ui_smoke import BOOTSTRAP, _chat_payload
 
 
 def _row(rid, name, hops, occupants=(), status="live", holder=None,
-         holder_name=None, holder_room=None):
+         holder_name=None, holder_room=None, region=None, lint=0):
     return {"id": rid, "name": name, "status": status, "holder": holder,
             "hops": hops, "holder_name": holder_name, "holder_room": holder_room,
-            "occupants": list(occupants)}
+            "occupants": list(occupants), "region": region, "lint": lint}
 
 
 VOCAB = {
@@ -41,10 +41,34 @@ VOCAB = {
     "heights": ["floor", "waist", "head", "full"],
     "footprints": ["point", "small", "large", "run"],
     "opacities": ["opaque", "see_through"],
-    "regions": [{"id": "east_wing", "name": "East Wing"}],
+    "shapes": ["rectangle", "round", "l"],
+    "corners": ["ne", "se", "sw", "nw"],
+    "walls": ["n", "e", "s", "w"],
+    "extent": {"min": 2, "max": 24},
+    "regions": [{"id": "east_wing", "name": "East Wing", "look": ""}],
     "attire_regions": ["head", "torso", "arms", "hands", "waist", "groin", "legs", "feet"],
     "garment_states": ["worn", "loosened", "open", "removed"],
 }
+
+# The size tier's square side, the browser mock's copy of `GRID_SIDE` for the
+# derived geometry a PATCH hands back.
+TIER_SIDE = {"": 6, "tiny": 3, "small": 4, "medium": 6, "large": 8, "huge": 10, "vast": 12}
+
+
+def _geometry(record):
+    """What the server's `_geometry` would say for a rectangle: the extent's
+    box when one stands, else the tier's square; each straight wall's paces."""
+    extent = record.get("extent")
+    if extent:
+        w, d = extent["w"], extent["d"]
+        side = (w * d) ** 0.5
+        derived = "medium" if side < 7 else "large"
+    else:
+        w = d = TIER_SIDE[record.get("size") or ""]
+        derived = None
+    return {"w": w, "d": d, "shape": record.get("shape") or "rectangle",
+            "measured": bool(extent), "size_derived": derived,
+            "walls": {"n": w, "s": w, "e": d, "w": d}}
 
 # Alice's ledger AS STORED: a kimono spanning torso and legs, recorded once per
 # region, and an apron on the torso alone.
@@ -62,9 +86,9 @@ INDEX = {
     "frame_id": None,
     "location": "Old Manor",
     "groups": {
-        "cast": [_row("kitchen", "Kitchen", 0, ["Alice"]),
+        "cast": [_row("kitchen", "Kitchen", 0, ["Alice"], region="east_wing", lint=2),
                  _row("study", "Study", 0, ["Nathan"])],
-        "reachable": [_row("hallway", "Hallway", 1),
+        "reachable": [_row("hallway", "Hallway", 1, region="east_wing"),
                       _row("console_room", "Console Room", 1, holder="tardis",
                            holder_name="The TARDIS", holder_room="study"),
                       _row("attic", "Attic", 2, status="planned")],
@@ -83,18 +107,41 @@ INDEX = {
 }
 
 
-def _slice(rid, name, desc, exits, occupants=(), adjacent=None, light=""):
+def _slice(rid, name, desc, exits, occupants=(), adjacent=None, light="",
+           region="", anchors=None, lint=()):
+    record = {"name": name, "desc": desc, "notes": "", "light": light,
+              "size": "", "exposure": "", "region": region,
+              "extent": None, "shape": "", "parts": [],
+              "anchors": anchors or {},
+              "adjacent": adjacent if adjacent is not None else [
+                  {"to": x["to"], "barrier": x["barrier"]} for x in exits
+                  if x["barrier"]]}
+    record["geometry"] = _geometry(record)
     return {"id": rid, "name": name, "status": "live", "holder": None,
             "holder_name": None, "description": desc, "exits": exits,
+            "region": region or None,
+            "region_name": "East Wing" if region == "east_wing" else None,
+            "region_look": "",
             "occupants": list(occupants), "things": [], "planned_stub": None,
             "plan_here": {"planned_entities": [], "needs": [], "package_ops": []},
-            "record": {"name": name, "desc": desc, "notes": "", "light": light,
-                       "size": "", "exposure": "", "region": "", "anchors": {},
-                       "adjacent": adjacent if adjacent is not None else [
-                           {"to": x["to"], "barrier": x["barrier"]} for x in exits
-                           if x["barrier"]]},
-            "stationable": [{"id": "oak_table", "desc": "the oak table", "implicit": False}]}
+            "record": record,
+            "stationable": [{"id": "oak_table", "desc": "the oak table", "implicit": False,
+                             "dir": None}],
+            "lint": list(lint)}
 
+
+# The kitchen's layout rows, as the server files them: a wall row under the
+# north wall's anchors, a bearing row under the exits.
+KITCHEN_LINT = [
+    {"kind": "wall_overfull", "room": "kitchen", "rooms": ["kitchen"], "wall": "n",
+     "needs": 3, "holds": 2, "field": "anchors",
+     "text": "Room 'kitchen': the n wall's anchors need 3 paces and the wall has 2; "
+             "the extent cannot hold them."},
+    {"kind": "reciprocal_bearing_disagrees", "rooms": ["kitchen", "hallway"],
+     "dirs": ["n", "e"], "names": ["Kitchen", "Hallway"], "field": "exits",
+     "text": "'Kitchen' says 'Hallway' lies n, and 'Hallway' says 'Kitchen' lies e; "
+             "the two bearings are not opposites, so the doorway has no one place."},
+]
 
 SLICES = {
     "kitchen": _slice("kitchen", "Kitchen", "A rustic kitchen with a heavy oak table.",
@@ -104,10 +151,15 @@ SLICES = {
                         "dir": None, "status": "planned"}],
                       [{"name": "Alice", "station": {"at": "oak_table", "near": []},
                         "attire": ALICE_ATTIRE}],
-                      adjacent=[{"to": "hallway", "barrier": "open"}]),
+                      adjacent=[{"to": "hallway", "barrier": "open"}],
+                      region="east_wing",
+                      anchors={"hearth": {"desc": "the hearth", "dir": "w", "height": "waist"},
+                               "oak_table": {"desc": "the oak table"}},
+                      lint=KITCHEN_LINT),
     "hallway": _slice("hallway", "Hallway", "A long, dim hallway.",
                       [{"to": "kitchen", "name": "Kitchen", "barrier": "open",
-                        "dir": None, "status": "live"}]),
+                        "dir": None, "status": "live"}],
+                      region="east_wing"),
     "garden": _slice("garden", "Garden", "An overgrown garden.", []),
 }
 
@@ -128,6 +180,7 @@ def _mount(page: Page):
     slices = copy.deepcopy(SLICES)
     index = copy.deepcopy(INDEX)
     attire = {"Alice": copy.deepcopy(ALICE_ATTIRE)}
+    looks: dict[str, str] = {}
 
     def handle(route) -> None:
         request = route.request
@@ -137,12 +190,24 @@ def _mount(page: Page):
         if request.method in ("PATCH", "PUT") and request.post_data:
             payload = json.loads(request.post_data)
             writes.append((request.method, path, payload))
-            if request.method == "PATCH" and path.startswith("/api/chats/1/rooms/"):
+            if request.method == "PATCH" and path.startswith("/api/chats/1/regions/"):
+                rid = path.rsplit("/", 1)[1]
+                looks[rid] = payload["look"]
+                body = {"id": rid, "name": rid, "brief": "", "look": payload["look"],
+                        "rooms": [s for s in slices if slices[s]["region"] == rid]}
+            elif request.method == "PATCH" and path.startswith("/api/chats/1/rooms/"):
                 rid = path.rsplit("/", 1)[1]
                 room = slices[rid]
-                for key in ("light", "size", "exposure", "name", "desc", "notes", "region"):
+                for key in ("light", "size", "exposure", "name", "desc", "notes", "region",
+                            "shape", "parts", "anchors"):
                     if key in payload:
                         room["record"][key] = payload[key]
+                if "extent" in payload:
+                    # The server's rule: the size word follows the measurement.
+                    room["record"]["extent"] = payload["extent"]
+                    if payload["extent"]:
+                        room["record"]["size"] = _geometry(room["record"])["size_derived"]
+                room["record"]["geometry"] = _geometry(room["record"])
                 if "name" in payload:
                     room["name"] = payload["name"]
                 if "exits" in payload:
@@ -178,7 +243,8 @@ def _mount(page: Page):
         elif path == "/api/chats/1/rooms":
             body = index
         elif path.startswith("/api/chats/1/rooms/"):
-            body = slices[path.rsplit("/", 1)[1]]
+            body = dict(slices[path.rsplit("/", 1)[1]])
+            body["region_look"] = looks.get(body.get("region") or "", "")
         elif path == "/api/chats/1/positions":
             body = POSITIONS
         elif path == "/api/chats/1/world":
@@ -280,6 +346,111 @@ def test_adding_an_exit_shows_the_doorway_from_both_rooms(page: Page, ui_base_ur
     card.locator(".wb-exit .wb-link", has_text="Garden").click()
     expect(card.locator("textarea").first).to_have_value("An overgrown garden.")
     expect(card.locator(".wb-exit", has_text="Kitchen")).to_have_count(1)
+
+
+def test_setting_an_extent_disables_size_and_shows_the_derived_tier(
+        page: Page, ui_base_url: str) -> None:
+    _, writes = _open_story(page, ui_base_url)
+    page.locator("#b-world").click()
+    card = page.locator("#modal .wb-card")
+    size = card.locator(".wb-field-size select")
+    extent = card.locator(".wb-field-extent")
+    # No extent: the size word is the host's to choose, and the card says
+    # what square the tier gives.
+    expect(size).to_be_enabled()
+    expect(extent).to_contain_text("6 × 6 from the tier")
+    # One side alone is not a measurement and sends nothing.
+    extent.locator("input").nth(0).fill("3")
+    extent.locator("input").nth(0).blur()
+    assert not [w for w in writes if "extent" in w[2]]
+    extent.locator("input").nth(1).fill("12")
+    extent.locator("input").nth(1).press("Enter")
+    expect(page.locator("#toasts")).to_contain_text("Saved.")
+    patches = [w for w in writes if w[0] == "PATCH" and w[1] == "/api/chats/1/rooms/kitchen"]
+    assert patches[-1][2] == {"extent": {"w": 3, "d": 12}}
+    # Re-rendered from the server's answer: size is the derived tier, shown
+    # and not offered; the walls read the extent.
+    size = card.locator(".wb-field-size select")
+    expect(size).to_be_disabled()
+    expect(size).to_have_value("medium")
+    expect(card.locator(".wb-field-size")).to_contain_text("derived from the extent")
+    expect(card.locator(".wb-wall[data-wall=n] .wb-wall-paces")).to_have_text("3 paces")
+    expect(card.locator(".wb-wall[data-wall=e] .wb-wall-paces")).to_have_text("12 paces")
+    # Clearing the extent re-enables the word.
+    card.locator(".wb-field-extent .wb-remove").click()
+    patches = [w for w in writes if w[0] == "PATCH" and w[1] == "/api/chats/1/rooms/kitchen"]
+    assert patches[-1][2] == {"extent": None}
+    expect(card.locator(".wb-field-size select")).to_be_enabled()
+
+
+def test_anchors_are_listed_under_their_wall(page: Page, ui_base_url: str) -> None:
+    _, writes = _open_story(page, ui_base_url)
+    page.locator("#b-world").click()
+    card = page.locator("#modal .wb-card")
+    anchors = card.locator(".wb-section", has_text="Anchors")
+    # Four straight walls always head a group, each with its paces from the
+    # tier; the hearth is under the west wall, the bearingless table last.
+    expect(anchors.locator(".wb-wall[data-wall=n], .wb-wall[data-wall=e], "
+                           ".wb-wall[data-wall=s], .wb-wall[data-wall=w]")).to_have_count(4)
+    expect(anchors.locator(".wb-wall[data-wall=w] .wb-wall-paces")).to_have_text("6 paces")
+    expect(anchors.locator(".wb-wall[data-wall=w] .wb-anchor[data-anchor=hearth]")).to_have_count(1)
+    expect(anchors.locator(".wb-wall[data-wall=''] .wb-anchor[data-anchor=oak_table]")).to_have_count(1)
+    expect(anchors.locator(".wb-wall[data-wall='']")).to_contain_text("No wall")
+    # Moving the hearth to the north wall is changing its bearing: the whole
+    # anchor map is sent, the hearth's dir changed and the table untouched.
+    anchors.locator(".wb-anchor[data-anchor=hearth] select").nth(0).select_option("n")
+    expect(page.locator("#toasts")).to_contain_text("Saved.")
+    patches = [w for w in writes if w[0] == "PATCH" and "anchors" in w[2]]
+    assert patches[-1][2]["anchors"] == {
+        "hearth": {"desc": "the hearth", "dir": "n", "height": "waist"},
+        "oak_table": {"desc": "the oak table"}}
+    expect(card.locator(".wb-wall[data-wall=n] .wb-anchor[data-anchor=hearth]")).to_have_count(1)
+
+
+def test_editing_the_region_look_persists_and_shows_on_a_sibling_room(
+        page: Page, ui_base_url: str) -> None:
+    _, writes = _open_story(page, ui_base_url)
+    page.locator("#b-world").click()
+    card = page.locator("#modal .wb-card")
+    look = card.locator(".wb-look input")
+    expect(card.locator(".wb-look")).to_contain_text("Shared by every room in")
+    expect(card.locator(".wb-look")).to_contain_text("East Wing")
+    look.fill("brick and iron under sodium lamps")
+    look.press("Enter")
+    expect(page.locator("#toasts")).to_contain_text("Saved.")
+    assert ("PATCH", "/api/chats/1/regions/east_wing",
+            {"look": "brick and iron under sodium lamps"}) in writes
+    # The room PATCH never carried it: the look is the region's.
+    assert not [w for w in writes if w[1].startswith("/api/chats/1/rooms/") and "look" in w[2]]
+    # A sibling room in the same region reads the one sentence.
+    card.locator(".wb-exit .wb-link", has_text="Hallway").click()
+    expect(card.locator("textarea").first).to_have_value("A long, dim hallway.")
+    expect(card.locator(".wb-look input")).to_have_value("brick and iron under sodium lamps")
+    # A room in no region has no look to edit.
+    page.locator("#modal .wb-tree .wb-room[data-room=garden]").click()
+    expect(card.locator("textarea").first).to_have_value("An overgrown garden.")
+    expect(card.locator(".wb-look")).to_have_count(0)
+
+
+def test_a_lint_row_renders_beside_its_field_and_the_tree_marks_the_room(
+        page: Page, ui_base_url: str) -> None:
+    _open_story(page, ui_base_url)
+    page.locator("#b-world").click()
+    modal = page.locator("#modal")
+    card = modal.locator(".wb-card")
+    # The tree marks the room the lint names, and only that one.
+    expect(modal.locator(".wb-tree .wb-room[data-room=kitchen] .wb-lint-mark")).to_have_text("Layout")
+    expect(modal.locator(".wb-tree .wb-room[data-room=study] .wb-lint-mark")).to_have_count(0)
+    # The wall row sits under the north wall; the bearing row under the exits;
+    # nothing under the fields that carry no row.
+    north = card.locator(".wb-wall[data-wall=n] .wb-lint")
+    expect(north).to_have_count(1)
+    expect(north).to_contain_text("the wall has 2")
+    expect(card.locator(".wb-wall[data-wall=w] .wb-lint")).to_have_count(0)
+    exits = card.locator(".wb-section", has_text="Exits").locator(".wb-lint")
+    expect(exits).to_have_count(1)
+    expect(exits).to_contain_text("not opposites")
+    expect(card.locator(".wb-lint")).to_have_count(2)
 
 
 def test_the_raw_tab_keeps_the_world_editor(page: Page, ui_base_url: str) -> None:

@@ -1061,9 +1061,30 @@ resize:vertical;box-sizing:border-box}
 letter-spacing:.06em;color:var(--dim);border-bottom:1px solid var(--bd);margin-bottom:4px}
 .wb-region-name{text-transform:none;letter-spacing:0;font-weight:600;color:var(--fg)}
 .wb-garment{display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:2px 0}
+/* The room's measurement (2026-09-04, room fidelity): paces boxes, the
+   derived-size note, an L's parts, anchors under their wall, the region's
+   look, and the layout lint's rows beside the field each concerns. */
+.wb-paces{width:4.5em;flex:none}
+.wb-extent,.wb-size{display:inline-flex;gap:4px;align-items:center;flex-wrap:wrap}
+.wb-derived{font-style:italic}
+.wb-parts{margin-top:6px;padding-left:8px;border-left:2px solid var(--bd)}
+.wb-wall{margin-top:6px}
+.wb-wall-head{display:flex;gap:6px;align-items:baseline;font-size:11px;text-transform:uppercase;
+letter-spacing:.06em;color:var(--dim);border-bottom:1px solid var(--bd);margin-bottom:2px}
+.wb-wall-name{font-weight:600;color:var(--fg)}
+.wb-wall-paces{text-transform:none;letter-spacing:0}
+.wb-doorway{padding-left:8px}
+.wb-look{margin-top:8px}
+.wb-look .wb-field{width:100%}
+.wb-look .wb-input{width:100%}
+.wb-lint{display:flex;gap:8px;align-items:baseline;padding:3px 6px;margin:4px 0;
+border-left:3px solid var(--warn,var(--acc));background:var(--hover-bg,color-mix(in srgb,var(--acc) 6%,transparent));
+border-radius:0 6px 6px 0}
+.wb-lint-mark{font-size:10px}
 @media (max-width:760px){
   .wb{flex-direction:column}
   .wb-tree{flex:none;max-width:none;width:100%;border-right:none;
   border-bottom:1px solid var(--bd);padding-right:0;max-height:30vh}
   .wb-fields{flex-direction:column}
+  .wb-wall-head{flex-wrap:wrap}
 }

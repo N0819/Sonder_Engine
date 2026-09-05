@@ -314,8 +314,11 @@ def test_the_two_buttons_are_bound_once_by_the_browser():
     assert 'api("PATCH"' in browser
     assert "/entities/${encodeURIComponent(" in browser
     assert "/bodies/${encodeURIComponent(" in browser and "/station${frameQuery()}" in browser
+    # The region's look goes through the regions route, never the room PATCH.
+    assert "/regions/${encodeURIComponent(region)}${frameQuery()}" in browser
     # No closed set is typed into the browser: every select reads `vocab`.
-    for word in ('"closed_door"', '"see_through"', '"loosened"', '"bright"'):
+    for word in ('"closed_door"', '"see_through"', '"loosened"', '"bright"',
+                 '"round"', '"rectangle"', '"nw"', '"wall_overfull"'):
         assert word not in browser, word
 
 
@@ -327,7 +330,9 @@ def test_every_label_is_in_both_language_packs():
                   "Exits", "Who is here", "Things", "The plan here", "Move here",
                   "Anchors", "Add exit", "Add garment", "Saved.",
                   "No room '${room_id}' in this story",
-                  "A room needs a name"):
+                  "A room needs a name", "Extent (paces)", "Shape", "Add part",
+                  "Look of the region", "Shared by every room in", "Layout",
+                  "No wall", "${paces} paces", "derived from the extent"):
         assert label in en, label
         assert ja.get(label) not in (None, label), label
 
@@ -482,6 +487,239 @@ class TestRoomPatch:
                             json={"light": "dim"}).status_code == 400
 
 
+class TestRoomMeasurement:
+    """The room's extent, shape and parts (`docs/design/DESIGN_ROOM_FIDELITY.md`
+    §2) through the same PATCH, under the engine's own normalisers; size shown
+    as derived while an extent stands; the lint's rows on the slice, filed
+    beside the field each concerns."""
+
+    def test_an_extent_lands_clamped_and_size_is_derived_from_it(
+            self, client, story, temp_db):
+        from world.spatial import EXTENT_MAX_PACES, size_from_extent
+        cid = story["chat_id"]
+        client.patch(f"/api/chats/{cid}/rooms/kitchen", json={"size": "tiny"})
+        r = client.patch(f"/api/chats/{cid}/rooms/kitchen",
+                         json={"extent": {"w": 3, "d": 12}})
+        assert r.status_code == 200, r.text
+        record = r.json()["record"]
+        room = _scene(temp_db, cid)["rooms"]["kitchen"]
+        assert room["extent"] == {"w": 3, "d": 12}
+        # The size WORD follows the measurement: the card shows it derived,
+        # and the record says what the card shows.
+        assert room["size"] == size_from_extent({"w": 3, "d": 12}) == "medium"
+        assert record["extent"] == {"w": 3, "d": 12} and record["size"] == "medium"
+        geometry = record["geometry"]
+        assert geometry["measured"] is True and geometry["size_derived"] == "medium"
+        assert (geometry["w"], geometry["d"]) == (3, 12)
+        # Each straight wall's paces: the long walls are the depth, the
+        # short ones the width.
+        assert geometry["walls"] == {"n": 3, "s": 3, "e": 12, "w": 12}
+        # No lint row: the word and the measurement agree.
+        assert r.json()["lint"] == []
+        # A number past the ceiling is clamped by the engine, not refused.
+        r = client.patch(f"/api/chats/{cid}/rooms/kitchen",
+                         json={"extent": {"w": 99, "d": 1}})
+        assert r.status_code == 200, r.text
+        assert _scene(temp_db, cid)["rooms"]["kitchen"]["extent"] == {
+            "w": EXTENT_MAX_PACES, "d": 2}
+
+    def test_clearing_the_extent_returns_the_room_to_its_tier(
+            self, client, story, temp_db):
+        cid = story["chat_id"]
+        client.patch(f"/api/chats/{cid}/rooms/kitchen", json={"extent": {"w": 4, "d": 4}})
+        r = client.patch(f"/api/chats/{cid}/rooms/kitchen", json={"extent": None})
+        assert r.status_code == 200, r.text
+        room = _scene(temp_db, cid)["rooms"]["kitchen"]
+        assert "extent" not in room
+        # The size word the extent wrote stays: the room does not shrink to
+        # an unsized default because its measurement was withdrawn.
+        assert room["size"] == "small"
+        geometry = r.json()["record"]["geometry"]
+        assert geometry["measured"] is False and geometry["size_derived"] is None
+        assert geometry["w"] == geometry["d"] == 4
+
+    @pytest.mark.parametrize("bad", [
+        {"w": 5}, {"w": "wide", "d": 3}, {"w": 0, "d": 3}, "3x4", 7,
+    ])
+    def test_an_extent_that_is_not_a_measurement_is_refused_naming_the_range(
+            self, client, story, temp_db, bad):
+        from world.spatial import EXTENT_MAX_PACES, EXTENT_MIN_PACES
+        cid = story["chat_id"]
+        before = json.dumps(_scene(temp_db, cid), sort_keys=True)
+        r = client.patch(f"/api/chats/{cid}/rooms/kitchen", json={"extent": bad})
+        assert r.status_code == 400, r.text
+        detail = r.json()["detail"]
+        assert str(EXTENT_MIN_PACES) in detail and str(EXTENT_MAX_PACES) in detail
+        assert json.dumps(_scene(temp_db, cid), sort_keys=True) == before
+
+    def test_a_shape_lands_and_a_word_outside_the_set_is_refused(
+            self, client, story, temp_db):
+        cid = story["chat_id"]
+        r = client.patch(f"/api/chats/{cid}/rooms/kitchen", json={"shape": "round"})
+        assert r.status_code == 200, r.text
+        assert _scene(temp_db, cid)["rooms"]["kitchen"]["shape"] == "round"
+        assert r.json()["record"]["shape"] == "round"
+        assert r.json()["record"]["geometry"]["shape"] == "round"
+        r = client.patch(f"/api/chats/{cid}/rooms/kitchen", json={"shape": "hexagon"})
+        assert r.status_code == 400
+        assert "rectangle" in r.json()["detail"] and "hexagon" in r.json()["detail"]
+        # Empty clears: the rectangle, which the record reports as unset.
+        r = client.patch(f"/api/chats/{cid}/rooms/kitchen", json={"shape": ""})
+        assert "shape" not in _scene(temp_db, cid)["rooms"]["kitchen"]
+        assert r.json()["record"]["shape"] == ""
+
+    def test_l_parts_land_normalised_and_a_bad_corner_is_refused(
+            self, client, story, temp_db):
+        cid = story["chat_id"]
+        r = client.patch(f"/api/chats/{cid}/rooms/kitchen", json={
+            "shape": "l", "extent": {"w": 8, "d": 8},
+            "parts": [{"w": 8, "d": 3, "at": "north-west"},
+                      {"w": 3, "d": 8, "at": "se"}]})
+        assert r.status_code == 200, r.text
+        room = _scene(temp_db, cid)["rooms"]["kitchen"]
+        # The corner word folded to the compass, the sides whole paces.
+        assert room["parts"] == [{"w": 8, "d": 3, "at": "nw"}, {"w": 3, "d": 8, "at": "se"}]
+        assert r.json()["record"]["parts"] == room["parts"]
+        r = client.patch(f"/api/chats/{cid}/rooms/kitchen",
+                         json={"parts": [{"w": 4, "d": 4, "at": "n"}]})
+        assert r.status_code == 400
+        assert "at" in r.json()["detail"] and "sw" in r.json()["detail"]
+        r = client.patch(f"/api/chats/{cid}/rooms/kitchen",
+                         json={"parts": [{"w": 4, "at": "ne"}]})
+        assert r.status_code == 400 and "paces" in r.json()["detail"]
+        r = client.patch(f"/api/chats/{cid}/rooms/kitchen", json={"parts": "two"})
+        assert r.status_code == 400
+        # An empty list clears.
+        client.patch(f"/api/chats/{cid}/rooms/kitchen", json={"parts": []})
+        assert "parts" not in _scene(temp_db, cid)["rooms"]["kitchen"]
+
+    def test_the_slice_carries_the_lint_rows_naming_the_room_beside_their_field(
+            self, client, story, temp_db):
+        from web.world_routes import LINT_FIELDS
+        from world.spatial import LAYOUT_LINT_KINDS
+        assert set(LINT_FIELDS) == set(LAYOUT_LINT_KINDS)
+        cid = story["chat_id"]
+        scene = _scene(temp_db, cid)
+        # Three anchors on a two-pace north wall (the lint's own fixture), a
+        # size word that disagrees with the extent, and corner parts on a
+        # round room -- three rows, three fields.
+        scene["rooms"]["kitchen"].update({
+            "extent": {"w": 2, "d": 6}, "size": "vast", "shape": "round",
+            "parts": [{"w": 2, "d": 2, "at": "ne"}],
+            "anchors": {"a": {"desc": "a chest", "dir": "n"},
+                        "b": {"desc": "a crate", "dir": "n"},
+                        "c": {"desc": "a barrel", "dir": "n"}}})
+        temp_db.wset(cid, "scene", scene)
+        slice_ = client.get(f"/api/chats/{cid}/rooms/kitchen").json()
+        rows = {r["kind"]: r for r in slice_["lint"]}
+        assert set(rows) == {"wall_overfull", "size_disagrees_with_extent",
+                             "corner_in_round_room"}
+        assert rows["wall_overfull"]["field"] == "anchors"
+        assert rows["wall_overfull"]["wall"] == "n"
+        assert "cannot hold" in rows["wall_overfull"]["text"]
+        assert rows["size_disagrees_with_extent"]["field"] == "extent"
+        assert rows["corner_in_round_room"]["field"] == "shape"
+        assert all(r["rooms"] == ["kitchen"] for r in slice_["lint"])
+        # A room the lint does not name carries no row, and the index marks
+        # only the room that does.
+        assert client.get(f"/api/chats/{cid}/rooms/study").json()["lint"] == []
+        rows_ = {r["id"]: r for rows_ in client.get(f"/api/chats/{cid}/rooms")
+                 .json()["groups"].values() for r in rows_}
+        assert rows_["kitchen"]["lint"] == 3 and rows_["study"]["lint"] == 0
+
+    def test_a_pair_row_names_both_rooms(self, client, story, temp_db):
+        cid = story["chat_id"]
+        scene = _scene(temp_db, cid)
+        for edge in scene["rooms"]["kitchen"]["adjacent"]:
+            if edge["to"] == "hallway":
+                edge["dir"] = "n"
+        for edge in scene["rooms"]["hallway"]["adjacent"]:
+            if edge["to"] == "kitchen":
+                edge["dir"] = "e"
+        temp_db.wset(cid, "scene", scene)
+        for rid in ("kitchen", "hallway"):
+            (row,) = [r for r in client.get(f"/api/chats/{cid}/rooms/{rid}").json()["lint"]
+                      if r["kind"] == "reciprocal_bearing_disagrees"]
+            assert row["field"] == "exits"
+            assert set(row["rooms"]) == {"kitchen", "hallway"}
+
+    def test_stationable_anchors_carry_their_bearing(self, client, story, temp_db):
+        cid = story["chat_id"]
+        client.patch(f"/api/chats/{cid}/rooms/kitchen", json={"exits": [
+            {"to": "hallway", "barrier": "open", "dir": "e"},
+            {"to": "cellar", "barrier": "closed_door"}]})
+        stationable = {a["id"]: a for a in
+                       client.get(f"/api/chats/{cid}/rooms/kitchen").json()["stationable"]}
+        assert stationable["door:hallway"]["implicit"] is True
+        assert stationable["door:hallway"]["dir"] == "e"
+        assert stationable["door:cellar"]["dir"] is None
+        assert stationable["oak_table"]["dir"] is None
+
+
+class TestRegionLook:
+    def test_the_look_is_written_once_and_read_from_every_room_in_the_region(
+            self, client, story, temp_db):
+        cid = story["chat_id"]
+        for rid in ("kitchen", "hallway"):
+            client.patch(f"/api/chats/{cid}/rooms/{rid}", json={"region": "East Wing"})
+        assert client.get(f"/api/chats/{cid}/rooms/kitchen").json()["region_look"] == ""
+        r = client.patch(f"/api/chats/{cid}/regions/east_wing",
+                         json={"look": "  brick and iron   under sodium lamps "})
+        assert r.status_code == 200, r.text
+        assert r.json()["id"] == "east_wing"
+        assert r.json()["look"] == "brick and iron under sodium lamps"
+        assert r.json()["rooms"] == ["hallway", "kitchen"]
+        # The registry holds it (`world.regions.region_registry`), and both
+        # rooms' cards read it.
+        from world.regions import region_registry
+        assert region_registry(cid, None)["east_wing"]["look"] == \
+            "brick and iron under sodium lamps"
+        for rid in ("kitchen", "hallway"):
+            assert client.get(f"/api/chats/{cid}/rooms/{rid}").json()["region_look"] == \
+                "brick and iron under sodium lamps"
+        # The vocab's region list carries it too, for the datalist.
+        vocab = client.get(f"/api/chats/{cid}/rooms").json()["vocab"]
+        assert {"id": "east_wing", "name": "east_wing",
+                "look": "brick and iron under sodium lamps"} in vocab["regions"]
+        # A room in no region reads no look; the scene itself is untouched.
+        assert client.get(f"/api/chats/{cid}/rooms/study").json()["region_look"] == ""
+        assert "look" not in json.dumps(_scene(temp_db, cid))
+        # An empty look removes the field.
+        r = client.patch(f"/api/chats/{cid}/regions/east_wing", json={"look": ""})
+        assert r.status_code == 200 and r.json()["look"] == ""
+        assert "look" not in region_registry(cid, None)["east_wing"]
+
+    def test_the_route_is_era_scoped_and_refuses_a_bad_body(self, client, story, temp_db):
+        cid = story["chat_id"]
+        r = client.post(f"/api/chats/{cid}/frames",
+                        json={"label": "Decades Ago", "ordinal": -10, "kind": "past"})
+        fid = r.json()["id"]
+        r = client.patch(f"/api/chats/{cid}/regions/old_town?frame_id={fid}",
+                         json={"look": "gaslight"})
+        assert r.status_code == 200, r.text
+        from world.regions import region_registry
+        assert region_registry(cid, fid)["old_town"]["look"] == "gaslight"
+        assert "old_town" not in region_registry(cid, None)
+        assert client.patch(f"/api/chats/{cid}/regions/old_town?frame_id=424242",
+                            json={"look": "x"}).status_code == 404
+        assert client.patch(f"/api/chats/{cid}/regions/old_town",
+                            json={}).status_code == 400
+        assert client.patch(f"/api/chats/{cid}/regions/old_town",
+                            json={"look": ["x"]}).status_code == 400
+
+    def test_the_route_is_host_only_and_idle_guarded(self, client, story, monkeypatch):
+        from agents import runtime
+        from web.auth_routes import GUEST_ALLOWED_API_PATHS
+        cid = story["chat_id"]
+        assert f"/api/chats/{cid}/regions/east_wing" not in GUEST_ALLOWED_API_PATHS
+        anonymous = TestClient(app_module.app)
+        assert anonymous.patch(f"/api/chats/{cid}/regions/east_wing",
+                               json={"look": "x"}).status_code in (401, 403)
+        monkeypatch.setitem(runtime.ABORTS, (cid, None), object())
+        assert client.patch(f"/api/chats/{cid}/regions/east_wing",
+                            json={"look": "x"}).status_code == 409
+
+
 class TestEntityPatch:
     def test_a_things_fields_land(self, client, story, temp_db):
         cid = story["chat_id"]
@@ -585,8 +823,10 @@ class TestBodiesAndVocab:
 
     def test_every_closed_set_comes_from_the_engine(self, client, story):
         from story.attire import GARMENT_STATES, REGIONS
-        from world.spatial import (_VALID_BARRIERS, FOOTPRINTS, HEIGHTS,
-                                   LIGHT_LEVELS, OPACITIES, ROOM_SIZES)
+        from world.spatial import (_VALID_BARRIERS, EXTENT_MAX_PACES,
+                                   EXTENT_MIN_PACES, FOOTPRINTS, HEIGHTS,
+                                   LIGHT_LEVELS, OPACITIES, ROOM_CORNERS,
+                                   ROOM_SIZES, SHAPES)
         from world.weather import EXPOSURES
         vocab = client.get(f"/api/chats/{story['chat_id']}/rooms").json()["vocab"]
         assert vocab["light"] == list(LIGHT_LEVELS)
@@ -596,6 +836,10 @@ class TestBodiesAndVocab:
         assert vocab["heights"] == list(HEIGHTS)
         assert vocab["footprints"] == list(FOOTPRINTS)
         assert vocab["opacities"] == list(OPACITIES)
+        assert vocab["shapes"] == list(SHAPES)
+        assert vocab["corners"] == list(ROOM_CORNERS)
+        assert vocab["walls"] == ["n", "e", "s", "w"]
+        assert vocab["extent"] == {"min": EXTENT_MIN_PACES, "max": EXTENT_MAX_PACES}
         assert vocab["attire_regions"] == list(REGIONS)
         assert vocab["garment_states"] == list(GARMENT_STATES)
         assert len(vocab["dirs"]) == 8 and "n" in vocab["dirs"]
