@@ -2376,7 +2376,18 @@ def perception_act(ctx, nonce):
             "spatial_to_actor": rel,
             "visual_channel_to_actor": has_visual(rel) and composer._sense_graded(
                 "full", "sight", _sense_card(sh)) != "none",
-            "proximity_to_actor": proximity_rel(
+            # ONE LINE, ONE FLOOR (PR5). This key feeds `speech_percept` and
+            # `communication_percept` and nothing else, and
+            # `composer.line_hear_level` states the contract in its own
+            # docstring: pass only a MEASURED tier, because `proximity_rel`
+            # returns "near" both as a reading and as its fallback when
+            # nobody wrote stations (6.7% of live bodies carry one), and a
+            # gate that reads the fallback as evidence of separation
+            # silences a conversation. The OUTCOME pass already passes
+            # `measured_proximity_rel`; this one passed the raw tier, so the
+            # same beat's same line was graded by two different floors --
+            # F61's class at the proximity gate.
+            "proximity_to_actor": measured_proximity_rel(
                 sc, character_name(sh), p_name),
             "proximity_to_sources": prox_to_others,
             "behind_sources": behind_others,
@@ -3340,6 +3351,106 @@ def _strip_self_narration_quote_safe(view, perceiver_name, other_names=()):
         return view, [], [_unmask_quoted_spans(r, spans)
                           for r in own_refusals]
     return _unmask_quoted_spans(stripped, spans), dropped, []
+
+
+#: Where one authored predicate ends and the next begins, as TYPOGRAPHY
+#: rather than vocabulary. This is deliberately not a list of conjunctions:
+#: it is the punctuation an author already used to join predicates, and the
+#: failure direction is the safe one -- a join point this misses leaves the
+#: two predicates in ONE span, so a span that names an inadmissible body
+#: takes more with it, never less. Nothing here decides meaning.
+_SURFACE_CLAUSE_SPLIT = re.compile(r"(?<=[,;:])\s+|\s+[—–]\s+|\s+--\s+")
+
+
+def _act_surface_admission(surface, *, actor, observer, forms_by_body,
+                           perceived, who):
+    """WHAT A BODY IS SEEN DOING IS ADMISSIBLE; WHAT IT IS SEEN DOING IT TO
+    IS ADMISSIBLE ONLY WHERE THE TARGET IS.
+
+    An `observable` is free text describing the ACTOR, and the act channel
+    admitted the whole string on the actor's channel alone. Any OTHER body
+    the sentence names is a percept about THAT body -- its presence, its
+    state, its name -- and it reached every observer who could see the actor
+    without passing a single admission gate of its own.
+
+    Live (`PLAY_2026_09_05C_masque.md` § PX5, turn 6). Ivo stood on a
+    completely dark terrace; Verrin, in the gallery, declared
+    ``observable: "looks leisurely over Ivo's uncovered face, then lifts his
+    wine glass and takes a slow, delicate sip without flinching"``. That
+    sentence was delivered verbatim to a body in the reception room two
+    edges away and to a body in the gallery whose own view in the same beat
+    correctly read "Through the glazed terrace door, only darkness". Both
+    received the name Ivo and the fact that his face was uncovered -- the
+    plot's secret, delivered to the two people it was being kept from, in
+    the beat it was created. No tripwire fired, because nothing was looking:
+    the identity scrub answers "may this observer hear this NAME", and the
+    leak here is the STATE beside it.
+
+    `perceived` is this observer's own eyes for the beat -- the set
+    `_composer_standing_percepts` fills through `seen_out`, which is the
+    same "could this observer see them" answer every presence percept is
+    built from. A body in it is admissible; a body absent from it is not,
+    and the span that named it is cut. This SUBTRACTS: what survives is the
+    actor's own conduct, which is what the channel was carrying.
+
+    Returns ``(surface, cut_bodies)``; an empty surface means every span
+    named somebody the observer has no channel to, and the caller refuses.
+    """
+    text = str(surface or "").strip()
+    if not text or not forms_by_body:
+        return text, []
+    exempt = {str(actor or "").strip().casefold(),
+              str(observer or "").strip().casefold()}
+    seen_folded = {str(n or "").strip().casefold() for n in (perceived or ())}
+    # Read from the section that OWNS the table (`agents.common`), never a
+    # second copy under this module's own key: one list of ordinary English
+    # words that are also names, in one place, per pack.
+    common_words = linguistic("agents.common", "_COMMON_WORD_NAMES")
+    third = []
+    for body, forms in forms_by_body.items():
+        canonical = str(body or "").strip()
+        folded = canonical.casefold()
+        if not canonical or folded in exempt or folded in seen_folded:
+            continue
+        patterns = []
+        for form in {canonical, *(forms or ())}:
+            form = str(form or "").strip()
+            if not form:
+                continue
+            # An ordinary English word that is also somebody's name matches
+            # only in its capitalised spelling -- the same guard
+            # `_scrub_unknown_identities` applies, for the same reason: "the
+            # rose garden" is not a percept of Rose.
+            if len(form.split()) == 1 and form.casefold() in common_words:
+                patterns.append(
+                    name_boundary_regex(form[:1].upper() + form[1:]))
+            else:
+                patterns.append(name_boundary_regex(form, re.IGNORECASE))
+        if patterns:
+            third.append((canonical, patterns))
+    named = [(body, patterns) for body, patterns in third
+             if any(pattern.search(text) for pattern in patterns)]
+    if not named:
+        return text, []
+    kept, cut = [], []
+    for span in _SURFACE_CLAUSE_SPLIT.split(text):
+        hits = [body for body, patterns in named
+                if any(pattern.search(span) for pattern in patterns)]
+        if hits:
+            cut.extend(hits)
+            continue
+        span = span.strip().rstrip(",;:").strip()
+        if span:
+            kept.append(span)
+    cut = sorted(set(cut))
+    trimmed = ", ".join(kept)
+    note_step_decision(
+        "act_percept", who, "refused" if not trimmed else "delivered",
+        "the observable named %s, whom this observer has no channel to; "
+        "%s" % (", ".join(cut),
+                "nothing else was said about the actor"
+                if not trimmed else "that clause was cut"))
+    return trimmed, cut
 
 
 def _composer_scrub_surface(text, name, recognized, unknown_sources):
@@ -4415,6 +4526,12 @@ def _composer_act(ctx, sc, interp, perceivers, known, p_name, p_visible,
     all_bodies.append(actor_body)
     bodies_by_name = {b["name"]: b for b in all_bodies if b.get("name")}
     joint_labels = _joint_stranger_labels(all_bodies)
+    # Every body this beat could NAME, and every spelling prose reaches for
+    # it by -- the input `_act_surface_admission` (PX5) reads to decide
+    # whether an observable's clause is about somebody the observer has a
+    # channel to. A presence with no sheet contributes its own name.
+    forms_by_body = {nm: self_forms_by_name.get(nm) or [nm]
+                     for nm in bodies_by_name}
     # WHERE THE BEAT SAYS THIS BODY ENDS UP (`_declared_arrival_room`), and
     # one relation per observer per room built from it (`_speech_room_for`):
     # a line said with a hand on somebody in the room walked INTO is heard
@@ -4545,9 +4662,19 @@ def _composer_act(ctx, sc, interp, perceivers, known, p_name, p_visible,
                         # Speech before the run stays audible; speech after
                         # gets no continuity floor.
                         continuity = False
+                    # A BODY THE OBSERVABLE NAMES IS A PERCEPT OF ITS OWN
+                    # (PX5). Before the identity scrub, because the scrub
+                    # rewrites the very names this reads.
+                    surface, _cut = _act_surface_admission(
+                        observable_action_onset_text(event),
+                        actor=p_name, observer=name,
+                        forms_by_body=forms_by_body,
+                        perceived=seen_bodies,
+                        who="%s -> %s" % (p_name, name))
+                    if _cut and not surface:
+                        continue        # refusal already recorded
                     surface = _composer_scrub_surface(
-                        observable_action_onset_text(event), name, recognized,
-                        unknown)
+                        surface, name, recognized, unknown)
                     surface = resolve_action_referents(
                         surface, event, {
                             **{key: value for key, value in display_map.items()},
@@ -4891,6 +5018,11 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
         b for b in (presence_bodies or ()) if b["name"] not in appearances)
     bodies_by_name = {b["name"]: b for b in bodies if b.get("name")}
     joint_labels = _joint_stranger_labels(bodies)
+    # The act stage's twin (see `_composer_act`): every body this beat could
+    # NAME, and every spelling prose reaches for it by, for
+    # `_act_surface_admission` (PX5).
+    forms_by_body = {nm: self_forms_by_name.get(nm) or [nm]
+                     for nm in bodies_by_name}
 
     # Visible-form structural changes this beat re-earn a full description.
     appearance_changed = set()
@@ -5220,8 +5352,17 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
                         _strip_identity_tokens(
                             appearances.get(actor),
                             [actor, *(cast_aliases.get(actor) or [])]))
+                # A BODY THE SURFACE NAMES IS A PERCEPT OF ITS OWN (PX5),
+                # asked before the identity scrub rewrites the names.
+                surface, _cut = _act_surface_admission(
+                    act.get("attempt"), actor=actor, observer=name,
+                    forms_by_body=forms_by_body, perceived=seen_bodies,
+                    who="%s -> %s" % (actor, name))
+                if _cut and not surface:
+                    order += 1
+                    continue            # refusal already recorded
                 surface = _composer_scrub_surface(
-                    act.get("attempt"), name, recognized, unknown)
+                    surface, name, recognized, unknown)
                 surface = resolve_action_referents(
                     surface, act.get("event") or {}, {
                         **{key: value for key, value in display_map.items()},
