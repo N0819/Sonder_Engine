@@ -23,8 +23,12 @@ a person-need in the same commit by enrolling the person somewhere real:
    own berths -- in a house under `BERTH_CEILING`, nearest the room they
    were seen in; when every house is full, the least-full one and a
    room-need for a dwelling, filed for the Writers' Room;
-4. else, in a story with no town at all, a minimal households charter
-   minted for the story, and the same room-need.
+4. else NOBODY, and no institution is minted to hold them. An enrolment is
+   into an institution that EXISTS; the fill used to found a households
+   charter for a story that had no town, which made a townsman of a
+   charcoal burner at a woodland camp and then refused his greeting as
+   `outside_licence` (road run, 2026-09-05). The person-need stays open for
+   the Writers' Room, which is the author that may found a town.
 
 The enrolled body is dealt a surface by the look law and RECONCILED with
 what was seen: an axis the Director's description names another pool value
@@ -50,7 +54,7 @@ HOUSEHOLDS_CHARTER = "households"
 #: model gives a hurt body to recover.
 GUEST_STAY_HOURS = 72.0
 #: How the fill enrolled a person; closed, for the record and the tests.
-ENROL_HOW = ("post", "guest", "household", "minted_households")
+ENROL_HOW = ("post", "guest", "household")
 
 
 def enrolled_body_key(name):
@@ -380,20 +384,28 @@ def enrol_person(cid, need, frame_id=None, scene=None):
                     notes.append("every house is at the berth ceiling; a "
                                  "dwelling is owed")
             else:
-                # 4. No town: a minimal households charter for the story.
-                item = items.setdefault(HOUSEHOLDS_CHARTER, {"state": {
-                    "key": HOUSEHOLDS_CHARTER, "posts": {}, "upkeeps": {},
-                    "priority": [], "bodies": {}}})
-                state = item.setdefault("state", {})
-                state.setdefault("key", HOUSEHOLDS_CHARTER)
-                _add_body(state, HOUSEHOLDS_CHARTER, body_key, name=name,
-                          place=place, berth=place, post_key="", seen=seen)
-                record.update(how="minted_households",
-                              charter=HOUSEHOLDS_CHARTER, berth=place,
-                              room_need=True)
-                notes.append("no institution keeps its own berths here; a "
-                             "households charter was minted and a dwelling "
-                             "is owed")
+                # 4. NOBODY KEEPS THEM, AND THE ENGINE DOES NOT INVENT
+                # SOMEBODY WHO DOES. A body is enrolled by an institution
+                # that EXISTS; minting one to hold a body makes a town out
+                # of a person, and the invented institution then governs
+                # them -- measured live on the road, 2026-09-05: a charcoal
+                # burner standing at a camp in the woods was written into a
+                # freshly minted `households` charter ("no institution keeps
+                # its own berths here; a households charter was minted and a
+                # dwelling is owed"), which then refused his greeting as
+                # `outside_licence`. He was a person the plan had already
+                # placed; what he was not was a townsman of a town with no
+                # houses in it.
+                #
+                # So the fill declines, and declining is a real answer: the
+                # person-need stays open for the Writers' Room (the one
+                # author who may found an institution), the body stays an
+                # ordinary background presence with the surface the story
+                # gave it, and the caller is told nobody could place them.
+                notes.append("no institution stands here that could keep "
+                             "them; nobody was minted to, and the person "
+                             "need stays open")
+                return record
     record["ref"] = {"charter": record["charter"], "body": body_key}
     save_registry(cid, registry, frame_id)
     return record

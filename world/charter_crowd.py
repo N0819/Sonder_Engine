@@ -249,7 +249,7 @@ def mood_of(members, feel):
     return _MOOD_WORST
 
 
-def crowd_for(chat_id, charter, place):
+def crowd_for(chat_id, charter, place, members=None):
     """One derived crowd for this charter in this room, or None.
 
     None below `CHARTER_CROWD_FLOOR`: two unvoiced bodies are two figures
@@ -259,8 +259,14 @@ def crowd_for(chat_id, charter, place):
     marks it derived is the uid prefix and the ``derived`` flag, and no
     ``since_turn``, because a projection has no birthday. The membership
     count dies here: it met the band vocabulary and is not carried out.
+
+    ``members`` is `members_of`'s answer when the caller has already asked
+    it. A VIEW MUST ASK ONCE: the crowd is the bodies it carries and the
+    figures are the bodies it does not, so the two presentations are one
+    subtraction and a second call to `members_of` is a second answer that
+    can differ from the first (`agents.common.charter_ground_for_room`).
     """
-    members = members_of(charter, place)
+    members = members_of(charter, place) if members is None else list(members)
     if len(members) < CHARTER_CROWD_FLOOR:
         return None
     key = str(charter.get("key") or "")

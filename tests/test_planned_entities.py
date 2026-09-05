@@ -28,6 +28,18 @@ def _chat(db):
                  ("Plans", "", time.time()))
 
 
+def _households(cid):
+    """A households charter the story already has. The fill enrols into an
+    institution that EXISTS and founds none (`charter_enrol`, road run
+    2026-09-05), so a person-need is answerable only where one stands."""
+    from world.charter_runtime import save_registry
+    save_registry(cid, {"households": {
+        "key": "households", "priority": [], "clock_hours": 10.0,
+        "upkeeps": {"keep_house_a": {"place": "house_a"},
+                    "keep_house_b": {"place": "house_b"}},
+        "posts": {}, "bodies": {}, "watch": {}}})
+
+
 def _ctx(db, cid, turn_idx=3, director_resolve=None, scene=None):
     if scene is not None:
         db.wset(cid, "scene", scene)
@@ -303,14 +315,29 @@ class TestPlanningNeeds:
         assert kinds == {"room", "thing"}
 
     def test_the_drain_fills_a_person_need_the_town_can_place(self, temp_db):
-        from world.charter_runtime import registry_for
+        from world.charter_runtime import registry_for, save_registry
         cid = _chat(temp_db)
+        save_registry(cid, {"households": {
+            "key": "households", "priority": [], "clock_hours": 10.0,
+            "upkeeps": {"keep_house_a": {"place": "house_a"},
+                        "keep_house_b": {"place": "house_b"}},
+            "posts": {}, "bodies": {}, "watch": {}}})
         need, _ = file_planning_need(cid, {"kind": "person", "surface": {"name": "Dock Hand", "room": "quay"}})
         out = drain_planning_needs(cid)
         assert out["filled"][0]["uid"] == need["uid"]
-        assert out["filled"][0]["how"] == "minted_households"
+        assert out["filled"][0]["how"] == "household"
         assert "households" in registry_for(cid)["items"]
         assert open_planning_needs(cid) == []
+
+    def test_a_person_need_no_institution_can_place_stays_open(self, temp_db):
+        """The drain does not found a town to hold one body; the need waits
+        for the Writers' Room (road run, 2026-09-05)."""
+        from world.charter_runtime import registry_for
+        cid = _chat(temp_db)
+        file_planning_need(cid, {"kind": "person", "surface": {"name": "Dock Hand", "room": "quay"}})
+        out = drain_planning_needs(cid)
+        assert out == {"filled": [], "open": 1}
+        assert registry_for(cid)["items"] == {}
 
     def test_past_the_cap_the_oldest_open_need_is_closed_as_stale(self, temp_db):
         cid = _chat(temp_db)
@@ -332,6 +359,7 @@ class TestPlanningNeeds:
     def test_the_job_runs_only_when_something_is_open(self, temp_db):
         from core import jobs
         cid = _chat(temp_db)
+        _households(cid)
         ctx = _ctx(temp_db, cid)
         assert schedule_planning_needs(ctx) is None
         file_planning_need(cid, {"kind": "person", "surface": {"name": "Dock Hand", "room": "quay"}})
@@ -367,6 +395,7 @@ class TestTheCommitFilesTheNeedAndTheTownAnswers:
         from persist.commit import track_background_presences
         from world.charter_runtime import registry_for
         cid = _chat(temp_db)
+        _households(cid)
         ctx = _ctx(temp_db, cid, director_resolve=_resolve_with_person(
             "Dock Hand", "quay", "A wiry hand with rope burns."), scene=_scene())
         track_background_presences(ctx, nonce=0)
@@ -375,8 +404,8 @@ class TestTheCommitFilesTheNeedAndTheTownAnswers:
         assert len(person) == 1 and person[0]["status"] == "filled"
         assert person[0]["surface"]["description"] == "A wiry hand with rope burns."
         assert person[0]["surface"]["room"] == "quay"
-        # A households charter minted for a story with no town owes the
-        # newcomer a dwelling: a room-need, open for the room.
+        # The households charter takes them; it keeps no berth yet, so the
+        # newcomer is owed a dwelling: a room-need, open for the room.
         assert [n["kind"] for n in open_planning_needs(cid)] == ["room"]
         ref = person[0]["fill"]["ref"]
         presences = temp_db.wget(cid, "background_presences", {})
