@@ -4676,8 +4676,36 @@ def _scrub_unknown_identities(view, *, allowed_forms, unknown_sources):
             continue
         label = _unknown_actor_label(
             name, src.get("appearance"), aliases=src.get("aliases"))
+        # A NAME'S OWN PARTS ARE SPELLINGS OF THE BODY IT NAMES. The forms
+        # were the full name and the authored aliases, so a Director writing
+        # a bare given name in free text walked past this pass while the same
+        # channel carrying the full name was caught and repaired three times
+        # in the same run. Measured (the Cold Season Ball, 2026-09-05, PX1):
+        # `poses["Verrin Sault"].detail` said "eyes fixed on Ivo through his
+        # white silk mask", and that sentence reached two minds' views, their
+        # observations and their stored episodes -- whose `entities` array
+        # ends `"Verrin Sault", "Ivo"`. The control is in the same run: turns
+        # 8, 9 and 15 carried "Ivo Sarn" and every one fired the tripwire.
+        #
+        # Withholding is the direction that may be generous, because every
+        # miss here SUBTRACTS: a part that collides with a form the observer
+        # legitimately commands is shielded by the `allowed` check below and
+        # by the longest-form-first alternation, and a part too short or too
+        # ordinary to tell from a word is refused by the same two guards the
+        # authored forms pass through.
+        # A part that is a TITLE, an ARTICLE or one of the engine's own
+        # label heads is a word the name shares with the language, not a
+        # spelling of the body: "The Stranger" yields nothing here, which is
+        # right twice over -- it is an engine label rather than an identity,
+        # and scrubbing its "the" would eat every article in the view. Both
+        # tables are language DATA the pack already owns for naming.
+        _generic = set(_ling("_NAME_TITLE_TOKENS")) | set(
+            _ling("_GENERIC_LABEL_HEADS"))
+        parts = [tok for tok in re.split(r"[^\w]+", name)
+                 if tok and tok.casefold() not in _generic] \
+            if len(name.split()) > 1 else []
         for form in [name] + [str(a or "").strip()
-                              for a in (src.get("aliases") or [])]:
+                              for a in (src.get("aliases") or [])] + parts:
             if not form or form.casefold() in allowed:
                 continue
             # A short Latin form cannot be told from an ordinary word; a short
