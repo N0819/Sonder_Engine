@@ -1,11 +1,17 @@
 # Room geometry: a line of sight the Director cannot argue with
 
-Status: PROTOTYPE, on a branch. Built 2026-09-02 in an isolated worktree
-from a design conversation about deterministic mapping and navigation; every
-number below was measured on that branch. Nothing here is merged. The
-companion pieces — the planned-room handoff (§8) and the anchor schema (§2) —
-landed in the same commit and are described here because they share the
-seam.
+Status: PROTOTYPE, on `main` since 2026-09-03. Built 2026-09-02 in an
+isolated worktree from a design conversation about deterministic mapping and
+navigation; every number below was measured on that worktree before the
+merge (`world/spatial_fov.py`, `tests/test_room_geometry.py`). The companion
+pieces — the planned-room handoff (§8) and the anchor schema (§2) — landed in
+the same commit and are described here because they share the seam. Extended
+on `writers-room` 2026-09-04, not yet on `main`: extents and shapes
+(`DESIGN_ROOM_FIDELITY.md` §2), the light and sound fields on the same grid
+(`DESIGN_LIGHT_FIELD.md`, `DESIGN_SOUND_FIELD.md`), and `offset` along a wall
+(`DESIGN_ROOM_FIDELITY.md` §10). The register holds what is still open as
+`docs/UNBUILT.md` § 2.27 (this note's §10, less per-cell light, which the
+light field now is) and § 2.26 (the map editor's gaps).
 
 The ask was "realistic geometry and object occlusion, rendered as text".
 The answer is a derived layer, never stored, that reads what the scene
@@ -253,8 +259,11 @@ second of pure Python; an ordinary two-body scene adds milliseconds.
     input. The clauses ask for the input; whether the model supplies it is a
     play-test question, not a schema one.
   * **A 2D grid at one pace.** No elevation, no partial transparency, no
-    light per cell beyond the room's own light, no occlusion of sound (right)
-    or scent (right). A balcony, a pit and a stairwell are not modelled.
+    occlusion of scent (right). A balcony, a pit and a stairwell are not
+    modelled. *Two items left this bullet on 2026-09-04: light per cell is
+    the light field (`DESIGN_LIGHT_FIELD.md`), and sound is a flood over the
+    same grid that goes round an occluder rather than through it
+    (`DESIGN_SOUND_FIELD.md`) -- both on `writers-room`, not yet on `main`.*
   * **Placement is seeded, not authored.** The bar is somewhere along the
     north wall, not at the end the prose put it. When a scene's prose is
     specific about where two features stand relative to each other, the grid

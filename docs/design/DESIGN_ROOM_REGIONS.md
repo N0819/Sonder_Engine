@@ -1,12 +1,17 @@
 # Reading the world by region
 
-**Status:** partly built (2026-09-04, `world/regions.py`): the region as a
-FIELD on every room, derived and never named, the registry of what the regions
-are, the index grouped by region, the briefs naming it, the in-pieces
-contradiction and the one-shot backfill. Still argument: `inspect_regions`
-(§5), the `region` argument on `inspect_rooms`, and a writer for a region's
-brief. Written 2026-09-04, after measuring what the Story Planner actually
-pays to look at a world.
+**Status:** partly built (2026-09-04, `world/regions.py`, on `writers-room`
+and not yet on `main`): the region as a FIELD on every room, derived and
+never named, the registry of what the regions are, the index grouped by
+region, the briefs naming it, the in-pieces contradiction, the one-shot
+backfill, and -- later the same day -- the registry's optional `look`
+(`set_region_look`, written by the World Browser's room card through
+`PATCH /api/chats/{cid}/regions/{region_id}`, read by the backdrop brief).
+Still argument, registered at `docs/UNBUILT.md` § 2.26 (the region bullet)
+and § 2.37 (the Room tool): `inspect_regions` (§5), the `region` argument
+on `inspect_rooms`, and a writer for a region's `brief` -- and no Room tool
+writes the `look` either. Written 2026-09-04, after measuring what the Story
+Planner actually pays to look at a world.
 
 *Built, 2026-09-04, later still -- and one ruling in §6 reversed.* The owner
 asked for regions as THE grouping the index, the coming World Browser and the

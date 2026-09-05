@@ -1,10 +1,16 @@
 # The light field: light as a quantity on the sight grid
 
-Status: PROTOTYPE, on a branch. Built 2026-09-04 in an isolated worktree
-from this note, §§ 3-8, as `world/spatial_light_field.py` behind the
-`world/spatial.py` facade, with `tests/test_light_field.py` (36 tests) and
-the measurements of § 9.1-9.4 taken read-only on a copy of the owner's
-database (chat 111 excluded). Nothing here is merged. Headline numbers:
+Status: PROTOTYPE, merged on `writers-room` 2026-09-04; not yet on `main`.
+Built 2026-09-04 in an isolated worktree from this note, §§ 3-8, as
+`world/spatial_light_field.py` behind the `world/spatial.py` facade, with
+`tests/test_light_field.py` (36 tests) and the measurements of § 9.1-9.4
+taken read-only on a copy of the owner's database (chat 111 excluded), then
+merged and extended the same day with the sound field (below). The register
+holds what is still open as `docs/UNBUILT.md` § 2.34: median or mean, the
+constants (§ 6, `FLOOR_SPILL` among them), whether the shape sentence should
+also say the median word, the unplayed § 9.5 live beats, cost at the geometry
+note's precision, the backdrop brief's empty `lighting` slot, and the Japanese
+adapter's missing furniture and openings sentences. Headline numbers:
 
     corpus (104 scenes, 589 rooms, 823 entities)
       entities carrying light_source             2   (one dim, one lit)

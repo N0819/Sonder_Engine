@@ -739,8 +739,10 @@ legitimately perceive, learn, remember or infer.
   is in motion sit beside it. The Story Planner answers: it reads the world
   through its tools, drafts what you ask for as a plot package, and acts only
   under what you have granted it in words -- a grant becomes a standing
-  mandate you can read and withdraw. No proposal card yet: an actionable
-  reply is prose plus the standing list. Under ⚙ Settings, *Writers' Room
+  mandate you can read and withdraw. Beside it sits the Dramaturge, which
+  proposes direction and builds nothing; the Planner judges each proposal
+  for naturalness and you can show, summarise or hide its lines. No proposal
+  card yet: an actionable reply is prose plus the standing list. Under ⚙ Settings, *Writers' Room
   research* names a web search provider and its key; once a story has also
   granted the room research in words, the Planner may search the web for
   reference material, every query shown in the thread before it is sent and

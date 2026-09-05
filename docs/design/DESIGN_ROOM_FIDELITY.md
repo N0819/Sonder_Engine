@@ -1,6 +1,13 @@
 # Room fidelity: one record, rendered three ways
 
-Status: PROTOTYPE, on a branch. Built 2026-09-04 in an isolated worktree
+Status: PROTOTYPE, merged on `writers-room` 2026-09-04; not yet on `main`.
+Built 2026-09-04 in an isolated worktree (§§2-4; the map editor and `offset`
+of §10 later the same day) and merged the same day; §5, the passage record,
+is designed and NOT built. The register holds what is still open as
+`docs/UNBUILT.md` § 2.37 (the passage record, a Room tool for a region's
+look, the extents nobody writes yet, the rim, the lint's beared-edge ceiling,
+the viewer camera, the one-time redraw, `size` from area) and § 2.26 (what
+the map editor does not yet do). Built
 from the owner's ruling of the same day: a room is minted ONCE and rendered
 three ways -- prose by the composer, sight and light by the geometry, a
 picture by the backdrop agent -- so every fidelity field on the room record

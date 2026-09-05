@@ -146,8 +146,24 @@ they answer different questions about it:
   decides whether a value is authored or configured, why a package operation
   writing the world key cannot work, and the overlay this codebase already
   reaches for whenever two authors share one value.
+- [`DESIGN_ROOM_GEOMETRY.md`](design/DESIGN_ROOM_GEOMETRY.md) — a line of
+  sight the Director cannot argue with (2026-09-02, prototype on `main`): a
+  per-room grid from the size tier, anchors placed by bearing, body cells from
+  stations, sight by shadowcasting, folded into `visual_level_between` and
+  rendered as a person would say it; the planned-room handoff shares the seam.
+- [`DESIGN_LIGHT_FIELD.md`](design/DESIGN_LIGHT_FIELD.md) — light as a
+  quantity on the sight grid (2026-09-04, prototype on `writers-room`): a
+  source is a class, not a device; shadowcast, decayed, summed, bounced,
+  floored and quantised LAST; fail-open where a room has no geometry; the
+  composer says where the light falls. Measured on the owner's corpus before
+  and after.
+- [`DESIGN_SOUND_FIELD.md`](design/DESIGN_SOUND_FIELD.md) — loudness as a
+  flood on the same grid (2026-09-04, prototype on `writers-room`): a
+  shortest acoustic path round what stands in the way, attenuated per
+  aperture, a signal against a noise floor, quantised LAST to the three words
+  every reader already keeps; one grid derivation for three senses.
 - [`DESIGN_ROOM_FIDELITY.md`](design/DESIGN_ROOM_FIDELITY.md) — one room
-  record rendered three ways (2026-09-04, prototype on a branch): `extent`
+  record rendered three ways (2026-09-04, prototype on `writers-room`): `extent`
   in paces and a `shape` from a closed set drive the sight grid, the size
   word and the backdrop picture alike; the layout lint (`world/spatial_lint.py`)
   reports where a scene's bearings and extents cannot all be true; the
@@ -212,6 +228,11 @@ modes each one documents.
   [`experiments/maze/`](experiments/maze).
 - [`DESIGN_MAZE_EXPANSION.md`](experiments/DESIGN_MAZE_EXPANSION.md) — the next
   arm: can a mind revise a map it already trusts? Designed, not built.
+- [`DEBUG_RUN_2026_09_04.md`](experiments/DEBUG_RUN_2026_09_04.md) — two
+  runs on copies of the owner's database after the Writers' Room waves
+  merged, every stage read: thirty-five findings, eight classes fixed the
+  same day (`tests/test_played_scene_classes.py`), the rest registered in
+  `UNBUILT.md` § 2.35 as owner decisions.
 - [`bench-2026-08-03/`](experiments/bench-2026-08-03) — a dated model shootout,
   its raw logs, and
   [`FAST_SUBSCRIBER_CONFIG.txt`](experiments/bench-2026-08-03/FAST_SUBSCRIBER_CONFIG.txt),
