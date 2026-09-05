@@ -73,25 +73,25 @@
 | `persist/chat_archive.py` | 1274 | Typed, atomic chat archive export/import service and HTTP routes. | `core.db`, `llm.schemas`, `mind.memory`, `persist.checkpoints`, `story.character_schema`, `story.room_conversation` |
 | `persist/chat_delete.py` | 42 |  | `core.db` |
 | `persist/checkpoints.py` | 1450 | Whole-chat snapshots and checkpoint restore orchestration. | `core.db`, `mind.memory` |
-| `persist/commit.py` | 773 | Atomic commit orchestrator, per-turn lock, thin tail domains, and the facade re-exporting every commit_* name. | `core.db`, `core.frames`, `llm.prompts`, `llm.providers`, `mind`, `mind.memory`, `mind.theory_of_mind`, `persist.commit_attire`, `persist.commit_background`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_entities`, `persist.commit_ledgers`, `persist.commit_mapping`, `persist.commit_mechanics`, `persist.commit_memory`, `persist.commit_memory_write`, `persist.commit_place_graph`, `persist.commit_room_registry`, `persist.commit_scene_state`, `story`, `story.character_schema`, `story.scene`, `world.comfort`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.spatial_frames`, `world.survival`, `world.weather` |
-| `persist/commit_attire.py` | 1458 | The mutable clothing ledger: attire notes, shed/worn garment entities, the validated attire diff. | `persist.commit_common`, `story`, `story.attire` |
+| `persist/commit.py` | 783 | Atomic commit orchestrator, per-turn lock, thin tail domains, and the facade re-exporting every commit_* name. | `core.db`, `core.frames`, `llm.prompts`, `llm.providers`, `mind`, `mind.memory`, `mind.theory_of_mind`, `persist.commit_attire`, `persist.commit_background`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_entities`, `persist.commit_ledgers`, `persist.commit_mapping`, `persist.commit_mechanics`, `persist.commit_memory`, `persist.commit_memory_write`, `persist.commit_place_graph`, `persist.commit_room_registry`, `persist.commit_scene_state`, `story`, `story.character_schema`, `story.scene`, `world.comfort`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.spatial_frames`, `world.survival`, `world.weather` |
+| `persist/commit_attire.py` | 1686 | The mutable clothing ledger: attire notes, shed/worn garment entities, the validated attire diff. | `persist.commit_common`, `story`, `story.attire` |
 | `persist/commit_background.py` | 4245 | Background presences: tracking, identity folding, the reactor gate, promotion to cast. | `core.db`, `mind.memory`, `persist.commit_common`, `story.character_schema`, `story.scene`, `world.spatial` |
 | `persist/commit_common.py` | 666 | Leaf helpers shared across commit domains: scalar utilities, name/address roster, entity-id canonicalisation. | `core.db`, `mind.memory`, `story.character_schema`, `world.mechanics`, `world.spatial` |
 | `persist/commit_destruction.py` | 414 | Single- and multi-book destruction cascades, retirement, and latency-gated news. | `core.db`, `mind.memory`, `persist.commit_common`, `world.mechanics`, `world.spatial`, `world.spatial_frames` |
 | `persist/commit_entities.py` | 560 | world_entities projection of the scene commit, awareness gate, disguise supersession. | `core.db`, `persist.commit_common`, `story.character_schema`, `story.scene`, `world.spatial` |
-| `persist/commit_ledgers.py` | 374 | Pending-obligation and world-pressure debt ledgers. | `core.db`, `core.pipeline_context`, `persist.commit_common` |
+| `persist/commit_ledgers.py` | 465 | Pending-obligation and world-pressure debt ledgers. | `core.db`, `core.pipeline_context`, `persist.commit_common` |
 | `persist/commit_mapping.py` | 730 | Lore/book mapping commit: book ops, lore ops, canon fallback ops, offscreen-event normaliser. | `core.db`, `core.frames`, `mind.memory`, `persist.commit_common`, `story.character_schema`, `story.provenance_text`, `world.spatial` |
 | `persist/commit_mechanics.py` | 438 | Transit/news sweeps, the world-event spine, information carriers, cast changes. | `core.db`, `persist.commit_common`, `persist.commit_scene_state`, `story.character_schema`, `story.scene`, `world.mechanics` |
-| `persist/commit_memory.py` | 1794 | Pre-lock memory preparation: per-mind memories and the psychology deltas riding with them. | `core.db`, `mind`, `mind.memory`, `mind.theory_of_mind`, `persist.commit_background`, `persist.commit_common`, `persist.commit_place_graph`, `story.character_schema`, `world.comfort`, `world.spatial`, `world.stimulation`, `world.survival` |
+| `persist/commit_memory.py` | 1831 | Pre-lock memory preparation: per-mind memories and the psychology deltas riding with them. | `core.db`, `mind`, `mind.memory`, `mind.theory_of_mind`, `persist.commit_background`, `persist.commit_common`, `persist.commit_place_graph`, `story.character_schema`, `world.comfort`, `world.spatial`, `world.stimulation`, `world.survival` |
 | `persist/commit_memory_write.py` | 325 | The durable memory write and its out-of-band consolidation twin. | `core.db`, `mind.memory`, `persist.commit_memory`, `story.character_schema`, `story.scene` |
 | `persist/commit_place_graph.py` | 321 | Per-mind durable place graph and per-beat spatial experience. | `world.spatial` |
 | `persist/commit_room_registry.py` | 496 | Room identity across frames: registry projection, mint dedup, renames, retirement, exit pruning. | `core.db`, `persist.commit_common`, `story.character_schema`, `world.spatial` |
-| `persist/commit_scene_state.py` | 1955 | The prepared post-turn scene: pre-lock build, scene commit domain, book anchoring, ground advance. | `core.db`, `core.pipeline_context`, `mind.memory`, `persist.commit_attire`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_room_registry`, `story.character_schema`, `story.provenance_text`, `world.mechanics`, `world.spatial`, `world.spatial_frames`, `world.weather` |
+| `persist/commit_scene_state.py` | 2224 | The prepared post-turn scene: pre-lock build, scene commit domain, book anchoring, ground advance. | `core.db`, `core.pipeline_context`, `mind.memory`, `persist.commit_attire`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_room_registry`, `story.character_schema`, `story.provenance_text`, `world.mechanics`, `world.spatial`, `world.spatial_frames`, `world.weather` |
 | `persist/llm_capture.py` | 383 |  | `core.db` |
 | `persist/pipeline_trace.py` | 596 | Privacy-conscious export, validation, and offline replay of persisted pipeline history. | `core.db` |
 | `story/__init__.py` | 6 |  | — |
 | `story/artifacts.py` | 649 |  | `llm.prompts` |
-| `story/attire.py` | 3504 |  | — |
+| `story/attire.py` | 3522 |  | — |
 | `story/authored_events.py` | 225 |  | `core.db` |
 | `story/carriers.py` | 788 |  | `core.db`, `story.character_schema`, `story.scene`, `world`, `world.spatial` |
 | `story/character_schema.py` | 2306 | Versioned character/persona defaults, normalization, accessors, and export payloads. | `llm.schemas`, `story` |
@@ -928,27 +928,27 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_commit_all_locked()` | 460 | 314 lines |
-| `commit_crowds()` | 273 | 149 lines |
-| `commit_authored_events()` | 219 | 30 lines |
-| `commit_narration_person()` | 187 | 29 lines |
-| `_prepare_turn_commit()` | 437 | 12 lines |
-| `commit_offscreen_epoch()` | 251 | 11 lines |
-| `commit_all()` | 424 | 11 lines |
-| `commit_offscreen_plans()` | 264 | 7 lines |
+| `_commit_all_locked()` | 463 | 321 lines |
+| `commit_crowds()` | 276 | 149 lines |
+| `commit_authored_events()` | 222 | 30 lines |
+| `commit_narration_person()` | 190 | 29 lines |
+| `_prepare_turn_commit()` | 440 | 12 lines |
+| `commit_offscreen_epoch()` | 254 | 11 lines |
+| `commit_all()` | 427 | 11 lines |
+| `commit_offscreen_plans()` | 267 | 7 lines |
 
 ### `persist/commit_attire.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `apply_attire_diff()` | 835 | 624 lines |
+| `apply_attire_diff()` | 1008 | 679 lines |
 | `interpret_attire_notes()` | 251 | 115 lines |
-| `_mint_shed_garments()` | 666 | 101 lines |
+| `_mint_shed_garments()` | 673 | 102 lines |
 | `_fold_duplicate_shed_garments()` | 368 | 85 lines |
+| `_reclaim_worn_shed_garments()` | 858 | 82 lines |
 | `_fold_worn_garment_entities()` | 455 | 69 lines |
 | `_merge_attire_regions()` | 30 | 65 lines |
 | `_heal_attire_identity_keys()` | 97 | 61 lines |
-| `_shed_record_candidates()` | 574 | 46 lines |
 
 ### `persist/commit_background.py`
 
@@ -1006,6 +1006,7 @@
 |---|---:|---:|
 | `commit_world_pressure()` | 242 | 133 lines |
 | `commit_obligations()` | 92 | 82 lines |
+| `commit_world_facts()` | 413 | 53 lines |
 | `world_pressure_view()` | 198 | 22 lines |
 | `_find_obligation()` | 59 | 21 lines |
 | `pending_obligation_view()` | 38 | 20 lines |
@@ -1038,14 +1039,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `prepare_memory_commit()` | 386 | 1409 lines |
+| `prepare_memory_commit()` | 436 | 1396 lines |
 | `_cited_memory_ids()` | 80 | 76 lines |
-| `_interior_relations_of()` | 329 | 55 lines |
-| `_own_sequence_memory()` | 204 | 50 lines |
-| `_intent_names_term()` | 288 | 39 lines |
-| `_inference_memory_text()` | 256 | 30 lines |
+| `_interior_relations_of()` | 379 | 55 lines |
+| `_own_sequence_memory()` | 254 | 50 lines |
+| `_hearer_label()` | 193 | 48 lines |
+| `_intent_names_term()` | 338 | 39 lines |
+| `_inference_memory_text()` | 306 | 30 lines |
 | `_marked_for_memory()` | 158 | 24 lines |
-| `_durable_dialogue_category()` | 57 | 22 lines |
 
 ### `persist/commit_memory_write.py`
 
@@ -1080,14 +1081,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `prepare_scene_commit()` | 936 | 902 lines |
+| `prepare_scene_commit()` | 1190 | 917 lines |
+| `derive_borne_containment()` | 828 | 113 lines |
 | `_advance_day_cycle()` | 68 | 111 lines |
-| `_place_orphan_mints()` | 754 | 71 lines |
-| `_fold_duplicate_mints()` | 682 | 70 lines |
+| `_fold_duplicate_mints()` | 682 | 110 lines |
+| `_place_orphan_mints()` | 1008 | 71 lines |
 | `_merge_overlays()` | 539 | 68 lines |
 | `sync_anchored_books()` | 197 | 66 lines |
-| `_guard_occupied_mover_removal()` | 264 | 60 lines |
-| `_report_started_sources()` | 876 | 58 lines |
+| `_refuse_unheld_transfers()` | 943 | 63 lines |
 
 ### `persist/llm_capture.py`
 
@@ -1132,14 +1133,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `advance()` | 2447 | 148 lines |
-| `_attributed_scoped()` | 1785 | 139 lines |
-| `normalize_regions()` | 516 | 133 lines |
-| `garments_named_in()` | 2122 | 126 lines |
-| `coerce_diff_shape()` | 1462 | 124 lines |
-| `compact_line()` | 3363 | 123 lines |
-| `perceptible_region_surfaces()` | 2718 | 100 lines |
-| `apply_flat_change()` | 2955 | 100 lines |
+| `advance()` | 2465 | 148 lines |
+| `_attributed_scoped()` | 1803 | 139 lines |
+| `normalize_regions()` | 534 | 133 lines |
+| `garments_named_in()` | 2140 | 126 lines |
+| `coerce_diff_shape()` | 1480 | 124 lines |
+| `compact_line()` | 3381 | 123 lines |
+| `perceptible_region_surfaces()` | 2736 | 100 lines |
+| `apply_flat_change()` | 2973 | 100 lines |
 
 ### `story/authored_events.py`
 

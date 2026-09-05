@@ -641,6 +641,13 @@ def _stamp_shed(entity, garment, owner, condition, eid=None):
     state["clothing"] = True
     state["shed"] = True
     state.setdefault("worn_by", str(owner))
+    # THE LEDGER KEY THIS OBJECT IS, kept on the object. A garment is a thing
+    # with an identity, not a string, and the string is exactly what a beat
+    # that puts it back on will not reproduce: the ledger's spelling is what
+    # `_reclaim_worn_shed_garments` restores when the same garment is worn
+    # again. Set unconditionally -- a re-stamp of the same record is the
+    # attire ledger saying so again.
+    state["garment"] = str(garment)
     if condition:
         state["condition"] = condition
     # A NAME THAT IS ONLY ITS OWN ID IS NOT A NAME. A record minted from an
@@ -757,6 +764,7 @@ def _mint_shed_garments(sc, shed, diff=None):
             "container": False,
             "interior_rooms": [],
             "state": {"clothing": True, "worn_by": str(owner), "shed": True,
+                      "garment": str(garment),
                       **({"condition": condition} if condition else {})},
         }
         if projected is not None:
@@ -764,6 +772,171 @@ def _mint_shed_garments(sc, shed, diff=None):
         where = positions.get(owner)
         if where:
             positions[key] = where
+
+
+def _identifying_words(text, *, without=""):
+    """The words in a garment name that pick out WHICH garment it is.
+
+    The head noun says what KIND of thing it is and every other coat in the
+    story has it too, so it is subtracted (`without`) along with the function
+    words a name hangs together with. What is left is what distinguishes this
+    one: `black`, `leather`, `moulded`.
+    """
+    drop = {w for w in re.findall(r"[a-z0-9]+", str(without or "").casefold())}
+    return {w for w in re.findall(r"[a-z0-9]+", str(text or "").casefold())
+            if len(w) > 2 and w not in drop
+            and w not in attire_model._NAME_FUNCTION_WORDS}
+
+
+def _is_the_same_garment(worn, ledger):
+    """Is this newly worn garment the one that shed object IS?
+
+    `resolve_garment`'s tight tiers -- exact, article-stripped, containment --
+    are taken as they stand: they cannot land on a different thing. Its loose
+    head-noun tier can, and a wardrobe is exactly where that matters, because
+    a body that sheds one coat and puts on another writes two names with one
+    noun. So a loose match must also share an IDENTIFYING word: a paraphrase
+    of the same garment is recognised by more than its noun ("black leather
+    half-mask" keeps `black` and `leather` of "a plain black half-mask of
+    moulded leather"), and a genuinely different garment brings its own words
+    ("a grey travelling coat" shares nothing with "a borrowed dark green
+    evening coat" but the coat).
+    """
+    resolve = attire_model.resolve_garment
+    if resolve(worn, [ledger], allow_head_noun=False) \
+            or resolve(ledger, [worn], allow_head_noun=False):
+        return True
+    if not (resolve(worn, [ledger]) or resolve(ledger, [worn])):
+        return False
+    head = attire_model._garment_keys(worn)[1]
+    return bool(_identifying_words(worn, without=head)
+                & _identifying_words(ledger, without=head))
+
+
+def _sanitized_wearing(items, name, ctx, report):
+    """`sanitize_attire_items`, with what it struck out said out loud.
+
+    The sanitiser keeps furniture and crockery out of a wardrobe, and it is
+    the one write on this path that can take a garment off a body without any
+    beat saying so -- silently, because a filter has no channel to speak on.
+    PS15 cost a story its goggles that way. The refusal stands; what changes
+    is that a body losing a garment to it is now a sentence somebody can read.
+    """
+    items = list(items or [])
+    kept = sanitize_attire_items(items)
+    dropped = [str(g) for g in items if str(g).strip()
+               and str(g) not in kept]
+    if dropped and ctx is not None:
+        ctx.add_warning(
+            "attire: %r is not clothing, so it was kept out of %s's wearing "
+            "list" % (", ".join(dropped), name))
+        if report:
+            ctx.tell_director(
+                "attire: %s were left out of %s's wardrobe -- a wearing list "
+                "holds what is ON the body, and these read as objects rather "
+                "than garments. A thing being carried or sat on belongs in "
+                "`entities` and `inventory_ops`. If one of them really is "
+                "clothing, name it by what it is." % (
+                    ", ".join(repr(g) for g in dropped), name))
+    return kept
+
+
+def _rename_worn_garment(entry, old, new):
+    """Re-spell one garment throughout a body's wardrobe entry."""
+    if not isinstance(entry, dict) or old == new:
+        return
+    entry["wearing"] = [new if str(g) == old else g
+                        for g in (entry.get("wearing") or [])]
+    for region in (entry.get("regions") or {}).values():
+        if not isinstance(region, dict):
+            continue
+        for garment in (region.get("garments") or []):
+            if isinstance(garment, dict) and str(garment.get("name")) == old:
+                garment["name"] = new
+
+
+def _reclaim_worn_shed_garments(sc, diff, ctx, gained):
+    """TAKING A THING OFF AND PUTTING IT ON ARE THE SAME OBJECT TWICE.
+
+    Removal mints a floor object; re-wearing writes a garment string into the
+    wardrobe. Nothing joined the two, so the story ended up with both: measured
+    in the masque run 2026-09-05 (PX10), turn 6 took the mask off and minted
+    `a_plain_black_half_mask_of_moulded_leather_..._ivo_sarn`; turn 7 put it
+    back on as `"black leather half-mask"`, a NEW garment matched by text,
+    while the old object went on following the player from room to room. At
+    turn 20 the story contained two masks. PS15 saw the same seam lose an
+    article across the round trip ("a wide straw hat" back as "wide straw
+    hat").
+
+    So a garment ENTERING a wardrobe is matched against the shed objects that
+    body left behind, and where it is one of them the object is consumed and
+    the ledger's own spelling goes back on the body -- the garment's identity
+    is the ledger key stamped on the object (`_stamp_shed`), never the string
+    a beat happened to reach for. Bounded three ways, because the failure
+    direction here is a wrong merge rather than a duplicate: the object must be
+    THIS body's, must still be shed, and must be within reach -- in the room
+    the body is standing in, or nowhere at all -- and the two names must be
+    the same garment by `_is_the_same_garment`, which is where a body that
+    sheds one coat and puts on another is kept from ending up with one.
+    """
+    entities = sc.get("entities") if isinstance(sc, dict) else None
+    if not isinstance(entities, dict) or not gained:
+        return []
+    attire = sc.get("attire") or {}
+    positions = sc.get("positions") if isinstance(sc.get("positions"), dict) \
+        else {}
+    projected = diff.get("entities") if isinstance(diff, dict) else None
+    reclaimed = []
+    for owner, names in gained.items():
+        names = [str(n) for n in names if str(n or "").strip()]
+        if not names:
+            continue
+        where = positions.get(owner)
+        shed = []
+        for eid in list(entities):
+            entity = entities.get(eid)
+            if not _is_clothing_entity(entity):
+                continue
+            state = entity.get("state") or {}
+            if not state.get("shed"):
+                continue
+            if str(state.get("worn_by") or "").strip().casefold() \
+                    != str(owner).strip().casefold():
+                continue
+            spot = positions.get(eid)
+            if spot and where and spot != where:
+                continue          # not within reach of the body wearing it
+            ledger = str(state.get("garment") or entity.get("name")
+                         or "").strip()
+            if ledger:
+                shed.append((eid, ledger))
+        for eid, ledger in shed:
+            candidates = [n for n in names if _is_the_same_garment(n, ledger)]
+            if len(candidates) != 1:
+                continue          # nothing, or an ambiguity nobody can settle
+            match = candidates[0]
+            if [other for other, other_ledger in shed
+                    if other != eid
+                    and _is_the_same_garment(match, other_ledger)]:
+                continue          # two shed objects answer to it
+            entities.pop(eid, None)
+            if isinstance(projected, dict):
+                projected.pop(eid, None)
+            positions.pop(eid, None)
+            names = [n for n in names if n != match]
+            if ledger != match:
+                _rename_worn_garment(attire.get(owner), match, ledger)
+            reclaimed.append((eid, owner, match, ledger))
+    for eid, owner, match, ledger in reclaimed:
+        note = (
+            "objective state: %s put %r back on, which is the shed object "
+            "%r -- one garment, so the object was taken back out of the room "
+            "and the wardrobe keeps its own spelling %r. A garment taken off "
+            "and put on again is the same thing twice." % (
+                owner, match, eid, ledger))
+        if ctx is not None:
+            ctx.tell_director(note)
+    return reclaimed
 
 
 def _overlay_texts_by_subject(diff):
@@ -854,6 +1027,12 @@ def apply_attire_diff(sc, diff, ctx, res=None, *, report=True):
                 f"{recovered['entity_id']!r} as removing "
                 f"{recovered['garment']!r} from {recovered['owner']!r}.")
 
+    # THE BEAT THAT HAS NO BEFORE. An establish with no resolve beside it is
+    # the opening: it states the arrangement of the world rather than changing
+    # one, so no wardrobe change it omits to mention is an act. See the
+    # omission guard below (PS15).
+    _opening = (getattr(ctx, "director_establish", None)
+                and not getattr(ctx, "director_resolve", None))
     att = sc.setdefault("attire", {})
     _overlay_by_subject = _overlay_texts_by_subject(diff)
     canonical_attire_key = _heal_attire_identity_keys(
@@ -897,6 +1076,7 @@ def apply_attire_diff(sc, diff, ctx, res=None, *, report=True):
     )
     _shed = []
     _gained = set()
+    _gained_by = {}
     for name, d in (diff.get("attire") or {}).items():
         name = canonical_attire_key(name)
         if not isinstance(d, dict):
@@ -1102,11 +1282,45 @@ def apply_attire_diff(sc, diff, ctx, res=None, *, report=True):
                                 or _t)
             _omitted = [g for g in _worn_now if g not in _staying]
             if _omitted:
-                _named = _licensed(_omitted)
+                # AN OPENING STATES A WARDROBE; IT DOES NOT CHANGE ONE.
+                # `_body_licensed` is a licence to undress a body whose
+                # clothing this beat's words are about, and on the opening
+                # beat they always are -- the establish describes everyone
+                # head to toe -- so every garment the seeded wardrobe held
+                # and the establish's list happened to omit came off, on a
+                # beat where nothing has happened yet. Measured, the Salt
+                # Terraces run 2026-09-05 turn 0 (PS15): goggles the player
+                # was wearing were shed onto the haul road by nobody, minted
+                # as `tinted_glass_goggles_..._mireille_adjani` with `shed:
+                # true`, and were gone from `wearing` for the whole story.
+                # Nothing was taken off, so nothing comes off: an omission
+                # from the FIRST statement of a wardrobe is silence about a
+                # garment, never an act on it. A garment the opening really
+                # does mean to be off is still removed by `remove`, which
+                # names it.
+                _named = set() if _opening else _licensed(_omitted)
                 # Held in their existing order, so a restatement cannot
                 # silently relayer the wardrobe either.
                 _held = [g for g in _omitted if g not in _named]
-                if _held:
+                if _held and _opening:
+                    d[_wholesale] = _wanted + _held
+                    ctx.add_warning(
+                        "attire: kept %s on %s against an opening %s that "
+                        "dropped them (%s) -- nothing has come off yet" % (
+                            "them" if len(_held) > 1 else "it", name,
+                            _wholesale, ", ".join(_held)))
+                    if report:
+                        ctx.tell_director(
+                            "attire: %s is still wearing %s. This is the "
+                            "opening beat, so the wardrobe is being STATED "
+                            "rather than changed, and a garment left out of "
+                            "your `%s` was not taken off by anybody -- it was "
+                            "simply not mentioned. To open with something "
+                            "already off the body, say so with `remove`, "
+                            "which names it." % (
+                                name, ", ".join(repr(x) for x in _held),
+                                _wholesale))
+                elif _held:
                     d[_wholesale] = _wanted + _held
                     ctx.add_warning(
                         "attire: kept %s on %s against a %s that dropped them "
@@ -1126,7 +1340,8 @@ def apply_attire_diff(sc, diff, ctx, res=None, *, report=True):
                                _wholesale))
         if d.get("wearing") is not None and not any(
                 d.get(k) for k in ("add", "remove", "replace")):
-            cur["wearing"] = sanitize_attire_items(list(d.get("wearing") or []))
+            cur["wearing"] = _sanitized_wearing(
+                list(d.get("wearing") or []), name, ctx, report)
             if d.get("state") is not None:
                 cur["state"] = (d["state"] if isinstance(d["state"], list)
                                 else [d["state"]])
@@ -1143,14 +1358,15 @@ def apply_attire_diff(sc, diff, ctx, res=None, *, report=True):
                         text, previous_names) or text
                     if canonical and canonical not in replaced:
                         replaced.append(canonical)
-                cur["wearing"] = sanitize_attire_items(replaced)
+                cur["wearing"] = _sanitized_wearing(replaced, name, ctx, report)
             for handle in d.get("add") or []:
                 text = str(handle or "").strip()
                 canonical = attire_model.resolve_garment(
                     text, cur["wearing"]) or text
                 if canonical and canonical not in cur["wearing"]:
                     cur["wearing"].append(canonical)
-            cur["wearing"] = sanitize_attire_items(cur["wearing"])
+            cur["wearing"] = _sanitized_wearing(
+                cur["wearing"], name, ctx, report)
             for handle in d.get("remove") or []:
                 canonical = attire_model.resolve_garment(
                     handle, cur["wearing"])
@@ -1427,6 +1643,14 @@ def apply_attire_diff(sc, diff, ctx, res=None, *, report=True):
                 if (_g.get("state") != "removed"
                         and _g["name"].casefold() not in _had):
                     _gained.add(_g["name"].casefold())
+        # WHAT THIS BODY IS WEARING NOW AND WAS NOT WEARING WHEN THE BEAT
+        # OPENED. Against `_worn_now` -- the wardrobe as this beat found it --
+        # and not against `_before`, which is normalized from `cur` AFTER the
+        # add/replace channels have already written into it and therefore
+        # holds every new garment as though it had always been there. This is
+        # what a re-worn shed object is matched against.
+        _gained_by[name] = [g for g in attire_model.flat_wearing(_after)
+                            if g not in _worn_now]
         for _region, _garment in attire_model.newly_removed(_before, _after):
             _shed.append((name, _garment,
                           attire_model.condition_of(_after, _garment)))
@@ -1437,6 +1661,10 @@ def apply_attire_diff(sc, diff, ctx, res=None, *, report=True):
     # Heals scenes that accumulated duplicates BEFORE adopt-or-mint
     # existed, and is idempotent, so it costs nothing on a clean scene.
     _fold_duplicate_shed_garments(sc, diff, ctx)
+    # ...AND A GARMENT PUT BACK ON IS THE OBJECT IT BECAME WHEN IT CAME OFF.
+    # After the mint and the fold, so what it matches against is the settled
+    # set of this body's shed objects rather than a half-built one.
+    _reclaim_worn_shed_garments(sc, diff, ctx, _gained_by)
     # A REMOVED GARMENT IS AN OBJECT IN THE WORLD, NOT A FACT ABOUT A BODY.
     # It kept a seat in its former wearer's regions -- `state: "removed"`,
     # under `torso`/`waist`/`arms` -- and every relation that seat carried was
