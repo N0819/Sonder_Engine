@@ -15,6 +15,7 @@ APP = (ROOT / "static/js/app.js").read_text(encoding="utf-8")
 COMPONENTS = (ROOT / "static/js/components.js").read_text(encoding="utf-8")
 LOREBOOKS = (ROOT / "static/js/lorebooks.js").read_text(encoding="utf-8")
 SETTINGS = (ROOT / "static/js/settings.js").read_text(encoding="utf-8")
+WORLD_BROWSER = (ROOT / "static/js/world_browser.js").read_text(encoding="utf-8")
 
 
 def _between(source: str, start: str, end: str) -> str:
@@ -153,8 +154,6 @@ def test_update_check_and_install_discard_stale_modal_results():
 
 def test_story_tool_dialogs_capture_one_chat_for_reads_and_writes():
     cases = [
-        ('$("#b-world").onclick', '$("#b-attire").onclick', "world"),
-        ('$("#b-attire").onclick', "// Genre & style", "attire"),
         ('$("#b-style").onclick', '$("#b-dlg").onclick', "style_guide"),
         ('$("#b-dlg").onclick', "// The Cast modal", "dialogue_config"),
     ]
@@ -164,6 +163,18 @@ def test_story_tool_dialogs_capture_one_chat_for_reads_and_writes():
         assert "if (S.chatId !== chatId) return;" in block
         assert f"/api/chats/${{chatId}}/{endpoint}" in block
         assert "/api/chats/${S.chatId}" not in block
+
+    # The world and attire dialogs moved to world_browser.js (2026-09-04),
+    # where one dialog reads the room index, the slices and the raw editors'
+    # own endpoints, every request against the chat captured at open.
+    block = _between(WORLD_BROWSER, "async function openWorldBrowser(",
+                     '$("#b-world").onclick')
+    assert "const chatId = S.chatId;" in block
+    assert "if (S.chatId !== chatId) return;" in block
+    assert "/api/chats/${chatId}/rooms" in block
+    for endpoint in ("world", "attire", "rooms", "positions"):
+        assert f"/api/chats/${{chatId}}/{endpoint}" in WORLD_BROWSER, endpoint
+    assert "/api/chats/${S.chatId}" not in WORLD_BROWSER
 
 
 def test_cast_dialog_threads_its_captured_chat_through_all_tabs():
@@ -271,7 +282,7 @@ def test_every_chat_scoped_toolbar_button_is_disabled_without_a_chat():
     -- the silent dead click the disabling exists to eliminate."""
     guarded = set(re.findall(
         r'\$\("(#b-[\w-]+)"\)\.onclick = async \(\) => \{\s*\n\s*if \(!S\.chatId\) return;',
-        SETTINGS))
+        SETTINGS + WORLD_BROWSER))
     assert guarded, "no chat-scoped handlers found -- the pattern moved"
 
     block = _between(CHAT, "function updateChatScopedButtons()", "function renderChat()")
