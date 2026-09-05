@@ -48,6 +48,7 @@ from __future__ import annotations
 import hashlib
 import heapq
 import json
+import math
 from typing import Optional
 
 from world.spatial_barriers import normalize_barrier
@@ -76,11 +77,21 @@ from world.spatial_senses import _material_shifted_barrier, _SOUND_WALK_BARRIERS
 # The closed vocabularies
 # ---------------------------------------------------------------------------
 
-#: What a thing emits when running. A schema the engine owns, not a device
-#: vocabulary: nothing here names a generator, a waterfall, a radio or a
-#: crowd -- the objects hand's clause states the class and the thing's name
-#: and description say what it is.
-SOUND_LEVELS = ("faint", "audible", "loud", "deafening")
+#: What a thing emits when running, or what a one-beat sound event is worth.
+#: A schema the engine owns, not a device vocabulary: nothing here names a
+#: generator, a waterfall, a radio or a crowd -- the objects hand's clause
+#: states the class and the thing's name and description say what it is.
+#:
+#: `thunderous` and `catastrophic` were added 2026-09-05 with the decibel
+#: denomination (`DESIGN_SOUND_DECIBELS.md` § 5): the old ladder topped out
+#: at 12.5x a normal voice, so a cannon, a collapsing roof, a dragon and a
+#: ship's horn had no rung and could reach no further than a shouting man.
+#: They are the only two levels over `FAR_FIELD_ENTRY_DB`, which is what
+#: makes "an incredibly loud noise travels very far" a property of the
+#: LADDER rather than of a special case somewhere. An authored `db` number
+#: on an entity or an event reaches anything the words do not.
+SOUND_LEVELS = ("faint", "audible", "loud", "deafening", "thunderous",
+                "catastrophic")
 
 #: Whether a source can be relied on: `STEADINESS`, `normalize_steadiness`,
 #: `FLICKER_RATE`, `FAIL_RATE` and the beat hash are the LIGHT field's,
@@ -95,9 +106,103 @@ SPEECH_VOLUMES = ("mutter", "whisper", "normal", "loud", "shout")
 
 
 # ---------------------------------------------------------------------------
-# Constants the OWNER sets (DESIGN_SOUND_FIELD.md § 6). Every one is named,
-# owner-visible, and carries the table beside it. The § 6 proposal is
-# recorded where a value differs from it, with the measured reason.
+# DECIBELS: the denomination (DESIGN_SOUND_DECIBELS.md § 2A, 2026-09-05)
+# ---------------------------------------------------------------------------
+#
+# The model is denominated in SOUND PRESSURE LEVELS. Every constant the owner
+# sets is a dB number, every threshold is a dB MARGIN, every loss is a
+# SUBTRACTION, and the far field (§ far field, below) is dB arithmetic end to
+# end. What that buys is that the dynamic range stops being unwieldy: a
+# whisper and a collapsing roof are 60 dB apart, one small number, where
+# linearly they are a factor of thirty thousand -- and a ladder that reaches
+# an artillery piece stops needing five-digit literals.
+#
+# POWERS STILL ADD IN POWER. Decibels are logarithms and logarithms do not
+# sum; two incoherent sources at the same cell make a level of
+# `db(p1 + p2)`, which is what real acoustics does too. So `noise_at` sums
+# intensities and the WORD is decided in dB, against a dB margin. That is
+# the whole of the conversion, and it is why it is exactly a rewriting: the
+# comparison `signal >= FULL_SNR * noise` and the comparison
+# `signal_db >= noise_db + FULL_SNR_DB` are the same inequality with a
+# logarithm taken of both sides.
+#
+# THE REFERENCE IS ARBITRARY AND CANCELS. `DB_REF` sets where the ladder
+# sits; every comparison in the model is a DIFFERENCE of two levels, so the
+# reference falls out of all of them but two -- the absolute floor
+# (`HEAR_FLOOR_DB`) and the far field's entry (`FAR_FIELD_ENTRY_DB`) -- and
+# both are stated in the same denomination beside the ladder they gate. 40
+# is chosen so an ordinary speaking voice reads about 51 dB at one pace,
+# which is roughly what one measures, and so the ladder's own numbers are
+# the ones `DESIGN_SOUND_DECIBELS.md` § 5 tabulates.
+
+#: Where the ladder sits. See above: arbitrary, cancels everywhere but the
+#: two absolute gates, and moving it moves those two with it.
+DB_REF = 40.0
+
+
+def db_of_power(power) -> float:
+    """A linear power as a level in dB. Silence is -inf, not an error: a
+    source that is switched off has no level, and every comparison below
+    handles -inf correctly by construction."""
+    power = float(power or 0.0)
+    if power <= 0.0:
+        return float("-inf")
+    return 10.0 * math.log10(power) + DB_REF
+
+
+def power_of_db(db) -> float:
+    """The inverse of `db_of_power`. Used where levels must be SUMMED --
+    two sources at one cell -- because logarithms do not add."""
+    db = float(db)
+    if db == float("-inf"):
+        return 0.0
+    return 10.0 ** ((db - DB_REF) / 10.0)
+
+
+def db_ratio(factor) -> float:
+    """A bare RATIO in dB -- a gain, a loss, a threshold. No reference: this
+    is the form every aperture factor, every occluder factor and both SNR
+    thresholds take once the model is in logs."""
+    factor = float(factor or 0.0)
+    if factor <= 0.0:
+        return float("-inf")
+    return 10.0 * math.log10(factor)
+
+
+#: The slack on every dB comparison, in dB. A LINEAR `>=` is inclusive and a
+#: logarithm of both sides is not bit-exact, so an exactly-at-threshold pair
+#: -- `signal == FULL_SNR * noise`, which synthetic fixtures do construct --
+#: could round either way and answer a different WORD than the linear model
+#: it replaces. MEASURED: over 800,000 exactly-at-threshold pairs across ten
+#: decades of level, the largest disagreement the logarithm introduces is
+#: 1.4e-14 dB. A pico-decibel is seventy times that and 2.3e-13 in power, so
+#: the guarantee is exact and worth stating: THE dB PATH AND THE LINEAR PATH
+#: GIVE THE SAME WORD FOR EVERY PAIR NOT WITHIN 1e-12 dB OF A THRESHOLD, and
+#: an exact tie -- which synthetic fixtures do construct -- resolves the
+#: inclusive way the linear `>=` resolved it.
+_DB_EPS = 1e-12
+
+
+def _at_least(level_db: float, threshold_db: float) -> bool:
+    """`level_db >= threshold_db`, inclusive to `_DB_EPS`."""
+    return level_db >= threshold_db - _DB_EPS
+
+
+# ---------------------------------------------------------------------------
+# Constants the OWNER sets (DESIGN_SOUND_FIELD.md § 6, DESIGN_SOUND_DECIBELS.md
+# § 5). Every one is named, owner-visible, and carries the table beside it.
+# The § 6 proposal is recorded where a value differs from it, with the
+# measured reason.
+#
+# THE LINEAR TABLES ARE THE ONES WRITTEN DOWN AND THE dB TABLES ARE DERIVED
+# FROM THEM, not the other way round, for one reason: a dB literal
+# round-trips back to a power that differs in the last bits (12.0 becomes
+# 12.000000000000007), and the near field's flood multiplies those factors
+# together and breaks ties on the product. Deriving in this direction makes
+# the dB tables EXACT conversions of the arithmetic that shipped, which is
+# what "no behaviour change" has to mean. The two rungs that are NOT a
+# conversion -- `thunderous`, `catastrophic` -- are declared in dB, where
+# they were designed, and their powers derived.
 # ---------------------------------------------------------------------------
 
 #: Power of a speaking body at its own cell, by the line's volume word.
@@ -115,6 +220,21 @@ SPEECH_VOLUMES = ("mutter", "whisper", "normal", "loud", "shout")
 SPEECH_POWER = {"mutter": 0.6, "whisper": 1.0, "normal": 12.0,
                 "loud": 40.0, "shout": 120.0}
 
+#: The same ladder in dB at one pace -- mutter 37.8 | whisper 40.0 |
+#: normal 50.8 | loud 56.0 | shout 60.8. Derived, so it cannot drift from
+#: the powers the flood multiplies.
+#:
+#: `DESIGN_SOUND_DECIBELS.md` § 5 tabulated `mutter 28, whisper 30, normal
+#: 51, loud 56, shout 61` and called it an exact conversion. The top three
+#: are exact (at `DB_REF` 40); the bottom two are not, and cannot be: a
+#: normal voice is twelve times a whisper in power, which is 10.8 dB, and
+#: the note's table puts 21 dB between them. Its quiet rungs were converted
+#: against a different reference than its loud ones. The ratios are what the
+#: model behaves by, so the ratios are what survived, and § 5 was corrected
+#: to this table rather than this table to § 5.
+SPEECH_DB = {volume: db_of_power(power)
+             for volume, power in SPEECH_POWER.items()}
+
 #: Power of a running entity at its own cell, by `sound_source`. Tied to the
 #: speech ladder rung for rung -- `audible` IS a normal voice, `loud` IS a
 #: loud one -- so "a loud generator masks a normal voice" means exactly what
@@ -122,8 +242,21 @@ SPEECH_POWER = {"mutter": 0.6, "whisper": 1.0, "normal": 12.0,
 #:
 #:   § 6 proposed   faint 2 | audible 6 | loud 14 | deafening 40
 #:   set here       faint 1 | audible 12 | loud 40 | deafening 150
+#:
+#: The top two rungs are the decibel work's (2026-09-05) and are DECLARED in
+#: dB, because they were never a conversion of anything: `thunderous` 85 and
+#: `catastrophic` 100 are 23 and 38 dB over `deafening`, which is where a
+#: cannon, a collapsing roof and a ship's horn live and where the old ladder
+#: had no rung at all.
 SOUND_POWER = {"faint": 1.0, "audible": 12.0, "loud": 40.0,
-               "deafening": 150.0}
+               "deafening": 150.0,
+               "thunderous": power_of_db(85.0),
+               "catastrophic": power_of_db(100.0)}
+
+#: The source ladder in dB at one pace -- faint 40.0 | audible 50.8 |
+#: loud 56.0 | deafening 61.8 | thunderous 85.0 | catastrophic 100.0. The
+#: same correction `SPEECH_DB` records applies to § 5's `faint 30`.
+SOUND_DB = {level: db_of_power(power) for level, power in SOUND_POWER.items()}
 
 #: What crosses an aperture, by the barrier's class AFTER its material shift
 #: (`_material_shifted_barrier`, so a paper screen and a vault door differ
@@ -136,6 +269,18 @@ SOUND_POWER = {"faint": 1.0, "audible": 12.0, "loud": 40.0,
 APERTURE_PASS = {"open": 1.0, "open_door": 0.9, "bars": 0.9,
                  "membrane": 0.5, "closed_door": 0.25, "window": 0.1,
                  "one_way_window": 0.1, "wall": 0.0}
+
+#: The same table as LOSSES in dB -- open 0 | open_door 0.46 | bars 0.46 |
+#: membrane 3.01 | closed_door 6.02 | window 10.0 -- which is what an
+#: aperture factor is once the model is in logs: a subtraction. `wall` is
+#: not in it, because on the NEAR field a wall is not an aperture at all:
+#: `sound_passes` refuses to place a neighbour beyond one, so there is no
+#: cell path through a wall to charge a loss to. A wall's finite
+#: transmission is the FAR field's business (`BARRIER_LOSS_DB` below), which
+#: runs on rooms rather than cells and does not need a doorway to cross.
+APERTURE_LOSS_DB = {barrier: -db_ratio(factor)
+                    for barrier, factor in APERTURE_PASS.items()
+                    if factor > 0.0}
 
 #: Path cost of a diagonal step; a side step costs 1. Kept as § 6 proposed.
 DIAGONAL_COST = 1.4
@@ -157,6 +302,8 @@ DIAGONAL_COST = 1.4
 #: (a detour round the counter can carry more than a crossing through it),
 #: and the Dijkstra would have to optimise the gain itself.
 OCCLUDER_PASS = 0.9
+#: The same, as a loss: 0.46 dB per occupied cell crossed.
+OCCLUDER_LOSS_DB = -db_ratio(OCCLUDER_PASS)
 
 #: The noise floor every cell of a room carries, by the room's exposure
 #: (`weather.room_exposure`); the weather's audible level is added on top
@@ -173,6 +320,13 @@ OCCLUDER_PASS = 0.9
 #: `full`, which a normal voice clears to ten paces and a whisper to two.
 AMBIENT = {"enclosed": 0.05, "sheltered": 0.1, "open": 0.2}
 
+#: The same floors in dB -- enclosed 27.0 | sheltered 30.0 | open 33.0.
+#: (`DESIGN_SOUND_DECIBELS.md` § 5 said 14 / 17 / 20: the right 3 dB steps
+#: against a different reference than its own source ladder. The steps are
+#: what the model behaves by; see `SPEECH_DB`.)
+AMBIENT_DB = {exposure: db_of_power(power)
+              for exposure, power in AMBIENT.items()}
+
 #: The weather as noise: precipitation the room can hear
 #: (`weather_for_room(...)["audible"]`, scaled by its `gain` -- muffled rain
 #: through a wall is quieter than rain on you), by the sky's intensity word,
@@ -180,6 +334,15 @@ AMBIENT = {"enclosed": 0.05, "sheltered": 0.1, "open": 0.2}
 #: only "(+ weather)"; these are the two numbers that sentence needed.
 WEATHER_NOISE = {"light": 0.3, "moderate": 0.6, "heavy": 1.0}
 WIND_NOISE = {"wind": 0.3, "gale": 1.0}
+
+#: Both as levels. They are ADDED to the exposure floor, and levels do not
+#: add -- `_ambient_floor` sums the powers and the dB view is taken of the
+#: total, which is the one place the conversion has to be careful and the
+#: one place real acoustics agrees with it exactly.
+WEATHER_NOISE_DB = {word: db_of_power(power)
+                    for word, power in WEATHER_NOISE.items()}
+WIND_NOISE_DB = {word: db_of_power(power)
+                 for word, power in WIND_NOISE.items()}
 
 #: A crowd's level by its BAND -- the count vocabulary `world/crowds.py`
 #: owns. § 3 asked for `audible` when open and `loud` when the crowd's `mood`
@@ -202,6 +365,16 @@ FULL_SNR = 2.0
 #: `fragment` when signal >= FRAGMENT_SNR * noise (and >= HEAR_FLOOR). Kept.
 FRAGMENT_SNR = 0.8
 
+#: The three in dB. The two ratios become MARGINS over the noise -- `full`
+#: at +3.01 dB, `fragment` at -0.97 dB -- which is the form they were always
+#: in and the form that says what they mean: a voice is followed when it is
+#: twice the room, and caught in pieces when it is four fifths of it. The
+#: absolute floor is a LEVEL and so is the one number the reference does not
+#: cancel out of.
+FULL_SNR_DB = db_ratio(FULL_SNR)
+FRAGMENT_SNR_DB = db_ratio(FRAGMENT_SNR)
+HEAR_FLOOR_DB = db_of_power(HEAR_FLOOR)
+
 #: THE NOISE LADDER the composer speaks (2026-09-04, the owner's rule b: the
 #: sentence grades by a closed set, never a number). Three words for what
 #: the noise at a cell does to a NORMAL VOICE ONE PACE OFF -- the yardstick
@@ -216,15 +389,34 @@ FRAGMENT_SNR = 0.8
 #: Move FULL_SNR or FRAGMENT_SNR and the words move with them.
 NOISE_WORDS = ("quiet", "din", "drowned")
 VOICE_ONE_PACE = SPEECH_POWER["normal"] / 2.0
+#: The same yardstick as a level: 47.8 dB, a normal voice at one pace.
+VOICE_ONE_PACE_DB = db_of_power(VOICE_ONE_PACE)
+
+
+def spreading_loss_db(length: float) -> float:
+    """`10*log10(1 + L^2)`: what a path of `length` costs a sound, in dB.
+    The linear model's `1 / (1 + L^2)` written as the loss it is. Path
+    length, never straight distance -- the whole difference from light."""
+    length = float(length or 0.0)
+    return 10.0 * math.log10(1.0 + length * length)
+
+
+#: The spreading loss at a path of ONE cell: 3.01 dB. The yardstick every
+#: masking rule is stated against ("could I hear someone beside me").
+_ONE_PACE_LOSS_DB = spreading_loss_db(1.0)
 
 
 def noise_word(noise: float) -> str:
     """One of NOISE_WORDS for a noise floor, by what it does to a normal
-    voice one pace off."""
-    noise = float(noise or 0.0)
-    if VOICE_ONE_PACE >= FULL_SNR * noise:
+    voice one pace off. In dB the three words are one margin read twice."""
+    return noise_word_db(db_of_power(noise))
+
+
+def noise_word_db(noise_db: float) -> str:
+    """`noise_word` for a floor already in dB."""
+    if _at_least(VOICE_ONE_PACE_DB, noise_db + FULL_SNR_DB):
         return "quiet"
-    if VOICE_ONE_PACE >= FRAGMENT_SNR * noise:
+    if _at_least(VOICE_ONE_PACE_DB, noise_db + FRAGMENT_SNR_DB):
         return "din"
     return "drowned"
 
@@ -329,10 +521,16 @@ def sound_field_hear_level(volume, signal_gain, noise) -> str:
     fraction of the speaker's power arriving at the listener's cell (what
     `spatial_rel_between` stamps as `rel["signal"]`); the volume word turns
     it into a signal here, because the relation is built before the line is
-    read."""
+    read.
+
+    In dB the two terms are ADDED rather than multiplied: the speaker's
+    level at one pace, plus the path's gain -- a negative number, the
+    aperture losses and the spreading loss the flood accumulated. That is
+    the whole of what "an aperture factor becomes a subtraction" means."""
     volume = str(volume or "normal").strip().casefold()
-    power = SPEECH_POWER.get(volume, SPEECH_POWER["normal"])
-    return quantise_hearing(power * float(signal_gain or 0.0), float(noise or 0.0))
+    level_db = SPEECH_DB.get(volume, SPEECH_DB["normal"])
+    return quantise_hearing_db(level_db + db_ratio(signal_gain),
+                               db_of_power(noise))
 
 
 #: The volumes a voice is RAISED at -- the two the bounded loudness walk
@@ -390,18 +588,48 @@ def open_edge_floor(volume, rel: dict) -> Optional[str]:
     if volume not in RAISED_VOLUMES:
         return None
     noise = rel.get("noise")
-    if noise is not None and quantise_hearing(
-            SPEECH_POWER[volume] / 2.0, float(noise)) == "none":
+    if noise is not None and quantise_hearing_db(
+            SPEECH_DB[volume] - _ONE_PACE_LOSS_DB,
+            db_of_power(noise)) == "none":
         return None
     return "fragment"
 
 
 def quantise_hearing(signal: float, noise: float) -> str:
+    """Quantise, LAST, from two LINEAR powers. The reference path: kept
+    exactly as it shipped, so the dB path below has something to be proved
+    identical to (`tests/test_sound_field.py`'s conversion property)."""
     if noise <= 0:
         return "full" if signal >= HEAR_FLOOR else "none"
     if signal >= FULL_SNR * noise:
         return "full"
     if signal >= FRAGMENT_SNR * noise and signal >= HEAR_FLOOR:
+        return "fragment"
+    return "none"
+
+
+def quantise_hearing_db(signal_db: float, noise_db: float) -> str:
+    """Quantise, LAST, from two LEVELS. THE PRODUCTION PATH.
+
+    The same inequality with a logarithm taken of both sides: `full` at
+    `FULL_SNR_DB` over the noise, `fragment` at `FRAGMENT_SNR_DB` over it
+    AND at or above the absolute floor, else `none`.
+
+    THE FLOOR GATES `fragment` AND NOT `full`, exactly as the linear model
+    does. It reads like an oversight and is not one worth changing here: a
+    signal under `HEAR_FLOOR` that still stands `FULL_SNR` over its room is
+    a room quieter than the floor, and the model's answer is that you follow
+    it. Whether that is right is the constants' question; whether this
+    function answers it the same way as the one it replaces is this
+    function's, and the order below is the answer. A silent room
+    (`noise_db` -inf) keeps its own arm for the same reason.
+    """
+    if noise_db == float("-inf"):
+        return "full" if _at_least(signal_db, HEAR_FLOOR_DB) else "none"
+    if _at_least(signal_db, noise_db + FULL_SNR_DB):
+        return "full"
+    if _at_least(signal_db, noise_db + FRAGMENT_SNR_DB) \
+            and _at_least(signal_db, HEAR_FLOOR_DB):
         return "fragment"
     return "none"
 
@@ -567,22 +795,74 @@ def gain_at(spread_map: dict, cell) -> float:
     return factor / (1.0 + length * length)
 
 
+def loss_db_at(spread_map: dict, cell) -> float:
+    """The same number as a LOSS in dB: the aperture and occluder losses the
+    path crossed, plus `spreading_loss_db` of its length. +inf where the
+    flood never arrived.
+
+    The flood itself still accumulates a multiplicative factor, and this is
+    the ONE place the decibel work is a view rather than the arithmetic. The
+    reason is bit-identity: `spread` breaks ties between two equally short
+    paths on the larger FACTOR, and a sum of dB losses and a product of
+    factors do not order identically in the last bits -- which is exactly
+    the class of defect the 2026-09-05 reciprocity repair was (`_LENGTH_EPS`
+    and its note). A product of factors IS a sum of losses, so nothing
+    behavioural rides on which side of the logarithm the accumulation
+    happens; only the tie-break does, and it stays where it was measured."""
+    gain = gain_at(spread_map, cell)
+    return -db_ratio(gain) if gain > 0.0 else float("inf")
+
+
 # ---------------------------------------------------------------------------
 # Sources
 # ---------------------------------------------------------------------------
 
-def _event_power(event) -> float:
-    """A one-beat source's power from its `intensity`: a sound level word,
-    a speech volume word, a number in [0, 1] as a fraction of `deafening`,
-    or `audible` when it says nothing usable."""
-    raw = event.get("intensity")
+def event_db(event) -> float:
+    """A one-beat sound's LEVEL in dB, from the event record.
+
+    Read in one order, loudest evidence first: an authored `db` number (the
+    escape hatch for anything the words do not reach -- a cannon, a
+    calving glacier, a god); then a `level` word off `SOUND_LEVELS`, which
+    is what the event channel asks for; then the older `intensity`, which
+    `sensory_events` has always carried as a level word, a speech volume, or
+    a number in [0, 1] read as a fraction of `deafening`'s POWER (kept
+    exactly, fraction and all, because opening turns have written it);
+    then `audible`, which is what a sound nobody graded is worth.
+    """
+    raw = event.get("db")
     if isinstance(raw, (int, float)) and not isinstance(raw, bool):
-        return SOUND_POWER["deafening"] * max(0.0, min(1.0, float(raw)))
-    word = str(raw or "").strip().casefold()
-    if word in SOUND_POWER:
-        return SOUND_POWER[word]
-    if word in SPEECH_POWER:
-        return SPEECH_POWER[word]
+        return float(raw)
+    for key in ("level", "intensity"):
+        raw = event.get(key)
+        if isinstance(raw, (int, float)) and not isinstance(raw, bool):
+            return db_of_power(
+                SOUND_POWER["deafening"] * max(0.0, min(1.0, float(raw))))
+        word = str(raw or "").strip().casefold()
+        if word in SOUND_DB:
+            return SOUND_DB[word]
+        if word in SPEECH_DB:
+            return SPEECH_DB[word]
+    return SOUND_DB["audible"]
+
+
+def _event_power(event) -> float:
+    """`event_db` as a power, for the near field's flood -- which multiplies
+    rather than adds. Written out rather than `power_of_db(event_db(...))`
+    so a level word yields the EXACT literal the flood was measured on: the
+    round trip through a logarithm returns 12.000000000000007, and this
+    number is one end of a tie-break."""
+    raw = event.get("db")
+    if isinstance(raw, (int, float)) and not isinstance(raw, bool):
+        return power_of_db(float(raw))
+    for key in ("level", "intensity"):
+        raw = event.get(key)
+        if isinstance(raw, (int, float)) and not isinstance(raw, bool):
+            return SOUND_POWER["deafening"] * max(0.0, min(1.0, float(raw)))
+        word = str(raw or "").strip().casefold()
+        if word in SOUND_POWER:
+            return SOUND_POWER[word]
+        if word in SPEECH_POWER:
+            return SPEECH_POWER[word]
     return SOUND_POWER["audible"]
 
 
@@ -888,7 +1168,7 @@ class SoundField:
         noise = self.noise_at(listener, exclude=(source_id,), room=room)
         if signal is None or noise is None:
             return "none"
-        return quantise_hearing(signal, noise)
+        return quantise_hearing_db(db_of_power(signal), db_of_power(noise))
 
     def door_gain(self, listener, *, room=None) -> Optional[float]:
         """The largest gain from any of the listener's own room's doorways
@@ -1080,6 +1360,463 @@ def heard_events(scene: dict, listener: str, events, *, room=None,
         level = field.level_of(listener, "event:%d" % idx, room=room)
         if level != "none":
             out.append((event, level))
+    return out
+
+
+# ---------------------------------------------------------------------------
+# THE EVENT CHANNEL: a sound that HAPPENS (docs/UNBUILT.md § 1.117)
+# ---------------------------------------------------------------------------
+#
+# `sound_source` is a STANDING emission and `state.running` is the switch
+# that holds it open. A thing that made a noise ONCE is not a thing that is
+# making a noise, and until 2026-09-05 the engine had no word for the
+# difference after the opening turn: a bell rung once either became a
+# permanent source -- the lighthouse run's fog bell, nine beats of one story
+# rewritten by a noise floor of 20.5 against a whisper's 0.34 -- or reached
+# nobody at all. The objects hand's clause named the distinction correctly
+# and then had nowhere to put the event.
+#
+# This is the somewhere. A beat's sounds live on the scene under the beat
+# that made them and are gone the moment the beat is: no expiry rule, no
+# device list, no guessing which kind of thing it was. The beat number IS
+# the lifetime.
+
+#: Where a beat's one-off sounds live on the scene, and the only place they
+#: do. Beat-scoped by CONSTRUCTION: the record carries the beat that wrote
+#: it and `beat_sensory_events` refuses any other, so a stale record cannot
+#: outlive its beat even if nothing ever clears it.
+SENSORY_EVENTS_KEY = "sensory_events"
+
+#: How many one-beat sounds one beat may hold. A beat is a moment; a moment
+#: with nine distinct noises in it is a model filling a list, not a world.
+#: Named here because every cap in this engine is named.
+MAX_SENSORY_EVENTS = 8
+
+
+def normalize_sensory_event(event, rooms=None) -> Optional[dict]:
+    """One `state_diff.sensory_events` entry as the engine holds it, or None
+    where it names no room the scene has.
+
+    `{kind, room, level | db, source, detail}` -- the note's shape, and a
+    closed set of keys. `kind` is the SENSE the event arrives on and defaults
+    to hearing, which is what the channel is for; `level` is a word off
+    `SOUND_LEVELS` and `db` the number for anything the words do not reach;
+    `source` is what made it and `detail` what it was like. Nothing else
+    survives, so a hand that writes prose into a key nobody reads writes it
+    into nothing.
+    """
+    if not isinstance(event, dict):
+        return None
+    room = str(event.get("room") or event.get("room_id")
+               or event.get("source_room") or "").strip()
+    if not room or (rooms is not None and room not in rooms):
+        return None
+    out = {"kind": str(event.get("kind") or "sound").strip().casefold()[:32],
+           "room": room,
+           "source": " ".join(str(event.get("source") or "").split())[:80],
+           "detail": " ".join(str(event.get("detail")
+                                  or event.get("desc")
+                                  or event.get("description") or "").split())[:200]}
+    level = normalize_sound_level(event.get("level"))
+    if level:
+        out["level"] = level
+    raw = event.get("db")
+    if isinstance(raw, (int, float)) and not isinstance(raw, bool):
+        out["db"] = float(raw)
+    if "level" not in out and "db" not in out:
+        raw = event.get("intensity")
+        if raw not in (None, ""):
+            out["intensity"] = raw
+    return out
+
+
+def beat_sensory_events(scene: dict, turn_idx) -> list:
+    """This beat's one-off sounds, and only this beat's. `[]` for any other
+    beat, for a scene that holds none, and for a reader with no beat to ask
+    about -- the field may only subtract on evidence it has."""
+    record = (scene or {}).get(SENSORY_EVENTS_KEY)
+    if not isinstance(record, dict) or turn_idx is None:
+        return []
+    try:
+        beat = int(record.get("beat"))
+    except (TypeError, ValueError):
+        return []
+    if beat != int(turn_idx):
+        return []
+    events = record.get("events")
+    return [e for e in events if isinstance(e, dict)] \
+        if isinstance(events, list) else []
+
+
+# ---------------------------------------------------------------------------
+# THE FAR FIELD (DESIGN_SOUND_DECIBELS.md § 2C, built 2026-09-05)
+# ---------------------------------------------------------------------------
+#
+# The near field above is ONE HOP WIDE: `room_field` lays the listener's room
+# and the neighbours placed beyond its own doorways, and nothing further. So
+# until today a sound two rooms away was not quiet -- it was ABSENT, and no
+# constant could change that. The far field is the answer, and it is a
+# different model on purpose:
+#
+#   * the NEAR field is cells. It knows where the counter is, which doorway
+#     the path went round, and who is standing behind what. It is the whole
+#     answer inside the rooms it lays, and it stays that.
+#   * the FAR field is ROOMS. Beyond the near field's edge there is no cell
+#     path to walk, and a sound that has crossed two buildings does not need
+#     one: what survives that far is a direction and a character, never a
+#     placement. So it floods the room graph by Dijkstra on ACCUMULATED LOSS
+#     in dB -- each room crossed costing the spreading loss of its own span,
+#     each edge its barrier's transmission loss -- and answers only for the
+#     rooms the near field could not reach.
+#
+# WHICH MEANS THE TWO NEVER ARGUE. The boundary is where authority hands
+# over, not where two models disagree about a neighbour: every room on the
+# listener's own composite is the near field's, and the far field is asked
+# only about rooms beyond it. That is what "they agree at the boundary"
+# has to mean between a cell model and a room model, and it is pinned.
+#
+# AND IT COSTS NOTHING ON AN ORDINARY BEAT. Nothing under
+# `FAR_FIELD_ENTRY_DB` enters it, and the loudest thing an ordinary beat
+# holds -- a shout, at 60.8 dB -- is nine decibels under that. No source
+# qualifies, `distant_sounds` returns before it builds anything, and no
+# graph is walked at all.
+
+#: What a solid partition passes. THE ONE GENUINELY NEW NUMBER
+#: (`DESIGN_SOUND_DECIBELS.md` § 5): a wall used to pass NOTHING, which was
+#: right for sight -- the table was borrowed from it -- and meant no
+#: explosion, ever, was heard through one by anybody. A wall attenuates; it
+#: does not abolish. 45 dB is the note's proposal and a real masonry wall.
+#:
+#: MEASURED CONSEQUENCE, and it is the owner's to accept or move
+#: (`docs/UNBUILT.md`): at 45 dB a shout dies against a wall as it must
+#: (60.8 - 21.6 - 45, inaudible), a `catastrophic` event is heard through
+#: ONE wall between medium rooms (33.4 dB against a 27.0 floor) and through
+#: TWO it is silent. The note's sentence "a `catastrophic` event is a
+#: fragment two rooms away" is therefore true through doorways and false
+#: through walls. 18 dB would make both halves true; 45 dB is the physical
+#: number. Registered rather than chosen.
+WALL_LOSS_DB = 45.0
+
+#: A floor or a ceiling: an edge that goes up or down and is a wall rather
+#: than a passage. A stairwell, a hatch or an open gallery is an APERTURE
+#: and keeps its own loss -- a vertical passage's barrier already has one --
+#: so this is only ever charged where the two rooms are stacked and nothing
+#: joins them.
+FLOOR_CEILING_LOSS_DB = 50.0
+
+#: What a barrier with nothing usable on it costs. A wall: the far field
+#: fails toward LESS reach, which is the direction every guard here fails.
+_UNKNOWN_BARRIER_LOSS_DB = WALL_LOSS_DB
+
+#: The level a source must reach at one pace before the far field is built
+#: at all. Above `deafening` (61.8) and below `thunderous` (85), so exactly
+#: the two new rungs and an authored `db` reach it, and NOTHING an ordinary
+#: beat contains does -- a shout is 60.8. That is not a performance guard
+#: bolted on: it is the same sentence as "incredibly loud noises travel very
+#: far", read from the other end.
+FAR_FIELD_ENTRY_DB = 70.0
+
+#: How a sound from beyond the near field ARRIVES, by its margin over the
+#: listening room's own noise floor. A closed set the engine owns, three
+#: words, and deliberately NOT the hearing ladder: `full` on that ladder
+#: means the words came through, and no distant sound ever carries words.
+DISTANT_LEVELS = ("faint", "plain", "overwhelming")
+
+#: The margin at which a distant sound stops being something you notice and
+#: becomes something you cannot do anything else through. 20 dB is a
+#: hundredfold over the room. The owner's, like every constant here.
+OVERWHELMING_MARGIN_DB = 20.0
+
+
+def _edge_loss_db(edge) -> float:
+    """One edge's transmission loss in dB, after the material shift. An
+    aperture costs what the near field's table charges it; a wall costs
+    `WALL_LOSS_DB`, or `FLOOR_CEILING_LOSS_DB` where the edge also goes up
+    or down and so is a floor rather than a partition."""
+    from world.spatial_geometry import normalize_vertical
+    shifted = _material_shifted_barrier(
+        normalize_barrier(edge.get("barrier")), edge.get("material"))
+    if shifted in APERTURE_LOSS_DB:
+        return APERTURE_LOSS_DB[shifted]
+    if normalize_vertical(edge.get("vertical")):
+        return FLOOR_CEILING_LOSS_DB
+    if shifted == "wall":
+        return WALL_LOSS_DB
+    return _UNKNOWN_BARRIER_LOSS_DB
+
+
+def far_field_graph(scene: dict) -> dict:
+    """`{room: {other: loss_db}}` -- the room graph a loud sound crosses,
+    UNDIRECTED and with every edge on it.
+
+    Undirected for the reason `one_opening_away` is: a doorway is one object
+    and may be declared from either side, and a path has no direction. Where
+    both sides declare it and disagree, the SMALLER loss wins -- the same
+    permissive reading the opening floor takes, and the one that cannot
+    silence a sound because of which room's author was more careful.
+
+    Every edge, not only the ones sound walks: a wall is on this graph, at
+    45 dB, which is the whole point of the far field.
+
+    CACHED ON THE SCENE OBJECT, because building it is the whole cost of a
+    loud beat: `effective_adjacent` resolves passages scene-wide and costs
+    about 8 ms a room, so a 600-room scene spent 543 ms here and 41 ms in
+    the flood it feeds. The cache is held by identity, like the sound
+    field's -- one beat's scene is one object, read many times and mutated
+    by nobody while it is being read.
+    """
+    rooms = (scene or {}).get("rooms") or {}
+    hit = _FAR_GRAPH_CACHE.get(id(scene))
+    if hit is not None and hit[0] is scene and hit[1] is rooms:
+        return hit[2]
+    graph = _build_far_field_graph(scene, rooms)
+    if len(_FAR_GRAPH_CACHE) >= _FAR_GRAPH_CACHE_MAX:
+        _FAR_GRAPH_CACHE.clear()
+    #: The scene is held, not just its id, so the id cannot be recycled onto
+    #: another object while this entry stands.
+    _FAR_GRAPH_CACHE[id(scene)] = (scene, rooms, graph)
+    return graph
+
+
+#: How many scenes' room graphs to remember. Small: the readers of one beat
+#: share one scene object, and a stale entry is impossible rather than
+#: unlikely (the entry is checked by identity of the scene AND of its rooms).
+_FAR_GRAPH_CACHE: dict = {}
+_FAR_GRAPH_CACHE_MAX = 8
+
+
+def _build_far_field_graph(scene, rooms) -> dict:
+    from world.spatial_barriers import effective_adjacent
+    graph: dict = {room: {} for room in rooms}
+    for room in sorted(rooms):
+        for edge in effective_adjacent(scene, room) or ():
+            if not isinstance(edge, dict) or not edge.get("to"):
+                continue
+            other = str(edge["to"])
+            if other not in rooms or other == str(room):
+                continue
+            loss = _edge_loss_db(edge)
+            for a, b in ((str(room), other), (other, str(room))):
+                known = graph[a].get(b)
+                if known is None or loss < known:
+                    graph[a][b] = loss
+    return graph
+
+
+def room_span(scene: dict, room_id) -> float:
+    """How far a sound travels crossing this room, in paces: its `extent`
+    where one is written, its size tier's side where none is. The engine's
+    OWN conversion (`spatial_fov.grid_side` -> `room_grid`), not a second
+    one -- 0 of 589 live rooms carried an extent when this was measured, so
+    the tier is what the far field will actually run on, and the day extents
+    are written the far field gets them for nothing."""
+    return float(grid_side(scene, room_id))
+
+
+#: Below this level nothing anywhere can hear a sound, whatever room it
+#: reaches: the quietest floor the model has (`AMBIENT["enclosed"]`, since
+#: weather and sources only ever ADD to a floor) taken at the `fragment`
+#: margin, or the absolute floor, whichever is higher. It is what makes the
+#: flood terminate on AUDIBILITY and need no hop cap: loss only accumulates,
+#: so once a room is under this, no room beyond it can be over it.
+def _inaudible_everywhere_db() -> float:
+    return max(AMBIENT_DB["enclosed"] + FRAGMENT_SNR_DB, HEAR_FLOOR_DB)
+
+
+def room_sound_flood(scene: dict, source_room, source_db: float) -> dict:
+    """`{room_id: {"db", "length", "barrier_db", "via"}}` for every room a
+    sound of `source_db` at one pace can still be heard in, `via` being the
+    room it arrives FROM (the last hop, which is the direction a listener
+    there would turn).
+
+    Dijkstra minimising ACCUMULATED LOSS. A room's level is
+    `source_db - barrier_db - spreading_loss_db(length)`, where `length` is
+    the sum of the spans of every room on the path, source's own included,
+    and `barrier_db` the sum of the edges' losses. Both terms only ever
+    grow, so the priority is monotone and the flood may stop expanding a
+    room the moment it falls under `_inaudible_everywhere_db()`.
+
+    NO HOP CAP, and none is wanted: the termination is AUDIBILITY, which is
+    the physically meaningful bound and the one that makes the reach of a
+    sound a property of how loud it is rather than of a constant. A
+    `catastrophic` event crosses about fifty medium rooms of open doorways
+    and stops; a `thunderous` one about thirty; a wall ends either in one
+    hop. What bounds the cost is the arithmetic, not a counter.
+
+    LABEL-CORRECTING rather than settle-once, because the loss is a sum of
+    two terms that do not trade off monotonically -- a longer path through
+    open doorways can beat a short one through a wall, and the room it beats
+    it at may already have been popped. A room is re-expanded only on a
+    strict improvement of more than `_DB_EPS`, which is what makes it
+    terminate.
+    """
+    source_room = str(source_room or "")
+    rooms = (scene or {}).get("rooms") or {}
+    if not source_room or source_room not in rooms:
+        return {}
+    graph = far_field_graph(scene)
+    cut = _inaudible_everywhere_db()
+    #: A room's span is derived from its shape, and deriving it lays the
+    #: room's cells out. Measured on a 600-room grid: 543 ms without this
+    #: memo and 41 ms with it, because a dense graph asks each room's span
+    #: once per edge into it rather than once.
+    spans: dict = {}
+
+    def span(room_id) -> float:
+        if room_id not in spans:
+            spans[room_id] = room_span(scene, room_id)
+        return spans[room_id]
+
+    span0 = span(source_room)
+    best = {source_room: {"db": source_db - spreading_loss_db(span0),
+                          "length": span0, "barrier_db": 0.0, "via": None}}
+    heap = [(-best[source_room]["db"], source_room)]
+    while heap:
+        neg_db, room = heapq.heappop(heap)
+        rec = best.get(room)
+        if rec is None or rec["db"] < -neg_db - _DB_EPS:
+            continue                    # stale: a louder way here was found
+        if rec["db"] < cut:
+            continue                    # inaudible here, and beyond it too
+        for other in sorted(graph.get(room) or ()):
+            barrier = rec["barrier_db"] + graph[room][other]
+            length = rec["length"] + span(other)
+            level = source_db - barrier - spreading_loss_db(length)
+            if level < cut:
+                continue
+            known = best.get(other)
+            if known is not None and known["db"] >= level - _DB_EPS:
+                continue
+            best[other] = {"db": level, "length": length,
+                           "barrier_db": barrier, "via": room}
+            heapq.heappush(heap, (-level, other))
+    return best
+
+
+def distant_level_word(level_db: float, floor_db: float) -> Optional[str]:
+    """One of `DISTANT_LEVELS` for a sound arriving at `level_db` in a room
+    whose noise floor is `floor_db`, or None where it does not arrive at
+    all. The same two margins the hearing ladder is quantised by, plus one
+    more for the sound there is no doing anything through."""
+    if not _at_least(level_db, HEAR_FLOOR_DB):
+        return None
+    if _at_least(level_db, floor_db + OVERWHELMING_MARGIN_DB):
+        return "overwhelming"
+    if _at_least(level_db, floor_db + FULL_SNR_DB):
+        return "plain"
+    if _at_least(level_db, floor_db + FRAGMENT_SNR_DB):
+        return "faint"
+    return None
+
+
+def far_field_sources(scene: dict, *, turn_idx=None, crowds=None,
+                      events=None) -> list:
+    """This beat's sources loud enough to enter the far field.
+
+    `speakers` is not a parameter and never will be: A VOICE IS NOT A FAR
+    FIELD SOURCE, AT ANY VOLUME. The threshold alone would do it -- a shout
+    is 60.8 dB against an entry of 70 -- but the threshold is a constant and
+    a constant can be moved, and what this refuses is not a loudness. It is
+    the claim that a body two streets away heard a sentence. So speech is
+    excluded by CONSTRUCTION, at the only door it could come through, and no
+    setting of the constants can open it.
+    """
+    out = []
+    sources, _notices = sound_sources(scene, turn_idx=turn_idx, crowds=crowds,
+                                      events=events)
+    for source in sources:
+        if source.get("kind") == "speech":
+            continue                    # never, at any volume. See above.
+        level_db = db_of_power(source.get("power"))
+        if level_db < FAR_FIELD_ENTRY_DB:
+            continue
+        out.append({**source, "db": level_db})
+    return out
+
+
+def _public_character(source, events) -> str:
+    """What a distant listener may be told the sound WAS LIKE -- and nothing
+    else. A one-beat event's own `detail`, which is prose the objects hand
+    wrote for exactly this: what the noise sounded like.
+
+    A RUNNING ENTITY CONTRIBUTES NOTHING HERE, deliberately. The engine has
+    a public description of the THING (`desc`) and none of its SOUND, and
+    handing a body three rooms away "a rusted iron bell on an iron bracket"
+    would tell them what an object they cannot see LOOKS like. That is a
+    sight fact arriving on a hearing channel, which is the same defect as
+    seeing through a wall with extra steps. Such a source delivers its
+    direction and its level, and the composer says so.
+    """
+    if source.get("kind") != "event":
+        return ""
+    try:
+        idx = int(str(source.get("id", "")).split(":")[1])
+    except (IndexError, ValueError):
+        return ""
+    event = (events or [])[idx] if 0 <= idx < len(events or []) else None
+    if not isinstance(event, dict):
+        return ""
+    return " ".join(str(event.get("detail") or "").split())[:160]
+
+
+def distant_sounds(scene: dict, listener: str, *, room=None, turn_idx=None,
+                   crowds=None, events=None, near_rooms=()) -> list:
+    """Every sound from beyond the near field this listener can hear.
+
+    `[{kind: "sound", level, db, character, bearing}]`, loudest first. A
+    BEARING AND A CHARACTER, NEVER A SENTENCE AND NEVER A PLACE.
+
+    `near_rooms` is what the listener's own composite already places
+    (`SoundField.grid.offsets`): those rooms are the near field's and are
+    skipped here, so no listener is ever answered twice about one sound.
+    The listener's own room is skipped for the same reason -- a sound where
+    it happened is `ambient_percepts`' business.
+
+    WHAT THIS FUNCTION CANNOT RETURN is as much of its contract as what it
+    can, and it is a FLOOR rather than a clause -- no configuration, no
+    constant and no caller can open any of these:
+
+      * no speech, at any volume (`far_field_sources` refuses the kind);
+      * no speaker and no source name (only an event's `detail`, which is
+        what the sound was LIKE);
+      * NO ROOM. The flood knows which neighbour the sound arrived from and
+        that room id never leaves this function: it is turned into a bearing
+        HERE, against the listener's own facing and their own room's edge,
+        and the bearing dict carries no room id and no room name. A bearing
+        is a direction; a direction is not a location; and the difference is
+        the whole of what a body two streets away is entitled to.
+
+    The bearing is why this takes a listener rather than a room: which way
+    "through the doorway on your left" is depends on which way they are
+    facing, and that is the observer's own fact.
+    """
+    listener_room = str(room or room_of(scene, listener) or "")
+    if not listener_room:
+        return []
+    sources = far_field_sources(scene, turn_idx=turn_idx, crowds=crowds,
+                               events=events)
+    if not sources:
+        return []                       # the ordinary beat: nothing walked
+    from world.spatial_senses import sound_bearing_via
+    skip = {str(r) for r in near_rooms or ()} | {listener_room}
+    floor_db = db_of_power(_ambient_floor(scene, listener_room))
+    out = []
+    for source in sources:
+        if str(source.get("room") or "") in skip:
+            continue                    # the near field's, or this room's own
+        reached = room_sound_flood(scene, source["room"], source["db"])
+        rec = reached.get(listener_room)
+        if rec is None:
+            continue
+        word = distant_level_word(rec["db"], floor_db)
+        if word is None:
+            continue
+        out.append({"kind": "sound", "level": word,
+                    "db": round(rec["db"], 1),
+                    "character": _public_character(source, events),
+                    "bearing": sound_bearing_via(scene, listener, rec["via"],
+                                                 room=listener_room)})
+    out.sort(key=lambda r: (-r["db"], r["level"]))
     return out
 
 

@@ -5578,16 +5578,38 @@ gap made a fog bell rung ONCE into a permanently running source, and nine
 beats of one story were rewritten by a noise floor of 20.5 against a
 whisper's 0.34.
 
-Both halves are now less damaging and neither is closed. The objects hand's
-card states the class (an emission is a state, a noise is an event, and the
-test is whether somebody would have to do something to make it stop) and
-points a one-off at `state.<x>_action`, which the merge expires with the beat
-that asserted it; `commit_scene_state._report_started_sources` tells the
-Director on the next beat about every `running` switch a beat threw. What is
-still missing is a channel a beat can write a sound INTO -- one that is heard
-where it happened, by whoever was there to hear it, and is then over. Until it
-exists a one-off sound is either a state that outlives it or nothing at all,
-and the clause is the only thing standing between those two.
+**Narrowed 2026-09-05 to three lines of wiring**
+(`docs/design/DESIGN_SOUND_DECIBELS.md` § 4, § 8). The channel is BUILT: the
+shape (`spatial_sound_field.normalize_sensory_event`, a closed set of keys,
+capped at `MAX_SENSORY_EVENTS` 8 a beat), the write
+(`commit_scene_state._record_sensory_events`, which stores the beat's sounds
+under the beat that made them and drops the record on any beat that makes
+none), and the read (`beat_sensory_events`, which refuses any beat but its
+own). The beat number IS the lifetime, so nothing decays and nothing expires
+on a counter. The objects hand's card now points a one-off at that channel
+rather than at `state.<x>_action`, and a sound loud enough to leave the room
+travels the room graph to wherever it is still audible
+(`spatial_sound_field.distant_sounds`).
+
+**What remains is that nothing writes to it from a live turn**, because
+three edits are in files the decibel work did not own:
+
+1. `llm/schemas.py`, `StateDiff`: `sensory_events: list[dict] =
+   Field(default_factory=list)` — the same declaration `EstablishOut`
+   already carries. Without it the field does not survive the validation
+   round trip, so a Director that writes one has it silently dropped.
+2. `agents/director_scopes.py`: add `"sensory_events"` to
+   `SPECIALISTS["objects"]["channels"]`. The card already asks for it.
+3. `agents/perception.py` / `agents/composer.py`: the delivery, one call and
+   one percept. The exact call and the four templates (already in both
+   packs) are in the note's § 8.
+
+Until those land, a one-off sound written by the objects hand is dropped at
+validation, which is a smaller failure than the two it replaces — it is no
+longer a state that outlives the beat — but it is still nobody hearing it.
+
+`commit_scene_state._report_started_sources` continues to tell the Director
+on the next beat about every `running` switch a beat threw.
 
 ### 1.115 The needs filter reads free prose, and its threshold is a judgement
 
@@ -5752,6 +5774,59 @@ And `speech_percept` still records nothing: give it the `note_step_decision`
 record `act_percept` has (level, volume, barrier, distance, which rescue
 fired) before deciding either rescue's fate, because the reason this was hard
 to attribute is that nothing persisted which relation was used or why.
+
+### 1.122 The decibel constants: a wall's loss, two new rungs, and three margins
+
+**Built 2026-09-05** (`docs/design/DESIGN_SOUND_DECIBELS.md`). The model is
+denominated in decibels, a wall has a finite transmission loss, and a sound
+over 70 dB floods the room graph until it is inaudible. The conversion was
+exactly identity — 12,685 tests unchanged — so everything below is a NEW
+number, and every one of them is the owner's.
+
+**Taken as the note proposed, and pinned:** `WALL_LOSS_DB` 45,
+`FLOOR_CEILING_LOSS_DB` 50, `FAR_FIELD_ENTRY_DB` 70, `SOUND_DB`
+`thunderous` 85 / `catastrophic` 100. **New, not in the note, and named
+here because every cap in this engine is named:** `DB_REF` 40 (the
+reference; arbitrary, and it cancels out of every comparison but the
+absolute floor and the far-field entry), `OVERWHELMING_MARGIN_DB` 20 (where
+a distant sound stops being something you notice), `MAX_SENSORY_EVENTS` 8
+(one-off sounds one beat may hold), `_DB_EPS` 1e-12 dB (arithmetic, not a
+judgement: measured at seventy times the worst error a logarithm introduces
+at an exact threshold).
+
+**The one decision this work could not take.** At 45 dB the wall does half
+of what the note claims. Measured, medium rooms, enclosed, floor 27.0 dB:
+
+| | one wall | two walls |
+|---|---|---|
+| shout (60.8 dB) | inaudible | inaudible |
+| deafening (61.8) | inaudible | inaudible |
+| thunderous (85) | 18.4 dB — inaudible | inaudible |
+| catastrophic (100) | 33.4 dB — **heard** | inaudible |
+
+"A shout is inaudible through it" holds. "A `catastrophic` event is a
+fragment two rooms away" holds through doorways and NOT through walls: only
+the top rung crosses a wall, and only one wall. The three numbers that
+decide this are the wall's loss, the top rung, and the per-room spreading
+term, and moving any of them moves the answer.
+
+**Recommendation, for the owner to take or refuse.** Leave 45 dB and accept
+that a wall is nearly absolute — it is the physical number for masonry, and
+"one wall stops all but the loudest thing in the world" is a defensible
+sentence about a building. If the note's sentence is the one that matters,
+`WALL_LOSS_DB` 18 makes both halves true (a shout still dies at one wall; a
+catastrophic event is a fragment at two) at the cost of a wall that a
+`thunderous` sound also crosses. Do NOT reach for raising `catastrophic`
+instead: it is already 38 dB over `deafening`, and stretching it further
+compresses everything under it into one rung. **Test to land with whichever
+is chosen**: two enclosed medium rooms joined by a `wall`, a `catastrophic`
+event in one ⇒ heard in the other; a `shout` ⇒ not.
+
+**And one measurement worth a play test before anything is moved:** a
+`catastrophic` event crosses about 50 medium rooms of open doorways before
+it terminates on audibility, and a `thunderous` one about 28. That is the
+owner's sentence working — an incredibly loud noise travels very far — and
+it is also the number most likely to feel wrong in a town.
 
 ## 2. Roadmap
 

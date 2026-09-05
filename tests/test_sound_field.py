@@ -154,7 +154,13 @@ def test_the_readers_words_do_not_change():
                {"S": {"at": "west"}, "L": {"near": ["S"]}})
     seen |= set(levels(sc, "S", "L").values())
     assert seen <= {"none", "fragment", "full"}
-    assert SOUND_LEVELS == ("faint", "audible", "loud", "deafening")
+    # The source ladder GREW on 2026-09-05 and the hearing ladder did not:
+    # `thunderous` and `catastrophic` are two more things a source can be,
+    # not two more things a listener can receive. What a body gets is still
+    # `none | fragment | full` for words, and `trace` for a direction with
+    # none -- which is what a distant sound has always been entitled to.
+    assert SOUND_LEVELS == ("faint", "audible", "loud", "deafening",
+                            "thunderous", "catastrophic")
     assert STEADINESS == ("steady", "flickering", "failing")
 
 
@@ -891,3 +897,545 @@ def test_a_flickering_source_on_the_bottom_rung_still_sounds():
     assert [s["id"] for s in sources] == ["hum"]
     assert sources[0]["power"] > 0.0
     assert notices == []
+
+
+# ---------------------------------------------------------------------------
+# DECIBELS (DESIGN_SOUND_DECIBELS.md § 2A, 2026-09-05)
+#
+# The conversion is arithmetic, not a behaviour change, and these are the
+# proof. One class of test asserts the two TABLES are the same numbers in two
+# denominations; the other asserts the two PATHS answer the same WORD, over
+# the suite's own fixtures and over randomised levels.
+# ---------------------------------------------------------------------------
+
+def test_the_decibel_tables_are_exact_conversions_of_the_powers():
+    """Every dB table is `10*log10(P) + DB_REF` of the power table it
+    denominates, every loss the negative of a factor's, and both thresholds
+    the ratios they replace. The two rungs that are NOT a conversion are the
+    two the ladder never had."""
+    from world.spatial import (
+        AMBIENT, AMBIENT_DB, APERTURE_LOSS_DB, APERTURE_PASS, db_of_power,
+        db_ratio, FAR_FIELD_ENTRY_DB, FRAGMENT_SNR, FRAGMENT_SNR_DB, FULL_SNR,
+        FULL_SNR_DB, HEAR_FLOOR, HEAR_FLOOR_DB, OCCLUDER_LOSS_DB,
+        OCCLUDER_PASS, power_of_db, SOUND_DB, SOUND_POWER, SPEECH_DB,
+        SPEECH_POWER)
+
+    for word, power in SPEECH_POWER.items():
+        assert SPEECH_DB[word] == db_of_power(power)
+    for word, power in AMBIENT.items():
+        assert AMBIENT_DB[word] == db_of_power(power)
+    for word, power in SOUND_POWER.items():
+        assert SOUND_DB[word] == db_of_power(power)
+    for barrier, factor in APERTURE_PASS.items():
+        if factor <= 0:
+            # A wall is not an aperture on the near field, so it is not in
+            # the aperture table at all -- its transmission is the far
+            # field's `WALL_LOSS_DB`.
+            assert barrier not in APERTURE_LOSS_DB
+            continue
+        assert APERTURE_LOSS_DB[barrier] == pytest.approx(-db_ratio(factor))
+    assert OCCLUDER_LOSS_DB == pytest.approx(-db_ratio(OCCLUDER_PASS))
+    assert FULL_SNR_DB == pytest.approx(db_ratio(FULL_SNR))
+    assert FRAGMENT_SNR_DB == pytest.approx(db_ratio(FRAGMENT_SNR))
+    assert HEAR_FLOOR_DB == db_of_power(HEAR_FLOOR)
+
+    # The two new rungs, declared in dB and reaching where nothing did.
+    assert SOUND_LEVELS[-2:] == ("thunderous", "catastrophic")
+    assert SOUND_DB["thunderous"] == pytest.approx(85.0)
+    assert SOUND_DB["catastrophic"] == pytest.approx(100.0)
+    assert SOUND_POWER["catastrophic"] == pytest.approx(power_of_db(100.0))
+    # ... and they are the only rungs the far field admits.
+    assert [w for w in SOUND_LEVELS if SOUND_DB[w] >= FAR_FIELD_ENTRY_DB] \
+        == ["thunderous", "catastrophic"]
+
+
+def test_the_two_quantisers_agree_over_randomised_levels():
+    """THE PROPERTY. `quantise_hearing` (linear, the path that shipped) and
+    `quantise_hearing_db` (the path that runs) give the same word for any
+    pair -- including the exact ties a synthetic fixture constructs, which
+    is what the dB comparison's slack is for."""
+    import random
+    from world.spatial import (
+        db_of_power, FRAGMENT_SNR, FULL_SNR, HEAR_FLOOR, quantise_hearing,
+        quantise_hearing_db)
+
+    rng = random.Random(20260905)
+    pairs = []
+    for _ in range(4000):
+        noise = rng.choice([0.0, 10.0 ** rng.uniform(-4, 2)])
+        pairs.append((10.0 ** rng.uniform(-5, 3), noise))
+    # The boundaries themselves, exactly on them and to either side. The
+    # nudges are RELATIVE, because the tolerance the conversion needs is: a
+    # margin stated in dB is a ratio, so "a hair under twice the noise" is
+    # `2n * (1 - e)` and not `2n - e`. An absolute nudge means something
+    # different at 0.05 than at 24, and below about 1e-13 of the level it
+    # means nothing at all -- it is under the resolution the logarithm
+    # itself has, which is what `_DB_EPS` is measured against.
+    for noise in (0.05, 0.1, 0.2, 1.0, 12.0, 4096.0):
+        for ratio in (FULL_SNR, FRAGMENT_SNR):
+            for nudge in (1.0, 1 - 1e-9, 1 + 1e-9, 1 - 1e-6, 1 + 1e-6):
+                pairs.append((ratio * noise * nudge, noise))
+    for nudge in (1.0, 1 - 1e-9, 1 + 1e-9):
+        pairs.append((HEAR_FLOOR * nudge, 0.0))
+        pairs.append((HEAR_FLOOR * nudge, HEAR_FLOOR / FRAGMENT_SNR))
+
+    disagreed = [(s, n) for s, n in pairs
+                 if quantise_hearing(s, n)
+                 != quantise_hearing_db(db_of_power(s), db_of_power(n))]
+    assert disagreed == [], (
+        "the decibel path and the linear path answer differently for "
+        "%d of %d pairs, starting at %r" % (len(disagreed), len(pairs),
+                                            disagreed[:3]))
+
+
+def _fixture_scenes():
+    """Every scene this module's fixtures build, as (name, scene, bodies).
+    The conversion identity is asserted over all of them at once."""
+    out = [("hall", scene(hall(), {"A": "hall", "B": "hall"},
+                          {"A": {"at": "west"}, "B": {"at": "south"}}),
+            ("A", "B"))]
+    for barrier in ("open", "open_door", "bars", "membrane", "closed_door",
+                    "window"):
+        out.append(("two rooms, %s" % barrier,
+                    scene(two_rooms(barrier), {"A": "a", "B": "b"},
+                          {"A": {"at": "c"}, "B": {"at": "w"}}),
+                    ("A", "B")))
+    for material in ("paper", "steel"):
+        out.append(("closed door in %s" % material,
+                    scene(two_rooms("closed_door", material),
+                          {"A": "a", "B": "b"},
+                          {"A": {"at": "c"}, "B": {"at": "w"}}), ("A", "B")))
+    out.append(("a loud generator in the hall",
+                scene(hall(), {"A": "hall", "B": "hall", "gen": "hall"},
+                      {"A": {"at": "west"}, "B": {"at": "south"},
+                       "gen": {"at": "east"}},
+                      entities={"gen": {"name": "the generator",
+                                        "sound_source": "loud"}}),
+                ("A", "B")))
+    out.append(("outdoors in heavy rain",
+                scene({"yard": room("large", {"well": {"desc": "a well",
+                                                       "dir": "n",
+                                                       "height": "waist"}},
+                                    exposure="open")},
+                      {"A": "yard", "B": "yard"}, {"A": {"at": "well"}},
+                      weather={"sky": "rain", "intensity": "heavy",
+                               "wind": "gale"}),
+                ("A", "B")))
+    out.append(("no geometry at all",
+                scene(hall(geometry=False), {"A": "hall", "B": "hall"},
+                      {"A": {"at": "west"}, "B": {"at": "south"}}),
+                ("A", "B")))
+    return out
+
+
+@pytest.mark.parametrize("name,sc,bodies", _fixture_scenes(),
+                         ids=[row[0] for row in _fixture_scenes()])
+def test_every_sound_fixture_gets_the_same_word_in_decibels(name, sc, bodies):
+    """THE CONVERSION IDENTITY. For every pair and every volume in every
+    fixture this module builds, the word the engine answers today is the
+    word the linear arithmetic it replaced would have answered from the
+    same stamped relation.
+
+    Stated over the RELATION rather than over the field, because the
+    relation is where the two models meet: `signal` is a path gain and
+    `noise` a floor, both linear, both untouched by the conversion -- so if
+    a word moved, the quantiser moved it, and this is the test that says so.
+    """
+    from world.spatial import quantise_hearing, SPEECH_POWER
+
+    graded = 0
+    for listener, speaker in ((bodies[0], bodies[1]), (bodies[1], bodies[0])):
+        rel = spatial_rel_between(sc, listener, speaker)
+        if rel.get("signal") is None or rel.get("noise") is None:
+            continue                    # no field: the edge model, untouched
+        for volume in VOLUMES:
+            graded += 1
+            word = hear_level(rel, volume)
+            linear = quantise_hearing(SPEECH_POWER[volume] * rel["signal"],
+                                      rel["noise"])
+            assert word == linear, (
+                "%s: %s hearing %s at %s is %r in decibels and %r linearly "
+                "(signal %r, noise %r)" % (name, listener, speaker, volume,
+                                           word, linear, rel["signal"],
+                                           rel["noise"]))
+    if name != "no geometry at all":
+        assert graded, "%s graded nothing on the field" % name
+
+
+def test_the_noise_ladder_is_the_same_three_words_in_decibels():
+    """`noise_word` moved into dB with everything else; the words it hands
+    the composer did not move with it."""
+    import random
+    from world.spatial import (db_of_power, FRAGMENT_SNR, FULL_SNR,
+                              noise_word, noise_word_db, VOICE_ONE_PACE)
+    rng = random.Random(5092026)
+    floors = [0.0, VOICE_ONE_PACE / FULL_SNR, VOICE_ONE_PACE / FRAGMENT_SNR]
+    floors += [10.0 ** rng.uniform(-4, 2) for _ in range(2000)]
+    for floor in floors:
+        assert noise_word(floor) == noise_word_db(db_of_power(floor))
+
+
+def test_an_event_reads_its_level_word_its_number_and_its_old_intensity():
+    """`event_db`, in the one order it reads: an authored `db` first (the
+    escape hatch for anything the words do not reach), then `level` off the
+    ladder, then the `intensity` `sensory_events` has always carried."""
+    from world.spatial import event_db, SOUND_DB, SPEECH_DB
+    assert event_db({"db": 137.0}) == 137.0
+    assert event_db({"db": 137.0, "level": "faint"}) == 137.0
+    assert event_db({"level": "catastrophic"}) == SOUND_DB["catastrophic"]
+    assert event_db({"intensity": "shout"}) == SPEECH_DB["shout"]
+    assert event_db({"intensity": 1.0}) == SOUND_DB["deafening"]
+    assert event_db({}) == SOUND_DB["audible"]
+
+
+# ---------------------------------------------------------------------------
+# THE FAR FIELD (DESIGN_SOUND_DECIBELS.md § 2B/2C)
+#
+# Beyond the near field's one hop, a loud sound floods the ROOM graph by
+# accumulated loss in dB and stops when it is inaudible. There is no hop cap
+# and there must not be one: the reach of a sound is a property of how loud
+# it is.
+# ---------------------------------------------------------------------------
+
+def bare_room(size="medium", adjacent=(), exposure="enclosed"):
+    """A room with NO anchor geometry: the near field does not exist for it,
+    so what these tests measure is the far field alone."""
+    return {"name": "a room", "size": size, "exposure": exposure,
+            "adjacent": list(adjacent), "anchors": {}}
+
+
+def chain(n, barrier="open_door", size="medium", exposure="enclosed"):
+    """`n` rooms in a line, each joined to the next by `barrier`."""
+    rooms = {}
+    for i in range(n):
+        adjacent = []
+        if i:
+            adjacent.append({"to": "r%d" % (i - 1), "barrier": barrier,
+                             "dir": "w"})
+        if i < n - 1:
+            adjacent.append({"to": "r%d" % (i + 1), "barrier": barrier,
+                             "dir": "e"})
+        rooms["r%d" % i] = bare_room(size, adjacent, exposure)
+    return scene(rooms, {})
+
+
+def crash(room="r0", level="catastrophic", detail="a long grinding collapse"):
+    return [{"kind": "sound", "source_room": room, "level": level,
+             "detail": detail}]
+
+
+def test_a_wall_passes_a_catastrophic_event_and_refuses_a_shout():
+    """THE OWNER'S SENTENCE. `APERTURE_PASS["wall"]` was 0 -- right for
+    sight, where the table came from -- so no explosion, ever, was heard
+    through a wall by anyone. A wall attenuates; it does not abolish.
+
+    The near field is untouched by this: a wall is still not an aperture and
+    still places no neighbour, because there is no cell path through a wall
+    to walk. The finite transmission is the far field's, on the room graph,
+    where a sound does not need a doorway to have crossed."""
+    from world.spatial import (AMBIENT_DB, distant_level_word,
+                               room_sound_flood, SOUND_DB, SPEECH_DB,
+                               WALL_LOSS_DB)
+    sc = chain(4, barrier="wall")
+    floor = AMBIENT_DB["enclosed"]
+
+    heard = room_sound_flood(sc, "r0", SOUND_DB["catastrophic"])
+    assert distant_level_word(heard["r1"]["db"], floor), (
+        "a catastrophic event is not heard through one wall")
+    # ... and no further: two walls is 90 dB, which nothing on the ladder
+    # has. Registered in the note, because the note's own sentence asked for
+    # a fragment two rooms away and 45 dB does not give one.
+    assert "r2" not in heard
+
+    # A voice never crosses one, at any volume -- which is what makes the
+    # wall a wall rather than a slow door.
+    for volume, level in SPEECH_DB.items():
+        reached = room_sound_flood(sc, "r0", level)
+        assert not distant_level_word(reached.get("r1", {}).get("db", -999.0),
+                                      floor), volume
+    assert WALL_LOSS_DB == 45.0
+
+
+def test_a_floor_is_a_wall_that_goes_up_and_a_stair_is_not():
+    """A vertical edge that is a WALL is a floor or a ceiling and costs
+    `FLOOR_CEILING_LOSS_DB`; a vertical edge that is an OPENING is a
+    stairwell and keeps its aperture's loss. A vertical passage's barrier
+    already has one."""
+    from world.spatial import (APERTURE_LOSS_DB, far_field_graph,
+                               FLOOR_CEILING_LOSS_DB, WALL_LOSS_DB)
+    sc = scene({"below": bare_room(adjacent=[
+                    {"to": "above", "barrier": "wall", "vertical": "up"}]),
+                "above": bare_room()}, {})
+    assert far_field_graph(sc)["below"]["above"] == FLOOR_CEILING_LOSS_DB
+    sc = scene({"below": bare_room(adjacent=[
+                    {"to": "above", "barrier": "open", "vertical": "up"}]),
+                "above": bare_room()}, {})
+    assert far_field_graph(sc)["below"]["above"] == APERTURE_LOSS_DB["open"]
+    # A horizontal wall is a partition and costs the partition's number.
+    sc = scene({"a": bare_room(adjacent=[{"to": "b", "barrier": "wall",
+                                          "dir": "e"}]),
+                "b": bare_room()}, {})
+    assert far_field_graph(sc)["a"]["b"] == WALL_LOSS_DB
+
+
+def test_the_far_field_terminates_on_audibility_and_has_no_hop_cap():
+    """A hundred rooms in a line and no counter anywhere. What stops the
+    flood is that the sound stops being audible: loss only accumulates, so
+    once a room is under the quietest floor the model has, no room beyond it
+    can be over it. How far a sound goes is then a property of HOW LOUD IT
+    IS, which is the whole claim."""
+    from world.spatial import (AMBIENT_DB, FRAGMENT_SNR_DB, HEAR_FLOOR_DB,
+                               room_sound_flood, SOUND_DB,
+                               _inaudible_everywhere_db)
+    sc = chain(100)
+    reach = {level: len(room_sound_flood(sc, "r0", SOUND_DB[level]))
+             for level in SOUND_LEVELS}
+    assert reach["catastrophic"] > reach["thunderous"] > reach["deafening"]
+    assert reach["catastrophic"] == 51 and reach["thunderous"] == 29
+    assert reach["catastrophic"] < 100, (
+        "the flood must stop of its own arithmetic, not run out of rooms")
+    # The cut is the quietest floor the model has at the `fragment` margin,
+    # or the absolute floor -- whichever is higher.
+    assert _inaudible_everywhere_db() == max(
+        AMBIENT_DB["enclosed"] + FRAGMENT_SNR_DB, HEAR_FLOOR_DB)
+    for rec in room_sound_flood(sc, "r0", SOUND_DB["catastrophic"]).values():
+        assert rec["db"] >= _inaudible_everywhere_db()
+
+
+def test_a_far_field_path_has_no_direction():
+    """RECIPROCITY, one level up from the near field's (§ PB2, repaired the
+    same day this was built): the loss between two rooms is one number, so a
+    sound in A reaching B and the same sound in B reaching A arrive at the
+    same level. The graph is undirected because a doorway is one object and
+    may be declared from either side."""
+    from world.spatial import far_field_graph, room_sound_flood, SOUND_DB
+    # Declared from ONE side only, and a ring so there are two ways round.
+    rooms = {
+        "hall": bare_room("large", [{"to": "stair", "barrier": "open_door",
+                                     "dir": "n"},
+                                    {"to": "cellar", "barrier": "wall",
+                                     "dir": "s"}]),
+        "stair": bare_room("small", [{"to": "cellar", "barrier": "open",
+                                      "dir": "s"}]),
+        "cellar": bare_room("huge"),
+    }
+    sc = scene(rooms, {})
+    graph = far_field_graph(sc)
+    for a, b in (("hall", "stair"), ("stair", "cellar"), ("hall", "cellar")):
+        assert graph[a][b] == graph[b][a], (a, b)
+    db = SOUND_DB["catastrophic"]
+    for a, b in (("hall", "cellar"), ("cellar", "hall"), ("hall", "stair")):
+        there = room_sound_flood(sc, a, db)[b]["db"]
+        back = room_sound_flood(sc, b, db)[a]["db"]
+        assert there == pytest.approx(back), (a, b, there, back)
+
+
+def test_the_flood_takes_the_quietest_way_round_and_not_the_shortest():
+    """ACCUMULATED LOSS, not hops. One wall away is one hop; three open
+    doorways round is three, and the sound arrives by the long way because
+    45 dB is more than three rooms of spreading."""
+    from world.spatial import room_sound_flood, SOUND_DB
+    rooms = {
+        "a": bare_room(adjacent=[{"to": "d", "barrier": "wall", "dir": "e"},
+                                 {"to": "b", "barrier": "open", "dir": "n"}]),
+        "b": bare_room(adjacent=[{"to": "c", "barrier": "open", "dir": "e"}]),
+        "c": bare_room(adjacent=[{"to": "d", "barrier": "open", "dir": "s"}]),
+        "d": bare_room(),
+    }
+    sc = scene(rooms, {})
+    reached = room_sound_flood(sc, "a", SOUND_DB["catastrophic"])
+    assert reached["d"]["via"] == "c", "the flood took the wall"
+
+
+def test_the_near_field_and_the_far_field_never_answer_the_same_room():
+    """THE BOUNDARY IS A HANDOVER, NOT AN ARGUMENT. Between a cell model and
+    a room model there is no arithmetic that makes two different derivations
+    agree to the decibel, so the far field is not asked about a room the
+    listener's own composite already places: every room on that composite is
+    the near field's, and a listener is never answered twice about one
+    sound. The rooms the near field lays are exactly `grid.offsets`."""
+    from world.spatial import distant_sounds, sound_field
+    rooms = two_rooms("open_door")
+    rooms["c"] = bare_room(adjacent=[{"to": "b", "barrier": "open_door",
+                                      "dir": "e"}])
+    rooms["b"]["adjacent"].append({"to": "c", "barrier": "open_door",
+                                   "dir": "w"})
+    sc = scene(rooms, {"L": "a"}, {"L": {"at": "c"}})
+    field = sound_field(sc, "L")
+    assert field is not None and set(field.grid.offsets) == {"a", "b"}
+
+    events = crash("b")                 # in a room the near field DOES place
+    assert distant_sounds(sc, "L", room="a", events=events,
+                          near_rooms=field.grid.offsets) == []
+    # ... and the same event two rooms out, which the near field cannot
+    # reach at all, is the far field's and is delivered.
+    heard = distant_sounds(sc, "L", room="a", events=crash("c"),
+                           near_rooms=field.grid.offsets)
+    assert [r["level"] for r in heard] == ["overwhelming"]
+    assert heard[0]["bearing"]["barrier"] == "open_door"
+    # Without a near field there is nothing to hand over from, and the
+    # neighbour is the far field's like any other room.
+    assert distant_sounds(sc, "L", room="a", events=events)
+
+
+def test_no_speech_crosses_the_far_field_at_any_volume_or_distance():
+    """THE FIREWALL FLOOR, and it is not a threshold. A body two streets
+    away who "hears" a line is the same defect as one who sees through a
+    wall, so speech is refused at the only door it could come through --
+    `far_field_sources` has no `speakers` parameter and drops the kind --
+    and no setting of any constant can open it.
+
+    Belt and braces, both stated: a shout is 60.8 dB against an entry of 70,
+    so the loudest voice there is would not qualify even if the kind check
+    were removed. And the record the far field returns has no key for
+    content: it is built field by field from a closed set."""
+    from world.spatial import (distant_sounds, FAR_FIELD_ENTRY_DB,
+                               far_field_sources, SPEECH_DB)
+    sc = chain(3)
+    sc["positions"] = {"Ada": "r0", "Bel": "r2"}
+    for volume in SPEECH_DB:
+        speakers = {"Ada": volume}
+        sources, _n = sound_sources(sc, speakers=speakers)
+        assert any(s["kind"] == "speech" for s in sources)
+        # The field's own source list carries the voice; the far field's
+        # does not, and cannot be asked to.
+        assert far_field_sources(sc) == []
+        assert max(SPEECH_DB.values()) < FAR_FIELD_ENTRY_DB
+
+    # An event that TRIES to smuggle a line through the channel carries it
+    # nowhere: the record has room for a character and no room for words.
+    events = [{"kind": "sound", "source_room": "r0", "level": "catastrophic",
+               "detail": "a shattering roar", "text": "RUN, THEY ARE HERE",
+               "speaker": "Ada", "quote": "RUN", "body": "RUN",
+               "line": "RUN", "room": "r0"}]
+    heard = distant_sounds(sc, "Bel", room="r2", events=events)
+    assert heard and set(heard[0]) == {"kind", "level", "db", "character",
+                                       "bearing"}
+    blob = repr(heard)
+    for leak in ("RUN", "THEY ARE HERE", "Ada", "r0", "r1"):
+        assert leak not in blob, (leak, blob)
+    assert heard[0]["character"] == "a shattering roar"
+
+
+def test_a_running_thing_delivers_a_direction_and_no_description_of_itself():
+    """A distant listener may be told what a sound was LIKE and never what
+    the thing making it looks like. The engine has a public description of
+    the THING and none of its sound, so a source that is not a one-beat
+    event contributes a direction and a level and no character at all --
+    handing over `desc` would put a sight fact on a hearing channel."""
+    from world.spatial import distant_sounds
+    sc = chain(3)
+    sc["entities"] = {"forge": {"name": "the drop hammer",
+                                "desc": "a black iron ram on a brass frame",
+                                "sound_source": "catastrophic"}}
+    sc["positions"] = {"forge": "r0"}
+    heard = distant_sounds(sc, "Bel", room="r2")
+    assert heard and heard[0]["character"] == ""
+    blob = repr(heard)
+    assert "drop hammer" not in blob and "brass" not in blob
+
+
+def test_an_ordinary_beat_walks_no_graph_at_all(monkeypatch):
+    """COST. Nothing under `FAR_FIELD_ENTRY_DB` enters the far field, and
+    the loudest thing an ordinary beat holds is a shout at 60.8 dB against
+    an entry of 70. So on an ordinary beat `distant_sounds` returns before
+    it builds a graph -- proved by making the graph impossible to build and
+    watching nothing fail."""
+    from world.spatial import distant_sounds
+    import world.spatial_sound_field as field_module
+
+    sc = chain(40)
+    sc["entities"] = {"gen": {"name": "a generator", "sound_source": "loud"}}
+    sc["positions"] = {"gen": "r0"}
+    calls = []
+    real = field_module.far_field_graph
+
+    def counted(*a, **k):
+        calls.append(1)
+        return real(*a, **k)
+
+    monkeypatch.setattr(field_module, "far_field_graph", counted)
+    for level in ("faint", "audible", "loud", "deafening"):
+        sc["entities"]["gen"]["sound_source"] = level
+        assert distant_sounds(sc, "L", room="r9",
+                              events=crash("r0", "audible")) == []
+    assert calls == [], "the far field built a graph on an ordinary beat"
+    sc["entities"]["gen"]["sound_source"] = "thunderous"
+    assert distant_sounds(sc, "L", room="r9")
+    assert calls, "the far field did not run when something was loud"
+
+
+def test_a_distant_sound_is_graded_by_the_room_it_arrives_in():
+    """The three words are a MARGIN over the listening room's own floor, so
+    the same event is overwhelming in a sealed room and merely plain in a
+    gale -- which is the same masking rule everything else here obeys."""
+    from world.spatial import distant_sounds, DISTANT_LEVELS
+    quiet = chain(60)
+    ladder, levels_db = [], []
+    for i in range(1, 60):
+        heard = distant_sounds(quiet, "L", room="r%d" % i, events=crash())
+        if not heard:
+            break
+        ladder.append(heard[0]["level"])
+        levels_db.append(heard[0]["db"])
+    # The three words in order, each once it is earned, and the level only
+    # ever falls with distance.
+    assert set(ladder) == set(DISTANT_LEVELS)
+    assert ladder == sorted(ladder, key=DISTANT_LEVELS.index, reverse=True)
+    assert levels_db == sorted(levels_db, reverse=True)
+    # The same event arriving at the same level is graded a rung quieter in
+    # a noisier room, because the word is a MARGIN and not a level: an open
+    # yard's floor is 6 dB over a sealed room's, and it takes the sound down
+    # with it without moving it a pace.
+    from world.spatial import AMBIENT_DB, distant_level_word
+    open_air = chain(60, exposure="open")
+    quieter = [distant_sounds(open_air, "L", room="r%d" % i, events=crash())
+               for i in range(1, len(ladder) + 1)]
+    quieter = [row[0]["level"] if row else None for row in quieter]
+    rung = {None: -1, **{w: i for i, w in enumerate(DISTANT_LEVELS)}}
+    assert all(rung[b] <= rung[a] for a, b in zip(ladder, quieter))
+    assert quieter != ladder, "a louder room graded nothing differently"
+    at = levels_db[ladder.index("overwhelming") - 1] if "overwhelming" \
+        in ladder else levels_db[0]
+    assert distant_level_word(at, AMBIENT_DB["enclosed"]) \
+        != distant_level_word(at, AMBIENT_DB["open"] + 20.0)
+
+
+# ---------------------------------------------------------------------------
+# THE EVENT CHANNEL (docs/UNBUILT.md § 1.117)
+# ---------------------------------------------------------------------------
+
+def test_a_sound_that_happens_is_heard_on_its_beat_and_not_the_next():
+    """THE GAP § 1.117 NAMED. A bell rung once was either a permanent source
+    or nothing; now it is a record carrying the beat that made it, and every
+    reader asks for a beat. Nothing expires on a counter -- the beat number
+    IS the lifetime."""
+    from world.spatial import beat_sensory_events, SENSORY_EVENTS_KEY
+    sc = chain(3)
+    sc[SENSORY_EVENTS_KEY] = {"beat": 7, "events": crash()}
+    assert beat_sensory_events(sc, 7) == crash()
+    assert beat_sensory_events(sc, 8) == []
+    assert beat_sensory_events(sc, 6) == []
+    assert beat_sensory_events(sc, None) == []
+    assert beat_sensory_events({}, 7) == []
+
+
+def test_the_event_record_keeps_the_notes_shape_and_nothing_else():
+    """`{kind, room, level | db, source, detail}` -- a closed set of keys, so
+    a hand that writes prose into a key nobody reads writes it into
+    nothing."""
+    from world.spatial import normalize_sensory_event
+    record = normalize_sensory_event(
+        {"kind": "SOUND", "room": "r0", "level": "Thunderous", "db": 121.5,
+         "source": "the north gate", "detail": "  a long   splintering  ",
+         "quote": "let me in", "speaker": "Ada"}, rooms={"r0": {}})
+    assert record == {"kind": "sound", "room": "r0", "level": "thunderous",
+                      "db": 121.5, "source": "the north gate",
+                      "detail": "a long splintering"}
+    # A sound happens somewhere, or it is not an event this engine holds.
+    assert normalize_sensory_event({"level": "loud"}, rooms={"r0": {}}) is None
+    assert normalize_sensory_event({"room": "nowhere"},
+                                   rooms={"r0": {}}) is None
+    # The older `intensity` survives for the opening turn, which writes it.
+    assert normalize_sensory_event({"room": "r0", "intensity": 0.4},
+                                   rooms={"r0": {}})["intensity"] == 0.4
