@@ -273,6 +273,7 @@
     "posture": "あなたは{value}。",
     "presence": "{label}がいる。",
     "presence_in_room": "{room}に",
+    "presence_at": "、{at}のところに",
     "presence_behind": "、{behind}の向こうに",
     "presence_shows": "、{shows}から上だけが見えて",
     "features": "{items}が見える。",

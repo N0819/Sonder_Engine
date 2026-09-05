@@ -75,12 +75,15 @@ from world.spatial import (
     _is_body_entity,
     body_visibility,
     contact_thing_label,
+    effective_anchors,
+    effective_station,
     entity_arc,
     entity_side,
     hear_level,
     _sense_channel,
     sense_adjusted,
     proximity_rel,
+    room_of,
     same_subject,
     size_relation,
     visual_level_between,
@@ -937,8 +940,6 @@ def _visible_room_label(scene, name):
     the room" are both false. Naming the room is the one distance phrasing that
     is true through a doorway, a grille and a pane of glass alike.
     """
-    from world.spatial import room_of
-
     room_id = room_of(scene, name)
     if not room_id:
         return ""
@@ -1064,6 +1065,30 @@ def presence_percepts(scene, observer_name, co_present, display_map,
         # IR invariant still holds. Absent rather than null when there is no
         # gap, so an unscaled scene's percept record is unchanged.
         size = _size_label(scene, observer_name, name)
+        # WHERE A BODY STANDS IS AS OBSERVABLE AS THAT IT IS STANDING.
+        # The view named the OBSERVER'S own station and never anybody
+        # else's: in a two-hander whose whole geometry is one room, Halla's
+        # view read "You are standing beside the table ... Tobin Renn is
+        # close by" for twenty-one turns while the scene held
+        # `stations = {Halla: table, Tobin: hearth}`, and the narrator,
+        # holding one anchor and needing two, put the man at the hearth
+        # beside the table on the story's first page (the long quiet room,
+        # 2026-09-05).
+        #
+        # Same room only, for the reason `pose_percepts` declines a pose
+        # across a barrier: the anchor is a piece of furniture in a room the
+        # observer is not in, and seeing that somebody beyond a doorway is
+        # standing is not seeing what they are standing at. A `beyond` tier
+        # already names their room, which is the distance that WAS measured.
+        station = None
+        if room is None:
+            at = str((effective_station(scene, name) or {}).get("at") or "")
+            here = room_of(scene, name)
+            record = (effective_anchors(scene, here) or {}).get(at) \
+                if (at and here) else None
+            if record is not None:
+                station = (str((record or {}).get("desc") or "").strip()
+                           or at.replace("_", " "))
         out.append(Percept(
             kind="presence", channel="sight",
             source_label=label,
@@ -1071,12 +1096,14 @@ def presence_percepts(scene, observer_name, co_present, display_map,
             data={"tier": tier, "side": side, "arc": arc, "sight": level,
                   "body": body_key(name),
                   **({"size": size} if size else {}),
+                  **({"at": station} if station else {}),
                   **({"room": room} if room else {}),
                   **({"behind": behind, "shows": shows} if behind else {})},
             salience=0.35,
             dedupe_key=standing_key(
                 "presence", (body_key(name),),
                 (tier, arc, level, size or "")
+                + ((station,) if station else ())
                 + ((behind, shows) if behind else ())),
         ))
     return out
@@ -2687,6 +2714,11 @@ def _presence_clause(p):
     # unknown or absent label costs wording and never the beat.
     size = _SIZE_PHRASES.get(str(p.data.get("size") or ""), "")
     size_clause = f", {size}" if size else ""
+    # Where they are standing, when the scene knows and they are in this
+    # room. It rides the tier rather than replacing it: "close by" is how
+    # far, "at the hearth" is where, and a reader wants both.
+    at = str(p.data.get("at") or "").strip()
+    at_clause = _en("presence_at", at=at) if at else ""
     # Seen over something: name what, and how much of them shows. Plain
     # words -- "behind the counter, from the waist up" -- never a fraction.
     behind = str(p.data.get("behind") or "").strip()
@@ -2696,7 +2728,8 @@ def _presence_clause(p):
         shows = str(p.data.get("shows") or "").strip()
         if shows:
             cover_clause += _en("presence_shows", shows=shows)
-    return f"{p.source_label} is {tier}{side_clause}{size_clause}{cover_clause}"
+    return (f"{p.source_label} is {tier}{at_clause}{side_clause}"
+            f"{size_clause}{cover_clause}")
 
 
 def _join_clauses(clauses):
