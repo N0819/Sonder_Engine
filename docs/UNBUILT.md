@@ -6812,6 +6812,21 @@ vocabulary; flicker and failure are seeded on (turn, source) so a reroll
 sees the same light. Nothing is built, nothing is measured; the note's § 9
 lists what to measure first and its § 6 the constants the owner sets.
 
+### 2.36 The sound field — DESIGN, not built
+
+Agreed 2026-09-04, queued after the light field:
+[`design/DESIGN_SOUND_FIELD.md`](design/DESIGN_SOUND_FIELD.md). Loudness as a
+scalar on the sight grid, spread by shortest acoustic PATH (a flood, not a
+raycast -- sound goes round a counter and through a doorway, light does not),
+attenuated per aperture by the barrier and its material, decayed by path
+length, summed into a signal and a noise floor (other sources, the room's
+ambient and weather, the listener's own machine), and quantised LAST to the
+existing `none | fragment | full` by signal against noise. Sources are a class
+(`sound_source`, `steadiness` shared with light, `state.running`), speech keeps
+its volume word, containment and comms keep their present rules, and a scene
+without geometry composes byte-identically. Nothing built or measured; § 6
+holds the constants the owner sets and § 9 what to measure first.
+
 ### 2.35 What the 2026-09-04 debug runs left open
 
 Evidence: [`experiments/DEBUG_RUN_2026_09_04.md`](experiments/DEBUG_RUN_2026_09_04.md)
