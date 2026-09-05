@@ -1331,6 +1331,42 @@ def prepare_scene_commit(ctx):
     for _msg in prune_dangling_exits(sc):
         ctx.warnings.append(_msg)
 
+    # WHICH PART OF THE MAP EACH ROOM IS IN (world/regions.py). Derived here,
+    # after the fringe and the pruning, because the answer is read off the
+    # merged graph: a planned room's region is its structure; a room this
+    # beat minted -- by the Director's diff or by the declared-destination
+    # branch above -- inherits the region of the room it was reached from,
+    # the occupied room deciding when its neighbours disagree; a zone is
+    # folded into a region once; an inside carries none and reports its
+    # holder's. Nothing is invented: a minted room joined to no regioned
+    # room stays unregioned, which is the class chat 115 needed named --
+    # a Director-minted lift car beside a planned one with nothing saying
+    # they were the same part of the map. The entries a fold or a
+    # declaration needs in the region registry are written in commit_scene,
+    # inside the transaction, from `prepared["regions"]`.
+    _region_entries = {}
+    try:
+        from world.regions import (assign_regions, planned_structure_of,
+                                   region_registry)
+        _prev_rooms = set(prev_scene.get("rooms") or {})
+        _regions = assign_regions(
+            sc, structures=planned_structure_of(cid),
+            minted={rid for rid in (sc.get("rooms") or {}) if rid not in _prev_rooms},
+            occupied={str(r) for r in (prev_scene.get("positions") or {}).values() if r})
+        # Only what the registry LACKS: a standing region's entry is not
+        # rewritten by every beat that stands in it.
+        _standing = region_registry(cid, ctx.turn.frame_id)
+        _region_entries = {rid: name for rid, name in _regions["registry"].items()
+                           if rid not in _standing}
+        for _room, _region, _why in _regions["assigned"]:
+            note_step_decision("room_region", _room, _region, _why)
+        for _room in _regions["dropped"]:
+            ctx.warnings.append(
+                f"room {_room!r} is the inside of a body and carries no region "
+                "of its own; it reports the region of the room its holder stands in")
+    except Exception as _region_exc:  # diagnostics, never a story blocker
+        ctx.warnings.append(f"room regions could not be derived: {_region_exc}")
+
     # G6: size stopped being flavour when perception started reading it.
     # `proximity_rel` needs it to say two people are `across` a room, and
     # S2a caps sight at `shapes` in a large room with no placement -- so a
@@ -1398,6 +1434,9 @@ def prepare_scene_commit(ctx):
             cid, chat.lorebook_id, prev_scene, sc),
         "frontier_mutations": _frontier_mutations,
         "destruction": destruction,
+        # `{region_id: name}` the region registry must hold for this scene's
+        # rooms: folded zones and Director-declared regions, named as written.
+        "regions": _region_entries,
     }
 
 
@@ -1418,6 +1457,12 @@ def commit_scene(ctx, nonce, *, prepared=None):
             from world.structure import apply_frontier_mutations
             apply_frontier_mutations(
                 ctx.chat.id, ctx.turn.id, prepared["frontier_mutations"])
+        if prepared.get("regions"):
+            # The registry of what the regions ARE, beside the scene that
+            # carries their ids and in the same transaction: a folded zone
+            # or a declared region is a name the scene now points at.
+            from world.regions import ensure_regions
+            ensure_regions(ctx.chat.id, ctx.turn.frame_id, prepared["regions"])
         if prepared.get("destruction"):
             _apply_destruction(
                 ctx.chat.id, ctx.turn.id, prepared["destruction"])

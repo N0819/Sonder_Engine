@@ -66,6 +66,13 @@ FRAME_SCOPED_WORLD_KEYS = {
     # The Dramaturge's proposals and the Planner's verdicts on them
     # (story/room_proposals.py). Per-era like the packages they lead to.
     "room_proposals",
+    # The REGION registry (world/regions.py): what the parts of the map ARE,
+    # `{region_id: {name, brief}}`. Per-era like the scene whose rooms carry
+    # the ids: a zone the Director folded into a region in one era is not a
+    # region in an era that never opened onto it. A planted structure is a
+    # region by construction and is read through from `structures`, never
+    # copied here.
+    "regions",
     # -- Plot package store (story/plot_packages.py) --------------------
     # The Writers' Room's packages: drafts, what was published and when.
     # Per-era like the scene: a branch that never published a package
@@ -145,7 +152,7 @@ def parse_scoped_world_key(key):
 #: runs from the root. `or` rather than a default argument, so an empty
 #: `ENGINE_DB=` falls through to the anchored path instead of naming the cwd.
 DB = os.environ.get("ENGINE_DB") or os.path.join(INSTALL_ROOT, "engine.db")
-SCHEMA_VERSION = 35
+SCHEMA_VERSION = 36
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta(key TEXT PRIMARY KEY, value TEXT);
@@ -1803,6 +1810,16 @@ MIGRATIONS = [
         # an empty llm_capture means "nothing recorded", and on a v34 file it
         # would have meant "cannot record".
     ],
+    # v35 -> v36
+    [
+        # Room regions (world/regions.py). No DDL: the field is `region` on a
+        # room inside the frame-scoped `scene` blob and `payload.region` on
+        # its `room_registry` row, and the registry of regions is a world
+        # key. The bump is the gate for the one-shot data backfill in
+        # init() -- `backfill_regions` runs when a file crosses this version
+        # and never again, so a room minted later without a region is not
+        # quietly given one on the next server start.
+    ],
 ]
 
 # DDL that must run AFTER the migration chain, on every path -- init()
@@ -2484,6 +2501,16 @@ def init():
     # has no scenes to repair, and an existing one is repaired exactly once
     # (see the function -- the key's presence is the gate).
     _recover_scene_time_of_day(c)
+    # Room regions, once. A file crossing v36 gets `region` derived for every
+    # room a rule reaches -- planned rooms by structure, zones folded, the
+    # rest inherited from a regioned neighbour, nothing invented
+    # (world/regions.backfill_regions). A fresh file has no rooms; a file
+    # already past the bump is left exactly as it is, so a room minted later
+    # with no region is not given one on the next server start. Deferred
+    # import: `world` imports this module.
+    if not is_fresh_db and current < 36:
+        from world.regions import backfill_regions
+        backfill_regions(c)
     c.commit()
     c.close()
 

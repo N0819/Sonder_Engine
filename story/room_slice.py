@@ -22,6 +22,8 @@ room the story knows, each::
     {"id": str, "name": str,
      "status": "live" | "planned" | "retired",
      "holder": str | None,     # `parent_entity`: the body this room is the inside of
+     "region": str | None,     # the part of the map (world/regions.py); an
+                               # inside reports its holder's room's
      "hops": int | None}       # BFS distance from the nearest room a cast
                                # member occupies; None when unreachable
 
@@ -37,13 +39,17 @@ room the story knows, each::
   of it is the holder's room, nothing routes through it, and a cast member
   standing inside a body is at hops 0 like anyone else. The cast is every
   body the scene's `positions` place.
-* Sorted by ``hops`` then ``id``; unreachable rows last. Cast rooms come
-  first by construction (hops 0).
+* GROUPED BY REGION: regions ordered by the nearest room in each (so the
+  cast's region comes first), and within a region by ``hops`` then ``id``,
+  unreachable rows last in their region. Rooms in no region are one group
+  under the same rule, so a story with no regions is ordered exactly as it
+  was: ``hops`` then ``id``, cast rooms first by construction.
 
 ``room_slice(cid, frame_id, room_id, scene=None)`` -> ``dict | None``, the
 whole of one room (None when no room of that id is known)::
 
-    {"id", "name", "status", "holder",          # as in the index row
+    {"id", "name", "status", "holder", "region", # as in the index row
+     "region_name": str | None,                  # the region's name from its registry
      "description": str,                         # the room's prose, capped at DESCRIPTION_CHARS
      "exits": [{"to", "name", "barrier", "dir", "status"}],
      "occupants": [{"name", "station", "attire"}],
@@ -108,8 +114,9 @@ def _text(value, limit):
 
 
 def _rooms(scene):
-    return {str(rid): room for rid, room in ((scene or {}).get("rooms") or {}).items()
-            if isinstance(room, dict)}
+    """The scene's rooms, dict-valued only (`world.regions.scene_rooms`)."""
+    from world.regions import scene_rooms
+    return scene_rooms(scene)
 
 
 def containment(scene):
@@ -123,29 +130,26 @@ def containment(scene):
 
 def _anchored(scene):
     """``{entity_id: room_id}`` for every anchor a room declares -- the
-    second way a thing is placed (the first is a `positions` row)."""
-    out = {}
-    for rid, room in _rooms(scene).items():
-        for aid in (room.get("anchors") or {}):
-            out.setdefault(str(aid), rid)
-    return out
+    second way a thing is placed (the first is a `positions` row).
+    `world.regions.scene_anchors`, which the region of an inside is read
+    through as well."""
+    from world.regions import scene_anchors
+    return scene_anchors(scene)
 
 
 def holder_room(scene, holder, anchored=None):
     """Where the body a room is inside of stands: by identity, by anchor,
-    or by a bare position row under the holder's name."""
-    from world.spatial import room_of
-    anchored = _anchored(scene) if anchored is None else anchored
-    where = room_of(scene, str(holder)) or anchored.get(str(holder))
-    if not where:
-        where = (scene.get("positions") or {}).get(str(holder))
-    return str(where) if where else None
+    or by a bare position row under the holder's name
+    (`world.regions.holder_room_of`, the one answer both readers use)."""
+    from world.regions import holder_room_of
+    return holder_room_of(scene, holder, anchored)
 
 
 def _registry(cid):
     """Every `room_registry` row of the story: ``{uid: {name, holder,
-    planned (the spec or None), retired (bool)}}``."""
+    planned (the spec or None), retired (bool), region}}``."""
     from core.db import q
+    from world.regions import registry_row_region
     out = {}
     for row in q("SELECT room_uid, name, parent_entity, payload, retired_turn_id "
                  "FROM room_registry WHERE chat_id=?", (cid,)):
@@ -159,8 +163,38 @@ def _registry(cid):
             "holder": str(row["parent_entity"]) if row["parent_entity"] else None,
             "planned": planned if isinstance(planned, dict) else None,
             "retired": row["retired_turn_id"] is not None,
+            "region": registry_row_region(payload),
         }
     return out
+
+
+def _region_of(scene, rid, registry):
+    """The region a room reports: the scene's answer for a live room (an
+    inside answering with its holder's room's), the registry's for a
+    planned or retired one (`world.regions.room_region`)."""
+    from world.regions import room_region
+    return room_region(scene, rid, {
+        uid: row["region"] for uid, row in registry.items() if row.get("region")})
+
+
+def group_by_region(rows):
+    """Order index rows by region, then by distance within it. A region's
+    rank is its nearest room's hops -- the cast's region first, a region no
+    reachable room stands in last, ties by region id -- and within a region
+    the order is hops then id, unreachable last. Rooms in no region form
+    one group under the same rule, which is what keeps a story with no
+    regions in exactly the order it had. Sorts in place; returns rows."""
+    rank = {}
+    for row in rows:
+        key = row.get("region")
+        hops = row.get("hops")
+        here = (0, hops) if hops is not None else (1, 0)
+        if key not in rank or here < rank[key]:
+            rank[key] = here
+    rows.sort(key=lambda r: (
+        rank[r.get("region")], r.get("region") or "",
+        r["hops"] is None, r["hops"] or 0, r["id"]))
+    return rows
 
 
 def _statuses(scene, registry):
@@ -271,10 +305,10 @@ def room_index(cid, frame_id, scene=None):
             "name": str(room.get("name") or reg.get("name") or rid),
             "status": status,
             "holder": str(holder) if holder else None,
+            "region": _region_of(scene, rid, registry),
             "hops": hops.get(rid) if status != STATUS_RETIRED else None,
         })
-    rows.sort(key=lambda r: (r["hops"] is None, r["hops"] or 0, r["id"]))
-    return rows
+    return group_by_region(rows)
 
 
 # ---------------------------------------------------------------------------
@@ -365,6 +399,7 @@ def _plan_here(cid, frame_id, room_ids):
 def room_slices(cid, frame_id, room_ids, scene=None):
     """`room_slice` for several rooms, the scene-wide work done once. Ids
     the story does not know are skipped; the order is the caller's."""
+    from world.regions import region_name, region_registry
     from world.spatial import effective_adjacent
     from world.structure import planned_room_brief
 
@@ -375,6 +410,7 @@ def room_slices(cid, frame_id, room_ids, scene=None):
     wanted = [str(r) for r in room_ids if str(r) in statuses]
     if not wanted:
         return []
+    regions = region_registry(cid, frame_id)
     positions = scene.get("positions") or {}
     occupants = {}
     for who, room in positions.items():
@@ -411,9 +447,12 @@ def room_slices(cid, frame_id, room_ids, scene=None):
                 exits[to] = {"to": to, "name": name_of(to),
                              "barrier": edge.get("barrier"), "dir": edge.get("dir"),
                              "status": statuses.get(to)}
+        region = _region_of(scene, rid, registry)
         out.append({
             "id": rid, "name": name_of(rid), "status": status,
             "holder": str(holder) if holder else None,
+            "region": region,
+            "region_name": region_name(regions, region) if region else None,
             "description": _text(room.get("desc") or room.get("description"),
                                  DESCRIPTION_CHARS),
             "exits": list(exits.values()),

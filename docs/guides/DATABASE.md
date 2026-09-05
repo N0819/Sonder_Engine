@@ -369,6 +369,24 @@ They are intentionally not rolled back by turn checkpoints: like other explicit
 authoring configuration, editing a card is not an event inside the beat being
 rerolled.
 
+## Room regions ride the blobs, not a column
+
+`region` (`world/regions.py`, schema v36) is a worked example of the checklist
+where every step was answered by an existing carrier. The field lives on the
+room inside the frame-scoped `scene` blob and in `room_registry.payload.region`
+(beside `planned`, whose `structure` is the same fact for a planned room), and
+the registry of what the regions are is the frame-scoped `regions` world key.
+So the archive (`SELECT *` over `world`, `payload` carried opaque), the
+checkpoint (the world table snapshotted verbatim, the registry row's `payload`
+with it) and the branch/clone remap (which touches turn and book ids, never a
+payload's text) all carry it with no code of their own -- and
+`tests/test_room_regions.py` proves each round trip rather than assuming it.
+What the bump DID need is the one thing a blob field cannot do for itself: the
+one-shot data backfill, gated on `SCHEMA_VERSION` crossing 36 in `init()`, so a
+room minted afterwards with no region is not quietly given one on the next
+open. A new column would have been a second spelling of `planned.structure`
+for every planned room.
+
 ## Runtime database selection
 
 `DB` defaults to `engine.db` and can be overridden with `ENGINE_DB` before importing `core/db.py`. Tests use `db.configure(path)` to switch connections safely.

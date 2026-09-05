@@ -168,9 +168,13 @@ class TestReadTools:
         # is behind a locked door, which is not walked, so it and the chapel
         # planned beyond it are unreachable (hops None, listed last) and
         # index-only -- exactly what `inspect_route` says of the same door.
+        # Grouped by region: the port's rooms (no region) hold the cast, so
+        # they come first, the loft last among them; the chapel is its own
+        # region, planned and unreached, so it comes after.
         assert [(r["id"], r["status"], r["hops"]) for r in rooms["index"]] == [
             ("quay", "live", 0), ("warehouse", "live", 1),
-            ("chapel_nave", "planned", None), ("loft", "live", None)]
+            ("loft", "live", None), ("chapel_nave", "planned", None)]
+        assert [r["region"] for r in rooms["index"]] == [None, None, None, "chapel"]
         assert {r["id"] for r in rooms["rooms"]} == {"quay", "warehouse"}
         quay = next(r for r in rooms["rooms"] if r["id"] == "quay")
         assert [o["name"] for o in quay["occupants"]] == [PLAYER]

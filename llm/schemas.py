@@ -1278,6 +1278,14 @@ class RoomDef(LenientModel):
     # "genuinely disconnected locale" (see spatial_frames.py's module
     # docstring); most rooms should leave this unset.
     zone: Optional[str] = None
+    # Which PART OF THE MAP the room belongs to (world/regions.py). Derived
+    # by the engine -- a planned room's structure, a minted room's inheritance
+    # from the room it was reached from -- and declared here only when the
+    # Director says a room opened onto ANOTHER part of the map. Declared for
+    # the same reason `zone` is: an undeclared field is dropped by the
+    # validation round-trip, and a declaration that never reaches commit is a
+    # room silently filed under the wrong part of the map.
+    region: Optional[str] = None
     # How much light there is to see BY: dark | dim | lit | bright. Declared
     # for the same reason `zone` is -- an undeclared field is dropped by the
     # validation round-trip, and a room going dark must survive it. Absent

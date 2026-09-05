@@ -87,7 +87,7 @@ class TestTheIndex:
         cid = _story(temp_db)
         rows = room_index(cid, None)
         by_id = {r["id"]: r for r in rows}
-        assert set(rows[0]) == {"id", "name", "status", "holder", "hops"}
+        assert set(rows[0]) == {"id", "name", "status", "holder", "region", "hops"}
         assert {r["status"] for r in rows} == {"live", "planned", "retired"}
         # Cast rooms first, at 0: the corridor (Mara) and the lift car (the
         # player, inside the elevator).
@@ -99,14 +99,21 @@ class TestTheIndex:
         # planned annex two, its store three.
         assert by_id["shaft"]["hops"] == 1 and by_id["lobby"]["hops"] == 1
         assert by_id["annex_hall"] == {"id": "annex_hall", "name": "Annex Hall",
-                                       "status": "planned", "holder": None, "hops": 2}
+                                       "status": "planned", "holder": None,
+                                       "region": "annex", "hops": 2}
         assert by_id["annex_store"]["hops"] == 3
         # A locked door is not walked: the vault is unreachable, listed
         # after every reachable room, and before nothing but the retired.
         assert by_id["vault"]["hops"] is None
         assert by_id["old_boiler"] == {"id": "old_boiler", "name": "Old Boiler Room",
-                                       "status": "retired", "holder": None, "hops": None}
-        assert [r["id"] for r in rows[-2:]] == ["old_boiler", "vault"]
+                                       "status": "retired", "holder": None,
+                                       "region": None, "hops": None}
+        # Grouped by region: the shelter's rooms (no region) hold the cast and
+        # come first, their unreachable and retired rows last among them; the
+        # annex is a region of its own and follows as a block.
+        assert [r["id"] for r in rows] == ["corridor", "lift_car", "lobby", "shaft",
+                                           "old_boiler", "vault",
+                                           "annex_hall", "annex_store"]
         hops = [r["hops"] for r in rows if r["hops"] is not None]
         assert hops == sorted(hops)
 
@@ -123,7 +130,7 @@ class TestTheIndex:
         scene["positions"] = {PLAYER: "vault"}
         rows = room_index(cid, None, scene)
         assert rows[0] == {"id": "vault", "name": "Vault", "status": "live",
-                           "holder": None, "hops": 0}
+                           "holder": None, "region": None, "hops": 0}
 
 
 # ---------------------------------------------------------------------------
@@ -134,8 +141,9 @@ class TestTheSlice:
     def test_the_shape_of_a_live_room(self, temp_db):
         cid = _story(temp_db)
         row = room_slice(cid, None, "corridor")
-        assert set(row) == {"id", "name", "status", "holder", "description", "exits",
-                            "occupants", "things", "planned_stub", "plan_here"}
+        assert set(row) == {"id", "name", "status", "holder", "region", "region_name",
+                            "description", "exits", "occupants", "things",
+                            "planned_stub", "plan_here"}
         assert (row["id"], row["name"], row["status"], row["holder"]) == (
             "corridor", "Corridor", "live", None)
         assert len(row["description"]) <= DESCRIPTION_CHARS
