@@ -54,10 +54,11 @@ is a hermit with a place.
 A major character who walks away does not get a cheaper simulation of
 themselves. They get a FRAME, and the frame is played when it matters. The
 prototype exists and is unwired -- three pure detectors written on the
-`causality-bubbles` branch, salvaged to
-`~/.claude/worktree-salvage-2026-09-05/causality-bubbles-untracked.tar.gz`
-(`world/spatial_bubbles.py`, `tests/test_causality_bubble_detectors.py`,
-`tests/test_couple_invariants.py`):
+`causality-bubbles` branch and never committed. They were salvaged when the
+stale worktrees were cleared on 2026-09-05, into the archive
+`~/.claude/worktree-salvage-2026-09-05/causality-bubbles-untracked.tar.gz`,
+which holds a spatial-bubbles module and its two test files. NOTHING OF IT
+IS IN THIS TREE, which is why no path here names one:
 
     bubble_split_decision   the non-persona sibling of `detect_split`: a major
                             character walks away with no player attached
