@@ -924,3 +924,71 @@ def test_the_thread_shows_the_players_words_whole_and_the_rooms_older_lines_fold
     conv = script.payloads[0]["conversation"]
     assert len(json.dumps(conv, ensure_ascii=False)) <= 300
     assert conv[-1]["text"] == "Last word." and conv[0]["id"] > first_id
+
+
+# ---------------------------------------------------------------------------
+# What the reply states, and what it read to know it
+# ---------------------------------------------------------------------------
+#
+# `story/room_citations.py` had the contract and the check, and nothing
+# emitted a claim -- so every reply read `stated_nothing`, which is honest
+# and is not a pass. These hold the emitting end: the room is GIVEN the
+# contract, and what it answers under it reaches the panel's envelope.
+
+
+def test_the_planner_is_given_the_citation_contract(temp_db, scripted):
+    """The sentence the room is held to is the one it is shown, because both
+    are `room_citations.CONTRACT_TEXT` and there is only the one string."""
+    from story.room_citations import CONTRACT_TEXT
+
+    cid, _turn_id = _story(temp_db)
+    script = scripted({"reply": "ok"})
+    sp.run_planner(cid, None, text="what is going on?")
+    assert CONTRACT_TEXT in script.systems[0]
+
+
+def test_the_reply_enumerates_what_it_stated(temp_db, scripted):
+    """The envelope carries `claims`; nothing is judged here. The check runs
+    where the ledger of rows read lives, which for a streamed reply is a
+    worker thread and never this one."""
+    cid, _turn_id = _story(temp_db)
+    scripted({"reply": "Two crates are bonded.",
+              "claims": [{"text": "Two crates are bonded",
+                          "cites": ["plot:crates"]},
+                         {"text": "A third may be coming", "proposal": True}]})
+    out = sp.run_planner(cid, None, text="what is going on?")
+    assert out["claims"] == [
+        {"text": "Two crates are bonded", "cites": ["plot:crates"],
+         "proposal": False},
+        {"text": "A third may be coming", "cites": [], "proposal": True}]
+
+
+def test_a_claim_naming_a_row_the_reply_read_stands_and_one_naming_none_is_demoted(
+        temp_db, scripted):
+    """End to end through the seam the panel uses, with the REAL Planner
+    seated: the room reads a row, states two things, and only the one it
+    can name a row for keeps its authority. The other keeps its sentence."""
+    cid, _turn_id = _story(temp_db)
+    scripted(
+        {"calls": [{"tool": "new_package",
+                    "args": {"title": "The courier", "premise": "someone comes"}}]},
+        lambda p: {"reply": "A courier is in motion; he is late by now.",
+                   "claims": [
+                       {"text": "A courier is in motion",
+                        "cites": [_last_uid(p)]},
+                       {"text": "He is late", "cites": ["plot:lateness"]}]},
+    )
+    room.seat_planner(sp.planner_reply)
+    try:
+        out = room.converse(cid, None, "what is going on?")
+    finally:
+        room.seat_planner(None)
+
+    found = out["citations"]
+    assert found["asserted"] == ["A courier is in motion"]
+    assert found["unsupported"] == ["He is late"]
+    # THE DEMOTION, which is the whole enforcement: the sentence survives,
+    # among the proposals rather than among the things the world says.
+    assert found["proposed"] == ["He is late"]
+    assert not found["stated_nothing"]
+    assert "he is late by now" in out["replies"][-1]["text"]

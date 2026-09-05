@@ -57,6 +57,7 @@ from world.spatial import (
     contact_actions_for_observer,
     contact_endpoint_is_body,
     contact_thing_label,
+    distant_sounds,
     effective_adjacent,
     egocentric_frame,
     _entity_named,
@@ -75,6 +76,7 @@ from world.spatial import (
     neighbour_feature_visibility,
     normalize_barrier,
     normalize_bearing,
+    normalize_sensory_event,
     proximity_rel,
     relative_bearing,
     resolve_substance_ops,
@@ -4828,6 +4830,23 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
         ctx, sc, interp, res, p_name, enriched_dlog,
         _background_beats(ctx, sc))
 
+    # A NOISE IS AN EVENT, AND AN EVENT IS OVER WHEN THE BEAT IS
+    # (DESIGN_SOUND_DECIBELS.md § 4). Read from the beat's own diff rather
+    # than from the scene, and it has to be: the record the scene will carry
+    # is written by the commit, which runs AFTER the narrator, so
+    # `beat_sensory_events` answers nothing at this point in the turn and
+    # would go on answering nothing next turn, when the beat has moved. The
+    # same normaliser the commit uses grades it, so what this stage delivers
+    # and what the commit stores are the same records; `desc` is the key
+    # `ambient_percepts` reads a signal's own room by, and `detail` is the
+    # one the objects hand writes it in.
+    _sensory = [record for record in (
+        normalize_sensory_event(event, rooms=sc.get("rooms") or {})
+        for event in (diff.get("sensory_events") or ())
+        if isinstance(event, dict)) if record]
+    beat_sounds = [dict(record, desc=record["detail"])
+                   for record in _sensory if record.get("detail")]
+
     # The complete set of lines actually spoken this beat (the invented-
     # dialogue tripwire's ground truth).
     spoken_lines = list(player_speech_lines(interp))
@@ -5025,6 +5044,9 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
             self_forms = _composer_self_forms(
                 name, self_forms_by_name.get(name),
                 bodies_by_name.get(name), joint_labels, display_map)
+            gate = _authored_prose_gate(
+                ctx, "perception_outcome", name, known, identity_space)
+            field = _sound_field_for(ctx, sc, name, p.get("room"))
             percepts = _composer_standing_percepts(
                 sc, p, name, others, display_map, known,
                 entity_state=p.get("entity_state")
@@ -5034,8 +5056,7 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
                                    if is_player_view else None),
                 prev_seen=_composer_prev_seen(base_ledger, pid),
                 seen_out=seen_bodies,
-                gate=_authored_prose_gate(
-                    ctx, "perception_outcome", name, known, identity_space),
+                gate=gate,
                 extra_parts=cast_parts, body_scents=body_scents,
                 body_descriptions=body_descriptions,
                 # Compression belongs only to player-facing prose. NPC
@@ -5046,7 +5067,28 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
                                   and not full_player_render),
                 self_forms=self_forms,
                 self_pronouns=p.get("pronouns"),
-                sound=_sound_field_for(ctx, sc, name, p.get("room")))
+                sound=field)
+            if beat_sounds:
+                # WHERE IT HAPPENED, and then everywhere else it reached.
+                # A signal is received whole only in its own room, so that
+                # room's observers get the authored detail through the same
+                # admission gate the establish stage uses...
+                percepts.extend(
+                    _gated_ambient_percepts(gate, beat_sounds, p.get("room")))
+                # ...and beyond the near field it is a BEARING AND A
+                # CHARACTER, never a sentence and never a place. The rooms
+                # this listener's own composite already places are the near
+                # field's and are skipped, so nobody is answered twice about
+                # one sound; the room the sound came from never leaves
+                # `distant_sounds`, which turns it into a direction against
+                # this observer's own facing (DESIGN_SOUND_DECIBELS.md § 3).
+                percepts.extend(composer.distant_sound_percepts(
+                    distant_sounds(
+                        sc, name, room=p.get("room"),
+                        turn_idx=getattr(ctx.turn, "idx", None),
+                        near_rooms=(field.grid.offsets if field else ()),
+                        crowds=ctx.get("_sound_crowds"),
+                        events=beat_sounds)))
             spatial = p.get("spatial_to_sources") or {}
             visual = p.get("visual_channel_to_sources") or {}
             recognized, unknown = _composer_unknown_sources(

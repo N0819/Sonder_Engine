@@ -2655,6 +2655,12 @@ def test_diff_application_is_order_independent_by_construction():
         # once rooms have settled. That split is deliberate and is what keeps
         # this channel out of the sequential set.
         "comms_ops",
+        # `_record_sensory_events` files the beat's one-off signals under the
+        # beat that made them, reading no channel mid-application: it checks
+        # each event's room against the SETTLED scene, the same split
+        # `comms_ops` keeps above. Nothing decays and nothing carries over,
+        # so there is no evolving state for it to walk.
+        "sensory_events",
     }
     # Op lists whose appliers walk evolving state sequentially. Two axes on
     # purpose: containment and scales APPLY as end-state upserts (so they
@@ -2725,6 +2731,19 @@ _UNREACHABLE_BY_DESIGN = {
     "ratified_claims": "claim adjudication, not a beat change",
     "contradicted_claims": "claim adjudication, not a beat change",
     "public_evidence": "observer metadata, not an objective beat change",
+    # A ONE-BEAT SIGNAL IS NOT A PERSISTENT CHANGE, and the manifest says so
+    # of itself: it enumerates "every PERSISTENT physical change your
+    # resolved_event asserts as COMPLETED". A bang leaves nothing standing
+    # to enumerate -- the beat number is its whole lifetime -- so a category
+    # for it would file a thing that expires in a ledger built for things
+    # that do not, and the omission detector would report it missing from
+    # the next scene for ever. It reaches its hand the other way the
+    # dispatch offers: a `ledger_notes` line keyed by the channel name,
+    # which `_note_for` routes by channel exactly as it routes one keyed by
+    # a hand.
+    "sensory_events": "a one-beat signal, not a persistent change; reaches "
+                      "the objects hand through a ledger note keyed by the "
+                      "channel",
 }
 
 

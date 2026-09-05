@@ -560,7 +560,15 @@ payload design. Since 2026-09-05 a Room model call goes through
 store under `room:<phase>`, filed against the turn in play so one export
 reads in order — this beat happened, then the room said this about it
 (`export_turn_debug`, `origin: "room"`). Off by default, hash-only once on,
-like everything else in `persist/llm_capture.py`. A measure rather than a
+like everything else in `persist/llm_capture.py`. The callers landed later
+the same day: `story_planner._call` and `dramaturge._call` both go through
+the seam, each naming its own phase so a pass reads apart from a reply, and
+the three job bodies that run outside a reply — the fill, the Dramaturge
+pass, and the out-of-band pass a handed-over brief submits — arm their own
+scope INSIDE the body, because `core/jobs.py` clears turn-scoped contextvars
+by design and a scope taken around the submit is not one the body can see.
+`room_bible.schedule_fold`'s job body still arms none, so a fold queued out
+of band records nothing; that is the one call left unreadable. A measure rather than a
 convenience: a room whose payloads cannot be read cannot be tuned, and four
 of the five runs' § 6 proposals stop exactly where the room begins.
 

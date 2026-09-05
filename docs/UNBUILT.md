@@ -5591,22 +5591,31 @@ rather than at `state.<x>_action`, and a sound loud enough to leave the room
 travels the room graph to wherever it is still audible
 (`spatial_sound_field.distant_sounds`).
 
-**What remains is that nothing writes to it from a live turn**, because
-three edits are in files the decibel work did not own:
+**Closed 2026-09-05.** The three edits landed:
+`StateDiff.sensory_events` (`llm/schemas.py`, so the channel survives the
+validation round trip), `SPECIALISTS["objects"]["channels"]`
+(`agents/director_scopes.py`, with the schema, category and ledger registries
+that guard it, and a `sensory_events` chunk in both packs — the note said the
+objects card already asked for it and it did not), and the delivery
+(`agents/perception._composer_outcome` → `composer.distant_sound_percepts` /
+`render_distant_sound`, pinned in `tests/test_distant_sound_delivery.py`).
 
-1. `llm/schemas.py`, `StateDiff`: `sensory_events: list[dict] =
-   Field(default_factory=list)` — the same declaration `EstablishOut`
-   already carries. Without it the field does not survive the validation
-   round trip, so a Director that writes one has it silently dropped.
-2. `agents/director_scopes.py`: add `"sensory_events"` to
-   `SPECIALISTS["objects"]["channels"]`. The card already asks for it.
-3. `agents/perception.py` / `agents/composer.py`: the delivery, one call and
-   one percept. The exact call and the four templates (already in both
-   packs) are in the note's § 8.
+The delivery reads the beat's own diff rather than `beat_sensory_events`,
+which is where the note's § 8 was wrong about the code: the scene's record is
+written by the commit, and the commit runs after the narrator — so the read
+it specified would have answered `[]` on the beat that made the sound and
+`[]` again next beat, when the beat number has moved. The stage normalises
+with the commit's own `normalize_sensory_event`, so what a view delivers and
+what the beat stores cannot disagree about which events were real.
 
-Until those land, a one-off sound written by the objects hand is dropped at
-validation, which is a smaller failure than the two it replaces — it is no
-longer a state that outlives the beat — but it is still nobody hearing it.
+**One residual, and it is the dispatch.** A hand runs when the Director's
+ruling reaches it, and a one-beat signal is not a persistent change, so it
+has no manifest category and reaches the objects hand only through a
+`ledger_notes` line keyed `sensory_events`
+(`tests/test_director_orchestration._UNREACHABLE_BY_DESIGN` records why).
+On a beat whose only object-world event is a noise, nothing else dispatches
+that hand — so whether the prose author reliably writes that note is
+unmeasured, and is the next thing to watch.
 
 `commit_scene_state._report_started_sources` continues to tell the Director
 on the next beat about every `running` switch a beat threw.
@@ -5983,6 +5992,10 @@ a distant sound stops being something you notice), `MAX_SENSORY_EVENTS` 8
 (one-off sounds one beat may hold), `_DB_EPS` 1e-12 dB (arithmetic, not a
 judgement: measured at seventy times the worst error a logarithm introduces
 at an exact threshold).
+
+`OVERWHELMING_MARGIN_DB` and the `DISTANT_LEVELS` words it grades reach a
+READER as of 2026-09-05 — the delivery landed with § 1.117 — so the margin
+is now something a play test can feel rather than a number in a table.
 
 **The one decision this work could not take.** At 45 dB the wall does half
 of what the note claims. Measured, medium rooms, enclosed, floor 27.0 dB:
