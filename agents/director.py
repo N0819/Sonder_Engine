@@ -168,6 +168,7 @@ from .director_views import (
 from .director_movement import (
     declared_walk_leg,
     _egocentric_exits,
+    _planned_elsewhere_view,
     _planned_rooms_view,
     movement_for_resolve,
     _sightlines_view,
@@ -875,6 +876,12 @@ def director_interpret(ctx, nonce):
         # when no planned room is in reach (see `_planned_rooms_view`).
         **({"planned_rooms": _planned} if (
             _planned := _planned_rooms_view(sc, ctx, p_room)) else {}),
+        # ...and the NAME of every other room the plan holds, so a place the
+        # story has already planned can be named from anywhere rather than
+        # invented beside itself (`_planned_elsewhere_view`).
+        **({"planned_elsewhere": _elsewhere} if (
+            _elsewhere := _planned_elsewhere_view(
+                sc, ctx, _planned or ())) else {}),
         # The room's notes on what its plan MEANS, in scope where the cast
         # stands or beside it (`_author_notes_view`); absent when none.
         **({"author_notes": _notes} if (
@@ -3421,6 +3428,11 @@ def director_resolve(ctx, nonce, _corrections=None):
         **({"planned_rooms": _planned} if (
             _planned := _planned_rooms_view(
                 sc, ctx, ctx.get("_player_room"), _mv_target)) else {}),
+        # ...and the NAME of every other room the plan holds
+        # (`_planned_elsewhere_view`).
+        **({"planned_elsewhere": _elsewhere} if (
+            _elsewhere := _planned_elsewhere_view(
+                sc, ctx, _planned or ())) else {}),
         # The room's notes on what its plan MEANS, in scope where the cast
         # stands, moves into or beside (`_author_notes_view`); absent when
         # none.
@@ -3949,6 +3961,7 @@ def director_resolve(ctx, nonce, _corrections=None):
         "present_figures": _present_figures,
         "sightlines": payload.get("sightlines"),
         "planned_rooms": payload.get("planned_rooms"),
+        "planned_elsewhere": payload.get("planned_elsewhere"),
         "author_notes": payload.get("author_notes"),
         "crowds": payload.get("crowds") or [],
         "couriers": payload.get("couriers") or [],

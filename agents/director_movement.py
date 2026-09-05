@@ -149,6 +149,26 @@ def _planned_rooms_view(sc, ctx, focus_room, *extra):
         return None
 
 
+def _planned_elsewhere_view(sc, ctx, briefed):
+    """Every planned room the scene does not hold and the brief did not
+    cover, as `{room_uid: name}` -- so a place the story has already planned
+    can be NAMED from anywhere, not only from beside it.
+
+    `_planned_rooms_view` above is the development brief and stays scoped to
+    reach; this is the spelling, and a spelling has to travel as far as the
+    player's attention does (`world.structure.planned_room_index`, and
+    docs/UNBUILT.md § 1.127 for the town that got built twice).
+    """
+    try:
+        from world.structure import planned_room_index
+        index = planned_room_index(ctx.chat["id"], sc)
+        for rid in (briefed or ()):
+            index.pop(rid, None)
+        return index or None
+    except Exception:
+        return None
+
+
 def movement_for_resolve(ctx, interp):
     """The beat's declared movement with its destination spelled as the
     world spells it. The compiler (`agents/mapping.classify_movement`)
