@@ -5753,6 +5753,73 @@ record `act_percept` has (level, volume, barrier, distance, which rescue
 fired) before deciding either rescue's fate, because the reason this was hard
 to attribute is that nothing persisted which relation was used or why.
 
+### 1.122 What the 2026-09-05 presentation and plan fixes left open
+
+**Five classes from the play runs landed 2026-09-05** and are pinned in
+`tests/test_played_scene_classes.py`; each left a residual worth naming, and
+one of them is a patch in a file this work did not own.
+
+- **PB4 (`PLAY_2026_09_05_caravanserai.md`) — FIXED.** A body is presented
+  once per view: `agents.common.charter_ground_for_room` asks
+  `charter_crowd.members_of` once per (room, stage) and both readers cut from
+  that one answer. **Open, and deliberate:** `CO_LOCATED_CAP` still drops a
+  fourth co-located institution's crowd from a view while its members stay
+  ground, so those bodies are presented nowhere in that view. The cap is a
+  presentation BUDGET, not a subtraction, and the alternative (letting a
+  capped-out institution's people fall through as individual figures) is what
+  the figure loop's own docstring refuses. It has never fired live. The other
+  known hole is `charter_runtime.background_presence_records`' ambiguity
+  withholding: two bodies sharing a display name are in no view at all until
+  the fiction distinguishes them, which is correct by design and reads as
+  this class.
+- **PE3 (`PLAY_2026_09_05_flat.md`) — FIXED for an ADDRESSED line.** A line
+  aimed at somebody the scene stands in the beat's declared destination is
+  graded there. **Open:** an UNADDRESSED line after a declared arrival is
+  still graded from the room the beat found the speaker in. Closing it needs
+  the declaration's own ORDER, and nothing carries it: `MovementDecl` has no
+  index into `sequence`, and no structural test distinguishes the action
+  element that IS the move from the ones around it. The patch is one field —
+  `MovementDecl.after` (or an `event_id`) naming the sequence element the
+  move belongs with, set by `director_interpret`, in `llm/schemas.py` and the
+  interpret prompt — and one line in `perception._speech_room_for` reading
+  it. Both are outside this work's files. Until then the conservative floor
+  stands, because widening a channel is the direction a mistake here leaks in.
+- **PD8 first half (`PLAY_2026_09_05_road.md`) — NOT BUILT, registered
+  here.** `director_interpret` raised `generation_requests: [{kind: npc,
+  subject: 'the shadow at the edge of the firelight', location_id:
+  charcoal_camp_clearing}]` while `plan:person:hob_tarry` stood filed for
+  that exact room and was in the same beat's `present_figures`; resolve
+  encoded nothing, reconciliation warned the prose was unbacked, and commit
+  filed a spurious `thing` need. **The patch, exactly:** in
+  `language_packs/*/cards/system_prompts/prompts/director_interpret.txt`, one
+  clause stating the class — *a figure the plan already holds for the room
+  the beat reaches is the answer to the beat's own reach; a generation
+  request is for what no plan holds* — beside the payload's existing
+  `present_figures` block; and, if a deterministic floor is wanted,
+  `agents/director.py` dropping a `generation_request` whose `location_id`
+  names a room a filed `plan:person:*` need already answers. Both files are
+  the Director agent's, not perception's.
+- **PB14 (`PLAY_2026_09_05_caravanserai.md`) — FIXED.**
+  `world.structure.materialize_planned_fringe` supplies a planned edge only
+  into a room the scene holds, after every stub of the pass exists;
+  `protect_planned_edges` already stated the same rule from the other side.
+  Nothing open.
+- **PA15 (`PLAY_2026_09_05_lighthouse.md`) — FIXED.**
+  `perception._excerpt_in` gives every tripwire in the self-narration family
+  40 characters of context on either side of the fragment it reports.
+  Nothing open.
+
+**And one deliberate loss, from PD8's second half.** A story with NO
+institution at all no longer enrols a rendered person anywhere: the
+`minted_households` branch of `world/charter_enrol.py` is gone, because
+founding a town to hold one body made a townsman of a charcoal burner at a
+woodland camp and then refused his own greeting as `outside_licence`. Such a
+body keeps its surface, its presence record and its voice, and loses the
+berth, the dealt seat and the simulated life a charter body has, until the
+Writers' Room founds something for it to belong to. If that proves too
+costly in play, the answer is a Room-facing prompt to found the institution,
+not a branch that founds one silently.
+
 ## 2. Roadmap
 
 Features the architecture intends and has not built. Ordered by value per unit

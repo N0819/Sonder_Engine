@@ -250,6 +250,19 @@ anchor of a room that holds four leaves four, and a post whose `anchor` names
 one of them still places its holder there.
 
 ### PB4. One institution's body is presented twice in a view, or not at all
+**RESOLVED 2026-09-05.** `agents/common.charter_ground_for_room` is the one
+reader: it asks `charter_crowd.members_of` ONCE per (room, stage), memoized
+on the stage's shared `inputs`, and hands back the crowd rows, the carried
+body keys and the carried display NAMES. `charter_crowds_for_room` returns
+its crowds and `presence_figures_for_room` subtracts its carried set, so the
+crowd is `carried` and the figures are `present - carried` by construction
+and the two cannot disagree. The name set is the second half: a presence
+record whose `charter_refs` were never written names a body the crowd is
+carrying, and a ref-only test cannot see that. `crowd_for` takes the
+membership rather than recomputing it. Per-view by design -- two observers in
+different rooms may legitimately differ; inside one view a body is presented
+once. `tests/test_played_scene_classes.py`.
+
 **Severity: wrong-but-recoverable.** Origin: `agents/common.py`
 `presence_figures_for_room` and `charter_crowds_for_room` computing "who is
 ground" from two different reads.
@@ -535,6 +548,17 @@ the Director sheet that an instruction to a townsperson must be realised as a
 the ledger disagree from the moment an NPC is asked to do anything.
 
 ### PB14. A published plan's edge is dropped at commit every beat after (F13 family)
+**RESOLVED 2026-09-05.** The rule was half-built: `protect_planned_edges`
+already restored only into a room the scene holds (2026-09-04, chat 114's
+terrace), while `materialize_planned_fringe` went on SUPPLYING the plan's
+whole adjacency -- both to the occupied room and to each stub it minted --
+so the way on to a room nobody has walked toward yet was re-added and
+re-dropped every beat. It now supplies an edge only into a room the scene
+holds, and the membership test runs after every stub of the pass exists, so
+two planned rooms minted together keep the doorway between them. The plan
+keeps the rest, and `protect_planned_edges` puts it back the beat the target
+is minted. `tests/test_played_scene_classes.py`.
+
 **Severity: cosmetic.** From turn 6 on, each commit warns "scene: dropped
 exit(s) from `desert_road_east` to undefined room(s) `milestone_shrine`". The
 Room's road package planned three rooms; the fringe materialised only the one

@@ -610,6 +610,16 @@ removed from the rendered text before it looks for Latin. `docs/UNBUILT.md`
 § 1.48.
 
 ### PA15. A tripwire fired: the composed view narrated its own perceiver
+**RESOLVED 2026-09-05** (the diagnostic, not the fire -- the guard did its
+job). `perception._excerpt_in` puts `_EXCERPT_CONTEXT_CHARS` (40) of the
+surrounding text on either side of the offending fragment and marks the cut
+with ellipses, so the sentence can be found in the view it came from. All
+four siblings in the family print through it: the self-narration tripwire,
+its quote-safe refusal, the authored-prose refusal, and
+`_strip_self_narration`'s own sight floor -- each of them was printing
+`fragment[:120]`, which says nothing when the splitter has already cut the
+fragment to four characters. `tests/test_played_scene_classes.py`.
+
 *Turn 9, both perception stages. Severity: firewall (caught).*
 `perception_act: COMPOSER TRIPWIRE -- composed view of Ivo Marrick narrated
 its own perceiver (engine defect): 'Marrick...'`. The tripwire did its job

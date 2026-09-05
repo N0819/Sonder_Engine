@@ -378,15 +378,16 @@ class TestARoomSomeoneSleepsInIsTheirs:
         assert view and view[0]["home"] == {"room": "ford_inn_common",
                                             "at_home": True}
         # A clerk minted in the hall with no clerk's post to take, and no
-        # institution keeping its own berths here, joins a households
-        # charter minted for the story -- and the hall is where they were
-        # seen, not a house the town has: a dwelling is owed.
+        # institution keeping its own berths in this town, is enrolled by
+        # NOBODY: the fill does not found a households charter to hold one
+        # body (road run, 2026-09-05, where the founded charter then refused
+        # its own member's greeting as `outside_licence`). The need stays
+        # open for the Writers' Room and the clerk is nobody's figure.
         clerk = enrol_person(ctx.chat.id, {"kind": "person", "surface": {
             "name": "the reeve's clerk", "room": "reeve_hall"}})
-        assert clerk["how"] == "minted_households" and clerk["room_need"]
+        assert clerk["ref"] is None and not clerk["charter"]
         rows = present_charter_figures(ctx.chat.id, _hall(), {"reeve_hall"})
-        homes = {r["name"]: r["home"] for r in rows}
-        assert homes["the reeve's clerk"] == "reeve_hall"
+        assert "the reeve's clerk" not in {r["name"] for r in rows}
 
     def test_a_room_out_of_reach_is_not_listed(self, temp_db):
         from world.charter_runtime import charter_dwellings
