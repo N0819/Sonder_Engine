@@ -5808,10 +5808,15 @@ What is left is in files that repair did not own: `composer.speech_percept`'s
 rescue, whose premise — that a by-name exchange across a barrier implies a
 device carrying it — is false in a stone tower. Both promote an unheard line
 to a full verbatim quotation, which is a comm channel invented from a name.
-And `speech_percept` still records nothing: give it the `note_step_decision`
-record `act_percept` has (level, volume, barrier, distance, which rescue
-fired) before deciding either rescue's fate, because the reason this was hard
-to attribute is that nothing persisted which relation was used or why.
+**The record landed 2026-09-05.** `speech_percept` now carries the
+`note_step_decision` record `act_percept` has -- level, how it was reached,
+volume, barrier, tier -- naming the comm channel, the addressed rescue and
+the open-group floor as three separate answers. **Neither rescue is dead and
+neither was deleted** (§ 1.126 audits the proposal and the two tests that
+prove them live). What is still open is only the addressed rescue's PREMISE:
+whether being named across a barrier should survive distance as well, since
+three rooms up a stone tower is not one closed door. Decide it on the next
+run's record.
 
 ### 1.122 What the 2026-09-05 presentation and plan fixes left open
 
@@ -6084,6 +6089,64 @@ event in one ⇒ heard in the other; a `shout` ⇒ not.
 it terminates on audibility, and a `thunderous` one about 28. That is the
 owner's sentence working — an incredibly loud noise travels very far — and
 it is also the number most likely to feel wrong in a town.
+
+### 1.126 Every cut a play run proposed, audited: not one field was dead
+
+**Audited 2026-09-05**, at the owner's instruction after the campaign-3
+reports: *"just because something didn't fire in their story doesn't mean it
+has no purpose"* and *"I would run tests specifically around those functions
+to confirm they are dead."* Four separate removals were proposed across the
+reports. Every one was checked against readers, writers and a live test.
+**None of them is dead, and nothing was removed.** The class, stated so the
+next report inherits it: **a run measures its own story. An empty field is
+evidence about the fiction that was played, never about the code.** A field
+reads empty for three different reasons and only one of them is waste — the
+story had nothing to put in it; the engine already retired the ask and fills
+the field itself; or the branch guards a case this story did not reach.
+
+- **The five `interaction_loop` citation keys** (`observations_used`,
+  `present_evidence_used`, `memory_evidence_used`, `considered_responses`,
+  `response_candidates`), reported empty in all 20 of a character's answers
+  and proposed for deletion. All five are **already dropped from the wire
+  schema for every caller** (`llm_quality._CHARACTER_RETIRED_WIRE_FIELDS`),
+  so they cost no payload byte and the model is never invited to fill them:
+  they read empty because the fix landed. Two of the evidence lanes are then
+  WRITTEN BY THE ENGINE after grounding (`character.py`'s `ground_refs`), and
+  `observations_used` is a compatibility projection over both that
+  `persist/commit_memory.py` reads. A recorded story on disk
+  (`demos/vale-model-played-14-story.json`) carries all three populated.
+  Pinned by `test_the_retired_citation_lanes_are_absent_from_the_ask_not_dead`.
+- **The two speech rescues** (§ 1.121), which I had myself recommended
+  deleting. Both are live and both are load-bearing: the addressed rescue is
+  what carries an ordinary named call through a wall
+  (`hear_level` answers `none` for a normal voice through `wall`; the rescue
+  makes it `full`), and the open-group floor is the only copy of a
+  compatibility path for rerolled pre-repair checkpoints. Pinned by
+  `test_the_addressed_rescue_is_live_and_says_so` and
+  `test_the_open_group_continuity_floor_is_live_and_says_so`.
+- **The body specialist's four "empty" channels**
+  (`active_awareness`, `active_restraints`, `active_conditions`,
+  `overlays`), proposed for conditional omission. `active_awareness` is the
+  ONLY channel by which a sleeper is ever woken and `active_restraints` the
+  only one by which a restraint ever ends -- the body chunk says so in both
+  packs ("WAKING IS YOUR JOB, AND ONLY YOURS"), and a body whose condition is
+  never re-emitted with `active:0` stays under forever. The conditional the
+  report asked for **already exists** one level up:
+  `director_scopes.py`'s `"conditions"` chunk is selected by
+  `f["physical_beat"] or f["active_conditions"]`, so the sheet is not sent
+  when there is nothing to end.
+- **`world_knowledge` empty on all 20 character calls** — it is the lore
+  paragraph (`character.py`), and that story had no lorebook entries.
+
+**What remains open from § 1.121 is unchanged and is NOT a deletion:**
+whether the addressed rescue's premise ("named across a barrier implies a
+channel carrying it") should survive DISTANCE as well as a barrier -- three
+rooms up a stone tower is not one closed door. That question was unanswerable
+because nothing recorded which relation had decided; `speech_percept` now
+carries the `note_step_decision` record `act_percept` has (level, how it was
+reached, volume, barrier, tier), naming the comm channel, the addressed
+rescue and the open-group floor separately. Decide it on the next run's
+record, not on this one's absence.
 
 ## 2. Roadmap
 

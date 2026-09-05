@@ -95,6 +95,35 @@ def test_compact_prompt_removes_only_considered_response_scratch():
     assert compact == control
 
 
+def test_the_retired_citation_lanes_are_absent_from_the_ask_not_dead():
+    """An empty field is not a useless field, and a play run cannot tell the
+    difference by looking at it.
+
+    A 2026-09-05 run read `observations_used`, `present_evidence_used`,
+    `memory_evidence_used`, `considered_responses` and `response_candidates`
+    empty in all twenty of a character's stored answers and proposed cutting
+    all five. Every one of them is already gone from the wire -- dropped from
+    the advertised schema for EVERY caller by
+    `llm_quality._CHARACTER_RETIRED_WIRE_FIELDS`, so they cost no payload
+    byte and the model is never invited to fill them. They read empty on the
+    wire because the fix landed, not because nothing uses them.
+
+    Two of the three evidence lanes are then WRITTEN BY THE ENGINE, after
+    grounding, and the third is a compatibility projection over both; a
+    reader downstream of the character step sees them full. That is what this
+    pins, so the next run that finds them empty finds this too.
+    """
+    from llm.prompts import character_prompt
+    from llm.llm_quality import _CHARACTER_RETIRED_WIRE_FIELDS
+
+    control = character_prompt({"self": {"name": "Vessel"}, "memory": {},
+                                "perception": {}, "decision": {}})
+    for field in _CHARACTER_RETIRED_WIRE_FIELDS:
+        assert f'"{field}"' not in control, field
+    assert {"observations_used", "present_evidence_used",
+            "memory_evidence_used"} <= set(_CHARACTER_RETIRED_WIRE_FIELDS)
+
+
 def test_unanswered_question_snapshot_avoids_a_second_history_read(monkeypatch):
     from agents import character
 
