@@ -689,7 +689,18 @@ legitimately perceive, learn, remember or infer.
   clear); a body dropped on ANY cell is pinned to that cell (and stands
   at the anchor whose cell it is, when it is one), the player and a
   promoted presence as much as the cast, and dropped in a neighbour's
-  cells is moved to that room and pinned where it landed there. A pinned
+  cells is moved to that room and pinned where it landed there. The
+  **townspeople** (charter bodies) are on the map too, as squares where
+  the cast are dots — the ones standing at an authored station or their
+  post's anchor solid, the ones merely dealt a cell lighter — and faintly
+  in a neighbour's cells when they stand there; a click opens their row
+  under "Who is here" (name, post, where they stand and which rule put
+  them there), the Bodies tab lists them under "Townspeople", and a drag
+  writes the charter registry, never the scene: onto an anchor they stand
+  at it, onto any other cell they are pinned to it, into a neighbour they
+  move there; a clear hands them back to the rule (post, walk, dealt). A
+  bound or reserved body (a registered character's) is refused: the cast
+  editor owns where those stand. A pinned
   body is measured: sight, cover and distance read its cell, and two
   pinned bodies are within reach at one pace, near within a third of the
   room, across beyond. A thing standing on the floor is dragged the same

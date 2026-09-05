@@ -20,9 +20,18 @@ present, else a frame row of this chat, 404 otherwise -- the same contract
   ``bodies`` is every body the scene knows -- cast, player, promoted
   presence, and a body the attire ledger dresses but nothing places -- each
   ``{name, kind, char_id, room, room_name, station, pose, attire}`` with the
-  ledger AS STORED (`body_rows`). ``vocab`` is every closed set the browser
-  offers as a select, read from the engine's own constants so a menu cannot
-  drift from the code (`vocabulary`).
+  ledger AS STORED (`body_rows`), followed by the TOWNSPEOPLE the charter
+  registry stands in a room of the scene (`charter_body_records`, since
+  2026-09-05): ``kind`` ``"charter"``, ``name`` the display name or the
+  permanent uid when the name is withheld (the view's own rule, never
+  invented here), plus ``charter``, ``body``, ``uid``, ``source`` (one of
+  `world.charter_place.SOURCES`), ``facing``, ``posts``, ``presented``,
+  ``withheld``, ``authored`` (the body record's own station, or None) and a
+  ``station`` DERIVED by the placement rule -- no pose, no attire, no
+  ``char_id``. ``vocab`` is every closed set the browser offers as a
+  select, read from the engine's own constants so a menu cannot drift from
+  the code (`vocabulary`); ``body_kinds`` and ``charter_sources`` are the
+  map's legend words.
 * ``GET  /{room_id}?frame_id=`` -> the slice plus ``holder_name``,
   ``record`` (the room's stored editable fields: name, desc, notes, light,
   size, exposure, region, extent, shape, parts, anchors, adjacent -- the
@@ -55,7 +64,10 @@ present, else a frame row of this chat, 404 otherwise -- the same contract
   ``{name: {cell, facing, kind, at, near, measured, source}}`` (``cell``
   None and ``measured`` false for a body with no station -- somewhere in the
   room; ``source`` ``"cell"`` for the station's own pin, ``"anchor"`` for a
-  cell derived from `at`/`near`, ``"none"``),
+  cell derived from `at`/`near`, ``"none"``; a townsperson's entry is the
+  `charter_body_records` record -- ``kind`` ``"charter"``, ``source`` the
+  placement's, ``room`` the room it stands in, which is this one or a
+  neighbour the field lays, since the observer's frame is what is placed),
   ``things`` ``[{id, name, kind, cell, anchor, placed}]``, ``walls`` (the
   field's wall lines, each ``{axis, coord, extent, aperture, to, name}``),
   ``neighbours`` ``[{id, name, offset, w, d, shape, cells, anchors}]``
@@ -146,6 +158,19 @@ tail), writing it through `wset` as `attire_put` does, and reconciling the
   into the frame's registry (not the scene, so no registry projection to
   reconcile); an empty look removes it. Shared by every room in the region
   by construction. Returns ``{id, name, brief, look, rooms}``.
+* ``PUT /api/chats/{cid}/charters/{charter}/bodies/{body}/station`` with
+  ``{room, at?, cell?, facing?}`` and ``DELETE`` of the same: a
+  TOWNSPERSON'S place, written on the charter registry and never the scene
+  (`charter_body_station_put` / `charter_body_station_delete`, 2026-09-05):
+  the room through `world.charter.place_body`, the within-room station
+  through `station_body`, both landed by `registry_for_update` +
+  `save_registry` for the chat's frame. Refused naming the reason when the
+  room is not live, the cell is outside the room (the bounds named, never
+  clamped), the anchor is not the room's, the body is bound, reserved or
+  departed, the charter or body is unknown (404), or a pipeline runs (409).
+  The DELETE clears the authored station, back to the post's anchor, the
+  walk's doorway or the dealt cell. Returns the body's row read back
+  through the placement.
 
 Since 2026-09-05 (the owner, on the map editor: "This room editor feels very
 incomplete") the editor CREATES, REMOVES and MOVES, each a narrow typed
@@ -245,6 +270,14 @@ from world.spatial import (
     size_from_extent, sound_field, sync_scene_passages,
 )
 from world.weather import EXPOSURES
+# The townspeople (`world/charter_place.py`, DESIGN_CHARTER_PLACEMENT § the
+# map): the placement read through the charter facade, the two authoring
+# seams the drag lands on, and the registry chokepoints they go through.
+from world.charter import (
+    PLACEMENT_SOURCES, body_of_an_authored_mind, charter_placements,
+    place_body, placement_uid, rooms_in_frame, scene_with_charter_bodies,
+    station_body)
+from world.charter_runtime import registry_for, registry_for_update, save_registry
 
 router = APIRouter(prefix="/api/chats/{cid}/rooms", tags=["world-browser"])
 
@@ -387,9 +420,19 @@ def _occupants(scene):
     return occupants
 
 
+#: The kinds a body on the map can be. The first three are the scene's
+#: (`_body_kind`); `charter` is a townsperson the registry stands in the room
+#: (`charter_body_records`), whose position is derived and never stored.
+#: Offered to the browser as `vocab.body_kinds` so its legend cannot drift.
+BODY_KINDS = ("player", "cast", "presence", "charter")
+CHARTER_KIND = BODY_KINDS[3]
+
+
 def _body_kind(name, player, cast):
     """player | cast | presence: the player by the persona's name, the cast
-    by the registered sheets (`_cast_ids`), anyone else a presence."""
+    by the registered sheets (`_cast_ids`), anyone else a presence. A
+    townsperson is never asked here: it is not in `positions`, and its kind
+    is `CHARTER_KIND` by construction."""
     key = str(name).strip().casefold()
     if key == str(player or "").strip().casefold():
         return "player"
@@ -464,6 +507,12 @@ def vocabulary(cid, frame_id):
                     for rid, entry in sorted(registry.items())],
         "attire_regions": list(ATTIRE_REGIONS),
         "garment_states": list(GARMENT_STATES),
+        # A body's kind on the map (`BODY_KINDS`) and, for a townsperson,
+        # what placed it (`world.charter_place.SOURCES`, in the order the
+        # rule tries them: authored station, post anchor, walk doorway,
+        # dealt cell) -- so the legend's words are the engine's.
+        "body_kinds": list(BODY_KINDS),
+        "charter_sources": list(PLACEMENT_SOURCES),
     }
 
 
@@ -482,11 +531,75 @@ def _cast_ids(cid):
     return out
 
 
-def body_rows(cid, chat, scene):
+def charter_body_records(cid, frame_id, scene, frame_rooms=None):
+    """``{key: record}`` for every townsperson the registry stands in a room
+    of ``scene`` -- restricted to ``frame_rooms`` when given -- READ THROUGH
+    THE PLACEMENT MODULE: `charter_placements` says where each stands and
+    why, `scene_with_charter_bodies` lays the rows on a view, and the cell,
+    facing and station are then read off that view with the same functions
+    `grid_view` reads a cast body with (`body_cell`, `effective_facing`,
+    `effective_station`), so there is no second derivation of a position.
+
+    The key is the placement's own: the display name where it is unique
+    across the registry, else the permanent uid ``charter:<charter>:<body>``
+    -- a name two people share is WITHHELD from every view
+    (`background_presence_records`), and this module invents none. A record
+    is ``{cell, facing, kind: "charter", at, near, measured, source, room,
+    charter, body, uid, withheld, posts, presented, station, authored}``:
+    ``source`` one of `PLACEMENT_SOURCES`, ``posts`` the watch posts the body
+    holds, ``station`` the placement's ``{at}`` | ``{cell}`` (plus ``near``
+    where authored), ``authored`` the body record's own station or None (what
+    a clear returns from, so Undo can put it back exactly). A body the scene
+    already stands under the same spelling (`room_of` answers: the Director
+    minted an entity for it) is the scene's, and is left to `positions`.
+    Empty -- and no registry parse beyond the cached one -- for a story with
+    no charters, so every other story's views are byte-identical."""
+    registry = registry_for(cid, frame_id)
+    placements = charter_placements(registry, scene, frame_rooms=frame_rooms)
+    if not placements:
+        return {}
+    view = scene_with_charter_bodies(scene, placements)
+    items = registry.get("items") or {}
+    out = {}
+    for uid, placement in sorted(placements.items()):
+        key = str(placement.get("key") or "")
+        if not key or room_of(scene, key):
+            continue
+        state = ((items.get(placement["charter"]) or {}).get("state") or {})
+        posts = sorted(str(post) for post, holder
+                       in (state.get("watch") or {}).items()
+                       if str(holder) == str(placement["body"]))
+        body = (state.get("bodies") or {}).get(placement["body"]) or {}
+        authored = body.get("station") if isinstance(body.get("station"), dict) else None
+        cell = body_cell(view, key)
+        station = effective_station(view, key)
+        out[key] = {
+            "cell": [int(cell[0]), int(cell[1])] if cell else None,
+            "facing": effective_facing(view, key),
+            "kind": CHARTER_KIND,
+            "at": station.get("at") or None,
+            "near": [str(n) for n in (station.get("near") or [])],
+            "measured": cell is not None,
+            "source": str(placement.get("source") or ""),
+            "room": str(placement["room"]),
+            "charter": str(placement["charter"]), "body": str(placement["body"]),
+            "uid": str(uid), "withheld": bool(placement.get("ambiguous")),
+            "posts": posts, "presented": str(placement.get("presented") or ""),
+            "station": dict(placement.get("station") or {}),
+            "authored": dict(authored) if authored else None,
+        }
+    return out
+
+
+def body_rows(cid, chat, scene, charter=None):
     """Every body the scene knows, for the Bodies tab: the bodies `positions`
     place (by `cast_rooms`'s rule), the player whether placed or not, and any
     body the attire ledger dresses that nothing places (offscreen, but
-    dressed). Ordered player first, then by name."""
+    dressed). Ordered player first, then by name. ``charter``
+    (`charter_body_records`) appends the townspeople after them, under their
+    own kind, each with its room, its posts and its derived station -- no
+    pose, no attire: those ledgers are the scene's, and a townsperson has no
+    row in either."""
     rooms_ = scene.get("rooms") or {}
     positions = scene.get("positions") or {}
     stations = scene.get("stations") if isinstance(scene.get("stations"), dict) else {}
@@ -529,6 +642,21 @@ def body_rows(cid, chat, scene):
             "attire": attire.get(name),
         })
     out.sort(key=lambda b: (b["kind"] != "player", b["name"].casefold()))
+    for key, rec in sorted((charter or {}).items(), key=lambda kv: kv[0].casefold()):
+        room_def = rooms_.get(rec["room"])
+        out.append({
+            "name": key, "kind": CHARTER_KIND, "char_id": None,
+            "room": rec["room"],
+            "room_name": (str(room_def.get("name") or rec["room"])
+                          if isinstance(room_def, dict) else rec["room"]),
+            "station": dict(rec.get("station") or {}),
+            "pose": None, "attire": None,
+            "charter": rec["charter"], "body": rec["body"], "uid": rec["uid"],
+            "source": rec["source"], "facing": rec.get("facing"),
+            "posts": list(rec.get("posts") or []), "presented": rec.get("presented"),
+            "withheld": bool(rec.get("withheld")),
+            "authored": dict(rec["authored"]) if rec.get("authored") else None,
+        })
     return out
 
 
@@ -538,7 +666,8 @@ def rooms_index(cid: int, frame_id: int | None = None):
     with _era(cid, frame_id):
         scene = rooms.read_scene(cid)
         index = rooms.room_index(cid, frame_id, scene)
-        bodies = body_rows(cid, chat, scene)
+        bodies = body_rows(cid, chat, scene,
+                           charter=charter_body_records(cid, frame_id, scene))
         vocab = vocabulary(cid, frame_id)
         lint = _lint_rows(scene)
     return {
@@ -685,14 +814,18 @@ def _room_name(scene, room_id):
 
 
 def grid_view(scene, room_id, lint_rows, *, player="", cast=None, things=(),
-              sound_from=None):
+              sound_from=None, charter=None):
     """One room's field exactly as the engine computes it -- the module
     docstring gives the shape. Pure over the scene and the same functions
     sight and light read (`room_grid`, `anchor_cells`, `body_cell`,
     `room_field`), so the map cannot show a wall the cast is not judged by.
     `things` is the slice's list for the room (`story.room_slice`), so a
-    thing is filed the one way it is filed everywhere. None when the room is
-    not in the scene."""
+    thing is filed the one way it is filed everywhere. `charter`
+    (`charter_body_records` over the frame `rooms_in_frame` lays) adds the
+    townspeople to ``bodies`` as `kind: "charter"` -- those standing in this
+    room, and those in a neighbour the grid lays, each carrying ``room`` so
+    the map draws the latter faintly where the neighbour is. None when the
+    room is not in the scene."""
     rooms_ = scene.get("rooms") or {}
     if not isinstance(rooms_.get(room_id), dict):
         return None
@@ -760,6 +893,14 @@ def grid_view(scene, room_id, lint_rows, *, player="", cast=None, things=(),
             # "anchor" (derived from `at`/`near`), or "none".
             "source": body_cell_source(scene, who),
         }
+    # The townspeople, after the scene's bodies: this room's, then the ones
+    # standing in a neighbour the field lays (`room` says which). Their
+    # ``source`` is the placement's (`PLACEMENT_SOURCES`), not the pin word.
+    laid = {str(room_id)} | {str(o) for o in (field.offsets if field else {})}
+    for key, rec in sorted((charter or {}).items(),
+                           key=lambda kv: (kv[1]["room"] != str(room_id), kv[0].casefold())):
+        if rec["room"] in laid and key not in bodies:
+            bodies[key] = dict(rec)
 
     things_out = []
     for thing in things or ():
@@ -884,7 +1025,7 @@ def _overlays(scene, room_id, sound_from=None):
             "light_sources": light_sources}
 
 
-def map_view(scene, lint_rows):
+def map_view(scene, lint_rows, charter=None):
     """Every live room placed by bearing, as the lint's embedding places
     them (`layout_rooms`, one component per connected set of beared,
     non-wall edges, from its smallest id), each with its box and shape, its
@@ -892,10 +1033,14 @@ def map_view(scene, lint_rows):
     the bearings land on another is DRAWN at the offset the rule gave it,
     flagged `collided` with the room it lands on and the doorway it was
     reached through -- the contradiction is the thing to look at, so it is
-    never hidden. The module docstring gives the shape."""
+    never hidden. ``charter`` (`charter_body_records`, the whole scene)
+    counts the townspeople among each room's ``occupants``, after the
+    scene's bodies. The module docstring gives the shape."""
     rooms_ = {str(rid): room for rid, room in (scene.get("rooms") or {}).items()
               if isinstance(room, dict)}
     occupants = _occupants(scene)
+    for key, rec in sorted((charter or {}).items(), key=lambda kv: kv[0].casefold()):
+        occupants.setdefault(rec["room"], []).append(key)
     components = []
     placed = set()
     for start in sorted(rooms_):
@@ -970,7 +1115,12 @@ def rooms_grid(cid: int, room_id: str, frame_id: int | None = None,
             scene, room_id, _lint_rows(scene),
             player=str(persona_name(persona_of(chat)) or "").strip(),
             cast=_cast_ids(cid), things=slice_.get("things") or (),
-            sound_from=sound_from)
+            sound_from=sound_from,
+            # The townspeople of this room and of every room the field lays
+            # beyond its doorways -- the observer's frame, and no more.
+            charter=charter_body_records(
+                cid, frame_id, scene,
+                frame_rooms=rooms_in_frame(scene, [room_id])))
     view["frame_id"] = frame_id
     return view
 
@@ -983,7 +1133,8 @@ def map_index(cid: int, frame_id: int | None = None):
     _chat_or_404(cid)
     with _era(cid, frame_id):
         scene = rooms.read_scene(cid)
-        view = map_view(scene, _lint_rows(scene))
+        view = map_view(scene, _lint_rows(scene),
+                        charter=charter_body_records(cid, frame_id, scene))
     view["frame_id"] = frame_id
     view["location"] = str(scene.get("location") or "")
     return view
@@ -1571,7 +1722,8 @@ def body_station_put(cid: int, name: str, body: dict = Body(...),
             station["cell"] = cell
         stations[key] = station
         _write_scene(cid, chat, before, scene)
-        rows = body_rows(cid, chat, scene)
+        rows = body_rows(cid, chat, scene,
+                         charter=charter_body_records(cid, frame_id, scene))
     row = next((b for b in rows if b["name"].strip().casefold() == folded), None)
     return row or {"name": key, "room": room, "station": stations[key]}
 
@@ -1975,7 +2127,8 @@ def body_room_put(cid: int, name: str, body: dict = Body(...),
                 station.pop("cell", None)
             invalidate_moved_body_pose_details(scene, before.get("positions") or {})
         _write_scene(cid, chat, before, scene)
-        rows = body_rows(cid, chat, scene)
+        rows = body_rows(cid, chat, scene,
+                         charter=charter_body_records(cid, frame_id, scene))
     folded = key.strip().casefold()
     return next((b for b in rows if b["name"].strip().casefold() == folded),
                 {"name": key, "room": target})
@@ -2015,7 +2168,8 @@ def body_pose_put(cid: int, name: str, body: dict = Body(...),
         if pose is not None:
             poses[key] = pose
         _write_scene(cid, chat, before, scene)
-        rows = body_rows(cid, chat, scene)
+        rows = body_rows(cid, chat, scene,
+                         charter=charter_body_records(cid, frame_id, scene))
     folded = key.strip().casefold()
     return next((b for b in rows if b["name"].strip().casefold() == folded),
                 {"name": key, "pose": pose})
@@ -2249,3 +2403,144 @@ def region_create(cid: int, body: dict = Body(...), frame_id: int | None = None)
     return {"id": rid, "name": str(entry.get("name") or rid),
             "brief": str(entry.get("brief") or ""),
             "look": str(entry.get("look") or ""), "rooms": in_region}
+
+
+# ---------------------------------------------------------------------------
+# A townsperson's place (2026-09-05, DESIGN_CHARTER_PLACEMENT § the map). The
+# REGISTRY is written, never the scene: a charter body's room is `place` and
+# its within-room position its authored `station`, both on the body record
+# (`world/charter_move.place_body` / `station_body`), read back next beat by
+# the placement rule (`world/charter_place.py` rule i) and by the next
+# `grid_view`. No positions row is ever stored for it.
+# ---------------------------------------------------------------------------
+
+charters_router = APIRouter(prefix="/api/chats/{cid}/charters", tags=["world-browser"])
+
+#: What a townsperson's station PUT may carry.
+CHARTER_STATION_FIELDS = ("room", "at", "cell", "facing")
+
+
+def _charter_body_or_refused(registry, charter_key, body_key):
+    """The charter state and the body record the route may author, or the
+    refusal naming why not: an unknown charter or body (404, the known ones
+    named), an authored person's body -- bound or reserved for a registered
+    character (`body_of_an_authored_mind`), whose place is the cast editor's
+    -- or a departed one, which stands nowhere (400)."""
+    items = (registry or {}).get("items") or {}
+    item = items.get(str(charter_key))
+    if not isinstance(item, dict):
+        known = ", ".join(sorted(items)) or "(none)"
+        raise HTTPException(
+            404, f"No charter '{charter_key}' in this story. Charters: {known}")
+    state = item.get("state") or {}
+    bodies = state.get("bodies") or {}
+    body = bodies.get(str(body_key))
+    if not isinstance(body, dict):
+        known = ", ".join(sorted(bodies)) or "(none)"
+        raise HTTPException(
+            404, f"No body '{body_key}' in charter '{charter_key}'. Bodies: {known}")
+    if body_of_an_authored_mind(state, str(body_key), body):
+        raise HTTPException(
+            400, f"'{body_key}' is an authored person's body -- bound or reserved "
+                 "for a registered character -- and stands where the cast editor "
+                 "puts them, not where the charter does")
+    if body.get("departed"):
+        raise HTTPException(400, f"'{body_key}' has departed and stands nowhere")
+    return state, body
+
+
+def _charter_row(cid, chat, scene, frame_id, charter_key, body_key):
+    """The body's row as the Bodies tab lists it, after a write -- read back
+    through `charter_body_records`, so the answer is what the next grid
+    shows and not what the route thinks it wrote."""
+    uid = placement_uid(charter_key, body_key)
+    rows = body_rows(cid, chat, scene,
+                     charter=charter_body_records(cid, frame_id, scene))
+    return next((b for b in rows if b.get("uid") == uid),
+                {"uid": uid, "charter": str(charter_key), "body": str(body_key),
+                 "kind": CHARTER_KIND, "room": None})
+
+
+@charters_router.put("/{charter_key}/bodies/{body_key}/station")
+def charter_body_station_put(cid: int, charter_key: str, body_key: str,
+                             body: dict = Body(...), frame_id: int | None = None):
+    """Stand a townsperson somewhere: ``{room, at?, cell?, facing?}``.
+    ``room`` is a live room of the scene (refused naming the known ones);
+    ``at`` an anchor that room holds (`effective_anchors`, the implicit
+    `door:<to>` ones included; refused naming them); ``cell`` ``[x, y]`` in
+    the room's own grid, refused outside it naming the bounds, never
+    clamped (`_cell_or_400`); ``facing`` a bearing (`_BEARINGS`), which
+    needs an ``at`` or a ``cell`` to face from. A room other than the body's
+    ``place`` moves it there first (`place_body`: the walk and errand it was
+    on are dropped, its old station with them), then the station is authored
+    (`station_body`, rule i of the placement); a move with no ``at``/``cell``
+    leaves the body to the dealt rule in the new room. The same room with
+    neither is refused: there is nothing to write. Refused for a body the
+    charter does not own the place of (`_charter_body_or_refused`) and while
+    a pipeline runs (409). The registry is read for update and saved for the
+    chat's frame (`registry_for_update` + `save_registry`). Returns the
+    body's row, read back through the placement."""
+    chat = _chat_or_404(cid)
+    _require_idle(cid)
+    if not isinstance(body, dict):
+        raise HTTPException(400, "Send {" + ", ".join(CHARTER_STATION_FIELDS) + "}")
+    unknown = sorted(k for k in body if k not in CHARTER_STATION_FIELDS)
+    if unknown:
+        raise HTTPException(
+            400, f"a townsperson's station has the fields "
+                 f"{', '.join(CHARTER_STATION_FIELDS)} (got {', '.join(unknown)})")
+    room = str(body.get("room") or "").strip()
+    if not room:
+        raise HTTPException(400, "A body needs a room to stand in")
+    with _era(cid, frame_id):
+        scene = get_scene(cid, chat)
+        _live_room_or_400(scene, room)
+        registry = registry_for_update(cid, frame_id)
+        _state, rec = _charter_body_or_refused(registry, charter_key, body_key)
+        cell = _cell_or_400(f"'{body_key}' cell", body.get("cell"), room_grid(scene, room))
+        anchors = effective_anchors(scene, room)
+        at = str(body.get("at") or "").strip() or None
+        if at is not None and at not in anchors:
+            held = ", ".join(sorted(anchors)) or "(none)"
+            raise HTTPException(
+                400, f"'{room}' has no anchor '{at}'. Anchors here: {held}")
+        facing = _enum_value("facing", body.get("facing"), _BEARINGS)
+        station = {}
+        if at is not None:
+            station["at"] = at
+        if cell is not None:
+            station["cell"] = cell
+        if facing and not station:
+            raise HTTPException(
+                400, "facing needs an at or a cell: a body faces from where it stands")
+        if facing:
+            station["facing"] = facing
+        moved = room != str(rec.get("place") or "")
+        if not station and not moved:
+            raise HTTPException(
+                400, f"'{body_key}' already stands in '{room}'; send at or cell "
+                     "to say where in it")
+        if moved:
+            place_body(registry, charter_key, body_key, room)
+        if station:
+            station_body(registry, charter_key, body_key, station)
+        save_registry(cid, registry, frame_id)
+        return _charter_row(cid, chat, scene, frame_id, charter_key, body_key)
+
+
+@charters_router.delete("/{charter_key}/bodies/{body_key}/station")
+def charter_body_station_delete(cid: int, charter_key: str, body_key: str,
+                                frame_id: int | None = None):
+    """Clear a townsperson's authored station (`station_body(..., None)`):
+    the body falls back to its post's anchor, its walk's doorway or its
+    dealt cell -- rules ii-iv of the placement. Idempotent; the same
+    refusals as the PUT for the body and the pipeline. Returns the row."""
+    chat = _chat_or_404(cid)
+    _require_idle(cid)
+    with _era(cid, frame_id):
+        scene = get_scene(cid, chat)
+        registry = registry_for_update(cid, frame_id)
+        _charter_body_or_refused(registry, charter_key, body_key)
+        station_body(registry, charter_key, body_key, None)
+        save_registry(cid, registry, frame_id)
+        return _charter_row(cid, chat, scene, frame_id, charter_key, body_key)

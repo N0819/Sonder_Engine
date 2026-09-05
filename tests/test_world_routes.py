@@ -332,7 +332,15 @@ def test_every_label_is_in_both_language_packs():
                   "No room '${room_id}' in this story",
                   "A room needs a name", "Extent (paces)", "Shape", "Add part",
                   "Look of the region", "Shared by every room in", "Layout",
-                  "No wall", "${paces} paces", "derived from the extent"):
+                  "No wall", "${paces} paces", "derived from the extent",
+                  # The townspeople (2026-09-05): the badge, the heading, the
+                  # legend, the row's words and the route's refusals.
+                  "Townsperson", "Townspeople", "Townsperson, dealt a cell",
+                  "Stands", "Post", "placed by hand", "at the post's anchor",
+                  "dealt a cell — nothing placed them",
+                  "Cleared the station; the rule places them again.",
+                  "A body needs a room to stand in",
+                  "No charter '${charter_key}' in this story. Charters: ${known}"):
         assert label in en, label
         assert ja.get(label) not in (None, label), label
 
@@ -1533,3 +1541,324 @@ class TestCells:
             assert r.status_code == 400, cell
             assert "hearth" in r.json()["detail"]
         assert "cell" not in _scene(temp_db, cid)["rooms"]["kitchen"]["anchors"]["hearth"]
+
+
+# ---- townspeople on the map (2026-09-05, DESIGN_CHARTER_PLACEMENT § the map) ----
+
+FROZEN_NO_CHARTER = ROOT / "tests" / "data" / "world_browser_no_charter.json"
+
+
+def _frozen_views(client, cid):
+    """The grid of the laid-out kitchen and hallway, the structure map and
+    the Bodies rows, for a story with NO charter registry -- the shapes the
+    charter wiring must leave byte-identical."""
+    views = {
+        "kitchen": client.get(f"/api/chats/{cid}/rooms/kitchen/grid").json(),
+        "hallway": client.get(f"/api/chats/{cid}/rooms/hallway/grid").json(),
+        "map": client.get(f"/api/chats/{cid}/map").json(),
+        "bodies": client.get(f"/api/chats/{cid}/rooms").json()["bodies"],
+    }
+    # The registered cast's ids are the fixture's own insertion order; the
+    # freeze keys them out so it does not depend on it.
+    for row in views["bodies"]:
+        row.pop("char_id", None)
+    return views
+
+
+class TestNoCharterIsByteIdentical:
+    def test_a_story_with_no_registry_renders_as_it_did_before(
+            self, client, story, temp_db):
+        """Frozen at 527ffcc3, before `grid_view`, `map_view` and `body_rows`
+        learned to lay townspeople: a story that has none must produce the
+        same bytes, so nothing about the charter path leaks a key, a count
+        or an order into every other story."""
+        cid = story["chat_id"]
+        _lay_out(temp_db, cid)
+        views = _frozen_views(client, cid)
+        frozen = json.loads(FROZEN_NO_CHARTER.read_text())
+        assert json.dumps(views, sort_keys=True) == json.dumps(frozen, sort_keys=True)
+
+
+def _town(temp_db, cid):
+    """The laid-out manor with an inn's people in it: the clerk on watch at
+    the desk post, whose anchor is the kitchen's oak table; a porter in the
+    kitchen with no post (dealt a cell); a guest in the hallway; a body
+    reserved for a registered character (`resident_seed_id`), which the map
+    may not place; and a departed one, which stands nowhere."""
+    from world.charter import normalize_charter
+    from world.charter_runtime import save_registry
+    _lay_out(temp_db, cid)
+    charter = normalize_charter({
+        "key": "inn",
+        "posts": {"desk": {"place": "kitchen", "anchor": "oak_table"}},
+        "watch": {"desk": "clerk"},
+        "bodies": {
+            "clerk": {"name": "Ysra", "place": "kitchen"},
+            "porter": {"name": "Oren", "place": "kitchen"},
+            "guest": {"name": "Tam", "place": "hallway"},
+            "kin": {"name": "Wil", "place": "kitchen", "resident_seed_id": "cast:1"},
+            "gone": {"name": "Pell", "place": "kitchen", "departed": True},
+        }})
+    save_registry(cid, {"inn": charter})
+    return charter
+
+
+def _body_record(temp_db, cid, body_key, frame_id=None):
+    from world.charter_runtime import registry_for
+    return registry_for(cid, frame_id)["items"]["inn"]["state"]["bodies"][body_key]
+
+
+def _station_url(cid, body_key, charter="inn", frame=""):
+    return f"/api/chats/{cid}/charters/{charter}/bodies/{body_key}/station{frame}"
+
+
+class TestTownspeopleOnTheMap:
+    """DESIGN_CHARTER_PLACEMENT § the map: the grid, the structure map and
+    the Bodies tab read the townspeople through the placement module, and a
+    drop writes the registry through the two authoring seams."""
+
+    def test_the_grid_lays_them_through_the_placement(self, client, story, temp_db):
+        from world.charter import charter_placements, placement_uid
+        from world.charter_runtime import registry_for
+        cid = story["chat_id"]
+        _town(temp_db, cid)
+        view = client.get(f"/api/chats/{cid}/rooms/kitchen/grid").json()
+        bodies = view["bodies"]
+        # The scene's own body is untouched; the two townspeople standing
+        # here follow; the guest in the laid neighbour is carried with her
+        # room; the reserved and the departed are not placed at all.
+        assert bodies["Alice"]["kind"] == "cast"
+        assert set(bodies) == {"Alice", "Ysra", "Oren", "Tam"}
+        ysra, oren, tam = bodies["Ysra"], bodies["Oren"], bodies["Tam"]
+        assert ysra["kind"] == oren["kind"] == tam["kind"] == "charter"
+        # The clerk stands at her post's anchor, the porter at a dealt cell.
+        assert ysra["source"] == "post" and ysra["at"] == "oak_table"
+        assert ysra["posts"] == ["desk"] and ysra["measured"] is True
+        assert ysra["room"] == "kitchen" and ysra["charter"] == "inn"
+        assert ysra["body"] == "clerk" and ysra["uid"] == "charter:inn:clerk"
+        assert ysra["withheld"] is False and ysra["authored"] is None
+        assert oren["source"] == "dealt" and oren["at"] is None
+        assert oren["cell"] in view["room"]["cells"]
+        taken = {tuple(c) for a in view["anchors"].values() for c in a["cells"]}
+        assert tuple(oren["cell"]) not in taken
+        assert tam["room"] == "hallway" and tam["source"] == "dealt"
+        # The same cell the engine deals: no second derivation.
+        scene = _scene(temp_db, cid)
+        placed = charter_placements(registry_for(cid), scene, frame_rooms=["kitchen"])
+        assert oren["cell"] == placed[placement_uid("inn", "porter")]["station"]["cell"]
+        assert oren["facing"] == placed[placement_uid("inn", "porter")]["facing"]
+        # The hallway's own grid lays the guest in the room and the two
+        # kitchen bodies beyond its door; the study, which lays neither
+        # room, has none.
+        view = client.get(f"/api/chats/{cid}/rooms/hallway/grid").json()
+        assert view["bodies"]["Tam"]["room"] == "hallway"
+        assert view["bodies"]["Ysra"]["room"] == "kitchen"
+        assert "Tam" not in client.get(f"/api/chats/{cid}/rooms/garden/grid").json()["bodies"]
+
+    def test_the_map_counts_them_and_the_bodies_tab_lists_them(self, client, story, temp_db):
+        from world.charter import PLACEMENT_SOURCES
+        from web.world_routes import BODY_KINDS
+        cid = story["chat_id"]
+        _town(temp_db, cid)
+        rooms_ = {r["id"]: r for c in client.get(f"/api/chats/{cid}/map").json()["components"]
+                  for r in c["rooms"]}
+        assert rooms_["kitchen"]["occupants"] == ["Alice", "Oren", "Ysra"]
+        assert rooms_["hallway"]["occupants"] == ["Bob", "Tam"]
+        index = client.get(f"/api/chats/{cid}/rooms").json()
+        rows = index["bodies"]
+        kinds = [b["kind"] for b in rows]
+        # Under their own kind, after every body of the scene.
+        assert kinds.index("charter") == len(kinds) - 3
+        assert kinds[-3:] == ["charter"] * 3
+        ysra = next(b for b in rows if b["name"] == "Ysra")
+        assert ysra["room"] == "kitchen" and ysra["room_name"] == "Kitchen"
+        assert ysra["posts"] == ["desk"] and ysra["station"] == {"at": "oak_table"}
+        assert ysra["source"] == "post" and ysra["char_id"] is None
+        assert ysra["pose"] is None and ysra["attire"] is None
+        assert ysra["uid"] == "charter:inn:clerk"
+        assert index["vocab"]["body_kinds"] == list(BODY_KINDS)
+        assert index["vocab"]["charter_sources"] == list(PLACEMENT_SOURCES)
+        assert "charter" in index["vocab"]["body_kinds"]
+        assert "dealt" in index["vocab"]["charter_sources"]
+
+    def test_a_withheld_name_is_keyed_by_its_uid(self, client, story, temp_db):
+        from world.charter_runtime import registry_for_update, save_registry
+        cid = story["chat_id"]
+        _town(temp_db, cid)
+        reg = registry_for_update(cid)
+        reg["items"]["inn"]["state"]["bodies"]["porter"]["name"] = "Ysra"
+        save_registry(cid, reg)
+        view = client.get(f"/api/chats/{cid}/rooms/kitchen/grid").json()
+        assert "Ysra" not in view["bodies"]
+        assert view["bodies"]["charter:inn:clerk"]["withheld"] is True
+        assert view["bodies"]["charter:inn:porter"]["withheld"] is True
+        names = [b["name"] for b in client.get(f"/api/chats/{cid}/rooms").json()["bodies"]]
+        assert "charter:inn:clerk" in names and "Ysra" not in names
+
+    def test_a_station_written_is_read_back_by_the_grid(self, client, story, temp_db):
+        cid = story["chat_id"]
+        _town(temp_db, cid)
+        r = client.put(_station_url(cid, "clerk"),
+                       json={"room": "kitchen", "cell": [5, 2], "facing": "n"})
+        assert r.status_code == 200, r.text
+        row = r.json()
+        assert row["kind"] == "charter" and row["source"] == "authored"
+        assert row["station"] == {"cell": [5, 2]} and row["facing"] == "n"
+        assert row["authored"] == {"cell": [5, 2], "facing": "n"}
+        # The registry holds it; the scene holds nothing for her.
+        assert _body_record(temp_db, cid, "clerk")["station"] == {"cell": [5, 2], "facing": "n"}
+        assert "Ysra" not in (_scene(temp_db, cid).get("positions") or {})
+        assert "Ysra" not in (_scene(temp_db, cid).get("stations") or {})
+        # The next grid reads it through the placement.
+        ysra = client.get(f"/api/chats/{cid}/rooms/kitchen/grid").json()["bodies"]["Ysra"]
+        assert ysra["cell"] == [5, 2] and ysra["facing"] == "n"
+        assert ysra["source"] == "authored" and ysra["at"] is None
+        # On an anchor: `at`, and the cell the engine derives from it.
+        r = client.put(_station_url(cid, "clerk"), json={"room": "kitchen", "at": "hearth"})
+        assert r.status_code == 200, r.text
+        assert _body_record(temp_db, cid, "clerk")["station"] == {"at": "hearth"}
+        ysra = client.get(f"/api/chats/{cid}/rooms/kitchen/grid").json()["bodies"]["Ysra"]
+        assert ysra["at"] == "hearth" and ysra["source"] == "authored"
+        assert ysra["measured"] is True
+        # A doorway is an implicit anchor the room holds.
+        r = client.put(_station_url(cid, "clerk"), json={"room": "kitchen", "at": "door:hallway"})
+        assert r.status_code == 200, r.text
+        assert client.get(f"/api/chats/{cid}/rooms/kitchen/grid").json()["bodies"]["Ysra"]["at"] == "door:hallway"
+
+    def test_a_drop_into_a_neighbour_moves_the_body(self, client, story, temp_db):
+        cid = story["chat_id"]
+        _town(temp_db, cid)
+        r = client.put(_station_url(cid, "porter"), json={"room": "hallway", "cell": [1, 1]})
+        assert r.status_code == 200, r.text
+        assert r.json()["room"] == "hallway" and r.json()["source"] == "authored"
+        oren = _body_record(temp_db, cid, "porter")
+        assert oren["place"] == "hallway" and oren["station"] == {"cell": [1, 1]}
+        kitchen = client.get(f"/api/chats/{cid}/rooms/kitchen/grid").json()["bodies"]
+        assert kitchen["Oren"]["room"] == "hallway"           # beyond the door now
+        hallway = client.get(f"/api/chats/{cid}/rooms/hallway/grid").json()["bodies"]
+        assert hallway["Oren"]["room"] == "hallway" and hallway["Oren"]["cell"] == [1, 1]
+        # A move with no place named in the new room: the dealt rule there.
+        r = client.put(_station_url(cid, "guest"), json={"room": "kitchen"})
+        assert r.status_code == 200, r.text
+        assert r.json()["room"] == "kitchen" and r.json()["source"] == "dealt"
+        assert "station" not in _body_record(temp_db, cid, "guest")
+        rooms_ = {r["id"]: r for c in client.get(f"/api/chats/{cid}/map").json()["components"]
+                  for r in c["rooms"]}
+        assert rooms_["kitchen"]["occupants"] == ["Alice", "Tam", "Ysra"]
+        assert rooms_["hallway"]["occupants"] == ["Bob", "Oren"]
+
+    def test_a_move_drops_the_walk_and_a_station_keeps_it(self, client, story, temp_db):
+        from world.charter_runtime import registry_for_update, save_registry
+        cid = story["chat_id"]
+        _town(temp_db, cid)
+        reg = registry_for_update(cid)
+        reg["items"]["inn"]["state"]["bodies"]["clerk"]["walk"] = {
+            "target": "study", "route": ["kitchen", "hallway", "study"], "leg": 0,
+            "credit": 0.0}
+        save_registry(cid, reg)
+        # Within the room: the station is authored, the walk goes on.
+        assert client.put(_station_url(cid, "clerk"),
+                          json={"room": "kitchen", "cell": [2, 2]}).status_code == 200
+        assert "walk" in _body_record(temp_db, cid, "clerk")
+        # Into the next room: the scene put her there; the walk is dropped
+        # with the old station (`place_body`).
+        assert client.put(_station_url(cid, "clerk"),
+                          json={"room": "hallway", "cell": [0, 0]}).status_code == 200
+        clerk = _body_record(temp_db, cid, "clerk")
+        assert "walk" not in clerk and clerk["station"] == {"cell": [0, 0]}
+
+    def test_every_refusal_names_its_reason(self, client, story, temp_db, monkeypatch):
+        cid = story["chat_id"]
+        _town(temp_db, cid)
+
+        def refused(body_key, payload, status, *words):
+            r = client.put(_station_url(cid, body_key), json=payload)
+            assert r.status_code == status, (payload, r.text)
+            for word in words:
+                assert word in r.json()["detail"], (word, r.json()["detail"])
+
+        refused("clerk", {"room": "crypt", "cell": [1, 1]}, 400, "No room 'crypt'", "Known rooms")
+        refused("clerk", {"room": "kitchen", "cell": [8, 1]}, 400,
+                "outside the room", "x in 0..7", "y in 0..3")
+        refused("clerk", {"room": "kitchen", "cell": "2,2"}, 400, "two whole numbers")
+        refused("clerk", {"room": "kitchen", "at": "throne"}, 400,
+                "has no anchor 'throne'", "hearth", "oak_table")
+        refused("clerk", {"room": "kitchen", "cell": [1, 1], "facing": "up"}, 400,
+                "facing must be one of")
+        refused("clerk", {"room": "kitchen", "facing": "n"}, 400, "faces from where it stands")
+        refused("clerk", {"room": "kitchen"}, 400, "already stands in 'kitchen'")
+        refused("clerk", {"cell": [1, 1]}, 400, "needs a room")
+        refused("clerk", {"room": "kitchen", "cell": [1, 1], "near": ["Alice"]}, 400, "near")
+        refused("kin", {"room": "kitchen", "cell": [1, 1]}, 400, "authored person")
+        refused("gone", {"room": "kitchen", "cell": [1, 1]}, 400, "departed")
+        refused("nobody", {"room": "kitchen", "cell": [1, 1]}, 404, "No body 'nobody'", "clerk")
+        r = client.put(_station_url(cid, "clerk", charter="guild"),
+                       json={"room": "kitchen", "cell": [1, 1]})
+        assert r.status_code == 404 and "No charter 'guild'" in r.json()["detail"]
+        assert "inn" in r.json()["detail"]
+        # Nothing landed through any of them.
+        assert "station" not in _body_record(temp_db, cid, "clerk")
+        # Never clamped: the cell was outside, so no cell was written.
+        assert "station" not in _body_record(temp_db, cid, "kin")
+        # The pipeline guard, the era, and the host.
+        from agents import runtime
+        monkeypatch.setitem(runtime.ABORTS, (cid, None), object())
+        assert client.put(_station_url(cid, "clerk"),
+                          json={"room": "kitchen", "cell": [1, 1]}).status_code == 409
+        assert client.delete(_station_url(cid, "clerk")).status_code == 409
+        monkeypatch.delitem(runtime.ABORTS, (cid, None))
+        assert client.put(_station_url(cid, "clerk", frame="?frame_id=424242"),
+                          json={"room": "kitchen", "cell": [1, 1]}).status_code == 404
+        from web.auth_routes import GUEST_ALLOWED_API_PATHS
+        assert _station_url(cid, "clerk") not in GUEST_ALLOWED_API_PATHS
+        anonymous = TestClient(app_module.app)
+        assert anonymous.put(_station_url(cid, "clerk"),
+                             json={"room": "kitchen", "cell": [1, 1]}).status_code in (401, 403)
+        assert anonymous.delete(_station_url(cid, "clerk")).status_code in (401, 403)
+
+    def test_a_clear_returns_the_body_to_the_rule(self, client, story, temp_db):
+        cid = story["chat_id"]
+        _town(temp_db, cid)
+        for body_key in ("clerk", "porter"):
+            assert client.put(_station_url(cid, body_key),
+                              json={"room": "kitchen", "cell": [6, 3]}).status_code == 200
+        grid = client.get(f"/api/chats/{cid}/rooms/kitchen/grid").json()["bodies"]
+        assert grid["Ysra"]["source"] == grid["Oren"]["source"] == "authored"
+        r = client.delete(_station_url(cid, "clerk"))
+        assert r.status_code == 200, r.text
+        assert r.json()["source"] == "post" and r.json()["station"] == {"at": "oak_table"}
+        r = client.delete(_station_url(cid, "porter"))
+        assert r.status_code == 200, r.text
+        assert r.json()["source"] == "dealt"
+        assert "station" not in _body_record(temp_db, cid, "clerk")
+        assert "station" not in _body_record(temp_db, cid, "porter")
+        grid = client.get(f"/api/chats/{cid}/rooms/kitchen/grid").json()["bodies"]
+        assert grid["Ysra"]["source"] == "post" and grid["Oren"]["source"] == "dealt"
+        # Idempotent; the same refusals as the PUT for whom it may not place.
+        assert client.delete(_station_url(cid, "clerk")).status_code == 200
+        assert client.delete(_station_url(cid, "kin")).status_code == 400
+        assert client.delete(_station_url(cid, "nobody")).status_code == 404
+        assert client.delete(_station_url(cid, "clerk", charter="guild")).status_code == 404
+
+    def test_the_write_is_era_scoped(self, client, story, temp_db):
+        from world.charter import normalize_charter
+        from world.charter_runtime import save_registry
+        cid = story["chat_id"]
+        _town(temp_db, cid)
+        r = client.post(f"/api/chats/{cid}/frames",
+                        json={"label": "Decades Ago", "ordinal": -10, "kind": "past"})
+        fid = r.json()["id"]
+        temp_db.wset_for_frame(cid, "scene", {
+            "location": "then", "rooms": {"kitchen": {"name": "Old Kitchen",
+                                                      "adjacent": []}},
+            "positions": {}, "entities": {}, "attire": {}}, fid)
+        save_registry(cid, {"inn": normalize_charter({
+            "key": "inn", "bodies": {"clerk": {"name": "Ysra", "place": "kitchen"}}})}, fid)
+        r = client.put(_station_url(cid, "clerk", frame=f"?frame_id={fid}"),
+                       json={"room": "kitchen", "cell": [1, 1]})
+        assert r.status_code == 200, r.text
+        assert _body_record(temp_db, cid, "clerk", fid)["station"] == {"cell": [1, 1]}
+        assert "station" not in _body_record(temp_db, cid, "clerk")
+        then = client.get(f"/api/chats/{cid}/rooms/kitchen/grid?frame_id={fid}").json()
+        assert then["bodies"]["Ysra"]["cell"] == [1, 1] and then["bodies"]["Ysra"]["source"] == "authored"
+        assert client.get(f"/api/chats/{cid}/rooms/kitchen/grid").json()["bodies"]["Ysra"]["source"] == "post"

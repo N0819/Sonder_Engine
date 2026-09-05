@@ -403,28 +403,11 @@ toward its next walk leg, or a cell dealt from (identity seed, room) -- laid
 on a shallow view of the scene, never stored -- and a Director
 `positions`/`stations` entry naming it is routed to the body record inside
 the commit. Measured at Harrowmere scale: 10 bodies laid in 1.7ms per beat
-for the observed frame, 100 in 12.6ms for the evidence pass. Residual, and
-not a defect: inherited place-graph nodes still carry no bearing, and the
-map does not draw the placed bodies -- §1.10b.
-
-### 1.10b The map does not draw or drag a townsperson
-
-`web/world_routes.py`'s `grid_view` lays bodies from `scene.positions`, and
-a charter body's placement is on the VIEW (`world.charter_place`), never the
-store, so the World Browser's map shows the room's furniture and the cast and
-none of the townspeople standing there. The engine half is built and the
-seams the drag will call exist: `charter_move.place_body(registry, charter,
-body, room)` for the room and `charter_move.station_body(registry, charter,
-body, station)` for the within-room position (`{"at": anchor}` or `{"cell":
-[x, y]}`, optionally `near`/`facing`; `None` clears it), both through
-`registry_for_update` + `save_registry`. To add: `PUT /api/chats/{cid}/
-charters/{charter}/bodies/{body}/station` taking `{"room", "at" | "cell"}`,
-and a `charter_bodies` block on `grid_view` from `charter_placements(
-registry_for(cid, frame), scene, frame_rooms={room})` keyed by uid with
-`name`, `cell`, `facing`, `source` (post / authored / walk / dealt) and
-`presented` (crowd / figure), drawn beside the cast in `static/js/
-world_browser.js`. Deferred because another agent held `web/world_routes.py`
-and `static/js/world_browser.js` while the engine half landed.
+for the observed frame, 100 in 12.6ms for the evidence pass. The map half
+landed the same day (`web/world_routes.py`'s `charter_body_records` and the
+charters router, `static/js/world_browser.js`;
+`design/DESIGN_CHARTER_PLACEMENT.md` § The map). Residual, and not a defect:
+inherited place-graph nodes still carry no bearing.
 
 ### 1.11 `ctx.warnings` reaches the pipeline drawer but not the story reader
 

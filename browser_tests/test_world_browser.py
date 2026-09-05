@@ -114,6 +114,20 @@ INDEX = {
         {"name": "Alice", "kind": "cast", "char_id": 9, "room": "kitchen",
          "room_name": "Kitchen", "station": {"at": "oak_table", "near": []},
          "pose": {"posture": "standing"}, "attire": ALICE_ATTIRE},
+        # The townspeople (2026-09-05): the inn's clerk on watch at the desk
+        # post, whose anchor is the hearth, and a porter dealt a cell -- rows
+        # of the charter REGISTRY, with no pose and no attire, as the server
+        # lists them after the scene's bodies.
+        {"name": "Ysra", "kind": "charter", "char_id": None, "room": "kitchen",
+         "room_name": "Kitchen", "station": {"at": "hearth"}, "pose": None, "attire": None,
+         "charter": "inn", "body": "clerk", "uid": "charter:inn:clerk", "source": "post",
+         "facing": "w", "posts": ["desk"], "presented": "figure", "withheld": False,
+         "authored": None},
+        {"name": "Oren", "kind": "charter", "char_id": None, "room": "kitchen",
+         "room_name": "Kitchen", "station": {"cell": [5, 4]}, "pose": None, "attire": None,
+         "charter": "inn", "body": "porter", "uid": "charter:inn:porter", "source": "dealt",
+         "facing": "n", "posts": [], "presented": "figure", "withheld": False,
+         "authored": None},
     ],
     "vocab": VOCAB,
 }
@@ -217,14 +231,16 @@ def _part_box(part, w, d):
             max(0, min(d, at[1] + part["d"])))
 
 
-def _grid(rid, slices):
+def _grid(rid, slices, charter=()):
     """A mock of `GET /rooms/{rid}/grid` over the mocked slice: the tier's
     square (or the extent's box, cut to a part shape's parts), each anchor on
     the wall its bearing names (one pace in when it has a height, at its
     `offset` along the wall when it has one), the doorways with a bearing as
     one cell of their wall, the occupants beside the anchor they stand at,
     the beared neighbour laid beyond its door, the things at their cells and
-    a light source's height word."""
+    a light source's height word. `charter` is the index's townspeople rows:
+    the ones standing here and in the laid neighbour join `bodies` as the
+    server lays them, each with its `room`."""
     room = slices[rid]
     record = room["record"]
     geometry = record["geometry"]
@@ -309,6 +325,29 @@ def _grid(rid, slices):
         bodies[o["name"]] = {"cell": cell, "facing": "e" if cell else None, "kind": kind,
                              "at": at, "near": list(station.get("near") or []),
                              "measured": cell is not None, "source": source}
+    laid = {rid} | {n["id"] for n in neighbours}
+    for b in charter:
+        if b["room"] not in laid:
+            continue
+        station = b.get("station") or {}
+        # The server's placement: the station's cell, else a cell beside the
+        # anchor (one pace south here, where a cast body's is one pace east,
+        # so a townsperson at a fixture never covers the cast member at it),
+        # else -- in a neighbour, whose anchors the mock does not place -- a
+        # cell of that room.
+        if isinstance(station.get("cell"), list) and len(station["cell"]) == 2:
+            cell = list(station["cell"])
+        elif station.get("at") and b["room"] == rid and station["at"] in anchors:
+            ax, ay = anchors[station["at"]]["cells"][0]
+            cell = [ax, min(d - 1, ay + 1)]
+        else:
+            cell = [1, 1]
+        bodies[b["name"]] = {"cell": cell, "facing": b.get("facing"), "kind": "charter",
+                             "at": station.get("at"), "near": [], "measured": True,
+                             "source": b["source"], "room": b["room"], "charter": b["charter"],
+                             "body": b["body"], "uid": b["uid"], "withheld": False,
+                             "posts": list(b.get("posts") or []), "presented": "figure",
+                             "station": dict(station), "authored": b.get("authored")}
     things, light_sources = [], []
     for th in room.get("things") or []:
         things.append({"id": th["id"], "name": th["name"], "kind": th.get("kind") or "",
@@ -614,6 +653,32 @@ def _mount(page: Page):
                     if b["name"] in attire:
                         b["attire"] = attire[b["name"]]
                 body = {"ok": True}
+            elif "/charters/" in path and path.endswith("/station"):
+                # A townsperson's place: the charter REGISTRY's row, never a
+                # slice's occupant. A PUT with `at` or `cell` authors the
+                # station (`source` authored); a PUT with the room alone moves
+                # the body to the dealt rule there; a DELETE hands it back to
+                # its post's anchor or a dealt cell.
+                charter, body_key = parts[5], parts[7]
+                row = next(b for b in index["bodies"]
+                           if b.get("charter") == charter and b.get("body") == body_key)
+                if request.method == "PUT":
+                    room = payload["room"]
+                    moved = room != row["room"]
+                    row["room"], row["room_name"] = room, slices[room]["name"]
+                    if "at" in payload or "cell" in payload:
+                        station = {k: payload[k] for k in ("at", "cell", "facing")
+                                   if payload.get(k) is not None}
+                        row["station"], row["authored"], row["source"] = station, dict(station), "authored"
+                    elif moved:
+                        row["station"], row["authored"], row["source"] = {"cell": [1, 1]}, None, "dealt"
+                else:
+                    row["authored"] = None
+                    if row["posts"] and row["room"] == "kitchen":
+                        row["station"], row["source"] = {"at": "hearth"}, "post"
+                    else:
+                        row["station"], row["source"] = {"cell": [5, 4]}, "dealt"
+                body = dict(row)
             else:
                 body = {"ok": True}
         elif path == "/api/bootstrap":
@@ -629,7 +694,7 @@ def _mount(page: Page):
         elif path.startswith("/api/chats/1/rooms/") and path.endswith("/grid"):
             rid = path.split("/")[5]
             if rid in slices:
-                body = _grid(rid, slices)
+                body = _grid(rid, slices, [b for b in index["bodies"] if b["kind"] == "charter"])
                 if parse_qs(url.query).get("sound_from"):
                     body["overlays"]["sound"] = {k: "full" for k in body["overlays"]["noise"]}
             else:
@@ -1466,3 +1531,146 @@ def test_the_structure_map_draws_doors_where_they_stand_and_a_drag_re_bears(
     modal.locator(".wb-room-map .wb-m-neighbour[data-room=kitchen]").click()
     expect(modal.locator(".wb-map-bar")).to_contain_text("Kitchen")
     expect(modal.locator(".wb-card textarea").first).to_have_value("A rustic kitchen with a heavy oak table.")
+
+
+# ---- Townspeople on the map (2026-09-05, DESIGN_CHARTER_PLACEMENT § the map) --
+
+CLERK = "/api/chats/1/charters/inn/bodies/clerk/station"
+PORTER = "/api/chats/1/charters/inn/bodies/porter/station"
+
+
+def _square_x(cell_x):
+    """Where the mock's square mark for a townsperson starts: the cell's
+    centre less the half-side the map draws (`S * 0.32`)."""
+    return f"{(cell_x + 0.5) * 24 - 24 * 0.32:g}"
+
+
+def test_townspeople_are_drawn_with_their_own_mark_and_a_click_opens_the_row(
+        page: Page, ui_base_url: str) -> None:
+    page_errors: list[str] = []
+    page.on("pageerror", lambda error: page_errors.append(str(error)))
+    _, _, modal = _open_map(page, ui_base_url)
+    svg = modal.locator(".wb-room-map")
+    # A square where the cast are dots; the clause that placed each is its
+    # class, so the dealt one draws lighter than the one at her post.
+    ysra = svg.locator(".wb-m-body.charter[data-body=Ysra]")
+    oren = svg.locator(".wb-m-body.charter[data-body=Oren]")
+    expect(ysra).to_have_count(1)
+    expect(ysra.locator("rect.wb-m-body-dot")).to_have_count(1)
+    expect(ysra).to_have_class(re.compile(r"\bpost\b"))
+    expect(oren).to_have_class(re.compile(r"\bdealt\b"))
+    expect(svg.locator(".wb-m-body[data-body=Alice] circle.wb-m-body-dot")).to_have_count(1)
+    # Beside the hearth (1, 3), as the mock lays a townsperson at an anchor.
+    expect(ysra.locator(".wb-m-body-dot")).to_have_attribute("x", _square_x(1))
+    expect(oren.locator(".wb-m-body-dot")).to_have_attribute("x", _square_x(5))
+    expect(ysra.locator(".wb-m-facing")).to_have_count(1)
+    expect(modal.locator(".wb-map-marks")).to_contain_text("Townsperson")
+    expect(modal.locator(".wb-map-marks")).to_contain_text("dealt a cell")
+    # Click opens the row under "Who is here" with the focus every mark has.
+    ysra.click()
+    row = modal.locator(".wb-card .wb-charter[data-body=Ysra]")
+    expect(row).to_have_class(re.compile(r"\bwb-focus\b"))
+    expect(row).to_contain_text("Townsperson")
+    expect(row).to_contain_text("desk")
+    expect(row).to_contain_text("hearth")
+    expect(row.locator(".wb-charter-source")).to_have_attribute("data-source", "post")
+    expect(row.locator(".wb-clear-station")).to_have_count(0)      # nothing authored to clear
+    expect(row.locator("select").first).to_be_focused()
+    # Enter on a focused mark does what the click does.
+    oren.focus()
+    page.keyboard.press("Enter")
+    expect(modal.locator(".wb-card .wb-charter[data-body=Oren]")).to_have_class(re.compile(r"\bwb-focus\b"))
+    # The Bodies tab lists them under their own heading, room and post shown.
+    page.locator("#modal .lore-inspector-tabs button", has_text="Bodies").click()
+    expect(page.locator("#modal .wb-townsfolk-heading")).to_have_text("Townspeople")
+    details = page.locator("#modal details.wb-charter[data-body=Ysra]")
+    expect(details.locator("summary")).to_contain_text("Townsperson")
+    expect(details.locator("summary")).to_contain_text("Kitchen")
+    expect(details.locator("summary")).to_contain_text("desk")
+    expect(details.locator("summary")).to_contain_text("at the post's anchor")
+    # The scene's bodies keep their own rows, with attire and pose.
+    expect(page.locator("#modal details.wb-body[data-body=Alice] .wb-attire")).to_have_count(1)
+    expect(details.locator(".wb-attire")).to_have_count(0)
+    assert page_errors == []
+
+
+def test_dragging_a_townsperson_in_its_room_writes_the_charter_station(
+        page: Page, ui_base_url: str) -> None:
+    _, writes, modal = _open_map(page, ui_base_url)
+    svg = modal.locator(".wb-room-map")
+    # Onto an anchor: she stands AT it -- the one route, the registry's.
+    svg.locator(".wb-m-body[data-body=Ysra]").drag_to(svg.locator(".wb-m-anchor[data-anchor=oak_table]"))
+    expect(page.locator("#toasts")).to_contain_text("Placed Ysra at oak_table")
+    puts = [w for w in writes if w[1] == CLERK]
+    assert puts[-1] == ("PUT", CLERK, {"room": "kitchen", "at": "oak_table"})
+    assert not [w for w in writes if w[1].startswith("/api/chats/1/bodies/")]
+    ysra = svg.locator(".wb-m-body[data-body=Ysra]")
+    expect(ysra).to_have_class(re.compile(r"\bauthored\b"))
+    row = modal.locator(".wb-card .wb-charter[data-body=Ysra]")
+    expect(row.locator(".wb-charter-source")).to_have_attribute("data-source", "authored")
+    expect(row.locator(".wb-clear-station")).to_have_count(1)
+    # Onto a plain cell: pinned to it; no `at` is sent.
+    ysra.drag_to(svg.locator(".wb-m-cell").nth(1 * 6 + 5))
+    expect(page.locator("#toasts")).to_contain_text("Placed Ysra at (1, 5)")
+    puts = [w for w in writes if w[1] == CLERK]
+    assert puts[-1] == ("PUT", CLERK, {"room": "kitchen", "cell": [1, 5]})
+    expect(svg.locator(".wb-m-body[data-body=Ysra] .wb-m-body-dot")).to_have_attribute("x", _square_x(1))
+    # Undo re-issues the station the record held before the drop.
+    modal.locator(".wb-map-bar .wb-undo").click()
+    expect(page.locator("#toasts")).to_contain_text("Undid")
+    puts = [w for w in writes if w[1] == CLERK]
+    assert puts[-1] == ("PUT", CLERK, {"room": "kitchen", "at": "oak_table"})
+    expect(modal.locator(".wb-card .wb-charter[data-body=Ysra] .wb-charter-where")).to_contain_text("oak_table")
+    # An arrow key is the drag by one cell, from where the mark stands: the
+    # cell beside the table (3, 4), one to the east.
+    svg.locator(".wb-m-body[data-body=Ysra]").focus()
+    page.keyboard.press("ArrowRight")
+    puts = [w for w in writes if w[1] == CLERK]
+    assert puts[-1] == ("PUT", CLERK, {"room": "kitchen", "cell": [4, 4]})
+    expect(page.locator("#toasts")).to_contain_text("Placed Ysra at (4, 4)")
+
+
+def test_dragging_a_townsperson_into_a_neighbour_moves_it_there(
+        page: Page, ui_base_url: str) -> None:
+    _, writes, modal = _open_map(page, ui_base_url)
+    svg = modal.locator(".wb-room-map")
+    target = svg.locator(".wb-m-neighbour[data-room=hallway] .wb-m-far-cell").nth(2 * 6 + 2)
+    svg.locator(".wb-m-body[data-body=Oren]").drag_to(target)
+    expect(page.locator("#toasts")).to_contain_text("Moved Oren to Hallway.")
+    puts = [w for w in writes if w[1] == PORTER]
+    assert puts[-1] == ("PUT", PORTER, {"room": "hallway", "cell": [2, 2]})
+    # No longer one of this room's marks; drawn faintly where the neighbour
+    # is, in its own frame.
+    expect(svg.locator(".wb-m-body[data-body=Oren]")).to_have_count(0)
+    expect(svg.locator(".wb-m-far-body[data-body=Oren]")).to_have_count(1)
+    expect(modal.locator(".wb-card .wb-charter[data-body=Oren]")).to_have_count(0)
+    # The Bodies tab agrees about the room, and its select moves him back
+    # through the same route with the room alone (the dealt rule there).
+    page.locator("#modal .lore-inspector-tabs button", has_text="Bodies").click()
+    oren = page.locator("#modal details.wb-charter[data-body=Oren]")
+    expect(oren.locator("summary")).to_contain_text("Hallway")
+    oren.locator("summary").click()
+    oren.locator(".wb-body-place select").select_option("kitchen")
+    expect(page.locator("#toasts")).to_contain_text("Moved Oren to Kitchen.")
+    puts = [w for w in writes if w[1] == PORTER]
+    assert puts[-1] == ("PUT", PORTER, {"room": "kitchen"})
+    expect(page.locator("#modal details.wb-charter[data-body=Oren] summary")).to_contain_text("Kitchen")
+    expect(page.locator("#modal details.wb-charter[data-body=Oren] summary")).to_contain_text("dealt a cell")
+
+
+def test_clearing_a_townspersons_station_returns_it_to_the_rule(
+        page: Page, ui_base_url: str) -> None:
+    _, writes, modal = _open_map(page, ui_base_url)
+    svg = modal.locator(".wb-room-map")
+    svg.locator(".wb-m-body[data-body=Ysra]").drag_to(svg.locator(".wb-m-cell").nth(0 * 6 + 5))
+    expect(page.locator("#toasts")).to_contain_text("Placed Ysra at (0, 5)")
+    expect(svg.locator(".wb-m-body[data-body=Ysra]")).to_have_class(re.compile(r"\bauthored\b"))
+    modal.locator(".wb-card .wb-charter[data-body=Ysra] .wb-clear-station").click()
+    expect(page.locator("#toasts")).to_contain_text("Cleared the station")
+    assert ("DELETE", CLERK, {}) in writes
+    # Back at her post's anchor: the mark's clause, the row's, and no clear.
+    expect(svg.locator(".wb-m-body[data-body=Ysra]")).to_have_class(re.compile(r"\bpost\b"))
+    row = modal.locator(".wb-card .wb-charter[data-body=Ysra]")
+    expect(row.locator(".wb-charter-source")).to_have_attribute("data-source", "post")
+    expect(row.locator(".wb-clear-station")).to_have_count(0)
+    expect(row).to_contain_text("hearth")

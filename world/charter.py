@@ -57,6 +57,7 @@ from .charter_model import (
     DEFAULT_FLOOR,
     LEVEL_MAX,
     LEVEL_MIN,
+    body_of_an_authored_mind,
     meets,
     normalize_body,
     normalize_body_station,
@@ -113,9 +114,9 @@ from .charter_move import (
     furthest_travelled, homecomings, place_body, relocate, station_body,
     walk, walked_edges)
 from .charter_place import (
-    charter_placements, lay_charter_bodies, placement_uid,
-    placements_from_slices, resolve_scene_placements, rooms_in_frame,
-    scene_with_charter_bodies)
+    SOURCES as PLACEMENT_SOURCES, charter_placements, lay_charter_bodies,
+    placement_uid, placements_from_slices, resolve_scene_placements,
+    rooms_in_frame, scene_with_charter_bodies)
 from .charter_temper import (
     SPREAD,
     TRAITS,
@@ -461,6 +462,8 @@ __all__ = [
     "spend_reluctance",
     "summarize",
     "travel_rooms",
+    "PLACEMENT_SOURCES",
+    "body_of_an_authored_mind",
     "charter_placements",
     "lay_charter_bodies",
     "place_body",
