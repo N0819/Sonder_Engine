@@ -84,8 +84,16 @@ def normalize_regions(stored):
         if not rid:
             continue
         value = value if isinstance(value, dict) else {}
-        out[rid] = {"name": str(value.get("name") or key),
-                    "brief": str(value.get("brief") or "")}
+        entry = {"name": str(value.get("name") or key),
+                 "brief": str(value.get("brief") or "")}
+        # `look`: the visual register of this part of the map -- what a
+        # picture of any room in it should share (the backdrop brief reads
+        # it: `dressing/backdrops.room_brief`). Present only when set, so an
+        # entry with no look keeps the shape every reader already pins.
+        look = " ".join(str(value.get("look") or "").split())
+        if look:
+            entry["look"] = look
+        out[rid] = entry
     return {"version": REGIONS_VERSION, "items": out}
 
 
@@ -141,6 +149,38 @@ def ensure_regions(cid, frame_id, entries):
         stored["items"][rid] = {"name": missing[rid], "brief": ""}
     wset_for_frame(cid, REGIONS_KEY, stored, frame_id)
     return sorted(missing)
+
+
+def set_region_look(cid, frame_id, region_id, look):
+    """Write a region's `look` -- the visual register a picture of any room
+    there shares -- into the frame's registry, entering the region by its id
+    when the registry lacks it. An empty `look` removes the field. Returns
+    the stored entry.
+
+    THE SEAM, NOT YET A TOOL: nothing in the Room calls this yet (the only
+    registry writer at commit is `ensure_regions`, which enters names), so a
+    look is set by a host the way any frame-scoped world key is, and the
+    Room tool that would write it is registered in `docs/UNBUILT.md`.
+    """
+    from core.db import wget_for_frame, wset_for_frame
+
+    rid = normalize_region_id(region_id)
+    if not rid:
+        return None
+    stored = normalize_regions(
+        wget_for_frame(cid, REGIONS_KEY, frame_id, {}) or {})
+    entry = dict(stored["items"].get(rid) or {})
+    if not entry:
+        seed = region_registry(cid, frame_id).get(rid) or {}
+        entry = {"name": str(seed.get("name") or region_id), "brief": ""}
+    text = " ".join(str(look or "").split())
+    if text:
+        entry["look"] = text
+    else:
+        entry.pop("look", None)
+    stored["items"][rid] = entry
+    wset_for_frame(cid, REGIONS_KEY, stored, frame_id)
+    return dict(entry)
 
 
 def region_name(registry, region_id):
@@ -511,4 +551,5 @@ __all__ = [
     "normalize_regions", "planned_structure_of", "region_name",
     "region_registry", "registry_room_regions", "registry_row_region",
     "room_pieces", "room_region", "scene_anchors", "scene_rooms",
+    "set_region_look",
 ]

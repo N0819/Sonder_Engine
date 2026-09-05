@@ -255,7 +255,11 @@ second of pure Python; an ordinary two-body scene adds milliseconds.
     exposed from the other, which is right for a screen and meaningless for
     a pillar.
   * **Two doorways on one wall cannot both cast.** The second neighbour whose
-    grid would overlap the first is skipped, and reads as open.
+    grid would overlap the first is skipped, and reads as open. *Half
+    answered 2026-09-04 (`DESIGN_ROOM_FIDELITY.md` §2): with extents, the
+    overlap test reads the neighbours' actual cells, so two small rooms off
+    one long wall both cast when they fit; the layout lint reports the pair
+    that does not.*
   * **The `_visible_features` opt-in is per room.** A room with one geometry
     field on one anchor gets the features sentence for ALL its anchors, so a
     Director that annotates one counter changes what the room's whole view
