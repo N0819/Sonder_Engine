@@ -170,6 +170,22 @@ model. Test: for any two bodies on one composite field,
 `gain_between(a, b) == gain_between(b, a)` to within float tolerance, over the
 courtyard/gate shape (an `open` edge, offset 0.5, width 3, 12x12 against 6x4).
 
+**FIXED (2026-09-05).** `SoundField.gain_between` now picks the field by the
+PAIR and not by whoever is asking: the two rooms sorted, first that can place
+both bodies, laid from the same beat's sources (`SoundField._field_for`). The
+noise stays the listener's own, because a noise floor is a property of where
+a body stands — that is the one thing about a pair that is not shared. Two
+smaller repairs went with it, both found by the brute force: the flood now
+prefers the LOUDER of two equal-length paths (it kept whichever the heap
+reached first, which is not the same path from the two ends), and path
+lengths are compared to a tolerance, because `1 + 1 + 1.4 + 1.4` and
+`1.4 + 1.4 + 1 + 1` are not the same float and the difference was worth
+exactly one occluder factor. Pinned by
+`tests/test_sound_field.py::test_the_gain_between_two_bodies_is_the_same_in_both_directions`,
+which brute-forces every pair of cells of a two-room fixture from both
+fields and both ends, as `tests/test_wall_is_a_line.py` does for a sight
+line.
+
 ### PB3. A diff that touches one anchor deletes the room's other anchors — and takes the post anchors, a cast station, the occluders and the backdrop with it
 **Severity: story-breaking. Recurs F60 (2026-09-05), with four new
 consequences.** Origin: `world/spatial_merge.py` `_merge_anchor_fields`
