@@ -7239,6 +7239,149 @@ pinned in `tests/test_played_scene_classes.py`). Open, each an owner decision:
   two beats and eight quote-matching guards fired falsely (F29); the
   characters cited no delivered observation on most beats (F14).
 
+What the 2026-09-05 geometry run left open
+([`experiments/DEBUG_RUN_2026_09_05.md`](experiments/DEBUG_RUN_2026_09_05.md),
+four chats on an export-built scratch db; F36, F42, F43 fixed the same
+day in `tests/test_played_scene_classes.py`). Each is an owner decision, or a
+patch in a file another hand was editing that day:
+
+- **A transit interior's doorway is derived, and the derivation says nothing
+  when it overrides the Director (F37).** `world/spatial_transit.
+  apply_transit_dock_edges` severs an interior room's exits when the carrier's
+  `transit.phase` is `in_transit`/`sealed` with no `route_room`, and strips
+  any edge the same beat's diff wrote on that room, silently. Chat 115 (copy):
+  the objects hand answered "is this lift going down or up?" with `phase:
+  in_transit, destination_room: null`; the lift lost its only exit, the next
+  beat's Director minted a phantom corridor, the movement was refused as
+  `separated`, the orphan room stayed in the scene, and the story fell down a
+  shaft. Patch: the rewrite returns the edges it stripped and the merge
+  warns once ("edges on an interior room are derived from its carrier's
+  transit record; write the record, not the room"); whether a phase change
+  with no destination should be refused is the owner's.
+- **A new edge written from one side only leaves the far room without the
+  doorway (F38).** `_mirror_symmetric_barriers` mirrors a BARRIER onto an
+  existing reciprocal and, by design, mints no reciprocal for a new edge
+  ("no reciprocal edge to mirror onto"). Chat 114 (copy), turn 4: the
+  spatial hand minted `beach_far_end` with `adjacent: [{to: beach}]` and
+  wrote nothing on the beach, so the mover was refused ("no passable route
+  ... barrier=separated") for a beat. The passage record (§ 2.37) answers
+  it; until then the patch is one branch: when BOTH rooms exist (scene or
+  diff) and the reciprocal is absent, append it with the same barrier.
+  `world/spatial_merge.py` edge code; test on the chat-114 shape.
+- **A station's `cell` outlives the `at` it was pinned with (F39).** Chat
+  115 (copy), turn 4: the resolve moved Sarah Moon from the north panel to
+  the east threshold; the merge kept the map's `cell: [0, 1]` (west wall),
+  and `body_cell` reads the cell first, so every field placed her where the
+  record did not. A fix (a changed `at` drops the cell) was written and
+  reverted: `tests/test_body_cells.py::test_the_merge_keeps_a_station_cell_a_
+  re_echo_left_out` pins the map's pin as outranking a Director `at` on
+  exactly that shape. The two rulings collide on the data; the owner's.
+- **The sky rule darkens a declared-lit room that carries no source entity
+  (F40).** `world/spatial_light.room_light` gives a non-`enclosed` room the
+  sun's light at night regardless of its declared word, because "a lamp is a
+  SOURCE and lives on an entity". Chat 114 (the owner's own turns 9-12 and
+  every beat here): the TARDIS console room, "bathed in amber and greenish
+  light", `light: lit`, `exposure: sheltered`, no source entity, composed
+  "It is dark here." in every view while the narrator wrote amber warmth;
+  the moonlit shore (`dim`) read dark. Two words the Director wrote
+  disagree and nobody is told. Options: a told-once engine notice when the
+  declared word is brighter than the sky and no entity in the room gives
+  light ("mint the source or make the room enclosed"), or the declared
+  word standing where it is brighter until a source exists. The owner's.
+- **The narrator originates the light (F41).** Chat 115 (copy), turn 5:
+  the player asserted the lift's light had gone out; the resolve realised
+  the claim as "observes the console under the interior lamp" (room `lit`,
+  the lamp `lit`); the narrator wrote "the dark hides the controls
+  completely". No fidelity check reads the light words. A clause or a
+  check; the owner's.
+- **Two writers, two vocabularies for an anchor's `dir` (F44).** The
+  Director writes `dir: "c"` (the console at the centre of chat 114's
+  room) and the merge keeps it; the World Browser refuses it ("dir must be
+  one of n..nw"). Either the schema admits a centre or the merge folds "c"
+  to no bearing. `web/world_routes.py`, reserved that day.
+- **The hands write the level and not the shape (F45).** A scenario built
+  to elicit geometry (a corridor that "turns sharply south", "a circular
+  room") produced 0 of 4 rooms with `extent`/`shape`; a torch "throwing a
+  tight beam" got `light_source: lit` and no `light_shape`/`pointed_at`; a
+  candle that "gutters" got `state.guttering: true` and no `steadiness`; a
+  ticking clock got `state.operating: true` and no `sound_source`. The
+  source-class clause yields the level word and the hands invent their own
+  switch words, which no field reads. Prompt work (the clause should say the
+  switch IS `lit`/`running` and the wobble IS `steadiness`); the owner's.
+- **A carried light recorded by position lights from the room's default
+  cell (F46).** The house run: the torch moved with its bearer as a
+  POSITION (`positions.hand_torch: corridor`), never as `held`; the field
+  placed it at the room's entry and the bearer, six cells on, "stood in the
+  dark" holding a lit torch. The objects hand's inventory floor is the fix
+  the owner asked about before; the engine half would be: an unstationed
+  portable source in a body's room with no holder takes the room centre,
+  as a body does.
+- **The Room cannot author geometry (F47).** `plan_rooms` has no `extent`,
+  `shape` or `parts` field (`_shape_plan_rooms` keeps name, purpose,
+  access, adjacent, frontier), so "a round lamp room" and "three paces by
+  twelve" survive only as prose in `purpose`. Add the three fields to the
+  operation, the preview and `OPERATION_FIELDS`, and let the stub carry
+  them into the establish; the owner's.
+- **An unstationed target is seen through the observer's own corner
+  (F48).** `body_visibility` with no cell for the target falls back to the
+  room relation; the house run delivered Mab's acts to Wren at the L's far
+  bar with the parlour doorway behind the corner (`visual_level` was `none`
+  with Mab stationed, `shapes` unstationed). Patch in `world/spatial_fov.py`
+  (reserved that day): an unstationed body takes the room centre for sight
+  as it does for light and sound, so the observer's shape is consulted.
+- **A mover's own pose detail names the room it left (F49).** `invalidate_
+  moved_body_pose_details` leaves the mover's prose alone by rule; "standing
+  near the coat-stand" followed Wren from the corridor into the parlour.
+  Patch: clear the mover's own `detail` when it names, on a word boundary,
+  an anchor of the room it left and none of the room it entered; the
+  owner's, since it narrows a documented rule.
+- **The declared word is a floor, so a lone source cannot show (F50).** A
+  parlour "relieved only by a single candle" declared `dim` composes
+  uniformly dim: the floor equals the candle's peak, the falloff never
+  quantises, the sentence cannot fire. Either the Director writes `dark`
+  for a room lit by one thing, or the floor yields where a source stands.
+- **A region the registry never named is entered as its id (F56).**
+  `PATCH /regions/{id}` on `uminchi_guesthouse` created the entry with
+  `name: "uminchi_guesthouse"`. `world/regions.py`, reserved that day.
+- **A door anchor the hand writes lands by seed, not at the doorway it
+  names (F58).** The spatial hand added `parlour_door` ("the open doorway
+  leading into the corridor", `dir: n`) to a room whose doorway sits at
+  `offset 0.9`; the seed put the anchor three cells from the door the
+  engine's own implicit `door:corridor` anchor marks, and a body stationed
+  "at the sill" spoke from three cells away. `stationable` already lists the
+  implicit anchor; the hands do not use it. Prompt, or fold a hand-written
+  anchor whose desc names an exit onto that exit's implicit anchor.
+- **A diff that adds one anchor drops every anchor the room had (F60).**
+  `_merge_anchor_fields` merges fields of anchors named on both sides and
+  writes the MAP whole by rule; a hand adding a door dropped the host's
+  `side_table` and `armchair` (both `height: waist`) and the room's sound
+  gate with them. Incoming anchors should ADD; a removal should be an
+  explicit channel. `tests/test_world_routes.py` and
+  `test_output_shape_publishes_every_field.py` pin the present rule and
+  would move with it.
+- **One whisper, two grades in one beat (F61).** The act stage's
+  deterministic floor grades speech through `hear_level`'s edge model (same
+  room, whisper, near -> fragment); the outcome's delivery grades it through
+  the field (signal/noise -> full). Same line, same bodies, two answers.
+  The act floor should hand `hear_level` the field the outcome hands it.
+- **The social hand's crowd op is not the schema's (F62).** "crowd op
+  rejected: unknown crowd op 'open'" -- the throng the market scenario named
+  never existed and the square had no crowd noise for the run. The warning
+  is right; the clause should name the ops.
+- **A frontier phrase is minted as a room whose id is the sentence (F63).**
+  F3 refused a bare bearing; "The open sky and rooftop views above the
+  square" became `the_open_sky_and_rooftop_views_above_the_square`, a
+  planned room the structure check reports as a dangling, disconnected
+  edge. A frontier is what lies that way, not a room to mint on the
+  opening.
+- **The Japanese pose sentence is half English (F59).** "youはatthe kitchen
+  tablethe chairの上にseated": subject, posture and prepositions untranslated
+  and unspaced. `language_adapters/japanese.py`, beside the note's known ja
+  gaps.
+- **The export bench captures no Writers' Room call.** Only
+  `agents/runtime.py` records; a Room reply is read from its return value
+  and tool events. Noted, not built.
+
 ### 2.36 The sound field — PROTOTYPE, what is left
 
 Designed and built 2026-09-04 on `writers-room` (not yet on `main`;
