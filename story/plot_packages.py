@@ -1656,7 +1656,7 @@ OPERATION_FIELDS = {
                 "terms?": "what is asked", "clock?": "package clock id"},
     "scheduled_consequence": {"clock": "the package clock it fires on",
                               "summary": "what happens when due", "room?": "<room_id>"},
-    "director_note": {"text": "what the plan MEANS, for the Director alone (prose, at most DIRECTOR_NOTE_CHARS characters)",
+    "director_note": {"text": "what the plan MEANS, for the Director alone (prose, at most DIRECTOR_NOTE_CHARS characters): what a placed thing is and is for, never how a character will take it -- a mind's conclusion is its own",
                       "rooms?": "[<room_id>] -- applies while a cast member is in or beside one of them; absent = everywhere",
                       "clock?": "package clock id (applies once due)"},
     "move_body": {"charter": "charter key", "body": "body key", "room": "<room_id>",
