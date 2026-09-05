@@ -171,6 +171,28 @@ route_scene_placements` before the merge, `apply_scene_placements` inside
 one owner of the room. Bodies are not occluders in the sight model -- anchors
 are -- for cast and townspeople alike.
 
+THE CHARTER ADVANCES EVERY BEAT, by that beat's own elapsed time
+(`charter_runtime.schedule_charter_ticks`, owner ruling 2026-09-05: its whole
+intention is semi-cheap off-screen simulation). THE PAID OFF-SCREEN RUNGS
+REMAIN EPOCH-GATED and must stay so -- `offscreen.schedule_profile_ticks`,
+the stochastic draw and the dormant-actor ticks each cost a model call, and
+`world/offscreen.epoch_reasons` is their gate. The walk has no provider seam
+at all, which is why the epoch (an hour bucket, a location change, a due
+event) was rationing free work: fifteen turns at an inn crossed none of those
+and forty bodies never moved
+(`docs/experiments/PLAY_2026_09_05_caravanserai.md` PB12). Idempotence is the
+beat's own `beat_id`, stamped on the frame's existing `offscreen_epoch` row
+by `advance_epoch` and minted the way the epoch id already is, so a reroll or
+a rerun-from-stage cannot advance the town twice and a beat that IS an epoch
+still advances once. Two bounds, bounding different things and never to be
+conflated: `MAX_CATCHUP_HOURS`/`MAX_PRESIM_HOURS` cap SIMULATED time,
+`CHARTER_BUDGET_SECONDS` caps WALL CLOCK (beat 10.0s -- the owner's cap;
+time_skip 60.0s; presim unbounded), and the context is decided by what the
+beat IS, never by how much elapsed time accumulated. When a budget binds,
+charters furthest behind go first, each records the clock it actually
+reached, and the rest catch up next beat. Full rule and the measured cost:
+`docs/design/DESIGN_INSTITUTIONS_AND_UPKEEP.md` §7a.
+
 Full Charter population/month experiments belong in
 `tools/charter_audit_*.py`, invoked together by `make charter-audit`; default
 pytest checks the mechanism on a small deterministic institution in
