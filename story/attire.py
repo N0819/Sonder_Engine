@@ -72,21 +72,39 @@ _NON_ATTIRE_TERMS = {
 def sanitize_attire_items(items):
     """A wearing list with the non-garments and the repeats taken out.
 
-    Whole-word matching against the phrase, so "glasses" and "tablecloth"
-    survive while "a bottle of wine" and "bottle green coat" both go -- a
-    garment named after an object it is not is the accepted cost of never
-    letting the object itself in. Order is preserved: a wearing list is
-    outermost-first by convention everywhere else in this module, and
-    sorting it would silently relayer somebody.
+    A THING IS REFUSED FOR WHAT IT IS, NOT FOR A WORD INSIDE ITS NAME. The
+    test used to be whole-word matching anywhere in the phrase, and the cost
+    it accepted ("bottle green coat" goes with "a bottle of wine") turned out
+    to be a real garment in a real story: the Salt Terraces run 2026-09-05
+    (PS15) opened with *"tinted glass goggles, pushed up on the hat brim"*,
+    which carries the word `glass`. They were struck out of the wearing list
+    while the diff's own `regions` block still held them, so the reconcile
+    read them as omitted, marked them `removed`, minted
+    `tinted_glass_goggles_..._mireille_adjani` as a shed object on the haul
+    road on the opening beat -- taken off by nobody -- and the player wore no
+    goggles for the rest of the story.
+
+    So the term must be what the phrase is ABOUT: the head noun of its first
+    clause, which is where English puts the thing itself. "a cup", "the
+    wooden chair" and "a glass" are still refused; "tinted glass goggles",
+    "glasses", "tablecloth" and "bottle green coat" are garments and stay.
+    The direction is the one this module keeps everywhere: wrongly holding a
+    thing in a wardrobe is visible and fixable next beat, and wrongly taking
+    a garment off a body is neither.
+
+    Order is preserved: a wearing list is outermost-first by convention
+    everywhere else in this module, and sorting it would silently relayer
+    somebody.
     """
     result = []
     for item in items or []:
         text = str(item).strip()
-        lowered = text.casefold()
         if not text:
             continue
-        if any(re.search(rf"\b{re.escape(term)}\b", lowered)
-               for term in _NON_ATTIRE_TERMS):
+        # The first clause, because a garment name routinely carries a
+        # trailing one that says how it is worn ("..., pushed up on the hat
+        # brim") and the head of THAT is not the thing.
+        if _garment_keys(text.split(",")[0])[1] in _NON_ATTIRE_TERMS:
             continue
         if text not in result:
             result.append(text)
