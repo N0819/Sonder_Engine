@@ -15,7 +15,7 @@
 | `agents/director_contact.py` | 457 |  | `story.character_schema`, `world.spatial` |
 | `agents/director_evidence.py` | 1195 |  | `agents.common`, `agents.director_lingua`, `llm`, `world.spatial` |
 | `agents/director_fanout.py` | 941 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
-| `agents/director_floors.py` | 1870 |  | `agents.common`, `agents.director_lingua`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
+| `agents/director_floors.py` | 1882 |  | `agents.common`, `agents.director_lingua`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
 | `agents/director_lingua.py` | 29 |  | — |
 | `agents/director_movement.py` | 1350 |  | `agents.director_lingua`, `story.character_schema`, `world.spatial` |
 | `agents/director_reconcile.py` | 592 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story`, `world.spatial` |
@@ -318,12 +318,12 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_bind_minted_entities_to_present_figures()` | 1453 | 160 lines |
-| `resolve_concealment_refs()` | 1664 | 104 lines |
+| `_bind_minted_entities_to_present_figures()` | 1453 | 172 lines |
+| `resolve_concealment_refs()` | 1676 | 104 lines |
 | `_awareness_exits()` | 715 | 98 lines |
 | `_release_attempts()` | 973 | 93 lines |
 | `_conditions_view()` | 595 | 87 lines |
-| `strip_addressee_concealment()` | 1790 | 81 lines |
+| `strip_addressee_concealment()` | 1802 | 81 lines |
 | `_narrated_destruction_subjects()` | 1233 | 79 lines |
 | `_unsupported_character_awareness()` | 310 | 66 lines |
 

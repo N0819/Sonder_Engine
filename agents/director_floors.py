@@ -1596,6 +1596,18 @@ def _bind_minted_entities_to_present_figures(sc, sd, figures, *,
                                   "body": chosen["body"]}
         if chosen.get("plan"):
             ent["plan_ref"] = {"uid": str(chosen["plan"])}
+            # A SOURCE THE PLAN AUTHORED IS A SOURCE THE FIELD MUST READ.
+            # `plan_entity` takes `light_source`/`sound_source` and their
+            # shape fields through the same closed tables the World Browser
+            # validates against, and `plan_figure` carries them here -- but
+            # the mint they bind to is written by a model that was never told
+            # about them, so a roar or a lamp the Writers' Room authored
+            # existed on the plan and nowhere the light and sound fields
+            # look. Copied only where the mint has not already said
+            # something: the beat is closer to the fact than the plan is.
+            for key, value in (chosen.get("sources") or {}).items():
+                if str(value or "").strip() and not ent.get(key):
+                    ent[str(key)] = value
         if minted in positions and str(eid) not in positions:
             positions[str(eid)] = positions.pop(minted)
         for d in (dialogue_log or []):
