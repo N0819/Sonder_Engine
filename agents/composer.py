@@ -844,7 +844,8 @@ def soundscape_percept(shape, room_id):
 
 
 def _shape_clauses(shape, prefix, levels):
-    return [_en(prefix + level, items=_join_clauses(group["items"]))
+    return [_en(prefix + level,
+                items=_join_clauses([_noun_phrase(i) for i in group["items"]]))
             for group in shape["groups"] for level in (group["level"],)
             if level in levels]
 
@@ -861,7 +862,11 @@ def render_light_shape(shape):
     parts = []
     clauses = _shape_clauses(shape, "light_at_", LIGHT_SHAPE_LEVELS)
     if clauses:
-        froms = shape["sources"] + shape["openings"]
+        # The sources are entity NAMES and the openings authored descs;
+        # neither carries the pack's determiner ("The light from brass hand
+        # lamp and the opening..." -- F52's last unfixed line, run
+        # 2026-09-05C `solitude` turn 5).
+        froms = [_noun_phrase(f) for f in shape["sources"] + shape["openings"]]
         origin = (_en("light_origin", items=_join_clauses(froms)) if froms
                   else _en("light_origin_none"))
         parts.append(_cap(_en("light_shape", origin=origin,
@@ -881,8 +886,9 @@ def render_sound_shape(shape):
     parts = []
     clauses = _shape_clauses(shape, "sound_at_", SOUND_SHAPE_LEVELS)
     if clauses:
-        froms = shape["sources"] + [_en("sound_beyond_opening", opening=o)
-                                    for o in shape["openings"]]
+        froms = [_noun_phrase(s) for s in shape["sources"]] + [
+            _en("sound_beyond_opening", opening=_noun_phrase(o))
+            for o in shape["openings"]]
         origin = (_en("sound_origin", items=_join_clauses(froms)) if froms
                   else _en("sound_origin_none"))
         parts.append(_cap(_en("sound_shape", origin=origin,
@@ -1236,6 +1242,137 @@ def _part_qualified(scene, text):
     return owner, part
 
 
+#: An engine identifier as it appears inside authored prose: a run of word
+#: characters carrying an underscore. English prose has none, so the shape is
+#: decidable rather than guessed -- this is a closed vocabulary the ENGINE
+#: owns (room uids, entity ids, anchor ids all mint this way), not an attempt
+#: to anticipate how a sentence will be phrased.
+_ID_SHAPED = re.compile(r"(?<![\w])[A-Za-z0-9]+(?:_[A-Za-z0-9]+)+(?![\w])")
+
+
+def _display_for_id(scene, token):
+    """The story's own name for an engine id, or "" when it names nothing.
+
+    Rooms, then entities, then anchors -- the three ledgers whose keys are
+    minted with underscores and therefore the three that can leak one.
+    """
+    rooms = (scene or {}).get("rooms") or {}
+    room = rooms.get(token)
+    if isinstance(room, dict) and str(room.get("name") or "").strip():
+        return str(room["name"]).strip()
+    named = str((_entity_named(scene, token) or {}).get("name") or "").strip()
+    if named:
+        return named
+    for room in rooms.values():
+        anchors = room.get("anchors") if isinstance(room, dict) else None
+        if isinstance(anchors, dict) and isinstance(anchors.get(token), dict):
+            desc = str(anchors[token].get("desc") or "").strip()
+            if desc:
+                return desc
+    return ""
+
+
+def _no_engine_ids(scene, text):
+    """Authored prose with every engine identifier taken out of it.
+
+    THE CLASS: an id is a handle the engine holds, never a word of the story.
+    `_pose_referent` already refuses one where a REFERENT is resolved (step
+    5), and the same string walked straight onto the page through the free
+    prose beside it -- run 2026-09-05C `solitude` turn 1 (PS2): "poised at
+    the brow with one foot on the top step down toward upper_terrace_rim,
+    survey staff planted in a rut."
+
+    An id that names a record renders as that record's own name, which
+    discloses nothing the id did not already carry -- the reader could read
+    `upper_terrace_rim` perfectly well.
+
+    An id that names NOTHING takes its whole clause with it, not just the
+    token: a clause reaching for a record the scene does not hold says
+    nothing, and excising the word alone leaves the reach behind it ("one
+    foot on the step down toward."). The unit is the clause the author's own
+    punctuation marks, so no list of prepositions has to be right -- and
+    where that is the only clause the field simply does not become a
+    percept, which is the subtraction the rest of this module makes
+    everywhere else.
+    """
+    text = str(text or "").strip()
+    if not text or "_" not in text:
+        return text
+
+    def swap(match):
+        # \x00 marks a token that named nothing; the clause holding it goes.
+        return _display_for_id(scene, match.group(0)) or "\x00"
+    parts = re.split(r"\s*([,;])\s*", text)
+    kept = []                       # [(clause, the separator that followed)]
+    for index in range(0, len(parts), 2):
+        clause = _ID_SHAPED.sub(swap, parts[index]).strip()
+        if not clause or "\x00" in clause:
+            continue
+        kept.append((clause,
+                     parts[index + 1] if index + 1 < len(parts) else ""))
+    out = "".join(
+        clause + ((separator or ",") + " " if position < len(kept) - 1 else "")
+        for position, (clause, separator) in enumerate(kept))
+    return " ".join(out.split())
+
+
+def _noun_phrase(text):
+    """One authored description, made fit to SPLICE into a sentence.
+
+    THE CLASS. Anchor descriptions, edge names and light-source labels are
+    authored free text and arrive in three shapes at once: a bare noun
+    ("cistern intake passage"), a phrase carrying its own determiner ("the
+    middle shelf"), and a full capitalised SENTENCE ("Salt-rimed limestone
+    kerbstones dividing the crystallisation pans."). The composer splices all
+    three into the middle of ITS OWN sentences -- a feature list, a way out,
+    where the light falls -- and only the second survives that intact.
+
+    Measured, run 2026-09-05C `solitude` (PS9). Turn 4: "You can see
+    Salt-rimed limestone kerbstones dividing the rectangular crystallisation
+    pans. within arm's reach, The open stone lip of the middle shelf ...
+    across the room." Turn 5: "...thins to half-light at The low
+    cut-limestone arch ... and The massive limestone revetment wall at the
+    far northeast end of the dry basin.." -- two full stops. Turn 20: "There
+    is broad salt-crusted stone steps."
+
+    Three subtractions, each decidable from the pack's own tables and none of
+    them guessing at English:
+
+      * a TERMINAL STOP goes. A phrase inside a list is not a sentence, and
+        the stop that belongs is the one the enclosing template supplies.
+      * a LEADING ARTICLE is lowercased. The pack names its own articles, so
+        a capital on one of them is sentence case and can never be a name.
+        Nothing else is lowered: "Salt-rimed" may be a proper name and this
+        layer has no way to know, so it keeps its capital and its meaning.
+      * a phrase carrying NO determiner takes the pack's, exactly as
+        `_pose_referent` gives one to a bare noun. This is F52's unfixed last
+        line ("from hand torch"), and it was live in three sentence families
+        at once.
+
+    English wording, like the rest of the reference renderer: a pack with no
+    articles and no determiners (`ja`) leaves every branch a no-op.
+    """
+    text = " ".join(str(text or "").split())
+    while text.endswith("."):
+        text = text[:-1].rstrip()
+    if not text:
+        return ""
+    words = text.split()
+    first = words[0].casefold().strip(",.;:")
+    if first in _ARTICLES:
+        words[0] = words[0][:1].lower() + words[0][1:]
+        return " ".join(words)
+    # A support is authored free-text and often arrives with its own
+    # preposition already on it ("on the sill"); `_render_pose` detects that
+    # and declines to add a second one. Prefixing a determiner here would
+    # slip underneath that check and produce "on the on the sill".
+    if (words[0][:1].isupper()
+            or first in _POSE_BARE_DETERMINERS
+            or first in _POSE_PREPOSITIONS):
+        return " ".join(words)
+    return _en("pose_entity", name=" ".join(words))
+
+
 def _pose_referent(scene, observer_name, display_map, co_present, other,
                    *, is_self=False):
     """What a pose is arranged against, rendered as the KIND OF THING it is.
@@ -1325,17 +1462,9 @@ def _pose_referent(scene, observer_name, display_map, co_present, other,
     # of its own ("the far wall", "her shoulder") and is not a proper name,
     # which a capital marks and which "the Marcus" would ruin. The determiner
     # list is language DATA and lives in the compositor card, empty for a
-    # language that takes no article at all.
-    first = text.split()[0].casefold().strip(",.")
-    # A support is authored free-text and often arrives with its own
-    # preposition already on it ("on the sill"); `_render_pose` detects that
-    # and declines to add a second one. Prefixing an article here would slip
-    # underneath that check and produce "on the on the sill".
-    if (text.split()[0][:1].isupper()
-            or first in _POSE_BARE_DETERMINERS
-            or first in _POSE_PREPOSITIONS):
-        return text
-    return _en("pose_entity", name=text)
+    # language that takes no article at all. One rule, shared with every
+    # other place an authored description is spliced into a sentence.
+    return _noun_phrase(text)
 
 
 def _same_referent(scene, a, b):
@@ -1623,6 +1752,11 @@ def pose_percepts(scene, observer_name, co_present, display_map,
         # before it enters the IR.  This applies to OTHER bodies' details too:
         # ``Mara ... squeezing Rhea's hand`` in Rhea's own view must
         # read ``... squeezing your hand``.
+        # AN ENGINE ID IS NOT A WORD OF THE STORY, in the free prose beside a
+        # referent as much as in the referent itself (`_no_engine_ids`; PS2).
+        pose = {f: (_no_engine_ids(scene, pose[f])
+                    if f in _POSE_FREE_TEXT else pose[f])
+                for f in pose}
         data = {"posture": _self_second_person(
             pose["posture"], self_forms) if self_forms else pose["posture"]}
         if level == "full":
@@ -1697,6 +1831,11 @@ def pose_percepts(scene, observer_name, co_present, display_map,
 
 _POSE_RENDER_FIELDS = ("posture", "support", "relative_to", "relation",
                        "constraint", "detail")
+
+#: The pose fields that are authored PROSE rather than a referent. `support`
+#: and `relative_to` are referents and go through `_pose_referent`, which
+#: already refuses an id (step 5); these three reach the page as written.
+_POSE_FREE_TEXT = ("posture", "constraint", "detail")
 
 
 def appearance_percept(source_name, label, description, *, force=False,
@@ -2729,13 +2868,23 @@ _COUNT_WORDS = {
 }
 
 
-def _presence_clause(p):
+def _presence_clause(p, *, brief=False):
     """One body's presence as a bare clause -- no capital, no full stop, so
-    it can stand alone or be joined with others."""
+    it can stand alone or be joined with others.
+
+    `brief` is the same fact at reduced cost, for a body whose presence has
+    not changed since this observer's last view: who they are and where, and
+    none of the qualifying clauses that were already delivered. See
+    `_render_presence_group` for why an unchanged body is still named.
+    """
     room = str(p.data.get("room") or "")
     tier = (_en("presence_in_room", room=room) if room
             else _TIER_PHRASES.get(str(p.data.get("tier")),
                                    _TIER_PHRASES["default"]))
+    if brief:
+        where = str(p.data.get("at") or "").strip()
+        return _en("presence_unchanged", label=p.source_label,
+                   where=_en("presence_at_bare", at=where) if where else tier)
     side = p.data.get("side")
     side_clause = _en("side", side=side) if side in ("left", "right") else ""
     # Relative magnitude qualifies every other clause in the view -- what can
@@ -2775,7 +2924,30 @@ def _join_clauses(clauses):
 def _render_presence_group(percepts):
     """Every co-present body the observer can see, as ONE sentence.
 
-    Three things happen here, and all three are why the corpus replay
+    `percepts` is a list of (percept, brief) pairs. A SENTENCE THAT
+    ENUMERATES WHO IS PRESENT MUST ENUMERATE EVERYONE PRESENT. The player
+    view leads with what changed and suppresses standing state this observer
+    already holds, which is right for a room, a smell or a pose and wrong for
+    this one clause, because presence is delivered in the grammar of a closed
+    conjunctive list -- and a reader cannot tell a delta from a roll-call
+    when both read "A is here, B is here, and C is here."
+
+    Measured, run 2026-09-05C `multitude` turn 1 (PM6): six bodies in the
+    hall, and the player's outcome view read "Maren Vaunt is within arm's
+    reach on your left, Ilsabet Roon is across the room on your left, Corin
+    Ashe is across the room on your left, and Devereux Hallam is within arm's
+    reach." Four names, an `and` before the last, and no Tobin Slake -- who
+    was standing at the doors and was the only person in the room who did
+    nothing that beat. The narrator then named exactly those four. Recurred
+    on turns 4, 7, 8 and 9.
+
+    So an unchanged body is still named, at reduced cost (`brief`): its label
+    and where it is, without the tier, side, size and cover clauses it was
+    already given. The delta survives as EMPHASIS -- what moved is spelled in
+    full and leads the sentence -- rather than as an omission that reads as
+    an absence.
+
+    Three more things happen here, and all three are why the corpus replay
     called the composed prose staccato:
 
     * A room with four people in it produced four sentences of identical
@@ -2792,14 +2964,19 @@ def _render_presence_group(percepts):
 
     Returns [(representative percept, sentence)], at most one per fidelity.
     """
+    pairs = [(p, False) if isinstance(p, Percept) else (p[0], bool(p[1]))
+             for p in percepts or ()]
     out = []
     for fidelity in ("full", "degraded"):
-        group = [p for p in percepts if p.fidelity == fidelity]
+        # What CHANGED is spelled in full and comes first; what merely
+        # persists closes the sentence. Stable within each half.
+        group = [(p, brief) for p, brief in pairs if p.fidelity == fidelity]
+        group = [x for x in group if not x[1]] + [x for x in group if x[1]]
         if not group:
             continue
         clauses, counts = [], {}
-        for p in group:
-            clause = _presence_clause(p)
+        for p, brief in group:
+            clause = _presence_clause(p, brief=brief)
             if clause in counts:
                 counts[clause] += 1
             else:
@@ -2829,7 +3006,7 @@ def _render_presence_group(percepts):
                     + clause[len(singular):].replace(" is ", " are ", 1))
             else:
                 rendered.append(clause)
-        out.append((group[0], _cap(_join_clauses(rendered)) + "."))
+        out.append((group[0][0], _cap(_join_clauses(rendered)) + "."))
     return out
 
 
@@ -2938,6 +3115,9 @@ def _render_pose(p, *, past=False):
 _POSE_PREPOSITIONS = frozenset(_ENGLISH_COMPOSITOR["pose_prepositions"])
 _POSE_BARE_DETERMINERS = frozenset(
     _ENGLISH_COMPOSITOR.get("pose_bare_determiners") or ())
+#: The determiners a leading capital is sentence case on, rather than a name.
+_ARTICLES = frozenset(
+    str(a).casefold() for a in (_ENGLISH_COMPOSITOR.get("articles") or ()))
 
 
 def _feature_items(rows, *, placed=True):
@@ -2953,7 +3133,9 @@ def _feature_items(rows, *, placed=True):
     """
     items = []
     for row in rows or ():
-        desc = str((row or {}).get("desc") or "").strip()
+        # An authored desc is a NOUN PHRASE here, whatever it was written as
+        # (`_noun_phrase`): this list is the inside of one sentence.
+        desc = _noun_phrase((row or {}).get("desc"))
         if not desc:
             continue
         if not placed:
@@ -3007,11 +3189,30 @@ def _render_openings(openings):
     the leak this whole layer has to avoid. And a room beyond that is dark
     arrives as darkness, because you see what is lit.
     """
-    parts = []
+    # TWO BOUNDARIES ARE NEVER ONE SENTENCE TWICE. A way out with no authored
+    # name falls back to its barrier's generic phrasing, so a room with two of
+    # them rendered "The doorway is shut. The doorway is shut." (run
+    # 2026-09-05C `masque`, turn 15, PX20) -- referentially indistinguishable
+    # and reading as a stutter. Describing the second one by where it goes is
+    # exactly what a blind boundary may not do, so the distinguisher is the
+    # one `assign_stranger_labels` already uses for bodies whose appearance
+    # cannot tell them apart: an ordinal, which distinguishes by NOTHING the
+    # observer has not already got -- they can see two doorways, and counting
+    # them adds no attribute and no identity.
+    rows = []
     for opening in openings or ():
-        desc = str((opening or {}).get("desc") or "").strip()
-        if not desc:
-            continue
+        desc = _noun_phrase((opening or {}).get("desc"))
+        if desc:
+            rows.append((opening, desc))
+    total, so_far = {}, {}
+    for _opening, desc in rows:
+        total[desc] = total.get(desc, 0) + 1
+    parts = []
+    for opening, desc in rows:
+        if total[desc] > 1:
+            so_far[desc] = so_far.get(desc, 0) + 1
+            if so_far[desc] > 1:
+                desc = _ordinal_label(desc, so_far[desc])
         state = str(opening.get("state") or "")
         room = str(opening.get("room_name") or "").strip()
         if state == "blind":
@@ -3276,6 +3477,22 @@ def _render_view_english(percepts, *, mode="character",
         seen_dedupe.add(p.dedupe_key)
         verdict = verdicts.get(p.dedupe_key, "first")
         leads = player and leads_the_beat(p, verdict, prev_standing)
+        if p.kind == "presence":
+            # NEVER SUPPRESSED, only shortened. A body that stands still is
+            # still in the room, and the sentence that says who is here is
+            # the one clause in this view whose grammar claims to be
+            # exhaustive (`_render_presence_group`, PM6).
+            #
+            # `standing` is already sorted by _STANDING_ORDER, so
+            # re-inserting the presence group at the first presence position
+            # keeps the discourse order of whichever half it belongs to
+            # intact.
+            presence_group.append(
+                (p, delta and p.dedupe_key in prev_standing))
+            if len(presence_group) == 1:
+                (beat_spans if presence_leads else standing_spans).append(
+                    _PRESENCE_SLOT)
+            continue
         if p.kind == "appearance":
             if (player and not full_render and verdict == "unchanged"
                     and not appearance_delta(p)):
@@ -3294,15 +3511,6 @@ def _render_view_english(percepts, *, mode="character",
             continue
         elif (not full_render and p.dedupe_key in prev_standing
                 and _is_own_body_description(p)):
-            continue
-        # `standing` is already sorted by _STANDING_ORDER, so re-inserting
-        # the presence group at the first presence position keeps the
-        # discourse order of whichever half it belongs to intact.
-        if p.kind == "presence":
-            presence_group.append(p)
-            if len(presence_group) == 1:
-                (beat_spans if presence_leads else standing_spans).append(
-                    _PRESENCE_SLOT)
             continue
         sentence = _render_standing(p)
         # A description the label already carried was delivered without
@@ -3338,6 +3546,16 @@ def _render_view_english(percepts, *, mode="character",
         # The ordering rule itself lives in `player_view_order`, which every
         # pack calls, so the reference renderer cannot drift from one.
         spans = player_view_order(event_spans + beat_spans + standing_spans)
+        # A ROLL-CALL IS ADDED TO A VIEW; IT IS NEVER THE WHOLE OF ONE. The
+        # brief clause above exists so the presence sentence stays honest
+        # about who is in the room, not so it can be a beat's entire content
+        # -- a beat whose only content is that nobody moved has told this
+        # mind nothing, and the empty view is exactly what
+        # `perception._composer_render_observer`'s floor reads before asking
+        # for the background instead (chat 98 turns 13, 15, 16, 20, 21, 36).
+        if (delta and spans and all(brief for _p, brief in presence_group)
+                and all(p.kind == "presence" for p, _s in spans)):
+            spans = []
     else:
         # Discourse rule: a sudden event chain leads; otherwise standing state
         # anchors the view and the beat follows.
