@@ -474,15 +474,18 @@ def delegated_channels() -> list[str]:
 
 
 class TestEveryDelegatedChannelIsNamedAsDelegated:
-    def test_the_engine_owns_thirty_one(self):
+    def test_the_engine_owns_thirty_two(self):
         """Bounds the tests below: a specialist that gains a channel moves
         this count, and the sheet has to move in the same commit. 31 until
         2026-09-04, when `offscreen_plan_ops` left the Director's diff with
         the offscreen hand (a plan is a character's own declaration); 31
         again on 2026-09-05, when the objects hand took `sensory_events` --
         a one-beat signal is an object-world event, and the far field had
-        nothing to carry until one could be written."""
-        assert len(delegated_channels()) == 31
+        nothing to carry until one could be written. 32 later that day, when
+        the social hand took `charter_ops`: the Planner could dispatch an
+        errand through a package and the Director, which owns objective
+        causality and had just narrated the order, could not (PB13)."""
+        assert len(delegated_channels()) == 32
 
     @pytest.mark.parametrize("language", LANGUAGES)
     def test_the_sheet_names_all_of_them(self, language):

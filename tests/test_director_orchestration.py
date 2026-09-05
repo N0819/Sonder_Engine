@@ -2646,6 +2646,10 @@ def test_diff_application_is_order_independent_by_construction():
         "cast_changes", "introductions", "world_facts", "remove_entities",
         "inventory_ops", "artifact_ops", "remove_rooms", "remove_adjacent",
         "crowd_ops", "courier_ops", "telling_ops",
+        # An order lands on the REGISTRY, not the scene: it is routed
+        # out of the diff before the merge and applied inside the
+        # commit, so it reads no other channel's mid-application state.
+        "charter_ops",
         "ratified_claims", "contradicted_claims",
         # Observer evidence is stage metadata applied later to independent
         # Charter minds; it reads no scene-diff channel while assembling.
@@ -2724,6 +2728,11 @@ _UNREACHABLE_BY_DESIGN = {
     "crowd_ops": "traffic ops surface, not a manifest category",
     "courier_ops": "traffic ops surface, not a manifest category",
     "telling_ops": "traffic ops surface, not a manifest category",
+    # An order is a dispatch, not a change this beat's prose asserts: what
+    # the manifest enumerates is what CHANGED, and an errand changes
+    # nothing until the body has walked it, one room at a time, on the
+    # beats after.
+    "charter_ops": "traffic ops surface, not a manifest category",
     # Adjudications of a CARRIED claim, not changes the beat's prose
     # asserts: they answer "was this hearsay true?", which the manifest --
     # an enumeration of what this beat changed -- has nothing to say about.

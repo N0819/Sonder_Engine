@@ -418,6 +418,7 @@ _SUBJECT_OP_CHANNELS = {
     # it. `detail` is what the noise was LIKE and names nothing, so it is
     # not read here.
     "sensory_events": ("room", "source"),
+    "charter_ops": ("body", "to"),
 }
 
 # A manifest subject that names the CHANNEL rather than a body ("contacts",

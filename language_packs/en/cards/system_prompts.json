@@ -205,7 +205,8 @@
         "courier_ops",
         "telling_ops",
         "ratified_claims",
-        "contradicted_claims"
+        "contradicted_claims",
+        "charter_ops"
       ],
       "chunks": {
         "cast_changes": {
@@ -234,6 +235,9 @@
         },
         "contradicted_claims": {
           "$text": "specialists/social/chunks/contradicted_claims.txt"
+        },
+        "charter_ops": {
+          "$text": "specialists/social/chunks/charter_ops.txt"
         }
       },
       "nsfw": false

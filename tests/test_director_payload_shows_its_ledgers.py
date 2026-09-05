@@ -159,6 +159,14 @@ LEDGERS = {
     "crowd_ops": (None, "the crowds table; delivered as `crowds`"),
     "courier_ops": (None, "the couriers table; delivered as `couriers`"),
     "telling_ops": (None, "world events; delivered as `carried_reports`"),
+    # The institution's own ledgers reach this hand through the charter
+    # aperture the payload already carries (`scene_ledger`, the crowd and
+    # figure projections), and the registry is the one owner of who is
+    # employed and where they are standing -- so an errand is written
+    # against what the beat can already see, and lands on the registry
+    # rather than on any scene row.
+    "charter_ops": (None, "the institution's own ledgers; delivered as "
+                          "the charter aperture"),
     "ratified_claims": (None, "background claims; delivered as "
                               "`unratified_claims`"),
     "contradicted_claims": (None, "background claims; delivered as "
