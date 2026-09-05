@@ -345,3 +345,116 @@ def test_a_room_that_is_not_a_step_from_here_is_not_a_leg():
     _guard_approach_is_not_arrival(ctx, _heading(), diff, _corridor(), "Ren")
     assert diff["positions"] == {}
     assert "Approach is not arrival" in ctx.warnings[0]
+
+
+# ===========================================================================
+# 2026-09-05: the geometry run (docs/experiments/DEBUG_RUN_2026_09_05.md),
+# chats 114/115 and two fresh scenarios on an export-built scratch db.
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# F36: the identity floor covers the episode, not only the view
+# ---------------------------------------------------------------------------
+
+def _outcome_ctx():
+    return types.SimpleNamespace(warnings=[])
+
+
+def test_a_strangers_name_in_the_episode_is_repaired_and_reported():
+    """Chat 115 (copy), turn 2: Sarah Moon's VIEW read "standing facing the
+    young woman" after the tripwire and her EPISODE read "standing facing
+    Hinami" -- the body specialist's pose `detail` carried a name she had
+    never been given, and the episode was stored as rendered."""
+    from agents.perception import _scrub_episode_identities
+    ctx = _outcome_ctx()
+    roster = [{"name": "Sarah Moon", "appearance": "a lab coat", "aliases": []},
+              {"name": "Hinami", "appearance": "a young fox-eared woman", "aliases": []}]
+    known = {"Sarah Moon": []}
+    content, gist = _scrub_episode_identities(
+        ctx, "perception_outcome", "Sarah Moon",
+        "I was standing facing Hinami with hands clasped. "
+        "\"Science lady, is this lift going down or up?\"",
+        "I was standing facing Hinami.", known, roster)
+    assert "Hinami" not in content and "Hinami" not in gist
+    assert "the young fox-eared woman" in content
+    assert "Science lady" in content            # quoted spans are untouched
+    assert len(ctx.warnings) == 1
+    assert "episode of Sarah Moon" in ctx.warnings[0]
+    assert "Hinami" in ctx.warnings[0]
+
+
+def test_a_recognised_name_in_the_episode_stands():
+    from agents.perception import _scrub_episode_identities
+    ctx = _outcome_ctx()
+    roster = [{"name": "Sarah Moon", "appearance": "", "aliases": []},
+              {"name": "Hinami", "appearance": "", "aliases": []}]
+    content, gist = _scrub_episode_identities(
+        ctx, "perception_outcome", "Sarah Moon",
+        "I was standing facing Hinami.", "facing Hinami",
+        {"Sarah Moon": ["Hinami"]}, roster)
+    assert content == "I was standing facing Hinami." and gist == "facing Hinami"
+    assert ctx.warnings == []
+
+
+# ---------------------------------------------------------------------------
+# a plan that attaches to a live room from the planned side
+# ---------------------------------------------------------------------------
+
+def test_a_plan_attached_to_a_live_room_from_its_own_side_is_minted(temp_db):
+    """Chat 114 (copy), turns 4-6: the Room planned a lighthouse `adjacent:
+    [{to: beach}]`; the live beach is in no plan and names nothing back, so
+    the fringe never minted the keeper's room, and the Director minted
+    `beach_far_end` beside the plan and filed a need the plan answered."""
+    from world.structure import materialize_planned_fringe
+    cid = temp_db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+                     ("Shore", "", time.time()))
+    plant_structure(cid, {"key": "lighthouse", "name": "Lighthouse"}, {
+        "keeper_room": {"name": "Keeper's Room", "adjacent": [
+            {"to": "beach", "barrier": "open_door", "bearing": "s"},
+            {"to": "lamp_room", "barrier": "open"}]},
+        "lamp_room": {"name": "Lamp Room", "adjacent": [{"to": "keeper_room", "barrier": "open"}]},
+    })
+    scene = {"rooms": {"beach": {"name": "Beach", "adjacent": [
+        {"to": "terrace", "barrier": "open"}]},
+        "terrace": {"name": "Terrace", "adjacent": [{"to": "beach", "barrier": "open"}]}},
+        "positions": {"Hinami": "beach"}, "entities": {}}
+    scene, added = materialize_planned_fringe(cid, scene)
+    assert added == 1
+    assert "keeper_room" in scene["rooms"]
+    assert scene["rooms"]["keeper_room"]["planned"] is True
+    exits = {e["to"]: e for e in scene["rooms"]["beach"]["adjacent"]}
+    assert "keeper_room" in exits and exits["keeper_room"]["barrier"] == "open_door"
+    assert exits["terrace"]["barrier"] == "open"           # the live exit stands
+    assert "lamp_room" not in scene["rooms"]              # two hops: not the fringe
+
+
+def test_a_live_exit_the_room_declared_is_not_overwritten_by_the_plan(temp_db):
+    from world.structure import materialize_planned_fringe
+    cid = temp_db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+                     ("Shore", "", time.time()))
+    plant_structure(cid, {"key": "lighthouse", "name": "Lighthouse"}, {
+        "keeper_room": {"name": "Keeper's Room", "adjacent": [
+            {"to": "beach", "barrier": "closed_door"}]}})
+    scene = {"rooms": {"beach": {"name": "Beach", "adjacent": [
+        {"to": "keeper_room", "barrier": "open_door", "dir": "n"}]},
+        "keeper_room": {"name": "Keeper's Room", "adjacent": [{"to": "beach", "barrier": "open_door"}]}},
+        "positions": {"Hinami": "beach"}, "entities": {}}
+    scene, added = materialize_planned_fringe(cid, scene)
+    assert added == 0
+    assert scene["rooms"]["beach"]["adjacent"] == [
+        {"to": "keeper_room", "barrier": "open_door", "dir": "n"}]
+
+
+# ---------------------------------------------------------------------------
+# an entity named with its determiner takes no second one
+# ---------------------------------------------------------------------------
+
+def test_an_entity_named_with_its_article_is_not_given_another():
+    """Chat 114 (copy), turn 2: "You are standing facing the The TARDIS"."""
+    from agents.composer import _pose_referent
+    scene = {"rooms": {"beach": {"name": "Beach"}},
+             "entities": {"tardis": {"name": "The TARDIS", "kind": "object"},
+                          "console": {"name": "hexagonal console", "kind": "object"}},
+             "positions": {"Hinami": "beach", "tardis": "beach", "console": "beach"}}
+    assert _pose_referent(scene, "Hinami", {}, [], "tardis") == "The TARDIS"
+    assert _pose_referent(scene, "Hinami", {}, [], "console") == "the hexagonal console"

@@ -266,6 +266,29 @@ def materialize_planned_fringe(cid, scene):
         spec = (planned.get(uid) or (None, {}))[1]
         planned_edges = [dict(e) for e in spec.get("adjacent") or ()
                          if isinstance(e, dict) and e.get("to")]
+        # A plan may attach to a room the scene ALREADY HOLDS from the
+        # planned side only: the Room plans a lighthouse "adjacent: [{to:
+        # beach}]" and the live beach, which is in no plan, carries no spec
+        # naming the lighthouse back. Read from the occupied room alone, the
+        # fringe never saw such a neighbour, so the player walked toward a
+        # published plan and the Director minted a stub of its own beside
+        # it and filed a need the plan already answered (chat 114 on a copy,
+        # 2026-09-05, turns 4-6: `beach_far_end` minted, the planned
+        # `lighthouse_keeper_room` never). An edge is one doorway however
+        # many sides declare it, so a planned room whose spec names the
+        # occupied room is that room's planned neighbour too, and the
+        # occupied room receives the reciprocal exit it did not declare.
+        for other_uid, (_name, other_spec) in planned.items():
+            if other_uid == uid or other_uid in rooms:
+                continue
+            for e in other_spec.get("adjacent") or ():
+                if isinstance(e, dict) and str(e.get("to") or "") == uid \
+                        and not any(str(pe.get("to")) == other_uid
+                                    for pe in planned_edges):
+                    planned_edges.append({
+                        "to": other_uid,
+                        **{k: v for k, v in (("barrier", e.get("barrier")),)
+                           if v}})
         targets.update(str(e.get("to")) for e in planned_edges)
         if uid in rooms and planned_edges:
             # The occupied live definition owns prose/physics it declared;

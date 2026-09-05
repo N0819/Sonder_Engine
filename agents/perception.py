@@ -3948,6 +3948,38 @@ def _repaired_observations(observations, view, name, known, roster):
     return out
 
 
+def _scrub_episode_identities(ctx, stage, name, content, gist, known, roster):
+    """The identity floor over the EPISODE -- the first-person memory text
+    minted from the same percepts as the view.
+
+    `_composer_tripwires` runs `_scrub_unknown_identities` over the composed
+    VIEW and stores the repaired text; the episode was rendered from the
+    same IR and stored as rendered, so a stranger's name the view had
+    repaired walked into the character's memory untouched. Measured
+    2026-09-05 (chat 115 on a copy, turn 2): Sarah Moon's view read
+    "standing facing the young woman" after the tripwire, and her episode
+    read "standing facing Hinami" -- a name she had never been given,
+    carried in by the body specialist's pose `detail`, now retrievable by
+    every later beat as her own memory. A leak into memory is the worse
+    one: a view lasts a beat, a memory is cited for the rest of the story.
+    Same inputs, same repair, same warning shape; the substitution is the
+    observer's own descriptor for that body, outside quoted spans only."""
+    recognized, unknown = _composer_unknown_sources(name, known, roster)
+    if not unknown:
+        return content, gist
+    allowed = [name, *recognized]
+    content, leaked = _scrub_unknown_identities(
+        content, allowed_forms=allowed, unknown_sources=unknown)
+    gist, leaked_gist = _scrub_unknown_identities(
+        gist, allowed_forms=allowed, unknown_sources=unknown)
+    if leaked or leaked_gist:
+        ctx.warnings.append(
+            f"{stage}: COMPOSER TRIPWIRE -- unearned identity "
+            f"{sorted(set(leaked) | set(leaked_gist))} reached the episode of "
+            f"{name} and was repaired before it became memory (engine defect)")
+    return content, gist
+
+
 def _composer_finish_observer(ctx, stage, pid, name, rendered, known, roster,
                               clean_views, observations, ledger, *,
                               spoken_lines=None, seen=None):
@@ -4903,6 +4935,9 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
             content, gist, entities = composer.render_episode(
                 percepts, prev_standing=prev_standing,
                 prev_described=prev_described, language=ctx.language)
+            content, gist = _scrub_episode_identities(
+                ctx, "perception_outcome", name, content, gist, known,
+                ident_roster)
             episodes[pid] = content
             episode_meta[pid] = {"gist": gist, "entities": entities}
     merged = dict(base_ledger)
