@@ -671,10 +671,31 @@ legitimately perceive, learn, remember or infer.
   secrets only certain people know.
 - **World Browser** — Behind 🌍 and 👕: one dialog, three tabs, and every
   field it shows is edited where it is shown. **Rooms** (🌍 opens here) is
-  a tree of every room the story knows (where the cast stands first, then
-  what they can reach, then the plan's rooms nobody can reach yet, retired
-  ids folded away; a room inside a body nested under its holder's) and the
-  chosen room's card: its name, description and notes as text; light, size
+  a **map editor** on the left and the chosen room's card on the right.
+  The map is the room's grid as the engine computes it — its cells to
+  scale with the shape's boundary, each anchor on its footprint cells with
+  its id and a height mark, each body as a marked cell with a facing tick
+  (a body with no station stands in a lane below the room), each doorway
+  a gap in the wall with the neighbour's name beyond it, the neighbours'
+  own cells drawn faintly where the engine lays them, and the layout
+  lint's rows drawn at the thing they concern. **Click opens the fields:**
+  an anchor, a doorway, a body, a thing or a lint mark scrolls the card to
+  its editor row and puts the cursor in it. **Drag places:** an anchor
+  dragged to a wall takes that wall and an exact place along it (dragged
+  into the room, it loses its wall and is placed by seed again); a
+  doorway dragged along its wall moves on both rooms' edges at once; a
+  body dropped on a cell is re-stationed there (at the anchor whose cell
+  it is, or free in the room), and dropped in a neighbour's cells is
+  moved to that room. "All rooms" zooms out to every room placed by
+  bearing — each as its box, exits as ticks on the wall they open in, a
+  room the bearings land on another drawn on it in red rather than hidden
+  — and clicking a room zooms back in. Every edit is an authored fact: no
+  Director call, no memory of a step. The tree of every room the story
+  knows (where the cast stands first, then what they can reach, then the
+  plan's rooms nobody can reach yet, retired ids folded away; a room
+  inside a body nested under its holder's) is folded open beneath the map,
+  so a planned room, which has no grid, is still a click away. The card:
+  its name, description and notes as text; light, size
   and exposure as menus over the engine's own words; its measurement — an
   extent in paces (both sides, within the engine's range), a shape
   (rectangle, round, L) and for an L its parts (each a rectangle at a
