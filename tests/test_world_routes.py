@@ -1340,3 +1340,173 @@ class TestOffset:
         assert "bar" not in merged["anchors"]
         merged = _merge_room(existing, {"anchors": {}}, "r")
         assert merged["anchors"]["bar"]["offset"] == 0.75
+
+
+class TestCells:
+    """`cell` on a station and on an anchor -- the map editor's placement on
+    ANY cell (the owner, 2026-09-04: "why are characters and personas
+    locked to stations?"; "I can only place anchors at stations when I
+    don't wall-attach them"). The engine's side is `tests/test_body_cells.py`;
+    here, the routes: a cell lands, is refused outside naming the bounds,
+    clears, is exclusive with an anchor's offset, and is reported with its
+    source by the grid."""
+
+    def test_a_station_cell_lands_and_the_grid_says_so(self, client, story, temp_db):
+        cid = story["chat_id"]
+        _lay_out(temp_db, cid)
+        r = client.put(f"/api/chats/{cid}/bodies/Alice/station",
+                       json={"at": None, "near": [], "cell": [5, 2]})
+        assert r.status_code == 200, r.text
+        assert r.json()["station"] == {"at": None, "near": [], "cell": [5, 2]}
+        assert _scene(temp_db, cid)["stations"]["Alice"] == {"at": None, "near": [], "cell": [5, 2]}
+        alice = client.get(f"/api/chats/{cid}/rooms/kitchen/grid").json()["bodies"]["Alice"]
+        assert alice["cell"] == [5, 2] and alice["measured"] is True
+        assert alice["source"] == "cell" and alice["at"] is None
+        # `at` and `cell` together: the anchor for prose, the cell for geometry.
+        r = client.put(f"/api/chats/{cid}/bodies/Alice/station",
+                       json={"at": "hearth", "near": [], "cell": [5, 2]})
+        assert r.status_code == 200, r.text
+        alice = client.get(f"/api/chats/{cid}/rooms/kitchen/grid").json()["bodies"]["Alice"]
+        assert alice == {**alice, "cell": [5, 2], "at": "hearth", "source": "cell"}
+
+    def test_the_grid_reports_an_anchor_derived_cell_and_none(self, client, story, temp_db):
+        cid = story["chat_id"]
+        _lay_out(temp_db, cid)
+        view = client.get(f"/api/chats/{cid}/rooms/kitchen/grid").json()
+        assert view["bodies"]["Alice"]["source"] == "anchor"        # at the hearth
+        view = client.get(f"/api/chats/{cid}/rooms/hallway/grid").json()
+        assert view["bodies"]["Bob"]["source"] == "none"
+
+    def test_a_cell_outside_the_room_is_refused_naming_the_bounds(
+            self, client, story, temp_db):
+        cid = story["chat_id"]
+        _lay_out(temp_db, cid)                                          # 8 by 4
+        for cell in ([8, 0], [0, 4], [-1, 0], [3, 9]):
+            r = client.put(f"/api/chats/{cid}/bodies/Alice/station",
+                           json={"at": None, "near": [], "cell": cell})
+            assert r.status_code == 400, cell
+            assert "8 by 4" in r.json()["detail"] and "0..7" in r.json()["detail"]
+        for junk in ("3,2", [3], [1.5, 2], True, {"x": 3}):
+            r = client.put(f"/api/chats/{cid}/bodies/Alice/station",
+                           json={"at": None, "near": [], "cell": junk})
+            assert r.status_code == 400, junk
+            assert "[x, y]" in r.json()["detail"]
+        # Nothing landed.
+        assert "cell" not in _scene(temp_db, cid)["stations"]["Alice"]
+
+    def test_a_cell_off_the_shape_is_refused_too(self, client, story, temp_db):
+        """An L's notch is in the box and not in the room."""
+        cid = story["chat_id"]
+        _lay_out(temp_db, cid, shape="l",
+                 parts=[{"w": 8, "d": 2, "at": "nw"}, {"w": 2, "d": 4, "at": "ne"}])
+        r = client.put(f"/api/chats/{cid}/bodies/Alice/station",
+                       json={"at": None, "near": [], "cell": [0, 3]})
+        assert r.status_code == 400
+        assert "shape keeps" in r.json()["detail"]
+        r = client.put(f"/api/chats/{cid}/bodies/Alice/station",
+                       json={"at": None, "near": [], "cell": [7, 3]})
+        assert r.status_code == 200, r.text
+
+    def test_null_or_absent_clears_the_cell_and_cover_rides_through(
+            self, client, story, temp_db):
+        cid = story["chat_id"]
+        _lay_out(temp_db, cid)
+        scene = _scene(temp_db, cid)
+        scene["stations"]["Alice"] = {"at": "hearth", "near": [], "cell": [5, 2], "cover": True}
+        temp_db.wset(cid, "scene", scene)
+        r = client.put(f"/api/chats/{cid}/bodies/Alice/station",
+                       json={"at": "hearth", "near": [], "cell": None})
+        assert r.status_code == 200, r.text
+        assert _scene(temp_db, cid)["stations"]["Alice"] == {"at": "hearth", "near": [],
+                                                              "cover": True}
+        client.put(f"/api/chats/{cid}/bodies/Alice/station",
+                   json={"at": "hearth", "near": [], "cell": [5, 2]})
+        r = client.put(f"/api/chats/{cid}/bodies/Alice/station",
+                       json={"at": "hearth", "near": []})
+        assert r.status_code == 200, r.text
+        assert "cell" not in _scene(temp_db, cid)["stations"]["Alice"]
+
+    def test_the_player_is_pinned_within_her_room_like_the_cast(
+            self, client, story, temp_db):
+        cid = story["chat_id"]
+        r = client.put(f"/api/chats/{cid}/bodies/Nathan/station",
+                       json={"at": None, "near": [], "cell": [1, 1]})
+        assert r.status_code == 200, r.text
+        assert _scene(temp_db, cid)["stations"]["Nathan"]["cell"] == [1, 1]
+        view = client.get(f"/api/chats/{cid}/rooms/study/grid").json()
+        assert view["bodies"]["Nathan"] == {**view["bodies"]["Nathan"], "cell": [1, 1],
+                                            "kind": "player", "source": "cell"}
+
+    def test_a_body_moved_between_rooms_loses_its_cell(self, client, story, temp_db):
+        """The cast editor's position route drops the pin: a cell is in the
+        old room's coordinates. The map re-pins in the new room afterwards
+        with its own station PUT, as `moveBody` chains them."""
+        cid = story["chat_id"]
+        _lay_out(temp_db, cid)
+        client.put(f"/api/chats/{cid}/bodies/Alice/station",
+                   json={"at": None, "near": [], "cell": [5, 2]})
+        r = client.put(f"/api/chats/{cid}/characters/{story['Alice']}/position",
+                       json={"room": "hallway"})
+        assert r.status_code == 200, r.text
+        station = _scene(temp_db, cid)["stations"]["Alice"]
+        assert "cell" not in station
+        assert client.get(f"/api/chats/{cid}/rooms/hallway/grid").json()["bodies"]["Alice"]["cell"] is None
+        # The same room again is not a move.
+        client.put(f"/api/chats/{cid}/bodies/Alice/station",
+                   json={"at": None, "near": [], "cell": [2, 2]})
+        client.put(f"/api/chats/{cid}/characters/{story['Alice']}/position",
+                   json={"room": "hallway"})
+        assert _scene(temp_db, cid)["stations"]["Alice"]["cell"] == [2, 2]
+
+    def test_an_anchor_cell_lands_clears_and_is_exclusive_with_offset(
+            self, client, story, temp_db):
+        cid = story["chat_id"]
+        _lay_out(temp_db, cid)
+        grid_of = lambda: client.get(f"/api/chats/{cid}/rooms/kitchen/grid").json()
+        seeded = grid_of()["anchors"]["oak_table"]["cells"]
+        assert grid_of()["anchors"]["oak_table"]["source"] == "seed"
+        anchors = {"hearth": {"desc": "the hearth", "dir": "w", "height": "waist"},
+                   "oak_table": {"desc": "the oak table", "footprint": "large",
+                                 "height": "waist", "cell": [4, 1]}}
+        r = client.patch(f"/api/chats/{cid}/rooms/kitchen", json={"anchors": anchors})
+        assert r.status_code == 200, r.text
+        stored = _scene(temp_db, cid)["rooms"]["kitchen"]["anchors"]["oak_table"]
+        assert stored["cell"] == [4, 1] and "offset" not in stored
+        table = grid_of()["anchors"]["oak_table"]
+        # A large footprint laid from its origin: 2 by 2, east and south.
+        assert table["cells"] == [[4, 1], [4, 2], [5, 1], [5, 2]]
+        assert table["source"] == "cell" and table["cell"] == [4, 1]
+        # A cell and an offset together: the cell wins and the offset is not kept.
+        anchors["hearth"] = {**anchors["hearth"], "offset": 0.5, "cell": [2, 2]}
+        r = client.patch(f"/api/chats/{cid}/rooms/kitchen", json={"anchors": anchors})
+        assert r.status_code == 200, r.text
+        hearth = _scene(temp_db, cid)["rooms"]["kitchen"]["anchors"]["hearth"]
+        assert hearth["cell"] == [2, 2] and "offset" not in hearth
+        assert hearth["dir"] == "w"                       # the wall stays, for prose
+        view = grid_of()["anchors"]["hearth"]
+        assert view["cells"] == [[2, 2]] and view["source"] == "cell" and view["dir"] == "w"
+        # An offset with the cell cleared: placed along the wall again.
+        anchors["hearth"] = {"desc": "the hearth", "dir": "w", "height": "waist",
+                             "offset": 0.0, "cell": None}
+        r = client.patch(f"/api/chats/{cid}/rooms/kitchen", json={"anchors": anchors})
+        assert r.status_code == 200, r.text
+        hearth = _scene(temp_db, cid)["rooms"]["kitchen"]["anchors"]["hearth"]
+        assert "cell" not in hearth and hearth["offset"] == 0.0
+        assert grid_of()["anchors"]["hearth"]["source"] == "offset"
+        # Clearing the table's cell returns it to the seed, byte for byte.
+        anchors["oak_table"] = {"desc": "the oak table", "footprint": "large",
+                                "height": "waist", "cell": None}
+        client.patch(f"/api/chats/{cid}/rooms/kitchen", json={"anchors": anchors})
+        assert grid_of()["anchors"]["oak_table"]["cells"] == seeded
+        assert grid_of()["anchors"]["oak_table"]["source"] == "seed"
+
+    def test_an_anchor_cell_outside_the_room_is_refused_naming_the_bounds(
+            self, client, story, temp_db):
+        cid = story["chat_id"]
+        _lay_out(temp_db, cid)
+        for cell in ([8, 1], [2, 4], "2,2", [2]):
+            r = client.patch(f"/api/chats/{cid}/rooms/kitchen", json={"anchors": {
+                "hearth": {"desc": "the hearth", "dir": "w", "cell": cell}}})
+            assert r.status_code == 400, cell
+            assert "hearth" in r.json()["detail"]
+        assert "cell" not in _scene(temp_db, cid)["rooms"]["kitchen"]["anchors"]["hearth"]

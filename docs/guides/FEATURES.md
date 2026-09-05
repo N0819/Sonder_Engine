@@ -683,10 +683,16 @@ legitimately perceive, learn, remember or infer.
   its editor row and puts the cursor in it. **Drag places:** an anchor
   dragged to a wall takes that wall and an exact place along it (dragged
   into the room, it loses its wall and is placed by seed again); a
-  doorway dragged along its wall moves on both rooms' edges at once; a
-  body dropped on a cell is re-stationed there (at the anchor whose cell
-  it is, or free in the room), and dropped in a neighbour's cells is
-  moved to that room. "All rooms" zooms out to every room placed by
+  doorway dragged along its wall moves on both rooms' edges at once; an
+  anchor dropped on any other cell is pinned to it (its wall and place
+  along it let go; the card shows the cell beside the wall, with a
+  clear); a body dropped on ANY cell is pinned to that cell (and stands
+  at the anchor whose cell it is, when it is one), the player and a
+  promoted presence as much as the cast, and dropped in a neighbour's
+  cells is moved to that room and pinned where it landed there. A pinned
+  body is measured: sight, cover and distance read its cell, and two
+  pinned bodies are within reach at one pace, near within a third of the
+  room, across beyond. "All rooms" zooms out to every room placed by
   bearing — each as its box, exits as ticks on the wall they open in, a
   room the bearings land on another drawn on it in red rather than hidden
   — and clicking a room zooms back in. Every edit is an authored fact: no

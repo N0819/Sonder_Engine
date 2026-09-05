@@ -536,6 +536,102 @@ def normalize_offset(value) -> Optional[float]:
     return number
 
 
+def normalize_cell(value) -> Optional[tuple]:
+    """A cell of a room's own grid -- `[x, y]`, two whole numbers in the
+    coordinates `room_grid` lays the room out in -- as an `(x, y)` tuple, or
+    None when the value is not that. Authored by the World Browser's map
+    (the owner dragging bodies and anchors onto plain cells, 2026-09-04),
+    never asked of the Director: `llm.schemas._coerce_station_table` keeps
+    only `at`/`near`, so the Director cannot write one. None is today's
+    derivation (`spatial_fov.body_cell`, `spatial_fov._place_anchors`), so a
+    station or anchor that never carried the field lands exactly where it
+    always did. A boolean is not a coordinate; prose is not a coordinate; a
+    single number or three are not a cell. Whether the cell lies INSIDE the
+    room is the reader's question, not this one's: a cell the room's extent
+    or shape has since moved out from under snaps to the nearest cell it
+    still holds (`RoomGrid.nearest`, ties to the smaller coordinates).
+    `docs/design/DESIGN_ROOM_FIDELITY.md` §10."""
+    if isinstance(value, (str, bytes, dict)) or not isinstance(value, (list, tuple)):
+        return None
+    if len(value) != 2:
+        return None
+    out = []
+    for part in value:
+        if isinstance(part, bool):
+            return None
+        if isinstance(part, float):
+            if part != part or part != int(part):
+                return None
+            part = int(part)
+        if not isinstance(part, int):
+            return None
+        out.append(part)
+    return (out[0], out[1])
+
+
+def normalize_scene_anchor_cells(scene: dict) -> list:
+    """Anchor-cell hygiene, run at merge and on every World Browser write:
+    an anchor's `cell` is kept as `[x, y]` (two whole numbers, as
+    `normalize_cell` reads it) and dropped otherwise. The same rule
+    `normalize_scene_stations` applies to a station's `cell`. Returns
+    [(room_id, anchor_id)] for what was dropped; mutates."""
+    dropped = []
+    rooms = (scene or {}).get("rooms")
+    if not isinstance(rooms, dict):
+        return dropped
+    for room_id, room in rooms.items():
+        anchors = room.get("anchors") if isinstance(room, dict) else None
+        if not isinstance(anchors, dict):
+            continue
+        for aid, anchor in anchors.items():
+            if not isinstance(anchor, dict) or "cell" not in anchor:
+                continue
+            cell = normalize_cell(anchor.get("cell"))
+            if cell is None:
+                anchor.pop("cell", None)
+                dropped.append((str(room_id), str(aid)))
+            else:
+                anchor["cell"] = [cell[0], cell[1]]
+    return dropped
+
+
+def invalidate_moved_body_cells(scene: dict, previous_positions) -> list:
+    """Drop the station `cell` of every body whose ROOM changed this beat.
+
+    The precedent is `invalidate_moved_body_pose_details`, one field over:
+    a cell is `[x, y]` in the coordinates of ONE room's grid, so in another
+    room it names nothing -- a body pinned to the hearth's corner of the
+    kitchen would otherwise stand at the same numbers in the hallway, which
+    is a place nobody chose. `normalize_scene_stations` already blanks the
+    `at` a room change strands (the old anchor fails its membership test in
+    the new room); a cell has no membership test to fail, so it is compared
+    against where the body WAS. The owner's map (2026-09-04) drops a body
+    into a neighbour's cells by moving the room and then writing a fresh
+    cell in the new room's coordinates, so the map's own path never trips
+    this; a Director beat that moves a pinned body does.
+
+    `previous_positions` is the room map as it stood BEFORE this beat's
+    merge. A body absent from it is newly placed rather than moved, and
+    nothing is dropped for it. Returns [(name, from_room, to_room)];
+    mutates."""
+    stations = (scene or {}).get("stations")
+    positions = (scene or {}).get("positions")
+    if not isinstance(stations, dict) or not isinstance(positions, dict) \
+            or not isinstance(previous_positions, dict):
+        return []
+    moved = []
+    for name, station in stations.items():
+        if not isinstance(station, dict) or "cell" not in station:
+            continue
+        now = _ci_get(positions, name)
+        was = _ci_get(previous_positions, name)
+        if not was or not now or str(was) == str(now):
+            continue
+        station.pop("cell", None)
+        moved.append((str(name), str(was), str(now)))
+    return moved
+
+
 def size_from_extent(extent) -> Optional[str]:
     """The size tier an extent implies, or None when there is no extent.
 
@@ -654,6 +750,49 @@ def guessed_room_sizes(scene: dict, prev_scene: dict = None) -> list[dict]:
     return sorted(out, key=lambda r: (-r["occupants"], r["room"]))
 
 
+#: Cell-distance proximity, for a pair the World Browser's map has PINNED.
+#: Two bodies whose cells are at most this far apart (Chebyshev -- a diagonal
+#: neighbour counts) are within reach: one pace, an arm's length on the
+#: engine's grid. Owner-visible; raise it and touching needs no adjacency.
+CELL_REACH_PACES = 1
+#: ...and a pair closer than the room's longer side divided by this is `near`
+#: (a third of the room), anything further `across`. The anchor-tier rule
+#: below never says `across` in a room smaller than `large`; this one can,
+#: because it has a measurement rather than a tier.
+CELL_NEAR_DIVISOR = 3
+
+
+def _cell_proximity(scene: dict, room_id, observer: str, target: str) -> Optional[str]:
+    """The one-sentence cell rule (`docs/design/DESIGN_ROOM_FIDELITY.md`
+    §10): when at least one of the pair stands on an AUTHORED `cell` and
+    both stand on a cell, within_reach is a distance of at most
+    `CELL_REACH_PACES`, near is under a `CELL_NEAR_DIVISOR`th of the room's
+    longer side, else across. None when the rule does not apply, which is
+    every pair no host has pinned -- so every anchor-tier answer below is
+    byte for byte what it was (the owner's condition for touching
+    proximity at all, 2026-09-04). Deliberately NOT "whenever both bodies
+    derive a cell": two bodies at two anchors derive cells too, and sixteen
+    test files pin the tier rule for them.
+    """
+    if normalize_cell(effective_station(scene, observer).get("cell")) is None \
+            and normalize_cell(effective_station(scene, target).get("cell")) is None:
+        return None
+    # Deferred: `spatial_fov` imports this module's station readers, and a
+    # top-level import back would be the cycle `tools/project_check.py`
+    # refuses; an import inside the function is the pattern it allows.
+    from world.spatial_fov import body_cell, room_grid
+    o_cell = body_cell(scene, observer)
+    t_cell = body_cell(scene, target)
+    if not o_cell or not t_cell:
+        return None
+    distance = max(abs(o_cell[0] - t_cell[0]), abs(o_cell[1] - t_cell[1]))
+    if distance <= CELL_REACH_PACES:
+        return "within_reach"
+    if distance * CELL_NEAR_DIVISOR < room_grid(scene, room_id).side:
+        return "near"
+    return "across"
+
+
 def proximity_rel(scene: dict, observer: str, target: str) -> Optional[str]:
     """Within-room proximity tier between two entities: 'within_reach' | 'near'
     | 'across', or None when they are not co-located. within_reach: same anchor,
@@ -671,6 +810,9 @@ def proximity_rel(scene: dict, observer: str, target: str) -> Optional[str]:
     t_room = room_of(scene, target)
     if not o_room or o_room != t_room:
         return None
+    measured = _cell_proximity(scene, o_room, observer, target)
+    if measured is not None:
+        return measured
     o_st = effective_station(scene, observer)
     t_st = effective_station(scene, target)
     o_at, t_at = o_st.get("at"), t_st.get("at")
@@ -711,6 +853,10 @@ def measured_proximity_rel(scene: dict, observer: str, target: str) -> Optional[
         return tier
     if effective_station(scene, observer).get("at") \
             and effective_station(scene, target).get("at"):
+        return tier
+    # A cell-rule "near" is a measurement too: it came from two cells.
+    o_room = room_of(scene, observer)
+    if o_room and _cell_proximity(scene, o_room, observer, target) == "near":
         return tier
     return None
 
@@ -848,6 +994,15 @@ def normalize_scene_stations(scene: dict) -> dict:
             st["at"] = None
         st["near"] = [n for n in (st.get("near") or [])
                       if _ci_get(positions, n) is not None and _ci_get(positions, n) == my_room]
+        # `cell`: kept as two whole numbers, dropped as anything else. Its
+        # room-change invalidation is `invalidate_moved_body_cells`, which
+        # needs the previous positions this function does not see.
+        if "cell" in st:
+            cell = normalize_cell(st.get("cell"))
+            if cell is None:
+                st.pop("cell", None)
+            else:
+                st["cell"] = [cell[0], cell[1]]
 
     for name, st in list(stations.items()):
         for other in list(st.get("near") or []):

@@ -4582,11 +4582,27 @@ def chat_char_position_put(cid: int, ch: int, body: dict = Body(...),
             key for key in positions
             if folded_name and fold_identity_key(key) == folded_name
         ]
+        was = {positions.get(key) for key in existing_keys} - {None, ""}
         for key in existing_keys:
             positions.pop(key)
 
         if room:
             positions[name] = room
+
+        # A station `cell` (the World Browser's map pin, 2026-09-04) is in
+        # the OLD room's grid coordinates and means nothing in the new one,
+        # so a change of room drops it -- the rule the merge applies through
+        # `invalidate_moved_body_cells`, applied here because this route
+        # writes the scene without the merge. The stale `at` is left as it
+        # is: `body_cell` fails open on an anchor the new room lacks, and the
+        # next merge's station hygiene blanks it, as before.
+        if was != ({room} if room else set()):
+            stations = scene.get("stations")
+            if isinstance(stations, dict):
+                for key, station in stations.items():
+                    if folded_name and fold_identity_key(key) == folded_name \
+                            and isinstance(station, dict):
+                        station.pop("cell", None)
 
         wset(cid, "scene", scene)
     return {"ok": True, "name": name, "room": room or None}
