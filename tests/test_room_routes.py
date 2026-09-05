@@ -182,6 +182,34 @@ def test_a_seated_planner_answers_in_its_own_voice_and_the_dramaturges(client, t
     assert client.get(f"/api/chats/{cid}/room").json()["seated"] is True
 
 
+def test_the_wire_carries_what_the_reply_stated(client, temp_db, unseated):
+    """Transport, and the whole of what this file owes the contract: the
+    verdicts reach the panel through BOTH routes, or a demotion is a thing
+    only the server ever knew about (`story/room_citations.py`)."""
+    from story import room_citations as cite
+    cid = _chat(temp_db)
+
+    def planner(chat_id, frame_id, text, **kw):
+        cite.note_reads("inspect_packages",
+                        {"packages": [{"uid": "plot:road"}]})
+        return {"reply": "A road is planned; a bridge may follow.",
+                "claims": [
+                    {"text": "A road is planned", "cites": ["plot:road"]},
+                    {"text": "A bridge is planned", "cites": ["plot:bridge"]}]}
+
+    room.seat_planner(planner)
+    out = client.post(f"/api/chats/{cid}/room/messages",
+                      json={"text": "A road, please."}).json()
+    assert out["citations"]["asserted"] == ["A road is planned"]
+    assert out["citations"]["unsupported"] == ["A bridge is planned"]
+
+    body = client.post(f"/api/chats/{cid}/room/messages/stream",
+                       json={"text": "And the bridge?"}).text
+    done = json.loads(body.strip().splitlines()[-1])
+    assert done["type"] == "room_done"
+    assert done["citations"]["unsupported"] == ["A bridge is planned"]
+
+
 def test_a_planner_that_fails_leaves_the_note_and_reports(client, temp_db, unseated):
     cid = _chat(temp_db)
 

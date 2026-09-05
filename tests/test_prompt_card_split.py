@@ -48,7 +48,9 @@ LANGUAGES = ("en", "ja")
 #: BOTH lost the same file. It moves when a prompt or fragment is added, and
 #: the move belongs in the same commit as the addition.
 #: 111 at the split (2026-08-29); 112 since `card_person_note` (2026-08-30).
-PART_COUNT = 114   # +1 (2026-09-04): 27_author_notes.txt, the prose author's
+PART_COUNT = 115   # +1 (2026-09-05): the objects hand's sensory_events chunk,
+                   # the channel a one-beat signal is written in;
+                   # +1 (2026-09-04): 27_author_notes.txt, the prose author's
                    # duty chunk for the Writers' Room's `author_notes` (the
                    # output shape moved to 28.txt);
                    # +1 (2026-09-01): director_note.txt, the specialists' one

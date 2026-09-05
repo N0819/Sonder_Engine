@@ -725,9 +725,11 @@ turn 6). `inspect_minds` returned Halvard's authored tier beside the ledger
 *Could not.* **Author geometry (F47 recurs).** I asked for "about four paces
 wide and twenty long"; `plan_rooms` has no `extent`/`shape`/`parts`, so the
 measurement landed as prose inside `purpose` and the room, when it
-materialises, will be the tier's square. *(Answered 2026-09-05: the
-operation takes `extent`, `shape` and `exposure`; `world/structure.py` still
-drops the three between the plan and the scene.)* **Report the charter accurately**:
+materialises, will be the tier's square. *(RESOLVED 2026-09-05: the
+operation takes `extent`, `shape` and `exposure`, and
+`structure.planned_geometry` carries them through the three points that
+rebuild a planned room -- so a stall range asked for four by twenty
+materialises at four by twenty, not at the tier's square.)* **Report the charter accurately**:
 `inspect_charters` returns 24 of 40 bodies (`bodies_truncated: 16`) as
 `{key, name, place, berth, available}` with **no post, no watch, no station**
 — so the Room reported the innkeeper as "Orhan Vesk" (the gate warden), the

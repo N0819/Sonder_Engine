@@ -742,13 +742,16 @@ sees tool NAMES and no answers. Its calls are not captured at all
 payload design I most wanted to read is the one I could not.
 
 > **Answered 2026-09-05.** Geometry: `plan_rooms` takes `extent`, `shape`
-> and `exposure` (F47, narrowed -- `world/structure.py` still drops the
-> three between plan and scene). The way up: `adjacent` takes
+> and `exposure`, and `structure.planned_geometry` carries them into the
+> live scene (F47 CLOSED later the same day; the three rebuild points had
+> been dropping them). The way up: `adjacent` takes
 > `vertical: up|down` and moves a vertical word out of `bearing`, so PA7's
-> sealed loft cannot be spelled that way again. The calls: the Room's model
-> calls now record through `story/room_calls.room_call` into the same
-> `llm_capture` store and read in `export_turn_debug` as `origin: "room"`,
-> once `agents/story_planner._call` and `dramaturge._call` route through it.
+> sealed loft cannot be spelled that way again -- and the room the scene
+> reads keeps the way up, with its far side a way down. The calls: the
+> Room's model calls now record through `story/room_calls.room_call` into
+> the same `llm_capture` store and read in `export_turn_debug` as
+> `origin: "room"`; `agents/story_planner._call` and `dramaturge._call`
+> route through it, and the out-of-band jobs arm their own scope.
 > The tool events' missing names and results are still open
 > (`docs/UNBUILT.md` § 2.35).
 
