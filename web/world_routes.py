@@ -47,11 +47,15 @@ present, else a frame row of this chat, 404 otherwise -- the same contract
   d, shape, measured, cells}``, ``rims`` ``{n, e, s, w: [cells]}`` (the
   cells that ARE each wall, in `RoomGrid.rim`'s order -- the order `offset`
   counts along), ``anchors`` ``{id: {cells, dir, height, footprint,
-  opacity, desc, offset}}`` (authored anchors), ``doorways`` ``[{id, to,
+  opacity, desc, offset, cell, source}}`` (authored anchors; ``source`` is
+  what placed it -- ``"cell"`` an authored origin cell, ``"offset"`` a place
+  along its wall, ``"seed"`` the formula), ``doorways`` ``[{id, to,
   name, dir, cells, barrier, offset, status}]`` (the implicit door anchors,
   ``cells`` empty when the edge has no bearing to place it by), ``bodies``
-  ``{name: {cell, facing, kind, at, near, measured}}`` (``cell`` None and
-  ``measured`` false for a body with no station -- somewhere in the room),
+  ``{name: {cell, facing, kind, at, near, measured, source}}`` (``cell``
+  None and ``measured`` false for a body with no station -- somewhere in the
+  room; ``source`` ``"cell"`` for the station's own pin, ``"anchor"`` for a
+  cell derived from `at`/`near`, ``"none"``),
   ``things`` ``[{id, name, kind, cell, anchor, placed}]``, ``walls`` (the
   field's wall lines, each ``{axis, coord, extent, aperture, to, name}``),
   ``neighbours`` ``[{id, name, offset, w, d, shape, cells, anchors}]``
@@ -109,23 +113,33 @@ tail), writing it through `wset` as `attire_put` does, and reconciling the
   `Design.md`'s "One doorway, one barrier"). Fields an edge carried that the
   browser does not edit (`distance`, `passage_from`, ...) survive on the
   edge that keeps its ``to``. Anchors are ``{anchor_id: {desc, dir?,
-  height?, footprint?, opacity?, offset?}}``; an anchor without an id is
-  keyed by its folded desc; the geometry words are refused outside
+  height?, footprint?, opacity?, offset?, cell?}}``; an anchor without an
+  id is keyed by its folded desc; the geometry words are refused outside
   `HEIGHTS` / `FOOTPRINTS` / `OPACITIES`. ``offset`` -- on an anchor or an
   exit -- is where along its wall the thing stands, a number in [0, 1] from
   the wall's start (`world.spatial.normalize_offset`; the map editor's
   drag writes it), refused outside the range naming it, null or '' clearing
-  it back to the seeded placement. Returns the fresh slice (as the GET
-  shapes it) so the card re-renders without a second fetch.
+  it back to the seeded placement. ``cell`` -- on an anchor -- is its ORIGIN
+  cell ``[x, y]`` in the room's own grid (the west-most, north-most cell of
+  its footprint; the map editor's drop on any cell writes it, the owner's
+  ruling of 2026-09-04), refused outside the room's cells naming the
+  bounds (`_cell_or_400`), null clearing it. ``cell`` and ``offset`` are
+  exclusive: a cell written clears the offset. Returns the fresh slice (as
+  the GET shapes it) so the card re-renders without a second fetch.
 * ``PATCH /{room_id}/entities/{entity_id}`` for a thing standing in the
   room: ``kind``, ``description`` (text), ``portable`` (bool),
   ``light_source`` (a `LIGHT_LEVELS` word, empty clearing it), ``lit`` (bool
   -> ``state.lit``; null clears), ``room`` (a live room id to move the
   thing's position row to; a thing placed only as an anchor is not moved --
   the anchor editor is where it lives). Returns the fresh slice.
-* ``PUT  /bodies/{name}/station`` with ``{at, near}``: ``at`` must be an
-  anchor the body's room holds (`effective_anchors`; the refusal names
-  them) or null; ``near`` names bodies standing in the same room. Returns
+* ``PUT  /bodies/{name}/station`` with ``{at, near, cell}``: ``at`` must be
+  an anchor the body's room holds (`effective_anchors`; the refusal names
+  them) or null; ``near`` names bodies standing in the same room; ``cell``
+  is ``[x, y]`` in the room's own grid, refused outside the room's cells
+  naming the bounds (`_cell_or_400`), null or absent for no pin -- the map
+  editor's placement on ANY cell (the owner, 2026-09-04), for the player
+  and a presence as much as the cast, since it never changes the room. A
+  station field the route does not own (`cover`) rides through. Returns
   the body's row.
 * ``PATCH /api/chats/{cid}/regions/{region_id}`` with ``{look}``: the
   region's visual register, written through `world.regions.set_region_look`
@@ -161,10 +175,13 @@ from world.spatial import (
     _BEARINGS, _DOOR_ANCHOR_PREFIX, _VALID_BARRIERS, EXTENT_MAX_PACES,
     EXTENT_MIN_PACES, FOOTPRINTS, HEIGHTS, LAYOUT_LINT_KINDS, LIGHT_LEVELS,
     OPACITIES, ROOM_CORNERS, ROOM_SIZES, SHAPES, anchor_cells, body_cell,
+    body_cell_source,
     effective_adjacent, effective_anchors, effective_facing,
     effective_station, layout_rooms, layout_warning, normalize_barrier,
-    normalize_bearing, normalize_extent, normalize_offset, normalize_parts,
-    normalize_room_id, normalize_scene_barriers, normalize_scene_bearings,
+    normalize_bearing, normalize_cell, normalize_extent, normalize_offset,
+    normalize_parts,
+    normalize_room_id, normalize_scene_anchor_cells, normalize_scene_barriers,
+    normalize_scene_bearings,
     normalize_scene_stations, normalize_shape, opposite_bearing, room_field,
     room_grid, room_layout_lint, room_of, size_from_extent,
 )
@@ -624,6 +641,9 @@ def grid_view(scene, room_id, lint_rows, *, player="", cast=None, things=()):
             "height": rec["height"], "footprint": rec["footprint"],
             "opacity": rec["opacity"], "desc": rec["desc"],
             "implicit": bool(rec["implicit"]), "offset": rec.get("offset"),
+            # What placed it: "cell" (an authored origin cell), "offset" (a
+            # place along its wall), or "seed" (the formula).
+            "cell": rec.get("cell"), "source": rec.get("source") or "seed",
         }
     doorways.sort(key=lambda d: d["to"])
 
@@ -640,6 +660,9 @@ def grid_view(scene, room_id, lint_rows, *, player="", cast=None, things=()):
             "at": station.get("at") or None,
             "near": [str(n) for n in (station.get("near") or [])],
             "measured": cell is not None,
+            # Where the cell came from: "cell" (the station's own pin),
+            # "anchor" (derived from `at`/`near`), or "none".
+            "source": body_cell_source(scene, who),
         }
 
     things_out = []
@@ -911,14 +934,19 @@ def _apply_exits(scene, room_id, room, exits):
             back.pop("offset", None)
 
 
-def _apply_anchors(room, anchors):
+def _apply_anchors(scene, room_id, room, anchors):
     """Replace the room's anchors: `{id: {desc, dir?, height?, footprint?,
-    opacity?}}`, an empty id keyed by the folded desc, geometry words
-    refused outside their sets."""
+    opacity?, offset?, cell?}}`, an empty id keyed by the folded desc,
+    geometry words refused outside their sets, a `cell` refused outside the
+    room's cells. `cell` and `offset` are exclusive -- a cell is a place and
+    an offset is a place along a wall -- so a cell written here clears the
+    offset, and an offset written with no cell is the whole of the placement
+    (the map sends `cell: null` when it drags an anchor onto a wall)."""
     if isinstance(anchors, list):
         anchors = {str(a.get("id") or ""): a for a in anchors if isinstance(a, dict)}
     if not isinstance(anchors, dict):
         raise HTTPException(400, "anchors must be a mapping of id -> {desc, dir, ...}")
+    grid = room_grid(scene, room_id)
     out = {}
     for aid, raw in anchors.items():
         if not isinstance(raw, dict):
@@ -939,12 +967,15 @@ def _apply_anchors(room, anchors):
             value = _enum_value(field, raw.get(field), allowed)
             if value:
                 anchor[field] = value
+        cell = _cell_or_400(f"anchor '{key}' cell", raw.get("cell"), grid)
         placed_at = _offset_or_400(f"anchor '{key}' offset", raw.get("offset"))
-        if placed_at is not None:
+        if cell is not None:
+            anchor["cell"] = cell
+        elif placed_at is not None:
             anchor["offset"] = placed_at
         # Whatever else the engine wrote on the anchor rides through.
         for field, value in raw.items():
-            if field not in ("id", "desc", "dir", "offset", *ANCHOR_ENUMS) \
+            if field not in ("id", "desc", "dir", "offset", "cell", *ANCHOR_ENUMS) \
                     and value is not None:
                 anchor.setdefault(field, value)
         out[key] = anchor
@@ -984,6 +1015,30 @@ def _offset_or_400(field, raw):
             400, f"{field} must be a number between 0 and 1 -- how far along "
                  f"the wall from its start (got {raw!r})")
     return placed_at
+
+
+def _cell_or_400(field, raw, grid):
+    """A cell of the room's own grid as `[x, y]`, or None to clear (null,
+    '', []), or a 400 naming the bounds. Read by `normalize_cell` -- two
+    whole numbers, nothing else -- and then required to lie on one of the
+    room's cells: a host who dropped a body on (9, 2) of an 8-by-4 room
+    dropped it outside, and the engine's own reader would silently snap it
+    to the nearest cell (the fail-open for a room that has since shrunk),
+    which is not what an authoring surface should do with a fresh mistake.
+    The owner dragging bodies and anchors on the map, 2026-09-04."""
+    if raw is None or raw == "" or raw == []:
+        return None
+    cell = normalize_cell(raw)
+    if cell is None:
+        raise HTTPException(
+            400, f"{field} must be [x, y], two whole numbers in the room's own "
+                 f"grid (got {raw!r})")
+    if not grid.contains(cell):
+        raise HTTPException(
+            400, f"{field} [{cell[0]}, {cell[1]}] is outside the room: a "
+                 f"{grid.shape} of {grid.w} by {grid.d} paces, x in 0..{grid.w - 1} "
+                 f"and y in 0..{grid.d - 1}, and on a cell the shape keeps")
+    return [cell[0], cell[1]]
 
 
 def _apply_extent(room, raw):
@@ -1035,6 +1090,7 @@ def _write_scene(cid, chat, before, scene):
     registry projection reconciled against what the blob held before."""
     normalize_scene_barriers(scene)
     normalize_scene_bearings(scene)
+    normalize_scene_anchor_cells(scene)
     scene.setdefault("stations", {})
     normalize_scene_stations(scene)
     with transaction():
@@ -1088,7 +1144,7 @@ def room_patch(cid: int, room_id: str, body: dict = Body(...),
         if "exits" in body:
             _apply_exits(scene, room_id, room, body.get("exits"))
         if "anchors" in body:
-            _apply_anchors(room, body.get("anchors"))
+            _apply_anchors(scene, room_id, room, body.get("anchors"))
         _write_scene(cid, chat, before, scene)
         row = _decorated_slice(cid, frame_id, room_id, scene)
     return row
@@ -1202,7 +1258,7 @@ def body_station_put(cid: int, name: str, body: dict = Body(...),
     chat = _chat_or_404(cid)
     _require_idle(cid)
     if not isinstance(body, dict):
-        raise HTTPException(400, "Send {at, near}")
+        raise HTTPException(400, "Send {at, near, cell}")
     with _era(cid, frame_id):
         scene = get_scene(cid, chat)
         before = copy.deepcopy(scene)
@@ -1212,6 +1268,14 @@ def body_station_put(cid: int, name: str, body: dict = Body(...),
         room = str(positions.get(key) or "") if key is not None else ""
         if not room:
             raise HTTPException(400, f"'{name}' stands in no room, so has no station")
+        # `cell`: a place in the room's own grid, the map editor's pin (the
+        # owner, 2026-09-04: "why are characters and personas locked to
+        # stations?"). Validated inside the room's cells; null or absent
+        # is no pin. The player and a promoted presence are placed this
+        # way like the cast -- the route asks only that the body stand in
+        # a room; moving one BETWEEN rooms is `chat_char_position_put`,
+        # which the registered cast alone has.
+        cell = _cell_or_400(f"'{key}' cell", body.get("cell"), room_grid(scene, room))
         anchors = effective_anchors(scene, room)
         at = str(body.get("at") or "").strip() or None
         if at is not None and at not in anchors:
@@ -1238,7 +1302,14 @@ def body_station_put(cid: int, name: str, body: dict = Body(...),
         stations = scene.setdefault("stations", {})
         if not isinstance(stations, dict):
             stations = scene["stations"] = {}
-        stations[key] = {"at": at, "near": near}
+        # The route writes what it owns -- `at`, `near`, `cell` -- and a
+        # field it does not (`cover`, the geometry note's) rides through.
+        prior = stations.get(key) if isinstance(stations.get(key), dict) else {}
+        station = {k: v for k, v in prior.items() if k not in ("at", "near", "cell")}
+        station.update({"at": at, "near": near})
+        if cell is not None:
+            station["cell"] = cell
+        stations[key] = station
         _write_scene(cid, chat, before, scene)
         rows = body_rows(cid, chat, scene)
     row = next((b for b in rows if b["name"].strip().casefold() == folded), None)
