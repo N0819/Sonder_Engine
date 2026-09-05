@@ -18,7 +18,10 @@ Two failure modes of the pre-fix backstop in director_resolve:
 The fix validates against the beat's would-be merged scene (dock edges
 recomputed on a working copy) and allows a non-adjacent target when
 spatial.passable_route_exists finds a route whose every doorway is already
-open/open_door. A route requiring a still-closed door remains blocked.
+open/open_door. A route whose only impassable edges are shut DOORS is
+contested rather than blocked (2026-09-05): the walk commits its passable
+prefix and the crossing itself waits on the resolve. A route through a
+wall is still refused whole.
 """
 
 import json
@@ -130,13 +133,20 @@ def test_multi_hop_walk_through_open_doors_is_committed(temp_db, monkeypatch):
     assert not [w for w in ctx.warnings if "movement" in w.casefold()]
 
 
-def test_multi_hop_route_through_closed_door_stays_blocked(
+def test_multi_hop_route_through_closed_door_is_contested_not_blocked(
     temp_db, monkeypatch,
 ):
     """The only route to engine_room passes a still-closed door mid-path.
-    Multi-hop permissiveness must not turn a closed door into open passage:
-    the move stays blocked (and a resolve-asserted position is stripped)
-    until the door is opened."""
+
+    A shut door is a CONTEST wherever it stands on the route, exactly as it
+    has always been when it stands one hop away: the resolve owns whether it
+    was opened and crossed, and here the resolve asserted the arrival. This
+    once stayed blocked on the objection that a multi-hop contest could not
+    be attributed to one door; `declared_walk_leg` names the door.
+
+    Measured, the flat run of 2026-09-05 (PE2): four of six declared
+    inter-room moves in an ordinary flat never committed, every one of them a
+    two-hop walk whose second edge was an interior door."""
     import agents.director as director
 
     ctx = _make_ctx(
@@ -151,8 +161,33 @@ def test_multi_hop_route_through_closed_door_stays_blocked(
 
     out = director.director_resolve(ctx, nonce=0)
 
-    assert "The Stranger" not in out["state_diff"]["positions"]
-    assert any("Blocked movement" in w for w in ctx.warnings)
+    assert out["state_diff"]["positions"]["The Stranger"] == "engine_room"
+    assert not [w for w in ctx.warnings if "Blocked movement" in w]
+    assert any("Contested crossing honoured" in w and "lobby" in w
+               for w in ctx.warnings)
+
+
+def test_multi_hop_route_the_resolve_did_not_assert_walks_its_prefix(
+    temp_db, monkeypatch,
+):
+    """Without the resolve's assertion the walk is not forced through the
+    door -- but it is not refused whole either. The body walks the passable
+    prefix and stops at the door, so the beat reads "she got as far as the
+    corridor" rather than "she never set out"."""
+    import agents.director as director
+
+    ctx = _make_ctx(
+        temp_db, _station_scene(corridor_to_lobby="closed_door"),
+        "engine_room",
+    )
+    monkeypatch.setattr(director, "_agent_json", lambda *a, **k: {})
+
+    out = director.director_resolve(ctx, nonce=0)
+
+    assert out["state_diff"]["positions"]["The Stranger"] == "corridor"
+    assert not [w for w in ctx.warnings if "Blocked movement" in w]
+    assert any("Partial movement" in w and "'corridor'" in w and "'lobby'" in w
+               for w in ctx.warnings)
 
 
 def test_multi_hop_route_opened_this_beat_is_committed(temp_db, monkeypatch):
