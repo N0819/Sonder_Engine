@@ -184,6 +184,32 @@ def set_region_look(cid, frame_id, region_id, look):
     return dict(entry)
 
 
+def set_region_name(cid, frame_id, region_id, name):
+    """Rename a region in the frame's registry -- the display name only; the
+    id every room's `region` field carries is untouched, so no room moves.
+    Entered by its id when the registry lacks it, as `set_region_look` does.
+    An empty name is refused (None): a region needs a label as a room does.
+    A HOST writes it from the World Browser's map (2026-09-05); nothing in
+    the Room calls it. Returns the stored entry."""
+    from core.db import wget_for_frame, wset_for_frame
+
+    rid = normalize_region_id(region_id)
+    text = " ".join(str(name or "").split())
+    if not rid or not text:
+        return None
+    stored = normalize_regions(
+        wget_for_frame(cid, REGIONS_KEY, frame_id, {}) or {})
+    entry = dict(stored["items"].get(rid) or {})
+    if not entry:
+        seed = region_registry(cid, frame_id).get(rid) or {}
+        entry = {"name": str(seed.get("name") or region_id),
+                 "brief": str(seed.get("brief") or "")}
+    entry["name"] = text
+    stored["items"][rid] = entry
+    wset_for_frame(cid, REGIONS_KEY, stored, frame_id)
+    return dict(entry)
+
+
 def region_name(registry, region_id):
     """The region's name, or its id when the registry has no entry."""
     entry = (registry or {}).get(region_id) if region_id else None
@@ -552,5 +578,5 @@ __all__ = [
     "normalize_regions", "planned_structure_of", "region_name",
     "region_registry", "registry_room_regions", "registry_row_region",
     "room_pieces", "room_region", "scene_anchors", "scene_rooms",
-    "set_region_look",
+    "set_region_look", "set_region_name",
 ]

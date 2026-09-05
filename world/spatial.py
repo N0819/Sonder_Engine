@@ -67,8 +67,9 @@ from world.spatial_barriers import (
     _ROUTE_MEMORY_BARRIERS, _SCENT_BARRIER_LEVELS,
     _SIGHT_BARRIERS, _VALID_BARRIERS, edge_crossable_from, edge_passable,
     effective_adjacent, neighbor_map, normalize_barrier,
-    normalize_scene_barriers, passage_direction, route_memory_barrier,
-    unresolved_barrier_words,
+    normalize_scene_barriers, normalize_scene_passages, PASSAGE_FIELDS,
+    passage_direction, passage_id_for, passage_of, resolve_edge,
+    route_memory_barrier, scene_passages, unresolved_barrier_words,
 )
 
 
@@ -230,14 +231,17 @@ from world.spatial_fov import (
     DEFAULT_FOOTPRINT, DEFAULT_HEIGHT, DEFAULT_OPACITY, DEFAULT_SHAPE,
     FOOTPRINTS,
     GRID_SIDE, HEIGHTS, OPACITIES, ROOM_CORNERS, RoomGrid, SHAPES,
-    _door_cells, _line, _occluders_on,
+    _EYE_RANK, _PART_SHAPES, _door_cells, _line, _occluders_on,
+    _sight_neighbours,
     _wall_verdict, anchor_cells, anchor_geometry,
     bearing_between, body_cell, body_cell_source, body_visibility,
     cover_between, eye_rank,
     feature_visibility, grid_side, height_rank,
     neighbour_feature_visibility, normalize_footprint,
-    normalize_height, normalize_opacity, normalize_parts, normalize_shape,
-    observer_field, posture_class, room_field, room_grid, room_has_geometry,
+    normalize_height, normalize_opacity, normalize_part_at, normalize_parts,
+    normalize_shape,
+    observer_field, part_box, parts_box, posture_class, room_field, room_grid,
+    room_has_geometry,
     shadowcast, sight_digest, sight_passes, _placed_neighbours,
     wall_aperture_cells,
 )
@@ -283,5 +287,5 @@ from world.spatial_merge import (
     _merge_entity, _merge_room, _position_key, _ROOM_SILENT_WHEN_EMPTY,
     _shield_standing_bearings, _shield_standing_passage, apply_following_ops,
     connect_orphan_new_rooms, merge_scene_with_diff, prune_bodiless_positions,
-    repair_entity_positions,
+    repair_entity_positions, sync_scene_passages,
 )

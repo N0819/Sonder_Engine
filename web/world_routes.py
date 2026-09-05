@@ -147,6 +147,59 @@ tail), writing it through `wset` as `attire_put` does, and reconciling the
   reconcile); an empty look removes it. Shared by every room in the region
   by construction. Returns ``{id, name, brief, look, rooms}``.
 
+Since 2026-09-05 (the owner, on the map editor: "This room editor feels very
+incomplete") the editor CREATES, REMOVES and MOVES, each a narrow typed
+write with the same guards, each refusal naming its reason
+(`docs/design/DESIGN_ROOM_FIDELITY.md` §5, §11):
+
+* ``POST /api/chats/{cid}/rooms`` ``{name, from?, dir?, barrier?, extent?,
+  shape?, region?}`` -> the new room's slice plus ``id`` (minted from the
+  name, never an id the scene or the registry holds; joined to ``from`` by
+  ONE doorway -- a passage record and both edges -- its region the joined
+  room's unless said otherwise).
+* ``DELETE /api/chats/{cid}/rooms/{room_id}`` -> ``{removed, retired}``;
+  REFUSED while any body or thing stands in the room, each named; every
+  edge into it and every passage naming it go with it; the registry
+  retires the id through `sync_room_registry_with_scene`.
+* ``POST /rooms/{room_id}/entities`` ``{name, kind?, description?, cell?}``
+  mints a thing standing here by a position row (pinned when ``cell``);
+  ``DELETE /rooms/{room_id}/entities/{entity_id}`` removes one (an
+  anchor-placed thing and a body are refused).
+* ``POST /rooms/{room_id}/presences`` ``{name, cell?}`` places a presence
+  (a position row, nothing else minted; refused when the name already
+  stands somewhere or is the player's or a cast member's).
+* ``DELETE /api/chats/{cid}/bodies/{name}`` removes a presence (the player,
+  the cast and a thing are refused); ``PUT /bodies/{name}/room`` ``{room}``
+  moves ANY body, dropping its station ``cell`` and a pose detail holding
+  another body on a change of room; ``PUT /bodies/{name}/pose`` writes the
+  six `_POSE_FIELDS` through `_clean_pose`.
+* The doorways router, ``/api/chats/{cid}/doorways``: ``POST`` ``{room, to,
+  barrier?, dir?, offset?, name?, material?, width?}`` opens ONE doorway (a
+  passage record, `scene.passages[id]`, and both edges naming it);
+  ``PATCH /{room}/{to}`` edits it as one object from EITHER room (`DOORWAY_FIELDS`;
+  a doorway declared from the far side alone gets its record minted from
+  the standing edge and this side's edge with it); ``DELETE /{room}/{to}``
+  closes it. ``width`` is whole paces in [1, `DOORWAY_MAX_WIDTH`].
+* ``POST /api/chats/{cid}/regions`` ``{name}`` enters a region (idempotent);
+  the regions ``PATCH`` also takes ``{name}`` to rename one (the id every
+  room carries stays).
+* The entity PATCH gained the source fields the light and sound fields read:
+  ``light_shape`` (`LIGHT_SHAPES`), ``light_height`` (`LIGHT_HEIGHTS`; a
+  ceiling light is `full` and casts no shadow), ``steadiness``
+  (`STEADINESS`), ``sound_source`` (`SOUND_LEVELS`), ``running`` and
+  ``pointed_at`` (a bearing, an anchor of the room or an entity of the
+  scene, refused outside those classes). Moving a thing drops its station.
+* The room PATCH's ``parts`` take ``at`` as a corner word OR an origin cell
+  ``[x, y]``; a cell part outside the box is refused naming the box;
+  ``shape`` may be `composite`.
+* ``GET /{room_id}/grid?sound_from=`` now carries ``overlays`` (``light``,
+  ``noise``, and ``sound`` for the chosen source), ``sound_sources`` and
+  ``light_sources`` (`_overlays`, through the composer's own readers);
+  doorways carry ``passage``, ``label``, ``material``, ``width``, ``state``
+  and ``declared_here``; things carry ``source``. ``GET /map`` exits carry
+  ``cells`` (the door's cells in the room's frame) and ``passage``; rooms
+  carry ``region`` and ``placed_via`` (the room each was laid out from).
+
 Attire is NOT written here: the browser's attire editor sends the whole
 ledger to `app.attire_put`, which re-derives every entry
 (`story.attire.rederive_entry`) -- one writer, one derivation.
@@ -172,18 +225,24 @@ from story.attire import GARMENT_STATES, REGIONS as ATTIRE_REGIONS
 from story.character_schema import character_name, persona_name
 from story.scene import get_scene, persona_of
 from world.spatial import (
-    _BEARINGS, _DOOR_ANCHOR_PREFIX, _VALID_BARRIERS, EXTENT_MAX_PACES,
-    EXTENT_MIN_PACES, FOOTPRINTS, HEIGHTS, LAYOUT_LINT_KINDS, LIGHT_LEVELS,
-    OPACITIES, ROOM_CORNERS, ROOM_SIZES, SHAPES, anchor_cells, body_cell,
+    _BEARINGS, _DOOR_ANCHOR_PREFIX, _EYE_RANK, _PART_SHAPES, _POSE_FIELDS,
+    _VALID_BARRIERS, _clean_pose, _door_cells, EXTENT_MAX_PACES,
+    EXTENT_MIN_PACES, FOOTPRINTS, HEIGHTS, LAYOUT_LINT_KINDS, LIGHT_HEIGHTS,
+    LIGHT_LEVELS, LIGHT_SHAPES, OPACITIES, ROOM_CORNERS, ROOM_SIZES, SHAPES,
+    SOUND_LEVELS, STEADINESS, anchor_cells, body_cell,
     body_cell_source,
     effective_adjacent, effective_anchors, effective_facing,
-    effective_station, layout_rooms, layout_warning, normalize_barrier,
+    effective_station, invalidate_moved_body_pose_details, layout_rooms,
+    layout_warning, light_field, noise_word, normalize_barrier,
     normalize_bearing, normalize_cell, normalize_extent, normalize_offset,
-    normalize_parts,
+    normalize_part_at, normalize_parts,
     normalize_room_id, normalize_scene_anchor_cells, normalize_scene_barriers,
-    normalize_scene_bearings,
-    normalize_scene_stations, normalize_shape, opposite_bearing, room_field,
-    room_grid, room_layout_lint, room_of, size_from_extent,
+    normalize_scene_bearings, normalize_scene_passages,
+    normalize_scene_stations, normalize_shape, normalize_vertical,
+    opposite_bearing, opposite_vertical, part_box, passage_id_for, passage_of,
+    quantise_hearing,
+    room_field, room_grid, room_layout_lint, room_of, scene_passages,
+    size_from_extent, sound_field, sync_scene_passages,
 )
 from world.weather import EXPOSURES
 
@@ -215,6 +274,7 @@ LINT_FIELDS = {
     "wall_overfull": "anchors",
     "corner_in_round_room": "shape",
     "l_part_redundant": "shape",
+    "parts_disconnected": "shape",
     "shape_disconnected": "shape",
     "size_disagrees_with_extent": "extent",
     "extent_unreadable": "extent",
@@ -383,8 +443,22 @@ def vocabulary(cid, frame_id):
         "opacities": list(OPACITIES),
         "shapes": list(SHAPES),
         "corners": list(ROOM_CORNERS),
+        "part_shapes": list(_PART_SHAPES),
         "walls": list(WALLS),
         "extent": {"min": EXTENT_MIN_PACES, "max": EXTENT_MAX_PACES},
+        # A thing's light and sound (`world/spatial_light_field.py`,
+        # `world/spatial_sound_field.py`): the four closed sets a source is
+        # authored in, and the sound ladder.
+        "light_shapes": list(LIGHT_SHAPES),
+        "light_heights": list(LIGHT_HEIGHTS),
+        "steadiness": list(STEADINESS),
+        "sound_levels": list(SOUND_LEVELS),
+        # A body's pose: the fields (`spatial_geometry._POSE_FIELDS`, open
+        # prose each) and the posture words the geometry reads an eye height
+        # from (`spatial_fov._EYE_RANK`), offered as suggestions, never
+        # refused outside -- a posture is prose.
+        "pose_fields": list(_POSE_FIELDS),
+        "postures": list(_EYE_RANK),
         "regions": [{"id": rid, "name": str(entry.get("name") or rid),
                      "look": str(entry.get("look") or "")}
                     for rid, entry in sorted(registry.items())],
@@ -569,6 +643,14 @@ def _decorated_slice(cid, frame_id, room_id, scene, lint_rows=None):
             "description": str(ent.get("description") or ""),
             "portable": bool(ent.get("portable")),
             "light_source": str(ent.get("light_source") or ""),
+            # The source fields the light and sound fields read
+            # (`world/spatial_light_field.py`, `world/spatial_sound_field.py`):
+            # as stored, '' for absent; `state` carries `lit`, `pointed_at`,
+            # `running`.
+            "light_shape": str(ent.get("light_shape") or ""),
+            "light_height": str(ent.get("light_height") or ""),
+            "steadiness": str(ent.get("steadiness") or ""),
+            "sound_source": str(ent.get("sound_source") or ""),
             "state": ent.get("state") if isinstance(ent.get("state"), dict) else {},
         }
         thing["placed"] = "position" if room_of(scene, thing["id"]) else "anchor"
@@ -602,7 +684,8 @@ def _room_name(scene, room_id):
     return str(room_id)
 
 
-def grid_view(scene, room_id, lint_rows, *, player="", cast=None, things=()):
+def grid_view(scene, room_id, lint_rows, *, player="", cast=None, things=(),
+              sound_from=None):
     """One room's field exactly as the engine computes it -- the module
     docstring gives the shape. Pure over the scene and the same functions
     sight and light read (`room_grid`, `anchor_cells`, `body_cell`,
@@ -624,6 +707,7 @@ def grid_view(scene, room_id, lint_rows, *, player="", cast=None, things=()):
         if rec["implicit"] and str(aid).startswith(_DOOR_ANCHOR_PREFIX):
             to = str(aid)[len(_DOOR_ANCHOR_PREFIX):]
             edge = edges.get(to) or {}
+            record = passage_of(scene, edge) or {}
             doorways.append({
                 "id": str(aid), "to": to, "name": _room_name(scene, to),
                 "dir": rec["dir"],
@@ -634,6 +718,18 @@ def grid_view(scene, room_id, lint_rows, *, player="", cast=None, things=()):
                 "barrier": normalize_barrier(edge.get("barrier")),
                 "offset": rec.get("offset"),
                 "status": "live" if to in rooms_ else None,
+                # THE PASSAGE (DESIGN_ROOM_FIDELITY §5): the one record both
+                # edges read through, when the doorway has one; the fields a
+                # host edits as ONE object from either room. `declared_here`
+                # says whether this room's own list holds the edge -- the
+                # doorway routes mint the missing side, so it no longer
+                # decides what may be edited.
+                "passage": str(edge.get("passage")) if record else None,
+                "label": str(record.get("name") or edge.get("name") or ""),
+                "material": str(record.get("material") or edge.get("material") or ""),
+                "width": record.get("width"),
+                "state": record.get("state") if isinstance(record.get("state"), dict) else {},
+                "declared_here": not bool(edge.get("implicit")),
             })
             continue
         anchors[str(aid)] = {
@@ -671,14 +767,22 @@ def grid_view(scene, room_id, lint_rows, *, player="", cast=None, things=()):
         if not tid:
             continue
         if tid in placed:
-            cell, anchor, how = None, tid, "anchor"
+            cell, anchor, how, source = None, tid, "anchor", "anchor"
         else:
             placed_cell = body_cell(scene, tid)
             cell = [int(placed_cell[0]), int(placed_cell[1])] if placed_cell else None
             anchor, how = None, "position"
+            # A thing is placed by its station's `cell` exactly as a body
+            # is (the same route, the same rule), so the map can drag it.
+            source = body_cell_source(scene, tid)
+        ent = (scene.get("entities") or {}).get(tid)
+        ent = ent if isinstance(ent, dict) else {}
         things_out.append({"id": tid, "name": str(thing.get("name") or tid),
                            "kind": str(thing.get("kind") or ""),
-                           "cell": cell, "anchor": anchor, "placed": how})
+                           "cell": cell, "anchor": anchor, "placed": how,
+                           "source": source,
+                           "light_source": str(ent.get("light_source") or ""),
+                           "sound_source": str(ent.get("sound_source") or "")})
 
     neighbours = []
     for other, offset in (field.offsets if field else {}).items():
@@ -717,12 +821,67 @@ def grid_view(scene, room_id, lint_rows, *, player="", cast=None, things=()):
         "neighbours": neighbours,
         "lint": _room_lint(lint_rows, room_id),
         # THE OVERLAYS SLOT. `{name: {"x,y": word}}` per-cell readings the
-        # map paints with a legend; this module computes none of them. The
-        # light field (`world/spatial_light_field.py`) and the sound field
-        # are the readers that fill it, from the composite `room_field`
-        # returns -- the same field the cells above came from.
-        "overlays": {},
+        # map paints with a legend. Filled by the readers the composer uses
+        # -- `light_field` and `sound_field`, over the same composite
+        # `room_field` returns -- and quantised with their own ladders;
+        # nothing is computed here or twice (`_overlays`). Absent when the
+        # room has no geometry for the field to exist over.
+        **_overlays(scene, room_id, sound_from),
     }
+
+
+def _overlays(scene, room_id, sound_from=None):
+    """``{overlays: {light, noise, sound?}, sound_sources: [...],
+    light_sources: [...]}`` for one room, or empty maps when the room carries
+    no geometry. `light` is the light field's word per cell
+    (`LightField.level`, the room's own frame); `noise` is the sound field's
+    floor per cell as `noise_word` says it -- every placed source's
+    intensity plus the room's ambient, the composer's `noise_at` for a
+    listener standing on that cell; `sound` is the hearing word for ONE
+    chosen source or speaker (`sound_from`, an id `sound_sources` lists):
+    `quantise_hearing` of its signal against the noise without it, per cell.
+    `light_sources` are the field's own placed sources with their height
+    RANK and shape, so the map can draw a full-height source as a ring (it
+    casts no shadow, `DESIGN_LIGHT_FIELD.md`) without re-deriving the rule."""
+    overlays, sound_sources, light_sources = {}, [], []
+    lf = light_field(scene, room_id)
+    if lf is not None:
+        overlays["light"] = {f"{x},{y}": lf.level((x, y))
+                             for x, y in lf.room_cells(room_id)}
+        heights = list(HEIGHTS)
+        for source in lf.sources:
+            if source.get("room") != room_id:
+                continue
+            rank = source.get("height")
+            light_sources.append({
+                "id": str(source.get("id")), "label": str(source.get("label") or source.get("id")),
+                "cell": [int(source["cell"][0]), int(source["cell"][1])],
+                "height": heights[min(len(heights) - 1, max(0, int(round(float(rank or 0)))))],
+                "shape": str(source.get("shape") or ""),
+            })
+    sf = sound_field(scene, "", room=room_id)
+    if sf is not None:
+        cells = [c for c, r in sf.grid.inside.items() if r == room_id]
+        noise = {}
+        for cell in cells:
+            total = sf.ambient.get(room_id, 0.0)
+            for source in sf.sources:
+                total += sf.intensity_at(source, cell)
+            noise[f"{cell[0]},{cell[1]}"] = noise_word(total)
+        overlays["noise"] = noise
+        sound_sources = [{"id": str(s["id"]), "label": str(s.get("label") or s["id"]),
+                          "kind": str(s.get("kind") or "")} for s in sf.sources]
+        chosen = next((s for s in sf.sources if str(s["id"]) == str(sound_from or "")), None)
+        if chosen is not None:
+            heard = {}
+            for cell in cells:
+                signal = sf.intensity_at(chosen, cell)
+                rest = sf.ambient.get(room_id, 0.0) + sum(
+                    sf.intensity_at(s, cell) for s in sf.sources if s is not chosen)
+                heard[f"{cell[0]},{cell[1]}"] = quantise_hearing(signal, rest)
+            overlays["sound"] = heard
+    return {"overlays": overlays, "sound_sources": sound_sources,
+            "light_sources": light_sources}
 
 
 def map_view(scene, lint_rows):
@@ -748,6 +907,7 @@ def map_view(scene, lint_rows):
         placed.update(offsets)
         placed.update(collided)
         landed = {other: (onto, via) for other, onto, via in layout["collisions"]}
+        parents = dict(layout.get("parents") or {})
         rows = []
         for rid in list(offsets) + [r for r in collided if r not in offsets]:
             grid = room_grid(scene, rid)
@@ -757,9 +917,17 @@ def map_view(scene, lint_rows):
                 if not isinstance(edge, dict) or not edge.get("to"):
                     continue
                 to = str(edge["to"])
+                # The doorway's cells in THIS room's frame (`_door_cells`,
+                # the placement the layout itself used), so the structure
+                # map draws the door where it stands rather than at the
+                # middle of its wall; empty when the edge has no bearing.
+                door_cells, _b = _door_cells(scene, rid, to)
                 exits.append({"to": to, "name": _room_name(scene, to),
                               "dir": normalize_bearing(edge.get("dir")),
                               "barrier": normalize_barrier(edge.get("barrier")),
+                              "cells": _cells(door_cells or []),
+                              "passage": str(edge["passage"])
+                              if passage_of(scene, edge) else None,
                               "placed": to in offsets or to in collided})
             exits.sort(key=lambda e: e["to"])
             onto, via = landed.get(rid, (None, None))
@@ -772,8 +940,12 @@ def map_view(scene, lint_rows):
                 "occupants": list(occupants.get(rid, [])),
                 "lint": len(_room_lint(lint_rows, rid)),
                 "holder": rooms_[rid].get("parent_entity") or None,
+                "region": str(rooms_[rid].get("region") or "") or None,
                 "collided": rid in collided and rid not in offsets,
                 "onto": onto, "via": via,
+                # The room this one was placed FROM (`layout_rooms`'s
+                # `parents`): the edge a drag on the structure map re-bears.
+                "placed_via": parents.get(rid) or via,
             })
         components.append({
             "start": start, "rooms": rows,
@@ -784,7 +956,8 @@ def map_view(scene, lint_rows):
 
 
 @router.get("/{room_id}/grid")
-def rooms_grid(cid: int, room_id: str, frame_id: int | None = None):
+def rooms_grid(cid: int, room_id: str, frame_id: int | None = None,
+               sound_from: str | None = None):
     chat = _chat_or_404(cid)
     with _era(cid, frame_id):
         scene = rooms.read_scene(cid)
@@ -796,7 +969,8 @@ def rooms_grid(cid: int, room_id: str, frame_id: int | None = None):
         view = grid_view(
             scene, room_id, _lint_rows(scene),
             player=str(persona_name(persona_of(chat)) or "").strip(),
-            cast=_cast_ids(cid), things=slice_.get("things") or ())
+            cast=_cast_ids(cid), things=slice_.get("things") or (),
+            sound_from=sound_from)
     view["frame_id"] = frame_id
     return view
 
@@ -900,12 +1074,18 @@ def _apply_exits(scene, room_id, room, exits):
 
     # The far side. A planned room the scene does not hold has no edge list
     # to mirror onto; the plan's own topology already names the doorway.
+    # A removed exit takes its passage record with it: the doorway is gone
+    # from both rooms, and a record naming it would be re-minted onto them
+    # by the sync.
     for to in set(prior) - seen:
         far = scene_rooms.get(to)
         if isinstance(far, dict):
             far["adjacent"] = [e for e in (far.get("adjacent") or [])
                                if not (isinstance(e, dict)
                                        and str(e.get("to")) == str(room_id))]
+        gone = prior.get(to) or {}
+        if passage_of(scene, gone):
+            scene_passages(scene).pop(gone.get("passage"), None)
     for edge in fresh:
         to = edge["to"]
         if to not in known:
@@ -920,6 +1100,12 @@ def _apply_exits(scene, room_id, room, exits):
         if edge["barrier"] != _ASYMMETRIC_BARRIER \
                 and str(back.get("barrier") or "") != _ASYMMETRIC_BARRIER:
             back["barrier"] = edge["barrier"]
+            # The host spoke on this edge: the passage the doorway resolves
+            # through says the same, so `sync_scene_passages` writes it back
+            # rather than the standing record overruling the edit.
+            record = passage_of(scene, edge)
+            if record is not None and edge["barrier"] != _ASYMMETRIC_BARRIER:
+                record["barrier"] = edge["barrier"]
         if edge.get("dir"):
             back["dir"] = opposite_bearing(edge["dir"])
         else:
@@ -1058,24 +1244,44 @@ def _apply_extent(room, raw):
 
 
 def _apply_parts(room, raw):
-    """Replace the room's `l` parts: each `{w, d, at}`, the corner refused
-    outside `ROOM_CORNERS` and the sides outside the extent clamp, then the
-    engine's own `normalize_parts` over the result. An empty list clears.
-    Parts on a shape that is not `l` are accepted -- the lint reports them
-    (`corner_in_round_room`), and a host who changes the shape back keeps
-    what was authored."""
+    """Replace the room's parts: each `{w, d, at}`, `at` a corner word of
+    `ROOM_CORNERS` or an origin cell `[x, y]` in the room's own grid (the
+    `cell` convention), the sides within the extent clamp, then the engine's
+    own `normalize_parts` over the result. A cell part that lies outside the
+    room's bounding box -- a negative origin, or a far edge past the extent
+    when one stands -- is REFUSED naming the box: the reader would clip it to
+    nothing, and an authoring surface should not quietly lose a fresh part.
+    An empty list clears. Parts on a shape that is not `l` or `composite`
+    are accepted -- the lint reports them (`corner_in_round_room`), and a
+    host who changes the shape back keeps what was authored."""
     if raw in (None, ""):
         raw = []
     if not isinstance(raw, list):
         raise HTTPException(400, "parts must be a list of {w, d, at}")
+    box = normalize_extent(room.get("extent"))
     parts = []
     for part in raw:
         if not isinstance(part, dict):
             raise HTTPException(400, "parts must be a list of {w, d, at}")
-        at = normalize_bearing(part.get("at"))
-        if at not in ROOM_CORNERS:
-            _refuse_outside("at", str(part.get("at")), list(ROOM_CORNERS))
+        at = normalize_part_at(part.get("at"))
+        if at is None:
+            raise HTTPException(
+                400, f"a part's at must be a corner of the box "
+                     f"({', '.join(ROOM_CORNERS)}) or its origin cell [x, y] "
+                     f"(got {part.get('at')!r})")
         extent = _paces_or_400("a part's extent", part)
+        if isinstance(at, list):
+            if at[0] < 0 or at[1] < 0:
+                raise HTTPException(
+                    400, f"a part at [{at[0]}, {at[1]}] starts outside the "
+                         f"room: x and y count from 0 at the north-west corner")
+            if box and (at[0] + extent["w"] > box["w"] or at[1] + extent["d"] > box["d"]):
+                raise HTTPException(
+                    400, f"a part of {extent['w']} by {extent['d']} paces at "
+                         f"[{at[0]}, {at[1]}] runs outside the room's box of "
+                         f"{box['w']} by {box['d']} paces (x in 0..{box['w'] - 1}, "
+                         f"y in 0..{box['d'] - 1}); widen the extent or move "
+                         f"the part")
         parts.append({"w": extent["w"], "d": extent["d"], "at": at})
     parts = normalize_parts(parts)
     if parts:
@@ -1091,6 +1297,11 @@ def _write_scene(cid, chat, before, scene):
     normalize_scene_barriers(scene)
     normalize_scene_bearings(scene)
     normalize_scene_anchor_cells(scene)
+    # A doorway with a passage record is one object: an edge this write
+    # changed (against `before`) speaks for it, and the record is written
+    # back onto both edges (`sync_scene_passages`, the merge's own call).
+    normalize_scene_passages(scene)
+    sync_scene_passages(scene, before)
     scene.setdefault("stations", {})
     normalize_scene_stations(scene)
     with transaction():
@@ -1177,21 +1388,52 @@ def room_entity_patch(cid: int, room_id: str, entity_id: str,
                 entity[field] = " ".join(str(body.get(field) or "").split())
         if "portable" in body:
             entity["portable"] = bool(body.get("portable"))
-        if "light_source" in body:
-            value = _enum_value("light_source", body.get("light_source"),
-                                LIGHT_LEVELS)
-            if value:
-                entity["light_source"] = value
-            else:
-                entity.pop("light_source", None)
-        if "lit" in body:
+        # THE SOURCE FIELDS. A thing that gives light or sound is a CLASS,
+        # not a device (`world/spatial_light_field.py`'s rule): the level it
+        # emits, how the emission is shaped, where it sits, whether it can
+        # be relied on, what a cone points at, and whether it is lit or
+        # running. This is how a ceiling light is authored -- `light_source`
+        # with `light_height: full`, which casts no shadow -- and a lantern
+        # on the floor, and a generator that cuts out, without naming any.
+        for field, allowed in (("light_source", LIGHT_LEVELS),
+                               ("light_shape", LIGHT_SHAPES),
+                               ("light_height", LIGHT_HEIGHTS),
+                               ("steadiness", STEADINESS),
+                               ("sound_source", SOUND_LEVELS)):
+            if field in body:
+                value = _enum_value(field, body.get(field), allowed)
+                if value:
+                    entity[field] = value
+                else:
+                    entity.pop(field, None)
+        for flag in ("lit", "running"):
+            if flag in body:
+                state = entity.get("state")
+                if not isinstance(state, dict):
+                    state = entity["state"] = {}
+                if body.get(flag) is None:
+                    state.pop(flag, None)
+                else:
+                    state[flag] = bool(body.get(flag))
+        if "pointed_at" in body:
             state = entity.get("state")
             if not isinstance(state, dict):
                 state = entity["state"] = {}
-            if body.get("lit") is None:
-                state.pop("lit", None)
+            target = str(body.get("pointed_at") or "").strip()
+            if not target:
+                state.pop("pointed_at", None)
             else:
-                state["lit"] = bool(body.get("lit"))
+                # What a cone may point at (`_resolve_pointed_at`): a
+                # bearing word, an anchor of the room -- a doorway's implicit
+                # anchor included -- or an entity the scene holds.
+                anchors = effective_anchors(scene, room_id)
+                if normalize_bearing(target) is None and target not in anchors \
+                        and target not in entities:
+                    raise HTTPException(
+                        400, f"pointed_at must be a bearing ({', '.join(_BEARINGS)}), "
+                             f"an anchor of '{room_id}' ({', '.join(sorted(anchors)) or 'none'}) "
+                             f"or an entity of the scene (got {target!r})")
+                state["pointed_at"] = normalize_bearing(target) or target
         if "room" in body:
             target = str(body.get("room") or "").strip()
             if not placed_by_position:
@@ -1206,6 +1448,12 @@ def room_entity_patch(cid: int, room_id: str, entity_id: str,
                         if str(k).strip().casefold() == str(entity_id).strip().casefold()]:
                 positions.pop(key)
             positions[str(entity_id)] = target
+            # A thing's station -- its `cell`, in the OLD room's grid -- is
+            # dropped on a change of room, the rule bodies follow
+            # (`invalidate_moved_body_cells`); the map writes a fresh one in
+            # the new room's grid when it moved the thing there.
+            if target != placed_by_position:
+                _drop_station(scene, str(entity_id))
         _write_scene(cid, chat, before, scene)
         row = _decorated_slice(cid, frame_id, room_id, scene)
     return row
@@ -1225,19 +1473,31 @@ def region_patch(cid: int, region_id: str, body: dict = Body(...),
     removes the field. Returns ``{id, name, brief, look, rooms}``, `rooms`
     the live rooms of this frame in the region, so the card can say how
     many rooms the one sentence reaches."""
-    from world.regions import normalize_region_id, set_region_look
+    from world.regions import (normalize_region_id, region_registry,
+                               set_region_look, set_region_name)
     chat = _chat_or_404(cid)
     _require_idle(cid)
-    if not isinstance(body, dict) or "look" not in body:
-        raise HTTPException(400, "Send {look}")
+    if not isinstance(body, dict) or not ({"look", "name"} & set(body)):
+        raise HTTPException(400, "Send {look} or {name}")
     rid = normalize_region_id(region_id)
     if not rid:
         raise HTTPException(400, "A region needs an id")
     look = body.get("look")
     if look is not None and not isinstance(look, str):
         raise HTTPException(400, "look must be text")
+    # `name` (2026-09-05, the map's rename): the display name alone; the
+    # id every room carries stays, so no room changes region.
+    name = body.get("name")
+    if "name" in body and (not isinstance(name, str) or not name.strip()):
+        raise HTTPException(400, "A region needs a name")
     with _era(cid, frame_id):
-        entry = set_region_look(cid, frame_id, rid, look or "")
+        entry = None
+        if "look" in body:
+            entry = set_region_look(cid, frame_id, rid, look or "")
+        if "name" in body:
+            entry = set_region_name(cid, frame_id, rid, name)
+        if entry is None:
+            entry = region_registry(cid, frame_id).get(rid)
         scene = get_scene(cid, chat) or {}
     if entry is None:
         raise HTTPException(400, "A region needs an id")
@@ -1314,3 +1574,678 @@ def body_station_put(cid: int, name: str, body: dict = Body(...),
         rows = body_rows(cid, chat, scene)
     row = next((b for b in rows if b["name"].strip().casefold() == folded), None)
     return row or {"name": key, "room": room, "station": stations[key]}
+
+
+# ---------------------------------------------------------------------------
+# Create and remove, from the map (2026-09-05; the owner: "this room editor
+# feels very incomplete"). Each write is narrow, typed, era-scoped and
+# idle-guarded like the ones above, lands through `_write_scene`, and refuses
+# naming the reason.
+# ---------------------------------------------------------------------------
+
+def _drop_station(scene, name):
+    """Remove a body's or a thing's station row, case-insensitively."""
+    stations = scene.get("stations")
+    if not isinstance(stations, dict):
+        return
+    folded = str(name).strip().casefold()
+    for key in [k for k in stations if str(k).strip().casefold() == folded]:
+        stations.pop(key, None)
+
+
+def _mint_id(name, taken, fallback):
+    """An id from a name, the room-id fold (`normalize_room_id`), suffixed
+    `_2`, `_3`, ... while `taken` holds it -- so a retired room's spent id
+    is never reused."""
+    base = normalize_room_id(str(name or "")) or fallback
+    candidate, n = base, 1
+    while candidate in taken:
+        n += 1
+        candidate = f"{base}_{n}"
+    return candidate
+
+
+def _position_key(scene, name):
+    folded = str(name or "").strip().casefold()
+    for key in (scene.get("positions") or {}):
+        if str(key).strip().casefold() == folded:
+            return key
+    return None
+
+
+def _ensure_passage(scene, a, b):
+    """The passage record a doorway between `a` and `b` resolves through,
+    minted from the standing edges when neither names one: the id
+    `passage_id_for` gives, the barrier the room's own edge carries (else
+    the far edge's, else `open`), the edge fields the passage owns copied
+    up. Both edges are made to exist and to name it. Returns `(id, record)`;
+    `sync_scene_passages` in `_write_scene` then writes the record back onto
+    both edges."""
+    rooms_ = scene.get("rooms") or {}
+    ra, rb = rooms_[a], rooms_[b]
+    ea, eb = _edge_to(ra, b), _edge_to(rb, a)
+    for edge in (ea, eb):
+        record = passage_of(scene, edge) if edge else None
+        if record is not None:
+            pid = edge["passage"]
+            break
+    else:
+        pid = passage_id_for(a, b)
+        passages = scene.setdefault("passages", {})
+        if not isinstance(passages, dict):
+            passages = scene["passages"] = {}
+        spoken = ea if ea is not None and "barrier" in ea else eb
+        record = {"rooms": [str(a), str(b)],
+                  "barrier": normalize_barrier((spoken or {}).get("barrier") or "open")}
+        for field in ("name", "material"):
+            value = (ea or {}).get(field) or (eb or {}).get(field)
+            if value:
+                record[field] = value
+        passages[pid] = record
+    if ea is None:
+        ea = {"to": str(b)}
+        if eb is not None and normalize_bearing(eb.get("dir")):
+            ea["dir"] = opposite_bearing(normalize_bearing(eb["dir"]))
+        if eb is not None and eb.get("offset") is not None:
+            ea["offset"] = eb["offset"]
+        ra.setdefault("adjacent", []).append(ea)
+    if eb is None:
+        eb = {"to": str(a)}
+        if normalize_bearing(ea.get("dir")):
+            eb["dir"] = opposite_bearing(normalize_bearing(ea["dir"]))
+        if ea.get("offset") is not None:
+            eb["offset"] = ea["offset"]
+        rb.setdefault("adjacent", []).append(eb)
+    ea["passage"] = pid
+    eb["passage"] = pid
+    return pid, record
+
+
+def _occupants_of(scene, room_id):
+    """(bodies, things) standing in the room by a position row."""
+    bodies, things = [], []
+    for who, where in (scene.get("positions") or {}).items():
+        if str(where or "") != str(room_id):
+            continue
+        (bodies if _is_body(scene, who) else things).append(str(who))
+    return sorted(bodies), sorted(things)
+
+
+@router.post("")
+def room_create(cid: int, body: dict = Body(...), frame_id: int | None = None):
+    """Mint a live room from the map: ``{name, from?, dir?, barrier?,
+    extent?, shape?, region?}``. With ``from`` (a live room) the new room is
+    joined to it by ONE doorway -- a passage record with both edges, the
+    given ``barrier`` (default `open`) and ``dir`` as the bearing FROM the
+    existing room, its opposite on the new room's edge -- so the layout
+    places it off that wall; without ``from`` the room stands unjoined.
+    The region is the joined room's unless ``region`` says otherwise (the
+    commit's own rule for a room reached from another). The id is minted
+    from the name and never reuses one the scene or the registry holds.
+    Returns the new room's slice plus ``id``."""
+    chat = _chat_or_404(cid)
+    _require_idle(cid)
+    if not isinstance(body, dict):
+        raise HTTPException(400, "Send {name, from, dir, barrier}")
+    name = " ".join(str(body.get("name") or "").split())
+    if not name:
+        raise HTTPException(400, "A room needs a name")
+    with _era(cid, frame_id):
+        scene = get_scene(cid, chat)
+        before = copy.deepcopy(scene)
+        rooms_ = scene.setdefault("rooms", {})
+        taken = set(rooms_) | {str(r["room_uid"]) for r in q(
+            "SELECT room_uid FROM room_registry WHERE chat_id=?", (cid,))}
+        rid = _mint_id(name, taken, "room")
+        room = {"name": name, "desc": "", "adjacent": []}
+        source = str(body.get("from") or "").strip()
+        if source:
+            origin = _live_room_or_400(scene, source)
+            direction = None
+            if str(body.get("dir") or "").strip():
+                direction = normalize_bearing(body.get("dir"))
+                if direction is None:
+                    _refuse_outside("dir", str(body.get("dir")), list(_BEARINGS))
+            barrier = str(body.get("barrier") or "").strip().casefold() or "open"
+            _refuse_outside("barrier", barrier, sorted(_VALID_BARRIERS))
+            edge = {"to": rid, "barrier": barrier}
+            if direction:
+                edge["dir"] = direction
+            origin.setdefault("adjacent", []).append(edge)
+            if origin.get("region") and not origin.get("parent_entity"):
+                room["region"] = origin["region"]
+        if "region" in body:
+            from world.regions import normalize_region_id
+            region = normalize_region_id(str(body.get("region") or ""))
+            if region:
+                room["region"] = region
+            else:
+                room.pop("region", None)
+        rooms_[rid] = room
+        if source:
+            _ensure_passage(scene, source, rid)
+        if body.get("extent") not in (None, "", {}, []):
+            _apply_extent(room, body.get("extent"))
+        if str(body.get("shape") or "").strip():
+            shape = _enum_value("shape", body.get("shape"), SHAPES)
+            if shape:
+                room["shape"] = shape
+        _write_scene(cid, chat, before, scene)
+        row = _decorated_slice(cid, frame_id, rid, scene)
+    row = row or {}
+    row["id"] = rid
+    return row
+
+
+@router.delete("/{room_id}")
+def room_delete(cid: int, room_id: str, frame_id: int | None = None):
+    """Remove a live room from the scene. REFUSED while anything stands in
+    it -- bodies and things alike, each named -- because a position row
+    naming no room is a body nowhere. Every edge into it and every passage
+    record naming it go with it; the registry projection retires the id
+    through `sync_room_registry_with_scene`, the path every scene writer
+    keeps (and the path restore reads), so the id is spent, never reused.
+    Returns ``{removed, retired}``."""
+    chat = _chat_or_404(cid)
+    _require_idle(cid)
+    with _era(cid, frame_id):
+        scene = get_scene(cid, chat)
+        before = copy.deepcopy(scene)
+        _live_room_or_400(scene, room_id)
+        bodies, things = _occupants_of(scene, room_id)
+        if bodies or things:
+            parts = []
+            if bodies:
+                parts.append("bodies: " + ", ".join(bodies))
+            if things:
+                parts.append("things: " + ", ".join(things))
+            raise HTTPException(
+                400, f"'{room_id}' is not empty ({'; '.join(parts)}); move "
+                     "them out before removing the room")
+        rooms_ = scene.get("rooms") or {}
+        rooms_.pop(room_id, None)
+        for room in rooms_.values():
+            if isinstance(room, dict) and room.get("adjacent"):
+                room["adjacent"] = [e for e in room["adjacent"]
+                                    if not (isinstance(e, dict)
+                                            and str(e.get("to")) == str(room_id))]
+        for pid, record in list(scene_passages(scene).items()):
+            if str(room_id) in [str(r) for r in (record.get("rooms") or [])]:
+                scene["passages"].pop(pid, None)
+        _write_scene(cid, chat, before, scene)
+    return {"removed": str(room_id), "retired": True}
+
+
+@router.post("/{room_id}/entities")
+def room_entity_create(cid: int, room_id: str, body: dict = Body(...),
+                       frame_id: int | None = None):
+    """Mint a THING standing in the room by a position row: ``{name, kind?,
+    description?, cell?}``. Its id is minted from the name against the
+    scene's entities; ``cell`` pins it in the room's grid through the
+    station the map writes (`_cell_or_400`). Returns the fresh slice plus
+    ``id``."""
+    chat = _chat_or_404(cid)
+    _require_idle(cid)
+    if not isinstance(body, dict):
+        raise HTTPException(400, "Send {name, kind, description, cell}")
+    name = " ".join(str(body.get("name") or "").split())
+    if not name:
+        raise HTTPException(400, "A thing needs a name")
+    with _era(cid, frame_id):
+        scene = get_scene(cid, chat)
+        before = copy.deepcopy(scene)
+        _live_room_or_400(scene, room_id)
+        entities = scene.setdefault("entities", {})
+        taken = set(entities) | {str(k) for k in (scene.get("positions") or {})}
+        eid = _mint_id(name, taken, "thing")
+        entity = {"name": name, "kind": " ".join(str(body.get("kind") or "object").split()),
+                  "description": " ".join(str(body.get("description") or "").split())}
+        entities[eid] = entity
+        scene.setdefault("positions", {})[eid] = str(room_id)
+        cell = _cell_or_400("cell", body.get("cell"), room_grid(scene, room_id))
+        if cell is not None:
+            scene.setdefault("stations", {})[eid] = {"at": None, "near": [], "cell": cell}
+        _write_scene(cid, chat, before, scene)
+        row = _decorated_slice(cid, frame_id, room_id, scene)
+    row = row or {}
+    row["id"] = eid
+    return row
+
+
+@router.delete("/{room_id}/entities/{entity_id}")
+def room_entity_delete(cid: int, room_id: str, entity_id: str,
+                       frame_id: int | None = None):
+    """Remove a thing standing in the room by a position row: its entity
+    record, position, station and pose. A thing placed as one of the
+    room's anchors is refused -- the anchor editor is where it lives -- as
+    is a body (a person is not a thing; the bodies routes own them)."""
+    from world.regions import scene_anchors
+    chat = _chat_or_404(cid)
+    _require_idle(cid)
+    with _era(cid, frame_id):
+        scene = get_scene(cid, chat)
+        before = copy.deepcopy(scene)
+        _live_room_or_400(scene, room_id)
+        entities = scene.get("entities") or {}
+        if not isinstance(entities.get(str(entity_id)), dict):
+            raise HTTPException(404, f"No entity '{entity_id}' in this scene")
+        if _is_body(scene, entity_id):
+            raise HTTPException(
+                400, f"'{entity_id}' is a body, not a thing; remove a presence "
+                     "through the bodies route")
+        placed_by_position = room_of(scene, str(entity_id))
+        if not placed_by_position:
+            where = scene_anchors(scene).get(str(entity_id))
+            raise HTTPException(
+                400, f"'{entity_id}' is placed as an anchor"
+                     + (f" of '{where}'" if where else "")
+                     + ", not by a position; edit the room's anchors to remove it")
+        if str(placed_by_position) != str(room_id):
+            raise HTTPException(
+                400, f"'{entity_id}' does not stand in '{room_id}' "
+                     f"(it is in '{placed_by_position}')")
+        entities.pop(str(entity_id), None)
+        key = _position_key(scene, entity_id)
+        if key is not None:
+            scene["positions"].pop(key, None)
+        _drop_station(scene, entity_id)
+        poses = scene.get("poses")
+        if isinstance(poses, dict):
+            poses.pop(str(entity_id), None)
+        _write_scene(cid, chat, before, scene)
+        row = _decorated_slice(cid, frame_id, room_id, scene)
+    return row
+
+
+@router.post("/{room_id}/presences")
+def room_presence_create(cid: int, room_id: str, body: dict = Body(...),
+                         frame_id: int | None = None):
+    """Place a PRESENCE in the room: ``{name, cell?}``. A presence is a body
+    the scene places by a position row with no registered sheet behind it
+    (`_body_kind`); nothing else is minted -- no entity, no memory, no
+    psychology (that is promotion). Refused when the name already stands
+    somewhere, or is the player's or a cast member's -- those are moved,
+    not created. Returns the fresh slice."""
+    chat = _chat_or_404(cid)
+    _require_idle(cid)
+    if not isinstance(body, dict):
+        raise HTTPException(400, "Send {name, cell}")
+    name = " ".join(str(body.get("name") or "").split())
+    if not name:
+        raise HTTPException(400, "A presence needs a name")
+    with _era(cid, frame_id):
+        scene = get_scene(cid, chat)
+        before = copy.deepcopy(scene)
+        _live_room_or_400(scene, room_id)
+        key = _position_key(scene, name)
+        if key is not None:
+            raise HTTPException(
+                400, f"'{key}' already stands in '{scene['positions'][key]}'; "
+                     "move them rather than placing them twice")
+        player = str(persona_name(persona_of(chat)) or "").strip()
+        kind = _body_kind(name, player, _cast_ids(cid))
+        if kind != "presence":
+            raise HTTPException(
+                400, f"'{name}' is the {kind}; move them into the room rather "
+                     "than placing a presence of the same name")
+        scene.setdefault("positions", {})[name] = str(room_id)
+        cell = _cell_or_400("cell", body.get("cell"), room_grid(scene, room_id))
+        if cell is not None:
+            scene.setdefault("stations", {})[name] = {"at": None, "near": [], "cell": cell}
+        _write_scene(cid, chat, before, scene)
+        row = _decorated_slice(cid, frame_id, room_id, scene)
+    return row
+
+
+@bodies_router.delete("/{name}")
+def body_presence_delete(cid: int, name: str, frame_id: int | None = None):
+    """Remove a presence from the scene: its position, station and pose.
+    The player and the registered cast are refused -- their place is the
+    story's and the cast editor's -- and so is a thing. The attire ledger is
+    left: a body the ledger dresses that nothing places is a legitimate
+    state (`body_rows`). Returns ``{removed}``."""
+    chat = _chat_or_404(cid)
+    _require_idle(cid)
+    with _era(cid, frame_id):
+        scene = get_scene(cid, chat)
+        before = copy.deepcopy(scene)
+        key = _position_key(scene, name)
+        if key is None:
+            raise HTTPException(400, f"'{name}' stands in no room")
+        if not _is_body(scene, key):
+            raise HTTPException(400, f"'{key}' is a thing; remove it through its room")
+        player = str(persona_name(persona_of(chat)) or "").strip()
+        kind = _body_kind(key, player, _cast_ids(cid))
+        if kind != "presence":
+            raise HTTPException(
+                400, f"'{key}' is the {kind} and cannot be removed here; "
+                     "only a presence can")
+        scene["positions"].pop(key, None)
+        _drop_station(scene, key)
+        for ledger in ("poses", "orientation"):
+            table = scene.get(ledger)
+            if isinstance(table, dict):
+                for k in [k for k in table if str(k).strip().casefold() == key.strip().casefold()]:
+                    table.pop(k, None)
+        _write_scene(cid, chat, before, scene)
+    return {"removed": key}
+
+
+@bodies_router.put("/{name}/room")
+def body_room_put(cid: int, name: str, body: dict = Body(...),
+                  frame_id: int | None = None):
+    """Move ANY body the scene knows -- the player, a presence, a cast
+    member -- to a live room: ``{room}``. The route the cast editor lacked
+    for the player and a presence (`chat_char_position_put` is by character
+    id); the same invalidation follows a change of room: the station's
+    `cell` (a place in the OLD room's grid) is dropped, and a pose detail
+    holding another body is dropped by `invalidate_moved_body_pose_details`.
+    Refused for an unknown room naming the known ones, and for a name the
+    scene does not place (a presence is created through its room). Returns
+    the body's row."""
+    chat = _chat_or_404(cid)
+    _require_idle(cid)
+    if not isinstance(body, dict):
+        raise HTTPException(400, "Send {room}")
+    target = str(body.get("room") or "").strip()
+    if not target:
+        raise HTTPException(400, "A body needs a room to move to")
+    with _era(cid, frame_id):
+        scene = get_scene(cid, chat)
+        before = copy.deepcopy(scene)
+        _live_room_or_400(scene, target)
+        positions = scene.setdefault("positions", {})
+        key = _position_key(scene, name)
+        player = str(persona_name(persona_of(chat)) or "").strip()
+        if key is None:
+            if player and str(name).strip().casefold() == player.casefold():
+                key = player
+            else:
+                raise HTTPException(
+                    400, f"'{name}' stands in no room; place a presence "
+                         "through the room it should stand in")
+        elif not _is_body(scene, key):
+            raise HTTPException(400, f"'{key}' is a thing; move it through its room")
+        was = str(positions.get(key) or "")
+        positions[key] = target
+        if was != target:
+            stations = scene.get("stations")
+            station = stations.get(key) if isinstance(stations, dict) else None
+            if isinstance(station, dict):
+                station.pop("cell", None)
+            invalidate_moved_body_pose_details(scene, before.get("positions") or {})
+        _write_scene(cid, chat, before, scene)
+        rows = body_rows(cid, chat, scene)
+    folded = key.strip().casefold()
+    return next((b for b in rows if b["name"].strip().casefold() == folded),
+                {"name": key, "room": target})
+
+
+@bodies_router.put("/{name}/pose")
+def body_pose_put(cid: int, name: str, body: dict = Body(...),
+                  frame_id: int | None = None):
+    """Write a body's pose: the six fields of `_POSE_FIELDS`, each open
+    prose, cleaned by the engine's own `_clean_pose` (a null idiom is empty;
+    a pose with nothing in it is no pose and the record is removed). A body
+    must be one the scene places or the player. Returns the body's row."""
+    chat = _chat_or_404(cid)
+    _require_idle(cid)
+    if not isinstance(body, dict):
+        raise HTTPException(400, "Send {" + ", ".join(_POSE_FIELDS) + "}")
+    unknown = sorted(k for k in body if k not in _POSE_FIELDS)
+    if unknown:
+        raise HTTPException(
+            400, f"a pose has the fields {', '.join(_POSE_FIELDS)} (got "
+                 f"{', '.join(unknown)})")
+    with _era(cid, frame_id):
+        scene = get_scene(cid, chat)
+        before = copy.deepcopy(scene)
+        key = _position_key(scene, name)
+        player = str(persona_name(persona_of(chat)) or "").strip()
+        if key is None and player and str(name).strip().casefold() == player.casefold():
+            key = player
+        if key is None:
+            raise HTTPException(400, f"'{name}' stands in no room, so has no pose")
+        poses = scene.setdefault("poses", {})
+        if not isinstance(poses, dict):
+            poses = scene["poses"] = {}
+        for k in [k for k in poses if str(k).strip().casefold() == key.strip().casefold()]:
+            poses.pop(k, None)
+        pose = _clean_pose(body)
+        if pose is not None:
+            poses[key] = pose
+        _write_scene(cid, chat, before, scene)
+        rows = body_rows(cid, chat, scene)
+    folded = key.strip().casefold()
+    return next((b for b in rows if b["name"].strip().casefold() == folded),
+                {"name": key, "pose": pose})
+
+
+# ---------------------------------------------------------------------------
+# The doorway as ONE object (the passage record, DESIGN_ROOM_FIDELITY §5)
+# ---------------------------------------------------------------------------
+
+doorways_router = APIRouter(prefix="/api/chats/{cid}/doorways", tags=["world-browser"])
+
+#: What a doorway PATCH may carry.
+DOORWAY_FIELDS = ("barrier", "dir", "offset", "name", "material", "width",
+                  "vertical", "state")
+
+#: The widest doorway in paces: the extent ceiling, since a doorway cannot be
+#: wider than any wall it stands in. Owner-visible.
+DOORWAY_MAX_WIDTH = EXTENT_MAX_PACES
+
+
+def _apply_doorway_fields(scene, room_id, to, record, ea, eb, body):
+    """Write the fields of one doorway onto its passage record and, for the
+    per-edge ones (`dir`, `offset`), onto both edges directly -- `dir` as
+    given from `room_id` and its opposite from `to`, `offset` the same
+    fraction on both (a wall's start is the same end from either room)."""
+    if "barrier" in body:
+        barrier = str(body.get("barrier") or "").strip().casefold() or "open"
+        _refuse_outside("barrier", barrier, sorted(_VALID_BARRIERS))
+        record["barrier"] = barrier
+        # The edges are written here too, so a one_way_window -- which the
+        # sync leaves per edge -- still lands on both.
+        ea["barrier"] = barrier
+        eb["barrier"] = barrier
+    if "dir" in body:
+        if str(body.get("dir") or "").strip():
+            direction = normalize_bearing(body.get("dir"))
+            if direction is None:
+                _refuse_outside("dir", str(body.get("dir")), list(_BEARINGS))
+            ea["dir"] = direction
+            eb["dir"] = opposite_bearing(direction)
+        else:
+            ea.pop("dir", None)
+            eb.pop("dir", None)
+    if "offset" in body:
+        placed_at = _offset_or_400("a doorway's offset", body.get("offset"))
+        for edge in (ea, eb):
+            if placed_at is None:
+                edge.pop("offset", None)
+            else:
+                edge["offset"] = placed_at
+    for field in ("name", "material"):
+        if field in body:
+            text = " ".join(str(body.get(field) or "").split())
+            if text:
+                record[field] = text
+            else:
+                record.pop(field, None)
+                ea.pop(field, None)
+                eb.pop(field, None)
+    if "width" in body:
+        raw = body.get("width")
+        if raw in (None, ""):
+            record.pop("width", None)
+            ea.pop("width", None)
+            eb.pop("width", None)
+        else:
+            try:
+                width = int(raw) if not isinstance(raw, bool) else None
+            except (TypeError, ValueError):
+                width = None
+            if width is None or width < 1 or width > DOORWAY_MAX_WIDTH:
+                raise HTTPException(
+                    400, f"a doorway's width is whole paces between 1 and "
+                         f"{DOORWAY_MAX_WIDTH} (got {raw!r})")
+            record["width"] = width
+    if "vertical" in body:
+        if str(body.get("vertical") or "").strip():
+            vertical = normalize_vertical(body.get("vertical"))
+            if vertical is None:
+                raise HTTPException(
+                    400, f"vertical must be up or down as seen from '{room_id}' "
+                         f"(got {body.get('vertical')!r})")
+            # Stored as seen from `rooms[0]`; the sync writes the edges.
+            record["vertical"] = vertical if str(record["rooms"][0]) == str(room_id) \
+                else (opposite_vertical(vertical) or vertical)
+        else:
+            record.pop("vertical", None)
+            ea.pop("vertical", None)
+            eb.pop("vertical", None)
+    if "state" in body:
+        state = body.get("state")
+        if state in (None, "", {}):
+            record.pop("state", None)
+        elif isinstance(state, dict):
+            record["state"] = {str(k): v for k, v in state.items() if str(k)}
+        else:
+            raise HTTPException(400, "a doorway's state is an object of facts about it")
+
+
+@doorways_router.post("")
+def doorway_create(cid: int, body: dict = Body(...), frame_id: int | None = None):
+    """Open a doorway between two live rooms: ``{room, to, barrier?, dir?,
+    offset?, name?, material?, width?}`` -- ``dir`` the bearing from
+    ``room``, ``offset`` where along that wall (the map's click on a blank
+    wall segment supplies both). ONE object: a passage record and both
+    edges. Refused when a doorway already stands between the two (edit it),
+    when either room is not live, or when the two are one. Returns
+    ``{passage, room, to}`` plus the fresh slice of ``room`` as ``slice``."""
+    chat = _chat_or_404(cid)
+    _require_idle(cid)
+    if not isinstance(body, dict):
+        raise HTTPException(400, "Send {room, to, barrier, dir, offset}")
+    room_id = str(body.get("room") or "").strip()
+    to = str(body.get("to") or "").strip()
+    if not room_id or not to:
+        raise HTTPException(400, "A doorway joins two rooms: send room and to")
+    if room_id == to:
+        raise HTTPException(400, "a room cannot exit into itself")
+    with _era(cid, frame_id):
+        scene = get_scene(cid, chat)
+        before = copy.deepcopy(scene)
+        here = _live_room_or_400(scene, room_id)
+        there = _live_room_or_400(scene, to)
+        if _edge_to(here, to) is not None or _edge_to(there, room_id) is not None:
+            raise HTTPException(
+                400, f"a doorway already stands between '{room_id}' and '{to}'; "
+                     "edit it rather than opening a second")
+        here.setdefault("adjacent", []).append({"to": to, "barrier": "open"})
+        pid, record = _ensure_passage(scene, room_id, to)
+        fields = {k: v for k, v in body.items() if k in DOORWAY_FIELDS}
+        fields.setdefault("barrier", "open")
+        _apply_doorway_fields(scene, room_id, to, record,
+                              _edge_to(here, to), _edge_to(there, room_id), fields)
+        _write_scene(cid, chat, before, scene)
+        row = _decorated_slice(cid, frame_id, room_id, scene)
+    return {"passage": pid, "room": room_id, "to": to, "slice": row}
+
+
+@doorways_router.patch("/{room_id}/{to}")
+def doorway_patch(cid: int, room_id: str, to: str, body: dict = Body(...),
+                  frame_id: int | None = None):
+    """Edit the doorway between two rooms as ONE object, from EITHER room --
+    a doorway declared from the far side alone included, since the passage
+    record is minted from the standing edge and the missing edge with it
+    (`_ensure_passage`). Fields: `DOORWAY_FIELDS`; ``dir`` and ``vertical``
+    are as seen from ``room_id``. Refused when no doorway stands between
+    the two. Returns ``{passage}`` plus the fresh slice of ``room_id`` as
+    ``slice``."""
+    chat = _chat_or_404(cid)
+    _require_idle(cid)
+    if not isinstance(body, dict):
+        raise HTTPException(400, "Send the changed fields: " + ", ".join(DOORWAY_FIELDS))
+    unknown = sorted(k for k in body if k not in DOORWAY_FIELDS)
+    if unknown:
+        raise HTTPException(
+            400, f"a doorway has the fields {', '.join(DOORWAY_FIELDS)} "
+                 f"(got {', '.join(unknown)})")
+    with _era(cid, frame_id):
+        scene = get_scene(cid, chat)
+        before = copy.deepcopy(scene)
+        here = _live_room_or_400(scene, room_id)
+        there = _live_room_or_400(scene, to)
+        if _edge_to(here, to) is None and _edge_to(there, room_id) is None:
+            raise HTTPException(
+                400, f"no doorway stands between '{room_id}' and '{to}'; open "
+                     "one first")
+        pid, record = _ensure_passage(scene, room_id, to)
+        _apply_doorway_fields(scene, room_id, to, record,
+                              _edge_to(here, to), _edge_to(there, room_id), body)
+        _write_scene(cid, chat, before, scene)
+        row = _decorated_slice(cid, frame_id, room_id, scene)
+    return {"passage": pid, "room": room_id, "to": to, "slice": row}
+
+
+@doorways_router.delete("/{room_id}/{to}")
+def doorway_delete(cid: int, room_id: str, to: str, frame_id: int | None = None):
+    """Close up a doorway: both edges and the passage record. Refused when
+    none stands between the two rooms. Returns ``{removed: [room, to]}``
+    plus the fresh slice of ``room_id`` as ``slice``."""
+    chat = _chat_or_404(cid)
+    _require_idle(cid)
+    with _era(cid, frame_id):
+        scene = get_scene(cid, chat)
+        before = copy.deepcopy(scene)
+        here = _live_room_or_400(scene, room_id)
+        there = _live_room_or_400(scene, to)
+        ea, eb = _edge_to(here, to), _edge_to(there, room_id)
+        if ea is None and eb is None:
+            raise HTTPException(
+                400, f"no doorway stands between '{room_id}' and '{to}'")
+        for edge in (ea, eb):
+            record = passage_of(scene, edge) if edge else None
+            if record is not None:
+                scene_passages(scene).pop(edge.get("passage"), None)
+        here["adjacent"] = [e for e in (here.get("adjacent") or [])
+                            if not (isinstance(e, dict) and str(e.get("to")) == str(to))]
+        there["adjacent"] = [e for e in (there.get("adjacent") or [])
+                             if not (isinstance(e, dict) and str(e.get("to")) == str(room_id))]
+        _write_scene(cid, chat, before, scene)
+        row = _decorated_slice(cid, frame_id, room_id, scene)
+    return {"removed": [room_id, to], "slice": row}
+
+
+# ---------------------------------------------------------------------------
+# Regions: create and rename (the `look` PATCH stands above)
+# ---------------------------------------------------------------------------
+
+@regions_router.post("")
+def region_create(cid: int, body: dict = Body(...), frame_id: int | None = None):
+    """Enter a region in the frame's registry by name: ``{name}``. The id is
+    the name's room-id fold (`normalize_region_id`); a region of that id
+    already standing is returned as it is (the write is idempotent) so the
+    map can offer it to a room at once. Returns ``{id, name, brief, look,
+    rooms}``."""
+    from world.regions import ensure_regions, normalize_region_id, region_registry
+    chat = _chat_or_404(cid)
+    _require_idle(cid)
+    if not isinstance(body, dict):
+        raise HTTPException(400, "Send {name}")
+    name = " ".join(str(body.get("name") or "").split())
+    rid = normalize_region_id(name)
+    if not name or not rid:
+        raise HTTPException(400, "A region needs a name")
+    with _era(cid, frame_id):
+        ensure_regions(cid, frame_id, {rid: name})
+        entry = region_registry(cid, frame_id).get(rid) or {"name": name, "brief": ""}
+        scene = get_scene(cid, chat) or {}
+    in_region = sorted(
+        str(room_id) for room_id, room in (scene.get("rooms") or {}).items()
+        if isinstance(room, dict) and str(room.get("region") or "") == rid)
+    return {"id": rid, "name": str(entry.get("name") or rid),
+            "brief": str(entry.get("brief") or ""),
+            "look": str(entry.get("look") or ""), "rooms": in_region}

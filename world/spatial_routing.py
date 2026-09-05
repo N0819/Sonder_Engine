@@ -9,7 +9,7 @@ from world.spatial_orientation import normalize_bearing, opposite_bearing
 
 from world.spatial_barriers import (_PASSABLE_BARRIERS, _SIGHT_BARRIERS,
                               edge_passable, effective_adjacent, neighbor_map,
-                              normalize_barrier)
+                              normalize_barrier, resolve_edge)
 from world.spatial_containment import container_of
 from world.spatial_light import _LIGHT_SIGHT, effective_light, light_blocks_sight
 
@@ -301,6 +301,11 @@ def spatial_rel(
             if edge.get("to") != target:
                 continue
 
+            # Through the passage the edge names (the passage record,
+            # DESIGN_ROOM_FIDELITY §5: F16/F22 were this loop reading the
+            # observer's own edge and the far room's edge disagreeing), per
+            # edge when it names none.
+            edge = resolve_edge(scene, edge)
             barrier = normalize_barrier(edge.get("barrier"))
             # `a_room` is the OBSERVER, and this loop reads their own side
             # first -- so the forward direction of a one-way window needs no

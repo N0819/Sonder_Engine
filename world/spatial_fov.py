@@ -104,14 +104,24 @@ GRID_SIDE = dict(_TIER_SIDE)
 
 #: The shapes a room may declare (`docs/design/DESIGN_ROOM_FIDELITY.md` §2).
 #: A closed set the ENGINE owns and enumerates: `rectangle` is the bounding
-#: box itself; `round` keeps the cells within the inscribed ellipse; `l` is the
-#: union of the rectangles `parts` places at corners of the box. Unknown ->
-#: rectangle, the shape that subtracts no cell.
-SHAPES = ("rectangle", "round", "l")
+#: box itself; `round` keeps the cells within the inscribed ellipse; `l` and
+#: `composite` are the union of the rectangles `parts` places within the box
+#: -- `l` the two-part case the 2026-09-04 prototype named, kept readable
+#: exactly as it was, `composite` any number of parts (a T, a U, a cross, a
+#: room with a bay; the owner, trying the map editor the same day: "the room
+#: editor doesn't cover the multi room shape design"). Unknown -> rectangle,
+#: the shape that subtracts no cell.
+SHAPES = ("rectangle", "round", "l", "composite")
 DEFAULT_SHAPE = "rectangle"
 
-#: Where an `l` part may sit: the four corners of the bounding box, as the
-#: bearing words the rest of the engine already reads. Owner-visible.
+#: The shapes whose cells are the union of their `parts`.
+_PART_SHAPES = ("l", "composite")
+
+#: Where a part may sit by a WORD: the four corners of the bounding box, as
+#: the bearing words the rest of the engine already reads. A part may instead
+#: sit at a room-local origin `at: [x, y]` -- the `cell` convention stations
+#: and anchors use: two whole numbers, the west-most, north-most cell of the
+#: part (`normalize_cell`). Owner-visible.
 ROOM_CORNERS = ("ne", "se", "sw", "nw")
 
 #: Eye height, and equally the top of the body, by the body's own posture.
@@ -230,21 +240,72 @@ def normalize_shape(value) -> str:
     return v if v in SHAPES else DEFAULT_SHAPE
 
 
+def normalize_part_at(value):
+    """Where a part sits: a corner word of `ROOM_CORNERS`, or a room-local
+    origin cell `[x, y]` as `normalize_cell` reads one (two whole numbers,
+    the part's west-most, north-most cell). None for anything else -- a
+    bearing that is not a corner, prose, one number."""
+    if isinstance(value, str):
+        at = normalize_bearing(value)
+        return at if at in ROOM_CORNERS else None
+    cell = normalize_cell(value)
+    return [cell[0], cell[1]] if cell is not None else None
+
+
 def normalize_parts(value) -> list:
-    """The readable `l` parts, each `{w, d, at}` with a corner word and both
-    sides in paces (`normalize_extent`'s clamp). A part with no corner or no
-    readable extent is dropped, not guessed at."""
+    """The readable parts of an `l` or a `composite`, each `{w, d, at}` with
+    both sides in paces (`normalize_extent`'s clamp) and `at` a corner word
+    or an origin cell (`normalize_part_at`). A part with no place or no
+    readable extent is dropped, not guessed at. An `l`'s corner parts read
+    exactly as they did before `composite` existed."""
     if not isinstance(value, (list, tuple)):
         return []
     out = []
     for part in value:
         if not isinstance(part, dict):
             continue
-        at = normalize_bearing(part.get("at"))
+        at = normalize_part_at(part.get("at"))
         extent = normalize_extent(part)
-        if at in ROOM_CORNERS and extent:
+        if at is not None and extent:
             out.append({"w": extent["w"], "d": extent["d"], "at": at})
     return out
+
+
+def part_box(part, w, d):
+    """One part's rectangle within a `w` x `d` bounding box, as
+    `(x0, y0, x1, y1)` half-open, clipped to the box. A corner part is laid
+    into its corner (the arithmetic the `l` prototype wrote, byte for
+    byte); a cell part is laid east and south from its origin. A part the
+    box holds nothing of is an empty rectangle, not an error -- the route
+    refuses one fresh, the reader fails open on one the extent has since
+    shrunk out from under."""
+    at = part["at"]
+    if isinstance(at, str):
+        pw, pd = min(part["w"], w), min(part["d"], d)
+        x0 = w - pw if at in ("ne", "se") else 0
+        y0 = d - pd if at in ("se", "sw") else 0
+        return (x0, y0, x0 + pw, y0 + pd)
+    x0, y0 = int(at[0]), int(at[1])
+    return (max(0, x0), max(0, y0), max(0, min(w, x0 + part["w"])),
+            max(0, min(d, y0 + part["d"])))
+
+
+def parts_box(parts) -> tuple:
+    """The bounding box the parts need when the room declares no `extent`:
+    the widest by the deepest for corner parts, the far edge of the
+    farthest-laid for cell parts -- `(w, d)`, each within the extent clamp.
+    An `l` of two corner parts gets exactly the box it always did."""
+    from world.spatial_geometry import EXTENT_MAX_PACES, EXTENT_MIN_PACES
+    w = d = 0
+    for part in parts:
+        at = part["at"]
+        if isinstance(at, str):
+            w, d = max(w, part["w"]), max(d, part["d"])
+        else:
+            w = max(w, max(0, int(at[0])) + part["w"])
+            d = max(d, max(0, int(at[1])) + part["d"])
+    clamp = lambda n: int(min(EXTENT_MAX_PACES, max(EXTENT_MIN_PACES, n)))
+    return clamp(w), clamp(d)
 
 
 class RoomGrid:
@@ -276,7 +337,9 @@ class RoomGrid:
 
     def key(self):
         return (self.shape, self.w, self.d,
-                tuple((p["w"], p["d"], p["at"]) for p in self.parts))
+                tuple((p["w"], p["d"],
+                       p["at"] if isinstance(p["at"], str) else tuple(p["at"]))
+                      for p in self.parts))
 
     def contains(self, cell) -> bool:
         return tuple(cell) in self.cells
@@ -323,14 +386,16 @@ def _shape_cells(shape, w, d, parts) -> frozenset:
             (x, y) for x, y in box
             if ((x + 0.5 - rx) / rx) ** 2 + ((y + 0.5 - ry) / ry) ** 2 <= 1.0)
         return kept or box
-    if shape == "l" and parts:
+    if shape in _PART_SHAPES and parts:
+        # THE UNION OF THE PARTS. An `l`'s two corner parts land on exactly
+        # the cells the prototype's arithmetic gave them (`part_box` is that
+        # arithmetic); a `composite` adds cell-placed parts and any count.
+        # The notch -- every cell of the box no part covers -- is not the
+        # room, so a line through it meets a wall.
         kept = set()
         for part in parts:
-            pw, pd = min(part["w"], w), min(part["d"], d)
-            x0 = w - pw if part["at"] in ("ne", "se") else 0
-            y0 = d - pd if part["at"] in ("se", "sw") else 0
-            kept.update((x, y) for x in range(x0, x0 + pw)
-                        for y in range(y0, y0 + pd))
+            x0, y0, x1, y1 = part_box(part, w, d)
+            kept.update((x, y) for x in range(x0, x1) for y in range(y0, y1))
         return frozenset(kept) or box
     return box
 
@@ -343,14 +408,15 @@ def room_grid(scene: dict, room_id) -> RoomGrid:
     room = room if isinstance(room, dict) else {}
     extent = normalize_extent(room.get("extent"))
     shape = normalize_shape(room.get("shape"))
-    parts = normalize_parts(room.get("parts")) if shape == "l" else []
+    parts = normalize_parts(room.get("parts")) if shape in _PART_SHAPES else []
     if extent:
         return RoomGrid(extent["w"], extent["d"], shape, parts, measured=True)
-    if shape == "l" and parts:
-        # An L with no box is the box its parts need: the widest by the
-        # deepest, so one part spans the width and one the depth.
-        return RoomGrid(max(p["w"] for p in parts), max(p["d"] for p in parts),
-                        shape, parts, measured=True)
+    if shape in _PART_SHAPES and parts:
+        # A part-shape with no box is the box its parts need: the widest by
+        # the deepest for corner parts (so one part spans the width and one
+        # the depth), the farthest edge for cell parts.
+        bw, bd = parts_box(parts)
+        return RoomGrid(bw, bd, shape, parts, measured=True)
     side = GRID_SIDE.get(effective_room_size(scene, room_id),
                          GRID_SIDE["medium"])
     return RoomGrid(side, side, shape, parts)
@@ -461,6 +527,15 @@ def _place_anchors(room_id, grid: RoomGrid, anchors) -> dict:
                 else grid.side
             length = {"point": 1, "small": 2, "large": 2,
                       "run": max(2, along - 2)}[fp]
+            # A doorway's `width` in paces (the passage record's,
+            # `DESIGN_ROOM_FIDELITY.md` §5, copied onto the implicit door
+            # anchor by `effective_anchors`) is its aperture: that many
+            # cells along the wall, never more than the wall has. Absent,
+            # the footprint's table above, byte for byte.
+            width = anchor.get("width")
+            if anchor.get("implicit") and isinstance(width, (int, float)) \
+                    and not isinstance(width, bool) and width >= 1:
+                length = max(1, min(int(width), max(1, along)))
             placed_at = normalize_offset(anchor.get("offset"))
             if placed_at is not None and bearing not in ROOM_CORNERS:
                 # An authored place along the wall: the fraction of the

@@ -2,12 +2,16 @@
 
 Status: PROTOTYPE, merged on `writers-room` 2026-09-04; not yet on `main`.
 Built 2026-09-04 in an isolated worktree (§§2-4; the map editor and `offset`
-of §10 later the same day) and merged the same day; §5, the passage record,
-is designed and NOT built. The register holds what is still open as
-`docs/UNBUILT.md` § 2.37 (the passage record, a Room tool for a region's
-look, the extents nobody writes yet, the rim, the lint's beared-edge ceiling,
-the viewer camera, the one-time redraw, `size` from area) and § 2.26 (what
-the map editor does not yet do). Built
+of §10 later the same day) and merged the same day. On 2026-09-05, after the
+owner tried the editor live ("This room editor feels very incomplete", "the
+room editor doesn't cover the multi room shape design"), §5 -- the passage
+record -- was BUILT, §2 widened to `composite` (any union of rectangles), and
+§10 grew from a map that drew and dragged to one that creates, removes,
+resizes, reshapes, lights and undoes (§11). The register holds what is still
+open as `docs/UNBUILT.md` § 2.37 (a Room tool for a region's look, the
+extents nobody writes yet, the rim, the lint's beared-edge ceiling, the
+viewer camera, the one-time redraw, `size` from area) and § 2.26 (what the
+map editor still does not do). Built
 from the owner's ruling of the same day: a room is minted ONCE and rendered
 three ways -- prose by the composer, sight and light by the geometry, a
 picture by the backdrop agent -- so every fidelity field on the room record
@@ -78,9 +82,39 @@ Three optional fields on the room record, beside `size`:
 
     extent   {w, d}        paces east-west and north-south; each clamped to
                            [EXTENT_MIN_PACES, EXTENT_MAX_PACES] = [2, 24]
-    shape    rectangle | round | l        SHAPES, a closed set the engine owns
-    parts    [{w, d, at}]  for `l` only: rectangles placed at a corner word
-                           (ne | se | sw | nw) of the room's bounding box
+    shape    rectangle | round | l | composite   SHAPES, a closed set the engine owns
+    parts    [{w, d, at}]  for `l` and `composite`: the rectangles the room is
+                           the union of, each placed within the bounding box
+                           by a corner word (ne | se | sw | nw) OR by its
+                           origin cell `at: [x, y]` -- the west-most,
+                           north-most cell of the part, the `cell` convention
+                           stations and anchors use (2026-09-05)
+
+**Composite (2026-09-05).** The owner, trying the map: "the room editor
+doesn't cover the multi room shape design." `l` was two corner parts, so a
+T, a U, a cross or a room with a bay had no spelling. The class, stated once:
+a room that is not one rectangle is the union of rectangles placed within its
+bounding box. `composite` is any number of parts, each at a corner or at a
+cell (`normalize_part_at`; `part_box` lays a corner part into its corner with
+the `l` prototype's own arithmetic and a cell part east and south from its
+origin, clipped to the box); `l` stays in the set as the two-part case and
+reads byte for byte as it did (`tests/test_composite_rooms.py` pins the
+arithmetic against a copy). The box is the extent when one stands, else what
+the parts need (`parts_box`). `RoomGrid` computes the union, so `rim`,
+`corner`, `nearest`, the walls of `_Field` and `_door_cells` all see the
+union's cells and nothing else: the notch's inner wall is a wall, a doorway
+on it places exactly as on an L's, and the `_door_cells`/`room_field`
+contract needed nothing new. Connectivity is a LINT row, never a refusal --
+`parts_disconnected`, naming the pieces that stand apart (a host laying
+parts down one at a time may well have the second not touch until the third
+arrives); the cell-level `shape_disconnected` row is then the same fact and
+is not repeated. A cell part outside the box IS refused by the route naming
+the box (the reader would clip it to nothing, and an authoring surface
+should not quietly lose a fresh part); a negative origin likewise. The
+schema (`RoomDef._parts_or_none`) keeps a corner word or a cell pair and
+heals junk to None; the spatial hand's clause states the class -- "a room
+that is not one rectangle is the union of rectangles placed within its
+bounding box" -- and names no shape beyond the engine's own set.
 
 Absent, the grid is exactly the square the size tier gave it before this
 note (`GRID_SIDE`): `test_room_shapes.py::test_a_room_without_extent_composes_byte_identically`
@@ -244,38 +278,65 @@ changed ONE clause -- the paragraph naming what it receives -- to state the
 class: compose from the walls outward, light as stated, the centre empty. The
 HARD RULES paragraph is byte-identical in both packs.
 
-## 5. The passage as one object (designed; NOT built)
+## 5. The passage as one object (BUILT 2026-09-05)
 
 F16 and F22 are one class: a doorway is stored as two edges and the two can
 disagree. `_mirror_symmetric_barriers` closes the common case at merge, and
-`_shield_minted_edges` the seal; the design that removes the class is one
-record per doorway:
+`_shield_minted_edges` the seal; the record that removes the class is one
+per doorway, and it is built (`world/spatial_barriers.py`, the passage
+block; `world/spatial_merge.py`'s `sync_scene_passages`;
+`tests/test_passages.py`):
 
     scene.passages[id] = {rooms: [a, b], barrier, name, material, width,
                           vertical, state}
     rooms[a].adjacent[i].passage = id        (and the same id on b's edge)
 
-Readers resolve the barrier THROUGH the passage when the edge names one
-and per-edge as today when it does not (fail-open: an old scene reads
-exactly as before). The merge keeps both in sync -- a barrier written on
-either edge writes the passage, and a passage write writes both edges --
-with `_mirror_symmetric_barriers` staying as the fallback for edges with no
-passage. Archive, checkpoint and branch ride free because the scene is one
-blob; the registry projection is untouched because a passage is not a room.
-`width` in paces gives the doorway's aperture (`_door_cells` reads it in
-place of the door anchor's footprint), and `state` is where a latch, a bar,
-a wedge lives -- F22's "latched" against `open_door` becomes a state on one
-object rather than prose against an edge.
+Readers resolve THROUGH the passage when the edge names one and per edge,
+byte for byte, when it does not (`resolve_edge`: a copy carrying the
+passage's `PASSAGE_FIELDS` -- barrier, name, material, width -- where the
+passage has a value; the very same dict when nothing is named, so a scene
+with no `passages` reads as it always did, pinned on every reader). The
+five readers the design named are the five that resolve: `spatial_rel`,
+`effective_adjacent` (own edges and the far-declared ones it derives),
+`neighbor_map`, `_sight_neighbours` (through `_placed_neighbours` ->
+`effective_adjacent`), and `effective_anchors`' door derivation, which also
+copies the passage's `width` onto the implicit door anchor so
+`_place_anchors` lays that many cells along the wall -- the aperture. A
+passage names its rooms; one whose rooms are not two live rooms is dropped
+by the hygiene (`normalize_scene_passages`) and its edges read per edge
+again (a frame split that keeps one room of a pair leaves exactly this).
 
-Why it is not built here: the readers are `spatial_rel`, `effective_adjacent`,
-`neighbor_map`, `_sight_neighbours` and the door-anchor derivation in
-`effective_anchors` -- five, across `spatial_routing.py`, `spatial_barriers.py`,
-`spatial_fov.py` and `spatial_geometry.py` -- and the merge seam is the
-block `_mirror_symmetric_barriers` sits in. The light-field sibling is
-editing `spatial_routing.py`'s light key and `spatial_merge.py`'s durable
-entity fields in the same window, and a fail-open reader change in five
-places is not the "additive and small" this worktree was held to. Registered
-in `docs/UNBUILT.md` with this design.
+**Which side spoke.** The merge keeps both in step (`sync_scene_passages`,
+run beside the other hygienes with the PRE-diff scene as comparand): an
+edge whose barrier CHANGED this beat is the beat speaking and updates the
+record; an unchanged edge that disagrees is healed from the record; then
+the record is written onto both edges, minting the missing edge when the
+doorway stood on one side alone. `_mirror_symmetric_barriers` stays the
+answer for edges with no passage, and `one_way_window` is never forced onto
+an edge from a passage: its asymmetry is a field (`sight_from`), not a
+disagreement. `vertical` is stored as seen from `rooms[0]` and written onto
+`rooms[0]`'s edge with its opposite on `rooms[1]`'s. `offset` stays the
+per-edge fraction the map writes on both edges (a wall's start is the same
+end from either room). `state` is carried and read by nothing yet -- it is
+where F22's "latched" belongs, as a state on one object rather than prose
+against an edge. The Director is never asked for a passage: its diff writes
+edges, and the sync reads which changed.
+
+**The Browser edits a doorway as ONE object from either room**
+(`web/world_routes.py`, `doorways_router`): `POST /api/chats/{cid}/doorways`
+opens one (`{room, to, barrier?, dir?, offset?, name?, material?, width?}`,
+refused when one already stands between the two, when either room is not
+live, or when the two are one); `PATCH /doorways/{room}/{to}` edits it from
+whichever room is open -- a doorway declared from the far side alone
+included, since `_ensure_passage` mints the record from the standing edge
+and this side's edge with it; `DELETE /doorways/{room}/{to}` closes it, both
+edges and the record. The room PATCH's exit list still speaks: a barrier
+changed there updates the passage before the sync writes it back, and a
+removed exit takes its record with it. The map drags a doorway from either
+room through the PATCH. Archive, checkpoint and branch carry `passages`
+because the scene is one blob; the registry projection is untouched because
+a passage is not a room. What is deliberately NOT done: no reader consults
+`state`, and the passage does not carry `offset`.
 
 ## 6. Constants the owner sets
 
@@ -284,8 +345,12 @@ in `docs/UNBUILT.md` with this design.
     EXTENT_MAX_PACES = 24     twice the `vast` side; the shadowcast is
                               O(cells) per observer and 576 cells is the
                               ceiling this note accepts without measuring
-    SHAPES = (rectangle, round, l)
-    ROOM_CORNERS = (ne, se, sw, nw)   where an `l` part may sit
+    SHAPES = (rectangle, round, l, composite)
+    ROOM_CORNERS = (ne, se, sw, nw)   where a part may sit by a word; a part
+                                      may instead sit at an origin cell
+    DOORWAY_MAX_WIDTH = EXTENT_MAX_PACES   the widest doorway, in paces: a
+                                      doorway cannot be wider than any wall
+                                      it stands in (`web/world_routes.py`)
     CAMERA_WALL_ORDER = (n, e, s, w)  which entrance is "main" when several
                                       are passable: compass order, then id
 
@@ -341,7 +406,11 @@ every anchor kind on every size tier.
     through one of them is not seen.
   * **The viewer camera multiplies pictures** (§4), and it is off by default
     for that reason.
-  * **The passage record is a design** (§5).
+  * **The passage record's `state` has no reader yet** (§5): the field is
+    carried so F22's "latched" has somewhere to live, and nothing consults it.
+  * **A composite's parts are refused outside the box but not inside one
+    another** (§2): a part wholly within another is redundant, and only an
+    `l` says so (`l_part_redundant`); a composite keeps it silently.
 
 ## 9. Files
 
@@ -359,8 +428,19 @@ every anchor kind on every size tier.
     language_packs/*/cards/system_prompts/specialists/spatial/chunks/rooms.txt
     language_packs/*/cards/system_prompts/prompts/backdrop_prompt.txt
     tests/test_room_shapes.py, tests/test_room_lint.py, tests/test_backdrop_brief.py
-    web/world_routes.py               grid_view / map_view (§10), the offset PATCH
-    static/js/world_browser.js        the map editor (§10)
+    web/world_routes.py               grid_view / map_view (§10), the offset PATCH;
+                                     since 2026-09-05 the create/remove/move/pose
+                                     routes, the doorways router, _overlays (§11)
+    static/js/world_browser.js        the map editor (§10, §11)
+    world/spatial_barriers.py        the passage record (§5): passage_of, resolve_edge,
+                                     normalize_scene_passages, PASSAGE_FIELDS
+    world/spatial_merge.py           sync_scene_passages (§5)
+    world/spatial_fov.py             composite (§2): _PART_SHAPES, normalize_part_at,
+                                     part_box, parts_box; an implicit anchor's `width`
+    world/spatial_lint.py            parts_disconnected; layout_rooms' `parents`
+    world/regions.py                 set_region_name
+    tests/test_passages.py, tests/test_composite_rooms.py,
+    tests/test_map_editor_routes.py, browser_tests/test_world_browser.py
 
 ## 10. The map editor, and `offset` (built 2026-09-04, the owner's ruling)
 
@@ -559,15 +639,126 @@ field without a schema change.
 **Overlays.** The grid route returns `overlays: {}`. The SVG paints any
 `{name: {"x,y": word}}` it receives as a tint per cell (a graded mix of the
 page's accent, one step per distinct word in the order the readings came)
-with a legend and a select over the names; it knows no word in advance and
-computes nothing. The light field and the sound field are the readers that
-fill the slot, in the sibling worktree.
+with a legend and one toggle per name; it knows no word in advance and
+computes nothing. Since 2026-09-05 the slot is FILLED (`web/world_routes
+._overlays`) by the readers the composer uses, quantised with their own
+ladders and computed nowhere twice: `light` is `light_field`'s word per cell
+(`LightField.level`); `noise` is the sound field's floor per cell as
+`noise_word` says it -- every placed source's `intensity_at` plus the room's
+ambient, what `noise_at` gives a listener standing there; `sound` is the
+hearing word (`quantise_hearing`) for ONE chosen source or speaker,
+`?sound_from=<id>` from the `sound_sources` the same response lists. Absent
+when the room carries no geometry for the field to exist over. The toggles
+are off by default; the sound one is a select over the sources.
+`light_sources` rides beside them -- the field's own placed sources with the
+engine's height word -- so the map draws a `full`-height source as a RING
+round its cell (a ceiling light casts no shadow, `DESIGN_LIGHT_FIELD.md`)
+without re-deriving the rule.
 
 **What argues against it, and what it does not do:** `docs/UNBUILT.md`
 § 2.26, "What the map editor does not yet do" -- among them that proximity
 reads cell distance only for a pinned pair and not for two anchored bodies
-whose cells are derived, that the structure map draws an exit as a tick at
-the middle of its wall rather than at its door cell, and a measured gap in
-the placement itself: a doorway on the inner wall of an L's notch lays the
-neighbour into the notch, where it overlaps the room's own other part and
-`room_field` skips it without a row.
+whose cells are derived, and a measured gap in the placement itself: a
+doorway on the inner wall of an L's notch lays the neighbour into the notch,
+where it overlaps the room's own other part and `room_field` skips it
+without a row.
+
+## 11. The editor completed (2026-09-05, the owner's second ruling)
+
+The owner, trying §10 live: "This room editor feels very incomplete" and
+"the room editor doesn't cover the multi room shape design." What §10 drew
+and dragged, this section CREATES, REMOVES, RESIZES, RESHAPES, LIGHTS and
+UNDOES -- every gesture one write through a narrow typed route, a toast
+naming what was written, the inverse kept for one Undo, and an arrow key
+that is the drag by one cell. An authoring surface throughout: no Director
+call, no memory of a step, no narration. `static/js/world_browser.js`,
+`web/world_routes.py`, `tests/test_map_editor_routes.py`,
+`browser_tests/test_world_browser.py`.
+
+**Shape on the map.** The room's box has a handle on each side, outside it
+(a doorway's hit rect straddles the wall line, and a handle over the wall
+took its clicks -- measured on the east handle over the hallway door); a
+side dragged writes the extent, `w` or `d`, within
+`[EXTENT_MIN_PACES, EXTENT_MAX_PACES]`, the size word following as the card
+already showed. The shape is a select on the map bar (the same set the card
+offers). A part shape's parts are drawn as dashed rectangles: dragged, a
+part is re-placed by its ORIGIN CELL (a moved corner part becomes a cell
+part -- `at: [x, y]`); its south-east knob resizes it. All through the room
+PATCH the card uses. The card's parts editor places a part by a corner word
+or by `x, y`.
+
+**Create and remove.** A click on a BLANK wall segment chooses that wall and
+the place along it (the fraction `offset` means) and opens the pane's form:
+a doorway to a room the story holds (`POST /doorways`, the passage record
+of §5), or a new room through the wall (`POST /rooms` -- minted from its
+name, never reusing an id the scene or the registry holds, joined by ONE
+doorway with the wall's bearing and the chosen barrier, its region the
+joined room's, the layout placing it off that wall). A click on EMPTY floor
+chooses the cell and offers an anchor there (the room PATCH's `anchors`
+with `cell`), a thing (`POST /rooms/{id}/entities`, minted from its name,
+its station pinned to the cell) or a presence (`POST /rooms/{id}/presences`
+-- a position row with no sheet behind it, nothing else minted; refused
+when the name already stands somewhere or is the player's or a cast
+member's). "Remove room" (`DELETE /rooms/{id}`) is REFUSED while anything
+stands in the room -- bodies and things alike, each named -- and otherwise
+takes every edge into it and every passage naming it, the registry retiring
+the id through `sync_room_registry_with_scene` (the path every scene writer
+keeps and the path restore reads). A thing is removed from its card row
+(`DELETE /rooms/{id}/entities/{eid}`; a thing placed as an anchor is
+refused -- the anchor editor is where it lives), a presence from its
+(`DELETE /bodies/{name}`; the player and the cast are refused).
+
+**Things.** A thing standing by a position row is dragged with the body
+rule: pinned by `cell` through the station route, moved to a neighbour
+through the entity route (which drops the old room's station) and pinned in
+the neighbour's grid. Its editor grew the source fields the light and sound
+fields read -- `light_source`, `light_shape`, `light_height`, `steadiness`,
+`state.lit`, `state.pointed_at` (offered from the room's anchors, its
+doorways and the bearings; refused outside those classes), `sound_source`,
+`state.running` -- each a closed set the engine owns (`vocab`). THIS IS HOW
+A CEILING LIGHT IS AUTHORED: `light_source` with `light_height: full`, which
+casts no shadow, and the map draws it as a ring. Nothing here names a lamp,
+a torch or a generator.
+
+**Bodies.** Any body -- the player, a presence, a cast member -- changes
+room from its row (`PUT /bodies/{name}/room`, the route the cast editor
+lacked for the first two; the cast keeps `chat_char_position_put`), with
+the same invalidation a room change has always meant: the station's `cell`
+dropped, a pose detail holding another body dropped
+(`invalidate_moved_body_pose_details`). Poses are edited in the body row
+and on the Bodies tab (`PUT /bodies/{name}/pose`: the six fields of
+`_POSE_FIELDS`, each open prose, cleaned by `_clean_pose`; posture offered
+from the words the geometry reads an eye height from, support from the
+room's anchors -- suggestions, never refusals).
+
+**Structure map.** A room is DRAGGABLE: a drop re-bears the doorway that
+placed it (`layout_rooms`' new `parents`, additive) from its parent room --
+the compass direction from the parent's centre to where the room's centre
+landed, written on both edges through the doorways PATCH -- and the
+layout's collisions, if the new bearing makes one, are said in words under
+the map beside the drawn overlap. Doorways are drawn WHERE THEIR DOOR CELLS
+ARE (`map_view` exits carry `cells`), not as ticks at the middle of the
+wall. Rooms are tinted by region with a legend.
+
+**Regions.** A region is entered by name from the card ("New region": the
+regions POST, then the room moved into it), renamed in place (the regions
+PATCH with `name`; the id every room carries stays, so no room moves), and
+a room moves between regions through its own `region` field -- which the
+commit's `assign_regions` keeps as a declaration, so an authored region
+survives the next beat.
+
+**One commit gesture.** Drop = write; the toast names what was written
+("Pinned hearth to (2, 4)", "Placed Study E of Hallway"); the inverse is
+remembered for ONE Undo, client-side, re-issuing the previous value through
+the same route, cleared when another room is opened or a write is not a
+drag. Every draggable answers the arrow keys with the same write one cell
+over, Enter or Space opens its editor, and after a write from the map the
+mark that was dragged is focused again so a nudge can go on. A legend
+beneath the map names every mark and every overlay word. The card and the
+Bodies tab are re-fetched after every write, never patched speculatively.
+
+**Constants introduced, for the owner to rule on:** `DOORWAY_MAX_WIDTH =
+EXTENT_MAX_PACES` (24 paces; a doorway cannot be wider than any wall it
+stands in). `SHAPES` gains `composite`; `LAYOUT_LINT_KINDS` gains
+`parts_disconnected`. The map's `WB_CELL`/`WB_MINI` scales are unchanged;
+the structure map's drag threshold scales with them.
