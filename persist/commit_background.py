@@ -1228,6 +1228,117 @@ def demand_reaches(scene, here, authored_rooms, *, aimed=False):
     return False
 
 
+def spoken_volumes(ctx, dr_output=None):
+    """The volumes an authored mind's own overt lines were spoken at this
+    beat -- what an address is MADE of, graded.
+
+    A line has a volume, and the volume is the whole difference between a
+    question put across a yard and one breathed at a rail. Both address
+    channels this module reads carry it: the player's overt declaration
+    (`overt_declaration`, the same elements every content filter here reads)
+    and the resolve stage's own dialogue log. Defaults to ("normal",) when
+    the beat records no line at all, which is the bar every other reader of
+    this question already applies.
+    """
+    volumes, seen = [], set()
+
+    def _take(value):
+        text = str(value or "normal").strip().casefold() or "normal"
+        if text not in seen:
+            seen.add(text)
+            volumes.append(text)
+
+    try:
+        elements, _raw = overt_declaration(ctx)
+    except Exception:
+        elements = []
+    for element in elements or []:
+        if isinstance(element, dict) \
+                and element.get("type") in ("speech", "communication"):
+            _take(element.get("volume"))
+    dr = dr_output if dr_output is not None else (
+        ctx.get("director_resolve") or {})
+    player = _player_name_or_none(ctx)
+    for entry in ((dr or {}).get("dialogue_log") or []):
+        if not isinstance(entry, dict) or not player:
+            continue
+        if str(entry.get("speaker") or "").strip().casefold() \
+                == player.casefold():
+            _take(entry.get("volume"))
+    return tuple(volumes) or ("normal",)
+
+
+def address_reaches(scene, listener, listener_room, speaker, speaker_rooms,
+                    volumes=("normal",)):
+    """Did the ADDRESSING LINE arrive where this body stands?
+
+    BEING ADDRESSED CHANGES WHETHER A BODY IS PICKED TO ANSWER, NEVER
+    WHETHER IT HEARD. An address is a claim about who the SPEAKER meant; it
+    is not a channel, and the engine owns the difference. Measured,
+    caravanserai turn 13 (PLAY_2026_09_05, PB1): the player, alone on an
+    upper gallery, said quietly "which of these doors is free? I've paid the
+    house below"; the demand gate marked the pick `channel: exempt` on the
+    strength of the address alone and a boy standing in the courtyard one
+    floor down -- `hear_level` `none` at every volume, in both directions --
+    answered the question's content. A leak is an engine failure, never a
+    model's, so the floor is here rather than in a sentence asking a model
+    to notice.
+
+    Body-to-body and at the line's OWN volume, which is what separates this
+    from `demand_reaches`: that one asks whether a carried debt has any
+    channel between two ROOMS at ordinary speech, the right question for a
+    debt and the wrong one for a whisper. Proximity is read too, so a body
+    across the same room from a whispered line is as unreached as one behind
+    a shut door -- but only where the tier is a MEASUREMENT
+    (`measured_proximity_rel`), because `proximity_rel` answers "near" both
+    as a reading and as its no-station-data default, and 93% of live bodies
+    carry no station. Reading the default as a distance would silence nearly
+    every whisper anyone ever aimed at the person beside them.
+
+    The bar is FULL, the same bar `_character_address_of`, the reply-debt
+    writer and `demand_reaches` all apply to the same question: a fragment
+    cannot be coherently replied to. Either direction counts, for the reason
+    `demand_reaches` gives: the line travelling to them and their answer
+    travelling back are one channel seen from two ends, and `hear_level` is
+    deliberately asymmetric about containment.
+
+    `speaker_rooms` is where the addressing mind stands -- the player's own
+    room where the scene places them, else every authored mind's room, which
+    is the aperture `demand_reaches` has always used. A speaker with no body
+    in the scene has no relation to build, so the ROOMS are all the channel
+    there is and the room-level read stands in. Fails OPEN only where
+    `demand_reaches` does -- a listener or a speaker the scene places nowhere
+    -- so a check about position never silences somebody the scene has no
+    position for.
+    """
+    rooms = [str(r) for r in (speaker_rooms or ()) if str(r or "")]
+    if not listener_room or not rooms:
+        return True
+    volumes = tuple(volumes or ("normal",))
+    try:
+        from world.spatial import measured_proximity_rel, spatial_rel_between
+        for room in rooms:
+            if speaker and str(room_of(scene, speaker) or "") == room:
+                rels = (spatial_rel_between(scene, listener, speaker,
+                                            observer_room=listener_room,
+                                            target_room=room),
+                        spatial_rel_between(scene, speaker, listener,
+                                            observer_room=room,
+                                            target_room=listener_room))
+                near = measured_proximity_rel(scene, listener, speaker)
+            else:
+                rels = (spatial_rel(scene, listener_room, room),
+                        spatial_rel(scene, room, listener_room))
+                near = None
+            for rel in rels:
+                if any(hear_level(rel, volume, proximity=near) == "full"
+                       for volume in volumes):
+                    return True
+    except Exception:
+        return True
+    return False
+
+
 def _valid_pending_reply(record, turn_idx):
     """The presence's owed reply if it has not yet expired, else None."""
     pr = record.get("pending_reply")
@@ -2543,6 +2654,117 @@ def _normalized_descriptor(text):
     return " ".join(words)
 
 
+def beat_scene(scene, dr_output=None):
+    """The scene with THIS beat's own positions laid over it -- the one read
+    every question about where a body stands should use in this module.
+
+    A DESCRIPTION IS RESOLVED AGAINST THE ROOM THE BEAT PUTS THE SPEAKER IN.
+    The background stage runs before `persist/commit.py` writes anything, so
+    `world.scene` still stands every body where the beat OPENED, and the
+    beat's own movement has not landed. Reading the stored scene therefore
+    answers with the room the player LEFT. Measured, caravanserai turn 13
+    (PLAY_2026_09_05, PB1/PB6): the player climbed to the upper gallery and
+    addressed a shape at the balustrade; the stored scene still stood her in
+    the courtyard, so the descriptor cohort was the courtyard's bodies, the
+    description bound to a boy one floor below, and the pair then read as
+    co-present for every hearing test downstream -- which is how a whispered
+    line reached a mind that could not hear it.
+
+    `state_diff.positions` is the freshest room this stage legitimately has:
+    the movement floor has already judged it (the merged diff the Director
+    orchestrator hands on), and commit will write exactly it. It has NOT
+    landed yet, so a later domain failure can still roll the turn back and
+    this read would have been the wrong one for a beat that never happened --
+    which is the right trade, because the alternative is being wrong about
+    every beat that does. Positions only: nothing else here is a question
+    about where somebody is.
+    """
+    sc = scene or {}
+    moved = ((dr_output or {}).get("state_diff") or {}).get("positions")
+    if not isinstance(moved, dict) or not moved:
+        return sc
+    positions = dict(sc.get("positions") or {})
+    positions.update({str(k): str(v) for k, v in moved.items()
+                      if str(v or "")})
+    return {**sc, "positions": positions}
+
+
+def _word_stems(text):
+    """The words of a phrase, folded so a plural and its singular are one
+    word. Morphology, not a vocabulary: nothing here anticipates which words
+    English will use, only that it inflects them."""
+    out = set()
+    for word in re.findall(r"[a-z0-9]+", str(text or "").casefold()):
+        out.add(word[:-1] if len(word) > 3 and word.endswith("s") else word)
+    return out
+
+
+def _presence_surface_words(record):
+    """Every word a stranger could take this body FOR: the dealt surface
+    sentence and its fields (`charter_surface`), the role noun or the
+    Director's own description of it (`sketch.role_hint`), and any
+    description already bound to it. All of it is what an onlooker in the
+    room sees; none of it is anybody's interior."""
+    sketch = (record or {}).get("sketch") or {}
+    parts = [sketch.get("appearance"), sketch.get("role_hint"),
+             (record or {}).get("blurb")]
+    surface = sketch.get("surface")
+    if isinstance(surface, dict):
+        for value in surface.values():
+            if isinstance(value, (list, tuple)):
+                parts.extend(str(v) for v in value)
+            else:
+                parts.append(value)
+    parts.extend(sketch.get("descriptors") or [])
+    return _word_stems(" ".join(str(p) for p in parts if p))
+
+
+def _bodies_the_description_could_be_true_of(cohort, descriptor):
+    """Narrow a descriptor cohort to the bodies whose visible surface answers
+    the description, or hand it back whole when none of them do.
+
+    The binding stays a MINT -- the fact is still made rather than retrieved
+    -- but it is made about somebody the description could be true of.
+    Measured, caravanserai turn 11 (PB6): "the girl with the apron" bound to
+    a trader with no apron and no post while three apron-wearing serving
+    hands stood in the same room, and the model wrote the only line it
+    honestly could ("Wrong person, courier").
+
+    A WORD DISCRIMINATES ONLY IF IT DOES NOT DESCRIBE EVERYBODY. The same
+    technique `_shared_name_words` uses one screen up, for the same reason:
+    a stopword list is a guess about how English phrases things, while what
+    a word tells you about THIS cohort is measurable. A word every candidate
+    answers to (or none does) separates nobody and is dropped, so the words
+    the engine itself joins a surface with -- `appearance_text` writes "with"
+    before hair and marks and "wearing" before what is worn, for every body
+    it composes -- fall out by construction rather than by being named.
+
+    The best-scoring bodies survive; a tie is left for the seeded pick, which
+    is what the whole cohort was always resolved by. That is the guard's
+    safety property: the narrowing is a PREFERENCE over the seed, so its
+    worst case is the behaviour it replaced, and a description nothing in the
+    room answers still binds to somebody in the room.
+    """
+    if len(cohort) < 2:
+        return cohort
+    words = _word_stems(descriptor)
+    if not words:
+        return cohort
+    surfaces = [(name, _presence_surface_words(rec)) for name, rec in cohort]
+    scores = {}
+    for word in words:
+        hits = [name for name, seen in surfaces if word in seen]
+        if not hits or len(hits) == len(surfaces):
+            continue
+        for name in hits:
+            scores[name] = scores.get(name, 0) + 1
+    if not scores:
+        return cohort
+    best = max(scores.values())
+    keep = {name for name, score in scores.items() if score == best}
+    return [(name, rec) for name, rec in cohort if name in keep]
+
+
 def descriptor_bindings(ctx, dr_output=None):
     """{addressed_to string: bound presence display name} for every flow
     ref that names NOBODY -- no registered character, no extra player, no
@@ -2555,8 +2777,15 @@ def descriptor_bindings(ctx, dr_output=None):
     addressable bodies stood in the player's room, and it HAD to -- a
     charter body record carries name/competence/place/post/rank and a
     presence row name/room/co-presence, so no store anywhere records who
-    sells cords, and a description is unresolvable by any reader from any
-    store in principle.
+    sells cords.
+
+    That last premise once read "and a description is unresolvable by any
+    reader from any store in principle", which stopped being true when
+    `charter_surface` began dealing every body a per-body record of exactly
+    what a stranger takes in at a glance. So the pick is no longer blind:
+    `_bodies_the_description_could_be_true_of` narrows the cohort to the
+    bodies whose visible surface or role noun answers the description before
+    the seed chooses among them (PB6).
 
     Resolution therefore cannot be retrieval; it is a BINDING that mints
     the fact -- the reverse of director_views' appearance-label mechanism.
@@ -2579,7 +2808,13 @@ def descriptor_bindings(ctx, dr_output=None):
     roster = {n.casefold() for n in _registered_name_roster(chat, ctx.cast)}
     roster |= {str((e.get("name") or "")).casefold()
                for e in (ctx.extra_players or [])}
-    sc = wget(cid, "scene", {}) or {}
+    # The room the BEAT puts the speaker in, not the one the stored scene
+    # still holds them in (`beat_scene`): a description is of somebody the
+    # speaker can see from where they now stand.
+    sc = beat_scene(
+        wget(cid, "scene", {}) or {},
+        dr_output if dr_output is not None
+        else (ctx.get("director_resolve") or {}))
     presences = _fold_duplicate_presences(
         wget(cid, "background_presences", {}) or {}, sc)
     _pname = _player_name_or_none(ctx)
@@ -2638,9 +2873,14 @@ def descriptor_bindings(ctx, dr_output=None):
                 bound = name  # the fact already exists; retrieval
                 break
         if not bound:
+            # Somebody the description could be TRUE of, where the room holds
+            # such a body at all (PB6). Falls back to the whole cohort, so a
+            # description nothing in the room answers still binds -- the mint
+            # is what makes an unresolvable phrase resolvable.
+            pool = _bodies_the_description_could_be_true_of(cohort, descriptor)
             digest = hashlib.sha256(
                 ("%s:%s" % (cid, descriptor)).encode("utf-8")).hexdigest()
-            bound = cohort[int(digest, 16) % len(cohort)][0]
+            bound = pool[int(digest, 16) % len(pool)][0]
         bindings[ref] = bound
     return bindings
 
@@ -2794,6 +3034,13 @@ def pick_background_reactors(ctx, dr_output, cap=1):
     at-post audibility bar survives where it always also lived:
     `_character_address_of` still requires a line heard in FULL.
 
+    BEING ADDRESSED CHANGES WHETHER A BODY IS PICKED TO ANSWER, NEVER
+    WHETHER IT HEARD. Every trigger above is subject to the channel test
+    (`address_reaches` for the address class, `demand_reaches` for the
+    carried debts): a line reaches a body only through the ordinary hearing
+    model, and if nothing can hear it, nobody answers -- zero is the correct
+    count and silence is a legitimate outcome.
+
     This gate remains the deterministic floor under a prompt clause
     (mirroring infer_vehicle_zones in spatial_frames.py): a presence given
     direct orders was still rendered "motionless" for 25+ turns before it
@@ -2838,12 +3085,9 @@ def addressed_rooms(ctx, dr_output, sc, player_room):
         if isinstance(rdata, dict) and str(rdata.get("name") or "").strip():
             by_name.setdefault(
                 str(rdata["name"]).strip().casefold(), str(rid))
-    positions = dict(sc.get("positions") or {})
-    sd = (dr_output or {}).get("state_diff") or {}
-    if isinstance(sd.get("positions"), dict):
-        positions.update({str(k): str(v) for k, v in sd["positions"].items()
-                          if str(v or "")})
-    after = {**sc, "positions": positions}
+    # The same one read of where this beat leaves everybody (`beat_scene`).
+    after = beat_scene(sc, dr_output)
+    positions = after.get("positions") or {}
 
     def _room_for(target):
         t = str(target or "").strip()
@@ -2948,7 +3192,13 @@ def pick_voice_demand(ctx, dr_output, cap=1):
     # `overt_declaration`: a whispered name used to qualify its own presence.
     player_input = overt_declaration_text(ctx)
     turn_idx = ctx.turn.idx
-    sc = wget(cid, "scene", {}) or {}
+    # THIS BEAT'S ROOMS, not the ones it opened with (`beat_scene`). Every
+    # question below -- who stands where, what reaches them, which bodies a
+    # description could be about -- is asked of the scene the beat leaves.
+    sc = beat_scene(wget(cid, "scene", {}) or {}, dr_output)
+    # The volumes the beat's own lines were spoken at, for the address
+    # channel test on each candidate.
+    volumes = spoken_volumes(ctx, dr_output)
     # Read through the duplicate fold: the ledger is healed at commit, but
     # this gate runs BEFORE commit, so a story already carrying an id-keyed
     # twin (chat 80) must not be able to dispatch the twin one last time.
@@ -3107,6 +3357,44 @@ def pick_voice_demand(ctx, dr_output, cap=1):
         # whoever is inside. Ranks below a precise address and above a
         # loose mention; never forces the slot.
         place_addressed = bool(here) and str(here) in aimed_rooms
+        # THE CHANNEL TEST. A trigger says a demand was RAISED; it does not
+        # say the demand arrived.
+        #
+        # BEING ADDRESSED CHANGES WHETHER A BODY IS PICKED TO ANSWER, NEVER
+        # WHETHER IT HEARD. Every spelling of the address class claims that
+        # an authored mind's WORDS reached this person, and until 2026-09-05
+        # a flow address claimed it without ever being asked: the pick was
+        # stamped `channel:exempt` on the strength of the address alone.
+        # Measured, caravanserai turn 13 (PB1): a whisper on an upper
+        # gallery was answered, in content, by a boy in the courtyard below
+        # who could not hear it at any volume in either direction. An
+        # address is a claim about who the SPEAKER meant; it is not a
+        # channel, so it is tested by the ordinary hearing model like any
+        # other line (`address_reaches`, body to body, at the beat's own
+        # volume). If nothing can hear the line, nobody answers it -- zero
+        # is the correct count, and silence is a legitimate outcome.
+        #
+        # Two spellings stay exempt, and neither is an address. `routed` is
+        # the Director writing a line FOR this presence that the engine
+        # removed so this stage could do the job properly, and `emerged` is
+        # the Director calling this body out of a crowd: both are the
+        # Director declaring what happens, not a claim that anyone was
+        # heard, and a hand-off that becomes silence is the failure this
+        # gate was built to end. `char_addr` is exempt because it has
+        # already passed this same bar, aimed more precisely, at its own
+        # speaker's room.
+        exempt = bool(routed or emerged or char_addr)
+        spoken_at = bool(flow_addressed or addressed_exact or addressed
+                         or place_addressed)
+        if spoken_at and not exempt:
+            if not address_reaches(sc, name, here, _pname,
+                                   {player_room} if player_room
+                                   else authored_rooms, volumes):
+                # The words did not arrive, so every trigger that claimed
+                # they did falls with them. A carried debt is a different
+                # claim and is judged below on its own channel.
+                flow_addressed = addressed_exact = False
+                addressed = place_addressed = False
         addressed_precise = bool(flow_addressed or routed or addressed_exact
                                  or char_addr)
         addressed_any = bool(addressed_precise or addressed
@@ -3123,30 +3411,23 @@ def pick_voice_demand(ctx, dr_output, cap=1):
             ("place_addressed:%s" % here, place_addressed),
             ("owed", bool(owed)), ("acting", acting), ("emerged", emerged),
         ) if hit]
-        # THE CHANNEL TEST (`demand_reaches`). A trigger says a demand was
-        # RAISED; it does not say the demand arrived. Three of the spellings
-        # above are the Director's own judgment for THIS beat -- it routed a
-        # line here, it named this presence the player's addressee, it called
-        # them out of a crowd -- and the Director owns what exists, so a
-        # hand-off that becomes silence is precisely the failure this gate was
-        # built to end; those are exempt. `char_addr` is exempt because it has
-        # already passed this same bar, aimed more precisely, at its own
-        # speaker's room. What is left claims something reached this person
-        # without ever testing that it could: the player's raw words, and the
-        # two carried debts. Filtering them here also makes the gate and the
-        # debt WRITER agree -- `track_background_presences` has applied the
-        # hearing bar to the player's precise address all along, so the gate
-        # was spending slots on debts its own writer would have refused to
-        # accrue.
-        if not (routed or flow_addressed or emerged or char_addr):
-            _aimed = bool(addressed or acting or place_addressed)
+        # What is left claims something reached this person without ever
+        # testing that it could: the two carried debts. Filtering them here
+        # also makes the gate and the debt WRITER agree --
+        # `track_background_presences` has applied the hearing bar to the
+        # player's precise address all along, so the gate was spending slots
+        # on debts its own writer would have refused to accrue.
+        if exempt:
+            why.append("channel:exempt")
+        elif addressed_any:
+            why.append("channel:hearing")
+        else:
+            _aimed = bool(acting)
             if not demand_reaches(sc, here, authored_rooms, aimed=_aimed):
                 continue
             why.append("channel:%s" % (
                 "unplaced" if not here or not authored_rooms
                 else ("hearing" if _aimed else "same_room")))
-        else:
-            why.append("channel:exempt")
         # Only a person may hold a background speaking turn. The ledger says
         # nothing about what a name DENOTES, so a device with an accrued
         # record qualified exactly like a barkeep: chat 80's ceiling-mounted
@@ -3162,12 +3443,16 @@ def pick_voice_demand(ctx, dr_output, cap=1):
         if verdict == "undecided" and not (routed or flow_addressed):
             continue
         if addressed_precise:
-            # AN ADDRESSEE IS NEVER SILENTLY DROPPED (§C3): a named
-            # counterpart failing to answer is the one visible failure mode,
-            # so every PRECISE spelling of an address widens the slots --
-            # the rule the flow-addressed and routed picks already had,
+            # AN ADDRESSEE WHO HEARD IS NEVER SILENTLY DROPPED (§C3): a
+            # named counterpart failing to answer is the one visible failure
+            # mode, so every PRECISE spelling of an address widens the slots
+            # -- the rule the flow-addressed and routed picks already had,
             # extended to the whole class. Overflow past the path's own
-            # ceiling is the caller's chorus decision, not a drop.
+            # ceiling is the caller's chorus decision, not a drop. The
+            # qualification is the channel test above and is not a softening
+            # of §C3: a body that could not receive the line is not an
+            # addressee this stage has anything to hand it, and the correct
+            # count of answers to a line nobody heard is zero.
             forced += 1
         # Overflow order (§C3): addressed > owed > acting > emerged, then
         # the B3 entanglement digest (patched in below, once, for charter

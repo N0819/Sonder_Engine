@@ -555,13 +555,35 @@ class TestADemandOnlyCountsWhereItCanArrive:
         })
         assert pick_background_reactors(ctx, dict(_QUIET), cap=2) == []
 
-    def test_a_directors_flow_address_is_exempt(self, temp_db):
-        """The Director's own judgment for THIS beat stays exempt: it owns
-        what exists, may have arranged a channel this gate cannot see, and a
-        hand-off that becomes silence is the failure the gate exists to
-        end."""
+    def test_a_directors_flow_address_is_not_a_channel(self, temp_db):
+        """BEING ADDRESSED CHANGES WHETHER A BODY IS PICKED TO ANSWER, NEVER
+        WHETHER IT HEARD. This test asserted the opposite until 2026-09-05 --
+        that a flow address exempts the hearing gate, on the reasoning that
+        the Director owns what exists and may have arranged a channel this
+        gate cannot see. Caravanserai turn 13 (PLAY_2026_09_05, PB1) is what
+        that licensed: a whisper on an upper gallery, `channel: exempt`, and
+        a boy in the courtyard below -- `hear_level` none at every volume,
+        both directions -- answering its content. A channel the Director
+        arranged is one it wrote into the scene this gate reads; an address
+        is a claim about who the SPEAKER meant, and it is not a channel."""
         from persist.commit import pick_background_reactors
         ctx = _mk_ctx(temp_db, scene=_three_room_scene("cellar"),
+                      cast_names=["Aldous"], presences={
+            "Clerk": {"first_turn": 1, "last_turn": 4, "dialogue_turns": [],
+                      "mention_turns": []},
+        })
+        ctx.director_interpret = {
+            "sequence": [], "flow": {"addressed_to_refs": ["Clerk"]}}
+        assert pick_background_reactors(ctx, dict(_QUIET), cap=2) == []
+
+    def test_a_directors_flow_address_still_forces_a_body_that_hears(
+            self, temp_db):
+        """The complement, and the reason this narrows eligibility rather
+        than the address: standing where the line can reach, the addressed
+        body is picked -- the §C3 guarantee, qualified by the channel and
+        by nothing else."""
+        from persist.commit import pick_background_reactors
+        ctx = _mk_ctx(temp_db, scene=_three_room_scene("square"),
                       cast_names=["Aldous"], presences={
             "Clerk": {"first_turn": 1, "last_turn": 4, "dialogue_turns": [],
                       "mention_turns": []},
