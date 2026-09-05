@@ -196,6 +196,25 @@ for the same beat (F61's fix, applied in this direction too); and, in
 `fragment` — a shout that carries less than a shut door does is the field
 disagreeing with the ladder it quantises onto, not a measurement.
 
+**SECOND HALF FIXED (2026-09-05).** The perception half landed first, and on
+its own it made both passes agree on the STRICT answer — so a shout across one
+open archway reached nobody in either pass, which is the disagreement fixed
+and the reach lost. *A raised voice carries through an opening: one passable
+edge away it is at worst a fragment.* `open_edge_floor` in
+`world/spatial_sound_field.py` says so, `stamp_sound_relation` marks the pair
+that has an opening between them (`one_opening_away` — undirected, because a
+doorway is one object declared from either side, which is also what keeps the
+floor reciprocal, and material-shifted, so a paper door is the opening it
+acoustically is), and `hear_level` applies it wherever its answer would be
+`none`, on the field branch and the edge branch alike. It is capped by the
+same masking rule everything else answers to (§ PA5): where the noise at the
+listener's own cell would refuse the same voice ONE PACE OFF, nothing from
+the next room survives either — an opening carries a voice INTO a room, not
+through the machine running in it. Pinned by
+`tests/test_sound_field.py::test_a_raised_voice_across_one_opening_is_at_worst_a_fragment`,
+`::test_the_floor_needs_an_opening_and_yields_to_the_room_it_arrives_in` and
+`::test_the_opening_is_one_doorway_however_it_was_declared`.
+
 ### PC4. A `flickering` source on the bottom rung of the ladder is extinguished, not dimmed, and nothing says so
 **Severity: wrong-but-recoverable.** Stage of origin:
 `world/spatial_light_field.py` (`steadiness_this_beat` + `_power_of_level`).
@@ -219,6 +238,21 @@ emitting rung — a flickering candle guts, it does not go out — and leave
 extinction to `failing`, which has its own notice. Test: a `dim`+`flickering`
 source over `FLICKER_RATE` consecutive beats; assert it is a placed source on
 every one of them.
+
+**FIXED (2026-09-05).** `_one_level_down` stops at the dimmest light a source
+can still give, and `_power_of_level`'s drop stops at the quietest sound: a
+flicker is a source WAVERING, not a source failing, and going out is what
+`failing` means — which files a notice the Director answers, where a flicker
+files nothing. The sound field had the same arithmetic and the same defect (a
+`faint` generator dropping to silence), so both were fixed together off one
+rule; a source declared `dark` is not a light and a flicker does not make it
+one. Pinned by
+`tests/test_light_field.py::test_a_flickering_source_on_the_bottom_rung_still_gives_light`
+and `tests/test_sound_field.py::test_a_flickering_source_on_the_bottom_rung_still_sounds`.
+Landed in the same commit as PA3, and the pair is consistent: PA3's floor
+reads the SWITCH (`state.lit`), never the beat, so a flickering fixture
+between its beats still holds its room's floor up and this repair means it is
+never off in the first place.
 
 ### PC5. Concealment authored as free text is not a channel, so the beat that ends it cannot encode the reveal
 **Severity: story-breaking (the scenario's payoff).** Stage of origin: the

@@ -88,8 +88,9 @@ from world.spatial_fov import (
     wall_aperture_cells,
 )
 from world.spatial_geometry import door_anchor_id, effective_facing
-from world.spatial_identity import room_of
-from world.spatial_light import LIGHT_LEVELS, normalize_light, room_light
+from world.spatial_identity import _ci_get, room_of
+from world.spatial_light import (
+    LIGHT_LEVELS, _light_radius, normalize_light, room_light)
 from world.spatial_orientation import _BEARING_DEG, normalize_bearing, relative_bearing
 
 
@@ -309,8 +310,20 @@ def _lit(entity: dict) -> bool:
 
 
 def _one_level_down(level: str) -> str:
+    """One rung down the ladder, and NEVER past the dimmest light a source
+    can still give.
+
+    FLICKERING IS A SOURCE WAVERING, NOT A SOURCE FAILING. Going out is what
+    `failing` means, and it files a notice the Director answers (§ 5); a
+    flicker files nothing, so a flicker that reached `dark` put a source out
+    with nothing anywhere to say so. Measured live: a `dim` candle lit in
+    the player's own hand contributed no light at all on its flicker beats,
+    and the room -- whose only source it was -- read its declared floor with
+    the candle absent from `light_sources` entirely
+    (`PLAY_2026_09_05_manor.md` § PC4). A source declared `dark` is not a
+    light and stays where it is."""
     i = LIGHT_LEVELS.index(level) if level in LIGHT_LEVELS else 2
-    return LIGHT_LEVELS[max(0, i - 1)]
+    return LIGHT_LEVELS[i - 1] if i > 1 else level
 
 
 def emitted_level(entity: dict, source_id, beat) -> Optional[str]:
@@ -328,6 +341,73 @@ def emitted_level(entity: dict, source_id, beat) -> Optional[str]:
     if steadiness == "flickering" and flickers_on(beat, source_id):
         level = _one_level_down(level)
     return None if level == "dark" else level
+
+
+def _room_fixtures(scene: dict, room_id) -> list:
+    """Every ROOM-FILLING light source standing in `room_id`, lit or not --
+    the room's own account of what lights it. Positioned by id or by name,
+    the way `spatial_light.source_light` reads them; filling by
+    `_light_radius`, so a hearth, a sconce or a ceiling fixture counts and a
+    hand torch does not. What someone carried in is not the room's account
+    of itself, and a stranger walking into a lit hall with a dead lantern in
+    their fist must not put the hall out."""
+    entities = (scene or {}).get("entities") or {}
+    positions = (scene or {}).get("positions") or {}
+    if not isinstance(entities, dict) or not room_id:
+        return []
+    out = []
+    for eid, entity in entities.items():
+        if not isinstance(entity, dict) or not entity.get("light_source"):
+            continue
+        where = _ci_get(positions, eid)
+        if where is None:
+            where = _ci_get(positions, str(entity.get("name") or ""))
+        if where == room_id and _light_radius(entity) == "room":
+            out.append(entity)
+    return out
+
+
+def ambient_floor_word(scene: dict, room_id) -> str:
+    """The light a room gives its own cells as a FLOOR (§ 4 step 6): the
+    declared word `room_light` answers, unless the room's own sources
+    contradict it.
+
+    THE DECLARED WORD AND THE SOURCES ARE TWO ACCOUNTS OF ONE FACT, and
+    until 2026-09-05 neither was allowed to correct the other, so the lie
+    ran in whichever direction the story moved. Where a room HOLDS sources
+    and every one of them is switched off, the sources are the account that
+    changed and the word is the one that went stale: a room whose lamps are
+    all out is dark, whatever word it was minted with. Measured live: the
+    lighthouse watch room read `bright` for nine beats after its only lamp
+    failed and the commit correctly wrote `state.lit: false`, so the story's
+    one secret -- a light going out -- could not be seen at all
+    (`PLAY_2026_09_05_lighthouse.md` § PA3).
+
+    Narrow deliberately, three ways, because a floor that yields too easily
+    is F40 again from the other side:
+
+      * a room with no FIXTURE has said nothing about its light and keeps
+        its word -- a windowless room declared `lit` by whoever minted it
+        does not go dark for want of an entity nobody wrote, and a doused
+        hand torch carried into it is not the room's account of itself
+        (`_room_fixtures`);
+      * a source that is LIT holds the floor up however feebly it burns, so
+        F50's lone candle in a `dim` parlour is untouched, and only the
+        SWITCH counts: a `flickering` source between its beats and a
+        `failing` one that has not yet been recorded out are still lit;
+      * only an `enclosed` room's word yields. Outdoors the sky is the
+        account and the lamps are not (`room_light` already lets the sun
+        overrule the declared word there); whether a declared word should
+        ever outrank the sources outdoors, and whether the floor should hold
+        for `dim`, are the owner's -- registered in `docs/UNBUILT.md`.
+    """
+    declared = room_light(scene, room_id)
+    if declared == "dark" or _exposure_of(scene, room_id) != "enclosed":
+        return declared
+    sources = _room_fixtures(scene, room_id)
+    if not sources or any(_lit(entity) for entity in sources):
+        return declared
+    return "dark"
 
 
 def failing_sources_out(scene: dict, beat) -> list:
@@ -684,7 +764,7 @@ def _spill(scene, lf: LightField, memo: dict, *, spill=True) -> None:
         if other not in field.offsets:
             continue
         for giver, taker in ((lf.room_id, other), (other, lf.room_id)):
-            power = (FLOOR_SPILL * POWER.get(room_light(scene, giver), 0.0)
+            power = (FLOOR_SPILL * POWER.get(ambient_floor_word(scene, giver), 0.0)
                      * float(wall.get("pass", 1.0)))
             if power <= 0.0:
                 continue
@@ -746,7 +826,7 @@ def compute_light_field(scene: dict, room_id, *, beat=None,
     # 6. Ambient floor -- a FLOOR, never a source: applied to the room's
     # own cells only, after bounce, so it casts nothing and spills nowhere.
     for rid in field.offsets:
-        lf.floor[rid] = POWER.get(room_light(scene, rid), 0.0)
+        lf.floor[rid] = POWER.get(ambient_floor_word(scene, rid), 0.0)
     for cell, rid in field.inside.items():
         total = lf.direct.get(cell, 0.0) + lf.bounced.get(cell, 0.0)
         lf.intensity[cell] = max(total, lf.floor.get(rid, 0.0))

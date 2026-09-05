@@ -737,3 +737,170 @@ def test_unknown_words_fall_to_the_wider_default():
     assert normalize_light_shape("Cone") == "cone"
     assert normalize_steadiness("guttering") == "steady"
     assert normalize_steadiness("FAILING") == "failing"
+
+
+# ---------------------------------------------------------------------------
+# PA3: the declared word is a floor, and a room whose fixtures are all out
+# ---------------------------------------------------------------------------
+
+def watch_room(*, lit=True, portable=False, exposure="enclosed",
+               declared="bright"):
+    """A room declared `bright` whose only source is one `bright` fixture --
+    the lighthouse watch room, whose great lamp failed."""
+    lamp = {"name": "the great lamp", "light_source": "bright",
+            "state": {"lit": lit}}
+    if portable:
+        lamp["portable"] = True
+    return _scene({"r": _room("the Watch Room", light=declared,
+                              exposure=exposure,
+                              anchors={"rail": {"desc": "the gallery rail"}})},
+                  {"P": "r", "lamp": "r"}, entities={"lamp": lamp},
+                  stations={"P": {"at": "rail"}})
+
+
+def test_a_room_whose_only_fixture_is_out_reads_dark():
+    """PA3. The declared word and the sources are two accounts of one fact;
+    where the room HOLDS fixtures and every one of them is switched off, the
+    word is the account that went stale. Live: the watch room read `bright`
+    for nine beats after its only lamp failed and the commit correctly wrote
+    `state.lit: false`, so the story's one secret -- a light going out --
+    could not be seen (`PLAY_2026_09_05_lighthouse.md` § PA3)."""
+    assert effective_light(watch_room(lit=True), "r") == "bright"
+    assert light_at(watch_room(lit=True), "P") == "bright"
+    assert effective_light(watch_room(lit=False), "r") == "dark"
+    assert light_at(watch_room(lit=False), "P") == "dark"
+    from world.spatial import ambient_floor_word
+    assert ambient_floor_word(watch_room(lit=True), "r") == "bright"
+    assert ambient_floor_word(watch_room(lit=False), "r") == "dark"
+
+
+def test_the_floor_yields_only_to_the_rooms_own_fixtures():
+    """Narrow three ways: no fixture at all keeps the word (F40's opposite
+    instance -- a declared `lit` room must not go dark for want of an entity
+    nobody wrote), a doused thing someone CARRIED in is not the room's
+    account of itself, and outdoors the sky is the account."""
+    for light in ("dark", "dim", "lit", "bright"):
+        sc = _scene({"r": _room("the Hall", light=light,
+                                anchors={"table": {"desc": "a table"}})},
+                    {"P": "r"}, stations={"P": {"at": "table"}})
+        assert effective_light(sc, "r") == light
+        assert light_at(sc, "P") == light
+    assert effective_light(watch_room(lit=False, portable=True), "r") == "bright"
+    outdoors = watch_room(lit=False, exposure="open")
+    assert effective_light(outdoors, "r") == "bright"
+    # A `dark` room cannot be lowered further, and a lit fixture holds the
+    # floor up however feebly it burns (F50's lone candle is untouched).
+    assert effective_light(watch_room(lit=False, declared="dark"), "r") == "dark"
+
+
+def test_a_doused_rooms_floor_no_longer_spills_next_door():
+    """The floor that yielded gives nothing through the doorway either: one
+    answer for what a room's own light is, read by both the floor and the
+    spill."""
+    def pair(lit):
+        rooms = {
+            "hall": _room("the Hall", light="bright", anchors={
+                "rail": {"desc": "the gallery rail"}},
+                adjacent=[{"to": "cell", "barrier": "open", "dir": "e"}]),
+            "cell": _room("the Cell", light="dark", anchors={
+                "cot": {"desc": "a cot"}},
+                adjacent=[{"to": "hall", "barrier": "open", "dir": "w"}]),
+        }
+        return _scene(rooms, {"lamp": "hall"}, entities={"lamp": {
+            "name": "the great lamp", "light_source": "bright",
+            "state": {"lit": lit}}})
+    lf = light_field(pair(True), "cell")
+    assert lf.spill and max(lf.spill.values()) > 0.0
+    dark = light_field(pair(False), "cell")
+    assert not dark.spill
+    assert effective_light(pair(False), "cell") == "dark"
+
+
+# ---------------------------------------------------------------------------
+# PC4: a flicker is a source wavering, not a source failing
+# ---------------------------------------------------------------------------
+
+def test_a_flickering_source_on_the_bottom_rung_still_gives_light():
+    """A `dim` source on its flicker beats keeps the dimmest light it can
+    give: going out is what `failing` means, and that files a notice where a
+    flicker files nothing. Live: a candle lit in the player's own hand
+    contributed no light at all on its flicker beats, and the room -- whose
+    only source it was -- lost it entirely (`PLAY_2026_09_05_manor.md`
+    § PC4)."""
+    candle = {"name": "the tower candle", "light_source": "dim",
+              "steadiness": "flickering", "portable": True}
+    beats = [b for b in range(FLICKER_RATE * 8) if flickers_on(b, "candle")]
+    assert beats                                   # the hash does pick some
+    for beat in beats:
+        assert emitted_level(candle, "candle", beat) == "dim"
+    for beat in range(FLICKER_RATE * 8):
+        sc = lamp_room("dim", steadiness="flickering")
+        sc[BEAT_KEY] = beat
+        assert [s["id"] for s in light_field(sc, "r").sources] == ["lamp"]
+    # A `lit` source still drops to `dim`, and a failing one still goes out.
+    lamp = {"name": "the lamp", "light_source": "lit",
+            "steadiness": "flickering"}
+    assert emitted_level(lamp, "lamp", beats[0]) == "dim"
+    failing = {"name": "the lamp", "light_source": "dim",
+               "steadiness": "failing"}
+    out = next(b for b in range(FAIL_RATE * 40) if fails_on(b, "lamp"))
+    assert emitted_level(failing, "lamp", out) is None
+    # A source declared `dark` is not a light and a flicker does not make it
+    # one.
+    assert emitted_level({"name": "x", "light_source": "dark",
+                          "steadiness": "flickering"}, "x", beats[0]) is None
+
+
+# ---------------------------------------------------------------------------
+# PA8: a thing is seen by the light that falls on it
+# ---------------------------------------------------------------------------
+
+def kitchen(*, lit=False):
+    """A dark kitchen with a stove, a door onto the store, and a lamp that
+    is out until it is lit."""
+    rooms = {
+        "kitchen": _room("the Kitchen", light="dark", anchors={
+            "stove": {"desc": "the cast-iron stove", "dir": "n",
+                      "height": "waist"},
+            "table": {"desc": "the scrubbed table", "cell": [2, 3],
+                      "height": "waist"}},
+            adjacent=[{"to": "store", "barrier": "closed_door", "dir": "e"}]),
+        "store": _room("the Store", light="dark", anchors={
+            "sack": {"desc": "a sack of flour"}},
+            adjacent=[{"to": "kitchen", "barrier": "closed_door", "dir": "w"}]),
+    }
+    return _scene(rooms, {"P": "kitchen", "lamp": "kitchen"},
+                  entities={"lamp": {"name": "the lamp",
+                                     "light_source": "lit",
+                                     "state": {"lit": lit}}},
+                  stations={"P": {"at": "table"}})
+
+
+def test_a_dark_room_names_no_features_and_still_names_its_doorways():
+    """PA8. A thing is seen by the light that falls on it, exactly as a body
+    is. Live: after the player blew out the lamp her own view read "You can
+    see The cast-iron stove ... within arm's reach ... It is dark here."
+    (`PLAY_2026_09_05_lighthouse.md` § PA8)."""
+    from world.spatial import feature_visibility
+    dark = {r["anchor"]: r for r in feature_visibility(kitchen(), "P")}
+    assert dark["stove"]["visible"] is False
+    assert dark["stove"]["basis"] == "light"
+    assert dark["door:store"]["visible"] is True   # a gap in the wall, not a thing
+    # The one a body has its hands on is knowledge from a channel that does
+    # not need light.
+    assert dark["table"]["visible"] is True
+    lit = {r["anchor"]: r for r in feature_visibility(kitchen(lit=True), "P")}
+    assert lit["stove"]["visible"] is True
+    assert lit["stove"]["basis"] == "open"
+
+
+def test_where_light_falls_the_features_grade_as_they_always_did():
+    """The gate SUBTRACTS and only ever subtracts: in a lit room every row
+    is what it was before the light was consulted, and where there is no
+    field to ask (`_unlit_cells` -> None) nothing is taken."""
+    from world.spatial import _unlit_cells, feature_visibility
+    sc = kitchen(lit=True)
+    rows = {r["anchor"]: r for r in feature_visibility(sc, "P")}
+    assert rows and all(row["visible"] for row in rows.values())
+    assert all(row["basis"] != "light" for row in rows.values())
+    assert _unlit_cells(sc, "no_such_room") is None

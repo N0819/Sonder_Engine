@@ -631,6 +631,59 @@ def body_cell_source(scene: dict, name: str) -> str:
     return "anchor" if body_cell(scene, name) else "none"
 
 
+def _stand_cell(grid: RoomGrid, cells, x, y, bearing, cover) -> tuple:
+    """The cell a body stationed AT an anchor stands in, given which of the
+    anchor's cells it takes: one step inward, then round the anchor, so a
+    body never stands IN the feature it is stationed at.
+
+    `cover`: the body is on the FAR side of its anchor -- between a counter
+    and the wall, on the blind side of a screen -- so the anchor stands
+    between it and the room. Declared by the station's owner, never inferred
+    from prose.
+    """
+    if bearing:
+        dx, dy = _inward(bearing)
+    else:
+        cx0, cy0 = grid.centre()
+        dx = (1 if cx0 > x else -1) if cx0 != x else 0
+        dy = (1 if cy0 > y else -1) if cy0 != y else 0
+        if dx and dy:
+            dy = 0
+        if not dx and not dy:
+            dx = 1
+    if cover:
+        dx, dy = -dx, -dy
+    for ddx, ddy in ((dx, dy), (-dx, -dy), (dy, dx), (-dy, -dx)):
+        cx = x + ddx
+        cy = y + ddy
+        if grid.contains((cx, cy)) and (cx, cy) not in cells:
+            return (cx, cy)
+    return (x, y)
+
+
+def _anchor_stand_cells(scene, room_id, grid, anchor_id, station) -> list:
+    """Every cell a body stationed at `anchor_id` could stand in, in the
+    anchor's own order -- the spread `body_cell` deals from."""
+    placed = anchor_cells(scene, room_id).get(anchor_id) or {}
+    cells = placed.get("cells") or ()
+    bearing = placed.get("dir")
+    cover = _takes_cover(station, anchor_id)
+    out = []
+    for x, y in cells:
+        cell = _stand_cell(grid, cells, x, y, bearing, cover)
+        if cell not in out:
+            out.append(cell)
+    return out
+
+
+def _names_back(scene: dict, other, name) -> bool:
+    """Does `other`'s own station name `name` among the bodies it stands
+    with -- the two of them one pair, each side declared?"""
+    key = str(name).strip().casefold()
+    return any(str(who).strip().casefold() == key
+               for who in effective_station(scene, other).get("near") or [])
+
+
 def body_cell(scene: dict, name: str, _seen=None) -> Optional[tuple]:
     """The cell a body stands in, or None when the station is unmeasured.
 
@@ -640,9 +693,27 @@ def body_cell(scene: dict, name: str, _seen=None) -> Optional[tuple]:
     shape has moved since (`RoomGrid.nearest`, ties to the smaller
     coordinates). A body with a `cell` and an `at` keeps `at` for prose --
     "at the hearth" -- and `cell` for geometry; the two are not checked
-    against each other. Without one, derived: `at` an anchor is one step
-    inward from the anchor's first cell; `near` another body is beside that
-    body's cell. The derivation is never stored."""
+    against each other. An authored cell is geometry and outranks
+    everything below it.
+
+    THEN `near`, AND ONLY THEN `at`. `near` names another BODY: it is the
+    record that says these two are TOGETHER, and a body placed near another
+    stands beside it. The anchor's spread decides where a body stands only
+    when nothing closer says otherwise -- it is a way of seating several
+    people along one counter, not a statement about any one of them.
+    Measured live: two bodies whose stations each read `{"at":
+    "scrub_edge", "near": [the other]}` were dealt cells six paces apart on
+    a run anchor spanning a fifteen-pace wall, while the composed view of
+    the same beat put them within arm's reach; the player's own line
+    reached neither of them (`PLAY_2026_09_05_road.md` § PD1).
+
+    Two bodies who each name the other are ONE pair, and a pair needs one of
+    them placed first -- otherwise each is laid beside where the other is
+    not, and the two answers disagree. The name that sorts first is the one
+    its anchor places; the other stands beside it. Deterministic, and the
+    same two cells whichever body is asked.
+
+    The derivation is never stored."""
     room_id = room_of(scene, name)
     if not room_id:
         return None
@@ -652,51 +723,42 @@ def body_cell(scene: dict, name: str, _seen=None) -> Optional[tuple]:
     if pinned is not None:
         return grid.nearest(pinned)
     at = st.get("at")
+    _seen = set(_seen or ())
+    key = str(name).strip().casefold()
+    for other in st.get("near") or []:
+        okey = str(other).strip().casefold()
+        if not okey or okey == key or okey in _seen:
+            continue
+        if at and key < okey and _names_back(scene, other, name):
+            break                       # this pair's host: my anchor seats me
+        cell = body_cell(scene, other, _seen | {key})
+        if cell is None:
+            continue
+        x, y = cell
+        # Both at one anchor: beside them ALONG it, so the pair stays at the
+        # counter they are both standing at.
+        if at and str(effective_station(scene, other).get("at")
+                      or "").strip().casefold() == str(at).strip().casefold():
+            free = [c for c in _anchor_stand_cells(scene, room_id, grid, at, st)
+                    if c != cell]
+            if free:
+                return min(free, key=lambda c: ((c[0] - x) ** 2
+                                                + (c[1] - y) ** 2, c))
+        k = _seed(room_id, key, okey) % 4
+        dx, dy = ((1, 0), (-1, 0), (0, 1), (0, -1))[k]
+        return grid.nearest((min(max(x + dx, 0), grid.w - 1),
+                             min(max(y + dy, 0), grid.d - 1)))
     if at:
         placed = anchor_cells(scene, room_id).get(at)
         if placed and placed["cells"]:
-            # Two bodies at one anchor stand beside each other along it,
-            # not in each other: each takes a cell of the anchor's extent
-            # by its own seed, so a long bar seats several.
+            # Two bodies at one anchor with nothing else said stand beside
+            # each other along it, not in each other: each takes a cell of
+            # the anchor's extent by its own seed, so a long bar seats
+            # several.
             cells = placed["cells"]
-            x, y = cells[_seed(room_id, at, str(name).casefold()) % len(cells)]
-            bearing = placed.get("dir")
-            if bearing:
-                dx, dy = _inward(bearing)
-            else:
-                cx0, cy0 = grid.centre()
-                dx = (1 if cx0 > x else -1) if cx0 != x else 0
-                dy = (1 if cy0 > y else -1) if cy0 != y else 0
-                if dx and dy:
-                    dy = 0
-                if not dx and not dy:
-                    dx = 1
-            # `cover`: the body is on the FAR side of its anchor -- between
-            # a counter and the wall, on the blind side of a screen -- so
-            # the anchor stands between it and the room. Declared by the
-            # station's owner, never inferred from prose.
-            if _takes_cover(st, at):
-                dx, dy = -dx, -dy
-            # The preferred side first, then round the anchor, so a body
-            # never stands IN the feature it is stationed at.
-            for ddx, ddy in ((dx, dy), (-dx, -dy), (dy, dx), (-dy, -dx)):
-                cx = x + ddx
-                cy = y + ddy
-                if grid.contains((cx, cy)) and (cx, cy) not in cells:
-                    return (cx, cy)
-            return (x, y)
-    _seen = set(_seen or ())
-    for other in st.get("near") or []:
-        key = str(other).casefold()
-        if key in _seen:
-            continue
-        cell = body_cell(scene, other, _seen | {str(name).casefold()})
-        if cell:
-            x, y = cell
-            k = _seed(room_id, str(name).casefold(), key) % 4
-            dx, dy = ((1, 0), (-1, 0), (0, 1), (0, -1))[k]
-            return grid.nearest((min(max(x + dx, 0), grid.w - 1),
-                                 min(max(y + dy, 0), grid.d - 1)))
+            x, y = cells[_seed(room_id, at, key) % len(cells)]
+            return _stand_cell(grid, cells, x, y, placed.get("dir"),
+                               _takes_cover(st, at))
     return None
 
 
@@ -1151,6 +1213,19 @@ def _tier(scene, observer, target):
     return proximity_rel(scene, observer, target)
 
 
+def _unlit_cells(scene: dict, room_id):
+    """The cells of `room_id` no light falls on, or None where there is no
+    light field to ask (fail-open, as every other reader of the light is).
+    The light field lays the room it is computed for at offset (0, 0), the
+    same frame `observer_field` gives an observer's own room, so the cells
+    are directly comparable."""
+    from world.spatial_light_field import light_field
+    lf = light_field(scene, room_id)
+    if lf is None:
+        return None
+    return {cell for cell in lf.room_cells(room_id) if lf.level(cell) == "dark"}
+
+
 def feature_visibility(scene: dict, observer: str, *, sweep=False) -> list:
     """Every anchor of the observer's room, as the observer's eyes have it.
 
@@ -1160,8 +1235,23 @@ def feature_visibility(scene: dict, observer: str, *, sweep=False) -> list:
 
     `basis` names the evidence the answer stands on -- "cone" when a facing
     subtracted, "line" when the observer's measured cell and an opaque
-    anchor did, "open" when nothing could. A `sweep` (a deliberate look
-    around) ignores the facing: the observer turns to see the whole room.
+    anchor did, "light" when no light falls where the thing stands, "open"
+    when nothing could. A `sweep` (a deliberate look around) ignores the
+    facing: the observer turns to see the whole room.
+
+    A THING IS SEEN BY THE LIGHT THAT FALLS ON IT -- exactly as a body is
+    (`body_visibility` reads `light_at` on the TARGET, and `sight_level`
+    grades by it). This list was gated by geometry alone until 2026-09-05,
+    so a view could name the stove in a room whose every cell was dark and
+    then say, in the same paragraph, that it was dark there
+    (`PLAY_2026_09_05_lighthouse.md` § PA8). Two carve-outs, each a channel
+    that does not need light: the anchor a body is STATIONED AT, which it
+    has its hands on, and a DOORWAY, which is a gap in the wall rather than
+    a thing in the room -- what lies beyond one is graded by the far room's
+    own light where the boundary is composed (`perception._visible_openings`),
+    and a body that cannot find the way out of a dark room could not leave
+    it. Where the room has no light field the answer is the one it always
+    was.
     """
     room_id = room_of(scene, observer)
     if not room_id:
@@ -1171,6 +1261,8 @@ def feature_visibility(scene: dict, observer: str, *, sweep=False) -> list:
     facing = None if sweep else effective_facing(scene, observer)
     eye = eye_rank(scene, observer)
     placed = field.anchors.get(room_id) or {}
+    unlit = _unlit_cells(scene, room_id)
+    touching = str(effective_station(scene, observer).get("at") or "").strip()
     rows = []
     for aid, rec in placed.items():
         cells = rec["cells"]
@@ -1196,6 +1288,10 @@ def feature_visibility(scene: dict, observer: str, *, sweep=False) -> list:
                 basis = "line"
                 occluded_by = (placed.get(blocker) or {}).get("desc") \
                     if blocker != "__wall__" else None
+        if visible and unlit is not None and not rec["implicit"] \
+                and aid != touching and all(c in unlit for c in cells):
+            visible = False
+            basis = "light"
         rows.append({
             "anchor": aid, "desc": rec["desc"], "implicit": rec["implicit"],
             "visible": visible, "sector": sector,

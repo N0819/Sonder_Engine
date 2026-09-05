@@ -199,11 +199,35 @@ small pure function:
    one, which the max-of-levels model could never say.
 
 6. **Ambient floor.** Every cell of a room is lifted to at least
-   `POWER[room_light(scene, room)]` -- the sky through `sun_light`
+   `POWER[ambient_floor_word(scene, room)]` -- the sky through `sun_light`
    outdoors, the declared `light` indoors, exactly as `room_light` answers
    today. This is the one place the room-level word survives, and within
    its own room it is a FLOOR, never a source: it casts nothing and shadows
    nothing there.
+
+   **6b. The word yields where the room's own fixtures are all out**
+   (2026-09-05). The declared word and the sources are two accounts of one
+   fact, and until this neither was allowed to correct the other, so the lie
+   ran in whichever direction the story moved. Where a room HOLDS
+   room-filling fixtures and every one of them is switched off, the sources
+   are the account that changed and the word is the one that went stale:
+   `ambient_floor_word` answers `dark` and the sources' own answer stands.
+   Measured: a lighthouse watch room read `bright` for nine beats after its
+   only lamp failed and the commit correctly wrote `state.lit: false`, so the
+   story's one secret -- a light going out -- could not be seen at all
+   (`docs/experiments/PLAY_2026_09_05_lighthouse.md` § PA3). Narrow three
+   ways, each a case the wide rule gets wrong: a room with NO fixture keeps
+   its word (a declared `lit` room must not go dark for want of an entity
+   nobody wrote -- F40's opposite instance), a doused thing someone CARRIED
+   in is not the room's account of itself (`_light_radius` `spot`), and only
+   an `enclosed` room's word yields, because outdoors the sky is the account
+   and `room_light` already lets the sun overrule the word there. The SWITCH
+   is what counts and not the beat: a `flickering` fixture between its beats
+   is lit. Read by the spill too (6a), so a room whose lamps are out gives
+   nothing through its doorway either. Two residuals -- whether a declared
+   word should ever outrank the sources outdoors, and whether the floor
+   should hold for `dim` -- are the owner's, in `docs/UNBUILT.md` § 1.119
+   with F50.
 
    **6a. The floor spills through doorways** (the owner agreed, 2026-09-04;
    this note's open question 1). Each aperture cell of every wall between
@@ -274,6 +298,19 @@ by decay, which is why it can be dropped without a special case.
     An all-round lantern held up between two faces counts too (decided
     2026-09-04): glare is about power in the eyes, not the source's shape;
     the cone only decides whether the power reaches the eye at all.
+  * `feature_visibility(scene, observer)` -> A THING IS SEEN BY THE LIGHT
+    THAT FALLS ON IT, exactly as a body is: an anchor no light reaches is
+    refused, with `basis: "light"` beside `"cone"` and `"line"` (2026-09-05).
+    Until then the furniture list was gated by geometry alone, so a view
+    could name the stove in a pitch-dark kitchen and say in the same
+    paragraph that it was dark there
+    (`docs/experiments/PLAY_2026_09_05_lighthouse.md` § PA8). Two carve-outs,
+    each a channel that does not need light: the anchor a body is STATIONED
+    at, which it has its hands on, and a DOORWAY, which is a gap in the wall
+    rather than a thing in the room -- what lies beyond one is graded by the
+    far room's own light where the boundary is composed
+    (`perception._visible_openings`), and a body that cannot find the way out
+    of a dark room could not leave it.
   * The composer's darkness sentences, the Director's dark-room check
     (`agents/director.py`, "any room not lit") and `spatial_routing`'s
     light gates all read through these three and change nothing.
@@ -283,8 +320,8 @@ by decay, which is why it can be dropped without a special case.
     owner's, shared word for word with the sound field: (a) speak only when
     the room is UNEVEN -- every cell one word and the flat `light_dim` /
     `light_dark` sentence stands, byte-identically; (b) grade by ANCHOR,
-    not by cell -- the visible anchors (`feature_visibility`, cone and line
-    already subtracted) grouped by the word at each anchor's nearest cell,
+    not by cell -- the visible anchors (`feature_visibility`, cone, line and
+    light already subtracted) grouped by the word at each anchor's nearest cell,
     the mapping `neighbour_feature_visibility` uses, bright to dark, as
     templates over the closed set, never free text, no number, cell or
     sector reaching prose; (c) name the source when it is IN VIEW, else the
@@ -312,6 +349,18 @@ of the beat sees the same light as the beat it replaces (the same reason
 anchor placement is seeded on (room, anchor)). Nothing about a device:
 `failing` is true of a guttering candle, a dying torch battery and a spell
 running out alike.
+
+A FLICKER MAY NOT PUT A SOURCE OUT (2026-09-05). The drop stops at the
+dimmest light a source can still give: `dim` stays `dim` on its flicker
+beats, and a source declared `dark` is not a light and a flicker does not
+make it one. Going out is what `failing` means, and that files the notice
+above where a flicker files nothing -- so a flicker that reached `dark` took
+a source out of the world with nothing anywhere to say so. Measured: a `dim`
+flickering candle lit in the player's own hand contributed no light at all on
+its flicker beats, and the room whose only source it was lost it entirely
+(`docs/experiments/PLAY_2026_09_05_manor.md` § PC4). The sound field's
+`_power_of_level` carries the same clamp on its own ladder -- a `faint`
+source dropping to silence was the same defect in the other sense.
 
 The commit's failed-source block is ONE block for both fields
 (`persist/commit_scene_state._record_failed_sources`, 2026-09-04): it reads
