@@ -701,10 +701,36 @@ def _fold_duplicate_mints(ctx, cid, sc, prev_scene, diff):
     and any room it was given is given to the survivor if the survivor had
     none. The Director is told, because a hand whose mint silently became an
     update would go on minting.
+
+    A THING THIS BEAT MOVES BETWEEN ITSELF AND THE CANDIDATE IS NOT THE
+    CANDIDATE. An `inventory_ops` transfer names two ENDPOINTS and a thing that
+    travels between them, so a diff that mints X and moves X out of (or into) Y
+    has said in its own vocabulary that X and Y are two things -- whatever
+    their names share. Measured, the Vaunt's Yard run 2026-09-05 turn 1 (PM16):
+    the Director minted `tally_boards` ("two notched wooden tally boards") and
+    wrote `{op: transfer, object_id: tally_boards, from_id: tally_satchel,
+    to_id: factors_table_entity}` -- taking the boards out of the satchel. The
+    alias overlap folded the boards INTO the satchel, the transfer had nowhere
+    to land, `scene.contained` was `{}` after twenty beats, and the satchel
+    stood pinned to a doorway across the hall for the rest of the story.
     """
     minted = _minted_this_beat(prev_scene, diff)
     if not minted:
         return []
+    # {folded mint label: {folded endpoint labels}} -- what this beat's own
+    # transfers say is NOT the same thing as the thing being moved.
+    endpoints = {}
+    for _op in (diff.get("inventory_ops") or []):
+        if not isinstance(_op, dict):
+            continue
+        _obj = str(_op.get("object_id") or "").strip().casefold()
+        if not _obj:
+            continue
+        _ends = endpoints.setdefault(_obj, set())
+        for _side in ("from_id", "to_id"):
+            _end = str(_op.get(_side) or "").strip().casefold()
+            if _end:
+                _ends.add(_end)
     entities = sc.get("entities")
     if not isinstance(entities, dict):
         return []
@@ -719,9 +745,23 @@ def _fold_duplicate_mints(ctx, cid, sc, prev_scene, diff):
         ent = entities.get(eid)
         if not isinstance(ent, dict):
             continue
-        held = next((standing[label] for label in sorted(_entity_labels(eid, ent))
+        labels = _entity_labels(eid, ent)
+        held = next((standing[label] for label in sorted(labels)
                      if label in standing), "")
         if not held or held == eid or held not in entities:
+            continue
+        _moved_between = set()
+        for _label in labels:
+            _moved_between |= endpoints.get(_label, set())
+        if _moved_between & _entity_labels(held, entities.get(held)):
+            # This beat's own transfer names them as two ends of one move.
+            add_engine_notice(
+                ctx, cid,
+                "%r reads as %r, which the scene already holds -- but this "
+                "beat moves it between the two, so they are two things and "
+                "the mint stands. Give a thing a name of its own rather than "
+                "one its container answers to."
+                % (eid, held))
             continue
         keeper = entities[held]
         if not isinstance(keeper, dict):
@@ -749,6 +789,220 @@ def _fold_duplicate_mints(ctx, cid, sc, prev_scene, diff):
             "Name the thing that is there instead of minting it again."
             % (eid, held))
     return folded
+
+
+#: The contact manners in which a body BEARS what it touches, out of the
+#: engine's own closed contact vocabulary (`spatial_contacts.CONTACT_MANNERS`).
+#: A SCHEMA THE ENGINE OWNS, not a list of the ways English says "carrying":
+#: a manner outside the vocabulary records nothing here and is still kept
+#: verbatim by the contact ledger it was written in.
+BEARING_MANNERS = frozenset({"carry", "hold", "grip", "support"})
+
+
+def _bearing_subject_key(scene, eid, entity):
+    """The spelling the scene's ledgers already use for this entity, else its id.
+
+    One being, one key -- the same rule (and the same two ledgers) as
+    `spatial_containment._placement_subject_key`, which is behind the facade
+    and not re-exported. Minting a second spelling would put one thing in two
+    rooms at once.
+    """
+    labels = [eid]
+    if isinstance(entity, dict):
+        labels.append(entity.get("name"))
+        labels.extend(entity.get("aliases") or [])
+    for label in labels:
+        text = str(label or "").strip()
+        if not text:
+            continue
+        for ledger in ((scene or {}).get("positions"),
+                       (scene or {}).get("contained")):
+            if not isinstance(ledger, dict):
+                continue
+            for key in ledger:
+                if str(key).strip().casefold() == text.casefold():
+                    return key
+    return str(eid)
+
+
+def derive_borne_containment(scene):
+    """A THING A BODY IS BEARING IS CONTAINED BY THAT BODY, AND A CONTAINED
+    THING GOES WHERE ITS HOLDER GOES.
+
+    The sibling of `derive_worn_containment`, which ties a worn garment to its
+    wearer from the wardrobe ledger. Possessions had no such join: carriage was
+    recorded in whatever channel the beat reached for -- the body's own
+    `held_items`, a settled contact, a pose supported by a body -- and only an
+    explicit `inventory_ops` transfer ever produced a containment record. So a
+    body walked out of the room and its kit stayed behind while the prose went
+    on using it.
+
+    Measured, the Salt Terraces run 2026-09-05 (PS3, PX25): turn 2, the player
+    walked five steps carrying everything and committed
+    `{Mireille: upper_terrace_rim, brass_hand_lamp: haul_road_head, canteen:
+    haul_road_head, folding_rule: haul_road_head}`. By turn 10 her possessions
+    were spread over three rooms; the folding rule was still on the revetment
+    stair at the end of the story. The masque run the same day recorded a pair
+    of shoes in the passage a body carried them out of, and a packet folded
+    into a coat lying in the room the coat left.
+
+    Every reading is AFFIRMATIVE and comes out of a vocabulary the engine owns:
+    a body's `held_items` (the durable ledger of what a hand holds), a settled
+    contact whose manner is one of `BEARING_MANNERS`, or a thing whose pose is
+    supported by a body. It yields to any containment record already standing
+    -- a hand that gave the thing away has outranked this -- and it RETIRES its
+    own records the moment the evidence stops, so a thing set down stays where
+    it was set down. Returns [(thing, bearer, evidence)]; mutates `scene`.
+    """
+    from world.spatial import (_ci_get, _unique_entity_keyed,
+                               contact_endpoint_is_body, contact_thing_label)
+
+    if not isinstance(scene, dict):
+        return []
+    contained = scene.get("contained")
+    if not isinstance(contained, dict):
+        contained = scene["contained"] = {}
+    borne = {}
+
+    def _thing(name, *, portable_only=False):
+        """(ledger key, entity) when the scene vouches for a THING it also
+        keeps an entity record of, else None. A room's own fixture answers
+        `contact_thing_label` too and is not a thing anybody carries, so an
+        entity record is required as well as a thing-word."""
+        text = str(name or "").strip()
+        if not text or not contact_thing_label(scene, text):
+            return None
+        eid, entity = _unique_entity_keyed(scene, text)
+        if not eid or not isinstance(entity, dict) or entity.get("ubiquitous"):
+            return None
+        if portable_only and not entity.get("portable"):
+            return None
+        return _bearing_subject_key(scene, eid, entity), entity
+
+    def _record(thing_name, bearer_name, evidence, *, portable_only=False):
+        bearer = str(bearer_name or "").strip()
+        if not bearer or not contact_endpoint_is_body(scene, bearer):
+            return
+        found = _thing(thing_name, portable_only=portable_only)
+        if not found:
+            return
+        subject, _entity = found
+        if subject.strip().casefold() == bearer.casefold():
+            return
+        borne.setdefault(subject.strip().casefold(),
+                         (subject, bearer, evidence))
+
+    # 1. WHAT A HAND HOLDS. `held_items` is durable state by the same doctrine
+    #    the wardrobe keeps ("a hand keeps what it holds until something says
+    #    otherwise") and was read by renderers alone.
+    for eid, ent in (scene.get("entities") or {}).items():
+        state = ent.get("state") if isinstance(ent, dict) else None
+        if not isinstance(state, dict):
+            continue
+        holder = _bearing_subject_key(scene, eid, ent)
+        for item in (state.get("held_items") or []):
+            _record(item, holder, "held_items")
+
+    # 2. A SETTLED CONTACT IN WHICH THE BODY IS THE ONE BEARING. Restricted to
+    #    portable things: a hand on a rail or a lever is the same manner, and
+    #    the rail is not going anywhere with anybody.
+    for row in (scene.get("contacts") or []):
+        if not isinstance(row, dict):
+            continue
+        if str(row.get("motion") or "").strip().casefold() == "moving":
+            continue
+        if str(row.get("manner") or "").strip().casefold() \
+                not in BEARING_MANNERS:
+            continue
+        _record(row.get("target"), row.get("actor"), "contact",
+                portable_only=True)
+
+    # 3. A POSE HELD UP BY A BODY. `support` names what carries the weight.
+    for subject, pose in (scene.get("poses") or {}).items():
+        if isinstance(pose, dict):
+            _record(subject, pose.get("support"), "pose")
+
+    for subject in list(contained):
+        record = contained[subject]
+        if not isinstance(record, dict) or record.get("by") != "bearing":
+            continue
+        now = borne.get(str(subject).strip().casefold())
+        if now is None or str(record.get("in") or "").strip().casefold() \
+                != now[1].casefold():
+            contained.pop(subject, None)
+
+    minted = []
+    for _folded, (subject, bearer, evidence) in borne.items():
+        if isinstance(_ci_get(contained, subject), dict):
+            continue
+        contained[subject] = {"in": bearer, "mode": "carried", "by": "bearing"}
+        minted.append((subject, bearer, evidence))
+    return minted
+
+
+def _refuse_unheld_transfers(ctx, sc, diff):
+    """A TRANSFER NAMES A HOLDER; A HOLDER WHO IS NOT HOLDING IT IS NOT ONE.
+
+    `derive_inventory_placements` reads a transfer's destination and never its
+    source, which is right for where a thing ENDS UP and leaves the claim in
+    `from_id` unchecked. So a player misremembering who had something -- which
+    is an ordinary thing for a player to do -- rewrote the world silently.
+
+    Measured, the Vaunt's Yard run 2026-09-05 turn 13 (PR9): `mirela_box` had
+    stood at `third_landing` since turn 8, the body named as its source was a
+    floor below it, and `{op: transfer, object_id: mirela_box, from_id:
+    "Mirela Andelic", to_id: "Vesna Kolar"}` committed -- the box changed
+    hands from somebody who did not have it and moved a storey to do it.
+
+    Refused only where the scene can say both things and they DISAGREE: the
+    source neither holds the object in the containment ledger nor stands in
+    the room the object is in. Silence -- an object nowhere, a source nowhere,
+    no source named at all -- is not a contradiction and passes, exactly as
+    the movement backstop treats an unknown route. Reported to the Director,
+    which is the only hand that can restate it.
+    """
+    ops = diff.get("inventory_ops")
+    if not isinstance(ops, list) or not ops:
+        return []
+    contained = sc.get("contained") if isinstance(sc.get("contained"), dict) \
+        else {}
+    kept, refused = [], []
+    for op in ops:
+        if not isinstance(op, dict):
+            kept.append(op)
+            continue
+        source = str(op.get("from_id") or "").strip()
+        obj = str(op.get("object_id") or "").strip()
+        if not source or not obj:
+            kept.append(op)
+            continue
+        record = None
+        for key, value in contained.items():
+            if str(key).strip().casefold() == obj.casefold():
+                record = value
+                break
+        if isinstance(record, dict) and str(record.get("in") or "") \
+                .strip().casefold() == source.casefold():
+            kept.append(op)
+            continue
+        thing_room = _room_of(sc, obj)
+        source_room = _room_of(sc, source)
+        if not thing_room or not source_room or thing_room == source_room:
+            kept.append(op)
+            continue
+        refused.append((op, obj, source, thing_room, source_room))
+    for _op, obj, source, thing_room, source_room in refused:
+        note = (
+            "possession: %r was not %s's to hand over -- the scene has it in "
+            "%s and them in %s, and no record has them holding it -- so the "
+            "transfer was refused. Say who is holding a thing before moving "
+            "it, or move the body first." % (
+                obj, source, thing_room, source_room))
+        ctx.tell_director(note)
+        ctx.add_warning("inventory: " + note)
+    if refused:
+        diff["inventory_ops"] = kept
+    return [r[0] for r in refused]
 
 
 def _place_orphan_mints(ctx, cid, sc, diff):
@@ -1185,6 +1439,11 @@ def prepare_scene_commit(ctx):
     _charter_orders = list(diff.get("charter_ops") or [])
     if "charter_ops" in diff:
         diff.pop("charter_ops", None)
+    # A HANDOVER'S SOURCE IS CHECKED AGAINST THE SCENE THE BEAT STARTED IN,
+    # because that is the arrangement the claim is about: `from_id` says who
+    # WAS holding the thing. Against `diff` -- the deep copy above, never the
+    # persisted step -- so the merge below never sees a refused op.
+    _refuse_unheld_transfers(ctx, prev_scene, diff)
     sc = merge_scene_with_diff(
         prev_scene, diff, contact_report=_contact_report,
         substance_report=_substance_report.append,
@@ -1210,6 +1469,16 @@ def prepare_scene_commit(ctx):
     # because a different beat writes different contact ops and most beats
     # write a report at all. A two-character report would have unpacked
     # silently into its own letters, which is the worse half of the same bug.
+    # WHAT A BODY IS BEARING GOES WITH IT. After the merge, so every declared
+    # position and containment record this beat wrote is already standing and
+    # this yields to all of them; then the same two passes the merge runs after
+    # its own late containment mint (`derive_containment_from_contacts`), so a
+    # record derived here reaches `positions` exactly as a declared one does.
+    if derive_borne_containment(sc):
+        from world.spatial import (derive_contained_positions,
+                                   normalize_scene_containment)
+        normalize_scene_containment(sc, carriers=_carriers)
+        derive_contained_positions(sc, carriers=_carriers)
     for _note in _contact_report:
         ctx.tell_director(str(_note))
     for _note in _crossing_report:

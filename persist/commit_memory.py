@@ -189,6 +189,56 @@ def _is_player(speaker, chat):
     from agents import is_player_speaker
     return is_player_speaker(speaker, chat)
 
+
+def _hearer_label(name, chat, cast, hearer_known, *, describe=False,
+                  heard=False):
+    """What THIS hearer may call that body, or "" when they may call it nothing.
+
+    ONE resolution for both ends of an overheard line. The speaker end has been
+    recognition-aware since F2; the addressee end took `intended_target` raw and
+    appended it as ` to {tgt}`, so twelve rows across two minds in the
+    2026-09-05 masque run (PX3) permanently recorded `... to Ivo Sarn` in minds
+    that had never learned the name and never did. A view lasts a beat; a memory
+    is cited for the rest of the story.
+
+    The rule, in the engine's vocabulary: *a memory names a body only by the
+    label its owner already holds for that body.* A canonical name when the
+    hearer knows it; otherwise, only where the caller says a description is
+    earned (`describe`), the same short appearance label every perception path
+    uses; otherwise "", and the caller drops the clause. `heard` marks a body
+    known through sound alone -- when there is nothing to describe, what the
+    hearer has is a voice, not a body.
+    """
+    from agents.common import (_text, _unknown_actor_label,
+                               character_scene_keys)
+    from story.scene import persona_of
+    raw = str(name or "").strip()
+    if not raw:
+        return ""
+    is_player = _is_player(raw, chat)
+    if is_player:
+        raw = persona_name(persona_of(chat)) or raw
+    if raw in hearer_known:
+        return raw
+    if not describe:
+        return ""
+    sheet = persona_of(chat) if is_player else next(
+        (s for s in (json.loads(_cr["sheet"]) for _cr in cast)
+         if character_name(s) == raw),
+        None)
+    label = _unknown_actor_label(
+        raw,
+        _char_appearance(sheet) if sheet else None,
+        character_scene_keys(sheet)[1:] if sheet else None,
+    )
+    # The generic fallback claims the hearer saw a body. Compared against the
+    # pack's own value rather than the English string it renders to: the
+    # literal comparison this replaces could not fire in a Japanese story, so
+    # the one case the check exists for was the one case it missed.
+    if label == _text("unknown_actor_fallback"):
+        return "a voice" if heard else ""
+    return label
+
 def _salience_of(text):
     s = 0.45 + min(len(text or ""), 400) / 1600.0
     # Which words make a beat worth remembering is a question about words, so
@@ -704,8 +754,8 @@ def prepare_memory_commit(ctx, *, scene=None):
             # canonical name was stored regardless of whether the hearer
             # recognizes them, leaking identity into memory. Check the
             # hearer's known map -- if the speaker isn't recognized, store
-            # an appearance-based label or "a voice" instead, and drop
-            # intended_target (which also names the speaker).
+            # an appearance-based label or "a voice" instead. The ADDRESSEE
+            # goes through the same gate (PX3); see `_hearer_label`.
             _known_map = wget(cid, "known", {}) or {}
             _hearer_known = set(_known_map.get(cname) or [])
             for d in dlog:
@@ -725,39 +775,26 @@ def prepare_memory_commit(ctx, *, scene=None):
                     spk = persona_name(persona_of(ctx.chat)) or spk
                 if spk == cname:
                     continue
-                # Recognition gate: the canonical name only if the hearer knows
-                # the speaker. The label comes from _unknown_actor_label, the
-                # same helper every perception path uses, rather than a second
-                # hand-rolled copy of it -- the copy truncated at a fixed 60
-                # characters and cut mid-word, and two implementations of the
-                # identity floor drift apart exactly where it matters.
-                if spk not in _hearer_known:
-                    from agents.common import (
-                        _unknown_actor_label, character_scene_keys)
-                    if _spk_is_player:
-                        from story.scene import persona_of
-                        _spk_sheet = persona_of(ctx.chat)
-                    else:
-                        _spk_sheet = next(
-                            (sheet for sheet in
-                             (json.loads(_cr["sheet"]) for _cr in ctx.cast)
-                             if character_name(sheet) == spk),
-                            None)
-                    spk_label = _unknown_actor_label(
-                        spk,
-                        _char_appearance(_spk_sheet) if _spk_sheet else None,
-                        character_scene_keys(_spk_sheet)[1:] if _spk_sheet else None,
-                    )
-                    # This memory is HEARD. When there is no appearance to
-                    # describe, _unknown_actor_label falls back to "the
-                    # unfamiliar person" -- which claims the hearer saw a body.
-                    # What they have is a voice.
-                    if spk_label == "the unfamiliar person":
-                        spk_label = "a voice"
-                    tgt = None  # drop intended_target -- it names the speaker
+                # Recognition gate, BOTH ENDS OF THE LINE (PX3). The canonical
+                # name only if the hearer knows the body; otherwise the label
+                # `_hearer_label` resolves, which is the same helper every
+                # perception path uses rather than a second hand-rolled copy of
+                # it. The speaker earns a description -- a line was heard, so
+                # there is a voice to attribute; the addressee earns none,
+                # because a hearer who cannot name the body a line was aimed at
+                # has no channel to who it was aimed at, and "to <description>"
+                # would claim they saw them. No name, no clause.
+                spk_label = _hearer_label(
+                    spk, chat, ctx.cast, _hearer_known,
+                    describe=True, heard=True)
+                _tgt_raw = str(d.get("intended_target") or "").strip()
+                if _tgt_raw and _tgt_raw == cname:
+                    # A mind always has a word for itself, and it is not its
+                    # own name: this memory is written in the first person.
+                    tgt = "me"
                 else:
-                    spk_label = spk
-                    tgt = d.get("intended_target")
+                    tgt = _hearer_label(
+                        _tgt_raw, chat, ctx.cast, _hearer_known) or None
                 quote = d.get("exact_quote", "")
                 qbody = _quote_body(quote)
                 if qbody and (quote in v or qbody in v):
