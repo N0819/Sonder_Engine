@@ -6186,6 +6186,82 @@ make it; whether a fuzzy match belongs in `planned_context` is a separate
 question, and the deterministic matcher is deliberately exact
 (§ *An exact match is not ambiguous*).
 
+### 1.128 The turn row, the narrator's contract and the guards (lane H, 2026-09-05)
+
+Landed from the play campaign of 2026-09-05: **PX2** (`cast_pronouns` keyed by
+what the player's view called each body, so a stranger has no name on the
+page), **PQ10** (a beat that produced no step is not a turn -- the row and its
+checkpoint go, and the story clock stays where it was), **PM19** (a
+deterministic stage re-run on unchanged inputs reuses its active variant
+instead of minting a byte-equivalent one), **PM8** (a quote's owner is the
+subject of the sentence that introduces it, not the last name before it),
+**PM4** (the player's declared conduct is scored against the page by its own
+lexical footprint), **PM22** (a pronoun redirects a tracked subject only when
+another body in scope answers to it), **PQ9** and the tense half of **PS20**
+(the beat with nothing to detect from reads the author's stated intent; a
+story whose author set no tense inherits the tense its own page is in), and the
+deterministic half of **PX18** (one mark ends a line, at the weld the engine
+itself makes).
+
+**What is open, and whose it is.**
+
+* **PX13, the composer half.** `state_diff.sensory_events` carries a `source`
+  (`black_lacquer_cabinet`) and the composed view drops it, so the narrator
+  placed a bolt-click at the locked door it had just written about and the
+  next beat had to deny an arrival. The narrator card now says a percept the
+  view delivers without a source has none and may not be given a home; the
+  other half is `agents/composer.py` -- give the view the source when the
+  observer can identify it (a hand on the lock certainly can). Until it does,
+  a sound the observer COULD place still arrives placeless.
+* **PX14, the guards that report a loss that landed.** Three warnings in one
+  beat named things that had committed: two `attire: dropped an unsupported
+  remove` for a mask that came off, and a `PLAYER AUTHORITY: declared ... was
+  not captured` for an edge that committed as `barrier: open_door`. A fourth
+  fired on a speech-attribution clause ("he said, at the same thread of a
+  whisper") whose manner was already recorded in `declared_actions[0].volume`.
+  The rule -- *say a thing was lost only after looking at whether it is
+  there* -- belongs in `agents/director_floors.py` (the player-authority
+  check) and `persist/commit_attire.py` (the removal report), neither of
+  which is this lane's.
+* **PM20, the call site.** `llm/llm_quality.json_failure_diagnosis` now
+  answers which of the three JSON failures a parse error was, and
+  `world/charter_generate.py::_json_call` still hand-writes a refusal that
+  blames the token budget for a response that was the model's own reasoning.
+  One expression: build the message from the diagnosis instead of the
+  budget sentence.
+* **PM24, an owner decision left as it stands.** The narrator moved a body
+  through a door the ledger kept her behind; `_check_position_fidelity` fired
+  and the prose shipped. The guard is right and the narrator card already
+  says a character is exactly where `room` says. What is actually missing is
+  upstream: a character declaration that reaches a doorway was resolved as no
+  movement at all, so the ledger and the beat disagreed before the page was
+  written. Fixing it at the narrator would be compensating downstream.
+* **PX18, the rest of it.** Twenty-one guard firings, zero repairs. One
+  repair now exists and it is deliberately the only one: the doubled
+  terminal at the engine's own weld, which is typography and needs no
+  opinion about the writing. The wrong-speaker attribution is a re-ask, the
+  pronoun mismatch and the adverb tell are judgments about prose, and the
+  standing rule for this stage -- detect and report, never rewrite -- was
+  measured and should not be reversed piecemeal.
+* **PX2's floor is `_speaker_display`, not `composer.observer_display_map`,
+  and that is a choice with a residual.** `cast_pronouns` is now keyed by the
+  same floor `co_present_positions` and `event_order` already use, which is
+  the coherence PX2 asks for -- one answer to "what may this page call that
+  body" across every body-keyed narrator field. The composer's map is
+  STRICTLY finer: it gates a stranger's appearance descriptor on
+  `visual_level_between`, so a body seen only as shapes is a bare figure
+  rather than an epithet. Three narrator fields therefore still hand the
+  model an appearance descriptor for a body the view rendered as a
+  silhouette. It is a naming mismatch across the whole payload rather than
+  anything `cast_pronouns` introduced, and closing it means giving
+  `agents/narration.py` the scene and sight data on the establish path,
+  where it currently has neither.
+
+* **PM4's floor is a guess worth re-measuring.** The check declines unless a
+  declared act adds at least `_PLAYER_ACT_MIN_DISTINCT_TOKENS` (two) words of
+  its own beyond the view. Two was chosen because one shared word is a
+  coincidence; nobody has replayed it against the stored corpus.
+
 ## 2. Roadmap
 
 Features the architecture intends and has not built. Ordered by value per unit

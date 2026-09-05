@@ -2266,6 +2266,7 @@
   "the story owns this entry; edit it directly rather than overlaying it": "このエントリは物語自身のものです。オーバーレイではなく直接編集してください",
   "The Story Planner is not seated yet. Your note is kept for it; nothing has been planned.": "ストーリープランナーはまだ着席していません。メモは保管されますが、何も計画されていません。",
   "The story rewound under the room's work; nothing landed.": "ルームの作業中に物語が巻き戻されたため、何も着地しませんでした。",
+  "The room lost its last answer to the model; what it had already settled stands, and its notes say what that was.": "ルームは最後の回答をモデルから受け取れませんでした。すでに決着した内容はそのまま残っており、それが何であったかはノートが述べます。",
   "The whole step as stored": "保存されているステップ全体",
   "Their character's name": "彼らのキャラクター名",
   "Their manner and look follow the story's tone and what the Writers' Room has planned for the place they stand in.": "彼らの物腰と見た目は、物語のトーンと、ライターズルームがその場所について計画した内容に従います。",

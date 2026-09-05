@@ -437,3 +437,58 @@ class TestTheProviderSaysWhyItStopped:
         assert recorded == [False], (
             "a response that says nothing about why it stopped is unknown, "
             "not truncated")
+
+
+class TestWhichFailureThisWas:
+    """multitude 2026-09-05, PM20. A location plan came back as 2,270
+    characters ending "...plus 2 featured = 14 total residents!" and the
+    refusal told the host the plan had outrun its 16,000-token budget and to
+    ask for fewer rooms. It had not; the retry that worked asked for the same
+    thing again. Three failures arrive as one `JSONDecodeError` and only one
+    of them is fixed by asking for less."""
+
+    def test_a_reasoning_leak_does_not_blame_the_budget(self, monkeypatch):
+        # `llm_quality` imported the name, so the binding it READS is its
+        # own -- patching `providers` here would be silently inert.
+        monkeypatch.setattr(llm_quality, "response_truncated",
+                            lambda: False)
+        leak = ("But they DO count, so you put 2 in populations. And "
+                "1 + 2 + 2 + 3 + 4 = 12 in populations, plus 2 featured = "
+                "14 total residents!")
+        note = llm_quality.json_failure_diagnosis(leak, max_tokens=16000)
+        assert "16000" not in note and "budget" not in note
+        assert "another attempt" in note
+
+    def test_a_cut_off_object_still_names_the_budget(self, monkeypatch):
+        # `llm_quality` imported the name, so the binding it READS is its
+        # own -- patching `providers` here would be silently inert.
+        monkeypatch.setattr(llm_quality, "response_truncated",
+                            lambda: False)
+        note = llm_quality.json_failure_diagnosis(
+            TRUNCATED_AFTER_VALUE, max_tokens=16000)
+        assert "mid-structure" in note and "16000-token" in note
+
+    def test_a_malformed_object_is_named_as_one(self, monkeypatch):
+        # `llm_quality` imported the name, so the binding it READS is its
+        # own -- patching `providers` here would be silently inert.
+        monkeypatch.setattr(llm_quality, "response_truncated",
+                            lambda: False)
+        note = llm_quality.json_failure_diagnosis(
+            '{"a": "he said "hi"", "b": 1}', max_tokens=16000)
+        assert "malformed" in note and "16000" not in note
+
+    def test_an_empty_answer_says_so(self, monkeypatch):
+        # `llm_quality` imported the name, so the binding it READS is its
+        # own -- patching `providers` here would be silently inert.
+        monkeypatch.setattr(llm_quality, "response_truncated",
+                            lambda: False)
+        note = llm_quality.json_failure_diagnosis("", max_tokens=16000)
+        assert "empty" in note and "16000" not in note
+
+    def test_the_finish_reason_is_still_the_first_witness(self, monkeypatch):
+        """A provider that says `length` outright decides it, whatever the
+        text looks like -- `output_ran_out_of_room`'s own ordering."""
+        monkeypatch.setattr(llm_quality, "response_truncated", lambda: True)
+        note = llm_quality.json_failure_diagnosis(
+            "plain prose with no object in it", max_tokens=4000)
+        assert "mid-structure" in note and "4000-token" in note

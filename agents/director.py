@@ -3741,8 +3741,29 @@ def director_resolve(ctx, nonce, _corrections=None):
         if str(d.get("name") or "").strip()
     ]
     _all_names = [n for n in ([_player_name] + _declared_names) if n]
+    # WHOSE PRONOUNS ARE WHOSE. Subject tracking continues a named body
+    # through a following pronoun sentence, and until it was handed the
+    # roster's own paradigms it continued a "she" onto a he/him body across
+    # the room -- so a warning named the wrong sheet (multitude 2026-09-05,
+    # PM22). Read off the cards, which is where the engine owns this.
+    _body_pronouns = {}
+    for _c in ctx.cast:
+        try:
+            _cs = json.loads(_c["sheet"])
+        except Exception:
+            continue
+        _cn = character_name(_cs)
+        _cp = ((_cs.get("identity") or {}).get("pronouns") or {})
+        if _cn and isinstance(_cp, dict):
+            _body_pronouns[_cn] = _cp
+    if _player_name and isinstance(pers, dict):
+        _pp = ((pers.get("identity") or {}).get("pronouns")
+               or pers.get("pronouns") or {})
+        if isinstance(_pp, dict) and _pp:
+            _body_pronouns[_player_name] = _pp
     _mute = _check_character_speech_authority(
-        out.get("resolved_event") or "", _silent_names, _all_names)
+        out.get("resolved_event") or "", _silent_names, _all_names,
+        pronouns=_body_pronouns)
     # CHARACTER-ACT AUTHORITY. The third side of the boundary, and the one
     # nothing held: act authority was enforced for the player alone, so the
     # Director could hand a character conduct freely. Live (chat 56 t1391) it
@@ -3752,7 +3773,8 @@ def director_resolve(ctx, nonce, _corrections=None):
     for _cname in _declared_names:
         _cacts.extend(_check_character_act_authority(
             out.get("resolved_event") or "",
-            char_actions.get(_cname) or [], _cname, _all_names))
+            char_actions.get(_cname) or [], _cname, _all_names,
+            pronouns=_body_pronouns))
     # PROSE-QUOTE AUTHORITY. The dialogue_log backstop further down drops an
     # invented line for a registered character, but only one that reached the
     # LOG; t1391's fabrication lived solely in resolved_event prose, with
@@ -3883,12 +3905,14 @@ def director_resolve(ctx, nonce, _corrections=None):
             _declared_player_actions, _player_name, _all_names,
             ctx.input or "")
         _retry_mute = _check_character_speech_authority(
-            _retry.get("resolved_event") or "", _silent_names, _all_names)
+            _retry.get("resolved_event") or "", _silent_names, _all_names,
+            pronouns=_body_pronouns)
         _retry_cacts = []
         for _cname in _declared_names:
             _retry_cacts.extend(_check_character_act_authority(
                 _retry.get("resolved_event") or "",
-                char_actions.get(_cname) or [], _cname, _all_names))
+                char_actions.get(_cname) or [], _cname, _all_names,
+                pronouns=_body_pronouns))
         _retry_quotes = _check_prose_quote_authority(
             _retry.get("resolved_event") or "", _allowed_quote_bodies)
         _retry_felt = _check_player_interiority_authority(
