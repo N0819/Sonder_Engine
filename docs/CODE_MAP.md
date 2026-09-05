@@ -10,7 +10,7 @@
 | `agents/background.py` | 1692 |  | `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `persist.commit`, `story.character_schema`, `story.scene`, `world.background_claims`, `world.spatial` |
 | `agents/character.py` | 4256 | Private character decision agent. | `agents.common`, `core.db`, `core.frames`, `llm.prompts`, `llm.schemas`, `mind`, `mind.affect`, `mind.memory`, `mind.memory_judge`, `mind.psychology_runtime`, `mind.theory_of_mind`, `story.character_schema`, `story.scene`, `world.gaps`, `world.place_purpose`, `world.spatial`, `world.survival` |
 | `agents/common.py` | 9763 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
-| `agents/composer.py` | 4128 |  | `agents.common`, `core.pipeline_context`, `story.provenance_text`, `story.scene`, `world.spatial` |
+| `agents/composer.py` | 4156 |  | `agents.common`, `core.pipeline_context`, `story.provenance_text`, `story.scene`, `world.spatial` |
 | `agents/director.py` | 4987 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial`, `world.survival` |
 | `agents/director_contact.py` | 457 |  | `story.character_schema`, `world.spatial` |
 | `agents/director_evidence.py` | 1195 |  | `agents.common`, `agents.director_lingua`, `llm`, `world.spatial` |
@@ -253,14 +253,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `observations_from_render()` | 3920 | 209 lines |
-| `_render_view_english()` | 3398 | 170 lines |
-| `pose_percepts()` | 1681 | 149 lines |
-| `presence_percepts()` | 984 | 132 lines |
-| `speech_percept()` | 2351 | 104 lines |
-| `environment_percept()` | 723 | 101 lines |
-| `_render_standing()` | 3237 | 96 lines |
-| `_pose_referent()` | 1376 | 92 lines |
+| `observations_from_render()` | 3948 | 209 lines |
+| `_render_view_english()` | 3426 | 170 lines |
+| `pose_percepts()` | 1709 | 149 lines |
+| `presence_percepts()` | 1012 | 132 lines |
+| `speech_percept()` | 2379 | 104 lines |
+| `environment_percept()` | 751 | 101 lines |
+| `_render_standing()` | 3265 | 96 lines |
+| `_pose_referent()` | 1404 | 92 lines |
 
 ### `agents/director.py`
 
