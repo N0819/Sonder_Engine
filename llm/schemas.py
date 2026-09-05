@@ -2098,6 +2098,17 @@ class StateDiff(LenientModel):
     # code. `scent` is what the matter smells of and is why this ledger, not
     # a parallel one, carries the commonest smell in play.
     substance_ops: list[dict] = Field(default_factory=list)
+    # A NOISE IS AN EVENT, AND AN EVENT IS OVER WHEN THE BEAT IS.
+    # `[{kind, room, level | db, source, detail}]`, written by the objects
+    # hand: a stroke, a shot, a crash, a cry. Heard where it happened by
+    # whoever was there, spread past the near field by
+    # `spatial.distant_sounds` when it is loud enough to travel, and gone
+    # when the beat is -- the record carries the beat that wrote it and
+    # every reader asks for a beat, so nothing decays and nothing expires on
+    # a counter (`DESIGN_SOUND_DECIBELS.md` § 4). `EstablishOut` has carried
+    # the same declaration since the channel was built; without it here a
+    # Director that wrote one had it dropped by the validation round trip.
+    sensory_events: list[dict] = Field(default_factory=list)
     # Actor-owned following changes, projected deterministically from the
     # player interpretation and character decisions. The resolve model does
     # not author these. {op:start|stop,follower,target?,reason?,turn?}.
@@ -2550,6 +2561,7 @@ class DirectorObjectsSpecialist(LenientModel):
     inventory_ops: list[dict] = Field(default_factory=list)
     artifact_ops: list[ArtifactOp] = Field(default_factory=list)
     destruction: Optional[dict] = None
+    sensory_events: list[dict] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
     # The numbered manifest slice this call was handed, echoed back
     # with a verdict per event (schemas.ResolvedEvent).
@@ -3780,7 +3792,7 @@ SPECIALIST_CHANNELS = {
     "director_contact": ("contact_ops", "contact_action_ops",
                          "substance_ops", "containment", "scales"),
     "director_objects": ("entities", "remove_entities", "inventory_ops",
-                         "artifact_ops", "destruction"),
+                         "artifact_ops", "destruction", "sensory_events"),
     "director_spatial": ("positions", "rooms", "remove_rooms",
                          "remove_adjacent", "stations", "poses", "comms_ops"),
 }
@@ -4963,6 +4975,14 @@ OUTPUT_EXAMPLES = {
         "inventory_ops": [],
         "artifact_ops": [],
         "destruction": None,
+        # A signal the beat MADE, as against a thing that goes on making
+        # one: `detail` is what the noise was LIKE and is the only part of
+        # it a body beyond the room ever receives.
+        "sensory_events": [
+            {"kind": "sound", "room": "lamp_room", "level": "loud",
+             "source": "storm_lantern",
+             "detail": "a sharp crack of hot glass"},
+        ],
         "notes": [],
     },
     "director_spatial": {

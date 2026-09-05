@@ -104,6 +104,18 @@ read the sentence and wrote `{w: 15, d: 20}, round` from it -- which is the
 argument FOR the field rather than against it: a plan that means fifteen by
 twenty should say so, not hope.
 
+**And it reaches the scene (2026-09-05).** The field was accepted on the
+plan side and dropped on the registry side: `world/structure.py` rebuilt a
+planned room field by field at three points -- `plant_structure`,
+`skeleton_rooms` and `materialize_planned_fringe` -- each listing the prose
+fields, so a room SHAPED at four by twenty was planted sizeless and
+materialised sizeless. One helper (`structure.planned_geometry`) now carries
+the three through all three, omitting what is absent so a room that measured
+nothing reads exactly as it did before any of this existed. Edges were
+already copied whole, so `vertical` survived the plant unaided; what is now
+pinned end to end is that the room the SCENE reads still has the way up, and
+that its far side is a way down (`tests/test_room_authors_geometry.py`).
+
 **Composite (2026-09-05).** The owner, trying the map: "the room editor
 doesn't cover the multi room shape design." `l` was two corner parts, so a
 T, a U, a cross or a room with a bay had no spelling. The class, stated once:

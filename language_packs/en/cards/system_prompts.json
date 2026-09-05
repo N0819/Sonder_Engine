@@ -277,7 +277,8 @@
         "remove_entities",
         "inventory_ops",
         "artifact_ops",
-        "destruction"
+        "destruction",
+        "sensory_events"
       ],
       "chunks": {
         "entities": {
@@ -294,6 +295,9 @@
         },
         "destruction": {
           "$text": "specialists/objects/chunks/destruction.txt"
+        },
+        "sensory_events": {
+          "$text": "specialists/objects/chunks/sensory_events.txt"
         }
       },
       "nsfw": false

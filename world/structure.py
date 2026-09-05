@@ -57,6 +57,24 @@ def normalize_structures(stored):
         and key != "version"}}
 
 
+#: The MEASURABLE half of a planned room, in the scene's own vocabulary.
+#: `story.plot_packages._plan_geometry` normalizes and clamps these three
+#: against the same closed sets a LIVED room is read through
+#: (`spatial.normalize_extent` / `spatial.SHAPES` / `weather.EXPOSURES`), so
+#: what the registry holds is already a scene value and is carried through as
+#: is. Absent stays absent: a room that measured nothing must read exactly as
+#: it did before a plan could measure anything, and a `None` written into the
+#: field is not the same as no field.
+GEOMETRY_FIELDS = ("extent", "shape", "exposure")
+
+
+def planned_geometry(planned):
+    """The geometry a planned room carries, omitting what it does not."""
+    planned = planned if isinstance(planned, dict) else {}
+    return {key: copy.deepcopy(planned[key]) for key in GEOMETRY_FIELDS
+            if planned.get(key)}
+
+
 def _payload(row):
     try:
         return json.loads(row["payload"] or "{}")
@@ -87,6 +105,8 @@ def skeleton_rooms(cid, structure_key, frame_id=None):
             # A structure IS a region (world/regions.py): a planned room
             # enters the scene already knowing which part of the map it is.
             "region": normalize_region_id(structure_key),
+            # And what the plan MEASURED, beside what the room is FOR.
+            **planned_geometry(planned),
         }
     return {"rooms": rooms}
 
@@ -278,6 +298,12 @@ def plant_structure(cid, structure, rooms, *, owning_book_id=None,
             "adjacent": [dict(edge) for edge in raw.get("adjacent") or ()
                          if isinstance(edge, dict) and edge.get("to")],
             "frontier": [str(x) for x in raw.get("frontier") or () if str(x)],
+            # A plan could say what a room is FOR and not how big it is: this
+            # rebuild listed the prose fields and dropped the measurement, so
+            # a stall range asked for "four paces wide and twenty long"
+            # reached the registry sizeless and survived only as prose in
+            # `purpose` (F47, measured 2026-09-05 in all five play runs).
+            **planned_geometry(raw),
         }
     if len(normalized) > structure["max_planned"]:
         raise ValueError("planned rooms exceed structure.max_planned")
@@ -362,6 +388,12 @@ def materialize_planned_fringe(cid, scene):
         rooms[uid] = {
             "name": name, "adjacent": [],
             "planned": True, "purpose": str(spec.get("purpose") or ""),
+            # A stub is measured the beat it is minted, not once some hand
+            # describes it: a planned room reaching the live scene by the
+            # fringe is the same room `skeleton_rooms` lays out at the
+            # opening, and a measurement the plan stated is not the
+            # Director's to invent a second time.
+            **planned_geometry(spec),
         }
         if spec.get("structure"):
             rooms[uid]["region"] = normalize_region_id(spec["structure"])
@@ -905,8 +937,9 @@ def structure_warnings(structure, rooms, known=()):
 
 
 __all__ = [
-    "FRONTIER_NAME_WORDS", "STRUCTURES_KEY", "apply_frontier_mutations",
-    "composed_scene", "frontier_refusal",
+    "FRONTIER_NAME_WORDS", "GEOMETRY_FIELDS", "STRUCTURES_KEY",
+    "apply_frontier_mutations",
+    "composed_scene", "frontier_refusal", "planned_geometry",
     "materialize_planned_fringe", "prepare_frontier_expansion",
     "mint_frontier", "normalize_structure", "normalize_structures",
     "planned_context",

@@ -1840,6 +1840,70 @@ def ambient_percepts(sensory_events, observer_room):
     return out
 
 
+#: What a distant sound is allowed to be. `distant_sounds` returns
+#: `{kind, level, db, character, bearing}` and only three of those reach a
+#: percept: the margin over this listener's own noise floor, the DIRECTION it
+#: arrived from, and what it sounded LIKE. No room, no name, no words -- and
+#: the subtraction is done by naming what is kept rather than by dropping
+#: what is not, so a field added upstream cannot ride in behind it
+#: (DESIGN_SOUND_DECIBELS.md § 3).
+DISTANT_SOUND_LEVELS = ("faint", "plain", "overwhelming")
+
+
+def distant_sound_percepts(records):
+    """Sounds from beyond the near field, as percepts.
+
+    A bang two rooms away is a HEARING percept like any other: it goes in
+    the same list, through the same renderer and the same dedupe, so nothing
+    downstream has to know the far field exists. What makes it different is
+    what it may say, and that is decided here -- a bearing and a character,
+    never a sentence and never a place.
+
+    A record the far field could give no bearing for is DROPPED. The three
+    templates all say which way the sound came from, and a distant noise
+    with no direction is a fact this observer has no frame for; silence is
+    the honest rendering of that, and it subtracts.
+    """
+    out = []
+    for record in records or ():
+        if not isinstance(record, dict):
+            continue
+        level = str(record.get("level") or "")
+        if level not in DISTANT_SOUND_LEVELS:
+            continue
+        bearing = record.get("bearing")
+        where = " ".join(str((bearing or {}).get("phrase") or "").split())
+        if not where:
+            continue
+        character = " ".join(str(record.get("character") or "").split())
+        out.append(Percept(
+            kind="ambient", channel="hearing",
+            data={"distant": {"level": level, "where": where,
+                              "character": character}},
+            salience=0.45,
+            # A sound is over when the beat is, so the key carries the beat's
+            # own content: the same bang louder, or from another quarter, is
+            # news again rather than the same standing fact.
+            dedupe_key=standing_key("distant_sound", (where,),
+                                    (level, character)),
+        ))
+    return out
+
+
+def render_distant_sound(distant):
+    """One distant sound as the reader meets it: how loud against this
+    room's own quiet, which way, and what it sounded like."""
+    distant = distant if isinstance(distant, dict) else {}
+    level = str(distant.get("level") or "")
+    where = str(distant.get("where") or "")
+    if level not in DISTANT_SOUND_LEVELS or not where:
+        return ""
+    character = (str(distant.get("character") or "").strip()
+                 or _en("sound_distant_character_none"))
+    return _cap(_en("sound_distant_" + level, where=where,
+                    character=character))
+
+
 #: A scent that arrives without its source. `muffled` is the graded rung
 #: `scent_level` has always returned and nothing downstream could act on.
 _SCENT_FIDELITY = {"full": "full", "muffled": "degraded"}
@@ -2975,6 +3039,8 @@ def _render_standing(p):
     if p.kind == "ambient":
         if p.data.get("soundscape"):
             return render_sound_shape(p.data.get("soundscape"))
+        if p.data.get("distant"):
+            return render_distant_sound(p.data["distant"])
         desc = str(p.data.get("desc") or "").strip()
         if desc and desc[-1:] not in ".!?":
             desc += "."
