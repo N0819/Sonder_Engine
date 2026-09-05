@@ -7581,11 +7581,19 @@ Evidence: [`experiments/DEBUG_RUN_2026_09_04.md`](experiments/DEBUG_RUN_2026_09_
 (two runs on copies, thirty-five findings; eight classes fixed the same day,
 pinned in `tests/test_played_scene_classes.py`). Open, each an owner decision:
 
-- **"Full authority" is a snapshot (F15).** A mandate granted as everything
-  the room could do enumerates the kinds that existed on its turn;
-  `director_note`, added later, was refused under chat 114's turn-5 grant
-  until the reply's own words happened to grant it. A total grant should
-  cover kinds added after it; widening a standing grant is the owner's call.
+- ~~**"Full authority" is a snapshot (F15).**~~ CLOSED 2026-09-05. The total
+  grant is now one MEMBER of the capability vocabulary
+  (`mandates.TOTAL_CAPABILITY`, spelled `everything`) rather than a snapshot
+  of the rest of it, and `mandates.permits` resolves it against the
+  capability being asked for at the moment it is asked -- so a kind added
+  after the grant is covered, and an ENUMERATED grant still covers exactly
+  what it listed. Every reader of a row's capabilities goes through
+  `permits`, so there is no second answer (`coverage`, `fill_limit`,
+  `_most_permissive`). `tests/test_mandate_scope_and_totality.py`.
+  Remaining, and the owner's: the Planner has to WRITE `everything` when a
+  player says it in words -- `agents/story_planner.py` is handed
+  `MANDATE_CAPABILITIES` and now sees the member, but nothing tells it that
+  "full authority" is that member rather than a list.
 - **A pose `detail` is a side channel for perception (F18).** "watching the
   arrival" on a body behind a closed door reached that mind as its own
   interoception and was cited as present evidence of an event in another
@@ -7692,12 +7700,23 @@ patch in a file another hand was editing that day:
   the owner asked about before; the engine half would be: an unstationed
   portable source in a body's room with no holder takes the room centre,
   as a body does.
-- **The Room cannot author geometry (F47).** `plan_rooms` has no `extent`,
-  `shape` or `parts` field (`_shape_plan_rooms` keeps name, purpose,
-  access, adjacent, frontier), so "a round lamp room" and "three paces by
-  twelve" survive only as prose in `purpose`. Add the three fields to the
-  operation, the preview and `OPERATION_FIELDS`, and let the stub carry
-  them into the establish; the owner's.
+- **The Room cannot author geometry (F47).** NARROWED 2026-09-05, and half
+  of it is built. `plan_rooms` now takes `extent {w, d}`, `shape` and
+  `exposure` on a room and `vertical: up|down` on an edge, each normalized
+  by the world's own reader (`spatial.normalize_extent`, `SHAPES`,
+  `weather.EXPOSURES`, `spatial.normalize_vertical`) and each FAIL-OPEN --
+  an unreadable value is no value and the room is what it is today. The
+  preview shows what the plan measured, so a host can see when a
+  measurement did not survive. `story/plot_packages.py`
+  (`_plan_geometry`, `_plan_edge`), `tests/test_room_authors_geometry.py`.
+  WHAT REMAINS, and it is `world/structure.py`'s: a planned room is rebuilt
+  field by field at two further points -- `plant_structure`'s `normalized`
+  dict and `skeleton_rooms`'s scene room -- so the three ROOM-LEVEL fields
+  are dropped between the plan and the scene. Both need
+  `extent`/`shape`/`exposure` carried through (three lines each; the edge
+  dicts already survive whole, so `vertical` reaches the scene today).
+  `parts` is deliberately not added: a composite room is authored by the
+  map editor, and a plan that could draw one could draw an unreachable one.
 - **An unstationed target is seen through the observer's own corner
   (F48).** `body_visibility` with no cell for the target falls back to the
   room relation; the house run delivered Mab's acts to Wren at the L's far
@@ -7752,9 +7771,78 @@ patch in a file another hand was editing that day:
   gaps. FIXED 2026-09-05 for every engine-owned slot in the sentence, and
   the class is now visible to the suite -- § 1.48. What survives is the
   authored prose the sentence carries, which is the owner decision below.
-- **The export bench captures no Writers' Room call.** Only
-  `agents/runtime.py` records; a Room reply is read from its return value
-  and tool events. Noted, not built.
+- ~~**The export bench captures no Writers' Room call.**~~ BUILT 2026-09-05,
+  with one half outstanding. `persist/llm_capture.py` now has the room half
+  of the recorder -- `room_capture`/`enter_room_capture` (the scope, armed
+  by `story/room_conversation.converse` and `converse_stream`),
+  `record_room_exchange`, `is_room_step`/`room_phase` -- and
+  `story/room_calls.room_call` is the one seam a Room model call makes,
+  recording what was SENT, what came back and the reasoning, under the same
+  content-addressed dedup and the same off-by-default rule. A call is filed
+  against the TURN IN PLAY under `room:<phase>` and `export_turn_debug`
+  marks it `origin: "room"`, so one export reads in order: this beat
+  happened, then the room said this about it (`room_calls_captured` counts
+  them). `story/room_bible._call` goes through it;
+  `tests/test_room_is_captured.py`.
+  WHAT REMAINS, and it is `agents/`'s: `story_planner._call`,
+  `dramaturge._call` and the two loops' own calls still reach
+  `providers.chat_complete` directly, so the Planner and the Dramaturge are
+  captured only once those three lines route through `room_call`; and
+  `schedule_room_work`'s fill and pass jobs need a `room_capture(cid,
+  "fill"/"dramaturge")` around their bodies, since `core/jobs.py` clears an
+  inherited scope by design for every OTHER contextvar and a job's calls
+  otherwise belong to no reply.
+- **A Room reply's tool events carry no name and no result.** Measured in
+  two runs: `{"tool": null, "args": null}` in the flat run's event stream
+  and `result_head: None` on all 20 of the lighthouse run's calls, so a
+  host watching the panel sees nothing and a harness has to read the tool
+  names out of `run_planner`'s return. `agents/story_planner.py`'s
+  `room_tool` events; the capture above answers the model calls and not
+  these.
+- ~~**The Room can plan a room above you but cannot say how you get up to
+  it (PA7).**~~ CLOSED 2026-09-05. `plan_rooms.adjacent` takes
+  `vertical: up|down`, read through `spatial.normalize_vertical`, and a
+  vertical word arriving in `dir` or `bearing` is MOVED there rather than
+  discarded -- up is not a bearing, which is the whole of what the
+  lighthouse's sealed loft edge said. An edge dict survives the plant whole,
+  so this one reaches the live scene today, and the far side's `down` is
+  derived by `effective_adjacent` as it always was.
+- ~~**A grant outlives the request it was granted for (PE14).**~~ CLOSED
+  2026-09-05 on the engine side. A mandate may name the ASK it answers
+  (`grant_mandate(request=)`), and it lapses when that ask ends: the package
+  retired or resolved, the question off the room's status row, or
+  `close_request` called outright. `expire_mandates` sweeps it on every read
+  of the standing grants and stamps `lapsed_reason`, and `renew_mandate` is
+  the explicit renewal -- a NEW row citing the one it renews, because a
+  licence that came back to life in place would leave no record that anyone
+  asked for it twice. A grant naming no request is standing, as every grant
+  was before this. `story/mandates.py`,
+  `tests/test_mandate_scope_and_totality.py`. Remaining, and the Planner's:
+  pass `request` when it records a grant, and offer to close the request
+  when the player withdraws one in words.
+- **`plan_rooms` still cannot name a region, and should not.** The road run
+  asked for `extent`, `shape`, `exposure` and `region`; the first three
+  landed. A structure IS a region (`world/structure.skeleton_rooms` sets
+  `region` from the structure key), so a per-room region field on the
+  operation would be a second answer to a question that already has one.
+  What the run actually wanted -- creating, splitting and altering regions
+  -- is § 2.26's region tier, and is unbuilt.
+- **The recap cites what it read (BUILT 2026-09-05), and the room has to be
+  told to.** `story/room_citations.py` holds the contract and the check: a
+  ledger of every row a reply actually read (filled at `room_tools.run_tool`,
+  the one call site), and `check_claims`, which marks a claim `supported`
+  only when every row it cites was read this reply. A claim citing nothing,
+  or citing a row nobody served, is DEMOTED to a proposal -- it keeps its
+  sentence and loses the authority it was borrowing -- and `converse` and
+  `converse_stream` return the verdicts as `citations`. Measured cases it is
+  for: "feigning sleep", the servant who was never sent, the salve "she
+  declined". WHAT REMAINS, and it is two other owners': the Planner must
+  emit `claims` in its reply envelope and be given `room_citations.
+  CONTRACT_TEXT` in its system block (`agents/story_planner.py`), and the
+  panel should show an unsupported claim as a proposal
+  (`static/js/writers_room.js`, `web/room_routes.py` passes the envelope
+  through untouched). Until the first of those lands every reply reads as
+  `stated_nothing`, which is honest and is not a pass.
 
 ### 2.36 The sound field — PROTOTYPE, what is left
 

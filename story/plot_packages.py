@@ -578,6 +578,85 @@ def _room_known(world, room):
 
 # -- plan_rooms ---------------------------------------------------------------
 
+def _plan_geometry(raw):
+    """The MEASURABLE half of a planned room, in the world's own vocabulary.
+
+    A plan used to be able to say what a room is FOR and not how big it is,
+    so a room asked for in paces arrived sizeless and the measurement
+    survived only as prose in `purpose`. Measured on 2026-09-05 in all five
+    play runs (F47): a lamp room "three paces by twelve", a stall range
+    "four paces wide and twenty long", a stairwell "two paces wide and four
+    long" -- each landed as `extent: None, shape: None`. The road run is the
+    counter-case and the reason this is three fields rather than a parser:
+    the same prose DID reach a real `extent {w: 15, d: 20}, shape: round`,
+    but only because the Director's spatial hand read the sentence and chose
+    to believe it. A plan that means fifteen by twenty should say fifteen by
+    twenty.
+
+    The vocabularies are NOT restated here. `extent` is normalized and
+    clamped by `world.spatial.normalize_extent` (paces, [EXTENT_MIN_PACES,
+    EXTENT_MAX_PACES]), `shape` is the engine's closed `SHAPES`, `exposure`
+    the engine's closed `EXPOSURES` -- the same sets the scene itself is
+    read through, so a planned value and a lived value are the same kind of
+    thing.
+
+    FAIL-OPEN, exactly as the rest of the record does: a value the world
+    cannot read is NO value, and the room is what it is today. That is why
+    `normalize_shape` is not simply called on whatever arrives -- it answers
+    `rectangle` for anything it does not know, which would silently square
+    an "oval" room; an unreadable word leaves the field absent and the
+    scene's own default stands.
+    """
+    from world.spatial import SHAPES, normalize_extent
+    from world.weather import EXPOSURES
+
+    out = {}
+    extent = normalize_extent(raw.get("extent"))
+    if extent:
+        out["extent"] = extent
+    shape = str(raw.get("shape") or "").strip().casefold()
+    if shape in SHAPES:
+        out["shape"] = shape
+    exposure = str(raw.get("exposure") or "").strip().casefold()
+    if exposure in EXPOSURES:
+        out["exposure"] = exposure
+    return out
+
+
+def _plan_edge(edge):
+    """One planned way out, with its VERTICAL read.
+
+    A plan could name a bearing and not a storey, so a room planned above
+    another had no way to say how a body gets up to it: measured 2026-09-05
+    (PA7, the lighthouse), the loft came back as `{"to": "watch_room",
+    "barrier": "wall", "bearing": "up"}` -- the one word that said what was
+    meant sat in the bearing field, which is not where a bearing lives, and
+    the edge sealed.
+
+    So the rule is the one the world already keeps: UP IS NOT A BEARING.
+    `world.spatial.normalize_vertical` owns the vocabulary; a vertical word
+    found in `dir` or `bearing` is moved to `vertical`, because a field that
+    holds a compass point cannot also hold a storey, and a word in the wrong
+    field is what the plan meant, not what it said.
+    """
+    from world.spatial import normalize_vertical
+
+    out = dict(edge)
+    vertical = normalize_vertical(out.get("vertical"))
+    if not vertical:
+        for field in ("dir", "bearing"):
+            moved = normalize_vertical(out.get(field))
+            if moved:
+                vertical, out[field] = moved, None
+                out.pop(field)
+                break
+    if vertical:
+        out["vertical"] = vertical
+    elif "vertical" in out:
+        out.pop("vertical")
+    return out
+
+
 def _shape_plan_rooms(op):
     structure = op.get("structure") if isinstance(op.get("structure"), dict) else {}
     rooms = op.get("rooms") if isinstance(op.get("rooms"), dict) else {}
@@ -606,10 +685,11 @@ def _shape_plan_rooms(op):
             "name": _text(raw.get("name"), 120) or str(uid),
             "purpose": _text(raw.get("purpose"), 400),
             "access": _text(raw.get("access"), 200),
-            "adjacent": [dict(e) for e in raw.get("adjacent") or ()
+            "adjacent": [_plan_edge(e) for e in raw.get("adjacent") or ()
                          if isinstance(e, dict) and e.get("to")],
             "frontier": [_text(x, 60) for x in raw.get("frontier") or ()
                          if _text(x, 60)],
+            **_plan_geometry(raw),
         }
     return {"structure": dict(structure), "rooms": clean,
             "owning_book_id": op.get("owning_book_id")}
@@ -641,10 +721,28 @@ def _preview_plan_rooms(cid, frame_id, op, world):
             elif to not in rooms and not _room_known(world, to):
                 errors.append("room %r exits to %r, which exists nowhere"
                               % (uid, to))
-    changes.append({"kind": "rooms_planted", "structure": op["structure"]["key"],
-                    "rooms": sorted(rooms),
-                    "already_planned": sorted(r for r in rooms
-                                              if r in world["planned"])})
+    # What the plan MEASURED, shown back. A geometry field the world could
+    # not read is absent by then (`_plan_geometry` fails open), so a host who
+    # asked for ten by six and sees no extent here knows the measurement did
+    # not survive, rather than reading it back in prose and believing it did
+    # (measured 2026-09-05, the manor run: a stable yard asked for "roughly
+    # ten by six" was reported back as fourteen by twelve).
+    geometry = {uid: {k: room[k] for k in ("extent", "shape", "exposure")
+                      if room.get(k)}
+                for uid, room in rooms.items()}
+    geometry = {uid: g for uid, g in geometry.items() if g}
+    vertical = sorted({"%s -> %s (%s)" % (uid, edge.get("to"), edge["vertical"])
+                       for uid, room in rooms.items()
+                       for edge in room["adjacent"] if edge.get("vertical")})
+    change = {"kind": "rooms_planted", "structure": op["structure"]["key"],
+              "rooms": sorted(rooms),
+              "already_planned": sorted(r for r in rooms
+                                        if r in world["planned"])}
+    if geometry:
+        change["geometry"] = geometry
+    if vertical:
+        change["vertical"] = vertical
+    changes.append(change)
     return {"changes": changes, "errors": errors, "warnings": warnings}
 
 
@@ -1636,7 +1734,7 @@ CLOCK_ONLY_KINDS = ("scheduled_consequence",)
 OPERATION_FIELDS = {
     "plan_rooms": {
         "structure": "{key, name} -- the structure the rooms belong to",
-        "rooms": "{<room_id>: {name, purpose, access, adjacent: [{to: <room_id>, barrier? (omit for an open way through), bearing?}], frontier: [<the NAME of a place that lies beyond, as the way out would be labelled -- never a direction and never a description of what is that way>]}}",
+        "rooms": "{<room_id>: {name, purpose, access, extent? {w, d} (how many paces across and how many deep -- the measurement belongs in this field, not in the prose of purpose), shape? (rectangle | round | l | composite), exposure? (open | sheltered | enclosed -- how much sky and weather reach it), adjacent: [{to: <room_id>, barrier? (omit for an open way through), bearing?, vertical? (up | down -- how a body reaches another storey; a bearing names a compass point and cannot say this)}], frontier: [<the NAME of a place that lies beyond, as the way out would be labelled -- never a direction and never a description of what is that way>]}}",
         "owning_book_id?": "lorebook id"},
     "plan_entity": {
         "name": "the entity's name", "kind": "person | thing | creature",

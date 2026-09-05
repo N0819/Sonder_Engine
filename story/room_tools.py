@@ -1182,7 +1182,16 @@ def run_tool(cid, name, args=None, *, frame_id=None, host=False,
         raise
     except ValueError as exc:
         return {"refused": str(exc)}
-    return fit_result(result, TOOL_RESULT_CHARS)
+    result = fit_result(result, TOOL_RESULT_CHARS)
+    # Every row this reply has actually read, remembered here because this
+    # is the one call site every read passes through. It is what a claim in
+    # the reply is checked against (`story/room_citations.py`): the room may
+    # state as fact what it read, and must offer anything else as a
+    # proposal. Cut rows are not remembered -- `fit_result` ran first, so
+    # what the room could not see it cannot cite.
+    from story.room_citations import note_reads
+    note_reads(name, result)
+    return result
 
 
 def _encoded_length(value):

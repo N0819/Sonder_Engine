@@ -93,8 +93,17 @@ ROOM_STATUS_KEY = "room_status"
 #:    "limits": {str: number | str} (cost/size ceilings the grant carries),
 #:    "granted_turn": int, "expires_turn": int | None,
 #:    "status": "active" | "revoked" | "expired",
-#:    "revoked_turn": int | None}
+#:    "revoked_turn": int | None,
+#:    "request": {"uid", "kind", "text", "closed"} | None (the ask the grant
+#:                answers; it lapses when the ask does -- `story/mandates.py`),
+#:    "lapsed_reason": "" | "term_ended" | "request_closed",
+#:    "renewed_from": str (the grant this one renews; renewal is an act)}
 MANDATE_STATUSES = ("active", "revoked", "expired")
+
+#: Why a grant is no longer active, when it lapsed rather than being
+#: revoked. Kept on the row because a grant that simply disappears is one
+#: the player has to be told about a second time.
+MANDATE_LAPSE_REASONS = ("", "term_ended", "request_closed")
 
 #: The shape of the status row, as the Planner writes it:
 #:   {"line": str (one spoiler-safe sentence, what is in motion),
@@ -215,7 +224,29 @@ def normalize_mandate(entry):
         "status": status,
         "revoked_turn": (int(entry["revoked_turn"])
                          if entry.get("revoked_turn") is not None else None),
+        "request": _normalize_request(entry.get("request")),
+        "lapsed_reason": (str(entry.get("lapsed_reason") or "")
+                          if str(entry.get("lapsed_reason") or "")
+                          in MANDATE_LAPSE_REASONS else ""),
+        "renewed_from": _line(entry.get("renewed_from"), 64),
     }
+
+
+def _normalize_request(entry):
+    """The ask a grant is scoped to, or None. Kept whole through every save,
+    because this row is the only thing that knows a grant was for one
+    thing rather than for everything from now on."""
+    if not isinstance(entry, dict):
+        return None
+    uid = _line(entry.get("uid"), 120)
+    if not uid:
+        return None
+    from story.mandates import REQUEST_KINDS, REQUEST_TEXT_CHARS
+    kind = str(entry.get("kind") or "")
+    return {"uid": uid,
+            "kind": kind if kind in REQUEST_KINDS else "other",
+            "text": _line(entry.get("text"), REQUEST_TEXT_CHARS),
+            "closed": bool(entry.get("closed"))}
 
 
 def mandates(cid, frame_id=None):
@@ -310,8 +341,19 @@ def converse(cid, frame_id, text):
     turn_idx = current_turn_idx(cid)
     player = add_message(cid, frame_id, "player", text, turn_idx=turn_idx)
     replies = []
+    # The room's own model calls are captured under this scope, exactly as a
+    # beat's stages are: `room:planner`, against the turn in play. Off unless
+    # the host turned capture on (`persist/llm_capture.py`), and one
+    # ContextVar set when they have not.
+    from persist.llm_capture import room_capture
+    from story.room_citations import check_claims, reading
+    citations = None
     try:
-        answer = PLANNER(cid, frame_id, text) or {}
+        # `reading` is the ledger of rows the room actually reads while it
+        # works; `check_claims` then holds the reply's stated facts to it.
+        with room_capture(cid, "planner"), reading():
+            answer = PLANNER(cid, frame_id, text) or {}
+            citations = check_claims(answer.get("claims"))
     except Exception as exc:  # the seam is a boundary; report, never 500
         answer = {"reply": None, "error": str(exc)[:400]}
     if answer.get("reply"):
@@ -325,6 +367,11 @@ def converse(cid, frame_id, text):
         "message": player,
         "replies": replies,
         "error": answer.get("error"),
+        # What the reply stated as fact, and what it read to know it. A
+        # claim citing no row it could have come from is reported among the
+        # proposals rather than the assertions -- the room keeps its
+        # sentence and loses the authority it was borrowing.
+        "citations": citations,
         "mandates": (answer.get("mandates")
                      if isinstance(answer.get("mandates"), list)
                      else mandates(cid, frame_id)),
@@ -369,6 +416,8 @@ def converse_stream(cid, frame_id, text):
     import threading
 
     from llm.providers import reasoning_sink, token_sink
+    from persist.llm_capture import enter_room_capture
+    from story.room_citations import check_claims, enter_reading
 
     text = _clean(text)
     if not text:
@@ -386,6 +435,11 @@ def converse_stream(cid, frame_id, text):
             {"type": "token", "delta": str(delta or "")}))
         reasoning_sink.set(lambda delta: events.put(
             {"type": "reasoning", "delta": str(delta or "")}))
+        # Capture is armed beside the two sinks, in the worker, for the
+        # same reason they are: what the room is SENT is as much a part of
+        # reading a reply as what it streamed back.
+        enter_room_capture(cid, "planner")
+        enter_reading()
         try:
             holder["answer"] = PLANNER(
                 cid, frame_id, text, on_event=events.put) or {}
@@ -399,6 +453,10 @@ def converse_stream(cid, frame_id, text):
         except Exception as exc:  # the seam is a boundary; report, never 500
             holder["answer"] = {"reply": None, "error": str(exc)[:400]}
         finally:
+            # Checked in the worker, because the ledger of rows read lives
+            # in the worker's context and nowhere else.
+            holder["citations"] = check_claims(
+                (holder.get("answer") or {}).get("claims"))
             events.put(DONE)
 
     worker = threading.Thread(target=work, daemon=True)
@@ -433,6 +491,7 @@ def converse_stream(cid, frame_id, text):
         "message": player,
         "replies": replies,
         "error": answer.get("error"),
+        "citations": holder.get("citations"),
         "mandates": (answer.get("mandates")
                      if isinstance(answer.get("mandates"), list)
                      else mandates(cid, frame_id)),
