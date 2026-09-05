@@ -35,6 +35,7 @@ from typing import Optional
 
 from llm.schemas import NON_ENTITY_FIELD_KEYS, is_derived_entity_name
 from world.spatial_orientation import (
+    _BEARINGS,
     _LEFT_SECTORS,
     _REL_SECTORS,
     _RIGHT_SECTORS,

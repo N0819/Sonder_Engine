@@ -6535,16 +6535,23 @@ for what follows. Residuals of this entry rather than a section of their own:
   no region a rule can reach -- the residue is Director-minted rooms in
   stories with no plan and no zone, and it is surfaced as `region: null`,
   never hidden.
-- **The World Browser shows a body's attire and cannot edit it.**
-  `static/js/world_browser.js` (2026-09-04) renders each occupant's ledger
-  as stored and points at the Raw JSON tab for repair. `fAttireGarments`
-  was the candidate editor and does not fit the live ledger: a spanning
-  garment is stored once per region without a `covers` list, so the editor
-  reads a kimono as torso-only and writes it back narrowed, and its
-  `read()` writes `state: "worn"` unconditionally, so opening the dialog
-  would re-fasten a loosened garment. A ledger editor that carries `state`,
-  `condition` and the spanning copies, writing through `PUT /attire` (which
-  re-derives), is the missing piece; until then per-body repair is JSON.
+- **The World Browser's editors stop where the ledgers stop** (2026-09-04,
+  the attire-editor residual closed the same day: the Bodies tab edits the
+  ledger as stored, a spanning garment carried through every region,
+  through `PUT /attire`). What the field editors still do not reach, and
+  Raw JSON does: an exit's `distance` and `passage_from` (kept verbatim on
+  an edited edge, never shown); an anchor's fields beyond desc / bearing /
+  the three geometry words; an entity's `aliases`, `plan_ref` and the rest
+  of its `state` beyond `lit`; a body's pose (shown on the Bodies tab, not
+  edited -- `poses` is the body specialist's channel and an authoring
+  surface for it wants the pose vocabulary, `_POSE_FIELDS`, as a form);
+  moving the PLAYER (the cast editor's rule: the player's position is the
+  story's business); creating or retiring a ROOM (a planned room is the
+  Writers' Room's, a live one is minted by a beat -- the browser edits what
+  exists); and `wearing` order, which is derived from the regions and so
+  has no independent edit. A `covered_zones` (displacement) editor per
+  garment is the largest attire gap: the ledger carries it and the editor
+  preserves it, but offers no control.
 - **The naturalness guard is a clause plus the structural floor, not a
   refusal over prose** (2026-09-04). The owner's phrasing was "refuse ops or
   notes naming what a character will think, feel or decide". What is built:
