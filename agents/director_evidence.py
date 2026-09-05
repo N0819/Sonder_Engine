@@ -396,6 +396,9 @@ _SUBJECT_VALUE_CHANNELS = frozenset({
 # thing the engine minted an id for.
 _SUBJECT_OP_CHANNELS = {
     "remove_adjacent": ("room", "to"),
+    # Engine-authored (the movement backstop): the body whose declared walk
+    # was refused, and the room it did not reach.
+    "movement_refused": ("subject", "to_room"),
     "inventory_ops": ("object_id", "from_id", "to_id"),
     "contact_ops": ("actor", "target"),
     "contact_action_ops": ("actor", "action"),

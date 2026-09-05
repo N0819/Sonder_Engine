@@ -171,6 +171,11 @@ model. Test: for any two bodies on one composite field,
 courtyard/gate shape (an `open` edge, offset 0.5, width 3, 12x12 against 6x4).
 
 ### PB3. A diff that touches one anchor deletes the room's other anchors — and takes the post anchors, a cast station, the occluders and the backdrop with it
+**RESOLVED 2026-09-05.** `_merge_anchor_fields` upserts by anchor id, as
+`_merge_room` upserts edges by `to`; a fixture leaves through the room's
+`remove_anchors`. The World Browser's own PATCH is the stated exception and
+still replaces the map whole. `tests/test_played_scene_classes.py`.
+
 **Severity: story-breaking. Recurs F60 (2026-09-05), with four new
 consequences.** Origin: `world/spatial_merge.py` `_merge_anchor_fields`
 ("the map is written whole"), fed by the spatial hand on turn 7.
@@ -303,6 +308,12 @@ description could be true of. Test: with three apron-wearing serving hands and
 one trader in a room, "the girl with the apron" binds to one of the three.
 
 ### PB7. A pose detail written in the room left survives into the room entered (F49, on the player's own body)
+**RESOLVED 2026-09-05.** `invalidate_moved_body_place_details`
+(`world/spatial_geometry.py`, called from the merge beside its twin) retires a
+mover's own `detail` when it names a place the scene knows — any room's id or
+name, or an anchor of the room LEFT that the room entered does not also hold.
+The room entered is not an exception, for the reason this finding gives.
+
 **Severity: cosmetic-to-wrong.** Origin: `world/spatial_merge`
 `invalidate_moved_body_pose_details` (the mover's own prose is left alone by
 rule).

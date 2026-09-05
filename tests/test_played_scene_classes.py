@@ -665,3 +665,288 @@ def test_reasoning_only_replies_retry_then_fall_to_the_next_candidate(monkeypatc
     assert [m for m, _ in tried] == ["first", "first", "second"]
     assert tried[1][1] == "off"
     assert tried[2][1] is None
+
+# F60 / PB3 / PA6 / PC6: a room's anchors are ADDED to, never written whole
+# ---------------------------------------------------------------------------
+
+def _common_room():
+    """The caravanserai's L-shaped main hall as it stood through beat 6: four
+    anchors, a cast member stationed at one of them, the innkeeper's post
+    naming another."""
+    return {
+        "rooms": {
+            "common_room": {
+                "name": "Common Room", "size": "large",
+                "desc": "The inn's main hall.",
+                "anchors": {
+                    "bookroom_door": {"desc": "the bookroom door", "dir": "n"},
+                    "counter": {"desc": "the long counter", "dir": "s",
+                                "footprint": "run", "height": "waist"},
+                    "hearth": {"desc": "the hearth", "dir": "w",
+                               "height": "waist"},
+                    "trestle_benches": {"desc": "long pine tables and benches",
+                                        "dir": "e", "footprint": "run",
+                                        "height": "waist",
+                                        "opacity": "opaque"},
+                },
+                "adjacent": [{"to": "bookroom", "barrier": "closed_door",
+                              "dir": "n"}]},
+            "bookroom": {"name": "Bookroom", "adjacent": [
+                {"to": "common_room", "barrier": "closed_door", "dir": "s"}]},
+        },
+        "positions": {"Halvard": "common_room"},
+        "stations": {"Halvard": {"at": "hearth"}},
+        "entities": {},
+    }
+
+
+#: The diff the spatial hand actually wrote on caravanserai turn 7 -- one
+#: anchor, to record that the door was now open.
+_ONE_ANCHOR = {"rooms": {"common_room": {"anchors": {
+    "bookroom_door": {"desc": "the bookroom door, a hand's width open"}}}}}
+
+
+def test_a_diff_naming_one_anchor_leaves_the_rooms_others_standing():
+    """Caravanserai turn 7 (PB3), lighthouse turns 4/7/16 (PA6), manor turns
+    1 and 9 (PC6): a diff writing one anchor replaced the whole map, so the
+    hall went from four anchors to one and stayed there."""
+    merged = merge_scene_with_diff(_common_room(), _ONE_ANCHOR)
+    anchors = merged["rooms"]["common_room"]["anchors"]
+    assert set(anchors) == {"bookroom_door", "counter", "hearth",
+                            "trestle_benches"}
+    # The named one updates...
+    assert anchors["bookroom_door"]["desc"] == \
+        "the bookroom door, a hand's width open"
+    assert anchors["bookroom_door"]["dir"] == "n"     # ...silence still lands
+    # ...and the untouched ones keep the geometry the fields gate on.
+    assert anchors["trestle_benches"]["height"] == "waist"
+    assert anchors["trestle_benches"]["opacity"] == "opaque"
+
+
+def test_an_explicit_removal_removes_exactly_one_anchor():
+    """A fixture still leaves a room -- through `remove_anchors`, the sibling
+    of `remove_adjacent` one level in -- and takes nothing else with it."""
+    merged = merge_scene_with_diff(_common_room(), {"rooms": {"common_room": {
+        "remove_anchors": ["hearth"]}}})
+    assert set(merged["rooms"]["common_room"]["anchors"]) == {
+        "bookroom_door", "counter", "trestle_benches"}
+    # The channel is consumed by the merge and never reaches the stored blob.
+    assert "remove_anchors" not in merged["rooms"]["common_room"]
+    # An explicit act outranks a re-echo: naming an anchor and removing it in
+    # one beat removes it, under either spelling of the id.
+    merged = merge_scene_with_diff(_common_room(), {"rooms": {"common_room": {
+        "anchors": {"hearth": {"desc": "the cold hearth"}},
+        "remove_anchors": ["Hearth"]}}})
+    assert "hearth" not in merged["rooms"]["common_room"]["anchors"]
+
+
+def test_a_cast_station_at_an_untouched_anchor_survives_the_beat():
+    """Brother Halvard had been at the hearth since the opening; after turn 7
+    his station read `{"at": None}` because the anchor it named was gone.
+    Manor turn 1 measured the same loss one step on -- an unmeasured body,
+    `body_cell` None and the grid reporting `source: "none"`, in the room the
+    whole beat was happening in."""
+    merged = merge_scene_with_diff(_common_room(), _ONE_ANCHOR)
+    assert merged["stations"]["Halvard"]["at"] == "hearth"
+
+
+def test_a_charter_post_anchor_still_places_its_holder():
+    """The innkeeper's post names `counter`. With the map written whole she
+    stopped standing at her own counter for the rest of the story and was
+    dealt a cell instead."""
+    from world.charter import normalize_charter
+    from world.charter_place import (charter_placements, placement_uid,
+                                     rooms_in_frame)
+    charter = normalize_charter({
+        "key": "inn",
+        "posts": {"desk": {"place": "common_room", "anchor": "counter"}},
+        "watch": {"desk": "innkeeper"},
+        "bodies": {"innkeeper": {"name": "Yusra", "place": "common_room"}}})
+    merged = merge_scene_with_diff(_common_room(), _ONE_ANCHOR)
+    placed = charter_placements(
+        {"items": {"inn": {"state": charter}}}, merged,
+        frame_rooms=rooms_in_frame(merged, ("common_room",)))
+    yusra = placed[placement_uid("inn", "innkeeper")]
+    assert yusra["station"] == {"at": "counter"}
+    assert yusra["source"] == "post"
+
+
+def test_the_backdrop_key_is_unchanged_when_the_room_did_not_change():
+    """The picture of the inn's main hall lost its counter, hearth and
+    benches: `room_brief`'s walls are built from the anchors, and
+    `visual_signature` keys on the brief."""
+    from dressing.backdrops import visual_signature
+    scene = _common_room()
+    before = visual_signature(scene, "common_room")
+    # A beat that touches no anchor at all.
+    moved = merge_scene_with_diff(scene, {"positions": {"Halvard": "bookroom"}})
+    assert visual_signature(moved, "common_room") == before
+    # And a beat that re-echoes one anchor verbatim, which is the ordinary way
+    # a hand mentions a fixture it is not changing.
+    echoed = merge_scene_with_diff(_common_room(), {"rooms": {"common_room": {
+        "anchors": {"counter": {"desc": "the long counter", "dir": "s"}}}}})
+    assert visual_signature(echoed, "common_room") == before
+
+
+def test_a_diff_carrying_no_anchors_leaves_every_room_byte_identical():
+    """The freeze: the additive rule is a behaviour change to beats that name
+    an anchor and to no others."""
+    scene = _common_room()
+    before = json.dumps(scene["rooms"], sort_keys=True, ensure_ascii=False)
+    merged = merge_scene_with_diff(scene, {
+        "positions": {"Halvard": "bookroom"},
+        "rooms": {"common_room": {"desc": "The inn's main hall, quieter now."}},
+        "remove_adjacent": [],
+    })
+    rooms = json.loads(json.dumps(merged["rooms"], sort_keys=True,
+                                  ensure_ascii=False))
+    expected = json.loads(before)
+    expected["common_room"]["desc"] = "The inn's main hall, quieter now."
+    assert rooms == expected
+
+
+# ---------------------------------------------------------------------------
+# F49 / PB7: a pose detail belongs to the room the pose was struck in
+# ---------------------------------------------------------------------------
+
+def _two_room_stack():
+    return {
+        "rooms": {
+            "courtyard": {"name": "Courtyard", "anchors": {
+                "well": {"desc": "the stone well", "dir": "n"}},
+                "adjacent": [{"to": "upper_gallery", "barrier": "open",
+                              "vertical": "up"}]},
+            "upper_gallery": {"name": "Upper Gallery", "adjacent": [
+                {"to": "courtyard", "barrier": "open", "vertical": "down"}]},
+        },
+        "positions": {"Tamsin": "courtyard"},
+        "entities": {},
+    }
+
+
+def test_a_movers_own_pose_detail_naming_the_room_entered_is_retired():
+    """Caravanserai turn 13 (PB7), on the PLAYER's own body. Turn 12 she
+    tipped her head back toward the gallery from the courtyard; turn 13 she
+    climbed to the gallery and her own outcome view opened "You are standing
+    -- head tipped back toward the upper gallery above. You are in Upper
+    Gallery." A detail predating the move that names the room the body now
+    stands in was written from OUTSIDE it."""
+    scene = _two_room_stack()
+    scene["poses"] = {"Tamsin": {
+        "posture": "standing",
+        "detail": "head tipped back toward the upper gallery above"}}
+    merged = merge_scene_with_diff(
+        scene, {"positions": {"Tamsin": "upper_gallery"}})
+    assert merged["poses"]["Tamsin"]["detail"] == ""
+    assert merged["poses"]["Tamsin"]["posture"] == "standing"  # subtracts only
+
+
+def test_a_movers_own_pose_detail_naming_the_room_left_is_retired():
+    """House turn 6 (F49): Wren walked from the corridor into the parlour and
+    kept `detail: "standing near the coat-stand, looking down toward the
+    turn"`, so the parlour view placed her at the corridor's coat-stand."""
+    scene = {
+        "rooms": {
+            "corridor": {"name": "Corridor", "anchors": {
+                "coat_stand": {"desc": "a tall coat-stand at the turn"}},
+                "adjacent": [{"to": "parlour", "barrier": "open_door"}]},
+            "parlour": {"name": "Parlour", "adjacent": [
+                {"to": "corridor", "barrier": "open_door"}]},
+        },
+        "positions": {"Wren": "corridor"}, "entities": {},
+        "poses": {"Wren": {"posture": "standing", "detail":
+                           "standing near the coat-stand, looking down "
+                           "toward the turn"}},
+    }
+    merged = merge_scene_with_diff(scene, {"positions": {"Wren": "parlour"}})
+    assert merged["poses"]["Wren"]["detail"] == ""
+
+
+def test_a_pose_detail_that_names_no_place_travels_with_the_body():
+    """The rule subtracts where the prose reached for somewhere, and only
+    there: a posture qualifier is about the body and goes where it goes."""
+    scene = _two_room_stack()
+    scene["poses"] = {"Tamsin": {"posture": "standing",
+                                 "detail": "arms folded, hood up"}}
+    merged = merge_scene_with_diff(
+        scene, {"positions": {"Tamsin": "upper_gallery"}})
+    assert merged["poses"]["Tamsin"]["detail"] == "arms folded, hood up"
+
+
+def test_a_pose_detail_this_beat_wrote_for_the_room_entered_stands():
+    """The hand that moved the body and wrote the prose in one breath was
+    writing about the destination; the merge does not get to know better."""
+    scene = _two_room_stack()
+    scene["poses"] = {"Tamsin": {"posture": "standing", "detail": "old prose"}}
+    merged = merge_scene_with_diff(scene, {
+        "positions": {"Tamsin": "upper_gallery"},
+        "poses": {"Tamsin": {"posture": "standing", "detail":
+                             "one hand on the upper gallery balustrade"}}})
+    assert merged["poses"]["Tamsin"]["detail"] == \
+        "one hand on the upper gallery balustrade"
+
+
+# ---------------------------------------------------------------------------
+# PC7: a move that did not happen leaves nothing behind
+# ---------------------------------------------------------------------------
+
+def test_a_refused_walk_leaves_room_station_and_pose_as_they_were():
+    """Manor turn 13. The declared walk to the long gallery was refused
+    (`barrier=separated`, the door she had just locked) and Ada stayed in the
+    study -- while the committed pose read "standing on the flagged floor of
+    the long gallery after passing beneath the stone archway" and her
+    companion's pose put her at the study door from the outside. The narrator
+    wrote the scene from the poses, so the reader ended the beat with two
+    people in the gallery and the engine with two locked in the study."""
+    scene = {
+        "rooms": {
+            "study": {"name": "Study", "anchors": {
+                "desk": {"desc": "the writing desk", "dir": "n"}},
+                "adjacent": [{"to": "hall", "barrier": "closed_door"}]},
+            "hall": {"name": "Hall", "adjacent": [
+                {"to": "study", "barrier": "closed_door"}]},
+            "long_gallery": {"name": "Long Gallery", "anchors": {
+                "archway": {"desc": "the stone archway", "dir": "w"}}},
+        },
+        "positions": {"Ada": "study", "Penrose": "study"},
+        "stations": {"Ada": {"at": "desk", "near": [], "cell": [2, 2]},
+                     "Penrose": {"at": "desk", "near": []}},
+        # Spelled with all six pose fields so the comparison below is against
+        # the normalized shape and measures the refusal, not `_clean_pose`.
+        "poses": {"Ada": {"posture": "standing", "support": "",
+                          "relative_to": "", "relation": "", "constraint": "",
+                          "detail": "at the desk"}},
+        "entities": {},
+    }
+    keys = ("positions", "stations", "poses")
+    before = json.dumps({k: scene[k] for k in keys}, sort_keys=True)
+    merged = merge_scene_with_diff(scene, {
+        # What the backstop leaves behind: the position it popped, recorded.
+        "movement_refused": [{"subject": "Ada", "to_room": "long_gallery"},
+                             {"subject": "Penrose", "to_room": "long_gallery"}],
+        # ...and everything the beat wrote FOR the walk it did not make.
+        "positions": {"Ada": "long_gallery", "Penrose": "long_gallery"},
+        "stations": {"Ada": {"at": "archway", "cell": [7, 1]}},
+        "poses": {"Ada": {"posture": "standing", "detail":
+                          "standing on the flagged floor of the long gallery "
+                          "after passing beneath the stone archway"},
+                  "Penrose": {"posture": "standing", "detail":
+                              "at the locked study door with an ear pressed "
+                              "against the cold oak panel"}},
+    })
+    assert json.dumps({k: merged[k] for k in keys}, sort_keys=True) == before
+
+
+def test_a_refusal_holds_back_only_the_bodies_it_names():
+    """One body refused does not freeze the beat for anybody else."""
+    scene = {
+        "rooms": {"study": {"name": "Study", "adjacent": [
+            {"to": "hall", "barrier": "open"}]},
+            "hall": {"name": "Hall", "adjacent": [
+                {"to": "study", "barrier": "open"}]}},
+        "positions": {"Ada": "study", "Penrose": "study"}, "entities": {},
+    }
+    merged = merge_scene_with_diff(scene, {
+        "movement_refused": [{"subject": "Ada", "to_room": "hall"}],
+        "positions": {"Ada": "hall", "Penrose": "hall"}})
+    assert merged["positions"] == {"Ada": "study", "Penrose": "hall"}

@@ -43,12 +43,14 @@ from world.spatial_geometry import (apply_pose_diff, derive_scene_stations,
                               poses_broken_by_scale_change,
                               invalidate_contact_bound_poses,
                               invalidate_moved_body_cells,
+                              invalidate_moved_body_place_details,
                               invalidate_moved_body_pose_details,
                               invalidate_transferred_pose_details,
                               normalize_scene_anchor_cells,
                               normalize_scene_poses, normalize_scene_stations)
 from world.spatial_identity import (_ci_get, _entity_named, room_of,
-                              is_derived_room_name, normalize_scene_subjects)
+                              is_derived_room_name, normalize_scene_subjects,
+                              same_subject)
 from world.spatial_senses import apply_comms_ops, normalize_scene_comms
 from world.spatial_substance import apply_substance_ops, apply_contact_action_ops
 from world.spatial_routing import stamp_sight_direction
@@ -160,9 +162,19 @@ def _merge_room(existing: dict, incoming: dict, room_id=None) -> dict:
     links to the entrance hall and stairwell. Adjacency is merged by
     upserting on `to`: an incoming edge with the same target updates it
     (so barrier/distance changes still work), edges not mentioned survive.
-    Explicit removal goes through `remove_adjacent`, not silence.
+    Explicit removal goes through `remove_adjacent`, not silence, and the
+    room's ANCHORS follow the same doctrine one field down: they are added
+    to and updated by an incoming map, and a fixture leaves the room through
+    `remove_anchors` (see `_merge_anchor_fields`).
     """
     merged_room = dict(existing)
+    # The removal channel travels WITH the room record, because this function
+    # merges two DIFFS as often as it merges a diff onto the scene
+    # (`director_evidence._merge_repair_into_diff`): a repair touching the
+    # same room must not swallow the severance the first diff declared. The
+    # union is applied here and carried; `merge_scene_with_diff` is what
+    # finally strips the key, so it never reaches the stored blob.
+    removals = _anchor_removals(existing) | _anchor_removals(incoming)
 
     for field in ("name", "desc", "notes", "parent_entity"):
         if not incoming.get(field):
@@ -200,7 +212,8 @@ def _merge_room(existing: dict, incoming: dict, room_id=None) -> dict:
     merged_room["adjacent"] = list(existing_edges.values())
 
     for key, value in incoming.items():
-        if key in ("name", "desc", "notes", "parent_entity", "adjacent"):
+        if key in ("name", "desc", "notes", "parent_entity", "adjacent",
+                   "remove_anchors"):
             continue
         # An empty container is indistinguishable from "the model did not
         # mention this", so it cannot be read as an erasure -- the doctrine
@@ -215,22 +228,109 @@ def _merge_room(existing: dict, incoming: dict, room_id=None) -> dict:
             value = _merge_anchor_fields(existing["anchors"], value)
         merged_room[key] = value
 
+    if removals:
+        if isinstance(merged_room.get("anchors"), dict):
+            merged_room["anchors"] = _drop_anchors(
+                merged_room["anchors"], removals)
+        merged_room["remove_anchors"] = sorted(removals)
+
     return merged_room
 
 
+def _refused_movers(diff) -> set:
+    """The bodies whose declared move this beat REFUSED, casefolded.
+
+    `state_diff.movement_refused` is ENGINE-AUTHORED, not a model channel:
+    the movement backstop writes one entry per body it holds back at the
+    moment it pops the position -- the declarer, and every companion the
+    same beat sent to the same destination (the group is held back together,
+    or the guard that keeps the player out of a wall walks her companion
+    through it without her). A model that writes the field is simply naming
+    bodies it does not move, which subtracts and cannot invent an arrival.
+    """
+    out = set()
+    for record in (diff or {}).get("movement_refused") or []:
+        if isinstance(record, dict):
+            subject = record.get("subject") or record.get("who")
+        else:
+            subject = record
+        subject = str(subject or "").strip()
+        if subject:
+            out.add(subject.casefold())
+    return out
+
+
+def _is_refused(scene, name, refused: set) -> bool:
+    if str(name or "").strip().casefold() in refused:
+        return True
+    # `positions`, `stations` and `poses` are each keyed by whatever their
+    # writer reached for -- a uid here, a display name there -- so the
+    # comparison is the scene's own identity question, not string equality.
+    return any(same_subject(scene, name, subject) for subject in refused)
+
+
+def _anchor_removals(room) -> set:
+    """The anchor ids a room record asks to have removed, casefolded.
+
+    Casefolded because an id is written by a model on one beat and named by
+    a model on another, and `Hearth` is not a second fixture."""
+    if not isinstance(room, dict):
+        return set()
+    raw = room.get("remove_anchors")
+    if isinstance(raw, str):
+        raw = [raw]
+    if not isinstance(raw, (list, tuple, set)):
+        return set()
+    return {str(aid).strip().casefold() for aid in raw
+            if str(aid or "").strip()}
+
+
+def _drop_anchors(anchors: dict, removals: set) -> dict:
+    return {aid: rec for aid, rec in anchors.items()
+            if str(aid).strip().casefold() not in removals}
+
+
 def _merge_anchor_fields(prior: dict, incoming: dict) -> dict:
-    """The edge-field doctrine above, applied to an anchor's fields: a model
-    re-declaring a room's anchors ("the bar, north wall") has no reliable
-    way to echo back the geometry it never thinks about -- the height a
-    body took cover behind, the footprint, the `offset` a host dragged it
-    to on the World Browser's map -- so a field the re-declaration leaves
-    out or blanks is silence, and a value still lands. An anchor the
-    incoming map does not name at all is still dropped: the map, unlike an
-    edge list, is written whole, and `anchors: {}` is already silence by
-    `_ROOM_SILENT_WHEN_EMPTY`."""
-    out = {}
+    """A ROOM'S ANCHORS ARE ADDED TO, NOT REPLACED.
+
+    The edge doctrine of `_merge_room`, one field down and now at both
+    levels. A model re-declaring a room's anchors ("the bar, north wall")
+    has no reliable way to echo back the geometry it never thinks about --
+    the height a body took cover behind, the footprint, the `offset` a host
+    dragged it to on the World Browser's map -- so a FIELD the
+    re-declaration leaves out or blanks is silence and a value still lands;
+    and it has no reliable way to echo back the OTHER FIXTURES either, so an
+    anchor the incoming map does not name survives.
+
+    That second half was the opposite until 2026-09-05: the map was written
+    whole, and the cost was measured in three runs. Caravanserai turn 7 (PB3)
+    wrote `common_room.anchors = {bookroom_door: ...}` to record one opened
+    door and took `counter`, `hearth` and `trestle_benches` with it -- and
+    with them a cast member's station (`Halvard {at: hearth}` became
+    `{at: None}`), two charter post anchors (the innkeeper stopped standing
+    at her own counter for the rest of the story), the hall's only occluders
+    (three "from the waist up" phrases on turn 3, zero after) and the
+    backdrop brief for the inn's main hall. Lighthouse (PA6) lost the
+    kitchen's anchors on turn 4, the watch room's on turn 7 and the
+    kitchen's again on turn 16; the host restored them through
+    `PATCH /rooms/{id}` twice and the next diff that named any anchor
+    removed them again. F60 is the original registration.
+
+    A FIXTURE STILL LEAVES A ROOM -- burned out, torn down, carried off --
+    and it leaves through `remove_anchors`, the sibling of `remove_adjacent`
+    one level in. Removal is applied after the upsert, so a beat that both
+    names an anchor and removes it removes it: an explicit act outranks a
+    re-echo.
+
+    THE ONE EXCEPTION, and it is not this function's: the World Browser's
+    `PATCH /rooms/{id}` (`web/world_routes._apply_anchors`) still replaces
+    the map whole. It writes the room record directly, never through here,
+    and its editor was SHOWN the whole map before it wrote -- which the
+    Director never is.
+    """
+    out = dict(prior)
     for aid, anchor in incoming.items():
-        before = prior.get(aid)
+        before = out.get(aid)
         if isinstance(anchor, dict) and isinstance(before, dict):
             spoken = {k: v for k, v in anchor.items()
                       if v is not None and v != ""}
@@ -1388,6 +1488,33 @@ def merge_scene_with_diff(
     incoming_stations = diff.get("stations") or {}
     incoming_poses = diff.get("poses") or {}
 
+    # A POSE DESCRIBES THE BODY WHERE IT STANDS, so a move that did not
+    # happen leaves nothing behind. The movement backstop refuses a declared
+    # walk by popping the position; everything else the beat wrote FOR that
+    # walk used to land anyway. Measured, manor turn 13 (PC7): "walks west
+    # across the lit hall and out under the stone archway into the dim
+    # gallery" was refused (`barrier=separated`, the door she had just
+    # locked), Ada stayed in the study, and the committed pose read
+    # `detail: "standing on the flagged floor of the long gallery after
+    # passing beneath the stone archway"` while her companion's pose put her
+    # "at the locked study door" from the OUTSIDE. The narrator wrote the
+    # scene from the poses, so the reader ended the beat with two people in
+    # the gallery and the engine with two people locked in the study.
+    #
+    # Subtracted from the INCOMING diff rather than repaired afterwards:
+    # nothing then overwrites the pre-beat room, station, cell, facing or
+    # pose, and every derivation downstream sees a body that did not move --
+    # which is what "position unchanged" already claimed.
+    refused = _refused_movers(diff)
+    if refused:
+        incoming_positions = {
+            name: room for name, room in incoming_positions.items()
+            if not _is_refused(merged, name, refused)}
+        incoming_stations = {name: st for name, st in incoming_stations.items()
+                             if not _is_refused(merged, name, refused)}
+        incoming_poses = {name: pose for name, pose in incoming_poses.items()
+                          if not _is_refused(merged, name, refused)}
+
     if isinstance(incoming_rooms, dict):
         for room_id, incoming_room in incoming_rooms.items():
             if not isinstance(incoming_room, dict):
@@ -1398,6 +1525,22 @@ def merge_scene_with_diff(
                 if isinstance(existing_room, dict)
                 else incoming_room
             )
+            # `remove_anchors` is a CHANNEL, not a field of a place: it says
+            # what left the room, and once the room record has been rebuilt
+            # without it there is nothing left for it to say. Stripped here,
+            # at the one boundary where a diff becomes the stored blob, so
+            # `_merge_room` can keep carrying it while two diffs merge
+            # (director_evidence._merge_repair_into_diff) and no room in any
+            # archive, checkpoint or backdrop key ever grows the key.
+            room_record = merged["rooms"][room_id]
+            if isinstance(room_record, dict) and "remove_anchors" in room_record:
+                removals = _anchor_removals(room_record)
+                room_record = dict(room_record)
+                room_record.pop("remove_anchors", None)
+                if removals and isinstance(room_record.get("anchors"), dict):
+                    room_record["anchors"] = _drop_anchors(
+                        room_record["anchors"], removals)
+                merged["rooms"][room_id] = room_record
 
     if isinstance(incoming_entities, dict):
         for entity_id, incoming_entity in incoming_entities.items():
@@ -1747,6 +1890,26 @@ def merge_scene_with_diff(
                      "and support are untouched." % (_mover, _holder))
             if _note not in inventory_report:
                 inventory_report.append(_note)
+    # ...AND A BODY THAT MOVED IS NOT WHERE ITS OWN PROSE SAYS IT IS. The
+    # twin above answers for a detail's claim on ANOTHER body and leaves the
+    # mover's own prose alone; a detail that names a PLACE is about where the
+    # body is, and the body is somewhere else. F49 and PB7, both on the
+    # player's own body -- the corridor's coat-stand carried into the parlour,
+    # and "head tipped back toward the upper gallery above" read out in the
+    # upper gallery. A detail this beat's own diff wrote is exempt: the hand
+    # that moved the body and wrote the prose was writing about where it
+    # arrived.
+    for _subject, _left in invalidate_moved_body_place_details(
+            merged, _positions_before,
+            stated=[name for name, entry in (incoming_poses or {}).items()
+                    if isinstance(entry, dict)
+                    and str(entry.get("detail") or "").strip()]):
+        if inventory_report is not None:
+            _note = ("position: %s left %s this beat, so the pose detail "
+                     "naming a place there was dropped. Their posture and "
+                     "support are untouched." % (_subject, _left))
+            if _note not in inventory_report:
+                inventory_report.append(_note)
     for _subject, _thing in invalidate_transferred_pose_details(
             merged, diff.get("inventory_ops")):
         if inventory_report is not None:
@@ -1886,7 +2049,9 @@ def merge_scene_with_diff(
     # is what the derivation reads: a hand on the quilt is a body at the bed.
     # Then the same hygiene as before -- prune a stale anchor (which auto-heals
     # a room move), drop non-co-located `near` links, symmetrize what survives.
-    derive_scene_stations(merged, diff.get("stations"), diff.get("contact_ops"))
+    # `incoming_stations`, not `diff["stations"]`: a body whose declared move
+    # was refused wrote no station this beat, so it must not read as stated.
+    derive_scene_stations(merged, incoming_stations, diff.get("contact_ops"))
     merged.setdefault("stations", {})
     normalize_scene_stations(merged)
     # ...AND A BODY THAT CHANGED ROOM IS NOT ON ITS OLD CELL. A station

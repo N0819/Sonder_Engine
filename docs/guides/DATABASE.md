@@ -141,6 +141,22 @@ transient source map consumed by the deterministic causal floor before the
 scene is committed; neither it nor compatibility `source_event_id` annotations
 belong in the stored scene blob.
 
+TWO MORE DIFF-ONLY FIELDS, both added 2026-09-05 and neither of them a scene
+field. `RoomDef.remove_anchors` (`rooms.<id>.remove_anchors: [anchor_id]`) is
+how a fixture LEAVES a room, now that an incoming `anchors` map is added to
+the room's rather than replacing it (`spatial._merge_anchor_fields`);
+`merge_scene_with_diff` applies it and strips the key, so no stored room, no
+archive, no checkpoint and no backdrop cache key ever grows it. It is carried
+through a diff-to-diff merge (`director_evidence._merge_repair_into_diff`)
+rather than consumed there, or a repair touching the same room would swallow
+the severance. `StateDiff.movement_refused` (`[{subject, to_room}]`) is
+engine-authored by the movement backstop for every body whose declared walk it
+refused, and the merge subtracts that body's position, station and pose from
+the beat before anything is applied — a move that did not happen leaves
+nothing behind. Both are consumed at merge and neither is persisted; the
+scene blob's shape is unchanged, so no migration, archive change or checkpoint
+change follows from either.
+
 ## Structured world tables
 
 - `world_entities`: normalized projection of the scene's entities, derived at commit (`commit_world_entities(prepared=...)`). Read at runtime only for fixed-point existence checks (`paradox._entity_exists`) and book-anchor alias resolution (`commit._entity_alias_map`). **Which** entities a beat touched comes from the post-dedup diff; **what** they now are comes from the merged scene, and taking the second from the diff too is how this projection drifted: `spatial._merge_entity` sits between the diff and the blob, reading a schema default as silence and refusing a name `schemas._fill_entity_names` derived from the dict key. Writing the raw diff skipped all of it, so a pose-only beat left the blob saying "Blue Police Box"/vehicle and the row saying "Tardis 001"/object — 15 of 480 live rows named literally `Object`, 19 disagreeing with the blob about `name`, 24 about `kind`. A row heals the next time a beat touches that entity; `tools/reproject_world_entities.py` sweeps the ones nothing will touch again (read-only without `--apply`, and it skips an entity whose frames disagree, since `scene` is frame-scoped and this table is not).
