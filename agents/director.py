@@ -167,6 +167,7 @@ from .director_views import (
 )
 from .director_movement import (
     declared_walk_leg,
+    _door_route,
     _egocentric_exits,
     _planned_elsewhere_view,
     _planned_rooms_view,
@@ -292,6 +293,8 @@ from .director_fanout import (
     _interpret_beat_view,
     _specialist_manifest_slice,
     _specialist_payload,
+    _anchor_names,
+    _beat_rooms,
     _stage_container,
     _normalized_channel_value,
     _EVENT_VERDICTS,

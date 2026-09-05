@@ -75,6 +75,7 @@ from world.spatial_orientation import (
     _LEFT_SECTORS,
     _RIGHT_SECTORS,
     normalize_bearing,
+    normalize_vertical,
     opposite_bearing,
     relative_bearing,
 )
@@ -966,7 +967,25 @@ def sight_passes(scene, room_id, edge):
     -- one a body can be walked into -- and None for everything else. Sight
     passes a window, a grille or a one-way pane, but none of those is a
     doorway a grid can be walked into; those stay with
-    `visual_level_between`."""
+    `visual_level_between`.
+
+    A ROOM YOU REACH BY GOING UP OR DOWN IS NOT BESIDE YOU, so it cannot be
+    laid out on your floor. A stair, a ladder, a hatch or a gallery opening
+    carries a bearing saying which way the flight LEANS; embedding the far
+    room at that bearing puts a storey on the plane, walls it off with a
+    band that is really a floor, and then casts sight across it as if the
+    two rooms shared a wall. Unplaced, the pair falls to `body_visibility`'s
+    open answer and `visual_level_between`'s own vertical branch
+    (`spatial_senses._opening_view_cap`), which is where looking down over a
+    rail belongs.
+
+    Live, the hearing at Vaunt's Yard (2026-09-05, PM1/PM2): a gallery whose
+    description reads "a clear view down over the witness floor" could see
+    nothing on the lit floor below under ANY bearing. Light and sound keep
+    their own placement predicates and still spill through the stairwell;
+    this is the sight rule only."""
+    if normalize_vertical(edge.get("vertical")):
+        return None
     barrier = normalize_barrier(edge.get("barrier"))
     if barrier not in _SIGHT_BARRIERS:
         return None
