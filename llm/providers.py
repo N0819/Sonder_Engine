@@ -155,24 +155,15 @@ def _capture_choice_finish(parsed):
 
 
 def _capture_reasoning(message):
-    """Stash a thinking model's trace, under whichever key it arrived by."""
+    """Stash a thinking model's trace, under whichever key it arrived by.
+
+    One reader with `_message_content`'s (`_reasoning_text`): the capture and
+    the failure must agree about what counts as a trace, or a reply whose
+    trace this stashed could still be raised as "carried no content".
+    """
     if not isinstance(message, dict):
         return
-    text = ""
-    for key in ("reasoning", "reasoning_content", "thinking"):
-        value = message.get(key)
-        if isinstance(value, str) and value.strip():
-            text = value
-            break
-        # OpenRouter can return reasoning as a list of blocks.
-        if isinstance(value, list):
-            parts = [
-                str(b.get("text") or b.get("thinking") or "")
-                for b in value if isinstance(b, dict)
-            ]
-            if any(parts):
-                text = "\n".join(p for p in parts if p)
-                break
+    text = _reasoning_text(message)
     try:
         last_reasoning.set(text or None)
     except Exception:
@@ -323,6 +314,14 @@ class LLMError(RuntimeError):
         super().__init__(message)
         self.status_code = status_code
         self.retryable = retryable
+
+
+#: How many reasoning-only replies from one model before the role's next
+#: candidate is tried instead. Two, because the first one buys the retry that
+#: turns thinking off and the second proves that lever was not the one -- and
+#: because a role's backup candidate is cheap to reach and a lost Writers'
+#: Room grant is not.
+REASONING_ONLY_BEFORE_CANDIDATE = 2
 
 
 class ReasoningBudgetExhausted(LLMError):
@@ -2295,6 +2294,7 @@ def chat_complete(
     # A caller that asked for an effort outright starts there instead.
     reasoning_effort_override = _coerce_reasoning_effort(reasoning_effort) \
         or None
+    reasoning_only = 0
 
     for attempt in range(retry_config.max_retries + 1):
         _check_cancel()
@@ -2341,7 +2341,26 @@ def chat_complete(
             last_error = error
 
             if isinstance(error, ReasoningBudgetExhausted):
+                reasoning_only += 1
                 reasoning_effort_override = "off"
+                # A RETRY LOOP THAT VARIES ONE SETTING CANNOT RECOVER FROM A
+                # FAILURE THAT SETTING DOES NOT CAUSE (F1, 2026-09-04):
+                # measured, four attempts, the last three with reasoning
+                # disabled, the same empty answer each time, and 6159 chars
+                # of trace where the budget was 20000 -- the budget was never
+                # the problem. Once the one lever has been tried, the MODEL
+                # is the thing left to change, and the role already carries
+                # backup candidates that this path never reached. The new
+                # candidate starts from the caller's own effort again,
+                # because "off" was this model's remedy and not a fact about
+                # the role.
+                if reasoning_only >= REASONING_ONLY_BEFORE_CANDIDATE \
+                        and candidate_offset + 1 < len(candidates):
+                    candidate_offset += 1
+                    resolved = candidates[candidate_offset]
+                    reasoning_effort_override = _coerce_reasoning_effort(
+                        reasoning_effort) or None
+                    reasoning_only = 0
 
             if not _should_retry(error, attempt, retry_config):
                 raise error
@@ -2833,22 +2852,69 @@ def _chat_complete_once(
                    served=parsed.get("model"))
     return guard_response(content)
 
+def _flatten_text(value, depth=0):
+    """Every string inside a nested JSON value, joined. Providers wrap a
+    trace as a string, a list of blocks, or a list of dicts of blocks, and
+    the shape is not the question being asked here."""
+    if depth > 6:
+        return ""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (list, tuple)):
+        # One block per line, which is how a trace returned as a list of
+        # blocks has always been stashed (`_capture_reasoning`).
+        return "\n".join(p for p in (_flatten_text(v, depth + 1)
+                                     for v in value) if p)
+    if isinstance(value, dict):
+        return " ".join(p for p in (_flatten_text(v, depth + 1)
+                                    for v in value.values()) if p)
+    return ""
+
+
+def _reasoning_text(message):
+    """The private trace this message carries, whatever the seam called it.
+
+    READ BY WHAT THE KEY SAYS IT IS, not against a list of key names: a
+    provider renames this field every generation of its API (`reasoning`,
+    `reasoning_content`, `reasoning_details`), and a list of the spellings
+    seen so far is always one spelling behind. Measured 2026-09-05: two
+    Writers' Room calls came back with `content: None` and a
+    `reasoning_details` block after ~120s and 7-14 tool calls, and because
+    the branch below matched only a reasoning STRING they were raised as an
+    untyped "response message carried no content" -- so F1's retry, which
+    keys on the typed failure, never saw them and both grants were lost
+    whole.
+    """
+    if not isinstance(message, dict):
+        return ""
+    chunks = [_flatten_text(value) for key, value in message.items()
+              if "reason" in str(key).casefold()
+              or "think" in str(key).casefold()]
+    return "\n".join(c for c in chunks if c).strip()
+
+
 def _message_content(parsed, prov_name, model):
     """The answer, or a retryable failure that says what actually happened.
 
-    A reasoning model can return a message carrying `reasoning` and NO
+    A reasoning model can return a message carrying its trace and NO
     `content` key at all -- it spent its whole budget thinking and never
     wrote the answer. Read as parsed["..."]["content"], that raised
     KeyError('content'), whose str() is the bare word 'content', and it
     surfaced live as "all providers failed (last provider error:
     'content')" on a specialist call. A missing answer is an ordinary,
     retryable outcome; it should never look like a parser bug.
+
+    A REPLY THAT CARRIES ONLY REASONING AND NO CONTENT IS A FAILED ATTEMPT,
+    NOT AN ANSWER -- one class, one typed failure, whichever field the trace
+    arrived in (`_reasoning_text`). Only a message carrying no trace either
+    falls to the untyped no-content error, because then nothing is known
+    about why the answer is missing.
     """
     message = ((parsed.get("choices") or [{}])[0] or {}).get("message") or {}
     content = message.get("content")
     if content:
         return content
-    reasoning = str(message.get("reasoning") or "").strip()
+    reasoning = _reasoning_text(message)
     if reasoning:
         raise ReasoningBudgetExhausted(
             f"{prov_name}: {model} returned reasoning but no answer "

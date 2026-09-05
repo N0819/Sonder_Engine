@@ -7220,13 +7220,6 @@ Evidence: [`experiments/DEBUG_RUN_2026_09_04.md`](experiments/DEBUG_RUN_2026_09_
 (two runs on copies, thirty-five findings; eight classes fixed the same day,
 pinned in `tests/test_played_scene_classes.py`). Open, each an owner decision:
 
-- **A thought-only reply loses the Room's grant (F1).** The Planner's main
-  call raised `ReasoningBudgetExhausted` four attempts running -- the last
-  three with reasoning disabled on the request -- on a 6k-char trace that
-  never exhausted a 20k budget; a tiny probe on the same role answered, and
-  the same grant succeeded on rerun. The retry varies one setting the failure
-  does not depend on. Proposal: after N reasoning-only replies fall to the
-  role's next candidate model for the remaining attempts.
 - **"Full authority" is a snapshot (F15).** A mandate granted as everything
   the room could do enumerates the kinds that existed on its turn;
   `director_note`, added later, was refused under chat 114's turn-5 grant
@@ -7389,12 +7382,6 @@ patch in a file another hand was editing that day:
   rejected: unknown crowd op 'open'" -- the throng the market scenario named
   never existed and the square had no crowd noise for the run. The warning
   is right; the clause should name the ops.
-- **A frontier phrase is minted as a room whose id is the sentence (F63).**
-  F3 refused a bare bearing; "The open sky and rooftop views above the
-  square" became `the_open_sky_and_rooftop_views_above_the_square`, a
-  planned room the structure check reports as a dangling, disconnected
-  edge. A frontier is what lies that way, not a room to mint on the
-  opening.
 - **The Japanese pose sentence is half English (F59).** "youはatthe kitchen
   tablethe chairの上にseated": subject, posture and prepositions untranslated
   and unspaced. `language_adapters/japanese.py`, beside the note's known ja
