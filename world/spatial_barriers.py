@@ -10,7 +10,9 @@ from world.spatial_orientation import (
 
 
 _BARRIER_ALIASES = {
-    "": "wall",
+    # An edge that says NOTHING about its barrier says nothing about a wall
+    # either. See `normalize_barrier`: silence is an opening.
+    "": "open",
     "none": "open",
     "no_barrier": "open",
     "no barrier": "open",
@@ -309,6 +311,17 @@ def normalize_barrier(value: str | None, *, unresolved: set | None = None) -> st
     Only then `wall`. Pass `unresolved` to collect the raw words that reached
     that last line, so an unread barrier can be reported instead of quietly
     sealing a doorway.
+
+    AND SILENCE IS AN OPENING, NOT A WALL. An edge carrying no barrier at all
+    is not an unread word -- there is no word to read, and nothing has been
+    said about a surface. It answers `open`, which is the value `room_create`
+    already defaults to. Measured 2026-09-05 ("The Long Road to Ambry"): the
+    Writers' Room planned a five-room road, omitted the OPTIONAL `barrier` on
+    every edge of it, and normalization sealed the road it had just drawn --
+    four edges had to be opened by hand through the World Browser before the
+    story could be walked, with no warning anywhere. Only a non-empty word the
+    table cannot read still falls to `wall`, and that one is collected into
+    `unresolved` and reported.
     """
     raw = str(value or "").strip().casefold()
     direct = _barrier_exact(raw)
@@ -317,6 +330,10 @@ def normalize_barrier(value: str | None, *, unresolved: set | None = None) -> st
 
     key = re.sub(r"[^a-z0-9]+", "_", raw).strip("_")
     if not key:
+        # Punctuation with no word in it: something was written and nothing
+        # can be read from it, which is the unread case and not the silent one.
+        if unresolved is not None:
+            unresolved.add(raw)
         return "wall"
     folded = _barrier_exact(key)
     if folded is not None:
