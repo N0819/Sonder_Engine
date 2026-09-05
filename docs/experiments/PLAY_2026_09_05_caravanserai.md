@@ -356,6 +356,21 @@ the pool is already the right seam: `appearance_text` should render through
 the language pack's own sentence, and a room's `name`/`notes` should reach a
 view through the pack's renderer as the description already does.
 
+**PART RESOLVED 2026-09-05, and part reclassified.** Checked against source:
+`world/charter_surface.appearance_text` ALREADY renders through the pack --
+`surface_label`, `surface_person`, `surface_summary_with`,
+`surface_summary_wearing` and `surface_list_join` are authored in both packs
+and resolve through the active story language. What is English in that
+sentence is the charter's own `looks` POOL, authored per charter in the
+story's words; a room's `name` and `notes` are the same kind of thing, and
+PA14 (lighthouse turn 19) judged authored English in a Japanese view CORRECT.
+So nothing was changed in `charter_surface.py`: this is the stored free-text
+class, registered as an owner decision with a recommendation in
+`docs/UNBUILT.md` § 1.48 (with PE5). The engine-owned half of the same view
+-- `you`, the pose frame, the non-awake residue, the dropped `communication`
+kind -- was fixed, and a structural check now fails on any engine-owned Latin
+script in a Japanese view.
+
 ### PB9. Doubled quotation marks and the guards that fire falsely (F29/F54 recur)
 **Severity: cosmetic, but it costs guard signal.** On 6 of 14 beats the
 narrator wrapped delivered lines as `""line""`, and each such beat drew
@@ -364,6 +379,13 @@ invented quoted dialogue absent from the player view" — both false: the lines
 were delivered and rendered. In Japanese the same tic produced `"「…。"」`.
 Registered already; the fix stands — normalise repeated quote runs before
 matching, in `agents/narration.py`'s guards.
+
+**RESOLVED 2026-09-05, one seam earlier than proposed.** The doubling is not
+a model tic to normalise away: the card taught the token protocol without
+saying who supplies the marks, so the model wrapped the token and the engine
+welded a second pair. `_substitute_dialogue_tokens` now welds once, in the
+pack's own marks (`「」` here), and the guards were made structural rather
+than taught to tolerate a spelling. `docs/UNBUILT.md` § 1.48.
 
 ### PB10. The contact hand cannot name a room's own fixture, so a real contact is dropped
 **Severity: wrong-but-recoverable.** Origin: `director_contact`'s payload

@@ -1345,3 +1345,131 @@ def test_every_relation_perception_builds_for_a_beat_carries_the_field():
         for call in re.findall(r"spatial_rel_between\((?:[^()]|\([^()]*\))*\)",
                                source):
             assert "sound=" in call, call
+
+# F29/F54: a quoted line is welded once, by the code that owns quoting
+# ---------------------------------------------------------------------------
+
+def _weld(prose, lines, language):
+    from language_runtime import language_scope
+    from agents.narration import _substitute_dialogue_tokens
+    with language_scope(language):
+        return _substitute_dialogue_tokens(prose, lines, language=language)
+
+
+@pytest.mark.parametrize("language,expected", [
+    ("en", 'He turns. "Mind the rail." She does not answer.'),
+    ("ja", "He turns. 「Mind the rail.」 She does not answer."),
+])
+def test_a_line_the_model_wrapped_in_quotes_reaches_the_page_in_one_pair(
+        language, expected):
+    """Five play runs, the majority of beats in each (F29, F54; PA10 turn 12,
+    PB9, PD11 turn 18, PE7 -- 31 false guard warnings in the flat run alone):
+    the model reads DIALOGUE FIDELITY, writes the token inside quote marks,
+    and the engine welded a second pair around it. The marks are the engine's,
+    in the form the page's own language uses, and there is one pair of them."""
+    prose, missing = _weld(
+        'He turns. "{{L1}}" She does not answer.', ["Mind the rail."],
+        language)
+    assert prose == expected
+    assert missing == []
+
+
+@pytest.mark.parametrize("language", ["en", "ja"])
+def test_the_marks_the_model_chose_do_not_survive_into_the_page(language):
+    """Any pair, not the one pair this repo happened to measure: a Japanese
+    story's narrator wrapping 「...」 and an English one wrapping curly
+    quotes are the same fault, and the weld is the same answer."""
+    for wrapped in ("“{{L1}}”", "「{{L1}}」", '""{{L1}}""'):
+        prose, _missing = _weld(wrapped, ["Mind the rail."], language)
+        marks = ("「", "」") if language == "ja" else ('"', '"')
+        assert prose == marks[0] + "Mind the rail." + marks[1]
+
+
+@pytest.mark.parametrize("language", ["en", "ja"])
+def test_a_line_that_already_carries_marks_is_not_wrapped_twice(language):
+    """The other half of the same class: the body handed over is the words,
+    and marks that rode in on it are the view's, not a second pair."""
+    prose, _missing = _weld("{{L1}}", ['"Mind the rail."'], language)
+    assert prose.count('"') + prose.count("「") + prose.count("」") == 2
+
+
+def test_a_correctly_rendered_muffled_fragment_is_not_invented_dialogue():
+    """PA10, lighthouse turn 12. A half-heard line reaches the view UNQUOTED
+    (`A muffled voice: ...deafen... glass... midnight...`), so a narrator that
+    correctly puts the fragment in the reader's ear as a quote was told it had
+    invented dialogue -- and that warning is enforceable, so the false positive
+    bought a rewrite. Invented means the view never DELIVERED it, not that the
+    view did not QUOTE it."""
+    from agents.common import _check_narrator_fidelity
+    view = ("A muffled voice: ...deafen... glass... midnight...\n"
+            'Ivo Marrick says in a level voice: "The lamp is lit."')
+    out = {"prose": ('Ivo Marrick answers, "The lamp is lit." Below, through '
+                     'the glass, "...deafen... glass... midnight..."')}
+    warnings = _check_narrator_fidelity(out, view)
+    assert not [w for w in warnings if w.startswith("Narrator invented")]
+
+
+def test_a_line_the_view_never_carried_is_still_invented():
+    """The guard subtracts; it does not stop asking. A quoted span whose words
+    appear nowhere in the view has no authorised speaker."""
+    from agents.common import _check_narrator_fidelity
+    view = 'Ivo Marrick says in a level voice: "The lamp is lit."'
+    out = {"prose": '"The lamp is lit." Then, "And the fog bell?"'}
+    warnings = _check_narrator_fidelity(out, view)
+    assert [w for w in warnings if w.startswith("Narrator invented")]
+
+
+# ---------------------------------------------------------------------------
+# F59: a view is composed in one language
+# ---------------------------------------------------------------------------
+
+def test_the_japanese_pose_sentence_is_wholly_japanese():
+    """PA14 (`youはbracedleaning。`), PD11, PE6. Two faults in one
+    sentence: `you` is the composer's own second-person TOKEN and had a
+    Japanese word waiting in the pack, and the clauses were concatenated the
+    way Japanese joins clauses -- which fuses two Latin words into one that
+    was never written."""
+    from agents.composer import Percept, render_view
+    pose = Percept(
+        kind="pose", channel="sight", source_label="you", fidelity="full",
+        data={"posture": "膝をついて",
+              "support": "石床",
+              "relative_to": "祭壇", "relation": "下",
+              "constraint": "縛られて"},
+        salience=0.8, order_key=0, dedupe_key="pose:self")
+    assert render_view([pose], language="ja").text == (
+        "あなたは祭壇の下に"
+        "石床の上に縛られて"
+        "膝をついている。")
+
+
+def test_a_pose_written_in_another_language_keeps_its_own_words_unfused():
+    """The residual PD11/PE5, registered as an owner decision: free prose is
+    in the language of the beat that wrote it, and a view in another language
+    reproduces it rather than inventing a translation. What it may not do is
+    weld two of those words together -- the FRAME is Japanese, the authored
+    words keep the spacing their own script requires."""
+    from agents.composer import Percept, render_view
+    pose = Percept(
+        kind="pose", channel="sight", source_label="you", fidelity="full",
+        data={"posture": "half-crouch", "support": "the ground",
+              "relative_to": "the crest", "relation": "below"},
+        salience=0.8, order_key=0, dedupe_key="pose:self")
+    text = render_view([pose], language="ja").text
+    assert text == ("あなたはthe crestのbelowに"
+                    "the groundの上にhalf-crouch。")
+    assert "belowthe" not in text
+
+
+def test_the_non_awake_residue_is_composed_in_the_views_own_language():
+    """The same class one kind over, and the whole view rather than a clause:
+    `_compose_residue_view` reads the pack through the ambient story language,
+    which nothing sets outside a turn -- so an unconscious mind's Japanese
+    view came back entirely in English. The pack had the Japanese text."""
+    from agents.composer import Percept, render_view
+    residue = Percept(
+        kind="residue", channel="interoception", source_label="you",
+        fidelity="full", data={"level": "unconscious", "pain": True},
+        salience=1.0, order_key=0, dedupe_key="residue")
+    text = render_view([residue], language="ja").text
+    assert text and not re.search(r"[A-Za-z]", text)
