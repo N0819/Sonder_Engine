@@ -2200,6 +2200,23 @@
         ]
       }
     ],
+    "_VOICE_PERSON_RES": {
+      "first": {
+        "$type": "regex",
+        "pattern": "\u4e00\u4eba\u79f0|\\bfirst[-\\s]?person\\b",
+        "flags": 34
+      },
+      "second": {
+        "$type": "regex",
+        "pattern": "\u4e8c\u4eba\u79f0|\\bsecond[-\\s]?person\\b",
+        "flags": 34
+      },
+      "third": {
+        "$type": "regex",
+        "pattern": "\u4e09\u4eba\u79f0|\\bthird[-\\s]?person\\b",
+        "flags": 34
+      }
+    },
     "_EVENT_LINES": {
       "act_other": "{n}. {actor}はこれを行った（まだ本文には書かれていない——それが起きる様を描写せよ）：{action}",
       "act_player": "{n}. {actor}はこれを行った（まだ本文には書かれていない——プレイヤーが試みたと記したことであり、それが実際に起きる様を描写せよ）：{action}",

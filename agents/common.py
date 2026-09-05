@@ -5642,7 +5642,7 @@ def split_sentences(text, split=None):
     return out
 
 
-def _sentence_subjects(prose, names, split=None):
+def _sentence_subjects(prose, names, split=None, pronouns=None):
     """Each sentence of `prose` paired with the name that is plainly its subject.
 
     The version this replaced refused to resolve pronouns at all, on the
@@ -5661,6 +5661,28 @@ def _sentence_subjects(prose, names, split=None):
 
     Yields (sentence, subject_name_or_None) in order.
 
+    A PRONOUN REDIRECTS ONLY WHEN THERE IS SOMEBODY FOR IT TO REDIRECT TO.
+    `pronouns` is `{name: {subject, object, possessive}}`, the roster's own
+    declared paradigms -- a closed set the engine owns. When a sentence opens
+    with a pronoun of a different group from the tracked subject's AND some
+    other body in scope answers to that group, the continuation is wrong:
+    measured (multitude, 2026-09-05, PM22) "She turns the key twice with a
+    harsh screech of tumblers..." was continued onto Tobin Slake, who is
+    he/him and was across the room with his palms on a door, while the body
+    the sentence is about was standing in the same roster. The sentence binds
+    to that other body when exactly one answers, and to nobody when several
+    do -- a guard that declines is quiet, and a guard that guesses among
+    equals is the thing being fixed.
+
+    IT IS NOT A GENDER CHECK ON THE PROSE. A disagreement with NO other
+    candidate is a sheet out of step with the page -- a default paradigm
+    nobody edited, a body written as "he" against a card that never said so
+    -- and the continuation stands, because there is no other reading. That
+    is the whole difference between narrowing this tracker and switching it
+    off for every cast carrying an unedited card. Omitting `pronouns` keeps
+    the older, paradigm-blind continuation, so a caller with no roster is
+    unchanged.
+
     `split` overrides the sentence splitter for callers that need a different
     one -- perception's tolerates a closing quote between the terminal
     punctuation and the space, and losing that would silently make a whole
@@ -5670,6 +5692,7 @@ def _sentence_subjects(prose, names, split=None):
     pieces = split_sentences(
         prose or "",
         split if split is not None else re.compile(r"(?<=[.!?])\s+"))
+    groups = {name: _pronoun_group(p) for name, p in (pronouns or {}).items()}
     for sentence in pieces:
         stripped = sentence.strip()
         if not stripped:
@@ -5685,10 +5708,23 @@ def _sentence_subjects(prose, names, split=None):
         if matched:
             current = matched
             yield stripped, matched
-        elif _ling("_SUBJECT_PRONOUN_RE").match(stripped):
-            yield stripped, current
         else:
-            yield stripped, None
+            opener = _ling("_SUBJECT_PRONOUN_RE").match(stripped)
+            if not opener:
+                yield stripped, None
+                continue
+            # The opener may carry a leading adverbial ("With a turn of her
+            # shoulder, she ..."), so the pronoun is its LAST word, not the
+            # whole match.
+            words = re.findall(r"[^\W\d_]+", opener.group(0), re.UNICODE)
+            said = _pronoun_to_group().get(words[-1].lower()) if words else None
+            held = groups.get(current)
+            if said and held and said != held:
+                answers = [n for n in (names or [])
+                           if n != current and groups.get(n) == said]
+                if answers:
+                    current = answers[0] if len(answers) == 1 else None
+            yield stripped, current
 
 
 # A conjunct that introduces its OWN subject is not the tracked body's doing.
@@ -5740,7 +5776,7 @@ _SPEECH_VERB_WINDOW = 3
 
 
 def _check_character_speech_authority(resolved_event, silent_names,
-                                      other_names=()):
+                                      other_names=(), pronouns=None):
     """Speech a resolved_event gives a character who declared none this beat.
 
     The mirror of `_check_player_act_authority`, and the boundary it defends is
@@ -5774,7 +5810,8 @@ def _check_character_speech_authority(resolved_event, silent_names,
     """
     warnings = []
     all_names = list(silent_names or []) + list(other_names or [])
-    for sentence, subject in _sentence_subjects(resolved_event, all_names):
+    for sentence, subject in _sentence_subjects(resolved_event, all_names,
+                                                pronouns=pronouns):
         if subject is None or subject not in (silent_names or []):
             continue
         # A quoted span is `_check_prose_quote_authority`'s business, not
@@ -5795,7 +5832,7 @@ def _check_character_speech_authority(resolved_event, silent_names,
 
 
 def _check_character_act_authority(resolved_event, declared_actions, name,
-                                   other_names=()):
+                                   other_names=(), pronouns=None):
     """Physical acts a resolved_event gives a CHARACTER they did not declare.
 
     The third side of the same boundary `_check_player_act_authority` and
@@ -5852,7 +5889,8 @@ def _check_character_act_authority(resolved_event, declared_actions, name,
 
     warnings = []
     all_names = [name] + [n for n in (other_names or []) if n != name]
-    for sentence, subject in _sentence_subjects(resolved_event, all_names):
+    for sentence, subject in _sentence_subjects(resolved_event, all_names,
+                                                pronouns=pronouns):
         if subject != name:
             continue
         without_quotes = _ling("_NARRATION_QUOTE_RE").sub(" ", sentence)
@@ -8492,6 +8530,85 @@ def _check_action_direction(prose, event_order):
     return warnings
 
 
+#: How many words of a declared act must be the ACT'S OWN -- not already
+#: standing in the view -- before the page is scored for rendering it. Two,
+#: because one shared word is a coincidence and two is a phrase; below it the
+#: act said nothing the room had not already said and there is nothing to
+#: look for. Named rather than buried: it is the whole conservatism of the
+#: check.
+_PLAYER_ACT_MIN_DISTINCT_TOKENS = 2
+
+
+def _act_footprint_tokens(text):
+    """Significant words of one act surface: casefolded, length >= 3,
+    stopwords removed. Pure lexical coverage, no domain vocabulary -- the
+    same construction `agents/director_evidence._decl_tokens` uses on the
+    other side of the turn, over this module's own function-word table
+    (`_OVERLAP_STOPWORDS`) rather than the Director's, because a pack key is
+    read under the namespace of the module reading it."""
+    tokens = set()
+    for tok in re.findall(r"[^\W\d_]+", str(text or "").casefold(), re.UNICODE):
+        if len(tok) >= 3 and tok not in _ling("_OVERLAP_STOPWORDS"):
+            tokens.add(tok)
+    return tokens
+
+
+def _check_player_act_rendered(prose, view, event_order, player_name,
+                               player_aliases=()):
+    """WHAT THE PAGE WAS TOLD IS NOT YET ON IT MUST END UP ON IT.
+
+    The player's own declared conduct reaches the narrator as the numbered
+    head of `current_events`, marked in as many words as not yet on the page
+    and required. Nothing read the page back. Measured (multitude,
+    2026-09-05, PM4): four beats in twenty where the declaration simply did
+    not appear -- turn 7 the player walked the hall, put both palms flat
+    against the shut doors and held them there, and the prose carried none
+    of the three while five other people spoke. `_check_action_direction`
+    fired on three of those four, but only for the movement component and
+    only because those acts named a direction; an act that names none was
+    invisible to every check the stage had.
+
+    WHAT IT LOOKS FOR is the act's own words, which is the only footprint an
+    act HAS: unlike a quote there is no verbatim string to find, and
+    demanding a vocabulary match would force stilted prose. So the act is
+    scored on the words it added to the beat -- its content words minus the
+    ones the composed view was already using, minus the player's own name
+    forms. A beat's room nouns are the view's; the verbs and manner of the
+    act are the declaration's, and if not one of them reached the page the
+    page did not render it.
+
+    A WARNING, deliberately not enforceable. Prose may legitimately carry an
+    act in wholly different words, and buying a rewrite on that judgment is
+    the trade this stage stopped making. It declines outright when the act
+    adds fewer than `_PLAYER_ACT_MIN_DISTINCT_TOKENS` words of its own.
+    """
+    if not player_name or not event_order:
+        return []
+    prose_tokens = _act_footprint_tokens(prose)
+    ambient = _act_footprint_tokens(view)
+    for form in (player_aliases or ()):
+        ambient |= _act_footprint_tokens(form)
+    ambient |= _act_footprint_tokens(player_name)
+    warnings = []
+    for ev in event_order:
+        if not isinstance(ev, dict) or ev.get("kind") != "action":
+            continue
+        if str(ev.get("actor") or "").strip() != str(player_name).strip():
+            continue
+        act = str(ev.get("action") or "").strip()
+        own = _act_footprint_tokens(act) - ambient
+        if len(own) < _PLAYER_ACT_MIN_DISTINCT_TOKENS:
+            continue
+        if own & prose_tokens:
+            continue
+        warnings.append(
+            "Player's declared conduct is missing from narrator prose: "
+            f"\"{act[:80]}\" -- none of "
+            f"{', '.join(sorted(own)[:6])} reached the page."
+        )
+    return warnings
+
+
 def _actor_reference_patterns(display):
     """Compiled patterns that count as a prose reference to one actor.
 
@@ -8661,18 +8778,47 @@ def _check_quote_attribution(prose, event_order, actor_pronouns=None):
                   max((prefix.rfind(qc) for qc in _ling("_QUOTE_CHARS")),
                       default=-1))
         prefix = prefix[cut + 1:]
+        # THE OWNER OF A QUOTE IS THE SUBJECT OF THE SENTENCE THAT INTRODUCES
+        # IT, NOT THE LAST NAME BEFORE IT.
+        #
+        # This scan used to take the reference NEAREST the quote, anywhere in
+        # the run-up. In a room with one other body that is the subject; in a
+        # room with five it is whoever the subject was looking at, holding
+        # something of, or inclining toward -- which is what people do in a
+        # crowd. Measured (multitude, 2026-09-05, PM8): 15 fires in 20 beats,
+        # 0 true, every one the same shape. "Devereux Hallam kept his gloved
+        # hands resting open upon the oak and inclined his head deferentially
+        # toward Maren Vaunt." + Hallam's line was reported as Vaunt's,
+        # because Vaunt is the object of `toward` and stands last. It fires
+        # MORE the more names a sentence carries, so the guard got worse
+        # exactly where dialogue is hardest to attribute.
+        #
+        # So: the introducing sentence is the last one before the quote, and
+        # its subject is the FIRST body named in it -- English puts the
+        # subject before its verb, and every oblique position (the object of a
+        # preposition, the possessor of a thing) comes after it. A possessive
+        # is skipped outright: "Vaunt's clerk" names a modifier, and a
+        # modifier is never the sentence's actor.
+        # The last NON-EMPTY piece: the prefix ends where the quote's opening
+        # mark was stripped off, so the splitter's final piece is the empty
+        # tail after that sentence's full stop.
+        _pieces = [s for s in split_sentences(prefix, _SENTENCE_SPLIT)
+                   if s.strip()]
+        lead = _pieces[-1] if _pieces else prefix
         best = None  # (pos, actor)
         for actor, pats in pat_map.items():
             for p in pats:
-                for mm in p.finditer(prefix):
-                    if best is None or mm.start() > best[0]:
+                for mm in p.finditer(lead):
+                    if mm.group(0).endswith(("'s", "’s")):
+                        continue
+                    if best is None or mm.start() < best[0]:
                         best = (mm.start(), actor)
         if best is None or best[1] == expected:
             continue
-        # A gendered pronoun AFTER the nearest (wrong) candidate that does not
-        # match that candidate's own declared pronouns re-points the reader
-        # elsewhere ("Vorne nods. She says...") -- ambiguous, decline to call.
-        between = prefix[best[0]:]
+        # A gendered pronoun AFTER the subject that does not match that
+        # subject's own declared pronouns re-points the reader elsewhere
+        # ("Vorne nods, and she says...") -- ambiguous, decline to call.
+        between = lead[best[0]:]
         cand_group = _group_of(best[1])
         ambiguous = False
         # The groups the ACTIVE pack declares, not three English words: the
@@ -9220,6 +9366,8 @@ def _check_narrator_fidelity(out, view, recent_prose=None, exclude_quotes=None,
         prose, position_facts, room_names))
     warnings.extend(_check_portal_fidelity(prose, portal_states))
     warnings.extend(_check_action_direction(prose, event_order))
+    warnings.extend(_check_player_act_rendered(
+        prose, view_text, event_order, player_name, player_aliases))
 
     # F5-F6: the page against the two records it was written from. Neither is
     # in `_ENFORCEABLE_PREFIXES` -- promotion is a measurement, not an edit.

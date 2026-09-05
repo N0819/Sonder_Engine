@@ -1888,6 +1888,23 @@
         ]
       }
     ],
+    "_VOICE_PERSON_RES": {
+      "first": {
+        "$type": "regex",
+        "pattern": "\\bfirst[-\\s]?person\\b",
+        "flags": 34
+      },
+      "second": {
+        "$type": "regex",
+        "pattern": "\\bsecond[-\\s]?person\\b",
+        "flags": 34
+      },
+      "third": {
+        "$type": "regex",
+        "pattern": "\\bthird[-\\s]?person\\b",
+        "flags": 34
+      }
+    },
     "_EVENT_LINES": {
       "act_other": "{n}. {actor} did this (NOT yet on the page — you must render it happening): {action}",
       "act_player": "{n}. {actor} did this (NOT yet on the page — the player described attempting it; you must render it happening): {action}",

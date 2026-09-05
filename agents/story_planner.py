@@ -160,10 +160,12 @@ SILENT_LINE = ("The room finished without a word; what it settled stands, and "
 WAITING_LINE = ("The room has open planning needs and no grant to answer "
                 "them. Tell the Story Planner what it may prepare.")
 REWOUND_LINE = "The story rewound under the room's work; nothing landed."
+LOST_ANSWER_LINE = ("The room lost its last answer to the model; what it had "
+                    "already settled stands, and its notes say what that was.")
 #: What the reply says when a stop is a spend stop, keyed by stop reason.
 STOP_LINES = {"steps": BOUNDED_LINE, "calls": BOUNDED_LINE, "wall": BOUNDED_LINE,
               "spend_reply": SPENT_LINE, "spend_hour": HOUR_SPENT_LINE,
-              "rewound": REWOUND_LINE}
+              "rewound": REWOUND_LINE, "model": LOST_ANSWER_LINE}
 #: Stops after which a background task resumes in its next pass.
 RESUMABLE_STOPS = ("steps", "calls", "wall")
 
@@ -558,6 +560,35 @@ def _note_bible(cid, frame_id, name, args, result, turn_idx):
         logger.info("bible note skipped: %s", exc)
 
 
+def _session_account(transcript):
+    """What a reply DID, as notes: the packages it touched and the tools it
+    ran. Read off the transcript rather than tracked alongside it, so it
+    cannot drift from what actually happened.
+
+    This exists for the reply that ends without one -- see the model-failure
+    branch in `run_planner`. A package the room drafted and validated is real
+    the moment the tool returns; the only thing a lost answer costs is the
+    sentence naming it, and this is that sentence.
+    """
+    uids, tools = [], []
+    for entry in transcript or ():
+        if not isinstance(entry, dict):
+            continue
+        args = entry.get("args")
+        uid = str((args or {}).get("uid") or "") if isinstance(args, dict) else ""
+        if uid and uid not in uids:
+            uids.append(uid)
+        name = str(entry.get("tool") or "")
+        if name and name not in tools:
+            tools.append(name)
+    notes = []
+    if uids:
+        notes.append("packages this reply touched: " + ", ".join(uids[:8]))
+    if tools:
+        notes.append("tools this reply ran: " + ", ".join(tools[:16]))
+    return notes
+
+
 def run_planner(cid, frame_id, *, text=None, task=None, base_turn=None,
                 regime=None, on_event=None):
     """One bounded reply. ``text`` is the player's line (the interactive
@@ -626,12 +657,38 @@ def run_planner(cid, frame_id, *, text=None, task=None, base_turn=None,
             break
         steps = step
         calls_left = max(0, min(reply_cap - calls_made, hour_left - calls_made))
-        out = _call(system, _payload(
-            cid, frame_id, text=text, task=task, transcript=transcript,
-            step=step, calls_left=calls_left, seconds_left=seconds_left,
-            turn_idx=turn_idx, regime=regime,
-            spend={"calls_per_reply": reply_cap, "calls_per_hour_left": hour_left}),
-            max_tokens=PLANNER_MAX_TOKENS)
+        try:
+            out = _call(system, _payload(
+                cid, frame_id, text=text, task=task, transcript=transcript,
+                step=step, calls_left=calls_left, seconds_left=seconds_left,
+                turn_idx=turn_idx, regime=regime,
+                spend={"calls_per_reply": reply_cap,
+                       "calls_per_hour_left": hour_left}),
+                max_tokens=PLANNER_MAX_TOKENS)
+        except Exception as exc:
+            # THE WORK IS NOT LOST, ONLY THE REPORT OF IT. A reply that has
+            # already run tools has already changed the database -- a package
+            # drafted, edited, validated -- and letting the exception out of
+            # here threw away the account of what that was. Measured (masque,
+            # 2026-09-05, PX22): 287 seconds, 14 model calls, 36 tool calls,
+            # a package sitting at revision 7 with `validation: {ok: true}`
+            # holding a `plan_rooms` and a `director_note`, and the caller was
+            # handed `reply: None, published: None`. The host found it by
+            # running `inspect_packages` by hand.
+            #
+            # A step-one failure with nothing done is a different event: there
+            # is no account to give, and swallowing it would hide the outage
+            # from a caller whose retry is the right answer. So the raise is
+            # kept for exactly that case.
+            if not calls_made and not transcript:
+                raise
+            logger.info("story planner call failed at step %s: %s", step, exc)
+            notes.append("the model call failed at step %d (%s: %s); the "
+                         "work before it stands"
+                         % (step, type(exc).__name__, str(exc)[:200]))
+            notes.extend(_session_account(transcript))
+            stopped = "model"
+            break
         shown, whole = _shown_transcript(transcript)
         first_shown = len(transcript) - len(shown)
         in_view = {first_shown + n for n in whole}
