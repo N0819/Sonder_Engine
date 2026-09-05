@@ -5654,16 +5654,22 @@ repair let the sources correct the word in ONE case only: an `enclosed` room
 that holds room-filling fixtures with every one of them switched off takes
 the sources' answer (`spatial_light_field.ambient_floor_word`). Two questions
 were deliberately left for the owner, because either answer changes every
-story and the measured case does not decide them.
+story and the measured case does not decide them. The first was answered by
+the F40 ruling the same day and is kept here for the reasoning; the second
+is open.
 
-* **Should a declared word ever outrank the sources OUTDOORS?** Today an
-  `open` or `sheltered` room's word never yields, on the reasoning that the
-  sky is that room's account of its light and `room_light` already lets the
-  sun overrule the declared word there (a declared `light` may only DARKEN an
-  outdoor room). The case that would test it: a `sheltered` market hall
-  declared `lit` at night with its braziers out. It currently reads `lit` at
-  midnight, because `sun_light` darkens it only where `day_phase` is set and
-  a scene without a clock reads as indoors.
+* **Should a declared word ever outrank the sources OUTDOORS? ANSWERED
+  2026-09-05** by the F40 ruling (`experiments/DEBUG_RUN_2026_09_05.md`),
+  and the answer is: where there are no sources. A `sheltered` room whose
+  declared word stands above what the sky gives it and which holds no light
+  source of its own keeps its word, because the declaration is then the only
+  thing that knows about the lamp nobody wrote as an entity; a `sheltered`
+  room that HOLDS sources is decided by them, so the market hall with its
+  braziers out is dark at midnight, exactly as this bullet's own test case
+  asked; and an `open` room is untouched, because there is no roof to hide a
+  source under. The two rules are now one rule read from both ends --
+  `ambient_floor_word` lets dead fixtures darken an enclosed room's word,
+  `room_light` lets a word stand where no fixture exists to speak.
 * **Should the floor hold for `dim`?** Today it yields for any word above
   `dark`, so an enclosed room declared `dim` with its one dead sconce in it
   reads `dark`. The argument for exempting `dim`: `dim` is the word an author
@@ -7711,26 +7717,16 @@ patch in a file another hand was editing that day:
   it; until then the patch is one branch: when BOTH rooms exist (scene or
   diff) and the reciprocal is absent, append it with the same barrier.
   `world/spatial_merge.py` edge code; test on the chat-114 shape.
-- **A station's `cell` outlives the `at` it was pinned with (F39).** Chat
-  115 (copy), turn 4: the resolve moved Sarah Moon from the north panel to
-  the east threshold; the merge kept the map's `cell: [0, 1]` (west wall),
-  and `body_cell` reads the cell first, so every field placed her where the
-  record did not. A fix (a changed `at` drops the cell) was written and
-  reverted: `tests/test_body_cells.py::test_the_merge_keeps_a_station_cell_a_
-  re_echo_left_out` pins the map's pin as outranking a Director `at` on
-  exactly that shape. The two rulings collide on the data; the owner's.
-- **The sky rule darkens a declared-lit room that carries no source entity
-  (F40).** `world/spatial_light.room_light` gives a non-`enclosed` room the
-  sun's light at night regardless of its declared word, because "a lamp is a
-  SOURCE and lives on an entity". Chat 114 (the owner's own turns 9-12 and
-  every beat here): the TARDIS console room, "bathed in amber and greenish
-  light", `light: lit`, `exposure: sheltered`, no source entity, composed
-  "It is dark here." in every view while the narrator wrote amber warmth;
-  the moonlit shore (`dim`) read dark. Two words the Director wrote
-  disagree and nobody is told. Options: a told-once engine notice when the
-  declared word is brighter than the sky and no entity in the room gives
-  light ("mint the source or make the room enclosed"), or the declared
-  word standing where it is brighter until a source exists. The owner's.
+- **The commit does not yet hand the Director the light notice the merge
+  writes (F40's second half).** The engine half landed 2026-09-05 with the
+  F40 ruling: a `sheltered` room whose declared word outranks the sky and
+  which holds no light source of its own keeps its word, and
+  `merge_scene_with_diff(light_report=...)` composes one line per such room
+  asking for the source to be written
+  (`spatial_light.unsourced_light_rooms`). Nothing passes the list yet.
+  `persist/commit_scene_state.py` should pass `_light_report` beside
+  `_crossing_report` and drain it through `ctx.tell_director`, which is how
+  every other merge report reaches the Director.
 - **The narrator originates the light (F41).** Chat 115 (copy), turn 5:
   the player asserted the lift's light had gone out; the resolve realised
   the claim as "observes the console under the interior lamp" (room `lit`,

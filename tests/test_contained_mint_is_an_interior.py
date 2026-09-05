@@ -93,11 +93,20 @@ class TestAnInsideIsEnclosedWhateverTheFieldSays:
         assert room_exposure(sc, "console") == "enclosed"
 
     def test_the_night_sky_no_longer_darkens_a_lit_interior(self):
+        """The console lamp is written as an entity here, which since F40
+        (2026-09-05) is what makes the sky the account of a SHELTERED room:
+        a room with no source of its own keeps its declared word, and a room
+        that holds one is decided by its sources -- so this contrast is now
+        parentage against the sky, with the source held constant."""
         sc = _scene()
         sc["day_phase"] = "night"
         sc["weather"] = {"sky": "clear"}
         sc["rooms"]["console"] = {"name": "Console", "exposure": "sheltered",
                                   "light": "lit"}
+        sc["entities"]["console_lamp"] = {
+            "name": "console lamp", "light_source": "lit",
+            "light_radius": "room", "state": {"lit": False}}
+        sc["positions"]["console_lamp"] = "console"
         assert room_light(sc, "console") == "dark"
         sc["rooms"]["console"]["parent_entity"] = "tardis"
         assert room_light(sc, "console") == "lit"

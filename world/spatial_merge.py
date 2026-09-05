@@ -1426,6 +1426,51 @@ def sync_scene_passages(scene: dict, prior_scene: dict = None) -> list:
     return touched
 
 
+def _station_moved_off_its_pin(current, incoming) -> bool:
+    """Does this incoming station name an anchor that is not the one the
+    standing `cell` was written with?
+
+    A CELL IS THE PRECISE PLACE OF THE STATION IT WAS PINNED WITH (owner's
+    decision, 2026-09-05, F39 of `docs/experiments/DEBUG_RUN_2026_09_05.md`,
+    reversing the 2026-09-04 ruling that the map's pin outranks a Director
+    `at` on this shape). Measured, chat 115 turn 4: the resolve moved a body
+    from the north control panel to the east threshold, this merge kept the
+    map's `cell: [0, 1]` on the west wall, and `body_cell` reads the cell
+    FIRST -- so every field drew her at the west wall while every ledger
+    said the east sill, and turn 6 moved her again with the cell still
+    there. A body drawn where no record puts her is worse than a host
+    having to pin again.
+
+    Only a NAMED anchor takes the pin down, and the three cases that do not
+    are the whole of the rule:
+
+      * a RE-ECHO of the same anchor keeps the cell. That is what the
+        2026-09-04 ruling was protecting and it is untouched: a Director
+        handing back a station it never thought about must not flatten a
+        host's pin ("at the bar, this end of it" is a thing a host wants to
+        say, and the Director is never asked for a cell --
+        `_coerce_station_table` keeps only `at`/`near`).
+      * a station that names NO `at` at all keeps the cell. Silence is not
+        a statement about where the body stands; a diff touching only
+        `near` is the ordinary form of it.
+      * an `at` cleared to nothing keeps the cell. Leaving an anchor is not
+        arriving anywhere, so nothing contradicts the pin -- the body stands
+        where it stood, no longer AT the thing. A cell with no `at` is a
+        supported record: it is what the map writes when a host drops a body
+        on open floor.
+
+    `near` never decides this, whichever way it changes. It names another
+    BODY, whose own place moves; a pinned pair is measured from the cells
+    (`_cell_proximity`), which is the more precise answer and already the
+    pinned rule.
+    """
+    if "at" not in incoming or "cell" not in current:
+        return False
+    named = str(incoming.get("at") or "").strip()
+    return bool(named) and named.casefold() \
+        != str(current.get("at") or "").strip().casefold()
+
+
 def merge_scene_with_diff(
     scene: dict,
     diff: dict | None,
@@ -1436,6 +1481,7 @@ def merge_scene_with_diff(
     clock_seconds=None,
     crossing_report=None,
     inventory_report=None,
+    light_report=None,
     carriers=None,
 ) -> dict:
     """`carriers` is ``{spelling: room}`` for the bodies another ledger
@@ -1454,7 +1500,14 @@ def merge_scene_with_diff(
     for want of a fact only the Director can supply. `inventory_report` is its
     sibling for the transfer ledger: what changing hands did to a body's
     standing pose prose, and which handovers named a thing the scene keeps no
-    record of and so could not be written down anywhere."""
+    record of and so could not be written down anywhere.
+
+    `light_report` is the same shape for the one thing the light reader can
+    only ask the Director for: a room whose declared light word is the only
+    account of its light (`spatial_light.unsourced_light_rooms`). The word
+    is honoured -- that is F40's decision -- and the beat says so, so the
+    next one can write the lamp as an entity and the light field can place
+    its rays instead of flooding the room from nowhere."""
     diff = diff or {}
     # A scene is a nested mutable structure.  A shallow copy allowed
     # downstream normalization and deterministic backstops (zone stamping,
@@ -1636,6 +1689,8 @@ def merge_scene_with_diff(
         for name, st in incoming_stations.items():
             if isinstance(st, dict):
                 cur = dict(merged["stations"].get(name) or {})
+                if _station_moved_off_its_pin(cur, st):
+                    cur.pop("cell", None)
                 cur.update(st)
                 merged["stations"][name] = cur
     apply_pose_diff(merged, incoming_poses)
@@ -2102,4 +2157,31 @@ def merge_scene_with_diff(
                        if isinstance(r, dict) and r.get("mode") == "asleep"}),
         )
 
+    _report_unsourced_light(merged, light_report)
     return merged
+
+
+def _report_unsourced_light(merged, report) -> None:
+    """One line per room whose light word is the only account of its light.
+
+    Read off the MERGED scene, so a room minted or re-lit this beat is
+    judged as it now stands. The phase is the one the scene carried into the
+    beat -- the commit advances the clock after this returns -- so at the
+    exact beat a phase turns, this reports the phase just ended; the reader
+    (`room_light`) always uses the current one, and the notice is advice to
+    the Director rather than a fact anything else depends on.
+    """
+    if report is None:
+        return
+    from world.spatial_light import unsourced_light_rooms
+    rooms = (merged or {}).get("rooms") or {}
+    for room_id, declared, sky in unsourced_light_rooms(merged):
+        room = rooms.get(room_id) or {}
+        label = str(room.get("name") or room_id)
+        report.append(
+            "%r is declared `light: %s` and the sky leaves it %s, and it "
+            "holds no light source of its own, so the room's word stands. "
+            "If something in there gives that light, write it as an entity "
+            "with `light_source` so it can be seen, moved, put out and lit "
+            "from where it stands; if nothing does, the room's `light` "
+            "should say what the sky leaves it." % (label, declared, sky))

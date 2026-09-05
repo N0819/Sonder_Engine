@@ -633,6 +633,121 @@ class TestAnyWayOfMakingLight:
         assert effective_light(scene, "cave") == "dark"
 
 
+class TestADeclaredWordWithNoSourceToContradictIt:
+    """Sources decide where the engine can see sources; where it can see
+    none, the declaration is the evidence (the owner's ruling of 2026-09-05,
+    F40 of `docs/experiments/DEBUG_RUN_2026_09_05.md`).
+
+    Chat 114: a console room "bathed in amber and greenish light", declared
+    `light: lit`, `exposure: sheltered`, holding no entity with
+    `light_source`, composed "It is dark here." in EVERY view for four
+    turns, while the narrator wrote the amber warmth of the same chamber.
+    The sky rule was right about the square outside and wrong about a
+    covered place nobody had written a lamp into.
+
+    The pair this makes with `ambient_floor_word`'s PA3 repair
+    (`world/spatial_light_field.py`) is one rule read from both ends: a
+    room whose fixtures are all switched off goes dark whatever word it
+    carries, and a room with no fixture at all keeps its word.
+    """
+
+    def _hall(self, phase="night", light="lit", exposure="sheltered"):
+        return {
+            "rooms": {
+                "hall": {"name": "Market Hall", "desc": "A covered hall.",
+                         "exposure": exposure, "adjacent": [],
+                         **({"light": light} if light else {})},
+            },
+            "entities": {}, "positions": {}, "day_phase": phase,
+        }
+
+    def _with_fixture(self, scene, lit):
+        scene["entities"]["brazier"] = {
+            "name": "brazier", "light_source": "lit", "light_radius": "room",
+            "state": {"lit": lit}}
+        scene["positions"]["brazier"] = "hall"
+        return scene
+
+    def _notices(self, scene):
+        report = []
+        merge_scene_with_diff(scene, {}, light_report=report)
+        return report
+
+    def test_a_sheltered_room_declared_lit_with_no_source_reads_lit(self):
+        scene = self._hall()
+        assert room_light(scene, "hall") == "lit"
+        assert effective_light(scene, "hall") == "lit"
+
+    def test_and_the_beat_asks_for_the_source_the_room_wants(self):
+        [notice] = self._notices(self._hall())
+        assert "Market Hall" in notice and "light_source" in notice
+        # It says both what was believed and what was overruled, so the
+        # Director can answer either way.
+        assert "`light: lit`" in notice and "dark" in notice
+
+    def test_a_room_that_holds_a_dead_fixture_goes_dark_and_says_nothing(self):
+        """PA3 from the other end: the sources are an account, and an
+        account that exists is the one that decides. A hall whose braziers
+        are out is dark at midnight whatever word it was minted with, and
+        nothing is asked of the Director -- the source is already written."""
+        scene = self._with_fixture(self._hall(), lit=False)
+        assert room_light(scene, "hall") == "dark"
+        assert self._notices(scene) == []
+
+    def test_a_lit_fixture_lights_it_by_being_a_source(self):
+        scene = self._with_fixture(self._hall(), lit=True)
+        assert room_light(scene, "hall") == "dark"     # the room's own word yields
+        assert effective_light(scene, "hall") == "lit"  # the source answers
+        assert self._notices(scene) == []
+
+    def test_a_hand_light_someone_carried_in_is_not_the_rooms_account(self):
+        """A pool of light that leaves with its bearer neither darkens the
+        room nor silences the question of what lights it."""
+        scene = self._hall()
+        scene["entities"]["lantern"] = {
+            "name": "lantern", "light_source": "lit", "portable": True,
+            "state": {"lit": False}}
+        scene["positions"]["lantern"] = "hall"
+        assert room_light(scene, "hall") == "lit"
+        assert len(self._notices(scene)) == 1
+
+    def test_an_open_room_is_unchanged_because_the_sky_is_all_of_it(self):
+        """There is no roof to hide a lamp under, so a word above the sky is
+        simply wrong -- the moonlit shore stays dark, and nothing is filed."""
+        scene = self._hall(exposure="open")
+        assert room_light(scene, "hall") == "dark"
+        assert self._notices(scene) == []
+        assert room_light(self._hall(exposure="open", light="bright"),
+                          "hall") == "dark"
+
+    def test_a_room_that_declares_nothing_declares_nothing(self):
+        """An absent `light` reads as `lit` by the fail-open at the top of
+        the module, and a fail-open is not a claim: every scene that never
+        said a word about its light is what it was."""
+        scene = self._hall(light=None)
+        assert room_light(scene, "hall") == "dark"
+        assert self._notices(scene) == []
+
+    def test_the_word_may_still_only_darken_where_the_sky_is_brighter(self):
+        assert room_light(self._hall(phase="midday", light="dim"),
+                          "hall") == "dim"
+        assert self._notices(self._hall(phase="midday", light="dim")) == []
+
+    def test_a_scene_with_no_clock_and_an_enclosed_room_are_untouched(self):
+        scene = self._hall()
+        scene.pop("day_phase")
+        assert room_light(scene, "hall") == "lit"
+        assert self._notices(scene) == []
+        sealed = self._hall(exposure="enclosed")
+        assert room_light(sealed, "hall") == "lit"
+        assert self._notices(sealed) == []
+
+    def test_no_report_is_asked_for_and_none_is_made(self):
+        """The merge is unchanged for every caller that wants no report."""
+        assert merge_scene_with_diff(self._hall(), {})["rooms"]["hall"][
+            "light"] == "lit"
+
+
 class TestLightSourcesInBackdrops:
     def test_a_fire_lights_the_picture_and_is_named(self):
         from dressing.backdrops import compose_prompt, room_projection
