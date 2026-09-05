@@ -571,6 +571,18 @@ store; on turn 15 the descent had to be re-declared on turn 16. F28's fix
 (accept a room on a passable path toward `to_room` as the leg walked) would
 have taken both.
 
+**STILL OPEN after the 2026-09-05 movement work, deliberately.** That work
+fixed the sibling class — a walk refused because a door on its path was shut
+(PE2/PC7) — and PA12 is not that: both turns had a passable route and an
+`arrives: false` declaration, and the guard refused a step the player had
+written as taken. The prefix rule was scoped to arriving declarations on
+purpose, because a non-arriving one already has an owner (`scene.approach`,
+`_travel_continues`, the approach-leg rule) and two seams answering "how far
+did she get" would be two answers. What PA12 needs is either the interpret
+reading such a sentence as arriving, or the approach-leg rule widening from
+"the room the beat PLACED them in is one passable step on" to a leg the guard
+derives when the beat placed them nowhere. Neither was built.
+
 ### PA13. The objects hand mints entities with no room, twice, including the Room's scheduled event
 *Turns 14 and 18. Severity: wrong-but-recoverable.* `watch_room_storm_pane`
 and `box_of_matches` were both minted with no `positions` entry, and the

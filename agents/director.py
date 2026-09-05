@@ -166,6 +166,7 @@ from .director_views import (
     _carried_reports_view,
 )
 from .director_movement import (
+    declared_walk_leg,
     _egocentric_exits,
     _planned_rooms_view,
     movement_for_resolve,
@@ -2954,6 +2955,39 @@ def _refuse_movement(sd, subject, to_room):
     records.append({"subject": name, "to_room": room})
 
 
+def _strip_unreached_placement(sc, sd, subject):
+    """Drop the pose and the station this beat wrote for a body whose walk
+    stopped short of where the beat was sending it.
+
+    `movement_refused` subtracts a body's position, station and pose together
+    (`spatial_merge._refused_movers`), because a journey that did not happen
+    left nothing behind. A journey that happened only PART of the way needs
+    the same subtraction minus the position: the position is true and stands
+    at the room she reached, while the pose and the station were authored for
+    the room she did not, and a pose is prose -- the manor run of 2026-09-05
+    (PC7) committed "standing on the flagged floor of the long gallery" for a
+    body the same beat held in the study, and the narrator wrote the scene
+    from the pose.
+
+    Keyed the scene's own way: `poses` and `stations` are each written under
+    whatever handle their writer reached for -- a uid here, a display name
+    there -- so identity is `same_subject`'s question, not string equality.
+    """
+    name = str(subject or "").strip()
+    if not name:
+        return
+    for channel in ("poses", "stations"):
+        table = sd.get(channel)
+        if not isinstance(table, dict):
+            continue
+        for key in [
+            key for key in list(table)
+            if str(key).strip().casefold() == name.casefold()
+            or same_subject(sc, key, name)
+        ]:
+            table.pop(key, None)
+
+
 def director_resolve(ctx, nonce, _corrections=None):
     from persist.commit import presence_name_items
     chat = ctx.chat
@@ -4050,6 +4084,10 @@ def director_resolve(ctx, nonce, _corrections=None):
         prev_room = subject_prev_room
         blocked = contested = False
         rel = None
+        # How far the declared walk gets on open doorways alone, and the room
+        # behind the first shut door on it. Only a multi-room walk asks the
+        # question -- one hop is its own answer.
+        reached, contested_door = prev_room, None
         if prev_room and mv["to_room"] != prev_room:
             rel = spatial_rel(route_scene, prev_room, mv["to_room"])
             if rel.get("barrier") == "separated":
@@ -4057,15 +4095,22 @@ def director_resolve(ctx, nonce, _corrections=None):
                 # doorway is ALREADY passable (open/open_door) is a
                 # legitimate single-beat traversal, not a teleport --
                 # observed live: a valid three-hop walk through open doors
-                # was dropped while the narration described arriving. A
-                # route that would require passing a still-closed door
-                # does NOT count: the backstop cannot attribute the
-                # contest to one specific door on a multi-hop path, so
-                # such a move stays blocked until the door is opened (a
-                # door the resolve opens this beat is already open in
-                # route_scene and makes the route passable).
-                blocked = not passable_route_exists(
+                # was dropped while the narration described arriving.
+                #
+                # A route whose only impassable edges are SHUT DOORS is the
+                # same contest the adjacent branch below has always
+                # recognised, one hop further out. This once stayed blocked,
+                # on the objection that "the backstop cannot attribute the
+                # contest to one specific door on a multi-hop path" --
+                # `declared_walk_leg` attributes it, by following the walk
+                # edge by edge until an edge refuses. So the question splits
+                # exactly as it does at one hop: a wall is blocked, a door is
+                # contested, and the resolve owns whether the door opened.
+                # (A door the resolve opens this beat is already open in
+                # route_scene and makes the whole route passable.)
+                reached, contested_door, blocked = declared_walk_leg(
                     route_scene, prev_room, mv["to_room"])
+                contested = not blocked and bool(contested_door)
             else:
                 # Directly adjacent: the single edge's barrier decides.
                 blocked = rel.get("barrier") in ("wall", "unknown")
@@ -4137,13 +4182,72 @@ def director_resolve(ctx, nonce, _corrections=None):
             # narration describing a bump against a sealed door while the
             # committed position walked through it. The resolve diff owns
             # contested outcomes; without its assertion, no move.
-            ctx.warnings.append(
-                f"Contested movement: barrier closed_door from '{prev_room}' "
-                f"to '{mv['to_room']}' not opened this beat and the resolve "
-                "diff did not assert the move; position unchanged."
-            )
+            #
+            # SHE STILL GOT AS FAR AS THE HALL. A walk refused whole says the
+            # body never set out, which is false whenever the shut door is
+            # not the first edge: the rooms before it were open and she
+            # crossed them. So the declared walk commits its passable PREFIX
+            # and stops at the door, and only the crossing itself waits on
+            # the resolve. At one hop the prefix is the room she is already
+            # standing in, and the else-branch below is the old rule
+            # unaltered.
+            prefix = (reached if (reached and reached != prev_room
+                                  and mv.get("arrives", True)) else None)
+            if prefix:
+                sd["positions"][move_subject] = prefix
+                # AND EVERYONE WALKING WITH HER STOPS WHERE SHE STOPS. The
+                # same group the blocked branch above holds back together:
+                # anyone this beat sent to the declared destination out of
+                # the mover's own room walked the edges she walked, so they
+                # reach exactly what she reached. Leaving them at the
+                # destination would send the companion through the shut door
+                # alone -- the chat-74 split the stranded rule exists to
+                # prevent, arriving from the other side.
+                walked_with = [
+                    subject for subject, room in list(sd["positions"].items())
+                    if room == mv["to_room"] and subject != move_subject
+                    and room_of(sc, subject) == prev_room
+                ]
+                for subject in walked_with:
+                    sd["positions"][subject] = prefix
+                # A pose or a station written for the room she did not reach
+                # is a write for a journey that did not happen -- the same
+                # subtraction `movement_refused` makes, minus the position,
+                # which here is true and stands (manor turn 13, PC7: a body
+                # held in the study kept the pose that had her "standing on
+                # the flagged floor of the long gallery").
+                for subject in [move_subject, *walked_with]:
+                    _strip_unreached_placement(sc, sd, subject)
+                ctx.warnings.append(
+                    f"Partial movement: {move_subject} walked from "
+                    f"'{prev_room}' as far as '{prefix}'; the way on to "
+                    f"'{contested_door}' is a closed door this beat did not "
+                    f"open, so the declared arrival at '{mv['to_room']}' is "
+                    "contested and uncommitted."
+                    + (" Held the group together: "
+                       + ", ".join(sorted(walked_with)) + "."
+                       if walked_with else "")
+                )
+            else:
+                ctx.warnings.append(
+                    f"Contested movement: barrier closed_door from "
+                    f"'{prev_room}' to '{mv['to_room']}' not opened this beat "
+                    "and the resolve diff did not assert the move; position "
+                    "unchanged."
+                )
         elif mv.get("arrives", True):
             sd["positions"][move_subject] = mv["to_room"]
+            if contested_door:
+                # Say which door was crossed. The contest is only nameable
+                # because the walk was followed edge by edge, and a multi-hop
+                # crossing the resolve authorised is exactly the thing a later
+                # reader of the trace needs to find.
+                ctx.warnings.append(
+                    f"Contested crossing honoured: the walk from "
+                    f"'{prev_room}' to '{mv['to_room']}' passes a closed door "
+                    f"into '{contested_door}', and the resolve diff asserted "
+                    "the arrival; committed as declared."
+                )
         else:
             # Declared as heading there, not getting there. The destination is
             # still what they are moving toward -- it is the arrival that this

@@ -2209,3 +2209,268 @@ def test_a_pair_standing_together_can_hear_each_other():
     })
     rel = spatial_rel_between(sc, "Corin Ashe", "Sable")
     assert hear_level(rel, "normal") == "full"
+
+
+# ---------------------------------------------------------------------------
+# PE2 / PC7 (second half): a shut door on the way is a contest, not a wall
+# ---------------------------------------------------------------------------
+#
+# Flat 4B, 2026-09-05. FOUR of six declared inter-room moves never committed:
+# "I go back down the hall and into my bedroom" is kitchen --open-- hallway
+# --closed_door-- bedroom, and the backstop answered "no passable route ...
+# (barrier=separated); position unchanged" while the identical one-hop
+# crossing would have been allowed as CONTESTED. The host moved a body by
+# hand three times for the story to continue.
+#
+# Two rules, and they answer two questions. HOW FAR she got is the floor
+# plan's: the walk commits its passable prefix and stops at the first shut
+# door. WHAT HAPPENS AT THAT DOOR is causality's, and belongs to the resolve
+# exactly as it does at one hop. A wall is neither -- no route reaches it,
+# doors counted -- and a walk into one is still refused whole.
+
+
+def _flat_4b_scene(hall_to_bedroom="closed_door"):
+    """kitchen_living --open-- hallway --X-- noors_bedroom, plus a balcony
+    the flat can only reach through a wall."""
+    return {
+        "location": "Flat 4B",
+        "rooms": {
+            "kitchen_living": {"name": "Kitchen", "adjacent": [
+                {"to": "hallway", "barrier": "open", "distance": "near"}]},
+            "hallway": {"name": "Hallway", "adjacent": [
+                {"to": "kitchen_living", "barrier": "open",
+                 "distance": "near"},
+                {"to": "noors_bedroom", "barrier": hall_to_bedroom,
+                 "distance": "near"}]},
+            "noors_bedroom": {"name": "Bedroom",
+                              "anchors": {"bed": {"desc": "the bed"}},
+                              "adjacent": [
+                                  {"to": "hallway", "barrier": hall_to_bedroom,
+                                   "distance": "near"}]},
+            "balcony": {"name": "Balcony", "adjacent": [
+                {"to": "kitchen_living", "barrier": "wall"}]},
+        },
+        "positions": {"The Stranger": "kitchen_living",
+                      "Mara": "kitchen_living"},
+        "stations": {}, "poses": {}, "entities": {}, "attire": {},
+        "overlays": {},
+    }
+
+
+def _movement_ctx(temp_db, scene, to_room, arrives=True):
+    from story.character_schema import default_character_data
+
+    chat_id = temp_db.qi(
+        "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+        ("Flat", "", time.time()))
+    char_id = temp_db.qi(
+        "INSERT INTO characters(name,sheet,source,created,resource_uid) "
+        "VALUES(?,?,?,?,?)",
+        ("Mara", json.dumps(default_character_data("Mara")), "{}",
+         time.time(), "char_mara"))
+    temp_db.qi(
+        "INSERT INTO chat_chars(chat_id,char_id,status,state) VALUES(?,?,?,?)",
+        (chat_id, char_id, "active", "{}"))
+    temp_db.wset(chat_id, "scene", scene)
+    cast = temp_db.q(
+        "SELECT ch.*,cc.state AS cstate,cc.status FROM chat_chars cc "
+        "JOIN characters ch ON ch.id=cc.char_id WHERE cc.chat_id=?",
+        (chat_id,))
+    turn_id = temp_db.qi(
+        "INSERT INTO turns(chat_id,idx,player_input,created) VALUES(?,?,?,?)",
+        (chat_id, 1, "move", time.time()))
+    ctx = PipelineContext(
+        chat=ChatData(id=chat_id, name="Flat", persona_id=None,
+                      lorebook_id=None, scenario="", created=time.time()),
+        turn=TurnData(id=turn_id, chat_id=chat_id, idx=1,
+                      player_input="move", created=time.time()),
+        cast=cast, input="move")
+    ctx.director_interpret = {
+        "sequence": [], "speech": None, "action": None,
+        "movement": {"to_room": to_room, "mover": "self", "arrives": arrives},
+        "flow": {"reactors": [], "authority_claims": [],
+                 "resolution_flags": {}, "fiction_frame": {}},
+    }
+    return ctx
+
+
+def test_a_walk_stopped_by_one_shut_door_lands_at_the_door(temp_db,
+                                                           monkeypatch):
+    """Turn 6 of the flat. The declared walk crosses one open doorway and
+    meets one shut one: she is in the hallway, and the bedroom is contested
+    -- not "position unchanged"."""
+    import agents.director as director
+    from tests.helpers import fanout_resolve_agent
+
+    ctx = _movement_ctx(temp_db, _flat_4b_scene(), "noors_bedroom")
+    monkeypatch.setattr(director, "_agent_json", fanout_resolve_agent(
+        # The beat wrote the arrival's prose without asserting the position.
+        {"state_diff": {
+            "poses": {"The Stranger": {
+                "posture": "standing",
+                "detail": "just inside the bedroom, the door shut behind"}},
+            "stations": {"The Stranger": {"at": "bed"}}}}))
+
+    sd = director.director_resolve(ctx, nonce=0)["state_diff"]
+
+    assert sd["positions"]["The Stranger"] == "hallway"
+    assert not [w for w in ctx.warnings if "Blocked movement" in w]
+    assert any("Partial movement" in w and "'hallway'" in w
+               and "'noors_bedroom'" in w for w in ctx.warnings)
+    # The prose written for the room she did not reach goes with the leg she
+    # did not walk; the position is true and stays.
+    assert "The Stranger" not in sd["poses"]
+    assert "The Stranger" not in sd["stations"]
+    # She DID move, so nothing is recorded as refused.
+    assert not sd.get("movement_refused")
+
+
+def test_the_resolve_still_owns_whether_the_door_opened(temp_db, monkeypatch):
+    """The other half of the contest, and the half PE2 measured: when the
+    beat itself says she went through, the walk stands -- the same trust the
+    one-hop branch has always extended."""
+    import agents.director as director
+    from tests.helpers import fanout_resolve_agent
+
+    ctx = _movement_ctx(temp_db, _flat_4b_scene(), "noors_bedroom")
+    monkeypatch.setattr(director, "_agent_json", fanout_resolve_agent(
+        {"state_diff": {"positions": {"The Stranger": "noors_bedroom"}}}))
+
+    sd = director.director_resolve(ctx, nonce=0)["state_diff"]
+
+    assert sd["positions"]["The Stranger"] == "noors_bedroom"
+    assert any("Contested crossing honoured" in w and "noors_bedroom" in w
+               for w in ctx.warnings)
+
+
+def test_a_walk_through_a_wall_is_still_refused_whole(temp_db, monkeypatch):
+    """The guard's reason for existing. No route reaches the balcony, doors
+    counted, so none of the contest rule applies: the position is stripped
+    and the refusal is recorded for the merge to subtract."""
+    import agents.director as director
+    from tests.helpers import fanout_resolve_agent
+
+    ctx = _movement_ctx(temp_db, _flat_4b_scene(), "balcony")
+    monkeypatch.setattr(director, "_agent_json", fanout_resolve_agent(
+        {"state_diff": {"positions": {"The Stranger": "balcony"}}}))
+
+    sd = director.director_resolve(ctx, nonce=0)["state_diff"]
+
+    assert "The Stranger" not in sd["positions"]
+    assert any("Blocked movement" in w for w in ctx.warnings)
+    assert {"subject": "The Stranger", "to_room": "balcony"} \
+        in sd["movement_refused"]
+
+
+def test_a_companion_stops_where_the_mover_stops(temp_db, monkeypatch):
+    """The stranded rule from the other side (chat 74). A body the same beat
+    sent to the same destination out of the mover's own room walked the same
+    edges, so it reaches what the mover reached -- never the room past the
+    door the mover could not open, and never one the mover cannot reach."""
+    import agents.director as director
+    from tests.helpers import fanout_resolve_agent
+
+    ctx = _movement_ctx(temp_db, _flat_4b_scene(), "noors_bedroom")
+    monkeypatch.setattr(director, "_agent_json", fanout_resolve_agent(
+        {"state_diff": {"positions": {"Mara": "noors_bedroom"}}}))
+
+    sd = director.director_resolve(ctx, nonce=0)["state_diff"]
+
+    assert sd["positions"]["The Stranger"] == "hallway"
+    assert sd["positions"]["Mara"] == "hallway"
+    assert any("Held the group together" in w for w in ctx.warnings)
+
+
+def test_a_fully_passable_multi_hop_walk_is_unchanged(temp_db, monkeypatch):
+    """The counter-case that keeps the rule honest: with the door open the
+    walk commits its destination and says nothing about doors."""
+    import agents.director as director
+
+    ctx = _movement_ctx(temp_db, _flat_4b_scene(hall_to_bedroom="open_door"),
+                        "noors_bedroom")
+    monkeypatch.setattr(director, "_agent_json", lambda *a, **k: {})
+
+    sd = director.director_resolve(ctx, nonce=0)["state_diff"]
+
+    assert sd["positions"]["The Stranger"] == "noors_bedroom"
+    assert not [w for w in ctx.warnings if "movement" in w.casefold()]
+
+
+def test_the_walk_leg_names_the_door_that_stopped_it():
+    """The primitive under both branches, and the answer to the objection
+    the old comment recorded: the contest IS attributable on a multi-hop
+    path, because the walk is followed edge by edge."""
+    from agents.director import declared_walk_leg
+
+    scene = _flat_4b_scene()
+    assert declared_walk_leg(scene, "kitchen_living", "noors_bedroom") == \
+        ("hallway", "noors_bedroom", False)
+    # A wall: no route at all, doors counted.
+    assert declared_walk_leg(scene, "kitchen_living", "balcony") == \
+        ("kitchen_living", None, True)
+    # Open throughout: no contest to attribute.
+    assert declared_walk_leg(_flat_4b_scene(hall_to_bedroom="open_door"),
+                             "kitchen_living", "noors_bedroom") == \
+        ("noors_bedroom", None, False)
+    # The first edge shut is the one-hop case, and the prefix is the room she
+    # already stands in -- the caller's old contested branch, unaltered.
+    assert declared_walk_leg(scene, "hallway", "noors_bedroom") == \
+        ("hallway", "noors_bedroom", False)
+
+
+# ---------------------------------------------------------------------------
+# PC8 / F65: a title with a name in it is one name
+# ---------------------------------------------------------------------------
+#
+# Manor run, 2026-09-05: "facing Lord you", "before Lord you", "toward Mrs. I
+# with practiced, gentle courtesy", "turns away from you you". Twice the
+# composer's own tripwire fired and called it an engine defect, which it was.
+# The rewrite replaced the name FRAGMENT it happened to hold and left
+# whatever stood in front of it -- and, applied shortest-form-first, matched
+# inside a name it had already half-rewritten.
+
+
+def test_a_title_before_a_name_is_rewritten_with_the_name():
+    from agents.common import _self_second_person, self_name_forms
+
+    forms = self_name_forms("Edmund Harrowgate", ["Edmund Harrowgate"])
+    out = _self_second_person(
+        "Penrose stands facing Lord Edmund Harrowgate, then turns before "
+        "Lord Edmund Harrowgate.", forms)
+    assert out == "Penrose stands facing you, then turns before you."
+    assert "Lord you" not in out and "Harrowgate" not in out
+
+
+def test_the_widest_form_of_one_name_wins_over_its_own_word_tokens():
+    """"toward Dov Aharon" became "toward you Aharon" became "toward you
+    you": the short form fired inside the long one."""
+    from agents.common import _self_second_person, self_name_forms
+
+    forms = self_name_forms("Dov Aharon", ["Dov"])
+    out = _self_second_person(
+        "Tam Reyes leans forward across the counter toward Dov Aharon.", forms)
+    assert out == "Tam Reyes leans forward across the counter toward you."
+
+
+def test_the_rewrite_leaves_a_third_partys_title_and_name_alone():
+    """The observer is somebody else: nothing of Lord Edmund's name is this
+    perceiver's, so the sentence is delivered as written."""
+    from agents.common import _self_second_person, self_name_forms
+
+    line = "Ada Quill stands facing Lord Edmund Harrowgate."
+    assert _self_second_person(
+        line, self_name_forms("Mrs Penrose", ["Mrs Penrose"])) == line
+
+
+def test_the_episodes_first_person_pass_inherits_the_same_boundary():
+    """"toward Mrs. I" was the same defect one renderer further on: the
+    episode takes "you" to "I", so a title stranded beside a pronoun comes
+    back wearing the other person."""
+    from agents.common import _self_second_person, self_name_forms
+    from agents.composer import _first_person
+
+    forms = self_name_forms("Penrose", ["Penrose"])
+    out = _first_person(_self_second_person(
+        "He moves toward Mrs. Penrose with practiced, gentle courtesy.",
+        forms))
+    assert out == "He moves toward me with practiced, gentle courtesy."

@@ -7729,14 +7729,27 @@ patch in a file another hand was editing that day:
   the position, for the declarer and for each `stranded` companion the same
   beat sent to the same destination. Manor turn 13's committed pose
   ("standing on the flagged floor of the long gallery" for a body refused
-  entry to the gallery) cannot recur. What remains open is the SECOND half of
-  PC7's own fix, which is F28's rule and not this: walking the passable
-  PREFIX of a declared path, so a refusal reads "she got as far as the hall"
-  rather than "she never set out". Every measured case of that class is
-  F28/PA12/PE2 -- PE2 is the sharpest (four of six declared inter-room moves
-  in an ordinary flat never committed, because one door on the path was
-  shut), and the proposed rule is that a route whose only impassable edges
-  are `closed_door` is CONTESTED, not blocked.
+  entry to the gallery) cannot recur. **The SECOND half landed the same day**
+  (PE2, PC7(b)) with the rule it belongs beside. A shut door is a CONTEST
+  wherever it stands on the route, which is what the adjacent branch has
+  always said and what the multi-hop branch refused to say on the objection
+  that it "cannot attribute the contest to one specific door on a multi-hop
+  path": `director_movement.declared_walk_leg` follows the walk edge by edge
+  and attributes it. A route no doorway reaches is still a WALL and still
+  refused whole; a route whose only impassable edges are `closed_door` is
+  contested, so the resolve owns the crossing as it does at one hop, and where
+  the resolve does not assert it the walk commits its passable PREFIX and
+  stops at the door -- with the pose and station written for the room it did
+  not reach dropped (`_strip_unreached_placement`), and every body the same
+  beat sent to that destination out of the mover's own room stopping where the
+  mover stopped. Measured cases closed: PE2 (four of six declared inter-room
+  moves in an ordinary flat), PC7's turn 13. **What is NOT closed is F28's own
+  remainder, PA12**: a declaration marked `arrives=false` for a step the
+  player wrote as taken. The prefix rule was scoped to ARRIVING declarations
+  deliberately, so that `scene.approach` and the approach-leg rule stay the
+  one seam answering how far a non-arriving walk got; PA12 needs either the
+  interpret's reading of such a sentence or a leg the approach guard derives
+  when the beat placed the body nowhere.
 - **One whisper, two grades in one beat (F61).** The act stage's
   deterministic floor grades speech through `hear_level`'s edge model (same
   room, whisper, near -> fragment); the outcome's delivery grades it through
