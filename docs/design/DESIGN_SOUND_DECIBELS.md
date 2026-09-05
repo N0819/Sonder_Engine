@@ -202,7 +202,8 @@ work did not own. Stated exactly, in § 8.
 | authored number | `db` on an entity or event | **built** | `event_db` reads it first, ahead of `level` and the older `intensity`; absent means the word decides |
 | wall transmission loss | 45 dB | **as proposed** | the physical number, and its measured consequence is not the note's sentence -- see § 5a |
 | floor and ceiling loss | 50 dB | **as proposed** | charged only where a vertical edge is a WALL; a stairwell is an aperture and keeps its own |
-| ambient, dB | enclosed 14, sheltered 17, open 20 | **27.0 / 30.0 / 33.0** | the note's steps are right and its reference is not; see § 5a |
+| ambient, dB | enclosed 14, sheltered 17, open 20 | **27.0 / 30.0 / 30.0** | the note's steps are right and its reference is not (§ 5a); `open` then moved 33.0 → 30.0 in the same session, the owner accepting `docs/UNBUILT.md` § 1.120 |
+| weather, dB | (not in the note) | light **30.0**, moderate **34.0**, heavy **37.0** | was 34.8 / 37.8 / 40.0; moved with `open` under the same accepted recommendation. `WIND_NOISE` deliberately unmoved |
 | far-field entry | any source over 70 dB | **as proposed** | above `deafening` 61.8 and below `thunderous` 85, so exactly the two new rungs and an authored number reach it |
 | distant level margins | (not in the note) | `FULL_SNR_DB` for `plain`, **`OVERWHELMING_MARGIN_DB` 20** | 20 dB is a hundredfold over the room; new, and the owner's |
 | events a beat may hold | (not in the note) | `MAX_SENSORY_EVENTS` **8** | a beat is a moment; a moment with nine distinct noises in it is a model filling a list |
@@ -243,6 +244,25 @@ the top rung crosses a wall at all, and only one. Whether that is right is
 the owner's; 18 dB would make both of the note's sentences true and 45 dB is
 the physical number for masonry. **Registered, not chosen**
 (`docs/UNBUILT.md` § 1.122).
+
+### 5b. The outdoor floor, moved in the same session (`docs/UNBUILT.md` § 1.120)
+
+A separate decision, landed as a separate commit and deliberately NOT hidden
+inside the conversion: the owner accepted the outdoor-constants
+recommendation the field's repair had registered. `AMBIENT["open"]` 0.2 →
+0.1 (level with `sheltered` — open air is not itself a noise; what is noisy
+outdoors is the weather, counted separately) and `WEATHER_NOISE`
+light/moderate/heavy 0.3/0.6/1.0 → 0.1/0.25/0.5. `WIND_NOISE` unmoved.
+
+A normal voice's `full` radius, in paces: fair 5.4 → 7.7, light rain 3.3 →
+5.4, moderate 2.5 → 4.0, heavy 2.0 → 3.0, heavy + gale 1.3 → 1.7.
+
+**It touches the far field in one direction only, and less than expected.**
+The flood's termination is bounded by the QUIETEST floor the model has,
+which is `AMBIENT["enclosed"]` and did not move — so a `catastrophic` event
+still reaches exactly 51 medium rooms of open doorways and no further. What
+changed is what an open room can HEAR of it: audible in 43 → 48 of those
+rooms in fair weather, 37 → 43 in light rain.
 
 ## 6. What argues against it
 
