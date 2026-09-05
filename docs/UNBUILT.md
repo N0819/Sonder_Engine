@@ -6550,10 +6550,20 @@ for what follows. Residuals of this entry rather than a section of their own:
   re-stationed within their room by drag. **A doorway declared from the far
   side alone cannot be dragged from this room** (the passage record, § 2.37,
   is what would make it one object; the map says so and does nothing).
-  **A body dropped on a plain cell is not pinned to that cell** -- there is
-  no per-cell station in the engine; `at` is cleared and the body is
-  "somewhere in the room" again, which the map shows in the lane below the
-  grid. **Things are not dragged** -- the entity route moves a thing between
+  **Proximity reads cell distance only for a PINNED pair** (the `cell`
+  field landed later the same day for bodies and anchors alike,
+  `DESIGN_ROOM_FIDELITY.md` §10; the body-on-a-plain-cell gap is closed).
+  `_cell_proximity` fires when at least one body carries an authored
+  `cell` and both stand on a cell; two bodies at two ANCHORS derive cells
+  too, and reading their distance would change the anchor-tier answers
+  that sixteen test files pin (`near` for two anchors in a medium room,
+  `across` only from `large`). The owner's condition for touching proximity
+  was byte-identity for unpinned pairs, so the rule stops there; widening
+  it to derived cells is a decision about those pins, not a bug. **The
+  station editor's `at` select lets a cell go** -- choosing an anchor by
+  name is read as "stand at it", so a host who wants "at the bar, THIS end"
+  drags on the map rather than picking from the menu; the map writes both.
+  **Things are not dragged** -- the entity route moves a thing between
   rooms and a thing has no station the map could write; it is clicked to
   its editor. **Nothing is created on the map** -- no anchor, doorway or room
   is drawn into being; the card's add rows do that, as before. **A room's

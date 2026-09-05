@@ -207,14 +207,21 @@ def _grid(rid, slices):
     anchors = {}
     for aid, a in (record.get("anchors") or {}).items():
         wall = a.get("dir") or ""
-        if wall in rims:
+        cell = a.get("cell") if isinstance(a.get("cell"), list) else None
+        # The server's order: a pinned origin cell first, then a place along
+        # the wall, then the seed (the middle stands in for the seed here).
+        if cell:
+            placed, source = [list(cell)], "cell"
+        elif wall in rims:
             placed = on_wall(wall, a.get("offset"), 1 if a.get("height") else 0)
+            source = "offset" if a.get("offset") is not None else "seed"
         else:
-            placed = [[w // 2, d // 2]]
+            placed, source = [[w // 2, d // 2]], "seed"
         anchors[aid] = {"cells": placed, "dir": wall or None, "height": a.get("height") or "floor",
                         "footprint": a.get("footprint") or "point",
                         "opacity": a.get("opacity") or "opaque", "desc": a.get("desc") or aid,
-                        "implicit": False, "offset": a.get("offset")}
+                        "implicit": False, "offset": a.get("offset"),
+                        "cell": cell, "source": source}
     doorways, neighbours, walls = [], [], []
     for x in room["exits"]:
         edge = next((e for e in record["adjacent"] if e["to"] == x["to"]), {})
@@ -241,13 +248,16 @@ def _grid(rid, slices):
     for o in room["occupants"]:
         station = o.get("station") or {}
         at = station.get("at")
-        cell = None
-        if at and at in anchors:
+        cell, source = None, "none"
+        # The server's order: the station's own pin first, else the anchor.
+        if isinstance(station.get("cell"), list) and len(station["cell"]) == 2:
+            cell, source = list(station["cell"]), "cell"
+        elif at and at in anchors:
             ax, ay = anchors[at]["cells"][0]
-            cell = [min(w - 1, ax + 1), ay]
+            cell, source = [min(w - 1, ax + 1), ay], "anchor"
         bodies[o["name"]] = {"cell": cell, "facing": "e" if cell else None, "kind": "cast",
                              "at": at, "near": list(station.get("near") or []),
-                             "measured": cell is not None}
+                             "measured": cell is not None, "source": source}
     return {"frame_id": None,
             "room": {"id": rid, "name": room["name"], "w": w, "d": d, "shape": geometry["shape"],
                      "measured": geometry["measured"], "cells": cells},
@@ -307,6 +317,10 @@ def _mount(page: Page):
             if request.method == "PUT" and path.startswith("/api/chats/1/bodies/"):
                 name = path.split("/")[5]
                 station = {"at": payload.get("at"), "near": list(payload.get("near") or [])}
+                # The server keeps a `cell` only as two whole numbers, and
+                # only when one was sent (null or absent is no pin).
+                if isinstance(payload.get("cell"), list) and len(payload["cell"]) == 2:
+                    station["cell"] = [int(payload["cell"][0]), int(payload["cell"][1])]
                 for room in slices.values():
                     for o in room["occupants"]:
                         if o["name"] == name:
@@ -748,13 +762,22 @@ def test_dragging_an_anchor_to_another_wall_changes_its_bearing_and_offset(
     expect(modal.locator(".wb-card .wb-wall[data-wall=n] .wb-anchor[data-anchor=hearth]")).to_have_count(1)
     moved = modal.locator(".wb-room-map .wb-m-anchor[data-anchor=hearth] .wb-m-anchor-cell")
     expect(moved).to_have_attribute("y", "25")
-    # Dropped into the room, an anchor loses its wall and is placed by seed.
+    # Dropped into the room, an anchor loses its wall and its offset and is
+    # PINNED to the cell it landed on (the owner, 2026-09-04).
     modal.locator(".wb-room-map .wb-m-anchor[data-anchor=hearth]").drag_to(
         modal.locator(".wb-room-map .wb-m-cell").nth(2 * 6 + 2))
     expect(page.locator("#toasts")).to_contain_text("Saved.")
     patches = [w for w in writes if w[0] == "PATCH" and "anchors" in w[2]]
     assert patches[-1][2]["anchors"]["hearth"]["dir"] == ""
     assert patches[-1][2]["anchors"]["hearth"]["offset"] is None
+    assert patches[-1][2]["anchors"]["hearth"]["cell"] == [2, 2]
+    # And dragged back onto a wall, the pin is let go with the wall written.
+    modal.locator(".wb-room-map .wb-m-anchor[data-anchor=hearth]").drag_to(
+        modal.locator(".wb-room-map .wb-m-cell").nth(0 * 6 + 4))
+    expect(page.locator("#toasts")).to_contain_text("Saved.")
+    patches = [w for w in writes if w[0] == "PATCH" and "anchors" in w[2]]
+    sent = patches[-1][2]["anchors"]["hearth"]
+    assert sent["dir"] == "w" and sent["cell"] is None and sent["offset"] is not None
 
 
 def test_dragging_a_doorway_along_its_wall_sets_the_exits_offset(
@@ -779,19 +802,76 @@ def test_dragging_a_body_onto_an_anchor_sets_its_station(page: Page, ui_base_url
     page.locator("#b-world").click()
     modal = page.locator("#modal")
     svg = modal.locator(".wb-room-map")
-    # Alice stands at the oak table; drop her on the hearth.
+    # Alice stands at the oak table; drop her on the hearth: `at` for prose
+    # AND the cell she landed on (the hearth's cell (1, 2): one pace in from
+    # the west wall's middle, as the mock lays a standing thing).
     svg.locator(".wb-m-body[data-body=Alice]").drag_to(svg.locator(".wb-m-anchor[data-anchor=hearth]"))
     expect(page.locator("#toasts")).to_contain_text("Saved.")
     puts = [w for w in writes if w[0] == "PUT" and w[1] == "/api/chats/1/bodies/Alice/station"]
-    assert puts and puts[-1][2] == {"at": "hearth", "near": []}
+    assert puts and puts[-1][2] == {"at": "hearth", "near": [], "cell": [1, 2]}
     # The card's station row and the map agree with the server's answer.
     expect(modal.locator(".wb-card .wb-body[data-body=Alice] select")).to_have_value("hearth")
+    expect(modal.locator(".wb-card .wb-body[data-body=Alice] .wb-station-cell")).to_contain_text("(1, 2)")
     expect(svg.locator(".wb-m-body[data-body=Alice]")).to_have_count(1)
-    # Dropped on a plain cell, she is free in the room: `at` cleared.
+    expect(svg.locator(".wb-m-body[data-body=Alice]")).to_have_class(re.compile(r"\bpinned\b"))
+    # Dropped on a plain cell, she is pinned to it and `at` is cleared (the
+    # owner, 2026-09-04: "why are characters and personas locked to
+    # stations?").
     svg.locator(".wb-m-body[data-body=Alice]").drag_to(svg.locator(".wb-m-cell").nth(4 * 6 + 4))
     expect(page.locator("#toasts")).to_contain_text("Saved.")
     puts = [w for w in writes if w[0] == "PUT" and w[1] == "/api/chats/1/bodies/Alice/station"]
-    assert puts[-1][2] == {"at": None, "near": []}
+    assert puts[-1][2] == {"at": None, "near": [], "cell": [4, 4]}
+    dot = svg.locator(".wb-m-body[data-body=Alice] .wb-m-body-dot")
+    expect(dot).to_have_attribute("cx", "108")           # (4 + 0.5) * 24
+    expect(dot).to_have_attribute("cy", "108")
+    # She stays there after a reload of the browser: close it, open it again.
+    page.locator("#modalx").click()
+    page.locator("#b-world").click()
+    dot = page.locator("#modal .wb-room-map .wb-m-body[data-body=Alice] .wb-m-body-dot")
+    expect(dot).to_have_attribute("cx", "108")
+    expect(dot).to_have_attribute("cy", "108")
+    # The card shows the cell with a clear; clearing sends no cell.
+    page.locator("#modal .wb-card .wb-body[data-body=Alice] .wb-clear-cell").click()
+    expect(page.locator("#toasts")).to_contain_text("Saved.")
+    puts = [w for w in writes if w[0] == "PUT" and w[1] == "/api/chats/1/bodies/Alice/station"]
+    assert puts[-1][2] == {"at": None, "near": [], "cell": None}
+    expect(page.locator("#modal .wb-room-map .wb-m-body[data-body=Alice]")).to_have_class(
+        re.compile(r"\bunplaced\b"))
+
+
+def test_dragging_an_anchor_into_the_room_pins_it_to_that_cell(page: Page, ui_base_url: str) -> None:
+    """The owner, 2026-09-04: "I can only place anchors at stations when I
+    don't wall-attach them, which is quite limiting." The hearth, on the
+    west wall, dropped in the middle of the room, stays where it was
+    dropped after a reload, and the card shows the cell with a clear."""
+    _, writes = _open_story(page, ui_base_url)
+    page.locator("#b-world").click()
+    modal = page.locator("#modal")
+    svg = modal.locator(".wb-room-map")
+    # Cell (2, 4): inside the room, off every wall, not under the table
+    # (which the mock stands in the middle). Cells are listed x-major.
+    svg.locator(".wb-m-anchor[data-anchor=hearth]").drag_to(svg.locator(".wb-m-cell").nth(2 * 6 + 4))
+    expect(page.locator("#toasts")).to_contain_text("Saved.")
+    patches = [w for w in writes if w[0] == "PATCH" and "anchors" in w[2]]
+    sent = patches[-1][2]["anchors"]["hearth"]
+    assert sent == {"desc": "the hearth", "dir": "", "height": "waist", "offset": None, "cell": [2, 4]}
+    cell = modal.locator(".wb-room-map .wb-m-anchor[data-anchor=hearth] .wb-m-anchor-cell")
+    expect(cell).to_have_attribute("x", "49")            # 2 * 24 + 1
+    expect(cell).to_have_attribute("y", "97")            # 4 * 24 + 1
+    # Listed under "No wall" now, with the cell beside the wall select.
+    expect(modal.locator(".wb-card .wb-wall[data-wall=''] .wb-anchor[data-anchor=hearth]")).to_have_count(1)
+    expect(modal.locator(".wb-card .wb-anchor[data-anchor=hearth] .wb-anchor-cell")).to_contain_text("(2, 4)")
+    # Still there after a reload.
+    page.locator("#modalx").click()
+    page.locator("#b-world").click()
+    cell = page.locator("#modal .wb-room-map .wb-m-anchor[data-anchor=hearth] .wb-m-anchor-cell")
+    expect(cell).to_have_attribute("x", "49")
+    expect(cell).to_have_attribute("y", "97")
+    # Clearing the cell sends the anchor map with the hearth's cell null.
+    page.locator("#modal .wb-card .wb-anchor[data-anchor=hearth] .wb-clear-cell").click()
+    expect(page.locator("#toasts")).to_contain_text("Saved.")
+    patches = [w for w in writes if w[0] == "PATCH" and "anchors" in w[2]]
+    assert patches[-1][2]["anchors"]["hearth"]["cell"] is None
 
 
 def test_zooming_out_to_the_structure_map_and_into_another_room(

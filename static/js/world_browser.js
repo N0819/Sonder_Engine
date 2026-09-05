@@ -23,7 +23,8 @@
 //              many paces it has; description, bearing, and the three
 //              geometry words), the things standing here (kind, description,
 //              portable, light, lit, move), and each body's station (the
-//              anchor it stands at, who it stands beside). The layout lint's
+//              anchor it stands at, who it stands beside, the cell the map
+//              pinned it to, with a clear). The layout lint's
 //              rows for the room are shown beside the field each concerns,
 //              and the tree marks a room that carries one.
 //   Bodies  -- every body the scene knows -- cast, player, promoted presence
@@ -248,16 +249,31 @@ function wbIndexRows(index) {
   return out;
 }
 
+// A station `cell` as the map writes it -- `[x, y]` in the room's own grid --
+// or null: the one shape the engine keeps (`normalize_cell`).
+function wbCellOf(station) {
+  const c = station && station.cell;
+  return Array.isArray(c) && c.length === 2 && Number.isInteger(c[0]) && Number.isInteger(c[1]) ? c : null;
+}
+
+function wbCellText(cell) {
+  return el("span", { translate: "no", class: "wb-cell" }, `(${cell[0]}, ${cell[1]})`);
+}
+
 function wbStationText(station) {
-  // `scene.stations[name]` is `{at: anchor|null, near: [names]}`: what the
-  // body stands at, and who it stands beside.
+  // `scene.stations[name]` is `{at: anchor|null, near: [names], cell?: [x, y]}`:
+  // what the body stands at, who it stands beside, and -- since the map
+  // editor let a body be dropped on any cell (the owner, 2026-09-04) -- the
+  // cell it is pinned to, in the room's own grid.
   if (!station || typeof station !== "object") return null;
   const near = Array.isArray(station.near) ? station.near.filter(Boolean) : [];
-  if (!station.at && !near.length) return null;
+  const cell = wbCellOf(station);
+  if (!station.at && !near.length && !cell) return null;
   return el("span", { class: "small dim" }, " · ",
     station.at ? el("span", { translate: "no" }, txt(station.at)) : null,
     near.length ? [station.at ? ", " : "", "Near", " ",
-                   el("span", { translate: "no" }, txt(near.join(", ")))] : null);
+                   el("span", { translate: "no" }, txt(near.join(", ")))] : null,
+    cell ? [station.at || near.length ? ", " : "", "Cell", " ", wbCellText(cell)] : null);
 }
 
 function wbPoseText(pose) {
@@ -590,6 +606,14 @@ function wbAnchors(slice, ctx) {
     wbText(a.desc || "", v => update(aid, { desc: v }), { placeholder: "Description" }),
     wbSelect(vocab.dirs, a.dir || "", { blank: "—", title: "Bearing — the wall this anchor stands on; change it to move the anchor",
                                         onchange: v => update(aid, { dir: v }) }),
+    // The origin cell the map pinned it to (its west-most, north-most cell;
+    // the footprint runs east and south from it). Beside the wall, because
+    // with a cell the wall is prose -- "against the north wall" -- and moves
+    // nothing; clearing the cell hands the anchor back to its wall or seed.
+    wbCellOf(a) ? el("span", { class: "small dim wb-anchor-cell" }, "Cell", " ", wbCellText(wbCellOf(a)),
+      el("button", { class: "small wb-remove wb-clear-cell",
+                     title: "Clear the cell — the anchor is placed by its wall again, or by seed",
+                     onclick: () => update(aid, { cell: null }) }, "✕")) : null,
     wbSelect(vocab.heights, a.height || "", { blank: "—", title: "Height",
                                               onchange: v => update(aid, { height: v }) }),
     wbSelect(vocab.footprints, a.footprint || "", { blank: "—", title: "Footprint",
@@ -682,6 +706,7 @@ function wbOccupant(o, slice, ctx) {
     return true;
   });
   const near = new Set(Array.isArray(station.near) ? station.near : []);
+  const cell = wbCellOf(station);
   const garments = o.attire && Array.isArray(o.attire.wearing) ? o.attire.wearing.length : null;
   return el("div", { class: "wb-body", "data-body": o.name },
     el("div", { class: "row wb-body-head" },
@@ -690,20 +715,28 @@ function wbOccupant(o, slice, ctx) {
       el("button", { class: "wb-link", onclick: () => ctx.showBody(o.name) }, "Attire")),
     slice.status === "live" ? el("div", { class: "wb-exit" },
       el("span", { class: "small dim" }, "At"),
+      // Choosing an anchor by name is "stand at it": the anchor places the
+      // body, so a pinned cell is let go. Dropping the body on the map
+      // writes both -- `at` for prose, `cell` for geometry.
       wbSelect(stationable.map(a => a.id), station.at || "",
         { blank: "—", title: "The anchor this body stands at",
           labels: id => {
             const a = stationable.find(x => x.id === id);
             return a && a.desc && a.desc !== id ? `${a.desc} (${id})` : id;
           },
-          onchange: v => put({ at: v || null, near: [...near] }) }),
+          onchange: v => put({ at: v || null, near: [...near], cell: null }) }),
+      cell ? el("span", { class: "small dim wb-station-cell" }, "Cell", " ", wbCellText(cell),
+        el("button", { class: "small wb-remove wb-clear-cell",
+                       title: "Clear the cell — the body stands at its anchor, or somewhere in the room",
+                       onclick: () => put({ at: station.at || null, near: [...near], cell: null }) },
+          "✕")) : null,
       others.length ? el("span", { class: "small dim" }, "Near") : null,
       ...others.map(name => el("label", { class: "wb-check" },
         el("input", { type: "checkbox", ...(near.has(name) ? { checked: true } : {}),
                       onchange: e => {
                         const next = new Set(near);
                         if (e.target.checked) next.add(name); else next.delete(name);
-                        return put({ at: station.at || null, near: [...next] });
+                        return put({ at: station.at || null, near: [...next], cell });
                       } }),
         el("span", { translate: "no" }, txt(name))))) : null);
 }
@@ -1043,6 +1076,24 @@ function wbRenderBodies(host, ctx) {
               txt(body.room_name || body.room))
           : el("span", { class: "small dim" }, "Offscreen"),
         wbStationText(body.station),
+        // The pin is let go here too: the Bodies tab is where a host reads
+        // a body's whole record, and the map's cell is part of it.
+        wbCellOf(body.station) && body.room
+          ? el("button", { class: "small wb-remove wb-clear-cell",
+                           title: "Clear the cell — the body stands at its anchor, or somewhere in the room",
+                           onclick: async e => {
+                             e.preventDefault();
+                             await wbWrite(ctx, async () => {
+                               await api("PUT",
+                                 `/api/chats/${ctx.chatId}/bodies/${encodeURIComponent(body.name)}/station${frameQuery()}`,
+                                 { at: body.station.at || null,
+                                   near: Array.isArray(body.station.near) ? body.station.near : [],
+                                   cell: null });
+                               await ctx.refresh();
+                               return true;
+                             });
+                           } }, "✕")
+          : null,
         body.pose && wbPoseText(body.pose)
           ? el("span", { class: "small dim", translate: "no" }, txt(" · " + wbPoseText(body.pose)))
           : null,
@@ -1127,13 +1178,15 @@ function wbRenderRaw(host, chatId, kind, cache) {
 // Drag places: an anchor dragged to a wall gets that wall's bearing and an
 // `offset` along it (a fraction from the wall's start -- west for a north or
 // south wall, north for an east or west one; the engine's
-// `normalize_offset`); dragged into the room it loses its bearing and is
-// placed by seed again. A doorway dragged along its wall sets the exit's
-// `offset`, on both rooms' edges, since a doorway is one object. A body
-// dropped on a cell is re-stationed: at the anchor whose cell it is, or free
-// in the room; dropped in a neighbour's cells it MOVES there (the cast
-// editor's position route, then its station). An authored fact, like every
-// edit here: no Director call, no memory of a step.
+// `normalize_offset`); dragged onto any other cell it is PINNED there
+// (`cell`, its origin cell in the room's own grid; the wall and the offset
+// cleared -- the owner, 2026-09-04). A doorway dragged along its wall sets
+// the exit's `offset`, on both rooms' edges, since a doorway is one object.
+// A body dropped on ANY cell is pinned to it (`cell`), and stationed `at`
+// the anchor whose cell it is when it is one, for prose; dropped in a
+// neighbour's cells it MOVES there (the cast editor's position route, then
+// its station with the cell in the neighbour's grid). An authored fact, like
+// every edit here: no Director call, no memory of a step.
 //
 // Overlays: the grid route's `overlays` slot (`{name: {"x,y": word}}`) is
 // painted as a tint per cell with a legend whenever a sibling fills it --
@@ -1314,12 +1367,13 @@ function wbRenderRoomMap(host, view, ctx, { overlay = null } = {}) {
   // with punctuation only, so the catalog carries the words and not the
   // joins.
   const openHint = t("open this room");
-  const anchorHint = t("click to edit, drag to a wall to move");
+  const anchorHint = t("click to edit, drag onto a wall or any cell to move");
   const doorwayTo = t("Doorway to");
   const doorHint = t("click for the exit, drag along the wall to move it");
   const thingHint = t("click to edit");
-  const bodyHint = t("click for the station, drag onto a cell to place");
+  const bodyHint = t("click for the station, drag onto any cell to place");
   const atWord = t("at");
+  const pinnedWord = t("pinned to this cell");
 
   // -- the neighbours, faintly, where the field lays them ------------------
   for (const n of far) {
@@ -1468,10 +1522,14 @@ function wbRenderRoomMap(host, view, ctx, { overlay = null } = {}) {
   for (const [name, b] of bodies) {
     const cell = b.cell || [lane++, laneY];
     const cx = (cell[0] + 0.5) * S, cy = (cell[1] + 0.5) * S;
+    // `source` says what placed the body: its own pinned cell, its
+    // anchor, or nothing -- the server's word, never re-derived here.
     const where = b.cell
-      ? (b.at ? `${atWord} ${b.at}` : t("free in the room"))
+      ? [b.at ? `${atWord} ${b.at}` : t("free in the room"),
+         b.source === "cell" ? pinnedWord : null].filter(Boolean).join(", ")
       : t("somewhere in the room — no station");
-    const g = wbSvg("g", { class: "wb-m-body " + b.kind + (b.cell ? "" : " unplaced"),
+    const g = wbSvg("g", { class: "wb-m-body " + b.kind + (b.cell ? "" : " unplaced")
+                                  + (b.source === "cell" ? " pinned" : ""),
                            "data-body": name, tabindex: "0", role: "button" },
       wbSvg("title", {}, `${name} — ${where} — ${bodyHint}`),
       wbSvg("circle", { cx, cy, r: S * 0.34, class: "wb-m-body-dot" }));
@@ -1557,13 +1615,18 @@ function wbRenderRoomMap(host, view, ctx, { overlay = null } = {}) {
     if (!inRoom(c)) return toast(t("Drop the anchor on a wall of this room, or inside it."), "warn");
     const anchors = {};
     for (const [id, rec] of Object.entries(slice.record.anchors)) anchors[id] = { ...rec };
+    // A wall cell writes the wall and a place along it (`dir` + `offset`)
+    // and lets the pin go; any other cell PINS the anchor there (`cell`,
+    // its origin -- the owner, 2026-09-04: "I can only place anchors at
+    // stations when I don't wall-attach them") and clears the wall and the
+    // offset. The two placements are exclusive on the server too.
     const wall = wallOf(c, p);
     if (wall) {
       const length = wbFootprintLength(a.footprint, wall.len);
       const offset = Math.min(1, Math.max(0, wall.idx / Math.max(1, wall.len - length)));
-      anchors[aid] = { ...anchors[aid], dir: wall.wall, offset };
+      anchors[aid] = { ...anchors[aid], dir: wall.wall, offset, cell: null };
     } else {
-      anchors[aid] = { ...anchors[aid], dir: "", offset: null };
+      anchors[aid] = { ...anchors[aid], dir: "", offset: null, cell: c };
     }
     await ctx.patchRoom({ anchors });
   }
@@ -1588,19 +1651,24 @@ function wbRenderRoomMap(host, view, ctx, { overlay = null } = {}) {
       ...(e.to === d.to ? { offset } : {}) })) });
   }
 
+  // A body dropped on ANY cell of its room is pinned to it (`cell`, in the
+  // room's own grid -- the owner, 2026-09-04: "why are characters and
+  // personas locked to stations?"); when the cell is an anchor's, `at` is
+  // written too, for prose, else cleared. Dropped in a neighbour's cells it
+  // moves rooms and is pinned to the cell in the NEIGHBOUR's coordinates.
   async function dropBody(name, b, p) {
     const c = cellOf(p);
     if (inRoom(c)) {
       const anchor = Object.entries(view.anchors || {}).find(([, a]) => a.cells.some(k => same(k, c)));
       const door = (view.doorways || []).find(d => d.cells.some(k => same(k, c)));
-      await ctx.putStation(name, { at: anchor ? anchor[0] : door ? door.id : null, near: b.near || [] });
+      await ctx.putStation(name, { at: anchor ? anchor[0] : door ? door.id : null, near: b.near || [], cell: c });
       return;
     }
     const n = far.find(nb => nb.cells.some(k => same([k[0] + nb.offset[0], k[1] + nb.offset[1]], c)));
     if (!n) return toast(t("Drop the body on a cell of this room, or of a neighbour to move it there."), "warn", 6000);
     const anchor = Object.entries(n.anchors || {}).find(([, a]) =>
       a.cells.some(k => same([k[0] + n.offset[0], k[1] + n.offset[1]], c)));
-    await ctx.moveBody(name, n, anchor ? anchor[0] : null);
+    await ctx.moveBody(name, n, anchor ? anchor[0] : null, [c[0] - n.offset[0], c[1] - n.offset[1]]);
   }
 
   host.append(svg);
@@ -1854,7 +1922,7 @@ async function openWorldBrowser(opts = {}) {
       // (only the registered cast has a position route -- the player's
       // place is the story's business, as that editor also holds), then its
       // station there, so nothing stale from the old room survives.
-      moveBody: async (name, neighbour, at) => {
+      moveBody: async (name, neighbour, at, cell = null) => {
         const who = (state.positions?.characters || []).find(c => c.name === name);
         if (!who) {
           toast(t("Only a registered cast member can be moved between rooms here; the player's place is the story's business."), "warn", 7000);
@@ -1863,9 +1931,11 @@ async function openWorldBrowser(opts = {}) {
         const done = await wbWrite(ctx, async () => {
           await api("PUT", `/api/chats/${chatId}/characters/${who.id}/position${frameQuery()}`,
             { room: neighbour.id });
+          // `cell` is in the NEIGHBOUR's grid: the position route dropped
+          // the old room's pin, and this writes the new one.
           await api("PUT",
             `/api/chats/${chatId}/bodies/${encodeURIComponent(name)}/station${frameQuery()}`,
-            { at, near: [] });
+            { at, near: [], cell });
           return true;
         }, { quiet: true });
         if (done) {

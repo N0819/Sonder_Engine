@@ -58,12 +58,48 @@ And since 2026-09-04 (the World Browser's map editor, `DESIGN_ROOM_FIDELITY.md`
                                             west wall (`RoomGrid.rim`'s order);
                                             absent, the seeded place below
 
+And since later the same day (the owner, trying the map: "I can only place
+anchors at stations when I don't wall-attach them"), on an anchor:
+
+    cell        [x, y]                      the anchor's ORIGIN cell in the
+                                            room's own grid -- its west-most,
+                                            north-most cell, the footprint
+                                            laid east (and, for `large`,
+                                            south) from it, clipped to the
+                                            room; `dir` alongside is the wall
+                                            it is against, for prose, and
+                                            moves nothing; exclusive with
+                                            `offset` (a cell outranks it, and
+                                            the route clears one when the
+                                            other is written); absent, the
+                                            offset or the seeded place
+
 On each station, beside `at` and `near`:
 
     cover       true | <anchor_id>              the body is on the FAR side of
                                                 its anchor -- between a counter
                                                 and the wall, on the blind side
                                                 of a screen
+    cell        [x, y]                          the cell the body stands on, in
+                                                the room's own grid (the map
+                                                editor's pin, 2026-09-04: "why
+                                                are characters and personas
+                                                locked to stations?"); with
+                                                `at`, the anchor is prose and
+                                                the cell is geometry; absent,
+                                                the derivation from `at`/`near`
+
+Both `cell`s are read by `normalize_cell` -- two whole numbers, nothing else
+-- and a cell the room's extent or shape has since moved out from under
+snaps to the nearest cell it still holds (`RoomGrid.nearest`, ties to the
+smaller coordinates). Neither is ever asked of the Director:
+`llm.schemas._coerce_station_table` keeps only `at`/`near`, and an anchor
+`cell` a re-echo carries is kept by `_merge_anchor_fields` as the host wrote
+it or dropped by `normalize_scene_anchor_cells` as junk. A body's cell is
+dropped when its ROOM changes (`invalidate_moved_body_cells`, the pose-detail
+precedent); an anchor's cell rides with its room. Archive, checkpoint and
+branch carry the scene blob whole, so nothing else moves.
+`DESIGN_ROOM_FIDELITY.md` §10 has the map's side.
 
 Three closed sets the ENGINE owns and reads (`world/spatial_fov.FOOTPRINTS`,
 `HEIGHTS`, `OPACITIES`): a schema, not a vocabulary table, which is the
@@ -136,10 +172,10 @@ Every answer carries a `basis`:
 
 The layer may only subtract on evidence it has:
 
-  * body occlusion needs BOTH bodies at a measured station (`at` or `near`),
-    the same bar `measured_proximity_rel` sets for proximity -- a body with
-    no station is somewhere in the room, and "somewhere" is not behind the
-    counter;
+  * body occlusion needs BOTH bodies at a measured station (`at`, `near`,
+    or -- since the map editor's pin -- a `cell`), the same bar
+    `measured_proximity_rel` sets for proximity -- a body with no station is
+    somewhere in the room, and "somewhere" is not behind the counter;
   * the cone needs a facing, and never subtracts what is within reach;
   * feature occlusion needs the observer at a measured station;
   * a room whose anchors carry no geometry field composes BYTE-IDENTICALLY
