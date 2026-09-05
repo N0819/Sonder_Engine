@@ -291,21 +291,40 @@ def _t_inspect_rooms(cid, frame_id, *, room_ids=None):
             "rooms": slices(near)}
 
 
-def _t_inspect_route(cid, frame_id, *, from_room, to_room):
-    from world.spatial import passable_neighbors
+def _route_graph(cid, scene, contained):
+    """The rooms a story can WALK BETWEEN, as an undirected map.
+
+    A CLOSED DOOR IS NOT A WALL. This asks where the story can reach, not
+    where a body may step this beat, and the engine already owns the set for
+    that question: `_ROUTE_MEMORY_BARRIERS` -- the passable set plus
+    `closed_door` -- with the comment that says exactly why ("a map that
+    forgot every closed door would forget most of a house"). Read over
+    `passable_neighbors` instead, `inspect_route` called three of six live
+    rooms of a house unreachable and the Room warned on its own good package
+    (PX15, masque run, 2026-09-05).
+
+    The plan's topology counts as walkable too: a planned stub is a room the
+    Director furnishes on entry. By ID: `planned_context` renders edges by
+    NAME for a reader, and a walk over names reached nothing planned.
+    """
+    from world.spatial import _ROUTE_MEMORY_BARRIERS, neighbor_map
     from world.structure import planned_topology
-    scene = _scene(cid)
-    contained = _containment(scene)
+
     graph = {str(k): {str(v) for v in vs if str(v) not in contained}
-             for k, vs in passable_neighbors(scene).items()
+             for k, vs in neighbor_map(scene, _ROUTE_MEMORY_BARRIERS,
+                                       directional=True).items()
              if str(k) not in contained}
-    # The plan's topology counts as walkable: a planned stub is a room the
-    # Director furnishes on entry. By ID: `planned_context` renders edges by
-    # NAME for a reader, and a walk over names reached nothing planned.
     for rid, others in planned_topology(cid).items():
         for other in others:
             graph.setdefault(rid, set()).add(other)
             graph.setdefault(other, set()).add(rid)
+    return graph
+
+
+def _t_inspect_route(cid, frame_id, *, from_room, to_room):
+    scene = _scene(cid)
+    contained = _containment(scene)
+    graph = _route_graph(cid, scene, contained)
     origin, goal = str(from_room), str(to_room)
     if goal in contained:
         raise ToolError("%r is the inside of %s, not a place a route "
@@ -775,7 +794,9 @@ def _t_inspect_contradictions(cid, frame_id):
     warnings, structure warnings, and dangling references -- a planned
     exit to nowhere, a plan placed in no room, a bill in a room that is
     gone, a need for a room that is gone, a package participant nobody
-    holds, a clock past due on an active package."""
+    holds, a clock past due on an active package, two rooms of the registry
+    that answer to one spelling, and a planted structure no live room can be
+    walked to."""
     from story.artifacts import POSTED, standing_artifacts
     from story.plot_packages import packages
     from world.planned_entities import planned_entities
@@ -795,7 +816,7 @@ def _t_inspect_contradictions(cid, frame_id):
     # placed cells; never prose.
     try:
         from world.spatial import room_layout_lint
-        out["layout"] = room_layout_lint(scene)
+        out["layout"] = _one_row_per_contradiction(room_layout_lint(scene))
     except Exception as exc:
         out["layout"] = [{"kind": "layout_unreadable", "error": str(exc)}]
     try:
@@ -916,6 +937,8 @@ def _t_inspect_contradictions(cid, frame_id):
             room_pieces(cid, scene, registry_room_regions(cid)))
     except Exception as exc:  # diagnostics only
         out["dangling"].append({"kind": "regions_unreadable", "error": str(exc)})
+    out["dangling"].extend(_rooms_named_alike(cid))
+    out["dangling"].extend(_structures_out_of_reach(cid, scene, contained))
     reserved = {r["name"].casefold() for r in
                 _t_inspect_reserved_identities(cid, frame_id)["characters"]
                 if r.get("name")}
@@ -927,6 +950,110 @@ def _t_inspect_contradictions(cid, frame_id):
             if name and name.casefold() not in reserved:
                 out["dangling"].append({"kind": "participant_nobody_holds",
                                         "package": pkg["uid"], "name": name})
+    return out
+
+
+#: A layout row about a PAIR of rooms says one thing about both of them, and
+#: the lint walks the pair from each end -- so `rooms_overlap_when_placed`
+#: arrived twice, once per ordering, and the Room read one contradiction as
+#: two (PS6, solitude run turn 18, 2026-09-05). The row is keyed by the
+#: unordered pair here rather than in the lint, because the tool is where a
+#: reader asks "how many things are wrong".
+_PAIRED_LAYOUT_KINDS = ("rooms_overlap_when_placed",)
+
+
+def _one_row_per_contradiction(rows):
+    """Layout rows with each PAIRED contradiction reported once."""
+    seen, out = set(), []
+    for row in rows or ():
+        if not isinstance(row, dict) or row.get("kind") not in _PAIRED_LAYOUT_KINDS:
+            out.append(row)
+            continue
+        key = (row["kind"], frozenset(str(r) for r in row.get("rooms") or ()),
+               str(row.get("via") or ""))
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(row)
+    return out
+
+
+def _rooms_named_alike(cid):
+    """Two rooms of the registry that answer to ONE spelling.
+
+    THE REGISTRY IS THE LEDGER OF ROOM IDENTITY, so two rows in it under one
+    spelling are two rooms the world says are one place -- and neither the
+    story nor a reader can say which is meant. The comparison is over the
+    spellings the registry ITSELF keeps (`normalize_room_id` of the uid, the
+    name and every alias), not over prose: `planned_room_spellings` already
+    treats a spelling two rooms share as naming neither, and this is the same
+    fact reported instead of swallowed.
+
+    The live case: `generate_lived_location` minted
+    `vaunts_yard_waterfront_2_yard` beside the live `yard` it had been told
+    to build onto, and eleven siblings with it; `inspect_contradictions`
+    answered `structure: [], dangling: [], layout: []` while the yard stood
+    empty for half the story (PM10/PM11, multitude run turns 8-9,
+    2026-09-05).
+    """
+    from core.db import q
+    from world.spatial import normalize_room_id
+
+    by_spelling = {}
+    for row in q("SELECT room_uid,name,aliases,payload FROM room_registry "
+                 "WHERE chat_id=? AND retired_turn_id IS NULL", (cid,)):
+        uid = str(row["room_uid"])
+        try:
+            aliases = json.loads(row["aliases"] or "[]")
+        except (TypeError, ValueError, json.JSONDecodeError):
+            aliases = []
+        for spelling in {normalize_room_id(uid),
+                         normalize_room_id(str(row["name"] or "")),
+                         *(normalize_room_id(str(a or "")) for a in aliases or ())}:
+            if spelling:
+                by_spelling.setdefault(spelling, set()).add(uid)
+    return [{"kind": "rooms_named_alike", "spelling": spelling,
+             "rooms": sorted(uids)}
+            for spelling, uids in sorted(by_spelling.items())
+            if len(uids) > 1]
+
+
+def _structures_out_of_reach(cid, scene, contained):
+    """A planted structure no live room can be walked to.
+
+    A structure is a region of the map; a region no route joins to the rooms
+    the story is standing in is a place nothing in the story can ever reach.
+    A reachability fact over the same graph `inspect_route` walks, never a
+    name comparison -- and it is what a host would have used to find the
+    parallel town `generate_lived_location` planted beside the live yard
+    (PM10/PM11, multitude run, 2026-09-05). A story whose scene holds no live
+    room yet (the plan is all there is) reports nothing: there is nothing to
+    be out of reach OF.
+    """
+    from core.db import wget_for_frame
+    from world.structure import (STRUCTURES_KEY, normalize_structures,
+                                 skeleton_rooms)
+
+    live = {str(rid) for rid, room in (scene.get("rooms") or {}).items()
+            if isinstance(room, dict) and not room.get("planned")
+            and str(rid) not in contained}
+    if not live:
+        return []
+    graph = _route_graph(cid, scene, contained)
+    seen, stack = set(live), list(live)
+    while stack:
+        for other in graph.get(stack.pop(), ()):
+            if other not in seen:
+                seen.add(other)
+                stack.append(other)
+    out = []
+    stored = normalize_structures(
+        wget_for_frame(cid, STRUCTURES_KEY, None, {}) or {})
+    for key in sorted(stored["items"]):
+        rooms = set(skeleton_rooms(cid, key).get("rooms") or {})
+        if rooms and not (rooms & seen):
+            out.append({"kind": "structure_out_of_reach", "structure": key,
+                        "rooms": sorted(rooms)[:LIST_CAP_ROUTE]})
     return out
 
 
@@ -1277,7 +1404,7 @@ TOOLS = [
      "args": _schema({"room_ids": _SL}),
      "handler": _t_inspect_rooms},
     {"name": "inspect_route",
-     "description": "Whether one room can be walked to from another over passable edges and the plan's topology, and the shortest path if so. When unreachable, lists what IS reachable from the start.",
+     "description": "Whether one room can be walked to from another over the edges a body could cross -- a closed door is a hop, not a wall -- and the plan's topology, and the shortest path if so. When unreachable, lists what IS reachable from the start.",
      "args": _schema({"from_room": _S, "to_room": _S}, ["from_room", "to_room"]),
      "handler": _t_inspect_route},
     {"name": "inspect_reserved_identities",
@@ -1304,7 +1431,7 @@ TOOLS = [
      "description": "The open planning needs: what a beat reached for that no plan holds -- an unplanned destination, a query nobody answered, a person the Director rendered with no plan behind them. Each carries the surface the beat committed, which a plan may add to and never contradict.",
      "args": _schema({"kind": _S}), "handler": _t_inspect_needs},
     {"name": "inspect_contradictions",
-     "description": "What the world holds that does not agree with itself: charter registry warnings, structure warnings, and dangling references (a planned exit to nowhere, a plan in no room, a bill in a vanished room, a need for a vanished room, a package participant nobody holds, a region whose live rooms are in pieces no path joins -- a possible duplicate room), and `layout`: where the rooms' geometry cannot all be true (two sides of one doorway naming bearings that are not opposites, rooms that land on top of each other when placed by their bearings, a wall whose anchors need more paces than its extent holds, two doorways placed on one cell, a shape that contradicts itself).",
+     "description": "What the world holds that does not agree with itself: charter registry warnings, structure warnings, and dangling references (a planned exit to nowhere, a plan in no room, a bill in a vanished room, a need for a vanished room, a package participant nobody holds, a region whose live rooms are in pieces no path joins -- a possible duplicate room, two rooms of the registry that answer to one spelling, a planted structure no live room can be walked to), and `layout`: where the rooms' geometry cannot all be true (two sides of one doorway naming bearings that are not opposites, rooms that land on top of each other when placed by their bearings, a wall whose anchors need more paces than its extent holds, two doorways placed on one cell, a shape that contradicts itself).",
      "args": _schema({}), "handler": _t_inspect_contradictions},
     {"name": "inspect_minds",
      "description": "What a character wants and believes, so the world you place can invite it; you cannot place a want or a belief. For each attached cast member (or the one named): the drive that survives every goal (its essence, how it shows, what it will not do; whether a rupture shifted it and what it was before), how strained that drive is and whether a rupture window is open, the resolved stress, the current beat goal, the held projects (aim, criterion, probation, how long unserved) and the ones given up with the stated reason, the standing and formed intentions with their progress, the beliefs by credence, and the leading claim this mind holds about each other person. Author knowledge, read the way the pipeline drawer reads it: nothing here reaches a mind by being read, and nothing you place may name what a character will conclude from it.",
@@ -1324,7 +1451,7 @@ TOOLS = [
                       "scope": _O, "authority": _O}, ["title"]),
      "handler": _t_new_package, "takes_actor": True},
     {"name": "edit_package",
-     "description": "Change a draft's fields: title, premise, truths, questions, participants, evidence, pressures, clocks, opportunities, constraints, planner_requests, scope, authority, spoiler_policy. Evidence needs an origin, a location, the truth ids it bears_on and an admission_path. A published package accepts only a superseding truth ({supersedes: <truth id>, text}) with a reason.",
+     "description": "Change a draft's fields: title, premise, truths, questions, participants, evidence, pressures, clocks, opportunities, constraints, planner_requests, scope, authority, spoiler_policy. A truth is a fact about the WORLD; give it known_by ([the names of the minds this fact is already inside, or `player` for the player's own character]) when somebody already holds it, and leave known_by off when nobody does. Everyone else reaches it through evidence, which needs an origin, a location, the truth ids it bears_on and an admission_path. A published package accepts only a superseding truth ({supersedes: <truth id>, text}) with a reason.",
      "args": _schema({"uid": _S, "fields": _O, "reason": _S}, ["uid", "fields"]),
      "handler": _t_edit_package},
     {"name": "draft_operation",

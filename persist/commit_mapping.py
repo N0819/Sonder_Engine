@@ -350,9 +350,18 @@ def _reads_as_prose(subject):
 
 
 def _answering_bodies(cid, ctx, scene, rooms):
-    """What the beat was already holding, as (words, room) pairs: every thing
-    the scene places, and every body standing in the rooms the needs name --
-    the same `present_figures` rows the Director's payload carried."""
+    """What the world was already holding, as (words, room, how) triples:
+    every thing the scene places, every AUTHORED PLAN the world holds, and
+    every body standing in the rooms the needs name -- the same
+    `present_figures` rows the Director's payload carried.
+
+    A PUBLISHED PLAN IS A PLAN. The Writers' Room published a `plan_entity`
+    for Jem Clough, and four beats later the commit filed *"the beat reached
+    for thing 'Jem Clough' no plan holds"* -- for a person whose plan the
+    world was holding, in the ledger this reads from (PQ13, quiet run,
+    2026-09-05). A need is what NOBODY has planned; asking the Room to author
+    a second Jem Clough is the cost of not looking.
+    """
     out = []
     for eid, ent in (scene.get("entities") or {}).items():
         if not isinstance(ent, dict):
@@ -360,7 +369,20 @@ def _answering_bodies(cid, ctx, scene, rooms):
         labels = " ".join(str(x or "") for x in
                           (eid, ent.get("name"), *(ent.get("aliases") or [])))
         out.append((set(_need_words(labels)),
-                    str(_room_of(scene, str(eid)) or "")))
+                    str(_room_of(scene, str(eid)) or ""), "the beat"))
+    try:
+        from world.planned_entities import planned_entities
+        for plan in planned_entities(
+                cid, getattr(getattr(ctx, "turn", None), "frame_id", None)
+        ).values():
+            labels = " ".join(str(x or "") for x in
+                              (plan.get("name"), plan.get("role"),
+                               *(plan.get("aliases") or [])))
+            out.append((set(_need_words(labels)),
+                        str((plan.get("brief") or {}).get("where") or ""),
+                        "a published plan"))
+    except Exception:
+        pass
     try:
         from agents.common import presence_figures_for_room
     except Exception:
@@ -376,7 +398,7 @@ def _answering_bodies(cid, ctx, scene, rooms):
         for row in figures or []:
             words = _need_words(" ".join(str(row.get(f) or "") for f in
                                          ("name", "role", "appearance")))
-            out.append((set(words), str(row.get("room") or room)))
+            out.append((set(words), str(row.get("room") or room), "the beat"))
     return out
 
 
@@ -445,15 +467,17 @@ def _drop_needs_the_beat_answers(ctx, needs):
         want_room = str((need.get("surface") or {}).get("room") or "")
         if held is None:
             held = _answering_bodies(cid, ctx, scene, rooms)
-        answer = ""
-        for cand_words, cand_room in held:
+        answer = held_by = ""
+        for cand_words, cand_room, how in held:
             shared = words & cand_words
             if len(shared) >= 2 or (
                     head in cand_words and want_room and cand_room == want_room):
                 answer = " ".join(sorted(shared)) or head
+                held_by = how
                 break
         if answer:
-            dropped.append((need, "the beat was already holding it (%s)" % answer))
+            dropped.append((need, "%s was already holding it (%s)"
+                            % (held_by, answer)))
         else:
             kept.append(need)
     for need, why in dropped:

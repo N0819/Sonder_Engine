@@ -290,10 +290,30 @@ def mint_frontier(structure, from_uid, axis, seed, existing=()):
         # A second segment of the same axis is the same name with an
         # ordinal, so the Director never sees two rooms spelled alike.
         name = f"{name} {suffix - 1}"
+    # A PURPOSE THAT IS THE NAME SAYS NOTHING, AND READS AS AUTHORED. A
+    # structure with no grammar falls back to a rule built out of the axis
+    # label itself, so the purpose comes back as the room's own name: the
+    # Room's `frontier: ["Lake Sarrat Dry Bed"]` minted a planned room whose
+    # entire description was "Lake Sarrat Dry Bed" (PS8, solitude run,
+    # 2026-09-05). An ABSENT purpose is honest -- the Director furnishes the
+    # room on entry, and `is_planned_stub` already reads a stub with no prose
+    # as a stub -- where a purpose equal to the name is a description nobody
+    # wrote standing in the way of the one somebody would.
+    purpose = str(purposes[rng.randrange(len(purposes))] or "")
+    if normalize_room_id(purpose) in (normalize_room_id(name),
+                                      normalize_room_id(axis_label)):
+        purpose = ""
     return uid, {
-        "name": name, "purpose": purposes[rng.randrange(len(purposes))],
+        "name": name, "purpose": purpose,
         "structure": structure["key"], "access": "",
-        "adjacent": [{"to": str(from_uid), "barrier": "open_door"}],
+        # AN OPENING, NOT A DOOR. A frontier label answers "what lies that
+        # way" and says nothing about what stands between, so minting
+        # `open_door` invented a door -- outdoors, a door between a wharf
+        # terrace and a dry lake bed (PS8). `open` asserts strictly less and
+        # is passable, visible, audible and scent-carrying everywhere
+        # `open_door` is; the Director may still declare a door when it
+        # furnishes the room.
+        "adjacent": [{"to": str(from_uid), "barrier": "open"}],
         "frontier": [] if frontier_refusal(axis) else [str(axis)],
         "provisional": True,
         "frontier_of": {"room": str(from_uid), "axis": str(axis)},

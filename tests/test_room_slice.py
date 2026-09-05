@@ -102,17 +102,22 @@ class TestTheIndex:
                                        "status": "planned", "holder": None,
                                        "region": "annex", "hops": 2}
         assert by_id["annex_store"]["hops"] == 3
-        # A locked door is not walked: the vault is unreachable, listed
-        # after every reachable room, and before nothing but the retired.
-        assert by_id["vault"]["hops"] is None
+        # A CLOSED DOOR IS A HOP, NOT A WALL. `normalize_barrier` folds a
+        # locked door onto `closed_door`, and a hop count answers what the
+        # story can REACH rather than what a body may step through this beat,
+        # so the vault behind the shaft's locked door is two hops out.
+        # Counted over `passable_neighbors`, a house of shut doors read as a
+        # house of unreachable rooms and the Room's own map put most of it
+        # beyond the frontier (PX15, masque run, 2026-09-05).
+        assert by_id["vault"]["hops"] == 2
         assert by_id["old_boiler"] == {"id": "old_boiler", "name": "Old Boiler Room",
                                        "status": "retired", "holder": None,
                                        "region": None, "hops": None}
         # Grouped by region: the shelter's rooms (no region) hold the cast and
-        # come first, their unreachable and retired rows last among them; the
-        # annex is a region of its own and follows as a block.
+        # come first, the retired row last among them; the annex is a region
+        # of its own and follows as a block.
         assert [r["id"] for r in rows] == ["corridor", "lift_car", "lobby", "shaft",
-                                           "old_boiler", "vault",
+                                           "vault", "old_boiler",
                                            "annex_hall", "annex_store"]
         hops = [r["hops"] for r in rows if r["hops"] is not None]
         assert hops == sorted(hops)
@@ -231,10 +236,10 @@ class TestInspectRooms:
         assert set(out) == {"location", "index", "rooms"}
         assert out["index"] == room_index(cid, None)
         # Within FRONTIER_DEPTH_HOPS of the cast, planned stubs included;
-        # the store at three hops, the vault and the retired room are
-        # index-only.
+        # the store at three hops and the retired room are index-only. The
+        # vault is two hops through a locked door, which is a door (PX15).
         assert {r["id"] for r in out["rooms"]} == {
-            "corridor", "lift_car", "shaft", "lobby", "annex_hall"}
+            "corridor", "lift_car", "shaft", "lobby", "annex_hall", "vault"}
         assert all(r["hops"] is not None and r["hops"] <= rf.FRONTIER_DEPTH_HOPS
                    for r in out["index"] if r["id"] in {s["id"] for s in out["rooms"]})
         # The tool carries the ledger's summary, not the region table.
@@ -339,7 +344,10 @@ class TestTheFrontierAgrees:
         reachable, stubs = rf.rooms_ahead(cid, scene, "shaft")
         assert "lift_car" not in reachable
         assert reachable == ["corridor", "lobby"] and stubs == []
-        # One hop deeper and the plan's annex is ahead, as a stub.
+        # One hop deeper and the plan's annex is ahead, as a stub -- and so is
+        # the vault, through the lobby's locked door, because a locked door is
+        # a state of a door and not a kind of wall (PX15).
         reachable, stubs = rf.rooms_ahead(cid, scene, "shaft", depth=3)
         assert "lift_car" not in reachable
-        assert reachable == ["annex_hall", "corridor", "lobby"] and stubs == ["annex_hall"]
+        assert reachable == ["annex_hall", "corridor", "lobby", "vault"] \
+            and stubs == ["annex_hall"]

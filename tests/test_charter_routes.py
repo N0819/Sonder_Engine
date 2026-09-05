@@ -88,7 +88,7 @@ def test_generation_route_closes_and_presims_one_model_plan(
         }],
     }
     monkeypatch.setattr("world.charter_generate.propose_town",
-                        lambda lore, brief="": plan)
+                        lambda lore, brief="", **kw: plan)
     monkeypatch.setattr("world.charter_generate.propose_history",
                         lambda plan, lore, horizon: {"eras": [],
                                                      "interventions": []})
@@ -128,7 +128,7 @@ def test_generation_reads_only_selected_lorebook_subtree(
             "INSERT INTO lore_entries(lorebook_id,title,keys,content,category) "
             "VALUES(?,?,?,?,?)", (lid, title, title, title, "locations"))
     seen = {}
-    def capture_plan(lore, brief=""):
+    def capture_plan(lore, brief="", **kw):
         seen["lore"] = lore
         return {"name": "Port", "structure": {"key": "port"},
                 "rooms": {"quay": {"name": "Quay", "adjacent": []}},
@@ -173,7 +173,7 @@ def test_second_generated_location_is_additive_and_collision_safe(
     }
     monkeypatch.setattr(
         "world.charter_generate.propose_town",
-        lambda lore, brief="": copy.deepcopy(plan))
+        lambda lore, brief="", **kw: copy.deepcopy(plan))
 
     app_module.charters_generate(chat_id, {
         "horizon_hours": 12, "generate_history": False})

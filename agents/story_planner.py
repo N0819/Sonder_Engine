@@ -437,6 +437,15 @@ def _apply_grants(cid, frame_id, grants, turn_idx):
                 scope=raw.get("scope") or "this story",
                 capabilities=raw.get("capabilities") or (),
                 limits=raw.get("limits"),
+                # THE ASK THE GRANT ANSWERS. `mandates` has stated since
+                # 2026-09-04 that a grant may name the request it was earned
+                # by and lapse with it -- and nothing passed one, so every
+                # grant the room ever minted was standing. Asked to build two
+                # rooms and a person, the room minted five capabilities with
+                # `limits: {}` and `expires_turn: null`: the player granted,
+                # without knowing it, the right to file lore and close needs
+                # forever (PX24, masque run, 2026-09-05).
+                request=raw.get("request"),
                 expires_turn=raw.get("expires_turn"), turn_idx=turn_idx))
         except (ValueError, TypeError) as exc:
             notes.append("grant not recorded: %s" % str(exc)[:200])

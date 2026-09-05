@@ -28,7 +28,7 @@
 | `agents/perception.py` | 5501 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `core.pipeline_context`, `mind`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
 | `agents/runtime.py` | 1382 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `core.db`, `core.pipeline_context`, `llm.providers`, `persist.checkpoints`, `persist.commit`, `story.character_schema`, `story.scene` |
 | `agents/storage.py` | 123 | Step and active-variant persistence helpers. | `core.db` |
-| `agents/story_planner.py` | 1137 |  | `core.logging_utils` |
+| `agents/story_planner.py` | 1146 |  | `core.logging_utils` |
 | `core/__init__.py` | 6 |  | — |
 | `core/db.py` | 2614 | SQLite schema, migrations, connection management, transactions, and key/value world access. | `core.paths` |
 | `core/frames.py` | 220 |  | `core.db` |
@@ -80,7 +80,7 @@
 | `persist/commit_destruction.py` | 414 | Single- and multi-book destruction cascades, retirement, and latency-gated news. | `core.db`, `mind.memory`, `persist.commit_common`, `world.mechanics`, `world.spatial`, `world.spatial_frames` |
 | `persist/commit_entities.py` | 560 | world_entities projection of the scene commit, awareness gate, disguise supersession. | `core.db`, `persist.commit_common`, `story.character_schema`, `story.scene`, `world.spatial` |
 | `persist/commit_ledgers.py` | 465 | Pending-obligation and world-pressure debt ledgers. | `core.db`, `core.pipeline_context`, `persist.commit_common` |
-| `persist/commit_mapping.py` | 730 | Lore/book mapping commit: book ops, lore ops, canon fallback ops, offscreen-event normaliser. | `core.db`, `core.frames`, `mind.memory`, `persist.commit_common`, `story.character_schema`, `story.provenance_text`, `world.spatial` |
+| `persist/commit_mapping.py` | 754 | Lore/book mapping commit: book ops, lore ops, canon fallback ops, offscreen-event normaliser. | `core.db`, `core.frames`, `mind.memory`, `persist.commit_common`, `story.character_schema`, `story.provenance_text`, `world.spatial` |
 | `persist/commit_mechanics.py` | 438 | Transit/news sweeps, the world-event spine, information carriers, cast changes. | `core.db`, `persist.commit_common`, `persist.commit_scene_state`, `story.character_schema`, `story.scene`, `world.mechanics` |
 | `persist/commit_memory.py` | 1831 | Pre-lock memory preparation: per-mind memories and the psychology deltas riding with them. | `core.db`, `mind`, `mind.memory`, `mind.theory_of_mind`, `persist.commit_background`, `persist.commit_common`, `persist.commit_place_graph`, `story.character_schema`, `world.comfort`, `world.spatial`, `world.stimulation`, `world.survival` |
 | `persist/commit_memory_write.py` | 325 | The durable memory write and its out-of-band consolidation twin. | `core.db`, `mind.memory`, `persist.commit_memory`, `story.character_schema`, `story.scene` |
@@ -92,7 +92,7 @@
 | `story/__init__.py` | 6 |  | — |
 | `story/artifacts.py` | 649 |  | `llm.prompts` |
 | `story/attire.py` | 3522 |  | — |
-| `story/authored_events.py` | 225 |  | `core.db` |
+| `story/authored_events.py` | 299 |  | `core.db` |
 | `story/carriers.py` | 788 |  | `core.db`, `story.character_schema`, `story.scene`, `world`, `world.spatial` |
 | `story/character_schema.py` | 2306 | Versioned character/persona defaults, normalization, accessors, and export payloads. | `llm.schemas`, `story` |
 | `story/couriers.py` | 1122 |  | `story.carriers`, `world` |
@@ -104,7 +104,7 @@
 | `story/lore_structure.py` | 248 |  | — |
 | `story/mandates.py` | 586 |  | `core.db` |
 | `story/naming.py` | 555 |  | `core.db`, `world.charter_identity` |
-| `story/plot_packages.py` | 2691 |  | — |
+| `story/plot_packages.py` | 2839 |  | `world.spatial` |
 | `story/provenance_text.py` | 132 |  | — |
 | `story/room_bible.py` | 424 |  | `core.db` |
 | `story/room_calls.py` | 96 |  | — |
@@ -113,8 +113,8 @@
 | `story/room_frontier.py` | 233 |  | `core.db` |
 | `story/room_proposals.py` | 264 |  | `core.db` |
 | `story/room_research.py` | 371 |  | `core.db` |
-| `story/room_slice.py` | 487 |  | — |
-| `story/room_tools.py` | 1492 |  | `story.plot_packages`, `story.room_research`, `story.room_slice` |
+| `story/room_slice.py` | 497 |  | — |
+| `story/room_tools.py` | 1619 |  | `story.plot_packages`, `story.room_research`, `story.room_slice` |
 | `story/scene.py` | 2746 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `core.db`, `story`, `story.attire`, `story.character_schema`, `world.day_cycle`, `world.spatial` |
 | `web/__init__.py` | 6 |  | — |
 | `web/app.py` | 6841 | FastAPI application assembly, resource CRUD, turn control, and streaming endpoints. | `agents`, `agents.story_planner`, `core`, `core.db`, `core.frames`, `core.paths`, `dressing.ambience`, `dressing.backdrops`, `llm`, `llm.prompts`, `llm.providers`, `mind.memory`, `persist.chat_archive`, `persist.chat_delete`, `persist.checkpoints`, `persist.commit`, `story`, `story.character_schema`, `story.dialogue_colors`, `story.importers`, `story.scene`, `web`, `web.auth_routes`, `web.room_routes`, `web.world_routes`, `world`, `world.survival` |
@@ -122,7 +122,7 @@
 | `web/guest_access.py` | 554 |  | `core.db` |
 | `web/room_routes.py` | 119 |  | `core.db`, `story` |
 | `web/story_view.py` | 1023 |  | `core.db`, `world.charter_runtime`, `world.living_world` |
-| `web/world_routes.py` | 2546 |  | `core`, `core.db`, `persist.commit`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.charter`, `world.charter_runtime`, `world.spatial`, `world.weather` |
+| `web/world_routes.py` | 2557 |  | `core`, `core.db`, `persist.commit`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.charter`, `world.charter_runtime`, `world.spatial`, `world.weather` |
 | `world/__init__.py` | 6 |  | — |
 | `world/background_claims.py` | 598 |  | `core.db` |
 | `world/charter.py` | 498 |  | `world.charter_author`, `world.charter_chatter`, `world.charter_commitment`, `world.charter_decide`, `world.charter_drift`, `world.charter_economy`, `world.charter_feel`, `world.charter_figure`, `world.charter_identity`, `world.charter_intervene`, `world.charter_log`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_move`, `world.charter_needs`, `world.charter_news`, `world.charter_place`, `world.charter_plan`, `world.charter_politics`, `world.charter_practice`, `world.charter_promote`, `world.charter_roster`, `world.charter_run`, `world.charter_social`, `world.charter_space`, `world.charter_talk`, `world.charter_temper`, `world.charter_trigger` |
@@ -137,7 +137,7 @@
 | `world/charter_enrol.py` | 431 |  | `world.charter_generate`, `world.charter_model`, `world.charter_needs`, `world.charter_roster`, `world.charter_surface` |
 | `world/charter_feel.py` | 444 |  | `mind.psychology_runtime`, `world.charter_mark`, `world.charter_needs`, `world.charter_temper` |
 | `world/charter_figure.py` | 140 |  | — |
-| `world/charter_generate.py` | 1323 |  | `world.charter_identity`, `world.charter_model`, `world.charter_needs`, `world.charter_roster`, `world.charter_surface` |
+| `world/charter_generate.py` | 1416 |  | `world.charter_identity`, `world.charter_model`, `world.charter_needs`, `world.charter_roster`, `world.charter_surface` |
 | `world/charter_harm.py` | 264 |  | — |
 | `world/charter_history.py` | 873 |  | — |
 | `world/charter_identity.py` | 1167 |  | — |
@@ -159,7 +159,7 @@
 | `world/charter_promote.py` | 604 |  | `world.charter_commitment`, `world.charter_feel`, `world.charter_politics`, `world.charter_social` |
 | `world/charter_roster.py` | 134 |  | `world.charter_model` |
 | `world/charter_run.py` | 1477 |  | `world`, `world.charter_commitment`, `world.charter_decide`, `world.charter_drift`, `world.charter_economy`, `world.charter_enrol`, `world.charter_feel`, `world.charter_figure`, `world.charter_harm`, `world.charter_intervene`, `world.charter_log`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_move`, `world.charter_needs`, `world.charter_news`, `world.charter_plan`, `world.charter_politics`, `world.charter_practice`, `world.charter_roster`, `world.charter_social`, `world.charter_space`, `world.charter_talk`, `world.charter_trigger` |
-| `world/charter_runtime.py` | 4045 |  | `core`, `core.logging_utils`, `world.charter`, `world.charter_news`, `world.charter_surface`, `world.day_cycle`, `world.mechanics` |
+| `world/charter_runtime.py` | 4148 |  | `core`, `core.logging_utils`, `world.charter`, `world.charter_news`, `world.charter_surface`, `world.day_cycle`, `world.mechanics` |
 | `world/charter_social.py` | 743 |  | `world.charter_politics` |
 | `world/charter_space.py` | 167 |  | `world.spatial` |
 | `world/charter_surface.py` | 341 |  | — |
@@ -177,7 +177,7 @@
 | `world/offscreen.py` | 2299 |  | `core`, `core.logging_utils`, `llm.prompts` |
 | `world/paradox.py` | 648 |  | `core.db`, `core.frames`, `story.character_schema`, `world.spatial` |
 | `world/place_purpose.py` | 545 |  | `mind.theory_of_mind`, `world.comfort`, `world.spatial`, `world.survival` |
-| `world/planned_entities.py` | 290 |  | `core.db` |
+| `world/planned_entities.py` | 301 |  | `core.db` |
 | `world/planning_needs.py` | 346 |  | — |
 | `world/region_events.py` | 420 |  | — |
 | `world/regions.py` | 582 |  | `world.spatial` |
@@ -203,7 +203,7 @@
 | `world/spatial_substance.py` | 1128 |  | `world.spatial_contacts`, `world.spatial_identity` |
 | `world/spatial_transit.py` | 522 |  | `world.spatial_barriers`, `world.spatial_identity` |
 | `world/stimulation.py` | 239 |  | `story`, `world.spatial` |
-| `world/structure.py` | 1394 |  | `world.charter_model`, `world.regions`, `world.spatial` |
+| `world/structure.py` | 1414 |  | `world.charter_model`, `world.regions`, `world.spatial` |
 | `world/subjects.py` | 500 |  | `core.db`, `mind.canon_provenance`, `world.spatial` |
 | `world/survival.py` | 463 |  | `core.db` |
 | `world/weather.py` | 916 |  | — |
@@ -479,14 +479,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `run_planner()` | 561 | 230 lines |
-| `deliberate()` | 893 | 91 lines |
-| `schedule_room_work()` | 1075 | 63 lines |
+| `run_planner()` | 570 | 230 lines |
+| `deliberate()` | 902 | 91 lines |
+| `schedule_room_work()` | 1084 | 63 lines |
 | `_payload()` | 366 | 55 lines |
 | `_shown_transcript()` | 314 | 50 lines |
-| `planner_reply()` | 830 | 40 lines |
-| `run_dramaturge_pass()` | 986 | 40 lines |
-| `_run_task()` | 793 | 35 lines |
+| `planner_reply()` | 839 | 40 lines |
+| `run_dramaturge_pass()` | 995 | 40 lines |
+| `_run_task()` | 802 | 35 lines |
 
 ### `core/db.py`
 
@@ -1017,13 +1017,13 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `commit_mapping()` | 505 | 201 lines |
+| `commit_mapping()` | 529 | 201 lines |
 | `_apply_mapping_book_ops()` | 100 | 106 lines |
-| `_drop_needs_the_beat_answers()` | 383 | 81 lines |
+| `_drop_needs_the_beat_answers()` | 405 | 83 lines |
 | `prepare_mapping_commit()` | 208 | 62 lines |
+| `_answering_bodies()` | 352 | 51 lines |
 | `_setting_fact_needs()` | 272 | 47 lines |
-| `_attach_committed_surface()` | 466 | 37 lines |
-| `_answering_bodies()` | 352 | 29 lines |
+| `_attach_committed_surface()` | 490 | 37 lines |
 | `_file_engine_provenance()` | 70 | 28 lines |
 
 ### `persist/commit_mechanics.py`
@@ -1146,11 +1146,13 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `resolve_authored_events()` | 174 | 52 lines |
-| `mint_authored_events()` | 107 | 47 lines |
-| `_retired_text()` | 52 | 34 lines |
-| `_event_id()` | 89 | 16 lines |
-| `due_authored_events()` | 156 | 16 lines |
+| `resolve_authored_events()` | 218 | 82 lines |
+| `mint_authored_events()` | 147 | 47 lines |
+| `_changed_text()` | 90 | 36 lines |
+| `_retired_text()` | 54 | 34 lines |
+| `_event_id()` | 129 | 16 lines |
+| `due_authored_events()` | 196 | 16 lines |
+| `_covers()` | 214 | 2 lines |
 
 ### `story/carriers.py`
 
@@ -1295,14 +1297,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `publish_package()` | 2360 | 84 lines |
-| `_preview_plan_rooms()` | 753 | 83 lines |
-| `_package_checks()` | 2086 | 78 lines |
-| `fire_due_clocks()` | 2485 | 77 lines |
-| `normalize_package()` | 176 | 74 lines |
-| `_reach_warning()` | 2187 | 73 lines |
-| `_world_snapshot()` | 490 | 66 lines |
-| `edit_package()` | 365 | 57 lines |
+| `_package_checks()` | 2188 | 115 lines |
+| `publish_package()` | 2508 | 84 lines |
+| `_preview_plan_rooms()` | 758 | 83 lines |
+| `_reach_warning()` | 2326 | 82 lines |
+| `fire_due_clocks()` | 2633 | 77 lines |
+| `normalize_package()` | 181 | 74 lines |
+| `_world_snapshot()` | 495 | 66 lines |
+| `edit_package()` | 370 | 57 lines |
 
 ### `story/provenance_text.py`
 
@@ -1402,27 +1404,27 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `room_slices()` | 399 | 68 lines |
-| `_plan_here()` | 364 | 33 lines |
-| `room_graph()` | 214 | 32 lines |
-| `_things_by_room()` | 318 | 26 lines |
-| `room_index()` | 289 | 23 lines |
-| `_registry()` | 148 | 21 lines |
-| `cast_rooms()` | 268 | 19 lines |
-| `group_by_region()` | 180 | 18 lines |
+| `room_slices()` | 409 | 68 lines |
+| `room_graph()` | 215 | 41 lines |
+| `_plan_here()` | 374 | 33 lines |
+| `_things_by_room()` | 328 | 26 lines |
+| `room_index()` | 299 | 23 lines |
+| `_registry()` | 149 | 21 lines |
+| `cast_rooms()` | 278 | 19 lines |
+| `group_by_region()` | 181 | 18 lines |
 
 ### `story/room_tools.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_t_inspect_contradictions()` | 773 | 158 lines |
-| `_mind_of()` | 969 | 148 lines |
-| `_t_inspect_charters()` | 565 | 83 lines |
-| `_t_inspect_config()` | 699 | 67 lines |
-| `_t_inspect_route()` | 294 | 60 lines |
+| `_t_inspect_contradictions()` | 792 | 162 lines |
+| `_mind_of()` | 1096 | 148 lines |
+| `_t_inspect_charters()` | 584 | 83 lines |
+| `_t_inspect_config()` | 718 | 67 lines |
 | `_t_inspect_rooms()` | 243 | 49 lines |
-| `_charter_body_rows()` | 473 | 38 lines |
-| `run_tool()` | 1417 | 35 lines |
+| `_t_inspect_route()` | 324 | 49 lines |
+| `_charter_body_rows()` | 492 | 38 lines |
+| `_rooms_named_alike()` | 981 | 38 lines |
 
 ### `story/scene.py`
 
@@ -1507,11 +1509,11 @@
 | `grid_view()` | 816 | 156 lines |
 | `room_entity_patch()` | 1516 | 95 lines |
 | `_apply_exits()` | 1180 | 92 lines |
-| `_apply_doorway_fields()` | 2193 | 77 lines |
+| `_apply_doorway_fields()` | 2204 | 77 lines |
 | `map_view()` | 1028 | 73 lines |
 | `body_rows()` | 594 | 67 lines |
-| `charter_body_station_put()` | 2465 | 64 lines |
-| `room_create()` | 1827 | 63 lines |
+| `charter_body_station_put()` | 2476 | 64 lines |
+| `room_create()` | 1838 | 63 lines |
 
 ### `world/background_claims.py`
 
@@ -1668,14 +1670,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `close_plan()` | 671 | 323 lines |
-| `_spread_berths()` | 533 | 84 lines |
-| `_ensure_shift_crews()` | 339 | 62 lines |
-| `narrate_actual_history()` | 1158 | 58 lines |
-| `ensure_required_rooms()` | 996 | 53 lines |
-| `_scale_populations()` | 455 | 51 lines |
-| `resident_service_chronicle()` | 1061 | 47 lines |
-| `ground_history_output()` | 1110 | 46 lines |
+| `close_plan()` | 728 | 323 lines |
+| `_spread_berths()` | 541 | 84 lines |
+| `_ensure_shift_crews()` | 347 | 62 lines |
+| `ensure_required_rooms()` | 1081 | 60 lines |
+| `narrate_actual_history()` | 1250 | 58 lines |
+| `_scale_populations()` | 463 | 51 lines |
+| `normalize_featured_residents()` | 632 | 47 lines |
+| `resident_service_chronicle()` | 1153 | 47 lines |
 
 ### `world/charter_harm.py`
 
@@ -1941,12 +1943,12 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `advance_snapshot()` | 2078 | 191 lines |
-| `registry_warnings()` | 1752 | 182 lines |
+| `advance_snapshot()` | 2181 | 191 lines |
+| `registry_warnings()` | 1855 | 182 lines |
+| `_plan_lived_location()` | 1367 | 181 lines |
 | `_prepare_cast_histories()` | 614 | 172 lines |
-| `_plan_lived_location()` | 1348 | 168 lines |
-| `_generate_lived_location()` | 1576 | 122 lines |
-| `presence_view()` | 3336 | 114 lines |
+| `_generate_lived_location()` | 1608 | 154 lines |
+| `presence_view()` | 3439 | 114 lines |
 | `presim_registry()` | 930 | 104 lines |
 | `generation_lore()` | 1036 | 101 lines |
 
@@ -2171,13 +2173,13 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `normalize_plan()` | 79 | 42 lines |
-| `settle_rendered_plans()` | 228 | 41 lines |
-| `plan_figure()` | 156 | 33 lines |
-| `_contradicted_axis()` | 271 | 20 lines |
-| `plans_in_view()` | 191 | 17 lines |
-| `add_planned_entity()` | 138 | 16 lines |
-| `reserved_plans()` | 210 | 16 lines |
+| `normalize_plan()` | 79 | 51 lines |
+| `settle_rendered_plans()` | 239 | 41 lines |
+| `plan_figure()` | 165 | 35 lines |
+| `_contradicted_axis()` | 282 | 20 lines |
+| `plans_in_view()` | 202 | 17 lines |
+| `add_planned_entity()` | 147 | 16 lines |
+| `reserved_plans()` | 221 | 16 lines |
 | `plan_uid()` | 64 | 6 lines |
 
 ### `world/planning_needs.py`
@@ -2482,14 +2484,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `claim_frontier_spaces()` | 1102 | 198 lines |
-| `prepare_frontier_expansion()` | 895 | 142 lines |
-| `materialize_planned_fringe()` | 398 | 121 lines |
-| `plant_structure()` | 303 | 93 lines |
-| `mint_frontier()` | 217 | 84 lines |
-| `planned_context()` | 826 | 67 lines |
-| `planned_room_brief()` | 636 | 62 lines |
-| `structure_warnings()` | 1322 | 61 lines |
+| `claim_frontier_spaces()` | 1122 | 198 lines |
+| `prepare_frontier_expansion()` | 915 | 142 lines |
+| `materialize_planned_fringe()` | 418 | 121 lines |
+| `mint_frontier()` | 217 | 104 lines |
+| `plant_structure()` | 323 | 93 lines |
+| `planned_context()` | 846 | 67 lines |
+| `planned_room_brief()` | 656 | 62 lines |
+| `structure_warnings()` | 1342 | 61 lines |
 
 ### `world/subjects.py`
 
@@ -2578,10 +2580,10 @@
 | GET | `/api/chats/{cid}/backdrop/{signature}.png` | `backdrop_image()` | `web/app.py:6584` |
 | GET | `/api/chats/{cid}/background_config` | `bg_cfg_get()` | `web/app.py:5077` |
 | PUT | `/api/chats/{cid}/background_config` | `bg_cfg_put()` | `web/app.py:5081` |
-| DELETE | `/api/chats/{cid}/bodies/{name}` | `body_presence_delete()` | `web/world_routes.py:2053` |
-| PUT | `/api/chats/{cid}/bodies/{name}/pose` | `body_pose_put()` | `web/world_routes.py:2138` |
-| PUT | `/api/chats/{cid}/bodies/{name}/room` | `body_room_put()` | `web/world_routes.py:2087` |
-| PUT | `/api/chats/{cid}/bodies/{name}/station` | `body_station_put()` | `web/world_routes.py:1667` |
+| DELETE | `/api/chats/{cid}/bodies/{name}` | `body_presence_delete()` | `web/world_routes.py:2064` |
+| PUT | `/api/chats/{cid}/bodies/{name}/pose` | `body_pose_put()` | `web/world_routes.py:2149` |
+| PUT | `/api/chats/{cid}/bodies/{name}/room` | `body_room_put()` | `web/world_routes.py:2098` |
+| PUT | `/api/chats/{cid}/bodies/{name}/station` | `body_station_put()` | `web/world_routes.py:1678` |
 | POST | `/api/chats/{cid}/characters` | `chat_add_char()` | `web/app.py:3854` |
 | DELETE | `/api/chats/{cid}/characters/{ch}` | `chat_del_char()` | `web/app.py:4303` |
 | PUT | `/api/chats/{cid}/characters/{ch}/card` | `chat_char_card_put()` | `web/app.py:4313` |
@@ -2606,14 +2608,14 @@
 | POST | `/api/chats/{cid}/charters/generate` | `charters_generate()` | `web/app.py:5019` |
 | DELETE | `/api/chats/{cid}/charters/job` | `charters_job_clear()` | `web/app.py:5060` |
 | GET | `/api/chats/{cid}/charters/job` | `charters_job_get()` | `web/app.py:5041` |
-| DELETE | `/api/chats/{cid}/charters/{charter_key}/bodies/{body_key}/station` | `charter_body_station_delete()` | `web/world_routes.py:2532` |
-| PUT | `/api/chats/{cid}/charters/{charter_key}/bodies/{body_key}/station` | `charter_body_station_put()` | `web/world_routes.py:2465` |
+| DELETE | `/api/chats/{cid}/charters/{charter_key}/bodies/{body_key}/station` | `charter_body_station_delete()` | `web/world_routes.py:2543` |
+| PUT | `/api/chats/{cid}/charters/{charter_key}/bodies/{body_key}/station` | `charter_body_station_put()` | `web/world_routes.py:2476` |
 | GET | `/api/chats/{cid}/debug` | `chat_debug_export()` | `web/app.py:1865` |
 | GET | `/api/chats/{cid}/dialogue_config` | `dlg_get()` | `web/app.py:4816` |
 | PUT | `/api/chats/{cid}/dialogue_config` | `dlg_put()` | `web/app.py:4833` |
-| POST | `/api/chats/{cid}/doorways` | `doorway_create()` | `web/world_routes.py:2273` |
-| DELETE | `/api/chats/{cid}/doorways/{room_id}/{to}` | `doorway_delete()` | `web/world_routes.py:2348` |
-| PATCH | `/api/chats/{cid}/doorways/{room_id}/{to}` | `doorway_patch()` | `web/world_routes.py:2312` |
+| POST | `/api/chats/{cid}/doorways` | `doorway_create()` | `web/world_routes.py:2284` |
+| DELETE | `/api/chats/{cid}/doorways/{room_id}/{to}` | `doorway_delete()` | `web/world_routes.py:2359` |
+| PATCH | `/api/chats/{cid}/doorways/{room_id}/{to}` | `doorway_patch()` | `web/world_routes.py:2323` |
 | GET | `/api/chats/{cid}/dramatic_irony` | `get_dramatic_irony_feed()` | `web/app.py:3953` |
 | GET | `/api/chats/{cid}/export` | `export_chat()` | `persist/chat_archive.py:266` |
 | GET | `/api/chats/{cid}/fixed_points` | `fixed_points_list()` | `web/app.py:5272` |
@@ -2653,7 +2655,7 @@
 | GET | `/api/chats/{cid}/promotable` | `list_promotable_presences()` | `web/app.py:3949` |
 | POST | `/api/chats/{cid}/promotions/confirm` | `confirm_promotion()` | `web/app.py:3978` |
 | POST | `/api/chats/{cid}/promotions/draft` | `draft_promotion()` | `web/app.py:3961` |
-| POST | `/api/chats/{cid}/regions` | `region_create()` | `web/world_routes.py:2381` |
+| POST | `/api/chats/{cid}/regions` | `region_create()` | `web/world_routes.py:2392` |
 | PATCH | `/api/chats/{cid}/regions/{region_id}` | `region_patch()` | `web/world_routes.py:1617` |
 | GET | `/api/chats/{cid}/room` | `room_thread()` | `web/room_routes.py:52` |
 | POST | `/api/chats/{cid}/room/mandates/{uid}/revoke` | `room_revoke()` | `web/room_routes.py:108` |
@@ -2661,15 +2663,15 @@
 | POST | `/api/chats/{cid}/room/messages/stream` | `room_say_stream()` | `web/room_routes.py:78` |
 | GET | `/api/chats/{cid}/room/status` | `room_status()` | `web/room_routes.py:117` |
 | GET | `/api/chats/{cid}/rooms` | `rooms_index()` | `web/world_routes.py:664` |
-| POST | `/api/chats/{cid}/rooms` | `room_create()` | `web/world_routes.py:1827` |
-| DELETE | `/api/chats/{cid}/rooms/{room_id}` | `room_delete()` | `web/world_routes.py:1893` |
+| POST | `/api/chats/{cid}/rooms` | `room_create()` | `web/world_routes.py:1838` |
+| DELETE | `/api/chats/{cid}/rooms/{room_id}` | `room_delete()` | `web/world_routes.py:1904` |
 | GET | `/api/chats/{cid}/rooms/{room_id}` | `rooms_slice()` | `web/world_routes.py:790` |
 | PATCH | `/api/chats/{cid}/rooms/{room_id}` | `room_patch()` | `web/world_routes.py:1464` |
-| POST | `/api/chats/{cid}/rooms/{room_id}/entities` | `room_entity_create()` | `web/world_routes.py:1932` |
-| DELETE | `/api/chats/{cid}/rooms/{room_id}/entities/{entity_id}` | `room_entity_delete()` | `web/world_routes.py:1968` |
+| POST | `/api/chats/{cid}/rooms/{room_id}/entities` | `room_entity_create()` | `web/world_routes.py:1943` |
+| DELETE | `/api/chats/{cid}/rooms/{room_id}/entities/{entity_id}` | `room_entity_delete()` | `web/world_routes.py:1979` |
 | PATCH | `/api/chats/{cid}/rooms/{room_id}/entities/{entity_id}` | `room_entity_patch()` | `web/world_routes.py:1516` |
 | GET | `/api/chats/{cid}/rooms/{room_id}/grid` | `rooms_grid()` | `web/world_routes.py:1104` |
-| POST | `/api/chats/{cid}/rooms/{room_id}/presences` | `room_presence_create()` | `web/world_routes.py:2013` |
+| POST | `/api/chats/{cid}/rooms/{room_id}/presences` | `room_presence_create()` | `web/world_routes.py:2024` |
 | GET | `/api/chats/{cid}/story_view` | `story_view_get()` | `web/app.py:5132` |
 | GET | `/api/chats/{cid}/style_guide` | `style_guide_get()` | `web/app.py:4799` |
 | PUT | `/api/chats/{cid}/style_guide` | `style_guide_put()` | `web/app.py:4805` |
