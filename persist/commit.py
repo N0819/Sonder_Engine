@@ -113,7 +113,8 @@ from persist.commit_entities import (_is_gated_awareness, _subjects_that_moved,
 from persist.commit_ledgers import (OBLIGATION_OVERDUE_AGE, OBLIGATION_CAP,
     pending_obligation_view, _find_obligation, commit_obligations,
     WORLD_PRESSURE_STALL_AGE, WORLD_PRESSURE_CAP, world_pressure_view,
-    _find_pressure, commit_world_pressure)
+    _find_pressure, commit_world_pressure,
+    WORLD_FACTS_CAP, WORLD_FACT_CHARS, commit_world_facts)
 from persist.commit_mapping import (
     _apply_mapping_book_ops, prepare_mapping_commit, commit_mapping, _lore_for,
     _fact_is_covered, _setting_fact_needs, _attach_committed_surface,
@@ -159,7 +160,9 @@ from persist.commit_scene_state import (_anchor_current_room, sync_anchored_book
     commit_scene, _record_subject_last_seen, _dedupe_overlay_entries,
     _merge_overlays, _overlay_handles, _overlay_ending_handles,
     _is_overlay_ending, _minted_this_beat, _entity_labels,
-    _fold_duplicate_mints, _place_orphan_mints, _report_started_sources)
+    _fold_duplicate_mints, _place_orphan_mints, _report_started_sources,
+    BEARING_MANNERS, _bearing_subject_key, derive_borne_containment,
+    _refuse_unheld_transfers)
 from persist.commit_mechanics import (commit_transit_sweep, commit_world_event_spine,
     commit_information_carriers, commit_cast_changes)
 from persist.commit_memory import (RECENT_TELLS_CAP, _durable_dialogue_category,
@@ -562,6 +565,13 @@ def _commit_all_locked(ctx, nonce):
             _commit_domain(
                 ctx, results, "world_pressure",
                 lambda: commit_world_pressure(ctx, nonce),
+            )
+            # What the beat established about the world, recorded rather than
+            # filed as something the beat reached for and did not find (PS18).
+            # Beside the other two world-KV ledgers because it is one.
+            _commit_domain(
+                ctx, results, "world_facts",
+                lambda: commit_world_facts(ctx, nonce),
             )
             _commit_domain(
                 ctx, results, "authored_events",

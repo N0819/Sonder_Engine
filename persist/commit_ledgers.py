@@ -372,3 +372,94 @@ def commit_world_pressure(ctx, nonce):
     return {"opened": opened, "ticked": ticked, "held": held,
             "resolved": resolved, "unaddressed": unaddressed,
             "stalled": stalled, "open": len(ledger)}
+
+
+# ---- The setting facts a beat established ----
+#
+# `state_diff.world_facts` is the Director saying what is TRUE of the world --
+# how a thing works, what a people hold, what happened long before the story.
+# It was committed NOWHERE. `commit_mapping._setting_fact_needs` turns each
+# uncovered fact into a `setting_fact` planning NEED for the Writers' Room to
+# file with provenance, which is a request rather than a record, and nothing
+# else read the channel at all.
+#
+# Measured, the Salt Terraces run 2026-09-05 (PS18): the opening wrote three
+# world facts ("Lake Sarrat dried up a generation ago...", and two more),
+# `wget(cid, "world_facts")` was null at the end of twenty turns, and the same
+# commit warned "3 planning need(s) recorded: the beat reached for setting
+# fact '...'" -- a fact the Director had just written, filed as something the
+# beat reached for and did not find, still `status: open` twenty turns later.
+#
+# A FACT THE DIFF SUPPLIES IS A RECORD, NOT A NEED. This is the record: the
+# story's own ledger of what it has established, chat-scoped (a setting fact
+# outlives the era it was said in), deduplicated on the fact's own normalized
+# text, and capped. The planning need is untouched and still says what the
+# Writers' Room owes -- filing a fact into the setting bible with a citation
+# is work only the room can do -- but the fact itself no longer depends on
+# that happening in order to exist anywhere.
+
+#: How many established setting facts the ledger carries. The eviction is the
+#: OLDEST, and in this ledger age is not the signal it is for a debt: a fact
+#: established twenty beats ago is exactly as true as one established now. The
+#: number is the owner's call; what is defended here is that every eviction is
+#: written to the turn's decision log rather than leaving a fact silently
+#: absent.
+WORLD_FACTS_CAP = 60
+
+#: A fact is a sentence, not a chapter.
+WORLD_FACT_CHARS = 400
+
+
+def commit_world_facts(ctx, nonce):
+    """Record what this beat established about the world.
+
+    Reads the establish's diff as readily as the resolve's: the opening beat
+    is where a story says most of what is true of it, and that is the beat
+    PS18 measured losing everything.
+    """
+    cid = ctx.chat.id
+    turn = ctx.turn
+    res = ctx.director_resolve or ctx.director_establish or {}
+    diff = res.get("state_diff") \
+        if isinstance(res.get("state_diff"), dict) else {}
+    incoming = diff.get("world_facts")
+    if not isinstance(incoming, list):
+        incoming = []
+    ledger = [dict(entry)
+              for entry in (wget(cid, "world_facts", []) or [])
+              if isinstance(entry, dict) and entry.get("fact")]
+    known = {_normalized_fact(entry.get("fact")) for entry in ledger}
+    recorded = 0
+    for item in incoming:
+        source = ""
+        if isinstance(item, dict):
+            text = str(item.get("fact") or "")
+            origin = item.get("source")
+            source = str((origin or {}).get("kind") or "") \
+                if isinstance(origin, dict) else str(origin or "")
+        else:
+            text = str(item or "")
+        text = " ".join(text.split())[:WORLD_FACT_CHARS]
+        key = _normalized_fact(text)
+        if not text or not key or key in known:
+            continue
+        known.add(key)
+        ledger.append({
+            "id": "fact:%s:%s" % (turn.idx, recorded),
+            "fact": text,
+            "turn_idx": turn.idx,
+            **({"source": source} if source else {}),
+        })
+        recorded += 1
+    if len(ledger) > WORLD_FACTS_CAP:
+        for entry in ledger[:-WORLD_FACTS_CAP]:
+            note_step_decision(
+                "world_facts_ledger", str(entry.get("fact") or "?")[:120],
+                "evicted_by_cap",
+                "ledger held %d established facts against cap %d; this was "
+                "the oldest. id=%s turn_idx=%s -- still true, and no longer "
+                "recorded." % (len(ledger), WORLD_FACTS_CAP, entry.get("id"),
+                               entry.get("turn_idx")))
+        ledger = ledger[-WORLD_FACTS_CAP:]
+    wset(cid, "world_facts", ledger)
+    return {"recorded": recorded, "held": len(ledger)}
