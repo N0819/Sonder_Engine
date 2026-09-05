@@ -350,7 +350,7 @@ def _payload(cid, frame_id, *, text, task, transcript, step, calls_left,
     from story.plot_packages import list_packages
     from story.room_frontier import frontier_report
     from story.room_proposals import pending_proposals
-    from story.room_tools import run_tool
+    from story.room_tools import cast_minds_summary, run_tool
     shown, _whole = _shown_transcript(transcript)
     try:
         clock = run_tool(cid, "inspect_clock", frame_id=frame_id)
@@ -360,9 +360,19 @@ def _payload(cid, frame_id, *, text, task, transcript, step, calls_left,
         frontier = frontier_report(cid, frame_id)
     except Exception as exc:
         frontier = {"error": str(exc)[:200]}
+    # One line per cast member -- the drive's essence and each held project's
+    # aim -- so the Planner knows what `inspect_minds` would answer before it
+    # reaches (measured 2026-09-04 on chat 114: 136 characters for the one
+    # cast member). Author knowledge; the seam that reads it is this loop
+    # and nothing a mind is shown (`tests/test_room_minds.py`).
+    try:
+        minds = cast_minds_summary(cid, frame_id)
+    except Exception as exc:
+        minds = [{"error": str(exc)[:200]}]
     payload = {
         "story": _story(cid),
         "clock": clock,
+        "minds": minds,
         "conversation": _conversation(cid, frame_id),
         "mandates": active_mandates(cid, frame_id, turn_idx),
         "withdrawn": [{"uid": m["uid"], "text": m["text"], "status": m["status"]}
