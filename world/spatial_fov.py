@@ -623,6 +623,17 @@ def observer_field(scene: dict, observer: str) -> Optional[_Field]:
     room_id = room_of(scene, observer)
     if not room_id:
         return None
+    return room_field(scene, room_id)
+
+
+def room_field(scene: dict, room_id) -> Optional[_Field]:
+    """`observer_field` by ROOM: the composite every observer standing in
+    `room_id` sees over, which depends on the room alone. Split out so the
+    light field (`world/spatial_light_field.py`) can be computed once per
+    room and read for every body in it -- the lamp's rays do not depend on
+    who is looking."""
+    if not room_id or room_id not in ((scene or {}).get("rooms") or {}):
+        return None
     field = _Field()
     field.add_room(scene, room_id, (0, 0))
     side = grid_side(scene, room_id)

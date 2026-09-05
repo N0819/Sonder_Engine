@@ -229,7 +229,21 @@ from world.spatial_fov import (
     feature_visibility, grid_side, height_rank,
     neighbour_feature_visibility, normalize_footprint,
     normalize_height, normalize_opacity, observer_field, posture_class,
-    room_has_geometry, shadowcast, sight_digest,
+    room_field, room_has_geometry, shadowcast, sight_digest,
+)
+
+
+from world.spatial_light_field import (
+    _FIELD_CACHE, _beat_hash, _cast, BEAT_KEY, beat_index, BOUNCE,
+    BOUNCE_PASSES_CAP, BOUNCE_REACH, BRIGHT_T, compute_light_field,
+    cone_factor, CONE_HALF_ANGLE, CONE_PENUMBRA, DARK_THRESHOLD,
+    DEFAULT_LIGHT_SHAPE, DEFAULT_STEADINESS, DIM_T, emitted_level,
+    FAIL_RATE, fails_on, failing_sources_out, field_effective_light,
+    field_light_at, field_rows, FLICKER_RATE, flickers_on, glare_between,
+    GLARE_CELLS, GLARE_POWER, light_field, light_geometry_exists,
+    light_sources, LIGHT_HEIGHTS, LIGHT_SHAPES, LightField, LIT_T,
+    normalize_light_shape, normalize_steadiness, observer_light_field,
+    POWER, quantise, reach_radius, STEADINESS,
 )
 
 

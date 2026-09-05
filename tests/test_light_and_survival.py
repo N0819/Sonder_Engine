@@ -541,24 +541,56 @@ class TestLightIsLocalNotRoomWide:
         from world.spatial import light_at
         assert light_at(self._hall(), "Far") == "dim"
 
+    def _hall_without_geometry(self):
+        """The same hall with neither a size tier nor anchors: the light
+        field (`world/spatial_light_field.py`) does not exist for it and the
+        room-level model below answers exactly as it always did."""
+        scene = self._hall()
+        scene["rooms"]["hall"].pop("size")
+        scene["rooms"]["hall"].pop("anchors")
+        return scene
+
     def test_the_room_itself_is_not_declared_lit(self):
-        """A pool of light must not silently illuminate the far corner."""
-        assert effective_light(self._hall(), "hall") == "dark"
+        """A pool of light must not silently illuminate the far corner.
+
+        Room-level: `dark`. With geometry (2026-09-04, the light field) the
+        room reads the level of its MEDIAN cell, and one lit torch in a
+        large dark hall lifts that median to `dim` -- the hall's typical
+        light, still not `lit` anywhere but round the bearer."""
+        assert effective_light(self._hall_without_geometry(), "hall") == "dark"
+        assert effective_light(self._hall(), "hall") == "dim"
 
     def test_a_room_filling_source_does_light_everyone(self):
+        """`light_radius: room` is the room-level model's word for a source
+        that fills the space. WHERE GEOMETRY EXISTS IT IS DERIVED, NOT READ
+        (DESIGN_LIGHT_FIELD.md § 3): a source with the power to fill the
+        room fills it, and a `lit` torch has not got that power across a
+        large hall -- the far figure is `dim` under the field whatever the
+        radius word says; a `bright` one fills it."""
         from world.spatial import light_at
 
-        scene = self._hall()
+        scene = self._hall_without_geometry()
         scene["entities"]["torch"]["light_radius"] = "room"
         assert light_at(scene, "Far") == "lit"
         assert effective_light(scene, "hall") == "lit"
+        scene = self._hall()
+        scene["entities"]["torch"]["light_radius"] = "room"
+        assert light_at(scene, "Far") == "dim"
+        scene["entities"]["torch"]["light_source"] = "bright"
+        assert light_at(scene, "Far") == "lit"
 
     def test_a_hearth_defaults_to_filling_the_room(self):
+        """Room-level: a fixed source fills the room. Under the field a
+        fixture sits at `full` height and casts no shadow, but its reach is
+        its power's: `lit` reaches the far side of a large hall as `dim`."""
         from world.spatial import light_at
 
-        scene = self._hall()
+        scene = self._hall_without_geometry()
         scene["entities"]["torch"].pop("portable")       # fixed, not carried
         assert light_at(scene, "Far") == "lit"
+        scene = self._hall()
+        scene["entities"]["torch"].pop("portable")
+        assert light_at(scene, "Far") == "dim"
 
     def test_graded_sight_between_bodies_uses_local_light(self):
         from world.spatial import visual_level_between

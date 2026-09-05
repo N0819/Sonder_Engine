@@ -1255,6 +1255,19 @@ class SceneEntityDef(LenientModel):
     # validation round-trip, and a lamp that comes back unlit is a character
     # standing in the dark holding it.
     light_source: Optional[str] = None
+    # HOW the light is given, where geometry exists to read it
+    # (`world/spatial_light_field.py`): `light_shape` all_round | cone (does
+    # the light have a direction), `light_height` floor | waist | head | full
+    # (where the source sits -- what a shadow is cut at; the anchor height
+    # vocabulary), `steadiness` steady | flickering | failing (can it be
+    # relied on). A CLASS, not a device: nothing here names a lantern or a
+    # torch. Declared for the reason `light_source` is -- an undeclared field
+    # does not survive the validation round-trip -- and kept durable by the
+    # merge (`spatial_merge._ENTITY_DEFAULT_FIELDS`) so a re-echo that says
+    # nothing about them does not blank them.
+    light_shape: Optional[str] = None
+    light_height: Optional[str] = None
+    steadiness: Optional[str] = None
     # What this thing SMELLS of, as a short noun phrase: bread, lamp oil, a
     # censer, a corpse. The sibling of `light_source` -- what the thing emits
     # on a channel other than sight -- and declared for the same reason. It is
