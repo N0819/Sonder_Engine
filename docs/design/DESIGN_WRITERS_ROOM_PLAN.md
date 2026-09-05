@@ -1,7 +1,10 @@
 # The Writers' Room — current plan
 
 **Status:** plan, agreed with the owner on 2026-09-02 and 2026-09-03. Nothing
-in this note is built unless § 3 says so. It compiles the decisions taken in
+in this note is built unless § 3 or an inline *Landed* note says so (Phase A,
+Phase B and the first half of Phase C carry one as of 2026-09-04; the
+register of what each left is `docs/UNBUILT.md` § 2.26 and § 2.26a). It
+compiles the decisions taken in
 conversation on those two days against the two design documents it sits on:
 
 - `DESIGN_WRITERS_ROOM_V2.md` (the owner's proposal; kept outside the repo in

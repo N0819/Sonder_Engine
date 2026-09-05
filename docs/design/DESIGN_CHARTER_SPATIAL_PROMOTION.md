@@ -1,15 +1,18 @@
 # Design: what a promoted charter body knows about where it is
 
-**Status: UNBUILT on main; PROTOTYPED on a branch (2026-09-02).** This is a
-problem statement and an options list, not a plan. On main nothing attempts
-the transfer described here; `charter_runtime.registry_warnings` now says per
-place when a charter place is not a room in the frame. The worktree branch
-carrying `tests/test_charter_traversal.py` prototypes the route half -- bodies
-walk the shared graph one room at a time and record the edges, and a
-promoted body inherits the town's public rooms plus its own walked routes as
-`place_graph` -- under option A (one namespace by construction). The
-measurements and the arguments against merging it as it stands are in
-`docs/UNBUILT.md` §1.10a.
+**Status: the route half is PROTOTYPED and on `main` since 2026-09-03
+(`e907c7a7`, `tests/test_charter_traversal.py`); the configuration half was
+answered 2026-09-02 (`tests/test_presim_walks_the_skeleton.py`).** This is a
+problem statement and an options list, not a plan.
+`charter_runtime.registry_warnings` says per place when a charter place is
+not a room in the frame. The prototype is the route half -- bodies walk the
+shared graph one room at a time and record the edges
+(`world/charter_move.py`, `WALK_ROOMS_PER_HOUR`), and a promoted body
+inherits the town's public rooms plus its own walked routes as `place_graph`
+(`charter_promote.inherited_place_graph`) -- under option A (one namespace by
+construction). The measurements, and what argues against calling it finished
+(reachability still counted rather than paced, "public" over-inclusive,
+inherited nodes without bearings), are in `docs/UNBUILT.md` §1.10a.
 
 A charter body promoted to a major character arrives knowing nothing about a
 building it has worked in for months. The promotion path mints a sheet, seeds

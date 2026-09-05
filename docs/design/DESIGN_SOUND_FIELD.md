@@ -1,6 +1,10 @@
 # The sound field: loudness as a quantity on the sight grid
 
-Status: PROTOTYPE, on a branch. Designed 2026-09-04 with the owner ("do you
+Status: PROTOTYPE, merged on `writers-room` 2026-09-04; not yet on `main`.
+The register holds what is still open as `docs/UNBUILT.md` § 2.36 (this
+note's § 10 and the open questions at its end: the constants, crowd mood,
+simultaneous lines, fragment thinning, `sensory_events` after establish, the
+two gates, the live run). Designed 2026-09-04 with the owner ("do you
 think we should raycast speech and sounds as well?" -- yes, and not with
 rays) and built the same day in an isolated worktree as
 `world/spatial_sound_field.py` behind the `world/spatial.py` facade, beside

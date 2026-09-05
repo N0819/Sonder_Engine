@@ -1,8 +1,18 @@
 # Story Planner and Dramaturge — an author-side writers' room over a living world
 
-**Status: design draft; none of these agents exists.** The unfinished work is
-registered in [`../UNBUILT.md`](../UNBUILT.md) §§2.9 and 2.26. This note argues
-for the product and authority shape; it is not implementation authority.
+**Status: the argument; the agents now exist.** The Story Planner
+(`agents/story_planner.py`, with the Charter Planner as one scoped call,
+`CHARTER_PLANNER_TOOL`), the Dramaturge (`agents/dramaturge.py`) and the
+plot package with its lifecycle (`story/plot_packages.py`) were built
+2026-09-03/04 to the plan in
+[`DESIGN_WRITERS_ROOM_PLAN.md`](DESIGN_WRITERS_ROOM_PLAN.md), which is the
+implementation authority; the `Design.md` rows are "The Story Planner is a
+bounded tool-using loop over the facade" and "The Dramaturge proposes
+direction and builds nothing". The unfinished work is registered in
+[`../UNBUILT.md`](../UNBUILT.md) §§2.9 and 2.26 (no proposal card, the
+Planner's tool discipline unmeasured live, mandates per era not per package,
+the frontier a count not a ranking). This note argues for the product and
+authority shape; where it and the plan disagree, the plan won.
 
 The Charter-specific data seams in
 [`FABLE_TOWN_IMPLEMENTATION.md`](FABLE_TOWN_IMPLEMENTATION.md) §5 are the

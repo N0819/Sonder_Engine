@@ -115,7 +115,6 @@ they fix is closed; these are the edges they deliberately do not cover.
 
 - **All of it is prose matching**, with everything §3.1 says about that.
 
-
 ### 1.2 Nothing validates the geometry of an asserted doorway
 
 **Found:** live, alpha 6.0 session. **Do this before any multi-location story
@@ -153,6 +152,18 @@ adjacency between known rooms (`authored|walked|opened|generated_map|asserted`),
 with the orchestrator rather than the model stamping the trusted values. That is
 a schema and prompt change across the mapping and spatial specialists.
 
+**Narrowed again 2026-09-04, from the other end.** The layout lint
+(`world/spatial_lint.room_layout_lint`, behind the `world/spatial.py` facade;
+§ 2.37) reads a scene's bearings and extents AFTER the merge and reports where
+they cannot all be true -- two sides of one doorway naming bearings that are
+not opposites (`reciprocal_bearing_disagrees`), a set of bearings that cannot
+be embedded on a plane (`rooms_overlap_when_placed`) -- once as a commit
+warning and always in the Room's `inspect_contradictions["layout"]`. So an
+impossible adjacency is now visible the beat it lands rather than when it is
+walked. Rows, never fixes, and only over edges that carry a bearing (578 of
+923 live exits carry none); nothing refuses the edge at the merge, and the
+conclusion above -- a stated BASIS for a new adjacency -- is unchanged.
+
 ### 1.5 A character cannot revise a bearing they learned wrong
 
 `disproven` fires when a doorway fails to exist. Nothing fires when a doorway
@@ -171,7 +182,6 @@ or nowhere.
 Related, and wider: a character can revise a belief about the world and has
 almost no mechanism for revising a belief about themselves. Project
 displacement is the only one.
-
 
 ### 1.7 JSON validation stalls cost beats
 
@@ -195,7 +205,6 @@ keeps every word in its attempt text and is typed as an act, so a character in
 the room may not receive it through the dialogue channel. Pinned as intended at
 `tests/test_schema_leniency.py`. Deciding it needs the hearing path looked at,
 not a better regex.
-
 
 ### 1.10 An entity's free-text `state` never ages, and a mind reads its own stale copy (S3-A8)
 
@@ -341,11 +350,11 @@ scene has never contained a place its 37 bodies live in.
 Cheapest first step is a diagnostic, not a fix: a non-empty charter registry
 and a scene sharing zero ids is an unambiguous dead bridge and can be said so.
 
-**PROTOTYPED ON A BRANCH, 2026-09-02, not on main.** The worktree branch
-carrying `tests/test_charter_traversal.py` answers the second half of this
-entry -- the route half -- on a charter that HAS a graph, and leaves the
-first half (no live charter world has one) exactly where it was. On the
-branch: a charter body carries the courier's shape between windows
+**PROTOTYPED 2026-09-02, on `main` since 2026-09-03** (`e907c7a7`;
+`tests/test_charter_traversal.py`). The prototype answers the second half of
+this entry -- the route half -- on a charter that HAS a graph, and leaves the
+first half (no live charter world has one) exactly where it was. As built: a
+charter body carries the courier's shape between windows
 (`world/charter_move.py`: a route planned once over the shared pathfinder, a
 leg, `place` always the current leg's room), a window buys
 `WALK_ROOMS_PER_HOUR` rooms per hour (the courier's own walking pace, 6), a
@@ -358,7 +367,7 @@ is not somebody else's berth, basis `told`) plus the rooms it walked (basis
 64,035 rooms crossed in both arms, 53.0s before against 52.8s after on 300
 bodies over 720 hours, once the walked record stopped being deep-copied
 per window (77s before that fix). What the prototype does NOT do, and what
-argues against merging it as it stands: the dispatch pace (24 rooms per
+argues against calling it finished: the dispatch pace (24 rooms per
 four-hour window) means nearly every walk on a settlement-sized map finishes
 inside the window it began, so the transit state is exercised only by a short
 window or a long road; `REACH_LIMIT` still decides reachability by count
@@ -402,7 +411,6 @@ aggregate view — no way to ask "which turns in this story had a view repaired"
 which is the question that would have caught those six turns earlier. A warning
 during a live run also still passes silently; only the persisted record shows
 it.
-
 
 ### 1.11a Pacing still decides who may ANSWER, and that half is unmeasured
 
@@ -500,7 +508,6 @@ Not defects yet. Each is a measured shape that will become one silently.
 recorded negative results with retry protocols rather than watch items, and
 moved to [`experiments/MEASUREMENT_BACKLOG.md`](experiments/MEASUREMENT_BACKLOG.md)
 §5 on 2026-08-19. Neither may be retried without the protocol stated there.)*
-
 
 ### 1.13 `ActionStage` is classified and the resolve path never reads it
 
@@ -657,7 +664,6 @@ welds two characters); `cheap_embed` for anything semantic (29.5%); and any
 provider call inside the write lock (262 ms for one text against `core/db.py`'s
 0.02 ms commit budget).
 
-
 ### 1.19 An unregistered presence has no name to be called by
 
 **Found 2026-08-02**, fixing the Dalek whose acts never rendered (chat 58,
@@ -790,7 +796,6 @@ declaration on **12.2%** of beats (91 of 745). That classifier deliberately
 over-credits warrants — any locomotion word anywhere counts — so 91 is a FLOOR
 and the true figure is higher by an unknown margin.
 
-
 ### 1.22 One window answers most beats, because every view describes the same person
 
 **Found 2026-08-02**, measuring the window layer against chat 38's real
@@ -874,7 +879,6 @@ both are more invasive than the defect.
 byte-identical-state bullet merged into §1.10, which is where the same finding
 was already written twice more.)*
 
-
 ### 1.27 Residuals from the speech-channel investigation
 
 Found in the same pass. The attire-blob accumulation is now fixed (`persist/commit.py`
@@ -893,7 +897,6 @@ test_attire_commit_stored_shape.py`). The rest are open.
 verbatim §1.28's second, and the intent-stall bullet is built —
 `mind/affect.py`'s `_INTENT_STALL_AFTER = 2` sets `status="dormant"` once a goal
 sits barren at its ceiling.)*
-
 
 ### 1.28 Residuals from the contact-sensation work
 
@@ -1156,7 +1159,6 @@ struck 2026-08-19: `world/spatial_contacts.py` now refuses a non-anatomical
 actor_part or target_part at the commit seam, in the one place every contact
 passes through.)*
 
-
 ### 1.29 Parallel reaction chains, and the isolated wave that is shelved for them
 
 Written, tested, switched off 2026-08-04. `agents.loops._perceptually_isolated`
@@ -1403,7 +1405,6 @@ gates either — the residual already noted in
 `design_notes/13-composer-build.md` ("the micro loop should emit percepts").
 One fix covers both: emit percepts.
 
-
 ### 1.40 A restore racing a mid-flight consolidation call
 
 All that remains of the 216-second turn investigation (chat 71 turn 10). The
@@ -1427,7 +1428,6 @@ at 29.5s was attributed to the bounded rewrite ladder from code structure alone.
 The per-call ledger (`_engine_notes.llm_calls`) stamps every narrator call on
 the stored variant, so the next slow narrator beat answers this directly —
 including whether the orchestrated path makes a rewrite MORE likely.
-
 
 ### 1.41 Surface-affect habituation ships default-off; flipping it is a decision this entry exists to force
 
@@ -1578,7 +1578,6 @@ player observation: `"...wearing charcoal pinstripe suit, light blue dress
 shirt, ..."`. Not a defect — the suppression of per-beat repetition is the
 design.
 
-
 ### 1.46 A transformation's parts are repaired on read, never at the source
 
 `scene.normalize_transformed_parts` coerces a `physical_transformation`'s
@@ -1690,7 +1689,6 @@ deliberately broad UI catalog scanner. Both are facts a pack AUTHOR needs before
 starting rather than defects in a story, and are now in
 [`guides/LANGUAGE_PACKS.md`](guides/LANGUAGE_PACKS.md).)*
 
-
 ### 1.49 Three things the prompt-card split made visible and did not change
 
 The 2026-08-29 split moved every prompt leaf out of
@@ -1731,7 +1729,6 @@ being removed. The two files are deliberately kept in one place (the markers
 stayed inline in the index) precisely because the coupling is silent, but
 that is mitigation, not a check. A `project_check` rule asserting every marker
 prefixes some line of the body is cheap and is not written.
-
 
 ### 1.50 Residuals from the speaking-device repair (chat 80)
 
@@ -1861,7 +1858,6 @@ it is the smallest number in the corpus with the largest documented effect
 (`CLAUDE.md` records projects as what made NPCs pass the maze without altering
 their drives), so measure it before enriching anything in the world layer.
 
-
 ### 1.57 Two per-item tags in `OFFSCREEN_WORLD_COMPLETION.md` overstate what is built
 
 `docs/design/OFFSCREEN_WORLD_COMPLETION.md` is a design note and its per-item
@@ -1888,50 +1884,6 @@ and the note is argument.
   The claim it supports — that no diagnostic surface exists to spoiler-gate —
   survives, since only one of the three is a reader in the sense meant. The
   sentence is what is wrong, not the conclusion.
-
-
-### 1.59 A channel census over persisted `state_diff`s cannot see `phase_sources`
-
-**Measured 2026-08-25**, deconstraint branch. A census of all 28 `state_diff`
-channels over 2,723 resolved turns reported `phase_sources` as **never used,
-not once** — and the census is structurally blind to it, not reporting a fact.
-`agents/director.py:3903` pops the key IN PLACE out of `out["state_diff"]`
-before the resolve step row is written, exactly as its docstring says
-("consumed before persistence"), so **a persisted `state_diff` cannot carry
-it**. Where it CAN be seen — `director_interpret.state_assertions` — it fires
-23 times in the same corpus.
-
-It is asked for unconditionally in `language_packs/en/prompt_policy.json` for
-all six specialists and `director_resolve_lean`, and read by
-`agents/common.py:485` `prune_blocked_phase_changes` at
-`agents/director.py:780` and `:3903`. It is a live causal floor. Recorded here
-because a later reader who repeats the census and trusts it will delete a
-working one on "0 uses" evidence.
-
-The same caution, weaker, covers `contradicted_claims` (asked for, 725 stored
-diffs carry the key, 0 non-empty) and `ratified_claims` (1,876 present, 1
-non-empty): both gate on `unratified_claims_present`, and
-`agents/director_scopes.py`'s `_CHANNEL_GATES` granted that scope **0 times in
-1,346 orchestrated Director stages**. They have not had a fair measurement yet;
-§1.30 is the entry that owns them.
-
-### 1.60 The interpret sheet and `agents/common.py` state opposite rules about concealed speech
-
-**Found 2026-08-25**, deconstraint branch, in passing; NOT fixed here because
-it is a concealment path and either direction is a firewall decision.
-
-`prompts.director_interpret` says: *"Concealing the surrounding action
-(stepping aside, opening a channel) does NOT by itself hide what is said — the
-speech element itself needs its own visibility/conceal_from."*
-`agents/common.py:2936-2955` does the opposite: it propagates a concealed
-action's `conceal_from` onto every speech element not explicitly
-`overt`/loud/shout, on the stated grounds that weak models mark the ACTION
-concealed and leave the speech bare.
-
-Both behaviours are defensible; they cannot both be the rule. A model told the
-opposite of what the engine does will mis-set the field in whichever direction
-it believes, and the prompt is what decides which. Settle it, then make the
-loser follow the winner — do not leave the sheet arguing with the code.
 
 ### 1.58 Schema-touching work deferred by owner policy 4
 
@@ -1994,25 +1946,48 @@ accident**, so every read site has to be re-examined for whether it wants
   there. Listed again here because the repair is the same kind of thing: a
   migration that deletes rows from live stories at next launch.
 
+### 1.59 A channel census over persisted `state_diff`s cannot see `phase_sources`
 
-### 1.60 `generalization_tags` promises a mechanism that does not exist
+**Measured 2026-08-25**, deconstraint branch. A census of all 28 `state_diff`
+channels over 2,723 resolved turns reported `phase_sources` as **never used,
+not once** — and the census is structurally blind to it, not reporting a fact.
+`agents/director.py:3903` pops the key IN PLACE out of `out["state_diff"]`
+before the resolve step row is written, exactly as its docstring says
+("consumed before persistence"), so **a persisted `state_diff` cannot carry
+it**. Where it CAN be seen — `director_interpret.state_assertions` — it fires
+23 times in the same corpus.
 
-`AssociationProfile.generalization_tags` (`story/character_schema.py:225`) is
-normalized, editable (`static/js/components.js:745`), archived with the sheet,
-and serialised to the character as prose inside `learned_associations`. What it
-is NOT is a generaliser: nothing deterministic reads it, and
-`psychology_runtime.apply_association_updates` moves `appraisal_bias`,
-`response_tendency` and `strength` and never touches this one. So a tag an
-author writes is a note to the model, and a tag the runtime could have LEARNED
-never appears.
+It is asked for unconditionally in `language_packs/en/prompt_policy.json` for
+all six specialists and `director_resolve_lean`, and read by
+`agents/common.py:485` `prune_blocked_phase_changes` at
+`agents/director.py:780` and `:3903`. It is a live causal floor. Recorded here
+because a later reader who repeats the census and trusts it will delete a
+working one on "0 uses" evidence.
 
-Kept rather than deleted, and the measurement is the reason: read-only on the
-live database 2026-08-18, **all 78 authored associations carry tags, and 87 of
-the 152 in the interior ledgers do**. Deleting the field discards authored work
-in three quarters of the places it exists. The choice — build the generaliser,
-or withdraw the promise the field's NAME makes — is an owner's, and either way
-`static/js/components.js` is the other half of whichever answer wins. Audit
-MIND-F16.
+The same caution, weaker, covers `contradicted_claims` (asked for, 725 stored
+diffs carry the key, 0 non-empty) and `ratified_claims` (1,876 present, 1
+non-empty): both gate on `unratified_claims_present`, and
+`agents/director_scopes.py`'s `_CHANNEL_GATES` granted that scope **0 times in
+1,346 orchestrated Director stages**. They have not had a fair measurement yet;
+§1.30 is the entry that owns them.
+
+### 1.60 The interpret sheet and `agents/common.py` state opposite rules about concealed speech
+
+**Found 2026-08-25**, deconstraint branch, in passing; NOT fixed here because
+it is a concealment path and either direction is a firewall decision.
+
+`prompts.director_interpret` says: *"Concealing the surrounding action
+(stepping aside, opening a channel) does NOT by itself hide what is said — the
+speech element itself needs its own visibility/conceal_from."*
+`agents/common.py:2936-2955` does the opposite: it propagates a concealed
+action's `conceal_from` onto every speech element not explicitly
+`overt`/loud/shout, on the stated grounds that weak models mark the ACTION
+concealed and leave the speech bare.
+
+Both behaviours are defensible; they cannot both be the rule. A model told the
+opposite of what the engine does will mis-set the field in whichever direction
+it believes, and the prompt is what decides which. Settle it, then make the
+loser follow the winner — do not leave the sheet arguing with the code.
 
 ### 1.61 Half the prompt ids are outside the prompt/schema drift check
 
@@ -2059,7 +2034,6 @@ the plan is simply shorter. `agents/narration.py:1119` already reads
 `establish_views.get(f"extra:{pid_key}")` before falling back to the outcome
 views, so the narrator half is waiting for a key nothing writes, which is why
 this reads as built until you go looking for the producer. Audit RUNTIME-4.
-
 
 ### 1.65 A condition subject written as a scene uid names nobody
 
@@ -2127,7 +2101,6 @@ mechanism and drop the JS reservation (one mechanism instead of two that can
 disagree). The second is closer to how the ambience cluster already behaves.
 Whichever wins, `browser_tests/test_ui_smoke.py` holds the invariant and should
 gain a tracker-side case.
-
 
 ### 1.67 Subject spellings outside the scene blob are not folded
 
@@ -2245,6 +2218,92 @@ genuinely end sentences, and rejoining there welds two real ones together. It
 holds the class that essentially never ends a sentence and does routinely
 precede a NAME, which is the shape that made the split damaging.
 
+### 1.70 Narrator repetition: what the change-key fix reached, and what it did not
+
+Landed 2026-08-28, from a 16-turn story (chat 95) whose every stage was read
+against the others. Three reported symptoms — an ambient closer the prose kept
+ending on, a re-declared smell, and two quotes welded into one span — were one
+mechanism with three feeder sites, all upstream of the narrator: a percept the
+engine calls `changed` becomes a numbered entry in `current_events`, and the
+sheet defines that list as obligation ("every entry in it happened and must
+reach the page"). The narrator writing a sentence about it is obedience.
+
+**Fixed at the origin.** A standing percept's change key now hashes the STATE
+it describes rather than the sentence composed from it
+(`composer.room_content_percepts`, with the state published by
+`common.crowds_for_room`), and no longer hashes a fact about the observer's
+recognition of the owner (`composer.scent_percepts` drops `label`). Both bump
+the key TAG, so a ledger written before the change reads as first sight rather
+than as a claim that something moved. `observations_from_render` no longer
+welds one mouth's consecutive lines into one numbered entry, and the atom cap
+that now pays for that prices the pair it is about to weld — wallpaper, then
+two silent events, then a silent event into a spoken one, then one mouth's two
+deliveries, then the obligation boundary, then two mouths last.
+
+**The middle of that order was wrong until 2026-08-29.** A same-mouth speech
+weld was priced BELOW every other event pair, so the cap reached first for the
+one shape the merge loop above deliberately refuses to mint. Measured, chat 98
+turn 29: nine legitimate atoms against a cap of eight, the cap folded Picard's
+first two lines into a single entry, and the page carried both quotes back to
+back with no attribution or beat between them — the worst dialogue sample in
+that run. Folding a SILENT atom into a spoken one cannot produce that shape,
+because the entry still holds one quote; it costs the channel (the group
+degrades to `mixed`) and the attribution, both of which the loop already
+spends there.
+
+**Still open: the cap itself.** `composer._MAX_OBSERVATION_ATOMS` is 8 and is
+untouched — turn 29 delivered nine atoms a mind legitimately received, so SOME
+boundary was going to be spent whatever the ordering, and the reorder only
+chooses the cheapest one. Raising it trades narrator payload size against how
+often any boundary is spent at all, which is the owner's call rather than the
+workflow's.
+
+**Not fixed: the `act_player` obligation marker asserts something false.**
+`{n}. {actor} did this (NOT yet on the page — the player described attempting
+it; you must render it happening)` is attached to an entry whose material is
+verbatim one payload key away, in `current_narration`. The comment at
+`narration.py:1141` records why the marker was added and is honest: it was
+measured when the player's input was buried at the tail of `past_narration`,
+and it took acts on the page from 5-in-12 to 7-of-9. `current_narration` has
+since been split into its own key placed immediately before `current_events`,
+so the two now say opposite things one line apart, and the model resolves the
+contradiction by writing the beat again — chat 95 turn 8, three `onset`
+surfaces, three paragraphs of replay with one of the player's own clauses
+surviving verbatim. The fix is to state the entry as the ADJUDICATED OUTCOME
+of what the player attempted (which is what earns it a number) instead of as a
+claim about the page. It is not landed because the marker's power is a
+MEASURED number and the only instrument that measures it is
+`tools/narrator_package_bench.py`, which spends real model calls; and this
+repo has been burned before by a marker that lost its force when reworded on
+reasoning alone. Whoever runs the bench should move
+`language_packs/en/cards/linguistics.json` `_EVENT_LINES.act_player` and the
+three assertions in `tests/test_narrator_world_fidelity.py` (~1030, ~1106,
+~1193) together, keeping the absence assertions at ~1237/1250.
+
+**Three calls left to the owner.**
+  * *Whether an ambient percept may enter the beat half at all.*
+    `leads_the_beat` refusing `kind == "ambient"` outright is smaller and more
+    certain than getting every state key right, and it would also cover
+    couriers and notices, which publish no state to key on. It costs the
+    ability to announce a crowd change as it happens.
+  * *The derived crowd's composition is deliberately not in its state key.*
+    `charter_crowd.composition_of` is a top-two-of-tally recomputed at every
+    read over a membership that walks its errands, so it reorders without the
+    crowd changing (chat 95: five spellings of one unchanged fact in sixteen
+    turns; a sorted set of the nouns still flips four times). The band carries
+    a real change instead. What this gives up: a crowd whose composition
+    genuinely turns over while its band holds now re-renders only when
+    something else about it moves.
+  * *Whether `_overused_phrases` should read the PAYLOAD as well as recent
+    prose.* Today it is computed from the narrator's own last four prose
+    blocks, so an engine-supplied tic can be banned only after the narrator
+    has written it twice, and the ban then argues against a payload that keeps
+    re-supplying the material — measured: "held its pitch" was on the ban list
+    at turns 7, 8 and 9 and the closer kept coming, and
+    `already_established_phrases` fired on 1 of 19 narrator calls in the whole
+    story. Pointing the ban list at engine-authored labels the narrator is
+    REQUIRED to be able to use is the shape of guard this repo has measured
+    failing, which is why it was not pursued.
 
 ### 1.71 `nature` is the designed answer and it is almost never asked
 
@@ -2312,7 +2371,6 @@ to be improved, so it must be applied before anything derives one. Until then,
 `guessed_spans` reports these garments — which is the right report, since
 nothing did in fact know where they go.
 
-
 ### 1.73 The chronological-padding brake stops the inner loop only
 
 Found 2026-08-20 by adversarial verification of the memory-probe harness.
@@ -2327,9 +2385,6 @@ state came via padding rows. Not fixed in the branch that found it because
 shrinking payloads is a retrieval behaviour change that needs its own probe
 run; the fix is moving the brake to the outer loop (or checking it before
 each append) and re-measuring with `tools/memory_probe_harness.py`.
-
-
-
 
 ### 1.76 `recall_confidence` measures distribution shape, and absence has the same shape as presence
 
@@ -2411,22 +2466,102 @@ be read with this beside it; 2.20 notes the separate reason the signal cannot
 fire early in a story (`_RECALL_CONFIDENCE_MIN_BANK = 40`, which the median
 bank does not reach until turn 10).
 
-### 1.79 Four readers spell the same tolerant ledger lookup
+### 1.77a Speaking turns and the page: what the utterance fix reached, and what it did not
 
-`story.attire.entry_for` is the shared casefold-tolerant lookup of a body's
-attire entry, added because `scene.visible_body_text` did a bare `.get(name)`
-and a case-variant identity key therefore found no garment for a dressed body
-— a gate that failed OPEN, delivering the face a covering conceals. Three
-inline copies of the same fallback remain in `agents/common.py` (around the
-`observer_body_regions`, region-coverage and per-body ledger reads). They are
-correct today and independently maintained, which is the same second-copy risk
-`_co_present_company` was just collapsed to remove. Adopting `entry_for` at all
-three is pure subtraction and wants no design decision.
+Landed 2026-08-29 from the 40-turn bridge run (chat 98), every stage of the
+cited turns read against the others.
 
-The key is unreliable in the first place because
-`persist.commit_attire._heal_attire_identity_keys` heals on the WRITE path and
-nothing heals on the read path. Healing on read, or canonicalising the key at
-one boundary, would retire all four call sites rather than unify them.
+**Fixed at the origin.** One mouth's consecutive spoken lines with no conduct
+between them are now ONE utterance, fused deterministically in the character
+stage (`common.fuse_speech_run`, called from `character.character_step` after
+`norm_sequence` and before the event ids are stamped). The speech budget's own
+contract already said this -- it defines a line as "one separate beat of talk,
+delivered between other conduct" and states that "multiple lines are not one
+speech split by punctuation" -- and nothing enforced it, so a three-element
+round became three `dialogue_log` entries, three `speech_percept`s, three
+"X says in a Y voice: ..." sentences in every view, and three quoted lines set
+back to back on the page. Measured over the run's 85 stored rounds: 79 speech
+elements become 51, 26 rounds fuse, and the speaker-beats carrying two or more
+quoted lines halve (24 -> 12). Turn 29's worst case, six quoted lines from one
+mouth in one beat, becomes two. The fuse SUBTRACTS -- no word is added or
+dropped -- and it refuses to cross any delivery difference (volume,
+visibility, conceal_from, targets, phase) or a line that claims an
+interruption, so a whispered aside inside a spoken turn keeps its boundary.
+A run that changed register loses its tone adverbial, because no single one is
+true of it.
+
+**Also fixed: a Python list repr in every character's composed view.**
+`perception_outcome` handed `delivered_views[observer]` -- a LIST of rendered
+lines -- to `composer.micro_round_percept`, which takes one line and calls
+`str()` on it. Measured: 68 of the 142 stored character views in chat 98
+carry a `['...']` span, on 24 of the 38 turns, and from there it reached the
+observations projected off the view and the episode minted from it. The
+composer's own dialogue tripwire caught four of them, said "engine defect,
+view delivered as composed", and the view shipped anyway.
+`composer.micro_round_percepts` now names the shape: a delivery is one line, a
+round delivers several.
+
+**Also fixed: the narrator was never told what the player was wearing.**
+`attire_exposure_facts` was computed for the deterministic screen only, and
+that screen asks one question -- is a COVERED region narrated bare. It has
+nothing to say about a garment asserted onto a body whose ledger does not
+carry it, which is the other half of the same disagreement (chat 98 t27, "her
+uniform sleeve" against a ledger reading combadge + civilian clothing). The
+narrator payload now carries `player_attire`, the ledger's own compact line
+for the player's own body, and the sheet says the ledger owns it. This widens
+nothing: a mind has a channel to its own clothing, which is the ground
+`attire_exposure_facts` already stood on. Every other body's dress still
+reaches the narrator only through the composed view, behind perception's gate.
+
+**Not fixed, and it is an OWNER'S FORK: a second round restates instead of
+advancing.** The register (`D-B`, reopened three times) hypothesised that the
+mind was not being told what it had already said. It is: `_speak` writes the
+accumulated `interaction_views[speaker_id]` before every call, and the
+speaker's own conduct is appended to it in the same place as everyone else's.
+CAUTION for the next reader -- the `self_view` key stored on a round record is
+that round's OWN emission, captured after the call for `rehydrate_loop_views`
+to replay; it is NOT the record handed to that round. Reading it as the input
+makes the ledger look correct-and-ignored in a way that happens to be true for
+a different reason.
+
+What remains is a genuine restatement across an exchange boundary: chat 98
+turn 29, Picard says "the sudden appearance after a clean survey eleven years
+prior", Data answers, and Picard says "the sudden activation after a clean
+survey eleven years prior". Both are separate rounds with another mouth
+between them, so the fuse correctly leaves them two deliveries, and they are
+paraphrases rather than repeats, so no literal guard reaches them. The
+cross-turn case (t32 -> t33, verbatim identical) IS detected --
+`repeat_correction` fired on t33 by name -- and the engine deliberately does
+not re-ask, on the owner's stated rule and against measured evidence that the
+retry only rephrases. So the remaining fork is the owner's:
+
+  * *Drop the round.* The register's own hypothesis: a round is granted and
+    the mind is asked what it says, never whether anything remains to be said.
+    But the grant at t29 is CORRECT by every other measure -- Data answered
+    the captain and expects a response -- so dropping it lands the answer in
+    silence. Any rule that drops it has to be able to tell "nothing left to
+    add" from "the exchange is still going", and nothing deterministic can.
+  * *Ask the second round a different question.* Tell a mind that has already
+    held the floor this beat that a further turn is for what the exchange has
+    newly raised, and that saying nothing is a complete answer. That is a
+    prompt change on a path where three separate negative constraints
+    (`recent_self_lines`, the refrain skeleton, `repeat_correction`) have
+    already been measured failing, for the reason `character.py` states at
+    length: a negative constraint helps a mind that has another move and does
+    nothing for one that does not.
+  * *Accept it.* The trade-off the no-re-ask rule already accepts, one scope
+    wider.
+
+Not guessed at here, because the choice is between two of the owner's own
+standing rulings.
+
+**Also corrected, for the register rather than the code.** `D-C` ("the
+narrator restates the player's own completed beat", turn 4) is not a narrator
+defect. The turn-4 player view OPENS with "Jean-Luc Picard accepts padd from
+you", because Picard's own round declared the act -- and he declared it
+because the turn-3 transfer never committed (`D-A`). Director, perception and
+narrator all carried it faithfully. Fixing it in the narrator would have
+buried the commit defect.
 
 ### 1.78 One authored body field reaches no reader
 
@@ -2473,131 +2608,106 @@ for the stranger descriptor that `observer_display_map` currently cuts from
 person" is not used to distinguish them. `character_card_warnings` says so, on
 every card-producing surface.
 
+### 1.79 Four readers spell the same tolerant ledger lookup
 
-### 1.79 What the Living World audit found
+`story.attire.entry_for` is the shared casefold-tolerant lookup of a body's
+attire entry, added because `scene.visible_body_text` did a bare `.get(name)`
+and a case-variant identity key therefore found no garment for a dressed body
+— a gate that failed OPEN, delivering the face a covering conceals. Three
+inline copies of the same fallback remain in `agents/common.py` (around the
+`observer_body_regions`, region-coverage and per-body ledger reads). They are
+correct today and independently maintained, which is the same second-copy risk
+`_co_present_company` was just collapsed to remove. Adopting `entry_for` at all
+three is pure subtraction and wants no design decision.
 
-**Found:** the 2026-08-24 survey behind `docs/guides/LIVING_WORLD.md` — eleven
-agents over `world/living_world.py`, `world/offscreen.py`, the twenty-nine
-`charter_*` modules, background life and the lifecycle paths. The guide states
-the behaviour; these are the places the behaviour is wrong.
+The key is unreliable in the first place because
+`persist.commit_attire._heal_attire_identity_keys` heals on the WRITE path and
+nothing heals on the read path. Healing on read, or canonicalising the key at
+one boundary, would retire all four call sites rather than unify them.
 
-**Defects.**
+### 1.80 Residuals from the change tier
 
-- ~~**The string `"false"` opts a character INTO paid off-screen ticks.**~~
-  **Landed.** `character_schema.authored_bool` reads the word a human wrote,
-  both card readers use it, and `character_card_warnings` tells the author
-  that whatever produced the sheet is not writing booleans. Original finding:
-  `character_offscreen_agent` applies `bool()`, and `bool("false")` is `True`.
-  The legacy branch applies the same `bool()`, so neither path is safe
-  (`story/character_schema.py:1166`, `:1400`). An imported or hand-edited sheet
-  carrying `"offscreen_agent": "false"` buys model calls. The card default is a
-  real boolean, so this reaches only sheets that have been through a text
-  editor or a lenient importer — which is exactly where it will not be noticed.
-- ~~**Two `cap=0` off-by-ones**~~ **Landed** — both now bound before they
-  append, matching `profile_candidates`, which already did. Original finding:
-  `full_agent_candidates(cap=0)` returns one candidate
-  (`world/offscreen.py:1338`) and `fired_consequences_at(cap=0)` returns one
-  item (`world/living_world.py:463`). Unreachable from today's callers, which
-  guard `cap <= 0` first; inherited by any new caller. `profile_candidates`
-  has the correct shape beside one of them (`:1399`).
-- ~~**Charter diagnostics leak across frames.**~~ **Landed** —
-  `charter_runtime._event_frame` filters the listing to the requested era, in
-  Python because `scheduled_events` has no frame column and the scoping rides
-  in the payload. Original finding: `charter_diagnostics` selects
-  `scheduled_events` with `seed LIKE 'charter:%'` and no `frame_id` predicate
-  (`world/charter_runtime.py:1161`), so the diagnostics surface for one era
-  lists charter events minted in every era of the chat — unlike `registry_for`
-  beside it, which is frame-scoped.
-- **Frame split and merge drop Charter and off-screen state.** A split seeds
-  the away frame from seven parent keys and `charters`, `offscreen_epoch` and
-  `offscreen_plans` are not among them (`world/spatial_frames.py:844`); a merge
-  reconciles four keys, so nothing a Charter, a plan or a standing intention
-  did in the away frame comes back (`:998`). Whether that is a defect or a
-  deliberate severance is undecided — it is undocumented either way, which is
-  the part that is certainly wrong.
-- **`pick_background_reactors` has no room filter.** `here` is computed and
-  used for only two of the eight qualifying signals
-  (`persist/commit_background.py:1541`), so a presence with dialogue history in
-  a room the player left ten turns ago still qualifies and can be picked.
-  `managed_presences` DOES filter by ambient scope
-  (`agents/background.py:553`), so the two paths disagree about co-presence.
+Landed with `Design.md` § A view leads with what changed: a player view is now
+partitioned into a beat half and a background half by
+`composer.standing_verdicts`, reading each observer's own previous ledger.
+Three things that work names for and does not close.
 
-**Untested.** No test in the suite covers Charter, Living World or off-screen
-state across archive, branch or checkpoint. The coverage is real — every table
-and key involved is in `chat_archive.WORLD_TABLES` and
-`checkpoints.snapshot_state` — but it is inferred from those lists rather than
-demonstrated, and the frame-split gap above is what an untested inference
-looks like when it is wrong.
+- **The content hash is LEXICAL, so a re-wording reads as a change.** A
+  standing key's content half hashes the rendered fields, and a specialist
+  that re-phrases a pose or a contact manner without moving anything mints a
+  new hash. Measured on the replayed corpus (chats 86-92, 389 player views),
+  the beat half carries 16.9% contact and 7.2% pose atoms per beat, and some
+  unknown share of that is re-phrasing rather than movement. **The cost is
+  bounded and is not an information leak**: every sentence still realises
+  admitted percept data, so a false "changed" verdict buys a re-description
+  the observer was already entitled to, never a fact they were not. Semantic,
+  wording-invariant keys are the fix and they are a separate change with a
+  separate argument — a pose is not obviously equal to a paraphrase of
+  itself, and deciding it is has consequences for memory minting too.
+- **The episode renderer keeps its own changed-list logic.**
+  `_render_episode_english` still asks `dedupe_key not in prev_standing` plus
+  `force`/`prev_described` directly rather than calling `standing_verdicts`.
+  It is correct as it stands (the split key is still an exact match), but it
+  is a second spelling of one rule, which is the shape this repo has watched
+  drift before — the Japanese adapter's copy of the player delta rule had
+  already drifted once when this work found it. Unifying it is a tidy-up, not
+  a defect.
+- **An adapter that implements `render_view` without calling
+  `standing_verdicts` re-forks the rule.**
+  `tests/test_japanese_renderer_parity.py` compares the two renderers'
+  beat/background classification AND the order of their spans, so the shipped
+  pack cannot drift silently; a THIRD pack could. The classification half of
+  that comparison shipped a beat behind the ordering half: the first version
+  of the ordering test rendered a beat containing exactly one member, which
+  orders correctly whatever the rule says, and it passed while the Japanese
+  adapter emitted the changed standing percepts before the events. The three
+  private composer names the pack reached across for are now public
+  (`leads_the_beat`, `as_beat`, `ACTIVE_STANDING_KINDS`) and the ordering
+  itself is `composer.player_view_order`, which both renderers call, so the
+  ORDER is no longer a thing a pack can hold an opinion about. What a pack
+  still spells for itself is admission -- the appearance and standing-dedupe
+  branches -- and that is the remaining fork. A malformed adapter still falls
+  through to the English reference renderer, which carries the tier, so the
+  failure mode is wording rather than information.
+- **The delta can still starve a view without emptying it, and that half is
+  the owner's call.** A view the delta empties completely is now re-asked for
+  the background (`perception._composer_outcome`; `Design.md` § A view leads
+  with what changed), because "nothing new" and "nothing reached this mind"
+  are different states and `agents/narration.py` reads the second off a null
+  view. A view the delta reduces to ONE sentence is untouched, and on chat 98
+  that was the more common shape: turn 9's whole player view was "You are
+  seated on the bar."; turn 10's "You are standing on the deck."; turn 38's
+  "The lieutenant commander is close by. You see lieutenant commander." No
+  room, no roster, no light — the narrator supplied all three from prose
+  memory. **The question is whether PLACE and COMPANY are deltas at all.**
+  They are continuously true, they are the frame every other sentence in a
+  view is positioned inside, and `ACTIVE_STANDING_KINDS` already exempts
+  sensations from suppression on exactly that argument ("an unchanged contact
+  is still being felt now"). Against that: the tier's whole measured result
+  was won by suppressing what the observer was already told, 772 of 2,645
+  consecutive player-view pairs repeated a 60-character sentence verbatim
+  before it, and a room's authored notes are long. A middle exists — restore
+  the room's IDENTITY every beat and keep its notes and light on the delta —
+  and it is a behaviour change to every story's prose, so it is named here
+  rather than taken.
+- **Two consecutive recovered views are byte-identical, by construction.**
+  The recovery re-renders the same unchanged percepts, so a run of quiet
+  beats hands the narrator the same paragraph each time. Measured live on
+  chat 98 turns 39 and 40 (played on a copy, 2026-08-29): both views were
+  the room, its notes, the roster and the pose, character for character, and
+  both beats' prose still differed because `already_established_phrases`
+  fills from the view against recent narration and is doing exactly the job
+  it was built for. Recorded because the mechanism is not obvious from the
+  code: the composer is not deduplicating across beats here, the narrator is.
 
-**Unwired.** `world/structure.py`'s frontier-expansion trio —
-`materialize_planned_fringe` (`:184`), `prepare_frontier_expansion` (`:266`),
-`apply_frontier_mutations` (`:350`) — is exported at `:410` and has no
-production caller anywhere in `agents/`, `persist/`, `web/`, `story/` or
-`tools/`.
-
-**Docstrings that overstate, each now contradicted by the guide.** Fix the
-docstring or fix the code; do not leave both.
-
-- "five approaches" in `world/living_world.py:1` and `web/app.py:4547` —
-  `LIVING_WORLD_APPROACHES` has four. Approach C became core carrier physics.
-- ~~`pick_background_reactors` returning `[]` as "the common case"~~ —
-  **withdrawn, and worth recording as a method note.** The audit reasoned from
-  the code that `dialogue_turns` is a standalone qualifying signal and records
-  are pruned only by promotion, so any presence that has spoken once qualifies
-  forever. The reading is right and the conclusion is false: measured over 816
-  live `background_react` steps in nine chats, the backstop produced a reaction
-  on 0–10% of beats, and 41 of 69 tracked presences have non-empty
-  `dialogue_turns`. Something downstream of that disjunct — the `roster` /
-  `voiced_this_beat` exclusion is the candidate — keeps it quiet. The
-  docstring stands. A code reading is a hypothesis; this corpus can answer it
-  directly, and the first draft of `LIVING_WORLD.md` shipped the hypothesis as
-  fact.
-- `ambient` withholding "a line directed at one of them"
-  (`story/scene.py:2087`, `agents/background.py:559`) — the test is divergent
-  hear levels, not direction.
-- `agents/background.py:16` naming the gate `pick_background_reactor`
-  (singular); the stage calls the plural with `cap`.
-- `agents/background.py:32` calling `pending_reply` "a one-beat debt"; the
-  write sets `expires_turn = turn_idx + 2`.
-- `world/charter_run.py:20` saying the consequence-fuse wiring is "deliberately
-  NOT done here" — it exists, in `charter_runtime`.
-- `world/charter_model.py`'s "five primitives" headline, against four
-  normalizers, with `normalize_body` outside the five; and its `authority`
-  described as "a closed list" where `normalize_post` closes nothing
-  (`:145`). The real closed set is `charter_decide.ORDER_ACTIONS`.
-
-
-### 1.80 A spoken line shorter than four characters is invisible, and takes the next one with it
-
-**Found:** building the narrator placeholder protocol, 2026-08-24.
-
-`_QUOTE_BODY_RE` matches an opening quote mark, then a run of at least
-**four** non-quote characters, then a closing mark. That `{4,}` means a quoted
-line of three characters or fewer -- `"No."`, `"Aye."`, `"Sir."` -- never
-matches, so DIALOGUE FIDELITY does not check it and the narrator may drop it
-freely.
-
-**The second half is worse than the first.** The two quote marks the regex
-skipped do not disappear; they pair with their neighbours. Given two short
-lines in one view, the span BETWEEN them matches instead:
-
-    'Picard says in a flat voice: "No." Riker says in a quiet voice: "No."'
-    -> [' Riker says in a quiet voice: ']
-
-So the check can be handed the composer's own attribution formula as though it
-were a delivered line, and then complain that the narrator failed to reproduce
-it. Every fidelity finding on a beat containing an odd number of sub-four
-character quotes is therefore suspect.
-
-`agents/common._dialogue_tokens` guards its own output with
-`_reads_as_attribution`, because feeding that span to the narrator as a line to
-PLACE would print `Riker says in a quiet voice:` inside quotation marks. The
-underlying regex is untouched: raising `{4,}` to `{1,}` would admit stray
-inch-marks and initials as dialogue, and the right fix is probably to match
-quoted spans pairwise rather than by content length -- `static/js/chat.js`
-already does exactly that (`quotedRegions`) for the speaker tinting, and its
-comment explains why the region rather than the match is the unit.
-
+One thing the replay surfaced that is NOT a residual, recorded so the next
+reader does not re-open it: the stored corpus shows a structured overlay
+reaching the page as a Python `repr` (`currently {'name': 'tail',
+'description': '...'}`, chat 89, every beat). `story/scene.appearance_of`
+already renders overlay dicts by description and has since before this work;
+those rows are historical prose, not live behaviour. A stored view is a
+record of what an older engine composed, and reading one as evidence about
+the current one is the mistake this paragraph exists to stop.
 
 ### 1.81 A part-qualified pose support is invisible to the pose sweeper
 
@@ -2627,7 +2737,6 @@ MEASUREMENT: 0fec229 measured the reuse check being fooled 4 of 5 times by the
 attribution label, and demoted the ordering check on exactly that evidence.
 Each enforceable firing costs a whole narrator call, so the question for both
 is their false-positive rate over a live run, and nobody has counted yet.
-
 
 ### 1.83 A beat that names only where the clock ENDS ages no body at all
 
@@ -2667,7 +2776,6 @@ free ride. Note also that a beat charged `UNCLAIMED_BEAT_SECONDS` shares
 this entry's shape exactly -- the clock moves and the bodies do not -- so
 the floor makes the class visible on 130 more corpus beats without widening
 it.
-
 
 ### 1.84 A condition with no declared end and no owning floor still stands forever
 
@@ -2735,7 +2843,6 @@ the ledger is short, or composing the Director's condition blocks once per
 beat instead of once per stage. The first is the one with the design argument
 behind it; the second is a payload-assembly change and should not be made
 before somebody measures what the three copies actually cost.
-
 
 ### 1.84a A condition's start is still a model-declared clock position
 
@@ -2980,37 +3087,245 @@ Related and NOT to be built on top of by accident: 1.84b (the singular post),
 records the same missing primitive from the other side — deep facilities
 needing "local sub-populations who live where they work".
 
-### 1.90 An opening may leave the whole cast nowhere, and nothing objects
+### 1.85 A memory's age off a per-beat estimate, not a per-beat record
 
-`director_establish` writes `positions`. On one generation of a five-character
-scenario it wrote ONE body — the player — and left every attached,
-`status='active'` cast member with no position, no pose and no station.
+**Found:** 2026-08-26, landing `memories.encoded_at_seconds`.
 
-WHAT THAT COSTS, measured end to end. `agents/common.character_room()` returns
-None for a body with no position; `agents/perception.py` builds `sources` only
-from cast that have a room, so `perception_act` committed
-`{"views": {}, "observations": {}}` with an all-empty `composer_ledger`. The
-character payload then carried `perception.current_room: ""`,
-`view: "Nothing in particular reaches you this beat."`, `observations: []`,
-`spatial_frame: {}`. An officer asked a direct question by name answered
-nothing, and his three considered responses were "remain at station",
-"initiate standard security sweep", "stand ready for any orders" — exactly what
-a mind with an empty beat produces. The Director was correct throughout
-(`flow.addressed_to` resolved, every speech span preserved) and the interaction
-loop called him first. Every stage behaved correctly on data that was already
-wrong before turn 1 ran.
+Every memory now carries the simulation-clock reading it was written at, and
+`mind/memory_time.py` names the interval off that reading alone -- so a single
+delivered memory is exact and needs nothing here. A SUMMARY WINDOW is the gap:
+it names a range of turn indices and carries no reading of its own, so the ends
+have to be resolved to fiction time by some other route.
 
-IT IS A SAMPLING FAILURE WITH NO FLOOR UNDER IT. Same scenario, same prompt,
-four runs: three placed all six bodies, one placed one. Nothing objected,
-because the only opening-stage placement checks —
-`llm/schemas.py:5222 _unplaced_establish_entities` and
-`agents/director_floors.py:1287 _unplaced_minted_entities` — iterate
-`state_diff.entities`, things the Director MINTED. **Registered cast are not
-entities**, so no floor covers them, no warning fires, and no test asserts that
-an attached active character receives a room from the opening.
+Today `window_clock_readings` resolves them by reading the stored stamps back
+off the memories that window actually consolidated. Those are real recorded
+values, not an estimate, and they are right whenever the window minted this
+character anything at all. Two cases they cannot answer: a window whose rows
+have since been archived away, and a window that minted this character nothing
+(the character was gated out, or simply silent, for the whole stretch). Both
+fall back to the qualitative phrase, which is honest and slightly poorer.
 
-The fix is a floor, not a prompt: an attached, active, non-dormant cast member
-that the opening left unplaced is a defect the engine can see for itself.
+The same gap has a second face: the v34 migration backfills existing rows at
+`turn_idx * world.mechanics.UNCLAIMED_BEAT_SECONDS`. That constant is the rate
+the live clock already charges a beat that claimed no duration, so backfilled
+rows come out consistent with new ones by construction rather than by an
+invented number -- but a story whose beats mostly DID declare durations has a
+bank dated by a flat 10s/beat that its own clock never followed.
+
+**What closes both:** one row per committed turn holding the reading that turn
+ended at -- a per-turn clock history, written where `persist/commit_scene_state`
+already stores `simulation_clock`, rolled back with the turn like any other
+committed row. `window_clock_readings` is the named seam: its BODY changes and
+nothing downstream does, because every caller already takes
+`(opened_at, closed_at)` or a qualitative refusal. The backfill becomes
+re-derivable for any chat whose history survives.
+
+Not urgent: the fallback is a phrase rather than a wrong number, which is the
+posture this whole change insists on. Worth doing when something wants to date
+a window whose memories are gone -- long-bank archival is the likely trigger.
+
+### 1.87 The beat's own passage phrase is recorded and read by nobody
+
+**Found:** 2026-08-26, in the same landing, and stated here rather than
+closed because closing it is a prompt change with its own blast radius.
+
+`state_diff.time.display_advance` ("moments later") is taught by the prose
+author's output shape in both language packs, emitted on most beats, and
+validated into `world.mechanics.TIME_METADATA_KEYS`. It reaches NO reader.
+Its one former consumer wrote it onto `scene.time` and
+`simulation_clock.display`, which is the defect the split removed: a per-beat
+phrase overwriting a standing world property, and erasing it when spelled
+empty. The phrase survives on the persisted resolve variant, which is where a
+record belongs.
+
+That leaves a field the engine solicits and does not use, which this
+repository's own rule calls worse than no field. Two ways out and both need a
+decision rather than a patch. Either stop asking for it -- delete it from the
+two packs' output shapes, leaving it in `TIME_METADATA_KEYS` so a model that
+still writes one is not accused of an unreadable claim -- or give it the one
+reader that would justify it, a player-facing between-beats label the
+narrator or the transcript renders. The second is a product decision; the
+first is free and should be taken if nobody wants the second.
+
+### 1.88 A restored checkpoint is as old as the beat it snapshot
+
+A checkpoint restore deletes every world row and writes the snapshot back
+verbatim, so a blob taken before the `scene.time` / `scene.time_of_day` split
+comes back in the pre-split shape: 2,731 of 2,810 stored blobs carry
+`scene.time` and none carries `time_of_day`. Within the session, a restore
+therefore reproduces the empty-clock symptom the split exists to remove. The
+next `db.init()` repairs it, so this is a within-session defect rather than a
+durable one.
+
+**A recovery call on the restore path was built and then REVERTED**, and the
+reason is worth keeping. Restoring a pre-split blob and converting it makes the
+restore a MUTATION, and `test_rerun_of_the_same_turn_produces_an_identical_world`
+is the invariant that forbids it: reroll restores the pre-turn checkpoint and
+re-runs the beat, and the two worlds must come out byte-identical. A conversion
+that fires on the first restore and not the second breaks that. Narrowing the
+call to rows that actually carry the old shape (`only_pre_split`, which is why
+that parameter exists on `recover_scene_time_of_day`) fixed a second, different
+regression — a restore of one era stamping an empty key onto another era's
+scene row, caught by
+`test_restoring_mid_a_framed_turn_does_not_clobber_the_present` — but does not
+fix this one, because the pre-split shape is exactly what the conversion acts on.
+
+So the fix is not a call on the restore path. Either the snapshot is upgraded
+when it is WRITTEN rather than when it is read, or the readers tolerate a
+pre-split scene for the life of a session. Reroll identity is not negotiable
+against a cosmetic within-session gap.
+
+### 1.89 A minted name serves only the unnamed
+
+Landed 2026-08-26 with the story-law name generator (`story/naming.py`;
+the write is `persist/commit_background._mint_missing_presence_names`,
+closing §1.17's last residual): a tracked person with no real name — none,
+or an id-shaped string standing where one should — draws ONE permanent name
+from the story's own law (authored `naming_profile` world key > Charter
+`naming` laws as separate lanes > pools harvested from the cast and the
+lorebook's entries about people), deterministic in (chat, presence uid) so a
+replayed commit re-lands the same name and a replacement (new uid) draws a
+new one. A story yielding no law mints nothing. What the generator does NOT
+serve, registered here:
+
+- **A role-descriptor name is kept, never upgraded.** A presence the story
+  calls "the barkeep" or "station engineer" has a name in the ledger's eyes,
+  so it never enters the mint. Deliberate — renaming it would be the engine
+  reaching for the field, the act permanence forbids — but it means the
+  J2 brief's "ensign at conn" acquires a personal name only if the story
+  (or a future explicit naming surface: promotion, a UI action, the
+  Director introducing them) supplies one.
+- **Charter bodies still fall back to a body key when the Charter has no
+  law of its own.** Closed on 2026-08-27, in part. The AUTHORED story-level
+  law now reaches the Charter mint — `_plan_lived_location` passes it as
+  `close_plan`'s `naming_law`, so an author's explicit profile outranks a
+  Charter's derived one exactly as `story/naming.py` says it should, and the
+  two are no longer separate authorities. What is still unbuilt is the third
+  lane: a Charter with no law, in a story with no authored law, does not
+  fall through to the HARVEST and keeps `materialize_body_names`' body-key
+  fallback (which `_plan_lived_location`'s unnamed check then refuses
+  loudly). Deliberate for now — the harvest's pools are built from the cast,
+  and handing a 42-body population names recombined from the cast's own
+  elements is the contamination §1.90's guard exists to prevent, so that
+  lane needs its own argument before it is opened. (The "mostly moot while
+  every shipped charter is empty" note this entry used to carry was
+  withdrawn with §J1: read at `item['state']` rather than the registry
+  wrapper, every shipped charter is populated — 40, 37, 42, 8 and 6 bodies.)
+- **The authored law has an API and no UI.** GET/PUT
+  `/api/chats/{cid}/naming_profile` (web/app.py) is the configurable
+  surface; nothing in `static/` renders it yet.
+- **Scenario prose is not harvested.** The harvest reads structured
+  evidence only (cast rows, lore `character` entries, Charter laws);
+  deterministically extracting names from freeform scenario text was
+  declined, not forgotten — a capitalization heuristic over prose is the
+  kind of guess this repo keeps finding in the fallback-became-the-mechanism
+  shape (§1.18).
+- **Harvest quality is the lorebook's quality.** An epithet-titled
+  `character` entry ("Sacred Rind") contributes epithet tokens; measured on
+  the corpus copy, chat 67's three id-named records minted
+  harvested-vocabulary names of exactly that flavour. The authored profile
+  exists to outrank the harvest wherever an author cares.
+
+### 1.90 A minted person never takes a registered mind's address
+
+Landed 2026-08-27. `_refuse_name_collision` was wired to the promotion path
+and the engine mints people on two paths; the Charter body allocator
+(`world/charter_identity.materialize_body_names`) took the other one.
+`story.naming.registered_identity_names` →
+`charter_identity.identity_reservation` → `name_is_reserved` is now the
+single answer both consult, subtracting at the persisted law
+(`strip_reserved_pools`) and again at the candidate. What it does NOT close,
+registered here:
+
+- **A name element is refused only where the law addresses people by it
+  alone.** `address_components` reads the story's own `name_format` /
+  `formal_format`; under `{given} {family}` two people may share a family,
+  which is correct and is also why a story whose prose calls people by
+  surname while its LAW writes full names gets no protection from the
+  element rule. The whole-name refusal still holds there. The honest fix is
+  an authored law that says how people are addressed, not a heuristic over
+  prose.
+- **Only the head and the tail of a registered name are its address.** A
+  token buried mid-name is not matched, so a three-part name whose middle
+  element is what everyone actually uses is not protected. No measured case;
+  registered because the rule is a choice.
+- **Nothing renames what is already named.** A story that already holds a
+  generated body under a registered surname keeps it: the mint is a write
+  and this is a subtraction at the mint, not a migration. Chat 95's two
+  measured bodies stay as they are unless the author changes them.
+- **The refusal is silent.** A candidate refused is simply not drawn; a
+  generation whose pool is exhausted BY the refusal surfaces as
+  `_plan_lived_location`'s unnamed-body error, which names the bodies but
+  not the reason. A pool small enough for that to happen is rare (the
+  measured laws carried 12 and 27 family elements) and the loud failure is
+  correct; a note saying "the reservation took the last one" would be
+  better.
+
+### 1.90a A generic name is never made out of a named person — LANDED
+
+Landed 2026-08-28. The mint's material was a model's, and the guard was a
+filter. `refuse_harvested_pools` emptied a generated law's name POOLS and kept
+its FRAGMENTS on the premise that "a fragment names nobody however well a
+model knows a canon". Measured across three consecutive generations of one
+institution: two of the three supplied `family_parts.starts` that were, entry
+for entry, the openings of the cast's own surnames — one list 100% so,
+including an element belonging to a character registered in that chat — and
+the third supplied ordinary fragments touching nobody. Variance in what a
+model volunteers, which is why the guard cannot be the model. Reproduced with
+that law as a fixture, one body came out wearing a registered person's
+surname EXACTLY, assembled from a three-letter opening and a two-letter
+ending, past every guard the engine had.
+
+`charter_identity.fragment_is_name_element` runs the same rule at the
+fragment (anchored at the head and the tail, `NAME_ELEMENT_FLOOR` = 2), and
+`refuse_harvested_material` pairs it with `_fill_empty_material` so a refusal
+that empties a field is answered rather than left to surface as a generation
+failure. `story.naming.phonology_lanes` is now a real lane, ranked authored >
+phonology > charters > harvested. `tests/test_name_material_partition.py`,
+`tests/test_phonology_lane.py`. What it does NOT close, registered here:
+
+- **The exact-surname share at the mint is still reachable, by design as
+  currently pinned.** Under `{given} {family}` `address_components` is empty,
+  so `name_is_reserved` refuses a component only when it is somebody's WHOLE
+  untitled name, and `reconstructs_a_reserved_name` deliberately permits an
+  exact share ("a registered `Beverly Crusher` does not reserve every
+  `Beverly`"). A law whose material legitimately assembles a registered
+  surname therefore still can. The measured route to it was the fragments and
+  that route is closed; the general case is an owner ruling, because closing
+  it reverses `test_a_paired_law_keeps_the_element_and_refuses_the_whole_name`
+  and `test_generation_without_a_reservation_still_stores_its_law`, which pin
+  the sharing permission on purpose. **`strip_reserved_pools` already made the
+  opposite ruling for POOLS** ("a pool that CONTAINS a named individual's
+  family name is the engine ISSUING that individual's name to strangers"), so
+  the two halves of the engine currently disagree about the same string.
+- **The last-resort pool branch still exists.** `refuse_harvested_material`
+  falls back to the (subtracted) pools when refusal and both replacements
+  leave a law with no assemblable material. It is strictly no worse than the
+  behaviour before the refusal existed and both measured generations reach it
+  never, but it is a path on which a model-supplied name list still reaches a
+  body. Removing it needs a story measured to hit it.
+- **`NAME_ELEMENT_FLOOR` = 2 is a new number and wants the owner's eye.** One
+  letter is the alphabet and refusing it would take the alphabet away from
+  the law; two letters that open or close somebody's name are a piece of that
+  name. The cost is real and unmeasured on a large lorebook: every two-letter
+  opening of every `character` entry's name becomes unavailable as material,
+  and a story with a very large named cast could lose a noticeable share of
+  ordinary syllables that way.
+- **The vocabulary lane is thin where a setting's places are short words.**
+  `vocabulary_name_parts` reads the plan's structure, room names and room
+  purposes through `derived_name_parts`, and a single-syllable room name
+  ("Hall", "Bay") contributes nothing. A generation whose law is wholly
+  refused AND whose rooms are all single-syllable falls through to the pool
+  branch above.
+- **A refused fragment is silent.** Same shape as §1.90's last residual: the
+  law simply carries fewer openings and nothing records that the reservation
+  took them. A generation whose material narrows sharply is worth saying so
+  about.
+- **The measured repetition is the honest cost and is not hidden.** With the
+  gen-C law refused, three given openings and three family openings survive,
+  so 24 bodies draw from a 12 x 9 space and family names recur. That is the
+  capacity allocator's documented reuse-after-exhaustion, not a new defect;
+  a law that gives one clean opening in three cannot sound wider than it is.
 
 ### 1.91 Nothing tells a character they were addressed
 
@@ -3335,38 +3650,6 @@ WHAT REMAINS OPEN, and it is the owner's:
     rather than picks. Whether an attach should be REFUSED without an answer,
     and how loud a per-attach notice is in a UI, are the owner's to say.
 
-### 1.96a The stateless rule was written for one population and applied to two
-
-`CLAUDE.md:101` states, as a property of the STAGE:
-
-    `agents/background.py` gives named, unregistered background presences a
-    stateless reaction per beat -- no persistent memory or psychology (that
-    requires promotion to a real character).
-
-The stage voices TWO populations and the sentence is true of only one:
-
-  * **Tracked presences** -- names harvested from the Director's own prose into
-    the `background_presences` world key by `track_background_presences`. These
-    genuinely have no persistent inner state, and the rule describes them
-    correctly.
-  * **Charter bodies** -- reached through `background_presence_records`
-    (`agents/background.py:323`) and `presence_view` (:1131). These carry
-    `state.minds`: ~14 claims per head across 42 heads, each with a decaying
-    `strength`, an `as_of_hours` and a `heard_from`. The Charter EXISTS to give
-    them persistent belief cheaply. The rule is false of them by design.
-
-WHY THIS MATTERS BEYOND TIDINESS. A doc that says the stage is stateless is a
-doc that says the return path in 1.96 should not exist -- there is no reason to
-translate an on-screen encounter back into a ledger if the presence has no
-ledger. **The architecture was closed off by a description rather than by a
-decision.** The engine's owner's stated intent is the opposite: the Charter is
-the cheap persistent mind, and that is its job.
-
-The correction is not to delete the sentence -- it is right about tracked
-presences, and the promotion boundary it names is real. It is to say which
-population it governs, and to state the other case beside it: a Charter body
-voiced through this stage brings a persisted mind with it and may carry one away.
-
 ### 1.96 One body, two simulations, and a door that only opens one way
 
 The architecture the engine's owner names: **background life is the on-screen
@@ -3441,6 +3724,38 @@ WHAT A TRANSLATION HAS TO PRESERVE, and this is the whole difficulty:
 Not designed here. The observation is the owner's; the measurement is that one
 direction is wired, the other is absent, and the door the other direction needs
 already documents this exact traffic as its own use case.
+
+### 1.96a The stateless rule was written for one population and applied to two
+
+`CLAUDE.md:101` states, as a property of the STAGE:
+
+    `agents/background.py` gives named, unregistered background presences a
+    stateless reaction per beat -- no persistent memory or psychology (that
+    requires promotion to a real character).
+
+The stage voices TWO populations and the sentence is true of only one:
+
+  * **Tracked presences** -- names harvested from the Director's own prose into
+    the `background_presences` world key by `track_background_presences`. These
+    genuinely have no persistent inner state, and the rule describes them
+    correctly.
+  * **Charter bodies** -- reached through `background_presence_records`
+    (`agents/background.py:323`) and `presence_view` (:1131). These carry
+    `state.minds`: ~14 claims per head across 42 heads, each with a decaying
+    `strength`, an `as_of_hours` and a `heard_from`. The Charter EXISTS to give
+    them persistent belief cheaply. The rule is false of them by design.
+
+WHY THIS MATTERS BEYOND TIDINESS. A doc that says the stage is stateless is a
+doc that says the return path in 1.96 should not exist -- there is no reason to
+translate an on-screen encounter back into a ledger if the presence has no
+ledger. **The architecture was closed off by a description rather than by a
+decision.** The engine's owner's stated intent is the opposite: the Charter is
+the cheap persistent mind, and that is its job.
+
+The correction is not to delete the sentence -- it is right about tracked
+presences, and the promotion boundary it names is real. It is to say which
+population it governs, and to state the other case beside it: a Charter body
+voiced through this stage brings a persisted mind with it and may carry one away.
 
 ### 1.97 Volition reads history; the rest of the social physics does not
 
@@ -3724,386 +4039,6 @@ What that leaves open:
   clock, and is bounded by bodies × `TIE_CAP`, but nobody has run it to the
   cap.
 
-### 1.85 A memory's age off a per-beat estimate, not a per-beat record
-
-**Found:** 2026-08-26, landing `memories.encoded_at_seconds`.
-
-Every memory now carries the simulation-clock reading it was written at, and
-`mind/memory_time.py` names the interval off that reading alone -- so a single
-delivered memory is exact and needs nothing here. A SUMMARY WINDOW is the gap:
-it names a range of turn indices and carries no reading of its own, so the ends
-have to be resolved to fiction time by some other route.
-
-Today `window_clock_readings` resolves them by reading the stored stamps back
-off the memories that window actually consolidated. Those are real recorded
-values, not an estimate, and they are right whenever the window minted this
-character anything at all. Two cases they cannot answer: a window whose rows
-have since been archived away, and a window that minted this character nothing
-(the character was gated out, or simply silent, for the whole stretch). Both
-fall back to the qualitative phrase, which is honest and slightly poorer.
-
-The same gap has a second face: the v34 migration backfills existing rows at
-`turn_idx * world.mechanics.UNCLAIMED_BEAT_SECONDS`. That constant is the rate
-the live clock already charges a beat that claimed no duration, so backfilled
-rows come out consistent with new ones by construction rather than by an
-invented number -- but a story whose beats mostly DID declare durations has a
-bank dated by a flat 10s/beat that its own clock never followed.
-
-**What closes both:** one row per committed turn holding the reading that turn
-ended at -- a per-turn clock history, written where `persist/commit_scene_state`
-already stores `simulation_clock`, rolled back with the turn like any other
-committed row. `window_clock_readings` is the named seam: its BODY changes and
-nothing downstream does, because every caller already takes
-`(opened_at, closed_at)` or a qualitative refusal. The backfill becomes
-re-derivable for any chat whose history survives.
-
-Not urgent: the fallback is a phrase rather than a wrong number, which is the
-posture this whole change insists on. Worth doing when something wants to date
-a window whose memories are gone -- long-bank archival is the likely trigger.
-
-### 1.88 A restored checkpoint is as old as the beat it snapshot
-
-A checkpoint restore deletes every world row and writes the snapshot back
-verbatim, so a blob taken before the `scene.time` / `scene.time_of_day` split
-comes back in the pre-split shape: 2,731 of 2,810 stored blobs carry
-`scene.time` and none carries `time_of_day`. Within the session, a restore
-therefore reproduces the empty-clock symptom the split exists to remove. The
-next `db.init()` repairs it, so this is a within-session defect rather than a
-durable one.
-
-**A recovery call on the restore path was built and then REVERTED**, and the
-reason is worth keeping. Restoring a pre-split blob and converting it makes the
-restore a MUTATION, and `test_rerun_of_the_same_turn_produces_an_identical_world`
-is the invariant that forbids it: reroll restores the pre-turn checkpoint and
-re-runs the beat, and the two worlds must come out byte-identical. A conversion
-that fires on the first restore and not the second breaks that. Narrowing the
-call to rows that actually carry the old shape (`only_pre_split`, which is why
-that parameter exists on `recover_scene_time_of_day`) fixed a second, different
-regression — a restore of one era stamping an empty key onto another era's
-scene row, caught by
-`test_restoring_mid_a_framed_turn_does_not_clobber_the_present` — but does not
-fix this one, because the pre-split shape is exactly what the conversion acts on.
-
-So the fix is not a call on the restore path. Either the snapshot is upgraded
-when it is WRITTEN rather than when it is read, or the readers tolerate a
-pre-split scene for the life of a session. Reroll identity is not negotiable
-against a cosmetic within-session gap.
-
-### 1.87 The beat's own passage phrase is recorded and read by nobody
-
-**Found:** 2026-08-26, in the same landing, and stated here rather than
-closed because closing it is a prompt change with its own blast radius.
-
-`state_diff.time.display_advance` ("moments later") is taught by the prose
-author's output shape in both language packs, emitted on most beats, and
-validated into `world.mechanics.TIME_METADATA_KEYS`. It reaches NO reader.
-Its one former consumer wrote it onto `scene.time` and
-`simulation_clock.display`, which is the defect the split removed: a per-beat
-phrase overwriting a standing world property, and erasing it when spelled
-empty. The phrase survives on the persisted resolve variant, which is where a
-record belongs.
-
-That leaves a field the engine solicits and does not use, which this
-repository's own rule calls worse than no field. Two ways out and both need a
-decision rather than a patch. Either stop asking for it -- delete it from the
-two packs' output shapes, leaving it in `TIME_METADATA_KEYS` so a model that
-still writes one is not accused of an unreadable claim -- or give it the one
-reader that would justify it, a player-facing between-beats label the
-narrator or the transcript renders. The second is a product decision; the
-first is free and should be taken if nobody wants the second.
-
-
-### 1.80 Residuals from the change tier
-
-Landed with `Design.md` § A view leads with what changed: a player view is now
-partitioned into a beat half and a background half by
-`composer.standing_verdicts`, reading each observer's own previous ledger.
-Three things that work names for and does not close.
-
-- **The content hash is LEXICAL, so a re-wording reads as a change.** A
-  standing key's content half hashes the rendered fields, and a specialist
-  that re-phrases a pose or a contact manner without moving anything mints a
-  new hash. Measured on the replayed corpus (chats 86-92, 389 player views),
-  the beat half carries 16.9% contact and 7.2% pose atoms per beat, and some
-  unknown share of that is re-phrasing rather than movement. **The cost is
-  bounded and is not an information leak**: every sentence still realises
-  admitted percept data, so a false "changed" verdict buys a re-description
-  the observer was already entitled to, never a fact they were not. Semantic,
-  wording-invariant keys are the fix and they are a separate change with a
-  separate argument — a pose is not obviously equal to a paraphrase of
-  itself, and deciding it is has consequences for memory minting too.
-- **The episode renderer keeps its own changed-list logic.**
-  `_render_episode_english` still asks `dedupe_key not in prev_standing` plus
-  `force`/`prev_described` directly rather than calling `standing_verdicts`.
-  It is correct as it stands (the split key is still an exact match), but it
-  is a second spelling of one rule, which is the shape this repo has watched
-  drift before — the Japanese adapter's copy of the player delta rule had
-  already drifted once when this work found it. Unifying it is a tidy-up, not
-  a defect.
-- **An adapter that implements `render_view` without calling
-  `standing_verdicts` re-forks the rule.**
-  `tests/test_japanese_renderer_parity.py` compares the two renderers'
-  beat/background classification AND the order of their spans, so the shipped
-  pack cannot drift silently; a THIRD pack could. The classification half of
-  that comparison shipped a beat behind the ordering half: the first version
-  of the ordering test rendered a beat containing exactly one member, which
-  orders correctly whatever the rule says, and it passed while the Japanese
-  adapter emitted the changed standing percepts before the events. The three
-  private composer names the pack reached across for are now public
-  (`leads_the_beat`, `as_beat`, `ACTIVE_STANDING_KINDS`) and the ordering
-  itself is `composer.player_view_order`, which both renderers call, so the
-  ORDER is no longer a thing a pack can hold an opinion about. What a pack
-  still spells for itself is admission -- the appearance and standing-dedupe
-  branches -- and that is the remaining fork. A malformed adapter still falls
-  through to the English reference renderer, which carries the tier, so the
-  failure mode is wording rather than information.
-- **The delta can still starve a view without emptying it, and that half is
-  the owner's call.** A view the delta empties completely is now re-asked for
-  the background (`perception._composer_outcome`; `Design.md` § A view leads
-  with what changed), because "nothing new" and "nothing reached this mind"
-  are different states and `agents/narration.py` reads the second off a null
-  view. A view the delta reduces to ONE sentence is untouched, and on chat 98
-  that was the more common shape: turn 9's whole player view was "You are
-  seated on the bar."; turn 10's "You are standing on the deck."; turn 38's
-  "The lieutenant commander is close by. You see lieutenant commander." No
-  room, no roster, no light — the narrator supplied all three from prose
-  memory. **The question is whether PLACE and COMPANY are deltas at all.**
-  They are continuously true, they are the frame every other sentence in a
-  view is positioned inside, and `ACTIVE_STANDING_KINDS` already exempts
-  sensations from suppression on exactly that argument ("an unchanged contact
-  is still being felt now"). Against that: the tier's whole measured result
-  was won by suppressing what the observer was already told, 772 of 2,645
-  consecutive player-view pairs repeated a 60-character sentence verbatim
-  before it, and a room's authored notes are long. A middle exists — restore
-  the room's IDENTITY every beat and keep its notes and light on the delta —
-  and it is a behaviour change to every story's prose, so it is named here
-  rather than taken.
-- **Two consecutive recovered views are byte-identical, by construction.**
-  The recovery re-renders the same unchanged percepts, so a run of quiet
-  beats hands the narrator the same paragraph each time. Measured live on
-  chat 98 turns 39 and 40 (played on a copy, 2026-08-29): both views were
-  the room, its notes, the roster and the pose, character for character, and
-  both beats' prose still differed because `already_established_phrases`
-  fills from the view against recent narration and is doing exactly the job
-  it was built for. Recorded because the mechanism is not obvious from the
-  code: the composer is not deduplicating across beats here, the narrator is.
-
-One thing the replay surfaced that is NOT a residual, recorded so the next
-reader does not re-open it: the stored corpus shows a structured overlay
-reaching the page as a Python `repr` (`currently {'name': 'tail',
-'description': '...'}`, chat 89, every beat). `story/scene.appearance_of`
-already renders overlay dicts by description and has since before this work;
-those rows are historical prose, not live behaviour. A stored view is a
-record of what an older engine composed, and reading one as evidence about
-the current one is the mistake this paragraph exists to stop.
-
-### 1.89 A minted name serves only the unnamed
-
-Landed 2026-08-26 with the story-law name generator (`story/naming.py`;
-the write is `persist/commit_background._mint_missing_presence_names`,
-closing §1.17's last residual): a tracked person with no real name — none,
-or an id-shaped string standing where one should — draws ONE permanent name
-from the story's own law (authored `naming_profile` world key > Charter
-`naming` laws as separate lanes > pools harvested from the cast and the
-lorebook's entries about people), deterministic in (chat, presence uid) so a
-replayed commit re-lands the same name and a replacement (new uid) draws a
-new one. A story yielding no law mints nothing. What the generator does NOT
-serve, registered here:
-
-- **A role-descriptor name is kept, never upgraded.** A presence the story
-  calls "the barkeep" or "station engineer" has a name in the ledger's eyes,
-  so it never enters the mint. Deliberate — renaming it would be the engine
-  reaching for the field, the act permanence forbids — but it means the
-  J2 brief's "ensign at conn" acquires a personal name only if the story
-  (or a future explicit naming surface: promotion, a UI action, the
-  Director introducing them) supplies one.
-- **Charter bodies still fall back to a body key when the Charter has no
-  law of its own.** Closed on 2026-08-27, in part. The AUTHORED story-level
-  law now reaches the Charter mint — `_plan_lived_location` passes it as
-  `close_plan`'s `naming_law`, so an author's explicit profile outranks a
-  Charter's derived one exactly as `story/naming.py` says it should, and the
-  two are no longer separate authorities. What is still unbuilt is the third
-  lane: a Charter with no law, in a story with no authored law, does not
-  fall through to the HARVEST and keeps `materialize_body_names`' body-key
-  fallback (which `_plan_lived_location`'s unnamed check then refuses
-  loudly). Deliberate for now — the harvest's pools are built from the cast,
-  and handing a 42-body population names recombined from the cast's own
-  elements is the contamination §1.90's guard exists to prevent, so that
-  lane needs its own argument before it is opened. (The "mostly moot while
-  every shipped charter is empty" note this entry used to carry was
-  withdrawn with §J1: read at `item['state']` rather than the registry
-  wrapper, every shipped charter is populated — 40, 37, 42, 8 and 6 bodies.)
-- **The authored law has an API and no UI.** GET/PUT
-  `/api/chats/{cid}/naming_profile` (web/app.py) is the configurable
-  surface; nothing in `static/` renders it yet.
-- **Scenario prose is not harvested.** The harvest reads structured
-  evidence only (cast rows, lore `character` entries, Charter laws);
-  deterministically extracting names from freeform scenario text was
-  declined, not forgotten — a capitalization heuristic over prose is the
-  kind of guess this repo keeps finding in the fallback-became-the-mechanism
-  shape (§1.18).
-- **Harvest quality is the lorebook's quality.** An epithet-titled
-  `character` entry ("Sacred Rind") contributes epithet tokens; measured on
-  the corpus copy, chat 67's three id-named records minted
-  harvested-vocabulary names of exactly that flavour. The authored profile
-  exists to outrank the harvest wherever an author cares.
-
-
-### 1.90 A minted person never takes a registered mind's address
-
-Landed 2026-08-27. `_refuse_name_collision` was wired to the promotion path
-and the engine mints people on two paths; the Charter body allocator
-(`world/charter_identity.materialize_body_names`) took the other one.
-`story.naming.registered_identity_names` →
-`charter_identity.identity_reservation` → `name_is_reserved` is now the
-single answer both consult, subtracting at the persisted law
-(`strip_reserved_pools`) and again at the candidate. What it does NOT close,
-registered here:
-
-- **A name element is refused only where the law addresses people by it
-  alone.** `address_components` reads the story's own `name_format` /
-  `formal_format`; under `{given} {family}` two people may share a family,
-  which is correct and is also why a story whose prose calls people by
-  surname while its LAW writes full names gets no protection from the
-  element rule. The whole-name refusal still holds there. The honest fix is
-  an authored law that says how people are addressed, not a heuristic over
-  prose.
-- **Only the head and the tail of a registered name are its address.** A
-  token buried mid-name is not matched, so a three-part name whose middle
-  element is what everyone actually uses is not protected. No measured case;
-  registered because the rule is a choice.
-- **Nothing renames what is already named.** A story that already holds a
-  generated body under a registered surname keeps it: the mint is a write
-  and this is a subtraction at the mint, not a migration. Chat 95's two
-  measured bodies stay as they are unless the author changes them.
-- **The refusal is silent.** A candidate refused is simply not drawn; a
-  generation whose pool is exhausted BY the refusal surfaces as
-  `_plan_lived_location`'s unnamed-body error, which names the bodies but
-  not the reason. A pool small enough for that to happen is rare (the
-  measured laws carried 12 and 27 family elements) and the loud failure is
-  correct; a note saying "the reservation took the last one" would be
-  better.
-
-### 1.90a A generic name is never made out of a named person — LANDED
-
-Landed 2026-08-28. The mint's material was a model's, and the guard was a
-filter. `refuse_harvested_pools` emptied a generated law's name POOLS and kept
-its FRAGMENTS on the premise that "a fragment names nobody however well a
-model knows a canon". Measured across three consecutive generations of one
-institution: two of the three supplied `family_parts.starts` that were, entry
-for entry, the openings of the cast's own surnames — one list 100% so,
-including an element belonging to a character registered in that chat — and
-the third supplied ordinary fragments touching nobody. Variance in what a
-model volunteers, which is why the guard cannot be the model. Reproduced with
-that law as a fixture, one body came out wearing a registered person's
-surname EXACTLY, assembled from a three-letter opening and a two-letter
-ending, past every guard the engine had.
-
-`charter_identity.fragment_is_name_element` runs the same rule at the
-fragment (anchored at the head and the tail, `NAME_ELEMENT_FLOOR` = 2), and
-`refuse_harvested_material` pairs it with `_fill_empty_material` so a refusal
-that empties a field is answered rather than left to surface as a generation
-failure. `story.naming.phonology_lanes` is now a real lane, ranked authored >
-phonology > charters > harvested. `tests/test_name_material_partition.py`,
-`tests/test_phonology_lane.py`. What it does NOT close, registered here:
-
-- **The exact-surname share at the mint is still reachable, by design as
-  currently pinned.** Under `{given} {family}` `address_components` is empty,
-  so `name_is_reserved` refuses a component only when it is somebody's WHOLE
-  untitled name, and `reconstructs_a_reserved_name` deliberately permits an
-  exact share ("a registered `Beverly Crusher` does not reserve every
-  `Beverly`"). A law whose material legitimately assembles a registered
-  surname therefore still can. The measured route to it was the fragments and
-  that route is closed; the general case is an owner ruling, because closing
-  it reverses `test_a_paired_law_keeps_the_element_and_refuses_the_whole_name`
-  and `test_generation_without_a_reservation_still_stores_its_law`, which pin
-  the sharing permission on purpose. **`strip_reserved_pools` already made the
-  opposite ruling for POOLS** ("a pool that CONTAINS a named individual's
-  family name is the engine ISSUING that individual's name to strangers"), so
-  the two halves of the engine currently disagree about the same string.
-- **The last-resort pool branch still exists.** `refuse_harvested_material`
-  falls back to the (subtracted) pools when refusal and both replacements
-  leave a law with no assemblable material. It is strictly no worse than the
-  behaviour before the refusal existed and both measured generations reach it
-  never, but it is a path on which a model-supplied name list still reaches a
-  body. Removing it needs a story measured to hit it.
-- **`NAME_ELEMENT_FLOOR` = 2 is a new number and wants the owner's eye.** One
-  letter is the alphabet and refusing it would take the alphabet away from
-  the law; two letters that open or close somebody's name are a piece of that
-  name. The cost is real and unmeasured on a large lorebook: every two-letter
-  opening of every `character` entry's name becomes unavailable as material,
-  and a story with a very large named cast could lose a noticeable share of
-  ordinary syllables that way.
-- **The vocabulary lane is thin where a setting's places are short words.**
-  `vocabulary_name_parts` reads the plan's structure, room names and room
-  purposes through `derived_name_parts`, and a single-syllable room name
-  ("Hall", "Bay") contributes nothing. A generation whose law is wholly
-  refused AND whose rooms are all single-syllable falls through to the pool
-  branch above.
-- **A refused fragment is silent.** Same shape as §1.90's last residual: the
-  law simply carries fewer openings and nothing records that the reservation
-  took them. A generation whose material narrows sharply is worth saying so
-  about.
-- **The measured repetition is the honest cost and is not hidden.** With the
-  gen-C law refused, three given openings and three family openings survive,
-  so 24 bodies draw from a 12 x 9 space and family names recur. That is the
-  capacity allocator's documented reuse-after-exhaustion, not a new defect;
-  a law that gives one clean opening in three cannot sound wider than it is.
-
-### 1.99c The Charter scale audit's 45-second guard is broken, and the branch broke it
-
-Found 2026-08-27 while measuring design 5; **re-measured 2026-08-27 after a
-review found the baseline was 100 commits from the wrong side of the branch
-point.** `tools/charter_audit_scale.py::test_a_simulated_month_costs_seconds_not_minutes`
-asserts a simulated month of `big_ship(500)` costs under 45 s, and its own
-comment records the measurement that set the bound: "below 30 s in isolation
-and 30.4–33.2 s after several minutes of sustained test load".
-
-The first version of this entry called 48cdd94 "committed HEAD, before any of
-the §1.7.6 designs" and concluded the guard "was already failing by 2x at
-HEAD". 48cdd94 is `main`'s tip, not this branch's baseline —
-`git rev-list --count 48cdd94..96916f6` is 100 — and it PASSES. Measured on
-`.venv`, this workstation, three trees strictly interleaved in one sitting,
-three cycles, `big_ship(500)` at 720 h:
-
-| tree | seconds |
-| --- | --- |
-| `main` at 48cdd94 | 43.04 / 42.31 / 41.81 |
-| this branch's committed baseline, 96916f6 | 89.49 / 88.64 / 88.62 |
-| the working tree, all five designs plus the review fixes | 90.02 / 91.03 / 91.96 |
-
-Absolute seconds move a lot with what else is on the box — the same working
-tree read 64.7 s under `pytest` on a quiet one — so the interleaved ratios are
-the load-bearing part of the table and not the raw numbers. So the guard was
-passing before this branch and is failing on it, by a little over 2x, and **the failure is almost entirely already committed**: the
-uncommitted work adds 1.6 % on top of 96916f6, not the 21 % a review measured
-before `charter_mark.held_marks` stopped normalizing the whole store (§1.97,
-`_normalize_row`).
-
-**And the cause is not the §1.7.6 work.** Bisected in one sitting on the same
-fixture at 240 h, one rep per tree, the box otherwise quiet:
-
-| tree | seconds | step |
-| --- | --- | --- |
-| 48cdd94 (`main`) | 8.70 | — |
-| be82486 *A memory is how it landed, not that it happened* | 11.77 | +35 % over 96 commits |
-| 3ac5d2c *All systems nominal is a report, not what happened to these people* | 15.60 | **+33 % over two commits** |
-| b5bc630 | 15.78 | +1 % |
-| 96916f6 (designs 1–2 and the tie layer) | 16.17 | +2.5 % |
-| working tree (designs 3–5 finished, plus the review fixes) | 16.61 | +2.7 % |
-
-3ac5d2c is the commit that made the offscreen branch stop being empty —
-`COARSE_PRACTICES`, `_record_coarse_experiences`, the `ENCOUNTER_ODDS` draw —
-and a third of the cost of a 500-hand month arrived with it. That is a
-deliberate feature and its docstring argues for it; what nobody did was
-re-measure the guard the same day. All five §1.7.6 designs together are about
-5 % of the run.
-
-**The assertion is deliberately left failing.** Raising it would erase the
-evidence, and the audit is opt-in — `tools/` is outside `testpaths`, so it is
-not collected by `pytest` and nothing in CI is red because of it. What needs
-doing is a decision about 3ac5d2c's writers at 500 bodies, not a new constant.
-
 ### 1.99a Status as a temporary trait, and the accusation nobody offscreen makes
 
 Landed 2026-08-27. Design 4 of
@@ -4374,6 +4309,59 @@ What that leaves open:
   mark is never appraised, and open for the same reason: `authored`
   deliberately does not advance the world.
 
+### 1.99c The Charter scale audit's 45-second guard is broken, and the branch broke it
+
+Found 2026-08-27 while measuring design 5; **re-measured 2026-08-27 after a
+review found the baseline was 100 commits from the wrong side of the branch
+point.** `tools/charter_audit_scale.py::test_a_simulated_month_costs_seconds_not_minutes`
+asserts a simulated month of `big_ship(500)` costs under 45 s, and its own
+comment records the measurement that set the bound: "below 30 s in isolation
+and 30.4–33.2 s after several minutes of sustained test load".
+
+The first version of this entry called 48cdd94 "committed HEAD, before any of
+the §1.7.6 designs" and concluded the guard "was already failing by 2x at
+HEAD". 48cdd94 is `main`'s tip, not this branch's baseline —
+`git rev-list --count 48cdd94..96916f6` is 100 — and it PASSES. Measured on
+`.venv`, this workstation, three trees strictly interleaved in one sitting,
+three cycles, `big_ship(500)` at 720 h:
+
+| tree | seconds |
+| --- | --- |
+| `main` at 48cdd94 | 43.04 / 42.31 / 41.81 |
+| this branch's committed baseline, 96916f6 | 89.49 / 88.64 / 88.62 |
+| the working tree, all five designs plus the review fixes | 90.02 / 91.03 / 91.96 |
+
+Absolute seconds move a lot with what else is on the box — the same working
+tree read 64.7 s under `pytest` on a quiet one — so the interleaved ratios are
+the load-bearing part of the table and not the raw numbers. So the guard was
+passing before this branch and is failing on it, by a little over 2x, and **the failure is almost entirely already committed**: the
+uncommitted work adds 1.6 % on top of 96916f6, not the 21 % a review measured
+before `charter_mark.held_marks` stopped normalizing the whole store (§1.97,
+`_normalize_row`).
+
+**And the cause is not the §1.7.6 work.** Bisected in one sitting on the same
+fixture at 240 h, one rep per tree, the box otherwise quiet:
+
+| tree | seconds | step |
+| --- | --- | --- |
+| 48cdd94 (`main`) | 8.70 | — |
+| be82486 *A memory is how it landed, not that it happened* | 11.77 | +35 % over 96 commits |
+| 3ac5d2c *All systems nominal is a report, not what happened to these people* | 15.60 | **+33 % over two commits** |
+| b5bc630 | 15.78 | +1 % |
+| 96916f6 (designs 1–2 and the tie layer) | 16.17 | +2.5 % |
+| working tree (designs 3–5 finished, plus the review fixes) | 16.61 | +2.7 % |
+
+3ac5d2c is the commit that made the offscreen branch stop being empty —
+`COARSE_PRACTICES`, `_record_coarse_experiences`, the `ENCOUNTER_ODDS` draw —
+and a third of the cost of a 500-hand month arrived with it. That is a
+deliberate feature and its docstring argues for it; what nobody did was
+re-measure the guard the same day. All five §1.7.6 designs together are about
+5 % of the run.
+
+**The assertion is deliberately left failing.** Raising it would erase the
+evidence, and the audit is opt-in — `tools/` is outside `testpaths`, so it is
+not collected by `pytest` and nothing in CI is red because of it. What needs
+doing is a decision about 3ac5d2c's writers at 500 bodies, not a new constant.
 
 ### 1.99d A person is owned by an institution, and a timeskip carries nobody
 
@@ -4779,180 +4767,6 @@ both needing the owner:
     `character_card_warnings` — which today reads a card the merge has already
     flattened. Costs nothing behaviourally and closes nothing on its own.
 
-### 1.101 The process clamp reads a generic word in a clothing sentence
-
-**Measured live 2026-08-29, chat 98 turns 40 and 41, twice in two turns.**
-
-`attire._process_sentence` requires a sentence to be about clothing before it
-reads process language as evidence about clothing — the fix for chat 70 t9,
-where a sentence about hands clamped a removal. The other half is still open:
-a sentence that IS about clothing and ALSO contains a generic process word
-about something else.
-
-    "...because alpha shift started in forty minutes she put the duty
-     uniform back on"
-
-`started` is `_PROCESS`; `uniform` is `_CLOTHING_CONTEXT`; the removal of the
-civilian clothes was held at `loosened` on a beat that completed it. The
-second case is the Director's own "She begins removing..." for a beat whose
-narration takes four garments off, which held all four.
-
-Failure direction is the safe one — a removal held one beat, restated the
-next — so this is a pacing defect, not a state fork. The shape of a fix is the
-same one `_CLOTHING_CONTEXT` already has: the process word and the clothing
-word have to be about the same thing, which sentence-level co-occurrence does
-not establish.
-
-**Narrowed, not closed, 2026-08-29.** The clamp is now scoped to the GARMENTS
-a process sentence names rather than to the body wearing them
-(`attire.process_targets_by_garment`, `attire._attributed_scoped`), so the
-second case above is smaller: "She begins removing her jacket" holds the
-jacket and lets the other three land. What survives is the first case
-verbatim — a sentence that names one garment and carries a process word about
-something else still holds THAT garment — and the wholly unattributed shape,
-"She begins removing her clothes", which names no garment and so still holds
-everything the body has on. The fix's shape is unchanged: the process word and
-the garment have to be about the same act, which co-occurrence in one sentence
-does not establish.
-
-### 1.102 A short whole garment name cannot license its own wardrobe
-
-**Found 2026-08-29** while fixing the licence gate's compound-name blindness
-(chat 92 t17). `attire.garments_named_in` floors every suffix window at two
-words or eight characters, so a fragment of a name cannot license a change to
-the whole garment. The floor applies at `i == 0` too, where the window is not
-a fragment — it is the name. A ledger garment called `t-shirt` (one word,
-seven characters) never clears it, and tier (c)'s word-set rescue cannot see
-`tshirt` in prose either, so that garment can be named by no beat at all and
-every change to it is refused.
-
-Not fixed with the compound-name pass because the two guards are separate and
-only one was measured: the floor's cost is a garment whose whole name is short
-AND spelled differently in prose, which no live chat has yet produced. The
-shape of a fix is to exempt the whole-name window from the floor — a name is
-never a fragment of itself — and then to decide whether tier (c)'s uniqueness
-test is enough protection for a three-letter name like `tie`, which is what
-the floor is currently standing in for.
-
-### 1.70 Narrator repetition: what the change-key fix reached, and what it did not
-
-Landed 2026-08-28, from a 16-turn story (chat 95) whose every stage was read
-against the others. Three reported symptoms — an ambient closer the prose kept
-ending on, a re-declared smell, and two quotes welded into one span — were one
-mechanism with three feeder sites, all upstream of the narrator: a percept the
-engine calls `changed` becomes a numbered entry in `current_events`, and the
-sheet defines that list as obligation ("every entry in it happened and must
-reach the page"). The narrator writing a sentence about it is obedience.
-
-**Fixed at the origin.** A standing percept's change key now hashes the STATE
-it describes rather than the sentence composed from it
-(`composer.room_content_percepts`, with the state published by
-`common.crowds_for_room`), and no longer hashes a fact about the observer's
-recognition of the owner (`composer.scent_percepts` drops `label`). Both bump
-the key TAG, so a ledger written before the change reads as first sight rather
-than as a claim that something moved. `observations_from_render` no longer
-welds one mouth's consecutive lines into one numbered entry, and the atom cap
-that now pays for that prices the pair it is about to weld — wallpaper, then
-two silent events, then a silent event into a spoken one, then one mouth's two
-deliveries, then the obligation boundary, then two mouths last.
-
-**The middle of that order was wrong until 2026-08-29.** A same-mouth speech
-weld was priced BELOW every other event pair, so the cap reached first for the
-one shape the merge loop above deliberately refuses to mint. Measured, chat 98
-turn 29: nine legitimate atoms against a cap of eight, the cap folded Picard's
-first two lines into a single entry, and the page carried both quotes back to
-back with no attribution or beat between them — the worst dialogue sample in
-that run. Folding a SILENT atom into a spoken one cannot produce that shape,
-because the entry still holds one quote; it costs the channel (the group
-degrades to `mixed`) and the attribution, both of which the loop already
-spends there.
-
-**Still open: the cap itself.** `composer._MAX_OBSERVATION_ATOMS` is 8 and is
-untouched — turn 29 delivered nine atoms a mind legitimately received, so SOME
-boundary was going to be spent whatever the ordering, and the reorder only
-chooses the cheapest one. Raising it trades narrator payload size against how
-often any boundary is spent at all, which is the owner's call rather than the
-workflow's.
-
-**Not fixed: the `act_player` obligation marker asserts something false.**
-`{n}. {actor} did this (NOT yet on the page — the player described attempting
-it; you must render it happening)` is attached to an entry whose material is
-verbatim one payload key away, in `current_narration`. The comment at
-`narration.py:1141` records why the marker was added and is honest: it was
-measured when the player's input was buried at the tail of `past_narration`,
-and it took acts on the page from 5-in-12 to 7-of-9. `current_narration` has
-since been split into its own key placed immediately before `current_events`,
-so the two now say opposite things one line apart, and the model resolves the
-contradiction by writing the beat again — chat 95 turn 8, three `onset`
-surfaces, three paragraphs of replay with one of the player's own clauses
-surviving verbatim. The fix is to state the entry as the ADJUDICATED OUTCOME
-of what the player attempted (which is what earns it a number) instead of as a
-claim about the page. It is not landed because the marker's power is a
-MEASURED number and the only instrument that measures it is
-`tools/narrator_package_bench.py`, which spends real model calls; and this
-repo has been burned before by a marker that lost its force when reworded on
-reasoning alone. Whoever runs the bench should move
-`language_packs/en/cards/linguistics.json` `_EVENT_LINES.act_player` and the
-three assertions in `tests/test_narrator_world_fidelity.py` (~1030, ~1106,
-~1193) together, keeping the absence assertions at ~1237/1250.
-
-**Three calls left to the owner.**
-  * *Whether an ambient percept may enter the beat half at all.*
-    `leads_the_beat` refusing `kind == "ambient"` outright is smaller and more
-    certain than getting every state key right, and it would also cover
-    couriers and notices, which publish no state to key on. It costs the
-    ability to announce a crowd change as it happens.
-  * *The derived crowd's composition is deliberately not in its state key.*
-    `charter_crowd.composition_of` is a top-two-of-tally recomputed at every
-    read over a membership that walks its errands, so it reorders without the
-    crowd changing (chat 95: five spellings of one unchanged fact in sixteen
-    turns; a sorted set of the nouns still flips four times). The band carries
-    a real change instead. What this gives up: a crowd whose composition
-    genuinely turns over while its band holds now re-renders only when
-    something else about it moves.
-  * *Whether `_overused_phrases` should read the PAYLOAD as well as recent
-    prose.* Today it is computed from the narrator's own last four prose
-    blocks, so an engine-supplied tic can be banned only after the narrator
-    has written it twice, and the ban then argues against a payload that keeps
-    re-supplying the material — measured: "held its pitch" was on the ban list
-    at turns 7, 8 and 9 and the closer kept coming, and
-    `already_established_phrases` fired on 1 of 19 narrator calls in the whole
-    story. Pointing the ban list at engine-authored labels the narrator is
-    REQUIRED to be able to use is the shape of guard this repo has measured
-    failing, which is why it was not pursued.
-
-### 1.100 Every charter already written names no commons
-
-`world/charter_space.commons_places` and the `commons` field it reads are new,
-and the field is EMPTY on every institution generated before it existed. So the
-class is closed -- a place a body may go for its own sake is now expressible,
-`frequented_places` is what `reach_map` walks and `errands` filters against, and
-`charter_runtime.registry_warnings` says out loud when an institution has none
--- while every already-generated world still routes its whole off-duty
-population to somebody's workplace until an author names its rooms or the
-location is regenerated. That is the authored-blank shape `CLAUDE.md` records
-for psychology, which is why the warning landed with the field rather than
-after it, and it is a MIGRATION rather than a defect: nothing can derive the
-predicate from what a charter already stores. A room's `purpose` is free prose
-and `world/place_purpose.py` states the reason not to key on it -- names are
-short noun phrases where identifier recognition is honest, descriptions are
-where it lies.
-
-Two things the field is deliberately not.
-  * **Not berths.** A berth is somebody's own place rather than a place people
-    go, `charter_move.homecomings` already routes a body to its own without
-    consulting reach, and the set of distinct berths grows with the population
-    -- on `tests/charter_worlds.big_town(1000)` every body's berth defaults to
-    its authored place, so folding them in would take `reach_map` from 1000 x 6
-    pairs to 1000 x 109.
-  * **Not `active_places`.** That is where social detail is simulated at beat
-    resolution, a scope dial, not a statement about what a room is for.
-
-Measured on chat 98: 7 work places against 45 rooms, and the run's author had
-to invent an upkeep nobody serves (`wardroom_service`, `requires: {}` -- a
-condition the institution now owes forever and will report as failing) purely
-to say that people sit in a lounge.
-
 ### 1.101 A handover the scene has no record of is refused out loud, and still refused
 
 **Found:** the Enterprise-D alpha-shift run (chat 98), turns 4 and 22.
@@ -5037,6 +4851,36 @@ derivation reaches the garment, not its contents; and `_MAX_CONTAINED` (40)
 now counts derived garment records beside declared ones, which a story
 minting many garments as entities could feel.
 
+### 1.102 What reaches a charter voice: what the 2026-09-03 fix reached, and what it did not
+
+Landed: `commit_charter_observations` receives the scene (it received the
+prepared-commit envelope and every actor was unplaced -- `acquired: 0` on all
+forty Harrowmere turns), co-presence sighting runs live
+(`charter_runtime.sight_figures_in_scene`), a figure is one subject keyed by
+the canonical name and rendered per observer, carrier news is stamped on the
+charter's own clock, and `own_state` reaches the per-presence voice.
+`tests/test_charter_voice_context.py`. Left open:
+
+- **The scene-manager path carries no charter slice.** `background.scene_life`
+  (`scene_life: ambient|full`) builds its populace from presence records and
+  never calls `presence_view`, so under the manager a body has no news, no
+  acquaintances and no `own_state`; only the per-presence `background_react`
+  path hands the slice over. The manager voices several bodies in one payload,
+  and one slice per body in a shared context is the cross-contamination §3.2
+  forbids, so this needs a per-body scoping decision, not a copy of the call.
+- **Charter-native events still cross to `world_events` in charter hours.**
+  `charter_hours_of` converts the carrier rail's seconds INTO a mind;
+  `land_presim` already converts presim events OUT by the horizon; the live
+  `advance_snapshot` path that mints `world_events` rows from window events
+  was not audited for the same unit.
+- **A name a charter body has learned is not yet rendered as the name.**
+  `presence_view` renders a figure in whatever label the caller hands it, and
+  `background._react_one` hands the name only where the presence's `known`
+  entry carries it -- which `seed_mutual_recognition` writes for cast
+  memberships and nothing writes for an unpromoted body told a name aloud.
+  The slice is right and safe (the stranger label); it is merely never the
+  name.
+
 ### 1.103 The player's dealings with a townsperson: what the ledgers do not yet answer
 
 Landed 2026-09-03 (`charter_author.FIGURE_ACTS` widened to order, request,
@@ -5090,133 +4934,6 @@ each a decision rather than a defect:
     members acting as figures; a player persona who IS the reeve by
     authorship has no binding and no standing, so their orders are requests.
     Giving a persona a body to ride is the promotion seam's question.
-
-### 1.77a Speaking turns and the page: what the utterance fix reached, and what it did not
-
-Landed 2026-08-29 from the 40-turn bridge run (chat 98), every stage of the
-cited turns read against the others.
-
-**Fixed at the origin.** One mouth's consecutive spoken lines with no conduct
-between them are now ONE utterance, fused deterministically in the character
-stage (`common.fuse_speech_run`, called from `character.character_step` after
-`norm_sequence` and before the event ids are stamped). The speech budget's own
-contract already said this -- it defines a line as "one separate beat of talk,
-delivered between other conduct" and states that "multiple lines are not one
-speech split by punctuation" -- and nothing enforced it, so a three-element
-round became three `dialogue_log` entries, three `speech_percept`s, three
-"X says in a Y voice: ..." sentences in every view, and three quoted lines set
-back to back on the page. Measured over the run's 85 stored rounds: 79 speech
-elements become 51, 26 rounds fuse, and the speaker-beats carrying two or more
-quoted lines halve (24 -> 12). Turn 29's worst case, six quoted lines from one
-mouth in one beat, becomes two. The fuse SUBTRACTS -- no word is added or
-dropped -- and it refuses to cross any delivery difference (volume,
-visibility, conceal_from, targets, phase) or a line that claims an
-interruption, so a whispered aside inside a spoken turn keeps its boundary.
-A run that changed register loses its tone adverbial, because no single one is
-true of it.
-
-**Also fixed: a Python list repr in every character's composed view.**
-`perception_outcome` handed `delivered_views[observer]` -- a LIST of rendered
-lines -- to `composer.micro_round_percept`, which takes one line and calls
-`str()` on it. Measured: 68 of the 142 stored character views in chat 98
-carry a `['...']` span, on 24 of the 38 turns, and from there it reached the
-observations projected off the view and the episode minted from it. The
-composer's own dialogue tripwire caught four of them, said "engine defect,
-view delivered as composed", and the view shipped anyway.
-`composer.micro_round_percepts` now names the shape: a delivery is one line, a
-round delivers several.
-
-**Also fixed: the narrator was never told what the player was wearing.**
-`attire_exposure_facts` was computed for the deterministic screen only, and
-that screen asks one question -- is a COVERED region narrated bare. It has
-nothing to say about a garment asserted onto a body whose ledger does not
-carry it, which is the other half of the same disagreement (chat 98 t27, "her
-uniform sleeve" against a ledger reading combadge + civilian clothing). The
-narrator payload now carries `player_attire`, the ledger's own compact line
-for the player's own body, and the sheet says the ledger owns it. This widens
-nothing: a mind has a channel to its own clothing, which is the ground
-`attire_exposure_facts` already stood on. Every other body's dress still
-reaches the narrator only through the composed view, behind perception's gate.
-
-**Not fixed, and it is an OWNER'S FORK: a second round restates instead of
-advancing.** The register (`D-B`, reopened three times) hypothesised that the
-mind was not being told what it had already said. It is: `_speak` writes the
-accumulated `interaction_views[speaker_id]` before every call, and the
-speaker's own conduct is appended to it in the same place as everyone else's.
-CAUTION for the next reader -- the `self_view` key stored on a round record is
-that round's OWN emission, captured after the call for `rehydrate_loop_views`
-to replay; it is NOT the record handed to that round. Reading it as the input
-makes the ledger look correct-and-ignored in a way that happens to be true for
-a different reason.
-
-What remains is a genuine restatement across an exchange boundary: chat 98
-turn 29, Picard says "the sudden appearance after a clean survey eleven years
-prior", Data answers, and Picard says "the sudden activation after a clean
-survey eleven years prior". Both are separate rounds with another mouth
-between them, so the fuse correctly leaves them two deliveries, and they are
-paraphrases rather than repeats, so no literal guard reaches them. The
-cross-turn case (t32 -> t33, verbatim identical) IS detected --
-`repeat_correction` fired on t33 by name -- and the engine deliberately does
-not re-ask, on the owner's stated rule and against measured evidence that the
-retry only rephrases. So the remaining fork is the owner's:
-
-  * *Drop the round.* The register's own hypothesis: a round is granted and
-    the mind is asked what it says, never whether anything remains to be said.
-    But the grant at t29 is CORRECT by every other measure -- Data answered
-    the captain and expects a response -- so dropping it lands the answer in
-    silence. Any rule that drops it has to be able to tell "nothing left to
-    add" from "the exchange is still going", and nothing deterministic can.
-  * *Ask the second round a different question.* Tell a mind that has already
-    held the floor this beat that a further turn is for what the exchange has
-    newly raised, and that saying nothing is a complete answer. That is a
-    prompt change on a path where three separate negative constraints
-    (`recent_self_lines`, the refrain skeleton, `repeat_correction`) have
-    already been measured failing, for the reason `character.py` states at
-    length: a negative constraint helps a mind that has another move and does
-    nothing for one that does not.
-  * *Accept it.* The trade-off the no-re-ask rule already accepts, one scope
-    wider.
-
-Not guessed at here, because the choice is between two of the owner's own
-standing rulings.
-
-**Also corrected, for the register rather than the code.** `D-C` ("the
-narrator restates the player's own completed beat", turn 4) is not a narrator
-defect. The turn-4 player view OPENS with "Jean-Luc Picard accepts padd from
-you", because Picard's own round declared the act -- and he declared it
-because the turn-3 transfer never committed (`D-A`). Director, perception and
-narrator all carried it faithfully. Fixing it in the narrator would have
-buried the commit defect.
-
-### 1.102 What reaches a charter voice: what the 2026-09-03 fix reached, and what it did not
-
-Landed: `commit_charter_observations` receives the scene (it received the
-prepared-commit envelope and every actor was unplaced -- `acquired: 0` on all
-forty Harrowmere turns), co-presence sighting runs live
-(`charter_runtime.sight_figures_in_scene`), a figure is one subject keyed by
-the canonical name and rendered per observer, carrier news is stamped on the
-charter's own clock, and `own_state` reaches the per-presence voice.
-`tests/test_charter_voice_context.py`. Left open:
-
-- **The scene-manager path carries no charter slice.** `background.scene_life`
-  (`scene_life: ambient|full`) builds its populace from presence records and
-  never calls `presence_view`, so under the manager a body has no news, no
-  acquaintances and no `own_state`; only the per-presence `background_react`
-  path hands the slice over. The manager voices several bodies in one payload,
-  and one slice per body in a shared context is the cross-contamination §3.2
-  forbids, so this needs a per-body scoping decision, not a copy of the call.
-- **Charter-native events still cross to `world_events` in charter hours.**
-  `charter_hours_of` converts the carrier rail's seconds INTO a mind;
-  `land_presim` already converts presim events OUT by the horizon; the live
-  `advance_snapshot` path that mints `world_events` rows from window events
-  was not audited for the same unit.
-- **A name a charter body has learned is not yet rendered as the name.**
-  `presence_view` renders a figure in whatever label the caller hands it, and
-  `background._react_one` hands the name only where the presence's `known`
-  entry carries it -- which `seed_mutual_recognition` writes for cast
-  memberships and nothing writes for an unpromoted body told a name aloud.
-  The slice is right and safe (the stranger label); it is merely never the
-  name.
 
 ### 1.104 The persona has no per-story copy, so a card edit reaches every story at once
 
@@ -5353,6 +5070,267 @@ answer and would become the fallback rather than the mechanism.
 `background_config` and `dialogue_config` both have entries -- so a threshold
 set by hand is rolled back by any restore or reroll.
 
+### 1.107 `generalization_tags` promises a mechanism that does not exist
+
+`AssociationProfile.generalization_tags` (`story/character_schema.py:225`) is
+normalized, editable (`static/js/components.js:745`), archived with the sheet,
+and serialised to the character as prose inside `learned_associations`. What it
+is NOT is a generaliser: nothing deterministic reads it, and
+`psychology_runtime.apply_association_updates` moves `appraisal_bias`,
+`response_tendency` and `strength` and never touches this one. So a tag an
+author writes is a note to the model, and a tag the runtime could have LEARNED
+never appears.
+
+Kept rather than deleted, and the measurement is the reason: read-only on the
+live database 2026-08-18, **all 78 authored associations carry tags, and 87 of
+the 152 in the interior ledgers do**. Deleting the field discards authored work
+in three quarters of the places it exists. The choice — build the generaliser,
+or withdraw the promise the field's NAME makes — is an owner's, and either way
+`static/js/components.js` is the other half of whichever answer wins. Audit
+MIND-F16.
+
+### 1.108 What the Living World audit found
+
+**Found:** the 2026-08-24 survey behind `docs/guides/LIVING_WORLD.md` — eleven
+agents over `world/living_world.py`, `world/offscreen.py`, the twenty-nine
+`charter_*` modules, background life and the lifecycle paths. The guide states
+the behaviour; these are the places the behaviour is wrong.
+
+**Defects.**
+
+- ~~**The string `"false"` opts a character INTO paid off-screen ticks.**~~
+  **Landed.** `character_schema.authored_bool` reads the word a human wrote,
+  both card readers use it, and `character_card_warnings` tells the author
+  that whatever produced the sheet is not writing booleans. Original finding:
+  `character_offscreen_agent` applies `bool()`, and `bool("false")` is `True`.
+  The legacy branch applies the same `bool()`, so neither path is safe
+  (`story/character_schema.py:1166`, `:1400`). An imported or hand-edited sheet
+  carrying `"offscreen_agent": "false"` buys model calls. The card default is a
+  real boolean, so this reaches only sheets that have been through a text
+  editor or a lenient importer — which is exactly where it will not be noticed.
+- ~~**Two `cap=0` off-by-ones**~~ **Landed** — both now bound before they
+  append, matching `profile_candidates`, which already did. Original finding:
+  `full_agent_candidates(cap=0)` returns one candidate
+  (`world/offscreen.py:1338`) and `fired_consequences_at(cap=0)` returns one
+  item (`world/living_world.py:463`). Unreachable from today's callers, which
+  guard `cap <= 0` first; inherited by any new caller. `profile_candidates`
+  has the correct shape beside one of them (`:1399`).
+- ~~**Charter diagnostics leak across frames.**~~ **Landed** —
+  `charter_runtime._event_frame` filters the listing to the requested era, in
+  Python because `scheduled_events` has no frame column and the scoping rides
+  in the payload. Original finding: `charter_diagnostics` selects
+  `scheduled_events` with `seed LIKE 'charter:%'` and no `frame_id` predicate
+  (`world/charter_runtime.py:1161`), so the diagnostics surface for one era
+  lists charter events minted in every era of the chat — unlike `registry_for`
+  beside it, which is frame-scoped.
+- **Frame split and merge drop Charter and off-screen state.** A split seeds
+  the away frame from seven parent keys and `charters`, `offscreen_epoch` and
+  `offscreen_plans` are not among them (`world/spatial_frames.py:844`); a merge
+  reconciles four keys, so nothing a Charter, a plan or a standing intention
+  did in the away frame comes back (`:998`). Whether that is a defect or a
+  deliberate severance is undecided — it is undocumented either way, which is
+  the part that is certainly wrong.
+- **`pick_background_reactors` has no room filter.** `here` is computed and
+  used for only two of the eight qualifying signals
+  (`persist/commit_background.py:1541`), so a presence with dialogue history in
+  a room the player left ten turns ago still qualifies and can be picked.
+  `managed_presences` DOES filter by ambient scope
+  (`agents/background.py:553`), so the two paths disagree about co-presence.
+
+**Untested.** No test in the suite covers Charter, Living World or off-screen
+state across archive, branch or checkpoint. The coverage is real — every table
+and key involved is in `chat_archive.WORLD_TABLES` and
+`checkpoints.snapshot_state` — but it is inferred from those lists rather than
+demonstrated, and the frame-split gap above is what an untested inference
+looks like when it is wrong.
+
+**Unwired.** `world/structure.py`'s frontier-expansion trio —
+`materialize_planned_fringe` (`:184`), `prepare_frontier_expansion` (`:266`),
+`apply_frontier_mutations` (`:350`) — is exported at `:410` and has no
+production caller anywhere in `agents/`, `persist/`, `web/`, `story/` or
+`tools/`.
+
+**Docstrings that overstate, each now contradicted by the guide.** Fix the
+docstring or fix the code; do not leave both.
+
+- "five approaches" in `world/living_world.py:1` and `web/app.py:4547` —
+  `LIVING_WORLD_APPROACHES` has four. Approach C became core carrier physics.
+- ~~`pick_background_reactors` returning `[]` as "the common case"~~ —
+  **withdrawn, and worth recording as a method note.** The audit reasoned from
+  the code that `dialogue_turns` is a standalone qualifying signal and records
+  are pruned only by promotion, so any presence that has spoken once qualifies
+  forever. The reading is right and the conclusion is false: measured over 816
+  live `background_react` steps in nine chats, the backstop produced a reaction
+  on 0–10% of beats, and 41 of 69 tracked presences have non-empty
+  `dialogue_turns`. Something downstream of that disjunct — the `roster` /
+  `voiced_this_beat` exclusion is the candidate — keeps it quiet. The
+  docstring stands. A code reading is a hypothesis; this corpus can answer it
+  directly, and the first draft of `LIVING_WORLD.md` shipped the hypothesis as
+  fact.
+- `ambient` withholding "a line directed at one of them"
+  (`story/scene.py:2087`, `agents/background.py:559`) — the test is divergent
+  hear levels, not direction.
+- `agents/background.py:16` naming the gate `pick_background_reactor`
+  (singular); the stage calls the plural with `cap`.
+- `agents/background.py:32` calling `pending_reply` "a one-beat debt"; the
+  write sets `expires_turn = turn_idx + 2`.
+- `world/charter_run.py:20` saying the consequence-fuse wiring is "deliberately
+  NOT done here" — it exists, in `charter_runtime`.
+- `world/charter_model.py`'s "five primitives" headline, against four
+  normalizers, with `normalize_body` outside the five; and its `authority`
+  described as "a closed list" where `normalize_post` closes nothing
+  (`:145`). The real closed set is `charter_decide.ORDER_ACTIONS`.
+
+### 1.109 A spoken line shorter than four characters is invisible, and takes the next one with it
+
+**Found:** building the narrator placeholder protocol, 2026-08-24.
+
+`_QUOTE_BODY_RE` matches an opening quote mark, then a run of at least
+**four** non-quote characters, then a closing mark. That `{4,}` means a quoted
+line of three characters or fewer -- `"No."`, `"Aye."`, `"Sir."` -- never
+matches, so DIALOGUE FIDELITY does not check it and the narrator may drop it
+freely.
+
+**The second half is worse than the first.** The two quote marks the regex
+skipped do not disappear; they pair with their neighbours. Given two short
+lines in one view, the span BETWEEN them matches instead:
+
+    'Picard says in a flat voice: "No." Riker says in a quiet voice: "No."'
+    -> [' Riker says in a quiet voice: ']
+
+So the check can be handed the composer's own attribution formula as though it
+were a delivered line, and then complain that the narrator failed to reproduce
+it. Every fidelity finding on a beat containing an odd number of sub-four
+character quotes is therefore suspect.
+
+`agents/common._dialogue_tokens` guards its own output with
+`_reads_as_attribution`, because feeding that span to the narrator as a line to
+PLACE would print `Riker says in a quiet voice:` inside quotation marks. The
+underlying regex is untouched: raising `{4,}` to `{1,}` would admit stray
+inch-marks and initials as dialogue, and the right fix is probably to match
+quoted spans pairwise rather than by content length -- `static/js/chat.js`
+already does exactly that (`quotedRegions`) for the speaker tinting, and its
+comment explains why the region rather than the match is the unit.
+
+### 1.110 An opening may leave the whole cast nowhere, and nothing objects
+
+`director_establish` writes `positions`. On one generation of a five-character
+scenario it wrote ONE body — the player — and left every attached,
+`status='active'` cast member with no position, no pose and no station.
+
+WHAT THAT COSTS, measured end to end. `agents/common.character_room()` returns
+None for a body with no position; `agents/perception.py` builds `sources` only
+from cast that have a room, so `perception_act` committed
+`{"views": {}, "observations": {}}` with an all-empty `composer_ledger`. The
+character payload then carried `perception.current_room: ""`,
+`view: "Nothing in particular reaches you this beat."`, `observations: []`,
+`spatial_frame: {}`. An officer asked a direct question by name answered
+nothing, and his three considered responses were "remain at station",
+"initiate standard security sweep", "stand ready for any orders" — exactly what
+a mind with an empty beat produces. The Director was correct throughout
+(`flow.addressed_to` resolved, every speech span preserved) and the interaction
+loop called him first. Every stage behaved correctly on data that was already
+wrong before turn 1 ran.
+
+IT IS A SAMPLING FAILURE WITH NO FLOOR UNDER IT. Same scenario, same prompt,
+four runs: three placed all six bodies, one placed one. Nothing objected,
+because the only opening-stage placement checks —
+`llm/schemas.py:5222 _unplaced_establish_entities` and
+`agents/director_floors.py:1287 _unplaced_minted_entities` — iterate
+`state_diff.entities`, things the Director MINTED. **Registered cast are not
+entities**, so no floor covers them, no warning fires, and no test asserts that
+an attached active character receives a room from the opening.
+
+The fix is a floor, not a prompt: an attached, active, non-dormant cast member
+that the opening left unplaced is a defect the engine can see for itself.
+
+### 1.111 Every charter already written names no commons
+
+`world/charter_space.commons_places` and the `commons` field it reads are new,
+and the field is EMPTY on every institution generated before it existed. So the
+class is closed -- a place a body may go for its own sake is now expressible,
+`frequented_places` is what `reach_map` walks and `errands` filters against, and
+`charter_runtime.registry_warnings` says out loud when an institution has none
+-- while every already-generated world still routes its whole off-duty
+population to somebody's workplace until an author names its rooms or the
+location is regenerated. That is the authored-blank shape `CLAUDE.md` records
+for psychology, which is why the warning landed with the field rather than
+after it, and it is a MIGRATION rather than a defect: nothing can derive the
+predicate from what a charter already stores. A room's `purpose` is free prose
+and `world/place_purpose.py` states the reason not to key on it -- names are
+short noun phrases where identifier recognition is honest, descriptions are
+where it lies.
+
+Two things the field is deliberately not.
+  * **Not berths.** A berth is somebody's own place rather than a place people
+    go, `charter_move.homecomings` already routes a body to its own without
+    consulting reach, and the set of distinct berths grows with the population
+    -- on `tests/charter_worlds.big_town(1000)` every body's berth defaults to
+    its authored place, so folding them in would take `reach_map` from 1000 x 6
+    pairs to 1000 x 109.
+  * **Not `active_places`.** That is where social detail is simulated at beat
+    resolution, a scope dial, not a statement about what a room is for.
+
+Measured on chat 98: 7 work places against 45 rooms, and the run's author had
+to invent an upkeep nobody serves (`wardroom_service`, `requires: {}` -- a
+condition the institution now owes forever and will report as failing) purely
+to say that people sit in a lounge.
+
+### 1.112 The process clamp reads a generic word in a clothing sentence
+
+**Measured live 2026-08-29, chat 98 turns 40 and 41, twice in two turns.**
+
+`attire._process_sentence` requires a sentence to be about clothing before it
+reads process language as evidence about clothing — the fix for chat 70 t9,
+where a sentence about hands clamped a removal. The other half is still open:
+a sentence that IS about clothing and ALSO contains a generic process word
+about something else.
+
+    "...because alpha shift started in forty minutes she put the duty
+     uniform back on"
+
+`started` is `_PROCESS`; `uniform` is `_CLOTHING_CONTEXT`; the removal of the
+civilian clothes was held at `loosened` on a beat that completed it. The
+second case is the Director's own "She begins removing..." for a beat whose
+narration takes four garments off, which held all four.
+
+Failure direction is the safe one — a removal held one beat, restated the
+next — so this is a pacing defect, not a state fork. The shape of a fix is the
+same one `_CLOTHING_CONTEXT` already has: the process word and the clothing
+word have to be about the same thing, which sentence-level co-occurrence does
+not establish.
+
+**Narrowed, not closed, 2026-08-29.** The clamp is now scoped to the GARMENTS
+a process sentence names rather than to the body wearing them
+(`attire.process_targets_by_garment`, `attire._attributed_scoped`), so the
+second case above is smaller: "She begins removing her jacket" holds the
+jacket and lets the other three land. What survives is the first case
+verbatim — a sentence that names one garment and carries a process word about
+something else still holds THAT garment — and the wholly unattributed shape,
+"She begins removing her clothes", which names no garment and so still holds
+everything the body has on. The fix's shape is unchanged: the process word and
+the garment have to be about the same act, which co-occurrence in one sentence
+does not establish.
+
+### 1.113 A short whole garment name cannot license its own wardrobe
+
+**Found 2026-08-29** while fixing the licence gate's compound-name blindness
+(chat 92 t17). `attire.garments_named_in` floors every suffix window at two
+words or eight characters, so a fragment of a name cannot license a change to
+the whole garment. The floor applies at `i == 0` too, where the window is not
+a fragment — it is the name. A ledger garment called `t-shirt` (one word,
+seven characters) never clears it, and tier (c)'s word-set rescue cannot see
+`tshirt` in prose either, so that garment can be named by no beat at all and
+every change to it is refused.
+
+Not fixed with the compound-name pass because the two guards are separate and
+only one was measured: the floor's cost is a garment whose whole name is short
+AND spelled differently in prose, which no live chat has yet produced. The
+shape of a fix is to exempt the whole-name window from the floor — a name is
+never a fragment of itself — and then to decide whether tier (c)'s uniqueness
+test is enough protection for a three-letter name like `tie`, which is what
+the floor is currently standing in for.
+
 ## 2. Roadmap
 
 Features the architecture intends and has not built. Ordered by value per unit
@@ -5441,7 +5419,6 @@ Precedent that did not exist when the note was written: `world/background_claims
 is exactly the "commit invention as claims, not facts" mechanism its decision 3
 asks for, built for background presences.
 
-
 ### 2.8 Richer off-screen life
 
 Deterministic scheduling exists; what is missing is the world visibly having
@@ -5513,7 +5490,6 @@ What remains in this register:
   `world/routines.py` is the standard), and the world never forgets while
   minds do (the objective spine is monotonic; culling unreachable facts makes
   the world observer-relative).
-
 
 ### 2.9 Predictive staging
 
@@ -5655,7 +5631,6 @@ crosses to the hearth"), because there is no within-room approach concept for it
 to read — room-level `scene.approach` is the only staged-movement memory there
 is.
 
-
 ### 2.16 A summary window should be an INDEX over raw memory, not more prose
 
 **Raised 2026-08-02; verdict recorded 2026-08-19/20.** The strong form below
@@ -5720,7 +5695,6 @@ is over their opening turns (§1.21). A progressive form answers both -- rank ra
 memories normally, and only reach for a window when the first pass returns
 nothing convincing -- and the "nothing convincing" signal that this paragraph
 said did not exist is now `recall_confidence` (see the verdict block above).
-
 
 ### 2.17 Memory reliability after temporal separation
 
@@ -5825,7 +5799,6 @@ frozen sets under `tools/memory_probes/`
 
 ---
 
-
 ### 2.18 The orchestrated Director: what is left after it landed
 
 **LANDED 2026-08-14.** The fan-out is the only Director path: there is no
@@ -5870,7 +5843,6 @@ unbuilt:
   the 19% prefix-cache rate as provider replica routing rather than byte
   instability; honest ceiling ~57%, since the per-beat payload is inherently
   uncacheable. Recorded rather than chased.
-
 
 ### 2.19 Character: scope the sheet, do not split the judgement
 
@@ -5918,7 +5890,6 @@ judgement?* Psychology persistence already is not — `mind/psychology_runtime.p
 does it deterministically from permitted inputs. If other pre- or post-work is
 bundled into the same call, that is separable without touching the decision at
 all, and is where any character-side decomposition should start.
-
 
 ### 2.20 Characters begin every story with no past they can recall
 
@@ -6569,8 +6540,10 @@ for what follows. Residuals of this entry rather than a section of their own:
   writes through the card's routes; what it does not draw or write:
   **overlays** -- the grid route returns `overlays: {}` and the SVG paints
   any `{name: {"x,y": word}}` it is handed with a legend, but nothing fills
-  the slot yet; the light-field and sound-field readers are the sibling
-  worktree's, and until they land the select does not appear. **The player
+  the slot: the light field (`spatial_light_field.light_field`, a word per
+  cell) and the sound field (`spatial_sound_field.sound_field`) are merged
+  beside it since 2026-09-04 and neither is wired into `grid_view`, so the
+  select does not appear (§ 2.34, § 2.36). **The player
   and a presence cannot be dragged between rooms** -- only a registered cast
   member has a position route (`chat_char_position_put`; the cast editor's
   rule that the player's place is the story's business); both can still be
@@ -6817,9 +6790,11 @@ offscreen hand retired). What it deliberately does not do:
   `declared_destination_unplanned` (t38's `upland_road`, which the plan did
   not hold). A live replay under the compiler is the next measurement.
 
-### 2.27 Room geometry and occlusion — PROTOTYPE on a branch
+### 2.27 Room geometry and occlusion — PROTOTYPE, on `main`
 
-Built 2026-09-02 on an isolated branch, not merged:
+Built 2026-09-02 in an isolated worktree and on `main` since 2026-09-03
+(`world/spatial_fov.py`, `tests/test_room_geometry.py`; the planned-room
+handoff beside it, `tests/test_planned_room_handoff.py`):
 [`design/DESIGN_ROOM_GEOMETRY.md`](design/DESIGN_ROOM_GEOMETRY.md).
 `world/spatial_fov.py` derives a per-room grid from the size tier, places
 anchors from their bearing with a seed keyed on (room, anchor), derives body
@@ -6833,210 +6808,34 @@ byte-identically (pinned). Measured first: the cone bites on ~27% of live
 bodies and body occlusion on ~11%, so the residual is the INPUT — whether
 the Director writes stations, and `cover` at all, once the two clauses ask.
 
-What is still open, from the note's own §10: no elevation or per-cell light;
-seeded placement can disagree with specific prose and nothing surfaces it;
+Extended on `writers-room` 2026-09-04 and not yet on `main`: extents and
+shapes (§ 2.37), the light and sound fields on the same grid (§ 2.34,
+§ 2.36), and `offset` along a wall for an anchor or a doorway (the map
+editor, § 2.26).
+
+What is still open, from the note's own §10: no elevation (a balcony, a pit
+and a stairwell are not modelled); seeded placement can disagree with
+specific prose and nothing surfaces it -- narrowed by `offset`, which lets a
+HOST put an anchor where the prose put it, while nothing reads the prose;
 `cover` on an interior anchor is relative to the room's centre; two doorways
-on one wall cannot both cast; the features sentence is a per-room opt-in
-that changes a room's whole view once one anchor is annotated; the archive
-round-trip of the new fields is asserted, not measured.
+on one wall both cast only where extents let both neighbours fit, and the
+lint reports the pair that does not; the features sentence is a per-room
+opt-in that changes a room's whole view once one anchor is annotated; the
+archive round-trip of the new fields is asserted, not measured. Per-cell
+light left this list on 2026-09-04: it is the light field (§ 2.34).
 
 The same commit carries the planned-room handoff (note §8): the plan's seed
 reaches `director_establish`/`director_resolve` and the spatial hand as
 `payload.planned_rooms` when a body enters a planned stub or has one
 adjacent through a non-wall barrier; planned exits are protected at commit;
 a described stub settles. Residual: the count of stubs developed per trigger
-in a played story is unmeasured on this branch (no live model call was made
-here). The mapping stage's own `planned_context` path went with the mapping
+in a played story is unmeasured -- the 2026-09-04 debug runs played the
+handoff (`experiments/DEBUG_RUN_2026_09_04.md` F2: a plan published before
+the first beat reached the opening; F13: the planned-exit churn, fixed) and
+counted nothing. The mapping stage's own `planned_context` path went with the mapping
 model (2026-09-04): the world-context compiler reads the plan for a named
 room and raises a planning need for an unplanned one, so there is one seed
 per room again.
-
-### 2.34 The light field — PROTOTYPE, what is left
-
-Built 2026-09-04 on a branch from
-[`design/DESIGN_LIGHT_FIELD.md`](design/DESIGN_LIGHT_FIELD.md) §§ 3-8 as
-`world/spatial_light_field.py` (behind the `world/spatial.py` facade;
-`tests/test_light_field.py`, 36 tests; measurements in the note's § 9).
-Light is a scalar on the composite sight grid: per-source shadowcast from
-the source's cell, blocked by occluders at or above the source's height
-rank and by the wall line outside its doorway, inverse-square decay, a cone
-with a linear penumbra, summed, bounced by the room's `exposure`, floored
-by `room_light`, quantised LAST; `light_at`, `effective_light` (median
-cell) and `sight_level` (glare) read it where a room has a size tier or
-anchors and a body a cell, and answer exactly as before everywhere else
-(pinned byte-for-byte on seven no-geometry scenes). `flickering` and
-`failing` are a hash of (beat, source); the commit stamps `scene.beat_idx`,
-records a failed source `state.lit: false` and files an `engine_notices`
-line. Extended 2026-09-04 at the merge with the sound field (the note's
-status header lists the six items: one grid, `FLOOR_SPILL`, the shape
-sentence, the median for an unstationed body, glare decided, one commit
-block; corpus re-measured in § 9.6, `tests/test_field_sentences.py` and
-`tests/test_one_grid_two_senses.py`). Left:
-
-  * **Two of the owner's three open questions**: median or mean for a
-    room's reading (§ 4b; median as built, and chat 115's dim corridor
-    with one lit source reads dim, not lit); and the constants (§ 6). One
-    already moved: LIT_T 2.0 -> 2.5, because 2.0 sat exactly on POWER[dim]
-    and every dim room with a grid read lit. The § 9.3 table shows a `lit`
-    source reaching one cell as lit and three as dim against the note's
-    "about two ... about four"; LIT_T <= 1.2 or POWER[lit] >= 12 would
-    meet the sentence. `FLOOR_SPILL` (0.25) is a fourth constant the owner
-    may move; its table is beside it.
-  * **The shape sentence replaces the flat one** when a room is uneven
-    (§ 4b). The room's median word is then not said; the observer's own
-    standing is. Whether the median should ALSO be said is a wording
-    choice the owner has not seen on a live page.
-  * **`light_radius` is superseded where geometry exists** (§ 3). Three
-    assertions in `tests/test_light_and_survival.py` changed to say so; a
-    `lit` fixture no longer fills a large hall and a `bright` one does.
-  * **§ 9.5 live beats** were not played. Two beats with a held cone in a
-    fresh non-explicit scenario, every stage read, is the next measurement
-    under the standing grant -- and the first live reading of the shape
-    sentence, which the corpus hands to one body in 104 scenes.
-  * **Cost was not measured** at the geometry note's precision. The field
-    is cached per (scene inputs, room) in a 64-entry memo keyed on a JSON
-    dump of what it reads; the dump is taken on every reader call. The
-    shape adds one `feature_visibility` and, per source, one `_visible_set`
-    per observer per stage.
-  * **The backdrop brief's `lighting` slot** (`dressing/backdrops.room_brief`,
-    reserved for the light field's sentence) is still empty; `light_shape`
-    is the input it was reserved for, and nothing hands it over yet.
-  * **The Japanese adapter renders neither the furniture sentence nor the
-    openings** (`language_adapters/japanese.py::_environment` reads
-    `room_name`, `room_notes`, `light` and now `light_shape`; the pack's
-    `features`, `feature_item`, `feature_glimpse` and `opening_*` templates
-    are authored and never called). Found while wiring the shape sentence;
-    the adapter's own docstring names this failure class. Not fixed here
-    -- the tier and side phrases it needs are language data with their own
-    reading rules -- and registered.
-
-### 2.36 The sound field — PROTOTYPE, on a branch
-
-Designed and built 2026-09-04
-([`design/DESIGN_SOUND_FIELD.md`](design/DESIGN_SOUND_FIELD.md),
-`world/spatial_sound_field.py`, `tests/test_sound_field.py`, 25 tests).
-Loudness is a scalar on the sight grid, spread by shortest acoustic PATH,
-attenuated per aperture by barrier and material, decayed by path length,
-summed into a signal and a noise floor, and quantised LAST to `none |
-fragment | full`; `spatial_rel_between` stamps `signal`/`noise` where the
-listener's room carries geometry and `hear_level` reads them; entities carry
-`sound_source`, `steadiness`, `state.running`; a failing source files an
-engine notice; a scene without geometry composes byte-identically (pinned).
-Measured: 2 of 589 live rooms carry geometry, 2 speaker-listener pairs on a
-field, whisper and mutter the only words that moved. Merged with the light
-field 2026-09-04: the composite is `room_field` under `sound_passes`
-(`_acoustic_grid`, which had drifted to squares, is gone), the steadiness
-words, hash and rates are the light field's, a failing source is switched
-off at commit in one block with the light field's and reported once, the
-composer says where the sound is (`sound_shape`, `NOISE_WORDS` derived from
-the SNR thresholds), and a listener standing on an occluder's cell hears.
-Left, each in the note's § 10 and each an owner decision: the constants
-(§ 6a set them off the § 6 proposal, with the reason); whether a crowd's
-`mood` should raise its level (built on its band, a closed set); which lines
-of a beat are simultaneous (the reader grades one line at a time;
-simultaneous masking exists only through the module API); whether a
-fragment should thin with the ratio; **`sensory_events` on no schema after
-establish** (§ 10.9 -- a crash two rooms away on a normal beat has no
-channel to arrive by; a Director schema addition, and which hand owns a
-one-beat sound is the owner's to say); **two gates** (§ 10.10 -- hearing
-exists in the 2 rooms with an authored footprint/height/opacity, light in
-the 321 with a size tier or anchors; whether hearing should take the wider
-gate); and the live run, which needs a copy of the owner's database there
-was no room for (the 2026-09-04 corpus pass streamed read-only instead, and
-found no live room uneven for sound).
-
-### 2.35 What the 2026-09-04 debug runs left open
-
-Evidence: [`experiments/DEBUG_RUN_2026_09_04.md`](experiments/DEBUG_RUN_2026_09_04.md)
-(two runs on copies, thirty-five findings; eight classes fixed the same day,
-pinned in `tests/test_played_scene_classes.py`). Open, each an owner decision:
-
-- **A thought-only reply loses the Room's grant (F1).** The Planner's main
-  call raised `ReasoningBudgetExhausted` four attempts running -- the last
-  three with reasoning disabled on the request -- on a 6k-char trace that
-  never exhausted a 20k budget; a tiny probe on the same role answered, and
-  the same grant succeeded on rerun. The retry varies one setting the failure
-  does not depend on. Proposal: after N reasoning-only replies fall to the
-  role's next candidate model for the remaining attempts.
-- **"Full authority" is a snapshot (F15).** A mandate granted as everything
-  the room could do enumerates the kinds that existed on its turn;
-  `director_note`, added later, was refused under chat 114's turn-5 grant
-  until the reply's own words happened to grant it. A total grant should
-  cover kinds added after it; widening a standing grant is the owner's call.
-- **A pose `detail` is a side channel for perception (F18).** "watching the
-  arrival" on a body behind a closed door reached that mind as its own
-  interoception and was cited as present evidence of an event in another
-  room. Clause first (a detail describes the BODY, never what it perceives)
-  or the composer delivers only posture it can verify.
-- **Two minds fought over one door and the world kept neither answer (F22).**
-  One held it open, one latched it, the narrator rendered both, the scene
-  kept it open. A barrier is one object; the resolve owes it one answer a
-  beat, and the reconciliation should catch "latched" prose against an
-  `open_door` edge as it catches the reverse.
-- **The planner calls `inspect_clock` every step (F10)** though the payload
-  carries `clock` and the echo answers with the key. Drop payload-key tools
-  from the manifest the model sees, or say so in the prompt.
-- **The reachability warning's unit is the package (F30):** a road at two
-  hops carries a depot at three without a word. Defensible; the owner should
-  know the unit.
-- **Two model tics measured, not fixed:** Gemini doubled quotation marks on
-  two beats and eight quote-matching guards fired falsely (F29); the
-  characters cited no delivered observation on most beats (F14).
-
-### 2.37 Room fidelity — what the 2026-09-04 prototype left
-
-Built on a branch, not merged: [`design/DESIGN_ROOM_FIDELITY.md`](design/DESIGN_ROOM_FIDELITY.md).
-A room may declare `extent` and `shape`; the layout lint reports where a
-scene's geometry cannot all be true; the backdrop brief draws the picture
-from the same record the composer and the geometry read. Measured on a copy
-of the owner's database: 0 of 589 rooms carry an extent; the lint finds 9
-rows in 4 of 104 scenes; the pre-change and built geometry agree on every
-room and body. Left open, each an owner decision or a build:
-
-- **The passage as one object (note §5).** F16 and F22 are one class -- a
-  doorway stored as two edges that can disagree. Designed:
-  `scene.passages[id] = {rooms, barrier, name, material, width, vertical,
-  state}`, edges carrying `passage: id`, readers (`spatial_rel`,
-  `effective_adjacent`, `neighbor_map`, `_sight_neighbours`,
-  `effective_anchors`' door derivation) resolving through the passage when
-  named and per-edge when not, the merge writing both from either, archive
-  and checkpoint riding the blob, the registry untouched. Not built: five
-  readers across four spatial siblings plus the merge block
-  `_mirror_symmetric_barriers` sits in, while the light-field sibling edits
-  `spatial_routing.py` and `spatial_merge.py` in the same window. The
-  mirror remains the answer to F16 until this lands.
-- **A Room tool that writes a region's `look`.** `regions.set_region_look`
-  is the seam; since later on 2026-09-04 the World Browser's room card calls
-  it through `PATCH /api/chats/{cid}/regions/{region_id}` (`web/world_routes.py`),
-  so a HOST sets a look by hand. Nothing in the Room does: the registry's
-  only writer at commit still enters names. A `describe_region` tool (look,
-  and the `brief` the regions note left for the same reason) is one tool,
-  one mandate kind, and a card clause.
-- **The Director has to write extents.** 0 of 589 rooms carry one. The
-  clause asks for one where proportion matters; whether the hand supplies
-  it, and whether `size_disagrees_with_extent` then fires often enough to
-  want a repair rather than a report, is a play-test question.
-- **A rim is not a curve.** A round room's doorway is a gap in an
-  axis-aligned wall line between the two boxes; the arc itself is a
-  staircase of cells. Right for sight through the door, coarse at the arc.
-- **The lint's embedding check reads only beared edges.** 578 of 923 exits
-  carry no bearing and cannot be placed; a contradiction through one of
-  them is not seen. The same 578 are the ceiling on what any room geometry
-  can draw, cast through or picture.
-- **The viewer camera multiplies pictures** (up to nine parts by eight
-  facings per room) and is behind `backdrop_continuity` for that reason;
-  whether the edit-from-anchor path keeps the room the same room under a
-  turned camera is unmeasured, because no image call was made here.
-- **Every existing backdrop is redrawn once** (299 images across 74 chat
-  directories on the owner's install): the brief is keyed, as the module's
-  own rule requires, and every room with an exit or an anchor hashes anew.
-  A one-time cost, named rather than hidden; there is no migration that
-  could map an old key to a new one without lying about what the old picture
-  shows.
-- **`size` from area loses one distinction** (a 2x18 gallery and a 6x6 room
-  are both `medium` floor). The proportion sentence carries it to the
-  picture; the proximity ladder does not. If `near`/`across` should read the
-  long side for a corridor, that is a `proximity_rel` change, not a size one.
 
 ### 2.28 The day cycle's residuals
 
@@ -7082,31 +6881,6 @@ clock"). What it deliberately does not do:
   day; an instantaneous beat that crosses a phase boundary by its floor
   charge alone still relies on the backstop's manifest half.
 
-### 2.30 The replay closer's residuals (2026-09-03)
-
-What the fixes for replay defects N2, N9, N10 and N11 deliberately left:
-
-- **A frontier stub named for its axis is a label, not a place name.** An
-  axis the planner wrote as a bare direction ("east") now mints a room
-  called "East" unless the grammar has a name that shares a word with it
-  ("North Lane" for "north"); the Director names the room when it furnishes
-  it (`structure.planned_room_brief`). The grammar's names are otherwise
-  unused, and a planner that writes only its planned rooms into them has
-  written nothing the closer reads.
-- **The boundary rule refuses "Westfield".** A fragment ending in a
-  consonant cluster does not join a consonant-initial one, which refuses
-  "Brgaron" and also "west"+"field"; the law still names everyone (the next
-  fragment in seeded order joins, or the middle is dropped), and a law whose
-  every start and end refuse each other is joined as written. The rule reads
-  the Latin range only; a kana law is untouched.
-- **The historian's per-resident allowance is an estimate.** 220 tokens
-  covers a 40-word summary with three citations and two turning points with
-  a margin; the ceiling holds by the retry, not the estimate, and the retry
-  halves the residents rather than the prose. The per-resident recent-life
-  call in `charter_history.py` (7,000 fixed) was not touched.
-- **Berths are dealt round, not read.** A post serving ten houses puts its
-  bodies one to each in turn; nothing reads a household's composition, so a
-  house of one holder and four members is the closer's, not the planner's.
 ### 2.29 Who the player talks to — residuals
 
 **Found:** the Harrowmere playtest (2026-09-02), landed 2026-09-03 as
@@ -7163,6 +6937,32 @@ What the fixes for replay defects N2, N9, N10 and N11 deliberately left:
   measurement of whether it held is the next replay's invented-dialogue
   count (5 on 40 beats before it).
 
+### 2.30 The replay closer's residuals (2026-09-03)
+
+What the fixes for replay defects N2, N9, N10 and N11 deliberately left:
+
+- **A frontier stub named for its axis is a label, not a place name.** An
+  axis the planner wrote as a bare direction ("east") now mints a room
+  called "East" unless the grammar has a name that shares a word with it
+  ("North Lane" for "north"); the Director names the room when it furnishes
+  it (`structure.planned_room_brief`). The grammar's names are otherwise
+  unused, and a planner that writes only its planned rooms into them has
+  written nothing the closer reads.
+- **The boundary rule refuses "Westfield".** A fragment ending in a
+  consonant cluster does not join a consonant-initial one, which refuses
+  "Brgaron" and also "west"+"field"; the law still names everyone (the next
+  fragment in seeded order joins, or the middle is dropped), and a law whose
+  every start and end refuse each other is joined as written. The rule reads
+  the Latin range only; a kana law is untouched.
+- **The historian's per-resident allowance is an estimate.** 220 tokens
+  covers a 40-word summary with three citations and two turning points with
+  a margin; the ceiling holds by the retry, not the estimate, and the retry
+  halves the residents rather than the prose. The per-resident recent-life
+  call in `charter_history.py` (7,000 fixed) was not touched.
+- **Berths are dealt round, not read.** A post serving ten houses puts its
+  bodies one to each in turn; nothing reads a household's composition, so a
+  house of one holder and four members is the closer's, not the planner's.
+
 ### 2.31 A townsperson's surface — residuals
 
 **Landed 2026-09-03** (`world/charter_surface.py`, Design.md "A townsperson
@@ -7197,6 +6997,7 @@ has a surface"). What it deliberately does not do:
 - **`surface.gait` is dealt and never rendered in a label** (it rides
   `appearance_text` and the widening words only); a limp is the kind of
   thing a silhouette shows and could join the silhouette tier.
+
 ### 2.32 Creatures as charter — residuals (2026-09-03)
 
 Landed as `docs/design/DESIGN_CREATURES_AS_CHARTER.md`. What it deliberately
@@ -7276,6 +7077,215 @@ deliberately does not do:
   measurement was: six of seven mints bind, the seventh (the bridge
   watchman: the watchman post's three seats held) enrols as a householder.
   The live rate under a new run is unmeasured.
+
+### 2.34 The light field — PROTOTYPE, what is left
+
+Built 2026-09-04 on `writers-room` (not yet on `main`) from
+[`design/DESIGN_LIGHT_FIELD.md`](design/DESIGN_LIGHT_FIELD.md) §§ 3-8 as
+`world/spatial_light_field.py` (behind the `world/spatial.py` facade;
+`tests/test_light_field.py`, 36 tests; measurements in the note's § 9).
+Light is a scalar on the composite sight grid: per-source shadowcast from
+the source's cell, blocked by occluders at or above the source's height
+rank and by the wall line outside its doorway, inverse-square decay, a cone
+with a linear penumbra, summed, bounced by the room's `exposure`, floored
+by `room_light`, quantised LAST; `light_at`, `effective_light` (median
+cell) and `sight_level` (glare) read it where a room has a size tier or
+anchors and a body a cell, and answer exactly as before everywhere else
+(pinned byte-for-byte on seven no-geometry scenes). `flickering` and
+`failing` are a hash of (beat, source); the commit stamps `scene.beat_idx`,
+records a failed source `state.lit: false` and files an `engine_notices`
+line.
+
+**The merge with the sound field (2026-09-04), recorded ONCE for both
+fields** (the sound field's own residuals are § 2.36): ONE grid derivation
+for every sense (`spatial_fov.room_field` under a placement predicate --
+`light_passes`, `sound_passes`; the sound field's private `_acoustic_grid`,
+which had drifted to squares, is gone; `tests/test_one_grid_two_senses.py`);
+ONE steadiness vocabulary, hash and pair of rates (`STEADINESS`,
+`FLICKER_RATE`, `FAIL_RATE`, defined in the light field and imported by the
+sound field); ONE commit block switching a `failing` source off in every
+sense it has (`state.lit`, `state.running`) and filing one notice per thing
+(`persist/commit_scene_state._record_failed_sources`); the composer says
+WHERE the light falls and WHERE the sound is (`light_shape` ->
+`composer.render_light_shape`, `sound_shape` -> `composer.render_sound_shape`,
+en and ja, under the owner's five rules; `tests/test_field_sentences.py`);
+the ambient floor SPILLS through apertures (`FLOOR_SPILL` 0.25); a body with
+no station reads the room's median; glare counts an all-round lantern; a
+listener whose station lands on an occluder's cell hears. The corpus was
+re-measured in the light note's § 9.6 and the sound note's § 9a. Left:
+
+  * **Two of the owner's three open questions**: median or mean for a
+    room's reading (§ 4b; median as built, and chat 115's dim corridor
+    with one lit source reads dim, not lit); and the constants (§ 6). One
+    already moved: LIT_T 2.0 -> 2.5, because 2.0 sat exactly on POWER[dim]
+    and every dim room with a grid read lit. The § 9.3 table shows a `lit`
+    source reaching one cell as lit and three as dim against the note's
+    "about two ... about four"; LIT_T <= 1.2 or POWER[lit] >= 12 would
+    meet the sentence. `FLOOR_SPILL` (0.25) is a fourth constant the owner
+    may move; its table is beside it.
+  * **The shape sentence replaces the flat one** when a room is uneven
+    (§ 4b). The room's median word is then not said; the observer's own
+    standing is. Whether the median should ALSO be said is a wording
+    choice the owner has not seen on a live page.
+  * **`light_radius` is superseded where geometry exists** (§ 3). Three
+    assertions in `tests/test_light_and_survival.py` changed to say so; a
+    `lit` fixture no longer fills a large hall and a `bright` one does.
+  * **§ 9.5 live beats** were not played. Two beats with a held cone in a
+    fresh non-explicit scenario, every stage read, is the next measurement
+    under the standing grant -- and the first live reading of the shape
+    sentence, which the corpus hands to one body in 104 scenes.
+  * **Cost was not measured** at the geometry note's precision. The field
+    is cached per (scene inputs, room) in a 64-entry memo keyed on a JSON
+    dump of what it reads; the dump is taken on every reader call. The
+    shape adds one `feature_visibility` and, per source, one `_visible_set`
+    per observer per stage.
+  * **The backdrop brief's `lighting` slot** (`dressing/backdrops.room_brief`,
+    reserved for the light field's sentence) is still empty; `light_shape`
+    is the input it was reserved for, and nothing hands it over yet.
+  * **The Japanese adapter renders neither the furniture sentence nor the
+    openings** (`language_adapters/japanese.py::_environment` reads
+    `room_name`, `room_notes`, `light` and now `light_shape`; the pack's
+    `features`, `feature_item`, `feature_glimpse` and `opening_*` templates
+    are authored and never called). Found while wiring the shape sentence;
+    the adapter's own docstring names this failure class. Not fixed here
+    -- the tier and side phrases it needs are language data with their own
+    reading rules -- and registered.
+
+### 2.35 What the 2026-09-04 debug runs left open
+
+Evidence: [`experiments/DEBUG_RUN_2026_09_04.md`](experiments/DEBUG_RUN_2026_09_04.md)
+(two runs on copies, thirty-five findings; eight classes fixed the same day,
+pinned in `tests/test_played_scene_classes.py`). Open, each an owner decision:
+
+- **A thought-only reply loses the Room's grant (F1).** The Planner's main
+  call raised `ReasoningBudgetExhausted` four attempts running -- the last
+  three with reasoning disabled on the request -- on a 6k-char trace that
+  never exhausted a 20k budget; a tiny probe on the same role answered, and
+  the same grant succeeded on rerun. The retry varies one setting the failure
+  does not depend on. Proposal: after N reasoning-only replies fall to the
+  role's next candidate model for the remaining attempts.
+- **"Full authority" is a snapshot (F15).** A mandate granted as everything
+  the room could do enumerates the kinds that existed on its turn;
+  `director_note`, added later, was refused under chat 114's turn-5 grant
+  until the reply's own words happened to grant it. A total grant should
+  cover kinds added after it; widening a standing grant is the owner's call.
+- **A pose `detail` is a side channel for perception (F18).** "watching the
+  arrival" on a body behind a closed door reached that mind as its own
+  interoception and was cited as present evidence of an event in another
+  room. Clause first (a detail describes the BODY, never what it perceives)
+  or the composer delivers only posture it can verify.
+- **Two minds fought over one door and the world kept neither answer (F22).**
+  One held it open, one latched it, the narrator rendered both, the scene
+  kept it open. A barrier is one object; the resolve owes it one answer a
+  beat, and the reconciliation should catch "latched" prose against an
+  `open_door` edge as it catches the reverse.
+- **The planner calls `inspect_clock` every step (F10).** Half answered the
+  same day: a tool whose answer rides a payload key (`inspect_clock` ->
+  `clock`, `inspect_packages` -> `packages`; `payload_key` in
+  `story/room_tools.TOOLS`) now echoes the key instead of re-reading, and an
+  identical call whose answer is still in view echoes the step to look at
+  (`agents/story_planner.py`), so the repeat costs a call and no characters.
+  Still the owner's: whether payload-key tools should leave the manifest the
+  model sees, or the card should say so -- the `story_planner` card does not
+  yet.
+- **The reachability warning's unit is the package (F30):** a road at two
+  hops carries a depot at three without a word. Defensible; the owner should
+  know the unit.
+- **Two model tics measured, not fixed:** Gemini doubled quotation marks on
+  two beats and eight quote-matching guards fired falsely (F29); the
+  characters cited no delivered observation on most beats (F14).
+
+### 2.36 The sound field — PROTOTYPE, what is left
+
+Designed and built 2026-09-04 on `writers-room` (not yet on `main`;
+[`design/DESIGN_SOUND_FIELD.md`](design/DESIGN_SOUND_FIELD.md),
+`world/spatial_sound_field.py`, `tests/test_sound_field.py`, 25 tests).
+Loudness is a scalar on the sight grid, spread by shortest acoustic PATH,
+attenuated per aperture by barrier and material, decayed by path length,
+summed into a signal and a noise floor, and quantised LAST to `none |
+fragment | full`; `spatial_rel_between` stamps `signal`/`noise` where the
+listener's room carries geometry and `hear_level` reads them; entities carry
+`sound_source`, `steadiness`, `state.running`; a failing source files an
+engine notice; a scene without geometry composes byte-identically (pinned).
+Measured: 2 of 589 live rooms carry geometry, 2 speaker-listener pairs on a
+field, whisper and mutter the only words that moved. Merged with the light
+field 2026-09-04; the shared record -- one grid, one steadiness, one
+failed-source block, the two shape sentences, the occluder-cell listener --
+is written once, in § 2.34. The sound side's own detail: the noise ladder
+`quiet | din | drowned` (`NOISE_WORDS`) is derived from `FULL_SNR` /
+`FRAGMENT_SNR` against a normal voice one pace off, never a fourth constant.
+Left, each in the note's § 10 and each an owner decision: the constants
+(§ 6a set them off the § 6 proposal, with the reason); whether a crowd's
+`mood` should raise its level (built on its band, a closed set); which lines
+of a beat are simultaneous (the reader grades one line at a time;
+simultaneous masking exists only through the module API); whether a
+fragment should thin with the ratio; **`sensory_events` on no schema after
+establish** (§ 10.9 -- a crash two rooms away on a normal beat has no
+channel to arrive by; a Director schema addition, and which hand owns a
+one-beat sound is the owner's to say); **two gates** (§ 10.10 -- hearing
+exists in the 2 rooms with an authored footprint/height/opacity, light in
+the 321 with a size tier or anchors; whether hearing should take the wider
+gate); and the live run, which needs a copy of the owner's database there
+was no room for (the 2026-09-04 corpus pass streamed read-only instead, and
+found no live room uneven for sound).
+
+### 2.37 Room fidelity — what the 2026-09-04 prototype left
+
+Built 2026-09-04 on `writers-room`, not yet on `main`:
+[`design/DESIGN_ROOM_FIDELITY.md`](design/DESIGN_ROOM_FIDELITY.md).
+A room may declare `extent` and `shape`; the layout lint reports where a
+scene's geometry cannot all be true; the backdrop brief draws the picture
+from the same record the composer and the geometry read. Measured on a copy
+of the owner's database: 0 of 589 rooms carry an extent; the lint finds 9
+rows in 4 of 104 scenes; the pre-change and built geometry agree on every
+room and body. Left open, each an owner decision or a build:
+
+- **The passage as one object (note §5).** F16 and F22 are one class -- a
+  doorway stored as two edges that can disagree. Designed:
+  `scene.passages[id] = {rooms, barrier, name, material, width, vertical,
+  state}`, edges carrying `passage: id`, readers (`spatial_rel`,
+  `effective_adjacent`, `neighbor_map`, `_sight_neighbours`,
+  `effective_anchors`' door derivation) resolving through the passage when
+  named and per-edge when not, the merge writing both from either, archive
+  and checkpoint riding the blob, the registry untouched. Not built: five
+  readers across four spatial siblings plus the merge block
+  `_mirror_symmetric_barriers` sits in. It was deferred because the
+  light-field work was editing `spatial_routing.py` and `spatial_merge.py`
+  in the same window; that window closed with the 2026-09-04 merge, so
+  nothing but the work stands in the way. The mirror remains the answer to
+  F16 until this lands, and F22 (§ 2.35) waits on the same record.
+- **A Room tool that writes a region's `look`.** `regions.set_region_look`
+  is the seam; since later on 2026-09-04 the World Browser's room card calls
+  it through `PATCH /api/chats/{cid}/regions/{region_id}` (`web/world_routes.py`),
+  so a HOST sets a look by hand. Nothing in the Room does: the registry's
+  only writer at commit still enters names. A `describe_region` tool (look,
+  and the `brief` the regions note left for the same reason) is one tool,
+  one mandate kind, and a card clause.
+- **The Director has to write extents.** 0 of 589 rooms carry one. The
+  clause asks for one where proportion matters; whether the hand supplies
+  it, and whether `size_disagrees_with_extent` then fires often enough to
+  want a repair rather than a report, is a play-test question.
+- **A rim is not a curve.** A round room's doorway is a gap in an
+  axis-aligned wall line between the two boxes; the arc itself is a
+  staircase of cells. Right for sight through the door, coarse at the arc.
+- **The lint's embedding check reads only beared edges.** 578 of 923 exits
+  carry no bearing and cannot be placed; a contradiction through one of
+  them is not seen. The same 578 are the ceiling on what any room geometry
+  can draw, cast through or picture.
+- **The viewer camera multiplies pictures** (up to nine parts by eight
+  facings per room) and is behind `backdrop_continuity` for that reason;
+  whether the edit-from-anchor path keeps the room the same room under a
+  turned camera is unmeasured, because no image call was made here.
+- **Every existing backdrop is redrawn once** (299 images across 74 chat
+  directories on the owner's install): the brief is keyed, as the module's
+  own rule requires, and every room with an exit or an anchor hashes anew.
+  A one-time cost, named rather than hidden; there is no migration that
+  could map an old key to a new one without lying about what the old picture
+  shows.
+- **`size` from area loses one distinction** (a 2x18 gallery and a 6x6 room
+  are both `medium` floor). The proportion sentence carries it to the
+  picture; the proximity ladder does not. If `near`/`across` should read the
+  long side for a corridor, that is a `proximity_rel` change, not a size one.
 
 ## 3. Information-pipeline leaks still open
 
@@ -8145,10 +8155,6 @@ someone measuring a live story where its absence makes the engine wrong.
   world record and assert it never surfaces in that character's output across N
   turns. The firewall is the engine's central claim and is currently protected by
   construction plus targeted tests.
-- **Perception prose bound by the audibility layer.** Live data shows perception
-  narrating "difficult to parse from this distance" while the deterministic layer
-  had already ruled the speech fully audible. The deterministic layer is right;
-  the prose should be constrained by it rather than free to contradict it.
 - **Remove the deprecated macro schema.** `fiction_worlds`, `fiction_locations`
   and `transit_edges` are dead — nothing in the runtime reads or writes them — but
   they are still created, snapshotted, restored and exported. Removal is planned
