@@ -26,8 +26,8 @@ from __future__ import annotations
 
 from world.spatial_barriers import effective_adjacent, normalize_barrier
 from world.spatial_fov import (
-    _UNIT, _door_cells, anchor_cells, normalize_parts, normalize_shape,
-    room_grid,
+    _PART_SHAPES, _UNIT, _door_cells, anchor_cells, normalize_parts,
+    normalize_shape, part_box, room_grid,
 )
 from world.spatial_geometry import (
     ROOM_SIZES, normalize_extent, size_from_extent,
@@ -42,6 +42,7 @@ LAYOUT_LINT_KINDS = (
     "wall_overfull",
     "corner_in_round_room",
     "l_part_redundant",
+    "parts_disconnected",
     "shape_disconnected",
     "rooms_overlap_when_placed",
     "size_disagrees_with_extent",
@@ -92,27 +93,74 @@ def _shape_rows(scene, rooms):
         if shape == "round" and parts:
             out.append({"kind": "corner_in_round_room", "room": rid,
                         "corners": [p["at"] for p in parts]})
-        if shape == "l" and len(parts) >= 2:
+        pieces = False
+        if shape in _PART_SHAPES and len(parts) >= 2:
             grid = room_grid(scene, rid)
-            boxes = []
-            for part in parts:
-                pw, pd = min(part["w"], grid.w), min(part["d"], grid.d)
-                x0 = grid.w - pw if part["at"] in ("ne", "se") else 0
-                y0 = grid.d - pd if part["at"] in ("se", "sw") else 0
-                boxes.append((x0, y0, x0 + pw, y0 + pd, part["at"]))
-            for i, a in enumerate(boxes):
-                for j, b in enumerate(boxes):
-                    if i != j and a[0] >= b[0] and a[1] >= b[1] \
-                            and a[2] <= b[2] and a[3] <= b[3]:
-                        out.append({"kind": "l_part_redundant", "room": rid,
-                                    "part": a[4], "within": b[4]})
-                        break
-        if shape != "rectangle" or normalize_extent(room.get("extent")):
+            boxes = [(*part_box(part, grid.w, grid.d), _part_label(part))
+                     for part in parts]
+            if shape == "l":
+                for i, a in enumerate(boxes):
+                    for j, b in enumerate(boxes):
+                        if i != j and a[0] >= b[0] and a[1] >= b[1] \
+                                and a[2] <= b[2] and a[3] <= b[3]:
+                            out.append({"kind": "l_part_redundant", "room": rid,
+                                        "part": a[4], "within": b[4]})
+                            break
+            # THE PARTS MUST TOUCH. A composite whose rectangles share no
+            # edge and no cell is two floors wearing one id -- a row, never
+            # a refusal (the owner's map lets a host lay the parts down one
+            # at a time, and the second may well not touch until the third
+            # arrives). Named at the part level, so the row says which
+            # pieces stand apart; the cell-level `shape_disconnected` below
+            # is then the same fact and is not repeated.
+            groups = _part_components(boxes)
+            if len(groups) > 1:
+                pieces = True
+                out.append({"kind": "parts_disconnected", "room": rid,
+                            "pieces": [[b[4] for b in g] for g in groups]})
+        if not pieces and (shape != "rectangle"
+                           or normalize_extent(room.get("extent"))):
             grid = room_grid(scene, rid)
             if not _cells_connected(grid.cells):
                 out.append({"kind": "shape_disconnected", "room": rid,
                             "shape": shape})
     return out
+
+
+def _part_label(part) -> str:
+    """A part named for a row: its corner word, or its origin as `x,y`."""
+    at = part["at"]
+    return at if isinstance(at, str) else "%d,%d" % (at[0], at[1])
+
+
+def _boxes_touch(a, b) -> bool:
+    """Two half-open rectangles share a cell, or an edge of positive length."""
+    ox = min(a[2], b[2]) - max(a[0], b[0])
+    oy = min(a[3], b[3]) - max(a[1], b[1])
+    return (ox > 0 and oy > 0) or (ox > 0 and oy == 0) or (oy > 0 and ox == 0)
+
+
+def _part_components(boxes) -> list:
+    """The boxes grouped by touching, in the order given; a box the bounding
+    box clipped to nothing holds no floor and joins nothing."""
+    groups, seen = [], set()
+    for i in range(len(boxes)):
+        if i in seen:
+            continue
+        group, stack = [], [i]
+        seen.add(i)
+        while stack:
+            k = stack.pop()
+            group.append(boxes[k])
+            if boxes[k][2] <= boxes[k][0] or boxes[k][3] <= boxes[k][1]:
+                continue
+            for j, other in enumerate(boxes):
+                if j not in seen and other[2] > other[0] and other[3] > other[1] \
+                        and _boxes_touch(boxes[k], other):
+                    seen.add(j)
+                    stack.append(j)
+        groups.append(group)
+    return groups
 
 
 def _cells_connected(cells) -> bool:
@@ -231,9 +279,13 @@ def layout_rooms(scene, start) -> dict:
     """
     rooms = _rooms(scene)
     if str(start) not in rooms:
-        return {"offsets": {}, "collisions": [], "collided": {}}
+        return {"offsets": {}, "collisions": [], "collided": {}, "parents": {}}
     offsets = {str(start): (0, 0)}
     collided = {}
+    # `parents` (2026-09-05, the structure map's drag): the room each placed
+    # room was laid out FROM -- the edge a drop re-bears. Additive; the
+    # start has none.
+    parents = {}
     occupied = {}
     for x, y in room_grid(scene, start).cells:
         occupied[(x, y)] = str(start)
@@ -260,13 +312,16 @@ def layout_rooms(scene, start) -> dict:
                 if hit:
                     collisions.append((other, hit[0], room_id))
                     collided.setdefault(other, offset)
+                    parents.setdefault(other, room_id)
                     continue
                 offsets[other] = offset
+                parents[other] = room_id
                 for c in cells:
                     occupied[c] = other
                 nxt.append(other)
         frontier = sorted(nxt)
-    return {"offsets": offsets, "collisions": collisions, "collided": collided}
+    return {"offsets": offsets, "collisions": collisions, "collided": collided,
+            "parents": parents}
 
 
 def _embedding_rows(scene, rooms, disagreeing=frozenset()):
@@ -351,6 +406,11 @@ def layout_warning(row) -> str:
         return (f"Room {row['room']!r}: the {row['part']} part lies within "
                 f"the {row['within']} part, so the shape is a rectangle, "
                 f"not an L.")
+    if kind == "parts_disconnected":
+        pieces = "; ".join(", ".join(piece) for piece in row.get("pieces") or [])
+        return (f"Room {row['room']!r}: its parts stand apart ({pieces}) and "
+                f"do not make one floor; move a part until the pieces touch, "
+                f"or make them two rooms.")
     if kind == "shape_disconnected":
         return (f"Room {row['room']!r}: its {row['shape']} shape is not one "
                 f"connected floor.")

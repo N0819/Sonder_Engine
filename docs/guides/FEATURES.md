@@ -692,43 +692,75 @@ legitimately perceive, learn, remember or infer.
   cells is moved to that room and pinned where it landed there. A pinned
   body is measured: sight, cover and distance read its cell, and two
   pinned bodies are within reach at one pace, near within a third of the
-  room, across beyond. "All rooms" zooms out to every room placed by
-  bearing — each as its box, exits as ticks on the wall they open in, a
-  room the bearings land on another drawn on it in red rather than hidden
-  — and clicking a room zooms back in. Every edit is an authored fact: no
-  Director call, no memory of a step. The tree of every room the story
-  knows (where the cast stands first, then what they can reach, then the
-  plan's rooms nobody can reach yet, retired ids folded away; a room
-  inside a body nested under its holder's) is folded open beneath the map,
-  so a planned room, which has no grid, is still a click away. The card:
-  its name, description and notes as text; light, size
-  and exposure as menus over the engine's own words; its measurement — an
+  room, across beyond. A thing standing on the floor is dragged the same
+  way (pinned to a cell; dropped in a neighbour it moves there), and a
+  thing that gives light shows its glow — a ceiling light, one at full
+  height, as a ring, because it casts no shadow. **The room's shape is on
+  the map:** a handle on each side of the box drags the extent (the size
+  word follows); the shape is a select in the map's bar; a room that is not
+  one rectangle — an L, or a *composite* of any number of rectangles (a T,
+  a U, a room with a bay) — shows its parts as dashed boxes, each dragged
+  to move (it is then placed by its own origin cell) or resized by its
+  corner. Parts that do not touch are a layout-lint row, never a refusal.
+  **Creating and removing from the map:** a click on a blank stretch of
+  wall opens a doorway to another room there, or adds a new room through
+  that wall (joined by one doorway with the wall's bearing and a chosen
+  barrier, placed off that wall in the same region); a click on empty floor
+  puts an anchor, a thing or a presence on that cell; "Remove room" removes
+  the room — refused, naming them, while anything still stands in it — and
+  retires its id; a thing and a presence are removed from their rows.
+  **Overlays:** one toggle per sense, off by default — the light on each
+  cell, the noise floor on each cell, and how one chosen source or speaker
+  is heard from each cell — the engine's own readings in its own words,
+  never recomputed here. **Undo** takes back the last drag, one step,
+  through the same route; every drag has arrow-key parity (a focused mark
+  moves one cell), Enter or Space opens the editor, and a legend under the
+  map names every mark. "All rooms" zooms out to every room placed by
+  bearing — each as its box tinted by region, doorways drawn where their
+  door cells are, a room the bearings land on another drawn on it in red
+  rather than hidden and said in words beneath — and a room dragged there
+  re-bears the doorway that placed it, from both sides. Clicking a room
+  zooms back in. Every edit is an authored fact: no Director call, no
+  memory of a step; the toast names what was written. The tree of every
+  room the story knows (where the cast stands first, then what they can
+  reach, then the plan's rooms nobody can reach yet, retired ids folded
+  away; a room inside a body nested under its holder's) is folded open
+  beneath the map, so a planned room, which has no grid, is still a click
+  away. The card: its name, description and notes as text; light, size and
+  exposure as menus over the engine's own words; its measurement — an
   extent in paces (both sides, within the engine's range), a shape
-  (rectangle, round, L) and for an L its parts (each a rectangle at a
-  corner of the box) — with size shown as *derived from the extent* and
-  not offered while an extent stands, and offered again when it is
-  cleared; its region, and the region's **look** (the visual register every
+  (rectangle, round, L, composite) and for an L or a composite its parts
+  (each a rectangle at a corner of the box, or at its own origin cell) —
+  with size shown as *derived from the extent* and not offered while an
+  extent stands, and offered again when it is cleared; its region (a new
+  one entered by name, an existing one renamed in place, the room moved
+  between them), and the region's **look** (the visual register every
   picture of that part of the map shares), edited here and shared by every
   room in the region; its exits (barrier and bearing per doorway, remove,
-  add — the far room's side of the doorway is written too, because a
-  doorway is one object); its anchors listed **under their wall** — each
-  straight wall heading says how many paces it has, from the extent or the
-  size tier, with the doorways it carries, so a wall that cannot hold what
-  stands on it is visible before the lint says so — each with description,
-  bearing (change it to move the anchor to another wall), height,
-  footprint, opacity; the things standing here (kind, description,
-  portable, the light it gives off, lit, and a move to another room); who
-  is here, with the anchor each body stands at and who they stand beside;
-  the plan's stub while it is still one, and what the Writers' Room has
-  planned for it. Where the layout lint finds the room's geometry cannot
-  all be true, each row is shown beside the field it concerns (a bearing
-  row under the exits, a wall row under that wall, a shape row under the
-  shape) and the tree marks the room. "Move here" relocates a cast
-  member the way the cast panel does. **Bodies** (👕 opens here) lists
-  every body the scene knows — player, cast, promoted presence — with its
-  room, station and pose, and its full attire ledger as an editor: per body
-  region, each garment's name, state (worn / loosened / open / removed) and
-  condition, remove, add (naming every region the garment covers), what is
+  add — and the doorway's name, material and width, ONE object edited from
+  either room, because a doorway is one object); its anchors listed
+  **under their wall** — each straight wall heading says how many paces it
+  has, from the extent or the size tier, with the doorways it carries, so a
+  wall that cannot hold what stands on it is visible before the lint says
+  so — each with description, bearing (change it to move the anchor to
+  another wall), height, footprint, opacity; the things standing here
+  (kind, description, portable, the light it gives off — level, shape, the
+  height it sits at, its steadiness, whether it is lit and what a cone
+  points at — the sound it makes while running, and a move to another
+  room); who is here, with the anchor each body stands at, who they stand
+  beside, their pose (the six fields, posture and support suggested from
+  the engine's words and the room's anchors), a move to any room, and a
+  presence's removal; the plan's stub while it is still one, and what the
+  Writers' Room has planned for it. Where the layout lint finds the room's
+  geometry cannot all be true, each row is shown beside the field it
+  concerns (a bearing row under the exits, a wall row under that wall, a
+  shape row under the shape) and the tree marks the room. "Move here"
+  relocates a cast member the way the cast panel does. **Bodies** (👕 opens
+  here) lists every body the scene knows — player, cast, promoted presence
+  — with its room (changed from here, any body), station and pose (edited
+  here), and its full attire ledger as an editor: per body region, each
+  garment's name, state (worn / loosened / open / removed) and condition,
+  remove, add (naming every region the garment covers), what is
   underneath, and the free notes. A garment that spans several regions is
   one garment: change its state under any region and every region agrees.
   Every menu is built from the engine's own vocabulary, and a value the

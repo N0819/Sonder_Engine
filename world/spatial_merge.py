@@ -8,10 +8,13 @@ from typing import Optional
 
 from llm.schemas import NON_ENTITY_FIELD_KEYS, is_derived_entity_name
 from world.spatial_orientation import (normalize_bearing, normalize_scene_bearings,
-                                 opposite_bearing)
+                                 normalize_vertical, opposite_bearing,
+                                 opposite_vertical)
 
-from world.spatial_barriers import (_PASSABLE_BARRIERS, normalize_barrier,
-                              normalize_scene_barriers)
+from world.spatial_barriers import (_ONE_WAY_BARRIER, _PASSABLE_BARRIERS,
+                              PASSAGE_FIELDS, normalize_barrier,
+                              normalize_scene_barriers,
+                              normalize_scene_passages, passage_of)
 from world.spatial_contact_migration import contacts_from_entity_state
 from world.spatial_contacts import (apply_contact_ops,
                               contacts_across_enclosure,
@@ -1231,6 +1234,98 @@ def apply_following_ops(scene: dict, operations) -> dict:
     return scene
 
 
+def sync_scene_passages(scene: dict, prior_scene: dict = None) -> list:
+    """THE PASSAGE RECORD'S ONE WRITER (`DESIGN_ROOM_FIDELITY.md` §5): keep
+    each `scene.passages[id]` and the two edges naming it in step, so a
+    doorway has ONE answer from either room.
+
+    For every passage the hygiene keeps (`normalize_scene_passages`: two live
+    rooms, a readable barrier): both edges exist -- the missing one is minted
+    with `to` and `passage` and nothing else, so the far room's list gains a
+    doorway it always had; then the passage's `PASSAGE_FIELDS` are written
+    onto both edges, and its `vertical` (as seen from `rooms[0]`) onto the
+    first with the opposite onto the second.
+
+    WHICH SIDE SPOKE. A Director beat writes barriers on EDGES (the schema
+    has no passage channel), so an edge whose barrier CHANGED since
+    `prior_scene` is the beat speaking and updates the passage before the
+    passage is written back -- the rule `_mirror_symmetric_barriers` applies
+    one edge at a time, stated once for the record. An edge that did not
+    change yields to the passage. With no `prior_scene` (a route that has
+    just written the passage), the passage is the fact. `one_way_window`
+    is never forced onto an edge: its asymmetry is a field (`sight_from`).
+
+    Additive and fail-open: a scene with no `passages` is untouched, byte for
+    byte; an edge naming a passage the hygiene dropped reads per edge again.
+    Returns the passage ids touched; mutates."""
+    passages = (scene or {}).get("passages")
+    if not isinstance(passages, dict) or not passages:
+        normalize_scene_passages(scene)
+        return []
+    normalize_scene_passages(scene)
+    passages = scene.get("passages") or {}
+    rooms = scene.get("rooms") or {}
+
+    def _edge(room_id, to_id):
+        room = rooms.get(room_id)
+        for e in (room.get("adjacent") or []) if isinstance(room, dict) else []:
+            if isinstance(e, dict) and str(e.get("to")) == str(to_id):
+                return e
+        return None
+
+    def _prior_barrier(room_id, to_id):
+        room = ((prior_scene or {}).get("rooms") or {}).get(room_id)
+        if not isinstance(room, dict):
+            return None
+        for e in room.get("adjacent") or []:
+            if isinstance(e, dict) and str(e.get("to")) == str(to_id):
+                return normalize_barrier(e.get("barrier"))
+        return None
+
+    touched = []
+    for pid, record in list(passages.items()):
+        a, b = record["rooms"]
+        pair = []
+        for here, there in ((a, b), (b, a)):
+            edge = _edge(here, there)
+            if edge is None:
+                edge = {"to": str(there), "passage": pid}
+                rooms[here].setdefault("adjacent", []).append(edge)
+            elif edge.get("passage") != pid:
+                edge["passage"] = pid
+            pair.append(edge)
+        # The edge that changed this beat speaks for the doorway.
+        if prior_scene is not None:
+            for here, there, edge in ((a, b, pair[0]), (b, a, pair[1])):
+                if "barrier" not in edge:
+                    continue
+                now = normalize_barrier(edge.get("barrier"))
+                was = _prior_barrier(here, there)
+                if was is not None and now != was and now != _ONE_WAY_BARRIER:
+                    record["barrier"] = now
+        for field in PASSAGE_FIELDS:
+            value = record.get(field)
+            if value is None or value == "":
+                continue
+            for edge in pair:
+                if field == "barrier":
+                    if normalize_barrier(value) == _ONE_WAY_BARRIER \
+                            or normalize_barrier(edge.get("barrier")) == _ONE_WAY_BARRIER:
+                        continue
+                    edge["barrier"] = normalize_barrier(value)
+                else:
+                    edge[field] = value
+        vertical = normalize_vertical(record.get("vertical"))
+        if vertical:
+            record["vertical"] = vertical
+            pair[0]["vertical"] = vertical
+            pair[1]["vertical"] = opposite_vertical(vertical) or vertical
+        elif "vertical" in record:
+            record.pop("vertical", None)
+        touched.append(pid)
+    return touched
+
+
 def merge_scene_with_diff(
     scene: dict,
     diff: dict | None,
@@ -1512,6 +1607,12 @@ def merge_scene_with_diff(
     # numbers or nothing; `_merge_anchor_fields` above kept it through a
     # re-echo, and this drops what a re-echo could not have written well.
     normalize_scene_anchor_cells(merged)
+    # A doorway with a passage record is ONE object: the edge the beat wrote
+    # updates the record, and the record is written back onto both edges
+    # (`sync_scene_passages`, DESIGN_ROOM_FIDELITY §5). `scene` is the
+    # pre-diff blob, untouched by the deepcopy above, so "which edge changed"
+    # is answerable. A scene with no passages is untouched.
+    sync_scene_passages(merged, scene)
     # Station hygiene moved to the end of the merge, beside contact hygiene:
     # it has to run after `derive_contained_positions`, or a carried body keeps
     # the anchor it was standing at while its carrier walks off with it.

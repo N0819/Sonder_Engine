@@ -1132,7 +1132,7 @@ fill:var(--hover-bg,color-mix(in srgb,var(--acc) 10%,transparent))}
 .wb-m-lint-mark circle{fill:var(--warn);stroke:var(--bg);stroke-width:1.2}
 .wb-m-lint-mark text{fill:var(--bg);font-weight:700;font-size:10px}
 .wb-m-lint-mark:hover circle,.wb-m-lint-mark:focus-visible circle{stroke:var(--fg)}
-.wb-m-lint-wall{stroke:var(--warn);stroke-width:5;opacity:.7}
+.wb-m-lint-wall{stroke:var(--warn);stroke-width:5;opacity:.7;pointer-events:none}
 .wb-sm-room{cursor:pointer;outline:none}
 .wb-sm-box,.wb-sm-box-cell{fill:var(--bg3);stroke:var(--fg);stroke-width:1.2}
 .wb-sm-box-cell{stroke:none}
@@ -1148,6 +1148,64 @@ fill:var(--hover-bg,color-mix(in srgb,var(--acc) 10%,transparent))}
 .wb-sm-who{font-size:6px;fill:var(--dim)}
 .wb-sm-unbeared{font-size:6.5px;fill:var(--dim)}
 .wb-sm-lint{fill:var(--warn);stroke:var(--bg);stroke-width:.8}
+/* The editor completed (2026-09-05): parts and handles on the room map, blank
+   walls and empty floor as targets, light sources, the structure map's
+   regions, the forms and legends beneath. Page tokens only. */
+.wb-m-part{cursor:grab;outline:none}
+.wb-m-part-rect{fill:color-mix(in srgb,var(--acc) 6%,transparent);stroke:var(--acc);stroke-width:1.2;stroke-dasharray:5 3}
+.wb-m-part:hover .wb-m-part-rect,.wb-m-part:focus-visible .wb-m-part-rect{stroke:var(--fg);stroke-width:1.8}
+.wb-m-part-label{font-size:7.5px;fill:var(--dim)}
+.wb-m-part-knob{fill:var(--acc);stroke:var(--bg);stroke-width:1;cursor:nwse-resize;outline:none}
+.wb-m-part-knob:hover,.wb-m-part-knob:focus-visible{fill:var(--fg)}
+.wb-m-handle{fill:color-mix(in srgb,var(--acc) 35%,transparent);stroke:none;outline:none}
+.wb-m-handle-n,.wb-m-handle-s{cursor:ns-resize}
+.wb-m-handle-e,.wb-m-handle-w{cursor:ew-resize}
+.wb-m-handle:hover,.wb-m-handle:focus-visible{fill:var(--acc)}
+.wb-m-wall-hit{fill:transparent;stroke:none;cursor:pointer;outline:none}
+.wb-m-wall-hit:hover,.wb-m-wall-hit:focus-visible,.wb-m-wall-hit.chosen{fill:color-mix(in srgb,var(--acc) 55%,transparent)}
+.wb-m-cell.free{cursor:cell}
+.wb-m-cell.free:hover,.wb-m-cell.chosen{fill:color-mix(in srgb,var(--acc) 22%,var(--bg3));stroke:var(--acc);stroke-width:1;stroke-dasharray:2 2}
+.wb-m-thing.pinned polygon{stroke-width:1.6}
+.wb-m-light-ring{fill:none;stroke:var(--warn);stroke-width:2;stroke-dasharray:3 2}
+.wb-m-light-glow{fill:color-mix(in srgb,var(--warn) 35%,transparent);stroke:none}
+.wb-m-part.dragging,.wb-m-thing.dragging,.wb-sm-room.dragging{opacity:.55;cursor:grabbing}
+.wb-sm-room.region-0 .wb-sm-box,.wb-sm-room.region-0 .wb-sm-box-cell{fill:color-mix(in srgb,var(--acc) 18%,var(--bg3))}
+.wb-sm-room.region-1 .wb-sm-box,.wb-sm-room.region-1 .wb-sm-box-cell{fill:color-mix(in srgb,var(--ok) 18%,var(--bg3))}
+.wb-sm-room.region-2 .wb-sm-box,.wb-sm-room.region-2 .wb-sm-box-cell{fill:color-mix(in srgb,var(--warn) 18%,var(--bg3))}
+.wb-sm-room.region-3 .wb-sm-box,.wb-sm-room.region-3 .wb-sm-box-cell{fill:color-mix(in srgb,var(--err) 12%,var(--bg3))}
+.wb-sm-room.region-4 .wb-sm-box,.wb-sm-room.region-4 .wb-sm-box-cell{fill:color-mix(in srgb,var(--fg) 12%,var(--bg3))}
+.wb-sm-room.region-5 .wb-sm-box,.wb-sm-room.region-5 .wb-sm-box-cell{fill:color-mix(in srgb,var(--dim) 25%,var(--bg3))}
+.wb-swatch-region-0{background:color-mix(in srgb,var(--acc) 18%,var(--bg3))}
+.wb-swatch-region-1{background:color-mix(in srgb,var(--ok) 18%,var(--bg3))}
+.wb-swatch-region-2{background:color-mix(in srgb,var(--warn) 18%,var(--bg3))}
+.wb-swatch-region-3{background:color-mix(in srgb,var(--err) 12%,var(--bg3))}
+.wb-swatch-region-4{background:color-mix(in srgb,var(--fg) 12%,var(--bg3))}
+.wb-swatch-region-5{background:color-mix(in srgb,var(--dim) 25%,var(--bg3))}
+.wb-sm-exit.at-door{stroke-width:2.4}
+.wb-map-forms:empty,.wb-map-marks:empty{display:none}
+.wb-map-forms{margin-top:6px;padding:6px;border:1px dashed var(--acc);border-radius:6px}
+.wb-map-marks{display:flex;gap:10px;flex-wrap:wrap;margin-top:4px;align-items:center}
+.wb-legend-item{display:inline-flex;gap:4px;align-items:center}
+.wb-legend-mark{display:inline-block;width:12px;height:12px;border-radius:3px;border:1px solid var(--bd)}
+.wb-lg-anchor{background:color-mix(in srgb,var(--acc) 42%,var(--bg3));border-color:var(--acc)}
+.wb-lg-door{background:var(--acc);height:4px;border:none;border-radius:0}
+.wb-lg-body{background:var(--acc);border-radius:50%}
+.wb-lg-player{background:var(--ok);border-radius:50%}
+.wb-lg-presence{background:var(--warn);border-radius:50%}
+.wb-lg-thing{background:var(--bg4,var(--bg3));border-color:var(--fg);transform:rotate(45deg);width:9px;height:9px}
+.wb-lg-ring{border:2px dashed var(--warn);border-radius:50%;background:transparent}
+.wb-lg-part{border:1px dashed var(--acc);background:color-mix(in srgb,var(--acc) 6%,transparent)}
+.wb-lg-handle{background:color-mix(in srgb,var(--acc) 35%,transparent);border:none;height:5px}
+.wb-lg-lint{background:var(--warn);border-radius:50%}
+.wb-overlay-toggles{display:inline-flex;gap:4px;align-items:center;flex-wrap:wrap}
+.wb-overlay.on{background:var(--acc);color:var(--bg)}
+.wb-map-shape{font-size:11px}
+.wb-region-field{display:inline-flex;gap:4px;align-items:center}
+.wb-region-rename{max-width:10em;flex:none}
+.wb-doorway-fields{padding-left:12px}
+.wb-pose .wb-input{flex:1 1 90px;max-width:12em}
+.wb-kind{flex:0 1 7em}
+.wb-collision{margin-top:2px}
 .wb-map-legend{display:flex;gap:10px;flex-wrap:wrap;margin-top:4px;align-items:center}
 .wb-map-legend:empty,.wb-map-notes:empty{display:none}
 .wb-swatch{display:inline-block;width:12px;height:12px;border-radius:3px;border:1px solid var(--bd);

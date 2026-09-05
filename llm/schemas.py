@@ -1380,8 +1380,10 @@ class RoomDef(LenientModel):
     # The room's PROPORTION and SHAPE (docs/design/DESIGN_ROOM_FIDELITY.md).
     # `extent` is {w, d} in paces -- east-west and north-south -- the
     # measurement `size` is only the word for; `shape` is one of
-    # spatial_fov.SHAPES (rectangle | round | l); `parts` places an `l`'s two
-    # rectangles at corners of the box as [{w, d, at}]. Read by the grid that
+    # spatial_fov.SHAPES (rectangle | round | l | composite); `parts` is the
+    # rectangles a room that is not one rectangle is the union of, each
+    # [{w, d, at}] placed within the bounding box by a corner word or by its
+    # origin cell `[x, y]` (an `l` is the two-part case). Read by the grid that
     # casts sight, by the proportion sentence the prose and the backdrop use,
     # and by the layout lint. Declared for the reason every field above is
     # -- the round trip drops what it does not declare -- and Optional-None so
@@ -1416,8 +1418,11 @@ def _extent_or_none(value):
 
 
 def _parts_or_none(value):
-    """The readable parts of an `l` room -- each an extent with an `at`
-    corner word -- or None when none is readable."""
+    """The readable parts of an `l` or `composite` room -- each an extent
+    with an `at` that is a corner word or an origin cell `[x, y]` -- or None
+    when none is readable. The reader (`world.spatial_fov.normalize_parts`)
+    refuses the same set on its own; the two agree without either trusting
+    the other."""
     if not isinstance(value, (list, tuple)):
         return None
     out = []
@@ -1425,8 +1430,15 @@ def _parts_or_none(value):
         if not isinstance(part, dict):
             continue
         extent = _extent_or_none(part)
-        at = str(part.get("at") or "").strip()
-        if extent and at:
+        raw = part.get("at")
+        at = None
+        if isinstance(raw, str) and raw.strip():
+            at = raw.strip()
+        elif isinstance(raw, (list, tuple)) and len(raw) == 2 and all(
+                isinstance(n, (int, float)) and not isinstance(n, bool)
+                and n == int(n) for n in raw):
+            at = [int(raw[0]), int(raw[1])]
+        if extent and at is not None:
             out.append({**extent, "at": at})
     return out or None
 
