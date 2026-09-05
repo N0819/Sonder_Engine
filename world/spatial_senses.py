@@ -405,12 +405,13 @@ def can_perceive_onset(scene: dict, from_room, to_room) -> bool:
 
 
 def sight_level(rel: dict) -> str:
-    """How well these two can see each other: none | shapes | full.
+    """How well these two can see each other: none | shapes | conduct | full.
 
     Barriers answer whether there is a line at all; light answers what that
     line carries. A lit room through an open door is full sight; the same room
-    unlit is nothing; and dim is the interesting middle -- enough to know
-    someone is there and not enough to know who.
+    unlit is nothing; and dim is the interesting middle -- enough to see what
+    a body is doing and not enough to see who it is (`_LIGHT_SIGHT`, where
+    the four rungs are stated).
 
     `crossing` is the third input, and it is about a BODY rather than a place:
     someone who has just gone through an opaque boundary is not instantly
@@ -436,8 +437,11 @@ def sight_level(rel: dict) -> str:
     # observer's eyes, caps sight at shapes -- the flashlight in your face.
     # Set by `spatial_rel_between` from the light field
     # (`spatial_light_field.glare_between`); never present without geometry.
-    if rel.get("glare") and level == "full":
-        level = "shapes"
+    # Written as a cap rather than as `== "full"` so it keeps subtracting at
+    # every rung above `shapes` -- a light in the eyes takes a dim room's
+    # conduct grade down too.
+    if rel.get("glare") and level != "none":
+        level = _weaker_sight(level, "shapes")
     if crossing and level == "none":
         return "shapes"
     return level
@@ -584,12 +588,17 @@ def spatial_rel_between(
     return rel
 
 
-_SIGHT_ORDER = {"none": 0, "shapes": 1, "full": 2}
+_SIGHT_ORDER = {"none": 0, "shapes": 1, "conduct": 2, "full": 3}
 
 
 def _weaker_sight(a: str, b: str) -> str:
-    """The dimmer of two sight grades -- caps only ever subtract."""
-    return a if _SIGHT_ORDER.get(a, 2) <= _SIGHT_ORDER.get(b, 2) else b
+    """The dimmer of two sight grades -- caps only ever subtract.
+
+    An unrecognised word grades as the TOP of the ladder, so a grade this
+    module does not know cannot silently cap anything: a cap is a claim, and
+    a word nobody understood is not one."""
+    top = len(SIGHT_LEVELS) - 1
+    return a if _SIGHT_ORDER.get(a, top) <= _SIGHT_ORDER.get(b, top) else b
 
 
 # How many 45-degree steps an egocentric sector sits from dead ahead.
@@ -690,7 +699,11 @@ def visual_level_between(scene: dict, observer: str, target: str) -> str:
     # ordinary room. Dark is deliberately NOT lifted: sight fails and the
     # touch channel already delivers what closeness in darkness gives;
     # a carried light beside its holder is light_at's business, not this.
-    if level == "shapes" and rel.get("same_room") \
+    # Stated as "anything the light graded short of full" rather than as
+    # `== "shapes"`, so the rule reaches the `conduct` rung `dim` now grades
+    # to as well: measured intimacy lifts what the LIGHT took, whichever rung
+    # the light left it on. `none` is still not lifted, for the reason below.
+    if level in ("shapes", "conduct") and rel.get("same_room") \
             and _measured_intimacy(scene, observer, target):
         level = "full"
     # GLARE (`spatial_light_field.glare_between`): a source of GLARE_POWER
@@ -698,10 +711,10 @@ def visual_level_between(scene: dict, observer: str, target: str) -> str:
     # observer's cell, with the target beyond it, caps sight at shapes. The
     # same rule `sight_level` applies to `rel["glare"]`; only ever True where
     # the observer's room carries geometry and both bodies hold a cell.
-    if level == "full":
+    if level != "none":
         from world.spatial_light_field import glare_between
         if glare_between(scene, observer, target):
-            level = "shapes"
+            level = _weaker_sight(level, "shapes")
     if not rel.get("same_room"):
         cap = _weaker_sight(
             _opening_view_cap(scene, t_room, target, o_room),

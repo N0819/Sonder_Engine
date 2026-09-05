@@ -5701,13 +5701,29 @@ is open.
   source under. The two rules are now one rule read from both ends --
   `ambient_floor_word` lets dead fixtures darken an enclosed room's word,
   `room_light` lets a word stand where no fixture exists to speak.
-* **Should the floor hold for `dim`?** Today it yields for any word above
-  `dark`, so an enclosed room declared `dim` with its one dead sconce in it
-  reads `dark`. The argument for exempting `dim`: `dim` is the word an author
-  reaches for when a room has SOME light from nowhere in particular -- a
-  grate, a gap under a door, a window nobody minted -- and taking it to zero
-  makes the room unnavigable for a reason the reader cannot see. The argument
-  against: it is exactly the same lie the `bright` case was, one rung down.
+* **Should the floor hold for `dim`? ANSWERED 2026-09-05 — no exemption**,
+  and the answer to confirm is that `dim` is not special. Today it yields for
+  any word above `dark`, so an enclosed room declared `dim` with its one dead
+  sconce in it reads `dark`. The argument for exempting `dim` was that `dim`
+  is the word an author reaches for when a room has SOME light from nowhere
+  in particular -- a grate, a gap under a door, a window nobody minted -- and
+  taking it to zero makes the room unnavigable for a reason the reader cannot
+  see. That case is already answered one branch over and does not need an
+  exemption to answer it: a room with NO fixture in it keeps its word
+  entirely (`_room_fixtures` is empty, `ambient_floor_word` returns the
+  declaration), which is exactly the "light from nowhere in particular" case
+  and the whole of it. What is left for the exemption to cover is a room
+  whose fixture was WRITTEN and is out — and there the sources are an
+  account, the account that exists decides, and exempting `dim` would be the
+  same lie the `bright` case was, one rung down. So the two rules stay one
+  rule read from both ends, with no rung carved out of either.
+
+  The pressure that produced this bullet has been relieved from the other
+  end instead: `unsourced_light_rooms` now asks the Director for the source
+  of EVERY room whose word nothing accounts for, indoors included (PQ1 / PR6
+  / PX7, 2026-09-05), so the grate nobody minted is a thing the engine says
+  out loud every beat until it exists, rather than a case the floor has to
+  guess at.
 
 F50 (`DEBUG_RUN_2026_09_05.md`) is the third of the family and is untouched:
 a LIT source still cannot quantise below its room's declared floor, so a
@@ -6185,6 +6201,42 @@ The index gives the Director the material to make that judgement and does not
 make it; whether a fuzzy match belongs in `planned_context` is a separate
 question, and the deterministic matcher is deliberately exact
 (§ *An exact match is not ambiguous*).
+
+### 1.128 What the light-and-sources repair left for other hands
+
+**Filed 2026-09-05** alongside the PQ1 / PQ2 / PR6 / PR14 / PX7 / PM17
+repair. Each of these is one edit in a file that lane's own work owns; none
+of them is load-bearing for what landed.
+
+* **`agents/perception.py::_sight_detail` — docstring only.** It says "every
+  grader here already answers in three words -- `sight_level` and
+  `visual_level_between` both return none/shapes/full". There are four now
+  (`none | shapes | conduct | full`, `world/spatial_light._LIGHT_SIGHT`).
+  The CODE is already right and is why PQ2's repair reaches the act channel
+  at all: its last line is `return "shapes" if level == "shapes" else
+  "full"`, so `conduct` delivers the observable surface, which is exactly
+  "dim withholds detail, not conduct". Only the sentence is stale.
+* **`agents/composer.py::pose_percepts` — a possible widening.** A body at
+  `conduct` yields posture and nothing else, because the grade is not
+  `full`. The subtraction is safe and may be right; the case for widening is
+  that `support` ("sitting in the wing chair") is gross conduct rather than
+  detail, and a dim room now grants the rest of a body's conduct. Not taken
+  here, because it is the composer's judgement and under-granting is the
+  safe direction.
+* **PR14's other half — the standing substances and conditions.** The
+  backdrop brief carries the room's light already (`room_projection` adds
+  `light` and `light_sources`; the finding measured `room_brief` alone, one
+  layer down). What it still does not carry is what is standing IN the room:
+  a smoke plume, a `world_conditions` fire. That is the same class as lane
+  D's finding that six `world_conditions` landed and nothing in perception
+  or the composer reads them, and it should be fixed once, there.
+* **The objects specialist's source clause (PR6, mid-play half).** The
+  establish now states that a thing that gives light or keeps up a sound is
+  an entity with `light_source` / `sound_source`, and the spatial hand's
+  `rooms` chunk states that a room's light word never says what gives it.
+  The hand that would mint a fire a BEAT introduces is `objects`, and
+  `specialists/objects/chunks/entities.txt` says nothing about sources in
+  either pack.
 
 ## 2. Roadmap
 

@@ -223,7 +223,7 @@ class TestPerceptionGradesTheCell:
     """The payoff: a townsperson is graded by light and line at its cell,
     as cast are, instead of being seen because it shares a room."""
 
-    def test_behind_the_screen_is_none_and_in_the_open_is_shapes(self):
+    def test_behind_the_screen_is_none_and_in_the_open_is_seen(self):
         charter = _charter(
             guest={"name": "Tam", "place": "hall", "station": {"cell": [7, 3]}},
             porter={"name": "Oren", "place": "hall", "station": {"cell": [3, 3]}})
@@ -232,14 +232,18 @@ class TestPerceptionGradesTheCell:
         assert body_visibility(view, "Rowan", "Tam")["occluded_by"] \
             == "a folding screen"
         assert visual_level_between(view, "Rowan", "Tam") == "none"
-        assert visual_level_between(view, "Rowan", "Oren") == "shapes"
+        # `conduct`, not `shapes`, since PQ2 (2026-09-05): the hall is
+        # `dim` and dim withholds detail, not conduct. What this test is
+        # about is the SPLIT -- nothing at all behind the screen, a body
+        # graded by the light in the open -- and the split is untouched.
+        assert visual_level_between(view, "Rowan", "Oren") == "conduct"
 
     def test_before_the_view_both_were_seen_alike(self):
         """The room-only placement `_presence_bodies` used to write."""
         scene = _scene()
         scene["positions"].update({"Tam": "hall", "Oren": "hall"})
         assert visual_level_between(scene, "Rowan", "Tam") == \
-            visual_level_between(scene, "Rowan", "Oren") == "shapes"
+            visual_level_between(scene, "Rowan", "Oren") == "conduct"
 
     def test_the_charter_observers_own_eye_is_graded_by_line(self):
         """The observing body stands at its cell: behind the screen it does

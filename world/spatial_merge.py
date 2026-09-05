@@ -2170,18 +2170,11 @@ def _report_unsourced_light(merged, report) -> None:
     exact beat a phase turns, this reports the phase just ended; the reader
     (`room_light`) always uses the current one, and the notice is advice to
     the Director rather than a fact anything else depends on.
+
+    The sentences are composed in `world/spatial_light.py` beside the rule
+    they report, cap included.
     """
     if report is None:
         return
-    from world.spatial_light import unsourced_light_rooms
-    rooms = (merged or {}).get("rooms") or {}
-    for room_id, declared, sky in unsourced_light_rooms(merged):
-        room = rooms.get(room_id) or {}
-        label = str(room.get("name") or room_id)
-        report.append(
-            "%r is declared `light: %s` and the sky leaves it %s, and it "
-            "holds no light source of its own, so the room's word stands. "
-            "If something in there gives that light, write it as an entity "
-            "with `light_source` so it can be seen, moved, put out and lit "
-            "from where it stands; if nothing does, the room's `light` "
-            "should say what the sky leaves it." % (label, declared, sky))
+    from world.spatial_light import unsourced_light_notices
+    report.extend(unsourced_light_notices(merged))

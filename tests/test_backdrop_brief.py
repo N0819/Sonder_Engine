@@ -108,11 +108,20 @@ def test_proportion_says_only_what_was_authored_or_measured():
 
 
 def test_the_camera_is_the_main_entrance_looking_in():
-    """The first PASSABLE doorway in compass order: the north door is shut,
-    so the picture is taken from the east stair looking west."""
+    """The first passable, NON-VERTICAL doorway in compass order: the north
+    door is shut and the east way is a stair, so the picture is taken from
+    the west opening looking east.
+
+    The vertical exclusion is PR14 (`PLAY_2026_09_05C_rush.md`, 2026-09-05):
+    a camera stands in a doorway and looks level across the room, and a
+    stair, ladder, hatch or shaft is a way up or down with no level, wide
+    shot to be taken from inside it. Live, the brief for a landing put the
+    camera in "the north doorway" looking south -- the north doorway being
+    the stair going down into a flashover.
+    """
     assert CAMERA_WALL_ORDER == ("n", "e", "s", "w")
     brief = room_brief(_scene(), "hall")
-    assert brief["camera"] == {"from": "the east doorway", "looking": "west",
+    assert brief["camera"] == {"from": "the west doorway", "looking": "east",
                                "framing": "level, wide"}
     sc = _scene()
     sc["rooms"]["hall"]["adjacent"][0]["barrier"] = "open_door"
@@ -128,7 +137,7 @@ def test_the_viewer_camera_is_behind_the_setting_and_needs_a_cell_and_a_facing()
     sc["stations"] = {"Hinami": {"at": "hearth"}}
     sc["orientation"] = {"Hinami": {"facing": "n"}}
     entrance = room_brief(sc, "hall", "Hinami")["camera"]
-    assert entrance["from"] == "the east doorway"
+    assert entrance["from"] == "the west doorway"
     turned = room_brief(sc, "hall", "Hinami", viewer_camera=True)["camera"]
     assert turned["looking"] == "north" and turned["framing"] == "eye level, wide"
     assert "south" in turned["from"] and "part of the room" in turned["from"] \
@@ -220,7 +229,7 @@ def test_the_draft_is_composed_from_the_walls_outward():
     assert "south wall: the hearth" in draft
     assert "standing free of the walls: an iron brazier" in draft
     assert "west wall: an opening" in draft
-    assert "seen from the east doorway looking west, level, wide, the middle of the floor empty" in draft
+    assert "seen from the west doorway looking east, level, wide, the middle of the floor empty" in draft
     assert "a large room" in draft
     assert "in the manner of the district: black stone, iron and tallow light" in draft
     assert draft.index("a large room") < draft.index("north wall")
@@ -366,4 +375,4 @@ def test_an_enclosed_room_is_briefed_and_hashed_exactly_as_it_was():
     assert set(brief) == {"walls", "openings", "proportion", "camera"}
     assert "sky" not in brief and "ground" not in brief and "ways" not in brief
     assert brief["proportion"] == "a large room"
-    assert brief["camera"]["from"] == "the east doorway"
+    assert brief["camera"]["from"] == "the west doorway"
