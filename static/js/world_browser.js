@@ -2,31 +2,57 @@
 
 // ---- The World Browser ----
 //
-// The room-centred view of the world state behind the 🌍 and 👕 buttons: a
-// tree of every room the story knows on the left, the selected room on the
-// right -- its prose, its exits (clickable, so the world is walked rather
-// than scrolled), who stands in it and what they wear, what else is here,
-// the plan's stub if it is still one, and what the author layer has claimed
-// about it. Both read `web/world_routes.py`, which is transport over
+// The room-centred view of the world state behind the 🌍 and 👕 buttons,
+// and since 2026-09-04 its EDITOR: three tabs in one dialog.
+//
+//   Rooms   -- a tree of every room the story knows on the left, the selected
+//              room on the right. Every field the card shows is edited where
+//              it is shown: name, description, notes, light / size / exposure
+//              (selects over the engine's own sets), region (a datalist of
+//              the map's regions), exits (barrier and bearing per doorway,
+//              remove, add -- the far room's edge is written too, because a
+//              doorway is one object), anchors (description, bearing, and the
+//              three geometry words), the things standing here (kind,
+//              description, portable, light, lit, move), and each body's
+//              station (the anchor it stands at, who it stands beside).
+//   Bodies  -- every body the scene knows -- cast, player, promoted presence
+//              -- with its room, station, pose, and its FULL attire ledger,
+//              editable: a garment's state and condition, add and remove,
+//              the region a garment is worn under, the free notes.
+//   Raw JSON -- the two editors that used to be the whole of these buttons,
+//              unchanged: the world table (🌍) or the attire ledger (👕),
+//              whole-body PUTs. The REPAIR path, kept because hand repair of
+//              a drifted scene is how the owner fixes one.
+//
+// Reads `web/world_routes.py`: the index (`groups`, `bodies`, `vocab`) and
+// the slice (`record`, `stationable`), both transport over
 // `story/room_slice.py` -- the ONE reader the Writers' Room's `inspect_rooms`
 // and the frontier also use, so the host and the Planner see one world.
 //
-// READ-ONLY, with two exceptions that reuse writes the app already has:
-// "Move here" is the cast editor's `PUT /characters/{ch}/position` (idle
-// only, room validated against the scene, narrates nothing), and the Raw
-// JSON tab IS the two editors that used to be the whole of these buttons --
-// the world table and the attire ledger, whole-body PUTs, behaviour
-// unchanged -- because hand repair of a drifted scene is how the owner fixes
-// one, and a structured view must not take that away.
+// Writes, each narrow and each validated by the server against the SAME sets
+// the menus are built from: `PATCH /rooms/{id}` (changed fields only; exits
+// and anchors as this room's full list), `PATCH /rooms/{id}/entities/{eid}`,
+// `PUT /bodies/{name}/station`, and the two writes the app already had --
+// "Move here" is the cast editor's `PUT /characters/{ch}/position`, and every
+// attire edit sends the WHOLE ledger to `PUT /attire`, which re-derives each
+// entry (`story.attire.rederive_entry`). The ledger stores a garment
+// covering several regions ONCE PER REGION; this editor groups the copies
+// by name into one garment (`wbGroupGarments`), edits that, and writes every
+// copy back with the same state (`wbLedgerEntry`) -- so a kimono loosened at
+// the torso is loosened at the legs, and a garment is never narrowed to the
+// region it happened to be edited under, nor its state reset to "worn". Those
+// two were the faults that made the card editor (`fAttireGarments`) unusable
+// here (`docs/UNBUILT.md` § 2.26, now closed).
 //
-// Attire is shown per body and NOT edited here. `fAttireGarments` (the card
-// editor) was considered and does not fit the live ledger: a stored garment
-// spanning several regions is recorded once per region without a `covers`
-// list, so the editor would read a kimono as torso-only and write it back
-// narrowed, and its `read()` writes `state: "worn"` unconditionally, so a
-// loosened or open garment would be re-fastened by opening the dialog. Until
-// there is a ledger editor that carries `state`, `condition` and the spanning
-// copies, the honest control is a link to Raw JSON.
+// NO CLOSED SET IS TYPED INTO THIS FILE. Every select reads `index.vocab`,
+// which the route builds from the engine's constants, so a menu cannot drift
+// from the code.
+//
+// Edits are EXPLICIT: a text input commits on blur or Enter (Escape reverts
+// the unsaved text), a select on change, a checkbox on change; a toast says
+// "Saved." on success and repeats the server's refusal on failure, and the
+// card is re-rendered from the server's answer either way -- never a silent
+// revert.
 //
 // Reads the story-view globals it needs (S.chatId, S.currentFrameId) and the
 // shared helpers ($, el, txt, api, t, toast, modal, closeModal,
@@ -43,10 +69,6 @@ const WB_GROUPS = [
   ["retired", "Retired"],
 ];
 
-// The regions in the ledger's own order (attire.REGIONS), for the per-body
-// table. Display order only; the ledger decides what exists.
-const WB_REGIONS = ["head", "torso", "arms", "hands", "waist", "groin", "legs", "feet"];
-
 function wbStatusBadge(status) {
   // Only the two statuses that change what a room IS. A live room needs no
   // badge; an id known to nothing (an exit pointing off the map) says so.
@@ -60,6 +82,63 @@ function wbRoomLabel(row) {
   // An interior room is named with what it is inside, as the cast editor
   // names it: "Console Room" alone does not say which ship.
   return castRoomLabel({ name: row.name, parent_name: row.holder_name || null });
+}
+
+// ---- Edit controls -----------------------------------------------------------
+
+// A select over one of the engine's closed sets. `blank` adds a first option
+// whose value is "" -- "leave unset", which the server reads as "clear".
+function wbSelect(options, value, { blank = null, title = null, onchange, labels = null } = {}) {
+  const select = el("select", { class: "wb-select", ...(title ? { title } : {}),
+                                onchange: e => onchange(e.target.value) });
+  if (blank !== null) select.append(el("option", { value: "" }, blank));
+  for (const option of options || []) {
+    const opt = el("option", { value: String(option), translate: "no" },
+      txt(labels ? labels(option) : option));
+    if (String(option) === String(value ?? "")) opt.selected = true;
+    select.append(opt);
+  }
+  if (blank !== null && !(options || []).some(o => String(o) === String(value ?? ""))) {
+    select.value = "";
+  }
+  return select;
+}
+
+// A text control that commits on blur or Enter and reverts on Escape. Only a
+// CHANGED value is sent: tabbing through a field is not an edit.
+function wbText(value, save, { multiline = false, placeholder = "", title = null } = {}) {
+  const attrs = { class: multiline ? "wb-textarea" : "wb-input", translate: "no",
+                  ...(placeholder ? { placeholder } : {}), ...(title ? { title } : {}) };
+  const input = multiline ? el("textarea", attrs) : el("input", { type: "text", ...attrs });
+  input.value = value == null ? "" : String(value);
+  let settled = input.value;
+  const commit = async () => {
+    if (input.value === settled) return;
+    const next = input.value;
+    settled = next;
+    await save(next);
+  };
+  input.addEventListener("blur", commit);
+  input.addEventListener("keydown", e => {
+    if (e.key === "Enter" && !multiline) { e.preventDefault(); input.blur(); }
+    if (e.key === "Escape") { input.value = settled; input.blur(); }
+  });
+  return input;
+}
+
+// One write, one outcome the host can see. On success the card re-renders
+// from the server's fresh answer; on failure the refusal is the toast and the
+// card re-renders from what the server still holds. Nothing reverts silently.
+async function wbWrite(ctx, call, { quiet = false } = {}) {
+  try {
+    const result = await call();
+    if (!quiet) toast("Saved.", "ok");
+    return result;
+  } catch (error) {
+    toast(error?.message || String(error), "err", 8000);
+    await ctx.refresh();
+    return null;
+  }
 }
 
 // ---- The tree -------------------------------------------------------------
@@ -142,7 +221,15 @@ function wbSection(title, ...kids) {
   return el("div", { class: "wb-section" }, el("h4", {}, title), ...kids);
 }
 
-function wbStation(station) {
+function wbIndexRows(index) {
+  const out = [];
+  for (const key of Object.keys(index.groups || {})) {
+    for (const row of index.groups[key] || []) out.push(row);
+  }
+  return out;
+}
+
+function wbStationText(station) {
   // `scene.stations[name]` is `{at: anchor|null, near: [names]}`: what the
   // body stands at, and who it stands beside.
   if (!station || typeof station !== "object") return null;
@@ -154,57 +241,13 @@ function wbStation(station) {
                    el("span", { translate: "no" }, txt(near.join(", ")))] : null);
 }
 
-function wbGarmentLine(g) {
-  if (typeof g === "string") return g;
-  if (!g || typeof g !== "object") return "";
-  const parts = [g.name || ""];
-  if (g.state && g.state !== "worn") parts.push(`(${g.state})`);
-  if (g.condition) parts.push(`— ${g.condition}`);
-  return parts.join(" ");
+function wbPoseText(pose) {
+  if (!pose || typeof pose !== "object") return "";
+  return ["posture", "support", "relation", "relative_to", "constraint", "detail"]
+    .map(k => pose[k]).filter(v => v && String(v).trim()).join(" · ");
 }
 
-function wbAttire(entry, showRaw) {
-  // The ledger AS STORED (the slice's contract): `wearing` and `state` are
-  // its own summary of itself, `regions` the per-region table. Shown, not
-  // edited -- see the file comment for why the card editor does not fit.
-  if (!entry || typeof entry !== "object") {
-    return el("div", { class: "small dim" }, "No attire recorded for this body.");
-  }
-  const wearing = Array.isArray(entry.wearing) ? entry.wearing : [];
-  const state = Array.isArray(entry.state) ? entry.state : [];
-  const regions = entry.regions && typeof entry.regions === "object" ? entry.regions : {};
-  const regionRows = WB_REGIONS
-    .concat(Object.keys(regions).filter(r => !WB_REGIONS.includes(r)))
-    .filter(r => regions[r] && typeof regions[r] === "object")
-    .map(r => {
-      const entryFor = regions[r];
-      const garments = (entryFor.garments || []).map(wbGarmentLine).filter(Boolean);
-      return el("tr", {},
-        el("td", { class: "dim" }, r),
-        el("td", {},
-          el("span", { translate: "no" }, txt(garments.length ? garments.join("; ") : "—")),
-          entryFor.beneath
-            ? el("span", { class: "dim" }, " (", "Underneath:", " ",
-                el("span", { translate: "no" }, txt(entryFor.beneath)), ")")
-            : null));
-    });
-  return el("div", { class: "wb-attire" },
-    el("div", {},
-      el("span", { class: "dim" }, "Wearing:"), " ",
-      el("span", { translate: "no" }, txt(wearing.length ? wearing.join(", ") : "—"))),
-    state.length
-      ? el("div", {},
-          el("span", { class: "dim" }, "State:"), " ",
-          el("span", { translate: "no" }, txt(state.join("; "))))
-      : null,
-    regionRows.length ? el("table", {}, ...regionRows) : null,
-    el("div", { class: "small dim", style: "margin-top:4px" },
-      "Attire is read-only here; hand-correct it under ",
-      el("button", { class: "wb-link", onclick: showRaw }, "Raw JSON"),
-      "."));
-}
-
-function wbMoveControl(slice, positions, chatId, onMoved) {
+function wbMoveControl(slice, positions, chatId, ctx) {
   // "Move here": the cast editor's relocation, aimed at this room. Only a
   // LIVE room can receive a body (the route validates the id against the
   // scene), and only the registered cast can be moved -- the player's own
@@ -220,18 +263,257 @@ function wbMoveControl(slice, positions, chatId, onMoved) {
     if (!who) return;
     button.disabled = true;
     try {
-      await api("PUT",
+      const done = await wbWrite(ctx, () => api("PUT",
         `/api/chats/${chatId}/characters/${who.id}/position${frameQuery()}`,
-        { room: slice.id });
-      toast(`Moved ${who.name} here.`, "ok");
-      await onMoved();
-    } catch (error) {
-      toast(error?.message || String(error), "err", 8000);
+        { room: slice.id }), { quiet: true });
+      if (done) {
+        toast(`Moved ${who.name} here.`, "ok");
+        await ctx.refresh();
+      }
     } finally {
       button.disabled = false;
     }
   } }, "Move here");
   return el("div", { class: "row", style: "margin-top:6px" }, select, button);
+}
+
+// The room's fields: a PATCH of just the one that changed, the card rebuilt
+// from the slice the server hands back.
+function wbRoomFields(slice, ctx) {
+  const record = slice.record;
+  const vocab = ctx.vocab;
+  const patch = fields => wbWrite(ctx, async () => {
+    const fresh = await api("PATCH",
+      `/api/chats/${ctx.chatId}/rooms/${encodeURIComponent(slice.id)}${frameQuery()}`,
+      fields);
+    await ctx.replaceCard(fresh);
+    return fresh;
+  });
+  const field = (label, control) => el("label", { class: "wb-field" },
+    el("span", { class: "small dim" }, label), control);
+  const regionsList = el("datalist", { id: "wb-regions-list" },
+    ...(vocab.regions || []).map(r => el("option", { value: r.id, translate: "no" },
+      txt(r.name && r.name !== r.id ? r.name : ""))));
+  const regionInput = wbText(record.region, value => patch({ region: value }),
+    { placeholder: "Which part of the map" });
+  regionInput.setAttribute("list", "wb-regions-list");
+  return el("div", { class: "wb-fields" },
+    field("Light", wbSelect(vocab.light, record.light,
+      { blank: "—", onchange: v => patch({ light: v }) })),
+    field("Size", wbSelect(vocab.size, record.size,
+      { blank: "—", onchange: v => patch({ size: v }) })),
+    field("Exposure", wbSelect(vocab.exposure, record.exposure,
+      { blank: "—", onchange: v => patch({ exposure: v }) })),
+    field("Region", el("span", {}, regionInput, regionsList)));
+}
+
+// Exits: the way the world is walked, and now the way a doorway is authored.
+// The editable rows are this room's STORED edges (`record.adjacent`); an exit
+// the slice derives from the far side's declaration, or from the plan's stub,
+// is shown as a link with where it came from.
+function wbExits(slice, ctx) {
+  const vocab = ctx.vocab;
+  const stored = slice.record ? slice.record.adjacent || [] : null;
+  const patchExits = exits => wbWrite(ctx, async () => {
+    const fresh = await api("PATCH",
+      `/api/chats/${ctx.chatId}/rooms/${encodeURIComponent(slice.id)}${frameQuery()}`,
+      { exits });
+    await ctx.replaceCard(fresh);
+    return fresh;
+  });
+  const asExit = e => ({ to: e.to, barrier: e.barrier || "", dir: e.dir || "" });
+  const byTo = new Map((slice.exits || []).map(x => [x.to, x]));
+  const rows = [];
+  if (stored) {
+    for (const edge of stored) {
+      const far = byTo.get(edge.to) || { to: edge.to, name: edge.to, status: null };
+      const mine = stored.map(asExit);
+      const update = (changes) => patchExits(
+        mine.map(x => x.to === edge.to ? { ...x, ...changes } : x));
+      rows.push(el("div", { class: "wb-exit" },
+        el("button", { class: "wb-link", translate: "no",
+                       onclick: () => ctx.select(edge.to) }, txt(far.name || edge.to)),
+        wbStatusBadge(far.status),
+        wbSelect(vocab.barriers, edge.barrier || "",
+          { title: "Barrier", onchange: v => update({ barrier: v }) }),
+        wbSelect(vocab.dirs, edge.dir || "",
+          { blank: "—", title: "Bearing", onchange: v => update({ dir: v }) }),
+        el("button", { class: "small wb-remove", title: "Remove this exit",
+                       onclick: () => patchExits(mine.filter(x => x.to !== edge.to)) },
+          "✕")));
+    }
+  }
+  const storedTo = new Set((stored || []).map(e => e.to));
+  for (const x of slice.exits || []) {
+    if (storedTo.has(x.to)) continue;
+    rows.push(el("div", { class: "wb-exit" },
+      el("button", { class: "wb-link", translate: "no",
+                     onclick: () => ctx.select(x.to) }, txt(x.name || x.to)),
+      (x.barrier || x.dir)
+        ? el("span", { class: "small dim", translate: "no" },
+            txt([x.barrier, x.dir].filter(Boolean).join(", ")))
+        : null,
+      wbStatusBadge(x.status),
+      stored ? el("span", { class: "small dim" },
+        slice.planned_stub ? "From the plan" : "Declared from the far side") : null));
+  }
+  const kids = [rows.length ? el("div", {}, ...rows)
+                            : el("div", { class: "small dim" }, "No exits recorded.")];
+  if (stored) {
+    // Add an exit: any room the story knows that is not this one and is not
+    // already a doorway of it -- live or planned.
+    const candidates = wbIndexRows(ctx.index)
+      .filter(r => r.id !== slice.id && r.status !== "retired" && !storedTo.has(r.id));
+    if (candidates.length) {
+      const target = el("select", { class: "wb-select", title: "Where the new exit leads" },
+        ...candidates.map(r => el("option", { value: r.id, translate: "no" },
+          txt(r.status === "planned" ? `${wbRoomLabel(r)} (${t("Planned")})` : wbRoomLabel(r)))));
+      const barrier = wbSelect(vocab.barriers, (vocab.barriers || [])[0] || "",
+        { title: "Barrier", onchange: () => {} });
+      const dir = wbSelect(vocab.dirs, "", { blank: "—", title: "Bearing", onchange: () => {} });
+      kids.push(el("div", { class: "wb-exit wb-add" },
+        target, barrier, dir,
+        el("button", { class: "small", onclick: () => patchExits(
+          stored.map(asExit).concat([{ to: target.value, barrier: barrier.value,
+                                       dir: dir.value }])) },
+          "Add exit")));
+    }
+  }
+  return wbSection("Exits", ...kids);
+}
+
+// Anchors: the room's named features, each with a wall and its geometry.
+function wbAnchors(slice, ctx) {
+  if (!slice.record) return null;
+  const vocab = ctx.vocab;
+  const anchors = slice.record.anchors || {};
+  const patchAnchors = next => wbWrite(ctx, async () => {
+    const fresh = await api("PATCH",
+      `/api/chats/${ctx.chatId}/rooms/${encodeURIComponent(slice.id)}${frameQuery()}`,
+      { anchors: next });
+    await ctx.replaceCard(fresh);
+    return fresh;
+  });
+  const copy = () => {
+    const out = {};
+    for (const [aid, a] of Object.entries(anchors)) out[aid] = { ...a };
+    return out;
+  };
+  const update = (aid, changes) => {
+    const next = copy();
+    next[aid] = { ...next[aid], ...changes };
+    return patchAnchors(next);
+  };
+  const rows = Object.entries(anchors).map(([aid, a]) => el("div", { class: "wb-exit" },
+    el("span", { class: "small dim", translate: "no", title: "Anchor id" }, txt(aid)),
+    wbText(a.desc || "", v => update(aid, { desc: v }), { placeholder: "Description" }),
+    wbSelect(vocab.dirs, a.dir || "", { blank: "—", title: "Bearing",
+                                        onchange: v => update(aid, { dir: v }) }),
+    wbSelect(vocab.heights, a.height || "", { blank: "—", title: "Height",
+                                              onchange: v => update(aid, { height: v }) }),
+    wbSelect(vocab.footprints, a.footprint || "", { blank: "—", title: "Footprint",
+                                                    onchange: v => update(aid, { footprint: v }) }),
+    wbSelect(vocab.opacities, a.opacity || "", { blank: "—", title: "Opacity",
+                                                 onchange: v => update(aid, { opacity: v }) }),
+    el("button", { class: "small wb-remove", title: "Remove this anchor", onclick: () => {
+      const next = copy();
+      delete next[aid];
+      return patchAnchors(next);
+    } }, "✕")));
+  const desc = el("input", { type: "text", class: "wb-input", translate: "no",
+                             placeholder: "A feature prose refers to — the hearth, the bar" });
+  const add = () => {
+    const text = desc.value.trim();
+    if (!text) return;
+    const next = copy();
+    next[""] = { desc: text };
+    return patchAnchors(next);
+  };
+  desc.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); add(); } });
+  return wbSection("Anchors",
+    rows.length ? el("div", {}, ...rows)
+                : el("div", { class: "small dim" }, "No anchors recorded."),
+    el("div", { class: "wb-exit wb-add" }, desc,
+      el("button", { class: "small", onclick: add }, "Add anchor")));
+}
+
+// A body in the room: its station edited here, its attire on the Bodies tab.
+function wbOccupant(o, slice, ctx) {
+  const stationable = slice.stationable || [];
+  const station = o.station || { at: null, near: [] };
+  const others = (slice.occupants || []).map(x => x.name).filter(n => n !== o.name);
+  const put = body => wbWrite(ctx, async () => {
+    await api("PUT",
+      `/api/chats/${ctx.chatId}/bodies/${encodeURIComponent(o.name)}/station${frameQuery()}`,
+      body);
+    await ctx.refresh();
+    return true;
+  });
+  const near = new Set(Array.isArray(station.near) ? station.near : []);
+  const garments = o.attire && Array.isArray(o.attire.wearing) ? o.attire.wearing.length : null;
+  return el("div", { class: "wb-body" },
+    el("div", { class: "row wb-body-head" },
+      el("b", { translate: "no" }, txt(o.name)),
+      garments != null ? el("span", { class: "small dim" }, `Garments: ${garments}`) : null,
+      el("button", { class: "wb-link", onclick: () => ctx.showBody(o.name) }, "Attire")),
+    slice.status === "live" ? el("div", { class: "wb-exit" },
+      el("span", { class: "small dim" }, "At"),
+      wbSelect(stationable.map(a => a.id), station.at || "",
+        { blank: "—", title: "The anchor this body stands at",
+          labels: id => {
+            const a = stationable.find(x => x.id === id);
+            return a && a.desc && a.desc !== id ? `${a.desc} (${id})` : id;
+          },
+          onchange: v => put({ at: v || null, near: [...near] }) }),
+      others.length ? el("span", { class: "small dim" }, "Near") : null,
+      ...others.map(name => el("label", { class: "wb-check" },
+        el("input", { type: "checkbox", ...(near.has(name) ? { checked: true } : {}),
+                      onchange: e => {
+                        const next = new Set(near);
+                        if (e.target.checked) next.add(name); else next.delete(name);
+                        return put({ at: station.at || null, near: [...next] });
+                      } }),
+        el("span", { translate: "no" }, txt(name))))) : null);
+}
+
+// A thing in the room: its fields, and a move.
+function wbThing(th, slice, ctx) {
+  const vocab = ctx.vocab;
+  const patch = fields => wbWrite(ctx, async () => {
+    const fresh = await api("PATCH",
+      `/api/chats/${ctx.chatId}/rooms/${encodeURIComponent(slice.id)}/entities/${encodeURIComponent(th.id)}${frameQuery()}`,
+      fields);
+    await ctx.replaceCard(fresh);
+    return fresh;
+  });
+  const record = th.record || {};
+  const lit = record.state && typeof record.state === "object" ? record.state.lit : undefined;
+  const liveRooms = wbIndexRows(ctx.index).filter(r => r.status === "live" && r.id !== slice.id);
+  const moveTo = el("select", { class: "wb-select", title: "Move this thing to another room" },
+    ...liveRooms.map(r => el("option", { value: r.id, translate: "no" }, txt(wbRoomLabel(r)))));
+  return el("div", { class: "wb-thing" },
+    el("div", { class: "wb-exit" },
+      el("b", { translate: "no" }, txt(th.name)),
+      th.plan_ref ? el("span", { class: "badge", title: th.plan_ref }, "From the plan") : null,
+      wbText(th.kind || "", v => patch({ kind: v }), { placeholder: "Kind" }),
+      el("label", { class: "wb-check" },
+        el("input", { type: "checkbox", ...(record.portable ? { checked: true } : {}),
+                      onchange: e => patch({ portable: e.target.checked }) }),
+        "Portable"),
+      el("span", { class: "small dim" }, "Light"),
+      wbSelect(vocab.light, record.light_source || "",
+        { blank: "—", title: "The light this thing gives off",
+          onchange: v => patch({ light_source: v }) }),
+      record.light_source ? el("label", { class: "wb-check" },
+        el("input", { type: "checkbox", ...(lit !== false ? { checked: true } : {}),
+                      onchange: e => patch({ lit: e.target.checked }) }),
+        "Lit") : null),
+    el("div", { class: "wb-exit" },
+      wbText(record.description || "", v => patch({ description: v }),
+        { placeholder: "Description", multiline: true }),
+      th.placed === "position" && liveRooms.length ? [moveTo,
+        el("button", { class: "small", onclick: () => patch({ room: moveTo.value }) }, "Move")]
+        : null));
 }
 
 function wbRenderCard(host, slice, ctx) {
@@ -240,8 +522,19 @@ function wbRenderCard(host, slice, ctx) {
     host.append(el("div", { class: "small dim" }, "Pick a room on the left."));
     return;
   }
+  const record = slice.record;
+  const patch = fields => wbWrite(ctx, async () => {
+    const fresh = await api("PATCH",
+      `/api/chats/${ctx.chatId}/rooms/${encodeURIComponent(slice.id)}${frameQuery()}`,
+      fields);
+    await ctx.replaceCard(fresh);
+    return fresh;
+  });
   const head = el("div", { class: "row", style: "align-items:baseline" },
-    el("h3", { style: "margin:0", translate: "no" }, txt(slice.name)),
+    record
+      ? (() => { const n = wbText(slice.name, v => patch({ name: v }), { title: "Room name" });
+                 n.classList.add("wb-title"); return n; })()
+      : el("h3", { style: "margin:0", translate: "no" }, txt(slice.name)),
     wbStatusBadge(slice.status),
     el("span", { class: "small dim", translate: "no" }, txt(slice.id)));
   host.append(head);
@@ -249,53 +542,39 @@ function wbRenderCard(host, slice, ctx) {
     host.append(el("div", { class: "small dim" }, "Inside", " ",
       el("b", { translate: "no" }, txt(slice.holder_name || slice.holder))));
   }
-  const move = wbMoveControl(slice, ctx.positions, ctx.chatId, ctx.refresh);
+  const move = wbMoveControl(slice, ctx.positions, ctx.chatId, ctx);
   if (move) host.append(move);
 
-  host.append(slice.description
-    ? el("p", { class: "wb-desc", translate: "no" }, txt(slice.description))
-    : el("p", { class: "small dim" }, "No description yet."));
+  if (record) {
+    host.append(wbRoomFields(slice, ctx));
+    host.append(wbText(record.desc, v => patch({ desc: v }),
+      { multiline: true, placeholder: "No description yet." }));
+    host.append(wbSection("Notes", wbText(record.notes, v => patch({ notes: v }),
+      { multiline: true, placeholder: "Standing facts about this room" })));
+  } else {
+    host.append(slice.description
+      ? el("p", { class: "wb-desc", translate: "no" }, txt(slice.description))
+      : el("p", { class: "small dim" }, "No description yet."));
+  }
 
-  // Exits: the way the world is walked. A link per far room, with what is
-  // between (barrier, direction) and a badge when the far room is not live.
-  const exits = slice.exits || [];
-  host.append(wbSection("Exits",
-    exits.length
-      ? el("div", {}, ...exits.map(x => el("div", { class: "wb-exit" },
-          el("button", { class: "wb-link", translate: "no",
-                         onclick: () => ctx.select(x.to) }, txt(x.name || x.to)),
-          (x.barrier || x.dir)
-            ? el("span", { class: "small dim", translate: "no" },
-                txt([x.barrier, x.dir].filter(Boolean).join(", ")))
-            : null,
-          wbStatusBadge(x.status))))
-      : el("div", { class: "small dim" }, "No exits recorded.")));
+  host.append(wbExits(slice, ctx));
+  const anchors = wbAnchors(slice, ctx);
+  if (anchors) host.append(anchors);
 
-  // Who is here, each row opening onto the body's attire.
+  // Who is here, each row with its station; attire is the Bodies tab's.
   const occupants = slice.occupants || [];
   host.append(wbSection("Who is here",
     occupants.length
-      ? el("div", {}, ...occupants.map(o => el("details",
-          { class: "wb-body", ...(ctx.expandAttire ? { open: "" } : {}) },
-          el("summary", {},
-            el("b", { translate: "no" }, txt(o.name)),
-            wbStation(o.station),
-            o.attire && Array.isArray(o.attire.wearing)
-              ? el("span", { class: "small dim" }, " · ",
-                  `Garments: ${o.attire.wearing.length}`)
-              : null),
-          wbAttire(o.attire, ctx.showRaw))))
+      ? el("div", {}, ...occupants.map(o => wbOccupant(o, slice, ctx)))
       : el("div", { class: "small dim" }, "Nobody is here.")));
 
   const things = slice.things || [];
   host.append(wbSection("Things",
     things.length
-      ? el("div", {}, ...things.map(th => el("div", { class: "wb-exit" },
-          el("span", { translate: "no" }, txt(th.name)),
-          th.kind ? el("span", { class: "small dim", translate: "no" }, txt(th.kind)) : null,
-          th.plan_ref
-            ? el("span", { class: "badge", title: th.plan_ref }, "From the plan")
-            : null)))
+      ? el("div", {}, ...things.map(th => record ? wbThing(th, slice, ctx)
+          : el("div", { class: "wb-exit" },
+              el("span", { translate: "no" }, txt(th.name)),
+              th.kind ? el("span", { class: "small dim", translate: "no" }, txt(th.kind)) : null)))
       : el("div", { class: "small dim" }, "Nothing else here.")));
 
   const stub = slice.planned_stub;
@@ -340,6 +619,210 @@ function wbRenderCard(host, slice, ctx) {
             el("span", { class: "small dim", translate: "no" },
               txt(`${o.op} #${o.index + 1}`)))))
       : el("div", { class: "small dim" }, "The plan makes no claim on this room.")));
+}
+
+// ---- The Bodies tab: every body, and the attire editor -----------------------
+
+// The ledger's per-region copies of a garment, grouped back into ONE garment
+// with the regions it covers, in the ledger's region order. The copies are
+// one garment by name (`story.attire._sync_spanning_garments` keeps them in
+// step by the same key), so the first copy's fields stand for all.
+function wbGroupGarments(entry, regionOrder) {
+  const regions = entry && entry.regions && typeof entry.regions === "object" ? entry.regions : {};
+  const order = regionOrder.concat(Object.keys(regions).filter(r => !regionOrder.includes(r)));
+  const garments = [];
+  const byKey = new Map();
+  for (const region of order) {
+    const slot = regions[region];
+    if (!slot || typeof slot !== "object") continue;
+    for (const raw of slot.garments || []) {
+      const g = typeof raw === "string" ? { name: raw } : raw;
+      if (!g || typeof g !== "object" || !g.name) continue;
+      const key = String(g.name).trim().toLowerCase();
+      let garment = byKey.get(key);
+      if (!garment) {
+        garment = { ...g, name: String(g.name).trim(), regions: [] };
+        delete garment.covers;
+        byKey.set(key, garment);
+        garments.push(garment);
+      }
+      if (!garment.regions.includes(region)) garment.regions.push(region);
+    }
+  }
+  return { order, garments };
+}
+
+// The ledger entry rebuilt from the edited garments: every garment written
+// under EVERY region it covers, each copy carrying the same state and
+// condition and the `covers` list, so the server's re-derivation sees one
+// garment and never a narrowed one. Per-region facts the editor does not
+// touch (`beneath_zones`, `uncovered`) survive from the stored slot.
+function wbLedgerEntry(entry, garments, beneath, notes) {
+  const stored = entry && entry.regions && typeof entry.regions === "object" ? entry.regions : {};
+  const regions = {};
+  for (const g of garments) {
+    const copy = { ...g };
+    delete copy.regions;
+    copy.covers = g.regions.length > 1 ? [...g.regions] : [];
+    for (const region of g.regions) {
+      if (!regions[region]) {
+        const slot = stored[region] && typeof stored[region] === "object" ? stored[region] : {};
+        regions[region] = { ...slot, garments: [], beneath: beneath[region] ?? slot.beneath ?? "" };
+      }
+      regions[region].garments.push({ ...copy });
+    }
+  }
+  for (const [region, text] of Object.entries(beneath)) {
+    if (!regions[region] && text) {
+      const slot = stored[region] && typeof stored[region] === "object" ? stored[region] : {};
+      regions[region] = { ...slot, garments: [], beneath: text };
+    }
+  }
+  return { ...(entry || {}), regions, state: notes.filter(n => n && n.trim()) };
+}
+
+function wbAttireEditor(body, ctx) {
+  const vocab = ctx.vocab;
+  const regionOrder = vocab.attire_regions || [];
+  const entry = body.attire && typeof body.attire === "object" ? body.attire : null;
+  const { order, garments } = wbGroupGarments(entry, regionOrder);
+  const beneath = {};
+  for (const region of order) {
+    const slot = entry && entry.regions ? entry.regions[region] : null;
+    if (slot && typeof slot === "object" && slot.beneath) beneath[region] = String(slot.beneath);
+  }
+  const notes = entry && Array.isArray(entry.state) ? entry.state.map(String) : [];
+
+  // Every write is the WHOLE ledger -- every body's entry as the index last
+  // read it, this body's rebuilt -- through the one route that re-derives.
+  const save = () => wbWrite(ctx, async () => {
+    const ledger = {};
+    for (const b of ctx.index.bodies || []) {
+      if (b.attire && typeof b.attire === "object") ledger[b.name] = b.attire;
+    }
+    ledger[body.name] = wbLedgerEntry(entry, garments, beneath, notes);
+    await api("PUT", `/api/chats/${ctx.chatId}/attire${frameQuery()}`, ledger);
+    await ctx.refresh();
+    return true;
+  });
+
+  const garmentRow = (g, region) => el("div", { class: "wb-garment" },
+    wbText(g.name, v => { if (v.trim()) { g.name = v.trim(); save(); } },
+      { placeholder: "Garment", title: "Garment name" }),
+    wbSelect(vocab.garment_states, g.state || (vocab.garment_states || [])[0],
+      { title: "How far off the body it is", onchange: v => { g.state = v; save(); } }),
+    wbText(g.condition || "", v => { g.condition = v; save(); },
+      { placeholder: "Condition — stained, torn, wet" }),
+    g.regions.length > 1
+      ? el("span", { class: "small dim", title: "One garment, worn across these regions" },
+          "Also:", " ", el("span", { translate: "no" },
+            txt(g.regions.filter(r => r !== region).join(", "))))
+      : null,
+    el("button", { class: "small wb-remove", title: "Take this garment off the ledger entirely",
+                   onclick: () => { garments.splice(garments.indexOf(g), 1); save(); } }, "✕"));
+
+  const regionRows = order.map(region => {
+    const here = garments.filter(g => g.regions.includes(region));
+    return el("div", { class: "wb-region", "data-region": region },
+      el("div", { class: "wb-region-head" },
+        el("span", { class: "wb-region-name", translate: "no" }, txt(region)),
+        here.length ? null : el("span", { class: "small dim" }, "bare")),
+      ...here.map(g => garmentRow(g, region)),
+      el("div", { class: "wb-exit" },
+        el("span", { class: "small dim" }, "Underneath:"),
+        wbText(beneath[region] || "", v => { beneath[region] = v; save(); },
+          { placeholder: "What shows when this region is uncovered" })));
+  });
+
+  // Add a garment: a name, the regions it covers, its state.
+  const name = el("input", { type: "text", class: "wb-input", translate: "no",
+                             placeholder: "Garment" });
+  const checks = regionOrder.map(region => {
+    const box = el("input", { type: "checkbox", value: region });
+    return el("label", { class: "wb-check" }, box, el("span", { translate: "no" }, txt(region)));
+  });
+  const state = wbSelect(vocab.garment_states, (vocab.garment_states || [])[0],
+    { title: "How far off the body it is", onchange: () => {} });
+  const add = () => {
+    const text = name.value.trim();
+    const regions = checks.map(l => l.querySelector("input")).filter(b => b.checked).map(b => b.value);
+    if (!text) return toast("A garment needs a name", "err");
+    if (!regions.length) return toast("Pick at least one region the garment covers", "err");
+    garments.push({ name: text, state: state.value, condition: "", regions });
+    save();
+  };
+  name.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); add(); } });
+
+  // The free notes: authored prose about the body's state. The derived
+  // bareness notes are the server's to rebuild, so sending them back is
+  // harmless and removing one is undone by re-derivation.
+  const noteRows = notes.map((note, i) => el("div", { class: "wb-exit" },
+    el("span", { translate: "no" }, txt(note)),
+    el("button", { class: "small wb-remove", title: "Remove this note",
+                   onclick: () => { notes.splice(i, 1); save(); } }, "✕")));
+  const noteInput = el("input", { type: "text", class: "wb-input", translate: "no",
+                                  placeholder: "A note about this body's appearance" });
+  const addNote = () => {
+    const text = noteInput.value.trim();
+    if (!text) return;
+    notes.push(text);
+    save();
+  };
+  noteInput.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); addNote(); } });
+
+  const wearing = entry && Array.isArray(entry.wearing) ? entry.wearing : [];
+  return el("div", { class: "wb-attire" },
+    el("div", {},
+      el("span", { class: "dim" }, "Wearing:"), " ",
+      el("span", { translate: "no" }, txt(wearing.length ? wearing.join(", ") : "—")),
+      " ", el("span", { class: "small dim" }, "(derived from the regions below)")),
+    ...regionRows,
+    el("div", { class: "wb-exit wb-add" }, name, ...checks, state,
+      el("button", { class: "small", onclick: add }, "Add garment")),
+    wbSection("Notes",
+      noteRows.length ? el("div", {}, ...noteRows) : null,
+      el("div", { class: "wb-exit wb-add" }, noteInput,
+        el("button", { class: "small", onclick: addNote }, "Add note"))));
+}
+
+function wbBodyKind(kind) {
+  if (kind === "player") return el("span", { class: "badge ok" }, "Player");
+  if (kind === "cast") return el("span", { class: "badge" }, "Cast");
+  return el("span", { class: "badge warn" }, "Presence");
+}
+
+function wbRenderBodies(host, ctx) {
+  host.innerHTML = "";
+  const bodies = ctx.index.bodies || [];
+  if (!bodies.length) {
+    host.append(el("div", { class: "small dim" }, "No bodies yet — nobody stands in the scene."));
+    return;
+  }
+  for (const body of bodies) {
+    const open = ctx.openBodies.has(body.name);
+    const details = el("details", { class: "wb-body", "data-body": body.name,
+                                    ...(open ? { open: "" } : {}) },
+      el("summary", {},
+        el("b", { translate: "no" }, txt(body.name)),
+        wbBodyKind(body.kind),
+        body.room
+          ? el("button", { class: "wb-link", translate: "no",
+                           onclick: e => { e.preventDefault(); ctx.showRoom(body.room); } },
+              txt(body.room_name || body.room))
+          : el("span", { class: "small dim" }, "Offscreen"),
+        wbStationText(body.station),
+        body.pose && wbPoseText(body.pose)
+          ? el("span", { class: "small dim", translate: "no" }, txt(" · " + wbPoseText(body.pose)))
+          : null,
+        body.attire && Array.isArray(body.attire.wearing)
+          ? el("span", { class: "small dim" }, " · ", `Garments: ${body.attire.wearing.length}`)
+          : null),
+      wbAttireEditor(body, ctx));
+    details.addEventListener("toggle", () => {
+      if (details.open) ctx.openBodies.add(body.name); else ctx.openBodies.delete(body.name);
+    });
+    host.append(details);
+  }
 }
 
 // ---- The Raw JSON tab: the two editors, unchanged --------------------------
@@ -404,11 +887,12 @@ async function openWorldBrowser(opts = {}) {
     }
     return null;
   };
+  const tabs = [["rooms", "Rooms"], ["bodies", "Bodies"], ["raw", "Raw JSON"]];
   const state = {
     index,
     positions,
     selected: opts.room || positions?.persona?.room || firstRoom(index),
-    tab: opts.tab === "raw" ? "raw" : "browse",
+    tab: tabs.some(([id]) => id === opts.tab) ? opts.tab : "rooms",
     cache: {},
   };
 
@@ -416,36 +900,54 @@ async function openWorldBrowser(opts = {}) {
     const alive = modalOwnership(b);
     const tabBar = el("div", { class: "lore-inspector-tabs" });
     const content = el("div", { class: "lore-inspector-content" });
-    const tabs = [["browse", "Browse"], ["raw", "Raw JSON"]];
 
     const tree = el("div", { class: "wb-tree" });
     const card = el("div", { class: "wb-card" });
-    const browse = el("div", {},
-      index.location
-        ? el("div", { class: "small dim", style: "margin-bottom:6px", translate: "no" },
-            txt(index.location))
-        : null,
-      el("div", { class: "wb" }, tree, card));
+    const location = el("div", { class: "small dim", style: "margin-bottom:6px", translate: "no" });
+    const browse = el("div", {}, location, el("div", { class: "wb" }, tree, card));
+    const bodies = el("div", { class: "wb-bodies" });
 
     const ctx = {
       chatId,
+      index: state.index,
+      vocab: state.index.vocab || {},
       positions: state.positions,
-      expandAttire: !!opts.expandAttire,
+      // The Bodies tab opens every body when the attire button opened the
+      // dialog, and remembers what the host folded since.
+      openBodies: new Set(opts.expandAttire ? (index.bodies || []).map(b => b.name) : []),
       select: id => loadRoom(id),
-      showRaw: () => selectTab("raw"),
-      refresh: async () => {
-        const [idx, pos] = await Promise.all([
-          api("GET", `/api/chats/${chatId}/rooms${frameQuery()}`),
-          api("GET", `/api/chats/${chatId}/positions${frameQuery()}`).catch(() => null),
-        ]);
+      showRoom: id => { state.selected = id; selectTab("rooms"); },
+      showBody: name => { ctx.openBodies.add(name); selectTab("bodies"); },
+      // The card rebuilt from a write's fresh slice; the tree re-read, since
+      // a rename or an exit changes it too.
+      replaceCard: async fresh => {
         if (!alive() || S.chatId !== chatId) return;
-        state.index = idx;
-        state.positions = pos;
-        ctx.positions = pos;
-        wbRenderTree(tree, state.index, state.selected, loadRoom);
-        await loadRoom(state.selected);
+        if (fresh && fresh.id === state.selected) wbRenderCard(card, fresh, ctx);
+        await refreshIndex();
+      },
+      refresh: async () => {
+        await refreshIndex();
+        if (!alive() || S.chatId !== chatId) return;
+        if (state.tab === "rooms") await loadRoom(state.selected);
+        else if (state.tab === "bodies") wbRenderBodies(bodies, ctx);
       },
     };
+
+    async function refreshIndex() {
+      const [idx, pos] = await Promise.all([
+        api("GET", `/api/chats/${chatId}/rooms${frameQuery()}`),
+        api("GET", `/api/chats/${chatId}/positions${frameQuery()}`).catch(() => null),
+      ]);
+      if (!alive() || S.chatId !== chatId) return;
+      state.index = idx;
+      state.positions = pos;
+      ctx.index = idx;
+      ctx.vocab = idx.vocab || ctx.vocab;
+      ctx.positions = pos;
+      location.textContent = idx.location || "";
+      location.hidden = !idx.location;
+      wbRenderTree(tree, state.index, state.selected, loadRoom);
+    }
 
     async function loadRoom(id) {
       state.selected = id;
@@ -467,9 +969,6 @@ async function openWorldBrowser(opts = {}) {
       }
       if (!alive() || S.chatId !== chatId || state.selected !== id) return;
       wbRenderCard(card, slice, ctx);
-      // The opening request may ask for the attire rows open; a room chosen
-      // afterwards opens closed, as a list of bodies normally does.
-      ctx.expandAttire = false;
     }
 
     function selectTab(tabId) {
@@ -480,8 +979,12 @@ async function openWorldBrowser(opts = {}) {
       content.innerHTML = "";
       if (tabId === "raw") {
         wbRenderRaw(content, chatId, rawKind, state.cache);
+      } else if (tabId === "bodies") {
+        wbRenderBodies(bodies, ctx);
+        content.append(bodies);
       } else {
         content.append(browse);
+        loadRoom(state.selected);
       }
     }
 
@@ -494,9 +997,10 @@ async function openWorldBrowser(opts = {}) {
     }
 
     b.append(tabBar, content);
+    location.textContent = index.location || "";
+    location.hidden = !index.location;
     wbRenderTree(tree, state.index, state.selected, loadRoom);
     selectTab(state.tab);
-    loadRoom(state.selected);
   }, { wide: true, autoFocus: false });
 }
 
@@ -505,13 +1009,13 @@ async function openWorldBrowser(opts = {}) {
 // with no story open rather than being a dead click.
 $("#b-world").onclick = async () => {
   if (!S.chatId) return;
-  await openWorldBrowser({ raw: "world" });
+  await openWorldBrowser({ raw: "world", tab: "rooms" });
 };
-// The attire button opens the same browser on the player's room with every
-// body's attire unfolded; its Raw JSON tab is the attire ledger.
+// The attire button opens the same dialog on the Bodies tab with every
+// body's ledger unfolded; its Raw JSON tab is the attire ledger.
 $("#b-attire").onclick = async () => {
   if (!S.chatId) return;
-  await openWorldBrowser({ raw: "attire", expandAttire: true });
+  await openWorldBrowser({ raw: "attire", tab: "bodies", expandAttire: true });
 };
 
 window.openWorldBrowser = openWorldBrowser;
