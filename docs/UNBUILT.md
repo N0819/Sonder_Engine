@@ -5278,11 +5278,11 @@ and key involved is in `chat_archive.WORLD_TABLES` and
 demonstrated, and the frame-split gap above is what an untested inference
 looks like when it is wrong.
 
-**Unwired.** `world/structure.py`'s frontier-expansion trio —
-`materialize_planned_fringe` (`:184`), `prepare_frontier_expansion` (`:266`),
-`apply_frontier_mutations` (`:350`) — is exported at `:410` and has no
-production caller anywhere in `agents/`, `persist/`, `web/`, `story/` or
-`tools/`.
+~~**Unwired.** `world/structure.py`'s frontier-expansion trio —
+`materialize_planned_fringe`, `prepare_frontier_expansion`,
+`apply_frontier_mutations` — has no production caller.~~ **Stale, corrected
+2026-09-05:** all three run every beat from
+`persist/commit_scene_state.prepare_scene_commit` / `commit_scene`.
 
 **Docstrings that overstate, each now contradicted by the guide.** Fix the
 docstring or fix the code; do not leave both.
@@ -7697,13 +7697,27 @@ clock"). What it deliberately does not do:
 
 What the fixes for replay defects N2, N9, N10 and N11 deliberately left:
 
-- **A frontier stub named for its axis is a label, not a place name.** An
-  axis the planner wrote as a bare direction ("east") now mints a room
-  called "East" unless the grammar has a name that shares a word with it
-  ("North Lane" for "north"); the Director names the room when it furnishes
-  it (`structure.planned_room_brief`). The grammar's names are otherwise
-  unused, and a planner that writes only its planned rooms into them has
-  written nothing the closer reads.
+- ~~**A frontier stub named for its axis is a label, not a place name.**~~
+  **CLOSED 2026-09-05** by `docs/design/DESIGN_FRONTIER_SPACES.md`. The
+  label was never the whole problem: a stub is now a SPACE HELD OPEN rather
+  than a room spent, marked `provisional` with the axis it stands for, and a
+  later plan fills it by identity (`plan_rooms`' `claims: {room, axis}`,
+  listed for the Room by `inspect_structures.frontiers`). Claiming renames
+  the room in place — same uid, old name kept as an alias, and the plan's own
+  spelling tables now read aliases so the old word still resolves — unless
+  the story has been in it, in which case the claim takes the purpose, the
+  geometry and the onward axes and leaves the name. That closes the
+  duplicate-room class of the replay outright: `bridge_road_2`,
+  `upland_road`, `slate_lane_2`, `market_square_2` and `_3` were every
+  duplicate room of that run, and each was a plan built beside a stub
+  standing for the same place. A stub also inherits its axis, so the world
+  no longer stops one ring past whatever a plan drew (measured: one room per
+  beat walked, 21 rooms over 20 beats on a one-axis road; bounded by
+  `max_planned`, no new cap). `tests/test_structure_frontier_claims.py` (24).
+  Left open and named to the owner in the note: a per-axis chain-depth cap
+  (recommended, not chosen — caps are the owner's), a durable "was ever
+  occupied" mark for a room, and `memories.location` still being a room's
+  NAME with no alias path in `memory_retrieval`.
 - **The boundary rule refuses "Westfield".** A fragment ending in a
   consonant cluster does not join a consonant-initial one, which refuses
   "Brgaron" and also "west"+"field"; the law still names everyone (the next

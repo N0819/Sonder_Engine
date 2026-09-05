@@ -104,7 +104,7 @@
 | `story/lore_structure.py` | 248 |  | — |
 | `story/mandates.py` | 586 |  | `core.db` |
 | `story/naming.py` | 555 |  | `core.db`, `world.charter_identity` |
-| `story/plot_packages.py` | 2588 |  | — |
+| `story/plot_packages.py` | 2668 |  | — |
 | `story/provenance_text.py` | 132 |  | — |
 | `story/room_bible.py` | 424 |  | `core.db` |
 | `story/room_calls.py` | 96 |  | — |
@@ -114,7 +114,7 @@
 | `story/room_proposals.py` | 264 |  | `core.db` |
 | `story/room_research.py` | 371 |  | `core.db` |
 | `story/room_slice.py` | 487 |  | — |
-| `story/room_tools.py` | 1480 |  | `story.plot_packages`, `story.room_research`, `story.room_slice` |
+| `story/room_tools.py` | 1492 |  | `story.plot_packages`, `story.room_research`, `story.room_slice` |
 | `story/scene.py` | 2746 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `core.db`, `story`, `story.attire`, `story.character_schema`, `world.day_cycle`, `world.spatial` |
 | `web/__init__.py` | 6 |  | — |
 | `web/app.py` | 6841 | FastAPI application assembly, resource CRUD, turn control, and streaming endpoints. | `agents`, `agents.story_planner`, `core`, `core.db`, `core.frames`, `core.paths`, `dressing.ambience`, `dressing.backdrops`, `llm`, `llm.prompts`, `llm.providers`, `mind.memory`, `persist.chat_archive`, `persist.chat_delete`, `persist.checkpoints`, `persist.commit`, `story`, `story.character_schema`, `story.dialogue_colors`, `story.importers`, `story.scene`, `web`, `web.auth_routes`, `web.room_routes`, `web.world_routes`, `world`, `world.survival` |
@@ -203,7 +203,7 @@
 | `world/spatial_substance.py` | 1128 |  | `world.spatial_contacts`, `world.spatial_identity` |
 | `world/spatial_transit.py` | 522 |  | `world.spatial_barriers`, `world.spatial_identity` |
 | `world/stimulation.py` | 239 |  | `story`, `world.spatial` |
-| `world/structure.py` | 947 |  | `world.charter_model`, `world.regions`, `world.spatial` |
+| `world/structure.py` | 1360 |  | `world.charter_model`, `world.regions`, `world.spatial` |
 | `world/subjects.py` | 500 |  | `core.db`, `mind.canon_provenance`, `world.spatial` |
 | `world/survival.py` | 354 |  | `core.db` |
 | `world/weather.py` | 916 |  | — |
@@ -1294,14 +1294,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `publish_package()` | 2257 | 84 lines |
-| `_package_checks()` | 1988 | 78 lines |
-| `fire_due_clocks()` | 2382 | 77 lines |
+| `publish_package()` | 2337 | 84 lines |
+| `_preview_plan_rooms()` | 730 | 83 lines |
+| `_package_checks()` | 2063 | 78 lines |
+| `fire_due_clocks()` | 2462 | 77 lines |
 | `normalize_package()` | 176 | 74 lines |
-| `_reach_warning()` | 2089 | 68 lines |
+| `_reach_warning()` | 2164 | 73 lines |
 | `_world_snapshot()` | 490 | 66 lines |
 | `edit_package()` | 365 | 57 lines |
-| `_preview_plan_rooms()` | 701 | 49 lines |
 
 ### `story/provenance_text.py`
 
@@ -1414,14 +1414,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_t_inspect_contradictions()` | 761 | 158 lines |
-| `_mind_of()` | 957 | 148 lines |
-| `_t_inspect_charters()` | 553 | 83 lines |
-| `_t_inspect_config()` | 687 | 67 lines |
-| `_t_inspect_route()` | 282 | 60 lines |
-| `_t_inspect_rooms()` | 231 | 49 lines |
-| `_charter_body_rows()` | 461 | 38 lines |
-| `run_tool()` | 1405 | 35 lines |
+| `_t_inspect_contradictions()` | 773 | 158 lines |
+| `_mind_of()` | 969 | 148 lines |
+| `_t_inspect_charters()` | 565 | 83 lines |
+| `_t_inspect_config()` | 699 | 67 lines |
+| `_t_inspect_route()` | 294 | 60 lines |
+| `_t_inspect_rooms()` | 243 | 49 lines |
+| `_charter_body_rows()` | 473 | 38 lines |
+| `run_tool()` | 1417 | 35 lines |
 
 ### `story/scene.py`
 
@@ -2481,14 +2481,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `prepare_frontier_expansion()` | 734 | 120 lines |
-| `materialize_planned_fringe()` | 330 | 102 lines |
-| `mint_frontier()` | 217 | 64 lines |
-| `planned_room_brief()` | 513 | 62 lines |
-| `planned_context()` | 671 | 61 lines |
-| `structure_warnings()` | 876 | 61 lines |
-| `frontier_refusal()` | 167 | 48 lines |
-| `plant_structure()` | 283 | 45 lines |
+| `claim_frontier_spaces()` | 1068 | 198 lines |
+| `prepare_frontier_expansion()` | 861 | 142 lines |
+| `materialize_planned_fringe()` | 398 | 121 lines |
+| `plant_structure()` | 303 | 93 lines |
+| `mint_frontier()` | 217 | 84 lines |
+| `planned_context()` | 792 | 67 lines |
+| `planned_room_brief()` | 636 | 62 lines |
+| `structure_warnings()` | 1288 | 61 lines |
 
 ### `world/subjects.py`
 
