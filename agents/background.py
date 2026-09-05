@@ -54,6 +54,8 @@ from llm.prompts import get_prompt
 from world.spatial import hear_level, spatial_rel_between
 
 from persist.commit import (
+    address_reaches,
+    beat_scene,
     name_in_roster,
     pick_background_reactors,
     pick_voice_demand,
@@ -69,6 +71,7 @@ from persist.commit import (
     _quote_body,
     _registered_name_roster,
     _room_of,
+    spoken_volumes,
     _valid_pending_reply,
     with_charter_presences,
 )
@@ -87,6 +90,22 @@ from .common import (_agent_json, _unknown_actor_label, character_room,
                      scene_figures)
 
 _log = logging.getLogger(__name__)
+
+
+def _beat_scene(ctx, dr=None):
+    """The scene as THIS beat leaves it (`persist.commit.beat_scene`).
+
+    This stage runs before commit, so `world.scene` still stands every body
+    where the beat opened. Reading it raw answered "where is the player" with
+    the room she LEFT, and the two bodies a beat had just separated then read
+    as co-present for every hearing test in this module -- which is how a
+    whispered line reached a mind one floor below it (PLAY_2026_09_05, PB1).
+    The beat's own `state_diff.positions` is the freshest room this stage
+    legitimately has; commit will write exactly it.
+    """
+    sc = wget(ctx.chat.id, "scene", {}) or {}
+    return beat_scene(sc, dr if dr is not None
+                      else (ctx.get("director_resolve") or {}))
 
 
 def _filtered_player_declaration(ctx, sc, name, here):
@@ -437,7 +456,7 @@ def _background_react(ctx, nonce):
         try:
             from world.charter_runtime import (background_presence_records,
                                                charter_place_ids)
-            _sc = wget(ctx.chat.id, "scene", {}) or {}
+            _sc = _beat_scene(ctx, dr)
             _pr = _player_room(ctx, _sc)
             _places = {_pr} if _pr else set()
             if _pr:
@@ -540,7 +559,7 @@ def _background_react(ctx, nonce):
 
     roster = {n.casefold() for n in _registered_name_roster(ctx.chat, ctx.cast)}
     roster |= {(e.get("name") or "").casefold() for e in (ctx.extra_players or [])}
-    sc = wget(ctx.chat.id, "scene", {}) or {}
+    sc = _beat_scene(ctx, dr)
     # Read through the duplicate fold so a gate-picked display name finds the
     # record even while the stored ledger still carries an id-keyed twin
     # (healed at commit; this stage runs before it).
@@ -685,7 +704,7 @@ def managed_presences(ctx, cap):
     (`_demanded_presences`) before spending a call on it.
     """
     cid = ctx.chat.id
-    sc = wget(cid, "scene", {}) or {}
+    sc = _beat_scene(ctx)
     presences = _fold_duplicate_presences(
         wget(cid, "background_presences", {}) or {}, sc)
     if not presences:
@@ -846,13 +865,16 @@ def _demanded_presences(ctx, dr, managed, ceiling):
                                 overt_declaration_text,
                                 _player_name_or_none)
 
-    sc = wget(ctx.chat.id, "scene", {}) or {}
+    sc = _beat_scene(ctx, dr)
     # The rooms the player's lines are aimed INTO (`addressed_rooms`), for
     # the place-addressed trigger -- the same rule the per-presence gate
     # applies (`pick_voice_demand`).
     _pname = _player_name_or_none(ctx)
-    aimed_rooms = addressed_rooms(
-        ctx, dr, sc, _room_of(sc, _pname) if _pname else "")
+    _p_room = _room_of(sc, _pname) if _pname else ""
+    aimed_rooms = addressed_rooms(ctx, dr, sc, _p_room)
+    # The volumes the beat's own lines were spoken at, for the address
+    # channel test on each candidate.
+    volumes = spoken_volumes(ctx, dr)
     # The words the managed names hold in common are this story's titles,
     # and a title names nobody in particular (`_shared_name_words`).
     shared_words = _shared_name_words(str(t[1]) for t in managed)
@@ -880,10 +902,35 @@ def _demanded_presences(ctx, dr, managed, ceiling):
         mentioned = _background_name_mentioned(
             name, player_input, shared=shared_words)
         place_hit = bool(room) and str(room) in aimed_rooms
-        addressed_any = precise or mentioned or place_hit
         owed = bool(_valid_pending_reply(rec, turn_idx))
         acting = (turn_idx - 1) in (rec.get("engaged_turns") or ())
         emerged_hit = name in emerged
+        # The demand gate's channel test, in the same words
+        # (`pick_voice_demand`): a trigger says a demand was RAISED, not
+        # that it arrived. BEING ADDRESSED CHANGES WHETHER A BODY IS PICKED
+        # TO ANSWER, NEVER WHETHER IT HEARD -- so every spelling of the
+        # address class is tested by the ordinary hearing model at the
+        # beat's own volume (`address_reaches`), and a body that could not
+        # receive the line is not eligible to answer it however directly it
+        # was addressed. The Director's own declarations of conduct (an
+        # emerge; a routed line, which reaches this path as an unpaid debt)
+        # and an aimed character line that already passed the same hearing
+        # bar are exempt; the two carried debts must reach where the
+        # presence stands -- and an owed reply, aimed by nobody now, needs
+        # one room while an act may cross a doorway.
+        # `managed_presences` scopes this populace to the player's AMBIENT
+        # scope, which is a different question with a different answer --
+        # on a vessel it resolved to every room aboard (chat 98).
+        exempt = bool(emerged_hit or aimed)
+        spoken_at = bool(flow_hit or named_exactly or mentioned or place_hit)
+        if spoken_at and not exempt:
+            if not address_reaches(sc, name, room, _pname,
+                                   {_p_room} if _p_room else authored_rooms,
+                                   volumes):
+                flow_hit = named_exactly = False
+                mentioned = place_hit = False
+                precise = bool(aimed)
+        addressed_any = precise or mentioned or place_hit
         if not (addressed_any or owed or acting or emerged_hit):
             continue
         why = [w for w, hit in (
@@ -893,25 +940,17 @@ def _demanded_presences(ctx, dr, managed, ceiling):
             ("place_addressed:%s" % room, place_hit),
             ("owed", owed), ("acting", acting), ("emerged", emerged_hit),
         ) if hit]
-        # The demand gate's channel test, in the same words (`demand_reaches`):
-        # a trigger says a demand was RAISED, not that it arrived. The
-        # Director's own judgment for this beat (a flow address, an emerge)
-        # and an aimed line that already passed the same hearing bar are
-        # exempt; the player's raw words and the two carried debts must
-        # reach where the presence stands -- and an owed reply, aimed by
-        # nobody now, needs one room while the rest may cross a doorway.
-        # `managed_presences` scopes this populace to the player's AMBIENT
-        # scope, which is a different question with a different answer --
-        # on a vessel it resolved to every room aboard (chat 98).
-        if not (flow_hit or emerged_hit or aimed):
-            _aimed = bool(addressed_any or acting)
+        if exempt:
+            why.append("channel:exempt")
+        elif addressed_any:
+            why.append("channel:hearing")
+        else:
+            _aimed = bool(acting)
             if not demand_reaches(sc, room, authored_rooms, aimed=_aimed):
                 continue
             why.append("channel:%s" % (
                 "unplaced" if not room or not authored_rooms
                 else ("hearing" if _aimed else "same_room")))
-        else:
-            why.append("channel:exempt")
         if precise:
             addressees += 1
         loose_only = bool(addressed_any and not precise and not place_hit
@@ -1014,7 +1053,7 @@ def scene_life(ctx, nonce, level, cfg):
     if not managed:
         return _result([], [])
 
-    sc = wget(ctx.chat.id, "scene", {}) or {}
+    sc = _beat_scene(ctx, dr)
     names = [n for _, n, _r, _rm in managed]
     events = _manager_events(ctx, dr, sc, managed, level)
 
