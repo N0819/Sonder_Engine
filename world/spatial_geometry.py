@@ -457,6 +457,77 @@ def effective_facing(scene: dict, name: str) -> Optional[str]:
 ROOM_SIZES = ("tiny", "small", "medium", "large", "huge", "vast")
 DEFAULT_ROOM_SIZE = "medium"
 
+#: A room's EXTENT in paces, `{w, d}`: `w` east-west, `d` north-south. The
+#: measurement `size` is the word for -- one word cannot say that a corridor
+#: is long, and the grid, the prose and the picture all need to know
+#: (`docs/design/DESIGN_ROOM_FIDELITY.md`). Both sides are clamped to this
+#: range. Two paces is the floor because a place narrower than two paces is
+#: a passage a body crosses, which `transit_seconds` already describes;
+#: twenty-four is twice the `vast` tier's side, and the shadowcast is
+#: O(cells) per observer, so 576 cells is the ceiling accepted without a
+#: measurement. Owner-visible: widen here, nowhere else.
+EXTENT_MIN_PACES = 2
+EXTENT_MAX_PACES = 24
+
+#: The side of the square grid each size tier gives a room with no extent.
+#: `spatial_fov.GRID_SIDE` is the same table under the name the geometry note
+#: gave it and reads THIS one, so the two cannot drift; it lives here because
+#: `size_from_extent` needs it and `spatial_fov` imports this module.
+_TIER_SIDE = {"tiny": 3, "small": 4, "medium": 6, "large": 8, "huge": 10,
+              "vast": 12}
+
+
+def _pace(value) -> Optional[float]:
+    """One side of an extent as a number of paces, or None for anything
+    that is not one -- prose, a bool, a negative, a zero."""
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if number != number or number <= 0:
+        return None
+    return number
+
+
+def normalize_extent(value) -> Optional[dict]:
+    """`{w, d}` in whole paces within the clamp, or None when the value is
+    not an extent. Reads `w`/`d`, and `width`/`depth` as the long spellings
+    of the same two fields (a schema alias, not a vocabulary table). A
+    single readable side with the other missing is not an extent: a room is
+    two-dimensional and a guess at the missing side would be a guess."""
+    if not isinstance(value, dict):
+        return None
+    w = _pace(value.get("w", value.get("width")))
+    d = _pace(value.get("d", value.get("depth")))
+    if w is None or d is None:
+        return None
+    clamp = lambda n: int(min(EXTENT_MAX_PACES, max(EXTENT_MIN_PACES,
+                                                     round(n))))
+    return {"w": clamp(w), "d": clamp(d)}
+
+
+def size_from_extent(extent) -> Optional[str]:
+    """The size tier an extent implies, or None when there is no extent.
+
+    `size` is FLOOR -- "how much floor there is to cross", the spatial
+    hand's own definition -- so the tier is the one whose square is nearest
+    in area: the side of the equal-area square against the midpoints between
+    tier sides. A 3x12 corridor is `medium` floor with a long proportion;
+    the proportion is what `extent` adds and `size` never could.
+    """
+    extent = normalize_extent(extent)
+    if not extent:
+        return None
+    side = (extent["w"] * extent["d"]) ** 0.5
+    tiers = list(ROOM_SIZES)
+    for lower, upper in zip(tiers, tiers[1:]):
+        midpoint = (_TIER_SIDE[lower] + _TIER_SIDE[upper]) / 2.0
+        if side < midpoint:
+            return lower
+    return tiers[-1]
+
 
 # Rooms whose NAME says "big" even when nobody authored `size`. Deliberately
 # blunt and deliberately short: the hint only widens the `near`->`across`
@@ -475,6 +546,14 @@ def effective_room_size(scene: dict, room_id) -> str:
     the safe default the engine already assumed. Derived-with-default; only
     proximity-grade consumers should read it."""
     room = (scene.get("rooms") or {}).get(room_id) or {}
+    # A measured extent wins the word: `size` is derived from it so the grid
+    # and the prose never disagree about how much floor there is. Authored
+    # `size` beside a disagreeing extent is a lint row
+    # (`spatial_lint.size_disagrees_with_extent`), never a silent override of
+    # the measurement.
+    measured = size_from_extent(room.get("extent"))
+    if measured:
+        return measured
     size = str(room.get("size") or "").strip().casefold()
     # A size outside the vocabulary is not a size. It falls through to the
     # unauthored path rather than being returned verbatim, which is what every

@@ -533,7 +533,16 @@ def _t_inspect_contradictions(cid, frame_id):
     rooms = set(scene.get("rooms") or {}) - set(contained)
     planned = set(planned_room_ids(cid))
     known = rooms | planned | set(contained)
-    out = {"registry": [], "structure": [], "dangling": []}
+    out = {"registry": [], "structure": [], "dangling": [], "layout": []}
+    # THE LAYOUT LINT (`world/spatial_lint.py`): every standing row, not only
+    # the ones that appeared this beat -- the commit reports appearance, the
+    # Room reads the standing state. Reads bearings, extents, shapes and
+    # placed cells; never prose.
+    try:
+        from world.spatial import room_layout_lint
+        out["layout"] = room_layout_lint(scene)
+    except Exception as exc:
+        out["layout"] = [{"kind": "layout_unreadable", "error": str(exc)}]
     try:
         from world.charter_runtime import registry_for, registry_warnings
         out["registry"] = registry_warnings(
@@ -1032,7 +1041,7 @@ TOOLS = [
      "description": "The open planning needs: what a beat reached for that no plan holds -- an unplanned destination, a query nobody answered, a person the Director rendered with no plan behind them. Each carries the surface the beat committed, which a plan may add to and never contradict.",
      "args": _schema({"kind": _S}), "handler": _t_inspect_needs},
     {"name": "inspect_contradictions",
-     "description": "What the world holds that does not agree with itself: charter registry warnings, structure warnings, and dangling references (a planned exit to nowhere, a plan in no room, a bill in a vanished room, a need for a vanished room, a package participant nobody holds, a region whose live rooms are in pieces no path joins -- a possible duplicate room).",
+     "description": "What the world holds that does not agree with itself: charter registry warnings, structure warnings, and dangling references (a planned exit to nowhere, a plan in no room, a bill in a vanished room, a need for a vanished room, a package participant nobody holds, a region whose live rooms are in pieces no path joins -- a possible duplicate room), and `layout`: where the rooms' geometry cannot all be true (two sides of one doorway naming bearings that are not opposites, rooms that land on top of each other when placed by their bearings, a wall whose anchors need more paces than its extent holds, two doorways placed on one cell, a shape that contradicts itself).",
      "args": _schema({}), "handler": _t_inspect_contradictions},
     {"name": "inspect_minds",
      "description": "What a character wants and believes, so the world you place can invite it; you cannot place a want or a belief. For each attached cast member (or the one named): the drive that survives every goal (its essence, how it shows, what it will not do; whether a rupture shifted it and what it was before), how strained that drive is and whether a rupture window is open, the resolved stress, the current beat goal, the held projects (aim, criterion, probation, how long unserved) and the ones given up with the stated reason, the standing and formed intentions with their progress, the beliefs by credence, and the leading claim this mind holds about each other person. Author knowledge, read the way the pipeline drawer reads it: nothing here reaches a mind by being read, and nothing you place may name what a character will conclude from it.",

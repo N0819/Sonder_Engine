@@ -146,6 +146,14 @@ they answer different questions about it:
   decides whether a value is authored or configured, why a package operation
   writing the world key cannot work, and the overlay this codebase already
   reaches for whenever two authors share one value.
+- [`DESIGN_ROOM_FIDELITY.md`](design/DESIGN_ROOM_FIDELITY.md) — one room
+  record rendered three ways (2026-09-04, prototype on a branch): `extent`
+  in paces and a `shape` from a closed set drive the sight grid, the size
+  word and the backdrop picture alike; the layout lint (`world/spatial_lint.py`)
+  reports where a scene's bearings and extents cannot all be true; the
+  backdrop brief draws from the walls outward; the passage-as-one-object
+  record is designed and left unbuilt. Measured on a copy of the owner's
+  database before and after.
 - [`DESIGN_ROOM_REGIONS.md`](design/DESIGN_ROOM_REGIONS.md) — reading the world
   by region rather than by room (2026-09-04): where the Planner's ingest cost
   actually is (the planned set, not the live scene), why the grouping already

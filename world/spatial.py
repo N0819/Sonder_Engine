@@ -164,7 +164,8 @@ from world.spatial_geometry import (
     _anchor_dir, _anchor_for_entity, _BARRIER_ANCHOR_DESC, _clean_pose,
     _DOOR_ANCHOR_PREFIX, _occupancy, _POSE_FIELDS, _REAR_SECTORS,
     _relative_sector, _ROOM_SIZE_HINT_WORDS, ROOM_SIZES,
-    DEFAULT_ROOM_SIZE, _sector_label, _station,
+    DEFAULT_ROOM_SIZE, EXTENT_MAX_PACES, EXTENT_MIN_PACES, normalize_extent,
+    size_from_extent, _sector_label, _station,
     anchor_bearing_of, apply_pose_diff, crossing_of, derive_scene_stations,
     door_anchor_id, effective_anchors, effective_facing, effective_room_size,
     effective_station, egocentric_frame, entity_arc, entity_side,
@@ -223,14 +224,23 @@ from world.spatial_prose import (
 
 
 from world.spatial_fov import (
-    DEFAULT_FOOTPRINT, DEFAULT_HEIGHT, DEFAULT_OPACITY, FOOTPRINTS,
-    GRID_SIDE, HEIGHTS, OPACITIES, _door_cells, _line, _occluders_on,
+    DEFAULT_FOOTPRINT, DEFAULT_HEIGHT, DEFAULT_OPACITY, DEFAULT_SHAPE,
+    FOOTPRINTS,
+    GRID_SIDE, HEIGHTS, OPACITIES, ROOM_CORNERS, RoomGrid, SHAPES,
+    _door_cells, _line, _occluders_on,
     _wall_verdict, anchor_cells, anchor_geometry,
     bearing_between, body_cell, body_visibility, cover_between, eye_rank,
     feature_visibility, grid_side, height_rank,
     neighbour_feature_visibility, normalize_footprint,
-    normalize_height, normalize_opacity, observer_field, posture_class,
-    room_field, room_has_geometry, shadowcast, sight_digest,
+    normalize_height, normalize_opacity, normalize_parts, normalize_shape,
+    observer_field, posture_class, room_field, room_grid, room_has_geometry,
+    shadowcast, sight_digest,
+)
+
+
+from world.spatial_lint import (
+    _cells_connected, LAYOUT_LINT_KINDS, layout_rooms, layout_warning,
+    room_layout_lint,
 )
 
 

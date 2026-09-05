@@ -211,8 +211,12 @@ def _merge_room(existing: dict, incoming: dict, room_id=None) -> dict:
 
 
 # Room fields whose empty value means "unmentioned" rather than "cleared".
+# `extent`, `shape` and `parts` (the room's proportion, DESIGN_ROOM_FIDELITY)
+# join for the reason `size` is here: a re-echo without them must not square
+# a corridor.
 _ROOM_SILENT_WHEN_EMPTY = frozenset({"anchors", "size", "zone", "region", "light",
-                                     "exposure", "transit_seconds"})
+                                     "exposure", "transit_seconds",
+                                     "extent", "shape", "parts"})
 
 # Every SceneEntityDef field whose schema default is indistinguishable from
 # "the model did not mention this". A diff carrying one of these cannot be

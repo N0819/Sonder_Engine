@@ -15,7 +15,8 @@ from story.character_schema import character_name_from_text, persona_name
 from story.provenance_text import strip_engine_provenance
 from world.weather import advance_weather, normalize_weather
 from world.spatial import (contradictory_sight_edges, guessed_room_sizes,
-                           merge_scene_with_diff)
+                           layout_warning, merge_scene_with_diff,
+                           room_layout_lint)
 from world.spatial_frames import (_cast_changes_leaving, infer_companion_carry,
                             infer_vehicle_zones,
                             infer_came_from, infer_focus, infer_facing,
@@ -1437,6 +1438,18 @@ def prepare_scene_commit(ctx):
             _notices.append(_msg)
         wset(cid, "engine_notices", _notices)
     sc[BEAT_KEY] = _turn_idx + 1
+    # THE LAYOUT LINT, under the same once-on-appearance rule
+    # (`world/spatial_lint.py`, DESIGN_ROOM_FIDELITY §3): a reciprocal bearing
+    # that is not an opposite, two doorways placed on one cell, a wall whose
+    # anchors need more paces than it has, a set of bearings that cannot be
+    # drawn on one plane. Reads no prose. `layout_lint_told` plays the part
+    # `sight_contradictions_told` plays above, so a scene already
+    # contradictory before this check existed is told once, not never.
+    _layout_told = wget(cid, "layout_lint_told", False)
+    for _row in room_layout_lint(sc, prev_scene if _layout_told else None):
+        ctx.warnings.append("[layout] " + layout_warning(_row))
+    if not _layout_told:
+        wset(cid, "layout_lint_told", True)
 
     for _room in guessed_room_sizes(sc, prev_scene):
         ctx.warnings.append(
