@@ -340,3 +340,46 @@ def test_the_seed_reaches_no_view_and_no_observation(temp_db):
     # The onset pass composes the CHARACTERS' views (the player's own comes
     # at outcome); Reya stands in the stub and receives its name and no seed.
     assert "Market Square" in (out["views"].get(str(char_id)) or "")
+
+
+def test_the_whole_plan_is_named_even_where_the_brief_does_not_reach(temp_db):
+    """THE BRIEF IS SCOPED; KNOWING THE PLACE EXISTS MUST NOT BE.
+
+    A player names a place from anywhere -- across a town, from memory, from
+    something a character said three beats ago -- and a Director never shown
+    the name cannot spell it. It invents one, and `classify_movement` cannot
+    rescue an invention that shares no word with the plan's spelling.
+
+    Measured (the Salt Terraces, 2026-09-05, PS5): the Room published "Town
+    Habitations Shelf" and a roofless common hall; from three rooms away the
+    interpret payload carried no `planned_rooms` key at all, the Director
+    wrote `upper_terrace_settlement`, and the beat after minted a second
+    common hall beside the planned one. The town ended with two of each and
+    the one thing the Room planted to be found unreachable in either.
+
+    So a NAME, and nothing else, for every planned room the scene has not
+    drawn -- however far away it is.
+    """
+    from world.structure import planned_room_index
+
+    cid, scene = _chat(temp_db)
+    del scene["rooms"]["kitchen"]
+    # The kitchen is two rooms from the square, and the brief does not reach
+    # it from there -- which is correct, and is the whole problem.
+    assert "kitchen" not in planned_room_brief(
+        cid, scene, rooms_to_develop(scene, "square"))
+    # The index names it anyway, by the plan's own spelling.
+    index = planned_room_index(cid, scene)
+    assert index.get("kitchen") == "Inn Kitchen"
+    # A room the scene already holds is not in it: the payload already
+    # carries those under `existing_rooms`.
+    assert "square" not in index and "inn" not in index
+
+
+def test_the_index_is_absent_for_a_story_with_no_plan(temp_db):
+    """The payload shape of a story that planned nothing is unchanged."""
+    from world.structure import planned_room_index
+
+    # A chat id no registry row names: the plan is empty and so is the index.
+    cid, _scene = _chat(temp_db)
+    assert planned_room_index(cid + 9999, {"rooms": {}}) == {}

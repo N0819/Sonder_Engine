@@ -703,6 +703,40 @@ def planned_room_ids(cid):
     return set(_planned_specs(cid))
 
 
+def planned_room_index(cid, scene=None):
+    """`{room_uid: name}` for every live planned room the SCENE does not yet
+    hold -- one line each, the whole plan, uncapped.
+
+    THE BRIEF IS SCOPED; KNOWING THE PLACE EXISTS MUST NOT BE.
+    `planned_room_brief` deliberately covers only the stubs a beat stands in
+    or looks into, because a purpose, an access note and an exit list are
+    expensive and a Director furnishing a room only needs the one it is
+    entering. But a player names a place from anywhere -- across a town, from
+    memory, from something a character said three beats ago -- and a Director
+    that has never been shown the name cannot spell it. It invents one, and
+    `classify_movement` cannot rescue an invention that shares no word with
+    the plan's spelling.
+
+    Measured (the Salt Terraces, 2026-09-05, PS5): the Writers' Room
+    published "Town Habitations Shelf" (`town_shelf_lane`) and a roofless
+    common hall; from three rooms away the interpret payload carried no
+    `planned_rooms` key at all, the Director wrote
+    `upper_terrace_settlement`, and the beat after minted
+    `settlement_common_hall` beside the planned one. The town ended with two
+    shelves of workers' houses, two common halls, and the one thing the Room
+    had planted to be found unreachable in either.
+
+    So the index is a NAME and nothing else, which is what a spelling costs:
+    seven rooms was 591 bytes in that run, and the largest plan in the
+    owner's database (chat 114, 49 rooms) is a few kilobytes. Uncapped, per
+    the owner's standing ruling that a cap is named rather than buried --
+    there is nothing here to cap.
+    """
+    rooms = (scene or {}).get("rooms") or {}
+    return {rid: name for rid, (name, _spec) in _planned_specs(cid).items()
+            if rid not in rooms}
+
+
 def planned_topology(cid):
     """``{room_uid: [adjacent room uids]}`` for every live planned registry
     row -- the plan's edges by ID. `planned_context` renders the same edges

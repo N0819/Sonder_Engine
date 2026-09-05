@@ -6148,6 +6148,44 @@ reached, volume, barrier, tier), naming the comm channel, the addressed
 rescue and the open-group floor separately. Decide it on the next run's
 record, not on this one's absence.
 
+### 1.127 A place the plan already holds, named from anywhere (PS5, BUILT 2026-09-05)
+
+**Found and fixed 2026-09-05** (`docs/experiments/PLAY_2026_09_05C_solitude.md`
+§ PS5), the run's worst failure. `planned_rooms` carries the plan's
+development brief and is scoped by REACH -- the room a body stands in, the
+one it is moving into, the non-wall neighbours -- which is right for a brief
+and wrong for a spelling. A player names a place from anywhere, and a
+Director never shown the name invents one; `classify_movement` consults the
+whole plan, but it cannot match an invention that shares no word with the
+plan's spelling.
+
+Measured: the Writers' Room published "Town Habitations Shelf"
+(`town_shelf_lane`) and `unroofed_common_hall` with a planted derrick in it.
+Turn 12, from three rooms away, the interpret payload carried
+`existing_rooms` and **no `planned_rooms` key at all**; the Director wrote
+`upper_terrace_settlement`, and turn 13 minted `settlement_common_hall`. The
+town ended with two shelves of workers' houses and two common halls, and the
+one thing the Room had planted to be found was unreachable in either. Turn 7
+was sent one planned room while four were published; turn 10 was sent one.
+
+**Built:** `world.structure.planned_room_index(cid, scene)` -- `{room_uid:
+name}` for every live planned room the scene does not yet hold -- reaches the
+interpret and resolve payloads as `planned_elsewhere`, beside the scoped
+brief and never replacing it. A name is what a spelling costs: seven rooms
+was 591 bytes in that run, and the largest plan in the owner's database (chat
+114, 49 rooms) is a few kilobytes. **Uncapped**, per the standing ruling that
+a cap is named rather than buried -- there is nothing here worth capping. The
+interpret prompt states the rule in both packs: *a place the story has
+already planned is not a new place*; only a destination no scene room and no
+indexed room answers is a new room.
+
+**Residual.** A player may still name a planned place in words that match
+neither its id nor its name -- "the settlement" for "Town Habitations Shelf".
+The index gives the Director the material to make that judgement and does not
+make it; whether a fuzzy match belongs in `planned_context` is a separate
+question, and the deterministic matcher is deliberately exact
+(§ *An exact match is not ambiguous*).
+
 ## 2. Roadmap
 
 Features the architecture intends and has not built. Ordered by value per unit
