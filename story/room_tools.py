@@ -597,6 +597,18 @@ def _t_inspect_contradictions(cid, frame_id):
         if room and room not in known:
             out["dangling"].append({"kind": "need_in_no_room", "uid": need["uid"],
                                     "room": room})
+    # ONE PART OF THE MAP IN TWO PIECES. Two live rooms the story files under
+    # one region with no path between them -- over every declared edge and
+    # the plan's topology -- are two rooms said to be one place and never
+    # joined: what a Director-minted room standing beside the planned room it
+    # duplicates looks like (chat 115's second lift car). A reachability
+    # fact, never a name comparison (`world.regions.room_pieces`).
+    try:
+        from world.regions import registry_room_regions, room_pieces
+        out["dangling"].extend(
+            room_pieces(cid, scene, registry_room_regions(cid)))
+    except Exception as exc:  # diagnostics only
+        out["dangling"].append({"kind": "regions_unreadable", "error": str(exc)})
     reserved = {r["name"].casefold() for r in
                 _t_inspect_reserved_identities(cid, frame_id)["characters"]
                 if r.get("name")}
@@ -723,7 +735,7 @@ TOOLS = [
      "description": "The planted structures (settlements, buildings) and every planned room id the registry holds -- the town's own topology, which a beat may furnish and may not delete.",
      "args": _schema({}), "handler": _t_inspect_structures},
     {"name": "inspect_rooms",
-     "description": "The map and the neighbourhood. With no arguments: `index` is every room the story knows -- live, planned (a stub nobody has entered) or retired (an id that is spent) -- with its holder when it is the inside of a body and its distance in hops from the cast; `rooms` is the full slice of every room within two hops (description, exits with barriers, who stands there and in what, what stands there, the plan's brief for a stub, and what the author layer already claims for it: planned entities, open needs, package operations). Everything farther is index-only: pass room_ids to open any rooms by id, whatever their status. The room a body stands in is a room whatever holds it.",
+     "description": "The map and the neighbourhood. With no arguments: `index` is every room the story knows -- live, planned (a stub nobody has entered) or retired (an id that is spent) -- with its holder when it is the inside of a body, its `region` (the part of the map it belongs to; the index is grouped by it, the cast's region first) and its distance in hops from the cast; `rooms` is the full slice of every room within two hops (description, exits with barriers, who stands there and in what, what stands there, the plan's brief for a stub, and what the author layer already claims for it: planned entities, open needs, package operations). Everything farther is index-only: pass room_ids to open any rooms by id, whatever their status. The room a body stands in is a room whatever holds it.",
      "args": _schema({"room_ids": _SL}),
      "handler": _t_inspect_rooms},
     {"name": "inspect_route",
@@ -752,7 +764,7 @@ TOOLS = [
      "description": "The open planning needs: what a beat reached for that no plan holds -- an unplanned destination, a query nobody answered, a person the Director rendered with no plan behind them. Each carries the surface the beat committed, which a plan may add to and never contradict.",
      "args": _schema({"kind": _S}), "handler": _t_inspect_needs},
     {"name": "inspect_contradictions",
-     "description": "What the world holds that does not agree with itself: charter registry warnings, structure warnings, and dangling references (a planned exit to nowhere, a plan in no room, a bill in a vanished room, a need for a vanished room, a package participant nobody holds).",
+     "description": "What the world holds that does not agree with itself: charter registry warnings, structure warnings, and dangling references (a planned exit to nowhere, a plan in no room, a bill in a vanished room, a need for a vanished room, a package participant nobody holds, a region whose live rooms are in pieces no path joins -- a possible duplicate room).",
      "args": _schema({}), "handler": _t_inspect_contradictions},
     {"name": "inspect_packages",
      "description": "The plot packages in this frame as spoiler-safe projections: status, revision, counts, clocks, operation kinds, validation verdict. Filter by status. Your payload already carries every package under `packages`, rebuilt every step; a call is answered with that key, not a copy.",

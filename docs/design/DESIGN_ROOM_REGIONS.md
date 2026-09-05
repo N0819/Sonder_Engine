@@ -1,7 +1,46 @@
 # Reading the world by region
 
-**Status:** argument, not built. Written 2026-09-04, after measuring what the
-Story Planner actually pays to look at a world.
+**Status:** partly built (2026-09-04, `world/regions.py`): the region as a
+FIELD on every room, derived and never named, the registry of what the regions
+are, the index grouped by region, the briefs naming it, the in-pieces
+contradiction and the one-shot backfill. Still argument: `inspect_regions`
+(§5), the `region` argument on `inspect_rooms`, and a writer for a region's
+brief. Written 2026-09-04, after measuring what the Story Planner actually
+pays to look at a world.
+
+*Built, 2026-09-04, later still -- and one ruling in §6 reversed.* The owner
+asked for regions as THE grouping the index, the coming World Browser and the
+planner all use, and for the grouping to cover the room this note had no
+answer for: a live room the Director minted. §2 held that membership was
+already recorded, and it was -- for PLANNED rooms. A minted room has no
+`planned.structure`, and chat 115's second lift car was minted. So the
+built shape is one field, `region`, on every room (`scene.rooms[id].region`;
+`room_registry.payload.region`, kept on retirement), derived at commit by
+rules that never read a name: a planned room's is its structure, a minted
+room's is inherited from the room it was reached from (the occupied room
+deciding a disagreement, a disagreement with no occupied neighbour left
+empty), an inside reports its holder's room's, a `zone` is folded once into a
+region and stays the frame-split trigger it was, a Director-written `region`
+is a declaration and is kept. Nothing is invented: a room joined to no
+regioned room has none, and the index shows `region: null` rather than
+hiding it (§5's residue rule, honoured).
+
+The reversal is §6's first line. There IS a `regions` world key now:
+`{region_id: {name, brief}}`, frame-scoped like the scene, with every planted
+structure read through as a region rather than copied in -- a structure is
+still the only spelling of a planned room's membership, so the collision §6
+warned about does not arise, and the key exists to name what a folded zone or
+a declared region is, which no structure can. Its `brief` is where §3's
+authored intent could live; nothing writes it yet, and the bible argument
+stands as the alternative. `room_index` rows carry `region` and the index is
+grouped by it (regions ranked by their nearest room, so the cast's comes
+first; hops then id within); `room_slice` carries `region` and
+`region_name`; `planned_room_brief` and `planned_context` name it;
+`inspect_contradictions` reports `region_in_pieces` -- one region's live rooms
+in two components no edge or planned edge joins, a reachability fact. Measured
+on a copy of the owner's database at the backfill (schema v36): 590 rooms in
+105 scene rows, 194 regioned and 396 empty after, 0 before; 32 folded-zone
+entries across 13 frame registries; 7 planted structures. `tests/test_room_regions.py`.
 
 *Update, 2026-09-04, later the same day.* The two-tier read landed, but keyed
 by DISTANCE rather than by region: `story/room_slice.py` gives `inspect_rooms`
