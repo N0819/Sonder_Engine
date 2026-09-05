@@ -160,6 +160,16 @@ def light_at(scene: dict, name: str) -> str:
     if not room_id:
         return "lit"
 
+    # WHERE THE ROOM CARRIES GEOMETRY AND THE BODY A STATION, THE ANSWER IS
+    # THE BODY'S CELL IN THE LIGHT FIELD (`world/spatial_light_field.py`):
+    # the same four words, from the lamp's rays instead of from the room.
+    # None means the field does not exist for this body and everything
+    # below keeps its answer, byte for byte.
+    from world.spatial_light_field import field_light_at
+    field_level = field_light_at(scene, name)
+    if field_level is not None:
+        return field_level
+
     # Ambient: the room's own light, plus sources that fill a whole room.
     level = _brighter(room_light(scene, room_id),
                       source_light(scene, room_id, filling_only=True))
@@ -200,6 +210,16 @@ def effective_light(scene: dict, room_id: str) -> str:
     the door open and a cellar with the door shut. Spill lifts dark to dim and
     never further: borrowed light does not let you read by it.
     """
+    # WHERE THE ROOM CARRIES GEOMETRY the answer is the level of its MEDIAN
+    # cell in the light field (`world/spatial_light_field.py`): the room's
+    # typical light, with spill a consequence of the wall as a line and the
+    # doorway as a gap in it rather than the one-step rule below. None means
+    # no geometry, and the room-level answer stands unchanged.
+    from world.spatial_light_field import field_effective_light
+    field_level = field_effective_light(scene, room_id)
+    if field_level is not None:
+        return field_level
+
     # Anything burning in here counts as much as anything built in -- but only
     # what actually fills the room. A hand torch is handled per body, in
     # light_at, so it never silently illuminates the far corner.
