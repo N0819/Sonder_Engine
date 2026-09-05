@@ -1004,3 +1004,43 @@ display:none;background:linear-gradient(135deg,transparent 50%,var(--bd) 50%)}
 border-left:2px solid var(--bd);padding-left:8px;margin-bottom:6px;
 max-height:220px;overflow:auto}
 .room-note{font-size:12px;font-style:italic}
+
+/* ---- WORLD BROWSER (world_browser.js) ----
+   The room tree and the room card inside the 🌍/👕 dialog. Chrome only:
+   every colour is a page token, so each theme's own values carry it. */
+.wb{display:flex;gap:14px;align-items:flex-start;min-height:320px}
+.wb-tree{flex:0 0 280px;max-width:40%;max-height:66vh;overflow:auto;
+border-right:1px solid var(--bd);padding-right:8px}
+.wb-card{flex:1;min-width:0}
+.wb-group{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);
+margin:10px 0 4px}
+.wb-retired>summary{cursor:pointer;list-style:none;display:flex;gap:6px;align-items:center}
+.wb-room{display:flex;gap:6px;align-items:center;width:100%;text-align:left;
+background:transparent;border:1px solid transparent;box-shadow:none;padding:4px 6px;
+border-radius:6px;cursor:pointer;color:var(--fg);font:inherit;font-size:13px}
+.wb-room:hover:not(:disabled){background:var(--hover-bg,color-mix(in srgb,var(--acc) 8%,transparent));
+border-color:var(--bd)}
+.wb-room.on{background:var(--selected-bg,color-mix(in srgb,var(--acc) 14%,transparent));
+border-color:var(--acc)}
+.wb-room.planned,.wb-room.retired{opacity:.62}
+.wb-room .wb-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wb-occupants{font-size:11px;max-width:45%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wb-nested{margin-left:16px}
+.wb-section{margin-top:12px}
+.wb-section h4{margin:0 0 4px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;
+color:var(--dim)}
+.wb-desc{white-space:pre-wrap;margin:8px 0 0}
+.wb-exit{display:flex;gap:8px;align-items:center;padding:3px 0;flex-wrap:wrap}
+.wb-link{background:transparent;border:none;box-shadow:none;padding:0;color:var(--acc);
+cursor:pointer;text-decoration:underline;font:inherit}
+.wb-link:hover:not(:disabled){background:transparent;border:none}
+.wb-body{border:1px solid var(--bd);border-radius:6px;padding:4px 8px;margin:4px 0}
+.wb-body>summary{cursor:pointer}
+.wb-attire{font-size:12px;margin-top:6px}
+.wb-attire table{border-collapse:collapse;margin-top:4px}
+.wb-attire td{padding:2px 8px 2px 0;vertical-align:top}
+@media (max-width:760px){
+  .wb{flex-direction:column}
+  .wb-tree{flex:none;max-width:none;width:100%;border-right:none;
+  border-bottom:1px solid var(--bd);padding-right:0;max-height:30vh}
+}

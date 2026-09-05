@@ -6535,6 +6535,16 @@ for what follows. Residuals of this entry rather than a section of their own:
   no region a rule can reach -- the residue is Director-minted rooms in
   stories with no plan and no zone, and it is surfaced as `region: null`,
   never hidden.
+- **The World Browser shows a body's attire and cannot edit it.**
+  `static/js/world_browser.js` (2026-09-04) renders each occupant's ledger
+  as stored and points at the Raw JSON tab for repair. `fAttireGarments`
+  was the candidate editor and does not fit the live ledger: a spanning
+  garment is stored once per region without a `covers` list, so the editor
+  reads a kimono as torso-only and writes it back narrowed, and its
+  `read()` writes `state: "worn"` unconditionally, so opening the dialog
+  would re-fasten a loosened garment. A ledger editor that carries `state`,
+  `condition` and the spanning copies, writing through `PUT /attire` (which
+  re-derives), is the missing piece; until then per-body repair is JSON.
 - **The fill job is queued from the commit tail, not from a threshold
   crossing.** Every commit with an open need or a short frontier and a
   grant submits one job (deduped per chat, capped per story hour); there
