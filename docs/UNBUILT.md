@@ -6755,6 +6755,24 @@ model (2026-09-04): the world-context compiler reads the plan for a named
 room and raises a planning need for an unplanned one, so there is one seed
 per room again.
 
+### 2.34 The light field — DESIGN, not built
+
+Agreed 2026-09-04 as the item after the Writers' Room waves and regions:
+[`design/DESIGN_LIGHT_FIELD.md`](design/DESIGN_LIGHT_FIELD.md). Light
+becomes a scalar on the sight grid `world/spatial_fov.py` already derives:
+each source's power decays by inverse square along `shadowcast` rays from
+the source's cell, shadowed only by occluders at or above the source's
+height rank (so a ceiling light needs no ceiling), shaped by a cone with a
+penumbra when the source has a direction, summed across sources, floored by
+the room's ambient, filled by bounce whose coefficient is the room's
+`exposure`, and quantised to the existing four-step ladder LAST, so every
+current reader keeps its words. Spill is a consequence of the wall as a
+line, not a rule. Sources are a class on the entity (`light_shape`,
+`light_height`, `steadiness`, `state.pointed_at`), never a device
+vocabulary; flicker and failure are seeded on (turn, source) so a reroll
+sees the same light. Nothing is built, nothing is measured; the note's § 9
+lists what to measure first and its § 6 the constants the owner sets.
+
 ### 2.28 The day cycle's residuals
 
 Landed 2026-09-03 (`world/day_cycle.py`, `Design.md` "The day moves with the
