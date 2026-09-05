@@ -34,13 +34,42 @@ from .director_lingua import _ling
 # failure (a character held at gunpoint narrated but never written to
 # state_diff.conditions); the general omission audit above it is what covers
 # the open-ended class.
+#
+# CO-OCCURRENCE IS NOT ATTRIBUTION, and this scan was the last floor here that
+# did not know it. A cue anywhere in the beat flagged EVERY tracked name
+# anywhere in the beat, so one ordinary transitive verb of an ordinary object
+# indicted the whole room: measured chat "multitude" 2026-09-05 turn 20 (PM9),
+# six warnings in one beat -- one per body, the player included -- for three
+# people signing a slip of paper that was pinned under an iron weight, and 16
+# such fires across three beats, all false. The consciousness floor and the
+# destruction tripwire both answered this years earlier by pinning a cue to
+# the nearest candidate name in its own clause; this now shares their
+# implementation (`_clause_attributed_subjects`) rather than owning a weaker
+# copy of the idea. `prefer_object` stays False because a restraint cue is
+# written from either side -- "Reya is pinned" puts the held body before it,
+# "pinned Reya against the door" after -- so the nearest name in the clause,
+# not the side, is the answer.
+
+
+def _restraint_cue_re():
+    """The restraint/duress keywords as one alternation, for clause pinning.
+
+    Built per call from the language pack rather than at import: `_ling`
+    resolves against the ACTIVE pack, and a module-level constant would freeze
+    whichever pack happened to be loaded first."""
+    keywords = [str(k) for k in _ling("_RESTRAINT_KEYWORDS") if str(k or "")]
+    if not keywords:
+        return None
+    return re.compile("|".join(re.escape(k) for k in keywords))
+
 
 def _untracked_restraint_subjects(resolved_event, dialogue_log, conditions,
                                   tracked_names):
-    """Named, tracked characters whose mention co-occurs with a restraint/
-    duress keyword in resolved_event or a dialogue_log exact_quote, but who
-    have no matching state_diff.conditions entry (matched by subject_id,
-    casefolded). Sorted for deterministic output."""
+    """Named, tracked characters a restraint/duress cue is attributed to in
+    resolved_event or a dialogue_log exact_quote -- one name per cue, the
+    nearest in its own clause -- and who have no matching
+    state_diff.conditions entry (matched by subject_id, casefolded). Sorted
+    for deterministic output."""
     text_units = [str(resolved_event or "")]
     for entry in (dialogue_log or []):
         if isinstance(entry, dict):
@@ -56,14 +85,11 @@ def _untracked_restraint_subjects(resolved_event, dialogue_log, conditions,
                 tracked_condition_subjects.add(
                     str(c.get("subject_id") or "").casefold())
 
-    flagged_names = set()
-    for text in text_units:
-        lower = text.casefold()
-        if not any(keyword in lower for keyword in _ling("_RESTRAINT_KEYWORDS")):
-            continue
-        for name in tracked_names:
-            if name and name.casefold() in lower:
-                flagged_names.add(name)
+    cue_re = _restraint_cue_re()
+    if cue_re is None:
+        return []
+    flagged_names = _clause_attributed_subjects(
+        text_units, cue_re, [n for n in (tracked_names or []) if n])
 
     return [name for name in sorted(flagged_names)
             if name.casefold() not in tracked_condition_subjects]

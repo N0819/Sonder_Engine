@@ -12,6 +12,8 @@ import pytest
 
 from language_runtime import english_linguistic
 
+from mind import affect as affect_module
+
 from mind.affect import (
     _va_pair,
     appraise,
@@ -610,9 +612,26 @@ def test_strain_damper_exempts_suppression_and_relief():
     assert entry3["source"] == "relief"
 
 def test_strain_decays_on_sixty_turn_half_life():
-    assert update_drive_strain(0.8, [], None, None, None, 60)[0] == pytest.approx(0.4)
-    assert update_drive_strain(0.8, [], None, None, None, 120)[0] == pytest.approx(0.2)
+    """The half-life still governs -- ACROSS beats, which is the only place
+    it was ever measured. What no longer happens is one beat consuming sixty
+    beats' worth of it: `turns_since` arrives in TURNS from a clockless story
+    and in MINUTES from a clocked one (`elapsed_psych_units`), so a two-hour
+    conversation used to relax a drive by 84% where the same seven beats with
+    no clock relaxed it by 8% (chat "quiet" 2026-09-05, PQ21)."""
+    strain = 0.8
+    for _ in range(60):
+        strain = update_drive_strain(strain, [], None, None, None, 1)[0]
+    assert strain == pytest.approx(0.4)
     assert update_drive_strain(0.8, [], None, None, None, 0)[0] == pytest.approx(0.8)
+
+
+def test_one_beat_cannot_decay_more_than_the_per_beat_floor():
+    """_STRAIN_DECAY_FLOOR_PER_BEAT: time does not pay down a drive. Relief
+    does, and the rupture's own force-close does."""
+    assert update_drive_strain(0.8, [], None, None, None, 60)[0] == pytest.approx(
+        0.8 * affect_module._STRAIN_DECAY_FLOOR_PER_BEAT)
+    assert update_drive_strain(0.8, [], None, None, None, 1)[0] == pytest.approx(
+        0.8 * 0.5 ** (1 / affect_module._STRAIN_HALF_LIFE))
 
 def test_strain_dual_accrual_applies_both_reports_larger():
     strain, entry = update_drive_strain(

@@ -435,8 +435,26 @@ def resolve_stress(previous, appraisal, profile, hedonic, elapsed_units,
     # `strain` is peak-held separately from `activation` so last beat's drive
     # is never re-read as this beat's distress. Legacy states carry no strain
     # key; their activation is the closest thing to it.
-    old_strain = _clamp(previous.get(
-        "strain", previous.get("activation")))
+    #
+    # AND NEITHER DOES A CARD. That fallback was written for legacy rows and
+    # has never once fired, because `initial_state.stress` is
+    # `{activation, load, coping_mode}` in every card template the engine
+    # ships and `character_initial_active_state` fills the missing `strain`
+    # in with 0.0 -- so the key is always PRESENT and always zero, and an
+    # authored acute stress was discarded on the character's first beat,
+    # every time. Measured chat "quiet" 2026-09-05 (PQ21): authored
+    # `{activation: 0.45, load: 0.55}`, and by turn 7 of a scene built to
+    # squeeze him the man read 0.252/0.0958 -- the numbers you get climbing
+    # from nothing, not the numbers you get from 0.45.
+    #
+    # The discriminator is a key this function stamps on every block it
+    # returns and nothing else writes: a `previous` carrying no `overloaded`
+    # is a seed rather than a resolved state, and in a seed `activation` is
+    # the only account of strain there is.
+    _resolved_before = "overloaded" in previous
+    old_strain = _clamp(previous.get("strain", previous.get("activation")))
+    if not _resolved_before and not old_strain:
+        old_strain = _clamp(previous.get("activation"))
     old_load = _clamp(previous.get("load"))
     strain = max(old_strain * decay, strain_target)
     activation = _clamp(strain + drive)

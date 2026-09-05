@@ -22,8 +22,10 @@ contacts and scales, and they move with simulation time rather than with turns
 cost the same.
 
 Air is the one with teeth, and it exists because of containment: sealing someone
-in an opaque container was previously survivable indefinitely. Air only depletes
-for a body in a sealed enclosure, and it depletes fast.
+in an opaque container was previously survivable indefinitely. Air depletes for a
+body in a sealed enclosure, and it depletes fast -- and it does NOT come back
+while the world is taking it, which is the difference between an enclosure and
+the air inside one (`AIR_DENIED_KEY`).
 """
 
 from __future__ import annotations
@@ -92,6 +94,32 @@ _PER_HOUR = {
 
 # Air is not a per-hour drain, it is a countdown, and only while sealed in.
 _AIR_SECONDS = 900.0        # a sealed container is unbreathable in ~15 minutes
+#: How long a body needs, out of the bad air, to be breathing freely again.
+#: A full breath a MINUTE was the old rate, and it is fifteen times the rate a
+#: sealed container takes one away: nothing the world or the Director could
+#: write survived a single beat against it (chat 3 "rush", 2026-09-05, PR3 --
+#: the body hand wrote `air: 0.9` for a smoke-filled stair on turn 7 and turn
+#: 8 committed 1.0, again at 14/15, and all three bodies finished five minutes
+#: of a burning tenement at 1.0). Still fast -- getting clear of smoke IS the
+#: cure -- but slow enough that a beat is a breath rather than a reset.
+_AIR_RECOVERY_SECONDS = 240.0
+
+#: Whose air the world is taking, as the scene itself records it.
+#:
+#: AIR IS A PROPERTY OF WHAT IS IN THE AIR, NOT OF THE ENCLOSURE. `is_sealed_in`
+#: answers one question -- is there any way out of this box -- and a stairwell
+#: full of smoke is not a box, so before this key existed no story in which the
+#: AIR was the threat could hold a body short of breath for longer than one
+#: beat.
+#:
+#: The world's standing processes are `world_conditions`, which live in a table
+#: this module cannot reach and which act in `world.mechanics._tick_conditions`
+#: -- a pass that meets the same scene dict this one does, later in the same
+#: turn. So the sweep writes down whose air a standing condition took, and the
+#: NEXT beat's tick does not hand it back. Rebuilt from scratch by every sweep,
+#: exactly like `engine_notices`, so it self-expires the beat the condition
+#: stops acting and a body that walks out of the smoke recovers normally.
+AIR_DENIED_KEY = "air_denied"
 _SLEEP_STAMINA_PER_HOUR = 0.14
 _REST_STAMINA_PER_HOUR = 0.05
 
@@ -234,12 +262,74 @@ def is_sealed_in(scene: dict, name: str) -> bool:
     return True
 
 
-def tick_vitals(scene: dict, elapsed_seconds, *, asleep=(), exerting=()) -> dict:
+def air_denied_names(scene: dict) -> set:
+    """Casefolded names of the bodies whose air the world is currently taking.
+
+    Read from the scene's own `air_denied` record (see `AIR_DENIED_KEY`), which
+    the conditions sweep rewrites from scratch every beat. Tolerant of junk in
+    the blob for the same reason `_stored_vitals` is: a checkpoint restore, an
+    archive import and the GM's scene editor all write this dict.
+    """
+    raw = (scene or {}).get(AIR_DENIED_KEY)
+    if isinstance(raw, dict):
+        raw = list(raw)
+    if not isinstance(raw, (list, tuple, set)):
+        return set()
+    return {str(n).strip().casefold() for n in raw if str(n or "").strip()}
+
+
+def add_air_denied(scene: dict, name) -> dict:
+    """Add one body to the record without disturbing the rest of it.
+
+    Two writers, at two points in the turn, and neither may erase the other:
+    `apply_vitals_diff` adds during the merge (this beat SAID the body is
+    short of breath), and the conditions sweep replaces at commit (what the
+    world is standing over it). The sweep's replace is the one that persists,
+    which is right -- a declaration is an event and a condition is a state.
+    """
+    label = str(name or "").strip()
+    if not label:
+        return scene
+    raw = scene.get(AIR_DENIED_KEY)
+    kept = [str(n) for n in raw if str(n or "").strip()] \
+        if isinstance(raw, (list, tuple)) else []
+    if label not in kept:
+        kept.append(label)
+    scene[AIR_DENIED_KEY] = kept
+    return scene
+
+
+def set_air_denied(scene: dict, names) -> dict:
+    """Record whose air the world is taking, replacing any earlier record.
+
+    REPLACES, never merges: the record is a statement about this beat, and a
+    body that walked out of the smoke must not stay short of breath because a
+    previous beat said it was in it.
+    """
+    kept = []
+    for name in names or []:
+        label = str(name or "").strip()
+        if label and label not in kept:
+            kept.append(label)
+    if kept:
+        scene[AIR_DENIED_KEY] = kept
+    else:
+        scene.pop(AIR_DENIED_KEY, None)
+    return scene
+
+
+def tick_vitals(scene: dict, elapsed_seconds, *, asleep=(), exerting=(),
+                air_denied=()) -> dict:
     """Advance every tracked body's vitals by the time this beat took.
 
     A no-op unless the scene already carries a vitals table, which is what
     keeps this free for stories with the setting off: nothing creates the table
     but an explicit write, so nothing here can start a hunger clock by itself.
+
+    `air_denied` names bodies whose air the world is taking THIS beat, for a
+    caller that holds the answer directly; it is unioned with what the scene
+    already records, because the two sources are the same fact arriving by
+    different routes and neither may subtract from the other.
     """
     table = (scene or {}).get("vitals")
     if not isinstance(table, dict) or not table:
@@ -255,6 +345,8 @@ def tick_vitals(scene: dict, elapsed_seconds, *, asleep=(), exerting=()) -> dict
 
     resting = {str(n).strip().casefold() for n in (asleep or [])}
     working = {str(n).strip().casefold() for n in (exerting or [])}
+    starved = air_denied_names(scene) | {
+        str(n).strip().casefold() for n in (air_denied or [])}
 
     for name in list(table):
         record = table.get(name)
@@ -264,11 +356,17 @@ def tick_vitals(scene: dict, elapsed_seconds, *, asleep=(), exerting=()) -> dict
         key = str(name).strip().casefold()
         current = _stored_vitals(record)
 
-        # Air: a countdown while sealed in, and a fast recovery once out.
+        # Air: a countdown while sealed in, and a recovery only where there is
+        # air to recover. A body the world is taking breath from neither
+        # counts down (the box is not what is wrong with it) nor recovers --
+        # what moves its air is the process that is doing it, in
+        # `world.mechanics._tick_conditions`, and a tick that hands the loss
+        # straight back is not a tick.
         if is_sealed_in(scene, name):
             current["air"] = _clamp(current["air"] - seconds / _AIR_SECONDS)
-        else:
-            current["air"] = _clamp(current["air"] + seconds / 60.0)
+        elif key not in starved:
+            current["air"] = _clamp(
+                current["air"] + seconds / _AIR_RECOVERY_SECONDS)
 
         if key in resting:
             current["stamina"] = _clamp(
@@ -319,12 +417,23 @@ def apply_vitals_diff(scene: dict, incoming) -> dict:
         if not isinstance(patch, dict):
             continue
         current = _stored_vitals(table.get(label))
+        before_air = current["air"]
         for vital, value in patch.items():
             if vital not in VITALS:
                 continue
             clamped = _clamp(value)
             if clamped is not None:
                 current[vital] = clamped
+        if current["air"] < before_air:
+            # THE BEAT'S OWN ACCOUNT OF A BODY'S AIR OUTRANKS THE TICK THAT
+            # FOLLOWS IT. This function runs immediately before `tick_vitals`
+            # inside `merge_scene_with_diff`, so a declared 0.9 met a recovery
+            # of +2.0 in the same merge and committed 1.0 -- measured chat
+            # "rush" 2026-09-05 turns 7/8 and 14/15 (PR3). A beat that says a
+            # body is short of breath is not also a beat that gives the breath
+            # back; what happens NEXT beat is the world's to say, through a
+            # standing condition, which is what replaces this record at commit.
+            add_air_denied(scene, label)
         table[label] = {k: round(v, 4) for k, v in current.items()}
     return scene
 

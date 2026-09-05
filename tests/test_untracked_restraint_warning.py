@@ -147,3 +147,53 @@ class TestRestraintWordsTheEnumCannotRead:
         default would jail a body on a record that says nothing."""
         assert _normalize_restraint_level("flabbergasted") == "held"
         assert _normalize_restraint_level("") == "held"
+
+
+# --- Co-occurrence is not attribution --------------------------------------
+#
+# Live case: chat "multitude", 2026-09-05 turn 20, finding PM9
+# (docs/experiments/PLAY_2026_09_05C_multitude.md). Six warnings in one beat,
+# one per body including the player -- "Possible untracked physical
+# restraint/duress detected for 'Ottoline Sarr' ... but no matching
+# state_diff.conditions entry was recorded this beat" -- for a beat in which
+# three people sign a piece of paper held down under an iron weight. 16 fires
+# across three beats, every one false. The cue fired anywhere in the beat and
+# flagged every tracked name anywhere in the beat, which is the one thing the
+# consciousness floor and the destruction tripwire in the same module had
+# both stopped doing years earlier.
+
+_VAUNTS_YARD = ["Ottoline Sarr", "Roon", "Vaunt", "Halder", "Merrow",
+                "Player"]
+
+
+class TestARestraintIsPinnedToItsOwnClause:
+    def test_a_slip_of_paper_pinned_under_an_iron_indicts_nobody(self):
+        resolved_event = (
+            "Roon sets the lamp on the trestle. The slip lies pinned under "
+            "that iron weight at the table's edge, and the three of them "
+            "come round to it in turn. Vaunt bars the yard doors behind them."
+        )
+        dialogue_log = [
+            {"speaker": "Vaunt", "exact_quote": '"Stand aside."'},
+            {"speaker": "Roon", "exact_quote": '"We take it in the lane."'},
+            {"speaker": "Halder", "exact_quote": '"It is held fast enough."'},
+        ]
+
+        warnings = _scan_for_untracked_restraint(
+            resolved_event, dialogue_log, {}, _VAUNTS_YARD,
+        )
+
+        assert warnings == []
+
+    def test_a_bystander_in_the_same_sentence_is_not_the_one_restrained(self):
+        resolved_event = (
+            "Halder holds Ottoline Sarr at gunpoint. Roon watches from the "
+            "doorway and does not move."
+        )
+
+        warnings = _scan_for_untracked_restraint(
+            resolved_event, [], {}, _VAUNTS_YARD,
+        )
+
+        assert len(warnings) == 1
+        assert "Ottoline Sarr" in warnings[0]
