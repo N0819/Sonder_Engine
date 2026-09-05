@@ -1893,6 +1893,21 @@ _SENSATION_FORMS = {
                             "steady pressure, weight and shared warmth"),
 }
 
+# WARMTH IS SHARED BETWEEN TWO BODIES; A THING HAS A TEMPERATURE OF ITS OWN.
+# The settled form above says "shared warmth" of whatever the contact is
+# against, and against a survey staff, a wall and an iron-hooped mallet it
+# claimed an exchange that only two living surfaces can have (the Salt
+# Terraces run, 2026-09-05, on fourteen of twenty beats). The moving form
+# claims nothing a thing cannot do, so it is unchanged; the settled one drops
+# the claim rather than replacing it with a temperature the record never
+# stated. Chosen the same way every floor here is: the scene must vouch
+# AFFIRMATIVELY for a body, and silence takes the form that asserts less.
+_SENSATION_FORMS_THING = {
+    ("moving", "either"): ("against it",
+                           "shifting pressure, movement and friction"),
+    ("settled", "either"): ("against it", "steady pressure and weight"),
+}
+
 
 def contact_manner_kind(manner) -> str:
     """`interior`, `moving`, or `settled` for one contact manner.

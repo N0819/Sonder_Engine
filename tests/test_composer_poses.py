@@ -681,3 +681,43 @@ class TestYourOwnBodyIsAlreadyInYourCard:
         again = render_view(parts, mode="character",
                             prev_standing=first.standing_keys)
         assert first.standing_keys == again.standing_keys
+
+
+def test_a_thing_the_director_gave_a_posture_is_still_a_thing():
+    """A POSE IS NOT EVIDENCE OF A BODY.
+
+    `scene.poses` is keyed by whatever the Director gave a posture to, and a
+    Director legitimately gives one to a thing -- a staff planted upright, a
+    canteen slung, a notebook pocketed. `_names_a_body` read that ledger as
+    proof of a person, so the composed view of a story whose whole cast was
+    one woman alone in a dead town told her she was leaning on "someone" on
+    fourteen of twenty beats (the Salt Terraces run, 2026-09-05). The
+    control case was inside the same view: the one possession that never
+    received a posture rendered correctly by its own name.
+
+    The scene is asked to vouch for a THING first, affirmatively, exactly as
+    `contact_sensation`'s docstring tells a caller holding an identity floor
+    to; silence leaves the person-shaped default standing.
+    """
+    scene = _scene(
+        {"Kai": {"posture": "leaning", "relative_to": "desk_main",
+                 "relation": "against"},
+         # The thing itself has a posture, which is what used to make it a body.
+         "desk_main": {"posture": "upright"}},
+        entities=_FURNISHED)
+    text, _ = _render(scene)
+    assert "someone" not in text
+    assert text == "Kai is leaning against the Oak Desk."
+
+
+def test_a_posed_body_the_scene_will_not_call_a_thing_is_still_a_body():
+    """The complement, and the reason the poses signal stays. A registered
+    mind routinely has no entity record at all, so nothing vouches for it as
+    a thing -- and its pose keeps it on the body side of the floor, where
+    the disclosure rule drops it rather than naming it."""
+    scene = _scene({"Kai": {"posture": "leaning", "relative_to": "Mara",
+                            "relation": "against"}})
+    scene["poses"]["Mara"] = {"posture": "standing"}
+    text, _ = _render(scene)
+    assert "Mara" not in text and "someone" not in text
+    assert text == "Kai is leaning."

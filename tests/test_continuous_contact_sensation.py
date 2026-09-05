@@ -732,3 +732,31 @@ def test_container_seal_and_moving_subpart_coexist_as_two_percepts():
     assert any("Rhea's mouth" in s for s in felt), felt
     assert any("Rhea's tongue" in s for s in felt), felt
     assert len(felt) == 2, felt
+
+
+def test_a_thing_bears_weight_and_does_not_share_warmth():
+    """Warmth is SHARED between two bodies; a thing has a temperature of its
+    own. The settled form claimed the exchange against a survey staff, a
+    wall and an iron-hooped mallet through a whole run with a cast of one
+    (the Salt Terraces, 2026-09-05). It drops the claim rather than
+    replacing it with a temperature the record never stated.
+
+    Affirmative in the same direction as every floor here: the scene must
+    vouch for a BODY, and silence takes the form that asserts less.
+    """
+    scene = {
+        "positions": {"Mireille": "rim", "survey_staff": "rim"},
+        "entities": {"survey_staff": {"name": "survey staff",
+                                      "kind": "equipment"}},
+    }
+    against_thing = {"actor": "Mireille", "actor_part": "hand",
+                     "target": "survey_staff", "manner": "grip",
+                     "relation": "surface", "motion": "settled"}
+    felt = contact_sensation(against_thing, you="Mireille", scene=scene)
+    assert "shared warmth" not in felt
+    assert "steady pressure and weight" in felt
+
+    scene["positions"]["Halla"] = "rim"
+    against_body = dict(against_thing, target="Halla", target_part="shoulder")
+    felt = contact_sensation(against_body, you="Mireille", scene=scene)
+    assert "steady pressure, weight and shared warmth" in felt
