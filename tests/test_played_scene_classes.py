@@ -2474,3 +2474,372 @@ def test_the_episodes_first_person_pass_inherits_the_same_boundary():
         "He moves toward Mrs. Penrose with practiced, gentle courtesy.",
         forms))
     assert out == "He moves toward me with practiced, gentle courtesy."
+
+# PB4: a body is presented once per view -- as ground in a crowd or as a
+# figure, and the two presentations are one subtraction computed once
+# (`PLAY_2026_09_05_caravanserai.md` § PB4)
+# ---------------------------------------------------------------------------
+
+def _qesh_chat(db):
+    return db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+                 ("Qesh", "", time.time()))
+
+
+def _qesh_registry(db, cid, count, room="courtyard"):
+    """One institution with ``count`` unposted bodies standing in ``room``."""
+    from world.charter_runtime import save_registry
+    save_registry(cid, {"qesh_house": {
+        "key": "qesh_house", "priority": [], "clock_hours": 0.0,
+        "upkeeps": {"water": {"place": room}},
+        "posts": {"water_carrier": {"place": room, "serves": ["water"],
+                                    "requires": {}}},
+        "bodies": {
+            "wc%d" % n: {"key": "wc%d" % n, "name": "Ilka Toum %d" % n,
+                         "place": room, "berth": room, "available": True,
+                         "home_post": "water_carrier", "competence": {}}
+            for n in range(count)},
+        "watch": {},
+    }})
+
+
+def _qesh_scene(room="courtyard"):
+    return {"rooms": {room: {"name": "Courtyard", "adjacent": []}},
+            "positions": {}, "entities": {}}
+
+
+def _presented_names(cid, sc, room):
+    """(the crowd rows, the figure names) one view is composed from, read
+    through ONE stage's shared inputs, exactly as perception reads them."""
+    from agents.common import (charter_crowds_for_room, chatter_inputs,
+                               presence_figures_for_room)
+    inputs = chatter_inputs(cid, sc, turn_idx=4)
+    crowds = charter_crowds_for_room(cid, sc, room, inputs)
+    figures = presence_figures_for_room(cid, sc, room, inputs, turn_idx=4)
+    return crowds, [str(row["name"]) for row in figures]
+
+
+def test_a_view_with_a_band_line_does_not_also_name_the_bodies_it_covers(
+        temp_db):
+    """Caravanserai turn 3: the composed view carried the band line "a
+    handful serving hands and wardens" AND eleven individual figure labels
+    of the same institution's people. The crowd is the carried set and the
+    figures are its complement, so a name cannot be in both."""
+    cid = _qesh_chat(temp_db)
+    _qesh_registry(temp_db, cid, 7)
+    crowds, figures = _presented_names(cid, _qesh_scene(), "courtyard")
+    assert len(crowds) == 1, "seven bodies at one place are a crowd"
+    assert figures == [], (
+        "the band covers these bodies and the view named them too: %r"
+        % figures)
+
+
+def test_a_record_that_lost_its_charter_link_is_still_ground(temp_db):
+    """The two readers agreed by REF, and a record whose `charter_refs` were
+    never written has none -- so the same person arrived as figure and as
+    ground for want of a link nobody stored. The display name is the other
+    identity a view has, and it answers the same question."""
+    cid = _qesh_chat(temp_db)
+    _qesh_registry(temp_db, cid, 7)
+    temp_db.wset(cid, "background_presences", {"p1": {
+        "name": "Ilka Toum 3", "uid": "p1", "nature": "person",
+        "dialogue_turns": [4], "mention_turns": [], "addressed_turns": [],
+        "charter_refs": [],
+        "sketch": {"station_room": "courtyard", "role_hint": "water carrier"},
+    }})
+    crowds, figures = _presented_names(cid, _qesh_scene(), "courtyard")
+    assert crowds and "Ilka Toum 3" not in figures
+
+
+def test_every_body_in_the_room_reaches_the_view_as_one_or_the_other(temp_db):
+    """Caravanserai turn 12, the other direction: seven bodies in the
+    courtyard reached the player as a band and as nobody. Below the crowd
+    floor every body is a figure; at or above it every body is ground; the
+    union is the institution's people standing there either way."""
+    from world.charter_crowd import CHARTER_CROWD_FLOOR
+    for count in (CHARTER_CROWD_FLOOR - 1, CHARTER_CROWD_FLOOR + 2):
+        cid = _qesh_chat(temp_db)
+        _qesh_registry(temp_db, cid, count)
+        crowds, figures = _presented_names(cid, _qesh_scene(), "courtyard")
+        carried = count if crowds else 0
+        assert carried + len(figures) == count, (
+            "%d bodies stand there and %d reached the view"
+            % (count, carried + len(figures)))
+        assert bool(crowds) != bool(figures)
+
+
+def test_a_scene_with_no_charter_composes_exactly_as_it_did(temp_db):
+    """The freeze: a story with no institution pays nothing, reads the same,
+    and the scene it was handed is not written to."""
+    cid = _qesh_chat(temp_db)
+    sc = _qesh_scene()
+    before = json.dumps(sc, sort_keys=True)
+    crowds, figures = _presented_names(cid, sc, "courtyard")
+    assert crowds == [] and figures == []
+    assert json.dumps(sc, sort_keys=True) == before
+
+
+# ---------------------------------------------------------------------------
+# PE3: a line is heard from where the speaker stood when they said it
+# (`PLAY_2026_09_05_flat.md` § PE3)
+# ---------------------------------------------------------------------------
+
+def _pe3_flat_scene():
+    return {"rooms": {
+        "living_room": {"name": "Living room", "adjacent": [
+            {"to": "balcony", "barrier": "closed_door", "dir": "e"}]},
+        "balcony": {"name": "Balcony", "adjacent": [
+            {"to": "living_room", "barrier": "closed_door", "dir": "w"}]},
+    }, "positions": {"Sami Haddad": "living_room"}, "entities": {}}
+
+
+def test_a_line_after_a_declared_arrival_is_graded_at_the_destination():
+    """Flat turn 20: a woman came in from the balcony, put a hand flat on a
+    man's shoulder, and the line she said with her hand on him reached both
+    cast views as a muffled voice through a shut glass door."""
+    sc = _pe3_flat_scene()
+    interp = {"movement": {"to_room": "living_room", "mover": "self",
+                           "arrives": True}}
+    arrival = perception._declared_arrival_room(sc, interp, "balcony")
+    assert arrival == "living_room"
+    event = {"type": "speech", "text": "You can have the sofa.",
+             "targets": ["Sami Haddad"]}
+    assert perception._speech_room_for(
+        sc, event, arrival, "balcony") == "living_room"
+
+
+def test_a_line_before_a_declared_departure_is_graded_where_it_was_said():
+    """The opposite case, kept right: the beat ends on the balcony and the
+    line was said to somebody in the room left behind."""
+    sc = _pe3_flat_scene()
+    interp = {"movement": {"to_room": "balcony", "mover": "self",
+                           "arrives": True}}
+    arrival = perception._declared_arrival_room(sc, interp, "living_room")
+    assert arrival == "balcony"
+    event = {"type": "speech", "text": "Goodnight.",
+             "targets": ["Sami Haddad"]}
+    assert perception._speech_room_for(
+        sc, event, arrival, "living_room") == "living_room"
+
+
+def test_a_beat_that_declares_no_arrival_grades_every_line_where_it_stood():
+    """The floor: a move of a vehicle rather than a body, a declaration that
+    only sets off, a destination the scene does not hold, and a move to the
+    room the beat already found them in all leave the grading where it was."""
+    sc = _pe3_flat_scene()
+    for movement in (None,
+                     {"to_room": "living_room", "mover": "the_van"},
+                     {"to_room": "living_room", "arrives": False},
+                     {"to_room": "a_room_nobody_built"},
+                     {"to_room": "balcony"}):
+        assert perception._declared_arrival_room(
+            sc, {"movement": movement}, "balcony") == ""
+    event = {"type": "speech", "text": "Hello.", "targets": ["Sami Haddad"]}
+    assert perception._speech_room_for(sc, event, "", "balcony") == "balcony"
+
+
+def test_an_unaddressed_line_keeps_the_room_the_beat_found_the_speaker_in():
+    """Widening a channel is the direction a mistake here would leak in, so
+    only a line the beat aims at somebody standing in the destination is
+    graded there. The residual is registered (`docs/UNBUILT.md` § 1.122)."""
+    sc = _pe3_flat_scene()
+    interp = {"movement": {"to_room": "living_room", "mover": "self"}}
+    arrival = perception._declared_arrival_room(sc, interp, "balcony")
+    for event in ({"type": "speech", "text": "Finally."},
+                  {"type": "speech", "text": "Hi.", "targets": ["nobody"]}):
+        assert perception._speech_room_for(
+            sc, event, arrival, "balcony") == "balcony"
+
+
+# ---------------------------------------------------------------------------
+# PD8: an answer that was produced and heard belongs in the view and in the
+# log that records who spoke; and a body is enrolled by an institution that
+# exists, never by founding one to hold it
+# (`PLAY_2026_09_05_road.md` § PD8, second half)
+# ---------------------------------------------------------------------------
+
+def _road_ctx(temp_db, *, presence_room):
+    """A camp clearing, a cast witness standing in it, and a background
+    presence who answers a direct question from ``presence_room``."""
+    from story.character_schema import (default_character_data,
+                                        default_persona_data)
+
+    persona_id = temp_db.qi(
+        "INSERT INTO personas(name,sheet,source) VALUES(?,?,?)",
+        ("Sable", json.dumps(default_persona_data("Sable")), "{}"))
+    cid = temp_db.qi(
+        "INSERT INTO chats(name,scenario,created,persona_id) VALUES(?,?,?,?)",
+        ("Road", "", time.time(), persona_id))
+    char_id = temp_db.qi(
+        "INSERT INTO characters(name,sheet,source,created,resource_uid) "
+        "VALUES(?,?,?,?,?)",
+        ("Corin Ashe", json.dumps(default_character_data("Corin Ashe")),
+         "{}", time.time(), "char_c"))
+    temp_db.qi(
+        "INSERT INTO chat_chars(chat_id,char_id,status,state) VALUES(?,?,?,?)",
+        (cid, char_id, "active", "{}"))
+    temp_db.wset(cid, "scene", {
+        "location": "the clearing", "time": "evening",
+        "rooms": {"clearing": {"name": "Clearing", "desc": "A clearing.",
+                               "adjacent": []},
+                  "coppice": {"name": "Coppice", "desc": "Cut wood.",
+                              "adjacent": []}},
+        "positions": {"Sable": "clearing", "Corin Ashe": "clearing",
+                      "Hob Tarry": presence_room},
+        "entities": {}, "attire": {}, "overlays": {},
+    })
+    temp_db.wset(cid, "known", {"Corin Ashe": ["Sable", "Hob Tarry"]})
+    cast = temp_db.q(
+        "SELECT ch.*,cc.state AS cstate,cc.status FROM chat_chars cc "
+        "JOIN characters ch ON ch.id=cc.char_id WHERE cc.chat_id=?", (cid,))
+    turn_id = temp_db.qi(
+        "INSERT INTO turns(chat_id,idx,player_input,created) VALUES(?,?,?,?)",
+        (cid, 1, "", time.time()))
+    ctx = PipelineContext(
+        chat=ChatData(id=cid, name="Road", persona_id=persona_id,
+                      lorebook_id=None, scenario="", created=time.time()),
+        turn=TurnData(id=turn_id, chat_id=cid, idx=1, player_input="",
+                      created=time.time()),
+        cast=cast, input="")
+    ctx["_player_room"] = "clearing"
+    ctx.director_interpret = {
+        "action": None, "sequence": [], "speech": None,
+        "speech_volume": "normal", "flow": {"reactors": [char_id]}}
+    ctx.director_resolve = {
+        "resolved_event": "The clamp smokes.", "state_diff": {},
+        "dialogue_log": [], "dialogue_order": []}
+    ctx["background_react"] = {
+        "fired": True, "name": "Hob Tarry",
+        "reactions": [{
+            "name": "Hob Tarry", "room": presence_room, "action": "",
+            "dialogue_log_entry": {
+                "speaker": "Hob Tarry", "volume": "normal",
+                "exact_quote": "Two days yet, if the wind holds steady."}}]}
+    return ctx, char_id
+
+
+def test_a_produced_background_answer_reaches_the_view_and_the_log(temp_db):
+    """Road turn 15: the burner answered a direct question and the line
+    reached no view and no dialogue log."""
+    from persist.commit import _background_fired_reactions
+    ctx, char_id = _road_ctx(temp_db, presence_room="clearing")
+    out = perception.perception_outcome(ctx, nonce="n")
+    view = out["views"][str(char_id)] or ""
+    assert "Two days yet" in view, view
+    assert not [w for w in ctx.warnings if "reached no view" in w]
+    logged = [r["dialogue_log_entry"]["exact_quote"]
+              for r in _background_fired_reactions(ctx.get("background_react"))]
+    assert logged == ["Two days yet, if the wind holds steady."]
+
+
+def test_an_answer_no_channel_carried_is_said_out_loud(temp_db):
+    """"The NPC answered and nobody heard" is indistinguishable, in every
+    record afterwards, from "the NPC said nothing" unless the beat says
+    which it was. The run gave no warning at all."""
+    ctx, _char_id = _road_ctx(temp_db, presence_room="coppice")
+    perception.perception_outcome(ctx, nonce="n")
+    assert [w for w in ctx.warnings
+            if "Hob Tarry" in w and "reached no view" in w], ctx.warnings
+
+
+def test_a_body_is_not_enrolled_by_founding_an_institution_for_it(temp_db):
+    """Road turn 15, the other half: a charcoal burner at a woodland camp
+    was written into a freshly founded `households` charter, which then
+    refused his own greeting as `outside_licence`."""
+    from world.charter_enrol import enrol_person
+    from world.charter_runtime import registry_for
+    cid = _qesh_chat(temp_db)
+    rec = enrol_person(cid, {"kind": "person", "surface": {
+        "name": "Hob Tarry", "room": "charcoal_camp_clearing"}})
+    assert rec["ref"] is None and not rec["charter"]
+    assert registry_for(cid)["items"] == {}
+
+
+# ---------------------------------------------------------------------------
+# PB14: a published plan's edge survives the beats after it is published
+# (`PLAY_2026_09_05_caravanserai.md` § PB14, the F13 family)
+# ---------------------------------------------------------------------------
+
+def _road_plan(cid):
+    """Three planned rooms in a line: the gate, the road, the shrine."""
+    plant_structure(cid, {"key": "qesh_road", "name": "Qesh road"}, {
+        "qesh_gate": {"name": "Gate", "adjacent": [
+            {"to": "desert_road_east", "barrier": "open"}]},
+        "desert_road_east": {"name": "Desert road", "adjacent": [
+            {"to": "qesh_gate", "barrier": "open"},
+            {"to": "milestone_shrine", "barrier": "open"}]},
+        "milestone_shrine": {"name": "Milestone shrine", "adjacent": [
+            {"to": "desert_road_east", "barrier": "open"}]},
+    })
+
+
+def test_a_published_plans_edge_survives_the_beats_after_it_is_published(
+        temp_db):
+    """Caravanserai turns 6-14: every commit warned "dropped exit(s) from
+    `desert_road_east` to undefined room(s) `milestone_shrine`", because the
+    fringe supplied the plan's whole adjacency and the dangling-exit guard
+    took away the way on to a room nobody had walked toward yet."""
+    from world.structure import materialize_planned_fringe
+    cid = _qesh_chat(temp_db)
+    _road_plan(cid)
+    scene = {"rooms": {"qesh_gate": {"name": "Gate", "adjacent": []}},
+             "positions": {"Tamsin Vell": "qesh_gate"}, "entities": {}}
+    for _beat in range(3):
+        scene, _added = materialize_planned_fringe(cid, scene)
+        assert "desert_road_east" in scene["rooms"]
+        assert prune_dangling_exits(scene) == [], (
+            "the plan's own edge was dropped and warned about again")
+
+
+def test_the_planned_edge_comes_back_the_beat_its_target_is_minted(temp_db):
+    """Nothing is lost: the plan keeps the edge, and it returns as soon as
+    the scene holds the room on the other side of it."""
+    from world.structure import materialize_planned_fringe
+    cid = _qesh_chat(temp_db)
+    _road_plan(cid)
+    scene = {"rooms": {"qesh_gate": {"name": "Gate", "adjacent": []}},
+             "positions": {"Tamsin Vell": "qesh_gate"}, "entities": {}}
+    scene, _ = materialize_planned_fringe(cid, scene)
+    scene["positions"]["Tamsin Vell"] = "desert_road_east"
+    scene, _ = materialize_planned_fringe(cid, scene)
+    assert "milestone_shrine" in scene["rooms"]
+    assert prune_dangling_exits(scene) == []
+    assert {e["to"] for e in scene["rooms"]["desert_road_east"]["adjacent"]} \
+        == {"qesh_gate", "milestone_shrine"}
+    assert protect_planned_edges(cid, scene) == []
+
+
+def test_a_scene_with_no_plan_is_returned_exactly_as_it_was(temp_db):
+    """The freeze."""
+    from world.structure import materialize_planned_fringe
+    cid = _qesh_chat(temp_db)
+    scene = {"rooms": {"gate": {"name": "Gate", "adjacent": []}},
+             "positions": {"Tamsin Vell": "gate"}, "entities": {}}
+    before = json.dumps(scene, sort_keys=True)
+    scene, added = materialize_planned_fringe(cid, scene)
+    assert added == 0 and json.dumps(scene, sort_keys=True) == before
+
+
+# ---------------------------------------------------------------------------
+# PA15: a diagnostic that cannot be traced to its cause is a diagnostic
+# nobody can act on (`PLAY_2026_09_05_lighthouse.md` § PA15)
+# ---------------------------------------------------------------------------
+
+def test_a_tripwires_excerpt_carries_enough_text_to_find_the_sentence():
+    """Lighthouse turn 9: the self-narration tripwire fired on live data,
+    repaired the view correctly, and printed `'Marrick...'` -- a fragment
+    the sentence splitter had cut down to nothing findable, in a view of a
+    thousand characters."""
+    view = ("You are standing in the lantern room. The light turns above "
+            "you, unevenly. Marrick. He does not look up from the brass "
+            "housing, and the rain goes on against the glass.")
+    excerpt = perception._excerpt_in(view, "Marrick.")
+    assert "Marrick." in excerpt
+    assert len(excerpt) >= 40 + len("Marrick.")
+    assert excerpt.strip(".") in view
+
+
+def test_an_excerpt_the_text_no_longer_holds_is_still_reported():
+    """A repair may rewrite what it reports, and a bounded excerpt of the
+    fragment beats no excerpt at all."""
+    assert perception._excerpt_in("a repaired view", "gone") == "gone"
+    assert perception._excerpt_in("anything", "") == ""

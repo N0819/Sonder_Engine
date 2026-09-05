@@ -640,14 +640,29 @@ class TestEveryBackgroundPersonIsACharterBody:
     named person joined. It is gone (Harrowmere replay 2026-09-03: seven
     mints, six of them shadows of a post-holder beside them, none with a
     home or a seat). A person with no plan behind them now files a planning
-    need and is ENROLLED in a real institution (`world/charter_enrol.py`);
-    a story with no town gets a households charter minted for it.
+    need and is ENROLLED in a real institution (`world/charter_enrol.py`) --
+    and where no institution stands, in NOTHING: the fill does not found a
+    town to hold one body (road run, 2026-09-05).
     """
+
+    @staticmethod
+    def _households(db, cid):
+        """A households charter the story already has -- two houses under
+        the berth ceiling, which is what makes it the institution whose work
+        is keeping its own berths."""
+        from world.charter_runtime import save_registry
+        save_registry(cid, {"households": {
+            "key": "households", "priority": [], "clock_hours": 10.0,
+            "upkeeps": {"keep_house_a": {"place": "house_a"},
+                        "keep_house_b": {"place": "house_b"}},
+            "posts": {}, "bodies": {}, "watch": {},
+        }})
 
     def test_a_named_person_is_given_a_body_in_a_real_institution(self, temp_db):
         from world.charter_enrol import HOUSEHOLDS_CHARTER, enrol_person
         from world.charter_runtime import registry_for
         cid = _make_chat(temp_db)
+        self._households(temp_db, cid)
 
         rec = enrol_person(cid, {"kind": "person", "surface": {
             "name": "Dock Hand", "room": "quay"}})
@@ -658,25 +673,27 @@ class TestEveryBackgroundPersonIsACharterBody:
         assert body["name"] == "Dock Hand" and body["place"] == "quay"
         assert "ambient" not in registry_for(cid)["items"]
 
-    def test_a_households_charter_minted_for_a_story_owes_a_dwelling(self, temp_db):
-        """The minimal households charter is an institution with nothing to
-        stand yet -- no posts, no upkeeps -- and the enrolment says a
-        dwelling is owed, which is a room-need for the room to answer."""
-        from world.charter_enrol import HOUSEHOLDS_CHARTER, enrol_person
+    def test_a_story_with_no_institution_founds_none_to_hold_a_body(
+            self, temp_db):
+        """The fill declines rather than inventing an employer. Measured on
+        the road, 2026-09-05: a charcoal burner at a woodland camp was
+        enrolled into a households charter founded for him, which then
+        refused his own greeting as `outside_licence`."""
+        from world.charter_enrol import enrol_person
         from world.charter_runtime import registry_for
         cid = _make_chat(temp_db)
 
         rec = enrol_person(cid, {"kind": "person", "surface": {
             "name": "Dock Hand", "room": "quay"}})
 
-        state = registry_for(cid)["items"][HOUSEHOLDS_CHARTER]["state"]
-        assert not state["posts"] and not state["upkeeps"]
-        assert rec["room_need"] is True
+        assert rec["ref"] is None and not rec["charter"]
+        assert registry_for(cid)["items"] == {}
 
     def test_the_same_person_is_not_minted_twice(self, temp_db):
         from world.charter_enrol import HOUSEHOLDS_CHARTER, enrol_person
         from world.charter_runtime import registry_for
         cid = _make_chat(temp_db)
+        self._households(temp_db, cid)
 
         first = enrol_person(cid, {"kind": "person", "surface": {
             "name": "Dock Hand", "room": "quay"}})

@@ -1769,7 +1769,90 @@ def chatter_inputs(cid, sc, turn_idx=None):
     return {"charters": charters, "memo": {}}
 
 
-def charter_crowds_for_room(cid, sc, room_id, inputs=None):
+def charter_ground_for_room(cid, sc, room_id, inputs=None, *, turn_idx=None):
+    """WHO IS GROUND IN THIS ROOM, asked once and answered once.
+
+    ``{"crowds": [row, ...], "carried": {(charter key, body key), ...},
+    "names": {display name casefolded, ...}}``, memoized per room on the
+    stage's shared ``inputs``.
+
+    DESIGN_BACKGROUND_PRESENTATION B2 states ONE subtraction: a charter body
+    is ground -- carried by the derived crowd -- exactly when nothing this
+    beat presents it individually. Both presentations are cut from that one
+    answer, so the crowd is `carried` and the figures are `present -
+    carried` by construction. They used to be two reads of the same slices
+    (`charter_crowds_for_room` called `members_of` inside `crowd_for`, and
+    `presence_figures_for_room` called it again over its own `inputs`), and
+    two reads drift: measured live 2026-09-05 in one caravanserai run, in
+    both directions -- turn 3's common room carried the band line "a handful
+    serving hands and wardens" AND eleven individual figure labels, and turn
+    12's courtyard delivered its seven bodies as a band and as nobody.
+    **A body is presented once per view.** The answer is per (room, stage),
+    so two observers looking at different rooms may legitimately differ;
+    inside one view it cannot.
+
+    `carried` ignores `CO_LOCATED_CAP` deliberately, as the figure loop
+    always did: the cap decides how many crowds a room's view has space to
+    DESCRIBE, never whether an institution's people are ground.
+
+    ``names`` is the second identity space a view actually has -- the
+    display names the derived records and the ledger rows are keyed by. A
+    presence record whose `charter_refs` were never written names a body the
+    crowd is carrying, and a ref-only test cannot see that; the name test
+    can, so the same person cannot arrive as figure and as ground for want
+    of a link nobody stored.
+    """
+    from world import charter_crowd
+
+    if not room_id:
+        return {"crowds": [], "carried": set(), "names": set()}
+    inputs = (inputs if isinstance(inputs, dict)
+              else chatter_inputs(cid, sc, turn_idx=turn_idx))
+    memo = inputs.setdefault("ground_memo", {})
+    room = str(room_id)
+    if room in memo:
+        return memo[room]
+    rows, carried, names = [], set(), set()
+    for charter in inputs.get("charters") or []:
+        key = str(charter.get("key") or "")
+        members = charter_crowd.members_of(charter, room)
+        crowd = charter_crowd.crowd_for(cid, charter, room, members)
+        if crowd is None:
+            continue
+        rows.append(crowd)
+        carried.update((key, member) for member in members)
+        names.update(_charter_body_display_names(charter, members))
+    ground = {"crowds": rows[:charter_crowd.CO_LOCATED_CAP],
+              "carried": carried, "names": names}
+    memo[room] = ground
+    return ground
+
+
+def _charter_body_display_names(charter, members):
+    """The display names one charter's bodies are known by -- the same
+    `charter_identity.display_name` every derived presence record and every
+    figure row is keyed under, so the two spellings cannot differ."""
+    from world.charter_identity import display_name
+
+    roles = {}
+    for post, holder in (charter.get("watch") or {}).items():
+        roles.setdefault(str(holder), []).append(str(post))
+    bodies = charter.get("bodies") or {}
+    out = set()
+    for key in members:
+        body = bodies.get(key)
+        if not isinstance(body, dict):
+            continue
+        for spelling in (display_name(body, roles.get(str(key)) or (),
+                                      charter.get("naming")),
+                         body.get("name")):
+            text = str(spelling or "").strip().casefold()
+            if text:
+                out.add(text)
+    return out
+
+
+def charter_crowds_for_room(cid, sc, room_id, inputs=None, *, turn_idx=None):
     """The derived charter crowds standing in one room: stored-shape rows,
     computed from the registry and NEVER persisted.
 
@@ -1780,29 +1863,17 @@ def charter_crowds_for_room(cid, sc, room_id, inputs=None):
     drift from where `charter_move.errands` actually walked people -- the
     second-source-of-truth scar `world/crowds.py` is written after.
 
+    The crowd half of `charter_ground_for_room`, which is where the one
+    subtraction lives now; the figures are the same answer's complement.
+
     Shares `chatter_inputs`' once-per-stage registry fetch and adds a
     per-room memo, exactly as `chatter_for_room` does; `persist/commit.py`
     calls this too, to resolve an `emerge` against the same rows perception
     showed, because with nothing stored the only way two readers agree is
     to be the same reader.
     """
-    from world import charter_crowd
-
-    if not room_id:
-        return []
-    inputs = inputs if isinstance(inputs, dict) else chatter_inputs(cid, sc)
-    memo = inputs.setdefault("crowd_memo", {})
-    room = str(room_id)
-    if room in memo:
-        return [dict(row) for row in memo[room]]
-    rows = []
-    for charter in inputs.get("charters") or []:
-        crowd = charter_crowd.crowd_for(cid, charter, room)
-        if crowd is not None:
-            rows.append(crowd)
-    rows = rows[:charter_crowd.CO_LOCATED_CAP]
-    memo[room] = rows
-    return [dict(row) for row in rows]
+    return [dict(row) for row in charter_ground_for_room(
+        cid, sc, room_id, inputs, turn_idx=turn_idx)["crowds"]]
 
 
 def presence_figures_for_room(cid, sc, room_id, inputs=None, *,
@@ -1883,21 +1954,20 @@ def presence_figures_for_room(cid, sc, room_id, inputs=None, *,
         ledger = inputs["presence_ledger"] = (
             wget(cid, "background_presences", {}) or {})
 
-    # Whom the derived crowds carry, by charter body key -- FIRST, because
-    # it decides both loops below. Recomputed from the same slices
-    # `charter_crowds_for_room` projects, so the two answers cannot disagree
-    # about who is ground. A record whose presentation has LAPSED (§C3's
-    # idle beats) puts its body back in the crowd, and that body must not
-    # then arrive here as well: the ledger row still exists, and its history
-    # is exactly what lapsing declines to delete.
-    by_key = {}
-    carried = set()
-    for charter in inputs.get("charters") or []:
-        key = str(charter.get("key") or "")
-        by_key[key] = charter
-        members = charter_crowd.members_of(charter, room)
-        if len(members) >= charter_crowd.CHARTER_CROWD_FLOOR:
-            carried.update((key, member) for member in members)
+    # Whom the derived crowds carry -- FIRST, because it decides both loops
+    # below, and ASKED OF THE ONE READER (`charter_ground_for_room`) rather
+    # than recomputed here. This used to run `members_of` a second time over
+    # its own `inputs`, and a second answer is an answer that can differ:
+    # the crowd and the figures then disagreed about who is ground, in both
+    # directions, in one live run (PB4). A record whose presentation has
+    # LAPSED (§C3's idle beats) puts its body back in the crowd, and that
+    # body must not then arrive here as well: the ledger row still exists,
+    # and its history is exactly what lapsing declines to delete.
+    ground = charter_ground_for_room(cid, sc, room, inputs, turn_idx=turn_idx)
+    carried = ground["carried"]
+    carried_names = ground["names"]
+    by_key = {str(charter.get("key") or ""): charter
+              for charter in inputs.get("charters") or []}
 
     def _refs_of(record):
         return {(str(r.get("charter") or ""), str(r.get("body") or ""))
@@ -1963,7 +2033,12 @@ def presence_figures_for_room(cid, sc, room_id, inputs=None, *,
         if not presence_has_an_identity(sc, name, rec):
             continue
         refs = _refs_of(rec)
-        if refs & carried:
+        # GROUND BY EITHER NAME THE VIEW HAS FOR IT. A ref says this record
+        # is that body; the display name says the same thing, and a record
+        # whose refs were never written has only the second. Without it one
+        # person arrives as figure and as ground in one paragraph for want
+        # of a link nobody stored.
+        if (refs & carried) or name.casefold() in carried_names:
             continue
         seen.add(name.casefold())
         seen_refs |= refs
@@ -1994,7 +2069,9 @@ def presence_figures_for_room(cid, sc, room_id, inputs=None, *,
         derived = {}
     for name, record in sorted(derived.items()):
         refs = _refs_of(record)
-        if str(name).casefold() in seen or (refs & seen_refs) or (refs & carried):
+        if (str(name).casefold() in seen or (refs & seen_refs)
+                or (refs & carried)
+                or str(name).casefold() in carried_names):
             continue
         seen.add(str(name).casefold())
         sketch = (record or {}).get("sketch") or {}

@@ -322,6 +322,9 @@ def materialize_planned_fringe(cid, scene):
                                                     row["room_uid"]), spec)
     added = 0
     targets = set()
+    #: room uid -> the planned edges this pass offers it, applied below once
+    #: every stub of the pass exists.
+    supply = {}
     for uid in occupied:
         spec = (planned.get(uid) or (None, {}))[1]
         planned_edges = [dict(e) for e in spec.get("adjacent") or ()
@@ -351,25 +354,48 @@ def materialize_planned_fringe(cid, scene):
                            if v}})
         targets.update(str(e.get("to")) for e in planned_edges)
         if uid in rooms and planned_edges:
-            # The occupied live definition owns prose/physics it declared;
-            # structure supplies only exits that live mapping has not named.
-            edges = {str(e.get("to")): dict(e)
-                     for e in (rooms[uid].get("adjacent") or ())
-                     if isinstance(e, dict) and e.get("to")}
-            for edge in planned_edges:
-                edges.setdefault(str(edge["to"]), edge)
-            rooms[uid]["adjacent"] = list(edges.values())
+            supply.setdefault(uid, []).extend(planned_edges)
     for uid in sorted(targets):
         if uid in rooms or uid not in planned:
             continue
         name, spec = planned[uid]
         rooms[uid] = {
-            "name": name, "adjacent": [dict(e) for e in spec.get("adjacent") or ()],
+            "name": name, "adjacent": [],
             "planned": True, "purpose": str(spec.get("purpose") or ""),
         }
         if spec.get("structure"):
             rooms[uid]["region"] = normalize_region_id(spec["structure"])
+        supply[uid] = [dict(e) for e in spec.get("adjacent") or ()
+                       if isinstance(e, dict) and e.get("to")]
         added += 1
+    # THE SCENE ONLY EVER HOLDS AN EDGE INTO A ROOM THE SCENE HOLDS, and the
+    # membership test runs after every stub of this pass exists, so two
+    # planned rooms minted together keep the doorway between them.
+    #
+    # The plan keeps the rest. A fringe that materialises only the room next
+    # to the occupied one hands the new stub the plan's whole adjacency,
+    # including the way on to a room nobody has walked toward yet; the
+    # dangling-exit guard then drops that edge and warns, in the same commit,
+    # every beat, for ever ("scene: dropped exit(s) from `desert_road_east`
+    # to undefined room(s) `milestone_shrine`", nine consecutive beats of one
+    # caravanserai run, 2026-09-05). `protect_planned_edges` states the other
+    # half of the same rule and puts the edge back the beat the target is
+    # minted, so nothing is lost -- what stops is a warning about a room the
+    # world does not have yet.
+    for uid, edges_in in supply.items():
+        room = rooms.get(uid)
+        if not isinstance(room, dict):
+            continue
+        # The live definition owns prose/physics it declared; structure
+        # supplies only exits that live mapping has not named.
+        edges = {str(e.get("to")): dict(e)
+                 for e in (room.get("adjacent") or ())
+                 if isinstance(e, dict) and e.get("to")}
+        for edge in edges_in:
+            to = str(edge.get("to") or "")
+            if to and to in rooms:
+                edges.setdefault(to, dict(edge))
+        room["adjacent"] = list(edges.values())
     return scene, added
 
 
