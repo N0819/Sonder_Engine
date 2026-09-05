@@ -1039,8 +1039,31 @@ cursor:pointer;text-decoration:underline;font:inherit}
 .wb-attire{font-size:12px;margin-top:6px}
 .wb-attire table{border-collapse:collapse;margin-top:4px}
 .wb-attire td{padding:2px 8px 2px 0;vertical-align:top}
+/* The editors (2026-09-04): compact controls that sit inline with the text
+   they edit, so a field is edited where it is shown. Chrome only, page
+   tokens only. */
+.wb-fields{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px}
+.wb-field{display:flex;flex-direction:column;gap:2px;font-size:12px}
+.wb-select{font:inherit;font-size:12px;padding:2px 4px;max-width:100%}
+.wb-input{font:inherit;font-size:12px;padding:2px 6px;min-width:0;flex:1 1 120px}
+.wb-textarea{font:inherit;font-size:13px;width:100%;min-height:56px;margin-top:8px;
+resize:vertical;box-sizing:border-box}
+.wb-title{font-size:17px;font-weight:600;flex:1 1 200px}
+.wb-remove{padding:0 6px;line-height:1.4}
+.wb-add{margin-top:6px;padding-top:6px;border-top:1px dashed var(--bd)}
+.wb-check{display:inline-flex;gap:4px;align-items:center;font-size:12px;cursor:pointer}
+.wb-body-head{align-items:baseline;flex-wrap:wrap}
+.wb-thing{border:1px solid var(--bd);border-radius:6px;padding:4px 8px;margin:4px 0}
+.wb-thing .wb-textarea{margin-top:0;min-height:36px;flex:1 1 200px;width:auto}
+.wb-bodies{max-height:70vh;overflow:auto}
+.wb-region{margin-top:8px}
+.wb-region-head{display:flex;gap:8px;align-items:baseline;font-size:11px;text-transform:uppercase;
+letter-spacing:.06em;color:var(--dim);border-bottom:1px solid var(--bd);margin-bottom:4px}
+.wb-region-name{text-transform:none;letter-spacing:0;font-weight:600;color:var(--fg)}
+.wb-garment{display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:2px 0}
 @media (max-width:760px){
   .wb{flex-direction:column}
   .wb-tree{flex:none;max-width:none;width:100%;border-right:none;
   border-bottom:1px solid var(--bd);padding-right:0;max-height:30vh}
+  .wb-fields{flex-direction:column}
 }
