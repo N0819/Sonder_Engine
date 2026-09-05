@@ -31,8 +31,9 @@ room the story knows, each::
   carrying a ``planned`` payload the scene has not reached; ``retired`` a
   registry row with `retired_turn_id` set -- included so a reader knows the
   id is spent, never as a place.
-* ``hops`` counts over `world.spatial.passable_neighbors` (the graph bodies
-  walk, directional where an edge says so) UNION `world.structure
+* ``hops`` counts over the edges a body could cross
+  (`world.spatial._ROUTE_MEMORY_BARRIERS` -- passable, plus a closed door;
+  directional where an edge says so) UNION `world.structure
   .planned_topology` (the plan's edges, undirected: a stub is a room the
   Director furnishes on entry). A room that is the inside of a body is
   joined to the room its HOLDER stands in and to nothing else: one hop out
@@ -212,17 +213,26 @@ def _statuses(scene, registry):
 
 
 def room_graph(cid, scene):
-    """``{room_id: {room_id}}``: the graph `hops` are counted over. Passable
-    edges (directional where an edge says so) UNION the plan's topology
-    (undirected). A contained room is joined to its holder's room in both
-    directions and has no other edge in either direction -- it is where
-    the world put a body, not a way anywhere."""
-    from world.spatial import passable_neighbors
+    """``{room_id: {room_id}}``: the graph `hops` are counted over. The edges
+    a body could cross (`_ROUTE_MEMORY_BARRIERS` -- passable, plus a closed
+    door, which a body simply opens; directional where an edge says so)
+    UNION the plan's topology (undirected). A contained room is joined to its
+    holder's room in both directions and has no other edge in either
+    direction -- it is where the world put a body, not a way anywhere.
+
+    A CLOSED DOOR IS NOT A WALL. This counted over `passable_neighbors`,
+    which means "passable THIS BEAT", so a house whose rooms are joined by
+    shut doors read as a house of unreachable rooms and the Room's map put
+    most of it beyond the frontier (PX15, masque run, 2026-09-05). The
+    question a hop count answers is what the story can REACH.
+    """
+    from world.spatial import _ROUTE_MEMORY_BARRIERS, neighbor_map
     from world.structure import planned_topology
 
     contained = containment(scene)
     graph = {}
-    for k, vs in passable_neighbors(scene).items():
+    for k, vs in neighbor_map(scene, _ROUTE_MEMORY_BARRIERS,
+                              directional=True).items():
         if str(k) in contained:
             continue
         graph.setdefault(str(k), set()).update(

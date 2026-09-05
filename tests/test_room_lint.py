@@ -278,4 +278,9 @@ def test_the_commit_and_the_room_both_surface_the_rows():
     assert "room_layout_lint(sc, prev_scene if _layout_told else None)" in commit_src
     assert '"layout_lint_told"' in commit_src
     tool_src = inspect.getsource(room_tools._t_inspect_contradictions)
-    assert 'out["layout"] = room_layout_lint(scene)' in tool_src
+    # The Room asks for EVERYTHING (`prev_scene=None`); the pair rows are
+    # then collapsed to one row per contradiction, because the lint walks a
+    # pair from each end and the Room read one overlap as two (PS6,
+    # 2026-09-05).
+    assert 'room_layout_lint(scene)' in tool_src
+    assert '_one_row_per_contradiction(' in tool_src

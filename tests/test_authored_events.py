@@ -50,10 +50,16 @@ def test_mint_is_idempotent_on_rerun(temp_db):
 
 
 def test_resolve_fires_when_covered(temp_db):
+    """Both channels: the beat TELLS it and WRITES IT DOWN. Prose alone fired
+    every scheduled event on its due beat in a story that merely talked about
+    the coming thing (PX9, 2026-09-05), so the committed diff has to carry it
+    too."""
     cid = _chat(temp_db)
     mint_authored_events(cid, 15, [{"summary": "the elevator crashes hard", "due_in_turns": 1}])
     fired, requeued, dropped = resolve_authored_events(
-        cid, 16, "With a deafening boom the elevator crashes into the shaft floor.")
+        cid, 16, "With a deafening boom the elevator crashes into the shaft floor.",
+        state_diff={"sensory_events": [
+            {"text": "the elevator crashes hard into the shaft floor"}]})
     assert (fired, requeued, dropped) == (1, 0, 0)
     # fired -> no longer pending/due
     assert due_authored_events(cid, 16) == []

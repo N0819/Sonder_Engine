@@ -126,6 +126,14 @@ private facts or rewrite the card. Give each a lore-appropriate real post;
 their presence counts toward that post's continuous shift crew."""
 
 _PLAN_SYSTEM += """
+The payload may contain naming_register: names this story already uses. It is
+a REGISTER, never a pool -- take no element of any of them (those people
+exist) -- and the naming law you propose must produce names that could be
+spoken in the same breath as those: the same language, the same formality, the
+same shape of given and family name. A resident nobody in this story can
+address without the register breaking is a resident the story cannot use."""
+
+_PLAN_SYSTEM += """
 The payload may include scale, topology, and required_rooms. Treat every
 required_rooms entry as author law: preserve its exact id/name/purpose, include
 it in rooms, and honor its adjacent ids. Fill out the support infrastructure
@@ -247,7 +255,7 @@ def propose_town(lore, brief="", *, constraints=None, model_call=None):
         payload.update({
             key: copy.deepcopy(constraints[key])
             for key in ("scale", "topology", "required_rooms",
-                        "featured_residents", "population")
+                        "featured_residents", "population", "naming_register")
             if constraints.get(key) not in (None, "", [])})
     return (model_call or (lambda p: _json_call(_PLAN_SYSTEM, p)))(payload)
 
@@ -619,6 +627,55 @@ def _spread_berths(rooms, charter_bodies, ceiling=BERTH_CEILING):
 def _words(value):
     import re
     return set(re.findall(r"[a-z0-9]+", str(value or "").casefold()))
+
+
+def normalize_featured_residents(rows):
+    """An author's `featured_residents`, each carrying the handle the closure
+    identifies it by.
+
+    A FEATURED RESIDENT IS IDENTIFIED BY THE NAME THE AUTHOR GAVE. `seed_id`
+    is a stable handle a card-derived seed already has; every other caller --
+    the Charter Planner's own contract among them -- writes `{name, role}`.
+    `_featured_assignments` keys on `seed_id` and drops a row without one, so
+    the two people the Writers' Room named by hand for a waterfront yard were
+    discarded in silence and fourteen bodies out of a standalone name
+    morphology stood in their place (PM12, multitude run, 2026-09-05). A
+    field whose whole purpose is "these people, by name" cannot require a
+    field the author has no way to supply.
+
+    The derived handle is a digest of the folded name, so the same person
+    asked for twice is one person, and a name that later arrives with a real
+    seed is a different (and correctly distinct) row.
+
+    `role` is read as `post` for the same reason: it is the word the request
+    contract uses, and a post the closure cannot see becomes a mechanically
+    chosen one.
+    """
+    out, seen = [], set()
+    for raw in rows or ():
+        if isinstance(raw, str):
+            raw = {"name": raw}
+        if not isinstance(raw, dict):
+            continue
+        row = dict(raw)
+        name = " ".join(str(row.get("name") or "").split())
+        seed_id = str(row.get("seed_id") or "").strip()
+        if not seed_id:
+            if not name:
+                continue
+            seed_id = "authored:" + hashlib.sha1(
+                name.casefold().encode("utf-8")).hexdigest()[:10]
+        if seed_id in seen:
+            continue
+        seen.add(seed_id)
+        row["seed_id"] = seed_id
+        if name:
+            row["name"] = name
+        if not str(row.get("post") or "").strip() \
+                and str(row.get("role") or "").strip():
+            row["post"] = " ".join(str(row["role"]).split())
+        out.append(row)
+    return out
 
 
 def _featured_assignments(plan, residents):
@@ -993,17 +1050,16 @@ def close_plan(plan, *, history=None, featured_residents=None,
             }
 
 
-def ensure_required_rooms(town, required):
-    """Close explicit author-required anchors into the planned skeleton.
+def _required_specs(required):
+    """``[(uid, raw)]`` for an author's `required_rooms`, ids normalized.
 
-    The model gets first refusal so it can integrate them naturally. Any it
-    omitted become prose-free planned rooms, connected only by the topology
-    the author supplied (or to the first standing anchor as a safe fallback).
+    ONE PLACE THE ID IS DERIVED. `ensure_required_rooms` closes these into the
+    plan and `charter_runtime` PINS them through the namespace remap; the two
+    have to agree about which id an entry names, or a required room is minted
+    under one spelling and bound under another (PM10).
     """
     from world.spatial import normalize_room_id
 
-    town = town if isinstance(town, dict) else {}
-    rooms = town.setdefault("rooms", {})
     specs = []
     for index, raw in enumerate(required or ()):
         raw = {"name": raw} if isinstance(raw, str) else raw
@@ -1014,6 +1070,30 @@ def ensure_required_rooms(town, required):
         if not uid:
             continue
         specs.append((uid, raw))
+    return specs
+
+
+def required_room_ids(required):
+    """The room ids an author's `required_rooms` names, in order."""
+    return [uid for uid, _raw in _required_specs(required)]
+
+
+def ensure_required_rooms(town, required):
+    """Close explicit author-required anchors into the planned skeleton.
+
+    The model gets first refusal so it can integrate them naturally. Any it
+    omitted become prose-free planned rooms, connected only by the topology
+    the author supplied (or to the first standing anchor as a safe fallback).
+
+    `connect_to` is read as `adjacent`. It is the spelling the charter
+    planner's own contract asks for, and reading only `adjacent` dropped
+    every edge an author actually wrote: the Room asked for four rooms each
+    with a `connect_to`, and all four landed hanging off the first standing
+    anchor instead (PM10, multitude run turn 8, 2026-09-05).
+    """
+    town = town if isinstance(town, dict) else {}
+    rooms = town.setdefault("rooms", {})
+    specs = _required_specs(required)
     added = []
     fallback = next(iter(rooms), "")
     required_ids = {uid for uid, _raw in specs}
@@ -1026,14 +1106,26 @@ def ensure_required_rooms(town, required):
         room["frontier"] = _strings(
             raw.get("frontier") if "frontier" in raw
             else room.get("frontier"))
-        authored_edges = _strings(raw.get("adjacent"))
+        from world.spatial import normalize_room_id
+        authored_edges = _strings(raw.get("adjacent")) or _strings(
+            raw.get("connect_to"))
+        # An author names a room the way they say it; the plan holds ids. A
+        # target is read as the id it spells so "Wharf Apron" reaches
+        # `wharf_apron`, and a spelling that reaches nothing the plan holds is
+        # left alone rather than rewritten -- it may name a live room, which
+        # `structure_warnings(known=...)` is what judges.
         edges = [dict(edge) for edge in room.get("adjacent") or ()
                  if isinstance(edge, dict) and edge.get("to")]
         if authored_edges:
+            resolved = []
+            for target in authored_edges:
+                folded = normalize_room_id(target)
+                if target in rooms or target in required_ids:
+                    resolved.append(target)
+                elif folded and (folded in rooms or folded in required_ids):
+                    resolved.append(folded)
             edges = [{"to": target, "barrier": str(
-                raw.get("barrier") or "open_door")}
-                     for target in authored_edges
-                     if target in rooms or target in required_ids]
+                raw.get("barrier") or "open_door")} for target in resolved]
         elif not edges and fallback and fallback != uid:
             edges = [{"to": fallback, "barrier": "open_door"}]
         room["adjacent"] = edges
@@ -1233,7 +1325,8 @@ __all__ = [
     "HISTORIAN_TURNING_POINTS", "historian_budget",
     "close_plan", "ensure_required_rooms",
     "event_chronicle", "ground_history_output",
-    "narrate_actual_history", "propose_history", "propose_town",
+    "narrate_actual_history", "normalize_featured_residents",
+    "propose_history", "propose_town", "required_room_ids",
     "resident_service_chronicle",
 ]
 

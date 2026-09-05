@@ -164,27 +164,32 @@ class TestReadTools:
         plant_structure(cid, {"key": "chapel", "name": "Chapel"}, {
             "chapel_nave": {"name": "Nave", "adjacent": [{"to": "loft", "barrier": "open"}]}})
         rooms = run_tool(cid, "inspect_rooms")
-        # The index is the map; the slices are the neighbourhood. The loft
-        # is behind a locked door, which is not walked, so it and the chapel
-        # planned beyond it are unreachable (hops None, listed last) and
-        # index-only -- exactly what `inspect_route` says of the same door.
-        # Grouped by region: the port's rooms (no region) hold the cast, so
-        # they come first, the loft last among them; the chapel is its own
-        # region, planned and unreached, so it comes after.
+        # The index is the map; the slices are the neighbourhood. A LOCKED
+        # DOOR IS A DOOR: the loft is two hops out and the chapel planted
+        # beyond it three, because the question a hop count answers is what
+        # the story can REACH and a body opens a door (PX15, masque run,
+        # 2026-09-05 -- three of six live rooms of a house were called
+        # unreachable, one closed door away). Grouped by region: the port's
+        # rooms (no region) hold the cast, so they come first; the chapel is
+        # its own region and farther out, so it comes after.
         assert [(r["id"], r["status"], r["hops"]) for r in rooms["index"]] == [
             ("quay", "live", 0), ("warehouse", "live", 1),
-            ("loft", "live", None), ("chapel_nave", "planned", None)]
+            ("loft", "live", 2), ("chapel_nave", "planned", 3)]
         assert [r["region"] for r in rooms["index"]] == [None, None, None, "chapel"]
-        assert {r["id"] for r in rooms["rooms"]} == {"quay", "warehouse"}
+        assert {r["id"] for r in rooms["rooms"]} == {"quay", "warehouse", "loft"}
         quay = next(r for r in rooms["rooms"] if r["id"] == "quay")
         assert [o["name"] for o in quay["occupants"]] == [PLAYER]
         opened = run_tool(cid, "inspect_rooms", {"room_ids": ["chapel_nave"]})
         assert [(r["id"], r["status"]) for r in opened["rooms"]] == [("chapel_nave", "planned")]
         route = run_tool(cid, "inspect_route", {"from_room": "quay", "to_room": "warehouse"})
         assert route["path"] == ["quay", "warehouse"] and route["hops"] == 1
-        # A locked door is not walked; the plan's edge is.
-        blocked = run_tool(cid, "inspect_route", {"from_room": "quay", "to_room": "loft"})
-        assert blocked["hops"] is None and "warehouse" in blocked["reachable"]
+        # A closed door is a hop, not a wall: `normalize_barrier` folds
+        # `locked_door` onto `closed_door`, and locked is a state of a door
+        # rather than a kind of wall (`_ROUTE_MEMORY_BARRIERS`). The plan's
+        # edge is walked too.
+        through = run_tool(cid, "inspect_route",
+                           {"from_room": "quay", "to_room": "loft"})
+        assert through["path"] == ["quay", "warehouse", "loft"]
         planned = run_tool(cid, "inspect_route", {"from_room": "loft", "to_room": "chapel_nave"})
         assert planned["hops"] == 1
         with pytest.raises(ToolError, match="exists nowhere"):

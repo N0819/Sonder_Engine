@@ -75,6 +75,11 @@ LANDED = ("published", "active", "resolved")
 
 SPOILER_POLICIES = ("open", "sealed")
 
+#: The one member of a truth's `known_by` that is not a name: the player's own
+#: character. A package is always ABOUT that mind and the Room does not always
+#: hold a spelling for it, so the audience vocabulary carries it as a word.
+TRUTH_AUDIENCE_PLAYER = "player"
+
 #: Caps. A package is read on every publish and its projection on every
 #: panel refresh; each is a ceiling on one JSON blob in the world row.
 #: Packages kept per frame that are not retired; past it `new_package`
@@ -835,6 +840,37 @@ def _apply_plan_rooms(cid, frame_id, op, turn_idx):
 
 # -- plan_entity --------------------------------------------------------------
 
+def _plan_sources(op):
+    """The source fields a planned thing may carry, each fail-open.
+
+    A THING THAT GIVES LIGHT OR SOUND IS A CLASS, and the engine already owns
+    the closed tables that say which class (`world/spatial.py`'s
+    `LIGHT_LEVELS`, `LIGHT_SHAPES`, `LIGHT_HEIGHTS`, `STEADINESS`,
+    `SOUND_LEVELS`) -- the same five the World Browser's entity PATCH
+    validates through. `plan_entity` accepted none of them, so the Room asked
+    to make an oven audible two floors down answered that the simulation had
+    no acoustic engine, then corrected itself exactly right: the gap was in
+    the authoring schema, not the world. It wrote the roar into the entity's
+    `truths` prose, where no field reads it (PR12, rush run, 2026-09-05).
+
+    Fail-open, as `_plan_geometry` is: a value the world cannot read is
+    absent rather than fatal, and `preview` is where a host sees it did not
+    survive.
+    """
+    from world.spatial import (LIGHT_HEIGHTS, LIGHT_LEVELS, LIGHT_SHAPES,
+                               SOUND_LEVELS, STEADINESS)
+    out = {}
+    for field, allowed in (("light_source", LIGHT_LEVELS),
+                           ("light_shape", LIGHT_SHAPES),
+                           ("light_height", LIGHT_HEIGHTS),
+                           ("steadiness", STEADINESS),
+                           ("sound_source", SOUND_LEVELS)):
+        value = _text(op.get(field), 40).casefold()
+        if value and value in allowed:
+            out[field] = value
+    return out
+
+
 def _shape_plan_entity(op):
     if not _text(op.get("name"), 120):
         raise ValueError("plan_entity names the entity")
@@ -849,6 +885,7 @@ def _shape_plan_entity(op):
                   "where": _text(brief.get("where"), 120)},
         "surface": dict(op["surface"]) if isinstance(op.get("surface"), dict) else {},
         "look": _text(op.get("look"), 600),
+        "sources": _plan_sources(op),
         "answers_need": _text(op.get("answers_need"), 60),
     }
 
@@ -873,9 +910,14 @@ def _preview_plan_entity(cid, frame_id, op, world):
     if op["answers_need"] and op["answers_need"] not in world["needs"]:
         errors.append("plan_entity answers need %r, which is not open"
                       % op["answers_need"])
-    return {"changes": [{"kind": "plan_updated" if held else "plan_filed",
-                         "uid": uid, "name": op["name"], "where": where}],
-            "errors": errors, "warnings": warnings}
+    change = {"kind": "plan_updated" if held else "plan_filed",
+              "uid": uid, "name": op["name"], "where": where}
+    if op.get("sources"):
+        # Shown back for the same reason a plan's geometry is: a source field
+        # the world could not read is absent by now, so a host who asked for a
+        # roar and sees no `sound_source` knows it did not survive.
+        change["sources"] = dict(op["sources"])
+    return {"changes": [change], "errors": errors, "warnings": warnings}
 
 
 def _apply_plan_entity(cid, frame_id, op, turn_idx):
@@ -885,7 +927,8 @@ def _apply_plan_entity(cid, frame_id, op, turn_idx):
     plan = add_planned_entity(cid, {
         "kind": op["kind"], "name": op["name"], "aliases": op["aliases"],
         "role": op["role"], "brief": op["brief"], "surface": op["surface"],
-        "look": op["look"], "source": "writers_room"},
+        "look": op["look"], "sources": op.get("sources") or {},
+        "source": "writers_room"},
         frame_id=frame_id, turn_idx=turn_idx)
     out = {"uid": plan["uid"]}
     if op["answers_need"]:
@@ -1159,17 +1202,41 @@ def _preview_request_location(cid, frame_id, op, world):
 
 
 def _prepare_request_location(cid, frame_id, op):
+    """Report what the generation ACTUALLY did.
+
+    `generate_lived_location` returns the town's NAME under `town`, the room
+    COUNT under `rooms` and the charter keys as a list under `charters`. This
+    read `result["town"]` as a dict, so the isinstance test failed on a
+    string, every field fell back to empty and a generation that planted
+    eleven rooms and fourteen bodies reported `{"summary": "Vaunt's Yard
+    Waterfront", "rooms": [], "charters": []}` with no warning (PM10,
+    multitude run turn 8, 2026-09-05). A report is the only thing a host has:
+    it says what landed, what it BOUND to rooms the story already had, and
+    every warning the generation raised.
+    """
     from world.charter_runtime import generate_lived_location
     result = generate_lived_location(cid, op["request"], frame_id=frame_id)
     result = result if isinstance(result, dict) else {}
-    town = result.get("town") if isinstance(result.get("town"), dict) else {}
-    rooms = town.get("rooms") if isinstance(town.get("rooms"), dict) else {}
-    return {"summary": _text(town.get("name") or op["request"].get("name")
-                             or "generated", 400),
-            "rooms": sorted(str(r) for r in rooms)[:LIST_CAP],
-            "charters": sorted(str(c) for c in (town.get("charters") or {}))[:LIST_CAP]
-            if isinstance(town.get("charters"), dict) else [],
-            "at": time.time()}
+    out = {"summary": _text(result.get("town") or op["request"].get("name")
+                            or "generated", 400),
+           "structure": _text((result.get("structure") or {}).get("key")
+                              if isinstance(result.get("structure"), dict)
+                              else "", 120),
+           "rooms": int(result.get("rooms") or 0),
+           "bound_rooms": [_text(r, 120) for r in
+                           (result.get("bound_rooms") or ())][:LIST_CAP],
+           "charters": [_text(c, 120) for c in
+                        (result.get("charters") or ())][:LIST_CAP],
+           "at": time.time()}
+    warnings = [_text(w, 400) for w in (result.get("warnings") or ())
+                if _text(w, 400)][:LIST_CAP]
+    if warnings:
+        out["warnings"] = warnings
+    if result.get("ok") is False:
+        out["refused"] = _text((result.get("presim") or {}).get("reason")
+                               if isinstance(result.get("presim"), dict)
+                               else "", 200) or "generation did not land"
+    return out
 
 
 # -- presimulate (LONG: deterministic but seconds; runs in prepare) ----------
@@ -1329,7 +1396,19 @@ def _shape_arrival(op):
 
 
 def _preview_arrival(cid, frame_id, op, world):
-    errors, changes = [], []
+    errors, changes, warnings = [], [], []
+    # AN ARRIVAL NOBODY IS THERE TO MEET IS AN ARRIVAL THAT ELAPSES. The
+    # caller from Clough's Steading arrived on the far side of a closed front
+    # door in a room neither character entered; the knock stood in the
+    # engine's event record for three turns, reached no narrator prose, and
+    # went stale (PQ13, quiet run, 2026-09-05). Nothing here is wrong -- a
+    # planned arrival in an empty room may be exactly the point -- so it is
+    # said as a warning, at the moment a host can still put somebody there.
+    if op["room"] not in (world.get("occupied") or ()):
+        warnings.append(
+            "arrival at %r, which no body occupies: an arrival is met by "
+            "being perceived, so unless somebody comes to it within the "
+            "window it will go unenacted and be marked stale" % op["room"])
     if not _room_known(world, op["room"]):
         errors.append("arrival at %r, which exists nowhere" % op["room"])
     if op["room"] in (world.get("containment") or {}):
@@ -1349,7 +1428,7 @@ def _preview_arrival(cid, frame_id, op, world):
                 errors.append("arrival: " + refused)
         changes.append({"kind": "arrival", "who": op["who"], "room": op["room"],
                         "as": found[0]})
-    return {"changes": changes, "errors": errors, "warnings": []}
+    return {"changes": changes, "errors": errors, "warnings": warnings}
 
 
 def _apply_arrival(cid, frame_id, op, turn_idx, *, by):
@@ -1895,6 +1974,18 @@ CLOCK_ONLY_KINDS = ("scheduled_consequence",)
 #: live (chat 111, 2026-09-03): four drafts in a row were refused because the
 #: model spelled the kind `kind` and the fields as it imagined them, and the
 #: refusal named neither.
+#: The engine's own source vocabularies, restated to the model exactly as
+#: they are (`world/spatial.py` is the authority; `_plan_sources` validates
+#: against the same tables). Imported here rather than copied, so a table the
+#: engine widens is a table the Room is told about.
+from world.spatial import (  # noqa: E402  (module table, needs the values)
+    LIGHT_HEIGHTS as _LIGHT_HEIGHTS,
+    LIGHT_LEVELS as _LIGHT_LEVELS,
+    LIGHT_SHAPES as _LIGHT_SHAPES,
+    SOUND_LEVELS as _SOUND_LEVELS,
+    STEADINESS as _STEADINESS,
+)
+
 OPERATION_FIELDS = {
     "plan_rooms": {
         "structure": "{key, name} -- the structure the rooms belong to",
@@ -1904,7 +1995,18 @@ OPERATION_FIELDS = {
         "name": "the entity's name", "kind": "person | thing | creature",
         "role?": "what they are for, in a word or two", "aliases?": "[names]",
         "brief": "{purpose, truths, where: <room_id>}",
-        "look?": "how they read at a glance", "answers_need?": "a planning-need uid"},
+        "look?": "how they read at a glance",
+        "light_source?": "how much light this thing PUTS OUT (%s) -- a thing "
+                         "that gives light says so in this field; prose about "
+                         "a glow lights nothing" % " | ".join(_LIGHT_LEVELS),
+        "light_shape?": "how that light is thrown (%s)" % " | ".join(_LIGHT_SHAPES),
+        "light_height?": "where the light sits (%s -- a ceiling light is "
+                         "`full` and casts no shadow)" % " | ".join(_LIGHT_HEIGHTS),
+        "steadiness?": "whether it can be relied on (%s)" % " | ".join(_STEADINESS),
+        "sound_source?": "how loud this thing IS, continuously (%s) -- the "
+                         "same rule: a roar written into truths is heard by "
+                         "nobody" % " | ".join(_SOUND_LEVELS),
+        "answers_need?": "a planning-need uid"},
     "post_artifact": {"room": "<room_id>", "description": "what the bill is, briefly",
                       "text?": "what it says", "report?": "{...}"},
     "schedule_event": {"summary": "what happens", "due_in_turns": "1..EVENT_DUE_CAP"},
@@ -2085,6 +2187,43 @@ def _package_checks(pkg, world):
                 if tid not in truth_ids:
                     errors.append("evidence %s bears on %r, which is no truth "
                                   "of this package" % (ev["id"], tid))
+    # WHOSE KNOWLEDGE IS THIS? A truth is a fact about the WORLD; `known_by`
+    # names the minds it is already inside. Everyone else -- the player
+    # included -- must reach it through a channel, which is what the evidence
+    # rows are for.
+    #
+    # There was no way to say it at all. The Room answered "what was
+    # Halvane's business with this family" with the whole compact, correctly
+    # and helpfully, and nothing in the reply, the claims or the package said
+    # which of it the player's own character may act on; in a story built on
+    # asymmetric knowledge a co-author that cannot mark whose knowledge a
+    # fact is will hand the player everything (PX23, masque run, 2026-09-05).
+    #
+    # A name here is checked the way a participant is: it names somebody the
+    # world holds, or it names nobody. `player` is a member of the vocabulary
+    # rather than a name, because the player's character is the one mind the
+    # package is always ABOUT and is not always in the roster under a name
+    # the Room knows.
+    for truth in pkg["truths"]:
+        audience = truth.get("known_by")
+        if audience in (None, ""):
+            continue
+        if not isinstance(audience, list):
+            errors.append("truth %s: known_by is the list of minds this fact "
+                          "is already inside" % truth["id"])
+            continue
+        for who in audience:
+            name = str(who or "").strip()
+            if not name:
+                continue
+            if name.casefold() in (TRUTH_AUDIENCE_PLAYER,):
+                continue
+            if name.casefold() not in world["reserved_names"]:
+                errors.append(
+                    "truth %s says %r knows it, and the world holds nobody of "
+                    "that name; known_by names a registered character, a "
+                    "charter body, an authored plan, or %r"
+                    % (truth["id"], name, TRUTH_AUDIENCE_PLAYER))
     truths_with_evidence = set()
     for ev in pkg["evidence"]:
         bears = ev.get("bears_on") or []
@@ -2165,11 +2304,18 @@ def _reach_warning(cid, world, pkg):
     """THE STORY CANNOT REACH THIS FROM WHERE IT STANDS. When a package
     plants or names rooms and NONE of them is within
     `room_frontier.FRONTIER_DEPTH_HOPS` of a room a cast member occupies --
-    hops over passable edges (`spatial.passable_neighbors`) joined with the
-    plan's topology (`structure.planned_topology`) and the package's own
-    planted adjacency, graph distance only, no name matching -- the preview
-    says so, naming the nearest occupied room and the hop count. A warning,
-    never an error: a room planted far away may be the point.
+    hops over the edges a body could cross (`spatial._ROUTE_MEMORY_BARRIERS`)
+    joined with the plan's topology (`structure.planned_topology`) and the
+    package's own planted adjacency, graph distance only, no name matching --
+    the preview says so, naming the nearest occupied room and the hop count.
+    A warning, never an error: a room planted far away may be the point.
+
+    A CLOSED DOOR IS NOT A WALL. This walked `passable_neighbors`, which
+    means "passable THIS BEAT" and excludes `closed_door` -- so a house whose
+    rooms are joined by shut doors read as unreachable, and the Room warned
+    on its own good package about four rooms that were one closed door away
+    (PX15, masque run, 2026-09-05). The question here is what the story can
+    REACH, and the engine already owns the set for that question.
 
     Measured on chat 115 (2026-09-04): the cast stood in
     `room_elevator_interior`, whose one exit is `corridor_sublevel_f`, which
@@ -2178,7 +2324,7 @@ def _reach_warning(cid, world, pkg):
     warned; the `condemned_shelter_lobby` the same package posted a bill in
     stands 4 hops out over the plan's topology and would have been."""
     from story.room_frontier import FRONTIER_DEPTH_HOPS
-    from world.spatial import passable_neighbors
+    from world.spatial import _ROUTE_MEMORY_BARRIERS, neighbor_map
     from world.structure import planned_topology
 
     occupied = {str(r) for r in world.get("occupied") or () if str(r or "")}
@@ -2203,7 +2349,9 @@ def _reach_warning(cid, world, pkg):
                     join(str(rid), str(claims["room"]))
     if not named or not occupied:
         return None
-    for rid, others in passable_neighbors(world.get("scene") or {}).items():
+    for rid, others in neighbor_map(world.get("scene") or {},
+                                    _ROUTE_MEMORY_BARRIERS,
+                                    directional=True).items():
         for other in others:
             join(str(rid), str(other))
     for rid, others in planned_topology(cid).items():

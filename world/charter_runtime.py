@@ -1159,11 +1159,21 @@ def _unique_generated_key(base, taken):
     return f"{base}_{index}"
 
 
-def _remap_generated_town(cid, town, existing_registry):
-    """Give an added location its own stable namespace when ids collide."""
+def _remap_generated_town(cid, town, existing_registry, *, pinned=()):
+    """Give an added location its own stable namespace when ids collide.
+
+    `pinned` is the ids the AUTHOR named (`required_rooms`), and they are
+    exempt: a required room is named by id, so its collision with an existing
+    room is the point of asking for it and not an accident to be routed
+    around. Without the exemption the namespace rule renamed every required
+    room, the whole institution's bodies went into the renamed copies, and the
+    engine's own bridge check recorded "no body can ever surface here" as a
+    note nobody read (PM10, multitude run turn 8, 2026-09-05).
+    """
     from core.db import q, wget_for_frame
     from world.spatial import normalize_room_id
 
+    pinned = {str(uid) for uid in pinned or ()}
     town = copy.deepcopy(town)
     stored_structures = wget_for_frame(cid, "structures", None, {}) or {}
     structure_items = stored_structures.get("items") \
@@ -1175,13 +1185,14 @@ def _remap_generated_town(cid, town, existing_registry):
     existing_rooms = {str(row["room_uid"]) for row in q(
         "SELECT room_uid FROM room_registry WHERE chat_id=? ", (cid,))}
     generated_rooms = {str(uid) for uid in (town.get("rooms") or {})}
+    pinned &= generated_rooms
     needs_namespace = structure_key != old_structure \
-        or bool(existing_rooms.intersection(generated_rooms))
+        or bool((existing_rooms - pinned).intersection(generated_rooms))
     room_map = {uid: uid for uid in generated_rooms}
     if needs_namespace:
-        taken = set(existing_rooms)
-        room_map = {}
-        for uid in sorted(generated_rooms):
+        taken = set(existing_rooms) | pinned
+        room_map = {uid: uid for uid in pinned}
+        for uid in sorted(generated_rooms - pinned):
             stem = normalize_room_id(f"{structure_key} {uid}") \
                 or f"{structure_key}_{len(room_map) + 1}"
             mapped = _unique_generated_key(stem, taken)
@@ -1271,6 +1282,14 @@ def generate_lived_location(cid, request, *, frame_id=None):
     from world.structure import plant_structure, structure_warnings
 
     request = request if isinstance(request, dict) else {}
+    # THE AUTHOR'S PEOPLE, GIVEN THE HANDLE THE CLOSURE IDENTIFIES THEM BY,
+    # once, at the one door every caller comes through -- so the request the
+    # digest fingerprints, the closure reads and `featured_resident_bindings`
+    # reports back are the same list (PM12).
+    if request.get("featured_residents"):
+        from world.charter_generate import normalize_featured_residents
+        request = {**request, "featured_residents":
+                   normalize_featured_residents(request["featured_residents"])}
     chat = q("SELECT * FROM chats WHERE id=?", (cid,), one=True)
     if not chat:
         raise ValueError("story not found")
@@ -1440,13 +1459,26 @@ def _plan_lived_location(cid, request, chat):
             raise ValueError("population must be a number") from exc
     else:
         population = None
+    # THE STORY'S OWN REGISTER, as evidence for the naming law rather than as
+    # material for it. The planner writes a name morphology from the lore
+    # alone, so the fourteen bodies generated to stand beside Ottoline Sarr
+    # and Maren Vaunt were called Wulvenan Pintlewason and Tadferard
+    # Balemaning, and nobody in that story could address one of them without
+    # the register breaking (PM12). The no-fly list (`reservation`, below)
+    # keeps their ELEMENTS out; this says what the result has to sound like.
+    try:
+        from story.naming import registered_identity_names
+        naming_register = sorted(registered_identity_names(cid) or ())[:24]
+    except Exception:
+        naming_register = []
     constraints = {
         key: copy.deepcopy(value)
         for key, value in (("scale", request.get("scale")),
                            ("topology", request.get("topology")),
                            ("required_rooms", request.get("required_rooms")),
                            ("featured_residents", requested_residents),
-                           ("population", population))
+                           ("population", population),
+                           ("naming_register", naming_register))
         if value not in (None, "", [])}
     plan = (propose_town(lore, brief, constraints=constraints)
             if constraints else propose_town(lore, brief))
@@ -1607,9 +1639,35 @@ def _generate_lived_location(cid, request, chat, frame_id, digest, artifact):
                     "owner": _GEN_OWNER, "stage": "planting",
                     "artifact": None})
     existing = registry_for_update(cid, frame_id)
-    town = _remap_generated_town(cid, town, existing)
+    from world.charter_generate import required_room_ids
+    required_ids = required_room_ids(request.get("required_rooms"))
+    town = _remap_generated_town(cid, town, existing, pinned=required_ids)
+    # A REQUIRED ROOM THE WORLD ALREADY HOLDS IS BOUND, NOT PLANTED. The
+    # registry row for a live room is that room's identity; re-planting it
+    # would overwrite its name and payload with a prose-free planned stub. So
+    # the standing ones are lifted out of the plant set and handed to
+    # `structure_warnings` as `known` -- they are nodes of the skeleton's
+    # graph, not holes in it -- and every planted room the author's own
+    # `connect_to` joined to one keeps that edge from its own side, which is
+    # what actually attaches the new institution to the story (PM10).
+    live_rooms = {str(row["room_uid"]) for row in q(
+        "SELECT room_uid FROM room_registry WHERE chat_id=? AND "
+        "retired_turn_id IS NULL", (cid,))}
+    bound_rooms = sorted(set(required_ids) & live_rooms & set(town["rooms"]))
+    to_plant = {uid: room for uid, room in town["rooms"].items()
+                if uid not in bound_rooms}
+    for uid in bound_rooms:
+        for edge in (town["rooms"][uid].get("adjacent") or ()):
+            target = str(edge.get("to") or "")
+            if target not in to_plant:
+                continue
+            back = to_plant[target].setdefault("adjacent", [])
+            if not any(str(e.get("to")) == uid for e in back
+                       if isinstance(e, dict)):
+                back.append({"to": uid,
+                             "barrier": str(edge.get("barrier") or "open_door")})
     structure, rooms = plant_structure(
-        cid, town["structure"], town["rooms"],
+        cid, town["structure"], to_plant,
         owning_book_id=owning_book)
     generated = normalize_registry({"items": {
         key: {"state": state,
@@ -1641,7 +1699,11 @@ def _generate_lived_location(cid, request, chat, frame_id, digest, artifact):
             "active_tail_hours", min(DEFAULT_PRESIM_TAIL_HOURS, horizon))),
         tail_places=tail_places,
         seed=int(request.get("seed") or 0),
-        scene=skeleton_scene(rooms),
+        # The bound rooms belong to the presim's scene too: a body posted to
+        # one lives and walks there, and a scene that omitted it would have
+        # nowhere to put the very people the author asked to be there.
+        scene=skeleton_scene({**{uid: town["rooms"][uid] for uid in bound_rooms},
+                              **rooms}),
         story_day=((hour_of_day(float(_clock_now.get("elapsed_seconds") or 0.0),
                                 _day[0], _day[1]), _day[1])
                    if _day is not None else None))
@@ -1677,8 +1739,10 @@ def _generate_lived_location(cid, request, chat, frame_id, digest, artifact):
     result = {
         "ok": landed.get("reason") is None, "town": town["name"],
         "structure": structure, "rooms": len(rooms),
+        "bound_rooms": bound_rooms,
         "charters": list(presimmed["items"]), "presim": landed,
-        "warnings": structure_warnings(structure, rooms)
+        "warnings": structure_warnings(structure, rooms, known=live_rooms)
+        + _unreachable_institution(presimmed, rooms, bound_rooms, live_rooms)
         + list((town.get("closure") or {}).get("warnings") or ()),
         "closure": copy.deepcopy(town.get("closure") or {}),
         "historian_error": historian_error,
@@ -1695,6 +1759,45 @@ def _generate_lived_location(cid, request, chat, frame_id, digest, artifact):
     clear_lived_location_job(cid)
     result["resumed_plan"] = bool(was_resumed)
     return result
+
+
+def _unreachable_institution(registry, planted, bound, live_rooms):
+    """Say at GENERATION time when a generated institution stands on ground
+    the story cannot share.
+
+    A body surfaces in a scene by standing in a room the scene holds
+    (`background_presence_records` matches a charter PLACE against a scene
+    room id). An institution whose every place is a room this story has
+    neither planted here nor is already standing in is an institution no
+    beat can ever reach -- and the only thing that ever said so was
+    `background_react`'s `charter_bridge` decision, recorded three turns
+    later, surfaced to nobody (PM10, multitude run turn 11, 2026-09-05).
+    This is a FATAL condition for an institution, so it is said where the
+    host is looking: in the generation's own warnings.
+
+    Zero overlap with both sides non-empty is unambiguous, which is why it
+    cannot fire falsely: there is no story in which a populated institution
+    and a story with rooms legitimately share no ground.
+    """
+    ground = set(planted or ()) | set(bound or ()) | set(live_rooms or ())
+    if not ground:
+        return []
+    out = []
+    for key, item in sorted((registry.get("items") or {}).items()):
+        state = item.get("state") or {}
+        places = {str(body.get("place") or "")
+                  for body in (state.get("bodies") or {}).values()
+                  if isinstance(body, dict)}
+        places |= {str(body.get("berth") or "")
+                   for body in (state.get("bodies") or {}).values()
+                   if isinstance(body, dict)}
+        places.discard("")
+        if places and not (places & ground):
+            out.append(
+                "%s: no body of this institution stands in a room the story "
+                "holds (%d place(s), none of them a planted or live room); "
+                "nothing here can ever surface in a beat" % (key, len(places)))
+    return out
 
 
 def skeleton_scene(rooms):

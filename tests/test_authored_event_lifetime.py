@@ -20,8 +20,16 @@ finished thing to the Director. The engine already states this rule for the
 other half of the same table -- a fuse whose cause un-happened is "cancelled
 loudly, never fired" -- and the authored side never got the sibling rule.
 
-Both are subtractive: neither can create an event, extend one, or need a model
-to cooperate.
+SPENT BY THE WORLD. Coverage was measured against the resolved PROSE alone, so
+in a story where the characters spend every beat talking about the coming
+thing, every scheduled event fires on its due beat whether or not it occurs
+(PX9). A scheduled event is spent when the WORLD changes, not when the
+conversation reaches it, so the committed diff has to carry it too -- and an
+event the prose carries and no channel encodes is said out loud rather than
+swallowed (PR2).
+
+All three are subtractive: none can create an event, extend one, or need a
+model to cooperate.
 """
 
 from __future__ import annotations
@@ -32,7 +40,7 @@ import time
 import pytest
 
 from core.db import q
-from story.authored_events import (MAX_REQUEUES, _retired_text,
+from story.authored_events import (MAX_REQUEUES, _changed_text, _retired_text,
                                    due_authored_events, mint_authored_events,
                                    resolve_authored_events)
 
@@ -100,7 +108,9 @@ class TestOneAssertionIsOneRow:
         echo."""
         cid = _chat(temp_db)
         mint_authored_events(cid, 1, [{"summary": "the bell rings"}])
-        resolve_authored_events(cid, 2, "The bell rings out over the yard.")
+        resolve_authored_events(
+            cid, 2, "The bell rings out over the yard.",
+            state_diff={"sensory_events": [{"text": "the bell rings"}]})
         assert mint_authored_events(cid, 9, [{"summary": "the bell rings"}]) == 1
         assert len(due_authored_events(cid, 10)) == 1
 
@@ -151,8 +161,9 @@ class TestAFutureWhoseSubjectEnded:
             state_diff={"remove_entities": ["a stack of ledgers"]}) == (0, 1, 0)
 
     def test_no_diff_is_todays_behaviour_exactly(self, temp_db):
-        """`state_diff` defaults to None so every existing caller keeps what
-        it had -- establish has no diff at all."""
+        """`state_diff` defaults to None so a caller that has no diff -- the
+        establish has none at all -- re-queues rather than raising. With no
+        world record there is nothing to say the beat enacted anything."""
         cid = _chat(temp_db)
         mint_authored_events(cid, 1, [self.ASSERTION])
         assert resolve_authored_events(
@@ -211,3 +222,113 @@ class TestTheWarningSaysWhichEnding:
         source = inspect.getsource(commit)
         assert "retired what they name" in source
         assert "re-queue limit" in source
+
+
+class TestSpentByTheWorldNotTheConversation:
+    """PX9 / PR2, masque run turn 10 and rush run turn 4, 2026-09-05.
+
+    The Writers' Room published "The Governor's Descent" for turn 10. Turn 10
+    was a beat of pure dialogue ABOUT the coming bell, and its prose happened
+    to contain "bell", "governor" and "Torre" -- so the row read
+    `{'status': 'fired', 'due_at': 10.0}` and nothing of the kind had
+    happened. `inspect_events` pending went empty and the Room's only lever on
+    future beats was silently disarmed.
+
+    The rule: a scheduled event is spent when the WORLD changes, not when the
+    conversation reaches it. The inverse case is PR2's: the Director narrated
+    a stair catching fire ten feet away, asserted it in no channel, and the
+    page for that beat was a woman letting go of a doorframe -- the beat is
+    re-queued and the engine says so out loud.
+    """
+
+    ARRIVAL = {"summary": "Governor Corvay descends into the Long Reception "
+                          "Room with his personal retinue"}
+
+    def test_a_beat_that_only_talks_about_it_does_not_fire_it(self, temp_db):
+        cid = _chat(temp_db)
+        mint_authored_events(cid, 7, [self.ARRIVAL])
+        fired, requeued, dropped = resolve_authored_events(
+            cid, 10,
+            "The Governor Corvay will descend into the Long Reception Room "
+            "with his personal retinue when the bell tolls, says Torre.",
+            state_diff={"contacts": [{"actor": "Torre", "relation": "rest"}]})
+        assert (fired, requeued, dropped) == (0, 1, 0)
+        assert _rows(temp_db, cid)[0]["status"] == "pending"
+
+    def test_the_beat_that_enacts_it_fires_it(self, temp_db):
+        cid = _chat(temp_db)
+        mint_authored_events(cid, 7, [self.ARRIVAL])
+        fired, requeued, dropped = resolve_authored_events(
+            cid, 10,
+            "Governor Corvay descends into the Long Reception Room with his "
+            "personal retinue.",
+            state_diff={"positions": {
+                "Governor Corvay": "long_reception_room",
+                "personal retinue": "long_reception_room"}})
+        assert (fired, requeued, dropped) == (1, 0, 0)
+
+    def test_the_world_record_alone_is_not_enough_either(self, temp_db):
+        """Both channels, not one: a diff that happens to name the same
+        subjects for an unrelated reason has not enacted the assertion, and
+        the prose is what says the beat carried it."""
+        cid = _chat(temp_db)
+        mint_authored_events(cid, 7, [self.ARRIVAL])
+        assert resolve_authored_events(
+            cid, 10, "Nothing stirred in the hall.",
+            state_diff={"positions": {
+                "Governor Corvay": "long_reception_room",
+                "personal retinue": "long_reception_room"}}) == (0, 1, 0)
+
+    def test_a_narrated_but_unencoded_event_is_reported(self, temp_db):
+        """PR2: the engine says the fire reached no ledger, rather than
+        counting it as enacted or dropping it in silence."""
+        import core.pipeline_context as pc
+
+        cid = _chat(temp_db)
+        mint_authored_events(cid, 3, [{
+            "summary": "Flames breach the lower flight and ignite the "
+                       "second-floor stair treads"}])
+        said = []
+        token = pc.current_warning_sink.set(said.append)
+        try:
+            resolve_authored_events(
+                cid, 4,
+                "Flames breach the lower flight and ignite the second-floor "
+                "stair treads.",
+                state_diff={"contacts": [{"actor": "Mirela"}]})
+        finally:
+            pc.current_warning_sink.reset(token)
+        assert any("no channel" in line for line in said), said
+
+    def test_a_foreclosed_event_still_goes_stale(self, temp_db):
+        """The retirement rule survives: the prose does not carry it, so it
+        is not enacted, and the diff retires what it names."""
+        cid = _chat(temp_db)
+        mint_authored_events(
+            cid, 1, [{"summary": "the lantern keeps burning on the sill"}])
+        assert resolve_authored_events(
+            cid, 2, "She crossed to the window.",
+            state_diff={"remove_entities": [
+                "the lantern burning on the sill"]}) == (0, 0, 1)
+
+
+class TestWhatCountsAsTheWorldRecord:
+    def test_a_nested_key_is_the_subject_it_names(self):
+        """A diff keys its channels by who changed, so the key is the world
+        saying who -- `positions: {Mara: hall}` is evidence about Mara."""
+        text = _changed_text({"positions": {"Mara": "hall"}})
+        assert "Mara" in text and "hall" in text
+
+    def test_the_channel_name_is_not_evidence(self):
+        """`positions` is the engine's word for a KIND of change, never a
+        word an assertion could be about -- the rule `_retired_text` states
+        about `op`."""
+        assert "positions" not in _changed_text({"positions": {"Mara": "hall"}})
+
+    def test_the_op_verb_is_not_evidence_here_either(self):
+        assert "remove" not in _changed_text(
+            {"attire": [{"op": "remove", "garment": "cloak"}]})
+
+    def test_a_missing_diff_is_not_an_error(self):
+        assert _changed_text(None) == ""
+        assert _changed_text("not a diff") == ""
