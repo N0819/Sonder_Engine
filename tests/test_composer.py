@@ -669,3 +669,103 @@ def test_an_ordinary_refusal_is_recorded_with_its_reason():
     assert out is None
     assert decisions and decisions[0][2] == "refused"
     assert "via spatial" in decisions[0][3]
+
+
+# ---------------------------------------------------------------------------
+# Campaign 3 (2026-09-05C): an authored description is a NOUN PHRASE
+# ---------------------------------------------------------------------------
+
+class TestAuthoredDescriptionsAreSpliced:
+    """Run 2026-09-05C `solitude` (PS9) and `masque` (PX20).
+
+    The Director writes anchor descriptions and edge names as capitalised
+    sentences, and the composer splices them into the middle of its own
+    sentences. Turn 4 shipped "You can see Salt-rimed limestone kerbstones
+    dividing the rectangular crystallisation pans. within arm's reach, The
+    open stone lip of the middle shelf ... across the room."; turn 5 shipped
+    "...at The low cut-limestone arch ... and The massive limestone revetment
+    wall at the far northeast end of the dry basin.." with two full stops;
+    turn 20 shipped "There is broad salt-crusted stone steps."
+    """
+
+    def test_a_sentence_shaped_desc_composes_as_a_phrase(self):
+        rows = [{"desc": "The open stone lip of the middle shelf.",
+                 "tier": "within_reach"},
+                {"desc": "Salt-rimed kerbstones dividing the pans.",
+                 "tier": "across"}]
+        sentence = composer._render_features(rows)
+        assert sentence == (
+            "You can see the open stone lip of the middle shelf within "
+            "arm's reach and Salt-rimed kerbstones dividing the pans "
+            "across the room.")
+        # No stop survives inside the list, and a capital that is not an
+        # article is left alone -- it may be a name and nothing here knows.
+        assert ". " not in sentence[:-1]
+
+    def test_a_bare_noun_takes_the_packs_article(self):
+        """F52's last unfixed line: the light's sources are entity NAMES."""
+        shape = {"groups": [{"level": "dim", "items": ["low arch."]}],
+                 "sources": ["brass hand lamp"], "openings": ["the opening"],
+                 "self": None}
+        assert composer.render_light_shape(shape) == (
+            "The light from the brass hand lamp and the opening thins to "
+            "half-light at the low arch.")
+
+    def test_a_way_out_agrees_in_number_with_a_plural_desc(self):
+        rows = [{"desc": "broad salt-crusted stone steps", "state": "bare"}]
+        assert composer._render_openings(rows) == (
+            "There is a way out through the broad salt-crusted stone steps.")
+
+    def test_two_unnamed_boundaries_are_never_the_same_sentence(self):
+        """PX20: "The doorway is shut. The doorway is shut." -- one room, two
+        unnamed doors, and a boundary sight does not cross may not be
+        described by where it goes."""
+        rows = [{"desc": "the doorway", "state": "blind"},
+                {"desc": "the doorway", "state": "blind"}]
+        rendered = composer._render_openings(rows)
+        assert rendered == ("Nothing shows through the doorway. "
+                            "Nothing shows through the second doorway.")
+
+    def test_the_light_sentence_states_the_light_and_not_a_posture(self):
+        """PS20: "You stand in the light." composed on turn 19 while her pose
+        was `seated`. Where the light falls is not a claim about the body."""
+        shape = {"groups": [], "sources": [], "openings": [], "self": "lit"}
+        assert composer.render_light_shape(shape) == "You are in the light."
+        assert "stand" not in composer.render_light_shape(
+            {"groups": [], "sources": [], "openings": [], "self": "dark"})
+
+
+class TestPresenceEnumeratesEveryone:
+    """Run 2026-09-05C `multitude` turn 1 (PM6): six bodies in the hall, and
+    the player's outcome view named four of them in a closed conjunctive
+    list -- no Tobin Slake, the one person who did nothing that beat. A
+    sentence that enumerates who is present must enumerate everyone
+    present."""
+
+    @staticmethod
+    def _presence(name, tier, at="", key=None):
+        return composer.Percept(
+            kind="presence", channel="sight", source_label=name,
+            data={"tier": tier, **({"at": at} if at else {})},
+            dedupe_key=key or f"presence:{name}")
+
+    def test_a_body_that_stood_still_is_still_in_the_room(self):
+        moved = self._presence("Maren Vaunt", "within_reach")
+        still = self._presence("Tobin Slake", "across", at="the doors")
+        rendered = composer.render_view(
+            [moved, still], mode="player", language="en",
+            prev_standing=frozenset({still.dedupe_key}))
+        assert "Tobin Slake" in rendered.text, rendered.text
+        assert rendered.text == (
+            "Maren Vaunt is within arm's reach and Tobin Slake is still "
+            "at the doors.")
+
+    def test_a_beat_where_nobody_moved_is_still_an_empty_view(self):
+        """The brief clause is added to a view, never the whole of one --
+        `perception`'s outcome floor reads an empty view and asks for the
+        background instead (chat 98 turns 13, 15, 16, 20, 21, 36)."""
+        still = self._presence("Tobin Slake", "across")
+        rendered = composer.render_view(
+            [still], mode="player", language="en",
+            prev_standing=frozenset({still.dedupe_key}))
+        assert rendered.text == ""

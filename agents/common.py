@@ -7534,10 +7534,56 @@ def _collapse_empty_quote_debris(prose):
     out = re.sub(r"\s+([.,!?;])", r"\1", out)
     return out
 
+#: Where one phrase stops and the next begins. A tic is something the
+#: narrator SAYS; a run of words that crosses a stop, a comma or a dash is
+#: two half-phrases welded at a boundary the prose put there on purpose.
+_PHRASE_BREAK = re.compile(r"[^A-Za-z']+")
+_SEGMENT_BREAK = re.compile(r"[.!?;:,()—–\"“”\n]+")
+
+
+def _phrase_segments(text):
+    """`text` split into the runs of words no punctuation interrupts, each as
+    a list of (original-case) words."""
+    return [seg for seg in
+            ([w for w in _PHRASE_BREAK.split(part) if w]
+             for part in _SEGMENT_BREAK.split(str(text or "")))
+            if seg]
+
+
+def _named_tokens(blocks):
+    """The lower-cased words these blocks capitalise where a sentence does not
+    require it -- i.e. the people and places being NAMED.
+
+    A NAME IS NOT A TIC. Measured, run 2026-09-05C `multitude` turn 3 (PM18):
+    `overused_phrases: ["bench ilsabet roon", "corin ashe froze", "out on
+    the"]`, handed to a narrator that had two `Proper noun from view missing
+    in narrator prose` warnings in the same run -- one channel asking it to
+    stop naming the people in the room while another counted the times it
+    did. The rate worsens with cast size, because with six named bodies the
+    frequent runs are increasingly name-adjacent.
+
+    Decided from the prose itself rather than from a cast list, so it holds
+    for a place, a ship or a title the caller never passes: a capital that a
+    segment start does not explain is doing referring work.
+    """
+    named = set()
+    for block in blocks:
+        for segment in _phrase_segments(block):
+            for word in segment[1:]:
+                if word[:1].isupper() and word.lower() != "i":
+                    named.add(word.lower())
+    return named
+
+
 def _phrase_ngrams(text, n):
-    """Lower-cased n-word phrases of `text`, punctuation-stripped."""
-    words = re.findall(r"[a-z']+", str(text or "").lower())
-    return [" ".join(words[i:i + n]) for i in range(len(words) - n + 1)]
+    """Lower-cased n-word phrases of `text`, none of them spanning a
+    punctuation boundary."""
+    out = []
+    for segment in _phrase_segments(text):
+        words = [w.lower() for w in segment]
+        out.extend(" ".join(words[i:i + n])
+                   for i in range(len(words) - n + 1))
+    return out
 
 
 # Content words whose repetition is a genuine tic; function-word runs ("in the
@@ -7553,24 +7599,56 @@ def _overused_phrases(recent_prose, current_prose="", n=3, min_hits=2, cap=12):
     A phrase counts once per prose block it appears in (so a within-block
     repeat isn't inflated), must contain a content word, and must recur in at
     least `min_hits` blocks including the current draft when supplied.
+
+    THE SLOTS HOLD PHRASES, NOT SHINGLES. The window is fixed at `n` words,
+    so the containment filter below could never fire -- no three-word phrase
+    contains another -- and a single recurring sentence filled the list with
+    its own overlapping thirds. Measured, run 2026-09-05C `quiet` turn 20
+    (PQ8): seven of ten slots were overlapping trigrams of one phrase
+    ("there was too", "was too little", "there was too little to make out"),
+    which spends the ban list on one tic and hides every other. Overlapping
+    hits inside one segment are therefore grown back into the whole phrase
+    they came from before the list is filled.
+
+    And a phrase that NAMES somebody is not a tic (`_named_tokens`, PM18).
     """
     blocks = [p for p in list(recent_prose or []) + [current_prose] if p]
     if len(blocks) < min_hits:
         return []
+    named = _named_tokens(blocks)
     counts = {}
     for block in blocks:
         for phrase in set(_phrase_ngrams(block, n)):
             words = phrase.split()
             if all(w in _ling("_TIC_STOPWORDS") for w in words):
                 continue
+            if any(w in named for w in words):
+                continue
             counts[phrase] = counts.get(phrase, 0) + 1
+    hits = {p for p, c in counts.items() if c >= min_hits}
+    if not hits:
+        return []
+    # Grow each run of overlapping hits back into the phrase it is a window
+    # onto. Done per segment, so a grown phrase is one the prose actually
+    # contains and never a weld across a boundary.
+    grown = set()
+    for block in blocks:
+        for segment in _phrase_segments(block):
+            words = [w.lower() for w in segment]
+            start = None
+            for i in range(len(words) - n + 2):
+                window = " ".join(words[i:i + n])
+                if i <= len(words) - n and window in hits:
+                    start = i if start is None else start
+                    continue
+                if start is not None:
+                    grown.add(" ".join(words[start:i + n - 1]))
+                    start = None
     # Prefer the longest/most-specific phrases; drop a phrase fully contained
     # in a longer flagged one so "clock ticks" and "the clock ticks" don't both
     # list.
-    hits = sorted((p for p, c in counts.items() if c >= min_hits),
-                  key=len, reverse=True)
     kept = []
-    for phrase in hits:
+    for phrase in sorted(grown, key=len, reverse=True):
         if not any(phrase in longer for longer in kept):
             kept.append(phrase)
     return kept[:cap]

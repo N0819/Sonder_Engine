@@ -209,10 +209,20 @@ class JapaneseRenderer:
             return (self._light_shape(shape) if kind == "light"
                     else self._sound_shape(shape))
 
-    def _presence(self, p, data, label, prefix):
+    def _presence(self, p, data, label, prefix, brief=False):
         if prefix:
             return self._text(prefix + "presence", label=label)
         tiers = self._value("tier_phrases") or {}
+        if brief:
+            # WHO IS PRESENT IS NOT A DELTA (`composer._render_presence_group`,
+            # PM6). The wording is the pack's; that an unchanged body is still
+            # named at all is the shared information decision.
+            where = str(data.get("at") or "").strip()
+            return self._text(
+                "presence_unchanged", label=label,
+                where=self._text("presence_at_bare", at=where) if where
+                else str(tiers.get(str(data.get("tier")),
+                                   tiers.get("default", ""))))
         tier = str(tiers.get(str(data.get("tier")), tiers.get("default", "")))
         side = data.get("side")
         sides = self._value("side_words") or {}
@@ -374,7 +384,7 @@ class JapaneseRenderer:
                               scent=scent)
         return self._text(prefix + "scent_air", scent=scent)
 
-    def _sentence(self, percept, *, episode=False):
+    def _sentence(self, percept, *, episode=False, brief=False):
         p = percept
         label = self._label(p)
         data = p.data or {}
@@ -384,7 +394,7 @@ class JapaneseRenderer:
         if p.kind == "environment":
             return self._environment(data, prefix)
         if p.kind == "presence":
-            return self._presence(p, data, label, prefix)
+            return self._presence(p, data, label, prefix, brief=brief)
         if p.kind == "appearance":
             description = data.get("description") or ""
             return self._text(prefix + "appearance", label=label,
@@ -503,6 +513,7 @@ class JapaneseRenderer:
             for p in percepts if p.kind == "presence")
 
         beat, background = [], []
+        brief_only = True
         seen = set()
         ordered = sorted(
             enumerate(percepts),
@@ -514,6 +525,7 @@ class JapaneseRenderer:
                 continue
             seen.add(p.dedupe_key)
             verdict = verdicts.get(p.dedupe_key, "first")
+            brief = False
             if player and p.order_key is None and not full_render:
                 if p.kind == "appearance":
                     if (verdict == "unchanged"
@@ -522,11 +534,18 @@ class JapaneseRenderer:
                     if (verdict == "reearn" and not (p.data or {}).get("reearn")
                             and not (p.data or {}).get("force")):
                         continue
-                elif (p.dedupe_key in (prev_standing or ())
-                      and p.kind not in composer.ACTIVE_STANDING_KINDS):
-                    continue
+                elif p.dedupe_key in (prev_standing or ()):
+                    # A body that stands still is still in the room. The
+                    # composer's rule, shared: presence is never suppressed,
+                    # only shortened (PM6).
+                    if p.kind == "presence":
+                        brief = True
+                    elif p.kind not in composer.ACTIVE_STANDING_KINDS:
+                        continue
+            if p.kind == "presence" and not brief:
+                brief_only = False
             source_key = str((p.data or {}).get("source_key") or "")
-            sentence = _full_stop(self._sentence(p))
+            sentence = _full_stop(self._sentence(p, brief=brief))
             if not sentence:
                 continue
             # Character mode keeps the sequence it always had: standing
@@ -550,6 +569,13 @@ class JapaneseRenderer:
         # act that moved it.
         spans = (composer.player_view_order(beat + background) if player
                  else beat + background)
+        # A roll-call is added to a view; it is never the whole of one. The
+        # composer's rule, shared -- an all-unchanged presence view has told
+        # this mind nothing, and the EMPTY view is what the outcome floor
+        # reads before asking for the background instead.
+        if (player and not full_render and spans and brief_only
+                and all(p.kind == "presence" for p, _s in spans)):
+            spans = []
         return RenderedView(
             text="".join(sentence for _, sentence in spans), spans=spans,
             standing_keys=standing_keys, described=described)

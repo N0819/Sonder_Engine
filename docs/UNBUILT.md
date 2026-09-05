@@ -6566,6 +6566,40 @@ only by a label its owner holds. Four residues:
    wharf_slip is not an indexed entity") and no route to it. That channel is
    the Director orchestrator's, not persistence's, and none of it is built.
 
+### 1.133 A declaration of stillness is read as silence, and the walk carries on (PQ6)
+
+**Open.** `agents/director_movement.py::_travel_continues` treats a beat with
+no `movement` channel as SILENCE, and silence CONTINUES a standing approach.
+That rule is right and was earned (chat 72: a beat spent grabbing someone by
+the shoulders was read as abandoning a walk that was plainly still under
+way). What it cannot see is the difference between a beat that says nothing
+about movement and a beat that says the mover did not move.
+
+Measured, run 2026-09-05C `quiet`
+(`docs/experiments/PLAY_2026_09_05C_quiet.md` § PQ6). Turn 10 declared
+`movement: {"to_room": "kitchen", "arrives": false}` and the resolve refused
+it correctly: *"Halla Renn is heading there, not there. No position committed
+this beat."* Turn 11's player prose read **"Halla did not move out of the
+doorway"**, the interpret wrote `movement: null`, and
+`director_resolve.state_diff.positions` put her in the kitchen. The narrator,
+reading the new position, wrote *"Close on her left, Tobin moved"* and, one
+paragraph later, *"the cold off the unlit hearth settled into her skirts"* --
+the hearth being in the room she had just been moved out of. A body in two
+places in three sentences, and the Director silently replacing the player's
+declared conduct, which `AGENTS.md` names as its hard limit.
+
+**The rule.** A stored approach is a standing INTENTION, and an intention the
+player's next declaration contradicts is spent, not queued.
+
+**Why it is still open.** The fix is not a prose match -- `_travel_continues`
+rejects prose inference on purpose, and rightly. It needs the interpret to
+distinguish "this beat declares stillness" from "this beat says nothing about
+movement", and the resolve to hand that to the existing
+`travel_interrupted` channel, which `_travel_continues` already honours. That
+is `agents/director_movement.py` plus the interpret/resolve prompt cards; the
+2026-09-05 fix wave assigned the finding to the composer lane, which owns
+none of them.
+
 ## 2. Roadmap
 
 Features the architecture intends and has not built. Ordered by value per unit
