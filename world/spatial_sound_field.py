@@ -311,14 +311,26 @@ OCCLUDER_LOSS_DB = -db_ratio(OCCLUDER_PASS)
 #: and does not spread.
 #:
 #:   § 6 proposed   enclosed 0.3 | sheltered 0.6 | open 1.0
-#:   set here       enclosed 0.05 | sheltered 0.1 | open 0.2
+#:   set 2026-09-04 enclosed 0.05 | sheltered 0.1 | open 0.2
+#:   set here       enclosed 0.05 | sheltered 0.1 | open 0.1
+#:                  = 27.0 | 30.0 | 30.0 dB
+#:
+#: `open` moved 0.2 -> 0.1 on 2026-09-05, the owner ACCEPTING the
+#: recommendation registered as `docs/UNBUILT.md` § 1.120: outdoors an
+#: ordinary voice was `full` only inside about five paces, and 3.3 in light
+#: rain, so two people walking together on an open road could not converse.
+#: OPEN AIR IS NOT ITSELF A NOISE. What is noisy outdoors is the weather,
+#: which is counted separately below, and 0.2 was four times a quiet room
+#: for no source the world holds. Level with `sheltered` for the same
+#: reason: the difference between a porch and a yard is what the sky can
+#: reach them with, not what the air does on a still day.
 #:
 #: With FULL_SNR 2 the proposal put `full` at 0.6 in a quiet room, where a
 #: normal voice at § 6's power is 0.23 five cells away -- `none`, below even
 #: the floor. Two people at opposite walls of a medium room could not have
 #: heard each other. The floor is set so a quiet enclosed room asks 0.1 for
 #: `full`, which a normal voice clears to ten paces and a whisper to two.
-AMBIENT = {"enclosed": 0.05, "sheltered": 0.1, "open": 0.2}
+AMBIENT = {"enclosed": 0.05, "sheltered": 0.1, "open": 0.1}
 
 #: The same floors in dB -- enclosed 27.0 | sheltered 30.0 | open 33.0.
 #: (`DESIGN_SOUND_DECIBELS.md` § 5 said 14 / 17 / 20: the right 3 dB steps
@@ -332,7 +344,19 @@ AMBIENT_DB = {exposure: db_of_power(power)
 #: through a wall is quieter than rain on you), by the sky's intensity word,
 #: and wind that reaches the room by its wind word. NOT in § 6, which said
 #: only "(+ weather)"; these are the two numbers that sentence needed.
-WEATHER_NOISE = {"light": 0.3, "moderate": 0.6, "heavy": 1.0}
+#:
+#:   set 2026-09-04 light 0.3 | moderate 0.6 | heavy 1.0
+#:   set here       light 0.1 | moderate 0.25 | heavy 0.5
+#:                  = 30.0 | 34.0 | 37.0 dB
+#:
+#: Moved 2026-09-05 with `AMBIENT["open"]`, the same accepted
+#: recommendation (`docs/UNBUILT.md` § 1.120). RAIN YOU CAN TALK THROUGH
+#: UNTIL IT IS HEAVY: light rain is the commonest weather there is, and at
+#: 0.3 it more than doubled an open room's floor by itself and took ordinary
+#: speech to 3.3 paces. `WIND_NOISE` is deliberately NOT moved -- wind you
+#: have to raise your voice over is what wind is, and the run that found
+#: this measured rain.
+WEATHER_NOISE = {"light": 0.1, "moderate": 0.25, "heavy": 0.5}
 WIND_NOISE = {"wind": 0.3, "gale": 1.0}
 
 #: Both as levels. They are ADDED to the exposure floor, and levels do not

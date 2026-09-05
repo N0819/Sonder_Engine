@@ -430,6 +430,51 @@ def test_outdoors_and_weather_raise_the_floor():
     assert levels(storm, "S", "L")["normal"] != "full"
 
 
+def test_a_road_is_a_road_you_can_walk_and_talk_down():
+    """§ 1.120, the owner's decision taken 2026-09-05: `AMBIENT["open"]`
+    0.2 -> 0.1 and `WEATHER_NOISE` 0.3/0.6/1.0 -> 0.1/0.25/0.5.
+
+    OPEN AIR IS NOT ITSELF A NOISE; what is noisy outdoors is the weather,
+    and the weather is counted separately. Before the move an ordinary voice
+    outdoors was `full` only inside about five paces and 3.3 in light rain,
+    so two people walking together on an open road could not converse
+    (`PLAY_2026_09_05_road.md` § PD2). The rule the constants must satisfy,
+    stated by the run that found it: the road takes their voices at the
+    distance you would have to raise your voice in life.
+
+    The test § 1.120 asked to land with: an empty open room, fair weather,
+    two bodies four paces apart, a normal voice."""
+    from world.spatial import AMBIENT, WEATHER_NOISE
+    assert AMBIENT["open"] == 0.1 and AMBIENT["open"] == AMBIENT["sheltered"]
+    assert WEATHER_NOISE == {"light": 0.1, "moderate": 0.25, "heavy": 0.5}
+
+    def road(weather=None):
+        sc = scene({"road": room("large", {"stone": {"desc": "a milestone",
+                                                     "dir": "n",
+                                                     "height": "waist"}},
+                                 exposure="open")},
+                   {"A": "road", "B": "road"},
+                   {"A": {"cell": [1, 4]}, "B": {"cell": [5, 4]}},
+                   weather=weather)
+        return sc
+
+    fair = road()
+    assert levels(fair, "A", "B")["normal"] == "full"
+    # Rain you can talk through until it is heavy: at four paces a normal
+    # voice survives light and moderate rain and is cut down by a downpour.
+    for intensity, expected in (("light", "full"), ("moderate", "full"),
+                                ("heavy", "fragment")):
+        wet = road({"sky": "rain", "precipitation": "rain",
+                    "intensity": intensity, "wind": "calm"})
+        assert levels(wet, "A", "B")["normal"] == expected, intensity
+    # And a still yard is now no noisier than a porch, which is the claim:
+    # the difference between them is what the sky can reach them with.
+    porch = road()
+    porch["rooms"]["road"]["exposure"] = "sheltered"
+    assert spatial_rel_between(porch, "B", "A")["noise"] \
+        == spatial_rel_between(fair, "B", "A")["noise"]
+
+
 def test_a_crowd_is_a_source_at_its_rooms_centre_by_band():
     sc = scene(hall(), {"L": "hall"}, {"L": {"at": "west"}})
     throng = [{"uid": "c1", "room_uid": "hall", "band": "a throng"}]

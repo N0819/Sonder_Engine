@@ -5701,6 +5701,29 @@ is invisible. All three want one answer.
 
 ### 1.120 Outdoors, ordinary speech is `full` only inside about five paces — a constants decision
 
+**TAKEN AND LANDED 2026-09-05.** The owner accepted the recommendation
+below in full: `AMBIENT["open"]` 0.2 → 0.1 (27.0 → 30.0 dB, level with
+`sheltered`) and `WEATHER_NOISE` light/moderate/heavy 0.3/0.6/1.0 →
+0.1/0.25/0.5, and nothing else — `WIND_NOISE` deliberately unmoved, because
+wind you have to raise your voice over is what wind is. Landed with the
+test § 1.120 asked for (`tests/test_sound_field.py::
+test_a_road_is_a_road_you_can_walk_and_talk_down`). Measured after, for a
+normal voice, `full` radius in paces: fair 5.4 → **7.7**, light rain 3.3 →
+**5.4**, moderate 2.5 → **4.0**, heavy 2.0 → **3.0**, heavy + gale 1.3 →
+**1.7**. A road you can walk and talk down, and a downpour you have to raise
+your voice in.
+
+It interacts with the far field built the same day
+(`DESIGN_SOUND_DECIBELS.md`) in one direction only, and less than expected:
+the flood's TERMINATION is bounded by the quietest floor the model has,
+which is `AMBIENT["enclosed"]` and did not move, so a `catastrophic` event
+still reaches exactly 51 medium rooms of open doorways and no further. What
+changed is what an OPEN room can hear of it — audible in 43 → **48** of
+those rooms in fair weather, and 37 → **43** in light rain.
+
+The rest of this entry is the measurement and the argument as they stood
+before the decision, kept because the decision is only legible against them.
+
 **Found 2026-09-05** (`docs/experiments/PLAY_2026_09_05_road.md` § PD2),
 measured again here against the constants as they stand. NOT a bug: the
 ambient floor is applied once, to the LISTENER's cell's room
