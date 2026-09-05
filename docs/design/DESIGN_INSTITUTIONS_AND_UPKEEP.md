@@ -314,6 +314,60 @@ therefore never race for one frame. A landing whose beat is no longer the
 frame's current beat is discarded and re-earned on the next advance, which is
 the same self-healing property the incremental bookkeeping already had.
 
+## 7b. Charter is a TOOL OF THE PLANNER: a read side and a write side
+
+**Built 2026-09-05** (`docs/design/DESIGN_OFFSCREEN_SUPERSEDED.md` § 3a,
+`world/charter_ops.py`, `story/room_tools.inspect_charters`,
+`tests/test_charter_ops.py`). Charter is the physics of off-screen life and
+the Planner is the hand that reaches into it. One subsystem, TWO READERS and
+ONE AUTHOR: the Director reads it for the beat (carriers, figures, crowds) and
+does not steer it; the Writers' Room reads it through `inspect_charters` and
+writes it only through the `charter_ops` package operation.
+
+**The read side must show the institution, and it did not.** Measured in the
+caravanserai run (`docs/experiments/PLAY_2026_09_05_caravanserai.md` § 5):
+`inspect_charters` returned no post, no watch, no station and 24 of 40 bodies,
+so the Room asked to describe the house named the gate warden as its innkeeper,
+named a stable hand as the gate warden, and invented three staff who did not
+exist. **A tool that hides the field the question is about is worse than no
+tool, because it answers confidently.** It now returns five sections -- the
+upkeeps against their floors with what tends them, the posts with their places
+and what they serve, the watch standing now, the bodies with place, station,
+berth, home post, duty and condition, and the roster's beliefs where they
+differ from the bodies -- and every one of them is PAGED rather than
+truncated: a page names the rows it withheld and the exact call that returns
+them. A cap that silently drops half a town is the defect, not the fix.
+
+**The write side moves a fact the institution already keeps.** `charter_ops`
+carries one authored EVENT -- up to twelve ops from a closed set, applied in
+order, all or nothing -- and every op lands through the function this design
+already named: an errand through `send_errand`, an arrival or a departure
+through `charter_runtime.transfer_person` (the one expression of joining,
+leaving, and the hermit employed nowhere), a death through the harm model a
+wolf uses, a post filled or vacated through the watch bill, an upkeep failing
+through the institution's own intervention window, a supply cut through the
+economy's books. Every refusal names its reason, and a field the kind does not
+take is a refusal rather than a dropped key.
+
+**The three things it does not change**, each a test rather than a paragraph:
+
+  * **The Planner directs; Charter computes.** The Planner says the granary
+    burned. Who therefore has nothing to tend, who notices, who is blamed and
+    who never hears is the simulation's answer on the beats after. There is
+    no field anywhere for who reacts.
+  * **The institution keeps its own beliefs** (§ 5, which this is the sharpest
+    case of). A death removes the body and leaves the roster believing in
+    them; only `charter_roster.observe` -- somebody seeing the body -- moves
+    the belief. `inspect_charters`' `roster` section is what makes that
+    legible to an author instead of looking like a bug.
+  * **Nothing here writes a mind.** `plant_claim`, the one surgery that puts
+    something in a head, is deliberately outside the set.
+
+**An authored event is an INPUT, not a rival output.** It must be expressible
+in the vocabulary Charter already owns or it is prose again -- the lesson of
+every fact this repo has written as free text and then found unable to act on.
+That is why the op set is closed and why an unknown field is refused.
+
 ## 8. Fidelity, as a ladder under the existing ceiling
 
 `scene.OFFSCREEN_LIFE_LADDER` remains the only permission ladder and this

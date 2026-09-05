@@ -584,6 +584,19 @@ standing still so visible. (Answered: by story seconds, on every beat. The
 window was never the problem — the trigger was.)
 
 ### PB13. An errand the fiction promised has no channel to the institution
+**HALF RESOLVED 2026-09-05.** The PLANNER now has the channel, as the
+`charter_ops` package operation (`world/charter_ops.py`,
+`charter_runtime.author_charter_ops`, `tests/test_charter_ops.py`): an errand
+routes through `charter_surgery.send_errand` and is refused by name when the
+body is not one the town stands or the destination is a room no plan holds.
+That is the fix for the Room, and it is what `DESIGN_OFFSCREEN_SUPERSEDED.md`
+§ 3a asked for. **The DIRECTOR half is still open** and is registered as
+`docs/UNBUILT.md` § 1.124: the resolve has no `charter_ops` channel, so an
+NPC told to fetch somebody mid-beat still leaves nothing in `state_diff`. The
+shape is unchanged (the `social` specialist, `llm/schemas.py`, fail loud) and
+the landing function it needs now exists and is tested. The original entry
+follows.
+
 **Severity: wrong-but-recoverable (borders on owner decision).** Turns 5 and
 10: the player asked twice that someone fetch the gate warden; the innkeeper
 agreed on the record ("She'll be told when the rush settles", "The girl at the
@@ -755,6 +768,17 @@ withheld twin name; the reply explained all three in the host's own terms.
    and the posts' own `anchor`s — it already loads the registry that has them.
    Its 24-body cap should be a cap on bodies *per post*, so a house of forty is
    summarised rather than truncated alphabetically.
+   *(**Answered 2026-09-05.** The tool returns five sections — `upkeeps`
+   against their floors with the posts serving them and who is tending them,
+   `posts` with place/purpose/serves/requires/reports_to/anchor/holder,
+   `watch` with `unfilled_posts`, `bodies` with place, within-room station
+   from `charter_place.charter_placements`, berth, home post, duty stood,
+   condition and any walk or errand, and `roster` — the institution's beliefs
+   where they differ from the bodies. The cap became a PAGE rather than a cap
+   per post: 24 rows a section when a charter is named, 8 in the
+   all-charters overview, and every page names the rows it withheld and the
+   exact call that returns them. Paging beats a per-post cap because a body
+   holding no post is exactly the one the old read hid.)*
 2. `plan_rooms` needs `extent`/`shape`/`parts` (F47). The Room is the only
    author of rooms beyond the frontier and it is the one author that cannot say
    how big they are.
@@ -765,7 +789,9 @@ withheld twin name; the reply explained all three in the host's own terms.
    so 24 model calls of author-facing work left no payload to read. That is the
    one measurement gap in this run.
 
-> **Answered 2026-09-05**, items 2, 3 and 4. (2) `plan_rooms` takes `extent`,
+> **Answered 2026-09-05**, item 1 and items 2, 3 and 4. (1) `inspect_charters`
+> shows the institution and pages every section; see the note under the item.
+> (2) `plan_rooms` takes `extent`,
 > `shape` and `exposure`, and an edge takes `vertical`; `parts` is
 > deliberately not offered, and `world/structure.py` still drops the
 > room-level three between plan and scene. (3) `story/room_citations.py` is
@@ -776,7 +802,7 @@ withheld twin name; the reply explained all three in the host's own terms.
 > it to bite. (4) the Room's model calls record through
 > `story/room_calls.room_call` and read in `export_turn_debug` as
 > `origin: "room"`, once `agents/story_planner._call` routes through it.
-> Item 1 is untouched.
+> Every item is now answered.
 
 ---
 

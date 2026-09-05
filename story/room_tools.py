@@ -58,9 +58,33 @@ EVENTS_DEFAULT = 6
 EVENT_EXCERPT_CHARS = 240
 #: Route length `inspect_route` will search (hops).
 ROUTE_HOPS_CAP = 64
-#: Bodies listed per charter by `inspect_charters` before the caller must
-#: ask for one charter.
-BODIES_PER_CHARTER = 24
+#: LIMITS THE OWNER SHOULD KNOW ABOUT (`inspect_charters`). The tool shows
+#: an INSTITUTION -- its upkeeps against their floors, its posts, the watch
+#: standing now, its bodies with place/station/home post/condition, and the
+#: roster's beliefs where they differ from the bodies -- and every one of
+#: those sections is PAGED rather than truncated: a page says how many rows
+#: it withheld and the exact call that returns them.
+#:
+#: Measured, and the reason the shape changed (caravanserai, 2026-09-05):
+#: the old tool answered with no post, no watch, no station and 24 of 40
+#: bodies, and the Room asked to describe the house named the gate warden as
+#: its innkeeper and invented three staff. A cap that silently drops half a
+#: town is the defect, not the fix.
+#:
+#: `CHARTER_PAGE` is rows of each section when ONE charter is named;
+#: `CHARTER_OVERVIEW_ROWS` is rows of each section per charter when none is
+#: (a story with six institutions must still fit the 12,000-character result
+#: cap, and `fit_result` cuts by dropping a whole top-level key, which would
+#: lose every charter at once). `CHARTER_PAGE_CAP` is the most a caller may
+#: ask for in one page.
+CHARTER_PAGE = 24
+CHARTER_OVERVIEW_ROWS = 8
+CHARTER_PAGE_CAP = 200
+#: The sections of an institution, each independently pageable.
+CHARTER_SECTIONS = ("upkeeps", "posts", "watch", "bodies", "roster")
+#: The old name, kept because `AGENTS.md` and the play report both cite it as
+#: the cap that hid sixteen bodies. It is `CHARTER_PAGE` now.
+BODIES_PER_CHARTER = CHARTER_PAGE
 #: LIMITS THE OWNER SHOULD KNOW ABOUT (`inspect_minds`). The room reads a
 #: mind as AUTHOR knowledge -- what a character wants and believes, so the
 #: world it places can invite it -- not as the character's own payload, so
@@ -360,32 +384,251 @@ def _t_inspect_plans(cid, frame_id, *, kind=None):
     return {"plans": plans}
 
 
-def _t_inspect_charters(cid, frame_id, *, charter=None, body=None):
+def _charter_upkeep_rows(state):
+    """Every condition the institution owes, against its floor, with the
+    posts that tend it and who is standing them. `out_of_band` is the
+    engine's own predicate, not a comparison restated here."""
+    from world.charter import out_of_band
+    posts = state.get("posts") or {}
+    watch = state.get("watch") or {}
+    bodies = state.get("bodies") or {}
+    rows = []
+    for key in sorted(state.get("upkeeps") or {}):
+        upkeep = (state["upkeeps"] or {})[key]
+        serving = sorted(p for p, post in posts.items()
+                         if key in (post.get("serves") or ()))
+        tending = [str((bodies.get(str(watch[p])) or {}).get("name")
+                       or watch[p]) for p in serving if watch.get(p)]
+        rows.append({
+            "key": key, "place": upkeep.get("place") or "",
+            "level": round(float(upkeep.get("level") or 0.0), 4),
+            "floor": round(float(upkeep.get("floor") or 0.0), 4),
+            "below_floor": bool(out_of_band(upkeep)),
+            "drift_per_hour": upkeep.get("drift_per_hour"),
+            "service_per_hour": upkeep.get("service_per_hour"),
+            "depends_on": list(upkeep.get("depends_on") or ()),
+            "requires": dict(upkeep.get("requires") or {}),
+            "served_by": serving, "tended_by": tending,
+        })
+    return rows
+
+
+def _charter_post_rows(state):
+    """Every duty slot: where it is stood, what it is for, what it serves,
+    which fixture of its room it is stood at, and who holds it now."""
+    watch = state.get("watch") or {}
+    bodies = state.get("bodies") or {}
+    rows = []
+    for key in sorted(state.get("posts") or {}):
+        post = (state["posts"] or {})[key]
+        holder = str(watch.get(key) or "")
+        rows.append({
+            "key": key, "place": post.get("place") or "",
+            "purpose": post.get("purpose") or "",
+            "serves": list(post.get("serves") or ()),
+            "requires": dict(post.get("requires") or {}),
+            "reports_to": post.get("reports_to") or "",
+            "authority": list(post.get("authority") or ()),
+            "anchor": post.get("anchor") or "",
+            "held_by": holder,
+            "held_by_name": str((bodies.get(holder) or {}).get("name") or holder),
+        })
+    return rows
+
+
+def _charter_watch_rows(state):
+    """WHO IS STANDING WHAT, right now, and which posts nobody is."""
+    watch = state.get("watch") or {}
+    posts = state.get("posts") or {}
+    bodies = state.get("bodies") or {}
+    standing = []
+    for post in sorted(posts):
+        body_key = str(watch.get(post) or "")
+        if not body_key:
+            continue
+        held = bodies.get(body_key) or {}
+        standing.append({
+            "post": post, "body": body_key,
+            "name": str(held.get("name") or body_key),
+            "place": (posts.get(post) or {}).get("place") or "",
+            "at": (posts.get(post) or {}).get("anchor") or "",
+            "serves": list((posts.get(post) or {}).get("serves") or ()),
+            "condition": held.get("condition") or "well",
+        })
+    return standing
+
+
+def _charter_body_rows(state, charter_key, placements):
+    """Every body with its place, its within-room station, its home post,
+    the duty it is standing now, and its condition. ``placements`` is
+    `charter_place.charter_placements` keyed by placement uid, so a body the
+    scene can actually lay carries the station it is standing at."""
+    from world.charter import placement_uid
+    watch = state.get("watch") or {}
+    standing = {str(b): p for p, b in watch.items() if b}
+    rows = []
+    for key in sorted(state.get("bodies") or {}):
+        held = (state["bodies"] or {})[key]
+        placed = placements.get(placement_uid(charter_key, key)) or {}
+        row = {
+            "key": key, "name": held.get("name") or key,
+            "place": held.get("place") or "", "berth": held.get("berth") or "",
+            "home_post": held.get("home_post") or "",
+            "standing": standing.get(key, ""),
+            "available": bool(held.get("available")),
+            "condition": held.get("condition") or "well",
+            "competence": dict(held.get("competence") or {}),
+        }
+        station = placed.get("station") or held.get("station")
+        if station:
+            row["station"] = station
+            row["station_from"] = placed.get("source") or "authored"
+        if placed.get("facing"):
+            row["facing"] = placed["facing"]
+        if held.get("departed"):
+            row["departed"] = True
+        if held.get("stood_down"):
+            row["stood_down"] = True
+        if held.get("walk"):
+            row["walking_to"] = (held["walk"] or {}).get("target") or ""
+        if held.get("errand"):
+            row["errand"] = {"to": (held["errand"] or {}).get("to") or "",
+                             "purpose": (held["errand"] or {}).get("purpose") or ""}
+        rows.append(row)
+    return rows
+
+
+def _charter_roster_rows(state):
+    """THE ROSTER'S BELIEFS WHERE THEY DIFFER FROM THE BODIES.
+
+    A roster is what the institution BELIEVES about its people and it is
+    allowed to be wrong: it improves by OBSERVATION and decays otherwise
+    (`world/charter_roster.py`). Reading the difference is an AUTHOR act --
+    the room reads objective truth, and the charter's own planner never sees
+    this -- and it is the field that makes a town which learns of a death
+    when somebody sees the body legible instead of looking like a bug.
+    """
+    from world.charter import stale_claims
+    roster = state.get("roster") or {}
+    bodies = state.get("bodies") or {}
+    rows = []
+    for key, why in sorted(stale_claims(roster, bodies)):
+        record = roster.get(key) or {}
+        held = bodies.get(key) or {}
+        rows.append({
+            "body": key, "name": str(held.get("name") or key),
+            "differs": why,
+            "believes": {
+                "available": bool(record.get("believed_available")),
+                "competence": dict(record.get("competence") or {}),
+                "strength": round(float(record.get("strength") or 0.0), 4),
+                "as_of_hours": record.get("as_of_hours"),
+            },
+            "in_fact": {} if why == "no such body" else {
+                "available": bool(held.get("available")),
+                "competence": dict(held.get("competence") or {}),
+                "condition": held.get("condition") or "well",
+            },
+        })
+    return rows
+
+
+def _page(rows, cursor, limit, *, charter, section):
+    """One page of a section, and -- when rows remain -- how many were
+    withheld and the exact call that returns them. TRUNCATION IS THE DEFECT
+    BEING FIXED: a caller that asks for more gets more."""
+    total = len(rows)
+    cursor = max(0, int(cursor or 0))
+    page = rows[cursor:cursor + limit]
+    if cursor + limit >= total:
+        return page, None
+    return page, {
+        "withheld": total - (cursor + len(page)), "of": total,
+        "next_cursor": cursor + len(page),
+        "ask": "inspect_charters(charter=%r, section=%r, cursor=%d)"
+               % (charter, section, cursor + len(page)),
+    }
+
+
+def _t_inspect_charters(cid, frame_id, *, charter=None, body=None,
+                        section=None, cursor=0, limit=None):
+    """The institution, legibly: its upkeeps against their floors, its posts
+    with their places and what they serve, the watch standing now, every
+    body with place, station, home post and condition, and the roster's
+    BELIEFS where they differ from the bodies.
+
+    MEASURED, AND THE REASON THIS SHAPE EXISTS (caravanserai, 2026-09-05):
+    the old tool returned no post, no watch, no station and 24 of 40 bodies,
+    so the Room asked to describe the house named the gate warden as its
+    innkeeper and invented three staff who did not exist. A tool that hides
+    the field the question is about is worse than no tool, because it
+    answers confidently.
+
+    PAGED, NEVER TRUNCATED. Each section is cut at a page and says how many
+    rows were withheld and the exact call that returns them; ``section``
+    plus ``cursor`` pages one of them. Naming a ``charter`` opens that one
+    institution at the full page and adds its author-only diagnostics; a
+    ``body`` within it adds that body's life.
+    """
+    from world.charter import charter_placements
     from world.charter_runtime import charter_diagnostics, registry_for
     registry = registry_for(cid, frame_id)
     items = registry.get("items") or {}
     if charter and str(charter) not in items:
-        raise ToolError("no charter %r" % charter)
+        raise ToolError("no charter %r; the charters are %s"
+                        % (charter, ", ".join(sorted(items)) or "none"))
+    if section and str(section) not in CHARTER_SECTIONS:
+        raise ToolError("no section %r; the sections are %s"
+                        % (section, ", ".join(CHARTER_SECTIONS)))
+    rows_per_page = _cap(limit, CHARTER_PAGE_CAP,
+                         CHARTER_PAGE if charter else CHARTER_OVERVIEW_ROWS)
+    try:
+        placements = charter_placements(registry, _scene(cid))
+    except Exception:
+        # A scene that cannot be read costs the station column, never the
+        # institution: every other field here is the registry's own.
+        placements = {}
+    wanted = (str(section),) if section else CHARTER_SECTIONS
     summary = {}
     for key, item in sorted(items.items()):
         if charter and key != str(charter):
             continue
         state = item.get("state") or {}
-        bodies = state.get("bodies") or {}
-        listed = sorted(bodies.items())
-        summary[key] = {
-            "name": item.get("name") or key,
-            "posts": sorted((state.get("posts") or {}).keys()),
-            "upkeeps": sorted((state.get("upkeeps") or {}).keys()),
-            "places": sorted({str(b.get("place")) for b in bodies.values()
-                              if b.get("place")}),
-            "body_count": len(bodies),
-            "bodies": [{"key": k, "name": b.get("name"), "place": b.get("place"),
-                        "berth": b.get("berth"), "available": b.get("available")}
-                       for k, b in listed[:BODIES_PER_CHARTER]],
-            "bodies_truncated": max(0, len(listed) - BODIES_PER_CHARTER),
+        build = {
+            "upkeeps": _charter_upkeep_rows, "posts": _charter_post_rows,
+            "watch": _charter_watch_rows,
+            "bodies": lambda s, k=key: _charter_body_rows(s, k, placements),
+            "roster": _charter_roster_rows,
         }
-    out = {"charters": summary}
+        entry = {"key": key, "name": item.get("name") or state.get("key") or key,
+                 "clock_hours": state.get("clock_hours"),
+                 "places": sorted({str(p) for p in (
+                     [b.get("place") for b in (state.get("bodies") or {}).values()]
+                     + [p.get("place") for p in (state.get("posts") or {}).values()]
+                     + [u.get("place") for u in (state.get("upkeeps") or {}).values()]
+                 ) if p}),
+                 "counts": {}, "withheld": {}}
+        for name in CHARTER_SECTIONS:
+            rows = build[name](state)
+            entry["counts"][name] = len(rows)
+            if name not in wanted:
+                continue
+            page, more = _page(rows, cursor if section else 0, rows_per_page,
+                               charter=key, section=name)
+            entry[name] = page
+            if more:
+                entry["withheld"][name] = more
+        unfilled = sorted(p for p in (state.get("posts") or {})
+                          if not (state.get("watch") or {}).get(p))
+        entry["unfilled_posts"] = unfilled
+        entry["counts"]["unfilled_posts"] = len(unfilled)
+        if not entry["withheld"]:
+            entry.pop("withheld")
+        summary[key] = entry
+    out = {"charters": summary, "sections": list(wanted),
+           "rows_per_page": rows_per_page,
+           "paging": "every section is paged, never truncated: `withheld` "
+                     "names the rows held back and the call that returns them"}
     if charter:
         out["diagnostics"] = charter_diagnostics(
             cid, frame_id, charter_key=str(charter), body_key=str(body or ""))
@@ -1032,8 +1275,10 @@ TOOLS = [
      "description": "The authored plans for people, things and creatures: what each is for, what is true of it, where the clock has put it, and whether the Director has rendered it yet.",
      "args": _schema({"kind": _S}), "handler": _t_inspect_plans},
     {"name": "inspect_charters",
-     "description": "The institutions the town simulates: posts, upkeeps, places and bodies. Name a charter for its full author-only diagnostics (beliefs, judgments, commitments, economy, refused interventions), and a body within it for that body's life.",
-     "args": _schema({"charter": _S, "body": _S}), "handler": _t_inspect_charters},
+     "description": "The institutions the town simulates, as institutions: `upkeeps` (each condition it owes, its level against its floor, whether it is below it, what it drifts and what it depends on, the posts that serve it and who is tending it), `posts` (place, purpose, what it serves, what it requires, who it reports to, the fixture it is stood at, and who holds it), `watch` (who is standing what, right now) with `unfilled_posts`, `bodies` (place, within-room station, berth, home post, the duty being stood now, availability, condition, and any walk or errand under way), and `roster` -- what the institution BELIEVES about its people where that differs from the bodies, because a roster improves by observation and decays otherwise, so a town learns of a death when somebody sees the body. Every section is PAGED, never truncated: `withheld` names how many rows were held back and the exact call that returns them; pass section and cursor to page one. Name a charter for that one institution at a fuller page plus its author-only diagnostics (beliefs, judgments, commitments, economy, refused interventions), and a body within it for that body's life.",
+     "args": _schema({"charter": _S, "body": _S, "section": _S, "cursor": _I,
+                      "limit": _I}),
+     "handler": _t_inspect_charters},
     {"name": "inspect_events",
      "description": "The most recent objective beats as the engine recorded them (the last few, each as a short excerpt; pass n for more and full=true for the whole record of each), and every scheduled event still pending (authored events, charter events, couriers) with its due time.",
      "args": _schema({"n": _I, "full": _B}), "handler": _t_inspect_events},

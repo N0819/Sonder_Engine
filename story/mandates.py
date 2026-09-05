@@ -80,6 +80,13 @@ MANDATE_CAPABILITIES = (
     # Local drama (plan § 5 Phase C): circumstances that arrive where the
     # player is, each its own grant because each is its own kind of hand.
     "arrival", "errand", "incident", "summons", "scheduled_consequence",
+    # CHARTER AS THE PLANNER'S INSTRUMENT (`world/charter_ops.py`): one
+    # authored event moving the facts an institution keeps -- an errand, an
+    # arrival, a departure, a death, a post filled or vacated, an upkeep
+    # failing, a supply cut. ONE grant over the whole vocabulary rather than
+    # one per op, because what the player is granting is the hand, not the
+    # verb; and it expires with its request like every other.
+    "charter_ops",
     # A note to the Director saying what a package MEANS (which planned thing
     # is which live thing, what a consequence is for); read into the
     # Director payload alone, never a mind's.

@@ -40,6 +40,11 @@ the last miller died, and may also decide that tonight the river takes it.
 
 ## 2. An authored event is an INPUT to the simulation, not a rival output
 
+**BUILT 2026-09-05** as the `charter_ops` package operation
+(`world/charter_ops.py`, `tests/test_charter_ops.py`). The rest of this note
+-- the history trigger, what may be written, the four boundaries -- is still
+design.
+
 This is the whole interface, and it is what keeps the division honest in a
 populated place. When the Planner lands an event, it does not narrate beside
 the town: it MOVES the town's own state and lets the simulation take it from
@@ -117,13 +122,17 @@ a barrier):
 
 ## 5a. Charter is the Planner's instrument
 
-Stated in full in `DESIGN_OFFSCREEN_SUPERSEDED.md` § 3a and referenced here
-because it is what section 2's interface becomes once it is built: Charter is
-the physics of off-screen life and the Planner is the hand that reaches into
-it, with a read side that must show posts, watch and stations (today's tool
-hides them and the Room invented staff as a result) and a write side,
-`charter_ops`, routed through the functions Charter already owns. The Planner
-directs and Charter computes.
+**BUILT 2026-09-05.** Stated in full in `DESIGN_OFFSCREEN_SUPERSEDED.md`
+§ 3a: Charter is the physics of off-screen life and the Planner is the hand
+that reaches into it. `inspect_charters` is the read side and now shows the
+institution -- upkeeps against their floors, posts, the watch, every body's
+place and station, and the roster's beliefs where they differ from the
+bodies, each section paged rather than truncated. `charter_ops` is the write
+side, routed through the functions Charter already owns. The Planner directs
+and Charter computes: section 2's two consequences are the tests that say it
+was built right, and both hold -- an event must be spelled in Charter's own
+vocabulary, and after it lands everything downstream is the simulation's
+answer.
 
 ## 6. Why the Planner and not the Director
 

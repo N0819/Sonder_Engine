@@ -102,9 +102,9 @@
 | `story/importers.py` | 3124 | Native and AI-assisted character, persona, and lorebook import/generation. | `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.memory`, `story.character_schema`, `story.scene` |
 | `story/journey_history.py` | 431 |  | — |
 | `story/lore_structure.py` | 248 |  | — |
-| `story/mandates.py` | 579 |  | `core.db` |
+| `story/mandates.py` | 586 |  | `core.db` |
 | `story/naming.py` | 555 |  | `core.db`, `world.charter_identity` |
-| `story/plot_packages.py` | 2490 |  | — |
+| `story/plot_packages.py` | 2588 |  | — |
 | `story/provenance_text.py` | 132 |  | — |
 | `story/room_bible.py` | 424 |  | `core.db` |
 | `story/room_calls.py` | 96 |  | — |
@@ -114,7 +114,7 @@
 | `story/room_proposals.py` | 264 |  | `core.db` |
 | `story/room_research.py` | 371 |  | `core.db` |
 | `story/room_slice.py` | 487 |  | — |
-| `story/room_tools.py` | 1235 |  | `story.plot_packages`, `story.room_research`, `story.room_slice` |
+| `story/room_tools.py` | 1480 |  | `story.plot_packages`, `story.room_research`, `story.room_slice` |
 | `story/scene.py` | 2746 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `core.db`, `story`, `story.attire`, `story.character_schema`, `world.day_cycle`, `world.spatial` |
 | `web/__init__.py` | 6 |  | — |
 | `web/app.py` | 6841 | FastAPI application assembly, resource CRUD, turn control, and streaming endpoints. | `agents`, `agents.story_planner`, `core`, `core.db`, `core.frames`, `core.paths`, `dressing.ambience`, `dressing.backdrops`, `llm`, `llm.prompts`, `llm.providers`, `mind.memory`, `persist.chat_archive`, `persist.chat_delete`, `persist.checkpoints`, `persist.commit`, `story`, `story.character_schema`, `story.dialogue_colors`, `story.importers`, `story.scene`, `web`, `web.auth_routes`, `web.room_routes`, `web.world_routes`, `world`, `world.survival` |
@@ -150,6 +150,7 @@
 | `world/charter_needs.py` | 297 |  | `world.charter_model` |
 | `world/charter_news.py` | 517 |  | `world.charter_mind`, `world.charter_model`, `world.charter_talk` |
 | `world/charter_observe.py` | 585 |  | `world.charter_figure`, `world.charter_identity`, `world.charter_mind`, `world.spatial` |
+| `world/charter_ops.py` | 336 |  | `world.charter_harm` |
 | `world/charter_place.py` | 453 |  | `world.charter_identity`, `world.charter_model`, `world.charter_move`, `world.spatial` |
 | `world/charter_plan.py` | 227 |  | `world.charter_drift`, `world.charter_model`, `world.charter_roster` |
 | `world/charter_politics.py` | 161 |  | — |
@@ -158,11 +159,11 @@
 | `world/charter_promote.py` | 604 |  | `world.charter_commitment`, `world.charter_feel`, `world.charter_politics`, `world.charter_social` |
 | `world/charter_roster.py` | 134 |  | `world.charter_model` |
 | `world/charter_run.py` | 1477 |  | `world`, `world.charter_commitment`, `world.charter_decide`, `world.charter_drift`, `world.charter_economy`, `world.charter_enrol`, `world.charter_feel`, `world.charter_figure`, `world.charter_harm`, `world.charter_intervene`, `world.charter_log`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_move`, `world.charter_needs`, `world.charter_news`, `world.charter_plan`, `world.charter_politics`, `world.charter_practice`, `world.charter_roster`, `world.charter_social`, `world.charter_space`, `world.charter_talk`, `world.charter_trigger` |
-| `world/charter_runtime.py` | 4022 |  | `core`, `core.logging_utils`, `world.charter`, `world.charter_news`, `world.charter_surface`, `world.day_cycle`, `world.mechanics` |
+| `world/charter_runtime.py` | 4045 |  | `core`, `core.logging_utils`, `world.charter`, `world.charter_news`, `world.charter_surface`, `world.day_cycle`, `world.mechanics` |
 | `world/charter_social.py` | 743 |  | `world.charter_politics` |
 | `world/charter_space.py` | 167 |  | `world.spatial` |
 | `world/charter_surface.py` | 341 |  | — |
-| `world/charter_surgery.py` | 341 |  | — |
+| `world/charter_surgery.py` | 370 |  | — |
 | `world/charter_talk.py` | 351 |  | `world.charter_mind`, `world.charter_politics`, `world.charter_roster` |
 | `world/charter_temper.py` | 167 |  | — |
 | `world/charter_trigger.py` | 881 |  | `world.charter_mark`, `world.charter_news`, `world.charter_practice` |
@@ -1267,14 +1268,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `grant_mandate()` | 282 | 82 lines |
-| `_request()` | 179 | 29 lines |
-| `expire_mandates()` | 366 | 28 lines |
-| `request_open()` | 221 | 27 lines |
-| `close_request()` | 396 | 26 lines |
-| `renew_mandate()` | 424 | 22 lines |
-| `coverage()` | 453 | 16 lines |
-| `_most_permissive()` | 497 | 15 lines |
+| `grant_mandate()` | 289 | 82 lines |
+| `_request()` | 186 | 29 lines |
+| `expire_mandates()` | 373 | 28 lines |
+| `request_open()` | 228 | 27 lines |
+| `close_request()` | 403 | 26 lines |
+| `renew_mandate()` | 431 | 22 lines |
+| `coverage()` | 460 | 16 lines |
+| `_most_permissive()` | 504 | 15 lines |
 
 ### `story/naming.py`
 
@@ -1293,14 +1294,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `publish_package()` | 2159 | 84 lines |
-| `_package_checks()` | 1890 | 78 lines |
-| `fire_due_clocks()` | 2284 | 77 lines |
-| `normalize_package()` | 173 | 74 lines |
-| `_reach_warning()` | 1991 | 68 lines |
-| `_world_snapshot()` | 487 | 66 lines |
-| `edit_package()` | 362 | 57 lines |
-| `_preview_plan_rooms()` | 698 | 49 lines |
+| `publish_package()` | 2257 | 84 lines |
+| `_package_checks()` | 1988 | 78 lines |
+| `fire_due_clocks()` | 2382 | 77 lines |
+| `normalize_package()` | 176 | 74 lines |
+| `_reach_warning()` | 2089 | 68 lines |
+| `_world_snapshot()` | 490 | 66 lines |
+| `edit_package()` | 365 | 57 lines |
+| `_preview_plan_rooms()` | 701 | 49 lines |
 
 ### `story/provenance_text.py`
 
@@ -1413,14 +1414,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_t_inspect_contradictions()` | 518 | 158 lines |
-| `_mind_of()` | 714 | 148 lines |
-| `_t_inspect_config()` | 444 | 67 lines |
-| `_t_inspect_route()` | 258 | 60 lines |
-| `_t_inspect_rooms()` | 207 | 49 lines |
-| `run_tool()` | 1160 | 35 lines |
-| `fit_result()` | 1201 | 35 lines |
-| `_t_scan_lore()` | 162 | 33 lines |
+| `_t_inspect_contradictions()` | 761 | 158 lines |
+| `_mind_of()` | 957 | 148 lines |
+| `_t_inspect_charters()` | 553 | 83 lines |
+| `_t_inspect_config()` | 687 | 67 lines |
+| `_t_inspect_route()` | 282 | 60 lines |
+| `_t_inspect_rooms()` | 231 | 49 lines |
+| `_charter_body_rows()` | 461 | 38 lines |
+| `run_tool()` | 1405 | 35 lines |
 
 ### `story/scene.py`
 
@@ -1826,6 +1827,19 @@
 | `_post_forms()` | 236 | 32 lines |
 | `evidence_phrase()` | 136 | 21 lines |
 
+### `world/charter_ops.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `_check()` | 141 | 40 lines |
+| `_transfer()` | 251 | 30 lines |
+| `apply_charter_ops()` | 304 | 28 lines |
+| `normalize_charter_op()` | 113 | 26 lines |
+| `_op_upkeep_fails()` | 218 | 25 lines |
+| `_employer_of()` | 97 | 7 lines |
+| `_op_depart()` | 288 | 7 lines |
+| `_charter_state()` | 90 | 5 lines |
+
 ### `world/charter_place.py`
 
 | Function | Start | Size |
@@ -1931,7 +1945,7 @@
 | `_prepare_cast_histories()` | 614 | 172 lines |
 | `_plan_lived_location()` | 1348 | 168 lines |
 | `_generate_lived_location()` | 1576 | 122 lines |
-| `presence_view()` | 3313 | 114 lines |
+| `presence_view()` | 3336 | 114 lines |
 | `presim_registry()` | 930 | 104 lines |
 | `generation_lore()` | 1036 | 101 lines |
 
@@ -1977,14 +1991,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `plant_claim()` | 141 | 33 lines |
-| `adjust_stock()` | 176 | 25 lines |
-| `open_summons()` | 289 | 25 lines |
-| `send_errand()` | 243 | 24 lines |
-| `assign_post()` | 114 | 21 lines |
-| `charter_shock()` | 221 | 20 lines |
-| `harm_body()` | 269 | 18 lines |
-| `apply_surgery()` | 325 | 17 lines |
+| `plant_claim()` | 170 | 33 lines |
+| `adjust_stock()` | 205 | 25 lines |
+| `open_summons()` | 318 | 25 lines |
+| `send_errand()` | 272 | 24 lines |
+| `assign_post()` | 124 | 21 lines |
+| `charter_shock()` | 250 | 20 lines |
+| `harm_body()` | 298 | 18 lines |
+| `vacate_post()` | 147 | 17 lines |
 
 ### `world/charter_talk.py`
 

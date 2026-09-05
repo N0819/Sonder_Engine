@@ -78,6 +78,12 @@ that is what a frame and a channel already know.
 
 ## 3a. Charter is a TOOL OF THE PLANNER
 
+**BUILT 2026-09-05.** Both halves: `story/room_tools.inspect_charters` is the
+read side and the `charter_ops` package operation
+(`world/charter_ops.py` -> `charter_runtime.author_charter_ops`) is the write
+side. `tests/test_charter_ops.py`. The section below is the argument, kept as
+written, with what landed marked at the end of each half.
+
 The owner, closing the argument: "i think charter should be a tool to the
 planner ultimately." That is the statement the other two notes were circling,
 and it settles what "authorship" and "simulation" mean to each other.
@@ -94,12 +100,45 @@ and invented three staff. A tool that hides the field the question is about is
 worse than no tool, because it answers confidently. Posts, the watch, places,
 stations and the whole roster belong in the read, paged rather than truncated.
 
+> **Built.** `inspect_charters` returns five sections per institution --
+> `upkeeps` (level against floor, whether it is below it, its drift, what it
+> depends on, the posts that serve it and who is tending it), `posts` (place,
+> purpose, what it serves, what it requires, who it reports to, the fixture
+> it is stood at, who holds it), `watch` (who is standing what) with
+> `unfilled_posts`, `bodies` (place, within-room station from
+> `charter_place.charter_placements`, berth, home post, duty stood,
+> availability, condition, any walk or errand) and `roster` (the
+> institution's BELIEFS, shown only where they differ from the bodies).
+> Every section is PAGED: a page says how many rows it withheld and the exact
+> call that returns them, and `section` + `cursor` returns them. The old
+> 24-body cap is now the page size when one charter is named
+> (`CHARTER_PAGE`), eight per charter in the all-charters overview
+> (`CHARTER_OVERVIEW_ROWS`, so a story with several institutions still fits
+> the 12,000-character result cap, which `fit_result` would otherwise
+> satisfy by dropping every charter at once).
+
 **The write side is `charter_ops`** (registered, not built): an errand
 dispatched, an event staged against an institution -- an upkeep failing, a
 post vacated, a supply cut, somebody arriving, leaving or dying -- each routed
 through the functions Charter already owns (`charter_surgery.send_errand`,
 `charter_runtime.transfer_person`, the upkeep ledger) and refused the way a
 `positions` write is refused, by the same deterministic floor.
+
+> **Built**, as a package operation the Planner writes -- not a Director
+> channel; the Director half is still open (`docs/UNBUILT.md` § 1.124). One
+> authored EVENT carries up to `CHARTER_OPS_CAP` = 12 ops from the closed set
+> `errand | arrive | depart | die | fill_post | vacate_post | upkeep_fails |
+> supply_cut`, each landing through the function Charter already owns
+> (`send_errand`, `transfer_person`, `harm_body`, `assign_post`,
+> `vacate_post`, `charter_shock`'s `upkeep_shock`, `adjust_stock`), and the
+> whole event lands or none of it does. Every refusal names its reason: a
+> body the town does not stand, a room no plan holds, an upkeep the
+> institution does not owe, a good it never stocked, an institution the
+> registry does not hold (which `transfer_person` would otherwise MINT -- a
+> town founded by a typo), a body already dead, a field the kind does not
+> take. **An authored event is an INPUT**: it must be expressible in the
+> vocabulary Charter already owns, or it is prose again, which is the lesson
+> of the concealment written as free text that was no channel at all.
 
 Three things this does NOT change, and each is what makes the tool worth
 having:
@@ -114,6 +153,14 @@ having:
     when somebody sees the body is the whole material.
   * **The Director still reads Charter for the beat** -- carriers, figures,
     crowds -- and does not steer it. One subsystem, two readers, one author.
+
+Each of the three is pinned by a test rather than by this paragraph
+(`tests/test_charter_ops.py`): no op has a field for who reacts and a field
+outside the schema is refused, so a reaction cannot be smuggled in as an
+extra; a death leaves `roster[body].believed_available` true until
+`charter_roster.observe` is called; and `charter_carriers`,
+`present_charter_figures` and `charter_crowd.members_of` read the same
+registry across an authored event and write nothing.
 
 **Why this is the right shape.** Charter already refuses to hold a registered
 mind, already believes rather than knows, and already advances for free every
