@@ -87,7 +87,8 @@ from persist.commit_common import (_keys_str, _stable_event_key, _clamp,
     recognition_roster, seed_mutual_recognition,
     charter_recognition_projection,
     _GENERIC_ID_TOKENS, _canonical_token_key, _entity_alias_map,
-    _canonical_anchor, _room_of, _normalized_fact)
+    _canonical_anchor, _room_of, _normalized_fact,
+    ENGINE_NOTICES_KEY, add_engine_notice, compose_engine_notices)
 from persist.commit_place_graph import (VISITED_ROOMS_CAP, ROUTE_CREDIT_WINDOW,
     ROUTE_CREDIT_CAP, PLACE_GRAPH_NODE_CAP, update_place_graph,
     record_spatial_experience)
@@ -117,14 +118,16 @@ from persist.commit_mapping import (
     _apply_mapping_book_ops, prepare_mapping_commit, commit_mapping, _lore_for,
     _fact_is_covered, _setting_fact_needs, _attach_committed_surface,
     GENERATED_SOURCE_PREFIX, _file_engine_provenance,
-    SETTING_FACT_SUBJECT_CHARS, _describe_need)
+    SETTING_FACT_SUBJECT_CHARS, _describe_need,
+    NEED_SUBJECT_WORDS, _need_words, _reads_as_prose, _answering_bodies,
+    _drop_needs_the_beat_answers)
 from persist.commit_background import (BACKGROUND_PROMOTION_DIALOGUE_THRESHOLD,
     BACKGROUND_PROMOTION_MENTION_THRESHOLD, promotion_thresholds,
     _BACKGROUND_NAME_TITLE_WORDS, _NAME_TITLE_PREFIXES, strip_name_titles,
     name_in_roster, _PRESENCE_ARTICLES, _presence_identity,
     _bodies_answering_to, _canonical_presence_name, _presence_scene_entity,
     _presence_speech_verdict, presence_has_an_identity,
-    presence_personhood, presence_room,
+    presence_personhood, presence_is_enrollable, presence_room,
     _merge_presence_record,
     presence_record_for, _presence_lookup, _resolve_or_mint_presence,
     _mint_presence_uid, is_presence_uid, presence_display_name,
@@ -153,7 +156,8 @@ from persist.commit_scene_state import (_anchor_current_room, sync_anchored_book
     _guard_occupied_mover_removal, _advance_ground, prepare_scene_commit,
     commit_scene, _record_subject_last_seen, _dedupe_overlay_entries,
     _merge_overlays, _overlay_handles, _overlay_ending_handles,
-    _is_overlay_ending)
+    _is_overlay_ending, _minted_this_beat, _entity_labels,
+    _fold_duplicate_mints, _place_orphan_mints, _report_started_sources)
 from persist.commit_mechanics import (commit_transit_sweep, commit_world_event_spine,
     commit_information_carriers, commit_cast_changes)
 from persist.commit_memory import (RECENT_TELLS_CAP, _durable_dialogue_category,

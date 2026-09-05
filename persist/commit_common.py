@@ -593,3 +593,74 @@ def _room_of(scene, name):
 
 def _normalized_fact(value):
     return re.sub(r"[^a-z0-9]+", " ", str(value or "").casefold()).strip()
+
+
+# ---- The beat's engine notices: one writer, so the rule is kept once ----
+
+#: The world key the Director reads at the START of the next beat
+#: (`agents/director.py`, both payload builders). It is BEAT-SCOPED: it says
+#: what the engine made of THIS beat, and the beat's one rewrite is what
+#: retires the last beat's list.
+ENGINE_NOTICES_KEY = "engine_notices"
+
+
+def add_engine_notice(ctx, cid, message):
+    """File one engine notice for the next beat. The ONLY way to write one.
+
+    A notice is how the deterministic layer answers the Director: here is
+    what actually happened, as against what you asked for. The key it lands
+    in is beat-scoped, and the beat's rewrite is `commit_transit_sweep`'s --
+    the first domain inside the write lock. Every writer that reaches the key
+    on its own is therefore racing that rewrite, and whether it wins is
+    decided by nothing but the order the domains happen to run in.
+
+    MEASURED, and it is the strongest case in the file: `_record_failed_sources`
+    ran in `prepare_scene_commit`, BEFORE the lock, and appended its notice to
+    the key; the sweep then wrote the key whole from its own list. The lighthouse
+    run of 2026-09-05 played twenty turns with a `steadiness: failing` great lamp,
+    the light went out at the commits of turns 5 and 11, both notices were
+    written, and both were gone before the beat ended -- the Director's payload
+    carried `engine_notices: []` on turns 6 and 12, so it never relit a lamp it
+    was never told had failed. The whole mechanism was inert for the run.
+
+    So no writer touches the key. A notice is STAGED on the turn's context
+    (`ctx.tell_director`, which already dedupes), which is what the sweep
+    composes its rewrite from, so a notice filed before the rewrite survives
+    it by construction. A notice filed AFTER the rewrite -- the destruction
+    domain runs later in the same transaction -- is appended to the key as
+    well, because the beat's one rewrite is already behind it; the sweep's
+    composition dedupes, so filing on both sides of it can never double a
+    message.
+
+    A rule that has to be remembered by four callers is a rule that will be
+    forgotten by a fifth: `ctx` may be None only for a caller that has no
+    turn context at all, and then the key is the only channel there is.
+    """
+    text = str(message or "").strip()
+    if not text:
+        return
+    if ctx is not None and hasattr(ctx, "tell_director"):
+        ctx.tell_director(text)
+    if cid is None:
+        return
+    notices = list(wget(cid, ENGINE_NOTICES_KEY, []) or [])
+    if text not in notices:
+        notices.append(text)
+        wset(cid, ENGINE_NOTICES_KEY, notices)
+
+
+def compose_engine_notices(ctx, own):
+    """The beat's whole notice list: what this domain made, plus everything
+    staged on the turn's context, in order and without repeats.
+
+    The sweep's rewrite goes through here so that "the beat's list" has one
+    definition. Order is stated rather than incidental: the sweep's own
+    mechanical notices first (what the world did to the beat), then the
+    staged readings of the model's output (what the engine made of it).
+    """
+    out = []
+    for item in list(own or []) + list(getattr(ctx, "engine_feedback", []) or []):
+        text = str(item or "").strip()
+        if text and text not in out:
+            out.append(text)
+    return out
