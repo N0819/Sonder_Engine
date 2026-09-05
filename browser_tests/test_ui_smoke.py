@@ -228,6 +228,14 @@ def test_story_quick_start_offers_history_routing_for_each_cast_member(
     }
     _mock_api(page, bootstrap)
     page.goto(f"{ui_base_url}/static/index.html")
+    # The wizard reads `S.boot.lorebooks`, and `S.boot` is filled by the
+    # bootstrap fetch AFTER the page has loaded. Evaluating straight after
+    # `goto` raced it and lost about one run in two (measured 2026-09-05:
+    # "Cannot read properties of null (reading 'lorebooks')" at
+    # renderWizardScenario). The UI-driven tests wait implicitly through
+    # their clicks; a test that renders the wizard by hand must wait for
+    # the boot itself.
+    page.wait_for_function("() => typeof S !== 'undefined' && !!S.boot")
 
     page.evaluate("""
       (() => {
