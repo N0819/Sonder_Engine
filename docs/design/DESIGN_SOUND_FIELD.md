@@ -103,11 +103,16 @@ Computed per (scene, observer) on the same composite field as sight
    half, a closed door a quarter, a window a tenth, a wall nothing. The
    barrier's `material` shifts the class exactly as `_material_shifted_barrier`
    does today, so a thin door and a bank-vault door differ as they already
-   do. Occluders inside a room do NOT block sound: a counter is walked
-   round by the flood at the cost of the extra path -- its own cells are
-   REACHED and never passed through (2026-09-04: a listener whose station
+   do. Occluders inside a room do NOT block sound. SOUND IS STOPPED ONLY BY
+   WHAT REACHES THE CEILING (2026-09-05, § 6b): a `full`-height partition is
+   walked round by the flood at the cost of the extra path -- its own cells
+   are REACHED and never passed through (2026-09-04: a listener whose station
    resolved onto another anchor's seeded cell was never entered and heard
-   nothing at any volume; now the flood steps onto the cell and goes round).
+   nothing at any volume; now the flood steps onto the cell and goes round)
+   -- and anything lower is CROSSED for `OCCLUDER_PASS` and no extra path at
+   all, because a voice goes over a counter rather than round it. The
+   round-it rule ran from the waist up until 2026-09-05 and silenced ordinary
+   conversation in any furnished room (§ PE1).
    The composite the flood runs over is `spatial_fov.room_field` under the
    `sound_passes` predicate -- every barrier that is not a wall, at its pass
    -- the SAME derivation sight and light use, so an L or a round room is
@@ -250,6 +255,79 @@ the corpus pass (§ 9a.4): the one live pair on a field stands 2.4 paces
 apart, and 0.5 turned a mutter today's live path delivers as a fragment
 into `none`; 0.6 keeps it a fragment there and gone at four paces.
 
+### 6b. What the play runs moved (2026-09-05)
+
+One constant added and one owner decision registered, both from the five
+play runs of 2026-09-05.
+
+    OCCLUDER_PASS   0.9 per non-partition occluder cell the path crosses
+
+**Added** by the PE1 repair (`docs/experiments/PLAY_2026_09_05_flat.md`).
+Sound is stopped only by what reaches the ceiling: the flood rounds a
+`full`-height partition and CROSSES anything lower for this factor and no
+extra path. Before it, the round-it rule ran from the waist up and an
+ordinary kitchen counter parted a room as a wall does -- an 8x6 kitchen with
+a counter run and a table in it graded a normal voice between two bodies four
+paces apart at 0.0067 against a noise of 0.32, `none`, because the flood
+walked twelve cells for a four-cell line. 0.9 is chosen so that a counter and
+a table between two bodies four paces apart in a quiet room leave a normal
+voice `full` (0.9² × 12/17 = 0.57 against the 0.10 `full` asks there) and a
+line of three such things costs about a quarter of the signal. It is near 1
+for a second reason: the flood minimises PATH LENGTH, so a factor much below
+1 would make the shortest path the wrong answer and the Dijkstra would have
+to optimise the gain itself. The LIGHT field is deliberately unchanged --
+a ray is cast, not flooded, so a head-high shelf must shadow a waist-high
+candle and must not shadow a ceiling fixture, which is what `_cast` already
+does by comparing the occluder against the SOURCE's height.
+
+**Registered, not taken: outdoors an ordinary voice is `full` only inside
+about five paces**, and in light rain 3.3 (`PLAY_2026_09_05_road.md` § PD2).
+Measured again while landing PE1: it is not a bug -- the ambient floor is
+applied once, to the listener's cell's room, and the weather term is a
+separate quantity from the exposure term -- so it is the values that are in
+question and the values are the owner's. The full radius table per exposure
+and weather, the rule the constants should satisfy, and a recommendation
+(move `AMBIENT["open"]` 0.2 → 0.1 and `WEATHER_NOISE` light/moderate/heavy
+0.3/0.6/1.0 → 0.1/0.25/0.5, and nothing else) are in `docs/UNBUILT.md`
+§ 1.120.
+
+### 6c. Two rules the play runs restated (2026-09-05)
+
+Neither is a constant; both are the same sentence in two places.
+
+* **A path between two cells has no direction.** The gain for a PAIR is
+  computed on one field chosen by the pair -- the two rooms sorted, first
+  that can place both bodies -- not on whichever listener's field is asking.
+  Every composite is laid from one room outward, so two composites of the
+  same two rooms are two layouts with different offsets, aperture spans and
+  path lengths; read per listener that made hearing one-way, and a shout
+  across an open arch was answered by one body and not heard by the other in
+  the same beat (`PLAY_2026_09_05_caravanserai.md` § PB2). The NOISE stays
+  the listener's own: a noise floor is a property of where a body stands,
+  which is the one thing about a pair that is not shared.
+* **Noise masks a voice by what reaches the listener, wherever the voice came
+  from.** One masking rule, on every path. Where the field places both bodies
+  it quantises `signal` against `noise` as § 4.5 says. Where it cannot place
+  the speaker, the relation carries `door_gain` instead -- what the same
+  voice would deliver from this room's own best opening -- and `hear_level`
+  takes the weaker of the edge model's answer and that ceiling, since
+  whatever came from beyond entered through one of those openings and crossed
+  the rest of the room like any other sound. Before it, a fog bell drowned an
+  ordinary voice in its own room and did nothing at all to a shout from three
+  rooms away (`PLAY_2026_09_05_lighthouse.md` § PA5). A `vouched` channel is
+  exempt: a voice on a live comm channel is not crossing this room's air.
+* **A raised voice carries through an opening.** One passable edge away
+  (`one_opening_away`: an edge sound walks through, after the material shift,
+  declared from either side) a `loud` voice or a `shout` is at worst a
+  `fragment`, whatever the walk costs it. The edge model always said so and
+  the field can refuse it, so a shout across the most open archway in a house
+  arrived as less than one through a shut door, and once both perception
+  passes read the field it reached nobody at all
+  (`PLAY_2026_09_05_manor.md` § PC3). The floor answers to the masking rule
+  above like everything else: where the noise at the listener's own cell
+  would refuse the same voice one pace off, nothing from the next room
+  survives either.
+
 ## 7. Cost, and fail-open
 
 One Dijkstra per source over at most ~600 cells, a handful of sources: well
@@ -321,8 +399,12 @@ into aggregating scripts and nothing content-bearing was written to disk.
        ...a membrane, far walls                   6.8  0.011  0.05   none   none    full   full full
        round a corner via an open door            6.8  0.019  0.05   none   none    full   full full
        through the wall (room never placed)        --  edge rule: normal none, shout fragment
-       behind the counter (`cover`), from the hearth  10.0  0.010  0.05  none none full full full
+       behind the counter (`cover`), from the hearth   6.4  0.021  0.05  none none full full full
        before the counter, from the hearth        4.4  0.049  0.05   none   none    full   full full
+       (both re-measured 2026-09-05: the counter is CROSSED for
+        OCCLUDER_PASS, not gone round, so the `cover` path is 6.4 and not
+        10.0 -- the body is still on the far side of the run, so it is a
+        longer walk, and the flood no longer detours to the end of it)
        loud generator 3 off; speaker beside you   1.0  0.500  4.58    --     --     frag   full full
        loud generator 0 off; speaker beside you   1.0  0.500  40.05   --     --     none   none frag
        loud generator 3 off; speaker 5.2 away     5.2  0.036  4.58    --     --     none   none frag

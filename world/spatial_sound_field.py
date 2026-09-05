@@ -56,6 +56,7 @@ from world.spatial_fov import (
     _Field,
     _HEIGHT_RANK,
     _centre,
+    _door_cells,
     _observer_cell,
     _wall_verdict,
     body_cell,
@@ -68,7 +69,7 @@ from world.spatial_geometry import door_anchor_id
 from world.spatial_identity import _ci_get, room_of
 from world.spatial_light_field import (
     _beat_hash, FAIL_RATE, FLICKER_RATE, normalize_steadiness, STEADINESS)
-from world.spatial_senses import _material_shifted_barrier
+from world.spatial_senses import _material_shifted_barrier, _SOUND_WALK_BARRIERS
 
 
 # ---------------------------------------------------------------------------
@@ -138,6 +139,24 @@ APERTURE_PASS = {"open": 1.0, "open_door": 0.9, "bars": 0.9,
 
 #: Path cost of a diagonal step; a side step costs 1. Kept as § 6 proposed.
 DIAGONAL_COST = 1.4
+
+#: What a NON-PARTITION occluder costs the sound that crosses its cell -- a
+#: counter, a table, a sofa back, a shelf: things a voice goes over rather
+#: than round. NOT in § 6, which had no such term because the flood went
+#: round everything from the waist up; it is the number the PE1 repair
+#: needed, and it is the owner's like every other constant here.
+#:
+#:   set here   0.9 per occupied cell crossed
+#:
+#: Chosen against the case that found the defect: a counter run and a table
+#: between two bodies four paces apart in a quiet enclosed room leave a
+#: normal voice `full` (0.9^2 * 12 / 17 = 0.57, against the 0.10 `full`
+#: asks there), while a line of three such things costs about a quarter of
+#: the signal. Near 1 for a second reason: the flood minimises PATH LENGTH,
+#: so a factor much below 1 would make the shortest path the wrong answer
+#: (a detour round the counter can carry more than a crossing through it),
+#: and the Dijkstra would have to optimise the gain itself.
+OCCLUDER_PASS = 0.9
 
 #: The noise floor every cell of a room carries, by the room's exposure
 #: (`weather.room_exposure`); the weather's audible level is added on top
@@ -212,9 +231,31 @@ def noise_word(noise: float) -> str:
 #: Steadiness rates: see the light field's FLICKER_RATE / FAIL_RATE, imported
 #: above -- one hash, two senses, one pair of rates.
 
-#: Occluder ranks at or above this stop the flood's CELL and send it round:
-#: a counter, a screen, a partition. Floor-height things (a rug, a hearth on
-#: the wall line) are walked over. Occluders never block sound outright.
+#: SOUND IS STOPPED ONLY BY WHAT REACHES THE CEILING. An occluder at or
+#: above this rank is a PARTITION -- it parts the room acoustically and the
+#: flood goes round its cell. Everything lower is furniture: sound goes over
+#: and around it, losing `OCCLUDER_PASS` for the crossing and no path length
+#: at all.
+#:
+#: This was `_HEIGHT_RANK["waist"]` until 2026-09-05, which made a counter a
+#: wall. Measured live: an 8x6 kitchen with a waist counter along one wall
+#: and a waist table beside it, two bodies four paces apart in it, a normal
+#: voice -- signal 0.0067 against noise 0.32, `none`, because the flood had
+#: to walk 12 cells round the end of the counter for a four-cell straight
+#: line. Neither of the two people standing in the room received either the
+#: lie or its correction, and nothing anywhere warned that a line had
+#: reached nobody (`PLAY_2026_09_05_flat.md` § PE1).
+#:
+#: The LIGHT field is not the same mistake and is deliberately left alone: a
+#: light ray is cast, not flooded, so a head-high shelf must shadow a
+#: waist-high candle and must not shadow a ceiling fixture -- `_cast`'s
+#: `blocked` compares the occluder against the SOURCE's height, which is the
+#: right rule for a line and the wrong one for a flood.
+_PARTITION_RANK = _HEIGHT_RANK["full"]
+
+#: Occluder ranks at or above this are what the flood pays `OCCLUDER_PASS`
+#: to cross: a counter, a table, a sofa back, a head-high shelf.
+#: Floor-height things (a rug, a hearth on the wall line) cost nothing.
 _ROUND_RANK = _HEIGHT_RANK["waist"]
 
 #: `state.running` values that mean the thing is switched off. The same set
@@ -270,10 +311,15 @@ def _power_of_level(level, beat) -> float:
     if beat == "out":
         return 0.0
     if beat == "dropped":
-        index = SOUND_LEVELS.index(level) - 1
-        if index < 0:
-            return 0.0
-        level = SOUND_LEVELS[index]
+        # A DROP IS A SOURCE WAVERING, NOT A SOURCE STOPPING, and it never
+        # reaches past the quietest sound the thing can still make: going
+        # silent is what `failing` means, and that files a notice the
+        # Director answers (§ 5) where a flicker files nothing. The light
+        # field's `_one_level_down` is the same clamp on the same ladder --
+        # a `faint` generator dropping to no sound at all was the light
+        # field's snuffed candle in the other sense
+        # (`PLAY_2026_09_05_manor.md` § PC4).
+        level = SOUND_LEVELS[max(0, SOUND_LEVELS.index(level) - 1)]
     return SOUND_POWER[level]
 
 
@@ -287,6 +333,67 @@ def sound_field_hear_level(volume, signal_gain, noise) -> str:
     volume = str(volume or "normal").strip().casefold()
     power = SPEECH_POWER.get(volume, SPEECH_POWER["normal"])
     return quantise_hearing(power * float(signal_gain or 0.0), float(noise or 0.0))
+
+
+#: The volumes a voice is RAISED at -- the two the bounded loudness walk
+#: already treats as carrying past the room they are made in
+#: (`spatial_senses.sound_walk_level`). Read here, declared there.
+RAISED_VOLUMES = ("loud", "shout")
+
+
+def one_opening_away(scene: dict, a_room, b_room) -> bool:
+    """Are these two rooms joined by ONE passable opening -- an edge sound
+    walks through (`_SOUND_WALK_BARRIERS`, after the material shift, so a
+    paper door is the opening it acoustically is)?
+
+    Undirected, because a doorway is one object and may be declared from
+    either side: an edge from either room counts. That is also what keeps
+    the floor below reciprocal.
+    """
+    from world.spatial_barriers import effective_adjacent
+    a_room, b_room = str(a_room or ""), str(b_room or "")
+    if not a_room or not b_room or a_room == b_room:
+        return False
+    for here, there in ((a_room, b_room), (b_room, a_room)):
+        for edge in effective_adjacent(scene, here) or ():
+            if not isinstance(edge, dict) or str(edge.get("to") or "") != there:
+                continue
+            shifted = _material_shifted_barrier(
+                normalize_barrier(edge.get("barrier")), edge.get("material"))
+            if shifted in _SOUND_WALK_BARRIERS:
+                return True
+    return False
+
+
+def open_edge_floor(volume, rel: dict) -> Optional[str]:
+    """`fragment` where a RAISED VOICE CARRIES THROUGH AN OPENING, else None.
+
+    One passable edge away, a loud voice or a shout is at worst a fragment.
+    The edge model always said so -- `open`/`open_door`/`bars` deliver a
+    shout `full` -- and the field, which knows the path and the noise, can
+    say `none` for the same shout across the same archway once the walk is
+    long enough. That is a real loss of REACH rather than a stricter
+    hearing model: when both perception passes came to read the field
+    (2026-09-05, § PC3), a shout across one open archway could reach nobody
+    at all. The floor is the half of that repair the field owes.
+
+    Capped by the masking rule everything else is capped by (§ PA5): where
+    the noise at the listener's own cell would refuse the same voice ONE
+    PACE OFF, nothing from the next room survives either -- an opening
+    carries a voice into a room, not through the bell ringing in it. The
+    yardstick is the one `NOISE_WORDS` already uses, `P / 2` at a path of
+    one cell.
+    """
+    if not isinstance(rel, dict) or not rel.get("open_edge"):
+        return None
+    volume = str(volume or "").strip().casefold()
+    if volume not in RAISED_VOLUMES:
+        return None
+    noise = rel.get("noise")
+    if noise is not None and quantise_hearing(
+            SPEECH_POWER[volume] / 2.0, float(noise)) == "none":
+        return None
+    return "fragment"
 
 
 def quantise_hearing(signal: float, noise: float) -> str:
@@ -352,6 +459,16 @@ def _crossing_pass(field, a, b) -> float:
     return factor
 
 
+#: Two ways round a table are the SAME length, and a float sum does not
+#: always say so: 1 + 1 + 1.4 + 1.4 and 1.4 + 1.4 + 1 + 1 differ in the last
+#: bit, and a strict comparison then keeps whichever path the heap happened
+#: to reach first -- which is not the same path from the two ends, and made
+#: the gain between one pair differ by exactly one OCCLUDER_PASS depending
+#: on who was asking. Path lengths are compared to this tolerance so that
+#: "same length, louder way" is decidable. It is arithmetic, not a constant
+#: the owner sets.
+_LENGTH_EPS = 1e-9
+
 _STEPS = ((1, 0, 1.0), (-1, 0, 1.0), (0, 1, 1.0), (0, -1, 1.0),
           (1, 1, DIAGONAL_COST), (1, -1, DIAGONAL_COST),
           (-1, 1, DIAGONAL_COST), (-1, -1, DIAGONAL_COST))
@@ -360,14 +477,22 @@ _STEPS = ((1, 0, 1.0), (-1, 0, 1.0), (0, 1, 1.0), (0, -1, 1.0),
 def spread(field: _Field, origin) -> dict:
     """{cell: (path length, pass)} for every cell the flood reaches from
     `origin`: Dijkstra over the field's cells. A side step costs 1, a
-    diagonal DIAGONAL_COST. A cell holding an occluder at waist height or
-    above is REACHED but never passed through -- the flood steps onto the
-    counter's cell and goes round it, so a body standing at the counter
-    hears and the cells behind it are reached by the path round the end.
-    (Until 2026-09-04 such a cell was not entered at all, and a listener
-    whose station resolved onto another anchor's cell -- a body at the
-    hearth where the seeded shelf also landed -- heard NOTHING at any
-    volume: signal 0, a shout beside them `none`.) A step into another room
+    diagonal DIAGONAL_COST.
+
+    SOUND GOES OVER AND AROUND WHAT IS NOT A PARTITION. A cell holding an
+    occluder that reaches the ceiling (`_PARTITION_RANK`) is REACHED but
+    never passed through -- the flood steps onto the partition's cell and
+    goes round it, so a body standing at it hears and the cells behind it
+    are reached by the path round the end. (Until 2026-09-04 such a cell was
+    not entered at all, and a listener whose station resolved onto another
+    anchor's cell -- a body at the hearth where the seeded shelf also landed
+    -- heard NOTHING at any volume: signal 0, a shout beside them `none`.)
+    Anything lower is furniture: the flood crosses its cell for
+    OCCLUDER_PASS and no extra path at all, because a counter between two
+    people costs a conversation a little of its edge and not its existence.
+    Until 2026-09-05 the round-it rule ran from the WAIST up, and an
+    ordinary kitchen counter parted a room as a wall does (§ PE1, the
+    constant's own note). A step into another room
     leaps the wall band -- the wall is a line of no thickness -- and is
     allowed only where `_wall_verdict` puts the segment inside an aperture,
     carrying that aperture's `pass`. Deterministic: a tie breaks on the
@@ -376,13 +501,28 @@ def spread(field: _Field, origin) -> dict:
     if origin not in inside:
         return {}
     heights = field.height
-    best = {origin: (0.0, 1.0)}
-    heap = [(0.0, origin, 1.0)]
+
+    def furniture(cell) -> float:
+        """OCCLUDER_PASS for a cell holding something short of a partition,
+        1.0 otherwise. EVERY such cell on the path counts, both ends
+        included -- a path pays for what it stands in as well as for what it
+        crosses -- because a path has no direction and a factor charged only
+        on arrival would make the two ends of one path disagree."""
+        return (OCCLUDER_PASS
+                if _ROUND_RANK <= heights.get(cell, -1.0) < _PARTITION_RANK
+                else 1.0)
+
+    start = furniture(origin)
+    best = {origin: (0.0, start)}
+    heap = [(0.0, origin, start)]
     while heap:
         dist, cell, factor = heapq.heappop(heap)
-        if best.get(cell, (float("inf"),))[0] < dist:
-            continue
-        if cell != origin and heights.get(cell, -1.0) >= _ROUND_RANK:
+        known = best.get(cell)
+        if known is not None and (known[0] < dist - _LENGTH_EPS
+                                  or (known[0] <= dist + _LENGTH_EPS
+                                      and known[1] > factor)):
+            continue                    # stale: a shorter or a louder way here
+        if cell != origin and heights.get(cell, -1.0) >= _PARTITION_RANK:
             continue                    # reached, not passed through
         x, y = cell
         here = inside[cell]
@@ -401,8 +541,16 @@ def spread(field: _Field, origin) -> dict:
                 if pf <= 0:
                     continue
                 nd, nf = dist + cost, factor * pf
+            # Furniture in the way: crossed, not gone round (`OCCLUDER_PASS`).
+            nf *= furniture(nxt)
             known = best.get(nxt)
-            if known is None or nd < known[0]:
+            # The BEST path, not the first of its length: at equal length the
+            # larger factor wins, so an equally short way round the shut door
+            # or over nothing is not lost to whichever the heap reached
+            # first. Path reversal keeps both terms, so this is what makes
+            # the flood's answer the same in either direction.
+            if known is None or nd < known[0] - _LENGTH_EPS \
+                    or (nd <= known[0] + _LENGTH_EPS and nf > known[1]):
                 best[nxt] = (nd, nf)
                 heapq.heappush(heap, (nd, nxt, nf))
     return best
@@ -608,6 +756,11 @@ class SoundField:
         self.notices = list(notices)
         self.sources = []
         self._spreads = {}
+        #: The sources as `sound_sources` gave them, before placement on
+        #: THIS grid, so a field for another room can be laid from the same
+        #: beat's sources (`_field_for`).
+        self._raw_sources = list(sources)
+        self._siblings = {}
         for source in sources:
             if source["room"] not in grid.offsets:
                 continue
@@ -638,15 +791,65 @@ class SoundField:
         at = self.grid.cell_of(room, cell)
         return at if at in self.grid.inside else None
 
+    def _field_for(self, room_id):
+        """This beat's field laid on another room, or None when that room
+        carries no geometry. The same scene and the same sources; only the
+        composite differs."""
+        if not room_id:
+            return None
+        if room_id == self.room:
+            return self
+        if room_id in self._siblings:
+            return self._siblings[room_id]
+        field = None
+        if room_has_geometry(self.scene, room_id):
+            grid = acoustic_grid(self.scene, room_id)
+            if grid is not None:
+                field = SoundField(self.scene, room_id, grid,
+                                   self._raw_sources, self.notices,
+                                   self.turn_idx)
+        self._siblings[room_id] = field
+        return field
+
     def gain_between(self, speaker, listener, *, speaker_room=None,
                      listener_room=None) -> Optional[float]:
         """The fraction of a unit source at the speaker's cell that arrives
-        at the listener's cell, or None when either is off the field."""
-        s = self.locate(speaker, speaker_room)
-        l = self.locate(listener, listener_room)
-        if s is None or l is None:
+        at the listener's cell, or None when the pair is on no field.
+
+        A PATH BETWEEN TWO CELLS HAS NO DIRECTION: the gain one way is the
+        gain the other, so a pair gets ONE number and it is computed on ONE
+        field. Which field is decided by the PAIR and not by whoever is
+        asking -- the two rooms sorted, first that can place both bodies --
+        because every composite is laid from one room outward
+        (`room_field`), and two composites of the same two rooms are two
+        different layouts: different offsets, different aperture spans,
+        different path lengths through them. Read per listener, that made
+        hearing one-way. Measured live: a courtyard and a gate across one
+        open arch, one beat, one pair -- the warden's own field answered
+        0.0309 for the shout and the shouter's answered 0.0, so the warden
+        heard and replied while the player's view carried no hearing
+        observation at all and the narrator wrote "no reply comes" over a
+        reply the world had already produced
+        (`PLAY_2026_09_05_caravanserai.md` § PB2).
+
+        The NOISE stays the listener's own (`noise_at`, on the listener's
+        field): a noise floor is a property of where a body stands, which is
+        the one thing about the pair that is not shared.
+        """
+        s_room = speaker_room or room_of(self.scene, speaker)
+        l_room = listener_room or room_of(self.scene, listener)
+        if not s_room or not l_room:
             return None
-        return gain_at(self.spread_from(s), l)
+        for room_id in sorted({str(s_room), str(l_room)}):
+            field = self._field_for(room_id)
+            if field is None:
+                continue
+            s = field.locate(speaker, s_room)
+            l = field.locate(listener, l_room)
+            if s is None or l is None:
+                continue
+            return gain_at(field.spread_from(s), l)
+        return None
 
     # -- intensity ----------------------------------------------------------
 
@@ -687,6 +890,37 @@ class SoundField:
             return "none"
         return quantise_hearing(signal, noise)
 
+    def door_gain(self, listener, *, room=None) -> Optional[float]:
+        """The largest gain from any of the listener's own room's doorways
+        to the listener's cell -- what a unit source standing in the best
+        opening of this room would deliver to their ear. None when the
+        listener is off the field or the room has no opening placed.
+
+        This is the SIGNAL half of the masking rule for a voice the field
+        cannot place: wherever it came from, it entered this room through
+        one of these openings and crossed the rest of the room as any other
+        sound does, so no path from beyond can deliver more than a voice
+        standing in the doorway. The barrier and the hops on the far side
+        are the edge model's business and only ever subtract further.
+        """
+        cell = self.locate(listener, room)
+        if cell is None:
+            return None
+        room = room or room_of(self.scene, listener)
+        best = None
+        for other in sorted(self.grid.offsets):
+            if other == room:
+                continue
+            cells, _bearing = _door_cells(self.scene, room, other)
+            for door in cells or ():
+                at = self.grid.cell_of(room, door)
+                if at not in self.grid.inside:
+                    continue
+                gain = gain_at(self.spread_from(at), cell)
+                if best is None or gain > best:
+                    best = gain
+        return best
+
     def speech_level(self, speaker, volume, listener, *, speaker_room=None,
                      listener_room=None) -> Optional[str]:
         """One line's level for one listener, the speaker not otherwise a
@@ -696,7 +930,20 @@ class SoundField:
         if gain is None:
             return None
         noise = self.noise_at(listener, exclude=(speaker,), room=listener_room)
-        return sound_field_hear_level(volume, gain, noise)
+        if noise is None:
+            # The pair's gain came off the pair's own field (`gain_between`);
+            # the noise can only come off the LISTENER's, and without it
+            # there is nothing to quantise against.
+            return None
+        level = sound_field_hear_level(volume, gain, noise)
+        if level == "none" and one_opening_away(
+                self.scene, listener_room or room_of(self.scene, listener),
+                speaker_room or room_of(self.scene, speaker)):
+            # A raised voice carries through an opening (§ PC3), the same
+            # floor `hear_level` applies to a stamped relation.
+            level = open_edge_floor(
+                volume, {"open_edge": True, "noise": noise}) or level
+        return level
 
 
 def _cache_key(scene, room_id, turn_idx, crowds, events, speakers) -> str:
@@ -772,14 +1019,39 @@ def stamp_sound_relation(scene: dict, rel: dict, observer: str, target: str,
         sound = sound_field(scene, observer, room=observer_room)
     if sound is None:
         return rel
-    gain = sound.gain_between(target, observer, speaker_room=target_room,
-                              listener_room=observer_room)
-    if gain is None:
-        return rel
     noise = sound.noise_at(observer, exclude=(target,), room=observer_room)
     if noise is None:
         return rel
-    rel["signal"] = gain
+    o_room = observer_room or room_of(scene, observer)
+    t_room = target_room or room_of(scene, target)
+    if one_opening_away(scene, o_room, t_room):
+        # A RAISED VOICE CARRIES THROUGH AN OPENING (`open_edge_floor`): the
+        # rooms, not the path, decide that this pair has one, so it is
+        # recorded here where the rooms are known.
+        rel["open_edge"] = True
+    gain = sound.gain_between(target, observer, speaker_room=target_room,
+                              listener_room=observer_room)
+    if gain is not None:
+        rel["signal"] = gain
+        rel["noise"] = noise
+        return rel
+    # NOISE MASKS A VOICE BY WHAT REACHES THE LISTENER, WHEREVER THE VOICE
+    # CAME FROM. One masking rule, on every path: a listener's noise floor
+    # is a property of where the LISTENER stands, not of how far away the
+    # speaker is, so it must grade a voice from beyond the field exactly as
+    # it grades one from across the room. Where the field cannot place the
+    # speaker at all -- another room's room, more hops than a composite
+    # covers -- it can still say what a voice entering by this room's own
+    # best opening would deliver to this ear (`door_gain`), and that is a
+    # CEILING the edge model's answer may not exceed. Measured live: a fog
+    # bell in the watch room graded an ordinary voice IN the room to `none`
+    # (signal 0.34, noise 20.5) while a shout from three rooms away arrived
+    # whole, because the edge model had no idea there was a bell
+    # (`PLAY_2026_09_05_lighthouse.md` § PA5).
+    door = sound.door_gain(observer, room=observer_room)
+    if door is None or door <= 0.0:
+        return rel
+    rel["door_gain"] = door
     rel["noise"] = noise
     return rel
 

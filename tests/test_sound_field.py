@@ -13,10 +13,13 @@ from.
 
 from __future__ import annotations
 
+import copy
+
 import pytest
 
 from world.spatial import (
     APERTURE_PASS,
+    DIAGONAL_COST,
     FAIL_RATE,
     FLICKER_RATE,
     HEARING_LEVELS,
@@ -239,37 +242,62 @@ def test_round_a_corner_through_an_open_door_reaches_and_through_the_wall_does_n
     assert levels(sc, "S", "L")["normal"] == "none"
 
 
-def test_a_counter_costs_path_and_blocks_nothing():
-    """From the hearth, a listener BEHIND the counter (`cover`) is reached
-    round the end of the run -- path 10.0 against 4.4 for the near side --
-    and a normal voice is `full` on both sides. Nothing inside a room stops
-    sound; it is walked round."""
+def test_a_counter_is_crossed_and_a_partition_is_gone_round():
+    """PE1. SOUND GOES OVER AND AROUND WHAT IS NOT A PARTITION: a counter,
+    a table, a sofa back are crossed for OCCLUDER_PASS and no path at all,
+    and only something that reaches the ceiling parts a room acoustically.
+
+    The live case this replaces: an 8x6 kitchen with a waist counter run
+    and a waist table in it, two bodies four paces apart, a normal voice --
+    signal 0.0067 against noise 0.32, `none`, because the flood walked 12
+    cells round the end of the counter for a four-cell straight line, and
+    neither of the two people standing in the room received either the lie
+    or its correction (`PLAY_2026_09_05_flat.md` § PE1)."""
     behind = scene(hall(), {"S": "hall", "L": "hall"},
                    {"S": {"at": "south"}, "L": {"at": "counter", "cover": True}})
-    before = scene(hall(), {"S": "hall", "L": "hall"},
-                   {"S": {"at": "south"}, "L": {"at": "counter"}})
     f_behind = sound_field(behind, "L")
-    f_before = sound_field(before, "L")
-    l_behind = spread(f_behind.grid, f_behind.locate("S"))[f_behind.locate("L")][0]
-    l_before = spread(f_before.grid, f_before.locate("S"))[f_before.locate("L")][0]
-    assert l_behind > l_before
-    assert levels(behind, "S", "L")["normal"] == "full"
-    assert levels(before, "S", "L")["normal"] == "full"
-    # The counter's own cells are REACHED -- a body standing at the counter
-    # hears -- and never passed THROUGH: every cell behind the run is
-    # reached by a path longer than the straight line to it, because the
-    # flood went round the end.
-    counter_cells = {f_behind.grid.cell_of("hall", c)
-                     for c in f_behind.grid.anchors["hall"]["counter"]["cells"]}
     origin = f_behind.locate("S")
     reached = spread(f_behind.grid, origin)
+    counter_cells = {f_behind.grid.cell_of("hall", c)
+                     for c in f_behind.grid.anchors["hall"]["counter"]["cells"]}
     assert counter_cells <= set(reached)
+    # Behind the waist-high run: reached by the STRAIGHT walk, not round the
+    # end of it, and paying OCCLUDER_PASS for the cells it crossed.
     wall_side = [c for c in f_behind.grid.inside
                  if c[1] < min(cc[1] for cc in counter_cells)]
     assert wall_side
     for cell in wall_side:
         straight = max(abs(cell[0] - origin[0]), abs(cell[1] - origin[1]))
-        assert reached[cell][0] > straight, cell
+        assert reached[cell][0] <= straight * DIAGONAL_COST, cell
+    # The ones the run actually stands in front of paid for crossing it,
+    # and paid a factor rather than a detour.
+    over_the_counter = [c for c in wall_side
+                        if c[0] in {cc[0] for cc in counter_cells}]
+    assert over_the_counter
+    for cell in over_the_counter:
+        assert reached[cell][1] < 1.0, cell
+    assert levels(behind, "S", "L")["normal"] == "full"
+    # A body standing behind a waist counter four paces off still converses.
+    kitchen = {"kitchen": room("large", {
+        "counter": {"desc": "the counter", "dir": "n", "footprint": "run",
+                    "height": "waist"},
+        "table": {"desc": "the table", "cell": [3, 2], "footprint": "large",
+                  "height": "waist"},
+        "door": {"desc": "the way out", "dir": "s"}})}
+    sc = scene(copy.deepcopy(kitchen), {"S": "kitchen", "L": "kitchen"},
+               {"S": {"cell": [5, 1]}, "L": {"cell": [1, 2]}})
+    assert levels(sc, "S", "L")["normal"] == "full"
+    # The same room with a FULL-height partition standing between them: the
+    # flood goes round it, and the voice pays the whole detour.
+    partitioned = scene(copy.deepcopy(kitchen), {"S": "kitchen", "L": "kitchen"},
+                        {"S": {"cell": [5, 1]}, "L": {"cell": [1, 2]}})
+    for y in range(6):
+        partitioned["rooms"]["kitchen"]["anchors"]["screen_%d" % y] = {
+            "desc": "a full-height screen", "cell": [3, y], "height": "full"}
+    f_open = sound_field(sc, "L")
+    f_shut = sound_field(partitioned, "L")
+    assert (f_shut.gain_between("S", "L")
+            < f_open.gain_between("S", "L") * 0.5)
     # And a body whose station lands ON an occluder's cell is not deaf: a
     # listener standing where another anchor's seeded cell fell hears the
     # speaker beside them in full (until 2026-09-04 the flood never entered
@@ -620,3 +648,246 @@ def test_gain_is_path_not_line():
     assert gain_at({}, (1, 1)) == 0.0
     assert isinstance(sound_field(scene(hall(), {"L": "hall"},
                                         {"L": {"at": "west"}}), "L"), SoundField)
+
+
+# ---------------------------------------------------------------------------
+# PB2: a path between two cells has no direction
+# ---------------------------------------------------------------------------
+
+def _pair_rooms():
+    """Two rooms of different sizes across one open arch -- the
+    caravanserai's courtyard and gate in miniature, the shape whose two
+    composites disagreed."""
+    return {
+        "yard": room("small", {
+            "well": {"desc": "the well", "cell": [1, 1], "height": "waist"},
+            "stair": {"desc": "the stair", "dir": "n"}},
+            [{"to": "gate", "barrier": "open", "dir": "e", "offset": 0.5}],
+            exposure="open"),
+        "gate": room("tiny", {
+            "beam": {"desc": "the bar beam", "dir": "e", "height": "full"},
+            "bench": {"desc": "the warden's bench", "dir": "s",
+                      "height": "waist"}},
+            [{"to": "yard", "barrier": "open", "dir": "w", "offset": 0.5}],
+            exposure="sheltered"),
+    }
+
+
+def test_the_gain_between_two_bodies_is_the_same_in_both_directions():
+    """PB2, brute-forced over EVERY pair of cells of a two-room fixture, as
+    `tests/test_wall_is_a_line.py` does for a sight line: the same pair
+    asked from either body's own field, and from either end, is one number.
+
+    The live case: a courtyard and a gate across one open arch, one beat,
+    one pair -- the warden's field answered 0.0309 for the shout and the
+    shouter's answered 0.0, so the warden heard and replied while the
+    narrator wrote "no reply comes" over the reply
+    (`PLAY_2026_09_05_caravanserai.md` § PB2)."""
+    sc = scene(_pair_rooms(), {"S": "yard", "L": "gate"},
+               {"S": {"cell": [0, 0]}, "L": {"cell": [0, 0]}})
+    fields = {r: sound_field(sc, name, room=r)
+              for r, name in (("yard", "S"), ("gate", "L"))}
+    assert all(f is not None for f in fields.values())
+    cells = {r: sorted(c for c, rid in fields[r].grid.inside.items()
+                       if rid == r) for r in ("yard", "gate")}
+    seen = set()
+    pairs = 0
+    for s_room in ("yard", "gate"):
+        for l_room in ("yard", "gate"):
+            for s_cell in cells[s_room]:
+                for l_cell in cells[l_room]:
+                    sc["positions"] = {"S": s_room, "L": l_room}
+                    sc["stations"] = {"S": {"cell": list(s_cell)},
+                                      "L": {"cell": list(l_cell)}}
+                    answers = {
+                        f.gain_between("S", "L", speaker_room=s_room,
+                                       listener_room=l_room)
+                        for f in fields.values()}
+                    answers |= {
+                        f.gain_between("L", "S", speaker_room=l_room,
+                                       listener_room=s_room)
+                        for f in fields.values()}
+                    assert None not in answers or answers == {None}, (
+                        s_room, s_cell, l_room, l_cell, answers)
+                    if answers != {None}:
+                        # One number, to within the order the products
+                        # happened to be multiplied in.
+                        assert max(answers) - min(answers) <= 1e-9, (
+                            s_room, s_cell, l_room, l_cell, answers)
+                    seen |= answers
+                    pairs += 1
+    assert pairs >= 100
+    assert any(g and g > 0.0 for g in seen)        # the arch does carry
+
+
+def test_a_shout_across_the_arch_is_heard_from_either_side():
+    """The same beat both ways round: the pair either hears or does not, and
+    the two bodies never disagree about which."""
+    sc = scene(_pair_rooms(), {"S": "yard", "L": "gate"},
+               {"S": {"at": "well"}, "L": {"at": "bench"}})
+    assert levels(sc, "S", "L")["shout"] == levels(sc, "L", "S")["shout"]
+    assert levels(sc, "S", "L")["shout"] != "none"
+
+
+# ---------------------------------------------------------------------------
+# PA5: one masking rule, on every path
+# ---------------------------------------------------------------------------
+
+def _three_rooms(bell=None):
+    """A chain of three rooms through open doors: the listener is two hops
+    from the speaker, so no composite places the pair and the edge model is
+    what answers."""
+    rooms = {
+        "kitchen": room("medium", {"stove": {"desc": "the stove", "dir": "s",
+                                             "height": "waist"}},
+                        [{"to": "stair", "barrier": "open_door", "dir": "n"}]),
+        "stair": room("medium", {"rail": {"desc": "the rail", "dir": "e",
+                                          "height": "waist"}},
+                      [{"to": "kitchen", "barrier": "open_door", "dir": "s"},
+                       {"to": "watch", "barrier": "open_door", "dir": "n"}]),
+        "watch": room("medium", {"lamp": {"desc": "the great lamp", "dir": "n",
+                                          "height": "waist"},
+                                 "rail2": {"desc": "the gallery rail",
+                                           "dir": "s", "height": "waist"}},
+                      [{"to": "stair", "barrier": "open_door", "dir": "s"}]),
+    }
+    entities = {}
+    if bell:
+        entities["bell"] = {"name": "the fog bell", "sound_source": bell}
+    sc = scene(rooms, {"S": "kitchen", "L": "watch"},
+               {"S": {"at": "stove"}, "L": {"at": "lamp"}}, entities=entities)
+    if bell:
+        sc["positions"]["bell"] = "watch"
+    return sc
+
+
+def test_noise_beside_the_listener_masks_a_voice_from_beyond_the_field():
+    """PA5. A listener's noise floor is a property of where the LISTENER
+    stands, so it grades a voice from two rooms off exactly as it grades one
+    in the room. Live: the fog bell drowned an ordinary voice IN the watch
+    room (signal 0.34, noise 20.5) while a shout from three rooms away
+    arrived whole, because the edge model had no idea there was a bell
+    (`PLAY_2026_09_05_lighthouse.md` § PA5)."""
+    quiet = _three_rooms()
+    assert "signal" not in spatial_rel_between(quiet, "L", "S")
+    assert levels(quiet, "S", "L")["shout"] != "none"   # edge model, unchanged
+    loud = _three_rooms(bell="deafening")
+    rel = spatial_rel_between(loud, "L", "S")
+    assert rel.get("door_gain") and rel.get("noise")
+    assert levels(loud, "S", "L")["shout"] == "none"
+    # And the same bell drowns a voice IN the room, which it always did:
+    # one rule, both paths.
+    same_room = _three_rooms(bell="deafening")
+    same_room["positions"]["S"] = "watch"
+    same_room["stations"]["S"] = {"at": "rail2"}
+    assert levels(same_room, "S", "L")["shout"] == "none"
+
+
+def test_a_quiet_room_masks_nothing_and_a_vouched_channel_is_exempt():
+    """The ceiling only ever subtracts, and only where there is noise to
+    subtract by: a quiet listener's answers are the edge model's own."""
+    rel = spatial_rel_between(_three_rooms(), "L", "S")
+    bare = {k: v for k, v in rel.items() if k not in ("door_gain", "noise")}
+    for volume in VOLUMES:
+        assert hear_level(rel, volume) == hear_level(bare, volume)
+    # A vouched channel is not this room's air: the doorway says nothing.
+    loud = spatial_rel_between(_three_rooms(bell="deafening"), "L", "S")
+    loud["barrier"] = "unknown"
+    assert hear_level(loud, "shout", vouched=True) == "fragment"
+
+
+# ---------------------------------------------------------------------------
+# PC3: a raised voice carries through an opening
+# ---------------------------------------------------------------------------
+
+def _across_one_edge(barrier="open", *, machine=None, at_the_ear=False):
+    """Two rooms joined by one edge, the bodies at the far wall of each, and
+    an optional machine running in the listener's room -- far off unless
+    `at_the_ear`, which stands it on the listener's own anchor."""
+    entities = {}
+    if machine:
+        entities["m"] = {"name": "the machine", "sound_source": machine}
+    sc = scene(two_rooms(barrier), {"S": "a", "L": "b"},
+               {"S": {"at": "c"}, "L": {"at": "w"}}, entities=entities)
+    if machine:
+        sc["positions"]["m"] = "b"
+        if at_the_ear:
+            sc["stations"]["m"] = {"at": "w"}
+    return sc
+
+
+def test_a_raised_voice_across_one_opening_is_at_worst_a_fragment():
+    """PC3's second half. The edge model always delivered a shout through an
+    archway; the field, which knows the path and the noise, can refuse the
+    same shout -- so when both perception passes came to read the field a
+    shout across one open archway could reach nobody at all. One passable
+    edge away, a raised voice floors at `fragment`."""
+    from world.spatial import sound_field_hear_level
+    sc = _across_one_edge("open", machine="loud")
+    rel = spatial_rel_between(sc, "L", "S")
+    assert rel.get("open_edge") is True
+    assert rel.get("signal") is not None          # the field DID place them
+    assert sound_field_hear_level("shout", rel["signal"], rel["noise"]) == "none"
+    assert hear_level(rel, "shout") == "fragment"
+    assert hear_level(rel, "loud") == "fragment"
+    # Only a RAISED voice: an ordinary one still follows the field.
+    assert hear_level(rel, "normal") == "none"
+    # And it is the same answer from either end (PB2): the machine is in
+    # L's room, so the two noises differ and the OPENING does not.
+    other_way = spatial_rel_between(sc, "S", "L")
+    assert other_way.get("open_edge") is True
+    assert hear_level(other_way, "shout") != "none"
+
+
+def test_the_floor_needs_an_opening_and_yields_to_the_room_it_arrives_in():
+    """A shut door is not an opening, two edges away is not one edge, and an
+    opening carries a voice INTO a room rather than through the machine
+    running in it -- the same masking rule everything else answers to."""
+    shut = spatial_rel_between(_across_one_edge("closed_door",
+                                                machine="loud"), "L", "S")
+    assert not shut.get("open_edge")
+    assert hear_level(shut, "shout") == "none"
+    two_hops = spatial_rel_between(_three_rooms(), "L", "S")
+    assert not two_hops.get("open_edge")
+    drowned = spatial_rel_between(
+        _across_one_edge("open", machine="deafening", at_the_ear=True),
+        "L", "S")
+    assert drowned.get("open_edge") is True
+    assert hear_level(drowned, "shout") == "none"
+
+
+def test_the_opening_is_one_doorway_however_it_was_declared():
+    """A doorway is one object: an edge declared from either side is the
+    same opening, which is also what keeps the floor reciprocal."""
+    from world.spatial import one_opening_away
+    sc = _across_one_edge("open")
+    sc["rooms"]["b"]["adjacent"] = []             # declared from `a` alone
+    assert one_opening_away(sc, "a", "b") is True
+    assert one_opening_away(sc, "b", "a") is True
+    assert one_opening_away(sc, "a", "a") is False
+    # A paper door is the opening it acoustically is; a steel one is not.
+    paper = scene(two_rooms("closed_door", material="paper"),
+                  {"S": "a", "L": "b"}, {"S": {"at": "c"}, "L": {"at": "w"}})
+    assert one_opening_away(paper, "a", "b") is True
+
+
+# ---------------------------------------------------------------------------
+# PC4: a drop is a source wavering, not a source stopping
+# ---------------------------------------------------------------------------
+
+def test_a_flickering_source_on_the_bottom_rung_still_sounds():
+    """A `faint` source on a dropped beat keeps the quietest sound it can
+    make; only `failing` goes out, and only that files a notice."""
+    from world.spatial import _power_of_level, SOUND_POWER
+    assert _power_of_level("faint", "dropped") == SOUND_POWER["faint"]
+    assert _power_of_level("audible", "dropped") == SOUND_POWER["faint"]
+    assert _power_of_level("faint", "out") == 0.0
+    beat = next(b for b in range(4000)
+                if steadiness_this_beat("flickering", b, "hum") == "dropped")
+    sc = scene(hall(), {"L": "hall", "hum": "hall"}, {"L": {"at": "west"}},
+               entities={"hum": {"name": "the vent", "sound_source": "faint",
+                                 "steadiness": "flickering"}})
+    sources, notices = sound_sources(sc, turn_idx=beat)
+    assert [s["id"] for s in sources] == ["hum"]
+    assert sources[0]["power"] > 0.0
+    assert notices == []
