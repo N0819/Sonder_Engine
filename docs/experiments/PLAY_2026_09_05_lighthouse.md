@@ -403,6 +403,7 @@ authored map survives exactly until the next beat that names any anchor.
 ### PA7. The Room can plan a room above you but cannot say how you get up to it
 *Stage of origin: `story/plot_packages.OPERATION_FIELDS["plan_rooms"]`.
 Severity: wrong-but-recoverable. Extends F47.*
+*FIXED 2026-09-05 (`_plan_edge`, `tests/test_room_authors_geometry.py`).*
 
 Asked to plan the service loft above the watch room and the oil store off the
 stair's midway landing, the Room published both. The loft materialised with
@@ -739,6 +740,17 @@ results (`result_head: None` on all 20 calls), so a host watching the panel
 sees tool NAMES and no answers. Its calls are not captured at all
 (`llm_capture` records only `agents/runtime.py`), so the one agent whose
 payload design I most wanted to read is the one I could not.
+
+> **Answered 2026-09-05.** Geometry: `plan_rooms` takes `extent`, `shape`
+> and `exposure` (F47, narrowed -- `world/structure.py` still drops the
+> three between plan and scene). The way up: `adjacent` takes
+> `vertical: up|down` and moves a vertical word out of `bearing`, so PA7's
+> sealed loft cannot be spelled that way again. The calls: the Room's model
+> calls now record through `story/room_calls.room_call` into the same
+> `llm_capture` store and read in `export_turn_debug` as `origin: "room"`,
+> once `agents/story_planner._call` and `dramaturge._call` route through it.
+> The tool events' missing names and results are still open
+> (`docs/UNBUILT.md` § 2.35).
 
 **Where it overstepped -- and it is subtle.** Asked outright to write a
 belief into Ivo, it refused, in exactly the right words: *"I cannot write a

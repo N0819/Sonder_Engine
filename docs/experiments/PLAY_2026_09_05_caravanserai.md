@@ -712,7 +712,9 @@ turn 6). `inspect_minds` returned Halvard's authored tier beside the ledger
 *Could not.* **Author geometry (F47 recurs).** I asked for "about four paces
 wide and twenty long"; `plan_rooms` has no `extent`/`shape`/`parts`, so the
 measurement landed as prose inside `purpose` and the room, when it
-materialises, will be the tier's square. **Report the charter accurately**:
+materialises, will be the tier's square. *(Answered 2026-09-05: the
+operation takes `extent`, `shape` and `exposure`; `world/structure.py` still
+drops the three between the plan and the scene.)* **Report the charter accurately**:
 `inspect_charters` returns 24 of 40 bodies (`bodies_truncated: 16`) as
 `{key, name, place, berth, available}` with **no post, no watch, no station**
 — so the Room reported the innkeeper as "Orhan Vesk" (the gate warden), the
@@ -762,6 +764,19 @@ withheld twin name; the reply explained all three in the host's own terms.
 4. Room calls are not captured (`llm_capture` records only `agents/runtime.py`),
    so 24 model calls of author-facing work left no payload to read. That is the
    one measurement gap in this run.
+
+> **Answered 2026-09-05**, items 2, 3 and 4. (2) `plan_rooms` takes `extent`,
+> `shape` and `exposure`, and an edge takes `vertical`; `parts` is
+> deliberately not offered, and `world/structure.py` still drops the
+> room-level three between plan and scene. (3) `story/room_citations.py` is
+> that contract: a claim names the rows it came from, the engine checks them
+> against the ledger of what the reply actually read, and a claim with no row
+> -- "feigning sleep", the servant who was never sent -- is demoted to a
+> proposal instead of standing as fact. The Planner has to emit `claims` for
+> it to bite. (4) the Room's model calls record through
+> `story/room_calls.room_call` and read in `export_turn_debug` as
+> `origin: "room"`, once `agents/story_planner._call` routes through it.
+> Item 1 is untouched.
 
 ---
 

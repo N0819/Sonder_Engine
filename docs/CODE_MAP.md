@@ -87,8 +87,8 @@
 | `persist/commit_place_graph.py` | 321 | Per-mind durable place graph and per-beat spatial experience. | `world.spatial` |
 | `persist/commit_room_registry.py` | 496 | Room identity across frames: registry projection, mint dedup, renames, retirement, exit pruning. | `core.db`, `persist.commit_common`, `story.character_schema`, `world.spatial` |
 | `persist/commit_scene_state.py` | 1846 | The prepared post-turn scene: pre-lock build, scene commit domain, book anchoring, ground advance. | `core.db`, `core.pipeline_context`, `mind.memory`, `persist.commit_attire`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_room_registry`, `story.character_schema`, `story.provenance_text`, `world.mechanics`, `world.spatial`, `world.spatial_frames`, `world.weather` |
-| `persist/llm_capture.py` | 229 |  | `core.db` |
-| `persist/pipeline_trace.py` | 574 | Privacy-conscious export, validation, and offline replay of persisted pipeline history. | `core.db` |
+| `persist/llm_capture.py` | 383 |  | `core.db` |
+| `persist/pipeline_trace.py` | 596 | Privacy-conscious export, validation, and offline replay of persisted pipeline history. | `core.db` |
 | `story/__init__.py` | 6 |  | — |
 | `story/artifacts.py` | 649 |  | `llm.prompts` |
 | `story/attire.py` | 3504 |  | — |
@@ -102,17 +102,19 @@
 | `story/importers.py` | 3124 | Native and AI-assisted character, persona, and lorebook import/generation. | `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.memory`, `story.character_schema`, `story.scene` |
 | `story/journey_history.py` | 431 |  | — |
 | `story/lore_structure.py` | 248 |  | — |
-| `story/mandates.py` | 376 |  | `core.db` |
+| `story/mandates.py` | 579 |  | `core.db` |
 | `story/naming.py` | 555 |  | `core.db`, `world.charter_identity` |
-| `story/plot_packages.py` | 2392 |  | — |
+| `story/plot_packages.py` | 2490 |  | — |
 | `story/provenance_text.py` | 132 |  | — |
-| `story/room_bible.py` | 421 |  | `core.db` |
-| `story/room_conversation.py` | 485 |  | `core.db` |
+| `story/room_bible.py` | 424 |  | `core.db` |
+| `story/room_calls.py` | 96 |  | — |
+| `story/room_citations.py` | 221 |  | — |
+| `story/room_conversation.py` | 544 |  | `core.db` |
 | `story/room_frontier.py` | 233 |  | `core.db` |
 | `story/room_proposals.py` | 264 |  | `core.db` |
 | `story/room_research.py` | 371 |  | `core.db` |
 | `story/room_slice.py` | 487 |  | — |
-| `story/room_tools.py` | 1226 |  | `story.plot_packages`, `story.room_research`, `story.room_slice` |
+| `story/room_tools.py` | 1235 |  | `story.plot_packages`, `story.room_research`, `story.room_slice` |
 | `story/scene.py` | 2746 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `core.db`, `story`, `story.attire`, `story.character_schema`, `world.day_cycle`, `world.spatial` |
 | `web/__init__.py` | 6 |  | — |
 | `web/app.py` | 6841 | FastAPI application assembly, resource CRUD, turn control, and streaming endpoints. | `agents`, `agents.story_planner`, `core`, `core.db`, `core.frames`, `core.paths`, `dressing.ambience`, `dressing.backdrops`, `llm`, `llm.prompts`, `llm.providers`, `mind.memory`, `persist.chat_archive`, `persist.chat_delete`, `persist.checkpoints`, `persist.commit`, `story`, `story.character_schema`, `story.dialogue_colors`, `story.importers`, `story.scene`, `web`, `web.auth_routes`, `web.room_routes`, `web.world_routes`, `world`, `world.survival` |
@@ -1090,25 +1092,25 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `record_exchange()` | 133 | 41 lines |
-| `put_blob()` | 76 | 25 lines |
-| `_payload_hashes()` | 110 | 21 lines |
-| `exchanges_for_turn()` | 176 | 20 lines |
-| `prune()` | 198 | 16 lines |
-| `vacuum_blobs()` | 216 | 14 lines |
-| `capture_enabled()` | 54 | 7 lines |
-| `capture_bodies()` | 63 | 7 lines |
+| `record_room_exchange()` | 313 | 46 lines |
+| `record_exchange()` | 135 | 41 lines |
+| `put_blob()` | 78 | 25 lines |
+| `latest_turn_id()` | 269 | 24 lines |
+| `_payload_hashes()` | 112 | 21 lines |
+| `exchanges_for_turn()` | 178 | 20 lines |
+| `prune()` | 200 | 16 lines |
+| `room_capture()` | 296 | 15 lines |
 
 ### `persist/pipeline_trace.py`
 
 | Function | Start | Size |
 |---|---:|---:|
+| `export_turn_debug()` | 424 | 148 lines |
 | `validate_pipeline_trace()` | 174 | 128 lines |
-| `export_turn_debug()` | 424 | 126 lines |
 | `export_pipeline_trace()` | 80 | 92 lines |
 | `replay_pipeline_trace()` | 304 | 68 lines |
 | `write_pipeline_trace()` | 389 | 25 lines |
-| `export_chat_debug()` | 552 | 23 lines |
+| `export_chat_debug()` | 574 | 23 lines |
 | `_canonical_json()` | 45 | 14 lines |
 | `load_pipeline_trace()` | 379 | 8 lines |
 
@@ -1265,14 +1267,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `grant_mandate()` | 154 | 73 lines |
-| `coverage()` | 250 | 16 lines |
-| `_most_permissive()` | 294 | 15 lines |
-| `expire_mandates()` | 229 | 14 lines |
-| `fill_limit()` | 279 | 13 lines |
-| `surprise_dial()` | 338 | 13 lines |
-| `spend_limits()` | 311 | 12 lines |
-| `beats_per_proposal()` | 353 | 12 lines |
+| `grant_mandate()` | 282 | 82 lines |
+| `_request()` | 179 | 29 lines |
+| `expire_mandates()` | 366 | 28 lines |
+| `request_open()` | 221 | 27 lines |
+| `close_request()` | 396 | 26 lines |
+| `renew_mandate()` | 424 | 22 lines |
+| `coverage()` | 453 | 16 lines |
+| `_most_permissive()` | 497 | 15 lines |
 
 ### `story/naming.py`
 
@@ -1291,14 +1293,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `publish_package()` | 2061 | 84 lines |
-| `_package_checks()` | 1792 | 78 lines |
-| `fire_due_clocks()` | 2186 | 77 lines |
+| `publish_package()` | 2159 | 84 lines |
+| `_package_checks()` | 1890 | 78 lines |
+| `fire_due_clocks()` | 2284 | 77 lines |
 | `normalize_package()` | 173 | 74 lines |
-| `_reach_warning()` | 1893 | 68 lines |
+| `_reach_warning()` | 1991 | 68 lines |
 | `_world_snapshot()` | 487 | 66 lines |
 | `edit_package()` | 362 | 57 lines |
-| `_shape_plan_rooms()` | 581 | 35 lines |
+| `_preview_plan_rooms()` | 698 | 49 lines |
 
 ### `story/provenance_text.py`
 
@@ -1312,7 +1314,7 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `fold()` | 357 | 52 lines |
+| `fold()` | 360 | 52 lines |
 | `render_block()` | 281 | 42 lines |
 | `add_entry()` | 194 | 40 lines |
 | `source_exists()` | 83 | 33 lines |
@@ -1321,18 +1323,39 @@
 | `_normalize_entry()` | 122 | 15 lines |
 | `_evict()` | 180 | 12 lines |
 
+### `story/room_calls.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `room_call()` | 35 | 39 lines |
+| `_reasoning()` | 85 | 12 lines |
+| `_requested()` | 76 | 7 lines |
+
+### `story/room_citations.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `check_claims()` | 176 | 46 lines |
+| `_harvest()` | 139 | 16 lines |
+| `note_reads()` | 124 | 13 lines |
+| `normalize_claim()` | 162 | 12 lines |
+| `reading()` | 96 | 9 lines |
+| `enter_reading()` | 107 | 9 lines |
+| `rows_read()` | 118 | 4 lines |
+| `_add()` | 157 | 3 lines |
+
 ### `story/room_conversation.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `converse_stream()` | 352 | 92 lines |
-| `converse()` | 301 | 35 lines |
-| `restore_room_messages()` | 456 | 30 lines |
-| `status()` | 250 | 24 lines |
-| `add_message()` | 164 | 23 lines |
-| `normalize_mandate()` | 198 | 21 lines |
-| `revoke_mandate()` | 231 | 17 lines |
-| `messages()` | 148 | 14 lines |
+| `converse_stream()` | 399 | 104 lines |
+| `converse()` | 332 | 51 lines |
+| `restore_room_messages()` | 515 | 30 lines |
+| `normalize_mandate()` | 207 | 26 lines |
+| `status()` | 281 | 24 lines |
+| `add_message()` | 173 | 23 lines |
+| `revoke_mandate()` | 262 | 17 lines |
+| `_normalize_request()` | 235 | 15 lines |
 
 ### `story/room_frontier.py`
 
@@ -1395,9 +1418,9 @@
 | `_t_inspect_config()` | 444 | 67 lines |
 | `_t_inspect_route()` | 258 | 60 lines |
 | `_t_inspect_rooms()` | 207 | 49 lines |
-| `fit_result()` | 1192 | 35 lines |
+| `run_tool()` | 1160 | 35 lines |
+| `fit_result()` | 1201 | 35 lines |
 | `_t_scan_lore()` | 162 | 33 lines |
-| `_t_inspect_reserved_identities()` | 323 | 31 lines |
 
 ### `story/scene.py`
 

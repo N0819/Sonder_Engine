@@ -345,11 +345,14 @@ def pending_fold_count(cid, frame_id, *, window):
 
 
 def _call(system, payload):
+    # Through `story.room_calls.room_call` rather than `chat_complete`
+    # directly, so a fold is captured like any other Room call when the
+    # host has capture on (`persist/llm_capture.py`). Same provider, same
+    # arguments, same return.
     from agents.common import jparse
-    from llm import providers
-    raw = providers.chat_complete(
-        BIBLE_ROLE, system, json.dumps(payload, ensure_ascii=False),
-        json_mode=True, max_tokens=BIBLE_FOLD_MAX_TOKENS)
+    from story.room_calls import room_call
+    raw = room_call(BIBLE_ROLE, system, payload,
+                    max_tokens=BIBLE_FOLD_MAX_TOKENS, phase="bible")
     out = jparse(raw)
     return out if isinstance(out, dict) else {}
 

@@ -625,6 +625,20 @@ every write already goes through a package that checks the grant anyway.
 (3) `inspect_route` should name the blocking edge (PC10). (4) Capture Room
 calls.
 
+> **Answered 2026-09-05**, items 1 and 4, and half of 2. (1) `plan_rooms`
+> takes `extent`, `shape` and `exposure` and an edge takes `vertical`; the
+> preview now shows what the plan MEASURED, which is the check this run
+> wanted -- a stable yard asked for at ten by six and reported back as
+> fourteen by twelve would show its extent or show none. `parts` is
+> deliberately not offered, and `world/structure.py` still drops the
+> room-level three between plan and scene. (4) the Room's model calls record
+> through `story/room_calls.room_call` into `llm_capture`, once
+> `agents/story_planner._call` routes through it. (2) is answered where a
+> proposal meets an assertion rather than where it meets a mandate:
+> `story/room_citations.py` marks the difference, so a room may say what it
+> is only suggesting without borrowing the world's authority for it -- the
+> mandate question itself is untouched.
+
 
 ## 6. Prompt and payload proposals, per stage
 
