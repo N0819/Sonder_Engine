@@ -775,3 +775,146 @@ def test_every_embedding_of_a_fragment_is_a_reference_no_pack_keeps_a_copy():
             assert not pasted, (
                 f"{pack.id}: {name} is pasted verbatim at {pasted}; embed it "
                 "as {{fragment:" + name + "}} so it cannot drift")
+
+
+# ---------------------------------------------------------------------------
+# F59: a rendered view is composed in ONE language
+# ---------------------------------------------------------------------------
+
+#: One percept of every kind `composer.PERCEPT_KINDS` names, with every
+#: story-authored slot filled in Japanese. The values here are the AUTHORED
+#: half of a view -- a room's name, a body's posture, what a smell is of --
+#: and they are deliberately non-Latin so that anything Latin left in the
+#: rendered text can only have come from the ENGINE: an enum key printed raw,
+#: a frame word the pack never translated, a `source_label` token.
+#:
+#: Adding a percept kind without a line here fails
+#: `test_every_percept_kind_the_engine_defines_has_a_japanese_rendering`.
+JAPANESE_PERCEPT_FIXTURES = {
+    "environment": ("you", {"room_name": "厨房", "room_notes": "狭い部屋。",
+                            "light": "dim"}),
+    "presence": ("レイヤ", {"tier": "near", "side": "left"}),
+    "pose": ("you", {"posture": "膝をついて", "support": "石床",
+                     "relative_to": "祭壇", "relation": "下",
+                     "constraint": "縛られて"}),
+    "appearance": ("レイヤ", {"description": "背の高い人物"}),
+    "act": ("レイヤ", {"surface": "扉を開ける"}),
+    "speech": ("レイヤ", {"body": "手すりに気をつけて。", "can_see": True,
+                          "volume": "whisper", "articulation": "slurred",
+                          "tone": "不安"}),
+    "communication": ("レイヤ", {"surface": "帳簿について尋ねる",
+                                 "via": "伝声管"}),
+    "sensation": ("you", {"clause": "腕に痛みが走る。"}),
+    "substance": ("you", {"clause": "水が滴る。"}),
+    "body_part": ("you", {"part": "尻尾", "count": 2, "aspect": "sides",
+                          "at": "腰", "description": "毛深い",
+                          "tucked": True}),
+    "body_region": ("you", {"place": "肩", "detail": "生々しい傷"}),
+    "body_state": ("you", {"posture": "立っている", "activity": "見張り",
+                           "held_items": ["提灯"]}),
+    "crossing": ("レイヤ", {"direction": "arrived"}),
+    "residue": ("you", {"level": "unconscious", "pain": True}),
+    "ambient": ("you", {"clause": "遠くで鐘が鳴る。"}),
+    "scent": ("レイヤ", {"scent": "煙", "attributed": True}),
+}
+
+
+def _ja_percept(kind, label, data):
+    return Percept(
+        kind=kind, channel="mixed", source_label=label, fidelity="full",
+        data=dict(data), salience=0.6, order_key=0,
+        dedupe_key="%s:%s" % (kind, label))
+
+
+def _engine_latin(text, authored):
+    """Latin script in a rendered view that the STORY did not put there.
+
+    THE LINE, and it is the whole of the check: a view is composed in one
+    language, and every word in it comes from one of two places. The story
+    authored some of them -- a proper name, a room's name, a posture the
+    Director wrote, a quoted foreign phrase -- and those are reproduced in
+    whatever script they were written in, because translating a name is not
+    this renderer's job and dropping it would lose a fact. Everything else is
+    the ENGINE's: templates, particles, enum keys, the `you` token the
+    composer stamps into `source_label`. Engine text in Latin script inside a
+    Japanese view is an untranslated slot, every time.
+
+    So the authored values are removed from the rendered text first, longest
+    first so a value contained in another does not unmask its container, and
+    what is left is the engine's own words.
+    """
+    scrubbed = text
+    for value in sorted({str(v) for v in authored if str(v).strip()},
+                        key=len, reverse=True):
+        scrubbed = scrubbed.replace(value, " ")
+    return re.findall(r"[A-Za-z]+", scrubbed)
+
+
+def _authored_values(data):
+    values = []
+    for value in data.values():
+        if isinstance(value, (list, tuple)):
+            values.extend(str(v) for v in value)
+        elif isinstance(value, str):
+            values.append(value)
+    return values
+
+
+@pytest.mark.parametrize("kind", sorted(JAPANESE_PERCEPT_FIXTURES))
+def test_no_engine_owned_slot_reaches_a_japanese_view_in_latin_script(kind):
+    """F59, four play runs and never the same slot twice: `youはbraced
+    leaning。` (PA14), `youはbelowthe crestthe groundの上にhalf-crouch`
+    (PD11), `youはthe chairの上にseated。` (PE6), the whole non-awake residue
+    in English, `slurred` printed as an enum key before that. Each was found
+    by a reader, one field at a time, because nothing could SEE the class.
+
+    This can: a slot with no rendering shows up as engine-owned Latin in a
+    view whose authored words are all Japanese. It is deterministic, it runs
+    over every kind the composer defines, and it does not care which slot
+    goes missing next."""
+    label, data = JAPANESE_PERCEPT_FIXTURES[kind]
+    view = render_view([_ja_percept(kind, label, data)], language="ja")
+    leaks = _engine_latin(view.text, _authored_values(data) + [label])
+    assert not leaks, "%s: %r in %r" % (kind, leaks, view.text)
+
+
+@pytest.mark.parametrize("kind", sorted(JAPANESE_PERCEPT_FIXTURES))
+def test_a_japanese_memory_episode_is_composed_in_japanese_too(kind):
+    """The episode is the same view one tense over, and it becomes the mind's
+    durable memory -- so an untranslated slot there outlives the beat."""
+    label, data = JAPANESE_PERCEPT_FIXTURES[kind]
+    episode, _gist, _entities = render_episode(
+        [_ja_percept(kind, label, data)], language="ja")
+    leaks = _engine_latin(episode, _authored_values(data) + [label])
+    assert not leaks, "%s: %r in %r" % (kind, leaks, episode)
+
+
+def test_a_name_the_story_authored_in_latin_script_is_not_a_leak():
+    """THE OTHER SIDE OF THE LINE. A Japanese story may perfectly well hold a
+    body called `Corin Ashe` and a room called `Kitchen-Living Room`: those
+    are the story's own words, and a renderer that translated or dropped them
+    would be inventing and losing facts respectively. The check must see the
+    frame, not the content -- so it passes here while the sentence around the
+    name stays Japanese."""
+    percept = _ja_percept("pose", "Corin Ashe",
+                          {"posture": "立っている", "support": "石床"})
+    text = render_view([percept], language="ja").text
+    assert text == "Corin Asheは石床の上に立っている。"
+    assert not _engine_latin(text, ["Corin Ashe", "立っている", "石床"])
+    # And the check is not vacuous: the same sentence with the engine's own
+    # second-person token left untranslated IS a leak.
+    assert _engine_latin("youは石床の上に立っている。", ["立っている", "石床"]) == [
+        "you"]
+
+
+def test_every_percept_kind_the_engine_defines_has_a_japanese_rendering():
+    """A kind with no branch in the adapter renders as the empty string, and
+    a dropped kind is a fact the observer earned and does not get -- it fails
+    silently, in a language nobody reading the tests speaks. `communication`
+    was exactly that: one of `PERCEPT_KINDS`, admitted by perception, and
+    absent from every Japanese view ever composed."""
+    from agents.composer import PERCEPT_KINDS
+    assert set(JAPANESE_PERCEPT_FIXTURES) == set(PERCEPT_KINDS)
+    for kind, (label, data) in sorted(JAPANESE_PERCEPT_FIXTURES.items()):
+        view = render_view([_ja_percept(kind, label, data)], language="ja")
+        assert view.text.strip(), "no Japanese rendering for percept %r" % kind

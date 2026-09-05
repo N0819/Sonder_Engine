@@ -411,5 +411,7 @@
   "surface_person": "person",
   "surface_figure": "figure",
   "surface_adjective_join": " ",
-  "surface_list_join": ", "
+  "surface_list_join": ", ",
+  "speech_quote_pair": ["\"", "\""],
+  "self_label": "you"
 }

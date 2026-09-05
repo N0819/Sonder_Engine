@@ -1701,6 +1701,123 @@ identified and not done:
 **"句点 inside 「」" is not normalised.** Standard Japanese practice omits the
 closing 句点 inside quotation marks; the engine emits whatever the model wrote.
 
+**A rendered view is composed in ONE language, and the suite can now see it
+(F59, 2026-09-05).** Five play runs found this one field at a time -- PA14's
+`youはbracedleaning。`, PD11's `youはbelowthe crestthe groundの上に
+half-crouch`, PE6's `youはthe chairの上にseated。`, and `slurred` printed as a
+raw enum key before them -- because nothing could see the CLASS. Three engine
+faults were fixed and one check was built:
+
+- `source_label`'s `you` is the composer's own second-person TOKEN, not
+  English prose, and nine percept kinds printed it verbatim. It renders
+  through the pack's `self_label` now (`JapaneseRenderer._label`).
+- The pose sentence had no Japanese frame for a `relation` beside its object
+  and joined its clauses with nothing -- correct for kana, and the thing that
+  fused two Latin words into one that was never written. `_join_clauses`
+  spaces a Latin/Latin boundary and only that; `pose_relation_at` frames the
+  relation.
+- The renderer borrows deterministic code from `agents/common.py` and
+  `agents/composer.py`, and every borrowed helper reads the pack through the
+  ambient `current_language_id`, which nothing sets outside a turn. So
+  `render_view(language="ja")` composed the non-awake residue -- the WHOLE
+  view for an unconscious mind -- in English, and ran the English
+  second-to-first-person rules over Japanese memory prose. Both are wrapped
+  in `language_scope(self.language)` now.
+- `communication` is one of `composer.PERCEPT_KINDS` and the adapter had no
+  branch for it at all, so every reported act of speech fell out of every
+  Japanese view with no error anywhere.
+
+**Where the line is drawn, because the check depends on it.**
+`tests/test_language_packs.py` renders one percept of every kind with every
+STORY-AUTHORED slot filled in Japanese, removes those authored values from
+the rendered text, and fails on any Latin left. Authored content -- a proper
+name, a room's name, a posture the Director wrote, a quoted foreign phrase --
+is reproduced in whatever script it was written in, because translating a
+name is not the renderer's job and dropping it would lose a fact; everything
+else in the view is the engine's, and engine text in Latin script inside a
+Japanese view is an untranslated slot every time. `Corin Asheは石床の上に
+立っている。` passes; `youは石床の上に立っている。` does not.
+
+**Two engine-owned English slots the new check does NOT yet cover, because
+they live outside this agent's files:**
+
+- `agents/common.communication_surface` builds its observable predicate from
+  a hardcoded English verb table (`ask -> asks`, `warn -> warns`, sixteen
+  entries), so a reported act of speech reaches a Japanese view in English.
+  The table belongs in the pack beside `dialogue_verbs`; the moment it does,
+  the check above catches any gap in it.
+- `agents/composer.communication_percept` writes the literal
+  `"speaks indistinctly"` for a partially heard communication. One string,
+  same class.
+
+**OWNER DECISION: a stored free-text fact is in the language of the beat that
+wrote it (PE5, PD11).** `scene.overlays` and `poses[].detail` are free prose
+written by the Director's hands in the language active at the time, stored in
+the scene blob, and re-delivered verbatim for the rest of the story. A run
+that switches language leaves a permanent tail: PE5 measured
+`scene.overlays["Noor Haddad"]` still holding a Japanese string in an English
+story on the final scene, and PD11 the reverse. No later switch can
+retranslate it, and nothing in the record says which language it is.
+
+The engine currently presents such a slot as if it were composed in the
+view's language, which is the part that is wrong however the rest is
+decided. Three honest options:
+
+1. Stamp stored free-text scene fields with the language they were written
+   in, and let the composer OMIT (never translate) one written in another.
+   Costs a key per field and loses a fact on a switch.
+2. Stamp it and RENDER it as what it is -- foreign text quoted as foreign --
+   so nothing is lost and nothing is misrepresented.
+3. Accept the mixture and say so in the docs.
+
+**Recommendation: (1), the stamp, then (2) on top of it.** The stamp is the
+cheap half and makes either of the others possible; without it neither is.
+Not built here, and DELIBERATELY not built: dropping authored prose from a
+view on a guess about its language is a worse failure than showing it. What
+IS built is the detection -- a Japanese view carrying Latin-script prose from
+an engine-owned slot now fails a test, and the authored-prose case is pinned
+as legitimate beside it (`test_a_pose_written_in_another_language_keeps_its_
+own_words_unfused`), so whichever way the owner decides, the two cases are
+already separated.
+
+**A quoted line is welded once, by the code that owns quoting (F29/F54,
+2026-09-05).** Registered here because the fix has a residual worth naming.
+The narrator card teaches a placeholder protocol -- the model writes `{{L1}}`
+and never types a delivered line -- while DIALOGUE FIDELITY three paragraphs
+above tells it to render a line as a quote. So the model wrapped the token,
+`"{{L1}}"`, and `_substitute_dialogue_tokens` welded a second pair around it:
+`""line""` in English, `「"line"」` in Japanese, on the majority of beats in
+five separate runs. Every downstream quote guard reads quote REGIONS, so a
+doubled mark shifted every boundary and the guards fired on correct prose --
+21 "Delivered line rendered without quotation marks" and 10 "Narrator invented
+quoted dialogue" in the flat run alone, all false, and the second of those is
+enforceable, so each one bought a rewrite.
+
+The fix is structural and not a normalisation: the substitution matches the
+token TOGETHER with any marks around it and writes one pack-correct pair
+(`「」` in Japanese), so a doubled mark is never written rather than detected
+and repaired. Nothing anywhere normalises repeated quote runs, and nothing
+should -- that would be another literal guard over free prose.
+
+NO GUARD WAS DELETED. Both guards that fired falsely were made structural
+instead:
+
+- "Delivered line rendered without quotation marks" (`_check_speech_marking`)
+  is now satisfied BY CONSTRUCTION for every token-placed line, because the
+  engine writes the marks. Its remaining reach is a line the model retyped
+  outside its token and outside quotes. **Residual risk:** it still asks its
+  question by folding typography and substring-searching the page, so if a
+  future path stops welding, it fails in whichever direction its missing
+  case points. It is warning-only (not in `_ENFORCEABLE_PREFIXES`), so a
+  false positive costs signal and not a rewrite.
+- "Narrator invented quoted dialogue absent from the player view" compared a
+  quoted span against the spans the VIEW had quoted, and a view quotes a full
+  line and leaves a half-heard one unquoted (`A muffled voice: ...deafen...
+  glass... midnight...`). A narrator correctly putting that fragment in the
+  reader's ear was told it had invented dialogue. It now compares against
+  what the view DELIVERED -- a span whose words are in the view verbatim came
+  from the view, however the view marked them.
+
 *(Two bullets left this entry on 2026-08-19 — RTL acceptance and the
 deliberately broad UI catalog scanner. Both are facts a pack AUTHOR needs before
 starting rather than defects in a story, and are now in
@@ -7213,8 +7330,9 @@ pinned in `tests/test_played_scene_classes.py`). Open, each an owner decision:
   hops carries a depot at three without a word. Defensible; the owner should
   know the unit.
 - **Two model tics measured, not fixed:** Gemini doubled quotation marks on
-  two beats and eight quote-matching guards fired falsely (F29); the
-  characters cited no delivered observation on most beats (F14).
+  two beats and eight quote-matching guards fired falsely (F29 -- FIXED
+  2026-09-05, § 1.48); the characters cited no delivered observation on most
+  beats (F14).
 
 What the 2026-09-05 geometry run left open
 ([`experiments/DEBUG_RUN_2026_09_05.md`](experiments/DEBUG_RUN_2026_09_05.md),
@@ -7354,7 +7472,9 @@ patch in a file another hand was editing that day:
 - **The Japanese pose sentence is half English (F59).** "youはatthe kitchen
   tablethe chairの上にseated": subject, posture and prepositions untranslated
   and unspaced. `language_adapters/japanese.py`, beside the note's known ja
-  gaps.
+  gaps. FIXED 2026-09-05 for every engine-owned slot in the sentence, and
+  the class is now visible to the suite -- § 1.48. What survives is the
+  authored prose the sentence carries, which is the owner decision below.
 - **The export bench captures no Writers' Room call.** Only
   `agents/runtime.py` records; a Room reply is read from its return value
   and tool events. Noted, not built.

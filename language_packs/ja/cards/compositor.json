@@ -257,6 +257,7 @@
     "pose_part_other": "{label}の{part}",
     "pose_part_self": "あなたの{part}",
     "pose_relation": "{other}にもたれて",
+    "pose_relation_at": "{other}の{relation}に",
     "pose_self_past": "私は",
     "pose_self_present": "あなたは",
     "pose_support": "{support}の上に",
@@ -380,5 +381,7 @@
   "surface_person": "人物",
   "surface_figure": "人影",
   "surface_adjective_join": "",
-  "surface_list_join": "、"
+  "surface_list_join": "、",
+  "speech_quote_pair": ["「", "」"],
+  "self_label": "あなた"
 }
