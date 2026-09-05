@@ -193,6 +193,7 @@ from .director_movement import (
     crossing_legs,
 )
 from .director_floors import (
+    resolve_concealment_refs,
     strip_addressee_concealment,
     _unplaced_minted_entities,
     _bind_minted_entities_to_present_figures,
@@ -1070,6 +1071,12 @@ def director_interpret(ctx, nonce):
     for _note in strip_addressee_concealment(
             out.get("sequence"), cast_by_id, target_forms):
         ctx.add_warning("player state: director_interpret: %s" % _note)
+    # ...and every surviving exclusion is resolved to a body, because the
+    # firewall reader downstream holds no scene and can only match the
+    # observer's own spellings (`resolve_concealment_refs`, PX4).
+    for _note in resolve_concealment_refs(
+            out.get("sequence"), cast_by_id, target_forms):
+        ctx.add_warning("player state: director_interpret: %s" % _note)
     out["sequence"] = assign_event_ids(
         out.get("sequence"), f"turn:{ctx.turn.id}:player")
 
@@ -1087,6 +1094,9 @@ def director_interpret(ctx, nonce):
         repair_narrated_speech_elements(entry)
         bind_sequence_targets(entry.get("sequence"), target_forms)
         for _note in strip_addressee_concealment(
+                entry.get("sequence"), cast_by_id, target_forms):
+            ctx.add_warning("player state: director_interpret: %s" % _note)
+        for _note in resolve_concealment_refs(
                 entry.get("sequence"), cast_by_id, target_forms):
             ctx.add_warning("player state: director_interpret: %s" % _note)
         entry["sequence"] = assign_event_ids(
@@ -3062,6 +3072,24 @@ def director_resolve(ctx, nonce, _corrections=None):
             covered_ids.add(int(declaration.get("char_id")))
         except (TypeError, ValueError):
             continue
+
+    # A CHARACTER'S OWN CONCEALMENT NAMES A BODY TOO. The player's
+    # `conceal_from` is resolved at the interpret floor; a character declares
+    # its own, in whatever spelling its model reached for, and nothing
+    # resolved those. Same floor, same reason (PX4): the firewall reader
+    # downstream holds no scene and can only match the observer's own
+    # spellings, so an entry it cannot match fails OPEN and publishes the
+    # line. Before the loops below, because `char_speech` copies the list
+    # object out of each element and would keep the unresolved one.
+    _by_id, _forms = _cast_match_forms(ctx.cast)
+    for _declaration in list(all_declarations) + [
+            ctx.character_results.get(c["id"]) for c in ctx.cast]:
+        if not isinstance(_declaration, dict):
+            continue
+        for _note in resolve_concealment_refs(
+                _declaration.get("sequence"), _by_id, _forms):
+            ctx.add_warning("character concealment: %s: %s"
+                            % (_declaration.get("name") or "?", _note))
 
     for declaration in all_declarations:
         char_id = declaration.get("char_id")

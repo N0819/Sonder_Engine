@@ -11,11 +11,11 @@
 | `agents/character.py` | 4256 | Private character decision agent. | `agents.common`, `core.db`, `core.frames`, `llm.prompts`, `llm.schemas`, `mind`, `mind.affect`, `mind.memory`, `mind.memory_judge`, `mind.psychology_runtime`, `mind.theory_of_mind`, `story.character_schema`, `story.scene`, `world.gaps`, `world.place_purpose`, `world.spatial`, `world.survival` |
 | `agents/common.py` | 9531 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
 | `agents/composer.py` | 3910 |  | `agents.common`, `core.pipeline_context`, `story.provenance_text`, `story.scene`, `world.spatial` |
-| `agents/director.py` | 4932 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial`, `world.survival` |
+| `agents/director.py` | 4960 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial`, `world.survival` |
 | `agents/director_contact.py` | 457 |  | `story.character_schema`, `world.spatial` |
 | `agents/director_evidence.py` | 1195 |  | `agents.common`, `agents.director_lingua`, `llm`, `world.spatial` |
 | `agents/director_fanout.py` | 887 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
-| `agents/director_floors.py` | 1692 |  | `agents.common`, `agents.director_lingua`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
+| `agents/director_floors.py` | 1844 |  | `agents.common`, `agents.director_lingua`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
 | `agents/director_lingua.py` | 29 |  | — |
 | `agents/director_movement.py` | 1260 |  | `agents.director_lingua`, `story.character_schema`, `world.spatial` |
 | `agents/director_reconcile.py` | 592 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story`, `world.spatial` |
@@ -266,14 +266,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `director_resolve()` | 2999 | 1900 lines |
-| `director_interpret()` | 756 | 651 lines |
-| `_reconcile_resolution()` | 1783 | 522 lines |
-| `_run_specialists()` | 2512 | 263 lines |
-| `director_establish()` | 320 | 171 lines |
-| `_reconcile_interpretation()` | 1409 | 139 lines |
-| `_specialist_repairs()` | 1610 | 119 lines |
-| `_ground_public_evidence()` | 2817 | 112 lines |
+| `director_resolve()` | 3009 | 1918 lines |
+| `director_interpret()` | 757 | 660 lines |
+| `_reconcile_resolution()` | 1793 | 522 lines |
+| `_run_specialists()` | 2522 | 263 lines |
+| `director_establish()` | 321 | 171 lines |
+| `_reconcile_interpretation()` | 1419 | 139 lines |
+| `_specialist_repairs()` | 1620 | 119 lines |
+| `_ground_public_evidence()` | 2827 | 112 lines |
 
 ### `agents/director_contact.py`
 
@@ -319,13 +319,13 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `_bind_minted_entities_to_present_figures()` | 1427 | 160 lines |
+| `resolve_concealment_refs()` | 1638 | 104 lines |
 | `_awareness_exits()` | 689 | 98 lines |
 | `_release_attempts()` | 947 | 93 lines |
 | `_conditions_view()` | 569 | 87 lines |
-| `strip_addressee_concealment()` | 1612 | 81 lines |
+| `strip_addressee_concealment()` | 1764 | 81 lines |
 | `_narrated_destruction_subjects()` | 1207 | 79 lines |
 | `_unsupported_character_awareness()` | 284 | 66 lines |
-| `_restraint_exits()` | 1073 | 64 lines |
 
 ### `agents/director_lingua.py`
 

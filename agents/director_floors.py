@@ -1609,6 +1609,158 @@ def _concealment_forms(ref, by_id, by_name):
     return {low}
 
 
+def _resolves_to_a_body(ref, by_id, by_name) -> bool:
+    """Does the scene hold a body under this spelling at all?
+
+    `_concealment_forms` answers with `{low}` -- the text itself -- when it
+    matched nothing, which is indistinguishable from a match for a caller
+    that only intersects sets. This asks the question directly, because one
+    caller's answer to "I could not find them" must be different from its
+    answer to "I found them".
+    """
+    text = str(ref or "").strip()
+    if not text:
+        return False
+    low = text.casefold()
+    if low == "*":
+        return True
+    if low.startswith("character:"):
+        low = low[len("character:"):].strip()
+    for cid, forms in (by_id or {}).items():
+        if low == str(cid).casefold() or low in forms:
+            return True
+    for name, forms in (by_name or {}).items():
+        if low == str(name).casefold() or low in forms:
+            return True
+    return False
+
+
+def resolve_concealment_refs(sequence, by_id, by_name, warn=None):
+    """A concealment NAMES A BODY; a name the scene cannot resolve is a
+    failure to be reported, never a permission.
+
+    `composer.concealed_from_observer` is the firewall reader, and it decides
+    on typed data alone -- it holds no scene, so it can only match the
+    observer's own name, id and `character:<id>` form. The Director writes
+    `conceal_from` in whichever spelling it reached for, and the two do not
+    have to be the same word. Measured (the Cold Season Ball, 2026-09-05,
+    PX4): the player's own declaration carried `conceal_from:
+    ["character:sault", "character:ivo"]`, neither entry matched anything,
+    the reader's default is `return False`, and Ivo received the line in full
+    in his composed view. No warning anywhere in the beat. It fails OPEN, in
+    the direction that discloses, silently.
+
+    The richer matcher already existed one module over and this floor was not
+    using it. So each entry is resolved here -- cast id, `character:<id>`,
+    display name, alias, scene key -- and rewritten to the canonical
+    `character:<id>` the composer's exact matcher already understands, which
+    keeps the composer's typed-data-only contract intact.
+
+    AN ENTRY THAT RESOLVES TO NOBODY IS THE INTERESTING CASE, and the safe
+    reading of "I meant to hide this from somebody I cannot name" is to keep
+    it hidden. It is replaced by the canonical forms of every body the beat
+    knows about that this line is NOT addressed to -- which is what the
+    author meant by naming somebody, and which still delivers the line to
+    the person it was spoken to. Over-concealing costs a beat;
+    under-concealing costs the plot. It warns either way.
+
+    Runs AFTER `strip_addressee_concealment`, so the addressee has already
+    been removed from the list and cannot be re-added by the unresolved
+    branch.
+    """
+    notes = []
+    for event in sequence or []:
+        if not isinstance(event, dict):
+            continue
+        if str(event.get("visibility") or "").strip().lower() != "concealed":
+            continue
+        listed = [value for value in (event.get("conceal_from") or [])
+                  if str(value or "").strip()]
+        if not listed:
+            continue
+        addressed = set()
+        for ref in (list(event.get("targets") or [])
+                    + [event.get("intended_target")]):
+            addressed |= _concealment_forms(ref, by_id, by_name)
+        resolved, engine_form, absent = [], [], []
+        actor_forms = _concealment_forms(
+            event.get("actor") or event.get("speaker"), by_id, by_name)
+        for value in listed:
+            text = str(value).strip()
+            if text == "*":
+                resolved.append("*")
+                continue
+            if not _resolves_to_a_body(text, by_id, by_name):
+                # A BARE NAME THE SCENE DOES NOT HOLD MAY SIMPLY BE SOMEBODY
+                # WHO IS NOT HERE. "Don't tell the Doctor" names a third
+                # party who is not in the room, and concealing that line from
+                # everyone present would delete a declaration rather than
+                # keep a secret. The `character:<x>` form is different in
+                # kind: it is a form the ENGINE mints and the model is
+                # copying, so one that resolves to nobody is a reference that
+                # failed, and failing closed is the only safe reading of it.
+                # Both warn.
+                (engine_form if text.casefold().startswith("character:")
+                 else absent).append(text)
+                continue
+            resolved.extend(_canonical_conceal_forms(text, by_id, by_name))
+        if absent:
+            # Left exactly as written, and reported: an exclusion naming
+            # nobody present excludes nobody, which is correct when the body
+            # is genuinely elsewhere and is the one case this cannot tell
+            # apart from a typo.
+            resolved.extend(absent)
+            notes.append(
+                "conceal_from named %s, which no body in this scene answers "
+                "to; if they are not present it excludes nobody, and if they "
+                "are it is misspelled" % ", ".join(repr(u) for u in absent))
+        if engine_form:
+            spared = set(addressed) | set(actor_forms)
+            for cid, forms in (by_id or {}).items():
+                if set(forms) & spared:
+                    continue
+                resolved.append("character:%s" % str(cid).casefold())
+            for name, forms in (by_name or {}).items():
+                if set(forms) & spared or str(name).casefold() in spared:
+                    continue
+                resolved.append(str(name))
+            notes.append(
+                "conceal_from carried the engine form %s, which resolves to "
+                "no body; the line is kept concealed from every body it is "
+                "not addressed to rather than published"
+                % ", ".join(repr(u) for u in engine_form))
+        deduped = []
+        for value in resolved:
+            if value not in deduped:
+                deduped.append(value)
+        if deduped != listed:
+            event["conceal_from"] = deduped
+    if warn:
+        for note in notes:
+            warn(note)
+    return notes
+
+
+def _canonical_conceal_forms(ref, by_id, by_name):
+    """The spellings `composer.concealed_from_observer` can match, for a
+    body the scene DOES hold: its `character:<id>` form when it is cast, and
+    its display name either way."""
+    text = str(ref or "").strip()
+    low = text.casefold()
+    if low.startswith("character:"):
+        low = low[len("character:"):].strip()
+    out = []
+    for cid, forms in (by_id or {}).items():
+        if low == str(cid).casefold() or low in forms:
+            out.append("character:%s" % str(cid).casefold())
+            break
+    for name, forms in (by_name or {}).items():
+        if low == str(name).casefold() or low in forms:
+            out.append(str(name))
+            break
+    return out or [text]
+
+
 def strip_addressee_concealment(sequence, by_id, by_name, warn=None):
     """A line cannot be concealed from the person it is addressed to.
 
