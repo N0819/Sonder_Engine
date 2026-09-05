@@ -1267,6 +1267,20 @@ class SceneEntityDef(LenientModel):
     # nothing about them does not blank them.
     light_shape: Optional[str] = None
     light_height: Optional[str] = None
+    # What this thing SOUNDS like while it runs: faint | audible | loud |
+    # deafening (`spatial.SOUND_LEVELS`). The sibling of `light_source` on
+    # the hearing channel -- a generator, a waterfall, a radio, a forge are
+    # all "a thing that makes a continuous sound", and the name and
+    # description say which. Switched off with state.running false (absent
+    # means running, as state.lit absent means lit). Declared for the same
+    # reason: an undeclared field does not survive the validation round-trip,
+    # and a machine that comes back silent masks nothing.
+    sound_source: Optional[str] = None
+    # Whether a source can be relied on: steady | flickering | failing
+    # (`spatial.STEADINESS`), SHARED by the light and sound fields -- a
+    # generator that cuts out is the same class as a lamp that goes out, and
+    # when they are one entity they fail on the same beat. Absent means
+    # steady.
     steadiness: Optional[str] = None
     # What this thing SMELLS of, as a short noun phrase: bread, lamp oil, a
     # censer, a corpse. The sibling of `light_source` -- what the thing emits

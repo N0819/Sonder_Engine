@@ -494,6 +494,8 @@ def spatial_rel_between(
     target: str,
     observer_room: Optional[str] = None,
     target_room: Optional[str] = None,
+    *,
+    sound=None,
 ) -> dict:
     """`spatial_rel` for two BODIES rather than two rooms.
 
@@ -511,6 +513,19 @@ def spatial_rel_between(
     `observer_room` / `target_room` let a caller that has already resolved a
     position uid/alias-tolerantly (or that carries a declared source room)
     keep that resolution; absent, `room_of` answers.
+
+    SOUND (2026-09-04, `world/spatial_sound_field.py`). When the observer's
+    room carries geometry and both bodies stand on the observer's composite
+    field, the relation also carries `signal` -- the fraction of the target's
+    power that arrives at the observer's cell along the shortest acoustic
+    path -- and `noise`, the observer's floor with the target excluded, and
+    `hear_level` quantises those instead of reading the edge. `sound` is a
+    precomputed `SoundField` for this observer (perception builds one per
+    perceiver with the beat's crowds, events and turn index); absent, one is
+    derived from the scene alone. Where there is no field the two keys are
+    NOT added, so a scene without geometry composes byte-identically. The
+    stamp runs after the enclosure flags because it defers to them: a voice
+    conducted through a body's mass is not on any grid.
     """
     o_room = observer_room if observer_room else room_of(scene, observer)
     t_room = target_room if target_room else room_of(scene, target)
@@ -561,6 +576,11 @@ def spatial_rel_between(
         if target_holder and not _shares_enclosure(
                 scene, _body_interior_holder(scene, observer), target):
             rel["source_enclosed"] = True
+    # Deferred import: the sound field reads this module's material ladder
+    # at import time, and this module reads the field only per call.
+    from world.spatial_sound_field import stamp_sound_relation
+    stamp_sound_relation(scene, rel, observer, target, sound=sound,
+                         observer_room=o_room, target_room=t_room)
     return rel
 
 
@@ -825,6 +845,22 @@ def hear_level(
     if rel.get("source_enclosed"):
         return "none" if volume in ("mutter", "whisper") else "fragment"
 
+    # GEOMETRY DECIDES WHERE IT EXISTS. A relation `spatial_rel_between`
+    # stamped with `signal` and `noise` came off the observer's sound field
+    # (`world/spatial_sound_field.py`): the speaker's power arrives along the
+    # shortest acoustic path -- round the counter, through the doorway at the
+    # aperture's drop, never through the wall -- and is quantised against the
+    # noise at the listener's cell, LAST, onto the same three words. Every
+    # rule below this line is the edge model, and it runs unchanged wherever
+    # the field does not exist: no geometry, a body off the field, or the
+    # enclosure cases above, which the field defers to because a voice
+    # through a body's mass has no cell. `vouched` is never reached with a
+    # field present -- a vouched channel is one with no spatial relation at
+    # all (barrier unknown, distance remote), and two bodies on one placed
+    # field always have one.
+    if rel.get("signal") is not None and rel.get("noise") is not None:
+        return _field_hear_level(volume, rel["signal"], rel["noise"])
+
     if rel.get("same_room"):
         # The two quiet volumes are NOT one tier, and writing them as one
         # ("A whisper (mutter)", as this comment used to read) is how the
@@ -917,6 +953,14 @@ def hear_level(
         return "fragment" if volume == "shout" else "none"
 
     return "none"
+
+def _field_hear_level(volume, signal_gain, noise) -> str:
+    """`hear_level`'s field branch: the sound field's quantisation, reached
+    through a deferred import (the field module imports this one's material
+    ladder at import time)."""
+    from world.spatial_sound_field import sound_field_hear_level
+    return sound_field_hear_level(volume, signal_gain, noise)
+
 
 def can_perceive(rel: dict, volume: str = "normal") -> bool:
     return hear_level(rel, volume) != "none"
