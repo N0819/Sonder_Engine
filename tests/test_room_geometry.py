@@ -264,7 +264,15 @@ def test_a_facing_puts_what_is_behind_out_of_view_and_a_sweep_turns_round():
 def test_a_room_without_geometry_composes_byte_identically():
     """The environment percept of a room nobody authored geometry on carries
     no features and keys exactly as it always did; a presence percept in it
-    carries no cover fields and keys exactly as it always did."""
+    carries no cover fields.
+
+    It DOES carry the other body's station, which needs no geometry at all --
+    an anchor and a station are enough to say where somebody is standing, and
+    saying so is the whole of the finding this asserts against (the long
+    quiet room, 2026-09-05). A stationless body still keys exactly as it
+    always did, which is the stability this test was written for; the
+    companion below pins the station's own key.
+    """
     rooms = taproom(geometry=False)
     assert not room_has_geometry({"rooms": rooms}, "tap")
     env = composer.environment_percept("tap", "the Taproom", "Sawdust.", "lit")
@@ -277,10 +285,22 @@ def test_a_room_without_geometry_composes_byte_identically():
     display = {"Keeper": "Keeper"}
     [p] = composer.presence_percepts(sc, "P", [{"name": "Keeper"}], display)
     assert "behind" not in p.data and "shows" not in p.data
+    assert p.data["at"] == "the long bar"
     assert p.dedupe_key == composer.standing_key(
         "presence", (composer.body_key("Keeper"),),
-        (p.data["tier"], p.data["arc"], p.data["sight"], ""))
-    assert composer._presence_clause(p) == "Keeper is across the room"
+        (p.data["tier"], p.data["arc"], p.data["sight"], "", "the long bar"))
+    assert composer._presence_clause(p) == (
+        "Keeper is across the room, at the long bar")
+
+    # And with no station at all, the key is what it has always been.
+    bare = scene({"P": "tap", "Keeper": "tap"}, {"P": {"at": "hearth"}},
+                 {"P": {"facing": "n"}}, rooms=rooms)
+    [q] = composer.presence_percepts(bare, "P", [{"name": "Keeper"}], display)
+    assert "at" not in q.data
+    assert q.dedupe_key == composer.standing_key(
+        "presence", (composer.body_key("Keeper"),),
+        (q.data["tier"], q.data["arc"], q.data["sight"], ""))
+    assert composer._presence_clause(q) == "Keeper is close by"
 
 
 def test_a_degradation_is_a_failing_test():
@@ -479,3 +499,46 @@ def test_the_director_payload_carries_the_digest_and_the_spatial_hand_reads_it()
     assert payload["sightlines"] == digest
     body = _specialist_payload("body", _Ctx(), sc, view, {"sightlines": digest})
     assert "sightlines" not in body
+
+
+def test_a_view_says_where_the_other_body_is_standing():
+    """WHERE A BODY STANDS IS AS OBSERVABLE AS THAT IT IS STANDING.
+
+    The composed view named the OBSERVER'S own station and nobody else's. In
+    a two-hander whose entire geometry is one room -- `stations = {Halla:
+    table, Tobin: hearth}` -- Halla's view read "You are standing beside the
+    table ... Tobin Renn is close by" for twenty-one turns, and the narrator,
+    holding one anchor and needing two, put the man at the hearth beside the
+    table in the story's first paragraph (the long quiet room, 2026-09-05).
+    """
+    sc = scene({"P": "tap", "Q": "tap"},
+               {"P": {"at": "hearth"}, "Q": {"at": "bar"}},
+               {"P": {"facing": "n"}, "Q": {"facing": "s"}})
+    [seen] = composer.presence_percepts(sc, "P", [{"name": "Q"}], {"Q": "Q"})
+    assert composer._presence_clause(seen) == (
+        "Q is across the room, at the long bar")
+    # Symmetric: each of them is told where the other is.
+    [back] = composer.presence_percepts(sc, "Q", [{"name": "P"}], {"P": "P"})
+    assert "at the hearth" in composer._presence_clause(back)
+
+
+def test_a_body_in_another_room_is_placed_by_its_room_and_not_by_its_anchor():
+    """The same subtraction `pose_percepts` makes across a barrier, and for
+    the same reason: the anchor is furniture in a room the observer is not
+    standing in, so seeing that somebody beyond a doorway is standing is not
+    seeing what they are standing at. The room they are in IS the distance
+    that was measured, and it is what the clause says."""
+    rooms = taproom()
+    rooms["yard"] = {"name": "the Yard", "size": "medium",
+                     "anchors": {"well": {"desc": "the well", "dir": "e"}}}
+    rooms["tap"]["adjacent"] = [{"to": "yard", "barrier": "open_door",
+                                 "dir": "e"}]
+    rooms["yard"]["adjacent"] = [{"to": "tap", "barrier": "open_door",
+                                  "dir": "w"}]
+    sc = scene({"P": "tap", "Q": "yard"},
+               {"P": {"at": "door"}, "Q": {"at": "well"}},
+               {"P": {"facing": "e"}}, rooms=rooms)
+    seen = composer.presence_percepts(sc, "P", [{"name": "Q"}], {"Q": "Q"})
+    for p in seen:
+        assert "at" not in p.data
+        assert "the Yard" in composer._presence_clause(p)

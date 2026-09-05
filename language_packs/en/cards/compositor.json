@@ -358,6 +358,7 @@
     "pose_support": "on {support}",
     "posture": "You are {value}.",
     "presence_in_room": "in {room}",
+    "presence_at": ", at {at}",
     "presence_behind": ", behind {behind}",
     "presence_shows": ", from the {shows} up",
     "features": "You can see {items}.",
