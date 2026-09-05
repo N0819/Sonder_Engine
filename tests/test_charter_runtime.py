@@ -190,7 +190,7 @@ def test_catchup_lands_state_and_stable_consequences(temp_db):
     temp_db.qi(
         "INSERT INTO turns(chat_id,idx,player_input,created,frame_id) "
         "VALUES(?,?,?,?,?)", (cid, 1, "", time.time(), None))
-    temp_db.wset(cid, "offscreen_epoch", {"epoch_id": "epoch-1"})
+    temp_db.wset(cid, "offscreen_epoch", {"beat_id": "epoch-1"})
     registry = normalize_registry({
         "items": {"works": {"state": _working_pair(),
                               "last_elapsed_seconds": 0.0,
@@ -235,7 +235,7 @@ def test_an_epoch_change_discards_the_whole_landing(temp_db):
     temp_db.qi(
         "INSERT INTO turns(chat_id,idx,player_input,created,frame_id) "
         "VALUES(?,?,?,?,?)", (cid, 1, "", time.time(), None))
-    temp_db.wset(cid, "offscreen_epoch", {"epoch_id": "new-edge"})
+    temp_db.wset(cid, "offscreen_epoch", {"beat_id": "new-edge"})
     registry = normalize_registry({"works": _working_pair()})
 
     result = land_snapshot(cid, None, 1, "old-edge", registry, [], [])
@@ -249,7 +249,7 @@ def test_an_author_edit_while_a_tick_runs_wins(temp_db):
     temp_db.qi(
         "INSERT INTO turns(chat_id,idx,player_input,created,frame_id) "
         "VALUES(?,?,?,?,?)", (cid, 1, "", time.time(), None))
-    temp_db.wset(cid, "offscreen_epoch", {"epoch_id": "same-edge"})
+    temp_db.wset(cid, "offscreen_epoch", {"beat_id": "same-edge"})
     source = save_registry(cid, {"items": {"works": {
         "state": _working_pair(), "last_elapsed_seconds": 0.0}}})
     source_revision = registry_revision(source)
@@ -280,7 +280,7 @@ def test_a_committed_epoch_schedules_and_lands_out_of_band(
         "VALUES(?,?,?,?,?)", (cid, 3, "", time.time(), None))
     temp_db.wset(cid, "dialogue_config", {
         "offscreen_life": "deterministic"})
-    temp_db.wset(cid, "offscreen_epoch", {"epoch_id": "epoch-job"})
+    temp_db.wset(cid, "offscreen_epoch", {"beat_id": "epoch-job"})
     temp_db.wset(cid, "scene", {
         "rooms": {"room_a": {}, "room_b": {}}, "positions": {}})
     save_registry(cid, {"items": {"works": {
@@ -303,11 +303,12 @@ def test_a_committed_epoch_schedules_and_lands_out_of_band(
 
     job = schedule_charter_ticks(ctx, {
         "opportunity": True, "epoch_id": "epoch-job",
+        "beat_id": "epoch-job", "beat_elapsed_seconds": 3600.0,
         "elapsed_seconds": 3600.0,
     })
 
     assert job is not None
-    assert submitted["key"] == "charter:epoch-job"
+    assert submitted["key"] == "charter:present"
     assert submitted["base_turn"] == 3
     assert submitted["result"]["events"] >= 1
     assert registry_for(cid)["items"]["works"]["last_epoch_id"] == "epoch-job"

@@ -543,6 +543,43 @@ def _epoch_id(cid, frame_id, turn_idx, elapsed, location, reasons):
     return "epoch_" + hashlib.sha256(material.encode("utf-8")).hexdigest()[:20]
 
 
+def _beat_id(cid, frame_id, turn_idx, elapsed, location):
+    """THIS BEAT'S STABLE IDENTITY, minted the way an epoch's already is.
+
+    Same material and the same hash as `_epoch_id` under its own prefix,
+    minus `reasons`: an epoch is a thing that HAPPENED and is named by its
+    causes, a beat is simply where the story now stands. Reused rather than
+    invented because the idempotence it buys is the same idempotence -- a
+    reroll or a rerun-from-stage that lands the same clock at the same place
+    is the same beat, and `charter_runtime.advance_snapshot` refuses to
+    advance a charter twice for one token.
+    """
+    material = json.dumps(
+        [int(cid), frame_id, int(turn_idx), round(float(elapsed), 3),
+         str(location or "")],
+        ensure_ascii=False, separators=(",", ":"),
+    )
+    return "beat_" + hashlib.sha256(material.encode("utf-8")).hexdigest()[:20]
+
+
+def _beat_context(prepared):
+    """Which wall-clock budget this beat's charter advance runs under.
+
+    Decided by WHAT THE BEAT IS, never by how much elapsed time happens to
+    have accumulated -- otherwise an ordinary beat after a long real-world
+    pause would silently take the generous budget. The beat's own resolve
+    says so: `state_diff.time.mode`, already in the time vocabulary
+    (`world/mechanics.TIME_METADATA_KEYS`) as the beat's labelling of its
+    own passage. The budgets themselves are
+    `charter_runtime.CHARTER_BUDGET_SECONDS`.
+    """
+    diff = (prepared or {}).get("diff")
+    block = diff.get("time") if isinstance(diff, dict) else None
+    mode = str((block or {}).get("mode") or "").strip().casefold() \
+        if isinstance(block, dict) else ""
+    return "time_skip" if mode == "time_skip" else "beat"
+
+
 def _plan_slug(value):
     return re.sub(r"[^a-z0-9_-]+", "_", str(value or "").casefold()).strip("_")[:80]
 
@@ -1013,6 +1050,23 @@ def advance_epoch(ctx, prepared_scene, transit_result):
     if _reactive_due_crossed(plans, previous_clock, clock):
         reasons.append("reactive_due")
 
+    # THE BEAT, WHICH IS NOT THE EPOCH. Stamped on this row every beat --
+    # opportunity or not, bootstrapped or not -- because the Charter's
+    # deterministic walk advances every beat by that beat's own elapsed time
+    # and needs a stable token to be idempotent on
+    # (`charter_runtime.schedule_charter_ticks`). It rides inside
+    # `offscreen_epoch` rather than in a key of its own so it is already
+    # covered by the checkpoint, branch remap and portable archive this row
+    # is in. The epoch fields beside it keep their exact meaning: they are
+    # what the PAID off-screen rungs hang from, and nothing here changes
+    # when one is declared.
+    beat = {
+        "beat_id": _beat_id(cid, frame_id, turn_idx, elapsed, location),
+        "beat_turn": int(turn_idx),
+        "beat_elapsed_seconds": elapsed,
+        "beat_context": _beat_context(prepared),
+    }
+
     old = wget(cid, EPOCH_KEY, {}) or {}
     # Upgrade baseline: an old story has no epoch record. Do not invent one
     # retroactive tick merely because new code first saw it, but do preserve a
@@ -1024,6 +1078,7 @@ def advance_epoch(ctx, prepared_scene, transit_result):
             "elapsed_seconds": elapsed,
             "time_bucket": int(elapsed // EPOCH_SECONDS),
             "location": location, "reasons": ["baseline"],
+            **beat,
         }
         wset(cid, EPOCH_KEY, state)
         return {
@@ -1034,11 +1089,16 @@ def advance_epoch(ctx, prepared_scene, transit_result):
         }
 
     if not reasons:
+        # No epoch, but still a beat. The stored row keeps whatever epoch it
+        # already carried -- the paid rungs must not see a boundary that was
+        # not crossed -- and gains this beat's identity beside it.
+        state = {**(old if isinstance(old, dict) else {}), **beat}
+        wset(cid, EPOCH_KEY, state)
         return {
             "opportunity": False, "eligible": False,
             "bootstrapped": bootstrapped, "reasons": [],
             "epoch_id": "", "actors_considered": 0,
-            "stochastic_fired": 0,
+            "stochastic_fired": 0, **beat,
         }
 
     try:
@@ -1055,6 +1115,7 @@ def advance_epoch(ctx, prepared_scene, transit_result):
         "elapsed_seconds": elapsed,
         "time_bucket": int(elapsed // EPOCH_SECONDS),
         "location": location, "reasons": reasons,
+        **beat,
     }
     wset(cid, EPOCH_KEY, state)
 

@@ -500,7 +500,45 @@ beat that addresses a charter post-holder by their visible dress files no
 person need.
 
 ### PB12. The institution never ticks, so nobody in a forty-body house ever moves
-**Owner decision.** Measured: after 15 turns, `charters` in every commit
+**RESOLVED 2026-09-05. The charter advances every beat, by that beat's own
+elapsed time.** The owner's ruling settled the question this entry asked:
+"Charter is supposed to advance every beat, its whole intention is semi cheap
+off screen simulation." The gate that was removed is one line in
+`charter_runtime.schedule_charter_ticks` — it opened on the epoch's
+`opportunity`, and `world/offscreen.epoch_reasons` declares one on four
+things only (the opening beat, a change of the scene's top-level location, a
+crossed in-world HOUR, a due event), none of which an evening at an inn
+crosses. The epoch gate was never this path's gate: it is the rung the
+off-screen work that COSTS a model call hangs from, and it stays there
+untouched. This walk has no provider seam at all, so an hour bucket was
+rationing free work.
+
+Replayed against this run's shape — forty bodies, fifteen two-minute beats,
+one location, no hour crossed (`twin_towns(folk=40)`):
+
+| | advances | simulated | bodies moved | rooms walked | watch changes |
+|---|---|---|---|---|---|
+| before | 0 | 0.00h | 0 | 0 | 0 |
+| after | 15 | 0.50h | 12 | 22 | 6 |
+
+Fractions carry, which is what makes a two-minute beat mean anything: a beat
+buys a thirtieth of an hour, which at `WALK_ROOMS_PER_HOUR` = 6 is 0.2 of a
+room, and `charter_move`'s walk `credit` accumulates 0.2 → 0.4 → 0.6 → 0.8 →
+one room crossed, surviving the registry save/normalize round trip between
+beats. The per-hour ledgers are linear and slice exactly: an untended upkeep
+drifts identically over fifteen two-minute steps and one half-hour step
+(`tests/test_charter_every_beat.py`). Nothing floored.
+
+Cost, measured on a machine shared with six other agents (load average 6-11,
+so these are an UPPER bound), median of twelve beats per scale: 8 bodies
+0.010s, 40 bodies 0.041-0.077s, 240 bodies 0.31-0.49s, 500 bodies
+0.85-0.94s (worst single beat seen: 1.78s). The owner's ten-second per-beat
+budget therefore does not bind at any population this repo can build; it is a
+guard that never fires in practice, and it is there so that a town large
+enough to make it fire degrades by advancing less rather than by stalling a
+turn. The original measurement follows.
+
+**Owner decision (original).** Measured: after 15 turns, `charters` in every commit
 result is `null`, `clock_hours` is `0.0`, and **not one body changed `place`**
 (opening places vs final places: `moved: []`). The story clock advanced 252
 seconds in fourteen beats (~18s a beat), and `advance_snapshot` needs
@@ -513,7 +551,8 @@ The question for the owner: should a charter window be charged by story
 seconds (as now), by beats, or by whichever comes first? A caravanserai at
 dusk in which nobody carries water for a quarter of an hour of fiction reads
 as a stage set, and the placement work of 2026-09-05 is what makes their
-standing still so visible.
+standing still so visible. (Answered: by story seconds, on every beat. The
+window was never the problem — the trigger was.)
 
 ### PB13. An errand the fiction promised has no channel to the institution
 **Severity: wrong-but-recoverable (borders on owner decision).** Turns 5 and
@@ -790,7 +829,8 @@ Per call, by total time spent:
 
 Story time: 252 seconds across fourteen beats (18s a beat), `hour_of_day`
 18.75 → 18.82, phase `dusk` throughout; the charter's own clock never left
-0.0 (PB12).
+0.0 (PB12 — the same run under the per-beat rule would leave it at 0.07h,
+which at forty bodies is a dozen of them somewhere else).
 
 ---
 

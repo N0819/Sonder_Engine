@@ -155,8 +155,8 @@
 | `world/charter_predation.py` | 712 |  | `world.charter_creature`, `world.charter_harm`, `world.charter_model`, `world.charter_move` |
 | `world/charter_promote.py` | 604 |  | `world.charter_commitment`, `world.charter_feel`, `world.charter_politics`, `world.charter_social` |
 | `world/charter_roster.py` | 134 |  | `world.charter_model` |
-| `world/charter_run.py` | 1464 |  | `world`, `world.charter_commitment`, `world.charter_decide`, `world.charter_drift`, `world.charter_economy`, `world.charter_enrol`, `world.charter_feel`, `world.charter_figure`, `world.charter_harm`, `world.charter_intervene`, `world.charter_log`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_move`, `world.charter_needs`, `world.charter_news`, `world.charter_plan`, `world.charter_politics`, `world.charter_practice`, `world.charter_roster`, `world.charter_social`, `world.charter_space`, `world.charter_talk`, `world.charter_trigger` |
-| `world/charter_runtime.py` | 3869 |  | `core`, `core.logging_utils`, `world.charter`, `world.charter_news`, `world.charter_surface`, `world.day_cycle`, `world.mechanics` |
+| `world/charter_run.py` | 1477 |  | `world`, `world.charter_commitment`, `world.charter_decide`, `world.charter_drift`, `world.charter_economy`, `world.charter_enrol`, `world.charter_feel`, `world.charter_figure`, `world.charter_harm`, `world.charter_intervene`, `world.charter_log`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_move`, `world.charter_needs`, `world.charter_news`, `world.charter_plan`, `world.charter_politics`, `world.charter_practice`, `world.charter_roster`, `world.charter_social`, `world.charter_space`, `world.charter_talk`, `world.charter_trigger` |
+| `world/charter_runtime.py` | 4022 |  | `core`, `core.logging_utils`, `world.charter`, `world.charter_news`, `world.charter_surface`, `world.day_cycle`, `world.mechanics` |
 | `world/charter_social.py` | 743 |  | `world.charter_politics` |
 | `world/charter_space.py` | 167 |  | `world.spatial` |
 | `world/charter_surface.py` | 341 |  | — |
@@ -171,7 +171,7 @@
 | `world/gaps.py` | 454 |  | `core.db`, `mind.canon_provenance`, `world.spatial`, `world.subjects` |
 | `world/living_world.py` | 596 |  | `core.logging_utils`, `world.mechanics` |
 | `world/mechanics.py` | 930 |  | `core`, `world.spatial`, `world.spatial_frames` |
-| `world/offscreen.py` | 2238 |  | `core`, `core.logging_utils`, `llm.prompts` |
+| `world/offscreen.py` | 2299 |  | `core`, `core.logging_utils`, `llm.prompts` |
 | `world/paradox.py` | 648 |  | `core.db`, `core.frames`, `story.character_schema`, `world.spatial` |
 | `world/place_purpose.py` | 545 |  | `mind.theory_of_mind`, `world.comfort`, `world.spatial`, `world.survival` |
 | `world/planned_entities.py` | 290 |  | `core.db` |
@@ -1890,27 +1890,27 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `step()` | 425 | 972 lines |
-| `_record_coarse_experiences()` | 242 | 160 lines |
-| `run()` | 1399 | 66 lines |
-| `_remember_experience()` | 154 | 32 lines |
-| `_run_private_habits()` | 211 | 29 lines |
-| `_social_events()` | 109 | 25 lines |
-| `_record_social_experiences()` | 188 | 21 lines |
-| `_settle_commitments()` | 404 | 19 lines |
+| `step()` | 426 | 972 lines |
+| `_record_coarse_experiences()` | 243 | 160 lines |
+| `run()` | 1400 | 78 lines |
+| `_remember_experience()` | 155 | 32 lines |
+| `_run_private_habits()` | 212 | 29 lines |
+| `_social_events()` | 110 | 25 lines |
+| `_record_social_experiences()` | 189 | 21 lines |
+| `_settle_commitments()` | 405 | 19 lines |
 
 ### `world/charter_runtime.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `registry_warnings()` | 1697 | 182 lines |
-| `_prepare_cast_histories()` | 559 | 172 lines |
-| `_plan_lived_location()` | 1293 | 168 lines |
-| `advance_snapshot()` | 2003 | 158 lines |
-| `_generate_lived_location()` | 1521 | 122 lines |
-| `presence_view()` | 3160 | 114 lines |
-| `presim_registry()` | 875 | 104 lines |
-| `generation_lore()` | 981 | 101 lines |
+| `advance_snapshot()` | 2078 | 191 lines |
+| `registry_warnings()` | 1752 | 182 lines |
+| `_prepare_cast_histories()` | 614 | 172 lines |
+| `_plan_lived_location()` | 1348 | 168 lines |
+| `_generate_lived_location()` | 1576 | 122 lines |
+| `presence_view()` | 3313 | 114 lines |
+| `presim_registry()` | 930 | 104 lines |
+| `generation_lore()` | 1036 | 101 lines |
 
 ### `world/charter_social.py`
 
@@ -2094,14 +2094,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `land_agent_tick()` | 1932 | 187 lines |
-| `apply_plan_ops()` | 731 | 120 lines |
-| `schedule_agent_ticks()` | 2121 | 118 lines |
-| `schedule_profile_ticks()` | 1421 | 112 lines |
-| `agent_context()` | 1599 | 109 lines |
-| `advance_epoch()` | 986 | 98 lines |
-| `advance_reactive_plans()` | 899 | 85 lines |
-| `profile_summary_record()` | 1167 | 85 lines |
+| `land_agent_tick()` | 1993 | 187 lines |
+| `advance_epoch()` | 1023 | 122 lines |
+| `apply_plan_ops()` | 768 | 120 lines |
+| `schedule_agent_ticks()` | 2182 | 118 lines |
+| `schedule_profile_ticks()` | 1482 | 112 lines |
+| `agent_context()` | 1660 | 109 lines |
+| `advance_reactive_plans()` | 936 | 85 lines |
+| `profile_summary_record()` | 1228 | 85 lines |
 
 ### `world/paradox.py`
 
