@@ -96,15 +96,21 @@ def test_dulled_shifts_one_rung_down():
     assert sense_adjusted("full", "hearing", dulled) == "fragment"
     assert sense_adjusted("fragment", "hearing", dulled) == "trace"
     assert sense_adjusted("none", "hearing", dulled) == "none"
+    # The sight ladder gained a rung on 2026-09-05 (`_LIGHT_SIGHT`, PQ2):
+    # none | shapes | conduct | full. One rung down from full is now
+    # `conduct` -- poor eyes take the face and leave the doing -- which is a
+    # closer reading of poor eyesight than the silhouette two rungs down.
     dim = [_sense("vision", acuity="poor")]
-    assert sense_adjusted("full", "sight", dim) == "shapes"
+    assert sense_adjusted("full", "sight", dim) == "conduct"
+    assert sense_adjusted("conduct", "sight", dim) == "shapes"
 
 
 def test_keen_upgrades_content_already_flowing():
     keen = [_sense("hearing", acuity="keen")]
     assert sense_adjusted("fragment", "hearing", keen) == "full"
     sharp = [_sense("vision", acuity="keen")]
-    assert sense_adjusted("shapes", "sight", sharp) == "full"
+    assert sense_adjusted("shapes", "sight", sharp) == "conduct"
+    assert sense_adjusted("conduct", "sight", sharp) == "full"
     nose = [_sense("smell", acuity="keen")]
     assert sense_adjusted("muffled", "scent", nose) == "full"
 

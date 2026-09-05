@@ -419,8 +419,14 @@ def test_the_ambient_floor_is_a_floor_not_a_source():
 
 def test_the_ladders_and_the_light_to_sight_table_are_untouched():
     assert LIGHT_LEVELS == ("dark", "dim", "lit", "bright")
-    assert SIGHT_LEVELS == ("none", "shapes", "full")
-    assert _LIGHT_SIGHT == {"dark": "none", "dim": "shapes", "lit": "full",
+    # The sight ladder gained `conduct` on 2026-09-05 (PQ2,
+    # `docs/experiments/PLAY_2026_09_05C_quiet.md`): dim withholds detail,
+    # not conduct, so the word an author means by "indoors, late afternoon"
+    # stopped grading to the silhouette a barrier leaves. `shapes` is
+    # untouched and is still what the caps, the crossings and the glare
+    # answer; `dark` and the two lit words are exactly what they were.
+    assert SIGHT_LEVELS == ("none", "shapes", "conduct", "full")
+    assert _LIGHT_SIGHT == {"dark": "none", "dim": "conduct", "lit": "full",
                             "bright": "full"}
     assert LIGHT_SHAPES == ("all_round", "cone")
     assert STEADINESS == ("steady", "flickering", "failing")

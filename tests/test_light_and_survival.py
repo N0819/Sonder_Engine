@@ -494,7 +494,11 @@ class TestLightIsGradedNotBinary:
         }
 
     @pytest.mark.parametrize("light,level", [
-        ("dark", "none"), ("dim", "shapes"), ("lit", "full"), ("bright", "full"),
+        # `dim` grades to `conduct`, not `shapes`, since PQ2 (2026-09-05):
+        # dim withholds detail, not conduct. `shapes` is what a BARRIER
+        # leaves, and the rung below covers it still.
+        ("dark", "none"), ("dim", "conduct"), ("lit", "full"),
+        ("bright", "full"),
     ])
     def test_sight_levels(self, light, level):
         from world.spatial import sight_level
@@ -596,9 +600,12 @@ class TestLightIsLocalNotRoomWide:
         from world.spatial import visual_level_between
 
         scene = self._hall()
-        # The bearer is in their own light; the far figure is only a shape.
+        # The bearer is in their own light and fully read; the far figure
+        # stands in what the torch leaves the rest of the room, which is
+        # `dim` -- so the bearer sees what she is doing and not who she is
+        # (`conduct` since PQ2, 2026-09-05).
         assert visual_level_between(scene, "Far", "Bearer") == "full"
-        assert visual_level_between(scene, "Bearer", "Far") == "shapes"
+        assert visual_level_between(scene, "Bearer", "Far") == "conduct"
 
 
 class TestAnyWayOfMakingLight:
@@ -713,10 +720,18 @@ class TestADeclaredWordWithNoSourceToContradictIt:
 
     def test_an_open_room_is_unchanged_because_the_sky_is_all_of_it(self):
         """There is no roof to hide a lamp under, so a word above the sky is
-        simply wrong -- the moonlit shore stays dark, and nothing is filed."""
+        simply wrong -- the moonlit shore stays dark.
+
+        The NOTICE is a separate question and, since PQ1/PR6/PX7
+        (2026-09-05), is asked of this room too: a shore declared `lit` at
+        midnight with nothing in it that makes light wants either the lamp
+        written or the word corrected, and the Director is the one who can
+        do either. What the reader answers is untouched.
+        """
         scene = self._hall(exposure="open")
         assert room_light(scene, "hall") == "dark"
-        assert self._notices(scene) == []
+        [notice] = self._notices(scene)
+        assert "Market Hall" in notice and "light_source" in notice
         assert room_light(self._hall(exposure="open", light="bright"),
                           "hall") == "dark"
 
@@ -733,14 +748,25 @@ class TestADeclaredWordWithNoSourceToContradictIt:
                           "hall") == "dim"
         assert self._notices(self._hall(phase="midday", light="dim")) == []
 
-    def test_a_scene_with_no_clock_and_an_enclosed_room_are_untouched(self):
+    def test_a_scene_with_no_clock_and_an_enclosed_room_keep_their_word(self):
+        """The READER is untouched by either -- a scene that has never said
+        what time it is, and a room sealed under a roof, both keep the word
+        they were minted with.
+
+        The notice is asked of both since PQ1/PR6/PX7 (2026-09-05), and
+        indoors is where the question actually lives: the parlour with the
+        fire nobody minted, the tenement burning down with `light_source:
+        []`, and the ball "hung with lamps" that produced five entities and
+        no source were all `enclosed`, and the old sky-scoped notice never
+        looked at one of them.
+        """
         scene = self._hall()
         scene.pop("day_phase")
         assert room_light(scene, "hall") == "lit"
-        assert self._notices(scene) == []
+        assert len(self._notices(scene)) == 1
         sealed = self._hall(exposure="enclosed")
         assert room_light(sealed, "hall") == "lit"
-        assert self._notices(sealed) == []
+        assert len(self._notices(sealed)) == 1
 
     def test_no_report_is_asked_for_and_none_is_made(self):
         """The merge is unchanged for every caller that wants no report."""

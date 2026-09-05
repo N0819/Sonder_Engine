@@ -555,8 +555,12 @@ def _is_carried_interior(scene, room_id):
 # degrades with distance into "somewhere along there", which is the form worth
 # handing a character.
 CORRIDOR_SIGHT_LIMIT = 6
-_CORRIDOR_VAGUENESS = ((1, "just ahead"), (2, "a short way"),
-                       (4, "some way"), (99, "far"))
+# `(1, "just ahead")` was the first rung until 2026-09-05 and is gone rather
+# than unreachable: the shortest line this function reports is now two rooms
+# (see the `dist > 1` gate below, PM17), so nothing could ever land on it.
+# Every other cut point is exactly what it was, so no reported line changed
+# its word.
+_CORRIDOR_VAGUENESS = ((2, "a short way"), (4, "some way"), (99, "far"))
 # How many rooms down a line are NAMED. Beyond this the passage is reported as
 # running on, without contents -- which is both what sight gives you and what
 # keeps this from becoming a page per beat.
@@ -643,7 +647,20 @@ def corridor_sightlines(scene, room_id):
                 terminus = "turn"
                 break
             prev, cur, dist = cur, straight[0].get("to"), dist + 1
-        if terminus:
+        # A CORRIDOR SIGHT IS WHAT THE LINE MEETS BEYOND THE ROOM YOU CAN
+        # ALREADY SEE INTO. Where the line stopped at the very first room
+        # there is no line: the neighbour is a room, delivered as a room by
+        # the composed view and by `_onward_exits`' own
+        # `onward_exits_visible` / `visibly_no_way_through`, and calling it a
+        # passage with a terminus adds nothing and asserts a geography that
+        # is not there. Measured (PM17,
+        # `docs/experiments/PLAY_2026_09_05C_multitude.md`): a tiny lit
+        # alcove one open door east of the hall was sent to five minds
+        # sixty-two times as `{"along": [], "dir": "e", "distance": 1,
+        # "terminus": "darkness", "vagueness": "just ahead"}` -- a corridor
+        # east ending in darkness, in a payload whose own view called the
+        # same room "Dimly lit from the hall doorway".
+        if terminus and dist > 1:
             out.append({
                 "dir": heading, "distance": dist, "terminus": terminus,
                 "vagueness": next(v for lim, v in _CORRIDOR_VAGUENESS

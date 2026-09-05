@@ -1422,9 +1422,15 @@ def region_visibility(sc, observer, body, entry=None):
                 body_level = {"containment":
                               [str(holders[0])] if holders else []}
             else:
-                body_level = {"vantage": ["seen only in silhouette"
-                                          if level == "shapes"
-                                          else "out of sight"]}
+                # Stated as "is there a visual channel at all" rather than
+                # by naming one rung, so the sight ladder can grow without
+                # this attribution silently inverting: when `_LIGHT_SIGHT`
+                # gained `conduct` (PQ2, 2026-09-05) a body plainly seen
+                # moving in a dim room would otherwise have been reported
+                # "out of sight". Anything short of full hides the regions;
+                # only `none` hides the body.
+                body_level = {"vantage": ["out of sight" if level == "none"
+                                          else "seen only in silhouette"]}
         elif entity_arc(sc, observer, body) == "rear":
             body_level = {"vantage": ["behind the observer"]}
 

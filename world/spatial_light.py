@@ -82,8 +82,11 @@ def room_light(scene: dict, room_id: str) -> str:
         fail-open is not a claim, so every scene that never said a word
         about its light is byte for byte what it was.
 
-    `unsourced_light_rooms` reports exactly the rooms this branch fires on,
-    for the engine notice that asks the Director to write the source.
+    `unsourced_light_rooms` is the engine notice that asks the Director to
+    write the source. It used to report exactly the rooms this branch fires
+    on and no longer does: whether a word may STAND is the sky rule's
+    question and belongs here, while whether a room wants a source written
+    is asked of every room, indoors included.
 
     Indoors -- or in a scene that has never said what time it is, or a room
     the exposure reader cannot place, which it reads as indoors -- the
@@ -119,7 +122,7 @@ def _declaration_is_the_only_account(scene, room_id, room, exposure,
                                      declared, sky) -> bool:
     """Is this room's own light WORD the only account of its light, and is
     it brighter than the sky leaves it? The F40 branch of `room_light`,
-    factored out so the engine notice reports exactly what the reader did.
+    factored out so the branch has one spelling.
 
     The room must actually carry a word (an absent `light` is a fail-open,
     not a declaration), stand under a roof but not sealed under one
@@ -143,35 +146,111 @@ def _declaration_is_the_only_account(scene, room_id, room, exposure,
 
 
 def unsourced_light_rooms(scene: dict) -> list:
-    """`[(room_id, declared, sky)]` for every room whose declared light word
-    is the only account of its light and outranks the sky (`room_light`'s
-    F40 branch).
+    """`[(room_id, declared, otherwise)]` for every room whose light is
+    claimed by a WORD and accounted for by nothing else in the scene --
+    `otherwise` being the light everything but the word leaves it.
 
-    A room here is a room the story described as lit and never gave a lamp:
-    the word is honoured, and the Director is told once that the room wants
-    a source written, so the next beat can mint the thing that lights it
-    and the light field can place its rays. `merge_scene_with_diff`'s
-    `light_report` composes the sentence; the commit hands it to
-    `ctx.tell_director` with the rest.
+    A ROOM THAT SAYS IT IS LIT AND HOLDS NOTHING THAT MAKES LIGHT WANTS A
+    SOURCE, wherever it stands. This began (F40) as the sky rule's own
+    reader: a `sheltered` room whose word outranked the sun was the only
+    room reported, because that was the only place `room_light` let a word
+    stand. That scope was the sky rule's, not this question's, and indoors
+    is where the question actually lives. Measured across three runs of the
+    2026-09-05 campaign: a parlour whose scenario opened on "a fire in the
+    grate" came out with a `hearth` ANCHOR, five minted objects and no fire,
+    all three rooms `dim`, and thirteen beats went by before a specialist
+    said outright that the grate was "absent from entity indexes" (PQ1); a
+    tenement burning down for twenty beats committed `light_source: []` and
+    `sound_source: []` (PR6); a ball "hung with lamps" produced five
+    entities and not one source (PX7). In all three the engine was silent,
+    because the rooms were `enclosed` and the sky rule never looked at them.
+
+    What ACCOUNTS for a room's light, and the two exclusions are the rule:
+
+      * a room that declares NOTHING declares nothing. An absent `light` is
+        the fail-open at the top of this module, and a fail-open is not a
+        claim -- so a scene that never said a word about its light is
+        reported exactly as before, which is not at all.
+      * a room that HOLDS a fixture has an account already, lit or out
+        (`_room_fixtures`, the reading PA3 makes). The source is written;
+        whether it is burning is the story's business, not this notice's.
+      * `dark` claims no light, so there is nothing to source.
+
+    The word is honoured either way -- this asks the Director for the thing
+    that lights the room, it never darkens one. `unsourced_light_notices`
+    composes the sentences; `merge_scene_with_diff` appends them to
+    `light_report`, and the commit hands that to `ctx.tell_director`.
     """
     rooms = (scene or {}).get("rooms") or {}
     if not isinstance(rooms, dict):
         return []
-    phase = str((scene or {}).get("day_phase") or "").strip()
-    if not phase:
-        return []
+    from world.spatial_light_field import _room_fixtures
     from world.weather import room_exposure
-    sky = _sky_light(scene, phase)
+    phase = str((scene or {}).get("day_phase") or "").strip()
+    sky = _sky_light(scene, phase) if phase else None
     out = []
     for room_id in sorted(rooms):
         room = rooms.get(room_id)
         if not isinstance(room, dict):
             continue
+        if not str(room.get("light") or "").strip():
+            continue
         declared = normalize_light(room.get("light"))
-        if _declaration_is_the_only_account(
-                scene, room_id, room, room_exposure(scene, room_id),
-                declared, sky):
-            out.append((str(room_id), declared, sky))
+        # What the room would read on everything BUT its word: the sky where
+        # the weather reaches it, and otherwise nothing at all -- an enclosed
+        # room with no fixture in it has no other account of its light.
+        otherwise = "dark"
+        if sky and room_exposure(scene, room_id) != "enclosed":
+            otherwise = sky
+        if _LIGHT_ORDER.get(declared, 2) <= _LIGHT_ORDER.get(otherwise, 2):
+            continue
+        if _room_fixtures(scene, room_id):
+            continue
+        out.append((str(room_id), declared, otherwise))
+    return out
+
+
+#: How many rooms one beat's light notice NAMES before it counts the rest.
+#: An establish mints a whole building at once, so an uncapped notice is a
+#: paragraph per beat for as long as the Director declines to mint a lamp --
+#: PR6's tenement would have run ten rooms wide, every beat, for twenty
+#: beats. Three is enough for the Director to see the class and act on it.
+UNSOURCED_LIGHT_NOTICE_ROOMS = 3
+
+
+def unsourced_light_notices(scene: dict) -> list:
+    """One engine notice per room that wants a light source, capped at
+    `UNSOURCED_LIGHT_NOTICE_ROOMS` with a tail counting the rest.
+
+    Rooms somebody is STANDING in come first: a room's light matters this
+    beat where a body is in it, and the rest of the building can wait for
+    the beat that walks into it.
+    """
+    rooms = (scene or {}).get("rooms") or {}
+    occupied = {str(where) for where in
+                ((scene or {}).get("positions") or {}).values() if where}
+    wanted = sorted(unsourced_light_rooms(scene),
+                    key=lambda row: (row[0] not in occupied, row[0]))
+    out = []
+    for room_id, declared, otherwise in wanted[:UNSOURCED_LIGHT_NOTICE_ROOMS]:
+        room = rooms.get(room_id) or {}
+        label = str(room.get("name") or room_id)
+        out.append(
+            "%r is declared `light: %s` and nothing in the scene accounts "
+            "for that light: it holds no light source of its own, and "
+            "everything else about it leaves it %s. The room's word stands, "
+            "so nobody is in the dark for this. But a thing the story can "
+            "change is an ENTITY, and a thing that only says where an entity "
+            "stands is an anchor -- so if something in there gives that "
+            "light, write it as an entity with `light_source` and a "
+            "position, and it can then be seen, moved, put out, carried and "
+            "lit from where it stands. If nothing gives it, the room's "
+            "`light` should say what it is actually left with."
+            % (label, declared, otherwise))
+    rest = len(wanted) - len(out)
+    if rest > 0:
+        out.append("%d more room%s in this scene declare a light nothing in "
+                   "them accounts for." % (rest, "" if rest == 1 else "s"))
     return out
 
 
@@ -353,10 +432,40 @@ def light_blocks_sight(level) -> bool:
 # What light lets you make out, mirroring hear_level's none/fragment/full. A
 # binary "can you see" cannot express the state most scenes actually want: a
 # shape moving in the gloom that you cannot identify.
-SIGHT_LEVELS = ("none", "shapes", "full")
+#
+# DIM WITHHOLDS DETAIL, NOT CONDUCT -- which is why there are four rungs and
+# not three. `dim` is the word an author reaches for to mean "indoors, late
+# afternoon"; `shapes` is what the engine meant by it, and the two are not the
+# same claim. Measured (PQ2, `docs/experiments/PLAY_2026_09_05C_quiet.md`, a
+# two-hander whose entire content is what two people do with their hands):
+# with both bodies at `dim`, every act composed as "{label} moves, too little
+# of it to make out" -- a glove drawn off finger by finger and laid on a table
+# four feet away, three times -- and fifteen of twenty-one beats carried that
+# phrase or a narrator paraphrase of it.
+#
+# The rule the four rungs state, in the engine's own vocabulary:
+#
+#   * `none` -- no visual channel at all. Not even a figure.
+#   * `shapes` -- a body is there and moving, and nothing about what it is
+#     doing. This is what a BARRIER leaves: a silhouette in a doorway, a
+#     figure across a courtyard, a shape through a curtained opening. It is
+#     reached by the view-cone caps, by an authored far edge, by a crossing
+#     and by glare, and it is exactly what it always was.
+#   * `conduct` -- what a body DOES, without what it IS. Where it moved,
+#     whether it sat, what it took up and set down: the gross conduct a
+#     silhouette genuinely carries. What it does not carry is the face, the
+#     cut of a garment, the appearance of a stranger -- every reader that
+#     wants detail already asks for `full`, so this rung costs identity by
+#     construction and nothing here had to enumerate what "detail" means.
+#   * `full` -- the lot.
+#
+# The grade WORD is an owner decision, taken 2026-09-05: `conduct` is the noun
+# the rule itself uses, and it names the CONTENT of the rung rather than its
+# cause, which is what the other three names do.
+SIGHT_LEVELS = ("none", "shapes", "conduct", "full")
 _LIGHT_SIGHT = {
     "dark": "none",       # nothing, including the person beside you
-    "dim": "shapes",      # movement, outline, bulk -- not faces, not detail
+    "dim": "conduct",     # what a body does -- not faces, not detail
     "lit": "full",
     "bright": "full",
 }

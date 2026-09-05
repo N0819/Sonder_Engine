@@ -76,7 +76,10 @@ class TestTheSightSplitThatMadeTwoPeopleOfOne:
         """Everything below rests on this: the same observer, in the same
         room, at two different sight levels."""
         scene = _dim_scene()
-        assert visual_level_between(scene, "OBS", "SUBJ") == "shapes"
+        # `conduct` since PQ2 (2026-09-05): dim withholds detail, not
+        # conduct. What this file is about is unchanged -- anything short of
+        # `full` carries no appearance and no identity.
+        assert visual_level_between(scene, "OBS", "SUBJ") == "conduct"
         assert visual_level_between(scene, "OBS", "NEAR") == "full"
 
     def test_a_silhouette_receives_no_appearance_descriptor(self):
