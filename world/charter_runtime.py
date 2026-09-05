@@ -2071,6 +2071,11 @@ def advance_snapshot(registry, *, elapsed_seconds, epoch_id, base_turn,
                         key, body_key, str(room),
                         state["bodies"][body_key].get("place"))
                     continue
+                if str(room) != str(state["bodies"][body_key].get("place") or ""):
+                    # A station names a fixture or a cell of ONE room
+                    # (`charter_place` rule i); a bound body's within-room
+                    # position is the scene's own `stations` row anyway.
+                    state["bodies"][body_key].pop("station", None)
                 state["bodies"][body_key]["place"] = str(room)
                 # A registered character walks under its own movement, so
                 # whatever route Charter had it on is over.
@@ -3050,6 +3055,61 @@ def _relabel(value, mapping):
     if isinstance(value, str):
         return mapping.get(value, value)
     return value
+
+
+def route_scene_placements(cid, diff, scene, frame_id=None):
+    """Which of this beat's Director ``positions``/``stations`` entries name
+    a charter body (`charter_place.resolve_scene_placements`), STRIPPED from
+    ``diff`` in place so the merge stores no row for them. Returns the
+    routing for `apply_scene_placements` to land inside the commit's
+    transaction. Reads the shared cached registry; writes nothing.
+
+    Called from `persist.commit_scene_state.prepare_scene_commit` before
+    `merge_scene_with_diff`, on the commit's own deep copy of the diff.
+    """
+    from world.charter_place import resolve_scene_placements
+
+    registry = registry_for(cid, frame_id)
+    if not registry.get("items"):
+        return {"moves": [], "stations": [], "names": []}
+    routing = resolve_scene_placements(registry, diff, scene)
+    for name in routing["names"]:
+        for channel in ("positions", "stations"):
+            table = (diff or {}).get(channel)
+            if isinstance(table, dict):
+                table.pop(name, None)
+    return routing
+
+
+def apply_scene_placements(cid, routing, frame_id=None):
+    """Land a beat's routed placements on the registry: each move through
+    `charter_move.place_body` (place set, walk and errand dropped, station
+    cleared), then each station through `charter_move.station_body`, and
+    ONE `save_registry`. Called from `persist.commit_scene_state.commit_scene`
+    inside the turn's transaction, so a domain failure rolls it back with
+    the scene. Returns the number of bodies touched; nothing to land costs
+    no registry parse at all.
+    """
+    from world.charter_move import place_body, station_body
+
+    routing = routing if isinstance(routing, dict) else {}
+    moves = [m for m in routing.get("moves") or () if isinstance(m, dict)]
+    stations = [s for s in routing.get("stations") or ()
+                if isinstance(s, dict)]
+    if not moves and not stations:
+        return 0
+    registry = registry_for_update(cid, frame_id)
+    touched = set()
+    for move in moves:
+        place_body(registry, move.get("charter"), move.get("body"),
+                   move.get("room"))
+        touched.add((str(move.get("charter")), str(move.get("body"))))
+    for row in stations:
+        station_body(registry, row.get("charter"), row.get("body"),
+                     row.get("station"))
+        touched.add((str(row.get("charter")), str(row.get("body"))))
+    save_registry(cid, registry, frame_id)
+    return len(touched)
 
 
 def charter_carriers(cid, rooms, frame_id=None):

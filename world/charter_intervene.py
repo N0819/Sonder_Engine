@@ -170,6 +170,7 @@ def _apply_relocate(charter, row):
         if old and str(body.get("place") or "") == old:
             body["place"] = target
             body.pop("walk", None)
+            body.pop("station", None)   # a station is a fact about one room
     return {"kind": "lair_moved", "at_hours": float(row["at_hours"]),
             "place": target, "from": old, "cause": row.get("cause", "")}, ""
 

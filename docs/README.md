@@ -96,6 +96,10 @@ World and body:
   — what a promoted charter body knows about where it is. Unbuilt; states the
   two gaps (disjoint place/room namespaces, and `stood` being a tally rather
   than a graph) and the options.
+- [`DESIGN_CHARTER_PLACEMENT.md`](design/DESIGN_CHARTER_PLACEMENT.md) — where a
+  charter body stands within its room: the four-place rule, the seeded dealing,
+  the read-time view, and the routed Director move. Built 2026-09-05; the map
+  half is `UNBUILT.md` §1.10b.
 - [`DESIGN_RUNNING.md`](design/DESIGN_RUNNING.md) — multi-room movement, bounded
   by decision rather than sight. Built.
 - [`DESIGN_SURFACE_COMFORT.md`](design/DESIGN_SURFACE_COMFORT.md) — ambient

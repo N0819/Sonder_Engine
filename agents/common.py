@@ -1931,6 +1931,28 @@ def presence_figures_for_room(cid, sc, room_id, inputs=None, *,
                 return surface
         return None
 
+    # WHERE IN THE ROOM each body stands (`world.charter_place`): derived
+    # from the same slices the crowd reads, once per room per stage, and
+    # carried on the row as ``placement`` so the perception stage can lay
+    # the body at its cell on its own scene copy. Never persisted.
+    placement_memo = inputs.setdefault("placement_memo", {})
+    if room not in placement_memo:
+        try:
+            from world.charter_place import placements_from_slices
+            placement_memo[room] = placements_from_slices(
+                inputs.get("charters") or [], sc, frame_rooms={room})
+        except Exception:
+            placement_memo[room] = {}
+    placements = placement_memo[room]
+
+    def _placement_for(refs):
+        from world.charter_place import placement_uid
+        for charter_key, body_key in sorted(refs):
+            placed = placements.get(placement_uid(charter_key, body_key))
+            if placed:
+                return placed
+        return None
+
     rows, seen, seen_refs = [], set(), set()
     for name, rec in presence_name_items(ledger):
         name = str(name or "").strip()
@@ -1959,6 +1981,9 @@ def presence_figures_for_room(cid, sc, room_id, inputs=None, *,
                        or ""):
                 row["appearance"] = appearance_text(
                     surface, noun=_noun_for(refs))
+        placed = _placement_for(refs)
+        if placed:
+            row["placement"] = dict(placed)
         rows.append(row)
 
     try:
@@ -1979,9 +2004,42 @@ def presence_figures_for_room(cid, sc, room_id, inputs=None, *,
                "role": _noun_for(refs)}
         if isinstance(sketch.get("surface"), dict):
             row["surface"] = dict(sketch["surface"])
+        placed = _placement_for(refs)
+        if placed:
+            row["placement"] = dict(placed)
         rows.append(row)
     memo[room] = rows
     return [dict(row) for row in rows]
+
+
+def charter_view_for_rooms(cid, sc, rooms, frame_id=None):
+    """``(viewed_scene, [positions key, ...])``: the scene with every
+    unpromoted charter body standing in ``rooms`` -- and in the rooms
+    `room_field` lays beyond their doorways -- placed at its cell
+    (`world.charter_place.scene_with_charter_bodies`), plus the keys those
+    rows are filed under. A shallow copy; the stored scene is untouched.
+
+    What `director_resolve`'s movement floor judges a townsperson's move
+    from: `_unreachable_position_writes` reads a mover's origin off the
+    scene, and a body the scene did not stand was never route-checked at all.
+    Fail-open: a story with no charter, or a registry that cannot be read,
+    hands back the scene it was given and no keys.
+    """
+    try:
+        from world.charter_place import (charter_placements, rooms_in_frame,
+                                         scene_with_charter_bodies)
+        from world.charter_runtime import registry_for
+        frame = rooms_in_frame(sc, rooms)
+        if not frame:
+            return sc, []
+        placements = charter_placements(
+            registry_for(cid, frame_id), sc, frame_rooms=frame)
+    except Exception:
+        return sc, []
+    if not placements:
+        return sc, []
+    viewed = scene_with_charter_bodies(sc, placements)
+    return viewed, [p["key"] for p in placements.values()]
 
 
 def present_charter_figures(cid, sc, rooms, frame_id=None):
@@ -2019,6 +2077,19 @@ def present_charter_figures(cid, sc, rooms, frame_id=None):
             cid, places=places, frame_id=frame_id)
     except Exception:
         return []
+    # Where each stands within its room (`world.charter_place`), so the
+    # objects and social hands can reason about who is beside what. The
+    # Director owns what exists, so it is shown the placement whole; an
+    # observer never receives it as a label.
+    placements = {}
+    try:
+        from world.charter_place import charter_placements
+        from world.charter_runtime import registry_for
+        if isinstance(sc, dict) and sc.get("rooms"):
+            placements = charter_placements(
+                registry_for(cid, frame_id), sc, frame_rooms=places)
+    except Exception:
+        placements = {}
     rows = []
     for name, record in derived.items():
         refs = [r for r in (record.get("charter_refs") or [])
@@ -2055,6 +2126,11 @@ def present_charter_figures(cid, sc, rooms, frame_id=None):
             "plan": body_plan_uid(ref.get("charter"), ref.get("body"))
             if ref.get("charter") and ref.get("body") else "",
         })
+        placed = placements.get("charter:%s:%s" % (
+            ref.get("charter"), ref.get("body")))
+        if placed:
+            rows[-1]["station"] = dict(placed.get("station") or {})
+            rows[-1]["facing"] = placed.get("facing") or ""
     rows.sort(key=lambda r: (0 if r["posts"] else 1, r["name"].casefold()))
     return rows
 
