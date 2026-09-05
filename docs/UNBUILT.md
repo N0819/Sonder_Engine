@@ -6567,58 +6567,50 @@ for what follows. Residuals of this entry rather than a section of their own:
   has no independent edit. A `covered_zones` (displacement) editor per
   garment is the largest attire gap: the ledger carries it and the editor
   preserves it, but offers no control.
-- **What the map editor does not yet do** (2026-09-04, the owner's ruling
+- **What the map editor still does not do** (2026-09-04, the owner's ruling
   of the same day landed the Rooms tab as a map: `web/world_routes.py`
   `grid_view`/`map_view`, `static/js/world_browser.js` "The map editor",
-  `DESIGN_ROOM_FIDELITY.md` §10). The map draws the engine's own field and
-  writes through the card's routes; what it does not draw or write:
-  **overlays** -- the grid route returns `overlays: {}` and the SVG paints
-  any `{name: {"x,y": word}}` it is handed with a legend, but nothing fills
-  the slot: the light field (`spatial_light_field.light_field`, a word per
-  cell) and the sound field (`spatial_sound_field.sound_field`) are merged
-  beside it since 2026-09-04 and neither is wired into `grid_view`, so the
-  select does not appear (§ 2.34, § 2.36). **The player
-  and a presence cannot be dragged between rooms** -- only a registered cast
-  member has a position route (`chat_char_position_put`; the cast editor's
-  rule that the player's place is the story's business); both can still be
-  re-stationed within their room by drag. **A doorway declared from the far
-  side alone cannot be dragged from this room** (the passage record, § 2.37,
-  is what would make it one object; the map says so and does nothing).
+  `DESIGN_ROOM_FIDELITY.md` §10; on 2026-09-05, after the owner's "This
+  room editor feels very incomplete", §11 of the same note landed the
+  overlays, dragging the player and a presence between rooms, dragging a
+  far-declared doorway (the passage record, § 2.37, now built), dragging
+  things, creating and removing rooms, doorways, anchors, things and
+  presences from the map, resizing the extent by its sides, the shape and a
+  composite's parts on the map, door positions and dragging on the
+  structure map, regions from the card, poses, and one-step Undo). What
+  remains, each a decision or a measured gap rather than a missed step:
   **Proximity reads cell distance only for a PINNED pair** (the `cell`
-  field landed later the same day for bodies and anchors alike,
-  `DESIGN_ROOM_FIDELITY.md` §10; the body-on-a-plain-cell gap is closed).
-  `_cell_proximity` fires when at least one body carries an authored
-  `cell` and both stand on a cell; two bodies at two ANCHORS derive cells
-  too, and reading their distance would change the anchor-tier answers
-  that sixteen test files pin (`near` for two anchors in a medium room,
-  `across` only from `large`). The owner's condition for touching proximity
-  was byte-identity for unpinned pairs, so the rule stops there; widening
-  it to derived cells is a decision about those pins, not a bug. **The
-  station editor's `at` select lets a cell go** -- choosing an anchor by
-  name is read as "stand at it", so a host who wants "at the bar, THIS end"
-  drags on the map rather than picking from the menu; the map writes both.
-  **Things are not dragged** -- the entity route moves a thing between
-  rooms and a thing has no station the map could write; it is clicked to
-  its editor. **Nothing is created on the map** -- no anchor, doorway or room
-  is drawn into being; the card's add rows do that, as before. **A room's
-  extent is not resized by dragging its wall.** **A corner anchor has no
-  `offset`** (a corner is one cell; the field is kept on the record and
-  moves nothing). **The structure map does not show door positions** -- an
-  exit is a tick at the middle of its wall, and two rooms off one wall are
-  told apart by their placement, not by where the tick sits; `layout_rooms`
-  knows the door cells, and the `/map` route could carry them. **The
-  structure map is not draggable** -- a room's bearing to a neighbour is
-  edited on the card's exit row. **No undo** beyond editing the field back.
+  field, `DESIGN_ROOM_FIDELITY.md` §10). `_cell_proximity` fires when at
+  least one body carries an authored `cell` and both stand on a cell; two
+  bodies at two ANCHORS derive cells too, and reading their distance would
+  change the anchor-tier answers that sixteen test files pin (`near` for
+  two anchors in a medium room, `across` only from `large`). The owner's
+  condition for touching proximity was byte-identity for unpinned pairs, so
+  the rule stops there; widening it to derived cells is a decision about
+  those pins, not a bug. **The station editor's `at` select lets a cell
+  go** -- choosing an anchor by name is read as "stand at it", so a host who
+  wants "at the bar, THIS end" drags on the map rather than picking from the
+  menu; the map writes both. **A thing has no wall `offset`** -- it is
+  placed by `cell` alone (a thing is not a feature of a wall; an anchor is),
+  so a thing dragged onto a wall cell is pinned there, not attached to the
+  wall. **A corner anchor has no `offset`** (a corner is one cell; the
+  field is kept on the record and moves nothing). **Undo is ONE step and
+  only for a drag** -- a write from the card clears it, since the card's own
+  value is then what the server holds; a deeper history is a decision about
+  where it would live. **A passage's `state` has no reader** (§ 2.37).
   **A body dropped in a neighbour's cells that are also a doorway's** is
   stationed at that door anchor, which is the honest reading and looks odd
-  when the host meant "just inside". **Measured on the L test room**: a
-  doorway on the inner wall of the notch (an `e`-facing rim cell of the
-  west part) lays the neighbour INTO the notch, where it overlaps the
-  room's own east part and `room_field` skips it silently -- the neighbour
-  is then absent from the map with no row saying why; the lint's
-  `rooms_overlap_when_placed` runs per component from `layout_rooms` and
-  does not see a room colliding with the room it hangs off, so this is a
-  gap in the lint as much as in the map.
+  when the host meant "just inside". **A structure-map drag re-bears only
+  the doorway that placed the room** (`layout_rooms`' `parents`); a room
+  reached by two doorways keeps its second bearing, and the lint says so if
+  the two now disagree. **Measured on the L test room**: a doorway on the
+  inner wall of the notch (an `e`-facing rim cell of the west part) lays the
+  neighbour INTO the notch, where it overlaps the room's own east part and
+  `room_field` skips it silently -- the neighbour is then absent from the
+  map with no row saying why; the lint's `rooms_overlap_when_placed` runs
+  per component from `layout_rooms` and does not see a room colliding with
+  the room it hangs off, so this is a gap in the lint as much as in the map,
+  and a composite's inner walls widen the class.
 - **The naturalness guard is a clause plus the structural floor, not a
   refusal over prose** (2026-09-04). The owner's phrasing was "refuse ops or
   notes naming what a character will think, feel or decide". What is built:
@@ -7222,7 +7214,9 @@ pinned in `tests/test_played_scene_classes.py`). Open, each an owner decision:
   One held it open, one latched it, the narrator rendered both, the scene
   kept it open. A barrier is one object; the resolve owes it one answer a
   beat, and the reconciliation should catch "latched" prose against an
-  `open_door` edge as it catches the reverse.
+  `open_door` edge as it catches the reverse. Since 2026-09-05 the doorway
+  IS one object (`scene.passages`, § 2.37), with a `state` field carried for
+  exactly this and read by nothing yet; the reconciliation is still open.
 - **The planner calls `inspect_clock` every step (F10).** Half answered the
   same day: a tool whose answer rides a payload key (`inspect_clock` ->
   `clock`, `inspect_packages` -> `packages`; `payload_key` in
@@ -7425,22 +7419,22 @@ scene's geometry cannot all be true; the backdrop brief draws the picture
 from the same record the composer and the geometry read. Measured on a copy
 of the owner's database: 0 of 589 rooms carry an extent; the lint finds 9
 rows in 4 of 104 scenes; the pre-change and built geometry agree on every
-room and body. Left open, each an owner decision or a build:
+room and body. The passage record (note §5) and `composite` (note §2) landed
+2026-09-05 with the map editor's completion (note §11): `scene.passages`,
+edges carrying `passage: id`, the five readers resolving through it, the
+merge's `sync_scene_passages`, the doorways routes; `tests/test_passages.py`,
+`tests/test_composite_rooms.py`. Left open, each an owner decision or a build:
 
-- **The passage as one object (note §5).** F16 and F22 are one class -- a
-  doorway stored as two edges that can disagree. Designed:
-  `scene.passages[id] = {rooms, barrier, name, material, width, vertical,
-  state}`, edges carrying `passage: id`, readers (`spatial_rel`,
-  `effective_adjacent`, `neighbor_map`, `_sight_neighbours`,
-  `effective_anchors`' door derivation) resolving through the passage when
-  named and per-edge when not, the merge writing both from either, archive
-  and checkpoint riding the blob, the registry untouched. Not built: five
-  readers across four spatial siblings plus the merge block
-  `_mirror_symmetric_barriers` sits in. It was deferred because the
-  light-field work was editing `spatial_routing.py` and `spatial_merge.py`
-  in the same window; that window closed with the 2026-09-04 merge, so
-  nothing but the work stands in the way. The mirror remains the answer to
-  F16 until this lands, and F22 (§ 2.35) waits on the same record.
+- **A passage's `state` has no reader.** The record carries it so F22's
+  "latched" against `open_door` (§ 2.35) has a home on ONE object rather
+  than as prose against an edge; nothing consults it yet, and what a latch
+  does to `edge_passable` is a decision -- a barrier word (`closed_door`) or
+  a state on an open one -- before it is a build. The Director still writes
+  barriers on edges (the schema has no passage channel); the sync reads
+  which edge changed. A frame split that keeps one room of a pair leaves a
+  passage naming a room the frame lacks; the hygiene drops it and the
+  surviving edge reads per edge again -- the fail-open, not a merge of the
+  two frames' records.
 - **A Room tool that writes a region's `look`.** `regions.set_region_look`
   is the seam; since later on 2026-09-04 the World Browser's room card calls
   it through `PATCH /api/chats/{cid}/regions/{region_id}` (`web/world_routes.py`),

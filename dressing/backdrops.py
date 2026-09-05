@@ -672,7 +672,11 @@ def _proportion_of(scene, room_id):
     if not grid.measured and not authored:
         return ""
     size = effective_room_size(scene or {}, room_id)
-    shape = {"round": "round room", "l": "L-shaped room"}.get(grid.shape, "room")
+    # `composite` is any union of rectangles that is not the two-part L: the
+    # picture is told the floor is irregular and left to the walls sentence
+    # for where it turns, since a shape word for every union does not exist.
+    shape = {"round": "round room", "l": "L-shaped room",
+             "composite": "irregularly shaped room"}.get(grid.shape, "room")
     if not grid.measured:
         return "a %s %s" % (size, shape)
     long_side, short_side = max(grid.w, grid.d), min(grid.w, grid.d)

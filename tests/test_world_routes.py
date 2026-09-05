@@ -1024,7 +1024,16 @@ class TestTheGridAndTheMap:
         assert wall["axis"] == 0 and wall["coord"] == 8
         assert wall["aperture"][1] - wall["aperture"][0] == 1.0
         assert view["lint"] == []
-        assert view["overlays"] == {}
+        # The overlays slot is filled by the readers the composer uses: the
+        # light field's word per cell and the sound field's noise floor,
+        # each quantised with its own ladder, over the room's own cells.
+        from world.spatial import LIGHT_LEVELS, NOISE_WORDS
+        assert set(view["overlays"]) == {"light", "noise"}
+        for name, ladder in (("light", LIGHT_LEVELS), ("noise", NOISE_WORDS)):
+            readings = view["overlays"][name]
+            assert set(readings) == {f"{x},{y}" for x, y in view["room"]["cells"]}
+            assert set(readings.values()) <= set(ladder)
+        assert view["sound_sources"] == [] and view["light_sources"] == []
 
     @pytest.mark.parametrize("shape, parts", [
         ("round", None),
@@ -1099,9 +1108,23 @@ class TestTheGridAndTheMap:
         assert rows["kitchen"]["measured"] is True and rows["hallway"]["measured"] is False
         assert rows["kitchen"]["cells"] == [[x, y] for x in range(8) for y in range(4)]
         exits = {e["to"]: e for e in rows["kitchen"]["exits"]}
+        from world.spatial import _door_cells
+        door, _bearing = _door_cells(scene, "kitchen", "hallway")
         assert exits["hallway"] == {"to": "hallway", "name": "Hallway", "dir": "e",
-                                    "barrier": "open", "placed": True}
+                                    "barrier": "open", "placed": True,
+                                    # The door's cells in the kitchen's own
+                                    # frame (the structure map draws the
+                                    # doorway where it stands), and no
+                                    # passage record: the exits are edges.
+                                    "cells": [[x, y] for x, y in sorted(door)],
+                                    "passage": None}
         assert exits["cellar"]["dir"] is None and exits["cellar"]["placed"] is False
+        assert exits["cellar"]["cells"] == []
+        # The room each was placed FROM, the edge a structure-map drag
+        # re-bears; the start of the component has none.
+        assert rows["kitchen"]["placed_via"] == "hallway"
+        assert rows["hallway"]["placed_via"] is None
+        assert rows["kitchen"]["region"] is None
         assert rows["kitchen"]["occupants"] == ["Alice"]
         assert rows["study"]["occupants"] == ["Nathan"]
         assert all(row["lint"] == 0 and row["collided"] is False for row in rows.values())

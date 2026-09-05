@@ -1,6 +1,6 @@
 """The World Browser in a real browser: the tree, the card, walking an exit,
-the field editors, the Bodies tab's attire editor, and the Raw JSON tab that
-keeps the old editors.
+the field editors, the Bodies tab's attire editor, the Raw JSON tab that
+keeps the old editors -- and the map editor, gesture by gesture.
 
 Fully mocked at the network boundary. What `node --check` cannot see is the
 part worth testing here: that 🌍 opens on Rooms and 👕 on Bodies, that
@@ -9,8 +9,12 @@ card, that a room's light chosen from the select is PATCHed and the card
 re-renders from the server's answer, that adding an exit sends this room's
 full exit list and the far room then shows the doorway, that changing a
 garment's state on the Bodies tab sends the WHOLE ledger with every copy of a
-spanning garment carrying the new state (never narrowed, never reset), and
-that the Raw JSON tab still offers the world table for hand repair.
+spanning garment carrying the new state (never narrowed, never reset), that
+the Raw JSON tab still offers the world table for hand repair -- and, since
+2026-09-05, that every drag, click-to-create and remove on the map is ONE
+write through the route the card uses, with a toast naming what was written,
+an Undo that re-issues the previous value, and an arrow key that is the drag
+by one cell.
 """
 
 from __future__ import annotations
@@ -18,7 +22,7 @@ from __future__ import annotations
 import copy
 import json
 import re
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 from playwright.sync_api import Page, expect
 
@@ -42,10 +46,17 @@ VOCAB = {
     "heights": ["floor", "waist", "head", "full"],
     "footprints": ["point", "small", "large", "run"],
     "opacities": ["opaque", "see_through"],
-    "shapes": ["rectangle", "round", "l"],
+    "shapes": ["rectangle", "round", "l", "composite"],
     "corners": ["ne", "se", "sw", "nw"],
+    "part_shapes": ["l", "composite"],
     "walls": ["n", "e", "s", "w"],
     "extent": {"min": 2, "max": 24},
+    "light_shapes": ["all_round", "cone"],
+    "light_heights": ["floor", "waist", "head", "full"],
+    "steadiness": ["steady", "flickering", "failing"],
+    "sound_levels": ["faint", "audible", "loud", "deafening"],
+    "pose_fields": ["posture", "support", "relative_to", "relation", "constraint", "detail"],
+    "postures": ["standing", "sitting", "kneeling", "crouching", "lying"],
     "regions": [{"id": "east_wing", "name": "East Wing", "look": ""}],
     "attire_regions": ["head", "torso", "arms", "hands", "waist", "groin", "legs", "feet"],
     "garment_states": ["worn", "loosened", "open", "removed"],
@@ -107,12 +118,20 @@ INDEX = {
     "vocab": VOCAB,
 }
 
+# A lamp standing on the kitchen floor by a position row, pinned to (2, 1):
+# the one thing the map drags, and the one light source it draws.
+LAMP = {"id": "brass_lamp", "name": "Brass Lamp", "kind": "lamp", "plan_ref": None,
+        "placed": "position", "cell": [2, 1],
+        "record": {"kind": "lamp", "description": "", "portable": True, "light_source": "",
+                   "light_shape": "", "light_height": "", "steadiness": "", "sound_source": "",
+                   "state": {}}}
+
 
 def _slice(rid, name, desc, exits, occupants=(), adjacent=None, light="",
-           region="", anchors=None, lint=()):
+           region="", anchors=None, lint=(), things=(), extent=None, shape="", parts=()):
     record = {"name": name, "desc": desc, "notes": "", "light": light,
               "size": "", "exposure": "", "region": region,
-              "extent": None, "shape": "", "parts": [],
+              "extent": extent, "shape": shape, "parts": list(parts),
               "anchors": anchors or {},
               "adjacent": adjacent if adjacent is not None else [
                   {"to": x["to"], "barrier": x["barrier"]} for x in exits
@@ -123,7 +142,8 @@ def _slice(rid, name, desc, exits, occupants=(), adjacent=None, light="",
             "region": region or None,
             "region_name": "East Wing" if region == "east_wing" else None,
             "region_look": "",
-            "occupants": list(occupants), "things": [], "planned_stub": None,
+            "occupants": list(occupants), "things": [copy.deepcopy(t) for t in things],
+            "planned_stub": None,
             "plan_here": {"planned_entities": [], "needs": [], "package_ops": []},
             "record": record,
             # Every authored anchor is stationable, as the server lists them.
@@ -152,16 +172,18 @@ SLICES = {
                        {"to": "attic", "name": "Attic", "barrier": None,
                         "dir": None, "status": "planned"}],
                       [{"name": "Alice", "station": {"at": "oak_table", "near": []},
-                        "attire": ALICE_ATTIRE}],
+                        "attire": ALICE_ATTIRE, "pose": {"posture": "standing"}}],
                       adjacent=[{"to": "hallway", "barrier": "open"}],
                       region="east_wing",
                       anchors={"hearth": {"desc": "the hearth", "dir": "w", "height": "waist"},
                                "oak_table": {"desc": "the oak table"}},
-                      lint=KITCHEN_LINT),
+                      lint=KITCHEN_LINT, things=[LAMP]),
     "hallway": _slice("hallway", "Hallway", "A long, dim hallway.",
                       [{"to": "kitchen", "name": "Kitchen", "barrier": "open",
                         "dir": None, "status": "live"}],
                       region="east_wing"),
+    "study": _slice("study", "Study", "A cluttered study filled with books.",
+                    [], [{"name": "Nathan", "station": None, "attire": None, "pose": None}]),
     "garden": _slice("garden", "Garden", "An overgrown garden.", []),
 }
 
@@ -183,19 +205,44 @@ DOOR_DIRS = {("kitchen", "hallway"): "e", ("hallway", "kitchen"): "w"}
 NEIGHBOUR_OFFSETS = {("kitchen", "hallway"): [7, -1], ("hallway", "kitchen"): [-7, 1]}
 
 
+def _part_box(part, w, d):
+    """`spatial_fov.part_box`, the mock's copy."""
+    at = part["at"]
+    if isinstance(at, str):
+        pw, pd = min(part["w"], w), min(part["d"], d)
+        x0 = w - pw if at in ("ne", "se") else 0
+        y0 = d - pd if at in ("se", "sw") else 0
+        return (x0, y0, x0 + pw, y0 + pd)
+    return (max(0, at[0]), max(0, at[1]), max(0, min(w, at[0] + part["w"])),
+            max(0, min(d, at[1] + part["d"])))
+
+
 def _grid(rid, slices):
     """A mock of `GET /rooms/{rid}/grid` over the mocked slice: the tier's
-    square, each anchor on the wall its bearing names (one pace in when it
-    has a height, at its `offset` along the wall when it has one), the
-    doorways with a bearing as one cell of their wall, the occupants beside
-    the anchor they stand at, the beared neighbour laid beyond its door."""
+    square (or the extent's box, cut to a part shape's parts), each anchor on
+    the wall its bearing names (one pace in when it has a height, at its
+    `offset` along the wall when it has one), the doorways with a bearing as
+    one cell of their wall, the occupants beside the anchor they stand at,
+    the beared neighbour laid beyond its door, the things at their cells and
+    a light source's height word."""
     room = slices[rid]
     record = room["record"]
     geometry = record["geometry"]
     w, d = geometry["w"], geometry["d"]
     cells = [[x, y] for x in range(w) for y in range(d)]
-    rims = {"n": [[x, 0] for x in range(w)], "e": [[w - 1, y] for y in range(d)],
-            "s": [[x, d - 1] for x in range(w)], "w": [[0, y] for y in range(d)]}
+    if record.get("shape") in VOCAB["part_shapes"] and record.get("parts"):
+        kept = set()
+        for part in record["parts"]:
+            x0, y0, x1, y1 = _part_box(part, w, d)
+            kept.update((x, y) for x in range(x0, x1) for y in range(y0, y1))
+        cells = sorted([list(c) for c in kept]) or cells
+    has = {tuple(c) for c in cells}
+    unit = {"n": (0, -1), "e": (1, 0), "s": (0, 1), "w": (-1, 0)}
+    rims = {}
+    for wall, (ux, uy) in unit.items():
+        along = 0 if wall in ("n", "s") else 1
+        rim = [c for c in has if (c[0] + ux, c[1] + uy) not in has]
+        rims[wall] = [list(c) for c in sorted(rim, key=lambda c: (c[along], c[1 - along]))]
 
     def on_wall(wall, offset, inset):
         rim = rims[wall]
@@ -229,7 +276,10 @@ def _grid(rid, slices):
         placed = on_wall(wall, edge.get("offset"), 0) if wall in rims else []
         doorways.append({"id": "door:" + x["to"], "to": x["to"], "name": x["name"], "dir": wall,
                          "cells": placed, "barrier": x["barrier"] or "open",
-                         "offset": edge.get("offset"), "status": x["status"]})
+                         "offset": edge.get("offset"), "status": x["status"],
+                         "passage": edge.get("passage"), "label": edge.get("name", ""),
+                         "material": edge.get("material", ""), "width": edge.get("width"),
+                         "state": {}, "declared_here": bool(edge)})
         offset = NEIGHBOUR_OFFSETS.get((rid, x["to"]))
         if offset and x["to"] in slices and placed:
             far = slices[x["to"]]["record"]["geometry"]
@@ -255,40 +305,64 @@ def _grid(rid, slices):
         elif at and at in anchors:
             ax, ay = anchors[at]["cells"][0]
             cell, source = [min(w - 1, ax + 1), ay], "anchor"
-        bodies[o["name"]] = {"cell": cell, "facing": "e" if cell else None, "kind": "cast",
+        kind = next((b["kind"] for b in INDEX["bodies"] if b["name"] == o["name"]), "presence")
+        bodies[o["name"]] = {"cell": cell, "facing": "e" if cell else None, "kind": kind,
                              "at": at, "near": list(station.get("near") or []),
                              "measured": cell is not None, "source": source}
+    things, light_sources = [], []
+    for th in room.get("things") or []:
+        things.append({"id": th["id"], "name": th["name"], "kind": th.get("kind") or "",
+                       "cell": th.get("cell"), "anchor": None, "placed": th.get("placed", "position"),
+                       "source": "cell" if th.get("cell") else "none",
+                       "light_source": th["record"].get("light_source", ""),
+                       "sound_source": th["record"].get("sound_source", "")})
+        if th["record"].get("light_source") and th.get("cell"):
+            # The engine's rule: a declared height, else `full` for a fixture
+            # and `head` for a free portable thing.
+            height = th["record"].get("light_height") or ("head" if th["record"].get("portable") else "full")
+            light_sources.append({"id": th["id"], "label": th["name"], "cell": th["cell"],
+                                  "height": height, "shape": th["record"].get("light_shape") or "all_round"})
+    # The overlays the readers would fill: a light word per cell for a room
+    # that carries geometry (every mocked room has anchors or a size).
+    overlays = {"light": {f"{x},{y}": "lit" if x < w // 2 else "dim" for x, y in cells},
+                "noise": {f"{x},{y}": "quiet" for x, y in cells}}
     return {"frame_id": None,
             "room": {"id": rid, "name": room["name"], "w": w, "d": d, "shape": geometry["shape"],
                      "measured": geometry["measured"], "cells": cells},
             "rims": rims, "anchors": anchors, "doorways": doorways, "bodies": bodies,
-            "things": [], "walls": walls, "neighbours": neighbours,
-            "lint": list(room.get("lint") or []), "overlays": {}}
+            "things": things, "walls": walls, "neighbours": neighbours,
+            "lint": list(room.get("lint") or []), "overlays": overlays,
+            "sound_sources": [], "light_sources": light_sources}
 
 
 def _map(slices):
     """A mock of `GET /map`: the kitchen and the hallway one component (the
     hallway east of the kitchen, the study north of the hallway), the garden
-    its own, and a pantry the bearings land on the kitchen -- drawn, flagged."""
+    its own, and a pantry the bearings land on the kitchen -- drawn, flagged.
+    Each placed room names the room it was placed FROM and its doorways' cells."""
     def row(rid, name, offset, w=6, d=6, exits=(), occupants=(), lint=0, collided=False,
-            onto=None, via=None):
+            onto=None, via=None, placed_via=None, region=None):
         return {"id": rid, "name": name, "offset": offset, "w": w, "d": d, "shape": "rectangle",
                 "measured": False, "cells": [[x, y] for x in range(w) for y in range(d)],
                 "exits": list(exits), "occupants": list(occupants), "lint": lint, "holder": None,
-                "collided": collided, "onto": onto, "via": via}
-    exit_ = lambda to, dir_, placed=True, barrier="open": {
+                "region": region, "collided": collided, "onto": onto, "via": via,
+                "placed_via": placed_via}
+    exit_ = lambda to, dir_, placed=True, barrier="open", cells=(): {
         "to": to, "name": slices.get(to, {}).get("name", to), "dir": dir_, "barrier": barrier,
-        "placed": placed}
+        "placed": placed, "cells": [list(c) for c in cells], "passage": None}
     return {"frame_id": None, "location": "Old Manor", "components": [
         {"start": "hallway", "rooms": [
-            row("hallway", "Hallway", [0, 0], exits=[exit_("kitchen", "w"), exit_("study", "n", barrier="closed_door"),
-                                                    exit_("pantry", "w")], occupants=["Bob"]),
-            row("kitchen", "Kitchen", [-7, 1], exits=[exit_("hallway", "e"), exit_("attic", None, False)],
-                occupants=["Alice"], lint=2),
-            row("study", "Study", [0, -7], exits=[exit_("hallway", "s", barrier="closed_door")],
-                occupants=["Nathan"]),
-            row("pantry", "Pantry", [-4, 3], w=4, d=4, exits=[exit_("hallway", "e")], lint=1,
-                collided=True, onto="kitchen", via="hallway")],
+            row("hallway", "Hallway", [0, 0], exits=[exit_("kitchen", "w", cells=[(0, 2)]),
+                                                    exit_("study", "n", barrier="closed_door", cells=[(3, 0)]),
+                                                    exit_("pantry", "w", cells=[(0, 5)])],
+                occupants=["Bob"], region="east_wing"),
+            row("kitchen", "Kitchen", [-7, 1], exits=[exit_("hallway", "e", cells=[(5, 1)]),
+                                                     exit_("attic", None, False)],
+                occupants=["Alice"], lint=2, placed_via="hallway", region="east_wing"),
+            row("study", "Study", [0, -7], exits=[exit_("hallway", "s", barrier="closed_door", cells=[(3, 5)])],
+                occupants=["Nathan"], placed_via="hallway"),
+            row("pantry", "Pantry", [-4, 3], w=4, d=4, exits=[exit_("hallway", "e", cells=[(3, 2)])], lint=1,
+                collided=True, onto="kitchen", via="hallway", placed_via="hallway")],
          "collisions": [{"room": "pantry", "onto": "kitchen", "via": "hallway"}]},
         {"start": "garden", "rooms": [row("garden", "Garden", [0, 0])], "collisions": []},
     ]}
@@ -305,17 +379,31 @@ def _mount(page: Page):
     attire = {"Alice": copy.deepcopy(ALICE_ATTIRE)}
     looks: dict[str, str] = {}
 
+    def edge_of(rid, to):
+        return next((e for e in slices[rid]["record"]["adjacent"] if e["to"] == to), None)
+
+    def ensure_edge(rid, to, barrier="open", dir_=None):
+        if edge_of(rid, to) is None:
+            slices[rid]["record"]["adjacent"].append({"to": to, "barrier": barrier})
+        if not any(x["to"] == to for x in slices[rid]["exits"]):
+            slices[rid]["exits"].append({"to": to, "name": slices[to]["name"], "barrier": barrier,
+                                         "dir": dir_, "status": "live"})
+        if dir_:
+            edge_of(rid, to)["dir"] = dir_
+
     def handle(route) -> None:
         request = route.request
-        path = urlparse(request.url).path
+        url = urlparse(request.url)
+        path = url.path
         seen.append(path)
         body = {}
         status = 200
-        if request.method in ("PATCH", "PUT") and request.post_data:
-            payload = json.loads(request.post_data)
+        if request.method in ("PATCH", "PUT", "POST", "DELETE") and not path.endswith("/bootstrap"):
+            payload = json.loads(request.post_data) if request.post_data else {}
             writes.append((request.method, path, payload))
-            if request.method == "PUT" and path.startswith("/api/chats/1/bodies/"):
-                name = path.split("/")[5]
+            parts = path.split("/")
+            if request.method == "PUT" and path.startswith("/api/chats/1/bodies/") and path.endswith("/station"):
+                name = parts[5]
                 station = {"at": payload.get("at"), "near": list(payload.get("near") or [])}
                 # The server keeps a `cell` only as two whole numbers, and
                 # only when one was sent (null or absent is no pin).
@@ -325,15 +413,161 @@ def _mount(page: Page):
                     for o in room["occupants"]:
                         if o["name"] == name:
                             o["station"] = station
+                    for th in room["things"]:
+                        if th["id"] == name:
+                            th["cell"] = station.get("cell")
                 for b in index["bodies"]:
                     if b["name"] == name:
                         b["station"] = station
                 body = {"name": name, "station": station}
+            elif request.method == "PUT" and path.startswith("/api/chats/1/bodies/") and path.endswith("/room"):
+                name, target = parts[5], payload["room"]
+                for room in slices.values():
+                    room["occupants"] = [o for o in room["occupants"] if o["name"] != name]
+                slices[target]["occupants"].append({"name": name, "station": None, "attire": None, "pose": None})
+                for b in index["bodies"]:
+                    if b["name"] == name:
+                        b["room"], b["room_name"], b["station"] = target, slices[target]["name"], None
+                body = {"name": name, "room": target}
+            elif request.method == "PUT" and path.startswith("/api/chats/1/bodies/") and path.endswith("/pose"):
+                name = parts[5]
+                pose = {k: v for k, v in payload.items() if v}
+                for b in index["bodies"]:
+                    if b["name"] == name:
+                        b["pose"] = pose or None
+                for room in slices.values():
+                    for o in room["occupants"]:
+                        if o["name"] == name:
+                            o["pose"] = pose or None
+                body = {"name": name, "pose": pose or None}
+            elif request.method == "DELETE" and path.startswith("/api/chats/1/bodies/"):
+                name = parts[5]
+                for room in slices.values():
+                    room["occupants"] = [o for o in room["occupants"] if o["name"] != name]
+                index["bodies"] = [b for b in index["bodies"] if b["name"] != name]
+                body = {"removed": name}
+            elif request.method == "PUT" and path.startswith("/api/chats/1/characters/"):
+                body = {"ok": True}
+            elif request.method == "POST" and path == "/api/chats/1/regions":
+                rid = payload["name"].strip().lower().replace(" ", "_")
+                if not any(r["id"] == rid for r in index["vocab"]["regions"]):
+                    index["vocab"]["regions"].append({"id": rid, "name": payload["name"], "look": ""})
+                body = {"id": rid, "name": payload["name"], "brief": "", "look": "", "rooms": []}
             elif request.method == "PATCH" and path.startswith("/api/chats/1/regions/"):
                 rid = path.rsplit("/", 1)[1]
-                looks[rid] = payload["look"]
-                body = {"id": rid, "name": rid, "brief": "", "look": payload["look"],
+                if "look" in payload:
+                    looks[rid] = payload["look"]
+                if "name" in payload:
+                    for r in index["vocab"]["regions"]:
+                        if r["id"] == rid:
+                            r["name"] = payload["name"]
+                    for s in slices.values():
+                        if s["region"] == rid:
+                            s["region_name"] = payload["name"]
+                body = {"id": rid, "name": payload.get("name", rid), "brief": "", "look": looks.get(rid, ""),
                         "rooms": [s for s in slices if slices[s]["region"] == rid]}
+            elif request.method == "POST" and path == "/api/chats/1/doorways":
+                rid, to = payload["room"], payload["to"]
+                barrier = payload.get("barrier") or "open"
+                ensure_edge(rid, to, barrier, payload.get("dir"))
+                opposite = {"n": "s", "s": "n", "e": "w", "w": "e"}.get(payload.get("dir"))
+                ensure_edge(to, rid, barrier, opposite)
+                pid = "|".join(sorted([rid, to]))
+                for a, b in ((rid, to), (to, rid)):
+                    edge_of(a, b)["passage"] = pid
+                    if payload.get("offset") is not None:
+                        edge_of(a, b)["offset"] = payload["offset"]
+                body = {"passage": pid, "room": rid, "to": to, "slice": slices[rid]}
+            elif request.method == "PATCH" and path.startswith("/api/chats/1/doorways/"):
+                rid, to = parts[5], parts[6]
+                ensure_edge(rid, to)
+                ensure_edge(to, rid)
+                pid = "|".join(sorted([rid, to]))
+                for a, b in ((rid, to), (to, rid)):
+                    edge = edge_of(a, b)
+                    edge["passage"] = pid
+                    for key in ("offset", "barrier", "name", "material", "width"):
+                        if key in payload:
+                            edge[key] = payload[key]
+                    if "dir" in payload:
+                        opposite = {"n": "s", "s": "n", "e": "w", "w": "e", "ne": "sw", "sw": "ne",
+                                    "nw": "se", "se": "nw"}
+                        edge["dir"] = payload["dir"] if a == rid else opposite.get(payload["dir"])
+                    for x in slices[a]["exits"]:
+                        if x["to"] == b:
+                            if "barrier" in payload:
+                                x["barrier"] = payload["barrier"]
+                            if "dir" in payload:
+                                x["dir"] = edge["dir"]
+                body = {"passage": pid, "room": rid, "to": to, "slice": slices[rid]}
+            elif request.method == "DELETE" and path.startswith("/api/chats/1/doorways/"):
+                rid, to = parts[5], parts[6]
+                for a, b in ((rid, to), (to, rid)):
+                    slices[a]["record"]["adjacent"] = [e for e in slices[a]["record"]["adjacent"] if e["to"] != b]
+                    slices[a]["exits"] = [x for x in slices[a]["exits"] if x["to"] != b]
+                body = {"removed": [rid, to], "slice": slices[rid]}
+            elif request.method == "POST" and path == "/api/chats/1/rooms":
+                rid = payload["name"].strip().lower().replace(" ", "_")
+                slices[rid] = _slice(rid, payload["name"], "", [])
+                index["groups"]["reachable"].append(_row(rid, payload["name"], 1))
+                if payload.get("from"):
+                    src = payload["from"]
+                    ensure_edge(src, rid, payload.get("barrier") or "open", payload.get("dir"))
+                    opposite = {"n": "s", "s": "n", "e": "w", "w": "e"}.get(payload.get("dir"))
+                    ensure_edge(rid, src, payload.get("barrier") or "open", opposite)
+                body = dict(slices[rid], id=rid)
+            elif request.method == "DELETE" and re.fullmatch(r"/api/chats/1/rooms/[^/]+", path):
+                rid = parts[5]
+                if slices[rid]["occupants"] or slices[rid]["things"]:
+                    who = ", ".join(o["name"] for o in slices[rid]["occupants"])
+                    status, body = 400, {"detail": f"'{rid}' is not empty (bodies: {who}); move them out before removing the room"}
+                else:
+                    slices.pop(rid)
+                    for key in index["groups"]:
+                        index["groups"][key] = [r for r in index["groups"][key] if r["id"] != rid]
+                    body = {"removed": rid, "retired": True}
+            elif request.method == "POST" and path.endswith("/entities"):
+                rid = parts[5]
+                eid = payload["name"].strip().lower().replace(" ", "_")
+                thing = {"id": eid, "name": payload["name"], "kind": payload.get("kind") or "object",
+                         "plan_ref": None, "placed": "position", "cell": payload.get("cell"),
+                         "record": {"kind": payload.get("kind") or "object", "description": "",
+                                    "portable": False, "light_source": "", "light_shape": "",
+                                    "light_height": "", "steadiness": "", "sound_source": "", "state": {}}}
+                slices[rid]["things"].append(thing)
+                body = dict(slices[rid], id=eid)
+            elif request.method == "DELETE" and "/entities/" in path:
+                rid, eid = parts[5], parts[7]
+                slices[rid]["things"] = [th for th in slices[rid]["things"] if th["id"] != eid]
+                body = slices[rid]
+            elif request.method == "PATCH" and "/entities/" in path:
+                rid, eid = parts[5], parts[7]
+                thing = next(th for th in slices[rid]["things"] if th["id"] == eid)
+                for key in ("kind", "description", "portable", "light_source", "light_shape",
+                            "light_height", "steadiness", "sound_source"):
+                    if key in payload:
+                        thing["record"][key] = payload[key]
+                        if key == "kind":
+                            thing["kind"] = payload[key]
+                for flag in ("lit", "running", "pointed_at"):
+                    if flag in payload:
+                        thing["record"]["state"][flag] = payload[flag]
+                if "room" in payload:
+                    slices[rid]["things"].remove(thing)
+                    thing["cell"] = None
+                    slices[payload["room"]]["things"].append(thing)
+                body = slices[rid]
+            elif request.method == "POST" and path.endswith("/presences"):
+                rid = parts[5]
+                station = {"at": None, "near": []}
+                if payload.get("cell"):
+                    station["cell"] = payload["cell"]
+                slices[rid]["occupants"].append({"name": payload["name"], "station": station,
+                                                 "attire": None, "pose": None})
+                index["bodies"].append({"name": payload["name"], "kind": "presence", "char_id": None,
+                                        "room": rid, "room_name": slices[rid]["name"],
+                                        "station": station, "pose": None, "attire": None})
+                body = slices[rid]
             elif request.method == "PATCH" and path.startswith("/api/chats/1/rooms/"):
                 rid = path.rsplit("/", 1)[1]
                 room = slices[rid]
@@ -341,6 +575,8 @@ def _mount(page: Page):
                             "shape", "parts", "anchors"):
                     if key in payload:
                         room["record"][key] = payload[key]
+                if "region" in payload:
+                    room["region"] = payload["region"] or None
                 if "extent" in payload:
                     # The server's rule: the size word follows the measurement.
                     room["record"]["extent"] = payload["extent"]
@@ -394,6 +630,8 @@ def _mount(page: Page):
             rid = path.split("/")[5]
             if rid in slices:
                 body = _grid(rid, slices)
+                if parse_qs(url.query).get("sound_from"):
+                    body["overlays"]["sound"] = {k: "full" for k in body["overlays"]["noise"]}
             else:
                 status, body = 404, {"detail": f"No room '{rid}' in this scene"}
         elif path.startswith("/api/chats/1/rooms/"):
@@ -422,6 +660,14 @@ def _open_story(page: Page, ui_base_url: str):
     page.get_by_label("Open First").click()
     expect(page.locator("#chatname")).to_have_text("First")
     return seen, writes
+
+
+def _open_map(page: Page, ui_base_url: str):
+    seen, writes = _open_story(page, ui_base_url)
+    page.locator("#b-world").click()
+    modal = page.locator("#modal")
+    expect(modal.locator(".wb-room-map")).to_be_visible()
+    return seen, writes, modal
 
 
 def test_the_world_button_opens_on_the_room_tree_and_the_players_room(
@@ -494,7 +740,7 @@ def test_adding_an_exit_shows_the_doorway_from_both_rooms(page: Page, ui_base_ur
     add.locator("select").nth(0).select_option("garden")
     add.locator("select").nth(1).select_option("closed_door")
     add.get_by_role("button", name="Add exit").click()
-    expect(card.locator(".wb-exit", has_text="Garden")).to_have_count(1)
+    expect(card.locator(".wb-exit[data-exit=garden]")).to_have_count(1)
     patches = [w for w in writes if w[0] == "PATCH" and w[1] == "/api/chats/1/rooms/kitchen"]
     # This room's FULL exit list, the standing doorway kept, the new one added.
     assert patches[-1][2]["exits"] == [
@@ -503,7 +749,29 @@ def test_adding_an_exit_shows_the_doorway_from_both_rooms(page: Page, ui_base_ur
     # Walk through it: the far room shows the doorway back.
     card.locator(".wb-exit .wb-link", has_text="Garden").click()
     expect(card.locator("textarea").first).to_have_value("An overgrown garden.")
-    expect(card.locator(".wb-exit", has_text="Kitchen")).to_have_count(1)
+    expect(card.locator(".wb-exit[data-exit=kitchen]")).to_have_count(1)
+
+
+def test_a_doorways_name_material_and_width_are_one_object_from_either_room(
+        page: Page, ui_base_url: str) -> None:
+    """The passage record: the doorway's fields go through the doorways PATCH
+    from whichever room is open, and the far room reads the same."""
+    _, writes = _open_story(page, ui_base_url)
+    page.locator("#b-world").click()
+    card = page.locator("#modal .wb-card")
+    fields = card.locator(".wb-doorway-fields[data-doorway=hallway]")
+    expect(fields).to_have_count(1)
+    fields.locator("input").nth(0).fill("the arch")
+    fields.locator("input").nth(0).press("Enter")
+    expect(page.locator("#toasts")).to_contain_text("Saved.")
+    assert ("PATCH", "/api/chats/1/doorways/kitchen/hallway", {"name": "the arch"}) in writes
+    fields = card.locator(".wb-doorway-fields[data-doorway=hallway]")
+    fields.locator("input").nth(2).fill("2")
+    fields.locator("input").nth(2).press("Enter")
+    assert ("PATCH", "/api/chats/1/doorways/kitchen/hallway", {"width": 2}) in writes
+    # From the hallway the same doorway carries the same name.
+    card.locator(".wb-exit .wb-link", has_text="Hallway").click()
+    expect(card.locator(".wb-doorway-fields[data-doorway=kitchen] input").nth(0)).to_have_value("the arch")
 
 
 def test_setting_an_extent_disables_size_and_shows_the_derived_tier(
@@ -570,7 +838,7 @@ def test_editing_the_region_look_persists_and_shows_on_a_sibling_room(
     _, writes = _open_story(page, ui_base_url)
     page.locator("#b-world").click()
     card = page.locator("#modal .wb-card")
-    look = card.locator(".wb-look input")
+    look = card.locator(".wb-look .wb-field input")
     expect(card.locator(".wb-look")).to_contain_text("Shared by every room in")
     expect(card.locator(".wb-look")).to_contain_text("East Wing")
     look.fill("brick and iron under sodium lamps")
@@ -583,11 +851,33 @@ def test_editing_the_region_look_persists_and_shows_on_a_sibling_room(
     # A sibling room in the same region reads the one sentence.
     card.locator(".wb-exit .wb-link", has_text="Hallway").click()
     expect(card.locator("textarea").first).to_have_value("A long, dim hallway.")
-    expect(card.locator(".wb-look input")).to_have_value("brick and iron under sodium lamps")
+    expect(card.locator(".wb-look .wb-field input")).to_have_value("brick and iron under sodium lamps")
     # A room in no region has no look to edit.
     page.locator("#modal .wb-tree .wb-room[data-room=garden]").click()
     expect(card.locator("textarea").first).to_have_value("An overgrown garden.")
     expect(card.locator(".wb-look")).to_have_count(0)
+
+
+def test_a_region_is_created_from_the_card_and_renamed(page: Page, ui_base_url: str) -> None:
+    _, writes = _open_story(page, ui_base_url)
+    page.locator("#b-world").click()
+    card = page.locator("#modal .wb-card")
+    # The region box with a new name and "New region": the regions POST,
+    # then the room moved into the region it made.
+    box = card.locator(".wb-region-field input")
+    box.fill("West Wing")
+    card.locator(".wb-new-region").click()
+    expect(page.locator("#toasts")).to_contain_text("Saved.")
+    assert ("POST", "/api/chats/1/regions", {"name": "West Wing"}) in writes
+    patches = [w for w in writes if w[0] == "PATCH" and w[1] == "/api/chats/1/rooms/kitchen"]
+    assert patches[-1][2] == {"region": "west_wing"}
+    # Renamed: the regions PATCH with `name`; the room's field untouched.
+    rename = card.locator(".wb-region-rename")
+    rename.fill("The West Wing")
+    rename.press("Enter")
+    assert ("PATCH", "/api/chats/1/regions/west_wing", {"name": "The West Wing"}) in writes
+    assert not [w for w in writes if w[1].startswith("/api/chats/1/rooms/") and "name" in w[2]]
+    expect(card.locator(".wb-look")).to_contain_text("The West Wing")
 
 
 def test_a_lint_row_renders_beside_its_field_and_the_tree_marks_the_room(
@@ -679,24 +969,50 @@ def test_changing_a_garments_state_carries_every_region_and_never_narrows_it(
         .to_have_value("loosened")
 
 
+def test_the_bodies_tab_moves_the_player_and_writes_a_pose(page: Page, ui_base_url: str) -> None:
+    """The bodies route the cast editor lacked: the player moved by name;
+    the pose's fields written whole; the Bodies tab and the card agree."""
+    _, writes = _open_story(page, ui_base_url)
+    page.locator("#b-attire").click()
+    # The attire button unfolds every body, Nathan's included.
+    nathan = page.locator("#modal details.wb-body[data-body=Nathan]")
+    expect(nathan).to_have_attribute("open", "")
+    nathan.locator(".wb-body-place select").select_option("kitchen")
+    expect(page.locator("#toasts")).to_contain_text("Moved Nathan to Kitchen.")
+    assert ("PUT", "/api/chats/1/bodies/Nathan/room", {"room": "kitchen"}) in writes
+    # No character route: the player has no character id.
+    assert not [w for w in writes if "/characters/" in w[1]]
+    nathan = page.locator("#modal details.wb-body[data-body=Nathan]")
+    expect(nathan.locator("summary")).to_contain_text("Kitchen")
+    # The pose: posture from the engine's words, support free text.
+    posture = nathan.locator(".wb-pose .wb-pose-posture")
+    posture.fill("sitting")
+    posture.press("Enter")
+    expect(page.locator("#toasts")).to_contain_text("Saved.")
+    puts = [w for w in writes if w[0] == "PUT" and w[1] == "/api/chats/1/bodies/Nathan/pose"]
+    assert puts and puts[-1][2] == {"posture": "sitting", "support": "", "relative_to": "",
+                                    "relation": "", "constraint": "", "detail": ""}
+    expect(page.locator("#modal details.wb-body[data-body=Nathan] summary")).to_contain_text("sitting")
+    # The card's row for Nathan agrees after a re-fetch.
+    page.locator("#modal .lore-inspector-tabs button", has_text="Rooms").click()
+    expect(page.locator("#modal .wb-card .wb-body[data-body=Nathan] .wb-pose-posture")).to_have_value("sitting")
+
+
 # ---- The map editor -----------------------------------------------------------
 
 def test_the_map_renders_the_rooms_cells_anchors_doorway_neighbour_and_bodies(
         page: Page, ui_base_url: str) -> None:
     page_errors: list[str] = []
     page.on("pageerror", lambda error: page_errors.append(str(error)))
-    seen, _ = _open_story(page, ui_base_url)
-    page.locator("#b-world").click()
-    modal = page.locator("#modal")
+    seen, _, modal = _open_map(page, ui_base_url)
     svg = modal.locator(".wb-room-map")
-    expect(svg).to_be_visible()
     assert "/api/chats/1/rooms/kitchen/grid" in seen
     # The bar says where the zoom stands; the tree is still there beneath.
     expect(modal.locator(".wb-map-bar")).to_contain_text("Kitchen")
     expect(modal.locator(".wb-map-bar .wb-map-up")).to_have_text("All rooms")
     expect(modal.locator(".wb-list .wb-tree .wb-room[data-room=kitchen]")).to_be_visible()
     # Six by six cells, the two anchors, the beared doorway, the neighbour
-    # laid beyond it, the one body with her facing tick.
+    # laid beyond it, the one body with her facing tick, the lamp.
     expect(svg.locator(".wb-m-cell")).to_have_count(36)
     expect(svg.locator(".wb-m-anchor")).to_have_count(2)
     expect(svg.locator(".wb-m-anchor[data-anchor=hearth] .wb-m-height")).to_have_count(1)
@@ -707,31 +1023,41 @@ def test_the_map_renders_the_rooms_cells_anchors_doorway_neighbour_and_bodies(
     expect(svg.locator(".wb-m-neighbour[data-room=hallway] .wb-m-far-name")).to_have_text("Hallway")
     expect(svg.locator(".wb-m-body[data-body=Alice] .wb-m-facing")).to_have_count(1)
     expect(svg.locator(".wb-m-body[data-body=Alice] .wb-m-name")).to_have_text("Alice")
+    expect(svg.locator(".wb-m-thing[data-thing=brass_lamp]")).to_have_count(1)
     # The lint drawn at the thing it concerns: the wall row along the north
     # wall, the bearing row at the doorway (the far room is drawn, so at it).
     expect(svg.locator(".wb-m-lint-wall")).to_have_count(6)
     expect(svg.locator(".wb-m-lint-mark[data-kind=wall_overfull]")).to_have_count(1)
     expect(svg.locator(".wb-m-lint-mark[data-kind=reciprocal_bearing_disagrees]")).to_have_count(1)
+    # Four resize handles, one per side; blank wall segments and empty cells
+    # as targets; the legend names every mark.
+    expect(svg.locator(".wb-m-handle")).to_have_count(4)
+    expect(svg.locator(".wb-m-wall-hit").first).to_be_attached()
+    expect(svg.locator(".wb-m-cell.free").first).to_be_attached()
+    expect(modal.locator(".wb-map-marks")).to_contain_text("Ceiling light")
     # The doorway the mock cannot place is said in words under the map.
     expect(modal.locator(".wb-map-notes")).to_contain_text("Attic")
+    # Overlays are OFF by default: toggles offered, nothing painted.
+    expect(modal.locator(".wb-map-bar .wb-overlay")).to_have_count(2)
+    expect(svg.locator(".wb-m-tint")).to_have_count(0)
     assert page_errors == []
 
 
 def test_clicking_an_anchor_on_the_map_focuses_its_editor_row(
         page: Page, ui_base_url: str) -> None:
-    _open_story(page, ui_base_url)
-    page.locator("#b-world").click()
-    modal = page.locator("#modal")
+    _, _, modal = _open_map(page, ui_base_url)
     modal.locator(".wb-room-map .wb-m-anchor[data-anchor=hearth]").click()
     row = modal.locator(".wb-card .wb-anchor[data-anchor=hearth]")
     expect(row).to_have_class(re.compile(r"\bwb-focus\b"))
     expect(row.locator("input").first).to_be_focused()
-    # A doorway opens its exit row; a body its station row; Enter on a focused
-    # anchor does what the click does.
+    # A doorway opens its exit row; a body its station row; a thing its
+    # editor; Enter on a focused anchor does what the click does.
     modal.locator(".wb-room-map .wb-m-doorway[data-exit=hallway]").click()
     expect(modal.locator(".wb-card .wb-exit[data-exit=hallway]")).to_have_class(re.compile(r"\bwb-focus\b"))
     modal.locator(".wb-room-map .wb-m-body[data-body=Alice]").click()
     expect(modal.locator(".wb-card .wb-body[data-body=Alice]")).to_have_class(re.compile(r"\bwb-focus\b"))
+    modal.locator(".wb-room-map .wb-m-thing[data-thing=brass_lamp]").click()
+    expect(modal.locator(".wb-card .wb-thing[data-thing=brass_lamp]")).to_have_class(re.compile(r"\bwb-focus\b"))
     modal.locator(".wb-room-map .wb-m-anchor[data-anchor=oak_table]").focus()
     page.keyboard.press("Enter")
     expect(modal.locator(".wb-card .wb-anchor[data-anchor=oak_table]")).to_have_class(re.compile(r"\bwb-focus\b"))
@@ -739,16 +1065,15 @@ def test_clicking_an_anchor_on_the_map_focuses_its_editor_row(
 
 def test_dragging_an_anchor_to_another_wall_changes_its_bearing_and_offset(
         page: Page, ui_base_url: str) -> None:
-    _, writes = _open_story(page, ui_base_url)
-    page.locator("#b-world").click()
-    modal = page.locator("#modal")
+    _, writes, modal = _open_map(page, ui_base_url)
     svg = modal.locator(".wb-room-map")
     # The hearth stands on the west wall; drop it on cell (3, 0) -- the
     # north wall, three paces from its west end. Cells are listed x-major.
     hearth = svg.locator(".wb-m-anchor[data-anchor=hearth]")
     target = svg.locator(".wb-m-cell").nth(3 * 6 + 0)
     hearth.drag_to(target)
-    expect(page.locator("#toasts")).to_contain_text("Saved.")
+    # The toast names what was written.
+    expect(page.locator("#toasts")).to_contain_text("Moved hearth to the N wall")
     patches = [w for w in writes if w[0] == "PATCH" and "anchors" in w[2]]
     assert patches, writes
     sent = patches[-1][2]["anchors"]
@@ -766,7 +1091,7 @@ def test_dragging_an_anchor_to_another_wall_changes_its_bearing_and_offset(
     # PINNED to the cell it landed on (the owner, 2026-09-04).
     modal.locator(".wb-room-map .wb-m-anchor[data-anchor=hearth]").drag_to(
         modal.locator(".wb-room-map .wb-m-cell").nth(2 * 6 + 2))
-    expect(page.locator("#toasts")).to_contain_text("Saved.")
+    expect(page.locator("#toasts")).to_contain_text("Pinned hearth to (2, 2)")
     patches = [w for w in writes if w[0] == "PATCH" and "anchors" in w[2]]
     assert patches[-1][2]["anchors"]["hearth"]["dir"] == ""
     assert patches[-1][2]["anchors"]["hearth"]["offset"] is None
@@ -774,43 +1099,72 @@ def test_dragging_an_anchor_to_another_wall_changes_its_bearing_and_offset(
     # And dragged back onto a wall, the pin is let go with the wall written.
     modal.locator(".wb-room-map .wb-m-anchor[data-anchor=hearth]").drag_to(
         modal.locator(".wb-room-map .wb-m-cell").nth(0 * 6 + 4))
-    expect(page.locator("#toasts")).to_contain_text("Saved.")
+    expect(page.locator("#toasts")).to_contain_text("Moved hearth to the W wall")
     patches = [w for w in writes if w[0] == "PATCH" and "anchors" in w[2]]
     sent = patches[-1][2]["anchors"]["hearth"]
     assert sent["dir"] == "w" and sent["cell"] is None and sent["offset"] is not None
 
 
-def test_dragging_a_doorway_along_its_wall_sets_the_exits_offset(
+def test_undo_reissues_the_previous_anchor_map_and_an_arrow_key_nudges(
         page: Page, ui_base_url: str) -> None:
-    _, writes = _open_story(page, ui_base_url)
-    page.locator("#b-world").click()
-    modal = page.locator("#modal")
+    _, writes, modal = _open_map(page, ui_base_url)
+    svg = modal.locator(".wb-room-map")
+    svg.locator(".wb-m-anchor[data-anchor=hearth]").drag_to(svg.locator(".wb-m-cell").nth(2 * 6 + 2))
+    expect(page.locator("#toasts")).to_contain_text("Pinned hearth to (2, 2)")
+    # Undo: the previous anchor map through the same route, and it is gone
+    # from the bar once used.
+    undo = modal.locator(".wb-map-bar .wb-undo")
+    expect(undo).to_have_count(1)
+    undo.click()
+    expect(page.locator("#toasts")).to_contain_text("Undid: Pinned hearth to (2, 2)")
+    patches = [w for w in writes if w[0] == "PATCH" and "anchors" in w[2]]
+    assert patches[-1][2]["anchors"]["hearth"] == {"desc": "the hearth", "dir": "w", "height": "waist"}
+    expect(modal.locator(".wb-map-bar .wb-undo")).to_have_count(0)
+    # The arrow key is the drag by one cell: Alice stands at (1, 2) beside
+    # the oak table? No -- at the table's cell +1: the mock puts her at (4, 3).
+    body = modal.locator(".wb-room-map .wb-m-body[data-body=Alice]")
+    body.focus()
+    page.keyboard.press("ArrowRight")
+    expect(page.locator("#toasts")).to_contain_text("Placed Alice at (5, 3)")
+    puts = [w for w in writes if w[0] == "PUT" and w[1] == "/api/chats/1/bodies/Alice/station"]
+    assert puts[-1][2] == {"at": None, "near": [], "cell": [5, 3]}
+    # The focus came back to the mark, so a second press goes on nudging.
+    expect(modal.locator(".wb-room-map .wb-m-body[data-body=Alice]")).to_be_focused()
+
+
+def test_dragging_a_doorway_along_its_wall_sets_the_exits_offset_as_one_object(
+        page: Page, ui_base_url: str) -> None:
+    _, writes, modal = _open_map(page, ui_base_url)
     svg = modal.locator(".wb-room-map")
     # The doorway to the hallway is on the east wall; drop it beside cell
-    # (5, 5), the wall's south end.
+    # (5, 5), the wall's south end. The write is the doorways PATCH -- the
+    # doorway is one object -- and lands on both rooms' edges.
     svg.locator(".wb-m-doorway[data-exit=hallway]").drag_to(svg.locator(".wb-m-cell").nth(5 * 6 + 5))
-    expect(page.locator("#toasts")).to_contain_text("Saved.")
-    patches = [w for w in writes if w[0] == "PATCH" and "exits" in w[2]]
-    assert patches, writes
-    # This room's full exit list, the one doorway carrying its place along
-    # the wall -- and only that one, so the others keep whatever they had.
-    assert patches[-1][2]["exits"] == [{"to": "hallway", "barrier": "open", "dir": "", "offset": 1.0}]
+    expect(page.locator("#toasts")).to_contain_text("Moved the doorway to Hallway along the wall")
+    patches = [w for w in writes if w[1] == "/api/chats/1/doorways/kitchen/hallway"]
+    assert patches and patches[-1] == ("PATCH", "/api/chats/1/doorways/kitchen/hallway", {"offset": 1.0})
+    # From the hallway, the same doorway is dragged too -- its edge on the
+    # hallway's side was minted by the route.
+    modal.locator(".wb-card .wb-exit .wb-link", has_text="Hallway").click()
+    expect(modal.locator(".wb-map-bar")).to_contain_text("Hallway")
+    svg = modal.locator(".wb-room-map")
+    svg.locator(".wb-m-doorway[data-exit=kitchen]").drag_to(svg.locator(".wb-m-cell").nth(0 * 6 + 0))
+    expect(page.locator("#toasts")).to_contain_text("Moved the doorway to Kitchen along the wall")
+    assert ("PATCH", "/api/chats/1/doorways/hallway/kitchen", {"offset": 0.0}) in writes
 
 
 def test_dragging_a_body_onto_an_anchor_sets_its_station(page: Page, ui_base_url: str) -> None:
-    _, writes = _open_story(page, ui_base_url)
-    page.locator("#b-world").click()
-    modal = page.locator("#modal")
+    _, writes, modal = _open_map(page, ui_base_url)
     svg = modal.locator(".wb-room-map")
     # Alice stands at the oak table; drop her on the hearth: `at` for prose
     # AND the cell she landed on (the hearth's cell (1, 2): one pace in from
     # the west wall's middle, as the mock lays a standing thing).
     svg.locator(".wb-m-body[data-body=Alice]").drag_to(svg.locator(".wb-m-anchor[data-anchor=hearth]"))
-    expect(page.locator("#toasts")).to_contain_text("Saved.")
+    expect(page.locator("#toasts")).to_contain_text("Placed Alice at hearth")
     puts = [w for w in writes if w[0] == "PUT" and w[1] == "/api/chats/1/bodies/Alice/station"]
     assert puts and puts[-1][2] == {"at": "hearth", "near": [], "cell": [1, 2]}
     # The card's station row and the map agree with the server's answer.
-    expect(modal.locator(".wb-card .wb-body[data-body=Alice] select")).to_have_value("hearth")
+    expect(modal.locator(".wb-card .wb-body[data-body=Alice] .wb-exit select")).to_have_value("hearth")
     expect(modal.locator(".wb-card .wb-body[data-body=Alice] .wb-station-cell")).to_contain_text("(1, 2)")
     expect(svg.locator(".wb-m-body[data-body=Alice]")).to_have_count(1)
     expect(svg.locator(".wb-m-body[data-body=Alice]")).to_have_class(re.compile(r"\bpinned\b"))
@@ -818,7 +1172,7 @@ def test_dragging_a_body_onto_an_anchor_sets_its_station(page: Page, ui_base_url
     # owner, 2026-09-04: "why are characters and personas locked to
     # stations?").
     svg.locator(".wb-m-body[data-body=Alice]").drag_to(svg.locator(".wb-m-cell").nth(4 * 6 + 4))
-    expect(page.locator("#toasts")).to_contain_text("Saved.")
+    expect(page.locator("#toasts")).to_contain_text("Placed Alice at (4, 4)")
     puts = [w for w in writes if w[0] == "PUT" and w[1] == "/api/chats/1/bodies/Alice/station"]
     assert puts[-1][2] == {"at": None, "near": [], "cell": [4, 4]}
     dot = svg.locator(".wb-m-body[data-body=Alice] .wb-m-body-dot")
@@ -844,14 +1198,12 @@ def test_dragging_an_anchor_into_the_room_pins_it_to_that_cell(page: Page, ui_ba
     don't wall-attach them, which is quite limiting." The hearth, on the
     west wall, dropped in the middle of the room, stays where it was
     dropped after a reload, and the card shows the cell with a clear."""
-    _, writes = _open_story(page, ui_base_url)
-    page.locator("#b-world").click()
-    modal = page.locator("#modal")
+    _, writes, modal = _open_map(page, ui_base_url)
     svg = modal.locator(".wb-room-map")
     # Cell (2, 4): inside the room, off every wall, not under the table
     # (which the mock stands in the middle). Cells are listed x-major.
     svg.locator(".wb-m-anchor[data-anchor=hearth]").drag_to(svg.locator(".wb-m-cell").nth(2 * 6 + 4))
-    expect(page.locator("#toasts")).to_contain_text("Saved.")
+    expect(page.locator("#toasts")).to_contain_text("Pinned hearth to (2, 4)")
     patches = [w for w in writes if w[0] == "PATCH" and "anchors" in w[2]]
     sent = patches[-1][2]["anchors"]["hearth"]
     assert sent == {"desc": "the hearth", "dir": "", "height": "waist", "offset": None, "cell": [2, 4]}
@@ -874,27 +1226,236 @@ def test_dragging_an_anchor_into_the_room_pins_it_to_that_cell(page: Page, ui_ba
     assert patches[-1][2]["anchors"]["hearth"]["cell"] is None
 
 
-def test_zooming_out_to_the_structure_map_and_into_another_room(
+def test_dragging_a_thing_pins_it_and_a_ceiling_light_draws_as_a_ring(
         page: Page, ui_base_url: str) -> None:
-    seen, _ = _open_story(page, ui_base_url)
-    page.locator("#b-world").click()
-    modal = page.locator("#modal")
+    _, writes, modal = _open_map(page, ui_base_url)
+    svg = modal.locator(".wb-room-map")
+    lamp = svg.locator(".wb-m-thing[data-thing=brass_lamp]")
+    expect(lamp.locator(".wb-m-light-ring")).to_have_count(0)
+    # Dragged to (4, 2): the station route, the same rule as a body.
+    lamp.drag_to(svg.locator(".wb-m-cell").nth(4 * 6 + 2))
+    expect(page.locator("#toasts")).to_contain_text("Placed Brass Lamp at (4, 2)")
+    puts = [w for w in writes if w[0] == "PUT" and w[1] == "/api/chats/1/bodies/brass_lamp/station"]
+    assert puts and puts[-1][2] == {"at": None, "near": [], "cell": [4, 2]}
+    # Lit, from the card, at full height: the engine's vocabularies, and the
+    # map draws a ring -- a ceiling light casts no shadow.
+    card = modal.locator(".wb-card .wb-thing[data-thing=brass_lamp]")
+    card.locator(".wb-thing-light select").nth(0).select_option("lit")
+    expect(page.locator("#toasts")).to_contain_text("Saved.")
+    assert ("PATCH", "/api/chats/1/rooms/kitchen/entities/brass_lamp", {"light_source": "lit"}) in writes
+    # Each select re-renders the card from the server's answer, so waiting
+    # for the value to show is waiting for the write to have landed.
+    card = modal.locator(".wb-card .wb-thing[data-thing=brass_lamp]")
+    light = card.locator(".wb-thing-light select")
+    expect(light.nth(1).locator("option")).to_have_text(["—", "all_round", "cone"])
+    light.nth(2).select_option("full")
+    expect(modal.locator(".wb-card .wb-thing[data-thing=brass_lamp] .wb-thing-light select").nth(2)).to_have_value("full")
+    assert ("PATCH", "/api/chats/1/rooms/kitchen/entities/brass_lamp", {"light_height": "full"}) in writes
+    expect(modal.locator(".wb-room-map .wb-m-thing[data-thing=brass_lamp] .wb-m-light-ring")).to_have_count(1)
+    # A cone offers what it may point at: bearings, anchors, things.
+    modal.locator(".wb-card .wb-thing[data-thing=brass_lamp] .wb-thing-light select").nth(1).select_option("cone")
+    pointed = modal.locator(".wb-card .wb-thing[data-thing=brass_lamp] .wb-thing-light select").nth(4)
+    expect(pointed.locator("option", has_text="hearth")).to_have_count(1)
+    pointed.select_option("hearth")
+    expect(modal.locator(".wb-card .wb-thing[data-thing=brass_lamp] .wb-thing-light select").nth(4)).to_have_value("hearth")
+    assert ("PATCH", "/api/chats/1/rooms/kitchen/entities/brass_lamp", {"pointed_at": "hearth"}) in writes
+    # Sound: the level, then the running flag appears.
+    modal.locator(".wb-card .wb-thing[data-thing=brass_lamp] .wb-thing-sound select").select_option("faint")
+    expect(modal.locator(".wb-card .wb-thing[data-thing=brass_lamp] .wb-thing-sound input[type=checkbox]")).to_have_count(1)
+    assert ("PATCH", "/api/chats/1/rooms/kitchen/entities/brass_lamp", {"sound_source": "faint"}) in writes
+    # Removed from the card.
+    modal.locator(".wb-card .wb-thing[data-thing=brass_lamp] .wb-remove-thing").click()
+    assert ("DELETE", "/api/chats/1/rooms/kitchen/entities/brass_lamp", {}) in writes
+    expect(modal.locator(".wb-room-map .wb-m-thing[data-thing=brass_lamp]")).to_have_count(0)
+
+
+def test_a_side_handle_resizes_the_room_and_the_shape_is_chosen_on_the_map(
+        page: Page, ui_base_url: str) -> None:
+    _, writes, modal = _open_map(page, ui_base_url)
+    svg = modal.locator(".wb-room-map")
+    # The east handle dragged two cells out: an 8 x 6 extent, the size word
+    # following on the card. The pointer moves by two cells' worth of pixels
+    # (the SVG is scaled to the pane, so a cell's on-screen width is read).
+    px = svg.locator(".wb-m-cell").first.bounding_box()["width"]
+    handle = svg.locator(".wb-m-handle-e").bounding_box()
+    page.mouse.move(handle["x"] + handle["width"] / 2, handle["y"] + handle["height"] / 2)
+    page.mouse.down()
+    page.mouse.move(handle["x"] + handle["width"] / 2 + px, handle["y"] + handle["height"] / 2, steps=4)
+    page.mouse.move(handle["x"] + handle["width"] / 2 + 2 * px, handle["y"] + handle["height"] / 2, steps=4)
+    page.mouse.up()
+    expect(page.locator("#toasts")).to_contain_text("Resized the room to 8 × 6 paces")
+    patches = [w for w in writes if w[0] == "PATCH" and "extent" in w[2]]
+    assert patches and patches[-1][2] == {"extent": {"w": 8, "d": 6}}
+    expect(modal.locator(".wb-card .wb-field-size select")).to_be_disabled()
+    expect(modal.locator(".wb-room-map .wb-m-cell")).to_have_count(48)
+    # The shape from the map's own select: the room PATCH.
+    modal.locator(".wb-map-bar .wb-map-shape").select_option("composite")
+    expect(page.locator("#toasts")).to_contain_text("Shape: composite")
+    assert ("PATCH", "/api/chats/1/rooms/kitchen", {"shape": "composite"}) in writes
+    # The card's parts editor offers a cell-placed part; add one by cell.
+    card = modal.locator(".wb-card")
+    add = card.locator(".wb-parts .wb-add")
+    add.locator("select").select_option("cell")
+    inputs = add.locator("input")
+    inputs.nth(0).fill("0"); inputs.nth(1).fill("0"); inputs.nth(2).fill("8"); inputs.nth(3).fill("2")
+    add.get_by_role("button", name="Add part").click()
+    patches = [w for w in writes if w[0] == "PATCH" and "parts" in w[2]]
+    assert patches[-1][2] == {"parts": [{"w": 8, "d": 2, "at": [0, 0]}]}
+    # Drawn as a part on the map, with a knob; the room's cells are the
+    # part's now (the mock cuts the box to the parts as the engine does).
+    expect(modal.locator(".wb-room-map .wb-m-part[data-part='0']")).to_have_count(1)
+    expect(modal.locator(".wb-room-map .wb-m-cell")).to_have_count(16)
+    # Dragged one cell down, the part is re-placed by its origin cell.
+    part = modal.locator(".wb-room-map .wb-m-part[data-part='0']")
+    box = part.bounding_box()
+    page.mouse.move(box["x"] + 20, box["y"] + 20)
+    page.mouse.down()
+    page.mouse.move(box["x"] + 20, box["y"] + 20 + box["height"] / 2, steps=4)
+    page.mouse.move(box["x"] + 20, box["y"] + 20 + box["height"], steps=4)
+    page.mouse.up()
+    expect(page.locator("#toasts")).to_contain_text("Moved part to (0, 2)")
+    patches = [w for w in writes if w[0] == "PATCH" and "parts" in w[2]]
+    assert patches[-1][2] == {"parts": [{"w": 8, "d": 2, "at": [0, 2]}]}
+
+
+def test_a_blank_wall_opens_a_doorway_or_adds_a_room_and_empty_floor_places(
+        page: Page, ui_base_url: str) -> None:
+    _, writes, modal = _open_map(page, ui_base_url)
+    svg = modal.locator(".wb-room-map")
+    # A segment of the south wall: the form names the wall and the place.
+    svg.locator(".wb-m-wall-hit[data-wall=s][data-cell='2,5']").click()
+    form = modal.locator(".wb-map-forms .wb-wall-form")
+    expect(form).to_contain_text("S")
+    expect(form).to_contain_text("40%")
+    form.locator("select").nth(0).select_option("closed_door")
+    form.locator("select").nth(1).select_option("garden")
+    form.locator(".wb-open-doorway").click()
+    expect(page.locator("#toasts")).to_contain_text("Opened a doorway to Garden on the S wall.")
+    assert ("POST", "/api/chats/1/doorways",
+            {"room": "kitchen", "to": "garden", "barrier": "closed_door", "dir": "s", "offset": 0.4}) in writes
+    expect(modal.locator(".wb-room-map .wb-m-doorway[data-exit=garden]")).to_have_count(1)
+    expect(modal.locator(".wb-card .wb-exit[data-exit=garden]")).to_have_count(1)
+    # A new room through the north wall.
+    modal.locator(".wb-room-map .wb-m-wall-hit[data-wall=n][data-cell='1,0']").click()
+    form = modal.locator(".wb-map-forms .wb-wall-form")
+    form.locator("input").fill("Scullery")
+    form.locator(".wb-add-room").click()
+    expect(page.locator("#toasts")).to_contain_text("Added Scullery through the N wall.")
+    posts = [w for w in writes if w[0] == "POST" and w[1] == "/api/chats/1/rooms"]
+    assert posts[-1][2] == {"name": "Scullery", "from": "kitchen", "dir": "n", "barrier": "open"}
+    # The new room is selected, its grid drawn.
+    expect(modal.locator(".wb-map-bar")).to_contain_text("Scullery")
+    expect(modal.locator(".wb-tree .wb-room.on")).to_have_attribute("data-room", "scullery")
+    # Back in the kitchen: empty floor places a thing, then a presence, then
+    # an anchor, each at the clicked cell.
+    modal.locator(".wb-tree .wb-room[data-room=kitchen]").click()
+    expect(modal.locator(".wb-map-bar")).to_contain_text("Kitchen")
+    # (1, 4): empty floor -- the table stands at (3, 3) and Alice beside it,
+    # so those cells are theirs and take no click of their own.
+    expect(modal.locator(".wb-room-map .wb-m-cell.free[data-cell='3,3']")).to_have_count(0)
+    modal.locator(".wb-room-map .wb-m-cell.free[data-cell='1,4']").click()
+    form = modal.locator(".wb-map-forms .wb-cell-form")
+    expect(form).to_contain_text("(1, 4)")
+    form.locator("input").fill("Crate")
+    form.locator(".wb-place-thing").click()
+    expect(page.locator("#toasts")).to_contain_text("Added Crate.")
+    assert ("POST", "/api/chats/1/rooms/kitchen/entities", {"name": "Crate", "kind": "", "cell": [1, 4]}) in writes
+    expect(modal.locator(".wb-room-map .wb-m-thing[data-thing=crate]")).to_have_count(1)
+    modal.locator(".wb-room-map .wb-m-cell.free[data-cell='0,5']").click()
+    form = modal.locator(".wb-map-forms .wb-cell-form")
+    form.locator("input").fill("The Cook")
+    form.locator(".wb-place-presence").click()
+    expect(page.locator("#toasts")).to_contain_text("Placed The Cook.")
+    assert ("POST", "/api/chats/1/rooms/kitchen/presences", {"name": "The Cook", "cell": [0, 5]}) in writes
+    expect(modal.locator(".wb-room-map .wb-m-body[data-body='The Cook']")).to_have_class(re.compile(r"\bpresence\b"))
+    modal.locator(".wb-room-map .wb-m-cell.free[data-cell='4,0']").click()
+    form = modal.locator(".wb-map-forms .wb-cell-form")
+    form.locator("input").fill("the dresser")
+    form.locator(".wb-place-anchor").click()
+    expect(page.locator("#toasts")).to_contain_text("Added the dresser at (4, 0)")
+    patches = [w for w in writes if w[0] == "PATCH" and "anchors" in w[2]]
+    assert patches[-1][2]["anchors"][""] == {"desc": "the dresser", "cell": [4, 0]}
+    # The presence is removed from its card row.
+    modal.locator(".wb-card .wb-body[data-body='The Cook'] .wb-remove-presence").click()
+    expect(page.locator("#toasts")).to_contain_text("Removed The Cook.")
+    assert ("DELETE", "/api/chats/1/bodies/The%20Cook", {}) in writes or \
+        ("DELETE", "/api/chats/1/bodies/The Cook", {}) in writes
+
+
+def test_removing_a_room_is_refused_while_occupied_and_lands_when_empty(
+        page: Page, ui_base_url: str) -> None:
+    _, writes, modal = _open_map(page, ui_base_url)
+    modal.locator(".wb-map-bar .wb-remove-room").click()
+    # The server's refusal is the toast, naming who stands there.
+    expect(page.locator("#toasts")).to_contain_text("bodies: Alice")
+    assert ("DELETE", "/api/chats/1/rooms/kitchen", {}) in writes
+    expect(modal.locator(".wb-map-bar")).to_contain_text("Kitchen")
+    modal.locator(".wb-tree .wb-room[data-room=garden]").click()
+    expect(modal.locator(".wb-map-bar")).to_contain_text("Garden")
+    modal.locator(".wb-map-bar .wb-remove-room").click()
+    expect(page.locator("#toasts")).to_contain_text("Removed Garden; its id is retired.")
+    assert ("DELETE", "/api/chats/1/rooms/garden", {}) in writes
+    expect(modal.locator(".wb-tree .wb-room[data-room=garden]")).to_have_count(0)
+    expect(modal.locator(".wb-map-bar")).to_contain_text("Kitchen")
+
+
+def test_an_overlay_toggle_paints_the_readers_words_and_a_source_can_be_heard_from(
+        page: Page, ui_base_url: str) -> None:
+    seen, _, modal = _open_map(page, ui_base_url)
+    svg = modal.locator(".wb-room-map")
+    expect(svg.locator(".wb-m-tint")).to_have_count(0)
+    modal.locator(".wb-map-bar .wb-overlay[data-overlay=light]").click()
+    expect(modal.locator(".wb-map-bar .wb-overlay[data-overlay=light]")).to_have_attribute("aria-pressed", "true")
+    expect(modal.locator(".wb-room-map .wb-m-tint")).to_have_count(36)
+    expect(modal.locator(".wb-map-legend")).to_contain_text("light:")
+    expect(modal.locator(".wb-map-legend")).to_contain_text("lit")
+    expect(modal.locator(".wb-map-legend")).to_contain_text("dim")
+    # Off again with a second click; the noise toggle paints its own words.
+    modal.locator(".wb-map-bar .wb-overlay[data-overlay=light]").click()
+    expect(modal.locator(".wb-room-map .wb-m-tint")).to_have_count(0)
+    modal.locator(".wb-map-bar .wb-overlay[data-overlay=noise]").click()
+    expect(modal.locator(".wb-map-legend")).to_contain_text("quiet")
+
+
+def test_the_structure_map_draws_doors_where_they_stand_and_a_drag_re_bears(
+        page: Page, ui_base_url: str) -> None:
+    seen, writes, modal = _open_map(page, ui_base_url)
     modal.locator(".wb-map-bar .wb-map-up").click()
     structure = modal.locator(".wb-structure-map")
     expect(structure).to_be_visible()
     assert "/api/chats/1/map" in seen
     expect(modal.locator(".wb-map-bar")).to_contain_text("Every room, placed by bearing")
     # Every room as a box: the two components side by side, the occupied
-    # rooms marked, the exits as ticks, and the pantry DRAWN on the kitchen.
+    # rooms marked, the exits at their DOOR CELLS, and the pantry DRAWN on
+    # the kitchen; the collision said in words; the regions in the legend.
     expect(structure.locator(".wb-sm-room")).to_have_count(5)
     expect(structure.locator(".wb-sm-room[data-room=kitchen]")).to_have_class(re.compile(r"\boccupied\b"))
     expect(structure.locator(".wb-sm-room[data-room=kitchen] .wb-sm-who")).to_have_text("Alice")
-    expect(structure.locator(".wb-sm-room[data-room=hallway] .wb-sm-exit")).to_have_count(3)
+    expect(structure.locator(".wb-sm-room[data-room=hallway] .wb-sm-exit.at-door")).to_have_count(3)
     expect(structure.locator(".wb-sm-room[data-room=pantry]")).to_have_class(re.compile(r"\bcollided\b"))
     expect(structure.locator(".wb-sm-room[data-room=kitchen] .wb-sm-lint")).to_have_count(1)
-    # The kitchen's exit to the attic has no bearing: counted, not drawn.
     expect(structure.locator(".wb-sm-room[data-room=kitchen] .wb-sm-unbeared")).to_have_text("?1")
+    expect(structure.locator(".wb-sm-room[data-room=kitchen]")).to_have_class(re.compile(r"\bregion-0\b"))
+    expect(modal.locator(".wb-map-legend")).to_contain_text("East Wing")
+    expect(modal.locator(".wb-map-notes")).to_contain_text("Pantry")
+    expect(modal.locator(".wb-map-notes")).to_contain_text("lands on")
+    # Drag the study (placed north of the hallway) to the hallway's east:
+    # the doorway that placed it is re-beared from the hallway, both edges.
+    study = structure.locator(".wb-sm-room[data-room=study]")
+    hallway = structure.locator(".wb-sm-room[data-room=hallway]")
+    sb, hb = study.bounding_box(), hallway.bounding_box()
+    page.mouse.move(sb["x"] + sb["width"] / 2, sb["y"] + sb["height"] / 2)
+    page.mouse.down()
+    page.mouse.move(hb["x"] + hb["width"] * 1.5, hb["y"] + hb["height"] / 2, steps=6)
+    page.mouse.move(hb["x"] + hb["width"] * 1.6, hb["y"] + hb["height"] / 2, steps=3)
+    page.mouse.up()
+    expect(page.locator("#toasts")).to_contain_text("Placed Study E of Hallway")
+    assert ("PATCH", "/api/chats/1/doorways/hallway/study", {"dir": "e"}) in writes
+    # Undo re-bears it back through the same route.
+    modal.locator(".wb-map-bar .wb-undo").click()
+    assert ("PATCH", "/api/chats/1/doorways/hallway/study", {"dir": "n"}) in writes
     # Click the hallway: its grid on the left, its card on the right.
+    structure = modal.locator(".wb-structure-map")
     structure.locator(".wb-sm-room[data-room=hallway]").click()
     expect(modal.locator(".wb-room-map")).to_be_visible()
     expect(modal.locator(".wb-map-bar")).to_contain_text("Hallway")
