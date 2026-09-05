@@ -2577,6 +2577,29 @@ def author_surgery(cid, frame_id, op, *, by="writers_room", turn_idx=None):
             "op": str((op or {}).get("op") or ""), "result": result}
 
 
+def author_charter_ops(cid, frame_id, ops, *, by="writers_room",
+                       turn_idx=None, scene=None):
+    """The Planner's hand on the institutions (`world/charter_ops.py`): load
+    the frame's registry privately, apply ONE authored event -- every op of
+    it, in order -- and save once.
+
+    ALL OR NOTHING. A refusal anywhere raises `ValueError` naming the op's
+    index, its kind and the reason, and nothing is saved: an event that
+    half-lands is a town whose ledgers disagree with the sentence that made
+    them. Returns ``{"applied": [...]}``, one row per op.
+
+    The Planner DIRECTS and Charter COMPUTES: what follows from the event --
+    who has nothing to tend, who notices, who is blamed, who never hears --
+    is the simulation's own answer on the beats after, never carried here.
+    """
+    from .charter_ops import apply_charter_ops
+    registry = registry_for_update(cid, frame_id)
+    applied = apply_charter_ops(registry, ops, by=by, turn_idx=turn_idx,
+                                scene=scene)
+    save_registry(cid, registry, frame_id)
+    return {"applied": applied}
+
+
 def charter_diagnostics(cid, frame_id=None, *, charter_key="", body_key=""):
     """Author-only explanation surface; no result is delivered to a mind."""
     from core.db import q, wget_for_frame

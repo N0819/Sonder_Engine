@@ -37,7 +37,10 @@ seam -- planned rooms through `structure.plant_structure`, plans through
 `charter_runtime.generate_lived_location`, every nudge to an institution
 through `charter_runtime.author_surgery` (a fact the institution keeps,
 recorded as the author's; a claim lands as something a body was TOLD by a
-named teller, through the mind's one uptake door), a change over a region
+named teller, through the mind's one uptake door), a whole authored EVENT
+against an institution through `charter_runtime.author_charter_ops` (the
+closed vocabulary in `world/charter_ops.py`: what happened, never who
+reacts -- Charter computes that), a change over a region
 through `world.region_events.apply_wave` (hazard, ruin, shocks, harm by the
 harm model, displacement, evidence, news). There is no operation that
 writes `chat_chars.state`, a memory row, a perception view, a relationship
@@ -1335,6 +1338,84 @@ def _apply_errand(cid, frame_id, op, turn_idx, *, by):
         turn_idx=turn_idx, by=by)
 
 
+# -- charter_ops --------------------------------------------------------------
+#
+# CHARTER IS A TOOL OF THE PLANNER (`docs/design/
+# DESIGN_OFFSCREEN_SUPERSEDED.md` § 3a). This is the write side of it: one
+# AUTHORED EVENT, spelled in the vocabulary Charter already owns
+# (`world/charter_ops.CHARTER_OPS`), landing through the functions Charter
+# already owns, refused by the same deterministic floor that refuses a
+# `positions` write.
+#
+# AN AUTHORED EVENT IS AN INPUT TO THE SIMULATION, NOT A RIVAL OUTPUT. The
+# Planner says the granary burned -- an upkeep fails, a post is vacated, a
+# supply is cut. Charter says who therefore has nothing to tend, who
+# notices, who is blamed and who never hears. `ops` is what happened;
+# nothing in this operation can name who reacts, and nothing in it writes a
+# mind (`plant_claim`, the one surgery that touches a head, is deliberately
+# outside the set). `event`, when given, is the sentence the Director is
+# handed as a circumstance next beat -- what happened, in the world's own
+# words, never its consequences.
+
+def _shape_charter_ops(op):
+    from world.charter_ops import (CHARTER_OPS, CHARTER_OPS_CAP,
+                                   normalize_charter_op)
+    charter = _text(op.get("charter"), 120)
+    raw = op.get("ops")
+    if isinstance(raw, dict):
+        raw = [raw]
+    if not isinstance(raw, (list, tuple)) or not raw:
+        raise ValueError("charter_ops carries `ops`: the facts the event "
+                         "moves, each one of %s" % ", ".join(sorted(CHARTER_OPS)))
+    if len(raw) > CHARTER_OPS_CAP:
+        raise ValueError("an authored event carries at most %d ops; this one "
+                         "carries %d" % (CHARTER_OPS_CAP, len(raw)))
+    ops = [normalize_charter_op(one, default_charter=charter) for one in raw]
+    return {"charter": charter, "event": _text(op.get("event"), 400),
+            "ops": ops, **_clock_field(op)}
+
+
+def _charter_ops_subject(one):
+    """What an op is ABOUT, for the preview's change row: the fact it moves,
+    never a person who answers it."""
+    for field in ("body", "post", "upkeep", "good"):
+        if one.get(field):
+            return {field: one[field]}
+    return {}
+
+
+def _preview_charter_ops(cid, frame_id, op, world):
+    """Dry-run the WHOLE event on a copy of the snapshot's registry, in
+    order, so an op that depends on an earlier one previews truly and the
+    first refusal reports the index that failed."""
+    from world.charter_ops import apply_charter_ops
+    registry = copy.deepcopy(world.get("registry") or {"items": {}})
+    errors = []
+    try:
+        apply_charter_ops(registry, op["ops"], by="preview",
+                          scene=world.get("scene"))
+    except ValueError as exc:
+        errors.append(str(exc))
+    changes = [{"kind": "charter_op", "op": one["op"],
+                "charter": one["charter"], **_charter_ops_subject(one)}
+               for one in op["ops"]]
+    return {"changes": changes, "errors": errors, "warnings": []}
+
+
+def _apply_charter_ops(cid, frame_id, op, turn_idx, *, by):
+    from story.scene import get_scene
+    from world.charter_runtime import author_charter_ops
+    scene = get_scene(cid, _chat_row(cid)) or {}
+    out = author_charter_ops(cid, frame_id, op["ops"], by=by,
+                             turn_idx=turn_idx, scene=scene)
+    if op.get("event"):
+        # The event ARRIVES: the Director renders it where the player is,
+        # exactly as an `arrival` or a `summons` does. What it says is what
+        # happened; who answers it is nobody's to write here.
+        out["notice"] = _mint_notice(cid, turn_idx, op["event"], by=by)
+    return out
+
+
 # -- incident -----------------------------------------------------------------
 
 def _shape_incident(op):
@@ -1689,6 +1770,14 @@ OPERATIONS = {
     "errand": {"shape": _shape_errand, "preview": _preview_errand,
                "apply": _apply_errand, "long": False,
                "seam": "charter_runtime.author_surgery(send_errand)"},
+    # Charter as the Planner's instrument: one authored EVENT, in the
+    # institution's own vocabulary, landing all-or-nothing.
+    "charter_ops": {"shape": _shape_charter_ops,
+                    "preview": _preview_charter_ops,
+                    "apply": _apply_charter_ops, "long": False,
+                    "seam": "charter_runtime.author_charter_ops "
+                            "(world.charter_ops over charter_surgery + "
+                            "charter_runtime.transfer_person)"},
     "incident": {"shape": _shape_incident, "preview": _preview_incident,
                  "apply": _apply_incident, "long": False,
                  "seam": "charter_runtime.author_surgery(charter_shock | harm_body) "
@@ -1757,6 +1846,11 @@ OPERATION_FIELDS = {
                 "manner?": "how they arrive", "clock?": "a package clock id (lands when due)"},
     "errand": {"charter": "charter key", "body": "body key", "to": "<room_id>",
                "purpose?": "what for", "clock?": "package clock id"},
+    "charter_ops": {
+        "charter": "charter key -- the institution the event happens to, and the default for every op that names no other",
+        "event?": "what happened, in one sentence and in the world's own words; the Director is handed it as a circumstance next beat. Say WHAT HAPPENED, never who answers it -- who has nothing to tend, who notices, who is blamed and who never hears are the simulation's answer, not yours",
+        "ops": "[the facts the event moves, in order, each an object whose `op` names the kind: errand {body, to, purpose?} | arrive {body, from_charter?, place?} | depart {body, to_charter?, place?} (no to_charter = employed nowhere, still a person) | die {body, condition? (dead|missing|hurt, default dead), cause?} | fill_post {post, body} | vacate_post {post} | upkeep_fails {upkeep, to? | by? (exactly one), surface?} | supply_cut {holder, good, lots}]. A field a kind does not take is refused, not ignored; the whole event lands or none of it does",
+        "clock?": "package clock id (lands when due)"},
     "incident": {"room": "<room_id>", "summary": "what happens there",
                  "shock?": "0..1 drop to every upkeep served there (default 0.3)",
                  "harms?": "[{charter, body, outcome: hurt|dead|missing}] (needs schedule_harm)",
@@ -1855,6 +1949,10 @@ def operation_harms(op):
         return harms_a_body(op)
     if op.get("op") == "incident":
         return bool(op.get("harms"))
+    if op.get("op") == "charter_ops":
+        # A `die` op goes through the same harm model a wolf uses, so it is
+        # the same act and asks for the same grant.
+        return any(str(one.get("op")) == "die" for one in op.get("ops") or ())
     return False
 
 
@@ -2252,7 +2350,7 @@ def _apply_operation(cid, frame_id, pkg, op, turn_idx, *, elapsed, turn_id):
     if op["op"] == "region_event":
         return spec["apply"](cid, frame_id, op, turn_idx, by=by, elapsed=elapsed,
                              turn_id=turn_id)
-    if op["op"] in ("arrival", "errand", "incident", "summons",
+    if op["op"] in ("arrival", "errand", "charter_ops", "incident", "summons",
                     "scheduled_consequence") or op["op"] in SURGERY_FIELDS:
         return spec["apply"](cid, frame_id, op, turn_idx, by=by)
     return spec["apply"](cid, frame_id, op, turn_idx)

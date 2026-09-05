@@ -27,7 +27,12 @@ from __future__ import annotations
 
 import hashlib
 
-#: The closed set. Each is a mandate capability in `story/mandates.py`.
+#: The surgeries a package may name DIRECTLY, one mandate capability each in
+#: `story/mandates.py`. `_HANDLERS` is wider: `send_errand`, `harm_body`,
+#: `open_summons` and `vacate_post` are reached through an operation that
+#: shapes them (`errand`, `incident`, `summons`, and `charter_ops`, which is
+#: one grant over the whole authored-event vocabulary), so they are not their
+#: own capability and are not offered as bare surgeries.
 SURGERY_OPS = ("move_body", "assign_post", "plant_claim", "adjust_stock",
                "arm_trigger", "charter_shock")
 
@@ -69,7 +74,12 @@ def _body(charter, body_key):
     return body
 
 
-def _record(charter, op, by, turn_idx, detail):
+def record_authored(charter, op, by, turn_idx, detail):
+    """Write the author's hand onto the institution. PUBLIC because
+    `charter_ops` routes two of its ops (`arrive`, `depart`) through
+    `charter_runtime.transfer_person`, which is a registry-level move and
+    not a surgery, and an authored event that leaves no record is exactly
+    the hand this ledger exists to make visible."""
     rows = [dict(r) for r in (charter.get("authored") or ()) if isinstance(r, dict)]
     rows.append({"op": str(op), "by": _text(by, 120), "turn_idx": turn_idx,
                  "at_hours": float(charter.get("clock_hours") or 0.0),
@@ -132,6 +142,25 @@ def assign_post(charter, *, body="", post=""):
     held["stood_down"] = False
     return {"body": str(body), "post": post, "displaced": previous,
             "left": displaced}
+
+
+def vacate_post(charter, *, post=""):
+    """Take the watch bill's name off a post, and clear it as the holder's
+    home post. The body is not dismissed, hurt or moved: it is simply not
+    standing this duty, and the institution's own planner decides next
+    window whether anybody stands it. THE COMPLEMENT OF `assign_post`,
+    which could fill a post and never empty one, so an authored event could
+    say who took over and never say that nobody had."""
+    post = _text(post, 120)
+    if post not in (charter.get("posts") or {}):
+        raise ValueError("charter %r has no post %r" % (charter.get("key"), post))
+    watch = dict(charter.get("watch") or {})
+    body_key = str(watch.pop(post, "") or "")
+    charter["watch"] = watch
+    held = (charter.get("bodies") or {}).get(body_key) if body_key else None
+    if isinstance(held, dict) and str(held.get("home_post") or "") == post:
+        held["home_post"] = ""
+    return {"post": post, "body": body_key, "was_filled": bool(body_key)}
 
 
 def _claim_key(text):
@@ -318,7 +347,7 @@ _HANDLERS = {
     "plant_claim": plant_claim, "adjust_stock": adjust_stock,
     "arm_trigger": arm_trigger, "charter_shock": charter_shock,
     "send_errand": send_errand, "harm_body": harm_body,
-    "open_summons": open_summons,
+    "open_summons": open_summons, "vacate_post": vacate_post,
 }
 
 
@@ -336,6 +365,6 @@ def apply_surgery(registry, op, *, by="writers_room", turn_idx=None):
     except TypeError as exc:
         # A field the surgery does not take is a refusal, not a crash.
         raise ValueError("%s: %s" % (kind, str(exc).split("got an unexpected keyword argument")[-1].strip() or exc))
-    _record(charter, kind, by, turn_idx, {
+    record_authored(charter, kind, by, turn_idx, {
         k: v for k, v in fields.items() if not isinstance(v, (dict, list))})
     return result

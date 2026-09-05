@@ -5873,6 +5873,24 @@ not a branch that founds one silently.
 
 ### 1.123 An errand the fiction promised has no channel to the institution
 
+**CLOSED 2026-09-05, as a duplicate of § 1.124 with its Planner half built.**
+Two things happened to this entry. First, it and § 1.124 are one gap written
+down twice on the same day, and § 1.124 is the sharper statement of it; what
+remains open lives there and nowhere else. Second, the half this entry
+actually asked for — somebody with a channel to the institution — landed as
+the PLANNER's, not the Director's: `charter_ops`
+(`world/charter_ops.py`, `charter_runtime.author_charter_ops`,
+`tests/test_charter_ops.py`) is a package operation carrying one authored
+event, and `errand` is one of its eight ops, routed through
+`charter_surgery.send_errand` and refused by name when the body is not one the
+town stands or the destination is a room no plan holds. The "cheaper half"
+this entry offered — a Director-sheet clause — is still worth having as a
+COMPANION and is recorded in § 1.124, which is where the Director channel
+stays open.
+
+The original entry follows, because the argument in it is what earned the
+shape that landed.
+
 **Found 2026-09-05** (`docs/experiments/PLAY_2026_09_05_caravanserai.md`
 § PB13), and registered rather than built: this is a CAPABILITY, not a
 defect, and the shape is the owner's to choose. Its siblings — PC9, PC5,
@@ -5917,6 +5935,18 @@ window is ever charged, so even a dispatched errand would not walk.
 **Found 2026-09-05** (`docs/experiments/PLAY_2026_09_05_caravanserai.md` §
 PB13), registered rather than built: the shape needs `llm/schemas.py`, which
 another agent held on the day PB12 was fixed.
+
+**Narrowed 2026-09-05.** The Planner's half is built (`charter_ops`,
+§ 1.123), so what is missing here is now only the CHANNEL and not the landing
+function: `world/charter_ops.py` already normalizes, routes and refuses an
+`errand` op by name, and `charter_runtime.author_charter_ops` already lands a
+whole event all-or-nothing. A Director channel is three edits in files this
+agent did not own — a `charter_ops` array on the resolve schema in
+`llm/schemas.py`, the channel added to the `social` specialist's scope in
+`agents/director_scopes.py`, and routing in `agents/director.py` that calls
+`author_charter_ops` and sends an unroutable op to `tell_director` rather than
+dropping it. The op vocabulary the Director would write is the same closed
+set the Planner writes, which is the point of having only one.
 
 Turns 5 and 10 of that run: the player asked twice that someone fetch the
 gate warden, the innkeeper agreed on the record ("She'll be told when the
